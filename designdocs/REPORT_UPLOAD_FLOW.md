@@ -1,12 +1,14 @@
 # Issue Report Upload Flow
 
 How "Report an issue" hands a diagnostic bundle to a maintainer: the plugin packs
-a zip, uploads it through the existing Brevilabs API, and writes the returned link
-into a prefilled GitHub issue. The user clicks Submit in their browser and is
-done.
+a zip, uploads it privately, and writes the returned **report ID** into a
+prefilled GitHub issue. The user clicks Submit in their browser and is done. The
+bundle itself never appears on the issue — maintainers resolve the ID against the
+report store; nothing on the public page can download it.
 
-This replaces a native OS drag. The UI is built and merged against a mock
-uploader; what remains before it can ship to users is the endpoint.
+This replaces a native OS drag. The UI shipped first against a mock uploader;
+the real adapter (`src/utils/reportUpload.brevilabs.ts`) has since replaced it
+and the mock is deleted.
 
 ## Why change it
 
@@ -27,41 +29,99 @@ carries most of the feature's cost and most of its fragility:
   dialog that must survive a window teardown.
 - Even when it works, the user still has to aim a file at a browser window.
 
-## Transport: the existing Brevilabs API
+## Transport
 
-The upload goes through `BrevilabsClient`
-(`src/LLMProviders/brevilabsClient.ts`), not a new path. This settles three
-questions and closes off two features.
+A dedicated adapter (`createReportUploader` in
+`src/utils/reportUpload.brevilabs.ts`) posts the zip's raw bytes with
+`Content-Type: application/zip`. The request carries exactly four headers — the
+content type, a per-installation ID, an idempotency key, and the plugin version —
+and the adapter's tests pin that set with an exact match, so nothing extra can
+creep in.
 
-**Authentication and delivery are solved.** `makeRequest` already attaches
-`user_id` and `X-Client-Version` (`brevilabsClient.ts:196-207`). There is no
-broker to build, no presigned-URL signing in the client, and no storage
-credential ever ships inside the plugin. Binary upload has precedent too:
-`docs4llm` posts multipart via `makeFormDataRequest`, which is the shape to
-follow. `pdf4llm`'s base64-into-JSON is not — base64 inflates a 24 MB zip to
-roughly 32 MB of string.
+**Deliberately not routed through `BrevilabsClient`.** Both of its request
+helpers attach an `Authorization` header or a `user_id`, and this path must send
+neither: a diagnostic report is not a licensed API call, and tying one to the
+user's licence is exactly what the flow's privacy copy promises it does not do.
+Reporting a bug is not a premium feature either — gating it would silence
+exactly the users most likely to hit a rough edge.
 
-**No licence is required.** `validateLicenseKey` already calls with
-`excludeAuthHeader` and `skipLicenseCheck` (`brevilabsClient.ts:294-300`), so a
-report can be sent without `checkLicenseKey()` (`:173`) rejecting it. Reporting a
-bug is not a premium feature: gating it would silence exactly the users most
-likely to hit a rough edge.
+**The zip is uncompressed (STORE).** The endpoint rejects any compressed entry,
+so `zipReportBundle` packs with `level: 0`. The 24 MB bundle budget therefore
+maps 1:1 onto the packed size — no compression absorbs an overrun — and the
+shared 25 MB ceiling (the endpoint's, and GitHub's attachment limit on the
+manual fallback path) is checked against the packed result.
 
-The endpoint is therefore unauthenticated and needs its own abuse controls. The
-plugin gives it one handle — `body.user_id` is attached unconditionally
-(`brevilabsClient.ts:196`), a random per-install UUID, so rate limits and quotas
-do not need a licence to key on.
+**The per-installation ID is its own identifier**
+(`src/utils/reportInstallId.ts`): a UUIDv4 minted once into `localStorage`,
+which Obsidian never syncs. Not `getDeviceId()` (its fallbacks are not UUIDs,
+which the endpoint rejects) and not `settings.userId` (which rides on licensed
+API calls — reusing it would let a report be joined to a paid account, and it is
+vault-scoped besides). Reports are therefore not tied to any account identity;
+they are not fully anonymous either — the service necessarily sees the install
+ID and the connection — and the copy says neither more nor less.
 
 **There is no progress and no cancellation.** Everything goes through Obsidian's
-`requestUrl`, and `RequestUrlParam` (`obsidian.d.ts:3006`) has no `signal` and no
-progress callback. So the UI shows an indeterminate spinner, not a percentage —
-inventing one from elapsed time would be a lie with a progress bar around it — and
-it offers no Cancel, because a button that only stops the UI waiting while the
-request runs to completion is a button that lies.
+`requestUrl`, and `RequestUrlParam` has no `signal` and no progress callback. So
+the UI shows an indeterminate spinner that says the upload cannot be canceled,
+not a percentage — inventing one from elapsed time would be a lie with a
+progress bar around it. There is, however, a **deadline**: after four minutes
+the adapter stops waiting and reports an uncertain outcome, so a TCP black hole
+cannot pin the flow on "Uploading…" forever. That is not a cancellation — the
+underlying request keeps running, and if it did land, retrying the same attempt
+returns the stored copy's ID rather than storing a second one.
 
-This is a real constraint, and it also removes work: no `AbortController`
-lifecycle, no attempt-ID bookkeeping to discard late progress callbacks, no
-partial-upload cleanup path.
+## The upload attempt: bytes and idempotency key travel as a pair
+
+The endpoint deduplicates retries by an `Idempotency-Key` header. The invariant
+that matters is **one set of bytes, one key**: a retry must re-send the exact
+bytes the key was minted for, and new bytes must always arrive under a new key —
+or the server answers the new upload with the old stored bundle, silently.
+
+That invariant is enforced by construction, not by checking. `zipReportBundle`
+mints the key in the same return value that carries the packed bytes
+(`ReportUploadAttempt { body, idempotencyKey }`), and `PreparedReport` holds the
+pair whole:
+
+- **Retry upload** re-sends the same attempt — safe by definition, and safe in
+  the strong sense: if a "failed" upload actually landed (the response was lost,
+  not the write), the retry returns the stored copy's ID instead of storing a
+  second one.
+- **Rebuild zip** replaces the whole `PreparedReport`, so new bytes and a new
+  key are inseparable. A rebuild that fails leaves the old attempt untouched.
+- The uploader takes the attempt object, not a path — a file on disk can change
+  under a key that still names the old contents; in-memory bytes cannot. This is
+  also what keeps the adapter free of Node imports, so it lives in `src/utils`
+  without touching the ESLint node-modules allowlist and is safe to load on
+  mobile.
+
+Closing the modal and reopening it packs a fresh report and mints a fresh key.
+Accepted residual: if a previous upload actually landed but its response was
+lost and the user starts over, the server stores a second copy and a second slot
+of the daily allowance is spent; both age out with the retention window.
+Persisting the key across sessions was rejected — a stale key reused for new
+bytes is the silent-misreport failure above, strictly worse.
+
+## Failure classification: `retryable` gates the Retry button
+
+Upload failures are not one bucket. `UploadOutcome`'s failure half carries a
+structured `retryable`, set by the adapter (`ReportUploadError`), and the review
+page withholds the Retry button when it is false:
+
+| Class                | Examples                                                                                                      | Retryable | Why                                                                                                       |
+| -------------------- | ------------------------------------------------------------------------------------------------------------- | --------- | --------------------------------------------------------------------------------------------------------- |
+| Local, nothing sent  | install ID unavailable, plugin version invalid                                                                | no        | Refused before the request, so the daily allowance is not spent; the fix is the manual path, not a resend |
+| Definitive rejection | 400 / 413 / 415 / 422 / 429                                                                                   | no        | The identical bytes fail identically — while still spending a slot of the daily upload allowance          |
+| Uncertain outcome    | network error mid-flight, upload deadline elapsed, unreadable 2xx response, 408/425, a bare 3xx, 5xx / outage | yes       | The report may or may not be stored; the idempotency key makes re-sending safe either way                 |
+| Confirmed success    | 2xx with a fully well-formed receipt                                                                          | —         | Page ③                                                                                                    |
+
+Two rules the copy obeys everywhere: never claim a failed request "did not count"
+(the allowance is spent before validation, and a lost response is not a lost
+write), and never quote which limit tripped a 429 (the client cannot know).
+
+Error text is fixed local copy plus the status code — never the response body,
+which a proxy or captive portal can fill with arbitrary or echoed content, and
+never the transport's own message, which can carry local paths. A sentinel test
+pins that nothing from an error response reaches the user or the log.
 
 ## The flow
 
@@ -71,31 +131,25 @@ Three pages in one modal, with a read-only stepper at the top.
 ┌ ① What to include ─── ② Pack & review ─── ③ Submit ┐
 ```
 
-The stepper **replaces** the inline `①②③` numbering the current attach screen
-uses; two numbering systems in one dialog is worse than either alone. It indicates
-position only — clicking back would open a whole re-edit state space for a bundle
-that has already been packed or sent.
+The stepper indicates position only — clicking back would open a whole re-edit
+state space for a bundle that has already been packed or sent.
 
 ### ① What to include
 
-Description textarea, the source checkboxes, and the notice, then
+Description textarea, the source checkboxes, and the consent notice, then
 `[Pack the report]`.
 
-The notice has to be specific about the two things a reasonable person would not
-assume:
+The notice is maintainer-approved verbatim copy and must not be reworded:
 
-> Copilot packs the selected items into one zip and uploads it, then puts the link
-> in the GitHub issue. Anyone who opens that issue can download it — the
-> screenshot is not redacted.
+> Copilot redacts common sensitive data from diagnostic text on your device
+> before upload. Review it before sending; screenshots are not automatically
+> redacted. Reports are private and deleted after 60 days.
 
-Both halves are load-bearing. The destination is a **public** repo (`REPORT_REPO`
-in `src/utils/issueReport.ts`, whose comment says so), and while every text source
-passes through `redactLogText`, **the screenshot is raw PNG** — no redaction pass
-exists for pixels.
+Every text source passes through `redactLogText`; **the screenshot is raw PNG** —
+no redaction pass exists for pixels, which is why the copy singles it out.
 
 `report.md` is not one of the checkboxes: it is mandatory and always included,
-carrying the description, the environment block, and the per-source outcomes
-(`issueReport.ts:233`). The notice speaks for it.
+carrying the description, the environment block, and the per-source outcomes.
 
 ### ② Pack & review
 
@@ -114,46 +168,51 @@ waits:
 **The upload needs its own click, and this is not a redundant confirmation.** Page
 ① consented to _categories_; this is the first and only view of the _artifact_ —
 real filenames, real sizes, and which sources came back skipped or truncated.
-`docs/agent-mode-and-tools.md:243` already tells users to check the unredacted
-screenshot before sending, so removing that opportunity would regress documented
-behaviour.
+`docs/agent-mode-and-tools.md` tells users to check the unredacted screenshot
+before sending, so removing that opportunity would regress documented behaviour.
 
 `Rebuild zip` lives here and **only** here. Once the bundle is uploaded this page
 is gone, so rebuild-after-upload is unreachable by construction. That single
-constraint deletes a whole class of states: a stale link pointing at replaced
-contents, an orphaned remote object, a user stripping sensitive content locally
-while the old copy is still downloadable.
+constraint deletes a whole class of states: a stale reference pointing at
+replaced contents, an orphaned remote object, a user stripping sensitive content
+locally while the old copy is still stored.
 
-While uploading, the row set stays put and a spinner replaces the button row.
-Failure stays on this page — the error, `[Retry upload]`, `Show in folder`, and an
-escape hatch worded so it is unmistakable: the issue it opens carries **no** link
-and the user must attach the zip themselves.
+While uploading, the row set stays put and a spinner replaces the button row,
+saying the upload cannot be canceled. Failure stays on this page — the error,
+`[Retry upload]` **only when the failure is retryable**, `Show in folder`, and an
+escape hatch worded so it is unmistakable: the issue it opens carries **no**
+report ID and the user must attach the zip themselves.
 
 ### ③ Submit
 
-What was uploaded, the link (copyable), its expiry, and `[Open the issue]`.
+What was uploaded, the report ID (copyable), when the stored report expires, and
+`[Open the issue]`.
 
-This page earns its click. The link needs somewhere to live if the browser never
-surfaces the page or the user closes the tab, and it carries the one clarification
-that prevents a false sense of completion:
+This page earns its click. The ID needs somewhere to live if the browser never
+surfaces the page or the user closes the tab, and the page carries the one
+clarification that prevents a false sense of completion:
 
-> The link is already written into the issue. Nothing is filed until you press
-> Submit in your browser.
+> The report ID is already written into the issue. Nothing is filed until you
+> press Submit in your browser.
 
-If the API supports revocation, `Delete uploaded report` belongs here too — this
-is the last page that still holds a handle on the uploaded object.
+The expiry line says "Report expires _date_" — scheduled, not already happened —
+and promises nothing about how a maintainer retrieves the report, because that
+mechanism is not this UI's to describe.
 
 ## The uploader interface
 
 ```ts
-export interface ReportUploadResult {
-  /** Stable, non-secret URL for the issue body. Never a raw presigned GET. */
-  shareUrl: string;
-  /** When `shareUrl` stops working, so page ③ can say. */
-  expiresAt?: string;
+export interface ReportUploadAttempt {
+  readonly body: ArrayBuffer;
+  readonly idempotencyKey: string;
 }
 
-export type ReportUploader = (zipPath: string) => Promise<ReportUploadResult>;
+export interface ReportUploadResult {
+  reportId: string; // opaque; only ever read from the server's response
+  expiresAt: string; // required — the endpoint always returns it
+}
+
+export type ReportUploader = (attempt: ReportUploadAttempt) => Promise<ReportUploadResult>;
 ```
 
 A function type, not an interface with one method: one operation, no state. No
@@ -161,55 +220,32 @@ A function type, not an interface with one method: one operation, no state. No
 interface that advertises capabilities the implementation cannot honour is how a
 UI ends up promising a Cancel button that does nothing.
 
-Two fields rather than a bare URL, because each has a caller: `shareUrl` goes in
-the issue and `expiresAt` is displayed on page ③. A server-side id for revocation
-and support correlation is deliberately absent — nothing here would read it, and
-requiring it would oblige an endpoint that does not exist yet to return a field
-no caller wants. Revocation, when it lands, adds both the id and the sibling
-`deleteReport` that consumes it, rather than pre-paying for half of it now.
+`reportId` is **only ever read from the response**, never derived or invented
+client-side: only the server's receipt says the report was actually stored, and
+an ID produced any other way would let the UI display "uploaded" for a report
+that is not. The adapter validates the whole receipt strictly — ID shape,
+explicit `received: true`, parseable `expiresAt` — because a proxy, captive
+portal, or deploy mid-rollout can answer 200 with something else entirely, and
+an "upload succeeded" page quoting `undefined` is worse than a failure the user
+can retry. Unknown extra fields are ignored, so the server can add fields
+without breaking older clients.
 
 **Injected at the composition root**, as a **required** `ReportIssueModalParams`
-field. Tests override it.
-
-An earlier draft of this section said the opposite — that requiring it would
-break the barrel-exported constructor contract, so it had to be optional. That
-was written before the call sites were counted, and the count settles it:
-`ReportIssueModal` is constructed in exactly one place
-(`AdvancedSettings.tsx:150`), the barrel that re-exports it
-(`src/agentMode/index.ts:67`) has no consumer outside this plugin, and the
-plugin ships as a single bundle. There is no contract to break.
-
-With that gone, the trade is one-sided. A required field turns "forgot to wire
-the uploader" into a compile error; an optional one turns it into a modal that
-looks fine until the user clicks Upload and gets a failure that names nothing
-they can act on. The one caller is already updated, so the compile-time check
-costs nothing and catches the next caller too.
-
-### What the API contract must guarantee
-
-The plugin cannot solve these, but the design depends on them:
-
-- **`shareUrl` is not a bearer credential.** Writing one into a public issue
-  publishes it, at which point "unguessable" provides nothing. The link must be a
-  stable reference whose authorisation happens server-side when a maintainer opens
-  it.
-- **Retry is idempotent.** A lost response does not mean a lost write; see the
-  completion-ambiguity row in the matrix.
-- **Limits are stated.** The packer caps its own input, but the endpoint's ceiling
-  has to surface as a distinguishable error so page ② can name it.
-- **Retention is a real number** the endpoint enforces and returns as
-  `expiresAt`, so the disclosure can be specific rather than open-ended.
+field, constructed in exactly one place (`AdvancedSettings.tsx`). The install-ID
+dependency is a getter resolved on the upload click, so its failure (unusable
+storage) surfaces on the action that needs it as a refusal to upload — never as
+a broken modal, and never as a non-UUID placeholder on the wire.
 
 ## The issue URL is built after upload
 
 The obvious implementation has two defects. Both are fixed; this records what
 they were, because both are easy to reintroduce.
 
-**The link would be truncated first.** Over-long bodies were cut with
-`body.slice(0, keep)` — from the **end**. A link appended to the body is the
-first thing a long description pushes out. The report reference now sits in a
+**The reference would be truncated first.** Over-long bodies were cut with
+`body.slice(0, keep)` — from the **end**. A reference appended to the body is
+the first thing a long description pushes out. The report ID now sits in a
 prefix `buildIssueUrl` never touches, with truncation applied only to the body
-below it, and a test packs an over-long note and asserts both that the link
+below it, and a test packs an over-long note and asserts both that the ID
 survives and that the URL still fits its cap.
 
 **The URL was built too early.** `assembleReportBundle` generated it before any
@@ -217,46 +253,45 @@ upload existed. The URLs are now built in `zipReportBundle`, from the
 `report.md` it just packed — late enough that an edit the user made in the
 staging folder reaches the issue, which the earlier shape could not do.
 
-The two are named apart: `manualIssueUrl` (no link, opened when upload fails or
-is skipped) and the linked URL from `buildLinkedReportIssueUrl`, built only once
-a `shareUrl` exists. Neither can stand in for the other by accident.
+The two are named apart: `manualIssueUrl` (no ID, opened when upload fails or is
+skipped) and the linked URL from `buildLinkedReportIssueUrl`, built only once a
+`reportId` exists. Neither can stand in for the other by accident.
 
-A third defect surfaced later, in the seam between them: `uploadReport` caught
-the upload and the URL construction in one `try`, so a link too long to fit the
-URL cap reported the whole upload as failed — offering a Retry that would
-upload a second copy of a report the server already had. They are caught
-separately now. Once the upload resolves, the outcome is a success; a URL that
-could not be assembled downgrades to `linkPrefilled: false`, and page ③ asks
-the user to paste the link instead.
+A historical third defect died with the link: when the prefix carried a
+variable-length `shareUrl`, a URL too long to assemble had a `linkPrefilled:
+false` fallback asking the user to paste it. A fixed-width ID in the prefix
+cannot exceed the cap, so that fallback — its state field, its second done-page
+layout, and its tests — is deleted rather than kept against nothing.
 
 ## Privacy
 
-The bundle is **retained** server-side. That is the point: a maintainer opens the
-link days later. It differs from every existing Brevilabs upload (`pdf4llm`,
-`docs4llm`), which processes and discards.
+The bundle is **retained** server-side for 60 days, privately. That is the
+point: a maintainer looks it up days later by its ID. It differs from every
+existing Brevilabs upload (`pdf4llm`, `docs4llm`), which processes and discards
+— which is why the README's privacy section carries an explicit
+diagnostic-report carve-out instead of a blanket no-retention claim.
 
 **In-flow disclosure is the protection.** The upload is user-initiated, named on
-page ① before anything is packed, and needs a separate click on page ② against the
-real manifest. A user who does not want to send it clicks nothing and uses
-`Show in folder`. That is materially different from silent background telemetry,
-which is what a blanket retention promise exists to rule out.
+page ① before anything is packed, and needs a separate click on page ② against
+the real manifest. A user who does not want to send it clicks nothing and uses
+`Show in folder`. That is materially different from silent background telemetry.
 
-Two follow-ups, neither blocking:
+**The public issue carries only the ID.** Nothing on the issue can download the
+bundle; there is no download link to leak, and the ID is not a credential.
 
-- `README.md:337` states unconditionally that "No message content, file uploads,
-  or documents are retained on our servers after processing", and
-  `docs/troubleshooting-and-faq.md:220` repeats it. Once this ships that sentence
-  is inaccurate for a user-initiated report and wants a carve-out naming the
-  retention window. A documentation accuracy problem, not a user-harm one.
-- The screenshot has no redaction path. Page ① says so, which is the honest
-  minimum; a redaction pass, or dropping the screenshot from the upload and
-  keeping it on the manual path, are the larger answers if that proves
-  insufficient.
+**Local files are the user's.** The staging folder and the zip deliberately
+outlive the modal once the review step is reached — they are the review surface.
+The server-side deletion never touches them, and the docs say so explicitly.
+
+One follow-up, not blocking: the screenshot has no redaction path. Page ① says
+so, which is the honest minimum; a redaction pass, or dropping the screenshot
+from the upload and keeping it on the manual path, are the larger answers if
+that proves insufficient.
 
 ## What this deletes
 
-The point of the change, and the reason it is worth doing even before the endpoint
-exists.
+The point of the change, and the reason it was worth doing even before the
+endpoint existed.
 
 **Deleted outright — 293 lines:**
 
@@ -266,77 +301,64 @@ exists.
 | `src/utils/nativeFileDrag.test.ts` | 145   |
 
 **Replaced by something smaller.** The `Attach & submit` block in
-`ReportIssueFlow.tsx` is 142 lines of numbered manual instructions — open the
-issue, drag the file in, submit — because the user has three things to do by hand.
-After this they have one, and the block collapses into an upload row plus a
-result. The drag also has 32 references through `ReportIssueFlow.tsx` and 21
-through `ReportIssueModal.tsx` that go with it:
+`ReportIssueFlow.tsx` was 142 lines of numbered manual instructions — open the
+issue, drag the file in, submit — because the user had three things to do by
+hand. After this they have one, and the block collapses into an upload row plus
+a result. The drag's `dragSupported` / `dragFailed` states, three degraded
+layouts, icon plumbing, and `dragstart` handler go with it.
 
-- `dragSupported` / `dragFailed` state and the three degraded layouts
-- `loadFileDragIcon`, `DragIcon`, and the `dragIcon` field on the modal
-- the drag chip and its `dragstart` handler
+**Deleted with the real contract:** `reportUpload.mock.ts`, the
+`linkPrefilled` fallback and its second done-page layout, and the UI's own
+tolerance for a missing or unparseable expiry (the adapter now guarantees it).
 
-**Copy that becomes wrong**, and has to move with it:
-
-- `buildReportMarkdown` writes "Drag it into the…" into `report.md`
-  (`issueReport.ts:406`); the truncation note asks the reader to paste the full
-  report in (`:419-421`).
-- `README.md:259` describes the manual attach.
-- `docs/agent-mode-and-tools.md` states the zip is never uploaded and documents
-  the drag hand-off.
-
-**What is added:** the uploader interface and its mock (52 lines in two new
-files), the stepper, upload state and its manifest on page ②, and page ③.
-
-**The net is not a reduction.** This section originally claimed it would be.
-Measured against what shipped, production code is **+199 lines** (`+650/-503`
-across tracked `src` files, plus 52 untracked). The deletions above all
-happened; they are simply outweighed by three pages, an upload state machine,
-and the URL split. Worth recording plainly rather than leaving a budget claim
-the diff contradicts: what the change buys is the removal of the most
-platform-specific code in the feature and of a hand-off users could fail at, not
-a smaller codebase.
+**The net is not a reduction.** Production code grew by roughly two hundred
+lines against the drag version: three pages, an upload state machine, the
+adapter, and the install-ID module outweigh the deletions. What the change buys
+is the removal of the most platform-specific code in the feature and of a
+hand-off users could fail at, not a smaller codebase.
 
 **No persisted schema changes.** The wizard state is React-local and
-`PreparedReport` is never serialised, so there is no settings migration. The new
-persistent state lives on the server and wants its own versioning, `createdAt`,
-`expiresAt`, and status. `PreparedReport` (`ReportIssueFlow.tsx:34`) does gain
-upload fields, and every flow test fixture constructs it.
+`PreparedReport` is never serialised, so there is no settings migration. The
+only new client-side persistence is the install ID in `localStorage`.
 
 **Upload does not bring mobile support.** The entry point stays desktop-gated
-(`AdvancedSettings.tsx:123`) and the flow still needs Node temp paths and Electron
-reveal. Not part of this work's return.
+and the flow still needs Node temp paths and Electron reveal. The adapter and
+install-ID modules are nonetheless import-safe on mobile (no Node
+dependencies), so the settings tab that constructs the uploader loads there.
 
 ## Defect matrix
 
 Typing: this hits **state-write × failure** (upload state, plus what is left on
-disk and on the server), **carried state × boundary events** (the link surviving
-rebuild, retry, close), **batch × partial failure** (a multi-source bundle where
-one source fails while the whole succeeds), **actor / trust boundary ×
-authorisation and retention**, and **concurrency × completion ambiguity**.
+disk and on the server), **carried state × boundary events** (the attempt
+surviving rebuild, retry, close), **batch × partial failure** (a multi-source
+bundle where one source fails while the whole succeeds), **actor / trust
+boundary × authorisation and retention**, and **concurrency × completion
+ambiguity**.
 
 ### A — lifecycle × what each party holds
 
-| Lifecycle                    | Zip on disk    | Object on server | Link the user holds | Answer                                                                                                                                                                                                                                                    |
-| ---------------------------- | -------------- | ---------------- | ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Not started                  | exists         | none             | none                | —                                                                                                                                                                                                                                                         |
-| In flight                    | exists         | partial          | none                | Buttons replaced by a spinner                                                                                                                                                                                                                             |
-| Succeeded                    | exists         | one object       | valid               | Page ③                                                                                                                                                                                                                                                    |
-| Failed, server has nothing   | exists         | none             | none                | Retry, or the manual path                                                                                                                                                                                                                                 |
-| **Failed, server succeeded** | exists         | **one object**   | **none**            | **"Failed" does not imply the server is clean** — the response was lost, not the write. Retry must be idempotent or it orphans a second copy                                                                                                              |
-| In flight × rebuild          | being replaced | partial          | none                | **Rebuild is disabled while uploading**, or the upload streams a file being deleted underneath it                                                                                                                                                         |
-| In flight × second click     | exists         | two partials     | none                | **Single-flight lock**: the button is disabled for the duration                                                                                                                                                                                           |
-| Succeeded × rebuild          | new zip        | old contents     | stale               | **Unreachable by construction** — page ② is gone after upload                                                                                                                                                                                             |
-| Modal closed in flight       | exists         | one object       | valid               | Cannot be aborted, so closing does not undo it. On success the prefilled issue still opens — the report is stored either way, and withholding the link would leave an upload the user can neither see nor use. A failure has no surface left to report on |
+| Lifecycle                    | Zip on disk    | Object on server | ID the user holds | Answer                                                                                                                                                                                                                                                  |
+| ---------------------------- | -------------- | ---------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Not started                  | exists         | none             | none              | —                                                                                                                                                                                                                                                       |
+| In flight                    | exists         | partial          | none              | Buttons replaced by a spinner that says it cannot be canceled                                                                                                                                                                                           |
+| Succeeded                    | exists         | one object       | valid             | Page ③                                                                                                                                                                                                                                                  |
+| Failed, server has nothing   | exists         | none             | none              | Retry (same attempt), or the manual path                                                                                                                                                                                                                |
+| **Failed, server succeeded** | exists         | **one object**   | **none**          | **"Failed" does not imply the server is clean** — the response was lost, not the write. Retry re-sends the same idempotency key, so the server answers with the stored copy instead of a second object                                                  |
+| Definitive rejection         | exists         | none             | none              | No Retry — identical bytes fail identically while spending allowance. Rebuild (new attempt) or the manual path                                                                                                                                          |
+| In flight × rebuild          | being replaced | partial          | none              | **Rebuild is disabled while uploading**; the attempt's bytes are in memory anyway, so a mid-flight disk change cannot corrupt the upload                                                                                                                |
+| In flight × second click     | exists         | two partials     | none              | **Single-flight lock**: the button is disabled for the duration                                                                                                                                                                                         |
+| Succeeded × rebuild          | new zip        | old contents     | stale             | **Unreachable by construction** — page ② is gone after upload                                                                                                                                                                                           |
+| Modal closed in flight       | exists         | one object       | valid             | Cannot be aborted, so closing does not undo it. On success the prefilled issue still opens — the report is stored either way — and the ID rides into the browser-failure Notice, which may be its last surviving carrier. A failure has no surface left |
+| Modal closed, then reopened  | new bundle     | possibly two     | none              | New pack, new attempt, new key — accepted residual (see the attempt section): a lost-response duplicate ages out with the retention window                                                                                                              |
 
 ### B — content axis × timing axis
 
-|                           | Content                                                                              | Timing                            |
-| ------------------------- | ------------------------------------------------------------------------------------ | --------------------------------- |
-| What enters the bundle    | per-source opt-in; text redacted; `report.md` mandatory; screenshot **not** redacted | chosen on ①, packed on ②          |
-| What the user is told     | ①'s notice names public reach and the unredacted screenshot                          | before packing, before upload     |
-| What the user can inspect | real manifest with sizes, plus `Show in folder`                                      | on ②, **before** the upload click |
-| What leaves the machine   | the whole zip                                                                        | on the upload click on ②          |
+|                           | Content                                                                                            | Timing                            |
+| ------------------------- | -------------------------------------------------------------------------------------------------- | --------------------------------- |
+| What enters the bundle    | per-source opt-in; text redacted; `report.md` mandatory; screenshot **not** redacted               | chosen on ①, packed on ②          |
+| What the user is told     | ①'s verbatim consent copy: on-device redaction, unredacted screenshots, private + 60-day retention | before packing, before upload     |
+| What the user can inspect | real manifest with sizes, plus `Show in folder`                                                    | on ②, **before** the upload click |
+| What leaves the machine   | the whole zip                                                                                      | on the upload click on ②          |
 
 The third row is why page ② splits packing from uploading. Packing and uploading
 on one click would put the real manifest on page ③ — after the fact.
@@ -348,51 +370,25 @@ Modelled by `AttachmentOutcome`, and visible on page ② before sending.
 
 ### D — actor / trust boundary × authorisation and retention
 
-| Actor                           | Holds                     | Must not be able to            |
-| ------------------------------- | ------------------------- | ------------------------------ |
-| Reporter                        | zip, `shareUrl`           | — (may revoke, if supported)   |
-| Maintainer                      | `shareUrl` from the issue | download without authorisation |
-| Anyone reading the public issue | `shareUrl`                | download at all                |
-| Brevilabs                       | the object                | retain past the stated window  |
+| Actor                           | Holds                    | Must not be able to                                                       |
+| ------------------------------- | ------------------------ | ------------------------------------------------------------------------- |
+| Reporter                        | zip, report ID           | —                                                                         |
+| Maintainer                      | report ID from the issue | be impersonated by the ID alone: the ID is a lookup key, not a credential |
+| Anyone reading the public issue | report ID                | download anything at all                                                  |
+| Brevilabs                       | the object               | retain past the stated window                                             |
 
-The third row is what forces `shareUrl` to be a reference rather than a
-credential.
+The third row is what forces the issue to carry an ID rather than any URL: there
+is no public download surface for a leaked reference to open.
 
-## Sequencing
+## Sequencing (historical)
 
-This section originally required the endpoint before any UI. That was overruled:
-the UI is built and merged first, against a mock, and the endpoint follows. What
-remains true is the reason the rule existed, so it is worth being exact about
-what the override does and does not license.
-
-**What shipped.** The three pages, the uploader interface, and the deletion of
-the drag path, wired to `reportUpload.mock.ts` — which resolves after a delay
-with a `shareUrl` on the RFC 2606 `.invalid` TLD. Every success state is
-reachable and testable; nothing is actually sent anywhere.
-
-**What that costs.** A mock that always succeeds is not the failure shape the
-original rule was written against — it is the opposite one, and it is worse in
-one specific way. A stub that always throws routes users into a visible failure;
-a stub that always succeeds routes them into an invisible one. The user sees
-"Report uploaded", opens an issue carrying a dead link, and submits it believing
-the bundle is on a server. If the local zip is later cleaned up, the evidence is
-gone with no error ever shown.
-
-**What holds it.** Nothing in the code. This branch must not merge or release
-before the endpoint exists — that is a human gate, and it is the whole
-protection. The `.invalid` host is the one hedge that survives a mistake: a fake
-link can never resolve, and can never be mistaken for a real response.
-
-**Still to build, in order:**
-
-1. The endpoint, far enough to prove the contract end to end: private object,
-   authorised maintainer download, an enforced retention window, idempotent
-   retry, and rate limiting keyed on `user_id`.
-2. A real adapter replacing `reportUpload.mock.ts`. Note this is not purely
-   backend work — `makeFormDataRequest` attaches an `Authorization` header
-   unconditionally even with `skipLicenseCheck` (`brevilabsClient.ts:222,243`),
-   so the multipart path needs an `excludeAuthHeader` option first.
-3. Only then, release.
+The UI shipped first against a mock uploader on an RFC 2606 `.invalid` host,
+behind a human do-not-merge gate — a stub that always succeeds routes users into
+an invisible failure, so the gate was the whole protection. That phase is over:
+the endpoint exists, the real adapter replaced the mock, and the gate is lifted.
+What this branch still needs before release is ordinary verification — the test
+suites, the component gallery states, and one real end-to-end upload against the
+live endpoint, which a unit suite cannot substitute for.
 
 ## Prior art
 
@@ -406,13 +402,12 @@ with system info alone (#100054).
 
 Two things follow. Upload is the better trade than clipboard, since the pattern we
 would otherwise copy is a known long-standing complaint. And the URL-length cap in
-`buildIssueUrl` is load-bearing: the URL may carry a link, never a payload.
+`buildIssueUrl` is load-bearing: the URL may carry an ID, never a payload.
 
-**Cloudflare R2 presigned URLs** were the alternative transport and are not being
-used — going through the existing API means no client-side signing and no
-credentials in the plugin. One lesson transfers anyway: a presigned GET embeds its
-own authorisation, so handing one to a public issue publishes the object. That is
-why `shareUrl` is specified as a reference, not a credential.
+**Presigned download URLs** were the alternative reference shape and are not
+used — a presigned GET embeds its own authorisation, so handing one to a public
+issue publishes the object. That is why the issue carries an opaque ID with no
+download surface behind it, rather than any URL.
 
 ## Related
 
