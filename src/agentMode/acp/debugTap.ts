@@ -89,7 +89,11 @@ function tapReadable(
   return forConsumer;
 }
 
-class NdjsonLineSplitter {
+/**
+ * Accumulates stream bytes and hands out one complete NDJSON line at a time,
+ * so callers never see a frame that a chunk boundary cut in half.
+ */
+export class NdjsonLineSplitter {
   private buffer = "";
   private decoder = new TextDecoder();
 
