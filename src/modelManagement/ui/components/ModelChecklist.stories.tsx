@@ -12,7 +12,7 @@ const meta = {
     query: "",
     onQueryChange: () => {},
   },
-  parameters: { gallery: { host: "modal", layout: "padded" } },
+  parameters: { gallery: { host: "leaf", layout: "padded" } },
 } satisfies Meta<ModelChecklistProps>;
 export default meta;
 

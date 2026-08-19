@@ -168,6 +168,22 @@ function rowCheckbox(id: string): HTMLElement {
 }
 
 describe("ConfigureProviderForm (new mode)", () => {
+  it.each([
+    ["Anthropic", anthropicSource],
+    ["OpenAI", openaiSource],
+    ["Ollama", ollamaSource],
+    ["custom OpenAI-compatible", CUSTOM_OPENAI_DEFINITION],
+  ] as const)(
+    "renders manual Model ID and discovery search together for %s (https://github.com/logancyang/obsidian-copilot/issues/2894)",
+    (_provider, source) => {
+      render(<ConfigureProviderForm state={{ mode: "new", source }} onClose={jest.fn()} />);
+      const modelsSection = screen.getByText("Models").parentElement;
+      expect(modelsSection).not.toBeNull();
+      expect(within(modelsSection!).getByTestId("model-checklist-manual-input")).toBeTruthy();
+      expect(within(modelsSection!).getByPlaceholderText("Search available models…")).toBeTruthy();
+    }
+  );
+
   it("skips the mount fetch when the source requires an API key and the field is empty", () => {
     render(
       <ConfigureProviderForm state={{ mode: "new", source: anthropicSource }} onClose={jest.fn()} />
