@@ -298,6 +298,9 @@ describe("ConfigureProviderForm (new mode)", () => {
     );
 
     fireEvent.change(screen.getByTestId("api-key"), { target: { value: "work-key" } });
+    const baseUrlInput = screen.getByText("Base URL").parentElement?.querySelector("input");
+    expect(baseUrlInput).not.toBeNull();
+    fireEvent.change(baseUrlInput!, { target: { value: "https://work.example.com/v1" } });
     manualAddId("work-model");
     fireEvent.click(screen.getByRole("switch", { name: "Enable CORS" }));
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
@@ -386,6 +389,19 @@ describe("ConfigureProviderForm (new mode)", () => {
     );
     expect(mockVerifyCredentials).not.toHaveBeenCalled();
     await waitFor(() => expect(onClose).toHaveBeenCalled());
+  });
+
+  it("requires a Base URL before saving a custom endpoint (https://github.com/logancyang/obsidian-copilot/issues/2895)", () => {
+    render(
+      <ConfigureProviderForm
+        state={{ mode: "new", source: CUSTOM_OPENAI_DEFINITION }}
+        onClose={jest.fn()}
+      />
+    );
+    manualAddId("qwen3.8-27b");
+
+    expect(screen.getByRole("button", { name: "Save" }).hasAttribute("disabled")).toBe(true);
+    expect(mockSetupProvider).not.toHaveBeenCalled();
   });
 });
 

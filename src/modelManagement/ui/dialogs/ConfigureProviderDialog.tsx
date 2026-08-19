@@ -440,11 +440,21 @@ const ConfigureProviderBody: React.FC<ConfigureProviderBodyProps> = ({
   // untested key falls through to the save-time auto-verify in the handlers.
   const verificationBlocksSave = isConclusiveVerificationFailure(verification?.code);
 
+  // A non-catalog OpenAI-compatible provider has no native routing default, so
+  // persisting it without a Base URL creates a model that no backend can call.
+  // https://github.com/logancyang/obsidian-copilot/issues/2895
+  const missingCustomBaseUrl =
+    providerType === "openai-compatible" && !catalogProviderId && !effectiveBaseUrl;
+
   // The candidate pool only fills with models the endpoint listed (which
   // requires working credentials) or ones the user explicitly typed, so a
   // non-empty selection already implies a usable setup. On top of that, gate
-  // on a present + non-conclusively-invalid key.
-  const canSave = pool.selectedWireIds.size > 0 && !missingRequiredKey && !verificationBlocksSave;
+  // on a routable endpoint and a present + non-conclusively-invalid key.
+  const canSave =
+    pool.selectedWireIds.size > 0 &&
+    !missingCustomBaseUrl &&
+    !missingRequiredKey &&
+    !verificationBlocksSave;
 
   const testFailed = verification?.ok === false;
 
