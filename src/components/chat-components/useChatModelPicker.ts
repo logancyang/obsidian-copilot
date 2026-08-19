@@ -2,9 +2,12 @@ import {
   backendPickerAtomFamily,
   capabilitiesFromConfiguredInfo,
   mapProviderTypeToChatModelProvider,
+  providerHasApiKey,
   providerRequiresApiKey,
   resolveChatModelSelectionId,
 } from "@/modelManagement";
+import { useApp } from "@/context";
+import { KeychainService } from "@/services/keychainService";
 import { getModelKeyFromModel, settingsStore, useSettingsValue } from "@/settings/model";
 import type { ModelSelectorEntry } from "@/components/ui/ModelSelector";
 import { lockedCopilotEntries, shouldPreviewCopilotModels } from "@/lib/lockedCopilotEntries";
@@ -57,6 +60,7 @@ export function useChatModelPicker(params: {
   onChange: (configuredModelId: string) => void;
 }): ChatModelPickerOverride {
   const { value, onChange } = params;
+  const app = useApp();
   const entries = useAtomValue(backendPickerAtomFamily("chat"), { store: settingsStore });
   const settings = useSettingsValue();
 
@@ -69,6 +73,7 @@ export function useChatModelPicker(params: {
   );
 
   const { models, byModelKey, idToModelKey } = React.useMemo(() => {
+    const keychain = KeychainService.getInstance(app);
     const models: ModelSelectorEntry[] = [];
     const byModelKey = new Map<string, string>();
     const idToModelKey = new Map<string, string>();
@@ -79,7 +84,7 @@ export function useChatModelPicker(params: {
       // data so unknown models stay unblocked; only a populated array (which may
       // be empty) asserts "known". See the image guard in `Chat.tsx`.
       const capabilities = capabilitiesFromConfiguredInfo(configuredModel.info);
-      const needsKey = providerRequiresApiKey(provider) && !provider.apiKeyKeychainId;
+      const needsKey = providerRequiresApiKey(provider) && !providerHasApiKey(provider, keychain);
       const modelEntry: ModelSelectorEntry = {
         name: configuredModelId,
         provider: mapProviderTypeToChatModelProvider(provider),
@@ -95,7 +100,13 @@ export function useChatModelPicker(params: {
       idToModelKey.set(configuredModelId, modelKey);
     }
     return { models, byModelKey, idToModelKey };
-  }, [entries]);
+    // Reason: key presence is read from the local keychain, which React cannot
+    // observe directly. Both credential writers refresh the providers slice
+    // identity (`forgetAllSecrets` after the sweep, `setApiKey` after a
+    // same-pointer rewrite), which flows through `providersAtom` into a new
+    // `entries` array — so `entries` is the invalidation signal for the
+    // keychain reads below.
+  }, [entries, app]);
 
   const resolvedValue = React.useMemo(() => {
     const resolvedId = resolveChatModelSelectionId(entries, value);

@@ -187,6 +187,24 @@ describe("ProviderRegistry", () => {
     expect(await registry.getApiKey(id)).toBe("sk-rotated");
   });
 
+  it("setApiKey rewrites the key under the same pointer without changing the row's content", async () => {
+    const id = await registry.add({
+      providerType: "anthropic",
+      displayName: "A",
+      origin: { kind: "byok" },
+    });
+    await registry.setApiKey(id, "sk-first");
+    const rowBefore = registry.get(id)!;
+
+    await registry.setApiKey(id, "sk-rotated");
+
+    // Content is untouched: a rotation reuses the pointer, so settings carry
+    // no evidence the key changed. That the UI still re-reads the keychain is
+    // covered end to end by `useChatModelPicker.test.tsx`.
+    expect(registry.get(id)!).toEqual(rowBefore);
+    expect(await registry.getApiKey(id)).toBe("sk-rotated");
+  });
+
   it("update() ignores attempts to overwrite apiKeyKeychainId", async () => {
     const id = await registry.add({
       providerType: "anthropic",
@@ -268,6 +286,17 @@ describe("ProviderRegistry", () => {
     expect(getSettings().providers[id]).toBeDefined();
     await registry.remove(id);
     expect(getSettings().providers[id]).toBeUndefined();
+  });
+
+  describe("notifyCredentialStoreChanged()", () => {
+    it("notifies subscribers after an external credential-store mutation (https://github.com/logancyang/obsidian-copilot-preview/issues/261)", () => {
+      const listener = jest.fn();
+      registry.subscribe(listener);
+
+      registry.notifyCredentialStoreChanged();
+
+      expect(listener).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe("subscribe()", () => {

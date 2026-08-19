@@ -31,6 +31,42 @@ describe("ModelSelector", () => {
       cloudWarningProps.length = 0;
     });
 
+    it("mounts the dropdown into the caller-provided container instead of the focused window's body (https://github.com/logancyang/obsidian-copilot-preview/issues/204)", async () => {
+      const host = document.createElement("div");
+      document.body.appendChild(host);
+      // Simulate the failure window: another Obsidian window (settings) holds
+      // focus, so the wrappers' `activeDocument` fallback points away from the
+      // document the picker lives in.
+      const otherWindowDoc = document.implementation.createHTMLDocument("settings-window");
+      const globals = window as unknown as { activeDocument: Document };
+      const originalActiveDocument = globals.activeDocument;
+      Object.defineProperty(window, "activeDocument", {
+        configurable: true,
+        value: otherWindowDoc,
+      });
+      try {
+        render(
+          <ModelSelector
+            value="gpt-5|openai"
+            onChange={jest.fn()}
+            models={[model({})]}
+            container={host}
+          />
+        );
+        fireEvent.keyDown(screen.getByRole("button"), { key: "Enter" });
+
+        const menu = await screen.findByRole("menu");
+        expect(host.contains(menu)).toBe(true);
+        expect(otherWindowDoc.querySelector("[role=menu]")).toBeNull();
+      } finally {
+        Object.defineProperty(window, "activeDocument", {
+          configurable: true,
+          value: originalActiveDocument,
+        });
+        host.remove();
+      }
+    });
+
     it("shows the cloud-egress warning on the collapsed trigger when the current model needs it", () => {
       const cloud = model({ _needsSelfHostWarning: true });
       render(<ModelSelector value="gpt-5|openai" onChange={jest.fn()} models={[cloud]} />);

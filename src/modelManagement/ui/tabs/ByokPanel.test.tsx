@@ -22,6 +22,12 @@ jest.mock("@/modelManagement/ui/ModelManagementContext", () => ({
 }));
 // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real `useApp` hook; the name must match the export
 jest.mock("@/context", () => ({ useApp: () => ({}) }));
+// The provider card's key badge is a live keychain read; this panel test drives
+// it with the minimal stub app above, which carries no vault to derive a real
+// service from.
+jest.mock("@/services/keychainService", () => ({
+  KeychainService: { getInstance: () => ({ getSecretById: () => null }) },
+}));
 jest.mock("@/modelManagement/state/atoms", () => {
   const jotai = jest.requireActual<typeof import("jotai")>("jotai");
   const byokProviders = jotai.atom([

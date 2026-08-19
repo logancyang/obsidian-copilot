@@ -94,6 +94,7 @@ import { FileSystemAdapter, Notice, type App } from "obsidian";
 import { getSettings } from "@/settings/model";
 import type { CopilotSettings } from "@/settings/model";
 import type { CustomModel } from "@/aiParams";
+import type { Provider } from "@/modelManagement";
 import { KeychainService, isSecretKey } from "./keychainService";
 
 /** Build a lightweight settings object. */
@@ -458,6 +459,40 @@ describe("keychainService", () => {
         expect(Notice).toHaveBeenCalledWith(
           "All API keys for this vault removed. Please re-enter them."
         );
+      });
+
+      it("keeps provider pointers and row contents intact while clearing this device's entries (https://github.com/logancyang/obsidian-copilot-preview/issues/261)", async () => {
+        const secretStorage = makeSecretStorage();
+        const service = KeychainService.getInstance(makeApp({ secretStorage }));
+        secretStorage.listSecrets.mockReturnValue([]);
+
+        const providers: Record<string, Provider> = {
+          p1: {
+            providerId: "p1",
+            providerType: "openai-compatible",
+            displayName: "P",
+            origin: { kind: "byok" },
+            addedAt: 0,
+            requiresApiKey: true,
+            apiKeyKeychainId: "kc-p1",
+          },
+        };
+        (getSettings as jest.Mock).mockReturnValue(makeSettings({ providers }));
+
+        const saveData = jest.fn().mockResolvedValue(undefined);
+        const syncMemory = jest.fn();
+
+        await service.forgetAllSecrets(saveData, syncMemory);
+
+        const synced = syncMemory.mock.calls[0][0] as unknown as {
+          providers: Record<string, Record<string, unknown>>;
+        };
+        // The pointer survives — it addresses entries other devices still
+        // hold — and the row's content is unchanged, so nothing in settings
+        // claims the key is gone. That the UI re-reads the keychain after this
+        // is covered end to end by `useChatModelPicker.test.tsx`.
+        expect(synced.providers.p1.apiKeyKeychainId).toBe("kc-p1");
+        expect(synced.providers.p1).toEqual(providers.p1);
       });
 
       it("handles saveData failure gracefully — keychain NOT cleared", async () => {

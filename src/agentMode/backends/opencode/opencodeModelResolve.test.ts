@@ -1,5 +1,7 @@
+import type { App } from "obsidian";
 import type { CopilotSettings } from "@/settings/model";
 import type { ConfiguredModel, Provider, ProviderOrigin, ProviderType } from "@/modelManagement";
+import { KeychainService } from "@/services/keychainService";
 import { ChatModelProviders } from "@/constants";
 import {
   COPILOT_PLUS_OPENCODE_PROVIDER_ID,
@@ -116,13 +118,44 @@ describe("opencodeModelResolve", () => {
       ...overrides,
     });
 
+    it("resolves credential state through the live keychain when no probe is injected (https://github.com/logancyang/obsidian-copilot-preview/issues/261)", () => {
+      // Exercises the production default probe (KeychainService singleton +
+      // live read) that every other case bypasses via injection — a regression
+      // in that wiring must not stay green behind injected predicates.
+      const secrets = new Map<string, string>();
+      const app = {
+        vault: { adapter: {} },
+        secretStorage: {
+          getSecret: (id: string) => secrets.get(id) ?? null,
+        },
+      } as unknown as App;
+      const settings = makeSettings({
+        enabledModels: ["cm1"],
+        providers: { p1: byokProvider() },
+        configuredModels: [makeModel("cm1", "p1", "qwen/qwen3-max")],
+      });
+
+      KeychainService.resetInstance();
+      KeychainService.getInstance(app);
+      try {
+        // The pointer is set but this device's keychain has no entry for it.
+        expect(opencodeEnabledModelEntries(settings)[0].credentialState).toBe("missing_key");
+
+        secrets.set("kc-1", "sk-live");
+        expect(opencodeEnabledModelEntries(settings)[0].credentialState).toBe("ok");
+      } finally {
+        // Only this case owns the singleton; later cases must not inherit it.
+        KeychainService.resetInstance();
+      }
+    });
+
     it("flags a required-key provider with no key as missing_key", () => {
       const settings = makeSettings({
         enabledModels: ["cm1"],
         providers: { p1: byokProvider({ apiKeyKeychainId: null }) },
         configuredModels: [makeModel("cm1", "p1", "qwen/qwen3-max")],
       });
-      const [entry] = opencodeEnabledModelEntries(settings);
+      const [entry] = opencodeEnabledModelEntries(settings, () => false);
       expect(entry.baseModelId).toBe("openrouter/qwen/qwen3-max");
       expect(entry.credentialState).toBe("missing_key");
     });
@@ -140,9 +173,22 @@ describe("opencodeModelResolve", () => {
           },
         ],
       });
-      const [entry] = opencodeEnabledModelEntries(settings);
+      const [entry] = opencodeEnabledModelEntries(settings, () => true);
       expect(entry.credentialState).toBe("ok");
       expect(entry.name).toBe("Big X");
+    });
+
+    it("flags missing_key when the pointer is set but the live presence probe says no key (https://github.com/logancyang/obsidian-copilot-preview/issues/261)", () => {
+      // The Delete All Keys shape: the synced pointer survives while this
+      // device's keychain entry is gone — presence is the probe's answer,
+      // never the pointer's existence.
+      const settings = makeSettings({
+        enabledModels: ["cm1"],
+        providers: { p1: byokProvider() },
+        configuredModels: [makeModel("cm1", "p1", "qwen/qwen3-max")],
+      });
+      const [entry] = opencodeEnabledModelEntries(settings, () => false);
+      expect(entry.credentialState).toBe("missing_key");
     });
 
     it("treats agent-origin (native) models as ok regardless of key", () => {
@@ -192,7 +238,9 @@ describe("opencodeModelResolve", () => {
         },
         configuredModels: [makeModel("cloud", "pc", "gpt-4o"), makeModel("local", "pl", "llama3")],
       });
-      const byId = new Map(opencodeEnabledModelEntries(settings).map((e) => [e.baseModelId, e]));
+      const byId = new Map(
+        opencodeEnabledModelEntries(settings, () => true).map((e) => [e.baseModelId, e])
+      );
       expect(byId.get("openai/gpt-4o")?.needsSelfHostWarning).toBe(true);
       expect(byId.get("ollama/llama3")?.needsSelfHostWarning).toBe(false);
     });
@@ -211,7 +259,7 @@ describe("opencodeModelResolve", () => {
         },
         configuredModels: [makeModel("cloud", "pc", "gpt-4o")],
       });
-      expect(opencodeEnabledModelEntries(settings)[0].needsSelfHostWarning).toBe(false);
+      expect(opencodeEnabledModelEntries(settings, () => true)[0].needsSelfHostWarning).toBe(false);
     });
 
     it("returns the shared frozen empty array when nothing is enabled", () => {
@@ -225,7 +273,12 @@ describe("opencodeModelResolve", () => {
     it("builds the `<provider>/<model>` wire base id for copilot-plus models", () => {
       const settings = makeSettings({
         enabledModels: ["cm1"],
-        providers: { p1: makeProvider("p1", { kind: "copilot-plus" }) },
+        // Reason: production Plus rows carry `requiresApiKey: false`
+        // (`CopilotPlusSetupApi`), so credential projection short-circuits
+        // before any keychain probe.
+        providers: {
+          p1: { ...makeProvider("p1", { kind: "copilot-plus" }), requiresApiKey: false },
+        },
         configuredModels: [makeModel("cm1", "p1", "copilot-plus-flash")],
       });
       expect(opencodeEnabledModelEntries(settings)[0].baseModelId).toBe(

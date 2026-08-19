@@ -19,6 +19,7 @@ import {
   suppressNextPersistOnce,
 } from "@/services/settingsPersistence";
 import { hasPersistedSecrets } from "@/services/settingsSecretTransforms";
+import { providerHasApiKey, useModelManagement } from "@/modelManagement";
 import { logError } from "@/logger";
 import {
   type CopilotSettings,
@@ -37,6 +38,7 @@ const DESKTOP_UNAVAILABLE_FRAME_LOG_PATH = "(Agent Mode frame logs are desktop-o
 
 export const AdvancedSettings: React.FC = () => {
   const app = useApp();
+  const { providerRegistry } = useModelManagement();
   const settings = useSettingsValue();
   const [forgetting, setForgetting] = useState(false);
   const [frameLogPath, setFrameLogPath] = useState(DESKTOP_UNAVAILABLE_FRAME_LOG_PATH);
@@ -57,7 +59,17 @@ export const AdvancedSettings: React.FC = () => {
   }, []);
 
   const keychainAvailable = KeychainService.getInstance().isAvailable();
-  const keychainAppearsEmpty = keychainAvailable && !hasPersistedSecrets(settings);
+  // "No API keys" must also count BYOK provider keys, which live only in the
+  // keychain behind each row's `apiKeyKeychainId` pointer — they never appear
+  // in the legacy top-level/model-level fields `hasPersistedSecrets` scans, so
+  // a BYOK-only setup would be misreported as keyless.
+  // https://github.com/logancyang/obsidian-copilot-preview/issues/261
+  const keychainAppearsEmpty =
+    keychainAvailable &&
+    !hasPersistedSecrets(settings) &&
+    !Object.values(settings.providers).some((provider) =>
+      providerHasApiKey(provider, KeychainService.getInstance())
+    );
 
   const handleReportIssue = useCallback(() => {
     // Gate before importing the agentMode barrel: on mobile the barrel pulls in
@@ -148,6 +160,15 @@ export const AdvancedSettings: React.FC = () => {
             refreshLastPersistedSettings(nextSettings as CopilotSettings);
             suppressNextPersistOnce();
             setSettings(nextSettings);
+            // The keychain sweep bypasses ProviderRegistry, but subprocess
+            // backends bake provider keys into spawn-time config and only
+            // restart on registry emissions. Notify from THIS callback, not
+            // after the await: a disk-write failure returns without reaching
+            // here (nothing was deleted — no restart), while a partial
+            // keychain failure runs this before throwing (keys DID change —
+            // restart must still fire).
+            // https://github.com/logancyang/obsidian-copilot-preview/issues/261
+            providerRegistry.notifyCredentialStoreChanged();
           }
         )
       );
@@ -157,7 +178,7 @@ export const AdvancedSettings: React.FC = () => {
     } finally {
       setForgetting(false);
     }
-  }, [app, forgetting]);
+  }, [app, forgetting, providerRegistry]);
 
   return (
     <div className="tw-space-y-4">

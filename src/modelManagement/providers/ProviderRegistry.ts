@@ -88,6 +88,20 @@ export class ProviderRegistry {
     return () => this.#listeners.delete(listener);
   }
 
+  /**
+   * Notify subscribers after provider credentials were mutated outside this
+   * registry (e.g. the "Delete All Keys" keychain sweep). Subprocess agent
+   * backends bake provider keys into spawn-time config and only restart on
+   * registry emissions, so an external credential wipe must be announced here
+   * or a running backend keeps using the deleted key indefinitely. Call only
+   * after the credential-store operation and its in-memory settings projection
+   * have settled, so restarted consumers read final state.
+   * https://github.com/logancyang/obsidian-copilot-preview/issues/261
+   */
+  notifyCredentialStoreChanged(): void {
+    this.#emit();
+  }
+
   #emit(): void {
     for (const listener of [...this.#listeners]) {
       try {
@@ -284,7 +298,27 @@ export class ProviderRegistry {
       this.#setApiKeyKeychainId(providerId, keychainId);
     }
     keychain.setSecretById(keychainId, apiKey);
+    if (row.apiKeyKeychainId === keychainId) {
+      // Reason: a same-pointer rewrite (e.g. re-entering a key after Delete
+      // All Keys tombstoned the entry) changes only the keychain, which
+      // settings subscribers cannot see. Key badges are a live keychain read
+      // re-run when the row identity changes, so refresh the row — same
+      // content, new reference — or "No key" would stick until restart.
+      // https://github.com/logancyang/obsidian-copilot-preview/issues/261
+      this.#touchProviderRow(providerId);
+    }
     this.#emit();
+  }
+
+  /** Internal: re-issue a provider row with a fresh identity so settings
+   *  subscribers (and the derived picker atoms) re-run keychain-backed
+   *  reads. No fields change. */
+  #touchProviderRow(providerId: string): void {
+    setSettings((cur) => {
+      const current = cur.providers[providerId];
+      if (!current) return {};
+      return { providers: { ...cur.providers, [providerId]: { ...current } } };
+    });
   }
 
   /** Drops the keychain entry and clears `apiKeyKeychainId` on the row. */

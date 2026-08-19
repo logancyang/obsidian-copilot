@@ -19,7 +19,9 @@ import { cn } from "@/lib/utils";
 import { SelfHostCloudWarningIcon } from "@/components/ui/SelfHostCloudWarningIcon";
 import type { ConfiguredModel, Provider } from "@/modelManagement/types/persisted";
 import { useModelManagement } from "@/modelManagement/ui/ModelManagementContext";
+import { providerHasApiKey } from "@/modelManagement/providers/providerHasApiKey";
 import { providerRequiresApiKey } from "@/modelManagement/providers/providerRequiresApiKey";
+import { KeychainService } from "@/services/keychainService";
 import { ChevronRight, MoreVertical, Settings2, Trash2, XIcon } from "lucide-react";
 import { Notice } from "obsidian";
 import React, { useRef, useState } from "react";
@@ -123,7 +125,7 @@ const ProviderCard: React.FC<ProviderCardProps> = ({
     if (!requiresKey) {
       return { label: "Running", variant: "default", className: successClassName };
     }
-    if (provider.apiKeyKeychainId) {
+    if (providerHasApiKey(provider, KeychainService.getInstance(app))) {
       return { label: "API key set", variant: "default", className: successClassName };
     }
     return { label: "No key", variant: "secondary", className: "tw-rounded-full" };
