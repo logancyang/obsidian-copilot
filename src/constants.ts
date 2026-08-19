@@ -640,7 +640,6 @@ export interface ProviderMetadata {
    */
   curlBaseURL: string;
   keyManagementURL: string;
-  listModelURL: string;
   testModel?: ChatModels;
 }
 
@@ -651,7 +650,6 @@ export const ProviderInfo: Record<Provider, ProviderMetadata> = {
     host: "https://openrouter.ai/api/v1/",
     curlBaseURL: "https://openrouter.ai/api/v1",
     keyManagementURL: "https://openrouter.ai/keys",
-    listModelURL: "https://openrouter.ai/api/v1/models",
     testModel: ChatModels.OPENROUTER_GPT_5_4_MINI,
   },
   [ChatModelProviders.GOOGLE]: {
@@ -659,7 +657,6 @@ export const ProviderInfo: Record<Provider, ProviderMetadata> = {
     host: "https://generativelanguage.googleapis.com",
     curlBaseURL: "https://generativelanguage.googleapis.com/v1beta",
     keyManagementURL: "https://makersuite.google.com/app/apikey",
-    listModelURL: "https://generativelanguage.googleapis.com/v1beta/models",
     testModel: ChatModels.GEMINI_FLASH,
   },
   [ChatModelProviders.ANTHROPIC]: {
@@ -667,7 +664,6 @@ export const ProviderInfo: Record<Provider, ProviderMetadata> = {
     host: "https://api.anthropic.com/",
     curlBaseURL: "https://api.anthropic.com",
     keyManagementURL: "https://console.anthropic.com/settings/keys",
-    listModelURL: "https://api.anthropic.com/v1/models",
     testModel: ChatModels.CLAUDE_SONNET_4_6,
   },
   [ChatModelProviders.OPENAI]: {
@@ -675,7 +671,6 @@ export const ProviderInfo: Record<Provider, ProviderMetadata> = {
     host: "https://api.openai.com",
     curlBaseURL: "https://api.openai.com/v1",
     keyManagementURL: "https://platform.openai.com/api-keys",
-    listModelURL: "https://api.openai.com/v1/models",
     testModel: ChatModels.GPT_5_5,
   },
   [ChatModelProviders.XAI]: {
@@ -683,7 +678,6 @@ export const ProviderInfo: Record<Provider, ProviderMetadata> = {
     host: "https://api.x.ai/v1",
     curlBaseURL: "https://api.x.ai/v1",
     keyManagementURL: "https://console.x.ai",
-    listModelURL: "https://api.x.ai/v1/models",
     testModel: ChatModels.GROK_4_3,
   },
   [ChatModelProviders.AZURE_OPENAI]: {
@@ -691,14 +685,12 @@ export const ProviderInfo: Record<Provider, ProviderMetadata> = {
     host: "https://<resource>.services.ai.azure.com/models",
     curlBaseURL: "https://<resource>.services.ai.azure.com/models",
     keyManagementURL: "https://ai.azure.com",
-    listModelURL: "",
   },
   [ChatModelProviders.GROQ]: {
     label: "Groq",
     host: "https://api.groq.com/openai",
     curlBaseURL: "https://api.groq.com/openai/v1",
     keyManagementURL: "https://console.groq.com/keys",
-    listModelURL: "https://api.groq.com/openai/v1/models",
     testModel: ChatModels.GROQ_LLAMA_8b,
   },
   [ChatModelProviders.COHEREAI]: {
@@ -706,7 +698,6 @@ export const ProviderInfo: Record<Provider, ProviderMetadata> = {
     host: "https://api.cohere.ai/compatibility/v1",
     curlBaseURL: "https://api.cohere.ai/compatibility/v1",
     keyManagementURL: "https://dashboard.cohere.ai/api-keys",
-    listModelURL: "https://api.cohere.com/v1/models",
     testModel: ChatModels.COMMAND_R,
   },
   [ChatModelProviders.SILICONFLOW]: {
@@ -714,7 +705,6 @@ export const ProviderInfo: Record<Provider, ProviderMetadata> = {
     host: "https://api.siliconflow.com/v1",
     curlBaseURL: "https://api.siliconflow.com/v1",
     keyManagementURL: "https://cloud.siliconflow.com/me/account/ak",
-    listModelURL: "https://api.siliconflow.com/v1/models",
     testModel: ChatModels.SILICONFLOW_DEEPSEEK_V3,
   },
   [ChatModelProviders.OLLAMA]: {
@@ -722,28 +712,24 @@ export const ProviderInfo: Record<Provider, ProviderMetadata> = {
     host: "http://localhost:11434/v1/",
     curlBaseURL: "http://localhost:11434",
     keyManagementURL: "",
-    listModelURL: "",
   },
   [ChatModelProviders.LM_STUDIO]: {
     label: "LM Studio",
     host: "http://localhost:1234/v1",
     curlBaseURL: "http://localhost:1234/v1",
     keyManagementURL: "",
-    listModelURL: "",
   },
   [ChatModelProviders.OPENAI_FORMAT]: {
     label: "OpenAI Format",
     host: "https://api.example.com/v1",
     curlBaseURL: "https://api.example.com/v1",
     keyManagementURL: "",
-    listModelURL: "",
   },
   [ChatModelProviders.MISTRAL]: {
     label: "Mistral",
     host: "https://api.mistral.ai/v1",
     curlBaseURL: "https://api.mistral.ai/v1",
     keyManagementURL: "https://console.mistral.ai/api-keys",
-    listModelURL: "https://api.mistral.ai/v1/models",
     testModel: ChatModels.MISTRAL_TINY,
   },
   [ChatModelProviders.DEEPSEEK]: {
@@ -751,7 +737,6 @@ export const ProviderInfo: Record<Provider, ProviderMetadata> = {
     host: "https://api.deepseek.com/",
     curlBaseURL: "https://api.deepseek.com",
     keyManagementURL: "https://platform.deepseek.com/api-keys",
-    listModelURL: "https://api.deepseek.com/models",
     testModel: ChatModels.DEEPSEEK_CHAT,
   },
   [ChatModelProviders.AMAZON_BEDROCK]: {
@@ -759,21 +744,18 @@ export const ProviderInfo: Record<Provider, ProviderMetadata> = {
     host: "https://bedrock-runtime.{region}.amazonaws.com",
     curlBaseURL: "https://bedrock-runtime.{region}.amazonaws.com",
     keyManagementURL: "https://console.aws.amazon.com/iam/home#/security_credentials",
-    listModelURL: "",
   },
   [EmbeddingModelProviders.COPILOT_PLUS]: {
     label: "Copilot",
     host: BREVILABS_MODELS_BASE_URL,
     curlBaseURL: BREVILABS_MODELS_BASE_URL,
     keyManagementURL: "",
-    listModelURL: "",
   },
   [EmbeddingModelProviders.COPILOT_PLUS_JINA]: {
     label: "Copilot",
     host: BREVILABS_MODELS_BASE_URL,
     curlBaseURL: BREVILABS_MODELS_BASE_URL,
     keyManagementURL: "",
-    listModelURL: "",
   },
 };
 
