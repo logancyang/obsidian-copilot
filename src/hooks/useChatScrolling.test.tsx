@@ -26,6 +26,11 @@ function createScrollContainer(metrics: ScrollMetrics): HTMLDivElement {
       metrics.scrollTop = options.top;
     }
   }) as never;
+  container.scrollBy = jest.fn((options?: ScrollToOptions | number) => {
+    if (typeof options === "object" && typeof options?.top === "number") {
+      metrics.scrollTop += options.top;
+    }
+  }) as never;
   return container;
 }
 
@@ -41,13 +46,25 @@ describe("useChatScrolling", () => {
     queue.forEach((callback) => callback(0));
   }
 
+  // Maps each observed element to its observer's callback, so tests can fire
+  // resizes for a specific target (container vs content) the way the browser
+  // would.
+  let observedTargets = new Map<Element, ResizeObserverCallback>();
+
+  function fireResizeObserverFor(target: Element) {
+    observedTargets.get(target)?.([], { disconnect: jest.fn() } as unknown as ResizeObserver);
+  }
+
   beforeEach(() => {
-    // jsdom lacks ResizeObserver; the hook only needs observe/disconnect.
-    (window as unknown as { ResizeObserver?: unknown }).ResizeObserver = jest.fn(() => ({
-      observe: jest.fn(),
-      unobserve: jest.fn(),
-      disconnect: jest.fn(),
-    }));
+    // jsdom lacks ResizeObserver; the mock records callbacks for manual firing.
+    observedTargets = new Map();
+    (window as unknown as { ResizeObserver?: unknown }).ResizeObserver = jest.fn(
+      (callback: ResizeObserverCallback) => ({
+        observe: jest.fn((target: Element) => observedTargets.set(target, callback)),
+        unobserve: jest.fn(),
+        disconnect: jest.fn(),
+      })
+    );
     animationFrameQueue = [];
     jest.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
       animationFrameQueue.push(callback);
@@ -62,11 +79,13 @@ describe("useChatScrolling", () => {
 
   function renderAttachedHook(metrics: ScrollMetrics) {
     const container = createScrollContainer(metrics);
+    const content = document.createElement("div");
     const rendered = renderHook(() => useChatScrolling({ chatHistory: [] }));
     act(() => {
       rendered.result.current.scrollContainerCallbackRef(container);
+      rendered.result.current.contentCallbackRef(content);
     });
-    return { container, rendered };
+    return { container, content, rendered };
   }
 
   function dispatchScroll(container: HTMLDivElement) {
@@ -125,17 +144,30 @@ describe("useChatScrolling", () => {
       expect(rendered.result.current.isAtBottom).toBe(false);
     });
 
-    it("refreshes isAtBottom on re-render when streamed content grows without a scroll event (https://github.com/logancyang/obsidian-copilot-preview/issues/329)", () => {
+    it("refreshes isAtBottom when the observed content grows without a scroll event, e.g. streaming or image loads (https://github.com/logancyang/obsidian-copilot-preview/issues/329)", () => {
       const metrics = { scrollHeight: 1000, clientHeight: 400, scrollTop: 600 };
-      const { rendered } = renderAttachedHook(metrics);
+      const { content, rendered } = renderAttachedHook(metrics);
       expect(rendered.result.current.isAtBottom).toBe(true);
 
       metrics.scrollHeight = 2000;
       act(() => {
-        rendered.rerender();
+        fireResizeObserverFor(content);
       });
 
       expect(rendered.result.current.isAtBottom).toBe(false);
+    });
+
+    it("refreshes isAtBottom when a pane resize changes the viewport height without touching content (https://github.com/logancyang/obsidian-copilot-preview/issues/329)", () => {
+      const metrics = { scrollHeight: 1000, clientHeight: 400, scrollTop: 100 };
+      const { container, rendered } = renderAttachedHook(metrics);
+      expect(rendered.result.current.isAtBottom).toBe(false);
+
+      metrics.clientHeight = 950;
+      act(() => {
+        fireResizeObserverFor(container);
+      });
+
+      expect(rendered.result.current.isAtBottom).toBe(true);
     });
 
     it("scrollToBottom scrolls the container to its full scroll height", () => {
@@ -147,6 +179,18 @@ describe("useChatScrolling", () => {
       });
 
       expect(container.scrollTo).toHaveBeenLastCalledWith({ top: 1000, behavior: "smooth" });
+    });
+
+    it("scrollBy moves the container by the forwarded wheel delta without animation", () => {
+      const metrics = { scrollHeight: 1000, clientHeight: 400, scrollTop: 100 };
+      const { container, rendered } = renderAttachedHook(metrics);
+
+      act(() => {
+        rendered.result.current.scrollBy(120);
+      });
+
+      expect(container.scrollBy).toHaveBeenCalledWith({ top: 120, behavior: "instant" });
+      expect(metrics.scrollTop).toBe(220);
     });
   });
 });

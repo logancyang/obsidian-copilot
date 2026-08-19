@@ -9,10 +9,10 @@ const meta = {
 } satisfies Meta<ScrollToBottomButtonProps>;
 export default meta;
 
-// The button is absolutely positioned by design, so the story recreates its
+// The button is absolutely positioned by design, so the stories recreate its
 // real boundary: a relative, clipped message-list container it floats over.
-export const OverMessageList: StoryObj<ScrollToBottomButtonProps> = {
-  render: () => (
+function MessageListFrame({ children }: { children: React.ReactNode }) {
+  return (
     <div className="tw-relative tw-h-64 tw-overflow-hidden tw-rounded-md tw-border tw-border-solid tw-border-border">
       <div className="tw-h-full tw-overflow-y-auto tw-p-4 tw-text-muted">
         <p>
@@ -30,7 +30,23 @@ export const OverMessageList: StoryObj<ScrollToBottomButtonProps> = {
           quickly expanded into classical texts, legal codes, grammars, and popular literature.
         </p>
       </div>
-      <ScrollToBottomButton onClick={() => {}} />
+      {children}
     </div>
+  );
+}
+
+export const OverMessageList: StoryObj<ScrollToBottomButtonProps> = {
+  render: () => (
+    <MessageListFrame>
+      <ScrollToBottomButton onClick={() => {}} onScrollWheel={() => {}} />
+    </MessageListFrame>
+  ),
+};
+
+export const Streaming: StoryObj<ScrollToBottomButtonProps> = {
+  render: () => (
+    <MessageListFrame>
+      <ScrollToBottomButton onClick={() => {}} onScrollWheel={() => {}} isStreaming />
+    </MessageListFrame>
   ),
 };
