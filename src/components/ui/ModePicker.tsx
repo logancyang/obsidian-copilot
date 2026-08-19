@@ -20,6 +20,12 @@ export interface ModePickerOverride {
 interface ModePickerProps {
   override: ModePickerOverride;
   className?: string;
+  /**
+   * Portal host for the dropdown — an element from the caller's own tree, so
+   * the menu mounts in the picker's document rather than the focused window's.
+   * https://github.com/logancyang/obsidian-copilot-preview/issues/204
+   */
+  container?: HTMLElement | null;
 }
 
 /**
@@ -49,7 +55,7 @@ export function getModeLabel(value: CopilotMode): string {
   return MODE_DISPLAY[value]?.label ?? value;
 }
 
-export function ModePicker({ override, className }: ModePickerProps) {
+export function ModePicker({ override, className, container }: ModePickerProps) {
   const { options, value, onChange, disabled } = override;
   const triggerLabel = value ? getModeLabel(value) : "Mode";
 
@@ -74,7 +80,7 @@ export function ModePicker({ override, className }: ModePickerProps) {
           {!disabled && <ChevronDown className="tw-mt-0.5 tw-size-4 tw-shrink-0" />}
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="tw-w-[320px]">
+      <DropdownMenuContent align="start" className="tw-w-[320px]" container={container}>
         {options.map((opt) => {
           const display = MODE_DISPLAY[opt.value];
           const isActive = value === opt.value;

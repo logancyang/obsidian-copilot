@@ -884,6 +884,13 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
               lexicalEditorRef={lexicalEditorRef}
             />
           )}
+          {/* All three pickers portal into this pane's own tree via
+              `containerRef`. The wrappers' default host (`activeDocument.body`)
+              tracks window focus, not component ownership: a settings change
+              re-renders this pane while the settings window is focused, the
+              stale host is captured, and once that window closes the menus
+              open into a destroyed document — trigger toggles, nothing shows.
+              https://github.com/logancyang/obsidian-copilot-preview/issues/204 */}
           {modelPickerOverride?.effortOptionsByModelKey && modelPickerOverride.commitSelection ? (
             // Agent Mode: always use the merged picker, even when the active
             // model has no effort dimension — the user can still switch to
@@ -898,6 +905,7 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
                 commitSelection: modelPickerOverride.commitSelection,
               }}
               className="tw-min-w-0 tw-max-w-full tw-truncate"
+              container={containerRef.current}
             />
           ) : (
             <ModelSelector
@@ -909,13 +917,16 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
               apiKeySettings={modelPickerOverride ? undefined : settings}
               onChange={modelPickerOverride?.onChange ?? setCurrentModelKey}
               className="tw-min-w-0 tw-max-w-full tw-truncate"
+              container={containerRef.current}
             />
           )}
         </div>
 
         <div className="tw-flex tw-items-center tw-gap-1">
           {!isGenerating && toolControls}
-          {modePickerOverride && <ModePicker override={modePickerOverride} />}
+          {modePickerOverride && (
+            <ModePicker override={modePickerOverride} container={containerRef.current} />
+          )}
           {isGenerating ? (
             <Button
               size="icon"

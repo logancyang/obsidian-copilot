@@ -35,6 +35,12 @@ export interface ModelEffortPickerOverride {
 interface ModelEffortPickerProps {
   override: ModelEffortPickerOverride;
   className?: string;
+  /**
+   * Portal host for the popover — an element from the caller's own tree, so
+   * the panel mounts in the picker's document rather than the focused window's.
+   * https://github.com/logancyang/obsidian-copilot-preview/issues/204
+   */
+  container?: HTMLElement | null;
 }
 
 interface EffortOpt {
@@ -47,7 +53,7 @@ interface EffortOpt {
  * path swaps the active session mid-interaction, which would collapse the
  * popover before the user could pick an effort.
  */
-export function ModelEffortPicker({ override, className }: ModelEffortPickerProps) {
+export function ModelEffortPicker({ override, className, container }: ModelEffortPickerProps) {
   const { models, value, effort, effortOptionsByModelKey, commitSelection, disabled } = override;
 
   const [open, setOpen] = useState(false);
@@ -236,6 +242,7 @@ export function ModelEffortPicker({ override, className }: ModelEffortPickerProp
         side="top"
         sideOffset={4}
         onKeyDown={handleKeyDown}
+        container={container}
       >
         <div className="tw-max-h-72 tw-overflow-y-auto tw-py-1" role="listbox" aria-label="Model">
           {models.map((entry) => {
