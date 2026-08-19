@@ -1,5 +1,6 @@
 import { logError, logInfo, logWarn } from "@/logger";
 import { requireNodeModule } from "@/utils/desktopRuntime";
+import { NdjsonLineSplitter } from "./debugTap";
 
 type ChildProcessByStdio = import("node:child_process").ChildProcessByStdio<
   Writable,
@@ -94,7 +95,7 @@ export class AcpProcessManager {
     ).toWeb;
     return {
       stdin: writableToWeb(child.stdin),
-      stdout: readableToWeb(child.stdout),
+      stdout: sanitizeAcpStdout(readableToWeb(child.stdout)),
     };
   }
 
@@ -151,6 +152,59 @@ export class AcpProcessManager {
       await exited;
     }
   }
+}
+
+/**
+ * CSI (colors, cursor moves) and OSC (window title) escape sequences. Agent
+ * binaries and their plugins write these to stdout for a human terminal;
+ * anything prefixed to a JSON-RPC envelope makes `JSON.parse` throw, and the
+ * SDK's `ndJsonStream` drops such frames silently.
+ */
+// eslint-disable-next-line no-control-regex
+const TERMINAL_ESCAPE_SEQUENCE = /\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g;
+
+/**
+ * Strip terminal escape sequences from an NDJSON byte stream so downstream
+ * consumers see parseable JSON-RPC frames. Buffering to newline boundaries
+ * also keeps a sequence intact when the child splits it across two chunks.
+ *
+ * @param inner The child's raw stdout as a Web stream.
+ */
+export function sanitizeAcpStdout(inner: ReadableStream<Uint8Array>): ReadableStream<Uint8Array> {
+  // Hand-rolled instead of `pipeThrough(new TransformStream())`: `inner`
+  // comes from Node's `Readable.toWeb()` and mixing it with a global-realm
+  // stream throws `ERR_INVALID_ARG_TYPE`.
+  const reader = inner.getReader();
+  const encoder = new TextEncoder();
+  let enqueued = 0;
+  let splitter: NdjsonLineSplitter;
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      splitter = new NdjsonLineSplitter((line) => {
+        const cleaned = line.replace(TERMINAL_ESCAPE_SEQUENCE, "").trim();
+        if (!cleaned) return;
+        controller.enqueue(encoder.encode(`${cleaned}\n`));
+        enqueued += 1;
+      });
+    },
+    async pull(controller) {
+      // Keep reading until a whole frame is ready: a chunk that ends
+      // mid-frame would otherwise leave the consumer waiting forever.
+      enqueued = 0;
+      while (enqueued === 0) {
+        const { value, done } = await reader.read();
+        if (done) {
+          splitter.flush();
+          controller.close();
+          return;
+        }
+        if (value) splitter.push(value);
+      }
+    },
+    cancel(reason) {
+      return reader.cancel(reason);
+    },
+  });
 }
 
 function pipeStderrToLogger(stderr: Readable, tag: string): void {
