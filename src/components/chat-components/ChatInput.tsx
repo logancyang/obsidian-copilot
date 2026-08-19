@@ -265,7 +265,18 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
   const [contextUrls, setContextUrls] = useState<string[]>(initialContext?.urls || []);
   const [contextFolders, setContextFolders] = useState<string[]>(initialContext?.folders || []);
   const [contextWebTabs, setContextWebTabs] = useState<WebTabContext[]>([]);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  // Portal host for the pickers, held in state rather than read from the ref:
+  // the first render passes before the ref attaches, and a ref attachment
+  // alone never re-renders — a pane mounted while another Obsidian window has
+  // focus would hand the pickers a null host for good. The state write on
+  // attach re-renders once and refreshes all three picker props.
+  // https://github.com/logancyang/obsidian-copilot-preview/issues/204
+  const [portalContainer, setPortalContainer] = useState<HTMLDivElement | null>(null);
+  const setContainerEl = useCallback((el: HTMLDivElement | null) => {
+    containerRef.current = el;
+    setPortalContainer(el);
+  }, []);
   const lexicalEditorRef = useRef<LexicalEditorType | null>(null);
   const [currentModelKey, setCurrentModelKey] = useModelKey();
   const settings = useSettingsValue();
@@ -770,7 +781,7 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
         modePickerOverride?.value === "auto" &&
           "tw-shadow-[0_0_10px_rgba(var(--color-red-rgb),0.18)] tw-border-red/60"
       )}
-      ref={containerRef}
+      ref={setContainerEl}
     >
       {/* Two columns: the content stack, and (when provided) a structural
           accessory column. A column, not an overlay, so badges, images,
@@ -905,7 +916,7 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
                 commitSelection: modelPickerOverride.commitSelection,
               }}
               className="tw-min-w-0 tw-max-w-full tw-truncate"
-              container={containerRef.current}
+              container={portalContainer}
             />
           ) : (
             <ModelSelector
@@ -917,7 +928,7 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
               apiKeySettings={modelPickerOverride ? undefined : settings}
               onChange={modelPickerOverride?.onChange ?? setCurrentModelKey}
               className="tw-min-w-0 tw-max-w-full tw-truncate"
-              container={containerRef.current}
+              container={portalContainer}
             />
           )}
         </div>
@@ -925,7 +936,7 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
         <div className="tw-flex tw-items-center tw-gap-1">
           {!isGenerating && toolControls}
           {modePickerOverride && (
-            <ModePicker override={modePickerOverride} container={containerRef.current} />
+            <ModePicker override={modePickerOverride} container={portalContainer} />
           )}
           {isGenerating ? (
             <Button
