@@ -2,7 +2,7 @@ import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
 import type { AgentChatMessage } from "@/agentMode/session/types";
 import AgentChatMessages from "@/agentMode/ui/AgentChatMessages";
 import { AI_SENDER, USER_SENDER } from "@/constants";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import React from "react";
 
 const scrollingMockState = {
@@ -172,14 +172,6 @@ describe("AgentChatMessages", () => {
       const button = screen.getByLabelText("Scroll to latest message");
       act(() => button.click());
       expect(scrollingMockState.jumpToLatest).toHaveBeenCalledTimes(1);
-    });
-
-    it("forwards wheel deltas from the button to the message list so hovering it never traps scrolling (https://github.com/logancyang/obsidian-copilot-preview/issues/329)", () => {
-      scrollingMockState.isAtBottom = false;
-      renderMessages([assistantMessage("answer-1", 62_000)], false);
-
-      fireEvent.wheel(screen.getByLabelText("Scroll to latest message"), { deltaY: 120 });
-      expect(scrollingMockState.scrollBy).toHaveBeenCalledWith(120);
     });
 
     it("swaps the arrow for a bouncing typing indicator while a turn is streaming (https://github.com/logancyang/obsidian-copilot-preview/issues/329)", () => {

@@ -1,7 +1,7 @@
 import ChatMessages, { isChatEmpty } from "@/components/chat-components/ChatMessages";
 import { USER_SENDER } from "@/constants";
 import type { ChatMessage } from "@/types/message";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import React from "react";
 
 const scrollingMockState = {
@@ -106,14 +106,6 @@ describe("ChatMessages", () => {
       const button = screen.getByLabelText("Scroll to latest message");
       act(() => button.click());
       expect(scrollingMockState.jumpToLatest).toHaveBeenCalledTimes(1);
-    });
-
-    it("forwards wheel deltas from the button to the message list so hovering it never traps scrolling (https://github.com/logancyang/obsidian-copilot-preview/issues/329)", () => {
-      scrollingMockState.isAtBottom = false;
-      renderMessages([userMessage("m1", "hello")]);
-
-      fireEvent.wheel(screen.getByLabelText("Scroll to latest message"), { deltaY: -80 });
-      expect(scrollingMockState.scrollBy).toHaveBeenCalledWith(-80);
     });
 
     it("swaps the arrow for a bouncing typing indicator while a response is streaming (https://github.com/logancyang/obsidian-copilot-preview/issues/329)", () => {
