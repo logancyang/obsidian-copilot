@@ -1061,3 +1061,12 @@ button.copilot-scroll-to-bottom-button {
     opacity: 1;
   }
 }
+
+/* Users who ask the OS for reduced motion get static dots instead of the
+   bounce (same convention as the JS matchMedia checks elsewhere in src/). */
+@media (prefers-reduced-motion: reduce) {
+  .copilot-typing-dot {
+    animation: none;
+    opacity: 0.7;
+  }
+}
