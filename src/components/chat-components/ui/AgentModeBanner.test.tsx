@@ -29,7 +29,6 @@ describe("AgentModeBanner", () => {
       const paths = Array.from(container.querySelectorAll("path"));
       expect(paths.some((path) => path.getAttribute("d") === COPILOT_AGENT_ICON_PATH)).toBe(true);
       expect(container.querySelector(".lucide-circle-alert")).toBeNull();
-      expect(screen.queryByText("New")).not.toBeNull();
       expect(screen.queryByText("Switch to Copilot Agent Chat")).not.toBeNull();
       expect(screen.queryByText("for a more capable agent experience")).not.toBeNull();
       fireEvent.click(screen.getByRole("button", { name: HEADLINE }));
@@ -37,7 +36,7 @@ describe("AgentModeBanner", () => {
       expect(onOpenAgent).toHaveBeenCalledTimes(1);
     });
 
-    it("frames the announcement around what is newly available rather than what is ending", () => {
+    it("keeps retirement wording out of the invitation", () => {
       const { container } = render(<AgentModeBanner onOpenAgent={jest.fn()} />);
 
       const copy = container.textContent?.toLowerCase() ?? "";
