@@ -140,6 +140,14 @@ export class ChatOpenRouter extends ChatOpenAI {
         logInfo(`OpenRouter reasoning enabled with max_tokens: 1024`);
         return {
           ...withCaching,
+          // No top-level `max_tokens` alongside this. OpenRouter's docs say the
+          // two must differ where both are present, which reads like the
+          // request needs one, but the gateway accepts a reasoning budget on
+          // its own: checked live against `anthropic/claude-haiku-4.5` and
+          // `nvidia/nemotron-3-nano-30b-a3b`, both 200 with the field absent.
+          // Supplying one here would put a ceiling back on every reasoning
+          // model, which is the thing this change removes.
+          // https://github.com/logancyang/obsidian-copilot-preview/issues/312
           reasoning: {
             max_tokens: 1024,
           },

@@ -65,7 +65,6 @@ export function AddProjectModalContent({
           projectModelKey: "",
           modelConfigs: {
             temperature: DEFAULT_MODEL_SETTING.TEMPERATURE,
-            maxTokens: DEFAULT_MODEL_SETTING.MAX_TOKENS,
           },
           contextSource: {
             inclusions: "",

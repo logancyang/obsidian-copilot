@@ -147,5 +147,41 @@ describe("ChatOpenRouter", () => {
         expect(result).toEqual([{ role: "assistant", content: "done" }]);
       });
     });
+
+    describe("invocationParams()", () => {
+      function paramsFor(fields: Record<string, unknown>): Record<string, unknown> {
+        const model = new ChatOpenRouter({
+          modelName: "test-model",
+          apiKey: "test-key",
+          configuration: { fetch: jest.fn() as unknown as typeof fetch },
+          ...fields,
+        });
+        return (
+          model as unknown as { invocationParams: () => Record<string, unknown> }
+        ).invocationParams();
+      }
+
+      it("sets a reasoning budget without inventing an output limit to go with it (https://github.com/logancyang/obsidian-copilot-preview/issues/312)", () => {
+        // The gateway takes a reasoning budget on its own, checked live in
+        // `src/integration_tests/outputLength.test.ts`. Adding a top-level
+        // figure here would cap every reasoning model.
+        const params = paramsFor({ enableReasoning: true });
+
+        expect(params.reasoning).toEqual({ max_tokens: 1024 });
+        expect(params.max_tokens).toBeUndefined();
+      });
+
+      it("passes an explicit output limit through when it sets a reasoning budget", () => {
+        const params = paramsFor({ enableReasoning: true, maxTokens: 8192 });
+
+        expect(params.max_tokens).toBe(8192);
+      });
+
+      it("sets an effort rather than a budget when an effort is configured", () => {
+        const params = paramsFor({ enableReasoning: true, reasoningEffort: "high" });
+
+        expect(params.reasoning).toEqual({ effort: "high" });
+      });
+    });
   });
 });

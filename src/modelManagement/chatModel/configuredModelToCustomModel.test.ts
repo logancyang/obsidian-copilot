@@ -1,4 +1,4 @@
-import { ChatModelProviders, ModelCapability } from "@/constants";
+import { ChatModelProviders, DEFAULT_MAX_OUTPUT_TOKENS, ModelCapability } from "@/constants";
 import type { ConfiguredModel, Provider } from "@/modelManagement/types/persisted";
 
 import {
@@ -111,6 +111,41 @@ describe("configuredModelToCustomModel", () => {
     expect(custom.apiKey).toBe("sk-ant");
     expect(custom.enabled).toBe(true);
     expect(custom.configuredModelId).toBe("cm1");
+  });
+
+  it("caps an Anthropic model's published ceiling rather than passing it through (https://github.com/logancyang/obsidian-copilot-preview/issues/312)", () => {
+    const custom = configuredModelToCustomModel({
+      provider: provider({ providerType: "anthropic" }),
+      configuredModel: configuredModel({
+        info: {
+          id: "claude-sonnet-4-5",
+          displayName: "Claude Sonnet 4.5",
+          limits: { context: 200000, output: 64000 },
+        },
+      }),
+      apiKey: "sk-ant",
+    });
+
+    expect(custom.maxTokens).toBe(DEFAULT_MAX_OUTPUT_TOKENS);
+  });
+
+  it("sends no output limit to a provider that accepts a request without one (https://github.com/logancyang/obsidian-copilot-preview/issues/312)", () => {
+    const openAiCompatible = configuredModelToCustomModel({
+      provider: provider({ origin: { kind: "byok", catalogProviderId: "openai" } }),
+      configuredModel: configuredModel({
+        info: { id: "gpt-5", displayName: "GPT-5", limits: { context: 400000, output: 128000 } },
+      }),
+      apiKey: "sk",
+    });
+    const anthropicWithoutLimits = configuredModelToCustomModel({
+      provider: provider({ providerType: "anthropic" }),
+      configuredModel: configuredModel({ info: { id: "claude-next", displayName: "Claude Next" } }),
+      apiKey: "sk-ant",
+    });
+
+    expect(openAiCompatible.maxTokens).toBeUndefined();
+    // Nothing published a ceiling, so the Anthropic client picks its own.
+    expect(anthropicWithoutLimits.maxTokens).toBeUndefined();
   });
 
   it("passes the resolved key through and carries the provider base URL", () => {

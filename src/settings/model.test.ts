@@ -693,6 +693,19 @@ describe("sanitizeSettings - docProcessorBackend (v6 field)", () => {
 
 describe("model", () => {
   describe("sanitizeSettings()", () => {
+    it("drops a persisted global output cap so it cannot truncate answers again (https://github.com/logancyang/obsidian-copilot-preview/issues/312)", () => {
+      const withRetiredCap = {
+        ...DEFAULT_SETTINGS,
+        maxTokens: 6000,
+        temperature: 0.4,
+      } as unknown as CopilotSettings;
+
+      const sanitized = sanitizeSettings(withRetiredCap);
+
+      expect("maxTokens" in (sanitized as unknown as Record<string, unknown>)).toBe(false);
+      expect(sanitized.temperature).toBe(0.4);
+    });
+
     function sanitizeClaudeSlice(autoModePermission: unknown): CopilotSettings {
       return sanitizeSettings({
         ...DEFAULT_SETTINGS,

@@ -11,7 +11,6 @@ import {
   ContextWebTabBadge,
 } from "@/components/chat-components/ContextBadges";
 import { InlineMessageEditor } from "@/components/chat-components/InlineMessageEditor";
-import { TokenLimitWarning } from "@/components/chat-components/TokenLimitWarning";
 import {
   cleanupMessageErrorBlockRoots,
   cleanupMessageToolCallRoots,
@@ -1000,10 +999,6 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
           <div className="message-content tw-break-words !tw-leading-[1.6]">
             {renderMessageContent()}
           </div>
-
-          {message.responseMetadata?.wasTruncated && message.sender !== USER_SENDER && (
-            <TokenLimitWarning message={message} app={app} />
-          )}
 
           {!isStreaming && (
             <AssistantResponseFooter
