@@ -1,16 +1,16 @@
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ArrowDown } from "lucide-react";
-import React from "react";
+import React, { useRef } from "react";
 
 export interface ScrollToBottomButtonProps {
   /** Invoked when the user asks to jump back to the newest message. */
   onClick: () => void;
   /**
-   * Forwards wheel deltas to the message list, so hovering the button never
-   * traps the user's scrolling.
+   * Forwards scroll intent (wheel deltas and touch drags) to the message
+   * list, so hovering or touching the button never traps scrolling.
    */
-  onScrollWheel: (deltaY: number) => void;
+  onScrollBy: (deltaY: number) => void;
   /**
    * While a response is streaming, the arrow becomes a typing indicator so
    * the button doubles as a "content is still arriving below" signal.
@@ -26,9 +26,20 @@ export interface ScrollToBottomButtonProps {
  */
 export function ScrollToBottomButton({
   onClick,
-  onScrollWheel,
+  onScrollBy,
   isStreaming = false,
 }: ScrollToBottomButtonProps) {
+  // DESIGN NOTE (input forwarding × sibling overlay): the overlay is a DOM
+  // sibling of the scroller, so native scroll chaining never reaches the
+  // list from here — wheel deltas and touch drags are forwarded instead.
+  // Keyboard scrolling while the button is focused is intentionally not
+  // forwarded: reaching that state takes deliberate tabbing, Enter/Space
+  // already trigger the jump, and it is recoverable by tabbing away (P3, no
+  // real caller observed). If a future review flags this again, point them
+  // at this note.
+  // https://github.com/logancyang/obsidian-copilot-preview/issues/329
+  const lastTouchYRef = useRef<number | null>(null);
+
   return (
     <Button
       type="button"
@@ -37,7 +48,20 @@ export function ScrollToBottomButton({
       aria-label="Scroll to latest message"
       title="Scroll to latest message"
       onClick={() => onClick()}
-      onWheel={(event) => onScrollWheel(event.deltaY)}
+      onWheel={(event) => onScrollBy(event.deltaY)}
+      onTouchStart={(event) => {
+        lastTouchYRef.current = event.touches[0]?.clientY ?? null;
+      }}
+      onTouchMove={(event) => {
+        const touchY = event.touches[0]?.clientY;
+        if (touchY == null || lastTouchYRef.current == null) return;
+        // Finger moving up drags the content down, i.e. a positive delta.
+        onScrollBy(lastTouchYRef.current - touchY);
+        lastTouchYRef.current = touchY;
+      }}
+      onTouchEnd={() => {
+        lastTouchYRef.current = null;
+      }}
       className={cn(
         // copilot-scroll-to-bottom-button (tailwind.css) re-points the
         // interactive background variables at the page background, since

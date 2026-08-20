@@ -238,7 +238,7 @@ const AgentChatMessages = memo(
         {!isAtBottom && (
           <ScrollToBottomButton
             onClick={jumpToLatest}
-            onScrollWheel={scrollBy}
+            onScrollBy={scrollBy}
             isStreaming={isLoading}
           />
         )}
