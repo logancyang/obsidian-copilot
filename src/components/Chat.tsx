@@ -15,7 +15,7 @@ import type { WebTabContext } from "@/types/message";
 import { ChatControls } from "@/components/chat-components/ChatControls";
 import ChatInput from "@/components/chat-components/ChatModeInput";
 import ChatMessages from "@/components/chat-components/ChatMessages";
-import { LegacyChatDeprecationHint } from "@/components/chat-components/ui/LegacyChatDeprecationHint";
+import { AgentModeBanner } from "@/components/chat-components/ui/AgentModeBanner";
 import { useChatModelPicker } from "@/components/chat-components/useChatModelPicker";
 import { NewVersionBanner } from "@/components/chat-components/NewVersionBanner";
 import IndexingProgressCard from "@/components/IndexingProgressCard";
@@ -795,6 +795,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
     <>
       <div className="tw-flex tw-size-full tw-flex-col tw-overflow-hidden">
         <NewVersionBanner currentVersion={plugin.manifest.version} />
+        <AgentModeBanner onOpenAgent={safeAsyncHandler(() => plugin.activateAgentView())} />
         <ChatMessages
           chatHistory={chatHistory}
           currentAiMessage={currentAiMessage}
@@ -831,11 +832,6 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
               latestTokenCount={latestTokenCount}
             />
             <ChatInput
-              footerContent={
-                <LegacyChatDeprecationHint
-                  onOpenAgent={safeAsyncHandler(() => plugin.activateAgentView())}
-                />
-              }
               inputMessage={inputMessage}
               setInputMessage={setInputMessage}
               handleSendMessage={safeAsyncHandler(handleSendMessage)}
