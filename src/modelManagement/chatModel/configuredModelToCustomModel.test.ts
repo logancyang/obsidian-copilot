@@ -39,9 +39,6 @@ describe("mapProviderTypeToChatModelProvider", () => {
     expect(mapProviderTypeToChatModelProvider(provider({ providerType: "azure" }))).toBe(
       ChatModelProviders.AZURE_OPENAI
     );
-    expect(mapProviderTypeToChatModelProvider(provider({ providerType: "bedrock" }))).toBe(
-      ChatModelProviders.AMAZON_BEDROCK
-    );
   });
 
   it("refines openai-compatible via the BYOK catalog provider id", () => {
@@ -212,13 +209,6 @@ describe("configuredModelToCustomModel", () => {
     expect(azure.azureOpenAIApiInstanceName).toBe("my-instance");
     expect(azure.azureOpenAIApiDeploymentName).toBe("my-deploy");
     expect(azure.azureOpenAIApiVersion).toBe("2024-05-01-preview");
-
-    const bedrock = configuredModelToCustomModel({
-      provider: provider({ providerType: "bedrock", extras: { bedrockRegion: "us-west-2" } }),
-      configuredModel: configuredModel(),
-      apiKey: "aws-key",
-    });
-    expect(bedrock.bedrockRegion).toBe("us-west-2");
 
     const openai = configuredModelToCustomModel({
       provider: provider({

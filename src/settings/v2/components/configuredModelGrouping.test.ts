@@ -95,7 +95,7 @@ describe("partitionCandidates", () => {
   });
 
   it("opencode: drops BYOK/Plus providers the routability predicate rejects (dead-toggle guard)", () => {
-    // An azure/bedrock-style BYOK provider with no catalog back-reference is
+    // An azure-style BYOK provider with no catalog back-reference is
     // unroutable by opencode; the predicate rejects it so it never renders.
     const unroutable: Provider = {
       providerId: "byok-azure",

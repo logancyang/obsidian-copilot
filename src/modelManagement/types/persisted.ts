@@ -46,7 +46,7 @@ export type ProviderOrigin =
       kind: "byok";
       /**
        * Catalog provider id (`models.dev` id, e.g. `"anthropic"`,
-       * `"openai"`, `"amazon-bedrock"`) this row was created from. Stable
+       * `"openai"`, `"anthropic"`) this row was created from. Stable
        * back-reference to the catalog — unlike `displayName` (user-editable)
        * or `providerType` (ambiguous: `openai`, Groq, OpenRouter all map to
        * `openai-compatible`). Lets the Configure dialog re-surface the full
@@ -98,7 +98,6 @@ export interface Provider {
   /**
    * Opaque per-`providerType` payload.
    *   azure:   { azureDeploymentName, azureApiVersion, azureInstanceName }
-   *   bedrock: { bedrockRegion }
    *   openai:  { openAIOrgId }
    * Kept because those adapters can't function without it.
    */

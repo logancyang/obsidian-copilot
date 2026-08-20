@@ -22,12 +22,10 @@ interface CurlRequestSpec {
 // ============================================================================
 
 const DEFAULT_ANTHROPIC_VERSION = "2023-06-01";
-const DEFAULT_BEDROCK_ANTHROPIC_VERSION = "bedrock-2023-05-31";
 const DEFAULT_CHAT_MESSAGE = "Hello!";
 const DEFAULT_EMBEDDING_INPUT = "Hello!";
 const DEFAULT_OPENAI_MAX_TOKENS = 64;
 const DEFAULT_ANTHROPIC_MAX_TOKENS = 256;
-const DEFAULT_BEDROCK_MAX_TOKENS = 256;
 const DEFAULT_GOOGLE_MAX_OUTPUT_TOKENS = 256;
 
 /** Providers that use OpenAI-compatible API format */
@@ -545,89 +543,6 @@ async function buildGoogleGenerativeAIRequestSpec(
 }
 
 // ============================================================================
-// Amazon Bedrock Builder
-// ============================================================================
-
-/** Checks if Bedrock model ID is Anthropic-based */
-function isBedrockAnthropicModel(modelId: string): boolean {
-  return /(^|\.)anthropic\./.test(modelId);
-}
-
-/** Builds curl command for Amazon Bedrock (provides both auth options) */
-async function buildBedrockCurlText(model: CustomModel): Promise<BuildCurlCommandResult> {
-  const warnings: string[] = [];
-
-  const modelId = model.name?.trim() || "<MODEL_ID>";
-  if (!model.name?.trim()) {
-    warnings.push("Model name is empty; using placeholder.");
-  }
-
-  const region = model.bedrockRegion?.trim() || "us-east-1";
-  if (!model.bedrockRegion?.trim()) {
-    warnings.push("Bedrock region is empty; defaulting to us-east-1.");
-  }
-
-  const baseOverride = model.baseUrl?.trim();
-  const endpointBase = trimTrailingSlashes(
-    baseOverride || `https://bedrock-runtime.${region}.amazonaws.com`
-  );
-  const invokeUrl = `${endpointBase}/model/${encodeURIComponent(modelId)}/invoke`;
-
-  // Build request body
-  const body: Record<string, unknown> = {
-    messages: [{ role: "user", content: [{ type: "text", text: DEFAULT_CHAT_MESSAGE }] }],
-    max_tokens: DEFAULT_BEDROCK_MAX_TOKENS,
-  };
-
-  if (isBedrockAnthropicModel(modelId)) {
-    body.anthropic_version = DEFAULT_BEDROCK_ANTHROPIC_VERSION;
-  } else {
-    warnings.push("Model ID does not look like Anthropic; request body may need adjustment.");
-  }
-
-  const apiKeyResolved = await resolveApiKeyForCurl(model.apiKey);
-  warnings.push(...apiKeyResolved.warnings);
-
-  // Option A: Bearer token auth
-  const bearerSpec: CurlRequestSpec = {
-    method: "POST",
-    url: invokeUrl,
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "application/json",
-      Authorization: `Bearer ${apiKeyResolved.apiKey}`,
-    },
-    body,
-  };
-
-  // Option B: AWS SigV4 auth
-  const sigV4Spec: CurlRequestSpec = {
-    method: "POST",
-    url: invokeUrl,
-    curlArgs: [
-      `--aws-sigv4 'aws:amz:${escapeForSingleQuotedString(region)}:bedrock'`,
-      `--user '<AWS_ACCESS_KEY_ID>:<AWS_SECRET_ACCESS_KEY>'`,
-    ],
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "application/json",
-    },
-    body,
-  };
-
-  const commandText = [
-    "# Amazon Bedrock InvokeModel",
-    "# Option A: Bearer token auth (matches Obsidian Copilot)",
-    formatCurlCommand(bearerSpec),
-    "",
-    "# Option B: IAM auth (AWS SigV4)",
-    formatCurlCommand(sigV4Spec),
-  ].join("\n");
-
-  return { ok: true, command: commandText, warnings };
-}
-
-// ============================================================================
 // Ollama Builder
 // ============================================================================
 
@@ -743,18 +658,6 @@ export async function buildCurlCommandForModel(
     const result = await buildAnthropicRequestSpec(model);
     if (!result.ok) return result;
     return { ok: true, command: formatCurlCommand(result.spec), warnings: result.warnings };
-  }
-
-  // Amazon Bedrock
-  if (provider === ChatModelProviders.AMAZON_BEDROCK) {
-    if (isEmbeddingModel) {
-      return {
-        ok: false,
-        error: "Bedrock embeddings are not supported by this generator.",
-        warnings,
-      };
-    }
-    return await buildBedrockCurlText(model);
   }
 
   // Google Gemini

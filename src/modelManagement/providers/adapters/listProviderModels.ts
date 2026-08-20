@@ -5,8 +5,8 @@
  * shape differences (`{ data: [{ id }] }` vs `{ models: [{ name }] }`).
  *
  * Returns `null` for provider types we cannot list over plain HTTP
- * (Bedrock needs SigV4 region awareness; Azure needs the deployment
- * URL + a different endpoint). Callers treat null as "skip auto-fetch"
+ * (Azure needs the deployment URL and a different endpoint). Callers
+ * treat null as "skip auto-fetch"
  * — the picker is still functional via catalog metadata + manual add.
  */
 
@@ -48,7 +48,6 @@ export async function listProviderModels(
     case "google":
       return listGoogleModels(baseUrl, { apiKey: opts.apiKey, timeoutMs: opts.timeoutMs });
     case "azure":
-    case "bedrock":
       logWarn(`Listing provider models for ${providerType} is not yet supported`);
       return null;
   }

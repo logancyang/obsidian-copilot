@@ -1083,15 +1083,13 @@ describe("model", () => {
     it("preserves the top-level vendor config a retained key needs to reach its service (https://github.com/logancyang/obsidian-copilot-preview/issues/259)", () => {
       // Reason: these are not secrets, so the secret-key heuristic misses them,
       // but a key without them is unusable — Azure composes its request URL
-      // from the instance/deployment/version trio, and Bedrock signs for a
-      // region.
+      // from the instance/deployment/version trio.
       const vendorConfig = {
         openAIOrgId: "org-123",
         azureOpenAIApiInstanceName: "my-instance",
         azureOpenAIApiDeploymentName: "chat-deploy",
         azureOpenAIApiVersion: "2025-01-01-preview",
         azureOpenAIApiEmbeddingDeploymentName: "embed-deploy",
-        amazonBedrockRegion: "eu-west-1",
       };
       settingsStore.set(settingsAtom, { ...DEFAULT_SETTINGS, ...vendorConfig });
 
@@ -1149,18 +1147,19 @@ describe("model", () => {
     it("drops a bundle value whose type its consumer cannot handle (https://github.com/logancyang/obsidian-copilot-preview/issues/259)", () => {
       // Reason: a hand-edited or cross-version `data.json` can hold a non-string
       // where a string is expected. Carrying it through reset would move the
-      // failure to the consumer — chatModelManager calls `.trim()` on the region.
+      // failure to the consumer — embeddingManager concatenates the API version
+      // into the request URL.
       settingsStore.set(settingsAtom, {
         ...DEFAULT_SETTINGS,
-        amazonBedrockApiKey: "bedrock-key",
-        amazonBedrockRegion: {} as unknown as string,
+        azureOpenAIApiKey: "azure-key",
+        azureOpenAIApiVersion: {} as unknown as string,
       });
 
       resetSettings();
 
       const after = settingsStore.get(settingsAtom);
-      expect(after.amazonBedrockApiKey).toBe("bedrock-key");
-      expect(after.amazonBedrockRegion).toBe(DEFAULT_SETTINGS.amazonBedrockRegion);
+      expect(after.azureOpenAIApiKey).toBe("azure-key");
+      expect(after.azureOpenAIApiVersion).toBe(DEFAULT_SETTINGS.azureOpenAIApiVersion);
     });
 
     it("preserves the Azure routing fields on a builtin embedding row alongside its key (https://github.com/logancyang/obsidian-copilot-preview/issues/259)", () => {

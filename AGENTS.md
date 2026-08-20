@@ -43,7 +43,6 @@ Read the matching guide when your task touches that area — they aren't loaded 
 | building or changing user-visible React components or visual states   | [`Component gallery workflow`](./designdocs/agents/TESTING_GUIDE.md#component-gallery-workflow) |
 | writing code: DI/structure, TypeScript, React, comments, CSS/Tailwind | [`designdocs/agents/STYLE_GUIDE.md`](./designdocs/agents/STYLE_GUIDE.md)                        |
 | touching plugin runtime: the `app`, network requests, popout windows  | [`designdocs/agents/PLUGIN_DEV_GUIDE.md`](./designdocs/agents/PLUGIN_DEV_GUIDE.md)              |
-| using a specific LLM provider (e.g. AWS Bedrock)                      | [`designdocs/agents/VENDOR_GUIDE.md`](./designdocs/agents/VENDOR_GUIDE.md)                      |
 | running a multi-step dev session                                      | [`designdocs/agents/PROCESS_GUIDE.md`](./designdocs/agents/PROCESS_GUIDE.md)                    |
 | changing user-facing behavior                                         | [`designdocs/agents/DOCS_GUIDE.md`](./designdocs/agents/DOCS_GUIDE.md)                          |
 | reviewing code or preparing an Obsidian submission                    | [`designdocs/OBSIDIAN_COMMUNITY_REVIEW.md`](./designdocs/OBSIDIAN_COMMUNITY_REVIEW.md)          |

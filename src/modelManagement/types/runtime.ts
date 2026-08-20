@@ -96,7 +96,7 @@ export interface BuiltChatModel {
  *
  * Two flavors share the same shape:
  *   - **Built-in definitions** (Ollama, LM Studio, custom OpenAI-compatible,
- *     Azure, Bedrock) live in `builtinDefinitions.ts`.
+ *     Azure) live in `builtinDefinitions.ts`.
  *   - **Catalog-backed definitions** are synthesized from a
  *     `CatalogProvider` at pick time and carry `catalogProviderId` so
  *     the configure dialog can resolve metadata.

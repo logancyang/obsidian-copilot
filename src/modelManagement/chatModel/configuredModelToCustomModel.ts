@@ -68,8 +68,6 @@ export function mapProviderTypeToChatModelProvider(provider: Provider): ChatMode
       return ChatModelProviders.GOOGLE;
     case "azure":
       return ChatModelProviders.AZURE_OPENAI;
-    case "bedrock":
-      return ChatModelProviders.AMAZON_BEDROCK;
     case "openai-compatible": {
       const catalogId =
         provider.origin.kind === "byok" ? provider.origin.catalogProviderId : undefined;
@@ -147,6 +145,5 @@ export function configuredModelToCustomModel(params: {
     azureOpenAIApiInstanceName: extraString(extras, "azureInstanceName"),
     azureOpenAIApiDeploymentName: extraString(extras, "azureDeploymentName"),
     azureOpenAIApiVersion: extraString(extras, "azureApiVersion"),
-    bedrockRegion: extraString(extras, "bedrockRegion"),
   };
 }

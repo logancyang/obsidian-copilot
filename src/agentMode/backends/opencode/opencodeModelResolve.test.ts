@@ -79,9 +79,8 @@ describe("opencodeModelResolve", () => {
       expect(mapProviderToOpencodeId(provider)).toEqual({ id: "p1", native: false });
     });
 
-    it("returns null for azure / bedrock BYOK providers without a catalog id", () => {
+    it("returns null for an azure BYOK provider without a catalog id", () => {
       expect(mapProviderToOpencodeId(makeProvider("p1", { kind: "byok" }, "azure"))).toBeNull();
-      expect(mapProviderToOpencodeId(makeProvider("p2", { kind: "byok" }, "bedrock"))).toBeNull();
     });
 
     it("maps copilot-plus origin to the reserved copilot-plus id, non-native", () => {

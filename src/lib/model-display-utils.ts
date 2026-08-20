@@ -23,7 +23,6 @@ export type ModelApiKeySettings = Pick<
   | "plusLicenseKey"
   | "mistralApiKey"
   | "deepseekApiKey"
-  | "amazonBedrockApiKey"
   | "siliconflowApiKey"
 >;
 
@@ -55,19 +54,6 @@ export function checkModelApiKey(
   errorNotice?: string;
 } {
   const provider = model.provider as ChatModelProviders;
-  if (provider === ChatModelProviders.AMAZON_BEDROCK) {
-    const apiKey = model.apiKey || settings.amazonBedrockApiKey;
-    if (!apiKey) {
-      return {
-        hasApiKey: false,
-        errorNotice:
-          "Amazon Bedrock API key is missing. Please add a key in Settings > Copilot > BYOK or update the model configuration.",
-      };
-    }
-
-    return { hasApiKey: true };
-  }
-
   const knownProvider = Object.prototype.hasOwnProperty.call(ProviderInfo, provider);
   const needsApiKey = knownProvider && !PROVIDERS_WITHOUT_API_KEYS.has(provider);
   const settingsKey = ProviderSettingsKeyMap[
