@@ -9,9 +9,10 @@ export interface AgentModeBannerProps {
 }
 
 /**
- * Announces Agent mode to Quick Chat users from the top of the chat column,
- * styled to match its slot sibling `NewVersionBanner`. The whole row is the
- * click target that opens the Agent view.
+ * Announces Agent mode at the top of the chat column. The whole card is the
+ * click target that opens the Agent view. `Chat` mounts it only while the chat
+ * has nothing to show, so it introduces Agent mode on an empty chat and then
+ * stays out of the way of a conversation.
  */
 export function AgentModeBanner({ onOpenAgent }: AgentModeBannerProps) {
   // Agent is unavailable on real and emulated mobile, so this announcement must stay desktop-only.
@@ -23,10 +24,11 @@ export function AgentModeBanner({ onOpenAgent }: AgentModeBannerProps) {
       variant="ghost2"
       size="fit"
       className={cn(
-        "tw-mb-1 tw-w-full tw-shrink-0 tw-justify-start tw-gap-2 tw-rounded-md tw-border",
-        "tw-border-solid tw-border-border tw-p-2 tw-pl-3 tw-text-left tw-text-muted",
+        "tw-mb-2 tw-w-full tw-shrink-0 tw-cursor-pointer tw-justify-start tw-gap-3 tw-rounded-md",
+        "tw-border tw-border-solid tw-border-border tw-bg-secondary tw-p-3 tw-text-left",
+        "tw-text-ui-small tw-text-normal hover:tw-bg-interactive-hover hover:tw-text-normal",
         // Wrap instead of truncating: a narrow sidebar must still show the whole sentence.
-        "tw-whitespace-normal hover:tw-text-normal"
+        "tw-whitespace-normal"
       )}
       title="Open Agent"
       onClick={onOpenAgent}

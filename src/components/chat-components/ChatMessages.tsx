@@ -23,6 +23,19 @@ interface ChatMessagesProps {
   showHelperComponents: boolean;
 }
 
+/**
+ * Whether the chat view has nothing to show: no visible message and no
+ * in-flight AI response. `ChatMessages` swaps to its suggested-prompts branch
+ * on exactly this condition and `Chat` gates the Agent mode banner on it, so
+ * the two surfaces cannot drift apart over what counts as an empty chat.
+ *
+ * @param chatHistory Messages for the active chat, including ones flagged invisible.
+ * @param currentAiMessage Text streaming in from the AI right now, empty when nothing is streaming.
+ */
+export function isChatEmpty(chatHistory: ChatMessage[], currentAiMessage: string): boolean {
+  return !chatHistory.some((message) => message.isVisible) && !currentAiMessage;
+}
+
 const ChatMessages = memo(
   ({
     chatHistory,
@@ -44,7 +57,7 @@ const ChatMessages = memo(
       chatHistory,
     });
 
-    if (!chatHistory.filter((message) => message.isVisible).length && !currentAiMessage) {
+    if (isChatEmpty(chatHistory, currentAiMessage)) {
       return (
         <div className="tw-flex tw-size-full tw-flex-col tw-gap-2 tw-overflow-y-auto">
           {showHelperComponents && settings.showSuggestedPrompts && (
