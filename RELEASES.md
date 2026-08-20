@@ -1,5 +1,43 @@
 # Release Notes
 
+# Copilot for Obsidian - Release v4.0.2 🛠️
+
+Answers run as long as they need again, local and keyless model servers are easy to add, and Agent Mode stops hanging on startup.
+
+- 🖥️ **Agent Mode no longer hangs on "Loading agent models…".** Agent binaries and shell wrappers that print colors or window titles to their output were corrupting the startup handshake. Those decorations are stripped before Copilot reads the reply. (@zeroliu)
+- 🔑 **Reset Settings keeps your API keys.** The confirmation dialog always promised your keys were safe, but confirming wiped them along with the providers and custom models that used them. Reset now restores preferences only. (@Emt-lin)
+- 📝 **Long answers run to the end.** Copilot no longer caps a response at 6,000 tokens, so the model writes until it is finished. The "Response Truncated" card that pointed at a Token Limit setting V4 had already removed is gone with it. (@zeroliu)
+- 🔌 **Local and keyless model servers just work.** A **Model ID** field now sits at the top of the model list, so you can type an exact ID when a server has no model discovery, and an API key is optional for custom OpenAI-compatible endpoints. LM Studio and oMLX setups that used to be unsavable now save. (@logancyang)
+- 💬 **Quick Chat stops warning you about a retirement that is not happening.** The "V3 Chat is retiring soon" line that many people read as "Quick Chat is going away" is gone, and so are the generic suggested prompts. An empty Quick Chat now makes one offer: switch to Copilot Agent Chat. The tab reads "Copilot (Quick Chat)" so the two chats are easy to tell apart. (@zeroliu)
+- 🧹 **Amazon Bedrock no longer offers models it cannot run.** Bedrock could not be made to work in V4: no region field, no credential test, no model list, and a client that was never finished. It is removed from the provider list, along with any Bedrock rows and keys saved in your vault. Claude is still there through Anthropic directly. (@zeroliu)
+- 🛡️ **Under the hood.** Dead V3 model-import code removed, a deprecated Obsidian API swapped out, and regression coverage added around opencode's install-state refresh. (@zeroliu, @logancyang)
+
+More details in the changelog:
+
+### Improvements
+
+- #2879 Seed Web Tab tracking from getMostRecentLeaf @zeroliu
+- #2880 Drop Bedrock streaming and route every request through requestUrl @zeroliu
+- #2887 Delete dead v3 model-import code orphaned by the v4 settings rewrite @zeroliu
+- #2896 Support manual and keyless OpenAI-compatible models @logancyang
+- #2910 Leave the answer's length to the model instead of capping it at 6,000 @zeroliu
+- #2923 Rework the empty Quick Chat around a Copilot Agent Chat invitation @zeroliu
+- #2924 Guard opencode install-state refresh scope @logancyang
+- #2929 Remove Amazon Bedrock chat provider support @zeroliu
+
+### Bug Fixes
+
+- #2847 Preserve API keys and their provider rows through Reset Settings @Emt-lin
+- #2909 Strip terminal escape sequences from agent stdout before parsing @zeroliu
+- #2914 Cover the full CSI parameter-byte range when stripping agent escape sequences @zeroliu
+
+## Troubleshoot
+
+- If models are missing, navigate to Copilot settings -> Models tab and click "Refresh Built-in Models".
+- Please report any issue you see in the member channel!
+
+---
+
 # Copilot for Obsidian - Release v4.0.1 🛠️
 
 The first patch since the V4 launch, squashing the bugs reported in 4.0.0's first week and adding plan usage caps to the agent meter, alongside a large Obsidian community-review compliance pass.
