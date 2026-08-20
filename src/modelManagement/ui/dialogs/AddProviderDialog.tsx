@@ -36,7 +36,6 @@ const PROVIDER_TYPE_HINTS: Record<ProviderType, string> = {
   google: "e.g. gemini-2.5-pro",
   "openai-compatible": "e.g. gpt-5",
   azure: "matches your Azure deployment name",
-  bedrock: "e.g. anthropic.claude-sonnet-4-5",
 };
 
 /** Synthesize a `ProviderDefinition` from a catalog row. Carries the

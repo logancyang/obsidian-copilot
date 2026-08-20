@@ -44,20 +44,6 @@ describe("model-display-utils", () => {
       });
     });
 
-    it("handles Bedrock provider-specific credentials", () => {
-      expect(
-        checkModelApiKey(
-          model({ provider: "amazon-bedrock" }),
-          settings({ amazonBedrockApiKey: "bedrock-key" })
-        )
-      ).toEqual({ hasApiKey: true });
-      expect(checkModelApiKey(model({ provider: "amazon-bedrock" }), settings())).toEqual({
-        hasApiKey: false,
-        errorNotice:
-          "Amazon Bedrock API key is missing. Please add a key in Settings > Copilot > BYOK or update the model configuration.",
-      });
-    });
-
     it("does not require keys for local or unknown providers", () => {
       expect(checkModelApiKey(model({ provider: "ollama" }), settings())).toEqual({
         hasApiKey: true,

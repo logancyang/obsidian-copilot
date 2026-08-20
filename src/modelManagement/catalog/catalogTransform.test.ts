@@ -15,7 +15,6 @@ describe("transformWireToCatalog", () => {
       ["@ai-sdk/anthropic", "anthropic"],
       ["@ai-sdk/google", "google"],
       ["@ai-sdk/azure", "azure"],
-      ["@ai-sdk/amazon-bedrock", "bedrock"],
       ["@ai-sdk/openai-compatible", "openai-compatible"],
       ["@ai-sdk/openai", "openai-compatible"],
       [undefined, "openai-compatible"],
@@ -256,5 +255,25 @@ describe("transformWireToCatalog", () => {
     const wire = makeWire({ empty: { id: "empty", name: "Empty" } });
     const [provider] = transformWireToCatalog(wire);
     expect(provider.models).toEqual({});
+  });
+
+  it("drops Amazon Bedrock rather than letting it fall through to openai-compatible (https://github.com/logancyang/obsidian-copilot/issues/2928)", () => {
+    const wire = makeWire({
+      "amazon-bedrock": {
+        id: "amazon-bedrock",
+        name: "Amazon Bedrock",
+        npm: "@ai-sdk/amazon-bedrock",
+        models: { "anthropic.claude-sonnet-4-5": { id: "anthropic.claude-sonnet-4-5" } },
+      },
+      openai: { id: "openai", name: "OpenAI", npm: "@ai-sdk/openai" },
+    });
+    expect(transformWireToCatalog(wire).map((p) => p.id)).toEqual(["openai"]);
+  });
+
+  it("drops Amazon Bedrock on its id, so a catalog that stops publishing the npm field still excludes it", () => {
+    const wire = makeWire({
+      "amazon-bedrock": { id: "amazon-bedrock", name: "Amazon Bedrock" },
+    });
+    expect(transformWireToCatalog(wire)).toEqual([]);
   });
 });

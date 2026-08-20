@@ -3,7 +3,7 @@
  * wizard alongside catalog-derived definitions.
  *
  * Covers providers `models.dev` does not list — local runners
- * (Ollama, LM Studio), per-tenant deploys (Azure, Bedrock), and the
+ * (Ollama, LM Studio), per-tenant deploys (Azure), and the
  * catch-all custom OpenAI-compatible endpoint. None carry a model list;
  * available ids come from `/models` fetched at dialog open or from the
  * user typing them in manually.
@@ -55,12 +55,5 @@ export const BUILTIN_PROVIDER_DEFINITIONS: readonly ProviderDefinition[] = [
     providerType: "azure",
     requiresApiKey: true,
     modelInputHint: "matches your Azure deployment name",
-  },
-  {
-    id: "aws-bedrock",
-    displayName: "AWS Bedrock",
-    providerType: "bedrock",
-    requiresApiKey: true,
-    modelInputHint: "e.g. anthropic.claude-sonnet-4-5",
   },
 ];

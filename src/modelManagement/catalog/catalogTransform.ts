@@ -24,6 +24,29 @@ export function looksLikeEmbeddingModel(idOrHaystack: string): boolean {
 }
 
 /**
+ * Catalog providers Copilot cannot route, dropped before anything else reads
+ * them.
+ *
+ * Amazon Bedrock routes by a per-account region rather than a base URL, and
+ * the BYOK dialog has no field to enter one, so every model it offered would be
+ * pinned to a default region the user never chose.
+ *
+ * The drop belongs here rather than in {@link mapNpmToProviderType}, whose
+ * `default` branch answers `openai-compatible`: removing Bedrock from the
+ * mapping alone would leave its 120 models in the picker behind an endpoint
+ * that cannot answer them.
+ * https://github.com/logancyang/obsidian-copilot/issues/2928
+ */
+const UNROUTABLE_PROVIDER_IDS: ReadonlySet<string> = new Set(["amazon-bedrock"]);
+
+/** Whether a wire provider entry names one of {@link UNROUTABLE_PROVIDER_IDS}. */
+function isUnroutableProvider(wire: unknown): boolean {
+  if (!isPlainObject(wire)) return false;
+  const id = (wire as { id?: unknown }).id;
+  return typeof id === "string" && UNROUTABLE_PROVIDER_IDS.has(id);
+}
+
+/**
  * Maps the `models.dev` `npm` field to the closed `ProviderType` union.
  */
 function mapNpmToProviderType(npm: string | undefined): ProviderType {
@@ -34,8 +57,6 @@ function mapNpmToProviderType(npm: string | undefined): ProviderType {
       return "google";
     case "@ai-sdk/azure":
       return "azure";
-    case "@ai-sdk/amazon-bedrock":
-      return "bedrock";
     default:
       return "openai-compatible";
   }
@@ -135,6 +156,7 @@ export function transformWireToCatalog(wire: unknown): CatalogProvider[] {
   if (!isPlainObject(wire)) return [];
   const providers: CatalogProvider[] = [];
   for (const [key, wireProvider] of Object.entries(wire)) {
+    if (isUnroutableProvider(wireProvider)) continue;
     const provider = transformProvider(key, wireProvider);
     if (provider) {
       providers.push(provider);

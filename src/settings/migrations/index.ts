@@ -16,6 +16,7 @@ import { seedDocProcessorBackend } from "@/miyo/miyoUtils";
 import type { ModelManagementApi } from "@/modelManagement";
 import { getSettings, normalizeRootFolders, setSettings } from "@/settings/model";
 
+import { executeBedrockRemoval } from "./bedrockRemovalMigration";
 import { executeByokMigration } from "./byokMigration";
 import { executeGitHubCopilotRemoval } from "./githubCopilotRemovalMigration";
 import { planOptionalCustomProviderAuthMigration } from "./optionalCustomProviderAuthMigration";
@@ -106,6 +107,14 @@ export async function runSettingsMigrations(api: ModelManagementApi): Promise<vo
   if (fromVersion < 10) {
     const migrated = planOptionalCustomProviderAuthMigration(getSettings().providers);
     if (migrated) setSettings({ providers: migrated });
+  }
+
+  // v11: drop everything the removed Amazon Bedrock chat provider owned — its
+  // provider rows, their models, the backend enrollments naming those models,
+  // any selection still pointing at one, and its stored API keys. Reads the
+  // settings freshly so it sees whatever the earlier migrations left behind.
+  if (fromVersion < 11) {
+    await executeBedrockRemoval(api, getSettings());
   }
 
   // Bump unconditionally after the migrations so a per-provider failure can't

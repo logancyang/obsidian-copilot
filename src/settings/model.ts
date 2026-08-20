@@ -69,8 +69,6 @@ export interface CopilotSettings {
   xaiApiKey: string;
   mistralApiKey: string;
   deepseekApiKey: string;
-  amazonBedrockApiKey: string;
-  amazonBedrockRegion: string;
   siliconflowApiKey: string;
   defaultChainType: ChainType;
   defaultModelKey: string;
@@ -615,9 +613,8 @@ export function getSettings(): Readonly<CopilotSettings> {
  * all: `baseUrl` decides which host receives it (a reset endpoint sends a proxy
  * key to the provider's default host), and the Azure trio is what
  * `embeddingManager` composes into the request URL for the builtin Azure
- * embedding row. Azure's *chat* deployment and `bedrockRegion` are absent
- * because no builtin row uses those providers; custom rows survive whole and
- * never consult this list.
+ * embedding row. Azure's *chat* deployment is absent because no builtin row
+ * uses that provider; custom rows survive whole and never consult this list.
  * https://github.com/logancyang/obsidian-copilot-preview/issues/259
  */
 const MODEL_CREDENTIAL_BUNDLE_FIELDS = [
@@ -657,7 +654,6 @@ const TOP_LEVEL_CREDENTIAL_COMPANION_FIELDS = [
   "azureOpenAIApiDeploymentName",
   "azureOpenAIApiVersion",
   "azureOpenAIApiEmbeddingDeploymentName",
-  "amazonBedrockRegion",
 ] as const satisfies readonly (keyof CopilotSettings)[];
 
 /**
@@ -676,7 +672,7 @@ const TOP_LEVEL_CREDENTIAL_BUNDLE_FIELDS: readonly string[] = [
  * Whether a pre-reset value is usable configuration worth carrying over.
  *
  * Reason: the bundles are almost entirely strings, and the string check is what
- * stops a corrupted or cross-version value (say `amazonBedrockRegion: {}` from
+ * stops a corrupted or cross-version value (say `azureOpenAIApiVersion: {}` from
  * a hand-edited `data.json`) from surviving reset and then throwing at its
  * consumer. Only `enableCors` is legitimately non-string, so it is named here
  * rather than widening the check for everything.
@@ -961,6 +957,11 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   delete sanitizedSettingsRecord.miyoRemoteVaultPath;
   delete sanitizedSettingsRecord.miyoVaultName;
   delete sanitizedSettingsRecord.enableMiyoSearch;
+  // Amazon Bedrock is no longer a chat provider, so a stored key and region
+  // would only be credentials for a service Copilot can no longer reach.
+  // https://github.com/logancyang/obsidian-copilot/issues/2928
+  delete sanitizedSettingsRecord.amazonBedrockApiKey;
+  delete sanitizedSettingsRecord.amazonBedrockRegion;
 
   // Migration: Rename self-hosted search settings to self-host mode (v3.2.0+)
   if (

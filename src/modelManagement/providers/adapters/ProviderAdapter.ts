@@ -77,7 +77,7 @@ export interface ProviderAdapter<TExtras = unknown> {
 
   /**
    * Issue a minimal "ping" to validate credentials. Adapter-defined —
-   * Anthropic might check `/v1/models`, Bedrock might call STS, etc.
+   * Anthropic might check `/v1/models`, Azure might probe a deployment, etc.
    * Returns a structured result; throwing is reserved for unrecoverable
    * misconfiguration (missing required extras).
    */

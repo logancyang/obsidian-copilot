@@ -377,7 +377,7 @@ describe("ConfigureProviderForm (new mode)", () => {
     expect(screen.getByTestId("model-row-remove-my-private-model")).toBeTruthy();
   });
 
-  it("ignores adapters that don't support listing (azure / bedrock)", async () => {
+  it("ignores adapters that don't support listing (azure)", async () => {
     mockListProviderModels.mockResolvedValue(null);
     render(
       <ConfigureProviderForm state={{ mode: "new", source: ollamaSource }} onClose={jest.fn()} />

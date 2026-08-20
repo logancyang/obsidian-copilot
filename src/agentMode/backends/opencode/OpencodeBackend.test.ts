@@ -357,7 +357,7 @@ describe("buildOpencodeConfig — provider/model injection", () => {
     expect(cfg.provider).toEqual({});
   });
 
-  it("skips unroutable providers (BYOK without a catalog id, e.g. azure/bedrock)", async () => {
+  it("skips unroutable providers (BYOK without a catalog id, e.g. azure)", async () => {
     const provider = makeProvider("p-azure", { kind: "byok" }, { providerType: "azure" });
     const deps = makeDeps({
       resolved: [okEntry(provider, makeModel("p-azure", "my-azure-deploy"))],
