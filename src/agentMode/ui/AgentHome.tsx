@@ -11,7 +11,7 @@ import { AgentProjectHeader } from "@/agentMode/ui/AgentProjectHeader";
 import { ProjectInfoPopover } from "@/agentMode/ui/ProjectInfoPopover";
 import { AgentTabStrip } from "@/agentMode/ui/AgentTabStrip";
 import { AgentWelcomeCard } from "@/agentMode/ui/AgentWelcomeCard";
-import { CopilotBrandIcon } from "@/agentMode/ui/CopilotBrandIcon";
+import { CopilotBrandIcon } from "@/components/ui/CopilotBrandIcon";
 import { AgentHomeShelf, type AgentHomeShelfSection } from "@/agentMode/ui/AgentHomeShelf";
 import { GlobalRecentChatsSection } from "@/agentMode/ui/GlobalRecentChatsSection";
 import {

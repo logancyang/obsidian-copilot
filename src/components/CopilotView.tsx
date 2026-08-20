@@ -47,7 +47,9 @@ export default class CopilotView extends ItemView {
   }
 
   getDisplayText(): string {
-    return "Copilot";
+    // Names the surface, not the plugin: with an Agent leaf reporting "Copilot
+    // Agent" alongside it, a bare "Copilot" does not say which chat this is.
+    return "Copilot (Quick Chat)";
   }
 
   async onOpen(): Promise<void> {

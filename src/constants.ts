@@ -991,7 +991,6 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   embeddingRequestsPerMin: 60,
   embeddingBatchSize: 16,
   disableIndexOnMobile: true,
-  showSuggestedPrompts: true,
   numPartitions: 1,
   lexicalSearchRamLimit: 100, // Default 100 MB
   promptUsageTimestamps: {},

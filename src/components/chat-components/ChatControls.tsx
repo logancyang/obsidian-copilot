@@ -213,19 +213,6 @@ export function ChatControls({
               className="tw-flex tw-justify-between"
               onSelect={(e) => {
                 e.preventDefault();
-                updateSetting("showSuggestedPrompts", !settings.showSuggestedPrompts);
-              }}
-            >
-              <div className="tw-flex tw-items-center tw-gap-2">
-                <Sparkles className="tw-size-4" />
-                Suggested Prompt
-              </div>
-              <SettingSwitch checked={settings.showSuggestedPrompts} />
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              className="tw-flex tw-justify-between"
-              onSelect={(e) => {
-                e.preventDefault();
                 updateSetting("autoAcceptEdits", !settings.autoAcceptEdits);
               }}
             >

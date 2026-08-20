@@ -1,9 +1,7 @@
 import { BottomLoadingIndicator } from "@/components/chat-components/BottomLoadingIndicator";
 import ChatSingleMessage from "@/components/chat-components/ChatSingleMessage";
-import { SuggestedPrompts } from "@/components/chat-components/SuggestedPrompts";
 import { USER_SENDER } from "@/constants";
 import { useChatScrolling } from "@/hooks/useChatScrolling";
-import { useSettingsValue } from "@/settings/model";
 import { ChatMessage } from "@/types/message";
 import { App } from "obsidian";
 import React, { memo } from "react";
@@ -19,8 +17,19 @@ interface ChatMessagesProps {
   onRegenerate: (messageIndex: number) => void;
   onEdit: (messageIndex: number, newMessage: string) => void;
   onDelete: (messageIndex: number) => void;
-  onReplaceChat: (prompt: string) => void;
-  showHelperComponents: boolean;
+}
+
+/**
+ * Whether the chat view has nothing to show: no visible message and no
+ * in-flight AI response. `ChatMessages` swaps to its suggested-prompts branch
+ * on exactly this condition and `Chat` gates the Agent mode banner on it, so
+ * the two surfaces cannot drift apart over what counts as an empty chat.
+ *
+ * @param chatHistory Messages for the active chat, including ones flagged invisible.
+ * @param currentAiMessage Text streaming in from the AI right now, empty when nothing is streaming.
+ */
+export function isChatEmpty(chatHistory: ChatMessage[], currentAiMessage: string): boolean {
+  return !chatHistory.some((message) => message.isVisible) && !currentAiMessage;
 }
 
 const ChatMessages = memo(
@@ -34,22 +43,18 @@ const ChatMessages = memo(
     onRegenerate,
     onEdit,
     onDelete,
-    onReplaceChat,
-    showHelperComponents = true,
   }: ChatMessagesProps) => {
-    const settings = useSettingsValue();
-
     // Chat scrolling behavior
     const { containerMinHeight, scrollContainerCallbackRef, getMessageKey } = useChatScrolling({
       chatHistory,
     });
 
-    if (!chatHistory.filter((message) => message.isVisible).length && !currentAiMessage) {
+    if (isChatEmpty(chatHistory, currentAiMessage)) {
+      // Height comes from the content, not the container: `Chat` centers the
+      // Agent Chat banner in the space this branch leaves free, so filling the
+      // column here would push that banner back to the top.
       return (
-        <div className="tw-flex tw-size-full tw-flex-col tw-gap-2 tw-overflow-y-auto">
-          {showHelperComponents && settings.showSuggestedPrompts && (
-            <SuggestedPrompts onClick={onReplaceChat} />
-          )}
+        <div className="tw-flex tw-w-full tw-flex-col tw-gap-2">
           {loading && <BottomLoadingIndicator label={loadingMessage} />}
         </div>
       );
