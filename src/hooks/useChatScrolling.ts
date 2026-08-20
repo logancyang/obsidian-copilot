@@ -31,6 +31,7 @@ interface UseChatScrollingReturn {
    * follow is strictly opt-in per click, so it never becomes the always-on
    * auto-follow that upstream declined in
    * https://github.com/logancyang/obsidian-copilot/issues/829.
+   * https://github.com/logancyang/obsidian-copilot-preview/issues/329
    */
   jumpToLatest: () => void;
   /**
@@ -143,6 +144,7 @@ export const useChatScrolling = ({
   // only ever move down, so a shrinking scrollTop is a reliable user signal
   // (clamps from content shrink also land here, which fails safe: follow
   // merely stops).
+  // https://github.com/logancyang/obsidian-copilot-preview/issues/329
   const handleScroll = useCallback(() => {
     const node = scrollContainerRef.current;
     if (node) {
@@ -260,6 +262,7 @@ export const useChatScrolling = ({
 
   // A finished turn ends the follow the user opted into; the next stream
   // requires a fresh click.
+  // https://github.com/logancyang/obsidian-copilot-preview/issues/329
   useEffect(() => {
     if (!isStreaming) {
       followStreamRef.current = false;
@@ -287,6 +290,7 @@ export const useChatScrolling = ({
         const observer = new ResizeObserver(() => {
           // Re-target with "instant": re-starting a smooth animation on every
           // streamed token would keep resetting and never catch up.
+          // https://github.com/logancyang/obsidian-copilot-preview/issues/329
           if (followStreamRef.current && isStreamingRef.current) {
             scrollToBottom("instant");
           }
