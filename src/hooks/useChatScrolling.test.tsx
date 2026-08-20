@@ -21,14 +21,18 @@ function createScrollContainer(metrics: ScrollMetrics): HTMLDivElement {
       metrics.scrollTop = value;
     },
   });
+  // Browsers fire a scroll event for programmatic scrolls; the hook's
+  // direction tracking depends on that, so the mock mirrors it.
   container.scrollTo = jest.fn((options?: ScrollToOptions | number) => {
     if (typeof options === "object" && typeof options?.top === "number") {
       metrics.scrollTop = options.top;
+      container.dispatchEvent(new Event("scroll"));
     }
   }) as never;
   container.scrollBy = jest.fn((options?: ScrollToOptions | number) => {
     if (typeof options === "object" && typeof options?.top === "number") {
       metrics.scrollTop += options.top;
+      container.dispatchEvent(new Event("scroll"));
     }
   }) as never;
   return container;
@@ -77,10 +81,14 @@ describe("useChatScrolling", () => {
     delete (window as unknown as { ResizeObserver?: unknown }).ResizeObserver;
   });
 
-  function renderAttachedHook(metrics: ScrollMetrics) {
+  function renderAttachedHook(metrics: ScrollMetrics, { isStreaming = false } = {}) {
     const container = createScrollContainer(metrics);
     const content = document.createElement("div");
-    const rendered = renderHook(() => useChatScrolling({ chatHistory: [] }));
+    const rendered = renderHook(
+      (props: { isStreaming: boolean }) =>
+        useChatScrolling({ chatHistory: [], isStreaming: props.isStreaming }),
+      { initialProps: { isStreaming } }
+    );
     act(() => {
       rendered.result.current.scrollContainerCallbackRef(container);
       rendered.result.current.contentCallbackRef(content);
@@ -96,7 +104,7 @@ describe("useChatScrolling", () => {
   }
 
   describe("useChatScrolling()", () => {
-    it("reports at-bottom while the viewport rests within the threshold of the newest content", () => {
+    it("reports at-bottom while the viewport rests within the threshold of the newest content (https://github.com/logancyang/obsidian-copilot-preview/issues/329)", () => {
       const { rendered } = renderAttachedHook({
         scrollHeight: 1000,
         clientHeight: 400,
@@ -116,7 +124,7 @@ describe("useChatScrolling", () => {
       expect(rendered.result.current.isAtBottom).toBe(false);
     });
 
-    it("reports at-bottom again once the user scrolls back to the newest content", () => {
+    it("reports at-bottom again once the user scrolls back to the newest content (https://github.com/logancyang/obsidian-copilot-preview/issues/329)", () => {
       const metrics = { scrollHeight: 1000, clientHeight: 400, scrollTop: 100 };
       const { container, rendered } = renderAttachedHook(metrics);
       expect(rendered.result.current.isAtBottom).toBe(false);
@@ -127,7 +135,7 @@ describe("useChatScrolling", () => {
       expect(rendered.result.current.isAtBottom).toBe(true);
     });
 
-    it("keeps tracking across repeated scroll-away and scroll-back cycles", () => {
+    it("keeps tracking across repeated scroll-away and scroll-back cycles (https://github.com/logancyang/obsidian-copilot-preview/issues/329)", () => {
       const metrics = { scrollHeight: 1000, clientHeight: 400, scrollTop: 600 };
       const { container, rendered } = renderAttachedHook(metrics);
 
@@ -170,18 +178,73 @@ describe("useChatScrolling", () => {
       expect(rendered.result.current.isAtBottom).toBe(true);
     });
 
-    it("scrollToBottom scrolls the container to its full scroll height", () => {
+    it("jumpToLatest smooth-scrolls the container to its full scroll height (https://github.com/logancyang/obsidian-copilot-preview/issues/329)", () => {
       const metrics = { scrollHeight: 1000, clientHeight: 400, scrollTop: 100 };
       const { container, rendered } = renderAttachedHook(metrics);
 
       act(() => {
-        rendered.result.current.scrollToBottom();
+        rendered.result.current.jumpToLatest();
       });
 
       expect(container.scrollTo).toHaveBeenLastCalledWith({ top: 1000, behavior: "smooth" });
     });
 
-    it("scrollBy moves the container by the forwarded wheel delta without animation", () => {
+    it("keeps following a streaming response after jumpToLatest so new content stays in view (https://github.com/logancyang/obsidian-copilot-preview/issues/329)", () => {
+      const metrics = { scrollHeight: 1000, clientHeight: 400, scrollTop: 100 };
+      const { container, content, rendered } = renderAttachedHook(metrics, { isStreaming: true });
+
+      act(() => {
+        rendered.result.current.jumpToLatest();
+      });
+
+      metrics.scrollHeight = 1500;
+      act(() => {
+        fireResizeObserverFor(content);
+      });
+
+      expect(container.scrollTo).toHaveBeenLastCalledWith({ top: 1500, behavior: "instant" });
+    });
+
+    it("stops following the moment the user scrolls up during a followed stream (https://github.com/logancyang/obsidian-copilot-preview/issues/329)", () => {
+      const metrics = { scrollHeight: 1000, clientHeight: 400, scrollTop: 100 };
+      const { container, content, rendered } = renderAttachedHook(metrics, { isStreaming: true });
+
+      act(() => {
+        rendered.result.current.jumpToLatest();
+      });
+
+      metrics.scrollTop = 200;
+      dispatchScroll(container);
+
+      metrics.scrollHeight = 1500;
+      act(() => {
+        fireResizeObserverFor(content);
+      });
+
+      expect(container.scrollTo).toHaveBeenLastCalledWith({ top: 1000, behavior: "smooth" });
+      expect(metrics.scrollTop).toBe(200);
+    });
+
+    it("ends follow when the stream finishes so the next turn needs a fresh opt-in (https://github.com/logancyang/obsidian-copilot-preview/issues/329)", () => {
+      const metrics = { scrollHeight: 1000, clientHeight: 400, scrollTop: 100 };
+      const { container, content, rendered } = renderAttachedHook(metrics, { isStreaming: true });
+
+      act(() => {
+        rendered.result.current.jumpToLatest();
+      });
+      act(() => {
+        rendered.rerender({ isStreaming: false });
+      });
+
+      metrics.scrollHeight = 1500;
+      act(() => {
+        fireResizeObserverFor(content);
+      });
+
+      expect(container.scrollTo).toHaveBeenLastCalledWith({ top: 1000, behavior: "smooth" });
+    });
+
+    it("scrollBy moves the container by the forwarded wheel delta without animation (https://github.com/logancyang/obsidian-copilot-preview/issues/329)", () => {
       const metrics = { scrollHeight: 1000, clientHeight: 400, scrollTop: 100 };
       const { container, rendered } = renderAttachedHook(metrics);
 

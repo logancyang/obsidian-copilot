@@ -4,6 +4,12 @@ import { useCallback, useRef, useState, useEffect } from "react";
 
 interface UseChatScrollingOptions {
   chatHistory: ChatMessage[];
+  /**
+   * True while a response is streaming. `jumpToLatest` only keeps following
+   * new content while this is set, so follow mode can never outlive the turn
+   * that the user opted into.
+   */
+  isStreaming?: boolean;
 }
 
 interface UseChatScrollingReturn {
@@ -19,8 +25,14 @@ interface UseChatScrollingReturn {
   getMessageKey: (message: ChatMessage, index: number) => string;
   /** True while the viewport rests within a small threshold of the newest message. */
   isAtBottom: boolean;
-  /** Scrolls the message list to its end. */
-  scrollToBottom: (behavior?: "smooth" | "instant") => void;
+  /**
+   * Scrolls to the newest message. While a response is streaming, keeps
+   * following new content until the user scrolls up or the turn ends —
+   * follow is strictly opt-in per click, so it never becomes the always-on
+   * auto-follow that upstream declined in
+   * https://github.com/logancyang/obsidian-copilot/issues/829.
+   */
+  jumpToLatest: () => void;
   /**
    * Scrolls the message list by a wheel delta. Lets overlays floating above
    * the list (the scroll-to-bottom button) forward wheel events so hovering
@@ -36,6 +48,7 @@ const AT_BOTTOM_THRESHOLD_PX = 24;
 
 export const useChatScrolling = ({
   chatHistory,
+  isStreaming = false,
 }: UseChatScrollingOptions): UseChatScrollingReturn => {
   const [containerMinHeight, setContainerMinHeight] = useState(0);
   const [isAtBottom, setIsAtBottom] = useState(true);
@@ -45,6 +58,12 @@ export const useChatScrolling = ({
   const contentResizeObserverRef = useRef<ResizeObserver | null>(null);
   const scrollListenerCleanupRef = useRef<(() => void) | null>(null);
   const pendingScrollFrameRef = useRef<{ win: Window; id: number } | null>(null);
+  // Follow mode entered by jumpToLatest during a stream; see the interface
+  // JSDoc. lastScrollTopRef feeds the synchronous upward-scroll detection.
+  const followStreamRef = useRef(false);
+  const lastScrollTopRef = useRef(0);
+  const isStreamingRef = useRef(isStreaming);
+  isStreamingRef.current = isStreaming;
 
   // Generate consistent message key for DOM identification
   // Using message IDs is better, as in the case of a network disconnection, the timestamps of two messages could be identical.
@@ -114,6 +133,24 @@ export const useChatScrolling = ({
     pendingScrollFrameRef.current = { win, id };
   }, [updateIsAtBottom]);
 
+  // Upward-scroll detection must run synchronously in the scroll handler, not
+  // in the coalesced frame: a content resize can re-push to the bottom in the
+  // same frame, and a deferred check would then read downward movement and
+  // keep follow mode alive against the user's intent. Follow-driven scrolls
+  // only ever move down, so a shrinking scrollTop is a reliable user signal
+  // (clamps from content shrink also land here, which fails safe: follow
+  // merely stops).
+  const handleScroll = useCallback(() => {
+    const node = scrollContainerRef.current;
+    if (node) {
+      if (node.scrollTop < lastScrollTopRef.current) {
+        followStreamRef.current = false;
+      }
+      lastScrollTopRef.current = node.scrollTop;
+    }
+    scheduleIsAtBottomCheck();
+  }, [scheduleIsAtBottomCheck]);
+
   const detachScrollTracking = useCallback(() => {
     scrollListenerCleanupRef.current?.();
     scrollListenerCleanupRef.current = null;
@@ -163,13 +200,13 @@ export const useChatScrolling = ({
 
         resizeObserverRef.current = resizeObserver;
 
-        node.addEventListener("scroll", scheduleIsAtBottomCheck, { passive: true });
-        scrollListenerCleanupRef.current = () =>
-          node.removeEventListener("scroll", scheduleIsAtBottomCheck);
+        node.addEventListener("scroll", handleScroll, { passive: true });
+        scrollListenerCleanupRef.current = () => node.removeEventListener("scroll", handleScroll);
+        lastScrollTopRef.current = node.scrollTop;
         updateIsAtBottom();
       }
     },
-    [calculateDynamicMinHeight, detachScrollTracking, scheduleIsAtBottomCheck, updateIsAtBottom]
+    [calculateDynamicMinHeight, detachScrollTracking, handleScroll, updateIsAtBottom]
   );
 
   // Recalculate min-height when chat history changes (new messages)
@@ -179,6 +216,29 @@ export const useChatScrolling = ({
       setContainerMinHeight(newCalculatedMinHeight);
     }
   }, [chatHistory, calculateDynamicMinHeight]);
+
+  // Scroll to bottom function
+  const scrollToBottom = useCallback((behavior: "smooth" | "instant" = "smooth") => {
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTo({
+        top: scrollContainerRef.current.scrollHeight,
+        behavior,
+      });
+    }
+  }, []);
+
+  const jumpToLatest = useCallback(() => {
+    followStreamRef.current = isStreamingRef.current;
+    scrollToBottom("smooth");
+  }, [scrollToBottom]);
+
+  // A finished turn ends the follow the user opted into; the next stream
+  // requires a fresh click.
+  useEffect(() => {
+    if (!isStreaming) {
+      followStreamRef.current = false;
+    }
+  }, [isStreaming]);
 
   // Content growth (streaming appends, image/diagram loads) changes the
   // content element's height without firing scroll events, so the at-bottom
@@ -199,13 +259,18 @@ export const useChatScrolling = ({
       contentRef.current = node;
       if (node) {
         const observer = new ResizeObserver(() => {
+          // Re-target with "instant": re-starting a smooth animation on every
+          // streamed token would keep resetting and never catch up.
+          if (followStreamRef.current && isStreamingRef.current) {
+            scrollToBottom("instant");
+          }
           updateIsAtBottom();
         });
         observer.observe(node);
         contentResizeObserverRef.current = observer;
       }
     },
-    [updateIsAtBottom]
+    [scrollToBottom, updateIsAtBottom]
   );
 
   // Cleanup ResizeObservers and scroll tracking on unmount
@@ -220,16 +285,6 @@ export const useChatScrolling = ({
       }
     };
   }, [detachScrollTracking]);
-
-  // Scroll to bottom function
-  const scrollToBottom = useCallback((behavior: "smooth" | "instant" = "smooth") => {
-    if (scrollContainerRef.current) {
-      scrollContainerRef.current.scrollTo({
-        top: scrollContainerRef.current.scrollHeight,
-        behavior,
-      });
-    }
-  }, []);
 
   // "instant" bypasses the container's scroll-smooth so wheel steps don't
   // animate-lag behind the user's hand.
@@ -278,7 +333,7 @@ export const useChatScrolling = ({
     contentCallbackRef,
     getMessageKey,
     isAtBottom,
-    scrollToBottom,
+    jumpToLatest,
     scrollBy,
   };
 };

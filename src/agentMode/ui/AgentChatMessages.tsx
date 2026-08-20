@@ -75,10 +75,11 @@ const AgentChatMessages = memo(
       contentCallbackRef,
       getMessageKey,
       isAtBottom,
-      scrollToBottom,
+      jumpToLatest,
       scrollBy,
     } = useChatScrolling({
       chatHistory: adapted,
+      isStreaming: isLoading,
     });
 
     const showPlanCard = currentPlan != null && currentPlan.decision === "pending";
@@ -236,7 +237,7 @@ const AgentChatMessages = memo(
             https://github.com/logancyang/obsidian-copilot-preview/issues/329 */}
         {!isAtBottom && (
           <ScrollToBottomButton
-            onClick={() => scrollToBottom()}
+            onClick={jumpToLatest}
             onScrollWheel={scrollBy}
             isStreaming={isLoading}
           />

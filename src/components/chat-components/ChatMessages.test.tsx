@@ -6,7 +6,7 @@ import React from "react";
 
 const scrollingMockState = {
   isAtBottom: true,
-  scrollToBottom: jest.fn(),
+  jumpToLatest: jest.fn(),
   scrollBy: jest.fn(),
 };
 
@@ -18,7 +18,7 @@ jest.mock("@/hooks/useChatScrolling", () => ({
     contentCallbackRef: jest.fn(),
     getMessageKey: (message: { id?: string }, index: number) => message.id ?? `${index}`,
     isAtBottom: scrollingMockState.isAtBottom,
-    scrollToBottom: scrollingMockState.scrollToBottom,
+    jumpToLatest: scrollingMockState.jumpToLatest,
     scrollBy: scrollingMockState.scrollBy,
   }),
 }));
@@ -88,7 +88,7 @@ describe("ChatMessages", () => {
   describe("ChatMessages()", () => {
     beforeEach(() => {
       scrollingMockState.isAtBottom = true;
-      scrollingMockState.scrollToBottom = jest.fn();
+      scrollingMockState.jumpToLatest = jest.fn();
       scrollingMockState.scrollBy = jest.fn();
     });
 
@@ -104,7 +104,7 @@ describe("ChatMessages", () => {
 
       const button = screen.getByLabelText("Scroll to latest message");
       act(() => button.click());
-      expect(scrollingMockState.scrollToBottom).toHaveBeenCalledTimes(1);
+      expect(scrollingMockState.jumpToLatest).toHaveBeenCalledTimes(1);
     });
 
     it("forwards wheel deltas from the button to the message list so hovering it never traps scrolling (https://github.com/logancyang/obsidian-copilot-preview/issues/329)", () => {
