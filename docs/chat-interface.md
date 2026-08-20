@@ -31,6 +31,8 @@ By default, a new chat includes the active note. A text selection takes priority
 
 Press **Enter** to send by default. You can switch this to **Shift + Enter** under **Settings → Copilot → Basic → General → Send Shortcut**. Use the stop button to interrupt a response.
 
+When you scroll up in a long conversation, a round arrow button appears near the bottom of the message area. Click it to jump back to the newest message; scrolling the mouse wheel while hovering it still scrolls the conversation. While Copilot is writing, the button shows animated dots instead of the arrow, and clicking it keeps the view pinned to the incoming text until you scroll up or the response finishes.
+
 Hover over a message to use its actions:
 
 - Your messages: **Copy**, **Edit**, and **Delete**.

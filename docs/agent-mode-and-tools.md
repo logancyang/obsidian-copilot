@@ -54,6 +54,7 @@ Click the **Agent** ribbon icon or run **Open Copilot Agent Chat Window** from t
 - Use **New Chat** to reset the current tab. Use **Recent Chats** on Agent Home, or **Chat History** during a conversation, to resume saved work.
 - Before the first message, you can switch an empty session to another installed agent without losing the draft. After chat history exists, that session stays with its agent.
 - Add the active note, selected text, other notes, the active Copilot web tab, or supported images. You can also mention a note with `[[Note title]]`.
+- When you scroll up in a long conversation, a round arrow button appears near the bottom of the message area — click it to jump back to the newest message. While the agent is working, the button shows animated dots, and clicking it keeps the view pinned to the incoming reply until you scroll up.
 - Hover the small ring next to the send controls to see how full the conversation's context window is. When your account has usage limits the agent can report — such as a 5-hour or weekly cap on a subscription plan — the same panel shows how much of each limit is used and when it resets. If your setup has no such limits (for example, your own API key), no limit rows appear.
 
 Type `/` to insert an enabled skill or [custom command](custom-commands.md). For a small question without opening Agent chat, use [Quick Ask](custom-commands.md#quick-ask).
