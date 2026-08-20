@@ -796,7 +796,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
       <div className="tw-flex tw-size-full tw-flex-col tw-overflow-hidden">
         <NewVersionBanner currentVersion={plugin.manifest.version} />
         {isChatEmpty(chatHistory, currentAiMessage) && (
-          <div className="tw-mx-auto tw-flex tw-w-full tw-max-w-sm tw-flex-1 tw-items-center tw-px-4">
+          <div className="tw-mx-auto tw-flex tw-w-full tw-max-w-lg tw-flex-1 tw-items-center tw-px-4">
             <AgentModeBanner onOpenAgent={safeAsyncHandler(() => plugin.activateAgentView())} />
           </div>
         )}
