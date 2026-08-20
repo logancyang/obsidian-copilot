@@ -419,8 +419,8 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
   // A backend's binary path (or a binary install/update) is resolved at spawn
   // time, so a change must reach the running/warm process — otherwise it only
   // updates the settings status line and the agent keeps the old binary until
-  // a plugin reload. Each descriptor's `subscribeInstallState` already fires
-  // only on its own path/install field, so this won't churn on unrelated saves.
+  // a plugin reload. Each descriptor scopes its subscription to settings that
+  // require its process to refresh, so unrelated saves do not churn backends.
   for (const descriptor of listBackendDescriptors()) {
     descriptor.subscribeInstallState(plugin, () => {
       void manager
