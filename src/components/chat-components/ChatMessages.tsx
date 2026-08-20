@@ -45,6 +45,8 @@ const ChatMessages = memo(
     onEdit,
     onDelete,
   }: ChatMessagesProps) => {
+    const isStreaming = !!currentAiMessage || !!loading;
+
     // Chat scrolling behavior
     const {
       containerMinHeight,
@@ -52,10 +54,11 @@ const ChatMessages = memo(
       contentCallbackRef,
       getMessageKey,
       isAtBottom,
-      scrollToBottom,
+      jumpToLatest,
       scrollBy,
     } = useChatScrolling({
       chatHistory,
+      isStreaming,
     });
 
     if (isChatEmpty(chatHistory, currentAiMessage)) {
@@ -142,9 +145,9 @@ const ChatMessages = memo(
             https://github.com/logancyang/obsidian-copilot-preview/issues/329 */}
         {!isAtBottom && (
           <ScrollToBottomButton
-            onClick={() => scrollToBottom()}
+            onClick={jumpToLatest}
             onScrollWheel={scrollBy}
-            isStreaming={!!currentAiMessage || !!loading}
+            isStreaming={isStreaming}
           />
         )}
       </div>

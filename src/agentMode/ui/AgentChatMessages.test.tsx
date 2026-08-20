@@ -7,7 +7,7 @@ import React from "react";
 
 const scrollingMockState = {
   isAtBottom: true,
-  scrollToBottom: jest.fn(),
+  jumpToLatest: jest.fn(),
   scrollBy: jest.fn(),
 };
 
@@ -19,7 +19,7 @@ jest.mock("@/hooks/useChatScrolling", () => ({
     contentCallbackRef: jest.fn(),
     getMessageKey: (message: { id: string }) => message.id,
     isAtBottom: scrollingMockState.isAtBottom,
-    scrollToBottom: scrollingMockState.scrollToBottom,
+    jumpToLatest: scrollingMockState.jumpToLatest,
     scrollBy: scrollingMockState.scrollBy,
   }),
 }));
@@ -83,7 +83,7 @@ describe("AgentChatMessages", () => {
       jest.useFakeTimers();
       jest.setSystemTime(200_000);
       scrollingMockState.isAtBottom = true;
-      scrollingMockState.scrollToBottom = jest.fn();
+      scrollingMockState.jumpToLatest = jest.fn();
       scrollingMockState.scrollBy = jest.fn();
     });
 
@@ -166,12 +166,12 @@ describe("AgentChatMessages", () => {
 
     it("shows the scroll-to-bottom button after scrolling away and jumps back on click (https://github.com/logancyang/obsidian-copilot-preview/issues/329)", () => {
       scrollingMockState.isAtBottom = false;
-      scrollingMockState.scrollToBottom = jest.fn();
+      scrollingMockState.jumpToLatest = jest.fn();
       renderMessages([assistantMessage("answer-1", 62_000)], false);
 
       const button = screen.getByLabelText("Scroll to latest message");
       act(() => button.click());
-      expect(scrollingMockState.scrollToBottom).toHaveBeenCalledTimes(1);
+      expect(scrollingMockState.jumpToLatest).toHaveBeenCalledTimes(1);
     });
 
     it("forwards wheel deltas from the button to the message list so hovering it never traps scrolling (https://github.com/logancyang/obsidian-copilot-preview/issues/329)", () => {
