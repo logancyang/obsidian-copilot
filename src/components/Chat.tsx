@@ -15,7 +15,7 @@ import type { WebTabContext } from "@/types/message";
 import { ChatControls } from "@/components/chat-components/ChatControls";
 import ChatInput from "@/components/chat-components/ChatModeInput";
 import ChatMessages from "@/components/chat-components/ChatMessages";
-import { LegacyChatDeprecationHint } from "@/components/chat-components/ui/LegacyChatDeprecationHint";
+import { AgentModePromoRow } from "@/components/chat-components/ui/AgentModePromoRow";
 import { useChatModelPicker } from "@/components/chat-components/useChatModelPicker";
 import { NewVersionBanner } from "@/components/chat-components/NewVersionBanner";
 import IndexingProgressCard from "@/components/IndexingProgressCard";
@@ -36,7 +36,12 @@ import ChainManager from "@/LLMProviders/chainManager";
 import { clearRecordedPromptPayload } from "@/LLMProviders/chainRunner/utils/promptPayloadRecorder";
 import { logFileManager } from "@/logFileManager";
 import CopilotPlugin from "@/main";
-import { getModelKeyFromModel, useSettingsValue } from "@/settings/model";
+import {
+  getModelKeyFromModel,
+  getSettings,
+  updateSetting,
+  useSettingsValue,
+} from "@/settings/model";
 import { ChatManagerChatUIState } from "@/state/ChatUIState";
 import { FileParserManager } from "@/tools/FileParserManager";
 import { ChatMessage } from "@/types/message";
@@ -183,6 +188,12 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
       setIndexingCardVisible(null);
     }
   }
+
+  // Persist the Agent mode promo row's dismissal. `updateSetting` replaces the
+  // whole `agentMode` object, so spread the freshest copy first.
+  const handleDismissAgentPromo = useCallback(() => {
+    updateSetting("agentMode", { ...getSettings().agentMode, quickChatPromoDismissed: true });
+  }, []);
 
   const handleIndexingCardClose = useCallback(() => {
     setIndexingCardVisible(false);
@@ -832,8 +843,10 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
             />
             <ChatInput
               footerContent={
-                <LegacyChatDeprecationHint
+                <AgentModePromoRow
+                  dismissed={settings.agentMode.quickChatPromoDismissed}
                   onOpenAgent={safeAsyncHandler(() => plugin.activateAgentView())}
+                  onDismiss={handleDismissAgentPromo}
                 />
               }
               inputMessage={inputMessage}

@@ -1059,6 +1059,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
     // chooses to share the log.
     debugFullFrames: true,
     welcomeDismissed: false,
+    quickChatPromoDismissed: false,
     skills: {
       folder: DEFAULT_SKILLS_FOLDER,
     },

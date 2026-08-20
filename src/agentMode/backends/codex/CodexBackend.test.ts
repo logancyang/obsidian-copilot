@@ -55,6 +55,7 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
         activeBackend: "codex",
         debugFullFrames: false,
         welcomeDismissed: false,
+        quickChatPromoDismissed: false,
         skills: { folder: "copilot/skills" },
         backends: {
           codex: { binaryPath: "/usr/local/bin/codex-acp" },
@@ -158,6 +159,7 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
         activeBackend: "codex",
         debugFullFrames: false,
         welcomeDismissed: false,
+        quickChatPromoDismissed: false,
         skills: { folder: "team-skills" },
         backends: { codex: { binaryPath: "/usr/local/bin/codex-acp" } },
       },
@@ -237,6 +239,7 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
         activeBackend: "codex",
         debugFullFrames: false,
         welcomeDismissed: false,
+        quickChatPromoDismissed: false,
         skills: { folder: "copilot/skills" },
         backends: {
           codex: {
@@ -278,6 +281,7 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
           activeBackend: "codex",
           debugFullFrames: false,
           welcomeDismissed: false,
+          quickChatPromoDismissed: false,
           skills: { folder: "copilot/skills" },
           backends: {
             codex: {
@@ -307,6 +311,7 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
         activeBackend: "codex",
         debugFullFrames: false,
         welcomeDismissed: false,
+        quickChatPromoDismissed: false,
         skills: { folder: "copilot/skills" },
         backends: {
           codex: {
@@ -336,6 +341,7 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
         activeBackend: "codex",
         debugFullFrames: false,
         welcomeDismissed: false,
+        quickChatPromoDismissed: false,
         skills: { folder: "copilot/skills" },
         backends: {},
       },

@@ -304,6 +304,11 @@ export interface CopilotSettings {
      */
     welcomeDismissed: boolean;
     /**
+     * One-shot dismissal of the Quick Chat composer's Agent mode promotion row.
+     * Persisted so the row never returns for that install. Defaults to `false`.
+     */
+    quickChatPromoDismissed: boolean;
+    /**
      * Skills management — canonical-store discovery, symlink lifecycle,
      * reconciliation. See `designdocs/SKILLS_MANAGEMENT.md` and
      * `designdocs/SKILLS_DISCOVERY_REDESIGN.md`.
@@ -1331,6 +1336,11 @@ function sanitizeAgentMode(raw: unknown): CopilotSettings["agentMode"] {
       ? r.welcomeDismissed
       : DEFAULT_SETTINGS.agentMode.welcomeDismissed;
 
+  const quickChatPromoDismissed =
+    typeof r.quickChatPromoDismissed === "boolean"
+      ? r.quickChatPromoDismissed
+      : DEFAULT_SETTINGS.agentMode.quickChatPromoDismissed;
+
   const claudeCliRaw =
     r.claudeCli && typeof r.claudeCli === "object"
       ? (r.claudeCli as Record<string, unknown>)
@@ -1363,6 +1373,7 @@ function sanitizeAgentMode(raw: unknown): CopilotSettings["agentMode"] {
     backends,
     debugFullFrames,
     welcomeDismissed,
+    quickChatPromoDismissed,
     skills,
     ...(claudeCli ? { claudeCli } : {}),
     ...(deviceProfiles ? { deviceProfiles } : {}),

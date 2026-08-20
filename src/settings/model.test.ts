@@ -207,8 +207,31 @@ describe("sanitizeSettings - agentMode shape migration", () => {
       backends: {},
       debugFullFrames: true,
       welcomeDismissed: false,
+      quickChatPromoDismissed: false,
       skills: { folder: "copilot/skills" },
     });
+  });
+
+  it("keeps an explicit quickChatPromoDismissed=true so the promo row stays gone across reloads", () => {
+    const sanitized = sanitizeSettings({
+      ...DEFAULT_SETTINGS,
+      agentMode: {
+        ...DEFAULT_SETTINGS.agentMode,
+        quickChatPromoDismissed: true,
+      },
+    });
+    expect(sanitized.agentMode.quickChatPromoDismissed).toBe(true);
+  });
+
+  it("falls back to the default when quickChatPromoDismissed is not a boolean", () => {
+    const sanitized = sanitizeSettings({
+      ...DEFAULT_SETTINGS,
+      agentMode: {
+        ...DEFAULT_SETTINGS.agentMode,
+        quickChatPromoDismissed: "yes",
+      },
+    } as unknown as CopilotSettings);
+    expect(sanitized.agentMode.quickChatPromoDismissed).toBe(false);
   });
 
   it("defaults debugFullFrames to on for new installs", () => {

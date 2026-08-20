@@ -683,6 +683,7 @@ describe("buildOpencodeConfig — agent/prompt/mode/skills blocks (preserved)", 
         activeBackend: "opencode",
         debugFullFrames: false,
         welcomeDismissed: false,
+        quickChatPromoDismissed: false,
         skills: { folder: "copilot/skills" },
         backends: {
           opencode: {
@@ -775,6 +776,7 @@ describe("buildOpencodeConfig — agent/prompt/mode/skills blocks (preserved)", 
         activeBackend: "opencode",
         debugFullFrames: false,
         welcomeDismissed: false,
+        quickChatPromoDismissed: false,
         skills: { folder: "copilot/skills" },
         backends: {
           opencode: {
@@ -813,6 +815,7 @@ describe("buildOpencodeConfig — agent/prompt/mode/skills blocks (preserved)", 
         activeBackend: "opencode",
         debugFullFrames: false,
         welcomeDismissed: false,
+        quickChatPromoDismissed: false,
         skills: { folder: "team-skills" },
         backends: {},
       },
@@ -943,6 +946,7 @@ describe("OpencodeBackend.buildSpawnDescriptor", () => {
       activeBackend: "opencode",
       debugFullFrames: false,
       welcomeDismissed: false,
+      quickChatPromoDismissed: false,
       skills: { folder: "copilot/skills" },
       backends: {
         opencode: {
@@ -978,6 +982,7 @@ describe("OpencodeBackend.buildSpawnDescriptor", () => {
       activeBackend: "opencode",
       debugFullFrames: false,
       welcomeDismissed: false,
+      quickChatPromoDismissed: false,
       skills: { folder: "copilot/skills" },
       backends: { opencode: { binaryPath: "/path/to/opencode" } },
     });
@@ -997,6 +1002,7 @@ describe("OpencodeBackend.buildSpawnDescriptor", () => {
       activeBackend: "opencode",
       debugFullFrames: false,
       welcomeDismissed: false,
+      quickChatPromoDismissed: false,
       skills: { folder: "copilot/skills" },
       backends: { opencode: { binaryPath: "/path/to/opencode" } },
     });
@@ -1024,6 +1030,7 @@ describe("OpencodeBackend.buildSpawnDescriptor", () => {
       activeBackend: "opencode",
       debugFullFrames: false,
       welcomeDismissed: false,
+      quickChatPromoDismissed: false,
       skills: { folder: "copilot/skills" },
       backends: {
         opencode: {
@@ -1049,6 +1056,7 @@ describe("OpencodeBackend.buildSpawnDescriptor", () => {
       activeBackend: "opencode",
       debugFullFrames: false,
       welcomeDismissed: false,
+      quickChatPromoDismissed: false,
       skills: { folder: "copilot/skills" },
       backends: { opencode: { binaryPath: "/path/to/opencode" } },
     });
@@ -1070,6 +1078,7 @@ describe("OpencodeBackend.buildSpawnDescriptor", () => {
       activeBackend: "opencode",
       debugFullFrames: false,
       welcomeDismissed: false,
+      quickChatPromoDismissed: false,
       skills: { folder: "copilot/skills" },
       backends: {
         opencode: {

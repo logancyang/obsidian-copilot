@@ -10,6 +10,7 @@ function makeAgentMode(partial: Partial<AgentMode> = {}): AgentMode {
     backends: {},
     debugFullFrames: false,
     welcomeDismissed: false,
+    quickChatPromoDismissed: false,
     skills: { folder: "copilot/skills" },
     ...partial,
   };
