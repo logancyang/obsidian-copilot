@@ -49,11 +49,12 @@ function userMessage(id: string, text: string): ChatMessage {
   };
 }
 
-function renderMessages(chatHistory: ChatMessage[], currentAiMessage = "") {
+function renderMessages(chatHistory: ChatMessage[], currentAiMessage = "", loading = false) {
   return render(
     <ChatMessages
       chatHistory={chatHistory}
       currentAiMessage={currentAiMessage}
+      loading={loading}
       app={{} as never}
       onRegenerate={jest.fn()}
       onEdit={jest.fn()}
@@ -117,11 +118,20 @@ describe("ChatMessages", () => {
 
     it("swaps the arrow for a bouncing typing indicator while a response is streaming (https://github.com/logancyang/obsidian-copilot-preview/issues/329)", () => {
       scrollingMockState.isAtBottom = false;
-      const { container } = renderMessages([userMessage("m1", "hello")], "partial reply");
+      const { container } = renderMessages([userMessage("m1", "hello")], "partial reply", true);
 
       const button = screen.getByLabelText("Scroll to latest message");
       expect(container.querySelectorAll(".copilot-typing-dot")).toHaveLength(3);
       expect(button.querySelector("svg")).toBeNull();
+    });
+
+    it("shows the static arrow when a stopped generation retains partial text without an active request (https://github.com/logancyang/obsidian-copilot-preview/issues/329)", () => {
+      scrollingMockState.isAtBottom = false;
+      const { container } = renderMessages([userMessage("m1", "hello")], "partial reply", false);
+
+      const button = screen.getByLabelText("Scroll to latest message");
+      expect(container.querySelectorAll(".copilot-typing-dot")).toHaveLength(0);
+      expect(button.querySelector("svg")).toBeTruthy();
     });
   });
 });

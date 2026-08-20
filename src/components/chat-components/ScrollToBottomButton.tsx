@@ -11,7 +11,11 @@ export interface ScrollToBottomButtonProps {
    * traps the user's scrolling.
    */
   onScrollWheel: (deltaY: number) => void;
-  /** While a response is streaming, the arrow becomes a typing indicator. */
+  /**
+   * While a response is streaming, the arrow becomes a typing indicator so
+   * the button doubles as a "content is still arriving below" signal.
+   * https://github.com/logancyang/obsidian-copilot-preview/issues/329
+   */
   isStreaming?: boolean;
 }
 

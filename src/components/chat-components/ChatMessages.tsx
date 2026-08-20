@@ -45,7 +45,11 @@ const ChatMessages = memo(
     onEdit,
     onDelete,
   }: ChatMessagesProps) => {
-    const isStreaming = !!currentAiMessage || !!loading;
+    // `loading` spans the whole request, while stopping a generation keeps its
+    // partial text in currentAiMessage — so only `loading` distinguishes an
+    // active stream from output retained after Stop.
+    // https://github.com/logancyang/obsidian-copilot-preview/issues/329
+    const isStreaming = !!loading;
 
     // Chat scrolling behavior
     const {
