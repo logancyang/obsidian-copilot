@@ -38,7 +38,7 @@ function MessageListFrame({ children }: { children: React.ReactNode }) {
 export const OverMessageList: StoryObj<ScrollToBottomButtonProps> = {
   render: () => (
     <MessageListFrame>
-      <ScrollToBottomButton onClick={() => {}} onScrollWheel={() => {}} />
+      <ScrollToBottomButton onClick={() => {}} onScrollBy={() => {}} />
     </MessageListFrame>
   ),
 };
@@ -46,7 +46,7 @@ export const OverMessageList: StoryObj<ScrollToBottomButtonProps> = {
 export const Streaming: StoryObj<ScrollToBottomButtonProps> = {
   render: () => (
     <MessageListFrame>
-      <ScrollToBottomButton onClick={() => {}} onScrollWheel={() => {}} isStreaming />
+      <ScrollToBottomButton onClick={() => {}} onScrollBy={() => {}} isStreaming />
     </MessageListFrame>
   ),
 };

@@ -150,7 +150,7 @@ const ChatMessages = memo(
         {!isAtBottom && (
           <ScrollToBottomButton
             onClick={jumpToLatest}
-            onScrollWheel={scrollBy}
+            onScrollBy={scrollBy}
             isStreaming={isStreaming}
           />
         )}
