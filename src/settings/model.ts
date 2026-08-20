@@ -59,11 +59,6 @@ export interface CopilotSettings {
   huggingfaceApiKey: string;
   cohereApiKey: string;
   anthropicApiKey: string;
-  azureOpenAIApiKey: string;
-  azureOpenAIApiInstanceName: string;
-  azureOpenAIApiDeploymentName: string;
-  azureOpenAIApiVersion: string;
-  azureOpenAIApiEmbeddingDeploymentName: string;
   googleApiKey: string;
   openRouterAiApiKey: string;
   xaiApiKey: string;
@@ -615,11 +610,9 @@ export function getSettings(): Readonly<CopilotSettings> {
  * out of `MODEL_SECRET_FIELDS`, which also drives persist-time secret
  * stripping — listing them there would blank routing config on every save.
  * They belong here because a key without its routing is worse than no key at
- * all: `baseUrl` decides which host receives it (a reset endpoint sends a proxy
- * key to the provider's default host), and the Azure trio is what
- * `embeddingManager` composes into the request URL for the builtin Azure
- * embedding row. Azure's *chat* deployment is absent because no builtin row
- * uses that provider; custom rows survive whole and never consult this list.
+ * all: `baseUrl` decides which host receives it, so a reset endpoint would send
+ * a proxy key to the provider's default host. Custom rows survive whole and
+ * never consult this list.
  * https://github.com/logancyang/obsidian-copilot-preview/issues/259
  */
 const MODEL_CREDENTIAL_BUNDLE_FIELDS = [
@@ -627,9 +620,6 @@ const MODEL_CREDENTIAL_BUNDLE_FIELDS = [
   "baseUrl",
   "enableCors",
   "openAIOrgId",
-  "azureOpenAIApiInstanceName",
-  "azureOpenAIApiVersion",
-  "azureOpenAIApiEmbeddingDeploymentName",
 ] as const satisfies readonly (keyof CustomModel)[];
 
 /**
@@ -655,18 +645,14 @@ const SESSION_PROOF_FIELD = "entitlementToken";
  */
 const TOP_LEVEL_CREDENTIAL_COMPANION_FIELDS = [
   "openAIOrgId",
-  "azureOpenAIApiInstanceName",
-  "azureOpenAIApiDeploymentName",
-  "azureOpenAIApiVersion",
-  "azureOpenAIApiEmbeddingDeploymentName",
 ] as const satisfies readonly (keyof CopilotSettings)[];
 
 /**
  * The top-level counterpart of {@link MODEL_CREDENTIAL_BUNDLE_FIELDS}.
  *
  * Kept separate from the model list rather than merged into one array because
- * the two address different objects with different field names — the Azure
- * deployment trio only exists at top level, `enableCors` only exists per row.
+ * the two address different objects with different field names: `enableCors`
+ * exists only per row, and the secret half is derived from a different source.
  */
 const TOP_LEVEL_CREDENTIAL_BUNDLE_FIELDS: readonly string[] = [
   ...TOP_LEVEL_SECRET_FIELDS.filter((field) => field !== SESSION_PROOF_FIELD),
@@ -677,7 +663,7 @@ const TOP_LEVEL_CREDENTIAL_BUNDLE_FIELDS: readonly string[] = [
  * Whether a pre-reset value is usable configuration worth carrying over.
  *
  * Reason: the bundles are almost entirely strings, and the string check is what
- * stops a corrupted or cross-version value (say `azureOpenAIApiVersion: {}` from
+ * stops a corrupted or cross-version value (say `openAIOrgId: {}` from
  * a hand-edited `data.json`) from surviving reset and then throwing at its
  * consumer. Only `enableCors` is legitimately non-string, so it is named here
  * rather than widening the check for everything.
@@ -917,14 +903,6 @@ export function useSettingsValue(): Readonly<CopilotSettings> {
 }
 
 /**
- * Normalize persisted model provider values so identity keys stay stable across migrations.
- * Reason: Legacy data may store "azure_openai" while runtime uses "azure-openai".
- */
-export function normalizeModelProvider(provider: string): string {
-  return provider === "azure_openai" ? EmbeddingModelProviders.AZURE_OPENAI : provider;
-}
-
-/**
  * Sanitizes the settings to ensure they are valid.
  * Note: This will be better handled by Zod in the future.
  */
@@ -941,20 +919,11 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
     settingsToSanitize.userId = uuidv4();
   }
 
-  // fix: Maintain consistency between EmbeddingModelProviders.AZURE_OPENAI and ChatModelProviders.AZURE_OPENAI,
-  // where it was 'azure_openai' before EmbeddingModelProviders.AZURE_OPENAI.
   if (!settingsToSanitize.activeEmbeddingModels) {
     settingsToSanitize.activeEmbeddingModels = BUILTIN_EMBEDDING_MODELS.map((model) => ({
       ...model,
       enabled: true,
     }));
-  } else {
-    settingsToSanitize.activeEmbeddingModels = settingsToSanitize.activeEmbeddingModels.map((m) => {
-      return {
-        ...m,
-        provider: normalizeModelProvider(m.provider),
-      };
-    });
   }
 
   const sanitizedSettings: CopilotSettings = { ...settingsToSanitize };
@@ -967,6 +936,14 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   // https://github.com/logancyang/obsidian-copilot/issues/2928
   delete sanitizedSettingsRecord.amazonBedrockApiKey;
   delete sanitizedSettingsRecord.amazonBedrockRegion;
+  // Azure OpenAI is no longer a chat or embedding provider, so a stored key and
+  // its routing fields would only address a service Copilot cannot reach.
+  // https://github.com/logancyang/obsidian-copilot/issues/2932
+  delete sanitizedSettingsRecord.azureOpenAIApiKey;
+  delete sanitizedSettingsRecord.azureOpenAIApiInstanceName;
+  delete sanitizedSettingsRecord.azureOpenAIApiDeploymentName;
+  delete sanitizedSettingsRecord.azureOpenAIApiVersion;
+  delete sanitizedSettingsRecord.azureOpenAIApiEmbeddingDeploymentName;
   // Copilot no longer limits how long an answer may be, so a stored limit
   // would only cut off answers the model was willing to finish.
   // https://github.com/logancyang/obsidian-copilot-preview/issues/312

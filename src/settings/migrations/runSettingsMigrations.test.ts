@@ -403,6 +403,41 @@ describe("runSettingsMigrations()", () => {
     expect(removeProvider).toHaveBeenCalledWith("bed");
   });
 
+  it("v12: hands a saved Azure provider to the removal cascade for a v11 vault", async () => {
+    mockGetSettings.mockReturnValue(
+      settings({
+        settingsVersion: 11,
+        providers: {
+          az: {
+            providerId: "az",
+            providerType: "azure" as ProviderType,
+            displayName: "Azure OpenAI",
+            origin: { kind: "byok" },
+            addedAt: 0,
+          },
+        },
+      })
+    );
+    const { api, removeProvider } = makeApi();
+
+    await runSettingsMigrations(api);
+
+    expect(removeProvider).toHaveBeenCalledWith("az");
+  });
+
+  it("v12: repoints an embedding selection that named Azure for a v11 vault", async () => {
+    mockGetSettings.mockReturnValue(
+      settings({ settingsVersion: 11, embeddingModelKey: "azure-openai|azure openai" })
+    );
+    const { api } = makeApi();
+
+    await runSettingsMigrations(api);
+
+    expect(mockSetSettings).toHaveBeenCalledWith(
+      expect.objectContaining({ embeddingModelKey: DEFAULT_SETTINGS.embeddingModelKey })
+    );
+  });
+
   it("v11: leaves a saved Bedrock provider alone for a vault already at the current version", async () => {
     mockGetSettings.mockReturnValue(
       settings({

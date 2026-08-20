@@ -46,7 +46,7 @@ export interface AdapterVerifyContext<TExtras = unknown> {
   apiKey: string | null;
   extras: TExtras;
   /** Optional probe model. Adapters that can't issue a ping without
-   *  a real wire id (Azure deployment-name routing) may require this
+   *  a real wire id (deployment-name routing) may require this
    *  and throw if absent. */
   probeModel?: ConfiguredModel;
 }
@@ -77,7 +77,7 @@ export interface ProviderAdapter<TExtras = unknown> {
 
   /**
    * Issue a minimal "ping" to validate credentials. Adapter-defined —
-   * Anthropic might check `/v1/models`, Azure might probe a deployment, etc.
+   * Anthropic might check `/v1/models`, Google `/v1beta/models`, etc.
    * Returns a structured result; throwing is reserved for unrecoverable
    * misconfiguration (missing required extras).
    */

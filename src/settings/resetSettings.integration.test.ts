@@ -112,7 +112,7 @@ describe("model", () => {
         ...DEFAULT_SETTINGS,
         _keychainVaultId: VAULT_ID,
         openAIApiKey: "sk-top-level",
-        azureOpenAIApiInstanceName: "my-instance",
+        openAIOrgId: "org-123",
         isPaidUser: true,
         plusLicenseKey: "lic-12345",
         entitlementToken: "test-stale-entitlement-token",
@@ -171,7 +171,7 @@ describe("model", () => {
 
       // Top-level credential and its vendor routing survive; preferences reset.
       expect(reloaded.openAIApiKey).toBe("sk-top-level");
-      expect(reloaded.azureOpenAIApiInstanceName).toBe("my-instance");
+      expect(reloaded.openAIOrgId).toBe("org-123");
       expect(reloaded.autoAcceptEdits).toBe(DEFAULT_SETTINGS.autoAcceptEdits);
 
       // Builtin row: key + endpoint kept, preferences back to defaults.

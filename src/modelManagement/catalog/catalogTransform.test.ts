@@ -14,7 +14,6 @@ describe("transformWireToCatalog", () => {
     it.each([
       ["@ai-sdk/anthropic", "anthropic"],
       ["@ai-sdk/google", "google"],
-      ["@ai-sdk/azure", "azure"],
       ["@ai-sdk/openai-compatible", "openai-compatible"],
       ["@ai-sdk/openai", "openai-compatible"],
       [undefined, "openai-compatible"],
@@ -270,10 +269,24 @@ describe("transformWireToCatalog", () => {
     expect(transformWireToCatalog(wire).map((p) => p.id)).toEqual(["openai"]);
   });
 
-  it("drops Amazon Bedrock on its id, so a catalog that stops publishing the npm field still excludes it", () => {
+  it("drops an unlisted provider id that ships an unroutable npm package, so a renamed or newly published Azure row is excluded on arrival (https://github.com/logancyang/obsidian-copilot/issues/2932)", () => {
     const wire = makeWire({
-      "amazon-bedrock": { id: "amazon-bedrock", name: "Amazon Bedrock" },
+      "azure-foundry": { id: "azure-foundry", name: "Azure AI Foundry", npm: "@ai-sdk/azure" },
+      openai: { id: "openai", name: "OpenAI", npm: "@ai-sdk/openai" },
     });
-    expect(transformWireToCatalog(wire)).toEqual([]);
+    expect(transformWireToCatalog(wire).map((p) => p.id)).toEqual(["openai"]);
+  });
+
+  it("drops both Azure catalog rows rather than reclassifying them as openai-compatible (https://github.com/logancyang/obsidian-copilot/issues/2932)", () => {
+    const wire = makeWire({
+      azure: { id: "azure", name: "Azure", npm: "@ai-sdk/azure" },
+      "azure-cognitive-services": {
+        id: "azure-cognitive-services",
+        name: "Azure Cognitive Services",
+        npm: "@ai-sdk/azure",
+      },
+      openai: { id: "openai", name: "OpenAI", npm: "@ai-sdk/openai" },
+    });
+    expect(transformWireToCatalog(wire).map((p) => p.id)).toEqual(["openai"]);
   });
 });

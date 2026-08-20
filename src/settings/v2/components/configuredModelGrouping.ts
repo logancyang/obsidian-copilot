@@ -28,7 +28,7 @@ export interface CandidatePartition {
  * models matching `agentType`, plus BYOK/Plus models for opencode only.
  *
  * For opencode, a BYOK/Plus provider it can't route (`isOpencodeRoutable`
- * false — azure / self-hosted) is dropped to avoid a dead toggle:
+ * false — self-hosted) is dropped to avoid a dead toggle:
  * `opencodeEnabledModelEntries` skips unroutable providers, so enabling one
  * would never reach the agent or picker.
  */
