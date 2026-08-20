@@ -158,10 +158,16 @@ export class AcpProcessManager {
  * CSI (colors, cursor moves) and OSC (window title) escape sequences. Agent
  * binaries and their plugins write these to stdout for a human terminal;
  * anything prefixed to a JSON-RPC envelope makes `JSON.parse` throw, and the
- * SDK's `ndJsonStream` drops such frames silently.
+ * SDK's `ndJsonStream` drops such frames silently — which strands Agent Mode
+ * when the decorated frame is the initialization response.
+ * See https://github.com/logancyang/obsidian-copilot/issues/2876.
+ *
+ * The CSI parameter class spans the full `0x30`-`0x3f` range ECMA-48 allows,
+ * not just digits and `;`: truecolor sequences such as `\x1b[38:2:255:0:0m`
+ * use `:`, and private forms use `<`, `=`, `>`, `?`.
  */
 // eslint-disable-next-line no-control-regex -- CSI/OSC sequences are defined by \x1b control bytes
-const TERMINAL_ESCAPE_SEQUENCE = /\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g;
+const TERMINAL_ESCAPE_SEQUENCE = /\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g;
 
 /**
  * Strip terminal escape sequences from an NDJSON byte stream so downstream
