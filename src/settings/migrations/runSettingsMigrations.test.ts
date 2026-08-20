@@ -6,7 +6,7 @@
 
 import type { CustomModel } from "@/aiParams";
 import { ChatModelProviders, DEFAULT_COPILOT_FOLDER, DEFAULT_SETTINGS } from "@/constants";
-import type { ModelManagementApi } from "@/modelManagement";
+import type { ModelManagementApi, ProviderType } from "@/modelManagement";
 import { getSettings, setSettings, type CopilotSettings } from "@/settings/model";
 import { Platform } from "obsidian";
 
@@ -44,11 +44,13 @@ function settings(
 
 function makeApi() {
   const setupProvider = jest.fn(async () => ({ providerId: "p1", configuredModelIds: ["cm1"] }));
+  const removeProvider = jest.fn(async () => undefined);
   const api = {
     providerRegistry: { listByOrigin: jest.fn(() => []) },
     setup: { byok: { setupProvider } },
+    coordinator: { removeProvider },
   } as unknown as ModelManagementApi;
-  return { api, setupProvider };
+  return { api, setupProvider, removeProvider };
 }
 
 const keyedAnthropic = () =>
@@ -377,6 +379,50 @@ describe("runSettingsMigrations()", () => {
     await runSettingsMigrations(api);
 
     expect(mockSetSettings).not.toHaveBeenCalled();
+  });
+
+  it("v11: hands a saved Bedrock provider to the removal cascade for a v10 vault", async () => {
+    mockGetSettings.mockReturnValue(
+      settings({
+        settingsVersion: 10,
+        providers: {
+          bed: {
+            providerId: "bed",
+            providerType: "bedrock" as ProviderType,
+            displayName: "Amazon Bedrock",
+            origin: { kind: "byok" },
+            addedAt: 0,
+          },
+        },
+      })
+    );
+    const { api, removeProvider } = makeApi();
+
+    await runSettingsMigrations(api);
+
+    expect(removeProvider).toHaveBeenCalledWith("bed");
+  });
+
+  it("v11: leaves a saved Bedrock provider alone for a vault already at the current version", async () => {
+    mockGetSettings.mockReturnValue(
+      settings({
+        settingsVersion: CURRENT_SETTINGS_VERSION,
+        providers: {
+          bed: {
+            providerId: "bed",
+            providerType: "bedrock" as ProviderType,
+            displayName: "Amazon Bedrock",
+            origin: { kind: "byok" },
+            addedAt: 0,
+          },
+        },
+      })
+    );
+    const { api, removeProvider } = makeApi();
+
+    await runSettingsMigrations(api);
+
+    expect(removeProvider).not.toHaveBeenCalled();
   });
 
   it("v8: does not flag a vault already at the current version", async () => {

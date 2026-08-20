@@ -114,7 +114,7 @@ export async function runSettingsMigrations(api: ModelManagementApi): Promise<vo
   // any selection still pointing at one, and its stored API keys. Reads the
   // settings freshly so it sees whatever the earlier migrations left behind.
   if (fromVersion < 11) {
-    executeBedrockRemoval(getSettings());
+    await executeBedrockRemoval(api, getSettings());
   }
 
   // Bump unconditionally after the migrations so a per-provider failure can't

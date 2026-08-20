@@ -6,19 +6,16 @@
  * Copilot no longer ships a `bedrock` adapter, so a saved Bedrock provider can
  * never build a client again. Left alone the row keeps its place in the model
  * list and stays selectable, and the user only finds out when a message fails.
- * Its API key is keychain-backed and reachable only through the row's
- * `apiKeyKeychainId`, so deleting the row without the entry would strand a
- * credential nothing can name any more.
  *
  * Split so the mapping logic stays trivially unit-testable:
  *  - `planBedrockRemoval` is PURE — settings in, plan out.
- *  - `executeBedrockRemoval` applies the patch and deletes the keychain
- *    entries.
+ *  - `executeBedrockRemoval` applies the patch, runs each provider row through
+ *    the shared removal cascade, and deletes the legacy top-level API key.
  */
 
 import type { CustomModel } from "@/aiParams";
 import { logWarn } from "@/logger";
-import type { BackendConfig, BackendType, Provider } from "@/modelManagement";
+import type { ModelManagementApi } from "@/modelManagement";
 import { KeychainService } from "@/services/keychainService";
 import { type CopilotSettings, setSettings } from "@/settings/model";
 
@@ -32,36 +29,46 @@ const REMOVED_PROVIDER_TYPE = "bedrock";
 const REMOVED_LEGACY_PROVIDER = "amazon-bedrock";
 
 /**
+ * Settings field that held the Bedrock key before BYOK moved credentials onto
+ * provider rows. The BYOK migration copies it without clearing it, so the
+ * entry outlives the row it seeded, and the field is gone from the schema now —
+ * nothing else can name its keychain id, so this migration is its last chance
+ * to be deleted.
+ */
+const REMOVED_LEGACY_SECRET_FIELD = "amazonBedrockApiKey";
+
+/**
  * Whether a persisted model key names the removed provider. Legacy keys are
  * `name|provider`, optionally prefixed with an agent backend id, so the
  * provider is always the trailing segment.
  */
-function referencesRemovedProvider(modelKey: string | undefined): boolean {
-  return modelKey?.endsWith(`|${REMOVED_LEGACY_PROVIDER}`) ?? false;
+function referencesRemovedProvider(modelKey: string): boolean {
+  return modelKey.endsWith(`|${REMOVED_LEGACY_PROVIDER}`);
 }
 
-/** What `planBedrockRemoval` found: the settings to write and the keys to drop. */
+/** What `planBedrockRemoval` found: the rows to cascade and the patch to write. */
 export interface BedrockRemovalPlan {
-  /** Settings patch dropping the provider rows, their models and enrollments. */
+  /** Every Bedrock `providerId`, for the caller to run through the cascade. */
+  providerIds: readonly string[];
+  /** Patch for the slices the cascade does not own: legacy models, selections. */
   patch: Partial<CopilotSettings>;
-  /** `apiKeyKeychainId` of every removed row, for the executor to delete. */
-  keychainIds: readonly string[];
 }
 
 /**
- * Pure planner: the plan that removes every Bedrock provider and everything
+ * Pure planner: what it takes to remove every Bedrock provider and everything
  * pointing at one, or `null` when the vault never configured Bedrock (so the
  * caller can skip a redundant write — referential stability, see AGENTS.md).
  *
- * Four slices reference a provider and each is cleaned here. The provider row
- * itself; the `ConfiguredModel`s belonging to it; the `enabledModels` lists
- * that enrolled those models into a backend's picker; and any stored selection
- * naming one.
+ * The provider row, its `ConfiguredModel`s, the `enabledModels` lists that
+ * enrolled them and the row's own API key are named here only by
+ * `providerIds`: `ModelManagementCoordinator.removeProvider` already owns that
+ * four-step cascade, so this plan carries the ids rather than a second copy of
+ * the traversal.
  *
- * The legacy `activeModels` list is cleaned too, in both its model rows and the
- * `name|amazon-bedrock` selections that point at them. A vault upgrading from
- * v3 never gets a provider row at all, because `planByokMigration` no longer
- * maps Bedrock, so `activeModels` is the only place its models exist. That list
+ * What the cascade does not reach is planned as a patch. The legacy
+ * `activeModels` list matters more than it looks: a vault upgrading from v3
+ * never gets a provider row at all, because `planByokMigration` no longer maps
+ * Bedrock, so `activeModels` is the only place its models exist. That list
  * still feeds a model picker: `ChatInput` and the quick-command modal both fall
  * back to it, so a row left behind stays on screen and fails when chosen.
  *
@@ -73,113 +80,84 @@ export interface BedrockRemovalPlan {
  * @param settings - Hydrated settings snapshot to plan against.
  */
 export function planBedrockRemoval(settings: CopilotSettings): BedrockRemovalPlan | null {
-  const providers = settings.providers ?? {};
-  const removedProviderIds = new Set(
-    Object.values(providers)
-      .filter((provider) => String(provider.providerType) === REMOVED_PROVIDER_TYPE)
-      .map((provider) => provider.providerId)
+  const providerIds = Object.values(settings.providers ?? {})
+    .filter((provider) => String(provider.providerType) === REMOVED_PROVIDER_TYPE)
+    .map((provider) => provider.providerId);
+
+  const removedProviderIds = new Set(providerIds);
+  const removedModelIds = new Set(
+    (settings.configuredModels ?? [])
+      .filter((model) => removedProviderIds.has(model.providerId))
+      .map((model) => model.configuredModelId)
   );
+
+  // A stored selection names a removed model either by its configured-model id
+  // or, in a vault whose BYOK migration never ran, by the legacy
+  // `name|amazon-bedrock` key that has no row behind it.
+  const isRemovedSelection = (modelKey: string | undefined): boolean =>
+    !!modelKey && (removedModelIds.has(modelKey) || referencesRemovedProvider(modelKey));
+
+  const patch: Partial<CopilotSettings> = {};
 
   const models = settings.activeModels ?? [];
   const keptLegacyModels = models.filter(
     (model: CustomModel) => model.provider !== REMOVED_LEGACY_PROVIDER
   );
-  const hasLegacyModels = keptLegacyModels.length !== models.length;
+  if (keptLegacyModels.length !== models.length) patch.activeModels = keptLegacyModels;
 
-  const patch: Partial<CopilotSettings> = {};
-  const keychainIds: string[] = [];
+  if (isRemovedSelection(settings.defaultModelKey)) patch.defaultModelKey = "";
+  if (isRemovedSelection(settings.quickCommandModelKey)) patch.quickCommandModelKey = undefined;
 
-  if (hasLegacyModels) patch.activeModels = keptLegacyModels;
-
-  if (removedProviderIds.size > 0) {
-    const keptProviders: Record<string, Provider> = {};
-    for (const [key, provider] of Object.entries(providers)) {
-      if (removedProviderIds.has(provider.providerId)) {
-        if (provider.apiKeyKeychainId) keychainIds.push(provider.apiKeyKeychainId);
-        continue;
-      }
-      keptProviders[key] = provider;
-    }
-    patch.providers = keptProviders;
-
-    const configuredModels = settings.configuredModels ?? [];
-    const removedModelIds = new Set(
-      configuredModels
-        .filter((model) => removedProviderIds.has(model.providerId))
-        .map((model) => model.configuredModelId)
-    );
-    const keptModels = configuredModels.filter(
-      (model) => !removedProviderIds.has(model.providerId)
-    );
-    if (keptModels.length !== configuredModels.length) patch.configuredModels = keptModels;
-
-    const backends = settings.backends ?? {};
-    const nextBackends: Partial<Record<BackendType, BackendConfig>> = {};
-    let backendsChanged = false;
-    for (const [backend, config] of Object.entries(backends)) {
-      if (!config) continue;
-      const enabledModels = config.enabledModels.filter((id) => !removedModelIds.has(id));
-      if (enabledModels.length !== config.enabledModels.length) {
-        backendsChanged = true;
-        nextBackends[backend as BackendType] = { ...config, enabledModels };
-      } else {
-        nextBackends[backend as BackendType] = config;
-      }
-    }
-    if (backendsChanged) patch.backends = nextBackends;
-
-    if (removedModelIds.has(settings.defaultModelKey)) patch.defaultModelKey = "";
-    if (settings.quickCommandModelKey && removedModelIds.has(settings.quickCommandModelKey)) {
-      patch.quickCommandModelKey = undefined;
-    }
-    const projects = settings.projectList ?? [];
-    if (projects.some((project) => removedModelIds.has(project.projectModelKey))) {
-      patch.projectList = projects.map((project) =>
-        removedModelIds.has(project.projectModelKey) ? { ...project, projectModelKey: "" } : project
-      );
-    }
-  }
-
-  // Legacy-form selections are checked whether or not a provider row existed:
-  // a vault whose BYOK migration never ran has the key without the row.
-  if (referencesRemovedProvider(settings.defaultModelKey)) patch.defaultModelKey = "";
-  if (referencesRemovedProvider(settings.quickCommandModelKey)) {
-    patch.quickCommandModelKey = undefined;
-  }
-  const projects = patch.projectList ?? settings.projectList ?? [];
-  if (projects.some((project) => referencesRemovedProvider(project.projectModelKey))) {
+  const projects = settings.projectList ?? [];
+  if (projects.some((project) => isRemovedSelection(project.projectModelKey))) {
     patch.projectList = projects.map((project) =>
-      referencesRemovedProvider(project.projectModelKey)
-        ? { ...project, projectModelKey: "" }
-        : project
+      isRemovedSelection(project.projectModelKey) ? { ...project, projectModelKey: "" } : project
     );
   }
 
-  return Object.keys(patch).length > 0 ? { patch, keychainIds } : null;
+  const hasWork = providerIds.length > 0 || Object.keys(patch).length > 0;
+  return hasWork ? { providerIds, patch } : null;
 }
 
 /**
- * Side-effecting executor. Applies the plan, then deletes the stored API keys.
- * The keychain half never throws: a build without SecretStorage, or a keychain
- * locked at load time, leaves the entries in place rather than wedging plugin
- * load — the version bump in the caller is unconditional either way, so the
- * cost of a failure here is an orphaned entry.
- *
- * @param settings - Hydrated settings snapshot the plan is computed from.
+ * Delete the pre-BYOK top-level Bedrock key. Never throws: a build without
+ * SecretStorage, or a keychain locked at load time, leaves the entry in place
+ * rather than wedging plugin load — the version bump in the caller is
+ * unconditional either way, so the cost of a failure here is an orphaned entry.
  */
-export function executeBedrockRemoval(settings: CopilotSettings): void {
-  const plan = planBedrockRemoval(settings);
-  if (!plan) return;
-  setSettings(plan.patch);
-
-  if (plan.keychainIds.length === 0) return;
+function deleteLegacyApiKey(): void {
   try {
     const keychain = KeychainService.getInstance();
     if (!keychain.isAvailable()) return;
-    for (const keychainId of plan.keychainIds) {
-      keychain.deleteSecretById(keychainId);
-    }
+    keychain.deleteSecret(REMOVED_LEGACY_SECRET_FIELD);
   } catch (error) {
-    logWarn("[bedrock-removal] could not delete the stored API key", error);
+    logWarn("[bedrock-removal] could not delete the legacy stored API key", error);
+  }
+}
+
+/**
+ * Side-effecting executor. Writes the patch, then hands each Bedrock row to the
+ * shared provider cascade, which drops the backend enrollments, the configured
+ * models, the row and its keychain entry in the order those slices tolerate.
+ *
+ * The legacy key is deleted whether or not there was a plan: a vault that typed
+ * a Bedrock key but never enabled a model has the keychain entry and nothing
+ * else, and after this release no code path can name it again.
+ *
+ * @param api - Model-management API owning the provider-removal cascade.
+ * @param settings - Hydrated settings snapshot the plan is computed from.
+ */
+export async function executeBedrockRemoval(
+  api: ModelManagementApi,
+  settings: CopilotSettings
+): Promise<void> {
+  deleteLegacyApiKey();
+
+  const plan = planBedrockRemoval(settings);
+  if (!plan) return;
+
+  if (Object.keys(plan.patch).length > 0) setSettings(plan.patch);
+  for (const providerId of plan.providerIds) {
+    await api.coordinator.removeProvider(providerId);
   }
 }
