@@ -20,6 +20,7 @@ import {
 import type { UserSystemPrompt } from "@/system-prompts/type";
 import {
   buildOpencodeConfig,
+  effortVariantsFor,
   OPENCODE_PROVIDER_MAP,
   OpencodeBackend,
   type OpencodeModelDeps,
@@ -158,6 +159,8 @@ function okEntry(provider: Provider, model: ConfiguredModel): EnabledBackendEntr
 function makeDeps(args: {
   resolved: EnabledBackendEntry[];
   keys?: Record<string, string | null>;
+  /** Published effort levels keyed by wire id; a missing key answers null. */
+  efforts?: Record<string, readonly string[] | null>;
 }): OpencodeModelDeps {
   const keys = args.keys ?? {};
   return {
@@ -171,7 +174,30 @@ function makeDeps(args: {
       url: "http://127.0.0.1:1234/search",
       token: "session-token",
     }),
+    ...(args.efforts
+      ? { getReasoningEfforts: async (id: string) => args.efforts?.[id] ?? null }
+      : {}),
   };
+}
+
+/** The Copilot Plus provider row `CopilotPlusSetupApi` seeds. */
+function makePlusProvider(): Provider {
+  return makeProvider(
+    "p-plus",
+    { kind: "copilot-plus" },
+    {
+      providerType: "openai-compatible",
+      displayName: "Copilot Plus",
+      baseUrl: "https://models.brevilabs.com/v1",
+    }
+  );
+}
+
+/** A Copilot Plus reasoning model, as `COPILOT_PLUS_MODELS` snapshots it. */
+function makePlusReasoningModel(wireId: string): ConfiguredModel {
+  const model = makeModel("p-plus", wireId);
+  model.info.reasoning = true;
+  return model;
 }
 
 const NO_MODELS_DEPS = makeDeps({ resolved: [] });
@@ -655,6 +681,89 @@ describe("buildOpencodeConfig — provider/model injection", () => {
       "X-Client-Version": "4.0.0-preview-260802",
     });
     expect(cp.models).toEqual({ "copilot-plus-flash": {} });
+  });
+
+  it("declares the effort levels Copilot Plus published, and disables the rest (https://github.com/logancyang/obsidian-copilot/issues/2917)", async () => {
+    // Left to itself opencode infers the menu from the model id — a fixed
+    // low/medium/high plus its own per-model special cases — which offers levels that
+    // are synonyms of one another and misses levels the model has. The disables are
+    // what removes an inferred level, since config variants merge over the guess.
+    const model = makePlusReasoningModel("copilot-plus-flash");
+    const deps = makeDeps({
+      resolved: [okEntry(makePlusProvider(), model)],
+      keys: { "p-plus": "plus-token-123" },
+      efforts: { "copilot-plus-flash": ["high", "max"] },
+    });
+
+    const cfg = (await buildOpencodeConfig(getSettings(), deps)) as {
+      provider: Record<string, { models?: Record<string, Record<string, unknown>> }>;
+    };
+
+    expect(cfg.provider["copilot-plus"].models?.["copilot-plus-flash"]).toEqual({
+      reasoning: true,
+      variants: {
+        high: { reasoningEffort: "high" },
+        max: { reasoningEffort: "max" },
+        none: { disabled: true },
+        minimal: { disabled: true },
+        low: { disabled: true },
+        medium: { disabled: true },
+        xhigh: { disabled: true },
+      },
+    });
+  });
+
+  it("offers no effort control for a Copilot Plus model that honors no level (https://github.com/logancyang/obsidian-copilot/issues/2917)", async () => {
+    // opencode builds the menu only for models it is told reason, so withholding the
+    // flag is what makes the control disappear. A menu whose every entry does nothing
+    // is worse than no menu.
+    const deps = makeDeps({
+      resolved: [okEntry(makePlusProvider(), makePlusReasoningModel("honors-no-level"))],
+      keys: { "p-plus": "plus-token-123" },
+      efforts: { "honors-no-level": [] },
+    });
+
+    const cfg = (await buildOpencodeConfig(getSettings(), deps)) as {
+      provider: Record<string, { models?: Record<string, Record<string, unknown>> }>;
+    };
+
+    expect(cfg.provider["copilot-plus"].models?.["honors-no-level"]).toEqual({});
+  });
+
+  it("keeps the inferred menu when the published levels cannot be read", async () => {
+    // A service too old to publish them, or one transient outage. Either way an
+    // imperfect menu beats dropping a control that works.
+    const deps = makeDeps({
+      resolved: [okEntry(makePlusProvider(), makePlusReasoningModel("copilot-plus-flash"))],
+      keys: { "p-plus": "plus-token-123" },
+      efforts: { "copilot-plus-flash": null },
+    });
+
+    const cfg = (await buildOpencodeConfig(getSettings(), deps)) as {
+      provider: Record<string, { models?: Record<string, Record<string, unknown>> }>;
+    };
+
+    expect(cfg.provider["copilot-plus"].models?.["copilot-plus-flash"]).toEqual({
+      reasoning: true,
+    });
+  });
+
+  it("never declares effort levels for a BYOK model, which has none published", async () => {
+    const provider = makeProvider("p-anthropic", { kind: "byok", catalogProviderId: "anthropic" });
+    const model = makeModel("p-anthropic", "copilot-plus-flash");
+    model.info.reasoning = true;
+    const getReasoningEfforts = jest.fn(async () => ["none", "low"]);
+    const deps = {
+      ...makeDeps({ resolved: [okEntry(provider, model)], keys: { "p-anthropic": "anth-123" } }),
+      getReasoningEfforts,
+    };
+
+    const cfg = (await buildOpencodeConfig(getSettings(), deps)) as {
+      provider: Record<string, { models?: Record<string, Record<string, unknown>> }>;
+    };
+
+    expect(cfg.provider.anthropic.models?.["copilot-plus-flash"]).toEqual({ reasoning: true });
+    expect(getReasoningEfforts).not.toHaveBeenCalled();
   });
 
   it("skips Copilot Plus when its provisioned relay token is unavailable (https://github.com/logancyang/obsidian-copilot/issues/2895)", async () => {
@@ -1225,6 +1334,41 @@ describe("OpencodeBackend.buildSpawnDescriptor", () => {
 // `COPILOT_PROMPT_BASE` and the full `buildAgentSystemPrompt` composition are
 // unit-tested in `backends/shared/agentSystemPrompt.test.ts`. The opencode tests
 // above only assert that the composed prompt reaches `cfg.agent.<id>.prompt`.
+
+describe("effortVariantsFor()", () => {
+  it("declares each published level and disables every level that was not published", () => {
+    expect(effortVariantsFor(["high", "max"])).toEqual({
+      high: { reasoningEffort: "high" },
+      max: { reasoningEffort: "max" },
+      none: { disabled: true },
+      minimal: { disabled: true },
+      low: { disabled: true },
+      medium: { disabled: true },
+      xhigh: { disabled: true },
+    });
+  });
+
+  it("disables thinking-off, which the service rejects rather than publishes", () => {
+    // An inferred menu that still offered it would invite the user to pick a level that
+    // fails the whole turn. https://github.com/logancyang/obsidian-copilot/issues/2915
+    expect(effortVariantsFor(["high", "max"]).none).toEqual({ disabled: true });
+  });
+
+  it("declares a published level the plugin does not know about", () => {
+    // The published list is the service's to extend; a client that dropped an
+    // unrecognized level would hide a level the model really has until it shipped again.
+    expect(effortVariantsFor(["ultra"])).toMatchObject({
+      ultra: { reasoningEffort: "ultra" },
+      high: { disabled: true },
+    });
+  });
+
+  it("disables every level when nothing was published", () => {
+    expect(Object.values(effortVariantsFor([]))).toEqual(
+      Array.from({ length: 7 }, () => ({ disabled: true }))
+    );
+  });
+});
 
 describe("OPENCODE_PROVIDER_MAP", () => {
   it("maps the BYOK provider ids plus Copilot Plus to opencode provider ids", () => {
