@@ -1,9 +1,7 @@
 import { BottomLoadingIndicator } from "@/components/chat-components/BottomLoadingIndicator";
 import ChatSingleMessage from "@/components/chat-components/ChatSingleMessage";
-import { SuggestedPrompts } from "@/components/chat-components/SuggestedPrompts";
 import { USER_SENDER } from "@/constants";
 import { useChatScrolling } from "@/hooks/useChatScrolling";
-import { useSettingsValue } from "@/settings/model";
 import { ChatMessage } from "@/types/message";
 import { App } from "obsidian";
 import React, { memo } from "react";
@@ -19,8 +17,6 @@ interface ChatMessagesProps {
   onRegenerate: (messageIndex: number) => void;
   onEdit: (messageIndex: number, newMessage: string) => void;
   onDelete: (messageIndex: number) => void;
-  onReplaceChat: (prompt: string) => void;
-  showHelperComponents: boolean;
 }
 
 /**
@@ -47,22 +43,18 @@ const ChatMessages = memo(
     onRegenerate,
     onEdit,
     onDelete,
-    onReplaceChat,
-    showHelperComponents = true,
   }: ChatMessagesProps) => {
-    const settings = useSettingsValue();
-
     // Chat scrolling behavior
     const { containerMinHeight, scrollContainerCallbackRef, getMessageKey } = useChatScrolling({
       chatHistory,
     });
 
     if (isChatEmpty(chatHistory, currentAiMessage)) {
+      // Height comes from the content, not the container: `Chat` centers the
+      // Agent Chat banner in the space this branch leaves free, so filling the
+      // column here would push that banner back to the top.
       return (
-        <div className="tw-flex tw-size-full tw-flex-col tw-gap-2 tw-overflow-y-auto">
-          {showHelperComponents && settings.showSuggestedPrompts && (
-            <SuggestedPrompts onClick={onReplaceChat} />
-          )}
+        <div className="tw-flex tw-w-full tw-flex-col tw-gap-2">
           {loading && <BottomLoadingIndicator label={loadingMessage} />}
         </div>
       );

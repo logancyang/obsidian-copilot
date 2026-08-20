@@ -796,7 +796,9 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
       <div className="tw-flex tw-size-full tw-flex-col tw-overflow-hidden">
         <NewVersionBanner currentVersion={plugin.manifest.version} />
         {isChatEmpty(chatHistory, currentAiMessage) && (
-          <AgentModeBanner onOpenAgent={safeAsyncHandler(() => plugin.activateAgentView())} />
+          <div className="tw-mx-auto tw-flex tw-w-full tw-max-w-sm tw-flex-1 tw-items-center tw-px-4">
+            <AgentModeBanner onOpenAgent={safeAsyncHandler(() => plugin.activateAgentView())} />
+          </div>
         )}
         <ChatMessages
           chatHistory={chatHistory}
@@ -808,8 +810,6 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
           onRegenerate={safeAsyncHandler(handleRegenerate)}
           onEdit={safeAsyncHandler(handleEdit)}
           onDelete={safeAsyncHandler(handleDelete)}
-          onReplaceChat={setInputMessage}
-          showHelperComponents
         />
         {shouldShowIndexingCard() ? (
           <div className="tw-inset-0 tw-z-modal tw-flex tw-items-center tw-justify-center tw-rounded-xl">

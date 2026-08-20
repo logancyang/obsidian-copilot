@@ -25,7 +25,7 @@ export function AgentModeBanner({ onOpenAgent }: AgentModeBannerProps) {
       variant="ghost2"
       size="fit"
       className={cn(
-        "tw-mb-2 tw-w-full tw-shrink-0 tw-cursor-pointer tw-justify-between tw-gap-3 tw-rounded-md",
+        "tw-w-full tw-shrink-0 tw-cursor-pointer tw-justify-between tw-gap-3 tw-rounded-md",
         "tw-border tw-border-solid tw-border-border tw-bg-secondary tw-p-3 tw-text-left",
         "tw-text-ui-small tw-text-normal hover:tw-bg-interactive-hover hover:tw-text-normal",
         // Wrap instead of truncating: a narrow sidebar must still show the whole sentence.

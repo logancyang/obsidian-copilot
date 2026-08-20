@@ -138,7 +138,6 @@ export interface CopilotSettings {
   defaultOpenArea: DEFAULT_OPEN_AREA;
   defaultSendShortcut: SEND_SHORTCUT;
   disableIndexOnMobile: boolean;
-  showSuggestedPrompts: boolean;
   numPartitions: number;
   defaultConversationNoteName: string;
   // Any valid paid license (Lite and above). undefined means never checked.

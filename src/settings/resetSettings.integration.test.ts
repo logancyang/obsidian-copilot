@@ -116,7 +116,7 @@ describe("model", () => {
         isPaidUser: true,
         plusLicenseKey: "lic-12345",
         entitlementToken: "test-stale-entitlement-token",
-        showSuggestedPrompts: false,
+        autoAcceptEdits: true,
         activeModels: [builtinRow, customRow],
         providers: {
           byok_openai: makeProvider({ apiKeyKeychainId: BYOK_POINTER }),
@@ -172,7 +172,7 @@ describe("model", () => {
       // Top-level credential and its vendor routing survive; preferences reset.
       expect(reloaded.openAIApiKey).toBe("sk-top-level");
       expect(reloaded.azureOpenAIApiInstanceName).toBe("my-instance");
-      expect(reloaded.showSuggestedPrompts).toBe(DEFAULT_SETTINGS.showSuggestedPrompts);
+      expect(reloaded.autoAcceptEdits).toBe(DEFAULT_SETTINGS.autoAcceptEdits);
 
       // Builtin row: key + endpoint kept, preferences back to defaults.
       const reloadedBuiltin = reloaded.activeModels.find((m) => m.name === builtin.name);
