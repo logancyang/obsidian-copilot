@@ -14,7 +14,6 @@ export type ModelApiKeySettings = Pick<
   CopilotSettings,
   | "anthropicApiKey"
   | "openAIApiKey"
-  | "azureOpenAIApiKey"
   | "googleApiKey"
   | "groqApiKey"
   | "openRouterAiApiKey"
@@ -30,7 +29,6 @@ const PROVIDERS_WITHOUT_API_KEYS: ReadonlySet<Provider> = new Set([
   ChatModelProviders.OPENAI_FORMAT,
   ChatModelProviders.OLLAMA,
   ChatModelProviders.LM_STUDIO,
-  ChatModelProviders.AZURE_OPENAI,
   EmbeddingModelProviders.COPILOT_PLUS,
   EmbeddingModelProviders.COPILOT_PLUS_JINA,
 ]);

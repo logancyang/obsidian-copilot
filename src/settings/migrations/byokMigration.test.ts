@@ -284,28 +284,6 @@ describe("planByokMigration — scope filters", () => {
   });
 });
 
-describe("planByokMigration — Azure (chat only)", () => {
-  it("maps Azure to chat-only with azure extras", () => {
-    const plan = planByokMigration(
-      settingsWith([model({ name: "gpt-4o", provider: ChatModelProviders.AZURE_OPENAI })], {
-        azureOpenAIApiKey: "k",
-        azureOpenAIApiInstanceName: "my-instance",
-        azureOpenAIApiDeploymentName: "my-deploy",
-        azureOpenAIApiVersion: "2024-06-01",
-      })
-    );
-    const azure = plan.find((p) => p.providerType === "azure");
-    expect(azure).toBeDefined();
-    expect(azure?.catalogProviderId).toBeUndefined();
-    expect(azure?.autoEnrollIn).toEqual(["chat"]);
-    expect(azure?.extras).toEqual({
-      azureInstanceName: "my-instance",
-      azureDeploymentName: "my-deploy",
-      azureApiVersion: "2024-06-01",
-    });
-  });
-});
-
 describe("planByokMigration — local providers (custom URL required)", () => {
   it("migrates Ollama / LM Studio only when an explicit baseUrl is set", () => {
     const withUrl = planByokMigration(

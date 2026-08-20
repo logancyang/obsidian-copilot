@@ -173,10 +173,6 @@ export interface ModelConfig {
   openAIOrgId?: string;
   anthropicApiKey?: string;
   cohereApiKey?: string;
-  azureOpenAIApiKey?: string;
-  azureOpenAIApiInstanceName?: string;
-  azureOpenAIApiDeploymentName?: string;
-  azureOpenAIApiVersion?: string;
   // Google and TogetherAI API key share this property
   apiKey?: string;
   openAIProxyBaseUrl?: string;
@@ -232,12 +228,6 @@ export interface CustomModel {
   dimensions?: number;
   // OpenAI specific fields
   openAIOrgId?: string;
-
-  // Azure OpenAI specific fields
-  azureOpenAIApiInstanceName?: string;
-  azureOpenAIApiDeploymentName?: string;
-  azureOpenAIApiVersion?: string;
-  azureOpenAIApiEmbeddingDeploymentName?: string;
 
   // OpenAI GPT-5 and O-series specific fields
   reasoningEffort?: ReasoningEffort;

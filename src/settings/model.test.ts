@@ -6,7 +6,6 @@ import {
   DEFAULT_SETTINGS,
   SEND_SHORTCUT,
   BUILTIN_CHAT_MODELS,
-  BUILTIN_EMBEDDING_MODELS,
 } from "@/constants";
 import {
   normalizeRootFolders,
@@ -442,17 +441,10 @@ describe("sanitizeSettings - legacy Miyo settings cleanup", () => {
     expect(sanitizeSettings(preserved).miyoSyncedExclusions).toBe('{"device":"d","roots":[]}');
   });
 
-  it("preserves embedding provider migrations while stripping obsolete Miyo keys", () => {
+  it("assigns a userId while stripping obsolete Miyo keys", () => {
     const legacySettings = {
       ...DEFAULT_SETTINGS,
       userId: "",
-      activeEmbeddingModels: [
-        {
-          name: "legacy-embedding",
-          provider: "azure_openai",
-          enabled: true,
-        },
-      ],
       miyoRemoteVaultPath: "\\\\Mac\\Home\\Downloads\\graham-essays-main",
     };
 
@@ -460,7 +452,6 @@ describe("sanitizeSettings - legacy Miyo settings cleanup", () => {
     const sanitizedRecord = sanitized as unknown as Record<string, unknown>;
 
     expect(sanitized.userId).toBeTruthy();
-    expect(sanitized.activeEmbeddingModels[0].provider).not.toBe("azure_openai");
     expect("miyoRemoteVaultPath" in sanitizedRecord).toBe(false);
   });
 });
@@ -643,25 +634,6 @@ describe("getEffectiveUserPrompt - legacy fallback", () => {
     const result = getEffectiveUserPrompt();
 
     expect(result).toBe("");
-  });
-});
-
-describe("normalizeModelProvider", () => {
-  it("maps azure_openai to the EmbeddingModelProviders.AZURE_OPENAI value", () => {
-    const { normalizeModelProvider } = jest.requireActual<{
-      normalizeModelProvider: (provider: string) => string;
-    }>("@/settings/model");
-    // Reason: EmbeddingModelProviders.AZURE_OPENAI = "azure openai" (with space)
-    expect(normalizeModelProvider("azure_openai")).toBe("azure openai");
-  });
-
-  it("passes through already-normalized and unrelated providers", () => {
-    const { normalizeModelProvider } = jest.requireActual<{
-      normalizeModelProvider: (provider: string) => string;
-    }>("@/settings/model");
-    expect(normalizeModelProvider("azure openai")).toBe("azure openai");
-    expect(normalizeModelProvider("openai")).toBe("openai");
-    expect(normalizeModelProvider("")).toBe("");
   });
 });
 
@@ -1160,56 +1132,18 @@ describe("model", () => {
     it("drops a bundle value whose type its consumer cannot handle (https://github.com/logancyang/obsidian-copilot-preview/issues/259)", () => {
       // Reason: a hand-edited or cross-version `data.json` can hold a non-string
       // where a string is expected. Carrying it through reset would move the
-      // failure to the consumer — embeddingManager concatenates the API version
-      // into the request URL.
+      // failure to the consumer — the OpenAI client sends the org id as a header.
       settingsStore.set(settingsAtom, {
         ...DEFAULT_SETTINGS,
-        azureOpenAIApiKey: "azure-key",
-        azureOpenAIApiVersion: {} as unknown as string,
+        openAIApiKey: "sk-openai",
+        openAIOrgId: {} as unknown as string,
       });
 
       resetSettings();
 
       const after = settingsStore.get(settingsAtom);
-      expect(after.azureOpenAIApiKey).toBe("azure-key");
-      expect(after.azureOpenAIApiVersion).toBe(DEFAULT_SETTINGS.azureOpenAIApiVersion);
-    });
-
-    it("preserves the Azure routing fields on a builtin embedding row alongside its key (https://github.com/logancyang/obsidian-copilot-preview/issues/259)", () => {
-      // Reason: Azure is the one builtin row whose request URL is assembled
-      // from per-row fields (embeddingManager reads instance + embedding
-      // deployment + version). Keeping only the key would leave it pointed at
-      // an address that cannot be built.
-      const azureDefault = BUILTIN_EMBEDDING_MODELS.find((m) => m.provider === "azure openai");
-      expect(azureDefault).toBeDefined();
-      settingsStore.set(settingsAtom, {
-        ...DEFAULT_SETTINGS,
-        activeEmbeddingModels: [
-          {
-            ...azureDefault!,
-            apiKey: "az-key",
-            azureOpenAIApiInstanceName: "my-instance",
-            azureOpenAIApiEmbeddingDeploymentName: "embed-deploy",
-            azureOpenAIApiVersion: "2025-01-01-preview",
-            enabled: false,
-          },
-        ],
-      });
-
-      resetSettings();
-
-      const restored = settingsStore
-        .get(settingsAtom)
-        .activeEmbeddingModels.find(
-          (m) => getModelKeyFromModel(m) === getModelKeyFromModel(azureDefault!)
-        );
-      expect(restored).toMatchObject({
-        apiKey: "az-key",
-        azureOpenAIApiInstanceName: "my-instance",
-        azureOpenAIApiEmbeddingDeploymentName: "embed-deploy",
-        azureOpenAIApiVersion: "2025-01-01-preview",
-      });
-      expect(restored!.enabled).toBe(azureDefault!.enabled);
+      expect(after.openAIApiKey).toBe("sk-openai");
+      expect(after.openAIOrgId).toBe(DEFAULT_SETTINGS.openAIOrgId);
     });
 
     it("filters out null/undefined model secrets", () => {

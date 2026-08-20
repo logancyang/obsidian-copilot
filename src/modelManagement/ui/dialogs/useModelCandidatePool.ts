@@ -157,7 +157,6 @@ export function useModelCandidatePool({
         apiKey: key,
         extras,
       });
-      if (result === null) return; // adapter does not support listing (azure)
       if (result.ok) {
         // Discovered ids populate the candidate list only — the user
         // explicitly ticks the ones they want before Save. Diff against

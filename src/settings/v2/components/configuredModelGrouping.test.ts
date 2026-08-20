@@ -95,12 +95,12 @@ describe("partitionCandidates", () => {
   });
 
   it("opencode: drops BYOK/Plus providers the routability predicate rejects (dead-toggle guard)", () => {
-    // An azure-style BYOK provider with no catalog back-reference is
+    // A BYOK provider with no catalog back-reference is
     // unroutable by opencode; the predicate rejects it so it never renders.
     const unroutable: Provider = {
-      providerId: "byok-azure",
-      providerType: "azure",
-      displayName: "Azure",
+      providerId: "byok-google",
+      providerType: "google",
+      displayName: "Google",
       origin: { kind: "byok" }, // no catalogProviderId → unroutable
       addedAt: 0,
     };
@@ -108,7 +108,7 @@ describe("partitionCandidates", () => {
       ...providers,
       [unroutable.providerId]: unroutable,
     };
-    const allModels = [...models, model("m-azure", "byok-azure", "gpt-4o")];
+    const allModels = [...models, model("m-google", "byok-google", "gemini-3-flash")];
     const isRoutable = (p: Provider): boolean =>
       p.origin.kind === "byok" ? Boolean(p.origin.catalogProviderId) : true;
     const { byokPlusCandidates } = partitionCandidates(
@@ -119,19 +119,19 @@ describe("partitionCandidates", () => {
       true,
       isRoutable
     );
-    // Only the routable BYOK provider survives; the azure row is dropped.
+    // Only the routable BYOK provider survives; the catalog-less row is dropped.
     expect(byokPlusCandidates.map((c) => c.configuredModel.configuredModelId)).toEqual(["m-byok"]);
   });
 
   it("opencode: keeps every BYOK/Plus provider when no routability predicate is given", () => {
     const unroutable: Provider = {
-      providerId: "byok-azure",
-      providerType: "azure",
-      displayName: "Azure",
+      providerId: "byok-google",
+      providerType: "google",
+      displayName: "Google",
       origin: { kind: "byok" },
       addedAt: 0,
     };
-    const allModels = [...models, model("m-azure", "byok-azure", "gpt-4o")];
+    const allModels = [...models, model("m-google", "byok-google", "gemini-3-flash")];
     const { byokPlusCandidates } = partitionCandidates(
       allModels,
       { ...providers, [unroutable.providerId]: unroutable },
@@ -140,8 +140,8 @@ describe("partitionCandidates", () => {
       true
     );
     expect(byokPlusCandidates.map((c) => c.configuredModel.configuredModelId).sort()).toEqual([
-      "m-azure",
       "m-byok",
+      "m-google",
     ]);
   });
 

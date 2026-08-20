@@ -55,15 +55,6 @@ function trimTrailingSlashes(value: string): string {
   return value.replace(/\/+$/g, "");
 }
 
-/** Attempts to parse a URL, returning null when invalid */
-function tryParseUrl(value: string): URL | null {
-  try {
-    return new URL(value);
-  } catch {
-    return null;
-  }
-}
-
 /** Escapes a string for safe inclusion in a single-quoted shell string */
 function escapeForSingleQuotedString(value: string): string {
   return value.replace(/'/g, "'\"'\"'");
@@ -272,138 +263,6 @@ async function buildOpenAICompatibleRequestSpec(
         stream: false,
         max_tokens: DEFAULT_OPENAI_MAX_TOKENS,
       },
-    },
-  };
-}
-
-// ============================================================================
-// Azure OpenAI Builder
-// ============================================================================
-
-/** Builds Azure OpenAI endpoint URL */
-function buildAzureEndpointUrl(
-  model: CustomModel,
-  deploymentName: string,
-  endpoint: string,
-  apiVersion: string
-): { url: string; warnings: string[] } {
-  const warnings: string[] = [];
-  const instanceName = model.azureOpenAIApiInstanceName?.trim() || "[instance]";
-
-  if (!model.azureOpenAIApiInstanceName?.trim()) {
-    warnings.push("Azure instance name is empty; using placeholder.");
-  }
-
-  const baseOverride = model.baseUrl?.trim();
-  if (baseOverride) {
-    const parsed = tryParseUrl(baseOverride);
-    if (parsed) {
-      let basePath = trimTrailingSlashes(parsed.pathname || "");
-
-      // Avoid duplicating /openai/deployments/ path
-      if (basePath.includes("/openai/deployments/")) {
-        basePath = basePath.split("/openai/deployments/")[0];
-      }
-
-      const base = `${parsed.origin}${basePath}`;
-      return {
-        warnings,
-        url: `${base}/openai/deployments/${encodeURIComponent(deploymentName)}/${endpoint}?api-version=${encodeURIComponent(apiVersion)}`,
-      };
-    }
-  }
-
-  return {
-    warnings,
-    url: `https://${instanceName}.openai.azure.com/openai/deployments/${encodeURIComponent(deploymentName)}/${endpoint}?api-version=${encodeURIComponent(apiVersion)}`,
-  };
-}
-
-/** Builds curl request spec for Azure OpenAI */
-async function buildAzureOpenAIRequestSpec(
-  model: CustomModel,
-  isEmbeddingModel: boolean
-): Promise<
-  | { ok: true; spec: CurlRequestSpec; warnings: string[] }
-  | { ok: false; error: string; warnings: string[] }
-> {
-  const warnings: string[] = [];
-
-  const apiKeyResolved = await resolveApiKeyForCurl(model.apiKey);
-  warnings.push(...apiKeyResolved.warnings);
-
-  const endpoint = isEmbeddingModel ? "embeddings" : "chat/completions";
-
-  // When a base URL is provided, use it directly (new flow)
-  if (model.baseUrl?.trim()) {
-    const { normalizeAzureUrl } = await import("@/LLMProviders/chatModelManager");
-    const { baseUrl, apiVersion } = normalizeAzureUrl(model.baseUrl.trim());
-    const version = apiVersion || model.azureOpenAIApiVersion?.trim() || "2024-05-01-preview";
-    const url = `${baseUrl}/${endpoint}?api-version=${encodeURIComponent(version)}`;
-
-    const modelName = model.name?.trim();
-    const body = isEmbeddingModel
-      ? { input: DEFAULT_EMBEDDING_INPUT, ...(modelName ? { model: modelName } : {}) }
-      : {
-          messages: [{ role: "user", content: DEFAULT_CHAT_MESSAGE }],
-          stream: false,
-          max_tokens: DEFAULT_OPENAI_MAX_TOKENS,
-          ...(modelName ? { model: modelName } : {}),
-        };
-
-    return {
-      ok: true,
-      warnings,
-      spec: {
-        method: "POST",
-        url,
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-          "api-key": apiKeyResolved.apiKey,
-        },
-        body,
-      },
-    };
-  }
-
-  // Legacy flow: construct from instance/deployment/version fields
-  const deploymentName = isEmbeddingModel
-    ? model.azureOpenAIApiEmbeddingDeploymentName?.trim() || "[deployment]"
-    : model.azureOpenAIApiDeploymentName?.trim() || "[deployment]";
-
-  if (!deploymentName || deploymentName === "[deployment]") {
-    warnings.push("Azure deployment name is empty; using placeholder.");
-  }
-
-  const apiVersion = model.azureOpenAIApiVersion?.trim() || "[api-version]";
-  if (!model.azureOpenAIApiVersion?.trim()) {
-    warnings.push("Azure api-version is empty; using placeholder.");
-  }
-
-  const endpointUrl = buildAzureEndpointUrl(model, deploymentName, endpoint, apiVersion);
-  warnings.push(...endpointUrl.warnings);
-
-  const body = isEmbeddingModel
-    ? { input: DEFAULT_EMBEDDING_INPUT }
-    : {
-        messages: [{ role: "user", content: DEFAULT_CHAT_MESSAGE }],
-        stream: false,
-        max_tokens: DEFAULT_OPENAI_MAX_TOKENS,
-      };
-
-  return {
-    ok: true,
-    warnings,
-    spec: {
-      method: "POST",
-      url: endpointUrl.url,
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-        "api-key": apiKeyResolved.apiKey,
-      },
-      body,
     },
   };
 }
@@ -642,13 +501,6 @@ export async function buildCurlCommandForModel(
   }
 
   const isEmbeddingModel = Boolean(model.isEmbeddingModel);
-
-  // Azure OpenAI
-  if (provider === ChatModelProviders.AZURE_OPENAI) {
-    const result = await buildAzureOpenAIRequestSpec(model, isEmbeddingModel);
-    if (!result.ok) return result;
-    return { ok: true, command: formatCurlCommand(result.spec), warnings: result.warnings };
-  }
 
   // Anthropic
   if (provider === ChatModelProviders.ANTHROPIC) {

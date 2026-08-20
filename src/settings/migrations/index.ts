@@ -16,6 +16,7 @@ import { seedDocProcessorBackend } from "@/miyo/miyoUtils";
 import type { ModelManagementApi } from "@/modelManagement";
 import { getSettings, normalizeRootFolders, setSettings } from "@/settings/model";
 
+import { executeAzureRemoval } from "./azureRemovalMigration";
 import { executeBedrockRemoval } from "./bedrockRemovalMigration";
 import { executeByokMigration } from "./byokMigration";
 import { executeGitHubCopilotRemoval } from "./githubCopilotRemovalMigration";
@@ -115,6 +116,13 @@ export async function runSettingsMigrations(api: ModelManagementApi): Promise<vo
   // settings freshly so it sees whatever the earlier migrations left behind.
   if (fromVersion < 11) {
     await executeBedrockRemoval(api, getSettings());
+  }
+
+  // v12: the same for Azure OpenAI, which additionally repoints an embedding
+  // selection that named it — `EmbeddingManager` throws rather than falling
+  // back when the stored key resolves to nothing.
+  if (fromVersion < 12) {
+    await executeAzureRemoval(api, getSettings());
   }
 
   // Bump unconditionally after the migrations so a per-provider failure can't
