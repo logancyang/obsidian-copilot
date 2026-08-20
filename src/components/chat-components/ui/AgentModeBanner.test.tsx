@@ -12,7 +12,7 @@ jest.mock("@/utils/desktopRuntime", () => ({
   isDesktopRuntime: () => mockDesktopRuntime,
 }));
 
-const COPY = "New: Agent mode. More capable models, tools, and skills.";
+const COPY = "New: Switch to Copilot Agent Chat for a more capable agent experience";
 
 describe("AgentModeBanner", () => {
   describe("AgentModeBanner()", () => {
@@ -20,7 +20,7 @@ describe("AgentModeBanner", () => {
       mockDesktopRuntime = true;
     });
 
-    it("announces Agent mode with the brand mark instead of an alert icon and opens Agent when selected", () => {
+    it("invites the user to Agent Chat with the brand mark instead of an alert icon and opens Agent when selected", () => {
       const onOpenAgent = jest.fn();
       const props: AgentModeBannerProps = { onOpenAgent };
 
@@ -43,7 +43,7 @@ describe("AgentModeBanner", () => {
       }
     });
 
-    it("hides the Agent announcement on mobile because Agent is unavailable (https://github.com/logancyang/obsidian-copilot-preview/issues/323)", () => {
+    it("hides the Agent Chat invitation on mobile because Agent is unavailable (https://github.com/logancyang/obsidian-copilot-preview/issues/323)", () => {
       mockDesktopRuntime = false;
 
       render(<AgentModeBanner onOpenAgent={jest.fn()} />);
