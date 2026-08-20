@@ -138,9 +138,14 @@ export const useChatScrolling = ({
   // in the coalesced frame: a content resize can re-push to the bottom in the
   // same frame, and a deferred check would then read downward movement and
   // keep follow mode alive against the user's intent. Follow-driven scrolls
-  // only ever move down, so a shrinking scrollTop is a reliable user signal
-  // (clamps from content shrink also land here, which fails safe: follow
-  // merely stops).
+  // only ever move down, so a shrinking scrollTop is a reliable user signal.
+  // DESIGN NOTE: browser clamps (content shrink, pane growth reducing the max
+  // scroll offset) also land here and clear follow. Evaluated and accepted:
+  // the misfire only stops auto-follow — one extra click recovers it — while
+  // distinguishing true input intent (wheel/touch/pointer tracking) was
+  // rejected as compensating complexity with worse race behavior than this
+  // conservative heuristic. If a future review flags this again, point them
+  // at this note.
   // https://github.com/logancyang/obsidian-copilot-preview/issues/329
   const handleScroll = useCallback(() => {
     const node = scrollContainerRef.current;
