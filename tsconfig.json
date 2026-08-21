@@ -22,5 +22,5 @@
     "lib": ["DOM", "DOM.Iterable", "ES5", "ES6", "ES7", "ES2022", "ESNext"]
   },
   "include": ["**/*.ts", "src", "dev/gallery", "typings/**/*.ts"],
-  "exclude": ["node_modules"]
+  "exclude": ["node_modules", "docs-site"]
 }
