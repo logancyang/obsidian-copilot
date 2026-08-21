@@ -266,6 +266,7 @@ export interface CopilotSettings {
       opencode?: OpencodeBackendSettings;
       claude?: ClaudeBackendSettings;
       codex?: CodexBackendSettings;
+      pi?: PiBackendSettings;
     };
     /**
      * Per-device agent config (binary paths, env overrides, …) keyed by a
@@ -376,6 +377,18 @@ export interface CodexBackendSettings {
   defaultMode?: CopilotMode | null;
   /** See `ClaudeBackendSettings.envOverrides`. Applied to the spawned `codex-acp` subprocess. */
   envOverrides?: Record<string, string>;
+}
+
+/** Settings slice owned by the bundled Pi backend. */
+export interface PiBackendSettings {
+  /**
+   * Opt-in gate. Pi ships with the plugin, so there is nothing to install —
+   * this flag is what makes it appear in the agent picker at all. Off until
+   * the backend is proven.
+   */
+  enabled?: boolean;
+  /** Sticky model preference. Pi has no effort dimension, so `effort` stays null. */
+  defaultModel?: ModelSelection | null;
 }
 
 /** Settings slice owned by the OpenCode backend. */
@@ -1308,17 +1321,20 @@ function sanitizeAgentMode(raw: unknown): CopilotSettings["agentMode"] {
   const existingOpencode = backendsRaw.opencode as Record<string, unknown> | undefined;
   const existingClaude = backendsRaw.claude as Record<string, unknown> | undefined;
   const existingCodex = backendsRaw.codex as Record<string, unknown> | undefined;
+  const existingPi = backendsRaw.pi as Record<string, unknown> | undefined;
 
   const opencodeSlice = existingOpencode
     ? sanitizeOpencodeBackendSettings(existingOpencode)
     : undefined;
   const claudeSlice = existingClaude ? sanitizeClaudeBackendSettings(existingClaude) : undefined;
   const codexSlice = existingCodex ? sanitizeCodexBackendSettings(existingCodex) : undefined;
+  const piSlice = existingPi ? sanitizePiBackendSettings(existingPi) : undefined;
 
   const backends: CopilotSettings["agentMode"]["backends"] = {};
   if (opencodeSlice) backends.opencode = opencodeSlice;
   if (claudeSlice) backends.claude = claudeSlice;
   if (codexSlice) backends.codex = codexSlice;
+  if (piSlice) backends.pi = piSlice;
 
   const deviceProfiles = sanitizeDeviceProfiles(r.deviceProfiles);
 
@@ -1642,6 +1658,15 @@ function sanitizeCodexBackendSettings(raw: unknown): CodexBackendSettings {
     defaultModel: sanitizeDefaultModel(r.defaultModel),
     defaultMode: sanitizeDefaultMode(r.defaultMode),
     envOverrides: sanitizeEnvOverrides(r.envOverrides),
+  };
+}
+
+function sanitizePiBackendSettings(raw: unknown): PiBackendSettings {
+  if (!raw || typeof raw !== "object") return {};
+  const r = raw as Record<string, unknown>;
+  return {
+    enabled: typeof r.enabled === "boolean" ? r.enabled : undefined,
+    defaultModel: sanitizeDefaultModel(r.defaultModel),
   };
 }
 

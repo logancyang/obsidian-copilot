@@ -11,6 +11,7 @@ import {
 import { ClaudeBackendDescriptor } from "./claude";
 import { CodexBackendDescriptor } from "./codex/descriptor";
 import { OpencodeBackendDescriptor } from "./opencode/descriptor";
+import { PiBackendDescriptor } from "./pi/descriptor";
 
 jest.mock("@/agentMode/backends/opencode/OpencodeInstallModal", () => ({
   OpencodeInstallModal: class {},
@@ -51,11 +52,12 @@ describe("backendRegistry", () => {
   });
 
   describe("backendDisplayOrder()", () => {
-    it("lists opencode, then Claude, then Codex", () => {
+    it("lists opencode, then Claude, Codex, and Pi", () => {
       expect(backendDisplayOrder()).toEqual([
         OpencodeBackendDescriptor,
         ClaudeBackendDescriptor,
         CodexBackendDescriptor,
+        PiBackendDescriptor,
       ]);
     });
 
@@ -91,6 +93,7 @@ describe("backendRegistry", () => {
           OpencodeBackendDescriptor,
           ClaudeBackendDescriptor,
           CodexBackendDescriptor,
+          PiBackendDescriptor,
         ])
       );
     });
@@ -99,6 +102,7 @@ describe("backendRegistry", () => {
       expect(OpencodeBackendDescriptor.selfHostable).toBe(true);
       expect(ClaudeBackendDescriptor.selfHostable).toBe(false);
       expect(CodexBackendDescriptor.selfHostable).toBe(false);
+      expect(PiBackendDescriptor.selfHostable).toBe(false);
     });
 
     it("never warns when the mode is off", () => {
@@ -113,6 +117,7 @@ describe("backendRegistry", () => {
       expect(backendNeedsSelfHostWarning(OpencodeBackendDescriptor, on)).toBe(false);
       expect(backendNeedsSelfHostWarning(ClaudeBackendDescriptor, on)).toBe(true);
       expect(backendNeedsSelfHostWarning(CodexBackendDescriptor, on)).toBe(true);
+      expect(backendNeedsSelfHostWarning(PiBackendDescriptor, on)).toBe(true);
     });
 
     // Self-Host Mode marks but never redirects: a persisted cloud-agent
@@ -122,6 +127,7 @@ describe("backendRegistry", () => {
         ClaudeBackendDescriptor
       );
       expect(getActiveBackendDescriptor(baseSettings("codex", true))).toBe(CodexBackendDescriptor);
+      expect(getActiveBackendDescriptor(baseSettings("pi", true))).toBe(PiBackendDescriptor);
     });
 
     it("getActiveBackendDescriptor still falls back to opencode for an unknown id", () => {
@@ -134,6 +140,7 @@ describe("backendRegistry", () => {
       const ids = getCloudAgentIds();
       expect(ids.has("claude")).toBe(true);
       expect(ids.has("codex")).toBe(true);
+      expect(ids.has("pi")).toBe(true);
       expect(ids.has("opencode")).toBe(false);
       // Stable reference across calls (drives referential stability downstream).
       expect(getCloudAgentIds()).toBe(ids);
