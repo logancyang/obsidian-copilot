@@ -1,8 +1,8 @@
 # Troubleshooting Copilot V4
 
-Start in **Settings → Copilot → Basic → Agents** and check the status beside the agent you want to use.
+Start in **Settings → Copilot → Basic → Agents** and check the status beside the Agent Chat backend you want to use.
 
-## Agent setup
+## Agent Chat setup
 
 ### opencode shows “Not set up” or “Error”
 
@@ -14,9 +14,7 @@ Use **Configure → Managed by Copilot** to reinstall or uninstall it. Setup is 
 
 ### Claude shows “Update required,” cannot be found, or is signed out
 
-Copilot requires Claude Code 2.1.206 or newer.
-
-- **Update required:** update Claude Code, then run **Configure Claude → Auto-detect**. For a custom path, update that installation or choose **Clear**.
+- **Update required:** update Claude Code to the minimum version shown by Copilot, then run **Configure Claude → Auto-detect**. For a custom path, update that installation or choose **Clear**.
 - **Not found:** run the displayed install command, then choose **Auto-detect**, or enter the absolute path to `claude`.
 - **Signed out:** choose **Sign in**. If **Open sign-in page** appears, use it to finish authentication.
 
@@ -31,11 +29,11 @@ Copilot connects through `codex-acp`, not the `codex` executable alone.
 3. Choose **Auto-detect**, or enter the absolute path to `codex-acp` and choose **Apply**.
 4. Run `codex login` in a terminal if Codex is not authenticated.
 
-See [Getting Started](getting-started.md) for the complete setup flow and [Windows Setup for Agent](agent-mode-windows-setup.md) for Windows-specific commands.
+See [Getting Started](getting-started.md) for the complete setup flow and [Windows setup for Agent Chat](agent-mode-windows-setup.md) for Windows-specific commands.
 
 ## Models, licenses, and API keys
 
-### The picker says “No models — enable in Basic → Agents → Quick Chat”
+### No models are enabled for Quick Chat
 
 Open **Basic → Agents → Quick Chat**, enable a model, and choose a **Default model**. If none are configured, first add a provider under **Settings → Copilot → BYOK**.
 
@@ -55,7 +53,7 @@ V4 stores secrets in the Obsidian Keychain.
 
 Do not delete `data.json`: it contains the vault's Keychain namespace. Use the in-app reset; it does not delete Keychain entries.
 
-## Agent chat is waiting or behaving unexpectedly
+## Agent Chat is waiting or behaving unexpectedly
 
 ### Nothing happens after you send
 
@@ -65,13 +63,13 @@ Permission choices depend on the active agent. **Stop** cancels the current turn
 
 ### You cannot switch agents in the current session
 
-An Agent session keeps its original backend after work begins. Create an empty session to choose another. Use **Recent Chats** for earlier sessions.
+An Agent Chat keeps its original backend after work begins. Create an empty chat to choose another. Use **Recent Chats** for earlier work.
 
 ### A project message says “Waiting for context”
 
 The message is queued while Copilot prepares saved sources. Fix or remove any source that cannot load. After changing saved context or instructions, start **New Chat**.
 
-See [Agent Projects](projects.md) for what is saved with a project.
+See [Projects](projects.md) for what is saved with a project.
 
 ### A skill or skill command is missing
 
@@ -79,7 +77,7 @@ In **Settings → Copilot → Skills**, confirm the skill has a valid `SKILL.md`
 
 On Windows, **Windows needs Developer Mode for multi-agent fanout** means you must enable **Settings → Privacy & security → For developers → Developer Mode** (or run Obsidian as administrator), then toggle again. The same repair works when vault sync replaces a link.
 
-Learn more in [Agents in Copilot V4](agent-mode-and-tools.md#skills-shared-across-agents).
+Learn more in [Skills across agents](agent-mode-and-tools.md#skills-across-agents).
 
 ## Miyo is unavailable or search is not running
 
@@ -87,10 +85,10 @@ Open **Settings → Copilot → Miyo**.
 
 - **Miyo isn't running:** open Miyo, then choose **Retry connection**.
 - **Register this vault with Miyo:** choose **Register & connect** on the same computer. For a remote connection or mobile device, register the vault in Miyo first, then retry.
-- **Not set up — add chat sources in Miyo:** this belongs to the separate **Search chat** row and does not block Agent vault search. Configure chat sources only if you want ChatGPT or Claude history search.
+- **Chat sources are not set up:** this belongs to the separate **Search chat** row and does not block Agent Chat vault search. Configure chat sources only if you want ChatGPT or Claude history search.
 - If excluded folders no longer match the Copilot folder, choose **Resync Miyo**. For a remote connection, remove and re-add the vault in Miyo.
 
-Connection alone does not enable Agent search. Under **Powered by Miyo**, turn on **Semantic search**. Copilot installs `miyo-search` already enabled for opencode, Claude, and Codex. If Copilot reports a same-name collision, rename or remove the existing skill and try again.
+Connection alone does not enable Agent Chat search. Under **Powered by Miyo**, turn on **Semantic search**. Copilot installs `miyo-search` for opencode, Claude, and Codex. If Copilot reports a same-name collision, rename or remove the existing Skill and try again.
 
 ## Quick Ask does not open or has no model
 
@@ -103,19 +101,20 @@ See [Copilot Commands and Quick Ask](custom-commands.md#quick-ask) for selection
 
 ## Logs and bug reports
 
-For Agent problems, use **Report an Issue**. Copilot prepares a screenshot and recent device-local activity logs, then opens a prefilled GitHub issue. Attach the files yourself.
+For Agent Chat problems, use **Report an Issue**. Copilot prepares a screenshot and recent device-local activity logs, then opens a prefilled GitHub issue. Attach the files yourself.
 
-For Quick Chat, enable **Advanced → Debug Mode**, reproduce the problem, then choose **Create Log File**. Agent logs can also be opened or cleared under **Advanced → Agent Mode activity log file**.
+For Quick Chat, enable **Advanced → Debug Mode**, reproduce the problem, then choose **Create Log File**. Agent Chat logs can also be opened or cleared in the Agent Chat debugging section under **Advanced**.
 
 Logs and screenshots can contain prompts, note contents, paths, and tool inputs. Review them before attaching anything to a public issue.
 
 ## What works on mobile?
 
-Agent—including opencode, Claude, Codex, Agent projects, and agent skill execution—is desktop-only. On mobile, use Quick Chat. Agent settings display **Agent settings are available on desktop.** Miyo on mobile requires a remote Miyo connection and manual vault registration in Miyo.
+Agent Chat, including opencode, Claude, Codex, Projects, and Skill execution, is desktop-only. On mobile, use Quick Chat. Agent settings display **Agent settings are available on desktop.** Miyo on mobile requires a remote Miyo connection and manual vault registration in Miyo.
 
 ## Related
 
 - [Getting Started](getting-started.md)
-- [Agents in Copilot V4](agent-mode-and-tools.md)
+- [Agent Chat](agent-mode-and-tools.md)
 - [Context and Mentions](context-and-mentions.md)
-- [Copilot Plus and Self-Host](copilot-plus-and-self-host.md)
+- [Copilot Settings](settings.md)
+- [Copilot Plans, Privacy, and Self-Hosting](copilot-plus-and-self-host.md)

@@ -1,12 +1,12 @@
-# LLM Providers
+# Model Sources and BYOK
 
-Copilot V4 can get models from a Copilot license, your own provider key, or an
-agent you already use. These options are separate: adding a key does not change
-the models supplied by Claude Code or Codex.
+Copilot V4 can get models from a Copilot plan, your own provider key or local
+endpoint, or an agent account you already use. These options are separate.
+Adding a key does not change the models supplied by Claude Code or Codex.
 
-## Choose a Model Source
+## Choose a model source
 
-| Model source                        | Quick Chat | Agent                                      |
+| Model source                        | Quick Chat | Agent Chat                                 |
 | ----------------------------------- | ---------- | ------------------------------------------ |
 | **Copilot-hosted models**           | Yes        | opencode                                   |
 | **Your API key or endpoint (BYOK)** | Yes        | opencode, when the provider is shown there |
@@ -18,16 +18,16 @@ Models reported by opencode are routed to their backing provider. Free
 opencode Zen models show a warning because that provider may log or train on
 prompts; review its terms before sending sensitive content.
 
-## Copilot-Hosted Models
+## Copilot-hosted models
 
-An eligible Copilot license can include a curated set of hosted models. You do
-not need an API key from an AI provider. Enter your license under **Settings →
-Copilot → Basic → Copilot License**, then click **Apply**.
+Lite, Plus, and included Supporter access can provide Copilot-hosted models.
+You do not need an API key from an AI provider. Enter your license under
+**Settings → Copilot → Basic → Copilot License**, then select **Apply**.
 
 Licensed models can appear in both places:
 
 - **Basic → Agents → Quick Chat** for regular Copilot chat.
-- **Basic → Agents → opencode** for Agent.
+- **Basic → Agents → opencode** for Agent Chat.
 
 They do not appear under Claude or Codex, because those agents use their own
 accounts and models. The available Copilot lineup changes over time, so use the
@@ -39,7 +39,7 @@ privacy policy says request content is processed transiently, not retained, and
 not used for training. See the
 [privacy policy](https://www.obsidiancopilot.com/en/privacy) for details.
 
-## Bring Your Own Key (BYOK)
+## Bring your own key (BYOK)
 
 BYOK lets you connect Copilot directly to an AI provider, a compatible gateway,
 or a model server on your computer. For cloud providers, usage and billing stay
@@ -89,9 +89,9 @@ and turn on **Enable CORS**. Responses then appear after completion instead of
 streaming token by token. For LM Studio, you can enable CORS in LM Studio to
 keep streaming instead.
 
-## Claude Code and Codex Accounts
+## Claude Code and Codex accounts
 
-Claude and Codex are Agent backends, not BYOK providers:
+Claude and Codex are Agent Chat backends, not BYOK providers:
 
 - **Claude** inherits authentication and models from the Claude Code CLI. Its
   usage follows your Claude Code account or CLI environment.
@@ -107,7 +107,7 @@ An OpenAI API key is different from a ChatGPT subscription, just as an
 Anthropic API key is different from a Claude Code subscription. Use **BYOK** for
 API access and the matching agent setup for subscription access.
 
-## Where Keys Are Stored
+## Where keys are stored
 
 Copilot stores provider API keys and the Copilot license key in this device's
 **Obsidian Keychain**, not in the vault's `data.json`. The Keychain is
@@ -119,7 +119,8 @@ Storage** and click **Delete All Keys**.
 
 ## Related
 
-- [Getting Started](getting-started.md) — Set up your first chat or agent
-- [Agents in Copilot V4](agent-mode-and-tools.md) — Install opencode, Claude, or Codex
-- [Models](models-and-parameters.md) — Enable models and choose defaults
-- [Paid Plans and Self-Host](copilot-plus-and-self-host.md) — Licensing and included models
+- [Getting Started](getting-started.md)
+- [Agent Chat](agent-mode-and-tools.md)
+- [Models, Effort, and Permission Modes](models-and-parameters.md)
+- [Settings: BYOK](settings.md#byok)
+- [Copilot Plans, Privacy, and Self-Hosting](copilot-plus-and-self-host.md)

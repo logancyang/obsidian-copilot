@@ -6,24 +6,24 @@ For a fast question or rewrite while you are editing, use **Quick Ask** instead.
 
 ## Commands or skills?
 
-Commands and skills can appear when you type `/`, but only Agent resolves slash invocations. Outside Agent, run saved commands from the editor or command palette. They serve different purposes:
+Commands and Skills can both appear when you type `/` in Agent Chat. Outside Agent Chat, run saved commands from the editor or command palette. They serve different purposes:
 
-| Use                 | Best for                                                                     | Managed in                       |
-| ------------------- | ---------------------------------------------------------------------------- | -------------------------------- |
-| **Copilot command** | A short, repeatable prompt with optional note variables                      | **Settings → Copilot → Command** |
-| **Skill**           | A reusable agent workflow that can include instructions and supporting files | **Settings → Copilot → Skills**  |
+| Use                 | Best for                                                                     | Managed in                                              |
+| ------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------- |
+| **Copilot command** | A short, repeatable prompt with optional note variables                      | [**Settings → Copilot → Command**](settings.md#command) |
+| **Skill**           | A reusable agent workflow that can include instructions and supporting files | [**Settings → Copilot → Skills**](settings.md#skills)   |
 
 Skills can be shared with opencode, Claude, and Codex. Commands stay inside Copilot and also work from the editor and Obsidian command palette. If a command and skill have the same name, the skill takes the slash-menu spot.
 
 ## Create a command
 
-1. Open **Settings → Copilot → Command**.
+1. Open [**Settings → Copilot → Command**](settings.md#command).
 2. Click **Add Cmd**.
 3. Enter a **Name** and **Prompt**.
 4. Optionally choose **Model (Optional)**, **Show in context menu**, and **Show in slash menu**.
 5. Click **Save**.
 
-Choose **Inherit from chat model** when the command should use your current Quick Chat model. A command-specific model applies to editor and command-palette runs; a slash run in Agent uses the current Agent session.
+Choose **Inherit from chat model** when the command should use your current Quick Chat model. A command-specific model applies to editor and command-palette runs. A slash run in Agent Chat uses the model selected for that Agent Chat.
 
 Use **Generate Default** for a starter set. You can edit, duplicate, delete, or drag commands to reorder them. **Custom Prompts Sort Strategy** controls their order in the slash menu.
 
@@ -45,13 +45,13 @@ For example:
 Rewrite {} as a concise project update. Match the style of {[[Writing Guide]]}.
 ```
 
-Tags must be in note properties, not only written inline in the note body. When you run a command from Agent, the agent resolves note, folder, and tag references with its vault tools.
+Tags must be in note properties, not only written inline in the note body. When you run a command from Agent Chat, the active agent resolves note, folder, and tag references with its vault tools.
 
 ## Run a command
 
 - **From the editor:** select text if needed, then right-click and choose **Copilot → _command name_**. The command must have **Show in context menu** enabled.
 - **From the command palette:** run **Apply custom command**, then choose any command. Each saved command is also registered by name in the palette.
-- **From Agent:** type `/`, choose a command, add any extra instruction, and send. Choosing an item inserts it without sending, so you can review it first.
+- **From Agent Chat:** type `/`, choose a command, add any extra instruction, and send. Choosing an item inserts it without sending, so you can review it first.
 
 Editor and command-palette runs open a result panel. You can refine the result, copy it, insert it at the cursor, or replace the original selection.
 
@@ -64,7 +64,7 @@ Editor and command-palette runs open a result panel. You can refine the result, 
 3. Ask your question. Use the model picker if needed, and enable **Note** to include the full active note.
 4. Use **Copy to clipboard**, **Insert at cursor**, or **Replace selection** on the answer. You can continue with follow-up questions in the same panel.
 
-Quick Ask uses a Quick Chat model configured through Copilot Plus or BYOK, not the model inside an Agent session. Its model and **Note** choices are remembered and shared with **Trigger quick command**.
+Quick Ask is an inline panel, not an Agent Chat session or the full Quick Chat view. It uses a Copilot-hosted or [BYOK](settings.md#byok) Quick Chat model, not the model selected in Agent Chat. Its model and **Note** choices are remembered and shared with **Trigger quick command**.
 
 Quick Ask is unavailable in Source mode. **Replace selection** appears only when text was selected and stays available only while Copilot can safely identify the original text in the same note and editor pane.
 
@@ -76,12 +76,12 @@ Quick Command is also unavailable in Source mode.
 
 ## Where commands are stored
 
-Each command is a Markdown file in `<Copilot folder>/copilot-custom-prompts/`. The filename is the command name, and Copilot keeps file changes and the **Command** settings tab in sync. Change the root under **Settings → Copilot → Basic → Copilot folder location**.
+Each command is a Markdown file in `<Copilot folder>/copilot-custom-prompts/`. The filename is the command name, and Copilot keeps file changes and the **Command** settings tab in sync. Change the root under [**Settings → Copilot → Basic → Copilot folder location**](settings.md#basic).
 
 When upgrading from older command settings, Copilot migrates supported commands to these files. If a name cannot be migrated, Copilot keeps it under the `unsupported/` subfolder and shows a startup notice.
 
 ## Related
 
-- [Agents in Copilot V4](agent-mode-and-tools.md)
+- [Agent Chat](agent-mode-and-tools.md)
 - [Context and Mentions](context-and-mentions.md)
 - [Getting Started](getting-started.md)

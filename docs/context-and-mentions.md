@@ -1,68 +1,75 @@
 # Context and Mentions
 
-Context is the material Copilot gives an AI with your request. In Copilot V4, these features have different lifetimes:
+Context is the material Copilot gives an AI with your request. Choose the shortest lifetime that fits the job:
 
-- **Agent attachments and context mentions** apply to the next message.
-- **Agent mentions** ask installed agents to answer that message.
-- **Project context** is saved and reused across chats in that project.
-- **Quick Chat context and tools** belong to Quick Chat, not Agent.
+| Context type                     | How long it lasts                                 |
+| -------------------------------- | ------------------------------------------------- |
+| Agent Chat attachment or mention | The next message                                  |
+| Mentioned agent                  | The current multi-agent question                  |
+| Project context                  | Every new chat started in that Project            |
+| Vault or Project `AGENTS.md`     | Every Agent Chat started in that vault or Project |
+| Quick Chat attachment            | The next Quick Chat message                       |
 
-## Add context to an Agent turn
+## Add context to Agent Chat
 
-Use the **+** button (**Add context**) beside the Agent composer. Depending on what is open, you can choose **Active Note**, **Notes**, **Folders**, **Active Web Tab**, **Web Tabs**, or **Images**. Web tabs use Copilot's desktop Web Viewer.
+Select **+** beside the Agent Chat composer to open **Add context**. Depending on what is open, you can add the **Active Note**, other **Notes**, **Folders**, the **Active Web Tab**, other **Web Tabs**, or **Images**. Web tabs come from Copilot's desktop Web Viewer.
 
 You can also add context while typing:
 
-- Type `[[` and select a note. It appears as `[[Note title]]`.
-- Type `@` to search the available context categories.
+- Type `[[` and select a note to insert `[[Note title]]`.
+- Type `@` to browse the available context categories.
 - Choose a folder to insert its path as `{Folder/path}`.
-- Paste or drag an image into the composer, or choose **Images** from **Add context**. The selected model must support images.
+- Paste or drag an image into the composer. The selected model must support images.
 
-Context badges above the composer show what will be sent. Remove any item with its **x** before sending. These attachments are cleared after the message is sent; they do not become permanent context for the conversation.
+Context badges above the composer show what will be sent with the next message. Select the **x** on a badge to remove it. After the message is sent, one-turn attachments are cleared.
 
-A note mention gives the agent the note's vault path so it can read the current file when needed. A folder mention points the agent to a folder to inspect; it does not paste every file in that folder into the prompt.
+A note mention gives the agent the note's vault path so it can read the current file when needed. A folder mention points to a folder to inspect. It does not paste every file in that folder into the prompt.
 
 ### Active note and selected text
 
-A fresh Agent chat follows your active-note preference and may start with an **Active Note** badge. Remove the badge when the current note is unrelated, or add **Active Note** again for a later turn.
+A new Agent Chat can start with an **Active Note** badge when that preference is enabled. Remove it when the current note is unrelated. You can add it again on any later turn.
 
-To attach an excerpt, select text in a note and run **Add selection to chat context** from the command palette. For text selected in the Web Viewer, run **Add web selection to chat context**. The excerpt appears as a removable badge and is included only with the next message. When a web selection is attached, Copilot sends the excerpt instead of also sending the full active web tab.
+To attach an excerpt from a note:
+
+1. Select the text.
+2. Run **Add selection to chat context** from the command palette.
+3. Review the removable selection badge before sending.
+
+For text selected in the Web Viewer, run **Add web selection to chat context**. Copilot sends the selected excerpt instead of also attaching the full active web tab.
 
 ## Mention other agents
 
-With active Plus access, type `@`, open **Agents**, and select installed agents. Each selected agent receives the same question and one-turn context, and the current agent summarizes their answers.
+With active Plus access, type `@`, open **Agents**, and select one or more other installed agents. Each mentioned agent receives the same question, that turn's attachments, and a bounded slice of the visible conversation. The current agent summarizes their answers and does not automatically answer separately.
 
-Multi-agent turns are for read-only research and review. Use a regular single-agent turn when you want files changed. Mentioning only the current agent behaves like a normal turn.
+Multi-agent answers are designed for read-only research, second opinions, and review, but retrieval Skills can still run trusted scripts under an agent's permissions. They are not a security sandbox. Use a normal single-agent turn when you want files changed. Mentioning only the current agent behaves like a normal turn.
 
-Agent does **not** expose Quick Chat's `@vault`, `@websearch`, `@composer`, or `@memory` tools. Agent uses the active backend's native tools and enabled skills instead.
+Agent mentions select opencode, Claude, or Codex. They are different from note, folder, and web context mentions. See [Multi-agent answers](agent-mode-and-tools.md#multi-agent-answers) for permissions and model behavior.
 
-## Save context in an Agent project
+## Reuse context with Projects
 
-For context you want to reuse, open an Agent project and use its **Context** section or **Context** tab. You can drag in a vault file or folder, or choose **Manage Context** to add **Links**, **Tags**, **Properties**, **Folders**, and **Files**.
+For material that should be prepared for more than one chat, create a [Project](projects.md). Add saved context from the **Context** section or tab:
 
-Project context is prepared for every chat in that project. If it is still loading when you send, Copilot queues the message until the context is ready. Start a new project chat after changing saved context or project instructions when you want the latest version applied.
+- drag in a vault file or folder;
+- add a web page or YouTube URL; or
+- select **Manage Context** to add links, tags, properties, folders, files, and ignored files.
 
-Project context is a focus aid, not a permission boundary. The agent can still inspect other files available through its native tools, and **Ignore Files** only excludes files from prepared project context. One-turn attachments remain one-turn attachments even inside a project.
+Project context is prepared for every new chat in that Project. If preparation is still running when you send a message, Copilot queues the message and starts it when the context is ready.
 
-See [Agent Projects](projects.md) for supported files, hosted conversion, and privacy details.
+Saved context is a focus aid, not a permission boundary. The agent can still inspect other files available through its tools. **Ignore Files** excludes files from prepared Project context but does not block an agent from reading them.
+
+One-turn attachments remain one-turn attachments inside a Project. Start a new Project chat after changing saved context or Project instructions when you want the latest version applied.
 
 ## Context in Quick Chat
 
-Quick Chat has its own composer and context state. It can add the active note and, on desktop, the active Web Viewer tab. Use **Add context** for a note, folder, web tab, or image. Type `@` for notes, folders, or web tabs, and `[[Note title]]` for a note. Context badges show what the next message includes. In **copilot plus**, you can also paste a URL as context and type `#` to select a vault tag for a vault-search query.
+Quick Chat has a separate composer and context state. It can attach the active note and, on desktop, the active Web Viewer tab. Use **Add context** for a note, folder, web tab, or image. You can also type `[[Note title]]` for a note.
 
-Paid Quick Chat also supports these explicit tool mentions:
+Quick Chat attachments apply to the next Quick Chat message. They do not become Agent Chat context, Project context, or `AGENTS.md` instructions.
 
-| Mention      | Action                             |
-| ------------ | ---------------------------------- |
-| `@vault`     | Search the vault                   |
-| `@websearch` | Search the web (`@web` also works) |
-| `@composer`  | Create or edit a note              |
-| `@memory`    | Save information to memory         |
-
-These mentions are available in the **copilot plus** Quick Chat mode. They are not Agent mentions and do not select opencode, Claude, or Codex.
+For vault-wide semantic search and AI history that you own outside the plugin, use [Miyo](vault-search-and-indexing.md). Miyo provides the local-first search path for Copilot V4.
 
 ## Related
 
-- [Agents in Copilot V4](agent-mode-and-tools.md)
-- [Agent Projects](projects.md)
-- [Quick Chat Interface](chat-interface.md)
+- [Agent Chat](agent-mode-and-tools.md)
+- [Projects](projects.md)
+- [Instructions for Agent Chat and Quick Chat](system-prompts.md)
+- [Quick Chat](chat-interface.md)
