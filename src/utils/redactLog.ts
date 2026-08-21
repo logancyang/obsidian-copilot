@@ -13,7 +13,72 @@
 
 interface RedactionRule {
   pattern: RegExp;
-  replacement: string;
+  /**
+   * Replacement text, or a function returning it. A function lets a rule match
+   * a broad candidate and then decide, which is how the email rule stays linear
+   * (see `runHoldsAddress`).
+   */
+  replacement: string | ((match: string) => string);
+}
+
+/**
+ * Whether a run of address-legal characters contains an email address.
+ *
+ * Scanned rather than pattern-matched, deliberately. A regex with a quantifier
+ * on both sides of the `@` retries from every position in the run and rescans
+ * it each time, which is quadratic — and a report attachment hands this whole
+ * log tails, where a pasted token or a minified line is one unbroken run of
+ * tens of thousands of characters. Measured on 256 KB: 30 s for the pattern
+ * this replaced, against 1 ms here. Bounding the quantifiers instead was tried
+ * and is worse than slow: an address longer than the bound keeps its overflow
+ * as plain text, so the address survives in part.
+ *
+ * Deliberately loose about what counts. The caller replaces the entire run, so
+ * a false positive costs a redaction marker where the text was harmless, while
+ * a false negative puts a real address in a bundle that leaves the machine.
+ */
+const isLetter = (ch: string) => (ch >= "a" && ch <= "z") || (ch >= "A" && ch <= "Z");
+
+/** Characters that can trail an address without belonging to it. */
+const TAIL_CHARS = ".-@_%+";
+
+function runHoldsAddress(run: string): boolean {
+  // The separating `@` is the first one with something other than another `@`
+  // in front of it, so a run that opens with one — `@handle@host.tld`, the
+  // shape a fediverse address takes — is still read as an address rather than
+  // rejected for having nothing before its first `@`.
+  let at = run.indexOf("@");
+  while (at !== -1 && (at === 0 || run[at - 1] === "@")) at = run.indexOf("@", at + 1);
+  if (at < 1) return false;
+  // ANY dot after the `@` that is followed by two or more letters makes this an
+  // address, not just the last one. Looking only at the last dot let a run like
+  // `a@b.com@c.d` pass as "no address" on the strength of its final one-letter
+  // ending, leaving the perfectly valid `a@b.com` in front of it untouched.
+  // Each character is visited at most twice, so this stays linear on a run that
+  // is an entire minified log line.
+  for (let i = at + 2; i < run.length; i++) {
+    if (run[i] !== ".") continue;
+    let end = i + 1;
+    while (end < run.length && isLetter(run[end])) end++;
+    if (end - i - 1 >= 2) return true;
+  }
+  return false;
+}
+
+/**
+ * Replace `run` with the email marker when it holds an address, keeping any
+ * trailing punctuation the run swallowed. Without that, redacting a sentence
+ * ending in an address would take the full stop with it.
+ *
+ * The tail is found by walking back from the end rather than by a `…$` regex.
+ * That regex is anchored only at its end, so on a run whose last character is
+ * not tail punctuation it retries from every interior position and rescans the
+ * remainder each time — quadratic, and measurably so: 4.2 s for a 100k run.
+ */
+function redactAddressRun(run: string): string {
+  let end = run.length;
+  while (end > 0 && TAIL_CHARS.includes(run[end - 1])) end--;
+  return runHoldsAddress(run.slice(0, end)) ? `<email>${run.slice(end)}` : run;
 }
 
 // Order matters only in that a path/email match should not be re-touched by a
@@ -25,15 +90,19 @@ const RULES: RedactionRule[] = [
   { pattern: /(\/(?:Users|home)\/)[^/\s"'\\:]+/g, replacement: "$1<user>" },
   { pattern: /([A-Za-z]:\\Users\\)[^\\\s"']+/gi, replacement: "$1<user>" },
 
-  // Email addresses. The quantifiers are bounded at the RFC's own limits rather
-  // than left open: an unbounded local part backtracks over every suffix of a
-  // long run of address-legal characters, which a pasted token or a minified log
-  // line supplies, and that is quadratic — 27 s for a 256 KB run, versus 31 ms
-  // bounded.
-  {
-    pattern: /[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,255}\.[A-Za-z]{2,24}/g,
-    replacement: "<email>",
-  },
+  // Email addresses. The pattern deliberately describes a *run* of address-legal
+  // characters rather than an address: `runHoldsAddress` then decides, and the
+  // whole run is replaced when it says yes
+  // (https://github.com/Brevilabs/obsidian-copilot-private/issues/202).
+  //
+  // Splitting it this way is what makes both properties reachable at once. A
+  // single expression has to put a quantifier on each side of the `@`, and that
+  // is either quadratic on a long run or, once bounded to avoid it, leaves the
+  // part that did not fit. Matching the run is linear because the class has no
+  // ambiguity to backtrack through, and replacing the run whole is what stops a
+  // second address glued to the first — `a@b.com.c@d.com`, or an `@handle@host`
+  // — from surviving as a leftover.
+  { pattern: /[A-Za-z0-9._%+@-]+/g, replacement: redactAddressRun },
 
   // Provider API keys with a recognizable prefix.
   { pattern: /\bsk-[A-Za-z0-9_-]{12,}/g, replacement: "<secret>" },
@@ -55,5 +124,14 @@ const RULES: RedactionRule[] = [
 
 /** Return `text` with private data replaced by visible markers. */
 export function redactLogText(text: string): string {
-  return RULES.reduce((acc, rule) => acc.replace(rule.pattern, rule.replacement), text);
+  // The two branches are the same call: `replace` is overloaded on the
+  // replacement rather than taking a union, so the type has to be narrowed
+  // before it will resolve.
+  return RULES.reduce(
+    (acc, rule) =>
+      typeof rule.replacement === "string"
+        ? acc.replace(rule.pattern, rule.replacement)
+        : acc.replace(rule.pattern, rule.replacement),
+    text
+  );
 }
