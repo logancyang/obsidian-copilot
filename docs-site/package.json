@@ -9,7 +9,8 @@
   },
   "scripts": {
     "build": "astro build",
-    "preview": "astro preview"
+    "preview": "astro preview",
+    "test": "node --test"
   },
   "dependencies": {
     "@astrojs/starlight": "0.41.7",
