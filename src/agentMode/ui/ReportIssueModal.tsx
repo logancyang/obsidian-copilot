@@ -378,7 +378,11 @@ export class ReportIssueModal extends Modal {
   constructor(private readonly params: ReportIssueModalParams) {
     super(params.app);
     // @ts-ignore — setTitle exists at runtime (see ConfirmModal).
-    this.setTitle("Report an Agent Mode issue");
+    // Not "an Agent Mode issue": this dialog opens from the general Debugging &
+    // support settings and can carry nothing but the regular chat log, so
+    // naming a mode here would misdescribe the report a Quick Chat user is
+    // filing. Same reason the issue title carries no mode prefix.
+    this.setTitle("Report an issue");
   }
 
   onOpen() {

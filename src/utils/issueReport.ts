@@ -337,11 +337,13 @@ export async function zipReportBundle(
   // assembler wrote, and by the time the compressed size is known the whole thing
   // has already been read into the renderer and zipped synchronously. Past this
   // ceiling that pause stops being a pause.
-  // A staged file that has gone missing is a removal, not a failure. The review
-  // step invites exactly this edit ("Edited the files? Rebuild zip repacks
-  // them") right after warning that the screenshot is not redacted, so deleting
-  // it is the obvious way to act on that warning. Throwing would strand the
-  // user with nothing to send, since the rebuild deletes the old zip first.
+  // A staged file that has gone missing is a removal, not a failure
+  // (https://github.com/Brevilabs/obsidian-copilot-private/issues/202). The
+  // review step invites exactly this edit ("Edited the files? Rebuild zip
+  // repacks them") right after warning that the screenshot is not redacted, so
+  // deleting it is the obvious way to act on that warning. Throwing would
+  // strand the user with nothing to send, since the rebuild deletes the old zip
+  // first.
   // `report.md` is the one file this cannot rescue — dropping it leaves no
   // issue to file, and `draftFromPackedNote` says so in as many words.
   const asRemoved = (a: AttachmentOutcome): AttachmentOutcome => ({
@@ -350,12 +352,13 @@ export async function zipReportBundle(
     status: "skipped",
     reason: "Removed from the report folder before the rebuild.",
   });
-  // Only an absent file is the user's own edit. A file that is still there but
-  // cannot be read — locked by another program, permissions changed underneath
-  // us — is a failure, and reporting it as "Removed" would blame the user for
-  // something they did not do while the report goes out a source short. Same
-  // split the assembler already makes, so the two passes describe one kind of
-  // trouble the same way.
+  // Only an absent file is the user's own edit
+  // (https://github.com/Brevilabs/obsidian-copilot-private/issues/202). A file
+  // that is still there but cannot be read — locked by another program,
+  // permissions changed underneath us — is a failure, and reporting it as
+  // "Removed" would blame the user for something they did not do while the
+  // report goes out a source short. Same split the assembler already makes, so
+  // the two passes describe one kind of trouble the same way.
   const afterReadError = (a: AttachmentOutcome, err: unknown): AttachmentOutcome =>
     isMissingFileError(err)
       ? asRemoved(a)
@@ -431,7 +434,7 @@ export async function zipReportBundle(
   // is nothing to upload.
   //
   // DESIGN NOTE — report.md attachment list may name a file the rebuilt zip omits
-  // (logancyang/obsidian-copilot-preview#279). When the user deletes an attachment
+  // (https://github.com/Brevilabs/obsidian-copilot-private/issues/227). When the user deletes an attachment
   // from the staging folder and clicks Rebuild, the above loop demotes it to
   // `skipped` in the returned manifest, but `entries[report.md]` is still the
   // original markdown listing that file. So the public issue can say an
