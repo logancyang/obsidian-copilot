@@ -89,6 +89,24 @@ and turn on **Enable CORS**. Responses then appear after completion instead of
 streaming token by token. For LM Studio, you can enable CORS in LM Studio to
 keep streaming instead.
 
+### OrcaRouter
+
+[OrcaRouter](https://www.orcarouter.ai) is a smart-routing model gateway with an
+OpenAI-compatible endpoint. Add it as a provider under **Settings → Copilot →
+BYOK → Add a provider** — it appears as **OrcaRouter** in the provider list with
+its base URL pre-filled:
+
+- Base URL: `https://api.orcarouter.ai/v1`
+- API key: `sk-orca-...` from your OrcaRouter account
+
+Select one or more gateway models. The `orcarouter/auto` model routes each
+request to the best available upstream model; `orcarouter/fusion`,
+`orcarouter/fusion-flash`, and `orcarouter/fusion-mini` pin a specific
+long-context family. Copilot discovers the full model list from
+`/v1/models`. It also runs gateway-level, zero-trust security for AI agents on
+the same endpoint — screening every prompt/response and governing every tool
+call on a default-deny basis, with no application code changes.
+
 ## Claude Code and Codex Accounts
 
 Claude and Codex are Agent backends, not BYOK providers:

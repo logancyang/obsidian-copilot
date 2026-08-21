@@ -70,6 +70,7 @@ export interface CopilotSettings {
   mistralApiKey: string;
   deepseekApiKey: string;
   siliconflowApiKey: string;
+  orcarouterApiKey: string;
   defaultChainType: ChainType;
   defaultModelKey: string;
   embeddingModelKey: string;
