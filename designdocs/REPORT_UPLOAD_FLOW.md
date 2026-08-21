@@ -197,7 +197,9 @@ clarification that prevents a false sense of completion:
 
 The expiry line says "Report expires _date_" — scheduled, not already happened —
 and promises nothing about how a maintainer retrieves the report, because that
-mechanism is not this UI's to describe.
+mechanism is not this UI's to describe. It also names Discord, because filing an
+issue is not the only way people ask for help, and the ID is the whole handle:
+pasted into a support conversation it points a maintainer at the same report.
 
 ## The uploader interface
 

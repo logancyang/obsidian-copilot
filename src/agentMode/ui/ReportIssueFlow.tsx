@@ -712,7 +712,9 @@ function DoneStep({ report, success, revealFile, openIssuePage }: DoneStepProps)
       </div>
 
       <div className="tw-flex tw-flex-col tw-gap-2">
-        <span className="tw-text-sm tw-font-medium">Report ID in the issue</span>
+        {/* Not "Report ID in the issue": the id is the handle for support
+            anywhere, and the callout above already says it is in the issue. */}
+        <span className="tw-text-sm tw-font-medium">Report ID</span>
         <div className="tw-flex tw-items-center tw-gap-2 tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-secondary tw-px-3 tw-py-2">
           <code className="tw-min-w-0 tw-flex-1 tw-truncate tw-text-xs tw-text-muted">
             {result.reportId}
@@ -724,7 +726,8 @@ function DoneStep({ report, success, revealFile, openIssuePage }: DoneStepProps)
             No download promise here — how a maintainer retrieves a report is
             not this UI's to describe. */}
         <span className="tw-text-xs tw-text-muted">
-          Report expires {new Date(result.expiresAt).toLocaleDateString()}
+          Report expires {new Date(result.expiresAt).toLocaleDateString()}. You can also paste this
+          ID in Discord when you ask for support there.
         </span>
       </div>
 
