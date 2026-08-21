@@ -37,7 +37,7 @@ export interface ReportUploadResult {
  * its idempotency key makes a duplicate store impossible. `retryable: false`
  * means the server (or a local pre-send check) definitively rejected this
  * attempt, and sending the identical bytes again can only fail the same way —
- * while still spending the user's daily upload allowance.
+ * while still spending the upload allowance.
  */
 export class ReportUploadError extends Error {
   constructor(

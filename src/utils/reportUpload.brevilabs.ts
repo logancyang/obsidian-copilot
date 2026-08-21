@@ -13,7 +13,7 @@ const REPORTS_ENDPOINT = `${BREVILABS_API_BASE_URL}/reports`;
 /**
  * The endpoint validates this header and rejects the whole upload when it
  * normalizes to "unknown", so an invalid version is refused locally — the
- * request would fail anyway, after spending a slot of the daily allowance.
+ * request would fail anyway, after spending a slot of the upload allowance.
  */
 const CLIENT_VERSION_PATTERN = /^[0-9A-Za-z][0-9A-Za-z._+-]{0,63}$/;
 
@@ -62,8 +62,8 @@ export interface ReportUploaderDeps {
 
 /**
  * Statuses where the server definitively rejected this attempt: re-sending the
- * identical bytes can only fail the same way, while still spending the user's
- * daily upload allowance — so the UI must not offer a Retry for these.
+ * identical bytes can only fail the same way, while still spending a slot of
+ * the upload allowance — so the UI must not offer a Retry for these.
  *
  * Fixed local copy only, never the response body: the error text reaches a
  * Notice and the log, and a body from a proxy or captive portal can carry
@@ -160,7 +160,7 @@ export function createReportUploader(deps: ReportUploaderDeps): ReportUploader {
   const request = deps.request ?? requestUrl;
   return async (attempt) => {
     // Local pre-send checks: both failures are ones the server would reject
-    // anyway (as a 400/422), after spending a slot of the daily allowance.
+    // anyway (as a 400/422), after spending a slot of the upload allowance.
     let installId: string;
     try {
       installId = deps.installId();

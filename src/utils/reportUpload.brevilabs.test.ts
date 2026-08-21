@@ -1,6 +1,9 @@
 import { BREVILABS_API_BASE_URL } from "@/constants";
+import { logError } from "@/logger";
 import { createReportUploader, type ReportRequest } from "@/utils/reportUpload.brevilabs";
 import { ReportUploadError, type ReportUploadAttempt } from "@/utils/reportUpload";
+
+jest.mock("@/logger");
 
 /** A request that always answers with the given status and body. */
 function respondWith(status: number, body: unknown): jest.MockedFunction<ReportRequest> {
@@ -96,7 +99,7 @@ describe("reportUpload.brevilabs", () => {
         expect(err.message).toMatch(/nothing was uploaded/);
         expect(err.message).not.toContain("alice");
         // Refused locally — the server must not be reached, or the failed
-        // request would still spend a slot of the daily allowance.
+        // request would still spend a slot of the upload allowance.
         expect(request).not.toHaveBeenCalled();
       });
 
@@ -128,10 +131,17 @@ describe("reportUpload.brevilabs", () => {
         }
       );
 
-      it("names the daily allowance on 429 without quoting a number, since the tripped limit is unknowable", async () => {
+      it("names the upload allowance on 429 without promising a number or a reset time", async () => {
         const err = await rejection(makeUploader(respondWith(429, "slow down"))(ATTEMPT));
         expect(err.message).toMatch(/allowance is used up/);
+        // The tripped limit is unknowable from the response: the server enforces
+        // one per installation and one per address, and says which only by
+        // refusing.
         expect(err.message).not.toMatch(/\d+ (uploads|times|per)/);
+        // And its window starts at the first attempt, so any word implying a
+        // midnight reset would send the user off to wait for one that never
+        // comes.
+        expect(err.message).not.toMatch(/today|daily/i);
       });
     });
 
@@ -195,6 +205,21 @@ describe("reportUpload.brevilabs", () => {
 
         expect(err.retryable).toBe(true);
         expect(err.message).toMatch(/unconfirmed/);
+      });
+
+      it("logs the transport's own error, which the fixed user-facing copy replaces", async () => {
+        // The message the user sees is deliberately the same sentence for every
+        // transport failure, which leaves the log as the only place the actual
+        // cause survives. Without this, a DNS failure, a reset connection and a
+        // protocol abort are indistinguishable after the fact.
+        const cause = new Error("net::ERR_HTTP2_PROTOCOL_ERROR");
+        const request = jest
+          .fn<ReturnType<ReportRequest>, Parameters<ReportRequest>>()
+          .mockRejectedValue(cause);
+
+        await rejection(makeUploader(request)(ATTEMPT));
+
+        expect(logError).toHaveBeenCalledWith(expect.stringContaining("[reportUpload]"), cause);
       });
 
       it.each([

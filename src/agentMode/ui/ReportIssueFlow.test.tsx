@@ -336,7 +336,7 @@ describe("ReportIssueFlow", () => {
 
       it("withholds Retry after a definitive rejection, keeping only the paths that can differ", async () => {
         // A rejection (quota spent, bundle refused) fails identically on the
-        // same bytes while still spending the daily allowance — so the only
+        // same bytes while still spending the upload allowance — so the only
         // buttons left are ones that change something: Rebuild makes a new zip,
         // and the manual path sidesteps the upload entirely.
         const upload = jest
@@ -612,6 +612,10 @@ describe("ReportIssueFlow", () => {
         // nothing to download, and the issue must carry only the id.
         expect(screen.getByText(uploadResult.reportId)).toBeTruthy();
         expect(screen.getByText(/Report expires/)).toBeTruthy();
+        // Filing an issue is not the only way to use the id, and a reader who
+        // is heading for chat instead has no other cue that it means anything
+        // there.
+        expect(screen.getByText(/paste this ID in Discord/)).toBeTruthy();
         expect(screen.getByText(/Nothing is filed until you press Submit/)).toBeTruthy();
       });
 

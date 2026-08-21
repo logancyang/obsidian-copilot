@@ -66,7 +66,7 @@ export interface PreparedReport {
  * `retryable` on the failure half is what gates the Retry button: re-sending
  * the same attempt is only offered when the outcome is unknown (the attempt's
  * idempotency key makes that safe), never for a definitive rejection, which
- * would fail identically while still spending the daily upload allowance.
+ * would fail identically while still spending the upload allowance.
  */
 export type UploadOutcome = UploadSuccess | { ok: false; error: string; retryable: boolean };
 
@@ -667,7 +667,7 @@ function ReviewStep({
               </Button>
             )}
             {/* A definitive rejection gets no Retry: the identical bytes would
-                fail identically while still spending the daily upload
+                fail identically while still spending a slot of the upload
                 allowance. Rebuild resets the state, so a *new* zip can upload. */}
             {(uploadState.status !== "failed" || uploadState.retryable) && (
               <Button
