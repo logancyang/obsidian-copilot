@@ -1,4 +1,5 @@
 import { BREVILABS_API_BASE_URL } from "@/constants";
+import { logError } from "@/logger";
 import {
   ReportUploadError,
   type ReportUploader,
@@ -217,10 +218,16 @@ export function createReportUploader(deps: ReportUploaderDeps): ReportUploader {
       // Identity, not `instanceof`: only this attempt's own deadline error may
       // pass through with its message intact.
       if (err === deadlineError) throw err;
+      // Fixed copy for the user, the real cause for whoever has to diagnose it.
+      // Discarding the transport's message outright left "could not reach the
+      // server" indistinguishable from a dozen different failures, with nothing
+      // anywhere to tell them apart. The log is the right home for it: it is a
+      // developer surface, and `redactLogText` scrubs it on the way into a
+      // report bundle, the same as every other `logError` in this flow.
+      logError("[reportUpload] the transport failed before a response arrived:", err);
       // The request may have reached the server before the connection died, so
       // this is an uncertain outcome, not a clean "nothing happened": the
-      // report may already be stored and the allowance already spent. Fixed
-      // copy, not the transport's message — see REJECTION_MESSAGES.
+      // report may already be stored and the allowance already spent.
       throw new ReportUploadError(
         "Could not reach the report server, so the upload is unconfirmed.",
         true
