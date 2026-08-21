@@ -29,14 +29,12 @@ export function ScrollToBottomButton({
   onScrollBy,
   isStreaming = false,
 }: ScrollToBottomButtonProps) {
-  // DESIGN NOTE (input forwarding × sibling overlay): the overlay is a DOM
-  // sibling of the scroller, so native scroll chaining never reaches the
-  // list from here — wheel deltas and touch drags are forwarded instead.
-  // Keyboard scrolling while the button is focused is intentionally not
-  // forwarded: reaching that state takes deliberate tabbing, Enter/Space
-  // already trigger the jump, and it is recoverable by tabbing away (P3, no
-  // real caller observed). If a future review flags this again, point them
-  // at this note.
+  // The overlay is a DOM sibling of the scroller, so native scroll chaining
+  // never reaches the list from here — wheel deltas and touch drags are
+  // forwarded instead. Keyboard scrolling while the button holds focus is
+  // deliberately not forwarded: reaching that state takes explicit tabbing,
+  // Enter/Space already perform the jump, and tabbing away restores normal
+  // scrolling.
   // https://github.com/logancyang/obsidian-copilot-preview/issues/329
   const lastTouchYRef = useRef<number | null>(null);
 

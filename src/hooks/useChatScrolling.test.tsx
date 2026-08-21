@@ -46,7 +46,9 @@ class MockResizeObserver {
 
   unobserve = jest.fn();
 
-  disconnect = () => disconnect();
+  disconnect = () => {
+    disconnect();
+  };
 }
 
 function Harness({ userMessageHeight }: { userMessageHeight: number }) {
