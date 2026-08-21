@@ -126,38 +126,72 @@ const FRAME_LOG_BASENAME = "acp-frames.ndjson";
  * process rather than rejected, and a hit there would be packed and uploaded.
  *
  * A real path is recognised by where it goes and what it is called — under the
- * OS temp dir, named for the log. Absoluteness alone is not the test: a
- * relative `TMPDIR` is passed through verbatim, so a genuine log path can be
- * relative too, and rejecting it would silently drop an attachment the user
- * asked for. Nor is the location alone enough, since a process whose working
- * directory sits inside the temp dir would resolve the sentence to somewhere
- * under it.
+ * OS temp dir, named for the log, and still under it once every link along the
+ * way is resolved. Absoluteness alone is not the test: a relative `TMPDIR` is
+ * passed through verbatim, so a genuine log path can be relative too, and
+ * rejecting it would silently drop an attachment the user asked for. Nor is the
+ * location alone enough, since a process whose working directory sits inside
+ * the temp dir would resolve the sentence to somewhere under it.
+ *
+ * Returns the resolved path, so what gets read is what was checked.
  *
  * Exported for its own tests: both callers reach it through a private method of
  * the modal, so this is the only place the distinction can be observed.
  */
-export function activityLogPath(): string | null {
+export async function activityLogPath(): Promise<string | null> {
   try {
     const path = requireNodeModule<typeof import("node:path")>("path");
     const os = requireNodeModule<typeof import("node:os")>("os");
+    const fs = requireNodeModule<typeof import("node:fs/promises")>("fs/promises");
     const candidate = frameSink.getPath();
     if (path.basename(candidate) !== FRAME_LOG_BASENAME) return null;
-    // Asked as a relative walk rather than a string prefix. A prefix has to be
-    // written as `root + separator` to stop `/tmpfoo` passing for `/tmp`, and
-    // that spelling breaks when the temp dir *is* a filesystem root: the prefix
-    // becomes `//` and every real path underneath fails it. Comparing the walk
-    // covers both, and covers a different Windows drive, which comes back
-    // absolute.
-    const relative = path.relative(path.resolve(os.tmpdir()), path.resolve(candidate));
-    const outside =
-      relative.length === 0 ||
-      relative === ".." ||
-      relative.startsWith(`..${path.sep}`) ||
-      path.isAbsolute(relative);
-    return outside ? null : candidate;
+    if (!isInside(os.tmpdir(), candidate)) return null;
+    // The name and the spelling describe only where the path claims to point.
+    // On a temp root shared with other accounts, a link planted at the leaf or
+    // at any directory above it spells out this same location and leads
+    // somewhere else, and the sink validates its own path only when it writes
+    // — so a report taken before the first frame is written asks a location
+    // nobody has checked. Resolving the links away and asking the containment
+    // question again makes the answer about the file rather than the string.
+    let resolved: string;
+    try {
+      resolved = await fs.realpath(candidate);
+    } catch {
+      // Nothing is there to resolve, so there is nothing to lead anywhere. The
+      // caller's own `stat` reports the absence as "nothing recorded yet".
+      return candidate;
+    }
+    // Both questions are asked again of the resolved path, because the first
+    // pair only described the spelling. A link named for the log and leading at
+    // a neighbour in the same temp dir satisfies containment honestly; what
+    // gives it away is that the file at the end of it is not called the log.
+    if (path.basename(resolved) !== FRAME_LOG_BASENAME) return null;
+    // The temp dir is resolved too: it is itself a link on macOS, and comparing
+    // a resolved path against an unresolved root would reject every real log.
+    return isInside(await fs.realpath(os.tmpdir()), resolved) ? resolved : null;
   } catch {
     return null;
   }
+}
+
+/**
+ * Whether `candidate` sits somewhere under `root`.
+ *
+ * Asked as a relative walk rather than a string prefix. A prefix has to be
+ * written as `root + separator` to stop `/tmpfoo` passing for `/tmp`, and that
+ * spelling breaks when the root *is* a filesystem root: it becomes `//` and
+ * every real path underneath fails it. The walk covers both, and covers a
+ * different Windows drive, which comes back absolute.
+ */
+function isInside(root: string, candidate: string): boolean {
+  const path = requireNodeModule<typeof import("node:path")>("path");
+  const relative = path.relative(path.resolve(root), path.resolve(candidate));
+  return (
+    relative.length > 0 &&
+    relative !== ".." &&
+    !relative.startsWith(`..${path.sep}`) &&
+    !path.isAbsolute(relative)
+  );
 }
 
 /** Size of a file on disk, or null when it does not exist or cannot be read. */
@@ -209,8 +243,11 @@ export async function removeReportPaths(paths: string[]): Promise<string[]> {
  * something they can delete and something they cannot.
  *
  * Silent on success, which is the ordinary case and needs no announcement.
+ *
+ * Exported for its own tests: its only caller is a prop the flow's tests
+ * replace, so this is the only place the notice can be observed.
  */
-async function discardReportPaths(paths: string[]): Promise<void> {
+export async function discardReportPaths(paths: string[]): Promise<void> {
   const left = await removeReportPaths(paths);
   if (left.length === 0) return;
   new Notice(
@@ -502,7 +539,7 @@ export class ReportIssueModal extends Modal {
    * keeps the note and checkbox state across the second render.
    */
   private async loadActivityLogSize(): Promise<void> {
-    const path = activityLogPath();
+    const path = await activityLogPath();
     const bytes = path === null ? null : await fileBytes(path);
     if (!this.root) return;
     this.render(this.buildSourceOptions(bytes));
@@ -671,10 +708,27 @@ export class ReportIssueModal extends Modal {
           "may have it open and try again."
       );
     }
-    const packed = await zipReportBundle({
-      folderPath: report.folderPath,
-      attachments: report.attachments,
-    });
+    let packed: Awaited<ReturnType<typeof zipReportBundle>>;
+    try {
+      packed = await zipReportBundle({
+        folderPath: report.folderPath,
+        attachments: report.attachments,
+      });
+    } catch (err) {
+      // A repack that failed part-way through writing already tried to take its
+      // own half-written file back, and that attempt can fail too. Preparation
+      // has an outer sweep of the whole report directory to catch this; a
+      // rebuild has none, because the folder is what the user is reviewing and
+      // must survive. So this is the last chance to notice, and the file left
+      // behind holds what the folder holds.
+      const stranded = await removeReportPaths([report.zipPath]);
+      if (stranded.length === 0) throw err;
+      const cause = err instanceof Error ? err.message : String(err);
+      throw new Error(
+        `${cause} A partly written zip is still at ${stranded.join(", ")} and could not be ` +
+          "deleted — remove it yourself once nothing is holding it open."
+      );
+    }
     return {
       ...report,
       zipPath: packed.zipPath,
@@ -777,7 +831,7 @@ async function activityLogRequest(): Promise<ReportLogRequest> {
   // Flush queued frames so the tail we read includes the failure the user is
   // reporting, not just whatever had already reached disk.
   await frameSink.flush();
-  const path = activityLogPath();
+  const path = await activityLogPath();
   if (path === null) {
     return { ...base, unavailableReason: "The Agent Mode activity log's location is unavailable." };
   }
