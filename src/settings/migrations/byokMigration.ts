@@ -240,7 +240,7 @@ export function planByokMigration(settings: CopilotSettings): SetupProviderInput
       normalizeUrl(baseUrl),
       apiKey ?? "",
       enableCors ? "cors" : "stream",
-    ].join(" ");
+    ].join("\u0000");
 
     let group = groups.get(groupKey);
     if (!group) {

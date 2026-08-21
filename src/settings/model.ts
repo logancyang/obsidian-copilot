@@ -282,9 +282,10 @@ export interface CopilotSettings {
      */
     claudeCli?: { path?: string };
     /**
-     * Opt-in: write the full untruncated ACP JSON-RPC frames as NDJSON to
-     * `<vault>/copilot/acp-frames.ndjson`. Heavyweight — leaves the existing
-     * 400-char summary log unchanged.
+     * Write the full untruncated ACP JSON-RPC frames as NDJSON to a per-vault
+     * owner-only directory under the OS temp folder (see
+     * `getFrameLogPaths()` in `src/agentMode/session/debugSink.ts`). On by
+     * default; leaves the existing 400-char summary log unchanged.
      */
     debugFullFrames: boolean;
     /**
