@@ -3,14 +3,17 @@ import {
   buildReportSourceOptions,
   captureBehindOverlay,
   createReportsRootDir,
+  discardReportPaths,
   openIssuePageWith,
   removeReportPaths,
+  ReportIssueModal,
   uploadReport,
   waitForStableTarget,
 } from "@/agentMode/ui/ReportIssueModal";
 import type { PreparedReport, ReportSourceId } from "@/agentMode/ui/ReportIssueFlow";
 import { ReportUploadError, type ReportUploader } from "@/utils/reportUpload";
 import { Notice } from "obsidian";
+import fs from "node:fs/promises";
 import os from "node:os";
 import nodePath from "node:path";
 
@@ -61,27 +64,27 @@ describe("ReportIssueModal", () => {
       "acp-frames.ndjson"
     );
 
-    it("returns the log's path once the sink knows where it writes", () => {
+    it("returns the log's path once the sink knows where it writes", async () => {
       frameSinkPath.mockReturnValue(realLogPath);
-      expect(activityLogPath()).toBe(realLogPath);
+      await expect(activityLogPath()).resolves.toBe(realLogPath);
     });
 
-    it("rejects a path that is named right but sits outside the temp dir (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", () => {
+    it("rejects a path that is named right but sits outside the temp dir (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", async () => {
       // The name alone is not enough: anything the sink did not build belongs
       // somewhere else, and packing it would attach a file nobody asked for.
       frameSinkPath.mockReturnValue(nodePath.join(os.homedir(), "acp-frames.ndjson"));
-      expect(activityLogPath()).toBeNull();
+      await expect(activityLogPath()).resolves.toBeNull();
     });
 
-    it("rejects a path inside the temp dir that is not the log (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", () => {
+    it("rejects a path inside the temp dir that is not the log (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", async () => {
       // Location alone is not enough either. A process whose working directory
       // sits inside the temp dir resolves the sink's placeholder sentence to
       // somewhere underneath it, so the name has to be checked too.
       frameSinkPath.mockReturnValue(nodePath.join(os.tmpdir(), "something-else.ndjson"));
-      expect(activityLogPath()).toBeNull();
+      await expect(activityLogPath()).resolves.toBeNull();
     });
 
-    it("accepts the log when the temp dir is a filesystem root (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", () => {
+    it("accepts the log when the temp dir is a filesystem root (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", async () => {
       // Containment written as `root + separator` becomes `//` here, and every
       // real path underneath fails it — dropping an attachment the user ticked.
       const root = nodePath.parse(os.tmpdir()).root;
@@ -89,13 +92,13 @@ describe("ReportIssueModal", () => {
       try {
         const inRoot = nodePath.join(root, "obsidian-copilot", "acp-frames.ndjson");
         frameSinkPath.mockReturnValue(inRoot);
-        expect(activityLogPath()).toBe(inRoot);
+        await expect(activityLogPath()).resolves.toBe(inRoot);
       } finally {
         spy.mockRestore();
       }
     });
 
-    it("rejects the sink's placeholder rather than treating it as a path (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", () => {
+    it("rejects the sink's placeholder rather than treating it as a path (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", async () => {
       // The settings tab is registered during load, ahead of the dynamic import
       // that tells the sink which vault it is logging for, so a report opened in
       // that window asks a sink that has no path to give. What it answers with
@@ -103,7 +106,42 @@ describe("ReportIssueModal", () => {
       // for it next to the process, and a hit there would be packed and uploaded
       // as though it were the activity log.
       frameSinkPath.mockReturnValue("(Agent Mode frame logs are desktop-only)");
-      expect(activityLogPath()).toBeNull();
+      await expect(activityLogPath()).resolves.toBeNull();
+    });
+
+    it("rejects a log path that leads out of the temp dir through a link (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", async () => {
+      // The sink checks its own directory chain only when it writes, so a
+      // report taken before the first frame lands asks a location nobody has
+      // vetted. On a temp root shared with other accounts, a link planted there
+      // spells out the log's name and leads at whatever its author chose —
+      // which a spelling check cannot see, and which would be uploaded.
+      const dir = await fs.mkdtemp(nodePath.join(os.tmpdir(), "report-link-"));
+      const secret = nodePath.join(dir, "secret.txt");
+      await fs.writeFile(secret, "private");
+      const link = nodePath.join(dir, "acp-frames.ndjson");
+      await fs.symlink(secret, link);
+      try {
+        frameSinkPath.mockReturnValue(link);
+        await expect(activityLogPath()).resolves.toBeNull();
+      } finally {
+        await fs.rm(dir, { recursive: true, force: true });
+      }
+    });
+
+    it("accepts a real log and answers with the path it checked (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", async () => {
+      // The counterpart: resolving links away must not cost the ordinary log
+      // its attachment. The answer is the resolved path so that what gets read
+      // is what was checked, which on macOS differs from the temp dir's own
+      // spelling because that is a link too.
+      const dir = await fs.mkdtemp(nodePath.join(os.tmpdir(), "report-real-"));
+      const log = nodePath.join(dir, "acp-frames.ndjson");
+      await fs.writeFile(log, "{}\n");
+      try {
+        frameSinkPath.mockReturnValue(log);
+        await expect(activityLogPath()).resolves.toBe(await fs.realpath(log));
+      } finally {
+        await fs.rm(dir, { recursive: true, force: true });
+      }
     });
   });
 
@@ -190,6 +228,84 @@ describe("ReportIssueModal", () => {
 
     it("reports nothing left behind when every delete succeeds", async () => {
       await expect(removeReportPaths(["/tmp/reports/bundle"])).resolves.toEqual([]);
+    });
+  });
+
+  describe("discardReportPaths()", () => {
+    beforeEach(() => {
+      (Notice as unknown as jest.Mock).mockClear();
+    });
+
+    it("says nothing when every path goes", async () => {
+      rm.mockResolvedValue(undefined);
+
+      await discardReportPaths(["/tmp/report-a", "/tmp/report-b"]);
+
+      expect(Notice).not.toHaveBeenCalled();
+    });
+
+    it("names what is left behind, since nothing else can (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", async () => {
+      // The dialog this cleans up after has already closed, so the toast is the
+      // only surface left: what survives is the user's prompts and note
+      // contents in a folder they have no other way to find.
+      rm.mockRejectedValueOnce(new Error("EBUSY")).mockResolvedValue(undefined);
+
+      await discardReportPaths(["/tmp/report-stuck", "/tmp/report-gone"]);
+
+      expect(Notice).toHaveBeenCalledTimes(1);
+      const message = (Notice as unknown as jest.Mock).mock.calls[0][0] as string;
+      expect(message).toContain("/tmp/report-stuck");
+      expect(message).not.toContain("/tmp/report-gone");
+    });
+  });
+
+  describe("rebuildZip()", () => {
+    beforeEach(() => {
+      rm.mockReset();
+    });
+
+    // Built without the constructor, wiring nothing, because the branch under
+    // test reads no state — the same shape `main.test.ts` uses to reach a
+    // private method whose collaborators are all module-level.
+    const rebuild = (report: PreparedReport) =>
+      (
+        Object.create(ReportIssueModal.prototype) as unknown as {
+          rebuildZip(report: PreparedReport): Promise<PreparedReport>;
+        }
+      ).rebuildZip(report);
+
+    it("refuses to repack while the stale zip is still there (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", async () => {
+      // Deleting the old zip first is the guarantee, not tidying before one: it
+      // holds whatever the user just took out of the folder. Repacking over a
+      // delete that failed would leave that file sitting there while the page
+      // reported a rebuild.
+      rm.mockRejectedValue(new Error("EBUSY"));
+      const report = {
+        folderPath: "/tmp/report-x/bundle",
+        zipPath: "/tmp/report-x/bundle.zip",
+        attachments: [],
+      } as unknown as PreparedReport;
+
+      await expect(rebuild(report)).rejects.toThrow("/tmp/report-x/bundle.zip");
+      // One deletion attempt and no more is what says the repack never started:
+      // a rebuild that went ahead would fail on the folder and then try to take
+      // its own half-written zip back, a second attempt this never reaches.
+      expect(rm).toHaveBeenCalledTimes(1);
+    });
+
+    it("names a half-written zip the failed repack could not take back (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", async () => {
+      // Preparation sweeps its whole directory when it fails, but a rebuild
+      // cannot: the folder is what the user is reviewing. So when the repack
+      // fails and its own cleanup fails too, this is the last chance to say
+      // where the leftover is.
+      rm.mockResolvedValueOnce(undefined).mockRejectedValue(new Error("EBUSY"));
+      const report = {
+        folderPath: "/tmp/report-y/bundle",
+        zipPath: "/tmp/report-y/bundle.zip",
+        attachments: [],
+      } as unknown as PreparedReport;
+
+      await expect(rebuild(report)).rejects.toThrow("/tmp/report-y/bundle.zip");
     });
   });
 

@@ -215,8 +215,10 @@ export interface ReportRuntime {
  * Write the report bundle to `<reportsRootDir>/copilot-report-<bundleId>/` and
  * report per-source outcomes. Throws when the folder or `report.md` cannot be
  * written (the caller should surface a retry); an individual log or screenshot
- * failing only downgrades that one attachment. A throw leaves no folder behind —
- * a bundle nobody received must not leave the user's prompts on disk.
+ * failing only downgrades that one attachment. A throw tries to take the folder
+ * with it — a bundle nobody received must not leave the user's prompts on disk —
+ * but a deletion can fail in turn, so a caller that can name a leftover path to
+ * the user should sweep the folder again rather than trust this one.
  */
 export async function assembleReportBundle(
   input: ReportInput,
@@ -485,7 +487,9 @@ export async function zipReportBundle(
   try {
     await runtime.writeFile(zipPath, zipped);
   } catch (err) {
-    // A half-written zip is worse than none: it is uploadable and it is wrong.
+    // A half-written zip is worse than none: nothing uploads it, because the
+    // bytes that upload are the ones held in memory here, but it sits in the
+    // temp folder holding whatever the bundle holds.
     await discardQuietly(zipPath, runtime);
     throw err;
   }
@@ -828,6 +832,16 @@ async function writeLog(
 /**
  * Remove a path that a failure has made worthless, without letting the cleanup's
  * own failure replace the error the caller is about to report.
+ *
+ * DESIGN NOTE — the failure is swallowed here rather than returned, so a path
+ * that will not go is left unnamed at this layer. What that path holds is the
+ * user's prompts and note contents, in a temp folder they have no other way to
+ * find, which is worth naming; naming it is the caller's job. This module has
+ * no user-visible surface — a return value it can only push upwards would have
+ * to be threaded through every throw site to reach one — while the callers
+ * already sweep and report: preparation clears the whole report directory in
+ * its catch and names what survives, and a rebuild does the same for its zip.
+ * A caller added later that does neither would reintroduce the silence.
  */
 async function discardQuietly(path: string, runtime: ReportRuntime): Promise<void> {
   try {
