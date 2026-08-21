@@ -43,12 +43,13 @@ The scope is a retrieval preference, not a security boundary. Keep Miyo's regist
 
 Miyo can also index supported ChatGPT and Claude chat histories. Configure those sources in Miyo, then use the **Search chat** row in Copilot to see their status and open Miyo's management screen. Chat-history search is separate from vault search.
 
-The **Document Processor** setting chooses how Copilot prepares PDFs and EPUBs:
+The **Document Processor** setting affects more than one chat surface, so check the route you use:
 
-- **Miyo** processes PDF and EPUB files with the local Miyo CLI installed on this computer. Parsing stays local even when semantic search uses a remote Miyo server; the remote server is not used for this step.
-- **Plus** uses Copilot's hosted document service and may consume paid usage.
+- In **Agent Chat**, **Miyo** runs the local `miyo-parse` CLI for PDF and EPUB files. This stays on the current computer even when semantic search uses a remote Miyo server. If the local CLI is unavailable, Agent Chat stops instead of falling back to a cloud parser.
+- In **Quick Chat**, **Miyo** asks the connected Miyo service to parse PDF and EPUB files. A local connection stays local; a configured remote connection processes them on that server and requires the server to have access to the registered vault files.
+- **Plus** can use Copilot-hosted PDF processing and may consume paid usage.
 
-Other file types and some saved project context can still use Copilot-hosted processing. See [Copilot Paid Plans and Data Routes](copilot-plus-and-self-host.md) before using sensitive documents.
+Outside the Miyo route, EPUB and ordinary non-PDF formats such as DOCX are not processed by this selector in regular chat context. Projects have a separate context-conversion route that can use hosted processing. See [Copilot Paid Plans and Data Routes](copilot-plus-and-self-host.md) before using sensitive documents.
 
 ## Let other AI tools use your knowledge
 
