@@ -546,8 +546,8 @@ function draftFromPackedNote(packedNote: Uint8Array | undefined): ReportIssueDra
 /**
  * Stands in for the description in `report.md` when the user typed none. Named
  * rather than inlined because `titleFromNoteBody` has to recognise it: a title
- * reading "[Agent Mode] _No description provided._" is worse than the generic
- * one it falls back to.
+ * reading "_No description provided._" is worse than the generic one it falls
+ * back to.
  */
 const NO_DESCRIPTION_PLACEHOLDER = "_No description provided._";
 
@@ -558,15 +558,22 @@ const NO_DESCRIPTION_PLACEHOLDER = "_No description provided._";
  */
 const NOTE_SECTION_HEADING = "## What went wrong";
 
-/** Title used when the note carries no description to cut one from. */
-const GENERIC_ISSUE_TITLE = "[Agent Mode] Issue report";
+/**
+ * Title used when the note carries no description to cut one from. No
+ * "[Agent Mode]" prefix on this or the cut title: the flow is reachable from
+ * the general Debugging & support settings and can carry nothing but the
+ * regular chat log, so the prefix would label plain-chat reports with a mode
+ * they never used. Which surface a report concerns is already in its body's
+ * environment block and attachment list.
+ */
+const GENERIC_ISSUE_TITLE = "Copilot issue report";
 
 /**
  * Issue title cut from the description in a report body. Reads only the
  * `NOTE_SECTION_HEADING` section, and falls back to a generic title when it is
  * not there at all: the sections around it hold the environment block and the
  * attachment list, so guessing at the first prose line anywhere produces a
- * title like "[Agent Mode] - Plugin version: 1.2.3" — which describes nothing
+ * title like "- Plugin version: 1.2.3" — which describes nothing
  * and is what a user who deleted the heading would get.
  */
 function titleFromNoteBody(body: string): string {
@@ -578,7 +585,7 @@ function titleFromNoteBody(body: string): string {
   const firstLine = (end === -1 ? section : section.slice(0, end)).find(
     (line) => line.length > 0 && line !== NO_DESCRIPTION_PLACEHOLDER
   );
-  return firstLine ? `[Agent Mode] ${firstLine.slice(0, 80).trim()}` : GENERIC_ISSUE_TITLE;
+  return firstLine ? firstLine.slice(0, 80).trim() : GENERIC_ISSUE_TITLE;
 }
 
 /**

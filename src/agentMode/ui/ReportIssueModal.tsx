@@ -343,21 +343,23 @@ export async function uploadReport(
  * A plain function, not a method, so a test can drive both failure shapes
  * without an Electron bridge — the same reason `uploadReport` is one.
  *
- * @param openExternal The shell's URL opener, or undefined where there is none.
+ * @param shell The Electron shell bridge, or null where there is none. Taken
+ *   whole rather than as its URL opener so the call keeps its receiver, the
+ *   same way `revealFile` calls `showItemInFolder`.
  * @param reportId Present on the uploaded path. Repeated in the failure Notice
  *   because it is the one thing the user cannot reconstruct by hand: the note
  *   and logs are on their machine, but the id exists only in a response this
  *   Notice may be the last surviving carrier of.
  */
 export function openIssuePageWith(
-  openExternal: ((url: string) => Promise<void>) | undefined,
+  shell: Pick<ElectronShell, "openExternal"> | null,
   url: string,
   reportId?: string
 ): void {
   const fallback =
     "Open the GitHub issue page yourself" +
     (reportId ? ` and include the report ID ${reportId}.` : ".");
-  if (!openExternal) {
+  if (!shell?.openExternal) {
     new Notice(`Copilot could not open your browser. ${fallback}`);
     return;
   }
@@ -366,7 +368,7 @@ export function openIssuePageWith(
     new Notice(`Copilot could not open the issue page. ${fallback}`);
   };
   try {
-    void openExternal(url).catch(failed);
+    void shell.openExternal(url).catch(failed);
   } catch (err) {
     failed(err);
   }
@@ -472,13 +474,13 @@ export class ReportIssueModal extends Modal {
    * cannot find.
    */
   private revealFile(path: string): void {
-    const showItemInFolder = getElectronShell()?.showItemInFolder;
-    if (!showItemInFolder) {
+    const shell = getElectronShell();
+    if (!shell?.showItemInFolder) {
       new Notice(`Copilot could not open the folder. The report is at ${path}`);
       return;
     }
     try {
-      showItemInFolder(path);
+      shell.showItemInFolder(path);
     } catch (err) {
       logError("[ReportIssue] could not reveal the report:", err);
       new Notice(`Copilot could not open the folder. The report is at ${path}`);
@@ -486,7 +488,7 @@ export class ReportIssueModal extends Modal {
   }
 
   private openIssuePage(url: string, reportId?: string): void {
-    openIssuePageWith(getElectronShell()?.openExternal, url, reportId);
+    openIssuePageWith(getElectronShell(), url, reportId);
   }
 
   private async prepare(
