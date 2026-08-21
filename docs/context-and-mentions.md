@@ -63,7 +63,7 @@ One-turn attachments remain one-turn attachments inside a Project. Start a new P
 
 Quick Chat has a separate composer and context state. It can attach the active note and, on desktop, the active Web Viewer tab. Use **Add context** for a note, folder, web tab, or image. You can also type `[[Note title]]` for a note.
 
-With an eligible paid plan, Quick Chat can also use a pasted URL as context and lets you type `#` to select a vault tag for a vault-search query. It supports these explicit tool mentions:
+With an eligible paid plan, switch Quick Chat to **copilot plus** mode. In that mode, Quick Chat can use a pasted URL as context, lets you type `#` to select a vault tag for a vault-search query, and supports these explicit tool mentions:
 
 | Mention      | Action                             |
 | ------------ | ---------------------------------- |
