@@ -46,6 +46,7 @@ export const CATALOG_ID_TO_CHAT_PROVIDER: Record<string, ChatModelProviders> = {
   xai: ChatModelProviders.XAI,
   cohere: ChatModelProviders.COHEREAI,
   siliconflow: ChatModelProviders.SILICONFLOW,
+  orcarouter: ChatModelProviders.ORCAROUTER,
   anthropic: ChatModelProviders.ANTHROPIC,
   google: ChatModelProviders.GOOGLE,
 };

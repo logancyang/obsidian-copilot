@@ -24,6 +24,7 @@ export type ModelApiKeySettings = Pick<
   | "mistralApiKey"
   | "deepseekApiKey"
   | "siliconflowApiKey"
+  | "orcarouterApiKey"
 >;
 
 const PROVIDERS_WITHOUT_API_KEYS: ReadonlySet<Provider> = new Set([

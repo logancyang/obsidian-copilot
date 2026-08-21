@@ -282,6 +282,10 @@ export enum ChatModels {
   OPENROUTER_GROK_4_3 = "x-ai/grok-4.3",
   SILICONFLOW_DEEPSEEK_V3 = "deepseek-ai/DeepSeek-V3",
   SILICONFLOW_DEEPSEEK_R1 = "deepseek-ai/DeepSeek-R1",
+  ORCAROUTER_AUTO = "orcarouter/auto",
+  ORCAROUTER_FUSION = "orcarouter/fusion",
+  ORCAROUTER_FUSION_FLASH = "orcarouter/fusion-flash",
+  ORCAROUTER_FUSION_MINI = "orcarouter/fusion-mini",
 }
 
 // Model Providers
@@ -301,6 +305,7 @@ export enum ChatModelProviders {
   DEEPSEEK = "deepseek",
   COHEREAI = "cohereai",
   SILICONFLOW = "siliconflow",
+  ORCAROUTER = "orcarouter",
 }
 
 export enum ModelCapability {
@@ -504,6 +509,31 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     isBuiltIn: false,
     baseUrl: "https://api.siliconflow.com/v1",
     capabilities: [ModelCapability.REASONING],
+  },
+  {
+    name: ChatModels.ORCAROUTER_AUTO,
+    provider: ChatModelProviders.ORCAROUTER,
+    enabled: false,
+    isBuiltIn: true,
+    capabilities: [ModelCapability.REASONING],
+  },
+  {
+    name: ChatModels.ORCAROUTER_FUSION,
+    provider: ChatModelProviders.ORCAROUTER,
+    enabled: false,
+    isBuiltIn: true,
+  },
+  {
+    name: ChatModels.ORCAROUTER_FUSION_FLASH,
+    provider: ChatModelProviders.ORCAROUTER,
+    enabled: false,
+    isBuiltIn: true,
+  },
+  {
+    name: ChatModels.ORCAROUTER_FUSION_MINI,
+    provider: ChatModelProviders.ORCAROUTER,
+    enabled: false,
+    isBuiltIn: true,
   },
 ];
 
@@ -761,6 +791,13 @@ export const ProviderInfo: Record<Provider, ProviderMetadata> = {
     keyManagementURL: "https://platform.deepseek.com/api-keys",
     testModel: ChatModels.DEEPSEEK_CHAT,
   },
+  [ChatModelProviders.ORCAROUTER]: {
+    label: "OrcaRouter",
+    host: "https://api.orcarouter.ai/v1",
+    curlBaseURL: "https://api.orcarouter.ai/v1",
+    keyManagementURL: "https://www.orcarouter.ai",
+    testModel: ChatModels.ORCAROUTER_AUTO,
+  },
   [EmbeddingModelProviders.COPILOT_PLUS]: {
     label: "Copilot",
     host: BREVILABS_MODELS_BASE_URL,
@@ -789,6 +826,7 @@ export const ProviderSettingsKeyMap: Record<SettingKeyProviders, keyof CopilotSe
   mistralai: "mistralApiKey",
   deepseek: "deepseekApiKey",
   siliconflow: "siliconflowApiKey",
+  orcarouter: "orcarouterApiKey",
 };
 
 export enum VAULT_VECTOR_STORE_STRATEGY {
@@ -963,6 +1001,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   mistralApiKey: "",
   deepseekApiKey: "",
   siliconflowApiKey: "",
+  orcarouterApiKey: "",
   defaultChainType: ChainType.LLM_CHAIN,
   defaultModelKey: ChatModels.OPENROUTER_GEMINI_2_5_FLASH + "|" + ChatModelProviders.OPENROUTERAI,
   embeddingModelKey:

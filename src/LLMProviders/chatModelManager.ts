@@ -75,6 +75,7 @@ const CHAT_PROVIDER_CONSTRUCTORS = {
   [ChatModelProviders.COPILOT_PLUS]: ChatOpenRouter,
   [ChatModelProviders.MISTRAL]: ChatOpenAI,
   [ChatModelProviders.DEEPSEEK]: ChatDeepSeek,
+  [ChatModelProviders.ORCAROUTER]: ChatOpenAI,
 } as const;
 
 type ChatProviderConstructMap = typeof CHAT_PROVIDER_CONSTRUCTORS;
@@ -140,6 +141,7 @@ export default class ChatModelManager {
     [ChatModelProviders.MISTRAL]: () => getSettings().mistralApiKey,
     [ChatModelProviders.DEEPSEEK]: () => getSettings().deepseekApiKey,
     [ChatModelProviders.SILICONFLOW]: () => getSettings().siliconflowApiKey,
+    [ChatModelProviders.ORCAROUTER]: () => getSettings().orcarouterApiKey,
   } as const;
 
   private constructor() {
@@ -480,6 +482,19 @@ export default class ChatModelManager {
           fetch: customModel.enableCors ? safeFetch : undefined,
         },
       },
+      [ChatModelProviders.ORCAROUTER]: {
+        modelName: modelName,
+        apiKey: await this.resolveApiKey(
+          customModel.apiKey,
+          settings.orcarouterApiKey,
+          allowLegacyCredentialFallback
+        ),
+        configuration: {
+          baseURL: customModel.baseUrl || ProviderInfo[ChatModelProviders.ORCAROUTER].host,
+          fetch: customModel.enableCors ? safeFetch : undefined,
+        },
+        ...this.getOpenAISpecialConfig(modelName, maxTokens, customModel),
+      },
     };
 
     const selectedProviderConfig =
@@ -583,6 +598,7 @@ export default class ChatModelManager {
           ChatModelProviders.MISTRAL,
           ChatModelProviders.DEEPSEEK,
           ChatModelProviders.SILICONFLOW,
+          ChatModelProviders.ORCAROUTER,
         ].includes(provider)
       ) {
         params.topP = customModel.topP;
@@ -603,6 +619,7 @@ export default class ChatModelManager {
           ChatModelProviders.MISTRAL,
           ChatModelProviders.DEEPSEEK,
           ChatModelProviders.SILICONFLOW,
+          ChatModelProviders.ORCAROUTER,
         ].includes(provider)
       ) {
         params.frequencyPenalty = customModel.frequencyPenalty;

@@ -43,6 +43,7 @@ const OPENAI_COMPATIBLE_PROVIDERS = new Set<string>([
   EmbeddingModelProviders.LM_STUDIO,
   ChatModelProviders.MISTRAL,
   ChatModelProviders.DEEPSEEK,
+  ChatModelProviders.ORCAROUTER,
   // Note: Ollama uses native API (/api/chat), not OpenAI-compatible
 ]);
 
