@@ -68,6 +68,13 @@ export interface OpencodeModelDeps {
    * `external_directory` allow rule is simply not injected (feature dormant).
    */
   getCacheRoot?: () => string | undefined;
+  /**
+   * Resolves the thinking-effort levels the Copilot Plus service publishes for a bare
+   * Plus model id, or null when they cannot be read. Injected so the config builder
+   * never reaches for the catalog itself. When omitted, no model gets a declared level
+   * set and opencode falls back to inferring one, which is the behavior this replaces.
+   */
+  getReasoningEfforts?: (modelId: string) => Promise<readonly string[] | null>;
 }
 
 /**
@@ -132,7 +139,14 @@ export class OpencodeBackend implements AcpBackend {
     // whitespace-only resolver result is treated as "unavailable" explicitly
     // rather than leaning on downstream truthiness.
     const cacheRoot = normalizeCacheRoot(this.#deps.getCacheRoot?.());
-    const config = await buildOpencodeConfig(settings, this.#deps, cacheRoot);
+    const config = await buildOpencodeConfig(
+      settings,
+      {
+        ...this.#deps,
+        getReasoningEfforts: (modelId) => this.#copilotPlus.readReasoningEfforts(modelId),
+      },
+      cacheRoot
+    );
     const envOverrides = settings.agentMode?.backends?.opencode?.envOverrides ?? {};
     // Accepted degradation: a user `OPENCODE_CONFIG_CONTENT` override (spread
     // last below) replaces the whole generated config, dropping the allow rule.
@@ -176,6 +190,40 @@ export class OpencodeBackend implements AcpBackend {
 function normalizeCacheRoot(raw: string | undefined): string | undefined {
   const trimmed = raw?.trim();
   return trimmed ? trimmed : undefined;
+}
+
+/**
+ * Every effort level an agent might put in a menu for one of our models. Used only to
+ * name the ones the service did not publish, so each can be switched off explicitly.
+ *
+ * `none` is in the list precisely because the service never publishes it and rejects it
+ * outright: left in an inferred menu it would be a level the user is invited to pick
+ * that fails the whole turn. https://github.com/logancyang/obsidian-copilot/issues/2915
+ */
+const ALL_EFFORT_LEVELS = ["none", "minimal", "low", "medium", "high", "xhigh", "max"];
+
+/**
+ * opencode `variants` declaring exactly the effort levels a model really has.
+ *
+ * opencode builds an effort menu for any model it is told reasons, and with no catalog
+ * entry for Copilot Plus it infers the levels from the model id — a fixed low/medium/high
+ * plus whatever its per-model special cases add. The result is wrong in both directions:
+ * it offers levels that are synonyms of each other and misses levels the model has.
+ * Config variants merge over the inferred ones and any marked `disabled` are dropped, so
+ * publishing the real set plus a disable for every other level replaces the guess
+ * outright. https://github.com/logancyang/obsidian-copilot/issues/2917
+ *
+ * @param levels - The levels the service published for this model, ascending.
+ */
+export function effortVariantsFor(
+  levels: readonly string[]
+): Record<string, Record<string, unknown>> {
+  const variants: Record<string, Record<string, unknown>> = {};
+  for (const level of levels) variants[level] = { reasoningEffort: level };
+  for (const level of ALL_EFFORT_LEVELS) {
+    if (!variants[level]) variants[level] = { disabled: true };
+  }
+  return variants;
 }
 
 /** Mutable opencode provider config entry built into `OPENCODE_CONFIG_CONTENT`. */
@@ -295,7 +343,23 @@ export async function buildOpencodeConfig(
     // for the model. opencode has no catalog entry for Copilot Plus / self-hosted
     // OpenAI-compatible providers, so without this it defaults to non-reasoning and
     // the effort picker shows "na". Mirrors the modalities injection above.
-    if (info.reasoning) modelConfig.reasoning = true;
+    if (info.reasoning) {
+      // Copilot Plus publishes the levels each of its models really has; a BYOK model
+      // has no such list and keeps opencode's own inference. Null means the catalog
+      // could not be read, which must not be mistaken for "no levels" — dropping a
+      // working control over a transient outage is worse than an imperfect menu.
+      const published =
+        origin.kind === "copilot-plus"
+          ? ((await deps.getReasoningEfforts?.(info.id)) ?? null)
+          : null;
+      // A model that honors no level gets no control at all: opencode builds the menu
+      // only for models it is told reason, so leaving `reasoning` unset is how the
+      // menu disappears rather than showing entries that do nothing.
+      if (published === null || published.length > 0) {
+        modelConfig.reasoning = true;
+        if (published) modelConfig.variants = effortVariantsFor(published);
+      }
+    }
     providerConfig.models[info.id] = modelConfig;
     injected.push(`${mapping.id}/${info.id}`);
   }

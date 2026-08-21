@@ -170,6 +170,12 @@ export interface BrevilabsModelEntry {
   label?: string;
   /** Input context window as a display string: `1M`, `256K`. */
   context_length?: string;
+  /**
+   * Thinking-effort levels this model distinguishes, ascending. Empty means the model
+   * honors none of them. Absent from services older than the field, which is why the
+   * caller must tell absent apart from empty.
+   */
+  reasoning_efforts?: string[];
 }
 
 export interface BrevilabsModelsResponse {
