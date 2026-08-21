@@ -19,8 +19,12 @@ import { agentOriginEnabledModelEntries } from "@/agentMode/backends/shared/agen
 import { ClaudeSdkBackendProcess } from "@/agentMode/sdk/ClaudeSdkBackendProcess";
 import { getCachedSdkCatalog, synthesizeEffortConfigOption } from "@/agentMode/sdk/effortOption";
 import { buildAgentSystemPrompt } from "@/agentMode/backends/shared/agentSystemPrompt";
-import { buildBuiltinSkillEnv } from "@/agentMode/backends/shared/builtinSkillEnv";
+import {
+  buildBuiltinSkillEnv,
+  sanitizeBuiltinSkillEnvOverrides,
+} from "@/agentMode/backends/shared/builtinSkillEnv";
 import { getVaultBase } from "@/utils/vaultPath";
+import { getMiyoFolderName } from "@/miyo/miyoUtils";
 import type {
   BackendAuth,
   BackendConfigOption,
@@ -330,10 +334,16 @@ export const ClaudeBackendDescriptor: ClaudeDescriptor = {
       clientVersion: args.clientVersion,
       descriptor: args.descriptor,
       getEnableThinking: () => Boolean(getSettings().agentMode?.backends?.claude?.enableThinking),
-      getEnvOverrides: () => getSettings().agentMode?.backends?.claude?.envOverrides,
+      getEnvOverrides: () =>
+        sanitizeBuiltinSkillEnvOverrides(getSettings().agentMode?.backends?.claude?.envOverrides),
       // Plugin-managed runtime paths and credentials for builtin skills.
       // Passed as a callback so `sdk/` need not import `backends/` (lint boundary).
-      getManagedEnv: () => buildBuiltinSkillEnv(args.clientVersion, getVaultBase(args.app) ?? ""),
+      getManagedEnv: () =>
+        buildBuiltinSkillEnv(
+          args.clientVersion,
+          getVaultBase(args.app) ?? "",
+          getMiyoFolderName(args.app)
+        ),
       checkAuth: async () =>
         (await getClaudeAuthStatus(claudePath, claudeChildEnv(getSettings()))).loggedIn,
       checkCompatibility: () =>

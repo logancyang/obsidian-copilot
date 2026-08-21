@@ -7,6 +7,7 @@ import { subscribeToSystemPromptChange } from "@/system-prompts/state";
 import { copilotAppDataDir, getVaultId } from "@/utils/appPaths";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 import { buildAgentSystemPrompt } from "./backends/shared/agentSystemPrompt";
+import { getBuiltinSkillEnvRestartPolicy } from "./backends/shared/builtinSkillEnv";
 import { backendRegistry, listBackendDescriptors } from "./backends/registry";
 import type { BackendId } from "./session/types";
 import { AgentChatPersistenceManager } from "./session/AgentChatPersistenceManager";
@@ -343,19 +344,21 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
   subscribeToSettingsChange((prev, next) => {
     // The managed env injected at spawn (see `buildBuiltinSkillEnv`) changes with
     // Copilot Plus sign-in/out or license rotation (the decrypted license the
-    // builtin Plus skill scripts read) and with the Miyo server URL (the
-    // `MIYO_URL` the bundled miyo CLI reads). Either is only read on a fresh
-    // spawn, so restart every backend — otherwise a running subprocess keeps the
-    // stale license/URL until a reload. (Restarts coalesce, so this folds with
-    // any Miyo-availability re-seed restart below.)
-    if (
-      prev.isPaidUser !== next.isPaidUser ||
-      prev.plusLicenseKey !== next.plusLicenseKey ||
-      prev.miyoServerUrl !== next.miyoServerUrl
-    ) {
+    // builtin Plus skill scripts read), with the Miyo server URL (the `MIYO_URL`
+    // the bundled miyo CLI reads), or with the Miyo Search scope. These values
+    // are only read on a fresh spawn, so restart every backend — otherwise a
+    // running subprocess keeps stale policy until a reload. (Restarts coalesce,
+    // so this folds with any Miyo-availability re-seed restart below.)
+    const managedEnvRestartPolicy = getBuiltinSkillEnvRestartPolicy(prev, next);
+    if (managedEnvRestartPolicy !== "none") {
+      // Applying a new search boundary cannot wait for a running turn to finish:
+      // cancel it before it can start another search with the prior scope.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/121
       for (const descriptor of listBackendDescriptors()) {
         void manager
-          .restartBackend(descriptor.id, "managed agent env changed")
+          .restartBackend(descriptor.id, "managed agent env changed", {
+            deferWhileBusy: managedEnvRestartPolicy !== "immediate",
+          })
           .catch((e) =>
             logError(`[AgentMode] restart after managed env change failed: ${descriptor.id}`, e)
           );

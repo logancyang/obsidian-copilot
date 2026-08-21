@@ -978,9 +978,10 @@ export const MiyoSettings: React.FC = () => {
               )}
               aria-disabled={!capabilitiesEnabled}
             >
-              {/* Search scope — bound to `miyoSearchAll` (true omits folder_name so
-                  Miyo searches everything it has indexed). Gated on the connection so
-                  the control stays keyboard-inert while dimmed. */}
+              {/* Search scope — only `true` may omit Miyo's exact folder-name
+                  boundary, including for Agent Chat. Gated on the connection so the
+                  control stays keyboard-inert while dimmed.
+                  https://github.com/Brevilabs/obsidian-copilot-private/issues/121 */}
               <CapabilityRow
                 indented
                 title={

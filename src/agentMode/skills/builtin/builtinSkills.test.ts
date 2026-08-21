@@ -321,6 +321,35 @@ describe("builtinSkills", () => {
       expect(miyoScript(".cmd")).toContain("search %* -n 10 --json");
     });
 
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/121 passes the exact active-vault identity in Current vault mode on POSIX and Windows", () => {
+      const sh = miyoScript(".sh");
+      const cmd = miyoScript(".cmd");
+
+      expect(sh).toContain('case "${COPILOT_MIYO_SEARCH_SCOPE:-current}"');
+      expect(sh).toContain('--folder "$COPILOT_MIYO_SEARCH_FOLDER"');
+      expect(cmd).toContain('if /I "%COPILOT_MIYO_SEARCH_SCOPE%"=="unrestricted"');
+      expect(cmd).toContain('--folder "%COPILOT_MIYO_SEARCH_FOLDER%"');
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/121 omits the folder boundary only for explicit Unrestricted mode on POSIX and Windows", () => {
+      const sh = miyoScript(".sh");
+      const cmd = miyoScript(".cmd");
+
+      expect(sh).toContain('unrestricted)\n    OUT=$("$MIYO" search "$QUERY" -n 10 --json');
+      expect(cmd).toContain(
+        'if /I "%COPILOT_MIYO_SEARCH_SCOPE%"=="unrestricted" (\n  "%MIYO%" search %* -n 10 --json'
+      );
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/121 fails closed when Current vault scope is missing, invalid, or unsupported", () => {
+      for (const script of [miyoScript(".sh"), miyoScript(".cmd")]) {
+        expect(script).toMatch(/active vault identity is missing/i);
+        expect(script).toMatch(/invalid Search scope/i);
+        expect(script).toMatch(/Do not (retry or )?run an unrestricted search/i);
+        expect(script).toMatch(/Update Miyo/i);
+      }
+    });
+
     it("resolves the binary absolute-path-first with a PATH fallback, per OS", () => {
       // POSIX (.sh): absolute install path tried before falling back to PATH.
       expect(miyoScript(".sh")).toContain("$HOME/.miyo/bin/miyo");

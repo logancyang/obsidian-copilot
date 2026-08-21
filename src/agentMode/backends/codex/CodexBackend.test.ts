@@ -8,6 +8,10 @@ import {
 import type { UserSystemPrompt } from "@/system-prompts/type";
 import { SYMPOSIUM_WORKSPACE_ROOT_ENV } from "@/symposium/constants";
 import { buildAgentSystemPrompt } from "@/agentMode/backends/shared/agentSystemPrompt";
+import {
+  MIYO_SEARCH_FOLDER_ENV,
+  MIYO_SEARCH_SCOPE_ENV,
+} from "@/agentMode/skills/builtin/builtinSkills";
 import { CodexBackend, toTomlBasicString } from "./CodexBackend";
 
 jest.mock("@/logger", () => ({
@@ -103,6 +107,36 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
     });
 
     expect(desc.env.COPILOT_CLIENT_VERSION).toBe("4.0.0-preview-260802");
+  });
+
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/121 gives global and Project sessions the same protected active-vault Miyo identity", async () => {
+    setSettings({
+      miyoSearchAll: false,
+      agentMode: {
+        byok: {},
+        activeBackend: "codex",
+        debugFullFrames: false,
+        welcomeDismissed: false,
+        skills: { folder: "copilot/skills" },
+        backends: {
+          codex: {
+            binaryPath: "/usr/local/bin/codex-acp",
+            envOverrides: {
+              [MIYO_SEARCH_SCOPE_ENV]: "unrestricted",
+              [MIYO_SEARCH_FOLDER_ENV]: "other-vault",
+            },
+          },
+        },
+      },
+    });
+
+    const desc = await new CodexBackend().buildSpawnDescriptor({
+      vaultBasePath: "/active-vault",
+      vaultName: "active-vault",
+    });
+
+    expect(desc.env[MIYO_SEARCH_SCOPE_ENV]).toBe("current");
+    expect(desc.env[MIYO_SEARCH_FOLDER_ENV]).toBe("active-vault");
   });
 
   it("encodes the shared product prompt into both paths, byte for byte", async () => {

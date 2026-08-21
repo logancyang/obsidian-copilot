@@ -9,7 +9,10 @@ import { AcpBackend, AcpSpawnDescriptor } from "@/agentMode/acp/types";
 import type { CopilotMode } from "@/agentMode/session/types";
 import { composeDenyList, getManagedSkills, SkillManager } from "@/agentMode/skills";
 import { buildAgentSystemPrompt } from "@/agentMode/backends/shared/agentSystemPrompt";
-import { buildBuiltinSkillEnv } from "@/agentMode/backends/shared/builtinSkillEnv";
+import {
+  buildBuiltinSkillEnv,
+  sanitizeBuiltinSkillEnvOverrides,
+} from "@/agentMode/backends/shared/builtinSkillEnv";
 import { OpencodeBackendDescriptor } from "./descriptor";
 import { copilotPlusModelId, mapProviderToOpencodeId } from "./opencodeModelResolve";
 import type { PlanUsageReading } from "@/agentMode/session/planUsage";
@@ -111,7 +114,10 @@ export class OpencodeBackend implements AcpBackend {
     return this.#copilotPlus.readContextWindow(copilotPlusModelId(wireModelId));
   }
 
-  async buildSpawnDescriptor(ctx: { vaultBasePath: string }): Promise<AcpSpawnDescriptor> {
+  async buildSpawnDescriptor(ctx: {
+    vaultBasePath: string;
+    vaultName?: string;
+  }): Promise<AcpSpawnDescriptor> {
     const settings = getSettings();
     const binaryPath = settings.agentMode?.backends?.opencode?.binaryPath;
     if (!binaryPath) {
@@ -133,7 +139,9 @@ export class OpencodeBackend implements AcpBackend {
     // rather than leaning on downstream truthiness.
     const cacheRoot = normalizeCacheRoot(this.#deps.getCacheRoot?.());
     const config = await buildOpencodeConfig(settings, this.#deps, cacheRoot);
-    const envOverrides = settings.agentMode?.backends?.opencode?.envOverrides ?? {};
+    const envOverrides = sanitizeBuiltinSkillEnvOverrides(
+      settings.agentMode?.backends?.opencode?.envOverrides
+    );
     // Accepted degradation: a user `OPENCODE_CONFIG_CONTENT` override (spread
     // last below) replaces the whole generated config, dropping the allow rule.
     // opencode then prompts on every snapshot read; the sources still appear in
@@ -149,7 +157,11 @@ export class OpencodeBackend implements AcpBackend {
       );
     }
     // Builtin skills consume plugin-managed runtime paths and credentials.
-    const builtinSkillEnv = await buildBuiltinSkillEnv(this.#deps.clientVersion, ctx.vaultBasePath);
+    const builtinSkillEnv = await buildBuiltinSkillEnv(
+      this.#deps.clientVersion,
+      ctx.vaultBasePath,
+      ctx.vaultName
+    );
 
     return {
       command: binaryPath,
@@ -158,8 +170,8 @@ export class OpencodeBackend implements AcpBackend {
         ...process.env,
         OPENCODE_CONFIG_CONTENT: JSON.stringify(config),
         ...builtinSkillEnv,
-        // User overrides last — they can replace OPENCODE_CONFIG_CONTENT
-        // intentionally if they need to point opencode at a different config.
+        // User overrides stay last for ordinary values. Copilot-owned Miyo
+        // scope keys were removed above so they cannot widen Current vault.
         ...envOverrides,
       },
     };

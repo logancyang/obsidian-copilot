@@ -944,6 +944,20 @@ describe("AgentSessionManager.restartBackend", () => {
     expect(mgr.getActiveSession()?.backendId).toBe("opencode");
   });
 
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/121 interrupts a busy turn when a privacy-boundary restart cannot be deferred", async () => {
+    const mgr = buildManager();
+    const first = await mgr.createSession();
+    getSessionTestHandle(first).setStatus("running");
+
+    await expect(
+      mgr.restartBackend("opencode", "Miyo Search scope changed", { deferWhileBusy: false })
+    ).resolves.toBe(true);
+
+    expect(mockSessionCancel).toHaveBeenCalledWith();
+    expect(mockBackendShutdown).toHaveBeenCalledTimes(1);
+    expect(mgr.getActiveSession()).not.toBe(first);
+  });
+
   it("queues a second concurrent restart so the latest settings are not lost", async () => {
     // Repro: a single BYOK save fires many provider/model events that each
     // call restartBackend. Without queueing, only the first restart's
@@ -977,6 +991,45 @@ describe("AgentSessionManager.restartBackend", () => {
     await new Promise((resolve) => window.setTimeout(resolve, 0));
 
     // First call's shutdown + the queued re-run's shutdown = 2.
+    expect(mockBackendShutdown).toHaveBeenCalledTimes(2);
+  });
+
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/121 keeps a queued privacy-boundary restart non-deferrable", async () => {
+    const mgr = buildManager();
+    await mgr.createSession();
+
+    // The first refresh's replacement becomes busy before the queued scope
+    // refresh runs. The privacy refresh must still cancel it immediately.
+    sessionCreateSpy.mockImplementationOnce((opts) => {
+      const replacement = makeMockSession({
+        internalId: opts.internalId,
+        chatInputId: opts.chatInputId,
+        backendId: opts.backendId,
+        projectId: opts.projectId,
+      });
+      getSessionTestHandle(replacement).setStatus("running");
+      return replacement;
+    });
+    let releaseShutdown!: () => void;
+    const shutdownStarted = new Promise<void>((resolveStarted) => {
+      mockBackendShutdown.mockImplementationOnce(
+        () =>
+          new Promise<undefined>((resolve) => {
+            resolveStarted();
+            releaseShutdown = () => resolve(undefined);
+          })
+      );
+    });
+
+    const ordinaryRestart = mgr.restartBackend("opencode", "managed env changed");
+    await shutdownStarted;
+    const privacyRestart = mgr.restartBackend("opencode", "Miyo Search scope changed", {
+      deferWhileBusy: false,
+    });
+    releaseShutdown();
+    await Promise.all([ordinaryRestart, privacyRestart]);
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+
     expect(mockBackendShutdown).toHaveBeenCalledTimes(2);
   });
 });

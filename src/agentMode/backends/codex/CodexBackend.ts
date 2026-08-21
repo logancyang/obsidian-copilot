@@ -2,7 +2,10 @@ import { getSettings } from "@/settings/model";
 import { AcpBackend, AcpSpawnDescriptor } from "@/agentMode/acp/types";
 import { buildSimpleSpawnDescriptor } from "@/agentMode/backends/shared/simpleBinaryBackend";
 import { buildAgentSystemPrompt } from "@/agentMode/backends/shared/agentSystemPrompt";
-import { buildBuiltinSkillEnv } from "@/agentMode/backends/shared/builtinSkillEnv";
+import {
+  buildBuiltinSkillEnv,
+  sanitizeBuiltinSkillEnvOverrides,
+} from "@/agentMode/backends/shared/builtinSkillEnv";
 import type { PlanUsageReading } from "@/agentMode/session/planUsage";
 import { defaultCodexHome, readCodexPlanUsage } from "./codexPlanUsage";
 import { mergeCodexConfigEnv } from "./codexConfigEnv";
@@ -30,14 +33,18 @@ export class CodexBackend implements AcpBackend {
 
   constructor(private readonly clientVersion = "") {}
 
-  async buildSpawnDescriptor(ctx: { vaultBasePath: string }): Promise<AcpSpawnDescriptor> {
+  async buildSpawnDescriptor(ctx: {
+    vaultBasePath: string;
+    vaultName?: string;
+  }): Promise<AcpSpawnDescriptor> {
+    const settings = getSettings();
     const descriptor = buildSimpleSpawnDescriptor(
-      getSettings().agentMode?.backends?.codex?.binaryPath,
+      settings.agentMode?.backends?.codex?.binaryPath,
       "Codex binary path not configured. Open Agent Mode settings and set the path to codex-acp.",
-      getSettings().agentMode?.backends?.codex?.envOverrides,
+      sanitizeBuiltinSkillEnvOverrides(settings.agentMode?.backends?.codex?.envOverrides),
       {
         // Builtin skills consume plugin-managed runtime paths and credentials.
-        ...(await buildBuiltinSkillEnv(this.clientVersion, ctx.vaultBasePath)),
+        ...(await buildBuiltinSkillEnv(this.clientVersion, ctx.vaultBasePath, ctx.vaultName)),
         // Newer adapters derive the initial ACP mode from this variable rather
         // than Codex's approval/sandbox config. User env overrides still win.
         INITIAL_AGENT_MODE: "agent",
