@@ -873,7 +873,7 @@ describe("issueReport", () => {
       // The title is cut from the same text the body is. Carrying the old one
       // over would publish, as the issue's title, the line the user just
       // deleted from the note.
-      expect(packed.issueDraft.title).toBe("[Agent Mode] Something broke.");
+      expect(packed.issueDraft.title).toBe("Something broke.");
       expect(packed.manualIssueUrl).not.toContain("Agent+crashed");
       // Headings are skipped: the title has to carry the description, not the
       // template's own "## What went wrong".
@@ -887,7 +887,7 @@ describe("issueReport", () => {
 
       const packed = await zipReportBundle(report, runtime);
 
-      expect(packed.issueDraft.title).toBe("[Agent Mode] Issue report");
+      expect(packed.issueDraft.title).toBe("Copilot issue report");
     });
 
     it("redacts a hand-edited report.md again before it can reach the issue body", async () => {
@@ -949,7 +949,7 @@ describe("issueReport", () => {
       );
       expect(url.includes("obsidian-copilot-preview")).toBe(false);
       const params = new URLSearchParams(url.split("?")[1]);
-      expect(params.get("title")).toBe("[Agent Mode] Agent crashed when I clicked run");
+      expect(params.get("title")).toBe("Agent crashed when I clicked run");
       expect(params.get("labels")).toBe("bug");
       expect(params.get("body")).toContain("Agent crashed when I clicked run");
     });
@@ -957,7 +957,7 @@ describe("issueReport", () => {
     it("titles the manual URL generically when the note is blank", async () => {
       const url = await manualUrlFor({ ...baseInput, note: "" });
       const params = new URLSearchParams(url.split("?")[1]);
-      expect(params.get("title")).toBe("[Agent Mode] Issue report");
+      expect(params.get("title")).toBe("Copilot issue report");
     });
 
     it("truncates the manual URL's body to stay under the Windows openExternal limit", async () => {
@@ -986,7 +986,7 @@ describe("issueReport", () => {
       const report = await assembleReportBundle(baseInput, runtime);
       // An edit that removed the heading leaves no section to read, and the
       // lines that remain belong to the environment block — a title cut from
-      // those would read "[Agent Mode] - Plugin version: 1.2.3".
+      // those would read "- Plugin version: 1.2.3".
       files.set(
         `${BUNDLE_DIR}/report.md`,
         "Stray intro\n\n## Environment\n\n- Plugin version: 1.2.3\n"
@@ -994,7 +994,7 @@ describe("issueReport", () => {
 
       const packed = await zipReportBundle(report, runtime);
 
-      expect(packed.issueDraft.title).toBe("[Agent Mode] Issue report");
+      expect(packed.issueDraft.title).toBe("Copilot issue report");
     });
 
     it("leaves no half-written zip behind when the write fails", async () => {
@@ -1173,7 +1173,7 @@ describe("issueReport", () => {
 
   describe("buildLinkedReportIssueUrl()", () => {
     const draft: ReportIssueDraft = {
-      title: "[Agent Mode] Agent crashed when I clicked run",
+      title: "Agent crashed when I clicked run",
       body: buildReportMarkdown(baseInput, []),
     };
     const reportId = "9f3c1a7b2e4d5f60819a2b3c4d5e6f70";

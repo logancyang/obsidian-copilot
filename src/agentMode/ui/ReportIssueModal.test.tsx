@@ -412,7 +412,7 @@ describe("ReportIssueModal", () => {
         body: new ArrayBuffer(4096),
         idempotencyKey: "5d41c9b2-7e3a-4f8b-9c1d-2a6e8f4b0d37",
       },
-      issueDraft: { title: "[Agent Mode] it exploded", body: "## What went wrong" },
+      issueDraft: { title: "it exploded", body: "## What went wrong" },
       manualIssueUrl: "https://github.com/logancyang/obsidian-copilot/issues/new?title=manual",
       attachments: [],
     };
@@ -472,7 +472,7 @@ describe("ReportIssueModal", () => {
     it("opens the page and says nothing when the browser takes it", async () => {
       const openExternal = jest.fn().mockResolvedValue(undefined);
 
-      openIssuePageWith(openExternal, url);
+      openIssuePageWith({ openExternal }, url);
       await Promise.resolve();
 
       expect(openExternal).toHaveBeenCalledWith(url);
@@ -480,7 +480,7 @@ describe("ReportIssueModal", () => {
     });
 
     it("tells the user to open the page themselves when there is no browser bridge", () => {
-      openIssuePageWith(undefined, url);
+      openIssuePageWith(null, url);
 
       expect(Notice).toHaveBeenCalledTimes(1);
     });
@@ -491,7 +491,7 @@ describe("ReportIssueModal", () => {
       // an uploaded report nobody can name.
       const openExternal = jest.fn().mockRejectedValue(new Error("no handler"));
 
-      openIssuePageWith(openExternal, url, "9f3c1a7b2e4d5f60819a2b3c4d5e6f70");
+      openIssuePageWith({ openExternal }, url, "9f3c1a7b2e4d5f60819a2b3c4d5e6f70");
       await Promise.resolve();
       await Promise.resolve();
 
@@ -503,7 +503,7 @@ describe("ReportIssueModal", () => {
     it("reports a bridge that rejects its promise", async () => {
       const openExternal = jest.fn().mockRejectedValue(new Error("no handler"));
 
-      openIssuePageWith(openExternal, url);
+      openIssuePageWith({ openExternal }, url);
       await Promise.resolve();
       await Promise.resolve();
 
@@ -518,7 +518,7 @@ describe("ReportIssueModal", () => {
         throw new Error("bridge disposed");
       });
 
-      expect(() => openIssuePageWith(openExternal, url)).not.toThrow();
+      expect(() => openIssuePageWith({ openExternal }, url)).not.toThrow();
       expect(Notice).toHaveBeenCalledTimes(1);
     });
   });

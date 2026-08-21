@@ -28,7 +28,7 @@ const prepared: PreparedReport = {
     body: new ArrayBuffer(4096),
     idempotencyKey: "5d41c9b2-7e3a-4f8b-9c1d-2a6e8f4b0d37",
   },
-  issueDraft: { title: "[Agent Mode] it exploded", body: "## What went wrong" },
+  issueDraft: { title: "it exploded", body: "## What went wrong" },
   manualIssueUrl: "https://github.com/logancyang/obsidian-copilot/issues/new?title=manual",
   attachments: [included("report", "report.md"), included("screenshot", "screenshot.png")],
 };

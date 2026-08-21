@@ -284,7 +284,15 @@ export const AdvancedSettings: React.FC = () => {
         />
       </SettingSection>
 
-      {/* Debugging & support Section */}
+      {/* Debugging & support Section.
+          DESIGN NOTE: the former "Create Log File" row is gone on purpose, not
+          by omission. "Report an issue" collects the same chat log as one of
+          its attachments (pre-selected when Debug Mode is on), and the
+          command-palette "Copilot: Create log file" remains for anyone who
+          wants the note in their vault by hand — README, the FAQ and the
+          issue template all point there. A second settings entry for the same
+          log would be one more path to keep consistent for no new capability.
+          If a future review flags the removal, point them at this note. */}
       <SettingSection label="Debugging & support">
         <SettingItem
           type="custom"
