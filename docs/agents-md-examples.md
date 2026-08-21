@@ -1,6 +1,6 @@
-# `AGENTS.md` Examples for Copilot V4
+# `AGENTS.md` Examples for Agent Chat
 
-`AGENTS.md` holds instructions that Agent should keep following. Write shared vault rules once at the vault root; Copilot makes them available to **opencode**, **Claude**, and **Codex**. An Agent project can add a second `AGENTS.md` in its project folder, and those more specific rules win when the two files conflict.
+`AGENTS.md` holds instructions that Agent Chat should keep following. Write shared vault rules once at the vault root. Copilot makes them available to **opencode**, **Claude**, and **Codex**. A Project can add a second `AGENTS.md` in its folder, and those more specific rules take precedence when the two files conflict.
 
 Start small. A useful file describes how _your_ vault works, not everything an AI might ever need to know.
 
@@ -32,7 +32,7 @@ Copy this to the root of your vault, then change it to match your habits:
 - When finished, name the notes you changed and mention anything you could not verify.
 ```
 
-Start a new Agent chat after editing `AGENTS.md` so every backend reads the latest version.
+Start a new Agent Chat after editing `AGENTS.md` so every backend reads the latest version. Quick Chat has its own [system prompts](system-prompts.md#system-prompts-for-quick-chat) and does not use this file.
 
 ## Patterns worth adding
 
@@ -43,7 +43,7 @@ Add only patterns that describe real, recurring preferences:
 - **Evidence:** when the agent must read source notes, search the vault, or verify current facts.
 - **Boundaries:** which edits are routine and which actions require confirmation.
 - **Definition of done:** checks to run and what the final handoff should report.
-- **Routing:** which repeatable jobs belong to a [Skill](agent-mode-and-tools.md#skills-shared-across-agents).
+- **Routing:** which repeatable jobs belong to a [Skill](agent-mode-and-tools.md#skills-across-agents).
 
 For a project, keep the override short. For example:
 
@@ -58,11 +58,11 @@ For a project, keep the override short. For example:
 
 ## External examples worth studying
 
-- [Andrej Karpathy's LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) — borrow its separation of raw sources, maintained knowledge, and update rules.
-- [GBrain `AGENTS.md`](https://raw.githubusercontent.com/garrytan/gbrain/master/AGENTS.md) — study its read order, privacy boundary, and explicit user decisions.
-- [gstack `AGENTS.md`](https://raw.githubusercontent.com/garrytan/gstack/main/AGENTS.md) — notice how the file routes substantial workflows into skills instead of containing every procedure.
-- [`claude-obsidian` `AGENTS.md`](https://github.com/AgriciDaniel/claude-obsidian/blob/main/AGENTS.md) — a concrete example of conventions for an AI-maintained Obsidian knowledge base.
-- [Daniel Mulroy's Pi workspace](https://raw.githubusercontent.com/dmmulroy/.dotfiles/main/home/.pi/AGENTS.md) — borrow its compact map of where to look, what to avoid, and how to handle sensitive information.
+- [Andrej Karpathy's LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f): borrow its separation of raw sources, maintained knowledge, and update rules.
+- [GBrain `AGENTS.md`](https://raw.githubusercontent.com/garrytan/gbrain/master/AGENTS.md): study its read order, privacy boundary, and explicit user decisions.
+- [gstack `AGENTS.md`](https://raw.githubusercontent.com/garrytan/gstack/main/AGENTS.md): notice how the file routes substantial workflows into Skills instead of containing every procedure.
+- [`claude-obsidian` `AGENTS.md`](https://github.com/AgriciDaniel/claude-obsidian/blob/main/AGENTS.md): a concrete example of conventions for an AI-maintained Obsidian knowledge base.
+- [Daniel Mulroy's Pi workspace](https://raw.githubusercontent.com/dmmulroy/.dotfiles/main/home/.pi/AGENTS.md): borrow its compact map of where to look, what to avoid, and how to handle sensitive information.
 
 ## What not to copy blindly
 
@@ -76,6 +76,6 @@ Review the file occasionally. Keep rules that prevent a recurring mistake or exp
 
 ## Related
 
-- [Instructions in Copilot V4](system-prompts.md)
-- [Agents in Copilot V4](agent-mode-and-tools.md)
+- [Instructions for Agent Chat and Quick Chat](system-prompts.md)
+- [Agent Chat](agent-mode-and-tools.md)
 - [Projects](projects.md)

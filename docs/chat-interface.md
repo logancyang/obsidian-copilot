@@ -1,22 +1,18 @@
 # Quick Chat
 
-Quick Chat is Copilot V4's lightweight conversation view. Use it for a short question, rewrite, or discussion with note context.
+Quick Chat is Copilot V4's lightweight conversation view. Use it for a short question, rewrite, or discussion that does not need agent tools or a project workspace.
 
-For multi-step work, native agent tools, reusable skills, permissioned file changes, or Agent project context, use **Agent** instead. On desktop, click **Open Copilot Agent Chat** in the ribbon or run **Open Copilot Agent Chat Window** from the command palette. See [Agents in Copilot V4](agent-mode-and-tools.md).
-
-Quick Chat's V3 chat window will be deprecated soon. On desktop, use **Agent with opencode** for bring-your-own-key and Copilot-hosted models. The small, always-visible link inside the message box, directly above its controls, opens Agent for you.
+On desktop, start with **Agent Chat** for multi-step work, reusable Skills, permissioned file changes, or project context. Click **Open Copilot Agent Chat** in the ribbon or run **Open Copilot Agent Chat Window** from the command palette. On mobile, where Agent Chat is unavailable, Quick Chat is the main conversation view. See [Agent Chat](agent-mode-and-tools.md).
 
 ## Open Quick Chat
 
-Run **Open Copilot Chat Window** from the command palette. On mobile, the Copilot ribbon button opens Quick Chat because Agent requires desktop Obsidian.
-
-At the top of Quick Chat, choose **chat (free)** for a standard conversation. The selector also shows **copilot plus**, which requires a paid license. It is a paid Quick Chat workflow, not Agent. Agent is a separate view and does not appear in this selector.
+Run **Open Copilot Chat Window** from the command palette. On mobile, the Copilot ribbon button opens Quick Chat because Agent Chat requires desktop Obsidian.
 
 ## Choose a model
 
-Use the model picker below the message box. It shows only models enabled under **Settings → Copilot → Basic → Agents → Quick Chat**, including Copilot Plus and bring-your-own-key models.
+Use the model picker below the message box. It shows only models enabled under **Settings → Copilot → Basic → Agents → Quick Chat**, including Copilot-hosted and bring-your-own-key models.
 
-The **Default model** in that settings panel controls which model a new Quick Chat starts with. See [Models and Parameters](models-and-parameters.md) to manage the list.
+The **Default model** in that settings panel controls which model a new Quick Chat starts with. See [Models, Effort, and Permissions](models-and-parameters.md) to manage the list.
 
 ## Ask with context
 
@@ -34,7 +30,7 @@ Press **Enter** to send by default. You can switch this to **Shift + Enter** und
 Hover over a message to use its actions:
 
 - Your messages: **Copy**, **Edit**, and **Delete**.
-- Copilot responses: **Show Sources** when available, **Insert / Replace at cursor**, **Copy**, **Regenerate**, and **Delete**.
+- Copilot responses: **Insert / Replace at cursor**, **Copy**, **Regenerate**, and **Delete**.
 
 After a response, the token counter in the top bar shows the context used for the latest response when the provider reports token usage.
 
@@ -48,17 +44,15 @@ Use **Chat History** to search saved conversations, reopen one, rename it, open 
 
 ## Chat settings
 
-Use **Chat Settings** (gear) to choose a **System Prompt** for the current chat or reset the session choice. These settings do not configure Agent, which reads `AGENTS.md` instead. See [System Prompts](system-prompts.md).
-
-Use **Advanced Settings** (`…`) to toggle **Suggested Prompt** and **Auto-accept Edits**.
+Use **Chat Settings** (gear) to choose a **System Prompt** for the current chat or reset the session choice. These settings do not configure Agent Chat, which reads `AGENTS.md` instead. See [Instructions for Agent Chat and Quick Chat](system-prompts.md).
 
 ## Quick Ask
 
-For one question or rewrite without opening a chat pane, run **Quick Ask** from the command palette or the editor's **Copilot** menu. Quick Ask uses a Quick Chat model, not the model in your Agent session. See [Copilot Commands and Quick Ask](custom-commands.md#quick-ask).
+For one question or rewrite without opening a chat pane, run **Quick Ask** from the command palette or the editor's **Copilot** menu. Quick Ask uses a Quick Chat model, not the model in your Agent Chat session. See [Copilot Commands and Quick Ask](custom-commands.md#quick-ask).
 
 ## Related
 
 - [Getting Started](getting-started.md)
-- [Agents in Copilot V4](agent-mode-and-tools.md)
-- [Projects](projects.md)
+- [Agent Chat](agent-mode-and-tools.md)
+- [Copilot Commands and Quick Ask](custom-commands.md)
 - [Context and Mentions](context-and-mentions.md)
