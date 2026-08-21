@@ -18,6 +18,7 @@ import {
   type ReportUploadResult,
 } from "@/utils/reportUpload";
 import { findLatestOpencodeLog } from "@/utils/opencodeLog";
+import { basename } from "@/utils/pathUtils";
 import { createPluginRoot } from "@/utils/react/createPluginRoot";
 import { getSettings } from "@/settings/model";
 import { App, Modal, Notice, apiVersion } from "obsidian";
@@ -107,15 +108,6 @@ export async function createReportsRootDir(): Promise<string | null> {
     return await fs.mkdtemp(path.join(os.tmpdir(), "obsidian-copilot-report-"));
   } catch {
     return null;
-  }
-}
-
-function basename(filePath: string): string {
-  try {
-    const path = requireNodeModule<typeof import("node:path")>("path");
-    return path.basename(filePath);
-  } catch {
-    return filePath;
   }
 }
 

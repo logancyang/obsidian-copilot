@@ -554,6 +554,19 @@ function ReviewStep({
     }
   };
 
+  // DESIGN NOTE — no `catch` here, and no `safeAsyncHandler` on the call sites
+  // that `void` this and `runRebuild`. Every failure this can meet is already a
+  // value rather than a throw: `uploadReport` converts a rejected uploader into
+  // an `ok: false` outcome, and `openIssuePageWith` contains all three of its
+  // failure shapes. The one unguarded call inside `uploadReport`
+  // (`buildLinkedReportIssueUrl`) carries its own note explaining why it cannot
+  // exceed the ceiling it throws over. So a catch, or a wrapper whose entire
+  // contribution is `.catch(logError)`, would guard a state nothing can reach —
+  // and two of the three call sites are guarded arrows, so wrapping them means
+  // a fresh closure every render rather than the memo-stable one the helper is
+  // built to hand back. If a future edit puts a throwing call in this function
+  // outside `uploadReport`, that is the moment to revisit.
+  // If a future review flags this again, point them at this note.
   const runUpload = async (packed: PreparedReport) => {
     if (busyRef.current) return;
     busyRef.current = true;
