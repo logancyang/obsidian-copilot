@@ -79,7 +79,8 @@ const REJECTION_MESSAGES: Record<number, string> = {
   // Neither "today's" nor "yours": the window starts at the first attempt
   // rather than at midnight, and the limit is enforced per installation *and*
   // per address, so a 429 can be someone else on the same network having spent
-  // it.
+  // it. Either word would send the user to wait for a reset that never comes
+  // (https://github.com/Brevilabs/obsidian-copilot-private/issues/202).
   429: "The report upload allowance is used up for now.",
 };
 

@@ -162,7 +162,8 @@ export function ReportIssueFlow(props: ReportIssueFlowProps) {
       });
       if (!mountedRef.current) {
         // Nobody will ever upload this bundle, and it is plaintext prompts and
-        // note contents sitting in the OS temp folder with no UI left to name it.
+        // note contents sitting in the OS temp folder with no UI left to name it
+        // (https://github.com/Brevilabs/obsidian-copilot-private/issues/202).
         discardReport(prepared);
         return;
       }
@@ -577,9 +578,11 @@ function ReviewStep({
         // The upload cannot be aborted, so it can land after the user dismissed
         // the dialog. The report is on the server either way — dropping the
         // result because this component is gone would leave them with an upload
-        // they can neither see nor use. Opening the prefilled issue needs no
-        // mounted tree, so it happens regardless, and the report id rides along
-        // so a browser that fails to open can still surface it.
+        // they can neither see nor use
+        // (https://github.com/Brevilabs/obsidian-copilot-private/issues/202).
+        // Opening the prefilled issue needs no mounted tree, so it happens
+        // regardless, and the report id rides along so a browser that fails to
+        // open can still surface it.
         //
         // The page turn comes first when the flow is still up, and not for
         // style: a host that throws on the way to the browser must not leave
