@@ -489,35 +489,40 @@ export class ReportIssueModal extends Modal {
     if (!rootDir)
       throw new Error("The OS temp folder is unavailable, so nothing could be written.");
 
-    const screenshotRequested = selected.has("screenshot");
-    const screenshotPng = screenshotRequested
-      ? await captureBehindOverlay(
-          this.containerEl,
-          () => this.params.resolveCaptureTarget(),
-          () => this.params.dismissSettings()
-        )
-      : null;
-    onStep("screenshot");
-
-    const logs: ReportLogRequest[] = [];
-    if (selected.has("activityLog")) logs.push(await activityLogRequest());
-    if (selected.has("chatLog")) logs.push(await chatLogRequest());
-    if (selected.has("opencodeLog")) logs.push(await opencodeLogRequest());
-
-    const env: ReportEnvInfo = {
-      pluginVersion: this.params.pluginVersion,
-      platform: process.platform,
-      obsidianVersion: apiVersion,
-      activeBackend: this.params.activeBackend,
-    };
-
     // One wrapper directory per report, so anything that fails on the way to the
     // review step takes the whole thing with it: what it holds is plaintext
     // prompts and note contents nobody asked to keep. A bundle that reaches the
     // user outlives this modal on purpose and is theirs to discard.
+    //
+    // The guard starts here rather than at the first write, so the directory is
+    // owned by the cleanup from the moment it exists: capturing the screenshot
+    // and collecting the logs can both throw, and a boundary drawn at the write
+    // would leave one behind per failed attempt.
     let report: Awaited<ReturnType<typeof assembleReportBundle>>;
     let packed: Awaited<ReturnType<typeof zipReportBundle>>;
     try {
+      const screenshotRequested = selected.has("screenshot");
+      const screenshotPng = screenshotRequested
+        ? await captureBehindOverlay(
+            this.containerEl,
+            () => this.params.resolveCaptureTarget(),
+            () => this.params.dismissSettings()
+          )
+        : null;
+      onStep("screenshot");
+
+      const logs: ReportLogRequest[] = [];
+      if (selected.has("activityLog")) logs.push(await activityLogRequest());
+      if (selected.has("chatLog")) logs.push(await chatLogRequest());
+      if (selected.has("opencodeLog")) logs.push(await opencodeLogRequest());
+
+      const env: ReportEnvInfo = {
+        pluginVersion: this.params.pluginVersion,
+        platform: process.platform,
+        obsidianVersion: apiVersion,
+        activeBackend: this.params.activeBackend,
+      };
+
       report = await assembleReportBundle({
         note,
         env,
