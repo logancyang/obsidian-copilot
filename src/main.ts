@@ -301,6 +301,7 @@ export default class CopilotPlugin extends Plugin {
         CopilotAgentView,
         PlanPreviewView,
         PLAN_PREVIEW_VIEW_TYPE,
+        acpFrameSink,
         createAgentSessionManager,
         setFrameSinkVaultBasePath,
       } = await import("@/agentMode");
@@ -314,6 +315,10 @@ export default class CopilotPlugin extends Plugin {
       setFrameSinkVaultBasePath(
         adapter instanceof FileSystemAdapter ? adapter.getBasePath() : null
       );
+      // A log left permissive by an older build is only reachable here when
+      // frame logging is switched off, because nothing else would read it
+      // again. https://github.com/logancyang/obsidian-copilot-preview/issues/250
+      void acpFrameSink.narrowLegacyLogs();
 
       this.agentSessionManager = createAgentSessionManager(this.app, this);
       // Enroll agent-reported models on probe settle, even when the settings
