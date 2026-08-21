@@ -112,8 +112,7 @@ export async function createReportsRootDir(): Promise<string | null> {
 
 function basename(filePath: string): string {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const path = require("node:path") as typeof import("node:path");
+    const path = requireNodeModule<typeof import("node:path")>("path");
     return path.basename(filePath);
   } catch {
     return filePath;
@@ -123,8 +122,7 @@ function basename(filePath: string): string {
 /** Size of a file on disk, or null when it does not exist or cannot be read. */
 async function fileBytes(filePath: string): Promise<number | null> {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const fs = require("node:fs/promises") as typeof import("node:fs/promises");
+    const fs = requireNodeModule<typeof import("node:fs/promises")>("fs/promises");
     return (await fs.stat(filePath)).size;
   } catch {
     return null;
@@ -147,8 +145,7 @@ async function fileBytes(filePath: string): Promise<number | null> {
 export async function removeReportPaths(paths: string[]): Promise<void> {
   for (const path of paths) {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const fs = require("node:fs/promises") as typeof import("node:fs/promises");
+      const fs = requireNodeModule<typeof import("node:fs/promises")>("fs/promises");
       await fs.rm(path, { recursive: true, force: true });
     } catch (err) {
       logError(`[ReportIssue] could not remove the abandoned report path ${path}:`, err);

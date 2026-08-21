@@ -15,8 +15,12 @@ const rm = jest.fn<Promise<void>, [string, unknown?]>();
 
 // Only `rm` is faked — `removeReportPaths` is asserted through it. `mkdtemp` is
 // the real one so the directory it creates can be inspected on disk.
-jest.mock("node:fs/promises", () => ({
-  ...jest.requireActual("node:fs/promises"),
+//
+// Mocked under the unprefixed id, which is the one `requireNodeModule` resolves;
+// Jest keys its registry on the literal specifier, so a `node:`-prefixed mock
+// would sit beside the module under test rather than replacing it.
+jest.mock("fs/promises", () => ({
+  ...jest.requireActual("fs/promises"),
   rm: (path: string, opts?: unknown) => rm(path, opts),
 }));
 
