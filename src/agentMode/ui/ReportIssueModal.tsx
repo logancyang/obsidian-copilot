@@ -142,9 +142,19 @@ export function activityLogPath(): string | null {
     const os = requireNodeModule<typeof import("node:os")>("os");
     const candidate = frameSink.getPath();
     if (path.basename(candidate) !== FRAME_LOG_BASENAME) return null;
-    const root = path.resolve(os.tmpdir());
-    const resolved = path.resolve(candidate);
-    return resolved.startsWith(root + path.sep) ? candidate : null;
+    // Asked as a relative walk rather than a string prefix. A prefix has to be
+    // written as `root + separator` to stop `/tmpfoo` passing for `/tmp`, and
+    // that spelling breaks when the temp dir *is* a filesystem root: the prefix
+    // becomes `//` and every real path underneath fails it. Comparing the walk
+    // covers both, and covers a different Windows drive, which comes back
+    // absolute.
+    const relative = path.relative(path.resolve(os.tmpdir()), path.resolve(candidate));
+    const outside =
+      relative.length === 0 ||
+      relative === ".." ||
+      relative.startsWith(`..${path.sep}`) ||
+      path.isAbsolute(relative);
+    return outside ? null : candidate;
   } catch {
     return null;
   }
@@ -187,6 +197,27 @@ export async function removeReportPaths(paths: string[]): Promise<string[]> {
     }
   }
   return left;
+}
+
+/**
+ * Delete report paths and, when any survive, say so in a notice.
+ *
+ * For the times nothing else can: the dialog has closed, or is about to show an
+ * error whose text nobody will read because the flow it belongs to is gone.
+ * What is left behind is plaintext prompts and note contents in a folder the
+ * user has no other way to find, so a toast naming it is the difference between
+ * something they can delete and something they cannot.
+ *
+ * Silent on success, which is the ordinary case and needs no announcement.
+ */
+async function discardReportPaths(paths: string[]): Promise<void> {
+  const left = await removeReportPaths(paths);
+  if (left.length === 0) return;
+  new Notice(
+    `Copilot could not delete the report's files. They are still at ${left.join(", ")} — ` +
+      "remove them yourself once nothing is holding them open.",
+    0
+  );
 }
 
 /**
@@ -456,7 +487,7 @@ export class ReportIssueModal extends Modal {
         // folder holds, so it is the bigger leak if only one of the two goes.
         // The wrapper holds the zip and the staging folder and nothing else, so
         // removing it takes both — and leaves no empty directory behind.
-        discardReport={(report) => void removeReportPaths([report.rootDir])}
+        discardReport={(report) => void discardReportPaths([report.rootDir])}
         onCancel={() => this.close()}
         revealFile={(path) => this.revealFile(path)}
         openIssuePage={(url, reportId) => this.openIssuePage(url, reportId)}
@@ -585,17 +616,24 @@ export class ReportIssueModal extends Modal {
       packed = await zipReportBundle(report);
     } catch (err) {
       // A directory that would not go carries the screenshot and the logs in
-      // plaintext, and this is the last moment anything can say where it is:
-      // the flow shows this error and the dialog never names the folder again.
+      // plaintext, and this is the last moment anything can name it.
+      //
+      // Which way it gets said depends on whether anyone is still looking. The
+      // flow renders this error, so folding the leftover path into it puts the
+      // whole story in one place — but only while the dialog is up. Once it has
+      // closed, the flow's own catch drops the error unread, and a notice is
+      // the only thing left that reaches the user.
       const left = await removeReportPaths([rootDir]);
-      if (left.length > 0) {
-        throw new Error(
-          `${err instanceof Error ? err.message : String(err)} The report's files could not be ` +
-            `deleted afterwards and are still at ${left.join(", ")} — remove them yourself once ` +
-            "nothing is holding them open."
-        );
+      if (left.length === 0) throw err;
+      const cause = err instanceof Error ? err.message : String(err);
+      const whereabouts =
+        `The report's files could not be deleted afterwards and are still at ` +
+        `${left.join(", ")} — remove them yourself once nothing is holding them open.`;
+      if (!this.root) {
+        new Notice(`${cause} ${whereabouts}`, 0);
+        throw err;
       }
-      throw err;
+      throw new Error(`${cause} ${whereabouts}`);
     }
     onStep("zip");
 
@@ -621,7 +659,18 @@ export class ReportIssueModal extends Modal {
    * holding whatever they just removed must not be sitting there uploadable.
    */
   private async rebuildZip(report: PreparedReport): Promise<PreparedReport> {
-    await removeReportPaths([report.zipPath]);
+    // Refused rather than repacked when the old zip will not go: the removal is
+    // the guarantee, not a tidy-up before one. Carrying on would leave the file
+    // holding what the user just took out sitting there, uploadable, while the
+    // page reported a rebuild.
+    const left = await removeReportPaths([report.zipPath]);
+    if (left.length > 0) {
+      throw new Error(
+        `The previous zip could not be deleted and is still at ${left.join(", ")}, so it was not ` +
+          "rebuilt — it still holds what the folder held before your edits. Close anything that " +
+          "may have it open and try again."
+      );
+    }
     const packed = await zipReportBundle({
       folderPath: report.folderPath,
       attachments: report.attachments,

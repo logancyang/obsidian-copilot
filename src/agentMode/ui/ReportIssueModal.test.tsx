@@ -73,6 +73,28 @@ describe("ReportIssueModal", () => {
       expect(activityLogPath()).toBeNull();
     });
 
+    it("rejects a path inside the temp dir that is not the log (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", () => {
+      // Location alone is not enough either. A process whose working directory
+      // sits inside the temp dir resolves the sink's placeholder sentence to
+      // somewhere underneath it, so the name has to be checked too.
+      frameSinkPath.mockReturnValue(nodePath.join(os.tmpdir(), "something-else.ndjson"));
+      expect(activityLogPath()).toBeNull();
+    });
+
+    it("accepts the log when the temp dir is a filesystem root (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", () => {
+      // Containment written as `root + separator` becomes `//` here, and every
+      // real path underneath fails it — dropping an attachment the user ticked.
+      const root = nodePath.parse(os.tmpdir()).root;
+      const spy = jest.spyOn(os, "tmpdir").mockReturnValue(root);
+      try {
+        const inRoot = nodePath.join(root, "obsidian-copilot", "acp-frames.ndjson");
+        frameSinkPath.mockReturnValue(inRoot);
+        expect(activityLogPath()).toBe(inRoot);
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
     it("rejects the sink's placeholder rather than treating it as a path (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", () => {
       // The settings tab is registered during load, ahead of the dynamic import
       // that tells the sink which vault it is logging for, so a report opened in

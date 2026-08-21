@@ -628,9 +628,12 @@ function ReviewStep({
       </div>
 
       {rebuild.status === "failed" && (
+        // Says only what holds however the rebuild failed. Whether the old zip
+        // is gone depends on which step gave way, and the error itself is the
+        // only thing that knows — so nothing here asserts it either way.
         <Callout tone="error" title="Could not rebuild the zip">
-          {rebuild.error} The old zip was removed first, so there is nothing to upload until a
-          rebuild succeeds. Your files are still in the folder.
+          {rebuild.error} There is nothing to upload until a rebuild succeeds. Your files are still
+          in the folder.
         </Callout>
       )}
 
