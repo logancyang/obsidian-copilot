@@ -796,6 +796,22 @@ async function writeLog(
       };
     }
 
+    // A tail is cut at a byte offset, not at a line, so its first line is a
+    // fragment whose beginning is on the other side of the cut. That matters
+    // because redaction recognises a secret by what precedes it: cut between
+    // `password=` and its value and the value arrives looking like ordinary
+    // text, which is why the fragment is dropped rather than redacted. When the
+    // tail holds no line break at all there is no complete entry underneath it
+    // to keep, so the source is left out and says so
+    // (https://github.com/Brevilabs/obsidian-copilot-private/issues/202).
+    if (truncated && !raw.text.includes("\n")) {
+      return {
+        ...base,
+        status: "skipped",
+        reason: "The newest entry alone is larger than the room left in the report.",
+      };
+    }
+
     const body = truncated ? withTruncationNote(raw.text, raw.totalBytes) : raw.text;
     // Redact after trimming so the expensive pattern pass only runs over the
     // slice that is actually going into the bundle.
@@ -868,10 +884,13 @@ function headOfText(text: string, maxBytes: number): { text: string; totalBytes:
 /**
  * Drop the leading partial line of a byte-sliced tail and label the gap, so a
  * reader is never misled into thinking a truncated log is the whole story.
+ *
+ * @param tail A truncated tail that contains at least one line break; the
+ *   caller leaves the source out entirely when it does not, since there would
+ *   be no complete entry left once the partial line went.
  */
 function withTruncationNote(tail: string, totalBytes: number): string {
-  const firstBreak = tail.indexOf("\n");
-  const whole = firstBreak >= 0 ? tail.slice(firstBreak + 1) : tail;
+  const whole = tail.slice(tail.indexOf("\n") + 1);
   return (
     `… earlier entries omitted: only the newest ${formatBytes(byteLength(whole))} of ` +
     `${formatBytes(totalBytes)} is included …\n${whole}`
