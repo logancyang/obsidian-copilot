@@ -439,6 +439,28 @@ describe("issueReport", () => {
       expect(text).not.toContain("cut-off first line");
     });
 
+    it("leaves out a truncated log with no line break rather than shipping its cut-open first line (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", async () => {
+      const { runtime, writes } = makeRuntime({
+        // One enormous entry, cut mid-value: the `password=` that would make the
+        // redactor recognise what follows is on the other side of the cut, so
+        // the value would reach the bundle looking like ordinary text.
+        readTail: async () => ({
+          text: 'hunter2SuperSecret","path":"/Users/alice/vault"}}',
+          totalBytes: 40 * 1024 * 1024,
+        }),
+      });
+      const report = await assembleReportBundle(baseInput, runtime);
+
+      const activity = outcome(report, "activityLog");
+      expect(activity.status).toBe("skipped");
+      expect(activity.reason).toContain("larger than the room left");
+      expect(writes.some((w) => w.path.endsWith("acp-frames.ndjson.txt"))).toBe(false);
+      // The secret never reaches any file in the bundle.
+      for (const written of writes) {
+        expect(new TextDecoder().decode(written.data)).not.toContain("hunter2SuperSecret");
+      }
+    });
+
     it("truncates an in-memory log by bytes so multi-byte characters cannot overshoot", async () => {
       const { runtime, writes } = makeRuntime();
       // Each character is 3 UTF-8 bytes, so a character-based cap would write
@@ -631,16 +653,26 @@ describe("issueReport", () => {
       expect(removed).toContain(BUNDLE_DIR);
     });
 
-    it("skips a half character at the start of a tail so no replacement glyph is bundled", async () => {
-      // The log has no newline at all, so the truncation banner cannot drop the
-      // partial leading line — the decode itself has to keep the glyph out.
-      const tailBudget = 100 * 1024 + 1; // not a multiple of the emoji's 4 bytes
+    it("bundles no replacement glyph when the cut lands inside a character", async () => {
+      // The budget is not a multiple of the emoji's four bytes, so the tail
+      // starts mid-character. The line break is what decides the outcome: with
+      // one, the partial first line goes and a whole log follows it; without
+      // one there would be no complete entry left, and the source is left out
+      // instead (covered separately). `readTailFrom` keeps the same promise a
+      // level down, for a tail read from disk rather than memory.
+      const tailBudget = 100 * 1024 + 1;
       const { runtime, writes } = makeRuntime();
       const report = await assembleReportBundle(
         {
           ...baseInput,
           screenshotPng: new Uint8Array(LOG_BUDGET_BYTES - tailBudget),
-          logs: [{ id: "chatLog", name: "copilot-chat-log.md", text: "😀".repeat(50_000) }],
+          logs: [
+            {
+              id: "chatLog",
+              name: "copilot-chat-log.md",
+              text: `${"😀".repeat(25_000)}\n${"😀".repeat(25_000)}`,
+            },
+          ],
         },
         runtime
       );
