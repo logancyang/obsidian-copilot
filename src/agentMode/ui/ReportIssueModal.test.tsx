@@ -11,6 +11,8 @@ import {
 import type { PreparedReport, ReportSourceId } from "@/agentMode/ui/ReportIssueFlow";
 import { ReportUploadError, type ReportUploader } from "@/utils/reportUpload";
 import { Notice } from "obsidian";
+import os from "node:os";
+import nodePath from "node:path";
 
 const rm = jest.fn<Promise<void>, [string, unknown?]>();
 
@@ -48,9 +50,27 @@ jest.mock("@/utils/captureViewScreenshot", () => ({
 
 describe("ReportIssueModal", () => {
   describe("activityLogPath()", () => {
+    // Built from the real temp dir rather than a fixed "/tmp/…": the guard
+    // checks that the sink's answer actually lands there, and this platform's
+    // temp dir is not /tmp.
+    const realLogPath = nodePath.join(
+      os.tmpdir(),
+      "obsidian-copilot",
+      "acp-frames",
+      "3f9a",
+      "acp-frames.ndjson"
+    );
+
     it("returns the log's path once the sink knows where it writes", () => {
-      frameSinkPath.mockReturnValue("/tmp/obsidian-copilot/acp-frames/3f9a/acp-frames.ndjson");
-      expect(activityLogPath()).toBe("/tmp/obsidian-copilot/acp-frames/3f9a/acp-frames.ndjson");
+      frameSinkPath.mockReturnValue(realLogPath);
+      expect(activityLogPath()).toBe(realLogPath);
+    });
+
+    it("rejects a path that is named right but sits outside the temp dir (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", () => {
+      // The name alone is not enough: anything the sink did not build belongs
+      // somewhere else, and packing it would attach a file nobody asked for.
+      frameSinkPath.mockReturnValue(nodePath.join(os.homedir(), "acp-frames.ndjson"));
+      expect(activityLogPath()).toBeNull();
     });
 
     it("rejects the sink's placeholder rather than treating it as a path (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", () => {
@@ -127,14 +147,27 @@ describe("ReportIssueModal", () => {
     it("still deletes the remaining paths after one of them fails", async () => {
       rm.mockRejectedValueOnce(new Error("EBUSY: resource busy or locked"));
 
-      await expect(
-        removeReportPaths(["/tmp/reports/bundle.zip", "/tmp/reports/bundle"])
-      ).resolves.toBeUndefined();
+      await removeReportPaths(["/tmp/reports/bundle.zip", "/tmp/reports/bundle"]);
 
       expect(rm.mock.calls.map(([path]) => path)).toEqual([
         "/tmp/reports/bundle.zip",
         "/tmp/reports/bundle",
       ]);
+    });
+
+    it("reports back what is still on disk, so the caller can name it (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", async () => {
+      // A lock or a virus scanner can refuse the delete, and what stays behind
+      // is plaintext prompts and note contents. Swallowing that leaves the user
+      // with no way to find the folder — the dialog never names it again.
+      rm.mockRejectedValueOnce(new Error("EBUSY: resource busy or locked"));
+
+      await expect(
+        removeReportPaths(["/tmp/reports/bundle.zip", "/tmp/reports/bundle"])
+      ).resolves.toEqual(["/tmp/reports/bundle.zip"]);
+    });
+
+    it("reports nothing left behind when every delete succeeds", async () => {
+      await expect(removeReportPaths(["/tmp/reports/bundle"])).resolves.toEqual([]);
     });
   });
 

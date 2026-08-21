@@ -111,6 +111,9 @@ export async function createReportsRootDir(): Promise<string | null> {
   }
 }
 
+/** What the sink names its log, and the only basename a real path can have. */
+const FRAME_LOG_BASENAME = "acp-frames.ndjson";
+
 /**
  * Where the Agent Mode activity log is, or null when the sink cannot say.
  *
@@ -118,10 +121,17 @@ export async function createReportsRootDir(): Promise<string | null> {
  * it has no vault to key its location off. The settings tab can outrun that: it
  * is registered during load, while the sink is seeded behind a dynamic import
  * that resolves later, so a report opened in between asks a sink that does not
- * yet know where it writes. A real log always sits under the OS temp dir, which
- * is what makes absoluteness the test — and it is worth testing, because a
- * relative string handed to `stat` resolves against the process's working
- * directory rather than failing outright.
+ * yet know where it writes. Telling the two apart matters because a sentence is
+ * a relative path: handed to `stat`, it is looked for beside the running
+ * process rather than rejected, and a hit there would be packed and uploaded.
+ *
+ * A real path is recognised by where it goes and what it is called — under the
+ * OS temp dir, named for the log. Absoluteness alone is not the test: a
+ * relative `TMPDIR` is passed through verbatim, so a genuine log path can be
+ * relative too, and rejecting it would silently drop an attachment the user
+ * asked for. Nor is the location alone enough, since a process whose working
+ * directory sits inside the temp dir would resolve the sentence to somewhere
+ * under it.
  *
  * Exported for its own tests: both callers reach it through a private method of
  * the modal, so this is the only place the distinction can be observed.
@@ -129,8 +139,12 @@ export async function createReportsRootDir(): Promise<string | null> {
 export function activityLogPath(): string | null {
   try {
     const path = requireNodeModule<typeof import("node:path")>("path");
+    const os = requireNodeModule<typeof import("node:os")>("os");
     const candidate = frameSink.getPath();
-    return path.isAbsolute(candidate) ? candidate : null;
+    if (path.basename(candidate) !== FRAME_LOG_BASENAME) return null;
+    const root = path.resolve(os.tmpdir());
+    const resolved = path.resolve(candidate);
+    return resolved.startsWith(root + path.sep) ? candidate : null;
   } catch {
     return null;
   }
@@ -147,9 +161,10 @@ async function fileBytes(filePath: string): Promise<number | null> {
 }
 
 /**
- * Best-effort delete of paths a report no longer needs. Failures are logged, not
- * raised: the caller is already handling something that went wrong, or has
- * nothing left to tell the user with.
+ * Best-effort delete of paths a report no longer needs. Failures are logged
+ * rather than raised — the caller is already handling something that went wrong
+ * — and returned, because what is left behind is plaintext prompts and note
+ * contents that only the caller can still tell the user about.
  *
  * Every path is attempted on its own, because they are separate leaks rather
  * than one: a staging folder that refuses to go (open handle, antivirus scan)
@@ -158,16 +173,20 @@ async function fileBytes(filePath: string): Promise<number | null> {
  *
  * @param paths Paths to delete, most exposed first — a partial cleanup should
  *   get rid of the worst leak, not whichever one happened to be listed first.
+ * @returns The paths that are still on disk, in the order they were given.
  */
-export async function removeReportPaths(paths: string[]): Promise<void> {
+export async function removeReportPaths(paths: string[]): Promise<string[]> {
+  const left: string[] = [];
   for (const path of paths) {
     try {
       const fs = requireNodeModule<typeof import("node:fs/promises")>("fs/promises");
       await fs.rm(path, { recursive: true, force: true });
     } catch (err) {
+      left.push(path);
       logError(`[ReportIssue] could not remove the abandoned report path ${path}:`, err);
     }
   }
+  return left;
 }
 
 /**
@@ -565,7 +584,17 @@ export class ReportIssueModal extends Modal {
       onStep("logs");
       packed = await zipReportBundle(report);
     } catch (err) {
-      await removeReportPaths([rootDir]);
+      // A directory that would not go carries the screenshot and the logs in
+      // plaintext, and this is the last moment anything can say where it is:
+      // the flow shows this error and the dialog never names the folder again.
+      const left = await removeReportPaths([rootDir]);
+      if (left.length > 0) {
+        throw new Error(
+          `${err instanceof Error ? err.message : String(err)} The report's files could not be ` +
+            `deleted afterwards and are still at ${left.join(", ")} — remove them yourself once ` +
+            "nothing is holding them open."
+        );
+      }
       throw err;
     }
     onStep("zip");
