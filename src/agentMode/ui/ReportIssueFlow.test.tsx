@@ -180,7 +180,7 @@ describe("ReportIssueFlow", () => {
         expect(stepStates()).toEqual(["done", "done", "done"]);
       });
 
-      it("stops updating once the modal closes mid-preparation, and discards the orphaned bundle", async () => {
+      it("stops updating once the modal closes mid-preparation, and discards the orphaned bundle (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", async () => {
         let resolvePrepare: (report: PreparedReport) => void = () => {};
         const prepare = jest.fn(
           () =>
@@ -404,7 +404,7 @@ describe("ReportIssueFlow", () => {
         });
       });
 
-      it("still opens the prefilled issue when the modal closes before the upload lands", async () => {
+      it("still opens the prefilled issue when the modal closes before the upload lands (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", async () => {
         let resolveUpload: (outcome: UploadOutcome) => void = () => {};
         const upload = jest.fn(
           () =>

@@ -131,7 +131,7 @@ describe("reportUpload.brevilabs", () => {
         }
       );
 
-      it("names the upload allowance on 429 without promising a number or a reset time", async () => {
+      it("names the upload allowance on 429 without promising a number or a reset time (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", async () => {
         const err = await rejection(makeUploader(respondWith(429, "slow down"))(ATTEMPT));
         expect(err.message).toMatch(/allowance is used up/);
         // The tripped limit is unknowable from the response: the server enforces
