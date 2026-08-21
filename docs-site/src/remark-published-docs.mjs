@@ -12,6 +12,8 @@ const SIBLING_GUIDE_LINK = /^(?:\.\/)?([^/#?]+)\.md(#.+)?$/;
  */
 export function remarkPublishedDocs() {
   return (tree) => {
+    // These branches preserve source-guide structure and links during publishing.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/301
     const [opening] = tree.children;
     if (opening?.type === "heading" && opening.depth === 1) {
       tree.children.shift();
