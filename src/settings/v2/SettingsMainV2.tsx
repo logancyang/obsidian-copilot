@@ -133,9 +133,10 @@ const SettingsContent: React.FC = () => {
 
 interface SettingsMainV2Props {
   plugin: CopilotPlugin;
+  initialTab?: TabId;
 }
 
-const SettingsMainV2: React.FC<SettingsMainV2Props> = ({ plugin }) => {
+const SettingsMainV2: React.FC<SettingsMainV2Props> = ({ plugin, initialTab = "basic" }) => {
   // Add a key state that we'll change when resetting
   const [resetKey, setResetKey] = React.useState(0);
   const { latestVersion, hasUpdate } = useLatestVersion(plugin.manifest.version);
@@ -152,7 +153,7 @@ const SettingsMainV2: React.FC<SettingsMainV2Props> = ({ plugin }) => {
   return (
     <PluginProvider plugin={plugin}>
       <ModelManagementProvider api={plugin.modelManagement}>
-        <TabProvider>
+        <TabProvider initialTab={initialTab}>
           {/* Obsidian 1.13 made the settings window resizable, and the panel has
               no width of its own — without a cap the rows stretch to whatever
               the user dragged the window to and every control drifts far from
