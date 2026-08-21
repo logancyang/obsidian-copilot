@@ -5,12 +5,22 @@ import { AI_SENDER } from "@/constants";
 import { act, render, screen } from "@testing-library/react";
 import React from "react";
 
+const scrollingMockState = {
+  isAtBottom: true,
+  jumpToLatest: jest.fn(),
+  scrollBy: jest.fn(),
+};
+
 jest.mock("@/hooks/useChatScrolling", () => ({
   // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook; name must match the export
   useChatScrolling: () => ({
     containerMinHeight: 0,
     scrollContainerCallbackRef: jest.fn(),
+    contentCallbackRef: jest.fn(),
     getMessageKey: (message: { id: string }) => message.id,
+    isAtBottom: scrollingMockState.isAtBottom,
+    jumpToLatest: scrollingMockState.jumpToLatest,
+    scrollBy: scrollingMockState.scrollBy,
   }),
 }));
 
@@ -70,6 +80,9 @@ describe("AgentChatMessages", () => {
     beforeEach(() => {
       jest.useFakeTimers();
       jest.setSystemTime(200_000);
+      scrollingMockState.isAtBottom = true;
+      scrollingMockState.jumpToLatest = jest.fn();
+      scrollingMockState.scrollBy = jest.fn();
     });
 
     afterEach(() => jest.useRealTimers());
@@ -118,6 +131,35 @@ describe("AgentChatMessages", () => {
       );
 
       expect(screen.getByTestId("agent-trail-timestamp").textContent).toBe(timestamp);
+    });
+
+    it("hides the scroll-to-bottom button while the viewport rests at the newest message (https://github.com/logancyang/obsidian-copilot-preview/issues/329)", () => {
+      scrollingMockState.isAtBottom = true;
+      renderMessages([assistantMessage("answer-1", 62_000)], false);
+
+      expect(screen.queryByLabelText("Scroll to latest message")).toBeNull();
+    });
+
+    it("shows the scroll-to-bottom button after scrolling away and jumps back on click (https://github.com/logancyang/obsidian-copilot-preview/issues/329)", () => {
+      scrollingMockState.isAtBottom = false;
+      scrollingMockState.jumpToLatest = jest.fn();
+      renderMessages([assistantMessage("answer-1", 62_000)], false);
+
+      const button = screen.getByLabelText("Scroll to latest message");
+      act(() => button.click());
+      expect(scrollingMockState.jumpToLatest).toHaveBeenCalledTimes(1);
+    });
+
+    it("swaps the arrow for a bouncing typing indicator while a turn is streaming (https://github.com/logancyang/obsidian-copilot-preview/issues/329)", () => {
+      scrollingMockState.isAtBottom = false;
+      const { container } = renderMessages(
+        [assistantMessage("answer-1", 62_000, { message: "", parts: [] })],
+        true
+      );
+
+      const button = screen.getByLabelText("Scroll to latest message");
+      expect(container.querySelectorAll(".copilot-typing-dot")).toHaveLength(3);
+      expect(button.querySelector("svg")).toBeNull();
     });
   });
 });
