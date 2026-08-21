@@ -172,7 +172,7 @@ export const UploadFailed: StoryObj<ReportIssueFlowProps> = {
           ok: false,
           // Reason only, mirroring the production adapter: the actions (and why
           // Retry is safe) are the callout's own copy, appended by the Flow.
-          error: "Could not reach the report server, so the upload is unconfirmed.",
+          error: "The upload did not complete, so its outcome is unconfirmed.",
           retryable: true,
         }),
       }}
@@ -181,7 +181,7 @@ export const UploadFailed: StoryObj<ReportIssueFlowProps> = {
 };
 
 /**
- * Page ② after a definitive rejection (e.g. the daily allowance is used up):
+ * Page ② after a definitive rejection (e.g. the upload allowance is used up):
  * no Retry — the identical bytes would fail identically — so only Rebuild,
  * Show in folder, and the manual path remain.
  */
@@ -193,7 +193,7 @@ export const UploadRejected: StoryObj<ReportIssueFlowProps> = {
         upload: async () => ({
           ok: false,
           // Reason only \u2014 see UploadFailed above.
-          error: "Today's report upload allowance is used up.",
+          error: "The report upload allowance is used up for now.",
           retryable: false,
         }),
       }}
