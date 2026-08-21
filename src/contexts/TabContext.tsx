@@ -7,8 +7,14 @@ interface TabContextType {
 
 const TabContext = createContext<TabContextType | undefined>(undefined);
 
-export const TabProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [selectedTab, setSelectedTab] = useState("basic");
+export const TabProvider: React.FC<{ children: React.ReactNode; initialTab?: string }> = ({
+  children,
+  initialTab = "basic",
+}) => {
+  // Obsidian creates a fresh settings tree for a one-shot Relevant Notes
+  // handoff, so that tree must be able to start on Miyo instead of Basic.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
+  const [selectedTab, setSelectedTab] = useState(initialTab);
 
   const value = useMemo(() => ({ selectedTab, setSelectedTab }), [selectedTab]);
 
