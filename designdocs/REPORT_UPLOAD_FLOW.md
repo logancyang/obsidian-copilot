@@ -97,7 +97,7 @@ pair whole:
 Closing the modal and reopening it packs a fresh report and mints a fresh key.
 Accepted residual: if a previous upload actually landed but its response was
 lost and the user starts over, the server stores a second copy and a second slot
-of the daily allowance is spent; both age out with the retention window.
+of the upload allowance is spent; both age out with the retention window.
 Persisting the key across sessions was rejected — a stale key reused for new
 bytes is the silent-misreport failure above, strictly worse.
 
@@ -107,12 +107,12 @@ Upload failures are not one bucket. `UploadOutcome`'s failure half carries a
 structured `retryable`, set by the adapter (`ReportUploadError`), and the review
 page withholds the Retry button when it is false:
 
-| Class                | Examples                                                                                                      | Retryable | Why                                                                                                       |
-| -------------------- | ------------------------------------------------------------------------------------------------------------- | --------- | --------------------------------------------------------------------------------------------------------- |
-| Local, nothing sent  | install ID unavailable, plugin version invalid                                                                | no        | Refused before the request, so the daily allowance is not spent; the fix is the manual path, not a resend |
-| Definitive rejection | 400 / 413 / 415 / 422 / 429                                                                                   | no        | The identical bytes fail identically — while still spending a slot of the daily upload allowance          |
-| Uncertain outcome    | network error mid-flight, upload deadline elapsed, unreadable 2xx response, 408/425, a bare 3xx, 5xx / outage | yes       | The report may or may not be stored; the idempotency key makes re-sending safe either way                 |
-| Confirmed success    | 2xx with a fully well-formed receipt                                                                          | —         | Page ③                                                                                                    |
+| Class                | Examples                                                                                                      | Retryable | Why                                                                                                        |
+| -------------------- | ------------------------------------------------------------------------------------------------------------- | --------- | ---------------------------------------------------------------------------------------------------------- |
+| Local, nothing sent  | install ID unavailable, plugin version invalid                                                                | no        | Refused before the request, so the upload allowance is not spent; the fix is the manual path, not a resend |
+| Definitive rejection | 400 / 413 / 415 / 422 / 429                                                                                   | no        | The identical bytes fail identically — while still spending a slot of the upload allowance                 |
+| Uncertain outcome    | network error mid-flight, upload deadline elapsed, unreadable 2xx response, 408/425, a bare 3xx, 5xx / outage | yes       | The report may or may not be stored; the idempotency key makes re-sending safe either way                  |
+| Confirmed success    | 2xx with a fully well-formed receipt                                                                          | —         | Page ③                                                                                                     |
 
 Two rules the copy obeys everywhere: never claim a failed request "did not count"
 (the allowance is spent before validation, and a lost response is not a lost
