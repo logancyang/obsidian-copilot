@@ -1,4 +1,5 @@
 import {
+  activityLogPath,
   buildReportSourceOptions,
   captureBehindOverlay,
   createReportsRootDir,
@@ -30,6 +31,15 @@ jest.mock("@/logger", () => ({
   logWarn: jest.fn(),
 }));
 
+const frameSinkPath = jest.fn<string, []>();
+
+jest.mock("@/agentMode/session/debugSink", () => ({
+  frameSink: {
+    getPath: () => frameSinkPath(),
+    flush: jest.fn(async () => {}),
+  },
+}));
+
 const captureViewScreenshot = jest.fn<Promise<Uint8Array>, [HTMLElement]>();
 
 jest.mock("@/utils/captureViewScreenshot", () => ({
@@ -37,6 +47,24 @@ jest.mock("@/utils/captureViewScreenshot", () => ({
 }));
 
 describe("ReportIssueModal", () => {
+  describe("activityLogPath()", () => {
+    it("returns the log's path once the sink knows where it writes", () => {
+      frameSinkPath.mockReturnValue("/tmp/obsidian-copilot/acp-frames/3f9a/acp-frames.ndjson");
+      expect(activityLogPath()).toBe("/tmp/obsidian-copilot/acp-frames/3f9a/acp-frames.ndjson");
+    });
+
+    it("rejects the sink's placeholder rather than treating it as a path (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", () => {
+      // The settings tab is registered during load, ahead of the dynamic import
+      // that tells the sink which vault it is logging for, so a report opened in
+      // that window asks a sink that has no path to give. What it answers with
+      // is a sentence, and a sentence is a relative path: statting it would look
+      // for it next to the process, and a hit there would be packed and uploaded
+      // as though it were the activity log.
+      frameSinkPath.mockReturnValue("(Agent Mode frame logs are desktop-only)");
+      expect(activityLogPath()).toBeNull();
+    });
+  });
+
   describe("createReportsRootDir()", () => {
     const realFs = jest.requireActual<typeof import("node:fs/promises")>("node:fs/promises");
     const created: string[] = [];
