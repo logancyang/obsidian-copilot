@@ -111,6 +111,31 @@ export async function createReportsRootDir(): Promise<string | null> {
   }
 }
 
+/**
+ * Where the Agent Mode activity log is, or null when the sink cannot say.
+ *
+ * `FrameSink.getPath()` answers with a parenthesised sentence, not a path, when
+ * it has no vault to key its location off. The settings tab can outrun that: it
+ * is registered during load, while the sink is seeded behind a dynamic import
+ * that resolves later, so a report opened in between asks a sink that does not
+ * yet know where it writes. A real log always sits under the OS temp dir, which
+ * is what makes absoluteness the test — and it is worth testing, because a
+ * relative string handed to `stat` resolves against the process's working
+ * directory rather than failing outright.
+ *
+ * Exported for its own tests: both callers reach it through a private method of
+ * the modal, so this is the only place the distinction can be observed.
+ */
+export function activityLogPath(): string | null {
+  try {
+    const path = requireNodeModule<typeof import("node:path")>("path");
+    const candidate = frameSink.getPath();
+    return path.isAbsolute(candidate) ? candidate : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Size of a file on disk, or null when it does not exist or cannot be read. */
 async function fileBytes(filePath: string): Promise<number | null> {
   try {
@@ -427,7 +452,8 @@ export class ReportIssueModal extends Modal {
    * keeps the note and checkbox state across the second render.
    */
   private async loadActivityLogSize(): Promise<void> {
-    const bytes = await fileBytes(frameSink.getPath());
+    const path = activityLogPath();
+    const bytes = path === null ? null : await fileBytes(path);
     if (!this.root) return;
     this.render(this.buildSourceOptions(bytes));
   }
@@ -673,7 +699,10 @@ async function activityLogRequest(): Promise<ReportLogRequest> {
   // Flush queued frames so the tail we read includes the failure the user is
   // reporting, not just whatever had already reached disk.
   await frameSink.flush();
-  const path = frameSink.getPath();
+  const path = activityLogPath();
+  if (path === null) {
+    return { ...base, unavailableReason: "The Agent Mode activity log's location is unavailable." };
+  }
   if ((await fileBytes(path)) == null) {
     return { ...base, unavailableReason: "No Agent Mode activity has been recorded yet." };
   }
