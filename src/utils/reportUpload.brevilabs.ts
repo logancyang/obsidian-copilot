@@ -76,7 +76,11 @@ const REJECTION_MESSAGES: Record<number, string> = {
   413: "The report is larger than the server accepts (HTTP 413).",
   415: "The report server rejected the upload format (HTTP 415).",
   422: "The report server rejected the request headers (HTTP 422).",
-  429: "Today's report upload allowance is used up.",
+  // Neither "today's" nor "yours": the window starts at the first attempt
+  // rather than at midnight, and the limit is enforced per installation *and*
+  // per address, so a 429 can be someone else on the same network having spent
+  // it.
+  429: "The report upload allowance is used up for now.",
 };
 
 /**
@@ -224,12 +228,15 @@ export function createReportUploader(deps: ReportUploaderDeps): ReportUploader {
       // anywhere to tell them apart. The log is the right home for it: it is a
       // developer surface, and `redactLogText` scrubs it on the way into a
       // report bundle, the same as every other `logError` in this flow.
-      logError("[reportUpload] the transport failed before a response arrived:", err);
-      // The request may have reached the server before the connection died, so
-      // this is an uncertain outcome, not a clean "nothing happened": the
-      // report may already be stored and the allowance already spent.
+      logError("[reportUpload] the transport failed without returning a response:", err);
+      // Not "could not reach the server": the throw covers a protocol-level
+      // abort just as much as a dead connection, and a real one was observed
+      // where the request did reach the server. All that is actually known is
+      // that no response came back, so the report may already be stored and
+      // the allowance already spent — an uncertain outcome, not a clean
+      // "nothing happened".
       throw new ReportUploadError(
-        "Could not reach the report server, so the upload is unconfirmed.",
+        "The upload did not complete, so its outcome is unconfirmed.",
         true
       );
     } finally {
