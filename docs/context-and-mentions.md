@@ -63,6 +63,17 @@ One-turn attachments remain one-turn attachments inside a Project. Start a new P
 
 Quick Chat has a separate composer and context state. It can attach the active note and, on desktop, the active Web Viewer tab. Use **Add context** for a note, folder, web tab, or image. You can also type `[[Note title]]` for a note.
 
+With an eligible paid plan, Quick Chat can also use a pasted URL as context and lets you type `#` to select a vault tag for a vault-search query. It supports these explicit tool mentions:
+
+| Mention      | Action                             |
+| ------------ | ---------------------------------- |
+| `@vault`     | Search the vault                   |
+| `@websearch` | Search the web (`@web` also works) |
+| `@composer`  | Create or edit a note              |
+| `@memory`    | Save information to memory         |
+
+These are Quick Chat tools. They do not mention or select an Agent Chat backend.
+
 Quick Chat attachments apply to the next Quick Chat message. They do not become Agent Chat context, Project context, or `AGENTS.md` instructions.
 
 For vault-wide semantic search and AI history that you own outside the plugin, use [Miyo](vault-search-and-indexing.md). Miyo provides the local-first search path for Copilot V4.

@@ -177,7 +177,7 @@ When Self-Host Mode is on, local and self-hosted endpoints sort first. Cloud pro
 
 ## Miyo
 
-Miyo supplies Copilot's current semantic search and selected chat-history search through the connected Miyo service. A local search connection keeps those requests on your computer; a remote connection sends them to the address you enter. PDF and EPUB processing is separate and always uses the local Miyo CLI on this computer.
+Miyo supplies Copilot's current semantic search and selected chat-history search through the connected Miyo service. A local search connection keeps those requests on your computer; a remote connection sends them to the address you enter. PDF and EPUB processing uses the local Miyo CLI in Agent Chat, while Quick Chat uses the connected local or remote Miyo service.
 
 ### Connection
 
