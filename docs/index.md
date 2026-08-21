@@ -28,7 +28,7 @@ For most people, opencode is the best starting point because Copilot can install
 ## Models, plans, and Miyo
 
 - [Model Sources and BYOK](llm-providers.md) covers Copilot-hosted models, BYOK for opencode and Quick Chat, and local endpoints.
-- [Models, Effort, and Permission Modes](models-and-parameters.md) explains model selection, defaults, operating modes, and reasoning effort.
+- [Models, Effort, and Permissions](models-and-parameters.md) explains model selection, defaults, approval behavior, and reasoning effort.
 - [Miyo: Local-First Search and AI Ownership](vault-search-and-indexing.md) brings more powerful local-first search and AI ownership to your knowledge.
 - [Copilot Plans, Privacy, and Self-Hosting](copilot-plus-and-self-host.md) compares free and paid access, hosted features, privacy, and self-hosting.
 

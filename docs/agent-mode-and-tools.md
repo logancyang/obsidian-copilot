@@ -59,7 +59,7 @@ For Windows-specific installation help, see [Windows setup for Agent Chat](agent
 
 Select the **Agent Chat** ribbon icon or run **Open Copilot Agent Chat Window** from the command palette. If the default agent is not ready, Copilot opens **Select your agent**. Configure an agent, choose an installed row, then select **Start chat**.
 
-## Models, effort, and modes
+## Models, effort, and permissions
 
 Each agent has its own model list. The models shown in one agent do not automatically appear in another.
 
@@ -68,15 +68,15 @@ Each agent has its own model list. The models shown in one agent do not automati
 - Before the first message, choosing a model from another installed agent switches the empty chat to that agent. Once a conversation has started, it stays with its agent.
 - **Effort** appears only when the selected agent and model support it. Higher effort can improve difficult reasoning but may take longer and use more of your account allowance.
 
-The mode picker shows only choices supported by the current agent:
+The permission picker shows only choices supported by the current agent:
 
-| Mode        | What it does                                                                        |
+| Choice      | What it does                                                                        |
 | ----------- | ----------------------------------------------------------------------------------- |
 | **Default** | Uses the agent's normal approval behavior and is the safest starting point          |
-| **Plan**    | Prepares a read-only plan before edits when the current agent supports this mode    |
+| **Plan**    | Prepares a read-only plan before edits when the current agent supports this choice  |
 | **Auto**    | Reduces approval prompts according to the current agent's automatic permission rule |
 
-opencode supports **Default** and **Auto**. Claude supports **Default**, **Plan**, and **Auto**. Codex shows the modes supported by the installed adapter. Claude also has an **Auto mode permissions** setting that controls how much its Auto mode may approve.
+opencode supports **Default** and **Auto**. Claude supports **Default**, **Plan**, and **Auto**. Codex shows the choices supported by the installed adapter. Claude also has an **Auto mode permissions** setting that controls how much Auto may approve.
 
 When an action needs approval, Agent Chat displays a **Permission required** card with the proposed change or tool input. Choose one of the temporary or persistent allow or deny options offered by that agent. Stopping the turn cancels unanswered requests.
 
@@ -125,7 +125,7 @@ On Windows, creating the folder links may require **Developer Mode** or administ
 ## Related
 
 - [Getting Started](getting-started.md)
-- [Models, Effort, and Permission Modes](models-and-parameters.md)
+- [Models, Effort, and Permissions](models-and-parameters.md)
 - [Projects](projects.md)
 - [Instructions for Agent Chat and Quick Chat](system-prompts.md)
 - [Copilot Commands and Quick Ask](custom-commands.md)

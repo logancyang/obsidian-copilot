@@ -8,13 +8,11 @@ On desktop, start with **Agent Chat** for multi-step work, reusable Skills, perm
 
 Run **Open Copilot Chat Window** from the command palette. On mobile, the Copilot ribbon button opens Quick Chat because Agent Chat requires desktop Obsidian.
 
-At the top of Quick Chat, choose **chat (free)** for a standard conversation. The selector also shows **copilot plus**, which requires a paid license. It is a paid Quick Chat workflow, not Agent Chat. Agent Chat is a separate view and does not appear in this selector.
-
 ## Choose a model
 
 Use the model picker below the message box. It shows only models enabled under **Settings → Copilot → Basic → Agents → Quick Chat**, including Copilot-hosted and bring-your-own-key models.
 
-The **Default model** in that settings panel controls which model a new Quick Chat starts with. See [Models, Effort, and Permission Modes](models-and-parameters.md) to manage the list.
+The **Default model** in that settings panel controls which model a new Quick Chat starts with. See [Models, Effort, and Permissions](models-and-parameters.md) to manage the list.
 
 ## Ask with context
 
@@ -32,7 +30,7 @@ Press **Enter** to send by default. You can switch this to **Shift + Enter** und
 Hover over a message to use its actions:
 
 - Your messages: **Copy**, **Edit**, and **Delete**.
-- Copilot responses: **Show Sources** when available, **Insert / Replace at cursor**, **Copy**, **Regenerate**, and **Delete**.
+- Copilot responses: **Insert / Replace at cursor**, **Copy**, **Regenerate**, and **Delete**.
 
 After a response, the token counter in the top bar shows the context used for the latest response when the provider reports token usage.
 
@@ -47,8 +45,6 @@ Use **Chat History** to search saved conversations, reopen one, rename it, open 
 ## Chat settings
 
 Use **Chat Settings** (gear) to choose a **System Prompt** for the current chat or reset the session choice. These settings do not configure Agent Chat, which reads `AGENTS.md` instead. See [Instructions for Agent Chat and Quick Chat](system-prompts.md).
-
-Use **Advanced Settings** (`…`) to toggle **Suggested Prompt** and **Auto-accept Edits**.
 
 ## Quick Ask
 

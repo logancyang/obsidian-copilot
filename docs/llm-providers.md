@@ -121,6 +121,6 @@ Storage** and click **Delete All Keys**.
 
 - [Getting Started](getting-started.md)
 - [Agent Chat](agent-mode-and-tools.md)
-- [Models, Effort, and Permission Modes](models-and-parameters.md)
+- [Models, Effort, and Permissions](models-and-parameters.md)
 - [Settings: BYOK](settings.md#byok)
 - [Copilot Plans, Privacy, and Self-Hosting](copilot-plus-and-self-host.md)

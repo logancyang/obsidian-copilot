@@ -2,7 +2,7 @@
 
 Projects are focused workspaces inside Agent Chat. Each Project keeps its own instructions, reusable context, and chat history, so ongoing work for a client, codebase, course, or research topic stays together.
 
-A Project works with opencode, Claude, or Codex. It uses the agent, model, effort, and permission mode selected for the current chat. It does not lock you to a separate model.
+A Project works with opencode, Claude, or Codex. It uses the agent, model, effort, and permission setting selected for the current chat. It does not lock you to a separate model.
 
 ## Create a Project
 

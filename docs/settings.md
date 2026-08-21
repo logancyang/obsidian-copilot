@@ -116,11 +116,11 @@ Quick Ask uses a Quick Chat model. It inherits the Quick Chat choice until you s
 
 ### General
 
-| Control                     | Default          | What it does                                                                                                                                                                                                  |
-| --------------------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Open Plugin In**          | **Sidebar View** | Chooses whether Copilot opens in a sidebar leaf or an editor tab. Options are **Sidebar View** and **Editor**.                                                                                                |
-| **Send Shortcut**           | **Enter**        | Chooses **Enter** or **Shift + Enter** to send. If the shortcut does not work, check **Obsidian → Hotkeys** for a conflict.                                                                                   |
-| **Copilot folder location** | `copilot`        | Sets the root for conversations, custom prompts, system prompts, skills, memory, and projects. Press Enter or select **Apply** to validate and confirm the change. The folder button reveals the active root. |
+| Control                     | Default          | What it does                                                                                                                                                                                          |
+| --------------------------- | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Open Plugin In**          | **Sidebar View** | Chooses whether Copilot opens in a sidebar leaf or an editor tab. Options are **Sidebar View** and **Editor**.                                                                                        |
+| **Send Shortcut**           | **Enter**        | Chooses **Enter** or **Shift + Enter** to send. If the shortcut does not work, check **Obsidian → Hotkeys** for a conflict.                                                                           |
+| **Copilot folder location** | `copilot`        | Sets the root for conversations, custom prompts, system prompts, skills, and projects. Press Enter or select **Apply** to validate and confirm the change. The folder button reveals the active root. |
 
 Changing the Copilot folder does not move existing files. The old root remains treated as Copilot data, and a new root that already contains notes becomes excluded from Copilot search. Move files yourself after the change. If Miyo is connected, open the Miyo tab and use **Resync Miyo** when prompted.
 

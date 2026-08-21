@@ -1,4 +1,4 @@
-# Models, Effort, and Permission Modes
+# Models, Effort, and Permissions
 
 Copilot keeps a separate model list for each experience. A model can be
 available in Copilot without appearing in every picker: you choose where it is
@@ -60,14 +60,14 @@ leaves open chats unchanged.
 In **Quick Chat**, the picker shows only enabled **Quick Chat models**. Its
 **Default model** is the model new Quick Chat conversations start with.
 
-## Model, effort, and permission mode
+## Model, effort, and permissions
 
-| Experience     | Choices available now                                                                                                                                                                                                                      |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **opencode**   | Model; effort when the model reports it; **Default** or **Auto** mode. Plan is not available.                                                                                                                                              |
-| **Claude**     | Model; effort when supported; **Default**, **Plan**, and **Auto** modes. **Auto mode permissions** controls what Auto may approve. **Show extended thinking** controls whether reasoning blocks are displayed; it is separate from effort. |
-| **Codex**      | Model; effort when reported; whichever of **Default**, **Plan**, and **Auto** the installed adapter supports.                                                                                                                              |
-| **Quick Chat** | Model only. Agent effort and operating modes do not apply.                                                                                                                                                                                 |
+| Experience     | Choices available now                                                                                                                                                                                                                            |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **opencode**   | Model; effort when the model reports it; **Default** or **Auto** permissions. **Plan** is not available.                                                                                                                                         |
+| **Claude**     | Model; effort when supported; **Default**, **Plan**, and **Auto** permissions. **Auto mode permissions** controls what Auto may approve. **Show extended thinking** controls whether reasoning blocks are displayed; it is separate from effort. |
+| **Codex**      | Model; effort when reported; whichever of **Default**, **Plan**, and **Auto** the installed adapter supports.                                                                                                                                    |
+| **Quick Chat** | Model only. Agent effort and permission controls do not apply.                                                                                                                                                                                   |
 
 **Default** uses the agent's normal approval behavior, **Plan** prepares a plan
 before editing, and **Auto** uses the selected agent's automatic permission

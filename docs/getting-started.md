@@ -56,9 +56,9 @@ Codex inherits the Codex CLI's credentials; there is no Codex key to paste into 
 
 1. Click the **Agent Chat** ribbon icon, or run **Open Copilot Agent Chat Window** from the command palette.
 2. If **Select your agent** appears, choose an **Installed** agent and select **Start chat**. When the default backend is already ready, Copilot opens its chat automatically.
-3. Pick a model and operating mode beside the message box, then describe the outcome you want.
+3. Pick a model and permission setting beside the message box, then describe the outcome you want.
 
-Try a concrete first request such as: “Review the unfinished tasks in this vault and make a short plan.” In **Default** mode, Agent Chat shows its work and asks before actions that need your approval.
+Try a concrete first request such as: “Review the unfinished tasks in this vault and make a short plan.” With **Default** selected, Agent Chat shows its work and asks before actions that need your approval.
 
 ## Projects, Skills, and Commands
 
