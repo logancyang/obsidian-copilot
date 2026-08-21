@@ -374,7 +374,7 @@ const MARKER_BADGE =
  */
 function StepMarker({ index, state }: { index: number; state: "done" | "current" | "waiting" }) {
   return (
-    <span className={MARKER_SLOT}>
+    <span className={cn(MARKER_SLOT)}>
       {state === "done" ? (
         <span
           className={cn(MARKER_BADGE, "tw-bg-success tw-text-success")}
@@ -418,7 +418,7 @@ function OutcomeBadge({
   children: React.ReactNode;
 }) {
   return (
-    <span className={MARKER_SLOT}>
+    <span className={cn(MARKER_SLOT)}>
       <span
         aria-hidden="true"
         className={cn(

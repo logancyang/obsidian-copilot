@@ -706,7 +706,7 @@ describe("issueReport", () => {
       expect(second.uploadAttempt.idempotencyKey).not.toBe(first.uploadAttempt.idempotencyKey);
     });
 
-    it("treats an attachment the user deleted from the folder as removed, not as a failure", async () => {
+    it("treats an attachment the user deleted from the folder as removed, not as a failure (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", async () => {
       const { runtime, writes, files } = makeRuntime();
       const report = await assembleReportBundle(baseInput, runtime);
       // The review step warns the screenshot is not redacted and invites the
@@ -726,7 +726,7 @@ describe("issueReport", () => {
       expect(names).toContain("report.md");
     });
 
-    it("treats an attachment deleted mid-pack as removed too", async () => {
+    it("treats an attachment deleted mid-pack as removed too (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", async () => {
       const { runtime, files } = makeRuntime();
       const report = await assembleReportBundle(baseInput, runtime);
       // Gone between the weigh pass and the read pass — the same removal, just
@@ -742,7 +742,7 @@ describe("issueReport", () => {
       expect(attachments.find((a) => a.name === "screenshot.png")?.status).toBe("skipped");
     });
 
-    it("reports an attachment that is still there but unreadable as failed, not as removed", async () => {
+    it("reports an attachment that is still there but unreadable as failed, not as removed (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", async () => {
       const { runtime, writes } = makeRuntime();
       const report = await assembleReportBundle(baseInput, runtime);
       // Locked by another program, or permissions changed underneath us. Calling
@@ -763,7 +763,7 @@ describe("issueReport", () => {
       expect(names).not.toContain("screenshot.png");
     });
 
-    it("reports an attachment that becomes unreadable between the two passes as failed", async () => {
+    it("reports an attachment that becomes unreadable between the two passes as failed (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", async () => {
       const { runtime } = makeRuntime();
       const report = await assembleReportBundle(baseInput, runtime);
       // Weighed fine, then refused the read — the removed/failed split has to
@@ -779,7 +779,7 @@ describe("issueReport", () => {
       expect(shot?.reason).toContain("EACCES");
     });
 
-    it("packs an attachment again once the user restores it after a rebuild dropped it", async () => {
+    it("packs an attachment again once the user restores it after a rebuild dropped it (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", async () => {
       const { runtime, writes, files } = makeRuntime();
       const assembled = await assembleReportBundle(baseInput, runtime);
       const staged = files.get(`${BUNDLE_DIR}/screenshot.png`);
