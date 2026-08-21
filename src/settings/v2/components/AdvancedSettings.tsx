@@ -2,7 +2,7 @@ import { CHAT_AGENT_VIEWTYPE } from "@/constants";
 import { Button } from "@/components/ui/button";
 import { SettingItem } from "@/components/ui/setting-item";
 import { SettingSection } from "@/components/ui/setting-section";
-import { SettingSwitch } from "@/components/ui/setting-switch";
+import { DebuggingSupportSection } from "@/settings/v2/components/DebuggingSupportSection";
 import { LegacyChatPromptsNotice } from "@/settings/v2/components/LegacyChatPromptsNotice";
 import {
   confirmLegacyVaultIndexToggle,
@@ -284,57 +284,20 @@ export const AdvancedSettings: React.FC = () => {
         />
       </SettingSection>
 
-      {/* Debugging & support Section.
-          DESIGN NOTE: the former "Create Log File" row is gone on purpose, not
-          by omission. "Report an issue" collects the same chat log as one of
-          its attachments (pre-selected when Debug Mode is on), and the
-          command-palette "Copilot: Create log file" remains for anyone who
-          wants the note in their vault by hand — README, the FAQ and the
-          issue template all point there. A second settings entry for the same
-          log would be one more path to keep consistent for no new capability.
-          If a future review flags the removal, point them at this note. */}
-      <SettingSection label="Debugging & support">
-        <SettingItem
-          type="custom"
-          title="Report an issue"
-          description="Walks you through collecting a screenshot and recent logs, packs them into a single zip you can review, uploads it privately, and opens a prefilled GitHub issue with the report ID already in it."
-        >
-          <Button variant="default" size="sm" onClick={handleReportIssue}>
-            Report an issue
-          </Button>
-        </SettingItem>
-
-        <SettingItem
-          type="switch"
-          title="Debug Mode"
-          description="Logs Copilot chat activity to the developer console (View → Toggle Developer Tools), and pre-selects the chat log when you report an issue."
-          checked={settings.debug}
-          onCheckedChange={(checked) => updateSetting("debug", checked)}
-        />
-
-        <SettingItem
-          type="custom"
-          title="Agent Mode activity log"
-          description={`Records the behind-the-scenes messages between Copilot and the agent so a report always has recent activity to attach. Stored on this device only, outside your vault (${frameLogPath}), and can include your prompts and note contents in plain text.`}
-        >
-          <div className="tw-flex tw-items-center tw-gap-2">
-            <SettingSwitch
-              checked={settings.agentMode.debugFullFrames}
-              onCheckedChange={(checked) => {
-                setSettings((cur) => ({
-                  agentMode: { ...cur.agentMode, debugFullFrames: checked },
-                }));
-              }}
-            />
-            <Button variant="secondary" size="sm" onClick={safeAsyncHandler(handleOpenFrameLog)}>
-              Open
-            </Button>
-            <Button variant="secondary" size="sm" onClick={safeAsyncHandler(handleClearFrameLog)}>
-              Clear
-            </Button>
-          </div>
-        </SettingItem>
-      </SettingSection>
+      <DebuggingSupportSection
+        debug={settings.debug}
+        onDebugChange={(checked) => updateSetting("debug", checked)}
+        frameLogEnabled={settings.agentMode.debugFullFrames}
+        onFrameLogChange={(checked) => {
+          setSettings((cur) => ({
+            agentMode: { ...cur.agentMode, debugFullFrames: checked },
+          }));
+        }}
+        frameLogPath={frameLogPath}
+        onReportIssue={handleReportIssue}
+        onOpenFrameLog={safeAsyncHandler(handleOpenFrameLog)}
+        onClearFrameLog={safeAsyncHandler(handleClearFrameLog)}
+      />
     </div>
   );
 };
