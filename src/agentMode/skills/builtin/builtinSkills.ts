@@ -57,6 +57,10 @@ export const PLUS_ENV = {
 /** Plugin-owned scope inputs consumed by the managed Miyo search wrappers. */
 export const MIYO_SEARCH_SCOPE_ENV = "COPILOT_MIYO_SEARCH_SCOPE";
 export const MIYO_SEARCH_FOLDER_ENV = "COPILOT_MIYO_SEARCH_FOLDER";
+/** Routes managed web skills through the plugin host instead of a hosted relay. */
+export const SELF_HOST_WEB_SEARCH_ENV = "COPILOT_SELF_HOST_WEB_SEARCH";
+/** Exact vault identity used to target the owning Obsidian CLI renderer. */
+export const AGENT_VAULT_NAME_ENV = "COPILOT_AGENT_VAULT_NAME";
 
 /**
  * No Copilot Plus license is configured — the free-user case (a non-Plus user
@@ -121,6 +125,9 @@ BASE="\${${PLUS_ENV.baseUrl}:-}"
 KEY="\${${PLUS_ENV.licenseKey}:-}"
 USER_ID="\${${PLUS_ENV.userId}:-}"
 CLIENT_VERSION="\${${PLUS_ENV.clientVersion}:-}"
+SELF_HOST="\${${SELF_HOST_WEB_SEARCH_ENV}:-}"
+OBSIDIAN_CLI="\${COPILOT_OBSIDIAN_CLI:-}"
+VAULT_NAME="\${${AGENT_VAULT_NAME_ENV}:-}"
 NO_LICENSE=${shSingleQuote(NO_LICENSE_MESSAGE)}
 NO_LICENSE_UPSELL=${shSingleQuote(NO_LICENSE_UPSELL)}
 LICENSE_INVALID=${shSingleQuote(LICENSE_INVALID_MESSAGE)}
@@ -140,7 +147,9 @@ no_license() {
   die "$msg"
 }
 
-[ -n "$KEY" ] && [ -n "$BASE" ] || no_license
+require_relay() {
+  [ -n "$KEY" ] && [ -n "$BASE" ] || no_license
+}
 
 # JSON-escape a single-line string: backslash first, then double quote.
 json_escape() {
@@ -200,6 +209,9 @@ $BASE = [Environment]::GetEnvironmentVariable('${PLUS_ENV.baseUrl}')
 $KEY = [Environment]::GetEnvironmentVariable('${PLUS_ENV.licenseKey}')
 $USER_ID = [Environment]::GetEnvironmentVariable('${PLUS_ENV.userId}')
 $CLIENT_VERSION = [Environment]::GetEnvironmentVariable('${PLUS_ENV.clientVersion}')
+$SELF_HOST = [Environment]::GetEnvironmentVariable('${SELF_HOST_WEB_SEARCH_ENV}')
+$OBSIDIAN_CLI = [Environment]::GetEnvironmentVariable('COPILOT_OBSIDIAN_CLI')
+$VAULT_NAME = [Environment]::GetEnvironmentVariable('${AGENT_VAULT_NAME_ENV}')
 if ($null -eq $USER_ID) { $USER_ID = '' }
 if ($null -eq $CLIENT_VERSION) { $CLIENT_VERSION = '' }
 $NO_LICENSE = ${psSingleQuote(NO_LICENSE_MESSAGE)}
@@ -221,7 +233,9 @@ function NoLicense {
   Die $msg
 }
 
-if (-not $KEY -or -not $BASE) { NoLicense }
+function RequireRelay {
+  if (-not $KEY -or -not $BASE) { NoLicense }
+}
 
 # Invoke-Relay endpoint body -> prints the response body, mapping HTTP status.
 function Invoke-Relay($endpoint, $body) {
@@ -340,11 +354,60 @@ function relaySkill(opts: {
   /** Relay body key + usage-doc placeholder, e.g. `["query", "<your search query>"]`. */
   arg: [key: string, placeholder: string];
   scriptFile: string;
+  license?: string;
+  selfHostMode?: "search" | "deny";
+  extraInstructions?: string;
 }): BuiltinSkill {
   const [argKey, argPlaceholder] = opts.arg;
   const cmdFile = opts.scriptFile.replace(/\.sh$/, ".cmd");
   const ps1File = opts.scriptFile.replace(/\.sh$/, ".ps1");
-  const version = 5;
+  const version = 6;
+  // Self-host search crosses back into the owning Obsidian renderer so API
+  // keys never enter the agent process; fetch fails closed because there is no
+  // provider-neutral page-fetch contract.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/165
+  const selfHostSh =
+    opts.selfHostMode === "search"
+      ? `if [ "$SELF_HOST" = "1" ]; then
+  [ -n "$OBSIDIAN_CLI" ] || die "A compatible Obsidian CLI is unavailable for self-host web search." 1
+  [ -n "$VAULT_NAME" ] || die "The owning Obsidian vault is unavailable for self-host web search." 1
+  ARG_B64=$(printf '%s' "$ARG" | base64 | tr -d '\\r\\n')
+  CODE="(()=>{const decode=(value)=>new TextDecoder().decode(Uint8Array.from(atob(value),(char)=>char.charCodeAt(0)));const bridge=app.plugins.plugins.copilot?.selfHostWebSearchAgentBridge;if(!bridge)throw new Error('Copilot self-host web search is unavailable.');return bridge.search(decode('$ARG_B64')).then(JSON.stringify);})()"
+  CLI_OUTPUT=$("$OBSIDIAN_CLI" "vault=$VAULT_NAME" eval "code=$CODE") || exit $?
+  CLI_RESULT=$(printf '%s\\n' "$CLI_OUTPUT" | sed -n '/^=> {/p' | sed -n '$p')
+  case "$CLI_RESULT" in
+    "=> {"*) printf '%s\\n' "\${CLI_RESULT#'=> '}"; exit 0 ;;
+    *) die "Copilot could not complete self-host web search." 1 ;;
+  esac
+fi
+`
+      : opts.selfHostMode === "deny"
+        ? `if [ "$SELF_HOST" = "1" ]; then
+  die "Self-Host mode does not support fetching a specific page. Do not use a native web-fetch tool; use copilot-web-search when search results are sufficient, otherwise tell the user page fetching is unavailable." 1
+fi
+`
+        : "";
+  const selfHostPs1 =
+    opts.selfHostMode === "search"
+      ? `if ($SELF_HOST -eq '1') {
+  if (-not $OBSIDIAN_CLI) { Die 'A compatible Obsidian CLI is unavailable for self-host web search.' 1 }
+  if (-not $VAULT_NAME) { Die 'The owning Obsidian vault is unavailable for self-host web search.' 1 }
+  $ARG_B64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($ARG))
+  $CODE = "(()=>{const decode=(value)=>new TextDecoder().decode(Uint8Array.from(atob(value),(char)=>char.charCodeAt(0)));const bridge=app.plugins.plugins.copilot?.selfHostWebSearchAgentBridge;if(!bridge)throw new Error('Copilot self-host web search is unavailable.');return bridge.search(decode('$ARG_B64')).then(JSON.stringify);})()"
+  $CLI_OUTPUT = & $OBSIDIAN_CLI "vault=$VAULT_NAME" 'eval' "code=$CODE"
+  if ($LASTEXITCODE -ne 0) { Die 'Copilot could not complete self-host web search.' 1 }
+  $CLI_RESULT = [string](@($CLI_OUTPUT | Where-Object { ([string]$_).StartsWith('=> {') })[-1])
+  if (-not $CLI_RESULT.StartsWith('=> {')) { Die 'Copilot could not complete self-host web search.' 1 }
+  [Console]::Out.WriteLine($CLI_RESULT.Substring(3))
+  exit 0
+}
+`
+      : opts.selfHostMode === "deny"
+        ? `if ($SELF_HOST -eq '1') {
+  Die 'Self-Host mode does not support fetching a specific page. Do not use a native web-fetch tool; use copilot-web-search when search results are sufficient, otherwise tell the user page fetching is unavailable.' 1
+}
+`
+        : "";
   return {
     name: opts.name,
     version,
@@ -352,7 +415,7 @@ function relaySkill(opts: {
     skillMd: `---
 name: ${opts.name}
 description: ${opts.description}
-license: Copilot Plus
+license: ${opts.license ?? "Copilot Plus"}
 metadata:
   copilot-enabled-agents: claude, codex, opencode
   copilot-builtin-version: "${version}"
@@ -365,6 +428,7 @@ ${opts.intro}
 ${howToRunSection({ shFile: opts.scriptFile, cmdFile, argPlaceholder })}
 
 ${LICENSE_PROBLEM_SECTION}
+${opts.extraInstructions ? `\n${opts.extraInstructions}\n` : ""}
 `,
     files: [
       {
@@ -372,6 +436,7 @@ ${LICENSE_PROBLEM_SECTION}
         content: `${scriptPreamble()}
 ARG="$*"
 [ -n "$ARG" ] || die "Usage: sh ${opts.scriptFile} <${argKey}>" 1
+${selfHostSh}require_relay
 relay "${opts.endpoint}" "{\\"${argKey}\\":\\"$(json_escape "$ARG")\\",\\"user_id\\":\\"$(json_escape "$USER_ID")\\"}"
 `,
       },
@@ -384,6 +449,7 @@ relay "${opts.endpoint}" "{\\"${argKey}\\":\\"$(json_escape "$ARG")\\",\\"user_i
         content: `${powershellPreamble()}
 $ARG = ($args -join ' ')
 if (-not $ARG) { Die "Usage: ${ps1File} <${argKey}>" 1 }
+${selfHostPs1}RequireRelay
 Invoke-Relay "${opts.endpoint}" @{ ${argKey} = $ARG; user_id = $USER_ID }
 `,
       },
@@ -394,12 +460,14 @@ Invoke-Relay "${opts.endpoint}" @{ ${argKey} = $ARG; user_id = $USER_ID }
 const WEB_SEARCH = relaySkill({
   name: "copilot-web-search",
   description:
-    "Search the web for current information using Copilot Plus. Use when the user asks to search online, look something up on the internet, or needs up-to-date facts beyond the vault. Prefer reading the vault for anything about the user's own notes. Requires an active Copilot Plus license.",
+    "Search the web for current information using Copilot Plus or the configured Self-Host search provider. Use when the user asks to search online, look something up on the internet, or needs up-to-date facts beyond the vault. Prefer reading the vault for anything about the user's own notes.",
   heading: "Copilot web search",
-  intro: "Search the web through Copilot Plus and return results for the user's query.",
+  intro: "Search the web through Copilot and return results for the user's query.",
   endpoint: "/websearch",
   arg: ["query", "<your search query>"],
   scriptFile: "web-search.sh",
+  license: "Copilot Plus or Self-Host",
+  selfHostMode: "search",
 });
 
 const WEB_FETCH = relaySkill({
@@ -411,6 +479,13 @@ const WEB_FETCH = relaySkill({
   endpoint: "/url4llm",
   arg: ["url", "<url-to-fetch>"],
   scriptFile: "web-fetch.sh",
+  selfHostMode: "deny",
+  extraInstructions: `## Self-Host mode
+
+Self-Host search providers do not provide a common full-page fetch contract. If
+the script reports that Self-Host mode is active, never use an agent-native web
+fetch tool. Use \`copilot-web-search\` when search results can answer the request;
+otherwise tell the user that fetching the page is unavailable.`,
 });
 
 const READ_PDF_VERSION = 6;
@@ -445,6 +520,7 @@ ${LICENSE_PROBLEM_SECTION}
     {
       path: "read-pdf.sh",
       content: `${scriptPreamble()}
+require_relay
 FILE=\${1:-}
 [ -n "$FILE" ] || die "Usage: sh read-pdf.sh <path-to-file.pdf>" 1
 [ -f "$FILE" ] && [ -r "$FILE" ] || die "Could not read file: $FILE" 1
@@ -461,6 +537,7 @@ relay "/pdf4llm" "{\\"pdf\\":\\"$PDF\\",\\"user_id\\":\\"$(json_escape "$USER_ID
     {
       path: "read-pdf.ps1",
       content: `${powershellPreamble()}
+RequireRelay
 $FILE = if ($args.Count -ge 1) { $args[0] } else { '' }
 if (-not $FILE) { Die "Usage: read-pdf.ps1 <path-to-file.pdf>" 1 }
 if (-not (Test-Path -LiteralPath $FILE -PathType Leaf)) { Die "Could not read file: $FILE" 1 }

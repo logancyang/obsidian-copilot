@@ -7,9 +7,11 @@ import { getSettings } from "@/settings/model";
 import { getMiyoCustomUrl } from "@/miyo/miyoUtils";
 import { BREVILABS_API_BASE_URL } from "@/constants";
 import {
+  AGENT_VAULT_NAME_ENV,
   MIYO_SEARCH_FOLDER_ENV,
   MIYO_SEARCH_SCOPE_ENV,
   PLUS_ENV,
+  SELF_HOST_WEB_SEARCH_ENV,
 } from "@/agentMode/skills/builtin/builtinSkills";
 import { SYMPOSIUM_WORKSPACE_ROOT_ENV } from "@/symposium/constants";
 import {
@@ -87,6 +89,7 @@ describe("builtinSkillEnv", () => {
 
       expect(await buildBuiltinSkillEnv("", "/vault/root", "root")).toEqual({
         [SYMPOSIUM_WORKSPACE_ROOT_ENV]: "/vault/root",
+        [AGENT_VAULT_NAME_ENV]: "root",
         [MIYO_SEARCH_SCOPE_ENV]: "current",
         [MIYO_SEARCH_FOLDER_ENV]: "root",
       });
@@ -97,6 +100,7 @@ describe("builtinSkillEnv", () => {
 
       expect(await buildBuiltinSkillEnv("", "/vault/root", "root")).toEqual({
         [SYMPOSIUM_WORKSPACE_ROOT_ENV]: "/vault/root",
+        [AGENT_VAULT_NAME_ENV]: "root",
         [MIYO_SEARCH_SCOPE_ENV]: "unrestricted",
         [MIYO_SEARCH_FOLDER_ENV]: "root",
       });
@@ -108,6 +112,22 @@ describe("builtinSkillEnv", () => {
 
       expect(await buildBuiltinSkillEnv()).toEqual({
         [COPILOT_OBSIDIAN_CLI_ENV]: "C:/Users/Me/App Data/Obsidian/Obsidian.com",
+      });
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/165 injects protected Self-Host routing without provider credentials", async () => {
+      mockGetSettings.mockReturnValue({
+        isPaidUser: false,
+        enableSelfHostMode: true,
+        exaApiKey: "host-only-key",
+      });
+
+      expect(await buildBuiltinSkillEnv("", "/vault/root", "root")).toEqual({
+        [SYMPOSIUM_WORKSPACE_ROOT_ENV]: "/vault/root",
+        [AGENT_VAULT_NAME_ENV]: "root",
+        [MIYO_SEARCH_SCOPE_ENV]: "current",
+        [MIYO_SEARCH_FOLDER_ENV]: "root",
+        [SELF_HOST_WEB_SEARCH_ENV]: "1",
       });
     });
 
@@ -147,6 +167,16 @@ describe("builtinSkillEnv", () => {
         ANTHROPIC_MODEL: "claude",
       });
     });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/165 prevents backend overrides from bypassing Self-Host search routing", () => {
+      expect(
+        sanitizeBuiltinSkillEnvOverrides({
+          [SELF_HOST_WEB_SEARCH_ENV]: "",
+          [AGENT_VAULT_NAME_ENV]: "other-vault",
+          OPENAI_API_KEY: "allowed",
+        })
+      ).toEqual({ OPENAI_API_KEY: "allowed" });
+    });
   });
 
   describe("getBuiltinSkillEnvRestartPolicy()", () => {
@@ -173,6 +203,20 @@ describe("builtinSkillEnv", () => {
       >;
 
       expect(getBuiltinSkillEnvRestartPolicy(prev, next)).toBe("immediate");
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/165 immediately blocks native web tools when Self-Host mode is enabled", () => {
+      const prev = { enableSelfHostMode: false } as ReturnType<typeof getSettings>;
+      const next = { enableSelfHostMode: true } as ReturnType<typeof getSettings>;
+
+      expect(getBuiltinSkillEnvRestartPolicy(prev, next)).toBe("immediate");
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/165 defers the routing refresh when Self-Host mode is disabled", () => {
+      const prev = { enableSelfHostMode: true } as ReturnType<typeof getSettings>;
+      const next = { enableSelfHostMode: false } as ReturnType<typeof getSettings>;
+
+      expect(getBuiltinSkillEnvRestartPolicy(prev, next)).toBe("deferred");
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/121 defers an enabled skill refresh when scope widens", () => {

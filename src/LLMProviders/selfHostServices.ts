@@ -1,5 +1,6 @@
 import { type Youtube4llmResponse } from "@/LLMProviders/brevilabsClient";
 import { logError, logInfo } from "@/logger";
+import { isSelfHostModeValid } from "@/plusUtils";
 import { getSettings } from "@/settings/model";
 import { safeFetchNoThrow } from "@/utils";
 
@@ -20,6 +21,39 @@ const SUPADATA_POLL_TIMEOUT = 60000;
 export interface SelfHostWebSearchResult {
   content: string;
   citations: string[];
+}
+
+/** Host-owned web-search surface exposed to Agent Chat scripts. */
+export interface SelfHostWebSearchAgentBridge {
+  search(query: string): Promise<SelfHostWebSearchResult>;
+}
+
+/**
+ * Keep self-host search credentials and entitlement checks inside the plugin host.
+ *
+ * @param isModeValid Resolves the live, verified self-host entitlement state.
+ * @param hasSearchKey Resolves whether the selected provider has a credential.
+ * @param search Runs the configured provider search inside Obsidian.
+ */
+export function createSelfHostWebSearchAgentBridge(
+  isModeValid: () => boolean = isSelfHostModeValid,
+  hasSearchKey: () => boolean = hasSelfHostSearchKey,
+  search: (query: string) => Promise<SelfHostWebSearchResult> = selfHostWebSearch
+): Readonly<SelfHostWebSearchAgentBridge> {
+  return Object.freeze({
+    async search(query: string): Promise<SelfHostWebSearchResult> {
+      // Agent processes must fail closed instead of falling back to a native
+      // web tool when the signed self-host entitlement is unavailable.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/165
+      if (!isModeValid()) {
+        throw new Error("Self-host web search is not available for this session.");
+      }
+      if (!hasSearchKey()) {
+        throw new Error("Add an API key for the selected self-host search provider.");
+      }
+      return search(query);
+    },
+  });
 }
 
 interface FirecrawlSearchResult {
