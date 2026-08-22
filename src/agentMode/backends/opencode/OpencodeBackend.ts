@@ -17,6 +17,7 @@ import { OpencodeBackendDescriptor } from "./descriptor";
 import { copilotPlusModelId, mapProviderToOpencodeId } from "./opencodeModelResolve";
 import type { PlanUsageReading } from "@/agentMode/session/planUsage";
 import { CopilotPlusUsageReader } from "@/agentMode/backends/shared/copilotPlusUsage";
+import type { SelfHostWebSearchAgentChannel } from "@/LLMProviders/selfHostServices";
 
 /**
  * Maps Copilot's `ChatModelProviders` to OpenCode's provider id. Used for the
@@ -71,6 +72,8 @@ export interface OpencodeModelDeps {
    * `external_directory` allow rule is simply not injected (feature dormant).
    */
   getCacheRoot?: () => string | undefined;
+  /** Starts or reuses the owning plugin lifecycle's provider-credential-free channel. */
+  getSelfHostWebSearchChannel?: () => Promise<Readonly<SelfHostWebSearchAgentChannel>>;
 }
 
 /**
@@ -183,11 +186,23 @@ export class OpencodeBackend implements AcpBackend {
           "snapshot read. Remove that override to restore silent cache access."
       );
     }
+    // Native web tools are already denied at this point, so a Self-Host spawn
+    // must obtain its replacement channel or fail before the agent starts.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/165
+    const selfHostSearchChannel =
+      settings.enableSelfHostMode === true
+        ? await this.#deps.getSelfHostWebSearchChannel?.()
+        : undefined;
+    if (settings.enableSelfHostMode === true && !selfHostSearchChannel) {
+      throw new Error("Copilot self-host web search channel is unavailable.");
+    }
+
     // Builtin skills consume plugin-managed runtime paths and credentials.
     const builtinSkillEnv = await buildBuiltinSkillEnv(
       this.#deps.clientVersion,
       ctx.vaultBasePath,
-      ctx.vaultName
+      ctx.vaultName,
+      selfHostSearchChannel
     );
 
     return {

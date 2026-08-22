@@ -7,11 +7,12 @@ import { getSettings } from "@/settings/model";
 import { getMiyoCustomUrl } from "@/miyo/miyoUtils";
 import { BREVILABS_API_BASE_URL } from "@/constants";
 import {
-  AGENT_VAULT_NAME_ENV,
   MIYO_SEARCH_FOLDER_ENV,
   MIYO_SEARCH_SCOPE_ENV,
   PLUS_ENV,
   SELF_HOST_WEB_SEARCH_ENV,
+  SELF_HOST_WEB_SEARCH_TOKEN_ENV,
+  SELF_HOST_WEB_SEARCH_URL_ENV,
 } from "@/agentMode/skills/builtin/builtinSkills";
 import { SYMPOSIUM_WORKSPACE_ROOT_ENV } from "@/symposium/constants";
 import {
@@ -89,7 +90,6 @@ describe("builtinSkillEnv", () => {
 
       expect(await buildBuiltinSkillEnv("", "/vault/root", "root")).toEqual({
         [SYMPOSIUM_WORKSPACE_ROOT_ENV]: "/vault/root",
-        [AGENT_VAULT_NAME_ENV]: "root",
         [MIYO_SEARCH_SCOPE_ENV]: "current",
         [MIYO_SEARCH_FOLDER_ENV]: "root",
       });
@@ -100,7 +100,6 @@ describe("builtinSkillEnv", () => {
 
       expect(await buildBuiltinSkillEnv("", "/vault/root", "root")).toEqual({
         [SYMPOSIUM_WORKSPACE_ROOT_ENV]: "/vault/root",
-        [AGENT_VAULT_NAME_ENV]: "root",
         [MIYO_SEARCH_SCOPE_ENV]: "unrestricted",
         [MIYO_SEARCH_FOLDER_ENV]: "root",
       });
@@ -122,13 +121,25 @@ describe("builtinSkillEnv", () => {
         exaApiKey: "host-only-key",
       });
 
-      expect(await buildBuiltinSkillEnv("", "/vault/root", "root")).toEqual({
+      expect(
+        await buildBuiltinSkillEnv("", "/vault/root", "root", {
+          url: "http://127.0.0.1:1234/search",
+          token: "session-token",
+        })
+      ).toEqual({
         [SYMPOSIUM_WORKSPACE_ROOT_ENV]: "/vault/root",
-        [AGENT_VAULT_NAME_ENV]: "root",
         [MIYO_SEARCH_SCOPE_ENV]: "current",
         [MIYO_SEARCH_FOLDER_ENV]: "root",
         [SELF_HOST_WEB_SEARCH_ENV]: "1",
+        [SELF_HOST_WEB_SEARCH_URL_ENV]: "http://127.0.0.1:1234/search",
+        [SELF_HOST_WEB_SEARCH_TOKEN_ENV]: "session-token",
       });
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/165 does not mark Self-Host routing active before its replacement channel exists", async () => {
+      mockGetSettings.mockReturnValue({ isPaidUser: false, enableSelfHostMode: true });
+
+      expect(await buildBuiltinSkillEnv()).toEqual({});
     });
 
     it("merges MIYO_URL with the Plus relay env for a Plus user with a custom Miyo URL", async () => {
@@ -172,7 +183,8 @@ describe("builtinSkillEnv", () => {
       expect(
         sanitizeBuiltinSkillEnvOverrides({
           [SELF_HOST_WEB_SEARCH_ENV]: "",
-          [AGENT_VAULT_NAME_ENV]: "other-vault",
+          [SELF_HOST_WEB_SEARCH_URL_ENV]: "http://attacker.invalid",
+          [SELF_HOST_WEB_SEARCH_TOKEN_ENV]: "replacement-token",
           OPENAI_API_KEY: "allowed",
         })
       ).toEqual({ OPENAI_API_KEY: "allowed" });

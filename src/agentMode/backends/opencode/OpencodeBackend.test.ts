@@ -29,10 +29,11 @@ import {
   COPILOT_PROMPT_BASE,
 } from "@/agentMode/backends/shared/agentSystemPrompt";
 import {
-  AGENT_VAULT_NAME_ENV,
   MIYO_SEARCH_FOLDER_ENV,
   MIYO_SEARCH_SCOPE_ENV,
   SELF_HOST_WEB_SEARCH_ENV,
+  SELF_HOST_WEB_SEARCH_TOKEN_ENV,
+  SELF_HOST_WEB_SEARCH_URL_ENV,
 } from "@/agentMode/skills/builtin/builtinSkills";
 
 function makeSystemPrompt(title: string, content: string): UserSystemPrompt {
@@ -166,6 +167,10 @@ function makeDeps(args: {
     providerRegistry: {
       getApiKey: async (providerId: string) => keys[providerId] ?? null,
     } as unknown as ProviderRegistry,
+    getSelfHostWebSearchChannel: async () => ({
+      url: "http://127.0.0.1:1234/search",
+      token: "session-token",
+    }),
   };
 }
 
@@ -1034,7 +1039,6 @@ describe("OpencodeBackend.buildSpawnDescriptor", () => {
     expect(desc.args).toEqual(["acp", "--cwd", "/active-vault"]);
     expect(desc.env[MIYO_SEARCH_SCOPE_ENV]).toBe("current");
     expect(desc.env[MIYO_SEARCH_FOLDER_ENV]).toBe("active-vault");
-    expect(desc.env[AGENT_VAULT_NAME_ENV]).toBe("active-vault");
   });
 
   it("https://github.com/Brevilabs/obsidian-copilot-private/issues/165 seals top-level and per-agent native web permissions in config overrides", async () => {
@@ -1050,7 +1054,8 @@ describe("OpencodeBackend.buildSpawnDescriptor", () => {
           binaryPath: "/path/to/opencode",
           envOverrides: {
             [SELF_HOST_WEB_SEARCH_ENV]: "",
-            [AGENT_VAULT_NAME_ENV]: "other-vault",
+            [SELF_HOST_WEB_SEARCH_URL_ENV]: "http://attacker.invalid",
+            [SELF_HOST_WEB_SEARCH_TOKEN_ENV]: "replacement-token",
             OPENCODE_CONFIG_CONTENT: JSON.stringify({
               permission: "ask",
               agent: {
@@ -1070,7 +1075,8 @@ describe("OpencodeBackend.buildSpawnDescriptor", () => {
     const cfg = JSON.parse(desc.env.OPENCODE_CONFIG_CONTENT as string);
 
     expect(desc.env[SELF_HOST_WEB_SEARCH_ENV]).toBe("1");
-    expect(desc.env[AGENT_VAULT_NAME_ENV]).toBe("active-vault");
+    expect(desc.env[SELF_HOST_WEB_SEARCH_URL_ENV]).toBe("http://127.0.0.1:1234/search");
+    expect(desc.env[SELF_HOST_WEB_SEARCH_TOKEN_ENV]).toBe("session-token");
     expect(cfg.permission).toEqual({ "*": "ask", websearch: "deny", webfetch: "deny" });
     expect(cfg.agent.build.permission).toEqual({
       bash: "ask",
@@ -1082,6 +1088,24 @@ describe("OpencodeBackend.buildSpawnDescriptor", () => {
       websearch: "deny",
       webfetch: "deny",
     });
+  });
+
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/165 refuses to start Self-Host OpenCode before the replacement search channel is available", async () => {
+    setSettings({ enableSelfHostMode: true });
+    updateSetting("agentMode", {
+      byok: {},
+      activeBackend: "opencode",
+      debugFullFrames: false,
+      welcomeDismissed: false,
+      skills: { folder: "copilot/skills" },
+      backends: { opencode: { binaryPath: "/path/to/opencode" } },
+    });
+    const deps = makeDeps({ resolved: [] });
+    delete deps.getSelfHostWebSearchChannel;
+
+    await expect(
+      new OpencodeBackend(deps).buildSpawnDescriptor({ vaultBasePath: "/vault" })
+    ).rejects.toThrow("self-host web search channel is unavailable");
   });
 
   it("https://github.com/Brevilabs/obsidian-copilot-private/issues/165 rejects a non-object config override instead of starting without native web denies", async () => {

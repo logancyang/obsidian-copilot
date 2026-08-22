@@ -2,11 +2,12 @@ import { BREVILABS_API_BASE_URL } from "@/constants";
 import { type CopilotSettings, getSettings } from "@/settings/model";
 import { getMiyoCustomUrl } from "@/miyo/miyoUtils";
 import {
-  AGENT_VAULT_NAME_ENV,
   MIYO_SEARCH_FOLDER_ENV,
   MIYO_SEARCH_SCOPE_ENV,
   PLUS_ENV,
   SELF_HOST_WEB_SEARCH_ENV,
+  SELF_HOST_WEB_SEARCH_TOKEN_ENV,
+  SELF_HOST_WEB_SEARCH_URL_ENV,
 } from "@/agentMode/skills/builtin/builtinSkills";
 import { SYMPOSIUM_WORKSPACE_ROOT_ENV } from "@/symposium/constants";
 import {
@@ -22,7 +23,8 @@ const PROTECTED_BUILTIN_ENV_KEYS = [
   MIYO_SEARCH_SCOPE_ENV,
   MIYO_SEARCH_FOLDER_ENV,
   SELF_HOST_WEB_SEARCH_ENV,
-  AGENT_VAULT_NAME_ENV,
+  SELF_HOST_WEB_SEARCH_URL_ENV,
+  SELF_HOST_WEB_SEARCH_TOKEN_ENV,
 ] as const;
 
 /** Frozen empty result so unmanaged spawns don't allocate a fresh object each time. */
@@ -44,8 +46,8 @@ const EMPTY_MANAGED_ENV: Readonly<Record<string, string>> = Object.freeze({});
  *   prompt.
  * - **Host review** (`SYMPOSIUM_WORKSPACE_ROOT`): owning workspace used to
  *   stage HTML and derive the wrapper's explicit Obsidian CLI vault target.
- * - **Self-host web search**: a mode marker and exact vault identity route the
- *   managed skill back into Obsidian without exposing provider credentials.
+ * - **Self-host web search**: a mode marker and per-lifecycle loopback channel
+ *   route the managed skill back into Obsidian without exposing provider credentials.
  * - **Miyo** (`MIYO_URL`): the user's custom/remote Miyo server URL when set, so
  *   the bundled `miyo` CLI targets their configured service instead of local
  *   loopback discovery (the only way Miyo works on mobile or against a remote
@@ -54,12 +56,14 @@ const EMPTY_MANAGED_ENV: Readonly<Record<string, string>> = Object.freeze({});
  *   without a license.
  * @param clientVersion Version reported to the Copilot Plus relay.
  * @param workspaceRootAbs Absolute host workspace root used by portable skills.
- * @param vaultName Exact active-vault name used by host-backed skills.
+ * @param vaultName Exact active-vault name used by vault-scoped skills.
+ * @param selfHostSearchChannel Plugin-owned endpoint and token for Self-Host search.
  */
 export async function buildBuiltinSkillEnv(
   clientVersion = "",
   workspaceRootAbs = "",
-  vaultName = ""
+  vaultName = "",
+  selfHostSearchChannel?: Readonly<{ url: string; token: string }>
 ): Promise<Readonly<Record<string, string>>> {
   const os = requireNodeModule<typeof import("node:os")>("os");
   const settings = getSettings();
@@ -74,14 +78,14 @@ export async function buildBuiltinSkillEnv(
   });
   if (obsidianCliPath) env[COPILOT_OBSIDIAN_CLI_ENV] = obsidianCliPath;
 
-  // The CLI bridge must target this lifecycle's vault instead of whichever
-  // Obsidian renderer happens to be focused.
+  // The channel values are protected from backend overrides so Self-Host mode
+  // cannot silently fall back to a hosted or agent-native search path.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/165
-  if (vaultName) env[AGENT_VAULT_NAME_ENV] = vaultName;
-  // The marker is protected from backend overrides so Self-Host mode cannot
-  // silently fall back to a hosted or agent-native search path.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/165
-  if (settings.enableSelfHostMode === true) env[SELF_HOST_WEB_SEARCH_ENV] = "1";
+  if (settings.enableSelfHostMode === true && selfHostSearchChannel) {
+    env[SELF_HOST_WEB_SEARCH_ENV] = "1";
+    env[SELF_HOST_WEB_SEARCH_URL_ENV] = selfHostSearchChannel.url;
+    env[SELF_HOST_WEB_SEARCH_TOKEN_ENV] = selfHostSearchChannel.token;
+  }
 
   // The CLI reads MIYO_URL; bare/local installs leave it empty and fall back to
   // loopback discovery.

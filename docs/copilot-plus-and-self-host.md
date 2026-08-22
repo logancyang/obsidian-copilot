@@ -106,8 +106,8 @@ Supporter and eligible legacy licenses can open **Settings → Copilot → Self-
 When it is on, Copilot:
 
 - Lets you supply Firecrawl, Perplexity, Parallel, or Exa credentials for web search.
-- Routes Agent Chat web searches through that selected provider while keeping its API key inside Obsidian.
-- Disables opencode's native web-search and web-fetch tools so they cannot bypass the selected route. Full-page fetching is unavailable until the self-host providers share a supported fetch interface.
+- With OpenCode selected, routes Agent Chat web searches through that selected provider while keeping its API key inside Obsidian. This does not require Obsidian's command line interface.
+- Disables OpenCode's native web-search and web-fetch tools so they cannot bypass the selected route. Full-page fetching through OpenCode is unavailable until the self-host providers share a supported fetch interface.
 - Lets you supply a Supadata key for YouTube transcripts.
 - Directs you to BYOK for local or self-hosted model endpoints.
 - Flags and sorts cloud agents and models below local or self-hosted choices.

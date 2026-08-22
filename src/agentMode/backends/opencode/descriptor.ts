@@ -284,6 +284,16 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
         // shared conversions cache. vaultId/path derivation lives entirely in
         // conversionsLocation — this backend never duplicates it.
         getCacheRoot: () => cacheRoot(args.plugin.app),
+        getSelfHostWebSearchChannel: () => {
+          // The native deny is safe only when this lifecycle can provide the
+          // replacement route before OpenCode starts.
+          // https://github.com/Brevilabs/obsidian-copilot-private/issues/165
+          const bridge = args.plugin.selfHostWebSearchAgentBridge;
+          if (!bridge) {
+            throw new Error("Copilot self-host web search channel is unavailable.");
+          }
+          return bridge.getChannel();
+        },
       })
     );
   },

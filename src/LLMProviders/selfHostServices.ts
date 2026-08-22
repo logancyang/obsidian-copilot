@@ -3,6 +3,7 @@ import { logError, logInfo } from "@/logger";
 import { isSelfHostModeValid } from "@/plusUtils";
 import { getSettings } from "@/settings/model";
 import { safeFetchNoThrow } from "@/utils";
+import { requireNodeModule } from "@/utils/desktopRuntime";
 
 const FIRECRAWL_SEARCH_URL = "https://api.firecrawl.dev/v2/search";
 const PERPLEXITY_CHAT_URL = "https://api.perplexity.ai/chat/completions";
@@ -11,6 +12,12 @@ const PARALLEL_SEARCH_QUERY_MAX_LENGTH = 200;
 const PARALLEL_OBJECTIVE_MAX_LENGTH = 5000;
 const EXA_SEARCH_URL = "https://api.exa.ai/search";
 const SUPADATA_TRANSCRIPT_URL = "https://api.supadata.ai/v1/transcript";
+/** Bounds agent-controlled input. https://github.com/Brevilabs/obsidian-copilot-private/issues/165 */
+const AGENT_SEARCH_REQUEST_MAX_LENGTH = 64 * 1024;
+
+type HttpServer = import("node:http").Server;
+type IncomingMessage = import("node:http").IncomingMessage;
+type ServerResponse = import("node:http").ServerResponse;
 
 /** Poll interval for Supadata async jobs (ms) */
 const SUPADATA_POLL_INTERVAL = 2000;
@@ -23,13 +30,20 @@ export interface SelfHostWebSearchResult {
   citations: string[];
 }
 
-/** Host-owned web-search surface exposed to Agent Chat scripts. */
+/** Address and bearer token for one plugin-owned Agent Chat search channel. */
+export interface SelfHostWebSearchAgentChannel {
+  url: string;
+  token: string;
+}
+
+/** Owns the provider-credential-free local channel used by Agent Chat search scripts. */
 export interface SelfHostWebSearchAgentBridge {
-  search(query: string): Promise<SelfHostWebSearchResult>;
+  getChannel(): Promise<Readonly<SelfHostWebSearchAgentChannel>>;
+  dispose(): void;
 }
 
 /**
- * Keep self-host search credentials and entitlement checks inside the plugin host.
+ * Keep provider credentials and entitlement checks inside a CLI-independent plugin channel.
  *
  * @param isModeValid Resolves the live, verified self-host entitlement state.
  * @param hasSearchKey Resolves whether the selected provider has a credential.
@@ -40,20 +54,142 @@ export function createSelfHostWebSearchAgentBridge(
   hasSearchKey: () => boolean = hasSelfHostSearchKey,
   search: (query: string) => Promise<SelfHostWebSearchResult> = selfHostWebSearch
 ): Readonly<SelfHostWebSearchAgentBridge> {
+  let server: HttpServer | null = null;
+  let channelPromise: Promise<Readonly<SelfHostWebSearchAgentChannel>> | null = null;
+  let rejectChannelStart: ((error: Error) => void) | null = null;
+  let disposed = false;
+
+  const runSearch = async (query: string): Promise<SelfHostWebSearchResult> => {
+    // Agent processes must fail closed instead of falling back to a native
+    // web tool when the signed self-host entitlement is unavailable.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/165
+    if (!isModeValid()) {
+      throw new Error("Self-host web search is not available for this session.");
+    }
+    if (!hasSearchKey()) {
+      throw new Error("Add an API key for the selected self-host search provider.");
+    }
+    return search(query);
+  };
+
+  const startChannel = (): Promise<Readonly<SelfHostWebSearchAgentChannel>> => {
+    const http = requireNodeModule<typeof import("node:http")>("http");
+    const crypto = requireNodeModule<typeof import("node:crypto")>("crypto");
+    const token = crypto.randomBytes(32).toString("hex");
+
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      const rejectStart = (error: Error): void => {
+        if (settled) return;
+        settled = true;
+        rejectChannelStart = null;
+        reject(error);
+      };
+      const resolveStart = (channel: Readonly<SelfHostWebSearchAgentChannel>): void => {
+        if (settled) return;
+        settled = true;
+        rejectChannelStart = null;
+        resolve(channel);
+      };
+      rejectChannelStart = rejectStart;
+      const nextServer = http.createServer((request, response) => {
+        void handleAgentSearchRequest(request, response, token, runSearch);
+      });
+      server = nextServer;
+      nextServer.once("error", rejectStart);
+      nextServer.listen(0, "127.0.0.1", () => {
+        if (disposed) {
+          nextServer.close();
+          rejectStart(new Error("Self-host web search channel is closed."));
+          return;
+        }
+        const address = nextServer.address() as import("node:net").AddressInfo;
+        nextServer.on("error", (error) => {
+          logError("[AgentMode] Self-host web search channel failed", error);
+        });
+        nextServer.unref();
+        resolveStart(
+          Object.freeze({
+            url: `http://127.0.0.1:${address.port}/search`,
+            token,
+          })
+        );
+      });
+    });
+  };
+
   return Object.freeze({
-    async search(query: string): Promise<SelfHostWebSearchResult> {
-      // Agent processes must fail closed instead of falling back to a native
-      // web tool when the signed self-host entitlement is unavailable.
+    getChannel(): Promise<Readonly<SelfHostWebSearchAgentChannel>> {
+      if (disposed) {
+        return Promise.reject(new Error("Self-host web search channel is closed."));
+      }
+      channelPromise ??= startChannel();
+      return channelPromise;
+    },
+    dispose(): void {
+      disposed = true;
+      // Closing before Node emits `listening` skips the listen callback, so
+      // explicitly settle a spawn already awaiting this channel.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/165
-      if (!isModeValid()) {
-        throw new Error("Self-host web search is not available for this session.");
-      }
-      if (!hasSearchKey()) {
-        throw new Error("Add an API key for the selected self-host search provider.");
-      }
-      return search(query);
+      rejectChannelStart?.(new Error("Self-host web search channel is closed."));
+      server?.close();
+      server = null;
+      channelPromise = null;
     },
   });
+}
+
+async function handleAgentSearchRequest(
+  request: IncomingMessage,
+  response: ServerResponse,
+  token: string,
+  search: (query: string) => Promise<SelfHostWebSearchResult>
+): Promise<void> {
+  // Bind to loopback, require a per-lifecycle token, and accept only one route
+  // so another vault or local webpage cannot select this plugin instance.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/165
+  if (request.method !== "POST" || request.url !== "/search") {
+    writeAgentSearchResponse(response, 404, { error: "Not found." });
+    return;
+  }
+  if (request.headers.authorization !== `Bearer ${token}`) {
+    writeAgentSearchResponse(response, 401, { error: "Unauthorized." });
+    return;
+  }
+
+  try {
+    const query = await readAgentSearchRequestBody(request);
+    if (!query.trim()) {
+      writeAgentSearchResponse(response, 400, { error: "A non-empty query is required." });
+      return;
+    }
+    writeAgentSearchResponse(response, 200, await search(query));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const status = message === "Request body is too large." ? 413 : 500;
+    writeAgentSearchResponse(response, status, { error: message });
+  }
+}
+
+async function readAgentSearchRequestBody(request: IncomingMessage): Promise<string> {
+  request.setEncoding("utf8");
+  let body = "";
+  for await (const chunk of request) {
+    body += chunk;
+    if (body.length > AGENT_SEARCH_REQUEST_MAX_LENGTH) {
+      throw new Error("Request body is too large.");
+    }
+  }
+  return body;
+}
+
+function writeAgentSearchResponse(
+  response: ServerResponse,
+  status: number,
+  body: SelfHostWebSearchResult | { error: string }
+): void {
+  response.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
+  response.end(JSON.stringify(body));
 }
 
 interface FirecrawlSearchResult {

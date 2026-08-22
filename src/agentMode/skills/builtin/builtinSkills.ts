@@ -59,8 +59,10 @@ export const MIYO_SEARCH_SCOPE_ENV = "COPILOT_MIYO_SEARCH_SCOPE";
 export const MIYO_SEARCH_FOLDER_ENV = "COPILOT_MIYO_SEARCH_FOLDER";
 /** Routes managed web skills through the plugin host instead of a hosted relay. */
 export const SELF_HOST_WEB_SEARCH_ENV = "COPILOT_SELF_HOST_WEB_SEARCH";
-/** Exact vault identity used to target the owning Obsidian CLI renderer. */
-export const AGENT_VAULT_NAME_ENV = "COPILOT_AGENT_VAULT_NAME";
+/** Per-lifecycle loopback endpoint for the plugin-owned search channel. */
+export const SELF_HOST_WEB_SEARCH_URL_ENV = "COPILOT_SELF_HOST_WEB_SEARCH_URL";
+/** Random bearer token authenticating the owning Agent Chat process. */
+export const SELF_HOST_WEB_SEARCH_TOKEN_ENV = "COPILOT_SELF_HOST_WEB_SEARCH_TOKEN";
 
 /**
  * No Copilot Plus license is configured — the free-user case (a non-Plus user
@@ -126,8 +128,8 @@ KEY="\${${PLUS_ENV.licenseKey}:-}"
 USER_ID="\${${PLUS_ENV.userId}:-}"
 CLIENT_VERSION="\${${PLUS_ENV.clientVersion}:-}"
 SELF_HOST="\${${SELF_HOST_WEB_SEARCH_ENV}:-}"
-OBSIDIAN_CLI="\${COPILOT_OBSIDIAN_CLI:-}"
-VAULT_NAME="\${${AGENT_VAULT_NAME_ENV}:-}"
+SELF_HOST_URL="\${${SELF_HOST_WEB_SEARCH_URL_ENV}:-}"
+SELF_HOST_TOKEN="\${${SELF_HOST_WEB_SEARCH_TOKEN_ENV}:-}"
 NO_LICENSE=${shSingleQuote(NO_LICENSE_MESSAGE)}
 NO_LICENSE_UPSELL=${shSingleQuote(NO_LICENSE_UPSELL)}
 LICENSE_INVALID=${shSingleQuote(LICENSE_INVALID_MESSAGE)}
@@ -210,8 +212,8 @@ $KEY = [Environment]::GetEnvironmentVariable('${PLUS_ENV.licenseKey}')
 $USER_ID = [Environment]::GetEnvironmentVariable('${PLUS_ENV.userId}')
 $CLIENT_VERSION = [Environment]::GetEnvironmentVariable('${PLUS_ENV.clientVersion}')
 $SELF_HOST = [Environment]::GetEnvironmentVariable('${SELF_HOST_WEB_SEARCH_ENV}')
-$OBSIDIAN_CLI = [Environment]::GetEnvironmentVariable('COPILOT_OBSIDIAN_CLI')
-$VAULT_NAME = [Environment]::GetEnvironmentVariable('${AGENT_VAULT_NAME_ENV}')
+$SELF_HOST_URL = [Environment]::GetEnvironmentVariable('${SELF_HOST_WEB_SEARCH_URL_ENV}')
+$SELF_HOST_TOKEN = [Environment]::GetEnvironmentVariable('${SELF_HOST_WEB_SEARCH_TOKEN_ENV}')
 if ($null -eq $USER_ID) { $USER_ID = '' }
 if ($null -eq $CLIENT_VERSION) { $CLIENT_VERSION = '' }
 $NO_LICENSE = ${psSingleQuote(NO_LICENSE_MESSAGE)}
@@ -369,15 +371,16 @@ function relaySkill(opts: {
   const selfHostSh =
     opts.selfHostMode === "search"
       ? `if [ "$SELF_HOST" = "1" ]; then
-  [ -n "$OBSIDIAN_CLI" ] || die "A compatible Obsidian CLI is unavailable for self-host web search." 1
-  [ -n "$VAULT_NAME" ] || die "The owning Obsidian vault is unavailable for self-host web search." 1
-  ARG_B64=$(printf '%s' "$ARG" | base64 | tr -d '\\r\\n')
-  CODE="(()=>{const decode=(value)=>new TextDecoder().decode(Uint8Array.from(atob(value),(char)=>char.charCodeAt(0)));const bridge=app.plugins.plugins.copilot?.selfHostWebSearchAgentBridge;if(!bridge)throw new Error('Copilot self-host web search is unavailable.');return bridge.search(decode('$ARG_B64')).then(JSON.stringify);})()"
-  CLI_OUTPUT=$("$OBSIDIAN_CLI" "vault=$VAULT_NAME" eval "code=$CODE") || exit $?
-  CLI_RESULT=$(printf '%s\\n' "$CLI_OUTPUT" | sed -n '/^=> {/p' | sed -n '$p')
-  case "$CLI_RESULT" in
-    "=> {"*) printf '%s\\n' "\${CLI_RESULT#'=> '}"; exit 0 ;;
-    *) die "Copilot could not complete self-host web search." 1 ;;
+  [ -n "$SELF_HOST_URL" ] && [ -n "$SELF_HOST_TOKEN" ] || die "Copilot self-host web search is unavailable for this session." 1
+  HTTP_RESPONSE=$(printf '%s' "$ARG" | curl --noproxy '*' -sS -X POST "$SELF_HOST_URL" \\
+    -H "Authorization: Bearer $SELF_HOST_TOKEN" \\
+    -H "Content-Type: text/plain; charset=utf-8" \\
+    --data-binary @- -w '\\n%{http_code}') || die "Copilot could not complete self-host web search." 1
+  HTTP_STATUS=$(printf '%s\\n' "$HTTP_RESPONSE" | tail -n 1)
+  RESPONSE_BODY=$(printf '%s\\n' "$HTTP_RESPONSE" | sed '$d')
+  case "$HTTP_STATUS" in
+    2??) printf '%s\\n' "$RESPONSE_BODY"; exit 0 ;;
+    *) [ -n "$RESPONSE_BODY" ] && printf '%s\\n' "$RESPONSE_BODY" >&2; exit 1 ;;
   esac
 fi
 `
@@ -390,15 +393,14 @@ fi
   const selfHostPs1 =
     opts.selfHostMode === "search"
       ? `if ($SELF_HOST -eq '1') {
-  if (-not $OBSIDIAN_CLI) { Die 'A compatible Obsidian CLI is unavailable for self-host web search.' 1 }
-  if (-not $VAULT_NAME) { Die 'The owning Obsidian vault is unavailable for self-host web search.' 1 }
-  $ARG_B64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($ARG))
-  $CODE = "(()=>{const decode=(value)=>new TextDecoder().decode(Uint8Array.from(atob(value),(char)=>char.charCodeAt(0)));const bridge=app.plugins.plugins.copilot?.selfHostWebSearchAgentBridge;if(!bridge)throw new Error('Copilot self-host web search is unavailable.');return bridge.search(decode('$ARG_B64')).then(JSON.stringify);})()"
-  $CLI_OUTPUT = & $OBSIDIAN_CLI "vault=$VAULT_NAME" 'eval' "code=$CODE"
-  if ($LASTEXITCODE -ne 0) { Die 'Copilot could not complete self-host web search.' 1 }
-  $CLI_RESULT = [string](@($CLI_OUTPUT | Where-Object { ([string]$_).StartsWith('=> {') })[-1])
-  if (-not $CLI_RESULT.StartsWith('=> {')) { Die 'Copilot could not complete self-host web search.' 1 }
-  [Console]::Out.WriteLine($CLI_RESULT.Substring(3))
+  if (-not $SELF_HOST_URL -or -not $SELF_HOST_TOKEN) { Die 'Copilot self-host web search is unavailable for this session.' 1 }
+  try {
+    $response = Invoke-WebRequest -UseBasicParsing -Uri $SELF_HOST_URL -Method POST -Headers @{ Authorization = "Bearer $SELF_HOST_TOKEN" } -ContentType 'text/plain; charset=utf-8' -Body ([Text.Encoding]::UTF8.GetBytes($ARG))
+  } catch {
+    if ($_.ErrorDetails.Message) { [Console]::Error.WriteLine($_.ErrorDetails.Message) }
+    Die 'Copilot could not complete self-host web search.' 1
+  }
+  [Console]::Out.WriteLine($response.Content)
   exit 0
 }
 `

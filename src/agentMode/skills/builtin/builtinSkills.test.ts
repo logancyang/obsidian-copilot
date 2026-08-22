@@ -1,11 +1,12 @@
 import {
-  AGENT_VAULT_NAME_ENV,
   BUILTIN_SKILLS,
   MIYO_PARSE_SKILL,
   MIYO_SEARCH_SKILL,
   planManagedBuiltins,
   PLUS_ENV,
   SELF_HOST_WEB_SEARCH_ENV,
+  SELF_HOST_WEB_SEARCH_TOKEN_ENV,
+  SELF_HOST_WEB_SEARCH_URL_ENV,
 } from "./builtinSkills";
 import {
   SYMPOSIUM_AGENT_HANDOFF_DIR,
@@ -156,17 +157,24 @@ describe("builtinSkills", () => {
       );
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/165 routes Self-Host web search through the owning Obsidian plugin bridge", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/165 routes Self-Host web search through the plugin-owned channel without the optional Obsidian CLI", () => {
       const sh = scriptOf("copilot-web-search", ".sh");
       expect(sh).toContain(SELF_HOST_WEB_SEARCH_ENV);
-      expect(sh).toContain(AGENT_VAULT_NAME_ENV);
-      expect(sh).toContain("selfHostWebSearchAgentBridge");
-      expect(sh).toContain('"vault=$VAULT_NAME" eval');
+      expect(sh).toContain(SELF_HOST_WEB_SEARCH_URL_ENV);
+      expect(sh).toContain(SELF_HOST_WEB_SEARCH_TOKEN_ENV);
+      expect(sh).toContain("curl --noproxy '*' -sS -X POST \"$SELF_HOST_URL\"");
+      expect(sh).toContain("--data-binary @-");
+      expect(sh).toContain("-w '\\n%{http_code}'");
+      expect(sh).toContain("printf '%s\\n' \"$RESPONSE_BODY\" >&2");
+      expect(sh).not.toContain("COPILOT_OBSIDIAN_CLI");
+      expect(sh).not.toContain("vault=$VAULT_NAME");
       expect(sh.indexOf('if [ "$SELF_HOST" = "1" ]')).toBeLessThan(sh.indexOf("require_relay\n"));
 
       const ps1 = scriptOf("copilot-web-search", ".ps1");
-      expect(ps1).toContain("selfHostWebSearchAgentBridge");
-      expect(ps1).toContain('& $OBSIDIAN_CLI "vault=$VAULT_NAME"');
+      expect(ps1).toContain("Invoke-WebRequest");
+      expect(ps1).toContain("Bearer $SELF_HOST_TOKEN");
+      expect(ps1).toContain("[Console]::Out.WriteLine($response.Content)");
+      expect(ps1).not.toContain("COPILOT_OBSIDIAN_CLI");
       expect(ps1.indexOf("if ($SELF_HOST -eq '1')")).toBeLessThan(ps1.indexOf("RequireRelay\n"));
     });
 
