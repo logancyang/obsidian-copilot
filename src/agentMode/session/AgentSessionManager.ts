@@ -337,7 +337,10 @@ export class AgentSessionManager {
    */
   private lastErrorSeq = 0;
 
-  private readonly pendingBackendRestarts = new Map<BackendId, string>();
+  private readonly pendingBackendRestarts = new Map<
+    BackendId,
+    { reason: string; immediate: boolean }
+  >();
   private readonly restartingBackends = new Set<BackendId>();
   private readonly preloader: AgentModelPreloader;
   /**
@@ -2196,8 +2199,9 @@ export class AgentSessionManager {
 
   /**
    * Restart a backend process so spawn-time configuration, including native
-   * skill discovery and deny rules, is rebuilt from current settings. If a
-   * session on that backend is busy, the restart is deferred until it is idle.
+   * skill discovery and deny rules, is rebuilt from current settings. By
+   * default a busy backend waits until it is idle; privacy-boundary callers can
+   * disable that deferral and cancel the active turn.
    *
    * When the manager owns no process yet, a warm probe held by the preloader
    * may still carry the pre-change spawn config; we refresh it instead (see
@@ -2205,8 +2209,16 @@ export class AgentSessionManager {
    *
    * Returns `true` when a running backend was restarted, a restart was
    * scheduled, or a warm probe was refreshed; `false` when nothing exists yet.
+   *
+   * @param backendId Backend process whose spawn-time state is stale.
+   * @param reason Diagnostic reason recorded for the restart.
+   * @param options Whether a busy turn may delay the restart.
    */
-  async restartBackend(backendId: BackendId, reason: string): Promise<boolean> {
+  async restartBackend(
+    backendId: BackendId,
+    reason: string,
+    options?: { deferWhileBusy?: boolean }
+  ): Promise<boolean> {
     if (this.disposed) return false;
     const inflight = this.starting.get(backendId);
     if (inflight) {
@@ -2214,13 +2226,19 @@ export class AgentSessionManager {
     }
     const backend = this.backends.get(backendId);
     if (!backend) return this.refreshWarmProbe(backendId, reason);
-    if (this.hasBusySession(backendId)) {
+    // Most config changes preserve the current turn. A Search scope change may
+    // opt out so no later tool call uses the prior privacy boundary.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/121
+    if (options?.deferWhileBusy !== false && this.hasBusySession(backendId)) {
       const prev = this.pendingBackendRestarts.get(backendId);
-      this.pendingBackendRestarts.set(backendId, prev ? `${prev}; ${reason}` : reason);
+      this.pendingBackendRestarts.set(backendId, {
+        reason: prev ? `${prev.reason}; ${reason}` : reason,
+        immediate: prev?.immediate ?? false,
+      });
       logInfo(`[AgentMode] deferred ${backendId} backend restart: ${reason}`);
       return true;
     }
-    await this.restartBackendNow(backendId, reason);
+    await this.restartBackendNow(backendId, reason, options?.deferWhileBusy === false);
     return true;
   }
 
@@ -3506,12 +3524,12 @@ export class AgentSessionManager {
 
   /** Execute a pending backend restart once every session for that backend is idle. */
   private async flushDeferredBackendRestartIfReady(backendId: BackendId): Promise<void> {
-    const reason = this.pendingBackendRestarts.get(backendId);
-    if (!reason) return;
-    if (this.hasBusySession(backendId)) return;
+    const pending = this.pendingBackendRestarts.get(backendId);
+    if (!pending) return;
+    if (!pending.immediate && this.hasBusySession(backendId)) return;
     this.pendingBackendRestarts.delete(backendId);
     try {
-      await this.restartBackendNow(backendId, reason);
+      await this.restartBackendNow(backendId, pending.reason, pending.immediate);
     } catch (err) {
       this.setLastError(err2String(err));
       logError(`[AgentMode] deferred ${backendId} backend restart failed`, err);
@@ -3520,7 +3538,11 @@ export class AgentSessionManager {
   }
 
   /** Immediately tear down `backendId` and replace the active affected tab. */
-  private async restartBackendNow(backendId: BackendId, reason: string): Promise<void> {
+  private async restartBackendNow(
+    backendId: BackendId,
+    reason: string,
+    immediate = false
+  ): Promise<void> {
     // A restart is already running for this backend. Stash the reason so the
     // tail of the in-flight restart can re-run with the latest settings —
     // otherwise rapid-fire emits (e.g. one BYOK save touching many models)
@@ -3528,7 +3550,13 @@ export class AgentSessionManager {
     // config until something else triggered another restart.
     if (this.restartingBackends.has(backendId)) {
       const prev = this.pendingBackendRestarts.get(backendId);
-      this.pendingBackendRestarts.set(backendId, prev ? `${prev}; ${reason}` : reason);
+      this.pendingBackendRestarts.set(backendId, {
+        reason: prev ? `${prev.reason}; ${reason}` : reason,
+        immediate: (prev?.immediate ?? false) || immediate,
+      });
+      // A Search scope change queued behind another refresh must keep its
+      // non-deferrable privacy semantics when the first refresh completes.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/121
       return;
     }
     const proc = this.backends.get(backendId);
@@ -3583,14 +3611,14 @@ export class AgentSessionManager {
     const queued = this.pendingBackendRestarts.get(backendId);
     if (queued !== undefined && !this.disposed) {
       this.pendingBackendRestarts.delete(backendId);
-      if (this.hasBusySession(backendId)) {
+      if (!queued.immediate && this.hasBusySession(backendId)) {
         // A session went busy between requests; fall back to the deferral
         // path so we don't tear down mid-turn.
         this.pendingBackendRestarts.set(backendId, queued);
         return;
       }
       try {
-        await this.restartBackendNow(backendId, queued);
+        await this.restartBackendNow(backendId, queued.reason, queued.immediate);
       } catch (err) {
         this.setLastError(err2String(err));
         logError(`[AgentMode] queued ${backendId} backend restart failed`, err);

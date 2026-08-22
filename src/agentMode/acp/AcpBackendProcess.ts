@@ -222,6 +222,7 @@ export class AcpBackendProcess implements BackendProcess {
     }
     const descriptor = await this.backend.buildSpawnDescriptor({
       vaultBasePath: adapter.getBasePath(),
+      vaultName: this.app.vault.getName(),
     });
 
     const procOpts: AcpProcessManagerOptions = {

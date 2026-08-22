@@ -1,6 +1,12 @@
 import type { AgentSession } from "@/agentMode/session/AgentSession";
 import type { BackendState, InstallState } from "@/agentMode/session/types";
-import { resetSettings, type CopilotSettings } from "@/settings/model";
+import { resetSettings, setSettings, type CopilotSettings } from "@/settings/model";
+import {
+  MIYO_SEARCH_FOLDER_ENV,
+  MIYO_SEARCH_SCOPE_ENV,
+} from "@/agentMode/skills/builtin/builtinSkills";
+import { __resetVaultBaseCache } from "@/utils/vaultPath";
+import { FileSystemAdapter, type App } from "obsidian";
 import { resolveClaudeBinary } from "./claudeBinaryResolver";
 import { claudeCompatibilityStore } from "./claudeCompatibilityStore";
 import {
@@ -57,6 +63,60 @@ function settingsWithClaudeRuntime(options: {
 describe("claude descriptor", () => {
   beforeEach(() => {
     jest.resetAllMocks();
+  });
+
+  describe("ClaudeBackendDescriptor.createBackendProcess()", () => {
+    afterEach(() => {
+      resetSettings();
+      __resetVaultBaseCache();
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/121 gives global and Project sessions the same protected active-vault Miyo identity", async () => {
+      resetSettings();
+      __resetVaultBaseCache();
+      mockResolveClaudeBinary.mockReturnValue("/usr/local/bin/claude");
+      setSettings({
+        miyoSearchAll: false,
+        agentMode: {
+          byok: {},
+          activeBackend: "claude",
+          debugFullFrames: false,
+          welcomeDismissed: false,
+          skills: { folder: "copilot/skills" },
+          backends: {
+            claude: {
+              envOverrides: {
+                [MIYO_SEARCH_SCOPE_ENV]: "unrestricted",
+                [MIYO_SEARCH_FOLDER_ENV]: "other-vault",
+              },
+            },
+          },
+        },
+      });
+      const adapter = Object.create(FileSystemAdapter.prototype) as FileSystemAdapter;
+      adapter.getBasePath = () => "/active-vault";
+      const app = { vault: { adapter, getName: () => "active-vault" } } as unknown as App;
+
+      const process = ClaudeBackendDescriptor.createBackendProcess({
+        plugin: {} as never,
+        app,
+        clientVersion: "4.0.0",
+        descriptor: ClaudeBackendDescriptor,
+      }) as unknown as {
+        opts: {
+          getEnvOverrides?: () => Record<string, string> | undefined;
+          getManagedEnv?: () => Promise<Readonly<Record<string, string>>>;
+        };
+      };
+
+      expect(process.opts.getEnvOverrides?.()).toEqual({});
+      await expect(process.opts.getManagedEnv?.()).resolves.toEqual(
+        expect.objectContaining({
+          [MIYO_SEARCH_SCOPE_ENV]: "current",
+          [MIYO_SEARCH_FOLDER_ENV]: "active-vault",
+        })
+      );
+    });
   });
 
   describe("getClaudeInstallState()", () => {

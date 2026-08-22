@@ -24,7 +24,11 @@ export interface AcpBackend {
   /** Human-readable name surfaced in the UI. */
   readonly displayName: string;
   /** Build the spawn descriptor (BYOK keys decrypted, env composed). */
-  buildSpawnDescriptor(ctx: { vaultBasePath: string }): Promise<AcpSpawnDescriptor>;
+  buildSpawnDescriptor(ctx: {
+    vaultBasePath: string;
+    /** Human-readable name of the active vault, independent of session cwd. */
+    vaultName?: string;
+  }): Promise<AcpSpawnDescriptor>;
   /** Return false to keep backend-owned agent-message text out of the session. */
   readonly shouldRouteAgentMessageText?: (text: string) => boolean;
   /**

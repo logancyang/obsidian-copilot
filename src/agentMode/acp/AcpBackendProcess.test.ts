@@ -69,7 +69,9 @@ jest.mock("./AcpProcessManager", () => ({
 
 function buildApp(basePath = "/vault"): App {
   const adapter = new (FileSystemAdapter as unknown as new (basePath: string) => unknown)(basePath);
-  return { vault: { adapter } } as unknown as App;
+  return {
+    vault: { adapter, getName: () => basePath.split(/[/\\]/).filter(Boolean).at(-1) ?? "" },
+  } as unknown as App;
 }
 
 function buildStubBackend(overrides: Partial<AcpBackend> = {}): AcpBackend {
@@ -115,6 +117,25 @@ describe("AcpBackendProcess", () => {
     mockResumeSession.mockResolvedValue({});
     mockLoadSession.mockClear();
     mockLoadSession.mockResolvedValue({});
+  });
+
+  describe("start()", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/121 passes the active vault identity to the shared process used by global and Project sessions", async () => {
+      const agentBackend = buildStubBackend();
+      const backend = new AcpBackendProcess(
+        buildApp("/Volumes/Notes/Main Vault"),
+        agentBackend,
+        "1.0.0",
+        buildStubDescriptor()
+      );
+
+      await backend.start();
+
+      expect(agentBackend.buildSpawnDescriptor).toHaveBeenCalledWith({
+        vaultBasePath: "/Volumes/Notes/Main Vault",
+        vaultName: "Main Vault",
+      });
+    });
   });
 
   describe("routeSessionUpdate()", () => {

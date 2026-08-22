@@ -54,6 +54,10 @@ export const PLUS_ENV = {
   clientVersion: "COPILOT_CLIENT_VERSION",
 } as const;
 
+/** Plugin-owned scope inputs consumed by the managed Miyo search wrappers. */
+export const MIYO_SEARCH_SCOPE_ENV = "COPILOT_MIYO_SEARCH_SCOPE";
+export const MIYO_SEARCH_FOLDER_ENV = "COPILOT_MIYO_SEARCH_FOLDER";
+
 /**
  * No Copilot Plus license is configured — the free-user case (a non-Plus user
  * gets no relay entries from `buildBuiltinSkillEnv`, so `KEY`/`BASE` are absent).
@@ -698,7 +702,7 @@ export const BUILTIN_SKILLS: readonly BuiltinSkill[] = [
   ...OBSIDIAN_SKILLS,
 ];
 
-const MIYO_SEARCH_VERSION = 2;
+const MIYO_SEARCH_VERSION = 3;
 const MIYO_PARSE_VERSION = 1;
 
 /** Shared by both Miyo wrappers; the host script must define `die` before it. */
@@ -743,7 +747,21 @@ QUERY="$*"
 
 ${MIYO_POSIX_RESOLVER}
 
-OUT=$("$MIYO" search "$QUERY" -n 10 --json 2>&1) || die "Miyo search failed — the Miyo app may not be running. Tell the user to open Miyo, then continue without vault search if they can't. Details: $OUT" 1
+# Default closed: only the explicit Unrestricted value may omit Miyo's exact
+# pre-retrieval folder boundary.
+# https://github.com/Brevilabs/obsidian-copilot-private/issues/121
+case "\${${MIYO_SEARCH_SCOPE_ENV}:-current}" in
+  unrestricted)
+    OUT=$("$MIYO" search "$QUERY" -n 10 --json 2>&1) || die "Miyo search failed — the Miyo app may not be running. Tell the user to open Miyo, then continue without vault search if they can't. Details: $OUT" 1
+    ;;
+  current)
+    [ -n "\${${MIYO_SEARCH_FOLDER_ENV}:-}" ] || die "Miyo search could not enforce Current vault scope because the active vault identity is missing. Do not retry or run an unrestricted search." 4
+    OUT=$("$MIYO" search "$QUERY" -n 10 --folder "$${MIYO_SEARCH_FOLDER_ENV}" --json 2>&1) || die "Miyo search could not enforce Current vault scope. Update Miyo, open it, and retry. Do not run an unrestricted search. Details: $OUT" 1
+    ;;
+  *)
+    die "Miyo search received an invalid Search scope. Do not retry or run an unrestricted search." 4
+    ;;
+esac
 printf '%s\\n' "$OUT"
 `;
 
@@ -761,7 +779,27 @@ if "%~1"=="" (
   exit /b 1
 )
 ${MIYO_WINDOWS_RESOLVER}
-"%MIYO%" search %* -n 10 --json
+rem Default closed: only the explicit Unrestricted value may omit Miyo's exact
+rem pre-retrieval folder boundary.
+rem https://github.com/Brevilabs/obsidian-copilot-private/issues/121
+if /I "%${MIYO_SEARCH_SCOPE_ENV}%"=="unrestricted" (
+  "%MIYO%" search %* -n 10 --json
+  if errorlevel 1 exit /b 1
+  exit /b 0
+)
+if not "%${MIYO_SEARCH_SCOPE_ENV}%"=="" if /I not "%${MIYO_SEARCH_SCOPE_ENV}%"=="current" (
+  echo Miyo search received an invalid Search scope. Do not retry or run an unrestricted search. 1>&2
+  exit /b 4
+)
+if not defined ${MIYO_SEARCH_FOLDER_ENV} (
+  echo Miyo search could not enforce Current vault scope because the active vault identity is missing. Do not retry or run an unrestricted search. 1>&2
+  exit /b 4
+)
+"%MIYO%" search %* -n 10 --folder "%${MIYO_SEARCH_FOLDER_ENV}%" --json
+if errorlevel 1 (
+  echo Miyo search could not enforce Current vault scope. Update Miyo, open it, and retry. Do not run an unrestricted search. 1>&2
+  exit /b 1
+)
 `;
 
 const MIYO_PARSE_SH = `#!/bin/sh
@@ -854,6 +892,10 @@ not need to know where Miyo is installed or which shell you are in. Run the
 script as your single search step; do not fall back to other search tools
 unless it reports that Miyo is unavailable. Read the JSON straight from stdout;
 do not pipe it through other tools (no \`jq\`, no \`|\`).
+
+Search scope comes from Copilot settings. **Current vault** applies Miyo's exact
+folder boundary for the active vault, including from Project chats.
+**Unrestricted** searches every folder registered with Miyo.
 
 ## Reading the results
 

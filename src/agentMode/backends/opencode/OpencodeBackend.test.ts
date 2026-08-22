@@ -28,6 +28,10 @@ import {
   buildAgentSystemPrompt,
   COPILOT_PROMPT_BASE,
 } from "@/agentMode/backends/shared/agentSystemPrompt";
+import {
+  MIYO_SEARCH_FOLDER_ENV,
+  MIYO_SEARCH_SCOPE_ENV,
+} from "@/agentMode/skills/builtin/builtinSkills";
 
 function makeSystemPrompt(title: string, content: string): UserSystemPrompt {
   return { title, content, createdMs: 0, modifiedMs: 0, lastUsedMs: 0 };
@@ -989,6 +993,35 @@ describe("OpencodeBackend.buildSpawnDescriptor", () => {
     const desc = await backend.buildSpawnDescriptor({ vaultBasePath: "/vault/abs" });
 
     expect(desc.env.COPILOT_CLIENT_VERSION).toBe("4.0.0-preview-260802");
+  });
+
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/121 gives global and Project sessions the same protected active-vault Miyo identity", async () => {
+    setSettings({ miyoSearchAll: false });
+    updateSetting("agentMode", {
+      byok: {},
+      activeBackend: "opencode",
+      debugFullFrames: false,
+      welcomeDismissed: false,
+      skills: { folder: "copilot/skills" },
+      backends: {
+        opencode: {
+          binaryPath: "/path/to/opencode",
+          envOverrides: {
+            [MIYO_SEARCH_SCOPE_ENV]: "unrestricted",
+            [MIYO_SEARCH_FOLDER_ENV]: "other-vault",
+          },
+        },
+      },
+    });
+
+    const desc = await new OpencodeBackend(NO_MODELS_DEPS).buildSpawnDescriptor({
+      vaultBasePath: "/active-vault",
+      vaultName: "active-vault",
+    });
+
+    expect(desc.args).toEqual(["acp", "--cwd", "/active-vault"]);
+    expect(desc.env[MIYO_SEARCH_SCOPE_ENV]).toBe("current");
+    expect(desc.env[MIYO_SEARCH_FOLDER_ENV]).toBe("active-vault");
   });
 
   it("threads the injected getCacheRoot into the spawned external_directory allow", async () => {
