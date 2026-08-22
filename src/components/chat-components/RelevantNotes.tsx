@@ -25,6 +25,10 @@ import { Platform, TFile } from "obsidian";
 import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
 
 const EMPTY_RELEVANT_NOTES = Object.freeze([]) as unknown as RelevantNoteEntry[];
+const IDLE_RELEVANT_NOTES_RESULT = Object.freeze({
+  notes: EMPTY_RELEVANT_NOTES,
+  semanticState: "idle" as const,
+});
 const DISABLED_RELEVANT_NOTES_RESULT = Object.freeze({
   notes: EMPTY_RELEVANT_NOTES,
   semanticState: "disabled" as const,
@@ -53,11 +57,17 @@ function useRelevantNotes(enableMiyo: boolean, miyoServerUrl: string) {
     let cancelled = false;
 
     async function fetchNotes() {
+      // With no active Markdown note there is no source to query. Keep the
+      // neutral empty state instead of entering loading forever.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
+      if (!activeFile?.path) {
+        setResult(IDLE_RELEVANT_NOTES_RESULT);
+        return;
+      }
       // Do not claim that Miyo is ready or unavailable while the request that
       // establishes its current state is still pending.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
       setResult(enableMiyo ? LOADING_RELEVANT_NOTES_RESULT : DISABLED_RELEVANT_NOTES_RESULT);
-      if (!activeFile?.path) return;
       try {
         const notes = await findRelevantNotes({ app, filePath: activeFile.path });
         // A settings or active-note change can supersede an in-flight Miyo
@@ -408,7 +418,7 @@ export const RelevantNotes = memo(
           ? "unavailable"
           : result.semanticState === "not-indexed"
             ? "not-indexed"
-            : result.semanticState === "loading"
+            : result.semanticState === "loading" || result.semanticState === "idle"
               ? null
               : hasSemanticMatches
                 ? null
@@ -462,15 +472,15 @@ export const RelevantNotes = memo(
                     ))}
                     miyoDownloadUrl={MIYO_HOMEPAGE_URL}
                     canOpenMiyoApp={canOpenMiyoApp}
-                     onOpenMiyoApp={(event) =>
-                       event.currentTarget.win.open(MIYO_DEEPLINK_URL, "_blank")
-                     }
-                     onOpenMiyoSettings={(event) =>
-                       openCopilotSettings(app, event.currentTarget.win, "miyo")
-                     }
-                     onRefresh={refresh}
-                   />
-                 )}
+                    onOpenMiyoApp={(event) =>
+                      event.currentTarget.win.open(MIYO_DEEPLINK_URL, "_blank")
+                    }
+                    onOpenMiyoSettings={(event) =>
+                      openCopilotSettings(app, event.currentTarget.win, "miyo")
+                    }
+                    onRefresh={refresh}
+                  />
+                )}
               </div>
             </div>
           </>
