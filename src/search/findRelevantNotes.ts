@@ -1,5 +1,5 @@
 import { logError, logInfo } from "@/logger";
-import { MiyoClient } from "@/miyo/MiyoClient";
+import { MiyoClient, MiyoRequestError } from "@/miyo/MiyoClient";
 import {
   getMiyoCustomUrl,
   getMiyoFilePath,
@@ -10,9 +10,12 @@ import {
 import { getBacklinkedNotes, getLinkedNotes } from "@/noteUtils";
 import { createCopilotPatternFilter } from "@/search/searchUtils";
 import { getSettings } from "@/settings/model";
+import { withTimeout } from "@/utils";
 import { App, TFile } from "obsidian";
 
 const MAX_K = 20;
+const MIYO_FOLDER_LOOKUP_TIMEOUT_MS = 8000;
+const MIYO_UNINDEXED_SOURCE_DETAIL = "No indexed chunks found for file_path";
 
 /**
  * Normalize a score map to the top K entries, ordered by score descending.
@@ -37,18 +40,25 @@ function capToTopK(scoreMap: Map<string, number>): Map<string, number> {
  *
  * @param app - The Obsidian app instance.
  * @param filePath - Source note path.
- * @returns Map of note paths to max similarity score.
+ * @returns Semantic scores and the Miyo state established by the request.
  */
 async function calculateSimilarityScoreFromMiyo(
   app: App,
   filePath: string
-): Promise<Map<string, number>> {
+): Promise<SemanticSearchResult> {
   const settings = getSettings();
   const miyoClient = new MiyoClient();
   const folderName = getMiyoFolderName(app);
   const miyoFilePath = getMiyoFilePath(app, filePath);
+  let baseUrl: string;
   try {
-    const baseUrl = await miyoClient.resolveBaseUrl(getMiyoCustomUrl(settings));
+    baseUrl = await miyoClient.resolveBaseUrl(getMiyoCustomUrl(settings));
+  } catch (error) {
+    logError(`RelevantNotes(Miyo): could not resolve Miyo: ${(error as Error).message}`);
+    return { similarityScoreMap: new Map(), semanticState: "unavailable" };
+  }
+
+  try {
     const response = await miyoClient.searchRelated(baseUrl, miyoFilePath, {
       folderName,
       limit: MAX_K,
@@ -82,15 +92,54 @@ async function calculateSimilarityScoreFromMiyo(
       );
     }
 
-    return capToTopK(similarityScoreMap);
+    return { similarityScoreMap: capToTopK(similarityScoreMap), semanticState: "ready" };
   } catch (error) {
-    logError(
-      `RelevantNotes(Miyo): searchRelated failed for file_path=${miyoFilePath} folder_name=${folderName}: ${
-        (error as Error).message
-      }`
-    );
-    return new Map();
+    // Miyo uses this one response for a source that has no indexed chunks,
+    // including a new note and a note excluded by Miyo. Only that response
+    // merits a bounded registration probe; an outage must remain unavailable.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
+    if (
+      !(error instanceof MiyoRequestError) ||
+      error.status !== 404 ||
+      error.detail !== MIYO_UNINDEXED_SOURCE_DETAIL
+    ) {
+      logError(
+        `RelevantNotes(Miyo): searchRelated failed for file_path=${miyoFilePath} folder_name=${folderName}: ${
+          (error as Error).message
+        }`
+      );
+      return { similarityScoreMap: new Map(), semanticState: "unavailable" };
+    }
+
+    try {
+      // A registered folder proves setup is healthy, but Miyo cannot tell
+      // whether this particular path is still indexing or excluded.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
+      await withTimeout(
+        () => miyoClient.getFolder(baseUrl, folderName),
+        MIYO_FOLDER_LOOKUP_TIMEOUT_MS,
+        "Relevant Notes Miyo folder lookup"
+      );
+      return { similarityScoreMap: new Map(), semanticState: "not-indexed" };
+    } catch (folderError) {
+      logError(
+        `RelevantNotes(Miyo): source has no indexed chunks and folder lookup failed for folder_name=${folderName}: ${(folderError as Error).message}`
+      );
+      return { similarityScoreMap: new Map(), semanticState: "unavailable" };
+    }
   }
+}
+
+export type RelevantNotesSemanticState =
+  | "loading"
+  | "disabled"
+  | "ready"
+  | "not-indexed"
+  | "unavailable";
+
+interface SemanticSearchResult {
+  similarityScoreMap: Map<string, number>;
+  semanticState: RelevantNotesSemanticState;
 }
 
 /**
@@ -98,14 +147,21 @@ async function calculateSimilarityScoreFromMiyo(
  *
  * @param app - The Obsidian app instance.
  * @param filePath - Source note path.
- * @returns Map of note paths to max similarity score.
+ * @returns Semantic scores and the Miyo state established by the request.
  */
-async function calculateSimilarityScore(app: App, filePath: string): Promise<Map<string, number>> {
+async function calculateSimilarityScore(app: App, filePath: string): Promise<SemanticSearchResult> {
   // Links and backlinks remain useful without Miyo, but the legacy local index
   // must not assign them semantic scores or trigger a hidden Miyo fallback.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
-  if (getSearchBackend(getSettings()) !== "miyo") {
-    return new Map();
+  const settings = getSettings();
+  if (!settings.enableMiyo) {
+    return { similarityScoreMap: new Map(), semanticState: "disabled" };
+  }
+  // An enabled Miyo that cannot run in this environment still needs the setup
+  // handoff, including mobile without a configured remote endpoint.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
+  if (getSearchBackend(settings) !== "miyo") {
+    return { similarityScoreMap: new Map(), semanticState: "unavailable" };
   }
   return calculateSimilarityScoreFromMiyo(app, filePath);
 }
@@ -151,6 +207,11 @@ export type RelevantNoteEntry = {
   };
 };
 
+export interface RelevantNotesResult {
+  notes: RelevantNoteEntry[];
+  semanticState: RelevantNotesSemanticState;
+}
+
 /**
  * Finds relevant notes for a file while enforcing Copilot's live search scope
  * across semantic and link-derived candidates.
@@ -166,13 +227,16 @@ export async function findRelevantNotes({
 }: {
   app: App;
   filePath: string;
-}): Promise<RelevantNoteEntry[]> {
+}): Promise<RelevantNotesResult> {
   const file = app.vault.getAbstractFileByPath(filePath);
   if (!(file instanceof TFile)) {
-    return [];
+    return {
+      notes: [],
+      semanticState: getSettings().enableMiyo ? "unavailable" : "disabled",
+    };
   }
 
-  const similarityScoreMap = await calculateSimilarityScore(app, filePath);
+  const { similarityScoreMap, semanticState } = await calculateSimilarityScore(app, filePath);
   const noteLinks = getNoteLinks(app, file);
 
   // Rank purely by semantic similarity so the displayed percentages stay
@@ -191,7 +255,7 @@ export async function findRelevantNotes({
       if (bScore == null) return -1;
       return bScore - aScore;
     });
-  return sortedPaths
+  const notes = sortedPaths
     .map((path) => {
       const file = app.vault.getAbstractFileByPath(path);
       if (!(file instanceof TFile) || file.extension !== "md") {
@@ -212,4 +276,5 @@ export async function findRelevantNotes({
       };
     })
     .filter((entry) => entry !== null);
+  return { notes, semanticState };
 }
