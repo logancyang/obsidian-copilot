@@ -39,6 +39,14 @@ Use **Search scope** in the Miyo settings tab:
 
 The scope is a retrieval preference, not a security boundary. Keep Miyo's registered folders intentional, especially when you use an unrestricted scope or connect to a shared remote server.
 
+### Relevant Notes
+
+Relevant Notes always includes direct links and backlinks that pass Copilot's search scope. Miyo is the only source of semantic matches and similarity percentages in this pane; Copilot's legacy local embedding index no longer scores Relevant Notes.
+
+If Miyo is disabled, link and backlink rows stay visible without percentages and the pane offers Miyo download and setup actions. If Miyo is unavailable or the vault registration cannot be confirmed, the same rows remain visible and **Open Miyo settings** returns directly to the existing connection flow under **Settings → Copilot → Miyo**, including when you use a remote endpoint or mobile device.
+
+A successful search with zero results shows **No semantic matches yet** without treating the empty result as a setup failure. When Miyo reports that the active path has no indexed chunks but the vault is registered, the pane instead shows **This note isn't indexed in Miyo**. Miyo uses that response for both a note that is still indexing and a path excluded from Miyo, so Copilot does not claim to know which one applies. On a local desktop connection, **Open Miyo** opens the Miyo app so you can review the folder's indexing and exclusion settings. Mobile and remote connections instead offer **Review Miyo connection**, which opens Copilot's Miyo tab to review the configured server without implying that Copilot can change Miyo's exclusions. Copilot's own inclusion and exclusion rules remain separate: a locally excluded active note still shows **This note is excluded**.
+
 ## Search conversations and process documents
 
 Miyo can also index supported ChatGPT and Claude chat histories. Configure those sources in Miyo, then use the **Search chat** row in Copilot to see their status and open Miyo's management screen. Chat-history search is separate from vault search.
@@ -63,6 +71,7 @@ Connector access is separate from Agent Chat search. Review the folders, remote 
 - **Register this vault:** register the folder in Miyo, then connect again.
 - **Semantic search is missing:** confirm the connection is healthy and turn on **Semantic search**. Copilot installs the shared Miyo skill for opencode, Claude, and Codex.
 - **New notes are missing:** ask Miyo to refresh the registered folder. Indexing progress is shown in Miyo.
+- **Relevant Notes has no semantic results:** **No semantic matches yet** means Miyo answered successfully but found no related notes. **This note isn't indexed in Miyo** means the note may still be indexing or may be excluded from Miyo. Links and backlinks remain visible in either state.
 - **Agent Chat Miyo document processing fails:** install Miyo on this computer so its local CLI is available, or switch **Document Processor** to **Plus**. A remote Miyo search connection does not provide the local CLI Agent Chat needs.
 - **Quick Chat Miyo document processing fails:** confirm that the connected Miyo service can access the registered vault and document. When a remote server is configured, troubleshoot the document on that server.
 - **Copilot asks for a resync:** use **Resync Miyo** so Miyo excludes Copilot's own working folder and conversation files.

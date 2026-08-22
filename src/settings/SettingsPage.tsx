@@ -2,6 +2,7 @@ import CopilotView from "@/components/CopilotView";
 import { CHAT_VIEWTYPE } from "@/constants";
 import CopilotPlugin from "@/main";
 import { getSettings } from "@/settings/model";
+import { consumeRequestedCopilotSettingsTab } from "@/settings/openSettings";
 import { logInfo, logError } from "@/logger";
 import { App, Notice, PluginSettingTab } from "obsidian";
 import React from "react";
@@ -67,6 +68,8 @@ export class CopilotSettingTab extends PluginSettingTab {
     const div = containerEl.createDiv("div");
     const sections = createPluginRoot(div, this.app);
 
-    sections.render(<SettingsMainV2 plugin={this.plugin} />);
+    sections.render(
+      <SettingsMainV2 plugin={this.plugin} initialTab={consumeRequestedCopilotSettingsTab()} />
+    );
   }
 }

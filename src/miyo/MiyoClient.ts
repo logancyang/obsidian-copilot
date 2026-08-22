@@ -13,6 +13,27 @@ export type {
 } from "@/miyo/miyoHealth";
 
 /**
+ * Represents an HTTP error returned by Miyo while leaving transport and
+ * endpoint-specific recovery decisions to the caller.
+ */
+export class MiyoRequestError extends Error {
+  public constructor(
+    public readonly status: number,
+    public readonly detail: string
+  ) {
+    // Some Miyo failures have no response body; retaining the prior status-only
+    // message keeps those callers stable while exposing structured fields.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
+    super(
+      detail
+        ? `Miyo request failed with status ${status}: ${detail}`
+        : `Miyo request failed with status ${status}`
+    );
+    this.name = "MiyoRequestError";
+  }
+}
+
+/**
  * Indexed file entry returned by Miyo.
  */
 export interface MiyoIndexedFileEntry {
@@ -696,11 +717,10 @@ export class MiyoClient {
       );
       const errorText = errorPayload?.detail || response.text || "";
       logWarn(`Miyo request failed (${response.status}): ${errorText}`);
-      throw new Error(
-        errorText
-          ? `Miyo request failed with status ${response.status}: ${errorText}`
-          : `Miyo request failed with status ${response.status}`
-      );
+      // Relevant Notes must distinguish an unindexed source from a service
+      // outage without parsing human-readable error messages.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
+      throw new MiyoRequestError(response.status, errorText);
     }
 
     const parsed = this.parseResponseJson<T>(response.json, response.text);
