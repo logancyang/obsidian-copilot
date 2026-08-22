@@ -124,13 +124,21 @@ function isEntitlementExpired(settings: CopilotSettings): boolean {
  * an edited `entitlementExpiresAt` would hold it open past the token's real
  * `exp` for as long as the session lived.
  *
- * `token` is what settings must still hold for the proof to apply. That is how
- * the paths that drop the token (turnOffPaid and markPaidPendingEntitlement)
- * revoke these capabilities without touching this state: no stored token can
- * match `""` while carrying features.
+ * `token` and `licenseKey` are what settings must still hold for the proof to
+ * apply. That is how the paths that drop the token (turnOffPaid and
+ * markPaidPendingEntitlement) revoke these capabilities without touching this
+ * state: no stored token can match `""` while carrying features.
  */
 interface VerifiedEntitlement {
   token: string;
+  /**
+   * The license key this entitlement was issued for. Without it the proof
+   * belongs to no key in particular, so swapping in a different key and getting
+   * anything short of an authoritative refusal (offline, 5xx, gateway error)
+   * would let the new key inherit the old one's plan.
+   * https://github.com/Brevilabs/obsidian-copilot-private/issues/307
+   */
+  licenseKey: string;
   features: ReadonlySet<EntitlementFeature>;
   /** The claims' plan name, for display only — never gated on. */
   plan: string;
@@ -147,6 +155,7 @@ interface VerifiedEntitlement {
 /** Frozen "nothing verified" proof — referential stability for the empty state. */
 const NO_VERIFIED_ENTITLEMENT: VerifiedEntitlement = Object.freeze({
   token: "",
+  licenseKey: "",
   features: Object.freeze(new Set<EntitlementFeature>()),
   plan: "",
   expiresAt: 0,
@@ -157,12 +166,17 @@ let verified: VerifiedEntitlement = NO_VERIFIED_ENTITLEMENT;
 
 /**
  * Whether the entitlement verified this session still stands: the proof must
- * belong to the token settings currently hold, and the signed `exp` must not
- * have passed. This is the offline window — signature-backed, so unlike the
- * persisted `isPaidUser` an edited `data.json` cannot widen it.
+ * belong to the token AND the license key settings currently hold, and the
+ * signed `exp` must not have passed. This is the offline window — signature-backed,
+ * so unlike the persisted `isPaidUser` an edited `data.json` cannot widen it.
  */
 function hasLiveEntitlement(): boolean {
-  return verified.token === getSettings().entitlementToken && Date.now() < verified.expiresAt;
+  const settings = getSettings();
+  return (
+    verified.token === settings.entitlementToken &&
+    verified.licenseKey === settings.plusLicenseKey &&
+    Date.now() < verified.expiresAt
+  );
 }
 
 /**
@@ -564,12 +578,17 @@ export function turnOffPaid(app?: App): void {
  * authoritative negative (invalid license / no key) downgrades, via turnOffPaid.
  */
 export async function applyEntitlement(token: string): Promise<boolean> {
-  const claims = await verifyEntitlement(token, { expectedUserId: getSettings().userId });
+  // Read before the await: a key swapped while verification is in flight would
+  // otherwise tag this proof with the new key while it carries the old key's
+  // claims, which is the inheritance this binding exists to prevent.
+  const { userId, plusLicenseKey } = getSettings();
+  const claims = await verifyEntitlement(token, { expectedUserId: userId });
   if (!claims) {
     return false;
   }
   verified = {
     token,
+    licenseKey: plusLicenseKey,
     features: new Set(claims.features),
     plan: claims.plan,
     expiresAt: claims.exp * 1000,
@@ -594,7 +613,7 @@ export async function applyEntitlement(token: string): Promise<boolean> {
  * separately and overrides this with the server's fresh token.
  */
 export async function verifyCachedEntitlement(): Promise<void> {
-  const { entitlementToken, userId } = getSettings();
+  const { entitlementToken, userId, plusLicenseKey } = getSettings();
   const claims = entitlementToken
     ? await verifyEntitlement(entitlementToken, { expectedUserId: userId })
     : null;
@@ -610,6 +629,7 @@ export async function verifyCachedEntitlement(): Promise<void> {
   // rotation, tampering) must drop the capabilities an earlier check granted it.
   verified = {
     token: entitlementToken,
+    licenseKey: plusLicenseKey,
     features: new Set(claims?.features),
     plan: claims?.plan ?? "",
     expiresAt: (claims?.exp ?? 0) * 1000,
