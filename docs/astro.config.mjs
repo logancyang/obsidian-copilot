@@ -58,5 +58,16 @@ const sidebar = [
 export default defineConfig({
   site: "https://docs.obsidiancopilot.com",
   markdown: { remarkPlugins: [remarkPublishedDocs] },
-  integrations: [starlight({ title: "Copilot for Obsidian", sidebar })],
+  integrations: [
+    starlight({
+      title: "Copilot for Obsidian",
+      favicon: "/favicon.svg",
+      logo: {
+        dark: "./src/assets/copilot-mark-cream.svg",
+        light: "./src/assets/copilot-icon-dark.svg",
+        alt: "",
+      },
+      sidebar,
+    }),
+  ],
 });
