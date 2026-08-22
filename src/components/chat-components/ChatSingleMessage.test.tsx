@@ -262,6 +262,8 @@ describe("normalizeFootnoteRendering", () => {
 });
 
 describe("ChatSingleMessage", () => {
+  let originalResizeObserver: typeof ResizeObserver | undefined;
+
   const baseMessage: ChatMessage = {
     id: "message-1",
     message: "Test message",
@@ -285,9 +287,20 @@ describe("ChatSingleMessage", () => {
   beforeEach(() => {
     renderMarkdownMock.mockReset();
     renderMarkdownMock.mockResolvedValue(undefined);
+    originalResizeObserver = window.ResizeObserver;
+    Object.defineProperty(window, "ResizeObserver", {
+      configurable: true,
+      value: jest.fn(() => ({ observe: jest.fn(), disconnect: jest.fn() })),
+    });
   });
 
-  afterEach(() => jest.restoreAllMocks());
+  afterEach(() => {
+    Object.defineProperty(window, "ResizeObserver", {
+      configurable: true,
+      value: originalResizeObserver,
+    });
+    jest.restoreAllMocks();
+  });
 
   beforeAll(() => {
     (window as unknown as Record<string, unknown>).activeDocument = window.document;

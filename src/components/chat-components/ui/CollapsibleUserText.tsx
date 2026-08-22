@@ -8,7 +8,7 @@ export interface CollapsibleUserTextProps {
 }
 
 interface ResizeObserverWindow extends Window {
-  ResizeObserver?: typeof ResizeObserver;
+  ResizeObserver: typeof ResizeObserver;
 }
 
 /** Keeps an overflowing user prompt compact without removing any of its text from the document. */
@@ -31,10 +31,7 @@ export function CollapsibleUserText({ children }: CollapsibleUserTextProps) {
 
     updateOverflow();
 
-    const ResizeObserverCtor = (content.win as ResizeObserverWindow).ResizeObserver;
-    if (ResizeObserverCtor === undefined) return;
-
-    const observer = new ResizeObserverCtor(updateOverflow);
+    const observer = new (content.win as ResizeObserverWindow).ResizeObserver(updateOverflow);
     observer.observe(content);
     return () => observer.disconnect();
   }, [children, isExpanded]);
