@@ -252,7 +252,7 @@ describe("RelevantNotes", () => {
         render(<RelevantNotes onAddToChat={jest.fn()} />);
 
         fireEvent.click(await screen.findByRole("button", { name: "Review Miyo connection" }));
-        expect(openMiyoSettings).toHaveBeenCalledWith(mockApp, window);
+        expect(openCopilotSettings).toHaveBeenCalledWith(mockApp, window, "miyo");
         expect(openSpy).not.toHaveBeenCalled();
         openSpy.mockRestore();
       }
@@ -267,6 +267,17 @@ describe("RelevantNotes", () => {
 
       expect(container.querySelector("[data-miyo-guidance]")).toBeNull();
       expect(screen.queryByText("No relevant notes found")).toBeNull();
+    });
+
+    it("shows the neutral empty state when no Markdown note is active instead of loading forever (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
+      mockSettings = { ...mockSettings, enableMiyo: true };
+      mockUseActiveFile.mockReturnValue(null);
+
+      render(<RelevantNotes onAddToChat={jest.fn()} />);
+
+      expect(await screen.findByText("No relevant notes found")).toBeTruthy();
+      expect(mockFindRelevantNotes).not.toHaveBeenCalled();
+      expect(screen.queryByText("No semantic matches yet")).toBeNull();
     });
 
     it("keeps the excluded-note card and suppresses semantic guidance (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {

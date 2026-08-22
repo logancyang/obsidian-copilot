@@ -144,6 +144,7 @@ async function calculateSimilarityScoreFromMiyo(
 }
 
 export type RelevantNotesSemanticState =
+  | "idle"
   | "loading"
   | "disabled"
   | "ready"
