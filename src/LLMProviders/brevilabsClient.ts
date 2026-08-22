@@ -67,6 +67,13 @@ interface BrevilabsApiResult<T> {
   data: T | null;
   error?: Error;
   status: number;
+  /**
+   * The API's own error body, present only when the server explained the
+   * failure itself. An infrastructure error page (a gateway or WAF 403, an HTML
+   * 502) carries none, which is what lets a caller tell "the API refused this
+   * request" from "the server is having a bad day".
+   */
+  detail?: { reason?: string; error?: string };
 }
 
 /**
@@ -90,7 +97,7 @@ function parseBrevilabsResponse<T>(
     if (detail?.reason) {
       const error = new Error(detail.reason);
       if (detail.error) error.name = detail.error;
-      return { data: null, error, status: response.status };
+      return { data: null, error, status: response.status, detail };
     }
     return {
       data: null,
@@ -362,7 +369,7 @@ export class BrevilabsClient {
       Object.assign(requestBody, filteredContext);
     }
 
-    const { data, error, status } = await this.makeRequest<LicenseResponse>(
+    const { data, error, status, detail } = await this.makeRequest<LicenseResponse>(
       "/license",
       requestBody,
       "POST",
@@ -379,14 +386,17 @@ export class BrevilabsClient {
     }
 
     if (error) {
-      // 403 is how `/license` refuses a key it will not honour — unknown,
-      // mistyped, or revoked — and it is the only part of that answer the
-      // client can rely on. The reason text names the key's prefix
-      // ("Invalid license key (prefix: abc...)"), so matching it verbatim let a
-      // rejection read as an unreachable server, and the fallback below handed
-      // the refused key the previous key's still-live entitlement.
+      // Revoke only on the API's own refusal of this key: a 403 the server
+      // explained in its own error body. Its reason text names the key's prefix
+      // ("Invalid license key (prefix: abc...)"), so matching that verbatim let
+      // a refusal read as an unreachable server, and the fallback below then
+      // handed the refused key the previous key's still-live entitlement.
+      //
+      // A 403 carrying no such body is infrastructure rather than a verdict on
+      // the key. A gateway or WAF answering 403 would otherwise revoke every
+      // paying user who happened to check in during the outage.
       // https://github.com/logancyang/obsidian-copilot-preview/issues/352
-      if (status === 403) {
+      if (status === 403 && detail) {
         turnOffPaid(app);
         return { isValid: false };
       }

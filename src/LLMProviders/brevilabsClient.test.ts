@@ -28,6 +28,7 @@ interface RequestOutcome {
   data: unknown;
   error: Error | null;
   status?: number;
+  detail?: { reason?: string; error?: string };
 }
 
 /**
@@ -49,9 +50,10 @@ function stubRequest(outcome: RequestOutcome, onRequest?: () => void): void {
  * prefix so support can tell which key was tried.
  */
 function licenseRejection(keyPrefix: string): RequestOutcome {
-  const error = new Error(`Invalid license key (prefix: ${keyPrefix}...)`);
+  const reason = `Invalid license key (prefix: ${keyPrefix}...)`;
+  const error = new Error(reason);
   error.name = "FORBIDDEN";
-  return { data: null, error, status: 403 };
+  return { data: null, error, status: 403, detail: { reason, error: "FORBIDDEN" } };
 }
 
 const VALID_LICENSE_RESPONSE = { entitlement: "signed-token", plan: "supporter" };
@@ -194,8 +196,15 @@ describe("brevilabsClient", () => {
         expect(mockTurnOffPaid).toHaveBeenCalled();
       });
 
-      it("leaves the entitlement alone when the server fails for a reason other than refusing the key", async () => {
-        stubRequest({ data: null, error: new Error("HTTP error: 502"), status: 502 });
+      it.each([
+        ["a 502 from the gateway", 502],
+        // A WAF or gateway can answer 403 with an HTML page and no API error
+        // body. Reading that as a verdict on the key would revoke every paying
+        // user who checked in during the outage.
+        // https://github.com/logancyang/obsidian-copilot-preview/issues/352
+        ["an unexplained 403 from infrastructure", 403],
+      ])("leaves the entitlement alone for %s", async (_label, status) => {
+        stubRequest({ data: null, error: new Error(`HTTP error: ${status}`), status });
 
         const result = await BrevilabsClient.getInstance().validateLicenseKey(
           undefined,
