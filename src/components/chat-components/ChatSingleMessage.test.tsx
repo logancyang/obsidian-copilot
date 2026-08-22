@@ -470,13 +470,17 @@ describe("ChatSingleMessage", () => {
     expect(screen.getByText(timestamp)).toBeTruthy();
   });
 
-  it("collapses only opted-in overflowing user text while keeping the full text and actions mounted (https://github.com/Brevilabs/obsidian-copilot-private/issues/151)", () => {
+  it("collapses opted-in overflowing user text while keeping the full text, attachment, and actions mounted (https://github.com/Brevilabs/obsidian-copilot-private/issues/151)", () => {
     jest.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockReturnValue(720);
     jest.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(600);
     const userMessage: ChatMessage = {
       ...baseMessage,
       sender: USER_SENDER,
       message: "A complete pasted log remains available for copying.",
+      content: [
+        { type: "text" },
+        { type: "image_url", image_url: { url: "data:image/png;base64,dGVzdA==" } },
+      ],
     };
 
     render(
@@ -492,6 +496,7 @@ describe("ChatSingleMessage", () => {
 
     expect(screen.getByRole("button", { name: "Show more" })).not.toBeNull();
     expect(screen.getByText(userMessage.message).textContent).toBe(userMessage.message);
+    expect(screen.getByAltText("User uploaded image")).not.toBeNull();
     expect(screen.getByTitle("Copy")).not.toBeNull();
   });
 
