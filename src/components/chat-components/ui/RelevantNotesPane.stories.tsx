@@ -39,6 +39,8 @@ const baseArgs: RelevantNotesPaneProps = {
   noteCount: 2,
   noteRows: <NoteRows scored />,
   miyoDownloadUrl: "https://www.miyo.md/",
+  canOpenMiyoApp: true,
+  onOpenMiyoApp: () => undefined,
   onOpenMiyoSettings: () => undefined,
 };
 
@@ -61,6 +63,22 @@ export const NoMiyoEmptyGuidance: StoryObj<RelevantNotesPaneProps> = {
   args: { guidance: "download", noteCount: 0, noteRows: null },
 };
 
-export const MiyoSetupEmptyGuidance: StoryObj<RelevantNotesPaneProps> = {
-  args: { guidance: "setup", noteCount: 0, noteRows: null },
+export const MiyoUnavailableEmptyGuidance: StoryObj<RelevantNotesPaneProps> = {
+  args: { guidance: "unavailable", noteCount: 0, noteRows: null },
+};
+
+export const EmptyNoSemanticMatches: StoryObj<RelevantNotesPaneProps> = {
+  args: { guidance: "no-matches", noteCount: 0, noteRows: null },
+};
+
+export const LinksOnlyNotIndexedGuidance: StoryObj<RelevantNotesPaneProps> = {
+  args: { guidance: "not-indexed", noteRows: <NoteRows scored={false} /> },
+};
+
+export const LinksOnlyNotIndexedRemoteGuidance: StoryObj<RelevantNotesPaneProps> = {
+  args: {
+    guidance: "not-indexed",
+    noteRows: <NoteRows scored={false} />,
+    canOpenMiyoApp: false,
+  },
 };
