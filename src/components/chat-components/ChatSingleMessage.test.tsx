@@ -6,6 +6,7 @@ import ChatSingleMessage, {
 import { ChatMessage } from "@/types/message";
 import type { App } from "obsidian";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { USER_SENDER } from "@/constants";
 
 jest.mock("@/settings/model", () => ({
   useSettingsValue: jest.fn(() => ({
@@ -286,6 +287,8 @@ describe("ChatSingleMessage", () => {
     renderMarkdownMock.mockResolvedValue(undefined);
   });
 
+  afterEach(() => jest.restoreAllMocks());
+
   beforeAll(() => {
     (window as unknown as Record<string, unknown>).activeDocument = window.document;
   });
@@ -452,5 +455,60 @@ describe("ChatSingleMessage", () => {
       </TooltipProvider>
     );
     expect(screen.getByText(timestamp)).toBeTruthy();
+  });
+
+  it("collapses only opted-in overflowing user text while keeping the full text and actions mounted (https://github.com/Brevilabs/obsidian-copilot-private/issues/151)", () => {
+    jest.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockReturnValue(240);
+    jest.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(160);
+    const userMessage: ChatMessage = {
+      ...baseMessage,
+      sender: USER_SENDER,
+      message: "A complete pasted log remains available for copying.",
+    };
+
+    render(
+      <TooltipProvider>
+        <ChatSingleMessage
+          message={userMessage}
+          app={createAppStub()}
+          isStreaming={false}
+          collapseLongUserMessages
+        />
+      </TooltipProvider>
+    );
+
+    expect(screen.getByRole("button", { name: "Show more" })).not.toBeNull();
+    expect(screen.getByText(userMessage.message).textContent).toBe(userMessage.message);
+    expect(screen.getByTitle("Copy")).not.toBeNull();
+  });
+
+  it("leaves Quick Chat user text and assistant text outside the Agent Chat collapse gate (https://github.com/Brevilabs/obsidian-copilot-private/issues/151)", () => {
+    jest.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockReturnValue(240);
+    jest.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(160);
+    const userMessage: ChatMessage = {
+      ...baseMessage,
+      sender: USER_SENDER,
+      message: "A Quick Chat prompt that remains unchanged.",
+    };
+    const { rerender } = render(
+      <TooltipProvider>
+        <ChatSingleMessage message={userMessage} app={createAppStub()} isStreaming={false} />
+      </TooltipProvider>
+    );
+
+    expect(screen.queryByRole("button", { name: "Show more" })).toBeNull();
+
+    rerender(
+      <TooltipProvider>
+        <ChatSingleMessage
+          message={baseMessage}
+          app={createAppStub()}
+          isStreaming={false}
+          collapseLongUserMessages
+        />
+      </TooltipProvider>
+    );
+
+    expect(screen.queryByRole("button", { name: "Show more" })).toBeNull();
   });
 });

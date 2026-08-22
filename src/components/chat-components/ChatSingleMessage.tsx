@@ -1,4 +1,5 @@
 import { ChatButtons } from "@/components/chat-components/ChatButtons";
+import { CollapsibleUserText } from "@/components/chat-components/ui/CollapsibleUserText";
 import { AssistantResponseFooter } from "@/components/ui/AssistantResponseFooter";
 import { SourcesModal } from "@/components/modals/SourcesModal";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -304,6 +305,8 @@ interface ChatSingleMessageProps {
   onDelete?: () => void;
   /** Agent Mode metadata placed at the response footer's leading edge, before the timestamp. */
   footerStart?: React.ReactNode;
+  /** Whether overflowing user text should start collapsed. Agent Chat opts in; Quick Chat does not. */
+  collapseLongUserMessages?: boolean;
 }
 
 const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
@@ -314,6 +317,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
   onEdit,
   onDelete,
   footerStart,
+  collapseLongUserMessages = false,
 }) => {
   const [isEditing, setIsEditing] = useState<boolean>(false);
   const parsedReasoningBlock = useMemo(
@@ -904,6 +908,19 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
     void insertAtCursor(app, message.message);
   };
 
+  const renderUserMessageText = () => {
+    const text = (
+      <div className="tw-whitespace-pre-wrap tw-break-words tw-text-[calc(var(--font-text-size)_-_2px)] tw-font-normal">
+        {message.message}
+      </div>
+    );
+
+    // Agent Chat can fold a pasted prompt without changing the shared Quick Chat
+    // renderer or moving images and message actions into the clipped region.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/151
+    return collapseLongUserMessages ? <CollapsibleUserText>{text}</CollapsibleUserText> : text;
+  };
+
   const renderMessageContent = () => {
     if (message.content) {
       return (
@@ -915,9 +932,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
                   // eslint-disable-next-line @eslint-react/no-array-index-key -- content array is fixed once message is rendered; items not reordered
                   <div key={index}>
                     {message.sender === USER_SENDER ? (
-                      <div className="tw-whitespace-pre-wrap tw-break-words tw-text-[calc(var(--font-text-size)_-_2px)] tw-font-normal">
-                        {message.message}
-                      </div>
+                      renderUserMessageText()
                     ) : (
                       <div
                         ref={contentRef}
@@ -947,9 +962,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
 
     // Fallback for messages without content array
     return message.sender === USER_SENDER ? (
-      <div className="tw-whitespace-pre-wrap tw-break-words tw-text-[calc(var(--font-text-size)_-_2px)] tw-font-normal">
-        {message.message}
-      </div>
+      renderUserMessageText()
     ) : (
       <div ref={contentRef} className={message.isErrorMessage ? "tw-text-error" : ""}></div>
     );

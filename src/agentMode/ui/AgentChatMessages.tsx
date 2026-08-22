@@ -205,6 +205,7 @@ const AgentChatMessages = memo(
                       app={app}
                       isStreaming={false}
                       footerStart={completedTurnDuration}
+                      collapseLongUserMessages
                     />
                     {runningTurnDuration ? (
                       <div className="tw-px-3">{runningTurnDuration}</div>
