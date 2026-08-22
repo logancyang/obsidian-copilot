@@ -84,6 +84,12 @@ import { Notice } from "obsidian";
 
 const FUTURE_EXP_SECONDS = 9_999_999_999;
 const PAST_EXP_SECONDS = 1_000_000_000;
+/**
+ * The license key these fixtures treat as stored. The verify helpers and
+ * {@link tokenBackedSettings} share it so the in-memory proof belongs to the key
+ * settings hold — the pairing {@link hasLiveEntitlement} now requires.
+ */
+const STORED_LICENSE_KEY = "key";
 
 function buildSettings(overrides: Partial<CopilotSettings>): CopilotSettings {
   return { ...DEFAULT_SETTINGS, ...overrides };
@@ -105,19 +111,26 @@ async function verifySessionFeatures(
     iat: 0,
     exp: expSeconds,
   });
-  mockGetSettings.mockReturnValue(buildSettings({ userId: "user-123", entitlementToken: "token" }));
+  mockGetSettings.mockReturnValue(
+    buildSettings({
+      userId: "user-123",
+      entitlementToken: "token",
+      plusLicenseKey: STORED_LICENSE_KEY,
+    })
+  );
   await verifyCachedEntitlement();
 }
 
 /**
- * Settings of a user holding an unexpired, token-derived entitlement. `token`
- * matches what {@link verifySessionFeatures} verified, so the in-memory proof
- * belongs to the token settings currently hold.
+ * Settings of a user holding an unexpired, token-derived entitlement. The token
+ * and license key match what the verify helpers verified, so the in-memory
+ * proof belongs to both the token and the key settings currently hold.
  */
 function tokenBackedSettings(overrides: Partial<CopilotSettings> = {}): CopilotSettings {
   return buildSettings({
     userId: "user-123",
     entitlementToken: "token",
+    plusLicenseKey: STORED_LICENSE_KEY,
     entitlementExpiresAt: Date.now() + 60_000,
     ...overrides,
   });
@@ -139,7 +152,13 @@ async function verifySessionClaims(
     exp: FUTURE_EXP_SECONDS,
     ...claims,
   });
-  mockGetSettings.mockReturnValue(buildSettings({ userId: "user-123", entitlementToken: "token" }));
+  mockGetSettings.mockReturnValue(
+    buildSettings({
+      userId: "user-123",
+      entitlementToken: "token",
+      plusLicenseKey: STORED_LICENSE_KEY,
+    })
+  );
   await verifyCachedEntitlement();
 }
 
@@ -551,7 +570,11 @@ describe("plusUtils", () => {
 
   describe("applyEntitlement()", () => {
     beforeEach(() => {
-      mockGetSettings.mockReturnValue(buildSettings({ userId: "user-123" }));
+      // A key is always stored by the time this runs: it is the /license answer
+      // for that key that carries the token.
+      mockGetSettings.mockReturnValue(
+        buildSettings({ userId: "user-123", plusLicenseKey: STORED_LICENSE_KEY })
+      );
     });
 
     it("grants Plus and self-host for a Supporter token carrying both features", async () => {
@@ -619,6 +642,31 @@ describe("plusUtils", () => {
       expect(isSelfHostModeValid()).toBe(false);
     });
 
+    it("does not tag the proof with a key swapped in while verification was in flight (https://github.com/Brevilabs/obsidian-copilot-private/issues/307)", async () => {
+      // validateLicenseKey's key-changed guard runs before this call, so only
+      // reading the key up front keeps the old key's claims off the new key.
+      mockVerifyEntitlement.mockImplementation(async () => {
+        mockGetSettings.mockReturnValue(
+          buildSettings({ userId: "user-123", plusLicenseKey: "a-different-key" })
+        );
+        return {
+          user_id: "user-123",
+          plan: "believer",
+          tier: "plus",
+          features: ["multi_agent", "self_host"],
+          iat: 0,
+          exp: FUTURE_EXP_SECONDS,
+        };
+      });
+
+      expect(await applyEntitlement("token")).toBe(true);
+      mockGetSettings.mockReturnValue(
+        tokenBackedSettings({ plusLicenseKey: "a-different-key", enableSelfHostMode: true })
+      );
+      expect(isSelfHostModeValid()).toBe(false);
+      expect(canUseMultiAgent()).toBe(false);
+    });
+
     it("does NOT change settings when the token cannot be verified", async () => {
       // An unverifiable token (bad signature, expired, unknown kid, or empty key
       // set during rollout) is not an authoritative negative, so flags are left
@@ -653,7 +701,11 @@ describe("plusUtils", () => {
         exp: FUTURE_EXP_SECONDS,
       };
       mockGetSettings.mockReturnValue(
-        buildSettings({ userId: "user-123", entitlementToken: "old-token" })
+        buildSettings({
+          userId: "user-123",
+          entitlementToken: "old-token",
+          plusLicenseKey: STORED_LICENSE_KEY,
+        })
       );
       mockVerifyEntitlement.mockImplementation(async (token: string) => {
         if (token === "old-token") {
@@ -740,20 +792,21 @@ describe("plusUtils", () => {
     it("refuses the offline fallback to an unexpired free-tier token", async () => {
       // The backend downgrades a lapsed paid key to the free policy instead of
       // refusing it a token, so an unexpired proof is not by itself paid access.
-      mockVerifyEntitlement.mockResolvedValue({
-        user_id: "user-123",
-        plan: "none",
-        tier: "free",
-        features: [],
-        iat: 0,
-        exp: FUTURE_EXP_SECONDS,
-      });
-      mockGetSettings.mockReturnValue(
-        buildSettings({ userId: "user-123", entitlementToken: "token" })
-      );
-      await verifyCachedEntitlement();
-      mockGetSettings.mockReturnValue(tokenBackedSettings({ plusLicenseKey: "key" }));
+      await verifySessionClaims({ plan: "none", tier: "free" });
+      mockGetSettings.mockReturnValue(tokenBackedSettings());
       mockValidateLicenseKey.mockRejectedValue(new Error("net::ERR_INTERNET_DISCONNECTED"));
+
+      expect(await checkIsPaidUser(undefined, { trigger: "manual" })).toBe(false);
+    });
+
+    it("refuses the previous key's entitlement to a newly entered key the server cannot rule on (https://github.com/Brevilabs/obsidian-copilot-private/issues/307)", async () => {
+      // Swapping the key leaves the old key's token persisted and its proof
+      // live. Without the proof naming the key that earned it, this fallback
+      // answered `true` for a key the server never accepted, keeping the old
+      // plan's badge and every Plus gate open until that token's exp passed.
+      await verifySessionFeatures(["multi_agent", "self_host"]);
+      mockGetSettings.mockReturnValue(tokenBackedSettings({ plusLicenseKey: "a-different-key" }));
+      mockValidateLicenseKey.mockResolvedValue({ isValid: undefined });
 
       expect(await checkIsPaidUser(undefined, { trigger: "manual" })).toBe(false);
     });
@@ -877,6 +930,19 @@ describe("plusUtils", () => {
       const { result } = renderHook(() => useLicenseState());
 
       expect(result.current).toEqual({ status: "active" });
+    });
+
+    it("stops naming the previous key's plan once a different key is stored (https://github.com/Brevilabs/obsidian-copilot-private/issues/307)", async () => {
+      // The badge reads the same proof the gates do, so a proof that outlived
+      // its key showed a replaced key the plan it never bought.
+      await verifySessionClaims({ plan: "believer", tier: "plus" });
+      mockGetSettings.mockReturnValue(
+        tokenBackedSettings({ plusLicenseKey: "a-different-key", isPaidUser: false })
+      );
+
+      const { result } = renderHook(() => useLicenseState());
+
+      expect(result.current).toEqual({ status: "inactive" });
     });
 
     it("shows nothing when no license key is stored", () => {
