@@ -304,6 +304,54 @@ describe("findRelevantNotes", () => {
       }
     });
 
+    it("keeps links and reports unavailable when the primary related search never settles (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
+      jest.useFakeTimers();
+      try {
+        mockedGetSearchBackend.mockReturnValue("miyo");
+        mockedGetSettings.mockReturnValue({
+          debug: false,
+          miyoServerUrl: "",
+          enableMiyo: true,
+        } as CopilotSettings);
+        mockSearchRelated.mockReturnValue(new Promise(() => undefined));
+        mockedGetLinkedNotes.mockReturnValue([createMarkdownFile("linked-only.md")]);
+
+        const resultPromise = findRelevantNotes({ app: window.app, filePath: "source.md" });
+        await jest.advanceTimersByTimeAsync(0);
+        await jest.advanceTimersByTimeAsync(8000);
+
+        await expect(resultPromise).resolves.toMatchObject({
+          notes: [{ note: { path: "linked-only.md" } }],
+          semanticState: "unavailable",
+        });
+        expect(mockGetFolder).not.toHaveBeenCalled();
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it("reports unavailable when Miyo endpoint resolution never settles (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
+      jest.useFakeTimers();
+      try {
+        mockedGetSearchBackend.mockReturnValue("miyo");
+        mockedGetSettings.mockReturnValue({
+          debug: false,
+          miyoServerUrl: "",
+          enableMiyo: true,
+        } as CopilotSettings);
+        mockResolveBaseUrl.mockReturnValue(new Promise(() => undefined));
+
+        const resultPromise = findRelevantNotes({ app: window.app, filePath: "source.md" });
+        await jest.advanceTimersByTimeAsync(0);
+        await jest.advanceTimersByTimeAsync(8000);
+
+        await expect(resultPromise).resolves.toMatchObject({ semanticState: "unavailable" });
+        expect(mockSearchRelated).not.toHaveBeenCalled();
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
     it("reports a 503 related-search outage as unavailable without trusting a registered folder (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
       mockedGetSearchBackend.mockReturnValue("miyo");
       mockedGetSettings.mockReturnValue({
