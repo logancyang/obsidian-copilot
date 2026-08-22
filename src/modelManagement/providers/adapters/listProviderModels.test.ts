@@ -75,11 +75,4 @@ describe("listProviderModels", () => {
       timeoutMs: undefined,
     });
   });
-
-  it("returns null for azure", async () => {
-    expect(await listProviderModels("azure", "https://example.openai.azure.com")).toBeNull();
-    expect(mockOAI).not.toHaveBeenCalled();
-    expect(mockAnthropic).not.toHaveBeenCalled();
-    expect(mockGoogle).not.toHaveBeenCalled();
-  });
 });

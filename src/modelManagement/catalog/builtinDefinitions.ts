@@ -3,7 +3,7 @@
  * wizard alongside catalog-derived definitions.
  *
  * Covers providers `models.dev` does not list — local runners
- * (Ollama, LM Studio), per-tenant deploys (Azure), and the
+ * (Ollama, LM Studio) and the
  * catch-all custom OpenAI-compatible endpoint. None carry a model list;
  * available ids come from `/models` fetched at dialog open or from the
  * user typing them in manually.
@@ -49,11 +49,4 @@ export const CUSTOM_OPENAI_DEFINITION: ProviderDefinition = {
 export const BUILTIN_PROVIDER_DEFINITIONS: readonly ProviderDefinition[] = [
   ...LOCAL_PROVIDER_DEFINITIONS,
   CUSTOM_OPENAI_DEFINITION,
-  {
-    id: "azure-openai",
-    displayName: "Azure OpenAI",
-    providerType: "azure",
-    requiresApiKey: true,
-    modelInputHint: "matches your Azure deployment name",
-  },
 ];

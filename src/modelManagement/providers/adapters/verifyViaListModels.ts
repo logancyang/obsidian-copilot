@@ -2,7 +2,7 @@
  * Shared helper for adapters that verify credentials by issuing a
  * GET against an OpenAI-style `/models` endpoint (or its provider-
  * specific equivalent — Anthropic's `/v1/models`, Google's
- * `/v1beta/models`, Azure's `/openai/deployments`). All four share the
+ * `/v1beta/models`). All three share the
  * same wire-level signal: 2xx means the credentials parse and the
  * caller has read access; 401/403 means the key is wrong; 429 means
  * the key is fine but rate-limited; anything else surfaces as

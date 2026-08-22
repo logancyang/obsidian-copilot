@@ -21,5 +21,7 @@
  *   10  → make auth optional on existing custom OpenAI-compatible BYOK rows.
  *   11  → drop the providers, models, enrollments and keys of the removed
  *         Amazon Bedrock chat provider.
+ *   12  → the same for the removed Azure OpenAI provider, plus repointing an
+ *         embedding selection that named it.
  */
-export const CURRENT_SETTINGS_VERSION = 11;
+export const CURRENT_SETTINGS_VERSION = 12;

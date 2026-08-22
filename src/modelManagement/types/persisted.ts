@@ -97,7 +97,6 @@ export interface Provider {
   requiresApiKey?: boolean;
   /**
    * Opaque per-`providerType` payload.
-   *   azure:   { azureDeploymentName, azureApiVersion, azureInstanceName }
    *   openai:  { openAIOrgId }
    * Kept because those adapters can't function without it.
    */

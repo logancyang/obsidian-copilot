@@ -96,7 +96,7 @@ export interface BuiltChatModel {
  *
  * Two flavors share the same shape:
  *   - **Built-in definitions** (Ollama, LM Studio, custom OpenAI-compatible,
- *     Azure) live in `builtinDefinitions.ts`.
+ *     live in `builtinDefinitions.ts`.
  *   - **Catalog-backed definitions** are synthesized from a
  *     `CatalogProvider` at pick time and carry `catalogProviderId` so
  *     the configure dialog can resolve metadata.
@@ -111,7 +111,7 @@ export interface ProviderDefinition {
   /** Which adapter family the wizard will dispatch to. */
   providerType: ProviderType;
   /** Pre-fills the base URL field in the wizard. Omitted when the
-   *  endpoint is per-user (custom proxy, Azure deployment URL, etc.). */
+   *  endpoint is per-user (a custom proxy, a self-hosted runner). */
   defaultBaseUrl?: string;
   /** Hides the API-key field in the wizard when `false` (Ollama,
    *  LMStudio). */

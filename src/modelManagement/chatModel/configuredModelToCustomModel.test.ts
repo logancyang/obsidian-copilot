@@ -36,9 +36,6 @@ describe("mapProviderTypeToChatModelProvider", () => {
     expect(mapProviderTypeToChatModelProvider(provider({ providerType: "google" }))).toBe(
       ChatModelProviders.GOOGLE
     );
-    expect(mapProviderTypeToChatModelProvider(provider({ providerType: "azure" }))).toBe(
-      ChatModelProviders.AZURE_OPENAI
-    );
   });
 
   it("refines openai-compatible via the BYOK catalog provider id", () => {
@@ -229,22 +226,6 @@ describe("configuredModelToCustomModel", () => {
   });
 
   it("maps provider extras onto the matching CustomModel fields", () => {
-    const azure = configuredModelToCustomModel({
-      provider: provider({
-        providerType: "azure",
-        extras: {
-          azureInstanceName: "my-instance",
-          azureDeploymentName: "my-deploy",
-          azureApiVersion: "2024-05-01-preview",
-        },
-      }),
-      configuredModel: configuredModel(),
-      apiKey: "azure-key",
-    });
-    expect(azure.azureOpenAIApiInstanceName).toBe("my-instance");
-    expect(azure.azureOpenAIApiDeploymentName).toBe("my-deploy");
-    expect(azure.azureOpenAIApiVersion).toBe("2024-05-01-preview");
-
     const openai = configuredModelToCustomModel({
       provider: provider({
         origin: { kind: "byok", catalogProviderId: "openai" },

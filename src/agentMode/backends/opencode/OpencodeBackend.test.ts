@@ -361,11 +361,11 @@ describe("buildOpencodeConfig — provider/model injection", () => {
     expect(cfg.provider).toEqual({});
   });
 
-  it("skips unroutable providers (BYOK without a catalog id, e.g. azure)", async () => {
-    const provider = makeProvider("p-azure", { kind: "byok" }, { providerType: "azure" });
+  it("skips unroutable providers (BYOK without a catalog id, e.g. google)", async () => {
+    const provider = makeProvider("p-google", { kind: "byok" }, { providerType: "google" });
     const deps = makeDeps({
-      resolved: [okEntry(provider, makeModel("p-azure", "my-azure-deploy"))],
-      keys: { "p-azure": "azure-key" },
+      resolved: [okEntry(provider, makeModel("p-google", "gemini-3-flash"))],
+      keys: { "p-google": "google-key" },
     });
     const cfg = (await buildOpencodeConfig(getSettings(), deps)) as {
       provider: Record<string, unknown>;

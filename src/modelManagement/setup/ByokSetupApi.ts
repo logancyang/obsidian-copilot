@@ -58,7 +58,7 @@ export interface SetupProviderInput {
   enableCors?: boolean;
   /** Stored in the keychain. */
   apiKey?: string;
-  /** Per-providerType payload (Azure deployment,
+  /** Per-providerType payload (
    *  OpenAI org id, …). */
   extras?: Record<string, unknown>;
   /** Whether this provider needs an API key. Flows through from the
