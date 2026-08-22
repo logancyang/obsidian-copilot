@@ -1027,6 +1027,8 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   selfHostSearchProvider: "firecrawl",
   firecrawlApiKey: "",
   perplexityApiKey: "",
+  parallelApiKey: "",
+  exaApiKey: "",
   supadataApiKey: "",
   docProcessorBackend: "plus",
   enableLexicalBoosts: true,

@@ -693,6 +693,27 @@ describe("sanitizeSettings - docProcessorBackend (v6 field)", () => {
 
 describe("model", () => {
   describe("sanitizeSettings()", () => {
+    it.each(["parallel", "exa"] as const)(
+      "preserves the %s self-host search provider (https://github.com/Brevilabs/obsidian-copilot-private/issues/285)",
+      (provider) => {
+        const sanitized = sanitizeSettings({
+          ...DEFAULT_SETTINGS,
+          selfHostSearchProvider: provider,
+        });
+
+        expect(sanitized.selfHostSearchProvider).toBe(provider);
+      }
+    );
+
+    it("falls back to Firecrawl for an unknown self-host search provider (https://github.com/Brevilabs/obsidian-copilot-private/issues/285)", () => {
+      const sanitized = sanitizeSettings({
+        ...DEFAULT_SETTINGS,
+        selfHostSearchProvider: "unknown",
+      } as unknown as CopilotSettings);
+
+      expect(sanitized.selfHostSearchProvider).toBe("firecrawl");
+    });
+
     it("drops a persisted global output cap so it cannot truncate answers again (https://github.com/logancyang/obsidian-copilot-preview/issues/312)", () => {
       const withRetiredCap = {
         ...DEFAULT_SETTINGS,

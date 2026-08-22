@@ -105,12 +105,12 @@ Supporter and eligible legacy licenses can open **Settings → Copilot → Self-
 
 When it is on, Copilot:
 
-- Lets you supply Firecrawl or Perplexity credentials for web search.
+- Lets you supply Firecrawl, Perplexity, Parallel, or Exa credentials for web search.
 - Lets you supply a Supadata key for YouTube transcripts.
 - Directs you to BYOK for local or self-hosted model endpoints.
 - Flags and sorts cloud agents and models below local or self-hosted choices.
 
-It does not disable the cloud. Claude, Codex, Copilot-hosted models, cloud BYOK providers, Firecrawl, Perplexity, and Supadata can still send data to their services when you select them. The warnings make those routes visible so you can decide.
+It does not disable the cloud. Claude, Codex, Copilot-hosted models, cloud BYOK providers, Firecrawl, Perplexity, Parallel, Exa, and Supadata can still send data to their services when you select them. The warnings make those routes visible so you can decide.
 
 You do not need Self-Host Mode to use a local BYOK model or local Miyo. Those are available independently.
 

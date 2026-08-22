@@ -5,16 +5,21 @@ import { SettingSection } from "@/components/ui/setting-section";
 import { useTab } from "@/contexts/TabContext";
 import { cn } from "@/lib/utils";
 import { useIsSelfHostEligible } from "@/plusUtils";
-import { updateSetting, useSettingsValue } from "@/settings/model";
+import { updateSetting, useSettingsValue, type SelfHostSearchProvider } from "@/settings/model";
+import { SelfHostWebSearchSettings } from "@/settings/v2/components/ui/SelfHostWebSearchSettings";
 import { ArrowUpRight, ShieldCheck } from "lucide-react";
 import React from "react";
 
 /** BYOK tab id in the settings tab strip (see SettingsMainV2 TAB_IDS). */
 const BYOK_TAB_ID = "byok";
 
-const FIRECRAWL_SIGNUP_URL = "https://firecrawl.link/logan-yang";
 const SUPADATA_SIGNUP_URL = "https://supadata.ai/?ref=obcopilot";
-const PERPLEXITY_API_KEY_URL = "https://docs.perplexity.ai";
+const SEARCH_PROVIDER_KEY_FIELDS = {
+  firecrawl: "firecrawlApiKey",
+  perplexity: "perplexityApiKey",
+  parallel: "parallelApiKey",
+  exa: "exaApiKey",
+} as const satisfies Record<SelfHostSearchProvider, keyof ReturnType<typeof useSettingsValue>>;
 
 /** Small "Sign up ↗" affordance appended to a provider key description. */
 const SignUpLink: React.FC<{ href: string }> = ({ href }) => (
@@ -93,52 +98,20 @@ export const SelfHostSettings: React.FC = () => {
           chokepoints keyed off the same persisted flag. */}
       <div className={cn("tw-space-y-4", !selfHostOn && "tw-pointer-events-none tw-opacity-40")}>
         <SettingSection label="Web search providers">
-          <SettingItem
-            type="select"
-            title="Web Search Provider"
-            description="Your key turns this into an agent skill parameter."
-            value={settings.selfHostSearchProvider}
-            onChange={(value) =>
-              updateSetting("selfHostSearchProvider", value as "firecrawl" | "perplexity")
-            }
-            options={[
-              { label: "Firecrawl", value: "firecrawl" },
-              { label: "Perplexity Sonar", value: "perplexity" },
-            ]}
+          <SelfHostWebSearchSettings
+            apiKeys={{
+              firecrawl: settings.firecrawlApiKey,
+              perplexity: settings.perplexityApiKey,
+              parallel: settings.parallelApiKey,
+              exa: settings.exaApiKey,
+            }}
             disabled={!selfHostOn}
+            provider={settings.selfHostSearchProvider}
+            onProviderChange={(provider) => updateSetting("selfHostSearchProvider", provider)}
+            onApiKeyChange={(provider, value) =>
+              updateSetting(SEARCH_PROVIDER_KEY_FIELDS[provider], value)
+            }
           />
-
-          {settings.selfHostSearchProvider === "firecrawl" && (
-            <SettingItem
-              type="password"
-              title="Firecrawl API Key"
-              description={
-                <span>
-                  Web search &amp; fetch via Firecrawl. <SignUpLink href={FIRECRAWL_SIGNUP_URL} />
-                </span>
-              }
-              value={settings.firecrawlApiKey}
-              onChange={(value) => updateSetting("firecrawlApiKey", value)}
-              placeholder="fc-…"
-              disabled={!selfHostOn}
-            />
-          )}
-
-          {settings.selfHostSearchProvider === "perplexity" && (
-            <SettingItem
-              type="password"
-              title="Perplexity API Key"
-              description={
-                <span>
-                  Web search via Perplexity Sonar. <SignUpLink href={PERPLEXITY_API_KEY_URL} />
-                </span>
-              }
-              value={settings.perplexityApiKey}
-              onChange={(value) => updateSetting("perplexityApiKey", value)}
-              placeholder="pplx-…"
-              disabled={!selfHostOn}
-            />
-          )}
 
           <SettingItem
             type="password"
