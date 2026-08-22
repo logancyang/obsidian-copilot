@@ -141,8 +141,6 @@ export default [
       "data.json",
       "designdocs/**",
       "docs/**",
-      // Standalone Astro package with its own dependencies and toolchain.
-      "docs-site/**",
       ".claude/**",
     ],
   },
