@@ -14,6 +14,7 @@ import { withTimeout } from "@/utils";
 import { App, TFile } from "obsidian";
 
 const MAX_K = 20;
+const MIYO_RELATED_SEARCH_TIMEOUT_MS = 8000;
 const MIYO_FOLDER_LOOKUP_TIMEOUT_MS = 8000;
 const MIYO_UNINDEXED_SOURCE_DETAIL = "No indexed chunks found for file_path";
 
@@ -52,17 +53,29 @@ async function calculateSimilarityScoreFromMiyo(
   const miyoFilePath = getMiyoFilePath(app, filePath);
   let baseUrl: string;
   try {
-    baseUrl = await miyoClient.resolveBaseUrl(getMiyoCustomUrl(settings));
+    baseUrl = await withTimeout(
+      () => miyoClient.resolveBaseUrl(getMiyoCustomUrl(settings)),
+      MIYO_RELATED_SEARCH_TIMEOUT_MS,
+      "Relevant Notes Miyo endpoint resolution"
+    );
   } catch (error) {
     logError(`RelevantNotes(Miyo): could not resolve Miyo: ${(error as Error).message}`);
     return { similarityScoreMap: new Map(), semanticState: "unavailable" };
   }
 
   try {
-    const response = await miyoClient.searchRelated(baseUrl, miyoFilePath, {
-      folderName,
-      limit: MAX_K,
-    });
+    // Obsidian's requestUrl can stay pending after a connection is accepted.
+    // Bound the primary request so graph rows and unavailable guidance return.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
+    const response = await withTimeout(
+      () =>
+        miyoClient.searchRelated(baseUrl, miyoFilePath, {
+          folderName,
+          limit: MAX_K,
+        }),
+      MIYO_RELATED_SEARCH_TIMEOUT_MS,
+      "Relevant Notes Miyo related search"
+    );
     const similarityScoreMap = new Map<string, number>();
     const results = response.results || [];
 
