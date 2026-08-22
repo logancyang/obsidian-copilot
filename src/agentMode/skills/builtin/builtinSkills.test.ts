@@ -27,7 +27,7 @@ const RELAY_SKILLS = BUILTIN_SKILLS.filter((skill) => skill.name.startsWith("cop
 
 describe("builtinSkills", () => {
   describe("BUILTIN_SKILLS", () => {
-    it("ships the approved Plus and Obsidian skills to all three agents", () => {
+    it("ships the approved Plus and Obsidian skills plus the opt-in screenpipe skill", () => {
       expect(BUILTIN_SKILLS.map((s) => s.name)).toEqual([
         "copilot-web-search",
         "copilot-web-fetch",
@@ -35,14 +35,18 @@ describe("builtinSkills", () => {
         "copilot-youtube-transcript",
         "copilot-fetch-x",
         "symposium-publish",
+        "screenpipe-activity",
         "obsidian-markdown",
         "obsidian-bases",
         "json-canvas",
         "obsidian-cli",
       ]);
-      for (const skill of BUILTIN_SKILLS) {
+      for (const skill of BUILTIN_SKILLS.filter((item) => item.name !== "screenpipe-activity")) {
         expect(skill.enabledAgents).toEqual(["claude", "codex", "opencode"]);
       }
+      expect(
+        BUILTIN_SKILLS.find((item) => item.name === "screenpipe-activity")?.enabledAgents
+      ).toEqual([]);
     });
 
     it("keeps the SKILL.md frontmatter version in sync with the numeric version", () => {
