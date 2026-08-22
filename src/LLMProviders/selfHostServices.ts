@@ -5,6 +5,10 @@ import { safeFetchNoThrow } from "@/utils";
 
 const FIRECRAWL_SEARCH_URL = "https://api.firecrawl.dev/v2/search";
 const PERPLEXITY_CHAT_URL = "https://api.perplexity.ai/chat/completions";
+const PARALLEL_SEARCH_URL = "https://api.parallel.ai/v1/search";
+const PARALLEL_SEARCH_QUERY_MAX_LENGTH = 200;
+const PARALLEL_OBJECTIVE_MAX_LENGTH = 5000;
+const EXA_SEARCH_URL = "https://api.exa.ai/search";
 const SUPADATA_TRANSCRIPT_URL = "https://api.supadata.ai/v1/transcript";
 
 /** Poll interval for Supadata async jobs (ms) */
@@ -24,12 +28,62 @@ interface FirecrawlSearchResult {
   url?: string;
 }
 
+type SearchSnippetField = "excerpts" | "highlights";
+
+/**
+ * Normalize ranked provider results without treating missing or malformed URLs
+ * as citations. https://github.com/Brevilabs/obsidian-copilot-private/issues/285
+ */
+function normalizeProviderResults(
+  rawResults: unknown,
+  snippetField: SearchSnippetField
+): SelfHostWebSearchResult {
+  if (!Array.isArray(rawResults)) {
+    return { content: "", citations: [] };
+  }
+
+  const contentParts: string[] = [];
+  const citations: string[] = [];
+
+  for (const item of rawResults) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      continue;
+    }
+
+    const record = item as Record<string, unknown>;
+    const title =
+      typeof record.title === "string" && record.title.trim() ? record.title.trim() : "Untitled";
+    const url = typeof record.url === "string" ? record.url.trim() : "";
+    const snippets = Array.isArray(record[snippetField])
+      ? record[snippetField].filter(
+          (snippet): snippet is string => typeof snippet === "string" && snippet.trim().length > 0
+        )
+      : [];
+    const content = [`### ${title}`, snippets.join("\n"), url ? `Source: ${url}` : ""]
+      .filter(Boolean)
+      .join("\n");
+
+    contentParts.push(content);
+    if (url) {
+      citations.push(url);
+    }
+  }
+
+  return { content: contentParts.join("\n\n"), citations };
+}
+
 /**
  * Check whether the currently selected self-host search provider has an API key configured.
  */
 export function hasSelfHostSearchKey(): boolean {
   const settings = getSettings();
   switch (settings.selfHostSearchProvider) {
+    // Each self-host provider reads only its own credential.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/285
+    case "parallel":
+      return !!settings.parallelApiKey;
+    case "exa":
+      return !!settings.exaApiKey;
     case "perplexity":
       return !!settings.perplexityApiKey;
     case "firecrawl":
@@ -124,6 +178,55 @@ async function perplexitySonarSearch(
   return { content, citations };
 }
 
+/** Web search via Parallel's GA Search API (self-host mode). */
+async function parallelSearch(query: string, apiKey: string): Promise<SelfHostWebSearchResult> {
+  // Parallel rejects requests above these per-field limits, so bound them only
+  // at its API boundary. https://github.com/Brevilabs/obsidian-copilot-private/issues/285
+  const response = await safeFetchNoThrow(PARALLEL_SEARCH_URL, {
+    method: "POST",
+    headers: {
+      "x-api-key": apiKey,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      objective: query.slice(0, PARALLEL_OBJECTIVE_MAX_LENGTH),
+      search_queries: [query.slice(0, PARALLEL_SEARCH_QUERY_MAX_LENGTH)],
+    }),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Parallel search failed (${response.status}): ${text}`);
+  }
+
+  const json = (await response.json()) as { results?: unknown };
+  return normalizeProviderResults(json?.results, "excerpts");
+}
+
+/** Web search via Exa's Search API (self-host mode). */
+async function exaSearch(query: string, apiKey: string): Promise<SelfHostWebSearchResult> {
+  const response = await safeFetchNoThrow(EXA_SEARCH_URL, {
+    method: "POST",
+    headers: {
+      "x-api-key": apiKey,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      query,
+      numResults: 5,
+      contents: { highlights: true },
+    }),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Exa search failed (${response.status}): ${text}`);
+  }
+
+  const json = (await response.json()) as { results?: unknown };
+  return normalizeProviderResults(json?.results, "highlights");
+}
+
 /**
  * Dispatch self-host web search to the provider selected in settings.
  * Returns content + citations directly without the legacy Perplexity wrapper.
@@ -131,6 +234,12 @@ async function perplexitySonarSearch(
 export async function selfHostWebSearch(query: string): Promise<SelfHostWebSearchResult> {
   const settings = getSettings();
   switch (settings.selfHostSearchProvider) {
+    // Direct dispatch keeps hosted search unchanged and prevents credentials
+    // crossing provider boundaries. https://github.com/Brevilabs/obsidian-copilot-private/issues/285
+    case "parallel":
+      return parallelSearch(query, settings.parallelApiKey);
+    case "exa":
+      return exaSearch(query, settings.exaApiKey);
     case "perplexity":
       return perplexitySonarSearch(query, settings.perplexityApiKey);
     case "firecrawl":

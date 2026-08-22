@@ -1,5 +1,5 @@
 import { DEFAULT_SETTINGS } from "@/constants";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
 
 // Persisted-settings surface: capture writes and feed a controllable snapshot.
@@ -57,6 +57,22 @@ describe("SelfHostSettings", () => {
     expect(screen.queryByText("Firecrawl API Key")).toBeNull();
   });
 
+  it.each([
+    ["parallel", "Parallel API Key", ["Firecrawl API Key", "Perplexity API Key", "Exa API Key"]],
+    ["exa", "Exa API Key", ["Firecrawl API Key", "Perplexity API Key", "Parallel API Key"]],
+  ] as const)(
+    "shows only the %s credential field when that provider is selected (https://github.com/Brevilabs/obsidian-copilot-private/issues/285)",
+    (provider, visibleTitle, hiddenTitles) => {
+      setSettings({ enableSelfHostMode: true, selfHostSearchProvider: provider });
+      render(<SelfHostSettings />);
+
+      expect(screen.getByText(visibleTitle)).toBeTruthy();
+      for (const title of hiddenTitles) {
+        expect(screen.queryByText(title)).toBeNull();
+      }
+    }
+  );
+
   it("persists a provider change through updateSetting", () => {
     setSettings({ enableSelfHostMode: true, selfHostSearchProvider: "firecrawl" });
     render(<SelfHostSettings />);
@@ -66,12 +82,49 @@ describe("SelfHostSettings", () => {
     expect(updateSetting).toHaveBeenCalledWith("selfHostSearchProvider", "perplexity");
   });
 
-  it("offers both Firecrawl and Perplexity as provider options", () => {
+  it("offers Firecrawl, Perplexity, Parallel, and Exa as provider options (https://github.com/Brevilabs/obsidian-copilot-private/issues/285)", () => {
     setSettings({ enableSelfHostMode: true, selfHostSearchProvider: "firecrawl" });
     render(<SelfHostSettings />);
 
     const options = screen.getAllByRole("option").map((o) => o.textContent);
-    expect(options).toEqual(expect.arrayContaining(["Firecrawl", "Perplexity Sonar"]));
+    expect(options).toEqual(["Firecrawl", "Perplexity Sonar", "Parallel", "Exa"]);
+  });
+
+  it.each([
+    ["parallel", "parallel-key", "parallelApiKey", "parallel-…"],
+    ["exa", "exa-key", "exaApiKey", "exa-…"],
+  ] as const)(
+    "persists the selected %s credential independently (https://github.com/Brevilabs/obsidian-copilot-private/issues/285)",
+    (provider, key, field, placeholder) => {
+      jest.useFakeTimers();
+      setSettings({ enableSelfHostMode: true, selfHostSearchProvider: provider });
+      render(<SelfHostSettings />);
+
+      fireEvent.change(screen.getByPlaceholderText(placeholder), { target: { value: key } });
+      act(() => jest.runAllTimers());
+
+      expect(updateSetting).toHaveBeenCalledWith(field, key);
+      jest.useRealTimers();
+    }
+  );
+
+  it.each(["parallel", "exa"] as const)(
+    "persists a provider change to %s (https://github.com/Brevilabs/obsidian-copilot-private/issues/285)",
+    (provider) => {
+      setSettings({ enableSelfHostMode: true, selfHostSearchProvider: "firecrawl" });
+      render(<SelfHostSettings />);
+
+      fireEvent.change(providerSelect(), { target: { value: provider } });
+
+      expect(updateSetting).toHaveBeenCalledWith("selfHostSearchProvider", provider);
+    }
+  );
+
+  it("disables the selected provider credential while self-host mode is off (https://github.com/Brevilabs/obsidian-copilot-private/issues/285)", () => {
+    setSettings({ enableSelfHostMode: false, selfHostSearchProvider: "parallel" });
+    render(<SelfHostSettings />);
+
+    expect(screen.getByPlaceholderText<HTMLInputElement>("parallel-…").disabled).toBe(true);
   });
 
   it("disables the provider control while self-host mode is off", () => {

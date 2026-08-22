@@ -181,11 +181,15 @@ export interface CopilotSettings {
    */
   miyoSyncedExclusions: string;
   /** Which provider to use for self-host web search */
-  selfHostSearchProvider: "firecrawl" | "perplexity";
+  selfHostSearchProvider: SelfHostSearchProvider;
   /** Firecrawl API key for self-host web search */
   firecrawlApiKey: string;
   /** Perplexity API key for self-host web search via Sonar */
   perplexityApiKey: string;
+  /** Parallel API key for self-host web search */
+  parallelApiKey: string;
+  /** Exa API key for self-host web search */
+  exaApiKey: string;
   /** Supadata API key for self-host YouTube transcripts */
   supadataApiKey: string;
   /**
@@ -328,6 +332,8 @@ export interface CopilotSettings {
   configuredModels: ConfiguredModel[];
   backends: Partial<Record<BackendType, BackendConfig>>;
 }
+
+export type SelfHostSearchProvider = "firecrawl" | "perplexity" | "parallel" | "exa";
 
 /**
  * Native Claude permission mode that Copilot's canonical `auto` pill drives.
@@ -1060,7 +1066,9 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   }
 
   // Ensure selfHostSearchProvider is a valid value
-  const validSearchProviders = ["firecrawl", "perplexity"] as const;
+  // Persisted Parallel and Exa choices must survive reload instead of silently
+  // reverting to Firecrawl. https://github.com/Brevilabs/obsidian-copilot-private/issues/285
+  const validSearchProviders = ["firecrawl", "perplexity", "parallel", "exa"] as const;
   if (!validSearchProviders.includes(sanitizedSettings.selfHostSearchProvider)) {
     sanitizedSettings.selfHostSearchProvider = DEFAULT_SETTINGS.selfHostSearchProvider;
   }
