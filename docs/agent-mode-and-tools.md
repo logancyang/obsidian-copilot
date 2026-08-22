@@ -118,7 +118,11 @@ Skills are reusable instruction packets built around a `SKILL.md` file. One Skil
 
 Shared Skills live under `<Copilot folder>/skills/`. Copilot links them into the native folders used by each agent: `.opencode/skills/`, `.claude/skills/`, and `.agents/skills/`. Skills already present in those native folders also appear in the settings list.
 
-Custom Skills and built-in Obsidian Skills are free. Active Plus access adds cloud-backed Skills for web research, PDF reading, YouTube transcripts, X posts, and Symposium.
+Custom Skills and built-in Obsidian Skills are free. Copilot also includes an optional **screenpipe activity** Skill for searching screen and audio history through an existing local screenpipe MCP connection. It is disabled until you enable it for an agent.
+
+The screenpipe Skill does not install screenpipe, start recording, or copy activity into your vault. Install and run screenpipe, [connect its MCP server](https://docs.screenpipe.com/mcp-server) to the same opencode, Claude, or Codex agent, restart Agent Chat, then enable **screenpipe-activity** under **Settings → Copilot → Skills**. You can then ask questions such as “What was I working on before this meeting?” or “Find what we said about the launch yesterday.” The selected agent and model receive the relevant search results, so use a local model when those excerpts must remain on your computer.
+
+Active Plus access adds cloud-backed Skills for web research, PDF reading, YouTube transcripts, X posts, and Symposium.
 
 On Windows, creating the folder links may require **Developer Mode** or administrator access. If a sync service replaces a link, toggle that Skill off and on for the affected agent to recreate it.
 
