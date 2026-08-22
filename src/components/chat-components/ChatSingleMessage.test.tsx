@@ -458,8 +458,8 @@ describe("ChatSingleMessage", () => {
   });
 
   it("collapses only opted-in overflowing user text while keeping the full text and actions mounted (https://github.com/Brevilabs/obsidian-copilot-private/issues/151)", () => {
-    jest.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockReturnValue(240);
-    jest.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(160);
+    jest.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockReturnValue(720);
+    jest.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(600);
     const userMessage: ChatMessage = {
       ...baseMessage,
       sender: USER_SENDER,
@@ -483,8 +483,8 @@ describe("ChatSingleMessage", () => {
   });
 
   it("leaves Quick Chat user text and assistant text outside the Agent Chat collapse gate (https://github.com/Brevilabs/obsidian-copilot-private/issues/151)", () => {
-    jest.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockReturnValue(240);
-    jest.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(160);
+    jest.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockReturnValue(720);
+    jest.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(600);
     const userMessage: ChatMessage = {
       ...baseMessage,
       sender: USER_SENDER,

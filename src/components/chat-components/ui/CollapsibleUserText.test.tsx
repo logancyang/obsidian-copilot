@@ -33,8 +33,8 @@ describe("CollapsibleUserText", () => {
     });
 
     it(`leaves short user text unchanged without a disclosure control (${ISSUE_URL})`, () => {
-      scrollHeight.mockReturnValue(80);
-      clientHeight.mockReturnValue(80);
+      scrollHeight.mockReturnValue(480);
+      clientHeight.mockReturnValue(480);
 
       renderText({ children: "Summarize this note." });
 
@@ -43,32 +43,32 @@ describe("CollapsibleUserText", () => {
     });
 
     it(`starts overflowing user text collapsed and expands or collapses it explicitly (${ISSUE_URL})`, () => {
-      scrollHeight.mockReturnValue(240);
-      clientHeight.mockReturnValue(160);
+      scrollHeight.mockReturnValue(720);
+      clientHeight.mockReturnValue(600);
 
       renderText({ children: "A complete pasted log remains here." });
 
       const showMore = screen.getByRole("button", { name: "Show more" });
       const content = screen.getByText("A complete pasted log remains here.");
       expect(showMore.getAttribute("aria-expanded")).toBe("false");
-      expect(content.classList.contains("tw-max-h-40")).toBe(true);
+      expect(content.classList.contains("tw-max-h-[60vh]")).toBe(true);
       expect(content.textContent).toBe("A complete pasted log remains here.");
 
       fireEvent.click(showMore);
 
       const showLess = screen.getByRole("button", { name: "Show less" });
       expect(showLess.getAttribute("aria-expanded")).toBe("true");
-      expect(content.classList.contains("tw-max-h-40")).toBe(false);
+      expect(content.classList.contains("tw-max-h-[60vh]")).toBe(false);
 
       fireEvent.click(showLess);
 
       expect(screen.getByRole("button", { name: "Show more" })).not.toBeNull();
-      expect(content.classList.contains("tw-max-h-40")).toBe(true);
+      expect(content.classList.contains("tw-max-h-[60vh]")).toBe(true);
     });
 
     it(`rechecks rendered overflow when the owning window reports a resize (${ISSUE_URL})`, () => {
-      scrollHeight.mockReturnValue(80);
-      clientHeight.mockReturnValue(80);
+      scrollHeight.mockReturnValue(480);
+      clientHeight.mockReturnValue(480);
       let resizeCallback: ResizeObserverCallback = () => undefined;
       const observe = jest.fn();
       const disconnect = jest.fn();
@@ -84,8 +84,8 @@ describe("CollapsibleUserText", () => {
       expect(observe).toHaveBeenCalledTimes(1);
       expect(screen.queryByRole("button", { name: "Show more" })).toBeNull();
 
-      scrollHeight.mockReturnValue(240);
-      clientHeight.mockReturnValue(160);
+      scrollHeight.mockReturnValue(720);
+      clientHeight.mockReturnValue(600);
       act(() => resizeCallback([], {} as ResizeObserver));
 
       expect(screen.getByRole("button", { name: "Show more" })).not.toBeNull();

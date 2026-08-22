@@ -13,6 +13,36 @@ Discussion topics
 - Set aside time for questions after each chapter.
 - Prepare a one-paragraph summary of each reading.
 - Collect unfamiliar terms in a shared glossary.
+- Mark passages that need a second reading.
+- Compare the main argument across the three chapters.
+- Write down one question before each discussion.
+- Note any examples that clarify a difficult concept.
+- Save optional readings for a later session.
+- Group related questions under short headings.
+- Identify one idea to revisit at the end of the week.
+- Add definitions for recurring technical terms.
+- Record where two authors disagree.
+- Keep a separate list of practical examples.
+- Highlight claims that need an outside source.
+- Choose one chapter for a closer reread.
+- Summarize each discussion in two sentences.
+- Leave space for comments from other readers.
+- Note which questions remain unresolved.
+- Add a short recap after the final chapter.
+- Select three quotations for the group discussion.
+- List any assumptions shared by the authors.
+- Separate factual questions from interpretation.
+- Identify the clearest example in each chapter.
+- Add one counterexample for each main claim.
+- Note connections to earlier readings.
+- Record questions that need more context.
+- Compare the conclusions in a short table.
+- Flag terms that authors use differently.
+- Choose one idea for a follow-up exercise.
+- Write a one-sentence takeaway for each section.
+- List sources mentioned for further reading.
+- Mark ideas that changed during the discussion.
+- Add a closing question for the next session.
 
 Follow-up
 - Draft the checklist in priority order.

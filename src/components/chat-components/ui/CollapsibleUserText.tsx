@@ -44,7 +44,7 @@ export function CollapsibleUserText({ children }: CollapsibleUserTextProps) {
       <div
         ref={contentRef}
         id={contentId}
-        className={cn("tw-w-full", !isExpanded && "tw-max-h-40 tw-overflow-hidden")}
+        className={cn("tw-w-full", !isExpanded && "tw-max-h-[60vh] tw-overflow-hidden")}
       >
         {children}
       </div>
