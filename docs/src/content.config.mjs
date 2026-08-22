@@ -3,10 +3,10 @@ import { docsSchema } from "@astrojs/starlight/schema";
 import { headingTitledGlob } from "./docs-loader.mjs";
 
 export const collections = {
-  // Only the guides at the top of `docs/` are published; `docs/plans/` holds
-  // internal planning notes and the folder also carries non-Markdown installers.
+  // Only the guides next to this package are published. README documents the
+  // package itself, `plans/` holds internal notes, and installers are not Markdown.
   docs: defineCollection({
-    loader: headingTitledGlob({ base: "../docs", pattern: "*.md" }),
+    loader: headingTitledGlob({ base: ".", pattern: ["*.md", "!README.md"] }),
     schema: docsSchema(),
   }),
 };
