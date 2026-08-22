@@ -1,6 +1,6 @@
 import { USER_SENDER } from "@/constants";
 import { ChatMessage } from "@/types/message";
-import { useCallback, useRef, useState, useEffect } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 interface UseChatScrollingOptions {
   chatHistory: ChatMessage[];
@@ -19,6 +19,14 @@ export const useChatScrolling = ({
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
 
+  const lastUserMessageIndex = useMemo(() => {
+    for (let index = chatHistory.length - 1; index >= 0; index--) {
+      const message = chatHistory[index];
+      if (message.isVisible && message.sender === USER_SENDER) return index;
+    }
+    return undefined;
+  }, [chatHistory]);
+
   // Generate consistent message key for DOM identification
   // Using message IDs is better, as in the case of a network disconnection, the timestamps of two messages could be identical.
   const getMessageKey = useCallback((message: ChatMessage, index: number): string => {
@@ -33,11 +41,6 @@ export const useChatScrolling = ({
     const containerHeight = messagesContainer.clientHeight;
 
     // Find the last user message element to measure its actual height
-    const lastUserMessageIndex = chatHistory
-      .map((msg, idx) => ({ msg, idx }))
-      .filter(({ msg }) => msg.isVisible && msg.sender === USER_SENDER)
-      .pop()?.idx;
-
     let lastUserMessageHeight = 0;
 
     if (lastUserMessageIndex !== undefined) {
@@ -63,7 +66,7 @@ export const useChatScrolling = ({
     const minHeight = Math.max(100, containerHeight - lastUserMessageHeight);
 
     return minHeight;
-  }, [chatHistory, getMessageKey]);
+  }, [chatHistory, getMessageKey, lastUserMessageIndex]);
 
   // Memoized callback ref that gets called only when the DOM element actually changes
   const scrollContainerCallbackRef = useCallback(
@@ -99,10 +102,25 @@ export const useChatScrolling = ({
         // Observe the messages container for size changes
         resizeObserver.observe(node);
 
+        if (lastUserMessageIndex !== undefined) {
+          const lastUserMessageKey = getMessageKey(
+            chatHistory[lastUserMessageIndex],
+            lastUserMessageIndex
+          );
+          const lastUserMessageElement = node.querySelector(
+            `[data-message-key="${lastUserMessageKey}"]`
+          );
+
+          // The scroll container can keep a fixed border box while a collapsed
+          // prompt expands inside it, so observe the measured row as well.
+          // https://github.com/Brevilabs/obsidian-copilot-private/issues/151
+          if (lastUserMessageElement) resizeObserver.observe(lastUserMessageElement);
+        }
+
         resizeObserverRef.current = resizeObserver;
       }
     },
-    [calculateDynamicMinHeight]
+    [calculateDynamicMinHeight, chatHistory, getMessageKey, lastUserMessageIndex]
   );
 
   // Recalculate min-height when chat history changes (new messages)
