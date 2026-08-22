@@ -70,7 +70,7 @@ From Agent Chat Home, open **Projects** and select **New project**. A project ke
 
 Skills are reusable instruction packets for jobs such as reviewing a change or drafting a release note. Open **Settings → Copilot → Skills** to see skills from Copilot's shared skills folder and the native opencode, Claude, and Codex skill folders. Enable each skill for the agents that should use it; Copilot links shared skills into the right agent folders for you.
 
-Type `/` in Agent Chat to choose an available skill. Copilot also includes skills for Obsidian Markdown, Bases, Canvas, and the Obsidian CLI. Learn more in [Skills across agents](agent-mode-and-tools.md#skills-across-agents).
+Type `/` in Agent Chat to choose an available skill. Copilot also includes skills for Obsidian Markdown, Bases, Canvas, and the Obsidian CLI, plus an optional screenpipe activity-history workflow. Learn more in [Skills across agents](agent-mode-and-tools.md#skills-across-agents).
 
 ### Reuse Copilot Commands
 
