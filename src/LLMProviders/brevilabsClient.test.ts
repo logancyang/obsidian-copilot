@@ -27,6 +27,8 @@ const { __setRequestUrlImpl: setRequestUrlImpl } = obsidianModule as unknown as 
 interface RequestOutcome {
   data: unknown;
   error: Error | null;
+  status?: number;
+  detail?: { reason?: string; error?: string };
 }
 
 /**
@@ -39,8 +41,19 @@ function stubRequest(outcome: RequestOutcome, onRequest?: () => void): void {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- reaching the private transport is the point
   (BrevilabsClient.getInstance() as any).makeRequest = async () => {
     onRequest?.();
-    return outcome;
+    return { status: outcome.error ? 500 : 200, ...outcome };
   };
+}
+
+/**
+ * How `/license` refuses a key: HTTP 403, with a reason that names the key's
+ * prefix so support can tell which key was tried.
+ */
+function licenseRejection(keyPrefix: string): RequestOutcome {
+  const reason = `Invalid license key (prefix: ${keyPrefix}...)`;
+  const error = new Error(reason);
+  error.name = "FORBIDDEN";
+  return { data: null, error, status: 403, detail: { reason, error: "FORBIDDEN" } };
 }
 
 const VALID_LICENSE_RESPONSE = { entitlement: "signed-token", plan: "supporter" };
@@ -62,8 +75,60 @@ describe("brevilabsClient", () => {
     describe("validateLicenseKey()", () => {
       beforeEach(() => {
         jest.clearAllMocks();
+        // `stubRequest` installs an own property over the prototype method;
+        // dropping it puts the real transport back for the tests that need it.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- mirrors how stubRequest reaches it
+        delete (BrevilabsClient.getInstance() as any).makeRequest;
         mockApplyEntitlement.mockResolvedValue(true);
-        mockGetSettings.mockReturnValue({ plusLicenseKey: "key-A" });
+        mockGetSettings.mockReturnValue({ plusLicenseKey: "key-A", userId: "user-1" });
+      });
+
+      // Drives the real transport, because the defect lived in the seam between
+      // the HTTP layer and this method: the layer discarded the status, leaving
+      // the reason text — which names the rejected key's prefix — as the only
+      // thing left to classify on.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/307
+      it("revokes entitlement for the 403 body the license endpoint actually returns", async () => {
+        setRequestUrlImpl(
+          jest.fn().mockResolvedValue({
+            status: 403,
+            json: {
+              detail: {
+                status: 403,
+                error: "FORBIDDEN",
+                message: "NO_PERMISSION",
+                reason: "Invalid license key (prefix: garbage-ke...)",
+              },
+            },
+          })
+        );
+
+        const result = await BrevilabsClient.getInstance().validateLicenseKey(
+          undefined,
+          MANUAL_LICENSE_CHECK
+        );
+
+        expect(result).toEqual({ isValid: false });
+        expect(mockTurnOffPaid).toHaveBeenCalled();
+      });
+
+      it("answers invalid without a request when no license key is stored (https://github.com/Brevilabs/obsidian-copilot-private/issues/307)", async () => {
+        // The server refuses an empty key with the same 403 it gives a wrong
+        // one, so the per-turn and per-model gates, which call this without
+        // checkIsPaidUser's no-key sign-out, would revoke a keyless user.
+        mockGetSettings.mockReturnValue({ plusLicenseKey: "" });
+        const makeRequest = jest.fn();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- verifies the private HTTP boundary
+        (BrevilabsClient.getInstance() as any).makeRequest = makeRequest;
+
+        const result = await BrevilabsClient.getInstance().validateLicenseKey(
+          undefined,
+          MANUAL_LICENSE_CHECK
+        );
+
+        expect(result).toEqual({ isValid: false });
+        expect(makeRequest).not.toHaveBeenCalled();
+        expect(mockTurnOffPaid).not.toHaveBeenCalled();
       });
 
       it("applies the signed entitlement when the license key is unchanged", async () => {
@@ -133,8 +198,13 @@ describe("brevilabsClient", () => {
         }
       );
 
-      it("revokes entitlement when the server rejects the key", async () => {
-        stubRequest({ data: null, error: new Error("Invalid license key") });
+      // The rejection is recognised by its 403, not by its reason text: the
+      // server names the rejected key's prefix in that text, so an exact-string
+      // match silently reclassified every refusal as an unreachable server and
+      // left the previous key's entitlement in force.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/307
+      it("revokes entitlement when the server answers 403, whatever the reason text says", async () => {
+        stubRequest(licenseRejection("key-A-gar"));
 
         const result = await BrevilabsClient.getInstance().validateLicenseKey(
           undefined,
@@ -143,6 +213,25 @@ describe("brevilabsClient", () => {
 
         expect(result).toEqual({ isValid: false });
         expect(mockTurnOffPaid).toHaveBeenCalled();
+      });
+
+      it.each([
+        ["a 502 from the gateway", 502],
+        // A WAF or gateway can answer 403 with an HTML page and no API error
+        // body. Reading that as a verdict on the key would revoke every paying
+        // user who checked in during the outage.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/307
+        ["an unexplained 403 from infrastructure", 403],
+      ])("leaves the entitlement alone for %s", async (_label, status) => {
+        stubRequest({ data: null, error: new Error(`HTTP error: ${status}`), status });
+
+        const result = await BrevilabsClient.getInstance().validateLicenseKey(
+          undefined,
+          MANUAL_LICENSE_CHECK
+        );
+
+        expect(result).toEqual({ isValid: undefined });
+        expect(mockTurnOffPaid).not.toHaveBeenCalled();
       });
 
       it("discards a success that arrives after the license key changed", async () => {
@@ -164,9 +253,9 @@ describe("brevilabsClient", () => {
       });
 
       it("discards a rejection that arrives after the license key changed", async () => {
-        // The mirror case: a stale "Invalid license key" must not revoke the
-        // entitlement the user's newly entered key just earned.
-        stubRequest({ data: null, error: new Error("Invalid license key") }, () => {
+        // The mirror case: a stale rejection must not revoke the entitlement
+        // the user's newly entered key just earned.
+        stubRequest(licenseRejection("key-A-gar"), () => {
           mockGetSettings.mockReturnValue({ plusLicenseKey: "key-B" });
         });
 
