@@ -345,6 +345,16 @@ export class BrevilabsClient {
     // the key it was requested for must be discarded rather than applied.
     const requestedLicenseKey = getSettings().plusLicenseKey;
 
+    // Having no key is not a question for the server. It answers an empty key
+    // with the same 403 refusal it gives a wrong one, so asking would let a
+    // keyless check revoke a user who has simply not entered one yet: the
+    // per-turn and per-model gates below call this without the sign-out that
+    // `checkIsPaidUser` performs when it finds no key.
+    // https://github.com/logancyang/obsidian-copilot-preview/issues/352
+    if (!requestedLicenseKey) {
+      return { isValid: false };
+    }
+
     // Build the request body with proper structure
     const requestBody: Record<string, unknown> = {
       license_key: requestedLicenseKey,

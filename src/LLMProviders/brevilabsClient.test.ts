@@ -112,6 +112,25 @@ describe("brevilabsClient", () => {
         expect(mockTurnOffPaid).toHaveBeenCalled();
       });
 
+      it("answers invalid without a request when no license key is stored (https://github.com/logancyang/obsidian-copilot-preview/issues/352)", async () => {
+        // The server refuses an empty key with the same 403 it gives a wrong
+        // one, so the per-turn and per-model gates, which call this without
+        // checkIsPaidUser's no-key sign-out, would revoke a keyless user.
+        mockGetSettings.mockReturnValue({ plusLicenseKey: "" });
+        const makeRequest = jest.fn();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- verifies the private HTTP boundary
+        (BrevilabsClient.getInstance() as any).makeRequest = makeRequest;
+
+        const result = await BrevilabsClient.getInstance().validateLicenseKey(
+          undefined,
+          MANUAL_LICENSE_CHECK
+        );
+
+        expect(result).toEqual({ isValid: false });
+        expect(makeRequest).not.toHaveBeenCalled();
+        expect(mockTurnOffPaid).not.toHaveBeenCalled();
+      });
+
       it("applies the signed entitlement when the license key is unchanged", async () => {
         stubRequest({ data: VALID_LICENSE_RESPONSE, error: null });
 
