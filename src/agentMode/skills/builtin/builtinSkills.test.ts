@@ -1,9 +1,11 @@
 import {
+  AGENT_VAULT_NAME_ENV,
   BUILTIN_SKILLS,
   MIYO_PARSE_SKILL,
   MIYO_SEARCH_SKILL,
   planManagedBuiltins,
   PLUS_ENV,
+  SELF_HOST_WEB_SEARCH_ENV,
 } from "./builtinSkills";
 import {
   SYMPOSIUM_AGENT_HANDOFF_DIR,
@@ -85,7 +87,8 @@ describe("builtinSkills", () => {
         expect(sh).toContain("Authorization: Bearer $KEY");
         expect(sh).toContain("X-Client-Version: $CLIENT_VERSION");
         // Guard + soft fallback when the license/relay config is absent.
-        expect(sh).toContain('[ -n "$KEY" ] && [ -n "$BASE" ] || no_license');
+        expect(sh).toContain("require_relay()");
+        expect(sh).toContain("require_relay\n");
         expect(sh).toContain("Copilot Plus");
 
         const ps1 = scriptOf(skill.name, ".ps1");
@@ -94,7 +97,8 @@ describe("builtinSkills", () => {
         expect(ps1).toContain('Authorization = "Bearer $KEY"');
         expect(ps1).toContain("'X-Client-Version' = $CLIENT_VERSION");
         // Same license guard as the shell script.
-        expect(ps1).toContain("if (-not $KEY -or -not $BASE) { NoLicense }");
+        expect(ps1).toContain("function RequireRelay");
+        expect(ps1).toContain("RequireRelay\n");
         expect(ps1).toContain("Copilot Plus");
         // The body is sent as explicit UTF-8 bytes — Windows PowerShell 5.1 would
         // otherwise ASCII-encode a string body and corrupt non-ASCII input.
@@ -149,6 +153,39 @@ describe("builtinSkills", () => {
       expect(scriptOf("copilot-web-fetch", ".ps1")).toContain('Invoke-Relay "/url4llm"');
       expect(scriptOf("copilot-web-fetch", ".ps1")).toContain(
         "@{ url = $ARG; user_id = $USER_ID }"
+      );
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/165 routes Self-Host web search through the owning Obsidian plugin bridge", () => {
+      const sh = scriptOf("copilot-web-search", ".sh");
+      expect(sh).toContain(SELF_HOST_WEB_SEARCH_ENV);
+      expect(sh).toContain(AGENT_VAULT_NAME_ENV);
+      expect(sh).toContain("selfHostWebSearchAgentBridge");
+      expect(sh).toContain('"vault=$VAULT_NAME" eval');
+      expect(sh.indexOf('if [ "$SELF_HOST" = "1" ]')).toBeLessThan(sh.indexOf("require_relay\n"));
+
+      const ps1 = scriptOf("copilot-web-search", ".ps1");
+      expect(ps1).toContain("selfHostWebSearchAgentBridge");
+      expect(ps1).toContain('& $OBSIDIAN_CLI "vault=$VAULT_NAME"');
+      expect(ps1.indexOf("if ($SELF_HOST -eq '1')")).toBeLessThan(ps1.indexOf("RequireRelay\n"));
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/165 fails Self-Host page fetch closed without invoking the hosted relay", () => {
+      const skill = BUILTIN_SKILLS.find((item) => item.name === "copilot-web-fetch");
+      expect(skill?.skillMd).toContain("never use an agent-native web");
+
+      const sh = scriptOf("copilot-web-fetch", ".sh");
+      expect(sh).toContain('if [ "$SELF_HOST" = "1" ]');
+      expect(sh).toContain("Do not use a native web-fetch tool");
+      expect(sh.indexOf("Do not use a native web-fetch tool")).toBeLessThan(
+        sh.indexOf("require_relay\n")
+      );
+
+      const ps1 = scriptOf("copilot-web-fetch", ".ps1");
+      expect(ps1).toContain("if ($SELF_HOST -eq '1')");
+      expect(ps1).toContain("Do not use a native web-fetch tool");
+      expect(ps1.indexOf("Do not use a native web-fetch tool")).toBeLessThan(
+        ps1.indexOf("RequireRelay\n")
       );
     });
 

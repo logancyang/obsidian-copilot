@@ -1,4 +1,8 @@
-import { hasSelfHostSearchKey, selfHostWebSearch } from "./selfHostServices";
+import {
+  createSelfHostWebSearchAgentBridge,
+  hasSelfHostSearchKey,
+  selfHostWebSearch,
+} from "./selfHostServices";
 
 const mockGetSettings = jest.fn();
 jest.mock("@/settings/model", () => ({
@@ -88,6 +92,54 @@ describe("selfHostServices", () => {
       mockGetSettings.mockReturnValue(providerSettings("unknown", { firecrawlApiKey: "fc-key" }));
 
       expect(hasSelfHostSearchKey()).toBe(true);
+    });
+  });
+
+  describe("createSelfHostWebSearchAgentBridge()", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/165 routes an entitled Agent Chat query through the host search callable", async () => {
+      const search = jest.fn().mockResolvedValue({
+        content: "result",
+        citations: ["https://example.com"],
+      });
+      const bridge = createSelfHostWebSearchAgentBridge(
+        () => true,
+        () => true,
+        search
+      );
+
+      await expect(bridge.search("current facts")).resolves.toEqual({
+        content: "result",
+        citations: ["https://example.com"],
+      });
+      expect(search).toHaveBeenCalledWith("current facts");
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/165 fails closed when the signed Self-Host entitlement is unavailable", async () => {
+      const search = jest.fn();
+      const bridge = createSelfHostWebSearchAgentBridge(
+        () => false,
+        () => true,
+        search
+      );
+
+      await expect(bridge.search("private query")).rejects.toThrow(
+        "Self-host web search is not available"
+      );
+      expect(search).not.toHaveBeenCalled();
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/165 fails closed when the selected provider has no API key", async () => {
+      const search = jest.fn();
+      const bridge = createSelfHostWebSearchAgentBridge(
+        () => true,
+        () => false,
+        search
+      );
+
+      await expect(bridge.search("private query")).rejects.toThrow(
+        "Add an API key for the selected self-host search provider"
+      );
+      expect(search).not.toHaveBeenCalled();
     });
   });
 

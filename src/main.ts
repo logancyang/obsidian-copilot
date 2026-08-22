@@ -131,6 +131,10 @@ import {
   type SymposiumAgentBridge,
   SymposiumPublisher,
 } from "@/symposium/SymposiumPublisher";
+import {
+  createSelfHostWebSearchAgentBridge,
+  type SelfHostWebSearchAgentBridge,
+} from "@/LLMProviders/selfHostServices";
 
 // Removed unused FileTrackingState interface
 
@@ -154,6 +158,8 @@ export default class CopilotPlugin extends Plugin {
   modelManagement!: ModelManagementApi;
   /** Frozen path-only facade available to Agent Mode's Obsidian CLI bridge. */
   symposiumAgentBridge?: Readonly<SymposiumAgentBridge>;
+  /** Credential-free facade available to the managed Agent Chat search skill. */
+  selfHostWebSearchAgentBridge?: Readonly<SelfHostWebSearchAgentBridge>;
   // Proof of THIS lifecycle for anything that enqueues a Miyo folder mutation.
   // Assigned in `onload` right after the queue reset, and read by the settings
   // UI rather than captured there: settings tabs mount lazily (`TabContent`
@@ -409,6 +415,8 @@ export default class CopilotPlugin extends Plugin {
     const symposiumPublisher = new SymposiumPublisher(this.app);
     const symposiumAgentBridge = createSymposiumAgentBridge(symposiumPublisher);
     this.symposiumAgentBridge = symposiumAgentBridge;
+    const selfHostWebSearchAgentBridge = createSelfHostWebSearchAgentBridge();
+    this.selfHostWebSearchAgentBridge = selfHostWebSearchAgentBridge;
     const publishFile = (file: TFile): void => {
       void symposiumPublisher
         .open(file)
@@ -419,6 +427,7 @@ export default class CopilotPlugin extends Plugin {
       if (this.symposiumAgentBridge === symposiumAgentBridge) {
         this.symposiumAgentBridge = undefined;
       }
+      this.selfHostWebSearchAgentBridge = undefined;
     });
     registerCommands(this, publishFile);
     registerSymposiumFileMenu(this, publishFile);

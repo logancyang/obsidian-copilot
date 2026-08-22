@@ -2,9 +2,11 @@ import { BREVILABS_API_BASE_URL } from "@/constants";
 import { type CopilotSettings, getSettings } from "@/settings/model";
 import { getMiyoCustomUrl } from "@/miyo/miyoUtils";
 import {
+  AGENT_VAULT_NAME_ENV,
   MIYO_SEARCH_FOLDER_ENV,
   MIYO_SEARCH_SCOPE_ENV,
   PLUS_ENV,
+  SELF_HOST_WEB_SEARCH_ENV,
 } from "@/agentMode/skills/builtin/builtinSkills";
 import { SYMPOSIUM_WORKSPACE_ROOT_ENV } from "@/symposium/constants";
 import {
@@ -16,7 +18,12 @@ import { requireNodeModule } from "@/utils/desktopRuntime";
 /** Env var the bundled `miyo` CLI reads to target a non-default Miyo service. */
 const MIYO_URL_ENV = "MIYO_URL";
 
-const PROTECTED_BUILTIN_ENV_KEYS = [MIYO_SEARCH_SCOPE_ENV, MIYO_SEARCH_FOLDER_ENV] as const;
+const PROTECTED_BUILTIN_ENV_KEYS = [
+  MIYO_SEARCH_SCOPE_ENV,
+  MIYO_SEARCH_FOLDER_ENV,
+  SELF_HOST_WEB_SEARCH_ENV,
+  AGENT_VAULT_NAME_ENV,
+] as const;
 
 /** Frozen empty result so unmanaged spawns don't allocate a fresh object each time. */
 const EMPTY_MANAGED_ENV: Readonly<Record<string, string>> = Object.freeze({});
@@ -37,6 +44,8 @@ const EMPTY_MANAGED_ENV: Readonly<Record<string, string>> = Object.freeze({});
  *   prompt.
  * - **Host review** (`SYMPOSIUM_WORKSPACE_ROOT`): owning workspace used to
  *   stage HTML and derive the wrapper's explicit Obsidian CLI vault target.
+ * - **Self-host web search**: a mode marker and exact vault identity route the
+ *   managed skill back into Obsidian without exposing provider credentials.
  * - **Miyo** (`MIYO_URL`): the user's custom/remote Miyo server URL when set, so
  *   the bundled `miyo` CLI targets their configured service instead of local
  *   loopback discovery (the only way Miyo works on mobile or against a remote
@@ -45,12 +54,12 @@ const EMPTY_MANAGED_ENV: Readonly<Record<string, string>> = Object.freeze({});
  *   without a license.
  * @param clientVersion Version reported to the Copilot Plus relay.
  * @param workspaceRootAbs Absolute host workspace root used by portable skills.
- * @param miyoFolderName Exact active-vault name Miyo resolves on its own host.
+ * @param vaultName Exact active-vault name used by host-backed skills.
  */
 export async function buildBuiltinSkillEnv(
   clientVersion = "",
   workspaceRootAbs = "",
-  miyoFolderName = ""
+  vaultName = ""
 ): Promise<Readonly<Record<string, string>>> {
   const os = requireNodeModule<typeof import("node:os")>("os");
   const settings = getSettings();
@@ -65,6 +74,15 @@ export async function buildBuiltinSkillEnv(
   });
   if (obsidianCliPath) env[COPILOT_OBSIDIAN_CLI_ENV] = obsidianCliPath;
 
+  // The CLI bridge must target this lifecycle's vault instead of whichever
+  // Obsidian renderer happens to be focused.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/165
+  if (vaultName) env[AGENT_VAULT_NAME_ENV] = vaultName;
+  // The marker is protected from backend overrides so Self-Host mode cannot
+  // silently fall back to a hosted or agent-native search path.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/165
+  if (settings.enableSelfHostMode === true) env[SELF_HOST_WEB_SEARCH_ENV] = "1";
+
   // The CLI reads MIYO_URL; bare/local installs leave it empty and fall back to
   // loopback discovery.
   const miyoUrl = getMiyoCustomUrl(settings);
@@ -76,7 +94,7 @@ export async function buildBuiltinSkillEnv(
     // session's cwd and remains portable to remote Miyo hosts.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/121
     env[MIYO_SEARCH_SCOPE_ENV] = settings.miyoSearchAll === true ? "unrestricted" : "current";
-    if (miyoFolderName) env[MIYO_SEARCH_FOLDER_ENV] = miyoFolderName;
+    if (vaultName) env[MIYO_SEARCH_FOLDER_ENV] = vaultName;
   }
 
   // Copilot Plus relay env — gated on an active subscription with a usable key.
@@ -121,7 +139,8 @@ export function getBuiltinSkillEnvRestartPolicy(
   const ordinaryEnvChanged =
     prev.isPaidUser !== next.isPaidUser ||
     prev.plusLicenseKey !== next.plusLicenseKey ||
-    prev.miyoServerUrl !== next.miyoServerUrl;
+    prev.miyoServerUrl !== next.miyoServerUrl ||
+    prev.enableSelfHostMode !== next.enableSelfHostMode;
   // Scope changes only affect a currently enabled skill. Tightening an active
   // boundary must cancel the current turn; widening can wait until it is idle.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/121
@@ -131,6 +150,12 @@ export function getBuiltinSkillEnvRestartPolicy(
     prev.miyoSearchAll !== next.miyoSearchAll;
 
   if (!ordinaryEnvChanged && !activeMiyoScopeChanged) return "none";
+  // Enabling Self-Host mode must stop a live native web tool before another
+  // query can leave through the agent's provider.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/165
+  if (prev.enableSelfHostMode !== true && next.enableSelfHostMode === true) {
+    return "immediate";
+  }
   if (activeMiyoScopeChanged && prev.miyoSearchAll === true && next.miyoSearchAll !== true) {
     return "immediate";
   }

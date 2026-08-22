@@ -29,8 +29,10 @@ import {
   COPILOT_PROMPT_BASE,
 } from "@/agentMode/backends/shared/agentSystemPrompt";
 import {
+  AGENT_VAULT_NAME_ENV,
   MIYO_SEARCH_FOLDER_ENV,
   MIYO_SEARCH_SCOPE_ENV,
+  SELF_HOST_WEB_SEARCH_ENV,
 } from "@/agentMode/skills/builtin/builtinSkills";
 
 function makeSystemPrompt(title: string, content: string): UserSystemPrompt {
@@ -861,6 +863,16 @@ describe("buildOpencodeConfig — agent/prompt/mode/skills blocks (preserved)", 
     expect(cfg.permission).toBeUndefined();
   });
 
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/165 denies native web tools for every Self-Host opencode agent", async () => {
+    setSettings({ enableSelfHostMode: true });
+
+    const cfg = (await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS)) as {
+      permission?: Record<string, string>;
+    };
+
+    expect(cfg.permission).toEqual({ websearch: "deny", webfetch: "deny" });
+  });
+
   it("synthesises deny rules for a mix of skills (only cross-discovered + not-enabled wins)", async () => {
     seedSkills([
       makeSkill("a", ["claude"]),
@@ -1022,6 +1034,75 @@ describe("OpencodeBackend.buildSpawnDescriptor", () => {
     expect(desc.args).toEqual(["acp", "--cwd", "/active-vault"]);
     expect(desc.env[MIYO_SEARCH_SCOPE_ENV]).toBe("current");
     expect(desc.env[MIYO_SEARCH_FOLDER_ENV]).toBe("active-vault");
+    expect(desc.env[AGENT_VAULT_NAME_ENV]).toBe("active-vault");
+  });
+
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/165 seals top-level and per-agent native web permissions in config overrides", async () => {
+    setSettings({ enableSelfHostMode: true });
+    updateSetting("agentMode", {
+      byok: {},
+      activeBackend: "opencode",
+      debugFullFrames: false,
+      welcomeDismissed: false,
+      skills: { folder: "copilot/skills" },
+      backends: {
+        opencode: {
+          binaryPath: "/path/to/opencode",
+          envOverrides: {
+            [SELF_HOST_WEB_SEARCH_ENV]: "",
+            [AGENT_VAULT_NAME_ENV]: "other-vault",
+            OPENCODE_CONFIG_CONTENT: JSON.stringify({
+              permission: "ask",
+              agent: {
+                build: { permission: { bash: "ask", websearch: "allow" } },
+                custom: { permission: "allow" },
+              },
+            }),
+          },
+        },
+      },
+    });
+
+    const desc = await new OpencodeBackend(NO_MODELS_DEPS).buildSpawnDescriptor({
+      vaultBasePath: "/active-vault",
+      vaultName: "active-vault",
+    });
+    const cfg = JSON.parse(desc.env.OPENCODE_CONFIG_CONTENT as string);
+
+    expect(desc.env[SELF_HOST_WEB_SEARCH_ENV]).toBe("1");
+    expect(desc.env[AGENT_VAULT_NAME_ENV]).toBe("active-vault");
+    expect(cfg.permission).toEqual({ "*": "ask", websearch: "deny", webfetch: "deny" });
+    expect(cfg.agent.build.permission).toEqual({
+      bash: "ask",
+      websearch: "deny",
+      webfetch: "deny",
+    });
+    expect(cfg.agent.custom.permission).toEqual({
+      "*": "allow",
+      websearch: "deny",
+      webfetch: "deny",
+    });
+  });
+
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/165 rejects a non-object config override instead of starting without native web denies", async () => {
+    setSettings({ enableSelfHostMode: true });
+    updateSetting("agentMode", {
+      byok: {},
+      activeBackend: "opencode",
+      debugFullFrames: false,
+      welcomeDismissed: false,
+      skills: { folder: "copilot/skills" },
+      backends: {
+        opencode: {
+          binaryPath: "/path/to/opencode",
+          envOverrides: { OPENCODE_CONFIG_CONTENT: "[]" },
+        },
+      },
+    });
+
+    await expect(
+      new OpencodeBackend(NO_MODELS_DEPS).buildSpawnDescriptor({ vaultBasePath: "/vault" })
+    ).rejects.toThrow("OPENCODE_CONFIG_CONTENT must be a JSON object");
   });
 
   it("threads the injected getCacheRoot into the spawned external_directory allow", async () => {
