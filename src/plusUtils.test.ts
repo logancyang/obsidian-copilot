@@ -642,7 +642,7 @@ describe("plusUtils", () => {
       expect(isSelfHostModeValid()).toBe(false);
     });
 
-    it("does not tag the proof with a key swapped in while verification was in flight (https://github.com/logancyang/obsidian-copilot-preview/issues/352)", async () => {
+    it("does not tag the proof with a key swapped in while verification was in flight (https://github.com/Brevilabs/obsidian-copilot-private/issues/307)", async () => {
       // validateLicenseKey's key-changed guard runs before this call, so only
       // reading the key up front keeps the old key's claims off the new key.
       mockVerifyEntitlement.mockImplementation(async () => {
@@ -799,7 +799,7 @@ describe("plusUtils", () => {
       expect(await checkIsPaidUser(undefined, { trigger: "manual" })).toBe(false);
     });
 
-    it("refuses the previous key's entitlement to a newly entered key the server cannot rule on (https://github.com/logancyang/obsidian-copilot-preview/issues/352)", async () => {
+    it("refuses the previous key's entitlement to a newly entered key the server cannot rule on (https://github.com/Brevilabs/obsidian-copilot-private/issues/307)", async () => {
       // Swapping the key leaves the old key's token persisted and its proof
       // live. Without the proof naming the key that earned it, this fallback
       // answered `true` for a key the server never accepted, keeping the old
@@ -932,7 +932,7 @@ describe("plusUtils", () => {
       expect(result.current).toEqual({ status: "active" });
     });
 
-    it("stops naming the previous key's plan once a different key is stored (https://github.com/logancyang/obsidian-copilot-preview/issues/352)", async () => {
+    it("stops naming the previous key's plan once a different key is stored (https://github.com/Brevilabs/obsidian-copilot-private/issues/307)", async () => {
       // The badge reads the same proof the gates do, so a proof that outlived
       // its key showed a replaced key the plan it never bought.
       await verifySessionClaims({ plan: "believer", tier: "plus" });

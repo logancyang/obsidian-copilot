@@ -350,7 +350,7 @@ export class BrevilabsClient {
     // keyless check revoke a user who has simply not entered one yet: the
     // per-turn and per-model gates below call this without the sign-out that
     // `checkIsPaidUser` performs when it finds no key.
-    // https://github.com/logancyang/obsidian-copilot-preview/issues/352
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/307
     if (!requestedLicenseKey) {
       return { isValid: false };
     }
@@ -405,7 +405,7 @@ export class BrevilabsClient {
       // A 403 carrying no such body is infrastructure rather than a verdict on
       // the key. A gateway or WAF answering 403 would otherwise revoke every
       // paying user who happened to check in during the outage.
-      // https://github.com/logancyang/obsidian-copilot-preview/issues/352
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/307
       if (status === 403 && detail) {
         turnOffPaid(app);
         return { isValid: false };

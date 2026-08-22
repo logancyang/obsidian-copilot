@@ -87,7 +87,7 @@ describe("brevilabsClient", () => {
       // the HTTP layer and this method: the layer discarded the status, leaving
       // the reason text — which names the rejected key's prefix — as the only
       // thing left to classify on.
-      // https://github.com/logancyang/obsidian-copilot-preview/issues/352
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/307
       it("revokes entitlement for the 403 body the license endpoint actually returns", async () => {
         setRequestUrlImpl(
           jest.fn().mockResolvedValue({
@@ -112,7 +112,7 @@ describe("brevilabsClient", () => {
         expect(mockTurnOffPaid).toHaveBeenCalled();
       });
 
-      it("answers invalid without a request when no license key is stored (https://github.com/logancyang/obsidian-copilot-preview/issues/352)", async () => {
+      it("answers invalid without a request when no license key is stored (https://github.com/Brevilabs/obsidian-copilot-private/issues/307)", async () => {
         // The server refuses an empty key with the same 403 it gives a wrong
         // one, so the per-turn and per-model gates, which call this without
         // checkIsPaidUser's no-key sign-out, would revoke a keyless user.
@@ -202,7 +202,7 @@ describe("brevilabsClient", () => {
       // server names the rejected key's prefix in that text, so an exact-string
       // match silently reclassified every refusal as an unreachable server and
       // left the previous key's entitlement in force.
-      // https://github.com/logancyang/obsidian-copilot-preview/issues/352
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/307
       it("revokes entitlement when the server answers 403, whatever the reason text says", async () => {
         stubRequest(licenseRejection("key-A-gar"));
 
@@ -220,7 +220,7 @@ describe("brevilabsClient", () => {
         // A WAF or gateway can answer 403 with an HTML page and no API error
         // body. Reading that as a verdict on the key would revoke every paying
         // user who checked in during the outage.
-        // https://github.com/logancyang/obsidian-copilot-preview/issues/352
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/307
         ["an unexplained 403 from infrastructure", 403],
       ])("leaves the entitlement alone for %s", async (_label, status) => {
         stubRequest({ data: null, error: new Error(`HTTP error: ${status}`), status });

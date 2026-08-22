@@ -136,7 +136,7 @@ interface VerifiedEntitlement {
    * belongs to no key in particular, so swapping in a different key and getting
    * anything short of an authoritative refusal (offline, 5xx, gateway error)
    * would let the new key inherit the old one's plan.
-   * https://github.com/logancyang/obsidian-copilot-preview/issues/352
+   * https://github.com/Brevilabs/obsidian-copilot-private/issues/307
    */
   licenseKey: string;
   features: ReadonlySet<EntitlementFeature>;
