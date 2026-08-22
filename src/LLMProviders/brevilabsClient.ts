@@ -56,13 +56,34 @@ async function buildMultipartFromFormData(
 }
 
 /**
- * Normalize a requestUrl response into the {data, error} shape used by Brevilabs API methods.
+ * A Brevilabs API answer, normalized. `status` is the HTTP status the server
+ * replied with, or 0 when the request never produced one (transport failure).
+ * It is carried separately from `error` because a server's error *wording* is
+ * free to change while its status code is the contract — classifying on the
+ * message text leaves a caller silently mis-reading responses the day the
+ * server adds so much as a suffix.
+ */
+interface BrevilabsApiResult<T> {
+  data: T | null;
+  error?: Error;
+  status: number;
+  /**
+   * The API's own error body, present only when the server explained the
+   * failure itself. An infrastructure error page (a gateway or WAF 403, an HTML
+   * 502) carries none, which is what lets a caller tell "the API refused this
+   * request" from "the server is having a bad day".
+   */
+  detail?: { reason?: string; error?: string };
+}
+
+/**
+ * Normalize a requestUrl response into the shape used by Brevilabs API methods.
  * Handles the case where `response.json` is a raw string (non-JSON body, e.g. HTML error page).
  */
 function parseBrevilabsResponse<T>(
   response: { status: number; json: unknown },
   endpoint: string
-): { data: T | null; error?: Error } {
+): BrevilabsApiResult<T> {
   let data: unknown = response.json;
   if (typeof data === "string") {
     try {
@@ -76,9 +97,13 @@ function parseBrevilabsResponse<T>(
     if (detail?.reason) {
       const error = new Error(detail.reason);
       if (detail.error) error.name = detail.error;
-      return { data: null, error };
+      return { data: null, error, status: response.status, detail };
     }
-    return { data: null, error: new Error(`HTTP error: ${response.status}`) };
+    return {
+      data: null,
+      error: new Error(`HTTP error: ${response.status}`),
+      status: response.status,
+    };
   }
   // Redact the signed entitlement JWS so it never lands in the shared
   // copilot-log.md when a license response is logged.
@@ -87,7 +112,7 @@ function parseBrevilabsResponse<T>(
       ? { ...(data as Record<string, unknown>), entitlement: "[redacted]" }
       : data;
   logInfo(`[API ${endpoint} request]:`, loggable);
-  return { data: data as T };
+  return { data: data as T, status: response.status };
 }
 
 export interface RerankResponse {
@@ -232,7 +257,7 @@ export class BrevilabsClient {
     method = "POST",
     excludeAuthHeader = false,
     skipLicenseCheck = false
-  ): Promise<{ data: T | null; error?: Error }> {
+  ): Promise<BrevilabsApiResult<T>> {
     if (!skipLicenseCheck) {
       this.checkLicenseKey();
     }
@@ -267,7 +292,7 @@ export class BrevilabsClient {
     endpoint: string,
     formData: FormData,
     skipLicenseCheck = false
-  ): Promise<{ data: T | null; error?: Error }> {
+  ): Promise<BrevilabsApiResult<T>> {
     if (!skipLicenseCheck) {
       this.checkLicenseKey();
     }
@@ -294,7 +319,11 @@ export class BrevilabsClient {
       });
       return parseBrevilabsResponse<T>(response, `${endpoint} form-data`);
     } catch (error) {
-      return { data: null, error: error instanceof Error ? error : new Error(String(error)) };
+      return {
+        data: null,
+        error: error instanceof Error ? error : new Error(String(error)),
+        status: 0,
+      };
     }
   }
 
@@ -340,7 +369,7 @@ export class BrevilabsClient {
       Object.assign(requestBody, filteredContext);
     }
 
-    const { data, error } = await this.makeRequest<LicenseResponse>(
+    const { data, error, status, detail } = await this.makeRequest<LicenseResponse>(
       "/license",
       requestBody,
       "POST",
@@ -357,11 +386,21 @@ export class BrevilabsClient {
     }
 
     if (error) {
-      if (error.message === "Invalid license key") {
+      // Revoke only on the API's own refusal of this key: a 403 the server
+      // explained in its own error body. Its reason text names the key's prefix
+      // ("Invalid license key (prefix: abc...)"), so matching that verbatim let
+      // a refusal read as an unreachable server, and the fallback below then
+      // handed the refused key the previous key's still-live entitlement.
+      //
+      // A 403 carrying no such body is infrastructure rather than a verdict on
+      // the key. A gateway or WAF answering 403 would otherwise revoke every
+      // paying user who happened to check in during the outage.
+      // https://github.com/logancyang/obsidian-copilot-preview/issues/352
+      if (status === 403 && detail) {
         turnOffPaid(app);
         return { isValid: false };
       }
-      // Do nothing if the error is not about the invalid license key
+      // Anything else is unknown, not a refusal: leave the entitlement alone.
       return { isValid: undefined };
     }
     if (data?.entitlement) {
