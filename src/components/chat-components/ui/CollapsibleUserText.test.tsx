@@ -66,6 +66,21 @@ describe("CollapsibleUserText", () => {
       expect(content.classList.contains("tw-max-h-[60vh]")).toBe(true);
     });
 
+    it(`keeps overflowing text expandable when the owning window has no ResizeObserver (${ISSUE_URL})`, () => {
+      scrollHeight.mockReturnValue(720);
+      clientHeight.mockReturnValue(600);
+      Object.defineProperty(window, "ResizeObserver", {
+        configurable: true,
+        value: undefined,
+      });
+
+      renderText({ children: "A long prompt in a window without resize observation." });
+
+      fireEvent.click(screen.getByRole("button", { name: "Show more" }));
+
+      expect(screen.getByRole("button", { name: "Show less" })).not.toBeNull();
+    });
+
     it(`rechecks rendered overflow when the owning window reports a resize (${ISSUE_URL})`, () => {
       scrollHeight.mockReturnValue(480);
       clientHeight.mockReturnValue(480);
