@@ -41,7 +41,6 @@ import type {
 } from "@/agentMode/session/types";
 import { wrapStreamsForDebug } from "./debugTap";
 import { AcpBackend } from "./types";
-import { getMiyoFolderName } from "@/miyo/miyoUtils";
 import {
   withoutExpiredWindows,
   type PlanUsage,
@@ -223,7 +222,7 @@ export class AcpBackendProcess implements BackendProcess {
     }
     const descriptor = await this.backend.buildSpawnDescriptor({
       vaultBasePath: adapter.getBasePath(),
-      vaultName: getMiyoFolderName(this.app),
+      vaultName: this.app.vault.getName(),
     });
 
     const procOpts: AcpProcessManagerOptions = {
