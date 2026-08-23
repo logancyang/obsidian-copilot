@@ -29,10 +29,7 @@ export async function getStandaloneQuestion(
 
   // Wrap the model call with token warning suppression
   return await withSuppressedTokenWarnings(async () => {
-    // Use temperature=0 for deterministic question condensation
-    const chatModel = await ChainOwner.instance
-      .getCurrentChainManager()
-      .chatModelManager.getChatModelWithTemperature(0);
+    const chatModel = ChainOwner.instance.getCurrentChainManager().chatModelManager.getChatModel();
 
     // Use stream() instead of invoke() to avoid LangChain's _generate() path,
     // which triggers tiktoken CDN fetch via _getEstimatedTokenCountFromPrompt.

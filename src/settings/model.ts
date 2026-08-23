@@ -73,7 +73,6 @@ export interface CopilotSettings {
   defaultChainType: ChainType;
   defaultModelKey: string;
   embeddingModelKey: string;
-  temperature: number;
   contextTurns: number;
   lastDismissedVersion: string | null;
   // DEPRECATED: Do not use this directly, migrated to file-based system prompts
@@ -698,8 +697,8 @@ function carriesConfiguration(field: string, value: unknown): boolean {
  * Reason: a builtin model's identity and parameters belong to the shipped
  * default, but its credential belongs to the user — and a credential is only
  * usable against the service it was issued for. This narrow allowlist resets
- * preferences such as enabled state and temperature while keeping the retained
- * key pointed where the user aimed it.
+ * preferences such as enabled state while keeping the retained key pointed
+ * where the user aimed it.
  *
  * @param defaultModel - The freshly built default row that owns the identity.
  * @param source - The pre-reset row supplying the credential bundle.
@@ -1000,9 +999,6 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   }
 
   // Stuff in settings are string even when the interface has number type!
-  const temperature = Number(settingsToSanitize.temperature);
-  sanitizedSettings.temperature = isNaN(temperature) ? DEFAULT_SETTINGS.temperature : temperature;
-
   const contextTurns = Number(settingsToSanitize.contextTurns);
   sanitizedSettings.contextTurns = isNaN(contextTurns)
     ? DEFAULT_SETTINGS.contextTurns

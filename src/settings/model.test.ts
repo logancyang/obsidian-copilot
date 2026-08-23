@@ -718,13 +718,13 @@ describe("model", () => {
       const withRetiredCap = {
         ...DEFAULT_SETTINGS,
         maxTokens: 6000,
-        temperature: 0.4,
+        contextTurns: 4,
       } as unknown as CopilotSettings;
 
       const sanitized = sanitizeSettings(withRetiredCap);
 
       expect("maxTokens" in (sanitized as unknown as Record<string, unknown>)).toBe(false);
-      expect(sanitized.temperature).toBe(0.4);
+      expect(sanitized.contextTurns).toBe(4);
     });
 
     function sanitizeClaudeSlice(autoModePermission: unknown): CopilotSettings {
@@ -1043,7 +1043,7 @@ describe("model", () => {
           baseUrl: "https://proxy.example.test/v1",
           openAIOrgId: "org-model",
           enableCors,
-          temperature: 0.9,
+          displayName: "My renamed model",
         };
         settingsStore.set(settingsAtom, {
           ...DEFAULT_SETTINGS,
@@ -1062,7 +1062,7 @@ describe("model", () => {
         expect(restored!.openAIOrgId).toBe("org-model");
         expect(restored!.enableCors).toBe(enableCors);
         expect(restored!.enabled).toBe(BUILTIN_CHAT_MODELS[0].enabled);
-        expect(restored!.temperature).toBe(BUILTIN_CHAT_MODELS[0].temperature);
+        expect(restored!.displayName).toBe(BUILTIN_CHAT_MODELS[0].displayName);
       }
     );
 
