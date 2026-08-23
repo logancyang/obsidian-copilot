@@ -12,10 +12,7 @@ export interface ChatLMStudioInput {
   modelName?: string;
   apiKey?: string;
   configuration?: Record<string, unknown>;
-  temperature?: number;
   maxTokens?: number;
-  topP?: number;
-  frequencyPenalty?: number;
   streaming?: boolean;
   streamUsage?: boolean;
   [key: string]: unknown;

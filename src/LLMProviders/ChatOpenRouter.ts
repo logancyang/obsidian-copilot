@@ -50,10 +50,7 @@ export interface ChatOpenRouterInput extends BaseChatModelParams {
     fetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
     [key: string]: unknown;
   };
-  temperature?: number;
   maxTokens?: number;
-  topP?: number;
-  frequencyPenalty?: number;
   streaming?: boolean;
   maxRetries?: number;
   maxConcurrency?: number;

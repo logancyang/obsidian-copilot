@@ -22,7 +22,6 @@ import { HumanMessage } from "@langchain/core/messages";
  *
  * ### 2. MAP Phase (Parallel Summarization)
  * Large items (>50k chars) are sent to the LLM for summarization in parallel.
- * - Uses low temperature (0.1) for deterministic output
  * - Max 3 concurrent requests to avoid API overload
  * - Failed summarizations keep original content
  * - If >50% fail, compaction aborts entirely (fail-safe)
@@ -69,8 +68,6 @@ export class ContextCompactor {
   private readonly MIN_ITEM_SIZE = 50000;
   /** Max parallel LLM calls */
   private readonly MAX_CONCURRENCY = 3;
-  /** Low temperature for deterministic summaries */
-  private readonly TEMPERATURE = 0.1;
   /** Max chars per item before truncation */
   private readonly MAX_ITEM_SIZE = 500000;
 
@@ -280,7 +277,7 @@ Summary:`;
       .replace("{path}", item.path)
       .replace("{content}", content);
 
-    const model = await this.chatModelManager.getChatModelWithTemperature(this.TEMPERATURE);
+    const model = this.chatModelManager.getChatModel();
     const response = await model.invoke([new HumanMessage(prompt)]);
 
     return typeof response.content === "string" ? response.content.trim() : "";
