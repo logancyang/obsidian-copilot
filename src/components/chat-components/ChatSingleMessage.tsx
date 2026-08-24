@@ -1,5 +1,4 @@
 import { ChatButtons } from "@/components/chat-components/ChatButtons";
-import { CollapsibleUserText } from "@/components/chat-components/ui/CollapsibleUserText";
 import { AssistantResponseFooter } from "@/components/ui/AssistantResponseFooter";
 import { SourcesModal } from "@/components/modals/SourcesModal";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -28,6 +27,7 @@ import {
   type ToolCallRootRecord,
 } from "@/components/chat-components/toolCallRootManager";
 import { AgentReasoningBlock } from "@/components/chat-components/AgentReasoningBlock";
+import { ClampedContent } from "@/components/ui/clamped-content";
 import { USER_SENDER } from "@/constants";
 import { cn } from "@/lib/utils";
 import { parseToolCallMarkers } from "@/LLMProviders/chainRunner/utils/toolCallParser";
@@ -50,6 +50,13 @@ import {
 } from "@/components/chat-components/collapsibleStateUtils";
 
 const FOOTNOTE_SUFFIX_PATTERN = /^\d+-\d+$/;
+
+/**
+ * A pasted prompt, log, or transcript pushes the reply and every earlier turn
+ * off the chat surface, so a user message taller than this collapses behind a
+ * Show more control: https://github.com/Brevilabs/obsidian-copilot-private/issues/151
+ */
+const COLLAPSED_USER_MESSAGE_CLASS_NAME = cn("tw-max-h-[60vh]");
 
 /**
  * Normalizes rendered markdown footnotes to align with inline citation UX.
@@ -918,7 +925,11 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
     // Agent Chat can fold a pasted prompt without changing the shared Quick Chat
     // renderer or moving images and message actions into the clipped region.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/151
-    return collapseLongUserMessages ? <CollapsibleUserText>{text}</CollapsibleUserText> : text;
+    return collapseLongUserMessages ? (
+      <ClampedContent collapsedClassName={COLLAPSED_USER_MESSAGE_CLASS_NAME}>{text}</ClampedContent>
+    ) : (
+      text
+    );
   };
 
   const renderMessageContent = () => {

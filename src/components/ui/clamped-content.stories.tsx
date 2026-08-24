@@ -1,9 +1,13 @@
-import {
-  CollapsibleUserText,
-  type CollapsibleUserTextProps,
-} from "@/components/chat-components/ui/CollapsibleUserText";
+import { ClampedContent, type ClampedContentProps } from "@/components/ui/clamped-content";
 import type { Meta, StoryObj } from "@/lib/story";
 import React from "react";
+
+const meta = {
+  title: "Chat/Clamped Content",
+  component: ClampedContent,
+  parameters: { gallery: { host: "leaf", layout: "padded" } },
+} satisfies Meta<ClampedContentProps>;
+export default meta;
 
 const LONG_PROMPT = `Please organize these sample meeting notes into a short checklist.
 
@@ -49,31 +53,37 @@ Follow-up
 - Keep each item brief and actionable.
 - Add a final reminder to review the notes together.`;
 
-function UserBubble({ children }: CollapsibleUserTextProps) {
-  return (
-    <div className="tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-secondary tw-p-2">
-      <CollapsibleUserText>
-        <div className="tw-whitespace-pre-wrap tw-break-words tw-text-sm tw-font-normal">
-          {children}
-        </div>
-      </CollapsibleUserText>
-    </div>
-  );
-}
+const MessageBubble: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <div className="tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-secondary tw-p-2">
+    <div className="tw-whitespace-pre-wrap tw-break-words !tw-leading-[1.6]">{children}</div>
+  </div>
+);
 
-const meta = {
-  title: "Chat/Collapsible User Text",
-  component: CollapsibleUserText,
-  parameters: { gallery: { host: "leaf", layout: "padded" } },
-} satisfies Meta<CollapsibleUserTextProps>;
-export default meta;
-
-export const Short: StoryObj<CollapsibleUserTextProps> = {
-  args: { children: "Summarize the active note." },
-  render: (args) => <UserBubble>{args.children}</UserBubble>,
+/** Agent Chat caps a very tall pasted prompt at 60% of the viewport. */
+export const Collapsed: StoryObj<ClampedContentProps> = {
+  render: () => (
+    <MessageBubble>
+      <ClampedContent collapsedClassName="tw-max-h-[60vh]">{LONG_PROMPT}</ClampedContent>
+    </MessageBubble>
+  ),
 };
 
-export const Overflowing: StoryObj<CollapsibleUserTextProps> = {
-  args: { children: LONG_PROMPT },
-  render: (args) => <UserBubble>{args.children}</UserBubble>,
+/** A short message stays exactly as written, with no control added. */
+export const FitsWithoutControl: StoryObj<ClampedContentProps> = {
+  render: () => (
+    <MessageBubble>
+      <ClampedContent collapsedClassName="tw-max-h-[60vh]">
+        Summarize the notes I touched this week and group them by project.
+      </ClampedContent>
+    </MessageBubble>
+  ),
+};
+
+/** A tight budget shows how little content the clamp can leave visible. */
+export const ThreeLineClamp: StoryObj<ClampedContentProps> = {
+  render: () => (
+    <MessageBubble>
+      <ClampedContent collapsedClassName="tw-max-h-[3lh]">{LONG_PROMPT}</ClampedContent>
+    </MessageBubble>
+  ),
 };
