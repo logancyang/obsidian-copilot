@@ -6,6 +6,7 @@ import { providerNeedsResolvedApiKey } from "@/modelManagement";
 import { isCatalogProviderDefaultEndpoint } from "@/utils/providerBaseUrl";
 import type { BackendConfigRegistry, ProviderRegistry } from "@/modelManagement";
 import { AcpBackend, AcpSpawnDescriptor } from "@/agentMode/acp/types";
+import { EFFORT_LEVELS_ASCENDING } from "@/agentMode/session/types";
 import type { CopilotMode } from "@/agentMode/session/types";
 import { composeDenyList, getManagedSkills, SkillManager } from "@/agentMode/skills";
 import { buildAgentSystemPrompt } from "@/agentMode/backends/shared/agentSystemPrompt";
@@ -74,6 +75,13 @@ export interface OpencodeModelDeps {
   getCacheRoot?: () => string | undefined;
   /** Starts or reuses the owning plugin lifecycle's provider-credential-free channel. */
   getSelfHostWebSearchChannel?: () => Promise<Readonly<SelfHostWebSearchAgentChannel>>;
+  /**
+   * Resolves the thinking-effort levels the Copilot Plus service publishes for a bare
+   * Plus model id, or null when they cannot be read. Injected so the config builder
+   * never reaches for the catalog itself. When omitted, no model gets a declared level
+   * set and opencode falls back to inferring one, which is the behavior this replaces.
+   */
+  getReasoningEfforts?: (modelId: string) => Promise<readonly string[] | null>;
 }
 
 /**
@@ -141,13 +149,27 @@ export class OpencodeBackend implements AcpBackend {
     // whitespace-only resolver result is treated as "unavailable" explicitly
     // rather than leaning on downstream truthiness.
     const cacheRoot = normalizeCacheRoot(this.#deps.getCacheRoot?.());
-    const config = await buildOpencodeConfig(settings, this.#deps, cacheRoot);
     const envOverrides = sanitizeBuiltinSkillEnvOverrides(
       settings.agentMode?.backends?.opencode?.envOverrides
     );
     const configOverride = envOverrides.OPENCODE_CONFIG_CONTENT;
     delete envOverrides.OPENCODE_CONFIG_CONTENT;
-    let configContent = configOverride ?? JSON.stringify(config);
+    // Resolve the override before building anything: it replaces the generated config
+    // wholesale, so building one spends a Copilot Plus catalog read on JSON that is then
+    // thrown away — and an unreachable models host makes that read wait out its deadline
+    // before every spawn. https://github.com/logancyang/obsidian-copilot/issues/2917
+    let configContent =
+      configOverride ??
+      JSON.stringify(
+        await buildOpencodeConfig(
+          settings,
+          {
+            ...this.#deps,
+            getReasoningEfforts: (modelId) => this.#copilotPlus.readReasoningEfforts(modelId),
+          },
+          cacheRoot
+        )
+      );
     if (settings.enableSelfHostMode === true && configOverride !== undefined) {
       // An explicit config override must not reopen agent-native web tools while
       // Self-Host mode promises that queries stay on the configured route.
@@ -246,6 +268,35 @@ function denyNativeWebTools(permission: unknown): Record<string, unknown> {
         ? (permission as Record<string, unknown>)
         : {};
   return { ...permissionRecord, websearch: "deny", webfetch: "deny" };
+}
+
+/**
+ * opencode `variants` declaring exactly the effort levels a model really has.
+ *
+ * opencode builds an effort menu for any model it is told reasons, and with no catalog
+ * entry for Copilot Plus it infers the levels from the model id — a fixed low/medium/high
+ * plus whatever its per-model special cases add. The result is wrong in both directions:
+ * it offers levels that are synonyms of each other and misses levels the model has.
+ * Config variants merge over the inferred ones and any marked `disabled` are dropped, so
+ * publishing the real set plus a disable for every other level replaces the guess
+ * outright. https://github.com/logancyang/obsidian-copilot/issues/2917
+ *
+ * @param levels - The levels the service published for this model, ascending.
+ */
+export function effortVariantsFor(
+  levels: readonly string[]
+): Record<string, Record<string, unknown>> {
+  const variants: Record<string, Record<string, unknown>> = {};
+  for (const level of levels) variants[level] = { reasoningEffort: level };
+  // Completeness is the whole contract here: a level missing from the canonical
+  // vocabulary cannot be disabled, so it survives into opencode's menu for a model the
+  // service never advertised it for, and picking a level the service rejects fails the
+  // turn with a raw error payload instead of answering.
+  // https://github.com/logancyang/obsidian-copilot/issues/2915
+  for (const level of EFFORT_LEVELS_ASCENDING) {
+    if (!variants[level]) variants[level] = { disabled: true };
+  }
+  return variants;
 }
 
 /** Mutable opencode provider config entry built into `OPENCODE_CONFIG_CONTENT`. */
@@ -365,7 +416,24 @@ export async function buildOpencodeConfig(
     // for the model. opencode has no catalog entry for Copilot Plus / self-hosted
     // OpenAI-compatible providers, so without this it defaults to non-reasoning and
     // the effort picker shows "na". Mirrors the modalities injection above.
-    if (info.reasoning) modelConfig.reasoning = true;
+    if (info.reasoning) {
+      // Copilot Plus publishes the levels each of its models really has; a BYOK model
+      // has no such list and keeps opencode's own inference. Null means the catalog
+      // could not be read, which must not be mistaken for "no levels" — dropping a
+      // working control over a transient outage is worse than an imperfect menu.
+      // https://github.com/logancyang/obsidian-copilot/issues/2917
+      const published =
+        origin.kind === "copilot-plus"
+          ? ((await deps.getReasoningEfforts?.(info.id)) ?? null)
+          : null;
+      // A model that honors no level gets no control at all: opencode builds the menu
+      // only for models it is told reason, so leaving `reasoning` unset is how the
+      // menu disappears rather than showing entries that do nothing.
+      if (published === null || published.length > 0) {
+        modelConfig.reasoning = true;
+        if (published) modelConfig.variants = effortVariantsFor(published);
+      }
+    }
     providerConfig.models[info.id] = modelConfig;
     injected.push(`${mapping.id}/${info.id}`);
   }

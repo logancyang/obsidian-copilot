@@ -16,6 +16,7 @@ import type {
   ModelSelection,
   ModelState,
 } from "@/agentMode/session/types";
+import { EFFORT_LEVELS_ASCENDING } from "@/agentMode/session/types";
 
 const CANONICAL_ORDER: CopilotMode[] = ["default", "plan", "auto"];
 const CANONICAL_LABELS: Record<CopilotMode, string> = {
@@ -237,7 +238,7 @@ function deriveEffortOptions(
       if (v.effort === null) continue;
       options.push({ value: v.effort, label: v.effort.toLowerCase() });
     }
-    return options;
+    return sortEffortOptions(options);
   }
   // Descriptor-style: ask the codec for a per-model effort option.
   if (descriptor.wire.effortConfigFor) {
@@ -257,7 +258,35 @@ function optionsFromConfigOption(opt: BackendConfigOption | null): EffortOption[
       flat.push({ value: entry.value, name: entry.name });
     }
   }
-  return flat.map((o) => ({ value: o.value, label: (o.name || o.value).toLowerCase() }));
+  return sortEffortOptions(
+    flat.map((o) => ({ value: o.value, label: (o.name || o.value).toLowerCase() }))
+  );
+}
+
+/**
+ * Rank of one effort level, least thinking first. The bare/"default" variant leads, and a
+ * level outside the canonical vocabulary trails every ranked one.
+ */
+function effortRank(value: string | null): number {
+  if (value === null) return -1;
+  const rank = EFFORT_LEVELS_ASCENDING.indexOf(value);
+  return rank === -1 ? Number.MAX_SAFE_INTEGER : rank;
+}
+
+/**
+ * Order a reported effort menu least-thinking-first.
+ *
+ * The order an agent reports is its own business, and at least one ranks a declared
+ * variant set by rules of its own — opencode hands back `high` before `none` for a
+ * Copilot Plus model, which would draw a slider that turns thinking *off* as the user
+ * drags it up, and only for the models that publish an off switch.
+ * https://github.com/logancyang/obsidian-copilot/issues/2917
+ *
+ * Levels we cannot rank keep the agent's relative order at the end, since its ordering is
+ * the only signal left for them; the sort is stable, so that fallback holds.
+ */
+function sortEffortOptions(options: EffortOption[]): EffortOption[] {
+  return [...options].sort((a, b) => effortRank(a.value) - effortRank(b.value));
 }
 
 /**

@@ -98,6 +98,26 @@ export interface EffortOption {
 }
 
 /**
+ * Every thinking-effort level our backends speak, ascending — least thinking first.
+ *
+ * Canonical in two directions. It ranks a reported menu so the picker's slider always
+ * runs the same way, and it is the vocabulary a backend checks a level against, so an
+ * agent-reported string that is not in here is one we cannot place. Agents report their
+ * levels in whatever order they please, and one that ranks them by its own rules will
+ * hand back a menu that runs backwards.
+ * https://github.com/logancyang/obsidian-copilot/issues/2917
+ */
+export const EFFORT_LEVELS_ASCENDING: readonly string[] = [
+  "none",
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+];
+
+/**
  * One entry in the picker's deduped catalog. One entry per base model id;
  * suffix-style variants (codex/opencode) collapse into one entry whose
  * `effortOptions` enumerates the variants.

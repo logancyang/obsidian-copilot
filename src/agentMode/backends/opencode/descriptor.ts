@@ -35,6 +35,8 @@ import type {
   SessionId,
 } from "@/agentMode/session/types";
 import type { BackendDescriptor, BackendProcess, InstallState } from "@/agentMode/session/types";
+import { EFFORT_LEVELS_ASCENDING } from "@/agentMode/session/types";
+import { findModelEntry } from "@/agentMode/session/translateBackendState";
 
 /** Config option id OpenCode uses to switch the active agent at runtime. */
 const OPENCODE_MODE_CONFIG_OPTION_ID = "mode";
@@ -53,15 +55,7 @@ let managerRef: OpencodeBinaryManager | null = null;
  * the model name (e.g. `openrouter/anthropic/claude-3.5-haiku` — the
  * last segment `claude-3.5-haiku` is the model, not an effort).
  */
-const KNOWN_OPENCODE_EFFORTS = new Set([
-  "none",
-  "minimal",
-  "low",
-  "medium",
-  "high",
-  "xhigh",
-  "max",
-]);
+const KNOWN_OPENCODE_EFFORTS = new Set(EFFORT_LEVELS_ASCENDING);
 
 /**
  * Wire-format codec for Opencode. Native providers emit
@@ -203,10 +197,17 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
         );
       }
       if (selection.effort !== null) {
-        const refreshedApply = session.getState()?.model?.apply;
+        const refreshed = session.getState()?.model;
+        const refreshedApply = refreshed?.apply;
         const effortConfigId =
           refreshedApply?.kind === "setConfigOption" ? refreshedApply.effortConfigId : undefined;
-        if (effortConfigId) {
+        // Only write a level the now-active model actually offers. A saved default can
+        // name a level the model has since stopped publishing, and the failed write
+        // takes the whole seeded selection down with it — the session reverts to the
+        // model it had before, not just to the default effort.
+        // https://github.com/logancyang/obsidian-copilot/issues/2917
+        const offered = findModelEntry(refreshed, selection.baseModelId)?.effortOptions;
+        if (effortConfigId && offered?.some((option) => option.value === selection.effort)) {
           await session.setConfigOption(effortConfigId, selection.effort);
         }
       }
