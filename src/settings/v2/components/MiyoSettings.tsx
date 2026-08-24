@@ -38,6 +38,7 @@ import {
   MiyoConnectModal,
 } from "@/settings/v2/components/MiyoConnectModal";
 import { MiyoStatusRow } from "@/settings/v2/components/MiyoStatusRow";
+import { PatternListEditor } from "@/settings/v2/components/PatternListEditor";
 import { err2String } from "@/utils";
 import { getVaultBase } from "@/utils/vaultPath";
 import { extractAppIgnoreSettings, getSystemExcludedFolders } from "@/search/searchUtils";
@@ -1045,6 +1046,38 @@ export const MiyoSettings: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Index scope — `qaExclusions` / `qaInclusions`. Deliberately NOT
+          connection-gated: these patterns filter Copilot's own retrieval,
+          Relevant Notes, and project context whether or not Miyo is reachable,
+          so gating them would strand a user whose note is excluded with no way
+          to include it. */}
+      <SettingSection
+        label="Index scope"
+        description="Which notes Copilot searches and shows in Relevant Notes; your Copilot folder is always excluded. Miyo's own index keeps the scope it was registered with until you re-add this folder in the Miyo app."
+      >
+        <SettingItem
+          type="custom"
+          title="Exclusions"
+          description="Skip these folders, tags, notes, or file extensions."
+        >
+          <PatternListEditor
+            value={settings.qaExclusions}
+            onChange={(value) => updateSetting("qaExclusions", value)}
+          />
+        </SettingItem>
+
+        <SettingItem
+          type="custom"
+          title="Inclusions"
+          description="Search only these folders, tags, or notes. Leave empty to cover the whole vault; exclusions take precedence."
+        >
+          <PatternListEditor
+            value={settings.qaInclusions}
+            onChange={(value) => updateSetting("qaInclusions", value)}
+          />
+        </SettingItem>
+      </SettingSection>
     </div>
   );
 };

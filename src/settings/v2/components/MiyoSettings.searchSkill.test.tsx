@@ -147,7 +147,12 @@ jest.mock("@/plusUtils", () => ({ createPlusPageUrl: () => "https://example.com"
 jest.mock("@/utils/vaultPath", () => ({ getVaultBase: () => "/vault" }));
 
 const NoticeMock = jest.fn();
+// Keep the shared mock's classes (Modal / FuzzySuggestModal) — the Index scope
+// editor pulls the pattern-picker modals into this module graph, and they extend
+// those at import time. Only Notice and Platform are overridden, so the tests can
+// read back messages and pin the platform.
 jest.mock("obsidian", () => ({
+  ...jest.requireActual<Record<string, unknown>>("obsidian"),
   Notice: class {
     constructor(message: string) {
       NoticeMock(message);
@@ -600,5 +605,66 @@ describe("scope resync banner", () => {
     fireEvent.click(await screen.findByText("Connect"));
 
     await waitFor(() => expect(verifyMiyoScope).toHaveBeenCalledTimes(2));
+  });
+});
+
+describe("index scope", () => {
+  it("renders the persisted exclusion and inclusion patterns as removable badges", async () => {
+    currentSettings = {
+      ...DEFAULT_SETTINGS,
+      qaExclusions: "notes/private,*.pdf",
+      qaInclusions: "wiki",
+    };
+    render(<MiyoSettings />);
+
+    expect(await screen.findByLabelText("Remove notes/private")).toBeTruthy();
+    expect(screen.getByLabelText("Remove *.pdf")).toBeTruthy();
+    expect(screen.getByLabelText("Remove wiki")).toBeTruthy();
+  });
+
+  it("persists the narrowed list to qaExclusions when an exclusion is removed", async () => {
+    currentSettings = {
+      ...DEFAULT_SETTINGS,
+      qaExclusions: "notes/private,*.pdf",
+      qaInclusions: "wiki",
+    };
+    render(<MiyoSettings />);
+
+    fireEvent.click(await screen.findByLabelText("Remove notes/private"));
+
+    expect(updateSetting).toHaveBeenCalledWith("qaExclusions", "*.pdf");
+  });
+
+  it("persists to qaInclusions when an inclusion is removed, leaving exclusions untouched", async () => {
+    currentSettings = {
+      ...DEFAULT_SETTINGS,
+      qaExclusions: "notes/private",
+      qaInclusions: "wiki",
+    };
+    render(<MiyoSettings />);
+
+    fireEvent.click(await screen.findByLabelText("Remove wiki"));
+
+    expect(updateSetting).toHaveBeenCalledWith("qaInclusions", "");
+    expect(updateSetting).not.toHaveBeenCalledWith("qaExclusions", expect.anything());
+  });
+
+  it("stays editable while Miyo is disconnected", async () => {
+    // These patterns filter Copilot's own retrieval and Relevant Notes whether
+    // or not Miyo is reachable, and the Relevant Notes "This note is excluded"
+    // state points here for the fix — gating them on the connection would
+    // strand a user with an excluded note and no way to include it.
+    mockMiyoBackend = "unavailable";
+    currentSettings = {
+      ...DEFAULT_SETTINGS,
+      enableMiyo: false,
+      qaExclusions: "notes/private",
+      qaInclusions: "",
+    };
+    render(<MiyoSettings />);
+
+    fireEvent.click(await screen.findByLabelText("Remove notes/private"));
+
+    expect(updateSetting).toHaveBeenCalledWith("qaExclusions", "");
   });
 });
