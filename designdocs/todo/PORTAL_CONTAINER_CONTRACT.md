@@ -24,7 +24,7 @@ problems with that:
    clicks may not register. The recent fix in `ByokGlobalTable` and
    `ProviderCatalogList` works around this by threading a local
    `containerRef` and passing `container={containerRef.current}` (matches
-   `ModelTable`).
+   `ModelTable`, `PatternListEditor`).
 2. **In popout windows**, `activeDocument.body` is wrong even outside a
    modal. `activeDocument` points at whichever window is _focused right
    now_, which may not be the window the component lives in. The correct
@@ -115,7 +115,8 @@ Plan:
 
 - `ByokGlobalTable.tsx`, `ProviderCatalogList.tsx` — recent local fix using
   the per-component `containerRef` pattern.
-- `ModelTable.tsx` — same pattern, predates this doc.
+- `ModelTable.tsx`, `PatternListEditor.tsx` — same pattern, predates this
+  doc.
 - `ConfigureProviderDialog.tsx` — uses `useTabOptional()?.modalContainer`
   to portal the dialog itself into `.modal-container`.
 - AGENTS.md → "Picking the right `document` / `window` (popout-window

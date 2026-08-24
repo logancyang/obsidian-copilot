@@ -100,7 +100,7 @@ If your plugin does not need CSS, delete this file.
   height: 20px;
   border-radius: 50%;
   background: var(--background-modifier-error);
-  color: white;
+  color: #fff;
   border: none;
   cursor: pointer;
   display: flex;
@@ -423,11 +423,11 @@ If your plugin does not need CSS, delete this file.
 }
 
 .switch.disabled input:checked + .slider {
-  background-color: #cccccc;
+  background-color: #ccc;
 }
 
 .switch.disabled input:focus + .slider {
-  box-shadow: 0 0 1px #cccccc;
+  box-shadow: 0 0 1px #ccc;
 }
 
 .switch.disabled input:checked + .slider:before {
@@ -453,7 +453,7 @@ If your plugin does not need CSS, delete this file.
   padding: 8px;
   font-size: 14px;
   line-height: 1.5;
-  border: 1px solid #cccccc;
+  border: 1px solid #ccc;
   border-radius: 4px;
   resize: vertical;
   overflow-y: hidden;
@@ -649,7 +649,6 @@ If your plugin does not need CSS, delete this file.
   transition: all 0.3s ease;
   position: relative;
   border-left: 4px solid transparent;
-  /*transition: border-color 0.2s ease;*/
 }
 
 .model-card.selected {
@@ -689,7 +688,7 @@ If your plugin does not need CSS, delete this file.
   align-self: flex-start;
 }
 
-/* delete icon*/
+/* delete icon */
 .model-delete-icon {
   position: absolute;
   top: 8px;
