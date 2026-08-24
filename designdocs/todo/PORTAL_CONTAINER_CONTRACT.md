@@ -10,7 +10,6 @@ Radix-based UI primitives in `src/components/ui/` portal their content out of
 the parent DOM subtree:
 
 - `DropdownMenuContent`
-- `DialogContent`
 - `PopoverContent`
 - `TooltipContent`
 - `SelectContent`
@@ -25,7 +24,7 @@ problems with that:
    clicks may not register. The recent fix in `ByokGlobalTable` and
    `ProviderCatalogList` works around this by threading a local
    `containerRef` and passing `container={containerRef.current}` (matches
-   `ModelTable`, `PatternListEditor`).
+   `ModelTable`).
 2. **In popout windows**, `activeDocument.body` is wrong even outside a
    modal. `activeDocument` points at whichever window is _focused right
    now_, which may not be the window the component lives in. The correct
@@ -41,7 +40,6 @@ callers to do the right thing.
 1. Make `container: HTMLElement | null` **required** on every portaled
    wrapper:
    - `DropdownMenuContent`
-   - `DialogContent`
    - `PopoverContent`
    - `TooltipContent` (today has no `container` prop at all — add it)
    - `SelectContent`
@@ -73,7 +71,7 @@ callers to do the right thing.
 
 ## Scope of the migration
 
-`grep -rE "(DropdownMenuContent|DialogContent|PopoverContent|TooltipContent|SelectContent)[^a-zA-Z]"`
+`grep -rE "(DropdownMenuContent|PopoverContent|TooltipContent|SelectContent)[^a-zA-Z]"`
 returns ~108 JSX call sites across ~28 files. `TooltipContent` alone is 44
 of those, and they live in leaf components (`ChatButtons`, `SuggestedPrompts`,
 `ChatSingleMessage`, etc.) that do not currently have access to any
@@ -117,8 +115,7 @@ Plan:
 
 - `ByokGlobalTable.tsx`, `ProviderCatalogList.tsx` — recent local fix using
   the per-component `containerRef` pattern.
-- `ModelTable.tsx`, `PatternListEditor.tsx` — same pattern, predates this
-  doc.
+- `ModelTable.tsx` — same pattern, predates this doc.
 - `ConfigureProviderDialog.tsx` — uses `useTabOptional()?.modalContainer`
   to portal the dialog itself into `.modal-container`.
 - AGENTS.md → "Picking the right `document` / `window` (popout-window

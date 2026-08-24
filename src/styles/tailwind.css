@@ -61,158 +61,11 @@ If your plugin does not need CSS, delete this file.
   background: var(--relevance-meter-color, var(--text-faint));
 }
 
-.button-container {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 1rem;
-  padding: 0 25px;
-}
-
-.button-container .mod-cta {
-  flex: 1; /* Make buttons take equal width */
-  margin: 25px 0;
-}
-
-/* button mobile style */
-@media screen and (max-width: 768px) {
-  .button-container {
-    gap: 0.5rem;
-    padding: 0 12px;
-  }
-
-  .button-container .mod-cta {
-    margin: 12px 0;
-    font-size: 0.9rem;
-    padding: 6px 12px;
-  }
-}
-
-.warning-message {
-  background-color: black;
-  color: orange;
-  padding: 10px;
-  margin: 10px 0;
-  border-radius: 5px;
-  border: 1px solid orange;
-  font-weight: bolder;
-  text-align: center;
-}
-
-.copilot-setting-item-name {
-  font-weight: bold;
-  display: block;
-  color: var(--inline-title-color);
-  margin-top: 20px;
-  margin-bottom: 10px;
-}
-
-.copilot-setting-item-description {
-  display: block;
-  margin-top: 10px;
-  margin-bottom: 10px;
-}
-
-.copilot-setting-item-control {
-  width: 50%; /* Adjust the width as needed */
-  max-width: 100%; /* Ensures it doesn't exceed the parent width */
-}
-
-.copilot-setting-item-control::placeholder {
-  color: gray;
-  opacity: 0.5;
-}
-
-.copilot-setting-item-control[type="range"] {
-  width: 70%;
-}
-
-.chat-context-menu {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0;
-  border-bottom: none;
-  flex: 1; /* Take up available space */
-}
-
 .note-badge {
   font-size: 10px;
   padding: 0 4px;
   background: rgb(0 0 0 / 20%);
   border-radius: 3px;
-}
-
-.context-note .note-name {
-  max-width: 150px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  display: inline-block;
-}
-
-.context-note.url .note-badge {
-  background-color: var(--interactive-accent);
-}
-
-.context-note.url .note-name {
-  max-width: 200px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.context-note .note-badge.pdf {
-  background-color: var(--background-modifier-error);
-}
-
-.chat-icons-right {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  justify-content: flex-end;
-  margin-left: auto; /* Push to the right */
-}
-
-.icon-scaler {
-  transform: scale(0.7);
-}
-
-.tooltip-text {
-  max-width: 400px;
-  background-color: var(--background-secondary);
-  color: var(--text-normal);
-  text-align: center;
-  border-radius: 5px;
-  padding: 5px;
-  font-size: var(--font-ui-smaller);
-  white-space: nowrap;
-}
-
-.select-wrapper {
-  position: relative;
-  display: inline-block;
-}
-
-@keyframes flash {
-  0%,
-  100% {
-    opacity: 0.5;
-  }
-  50% {
-    opacity: 1;
-  }
-}
-
-.submit-button.cancel {
-  opacity: 0.5;
-  padding: 4px;
-  border-radius: 4px;
-  animation: flash 2s infinite;
-}
-
-.submit-button.cancel:hover {
-  opacity: 1;
 }
 
 .selected-images {
@@ -271,12 +124,6 @@ If your plugin does not need CSS, delete this file.
   font-size: 10px;
 }
 
-/* Make sure the icon scales consistently */
-.button-content .icon-scaler {
-  width: 18px;
-  height: 18px;
-}
-
 .model-select-content {
   min-width: 120px;
   background: var(--background-secondary);
@@ -300,7 +147,6 @@ If your plugin does not need CSS, delete this file.
   background: var(--background-modifier-hover);
 }
 
-.submit-button svg,
 .model-select-button svg,
 .chain-select-button svg {
   width: 10px;
@@ -559,15 +405,6 @@ If your plugin does not need CSS, delete this file.
   width: 8%;
 }
 
-/* Add specific styles for toggle cells */
-.model-settings-table td .copilot-setting-item {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 100%;
-  margin: 0;
-}
-
 .model-settings-table .switch {
   display: flex;
   justify-content: center;
@@ -604,15 +441,6 @@ If your plugin does not need CSS, delete this file.
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.select-wrapper::after {
-  content: "\25BC";
-  position: absolute;
-  top: 50%;
-  right: 10px;
-  transform: translateY(-50%);
-  pointer-events: none;
 }
 
 .add-model-button {

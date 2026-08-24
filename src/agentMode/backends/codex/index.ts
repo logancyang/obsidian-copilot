@@ -1,1 +1,0 @@
-export { CodexBackendDescriptor } from "./descriptor";
