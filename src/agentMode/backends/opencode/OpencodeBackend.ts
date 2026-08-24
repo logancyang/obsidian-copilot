@@ -17,6 +17,7 @@ import { OpencodeBackendDescriptor } from "./descriptor";
 import { copilotPlusModelId, mapProviderToOpencodeId } from "./opencodeModelResolve";
 import type { PlanUsageReading } from "@/agentMode/session/planUsage";
 import { CopilotPlusUsageReader } from "@/agentMode/backends/shared/copilotPlusUsage";
+import type { SelfHostWebSearchAgentChannel } from "@/LLMProviders/selfHostServices";
 
 /**
  * Maps Copilot's `ChatModelProviders` to OpenCode's provider id. Used for the
@@ -71,6 +72,8 @@ export interface OpencodeModelDeps {
    * `external_directory` allow rule is simply not injected (feature dormant).
    */
   getCacheRoot?: () => string | undefined;
+  /** Starts or reuses the owning plugin lifecycle's provider-credential-free channel. */
+  getSelfHostWebSearchChannel?: () => Promise<Readonly<SelfHostWebSearchAgentChannel>>;
 }
 
 /**
@@ -142,25 +145,64 @@ export class OpencodeBackend implements AcpBackend {
     const envOverrides = sanitizeBuiltinSkillEnvOverrides(
       settings.agentMode?.backends?.opencode?.envOverrides
     );
-    // Accepted degradation: a user `OPENCODE_CONFIG_CONTENT` override (spread
-    // last below) replaces the whole generated config, dropping the allow rule.
+    const configOverride = envOverrides.OPENCODE_CONFIG_CONTENT;
+    delete envOverrides.OPENCODE_CONFIG_CONTENT;
+    let configContent = configOverride ?? JSON.stringify(config);
+    if (settings.enableSelfHostMode === true && configOverride !== undefined) {
+      // An explicit config override must not reopen agent-native web tools while
+      // Self-Host mode promises that queries stay on the configured route.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/165
+      let overriddenConfig: Record<string, unknown>;
+      try {
+        const parsed = JSON.parse(configOverride) as unknown;
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error();
+        overriddenConfig = parsed as Record<string, unknown>;
+      } catch {
+        throw new Error("opencode OPENCODE_CONFIG_CONTENT must be a JSON object.");
+      }
+      overriddenConfig.permission = denyNativeWebTools(overriddenConfig.permission);
+      const overriddenAgents = overriddenConfig.agent;
+      if (
+        overriddenAgents &&
+        typeof overriddenAgents === "object" &&
+        !Array.isArray(overriddenAgents)
+      ) {
+        for (const agent of Object.values(overriddenAgents)) {
+          if (!agent || typeof agent !== "object" || Array.isArray(agent)) continue;
+          const agentConfig = agent as Record<string, unknown>;
+          agentConfig.permission = denyNativeWebTools(agentConfig.permission);
+        }
+      }
+      configContent = JSON.stringify(overriddenConfig);
+    }
+    // Accepted degradation: a user `OPENCODE_CONFIG_CONTENT` override replaces
+    // the whole generated config, dropping the allow rule.
     // opencode then prompts on every snapshot read; the sources still appear in
     // the manifest. Warn so the lost approval-suppression is diagnosable.
-    if (
-      cacheRoot &&
-      Object.prototype.hasOwnProperty.call(envOverrides, "OPENCODE_CONFIG_CONTENT")
-    ) {
+    if (cacheRoot && configOverride !== undefined) {
       logWarn(
         "[AgentMode] opencode envOverrides.OPENCODE_CONFIG_CONTENT replaces the generated config; " +
           "the context-cache external_directory allow rule is dropped — opencode will prompt on every " +
           "snapshot read. Remove that override to restore silent cache access."
       );
     }
+    // Native web tools are already denied at this point, so a Self-Host spawn
+    // must obtain its replacement channel or fail before the agent starts.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/165
+    const selfHostSearchChannel =
+      settings.enableSelfHostMode === true
+        ? await this.#deps.getSelfHostWebSearchChannel?.()
+        : undefined;
+    if (settings.enableSelfHostMode === true && !selfHostSearchChannel) {
+      throw new Error("Copilot self-host web search channel is unavailable.");
+    }
+
     // Builtin skills consume plugin-managed runtime paths and credentials.
     const builtinSkillEnv = await buildBuiltinSkillEnv(
       this.#deps.clientVersion,
       ctx.vaultBasePath,
-      ctx.vaultName
+      ctx.vaultName,
+      selfHostSearchChannel
     );
 
     return {
@@ -168,11 +210,11 @@ export class OpencodeBackend implements AcpBackend {
       args: ["acp", "--cwd", ctx.vaultBasePath],
       env: {
         ...process.env,
-        OPENCODE_CONFIG_CONTENT: JSON.stringify(config),
         ...builtinSkillEnv,
         // User overrides stay last for ordinary values. Copilot-owned Miyo
         // scope keys were removed above so they cannot widen Current vault.
         ...envOverrides,
+        OPENCODE_CONFIG_CONTENT: configContent,
       },
     };
   }
@@ -188,6 +230,22 @@ export class OpencodeBackend implements AcpBackend {
 function normalizeCacheRoot(raw: string | undefined): string | undefined {
   const trimmed = raw?.trim();
   return trimmed ? trimmed : undefined;
+}
+
+/**
+ * Preserve an OpenCode permission policy while making native web access non-overridable.
+ * https://github.com/Brevilabs/obsidian-copilot-private/issues/165
+ *
+ * @param permission Existing shorthand or object permission policy.
+ */
+function denyNativeWebTools(permission: unknown): Record<string, unknown> {
+  const permissionRecord =
+    typeof permission === "string"
+      ? { "*": permission }
+      : permission && typeof permission === "object" && !Array.isArray(permission)
+        ? (permission as Record<string, unknown>)
+        : {};
+  return { ...permissionRecord, websearch: "deny", webfetch: "deny" };
 }
 
 /** Mutable opencode provider config entry built into `OPENCODE_CONFIG_CONTENT`. */
@@ -323,6 +381,14 @@ export async function buildOpencodeConfig(
   }
 
   const config: Record<string, unknown> = { provider };
+
+  // Top-level rules cover primary agents and subagents. Self-Host mode cannot
+  // rely on prompt steering because opencode's native tools contact its own
+  // search/fetch services directly.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/165
+  if (s.enableSelfHostMode === true) {
+    config.permission = denyNativeWebTools(config.permission);
+  }
 
   // Inject a managed `copilot-build` agent so the mode picker can offer the
   // canonical "default" semantic — let the agent edit, but ask first. The

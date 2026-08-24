@@ -1,4 +1,10 @@
-import { hasSelfHostSearchKey, selfHostWebSearch } from "./selfHostServices";
+import {
+  createSelfHostWebSearchAgentBridge,
+  hasSelfHostSearchKey,
+  selfHostWebSearch,
+  type SelfHostWebSearchAgentBridge,
+  type SelfHostWebSearchAgentChannel,
+} from "./selfHostServices";
 
 const mockGetSettings = jest.fn();
 jest.mock("@/settings/model", () => ({
@@ -47,6 +53,44 @@ function parallelRequestBody(): { objective: string; search_queries: string[] } 
   return JSON.parse(options.body) as { objective: string; search_queries: string[] };
 }
 
+function requestAgentSearchChannel(
+  channel: Readonly<SelfHostWebSearchAgentChannel>,
+  query: string,
+  token = channel.token,
+  url = channel.url
+): Promise<{ status: number; contentType: string | undefined; body: unknown }> {
+  const http = jest.requireActual<typeof import("node:http")>("node:http");
+  return new Promise((resolve, reject) => {
+    const request = http.request(
+      url,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "text/plain; charset=utf-8",
+          "Content-Length": Buffer.byteLength(query),
+        },
+      },
+      (response) => {
+        let responseBody = "";
+        response.setEncoding("utf8");
+        response.on("data", (chunk: string) => {
+          responseBody += chunk;
+        });
+        response.on("end", () => {
+          resolve({
+            status: response.statusCode ?? 0,
+            contentType: response.headers["content-type"],
+            body: JSON.parse(responseBody) as unknown,
+          });
+        });
+      }
+    );
+    request.on("error", reject);
+    request.end(query);
+  });
+}
+
 describe("selfHostServices", () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -88,6 +132,172 @@ describe("selfHostServices", () => {
       mockGetSettings.mockReturnValue(providerSettings("unknown", { firecrawlApiKey: "fc-key" }));
 
       expect(hasSelfHostSearchKey()).toBe(true);
+    });
+  });
+
+  describe("createSelfHostWebSearchAgentBridge()", () => {
+    const bridges: SelfHostWebSearchAgentBridge[] = [];
+
+    afterEach(() => {
+      for (const bridge of bridges) bridge.dispose();
+      bridges.length = 0;
+    });
+
+    function createBridge(
+      isModeValid: () => boolean,
+      hasSearchKey: () => boolean,
+      search: (query: string) => Promise<{ content: string; citations: string[] }>
+    ): SelfHostWebSearchAgentBridge {
+      const bridge = createSelfHostWebSearchAgentBridge(isModeValid, hasSearchKey, search);
+      bridges.push(bridge);
+      return bridge;
+    }
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/165 routes an entitled Agent Chat query through a reusable plugin-owned channel", async () => {
+      const search = jest.fn().mockResolvedValue({
+        content: "日本語の結果 ✅",
+        citations: ["https://example.com"],
+      });
+      const bridge = createBridge(
+        () => true,
+        () => true,
+        search
+      );
+      const channel = await bridge.getChannel();
+
+      await expect(requestAgentSearchChannel(channel, "current\nfacts ✅")).resolves.toEqual({
+        status: 200,
+        contentType: "application/json; charset=utf-8",
+        body: { content: "日本語の結果 ✅", citations: ["https://example.com"] },
+      });
+      await expect(bridge.getChannel()).resolves.toBe(channel);
+      expect(search).toHaveBeenCalledWith("current\nfacts ✅");
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/165 fails closed when the signed Self-Host entitlement is unavailable", async () => {
+      const search = jest.fn();
+      const bridge = createBridge(
+        () => false,
+        () => true,
+        search
+      );
+      const channel = await bridge.getChannel();
+
+      await expect(requestAgentSearchChannel(channel, "private query")).resolves.toEqual({
+        status: 500,
+        contentType: "application/json; charset=utf-8",
+        body: { error: "Self-host web search is not available for this session." },
+      });
+      expect(search).not.toHaveBeenCalled();
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/165 fails closed when the selected provider has no API key", async () => {
+      const search = jest.fn();
+      const bridge = createBridge(
+        () => true,
+        () => false,
+        search
+      );
+      const channel = await bridge.getChannel();
+
+      await expect(requestAgentSearchChannel(channel, "private query")).resolves.toEqual({
+        status: 500,
+        contentType: "application/json; charset=utf-8",
+        body: { error: "Add an API key for the selected self-host search provider." },
+      });
+      expect(search).not.toHaveBeenCalled();
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/165 rejects another local process without the per-lifecycle token", async () => {
+      const search = jest.fn();
+      const bridge = createBridge(
+        () => true,
+        () => true,
+        search
+      );
+      const channel = await bridge.getChannel();
+
+      await expect(
+        requestAgentSearchChannel(channel, "private query", "wrong-token")
+      ).resolves.toEqual({
+        status: 401,
+        contentType: "application/json; charset=utf-8",
+        body: { error: "Unauthorized." },
+      });
+      expect(search).not.toHaveBeenCalled();
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/165 rejects empty and oversized local search requests before provider dispatch", async () => {
+      const search = jest.fn();
+      const bridge = createBridge(
+        () => true,
+        () => true,
+        search
+      );
+      const channel = await bridge.getChannel();
+
+      await expect(requestAgentSearchChannel(channel, "   ")).resolves.toEqual({
+        status: 400,
+        contentType: "application/json; charset=utf-8",
+        body: { error: "A non-empty query is required." },
+      });
+      await expect(requestAgentSearchChannel(channel, "x".repeat(64 * 1024 + 1))).resolves.toEqual({
+        status: 413,
+        contentType: "application/json; charset=utf-8",
+        body: { error: "Request body is too large." },
+      });
+      expect(search).not.toHaveBeenCalled();
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/165 exposes only the search route on the local channel", async () => {
+      const search = jest.fn();
+      const bridge = createBridge(
+        () => true,
+        () => true,
+        search
+      );
+      const channel = await bridge.getChannel();
+
+      await expect(
+        requestAgentSearchChannel(
+          channel,
+          "private query",
+          channel.token,
+          channel.url.replace("/search", "/other")
+        )
+      ).resolves.toEqual({
+        status: 404,
+        contentType: "application/json; charset=utf-8",
+        body: { error: "Not found." },
+      });
+      expect(search).not.toHaveBeenCalled();
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/165 closes the local channel with its plugin lifecycle", async () => {
+      const bridge = createBridge(
+        () => true,
+        () => true,
+        jest.fn()
+      );
+      const channel = await bridge.getChannel();
+
+      bridge.dispose();
+
+      await expect(bridge.getChannel()).rejects.toThrow("channel is closed");
+      await expect(requestAgentSearchChannel(channel, "private query")).rejects.toThrow();
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/165 rejects channel startup when the plugin is disposed before listening", async () => {
+      const bridge = createBridge(
+        () => true,
+        () => true,
+        jest.fn()
+      );
+      const channel = bridge.getChannel();
+
+      bridge.dispose();
+
+      await expect(channel).rejects.toThrow("channel is closed");
     });
   });
 

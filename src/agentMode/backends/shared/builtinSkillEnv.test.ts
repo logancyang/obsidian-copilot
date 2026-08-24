@@ -10,6 +10,9 @@ import {
   MIYO_SEARCH_FOLDER_ENV,
   MIYO_SEARCH_SCOPE_ENV,
   PLUS_ENV,
+  SELF_HOST_WEB_SEARCH_ENV,
+  SELF_HOST_WEB_SEARCH_TOKEN_ENV,
+  SELF_HOST_WEB_SEARCH_URL_ENV,
 } from "@/agentMode/skills/builtin/builtinSkills";
 import { SYMPOSIUM_WORKSPACE_ROOT_ENV } from "@/symposium/constants";
 import {
@@ -111,6 +114,34 @@ describe("builtinSkillEnv", () => {
       });
     });
 
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/165 injects protected Self-Host routing without provider credentials", async () => {
+      mockGetSettings.mockReturnValue({
+        isPaidUser: false,
+        enableSelfHostMode: true,
+        exaApiKey: "host-only-key",
+      });
+
+      expect(
+        await buildBuiltinSkillEnv("", "/vault/root", "root", {
+          url: "http://127.0.0.1:1234/search",
+          token: "session-token",
+        })
+      ).toEqual({
+        [SYMPOSIUM_WORKSPACE_ROOT_ENV]: "/vault/root",
+        [MIYO_SEARCH_SCOPE_ENV]: "current",
+        [MIYO_SEARCH_FOLDER_ENV]: "root",
+        [SELF_HOST_WEB_SEARCH_ENV]: "1",
+        [SELF_HOST_WEB_SEARCH_URL_ENV]: "http://127.0.0.1:1234/search",
+        [SELF_HOST_WEB_SEARCH_TOKEN_ENV]: "session-token",
+      });
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/165 does not mark Self-Host routing active before its replacement channel exists", async () => {
+      mockGetSettings.mockReturnValue({ isPaidUser: false, enableSelfHostMode: true });
+
+      expect(await buildBuiltinSkillEnv()).toEqual({});
+    });
+
     it("merges MIYO_URL with the Plus relay env for a Plus user with a custom Miyo URL", async () => {
       mockGetSettings.mockReturnValue({
         isPaidUser: true,
@@ -147,6 +178,17 @@ describe("builtinSkillEnv", () => {
         ANTHROPIC_MODEL: "claude",
       });
     });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/165 prevents backend overrides from bypassing Self-Host search routing", () => {
+      expect(
+        sanitizeBuiltinSkillEnvOverrides({
+          [SELF_HOST_WEB_SEARCH_ENV]: "",
+          [SELF_HOST_WEB_SEARCH_URL_ENV]: "http://attacker.invalid",
+          [SELF_HOST_WEB_SEARCH_TOKEN_ENV]: "replacement-token",
+          OPENAI_API_KEY: "allowed",
+        })
+      ).toEqual({ OPENAI_API_KEY: "allowed" });
+    });
   });
 
   describe("getBuiltinSkillEnvRestartPolicy()", () => {
@@ -160,7 +202,7 @@ describe("builtinSkillEnv", () => {
         const prev = { [key]: before } as unknown as ReturnType<typeof getSettings>;
         const next = { [key]: after } as unknown as ReturnType<typeof getSettings>;
 
-        expect(getBuiltinSkillEnvRestartPolicy(prev, next)).toBe("deferred");
+        expect(getBuiltinSkillEnvRestartPolicy(prev, next, "opencode")).toBe("deferred");
       }
     );
 
@@ -172,7 +214,40 @@ describe("builtinSkillEnv", () => {
         typeof getSettings
       >;
 
-      expect(getBuiltinSkillEnvRestartPolicy(prev, next)).toBe("immediate");
+      expect(getBuiltinSkillEnvRestartPolicy(prev, next, "opencode")).toBe("immediate");
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/165 immediately blocks native web tools when Self-Host mode is enabled", () => {
+      const prev = { enableSelfHostMode: false } as ReturnType<typeof getSettings>;
+      const next = { enableSelfHostMode: true } as ReturnType<typeof getSettings>;
+
+      expect(getBuiltinSkillEnvRestartPolicy(prev, next, "opencode")).toBe("immediate");
+    });
+
+    it.each(["claude", "codex"])(
+      "https://github.com/Brevilabs/obsidian-copilot-private/issues/165 does not restart %s when OpenCode-only Self-Host routing is enabled",
+      (backendId) => {
+        const prev = { enableSelfHostMode: false } as ReturnType<typeof getSettings>;
+        const next = { enableSelfHostMode: true } as ReturnType<typeof getSettings>;
+
+        expect(getBuiltinSkillEnvRestartPolicy(prev, next, backendId)).toBe("none");
+      }
+    );
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/165 keeps Claude's shared environment refresh deferred when OpenCode-only routing changes too", () => {
+      const prev = { isPaidUser: false, enableSelfHostMode: false } as ReturnType<
+        typeof getSettings
+      >;
+      const next = { isPaidUser: true, enableSelfHostMode: true } as ReturnType<typeof getSettings>;
+
+      expect(getBuiltinSkillEnvRestartPolicy(prev, next, "claude")).toBe("deferred");
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/165 defers the OpenCode routing refresh when Self-Host mode is disabled", () => {
+      const prev = { enableSelfHostMode: true } as ReturnType<typeof getSettings>;
+      const next = { enableSelfHostMode: false } as ReturnType<typeof getSettings>;
+
+      expect(getBuiltinSkillEnvRestartPolicy(prev, next, "opencode")).toBe("deferred");
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/121 defers an enabled skill refresh when scope widens", () => {
@@ -183,7 +258,7 @@ describe("builtinSkillEnv", () => {
         typeof getSettings
       >;
 
-      expect(getBuiltinSkillEnvRestartPolicy(prev, next)).toBe("deferred");
+      expect(getBuiltinSkillEnvRestartPolicy(prev, next, "opencode")).toBe("deferred");
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/121 skips scope refreshes while the skill is disabled", () => {
@@ -194,14 +269,14 @@ describe("builtinSkillEnv", () => {
         typeof getSettings
       >;
 
-      expect(getBuiltinSkillEnvRestartPolicy(prev, next)).toBe("none");
+      expect(getBuiltinSkillEnvRestartPolicy(prev, next, "opencode")).toBe("none");
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/121 keeps spawn-time state for unrelated settings changes", () => {
       const prev = { miyoSearchAll: false, contextTurns: 5 } as ReturnType<typeof getSettings>;
       const next = { miyoSearchAll: false, contextTurns: 9 } as ReturnType<typeof getSettings>;
 
-      expect(getBuiltinSkillEnvRestartPolicy(prev, next)).toBe("none");
+      expect(getBuiltinSkillEnvRestartPolicy(prev, next, "opencode")).toBe("none");
     });
   });
 });

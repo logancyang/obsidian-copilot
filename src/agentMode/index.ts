@@ -345,16 +345,16 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     // The managed env injected at spawn (see `buildBuiltinSkillEnv`) changes with
     // Copilot Plus sign-in/out or license rotation (the decrypted license the
     // builtin Plus skill scripts read), with the Miyo server URL (the `MIYO_URL`
-    // the bundled miyo CLI reads), or with the Miyo Search scope. These values
-    // are only read on a fresh spawn, so restart every backend — otherwise a
-    // running subprocess keeps stale policy until a reload. (Restarts coalesce,
-    // so this folds with any Miyo-availability re-seed restart below.)
-    const managedEnvRestartPolicy = getBuiltinSkillEnvRestartPolicy(prev, next);
-    if (managedEnvRestartPolicy !== "none") {
-      // Applying a new search boundary cannot wait for a running turn to finish:
-      // cancel it before it can start another search with the prior scope.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/121
-      for (const descriptor of listBackendDescriptors()) {
+    // the bundled miyo CLI reads), with the Miyo Search scope, or with
+    // OpenCode's Self-Host routing boundary. These values are only read on a
+    // fresh spawn. The policy selects only affected backends and restarts
+    // coalesce with any Miyo-availability re-seed restart below.
+    for (const descriptor of listBackendDescriptors()) {
+      const managedEnvRestartPolicy = getBuiltinSkillEnvRestartPolicy(prev, next, descriptor.id);
+      if (managedEnvRestartPolicy !== "none") {
+        // Applying a new search boundary cannot wait for a running turn to finish:
+        // cancel it before it can start another search with the prior scope.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/121
         void manager
           .restartBackend(descriptor.id, "managed agent env changed", {
             deferWhileBusy: managedEnvRestartPolicy !== "immediate",
