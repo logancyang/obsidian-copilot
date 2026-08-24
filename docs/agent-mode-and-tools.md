@@ -90,6 +90,7 @@ Agent Chat keeps each conversation separate:
 - Select **New Chat** to reset the current tab.
 - Use **Recent Chats** from the Agent Chat home screen, or **Chat History** inside a conversation, to resume saved work.
 - Add the active note, selected text, other notes, folders, a Copilot Web Viewer tab, or supported images. You can also mention a note with `[[Note title]]`.
+- Messages taller than about 60% of the Agent Chat window start as a compact preview. Use **Show more** or **Show less** on the message to expand or collapse its full text.
 - Hover the context ring beside the send controls to see how much of the model's context window is in use. If the connected account reports usage limits, the same panel shows the available limit and reset time.
 
 Attachments apply to the next message. For instructions and context that should be reused, create a [Project](projects.md) or add rules to [`AGENTS.md`](system-prompts.md). See [Context and Mentions](context-and-mentions.md) for every context option.

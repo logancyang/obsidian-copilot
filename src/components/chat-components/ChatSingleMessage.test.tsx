@@ -6,6 +6,7 @@ import ChatSingleMessage, {
 import { ChatMessage } from "@/types/message";
 import type { App } from "obsidian";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { USER_SENDER } from "@/constants";
 
 jest.mock("@/settings/model", () => ({
   useSettingsValue: jest.fn(() => ({
@@ -292,6 +293,8 @@ function stubContentDimensions(scrollHeightPx: number, clientHeightPx: number): 
 }
 
 describe("ChatSingleMessage", () => {
+  let originalResizeObserver: typeof ResizeObserver | undefined;
+
   const baseMessage: ChatMessage = {
     id: "message-1",
     message: "Test message",
@@ -315,6 +318,19 @@ describe("ChatSingleMessage", () => {
   beforeEach(() => {
     renderMarkdownMock.mockReset();
     renderMarkdownMock.mockResolvedValue(undefined);
+    originalResizeObserver = window.ResizeObserver;
+    Object.defineProperty(window, "ResizeObserver", {
+      configurable: true,
+      value: jest.fn(() => ({ observe: jest.fn(), disconnect: jest.fn() })),
+    });
+  });
+
+  afterEach(() => {
+    Object.defineProperty(window, "ResizeObserver", {
+      configurable: true,
+      value: originalResizeObserver,
+    });
+    jest.restoreAllMocks();
   });
 
   beforeAll(() => {
@@ -484,70 +500,94 @@ describe("ChatSingleMessage", () => {
     );
     expect(screen.getByText(timestamp)).toBeTruthy();
   });
-  it("collapses an oversized user message behind a Show more control (https://github.com/Brevilabs/obsidian-copilot-private/issues/151)", () => {
-    const restoreContentHeight = stubContentDimensions(2000, 240);
+  it("collapses opted-in overflowing user text while keeping the full text, attachment, and actions mounted (https://github.com/Brevilabs/obsidian-copilot-private/issues/151)", () => {
+    const restoreContentHeight = stubContentDimensions(720, 600);
+    const userMessage: ChatMessage = {
+      ...baseMessage,
+      sender: USER_SENDER,
+      message: "A complete pasted log remains available for copying.",
+      content: [
+        { type: "text" },
+        { type: "image_url", image_url: { url: "data:image/png;base64,dGVzdA==" } },
+      ],
+    };
 
     try {
       render(
         <TooltipProvider>
           <ChatSingleMessage
-            message={{ ...baseMessage, sender: "user", message: "A very long pasted prompt" }}
+            message={userMessage}
             app={createAppStub()}
             isStreaming={false}
+            collapseLongUserMessages
           />
         </TooltipProvider>
       );
 
-      expect(screen.getByTestId("clamped-content").classList.contains("tw-max-h-[12lh]")).toBe(
+      expect(screen.getByTestId("clamped-content").classList.contains("tw-max-h-[60vh]")).toBe(
         true
       );
-      expect(screen.getByRole("button", { name: /show more/i })).toBeTruthy();
-      // The body stays mounted so Copy and text selection still see it all.
-      expect(screen.getByText("A very long pasted prompt")).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Show more" })).not.toBeNull();
+      expect(screen.getByText(userMessage.message).textContent).toBe(userMessage.message);
+      expect(screen.getByAltText("User uploaded image")).not.toBeNull();
+      expect(screen.getByTitle("Copy")).not.toBeNull();
     } finally {
       restoreContentHeight();
     }
   });
 
-  it("leaves a short user message without an expand control (https://github.com/Brevilabs/obsidian-copilot-private/issues/151)", () => {
+  it("leaves an opted-in short user message without an expand control (https://github.com/Brevilabs/obsidian-copilot-private/issues/151)", () => {
     const restoreContentHeight = stubContentDimensions(40, 40);
 
     try {
       render(
         <TooltipProvider>
           <ChatSingleMessage
-            message={{ ...baseMessage, sender: "user", message: "Hi" }}
+            message={{ ...baseMessage, sender: USER_SENDER, message: "Hi" }}
             app={createAppStub()}
             isStreaming={false}
+            collapseLongUserMessages
           />
         </TooltipProvider>
       );
 
-      expect(screen.getByTestId("clamped-content").getAttribute("style")).toBeNull();
+      expect(screen.getByTestId("clamped-content")).not.toBeNull();
       expect(screen.queryByRole("button", { name: /show more/i })).toBeNull();
     } finally {
       restoreContentHeight();
     }
   });
 
-  it("never collapses an assistant message, whose trail owns its own folding (https://github.com/Brevilabs/obsidian-copilot-private/issues/151)", async () => {
-    const restoreContentHeight = stubContentDimensions(2000, 240);
-
+  it("leaves Quick Chat user text and assistant text outside the Agent Chat collapse gate (https://github.com/Brevilabs/obsidian-copilot-private/issues/151)", () => {
+    const restoreContentHeight = stubContentDimensions(720, 600);
+    const userMessage: ChatMessage = {
+      ...baseMessage,
+      sender: USER_SENDER,
+      message: "A Quick Chat prompt that remains unchanged.",
+    };
     try {
-      render(
+      const { rerender } = render(
+        <TooltipProvider>
+          <ChatSingleMessage message={userMessage} app={createAppStub()} isStreaming={false} />
+        </TooltipProvider>
+      );
+
+      expect(screen.queryByTestId("clamped-content")).toBeNull();
+      expect(screen.queryByRole("button", { name: "Show more" })).toBeNull();
+
+      rerender(
         <TooltipProvider>
           <ChatSingleMessage
-            message={{ ...baseMessage, message: "A very long answer" }}
+            message={baseMessage}
             app={createAppStub()}
             isStreaming={false}
+            collapseLongUserMessages
           />
         </TooltipProvider>
       );
 
-      await waitFor(() => expect(renderMarkdownMock).toHaveBeenCalled());
-
       expect(screen.queryByTestId("clamped-content")).toBeNull();
-      expect(screen.queryByRole("button", { name: /show more/i })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Show more" })).toBeNull();
     } finally {
       restoreContentHeight();
     }
