@@ -26,93 +26,143 @@ const submitButton = (): HTMLElement => screen.getByRole("button", { name: /subm
 const cancelButton = (): HTMLElement => screen.getByRole("button", { name: /cancel/i });
 const otherTextarea = (): HTMLElement => screen.getByPlaceholderText(/type your response/i);
 
-describe("AskUserQuestionCard custom 'Other' response", () => {
-  it("single-select 'Other' → the trimmed typed text is the answer", () => {
-    const onResolve = jest.fn();
-    const request = makeRequest([
-      {
-        question: "When do we ship?",
-        options: [{ label: "A" }, { label: "B" }],
-      },
-    ]);
-    renderCard(request, onResolve);
+describe("AskUserQuestionCard", () => {
+  describe("AskUserQuestionCard()", () => {
+    it("single-select 'Other' → the trimmed typed text is the answer", () => {
+      const onResolve = jest.fn();
+      const request = makeRequest([
+        {
+          question: "When do we ship?",
+          options: [{ label: "A" }, { label: "B" }],
+        },
+      ]);
+      renderCard(request, onResolve);
 
-    fireEvent.click(getOtherControl("radio"));
-    // Surrounding whitespace proves the answer is trimmed on submit.
-    fireEvent.change(otherTextarea(), { target: { value: "  ship it Friday  " } });
-    fireEvent.click(submitButton());
+      fireEvent.click(getOtherControl("radio"));
+      // Surrounding whitespace proves the answer is trimmed on submit.
+      fireEvent.change(otherTextarea(), { target: { value: "  ship it Friday  " } });
+      fireEvent.click(submitButton());
 
-    expect(onResolve).toHaveBeenCalledTimes(1);
-    expect(onResolve).toHaveBeenCalledWith(REQUEST_ID, { "When do we ship?": "ship it Friday" });
-  });
+      expect(onResolve).toHaveBeenCalledTimes(1);
+      expect(onResolve).toHaveBeenCalledWith(REQUEST_ID, {
+        "When do we ship?": "ship it Friday",
+      });
+    });
 
-  it("multi-select presets + 'Other' → checked labels and trimmed text joined with ', '", () => {
-    const onResolve = jest.fn();
-    const request = makeRequest([
-      {
-        question: "Pick tasks",
-        multiSelect: true,
-        options: [{ label: "A" }, { label: "B" }, { label: "C" }],
-      },
-    ]);
-    renderCard(request, onResolve);
+    it("multi-select presets + 'Other' → checked labels and trimmed text joined with ', '", () => {
+      const onResolve = jest.fn();
+      const request = makeRequest([
+        {
+          question: "Pick tasks",
+          multiSelect: true,
+          options: [{ label: "A" }, { label: "B" }, { label: "C" }],
+        },
+      ]);
+      renderCard(request, onResolve);
 
-    fireEvent.click(screen.getByRole("checkbox", { name: /^A$/ }));
-    fireEvent.click(screen.getByRole("checkbox", { name: /^C$/ }));
-    fireEvent.click(getOtherControl("checkbox"));
-    fireEvent.change(otherTextarea(), { target: { value: "  rollback plan  " } });
-    fireEvent.click(submitButton());
+      fireEvent.click(screen.getByRole("checkbox", { name: /^A$/ }));
+      fireEvent.click(screen.getByRole("checkbox", { name: /^C$/ }));
+      fireEvent.click(getOtherControl("checkbox"));
+      fireEvent.change(otherTextarea(), { target: { value: "  rollback plan  " } });
+      fireEvent.click(submitButton());
 
-    expect(onResolve).toHaveBeenCalledTimes(1);
-    expect(onResolve).toHaveBeenCalledWith(REQUEST_ID, { "Pick tasks": "A, C, rollback plan" });
-  });
+      expect(onResolve).toHaveBeenCalledTimes(1);
+      expect(onResolve).toHaveBeenCalledWith(REQUEST_ID, {
+        "Pick tasks": "A, C, rollback plan",
+      });
+    });
 
-  it("disables Submit while 'Other' is armed with empty text, enabling it once text is typed", () => {
-    const onResolve = jest.fn();
-    const request = makeRequest([
-      {
-        question: "When do we ship?",
-        options: [{ label: "A" }, { label: "B" }],
-      },
-    ]);
-    renderCard(request, onResolve);
+    it("requires an explicit answer for every question before submitting (https://github.com/Brevilabs/obsidian-copilot-private/issues/182)", () => {
+      const onResolve = jest.fn();
+      const request = makeRequest([
+        {
+          header: "Deployment",
+          question: "Choose deployment",
+          options: [{ label: "Production" }, { label: "Staging" }],
+        },
+        {
+          header: "Timing",
+          question: "When should we ship?",
+          options: [{ label: "Today" }, { label: "Next week" }],
+        },
+        {
+          header: "Checks",
+          question: "Which checks are required?",
+          multiSelect: true,
+          options: [{ label: "Unit tests" }, { label: "End-to-end test" }],
+        },
+      ]);
+      renderCard(request, onResolve);
 
-    fireEvent.click(getOtherControl("radio"));
-    expect((submitButton() as HTMLButtonElement).disabled).toBe(true);
+      fireEvent.click(screen.getByRole("radio", { name: "Production" }));
+      fireEvent.click(screen.getByRole("tab", { name: "Timing" }));
+      fireEvent.click(getOtherControl("radio"));
+      fireEvent.change(otherTextarea(), { target: { value: "  Friday after QA  " } });
 
-    fireEvent.change(otherTextarea(), { target: { value: "x" } });
-    expect((submitButton() as HTMLButtonElement).disabled).toBe(false);
-  });
+      expect((submitButton() as HTMLButtonElement).disabled).toBe(true);
+      fireEvent.click(submitButton());
+      expect(onResolve).not.toHaveBeenCalled();
 
-  it("Cancel resolves with an empty answer map", () => {
-    const onResolve = jest.fn();
-    const request = makeRequest([
-      {
-        question: "When do we ship?",
-        options: [{ label: "A" }, { label: "B" }],
-      },
-    ]);
-    renderCard(request, onResolve);
+      fireEvent.click(screen.getByRole("tab", { name: "Checks" }));
+      fireEvent.click(screen.getByRole("checkbox", { name: "End-to-end test" }));
 
-    fireEvent.click(cancelButton());
+      expect((submitButton() as HTMLButtonElement).disabled).toBe(false);
+      fireEvent.click(submitButton());
+      expect(onResolve).toHaveBeenCalledTimes(1);
+      expect(onResolve).toHaveBeenCalledWith(REQUEST_ID, {
+        "Choose deployment": "Production",
+        "When should we ship?": "Friday after QA",
+        "Which checks are required?": "End-to-end test",
+      });
+    });
 
-    expect(onResolve).toHaveBeenCalledWith(REQUEST_ID, {});
-  });
+    it("disables Submit while 'Other' is armed with empty text, enabling it once text is typed", () => {
+      const onResolve = jest.fn();
+      const request = makeRequest([
+        {
+          question: "When do we ship?",
+          options: [{ label: "A" }, { label: "B" }],
+        },
+      ]);
+      renderCard(request, onResolve);
 
-  it("regression: single-select preset still resolves with the chosen label", () => {
-    const onResolve = jest.fn();
-    const request = makeRequest([
-      {
-        question: "When do we ship?",
-        options: [{ label: "A" }, { label: "B" }],
-      },
-    ]);
-    renderCard(request, onResolve);
+      fireEvent.click(getOtherControl("radio"));
+      expect((submitButton() as HTMLButtonElement).disabled).toBe(true);
 
-    fireEvent.click(screen.getByRole("radio", { name: /^A$/ }));
-    fireEvent.click(submitButton());
+      fireEvent.change(otherTextarea(), { target: { value: "x" } });
+      expect((submitButton() as HTMLButtonElement).disabled).toBe(false);
+    });
 
-    expect(onResolve).toHaveBeenCalledTimes(1);
-    expect(onResolve).toHaveBeenCalledWith(REQUEST_ID, { "When do we ship?": "A" });
+    it("Cancel resolves with an empty answer map", () => {
+      const onResolve = jest.fn();
+      const request = makeRequest([
+        {
+          question: "When do we ship?",
+          options: [{ label: "A" }, { label: "B" }],
+        },
+      ]);
+      renderCard(request, onResolve);
+
+      fireEvent.click(cancelButton());
+
+      expect(onResolve).toHaveBeenCalledWith(REQUEST_ID, {});
+    });
+
+    it("regression: single-select preset still resolves with the chosen label", () => {
+      const onResolve = jest.fn();
+      const request = makeRequest([
+        {
+          question: "When do we ship?",
+          options: [{ label: "A" }, { label: "B" }],
+        },
+      ]);
+      renderCard(request, onResolve);
+
+      fireEvent.click(screen.getByRole("radio", { name: /^A$/ }));
+      fireEvent.click(submitButton());
+
+      expect(onResolve).toHaveBeenCalledTimes(1);
+      expect(onResolve).toHaveBeenCalledWith(REQUEST_ID, { "When do we ship?": "A" });
+    });
   });
 });
