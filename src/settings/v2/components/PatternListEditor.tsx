@@ -37,7 +37,7 @@ const PATTERN_TYPE_CONFIG = {
 
 type PatternType = keyof typeof PATTERN_TYPE_CONFIG;
 
-interface PatternListEditorProps {
+export interface PatternListEditorProps {
   value: string;
   onChange: (value: string) => void;
   maxCollapsedHeight?: number;

@@ -445,7 +445,7 @@ export const RelevantNotes = memo(
                 </span>
                 <span className="tw-text-sm tw-text-muted">
                   It falls outside your semantic index settings, so related notes can&apos;t be
-                  shown here. Adjust inclusions or exclusions in Copilot settings to include it.
+                  shown here. Adjust Index scope in the Miyo tab of Copilot settings to include it.
                 </span>
               </div>
             </div>

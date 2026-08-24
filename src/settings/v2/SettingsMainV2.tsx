@@ -29,8 +29,8 @@ import { SelfHostSettings } from "./components/SelfHostSettings";
 //     (LegacyVaultIndexSetting), the off switch a vault not using Miyo needs to
 //     stop indexing; it reads as the legacy index because that is all the flag
 //     still controls once Miyo owns semantic search.
-//   - qaInclusions/qaExclusions — still consumed (Miyo registration snapshot);
-//     their edit UI is deferred per issue #195 ("defer include/exclude").
+//   - qaInclusions/qaExclusions — edited from the Miyo tab's "Index scope"
+//     section, which is where semantic search now lives.
 //   - embeddingModelKey / maxSourceChunks / enableInlineCitations / indexing
 //     limits — still read at runtime (embeddingManager, SearchTools,
 //     VaultQAChainRunner, CopilotPlusChainRunner) with their defaults; a
