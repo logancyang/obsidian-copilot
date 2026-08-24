@@ -260,6 +260,25 @@ describe("normalizeFootnoteRendering", () => {
   });
 });
 
+/**
+ * JSDOM lays nothing out, so a message body always measures zero. Forcing the
+ * natural height is what puts a message over or under the collapse threshold.
+ */
+function stubContentHeight(heightPx: number): () => void {
+  const original = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "scrollHeight");
+  Object.defineProperty(HTMLElement.prototype, "scrollHeight", {
+    configurable: true,
+    get: () => heightPx,
+  });
+  return () => {
+    if (original) {
+      Object.defineProperty(HTMLElement.prototype, "scrollHeight", original);
+    } else {
+      Reflect.deleteProperty(HTMLElement.prototype, "scrollHeight");
+    }
+  };
+}
+
 describe("ChatSingleMessage", () => {
   const baseMessage: ChatMessage = {
     id: "message-1",
@@ -452,5 +471,71 @@ describe("ChatSingleMessage", () => {
       </TooltipProvider>
     );
     expect(screen.getByText(timestamp)).toBeTruthy();
+  });
+  it("collapses an oversized user message behind a Show more control (https://github.com/Brevilabs/obsidian-copilot-private/issues/151)", () => {
+    const restoreContentHeight = stubContentHeight(2000);
+
+    try {
+      render(
+        <TooltipProvider>
+          <ChatSingleMessage
+            message={{ ...baseMessage, sender: "user", message: "A very long pasted prompt" }}
+            app={createAppStub()}
+            isStreaming={false}
+          />
+        </TooltipProvider>
+      );
+
+      expect(screen.getByTestId("clamped-content").style.maxHeight).not.toBe("");
+      expect(screen.getByRole("button", { name: /show more/i })).toBeTruthy();
+      // The body stays mounted so Copy and text selection still see it all.
+      expect(screen.getByText("A very long pasted prompt")).toBeTruthy();
+    } finally {
+      restoreContentHeight();
+    }
+  });
+
+  it("leaves a short user message uncollapsed", () => {
+    const restoreContentHeight = stubContentHeight(40);
+
+    try {
+      render(
+        <TooltipProvider>
+          <ChatSingleMessage
+            message={{ ...baseMessage, sender: "user", message: "Hi" }}
+            app={createAppStub()}
+            isStreaming={false}
+          />
+        </TooltipProvider>
+      );
+
+      expect(screen.getByTestId("clamped-content").style.maxHeight).toBe("");
+      expect(screen.queryByRole("button", { name: /show more/i })).toBeNull();
+    } finally {
+      restoreContentHeight();
+    }
+  });
+
+  it("never collapses an assistant message, whose trail owns its own folding", async () => {
+    const restoreContentHeight = stubContentHeight(2000);
+
+    try {
+      render(
+        <TooltipProvider>
+          <ChatSingleMessage
+            message={{ ...baseMessage, message: "A very long answer" }}
+            app={createAppStub()}
+            isStreaming={false}
+          />
+        </TooltipProvider>
+      );
+
+      await waitFor(() => expect(renderMarkdownMock).toHaveBeenCalled());
+
+      expect(screen.queryByTestId("clamped-content")).toBeNull();
+      expect(screen.queryByRole("button", { name: /show more/i })).toBeNull();
+    } finally {
+      restoreContentHeight();
+    }
   });
 });
