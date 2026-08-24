@@ -56,7 +56,7 @@ const FOOTNOTE_SUFFIX_PATTERN = /^\d+-\d+$/;
  * off the chat surface, so a user message taller than this collapses behind a
  * Show more control: https://github.com/Brevilabs/obsidian-copilot-private/issues/151
  */
-const COLLAPSED_USER_MESSAGE_LINES = 12;
+const COLLAPSED_USER_MESSAGE_CLASS_NAME = cn("tw-max-h-[12lh]");
 
 /**
  * Normalizes rendered markdown footnotes to align with inline citation UX.
@@ -1006,7 +1006,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
 
           <div className="message-content tw-break-words !tw-leading-[1.6]">
             {message.sender === USER_SENDER ? (
-              <ClampedContent collapsedLines={COLLAPSED_USER_MESSAGE_LINES}>
+              <ClampedContent collapsedClassName={COLLAPSED_USER_MESSAGE_CLASS_NAME}>
                 {renderMessageContent()}
               </ClampedContent>
             ) : (

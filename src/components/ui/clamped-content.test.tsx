@@ -2,22 +2,33 @@ import { ClampedContent } from "@/components/ui/clamped-content";
 import { fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
 
-/**
- * JSDOM lays nothing out, so `scrollHeight` is always 0 and computed
- * `line-height` is `normal`. Stubbing the natural content height is what lets a
- * test choose whether the content sits over or under the clamp.
- */
-function stubContentHeight(heightPx: number): () => void {
-  const original = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "scrollHeight");
+function stubContentDimensions(scrollHeightPx: number, clientHeightPx: number): () => void {
+  const originalScrollHeight = Object.getOwnPropertyDescriptor(
+    HTMLElement.prototype,
+    "scrollHeight"
+  );
+  const originalClientHeight = Object.getOwnPropertyDescriptor(
+    HTMLElement.prototype,
+    "clientHeight"
+  );
   Object.defineProperty(HTMLElement.prototype, "scrollHeight", {
     configurable: true,
-    get: () => heightPx,
+    get: () => scrollHeightPx,
+  });
+  Object.defineProperty(HTMLElement.prototype, "clientHeight", {
+    configurable: true,
+    get: () => clientHeightPx,
   });
   return () => {
-    if (original) {
-      Object.defineProperty(HTMLElement.prototype, "scrollHeight", original);
+    if (originalScrollHeight) {
+      Object.defineProperty(HTMLElement.prototype, "scrollHeight", originalScrollHeight);
     } else {
       Reflect.deleteProperty(HTMLElement.prototype, "scrollHeight");
+    }
+    if (originalClientHeight) {
+      Object.defineProperty(HTMLElement.prototype, "clientHeight", originalClientHeight);
+    } else {
+      Reflect.deleteProperty(HTMLElement.prototype, "clientHeight");
     }
   };
 }
@@ -31,24 +42,24 @@ describe("clamped-content", () => {
       restoreContentHeight = undefined;
     });
 
-    it("renders content that fits without any expand control", () => {
-      // 3 lines at the 20px fallback line height stays under a 5-line clamp.
-      restoreContentHeight = stubContentHeight(60);
+    it("renders content that fits without any expand control (https://github.com/Brevilabs/obsidian-copilot-private/issues/151)", () => {
+      restoreContentHeight = stubContentDimensions(60, 60);
 
-      render(<ClampedContent collapsedLines={5}>Short message</ClampedContent>);
+      render(<ClampedContent collapsedClassName="tw-max-h-[5lh]">Short message</ClampedContent>);
 
       expect(screen.queryByText("Short message")).not.toBeNull();
       expect(screen.queryByRole("button")).toBeNull();
-      expect(screen.getByTestId("clamped-content").style.maxHeight).toBe("");
+      expect(screen.getByTestId("clamped-content").getAttribute("style")).toBeNull();
     });
 
-    it("clips content taller than the clamp to the line budget and offers Show more", () => {
-      restoreContentHeight = stubContentHeight(1000);
+    it("clips content taller than the CSS cap and offers Show more (https://github.com/Brevilabs/obsidian-copilot-private/issues/151)", () => {
+      restoreContentHeight = stubContentDimensions(1000, 100);
 
-      render(<ClampedContent collapsedLines={5}>Very long message</ClampedContent>);
+      render(
+        <ClampedContent collapsedClassName="tw-max-h-[5lh]">Very long message</ClampedContent>
+      );
 
-      // 5 lines at the 20px fallback line height.
-      expect(screen.getByTestId("clamped-content").style.maxHeight).toBe("100px");
+      expect(screen.getByTestId("clamped-content").classList.contains("tw-max-h-[5lh]")).toBe(true);
       expect(screen.getByRole("button", { name: /show more/i }).getAttribute("aria-expanded")).toBe(
         "false"
       );
@@ -56,27 +67,33 @@ describe("clamped-content", () => {
       expect(screen.queryByText("Very long message")).not.toBeNull();
     });
 
-    it("removes the height cap when expanded and restores it when collapsed again", () => {
-      restoreContentHeight = stubContentHeight(1000);
+    it("removes the CSS cap when expanded and restores it when collapsed again (https://github.com/Brevilabs/obsidian-copilot-private/issues/151)", () => {
+      restoreContentHeight = stubContentDimensions(1000, 100);
 
-      render(<ClampedContent collapsedLines={5}>Very long message</ClampedContent>);
+      render(
+        <ClampedContent collapsedClassName="tw-max-h-[5lh]">Very long message</ClampedContent>
+      );
 
       fireEvent.click(screen.getByRole("button", { name: /show more/i }));
 
-      expect(screen.getByTestId("clamped-content").style.maxHeight).toBe("");
+      expect(screen.getByTestId("clamped-content").classList.contains("tw-max-h-[5lh]")).toBe(
+        false
+      );
       const collapseButton = screen.getByRole("button", { name: /show less/i });
       expect(collapseButton.getAttribute("aria-expanded")).toBe("true");
 
       fireEvent.click(collapseButton);
 
-      expect(screen.getByTestId("clamped-content").style.maxHeight).toBe("100px");
+      expect(screen.getByTestId("clamped-content").classList.contains("tw-max-h-[5lh]")).toBe(true);
       expect(screen.queryByRole("button", { name: /show more/i })).not.toBeNull();
     });
 
-    it("points the toggle at the region it controls", () => {
-      restoreContentHeight = stubContentHeight(1000);
+    it("points the toggle at the region it controls (https://github.com/Brevilabs/obsidian-copilot-private/issues/151)", () => {
+      restoreContentHeight = stubContentDimensions(1000, 100);
 
-      render(<ClampedContent collapsedLines={5}>Very long message</ClampedContent>);
+      render(
+        <ClampedContent collapsedClassName="tw-max-h-[5lh]">Very long message</ClampedContent>
+      );
 
       const region = screen.getByTestId("clamped-content");
       expect(region.id).not.toBe("");
@@ -85,19 +102,16 @@ describe("clamped-content", () => {
       );
     });
 
-    it("derives the height cap from the measured line height rather than a fixed size", () => {
-      restoreContentHeight = stubContentHeight(1000);
-      const computedStyle = jest
-        .spyOn(window, "getComputedStyle")
-        .mockReturnValue({ lineHeight: "30px" } as CSSStyleDeclaration);
+    it("uses the caller's CSS cap without writing inline styles (https://github.com/Brevilabs/obsidian-copilot-private/issues/151)", () => {
+      restoreContentHeight = stubContentDimensions(1000, 80);
 
-      try {
-        render(<ClampedContent collapsedLines={4}>Very long message</ClampedContent>);
+      render(
+        <ClampedContent collapsedClassName="tw-max-h-[4lh]">Very long message</ClampedContent>
+      );
 
-        expect(screen.getByTestId("clamped-content").style.maxHeight).toBe("120px");
-      } finally {
-        computedStyle.mockRestore();
-      }
+      const content = screen.getByTestId("clamped-content");
+      expect(content.classList.contains("tw-max-h-[4lh]")).toBe(true);
+      expect(content.getAttribute("style")).toBeNull();
     });
   });
 });

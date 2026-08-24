@@ -29,7 +29,7 @@ const MessageBubble: React.FC<{ children: React.ReactNode }> = ({ children }) =>
 export const Collapsed: StoryObj<ClampedContentProps> = {
   render: () => (
     <MessageBubble>
-      <ClampedContent collapsedLines={12}>{LONG_PROMPT}</ClampedContent>
+      <ClampedContent collapsedClassName="tw-max-h-[12lh]">{LONG_PROMPT}</ClampedContent>
     </MessageBubble>
   ),
 };
@@ -38,7 +38,7 @@ export const Collapsed: StoryObj<ClampedContentProps> = {
 export const FitsWithoutControl: StoryObj<ClampedContentProps> = {
   render: () => (
     <MessageBubble>
-      <ClampedContent collapsedLines={12}>
+      <ClampedContent collapsedClassName="tw-max-h-[12lh]">
         Summarize the notes I touched this week and group them by project.
       </ClampedContent>
     </MessageBubble>
@@ -49,7 +49,7 @@ export const FitsWithoutControl: StoryObj<ClampedContentProps> = {
 export const ThreeLineClamp: StoryObj<ClampedContentProps> = {
   render: () => (
     <MessageBubble>
-      <ClampedContent collapsedLines={3}>{LONG_PROMPT}</ClampedContent>
+      <ClampedContent collapsedClassName="tw-max-h-[3lh]">{LONG_PROMPT}</ClampedContent>
     </MessageBubble>
   ),
 };
