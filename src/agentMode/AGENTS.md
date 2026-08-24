@@ -60,11 +60,11 @@ Then in either case:
 
 1. Create `backends/<id>/` with:
    - `descriptor.ts` — `export const <Id>BackendDescriptor: BackendDescriptor = {…}`
-   - `index.ts` — re-exports the descriptor
    - any backend-specific UI (install modal, settings panel,
      permission modal) co-located here
    - `Backend.ts` (subprocess track only)
-2. Add the entry to `backends/registry.ts`.
+2. Import the descriptor directly from `descriptor.ts` and add it to
+   `backends/registry.ts`.
 3. Settings: store backend-specific config under `agentMode.backends.<id>`
    (extend `CopilotSettings.agentMode.backends` in `src/settings/model.ts`).
 4. Done. **No edits to `acp/`, `session/`, `sdk/`, or `ui/` should be
@@ -101,18 +101,15 @@ Then in either case:
 
 ## Modals and dialogs
 
-**Always prefer Obsidian's native `Modal`** (from `obsidian`) over the
-Radix-based `Dialog` primitive in `@/components/ui/dialog`. The native
-modal gives us correct popout-window behavior, native header chrome,
-ESC handling, and visual consistency with the rest of the plugin.
+**Use Obsidian's native `Modal`** (from `obsidian`). It gives us correct
+popout-window behavior, native header chrome, ESC handling, and visual
+consistency with the rest of the plugin.
 
-The standard pattern (see `src/components/modals/ConfirmModal.tsx` and
-`src/agentMode/skills/ui/DeleteConfirmDialog.tsx`):
-
-Only reach for the Radix `Dialog` when the surface needs to live
-_inside_ an existing React tree (e.g. nested inside another modal)
-and spawning a separate Obsidian `Modal` would break the focus or
-layout flow.
+The standard pattern is in `src/components/modals/ConfirmModal.tsx` and
+`src/agentMode/skills/ui/DeleteConfirmDialog.tsx`. If a surface must live
+inside an existing React tree, keep its visual content as a presentational
+component and host it from an Obsidian modal instead of introducing a second
+modal system.
 
 ## BackendDescriptor surface
 

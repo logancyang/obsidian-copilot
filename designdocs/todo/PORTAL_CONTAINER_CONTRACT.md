@@ -10,7 +10,6 @@ Radix-based UI primitives in `src/components/ui/` portal their content out of
 the parent DOM subtree:
 
 - `DropdownMenuContent`
-- `DialogContent`
 - `PopoverContent`
 - `TooltipContent`
 - `SelectContent`
@@ -41,7 +40,6 @@ callers to do the right thing.
 1. Make `container: HTMLElement | null` **required** on every portaled
    wrapper:
    - `DropdownMenuContent`
-   - `DialogContent`
    - `PopoverContent`
    - `TooltipContent` (today has no `container` prop at all — add it)
    - `SelectContent`
@@ -73,7 +71,7 @@ callers to do the right thing.
 
 ## Scope of the migration
 
-`grep -rE "(DropdownMenuContent|DialogContent|PopoverContent|TooltipContent|SelectContent)[^a-zA-Z]"`
+`grep -rE "(DropdownMenuContent|PopoverContent|TooltipContent|SelectContent)[^a-zA-Z]"`
 returns ~108 JSX call sites across ~28 files. `TooltipContent` alone is 44
 of those, and they live in leaf components (`ChatButtons`, `SuggestedPrompts`,
 `ChatSingleMessage`, etc.) that do not currently have access to any

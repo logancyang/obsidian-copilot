@@ -203,7 +203,7 @@ export default [
         config: "./tailwind.config.js",
         cssFiles: ["**/*.css", "!**/node_modules", "!**/.*", "!**/dist", "!**/build"],
         // Obsidian-provided utility classes used in JSX but not defined in our CSS.
-        whitelist: ["clickable-icon"],
+        whitelist: ["clickable-icon", "mod-cta"],
       },
     },
     rules: {

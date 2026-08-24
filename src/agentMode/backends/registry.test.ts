@@ -8,7 +8,7 @@ import {
   listBackendDescriptors,
   RECOMMENDED_BACKEND_ID,
 } from "./registry";
-import { ClaudeBackendDescriptor } from "./claude";
+import { ClaudeBackendDescriptor } from "./claude/descriptor";
 import { CodexBackendDescriptor } from "./codex/descriptor";
 import { OpencodeBackendDescriptor } from "./opencode/descriptor";
 

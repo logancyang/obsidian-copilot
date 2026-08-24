@@ -1,5 +1,5 @@
 import type { CopilotSettings } from "@/settings/model";
-import { ClaudeBackendDescriptor } from "./claude";
+import { ClaudeBackendDescriptor } from "./claude/descriptor";
 import { CodexBackendDescriptor } from "./codex/descriptor";
 import { OpencodeBackendDescriptor } from "./opencode/descriptor";
 import type { BackendDescriptor, BackendId } from "@/agentMode/session/types";
