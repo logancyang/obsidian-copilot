@@ -131,6 +131,10 @@ import {
   type SymposiumAgentBridge,
   SymposiumPublisher,
 } from "@/symposium/SymposiumPublisher";
+import {
+  createSelfHostWebSearchAgentBridge,
+  type SelfHostWebSearchAgentBridge,
+} from "@/LLMProviders/selfHostServices";
 
 // Removed unused FileTrackingState interface
 
@@ -154,6 +158,8 @@ export default class CopilotPlugin extends Plugin {
   modelManagement!: ModelManagementApi;
   /** Frozen path-only facade available to Agent Mode's Obsidian CLI bridge. */
   symposiumAgentBridge?: Readonly<SymposiumAgentBridge>;
+  /** Provider-credential-free channel available to the managed Agent Chat search skill. */
+  selfHostWebSearchAgentBridge?: Readonly<SelfHostWebSearchAgentBridge>;
   // Proof of THIS lifecycle for anything that enqueues a Miyo folder mutation.
   // Assigned in `onload` right after the queue reset, and read by the settings
   // UI rather than captured there: settings tabs mount lazily (`TabContent`
@@ -291,6 +297,17 @@ export default class CopilotPlugin extends Plugin {
 
     // Initialize the owner of the shared Quick Chat chain
     this.chainOwner = ChainOwner.getInstance(this.app, this.modelManagement);
+
+    // Must precede Agent Chat: startup model discovery may spawn OpenCode.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/165
+    const selfHostWebSearchAgentBridge = createSelfHostWebSearchAgentBridge();
+    this.selfHostWebSearchAgentBridge = selfHostWebSearchAgentBridge;
+    this.register(() => {
+      selfHostWebSearchAgentBridge.dispose();
+      if (this.selfHostWebSearchAgentBridge === selfHostWebSearchAgentBridge) {
+        this.selfHostWebSearchAgentBridge = undefined;
+      }
+    });
 
     // Initialize Agent Mode coordinator (desktop only — ACP needs subprocess
     // support). Gate on `isDesktopRuntime()`, not `Platform.isDesktopApp`:
