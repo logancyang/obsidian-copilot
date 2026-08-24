@@ -40,6 +40,14 @@ const ANTHROPIC_RESPONSE = JSON.stringify({
   usage: { input_tokens: 1, output_tokens: 1 },
 });
 
+/**
+ * The sampling knobs Copilot no longer sends. Copilot never exposed a control
+ * for any of them, and providers disagree on which values a model accepts, so
+ * each provider's own default is the better answer than Copilot's guess.
+ * https://github.com/logancyang/obsidian-copilot/issues/2959
+ */
+const RETIRED_SAMPLING_PARAMS = ["temperature", "top_p", "frequency_penalty"];
+
 /** Captures the body of the single request the model under test sends. */
 function captureRequestBody(responseText: string): () => Record<string, unknown> {
   let captured: Record<string, unknown> = {};
@@ -77,6 +85,23 @@ function wireModel(overrides: Partial<CustomModel> = {}): CustomModel {
   };
 }
 
+/**
+ * Answers every request with a provider-style 400 so the error the SDK raises
+ * can be inspected. Mirrors what Moonshot returns for a rejected parameter.
+ */
+function respondWithBadRequest(message: string): void {
+  const body = JSON.stringify({ error: { message, type: "invalid_request_error" } });
+  setRequestUrlImpl(() =>
+    Promise.resolve({
+      status: 400,
+      text: body,
+      json: JSON.parse(body) as Record<string, unknown>,
+      arrayBuffer: new ArrayBuffer(0),
+      headers: { "content-type": "application/json" },
+    })
+  );
+}
+
 async function send(model: CustomModel): Promise<void> {
   const instance = await ChatModelManager.getInstance().createModelInstanceFromBridged(model);
   await instance.invoke("hi");
@@ -92,6 +117,62 @@ describe("chatModelManager", () => {
 
         expect(body()).not.toHaveProperty("max_tokens");
         expect(body()).not.toHaveProperty("max_completion_tokens");
+      });
+
+      it("sends no sampling parameters, so the provider applies its own defaults (https://github.com/logancyang/obsidian-copilot/issues/2959)", async () => {
+        const body = captureRequestBody(OPENAI_RESPONSE);
+
+        await send(wireModel());
+
+        for (const param of RETIRED_SAMPLING_PARAMS) {
+          expect(body()).not.toHaveProperty(param);
+        }
+      });
+
+      it("sends Anthropic no sampling parameters either (https://github.com/logancyang/obsidian-copilot/issues/2959)", async () => {
+        const body = captureRequestBody(ANTHROPIC_RESPONSE);
+
+        await send(
+          wireModel({
+            name: "claude-sonnet-4-5",
+            provider: ChatModelProviders.ANTHROPIC,
+            baseUrl: "https://anthropic.invalid",
+            maxTokens: DEFAULT_MAX_OUTPUT_TOKENS,
+          })
+        );
+
+        for (const param of RETIRED_SAMPLING_PARAMS) {
+          expect(body()).not.toHaveProperty(param);
+        }
+      });
+
+      it("surfaces a rejected request as the provider's own message rather than a connection failure (https://github.com/logancyang/obsidian-copilot/issues/2959)", async () => {
+        respondWithBadRequest("invalid temperature: only 1 is allowed for this model");
+
+        const error = await send(wireModel()).catch((raised: unknown) => raised);
+
+        expect(error).toMatchObject({ status: 400 });
+        expect(String(error)).toContain("invalid temperature: only 1 is allowed for this model");
+        expect(String(error)).not.toContain("Connection error");
+      });
+
+      it("stops retrying a request the provider has rejected (https://github.com/logancyang/obsidian-copilot/issues/2959)", async () => {
+        let attempts = 0;
+        const body = JSON.stringify({ error: { message: "nope", type: "invalid_request_error" } });
+        setRequestUrlImpl(() => {
+          attempts += 1;
+          return Promise.resolve({
+            status: 400,
+            text: body,
+            json: JSON.parse(body) as Record<string, unknown>,
+            arrayBuffer: new ArrayBuffer(0),
+            headers: { "content-type": "application/json" },
+          });
+        });
+
+        await expect(send(wireModel())).rejects.toThrow();
+
+        expect(attempts).toBe(1);
       });
 
       it("sends an explicit per-model output limit when the model carries one", async () => {

@@ -163,7 +163,6 @@ export interface ProjectConfig {
 
 export interface ModelConfig {
   modelName: string;
-  temperature?: number;
   streaming: boolean;
   maxRetries: number;
   maxConcurrency: number;
@@ -209,10 +208,7 @@ export interface CustomModel {
   core?: boolean;
   stream?: boolean;
   streamUsage?: boolean;
-  temperature?: number;
   maxTokens?: number;
-  topP?: number;
-  frequencyPenalty?: number;
 
   // Ollama specific fields
   numCtx?: number;

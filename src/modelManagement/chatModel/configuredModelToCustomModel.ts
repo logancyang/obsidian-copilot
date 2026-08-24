@@ -108,9 +108,8 @@ function extraString(extras: Record<string, unknown>, key: string): string | und
 /**
  * Build the `CustomModel` for a resolved chat-backend selection.
  *
- * Per-model tuning (temperature, maxTokens, reasoning effort) is left unset.
- * Temperature falls back to the global setting, and `getModelInfo` derives
- * reasoning behavior from the wire model id.
+ * Per-model tuning (maxTokens, reasoning effort) is left unset, and
+ * `getModelInfo` derives reasoning behavior from the wire model id.
  *
  * `maxTokens` is set only for Anthropic, the one provider that will not accept
  * a request without one. Everywhere else it stays unset, because sending a

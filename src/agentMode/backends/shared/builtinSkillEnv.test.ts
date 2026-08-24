@@ -254,8 +254,8 @@ describe("builtinSkillEnv", () => {
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/121 keeps spawn-time state for unrelated settings changes", () => {
-      const prev = { miyoSearchAll: false, temperature: 0 } as ReturnType<typeof getSettings>;
-      const next = { miyoSearchAll: false, temperature: 1 } as ReturnType<typeof getSettings>;
+      const prev = { miyoSearchAll: false, contextTurns: 5 } as ReturnType<typeof getSettings>;
+      const next = { miyoSearchAll: false, contextTurns: 9 } as ReturnType<typeof getSettings>;
 
       expect(getBuiltinSkillEnvRestartPolicy(prev, next)).toBe("none");
     });

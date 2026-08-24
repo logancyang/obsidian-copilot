@@ -967,7 +967,6 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   defaultModelKey: ChatModels.OPENROUTER_GEMINI_2_5_FLASH + "|" + ChatModelProviders.OPENROUTERAI,
   embeddingModelKey:
     EmbeddingModels.OPENROUTER_OPENAI_EMBEDDING_SMALL + "|" + EmbeddingModelProviders.OPENROUTERAI,
-  temperature: DEFAULT_MODEL_SETTING.TEMPERATURE,
   contextTurns: 15,
   userSystemPrompt: "",
   openAIProxyBaseUrl: "",

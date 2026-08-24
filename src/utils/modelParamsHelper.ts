@@ -1,18 +1,6 @@
 import { DEFAULT_MODEL_SETTING, ReasoningEffort, Verbosity } from "@/constants";
 
 /**
- * Model parameters configuration interface
- */
-export interface ModelParams {
-  temperature?: number;
-  topP?: number;
-  frequencyPenalty?: number;
-  maxTokens?: number;
-  reasoningEffort?: ReasoningEffort;
-  verbosity?: Verbosity;
-}
-
-/**
  * Reasoning effort options configuration
  */
 export const REASONING_EFFORT_OPTIONS = [
