@@ -25,7 +25,11 @@ function isAnswered(
   customText: string
 ): boolean {
   if (otherActive) return customText.trim().length > 0;
-  if (question.multiSelect) return true;
+  if (question.multiSelect) {
+    // An untouched or fully cleared multi-select must not become an empty-string answer.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/182
+    return selection instanceof Set && selection.size > 0;
+  }
   return typeof selection === "string" && selection !== "";
 }
 
@@ -57,9 +61,8 @@ export const AskUserQuestionCard: React.FC<AskUserQuestionCardProps> = ({ reques
   const [otherActive, setOtherActive] = useState<Record<number, boolean>>({});
   const [customTexts, setCustomTexts] = useState<Record<number, string>>({});
 
-  // Gate Submit until every single-select question has a pick (or a non-empty
-  // "Other"). Multi-select questions may be left empty unless "Other" is armed,
-  // in which case its text must be filled.
+  // Gate Submit until every question has a preset selection or a non-empty
+  // "Other" response. An armed "Other" must be filled even when presets remain.
   const canSubmit = questions.every((q, idx) =>
     isAnswered(q, selections[idx], otherActive[idx] ?? false, customTexts[idx] ?? "")
   );
