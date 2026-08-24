@@ -204,6 +204,102 @@ describe("translateBackendState — model catalog from config option (opencode �
   });
 });
 
+describe("translateBackendState — effort option ordering", () => {
+  it("reorders a config-option menu the agent reported high-before-none into ascending order (https://github.com/logancyang/obsidian-copilot/issues/2917)", () => {
+    const modelOpt = selectOption(
+      "model",
+      [{ value: "copilot-plus/deepseek-v4-pro" }],
+      undefined,
+      "model"
+    );
+    const effortOpt = selectOption(
+      "effort",
+      [{ value: "high" }, { value: "none" }],
+      "high",
+      "thought_level"
+    );
+    const state = translateBackendState(
+      { models: null, modes: null, configOptions: [modelOpt, effortOpt] },
+      suffixDescriptor()
+    );
+    expect(state.model?.availableModels[0]?.effortOptions).toEqual([
+      { value: "none", label: "none" },
+      { value: "high", label: "high" },
+    ]);
+  });
+
+  it("orders a full menu by thinking level rather than by the agent's reported order", () => {
+    const modelOpt = selectOption("model", [{ value: "p/m" }], undefined, "model");
+    const effortOpt = selectOption(
+      "effort",
+      [
+        { value: "max" },
+        { value: "low" },
+        { value: "xhigh" },
+        { value: "none" },
+        { value: "high" },
+        { value: "minimal" },
+        { value: "medium" },
+      ],
+      "low",
+      "thought_level"
+    );
+    const state = translateBackendState(
+      { models: null, modes: null, configOptions: [modelOpt, effortOpt] },
+      suffixDescriptor()
+    );
+    expect(state.model?.availableModels[0]?.effortOptions.map((o) => o.value)).toEqual([
+      "none",
+      "minimal",
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max",
+    ]);
+  });
+
+  it("orders suffix-style variants ascending and keeps the bare default first", () => {
+    const models: RawModelState = {
+      currentModelId: "p/m",
+      availableModels: [
+        { modelId: "p/m/high", name: "p/m/high" },
+        { modelId: "p/m", name: "p/m" },
+        { modelId: "p/m/none", name: "p/m/none" },
+      ],
+    };
+    const state = translateBackendState(
+      { models, modes: null, configOptions: null },
+      suffixDescriptor()
+    );
+    expect(findModelEntry(state.model, "p/m")?.effortOptions).toEqual([
+      { value: null, label: "default" },
+      { value: "none", label: "none" },
+      { value: "high", label: "high" },
+    ]);
+  });
+
+  it("keeps levels outside the canonical vocabulary in the agent's order, after the ranked ones", () => {
+    const modelOpt = selectOption("model", [{ value: "p/m" }], undefined, "model");
+    const effortOpt = selectOption(
+      "effort",
+      [{ value: "turbo" }, { value: "high" }, { value: "ludicrous" }, { value: "none" }],
+      "high",
+      "thought_level"
+    );
+    const state = translateBackendState(
+      { models: null, modes: null, configOptions: [modelOpt, effortOpt] },
+      suffixDescriptor()
+    );
+    expect(state.model?.availableModels[0]?.effortOptions.map((o) => o.value)).toEqual([
+      "none",
+      "high",
+      "turbo",
+      "ludicrous",
+    ]);
+  });
+});
+
 describe("translateBackendState — name normalization + description", () => {
   it("passes the backend-reported description through when the backend opts in", () => {
     const models: RawModelState = {

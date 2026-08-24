@@ -35,6 +35,7 @@ import type {
   SessionId,
 } from "@/agentMode/session/types";
 import type { BackendDescriptor, BackendProcess, InstallState } from "@/agentMode/session/types";
+import { EFFORT_LEVELS_ASCENDING } from "@/agentMode/session/types";
 
 /** Config option id OpenCode uses to switch the active agent at runtime. */
 const OPENCODE_MODE_CONFIG_OPTION_ID = "mode";
@@ -53,15 +54,7 @@ let managerRef: OpencodeBinaryManager | null = null;
  * the model name (e.g. `openrouter/anthropic/claude-3.5-haiku` — the
  * last segment `claude-3.5-haiku` is the model, not an effort).
  */
-const KNOWN_OPENCODE_EFFORTS = new Set([
-  "none",
-  "minimal",
-  "low",
-  "medium",
-  "high",
-  "xhigh",
-  "max",
-]);
+const KNOWN_OPENCODE_EFFORTS = new Set(EFFORT_LEVELS_ASCENDING);
 
 /**
  * Wire-format codec for Opencode. Native providers emit

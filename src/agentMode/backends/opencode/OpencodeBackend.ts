@@ -6,6 +6,7 @@ import { providerNeedsResolvedApiKey } from "@/modelManagement";
 import { isCatalogProviderDefaultEndpoint } from "@/utils/providerBaseUrl";
 import type { BackendConfigRegistry, ProviderRegistry } from "@/modelManagement";
 import { AcpBackend, AcpSpawnDescriptor } from "@/agentMode/acp/types";
+import { EFFORT_LEVELS_ASCENDING } from "@/agentMode/session/types";
 import type { CopilotMode } from "@/agentMode/session/types";
 import { composeDenyList, getManagedSkills, SkillManager } from "@/agentMode/skills";
 import { buildAgentSystemPrompt } from "@/agentMode/backends/shared/agentSystemPrompt";
@@ -263,16 +264,6 @@ function denyNativeWebTools(permission: unknown): Record<string, unknown> {
 }
 
 /**
- * Every effort level an agent might put in a menu for one of our models. Used only to
- * name the ones the service did not publish, so each can be switched off explicitly.
- *
- * `none` is in the list precisely because the service never publishes it and rejects it
- * outright: left in an inferred menu it would be a level the user is invited to pick
- * that fails the whole turn. https://github.com/logancyang/obsidian-copilot/issues/2915
- */
-const ALL_EFFORT_LEVELS = ["none", "minimal", "low", "medium", "high", "xhigh", "max"];
-
-/**
  * opencode `variants` declaring exactly the effort levels a model really has.
  *
  * opencode builds an effort menu for any model it is told reasons, and with no catalog
@@ -290,7 +281,12 @@ export function effortVariantsFor(
 ): Record<string, Record<string, unknown>> {
   const variants: Record<string, Record<string, unknown>> = {};
   for (const level of levels) variants[level] = { reasoningEffort: level };
-  for (const level of ALL_EFFORT_LEVELS) {
+  // Completeness is the whole contract here: a level missing from the canonical
+  // vocabulary cannot be disabled, so it survives into opencode's menu for a model the
+  // service never advertised it for, and picking a level the service rejects fails the
+  // turn with a raw error payload instead of answering.
+  // https://github.com/logancyang/obsidian-copilot/issues/2915
+  for (const level of EFFORT_LEVELS_ASCENDING) {
     if (!variants[level]) variants[level] = { disabled: true };
   }
   return variants;
