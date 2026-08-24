@@ -94,7 +94,7 @@ describe("model", () => {
         apiKey: "sk-builtin-override",
         baseUrl: "https://proxy.example.test/v1",
         enabled: false,
-        temperature: 0.9,
+        displayName: "My renamed model",
       };
       const customRow: CustomModel = {
         name: "custom-gpt",
@@ -179,7 +179,7 @@ describe("model", () => {
       expect(reloadedBuiltin?.apiKey).toBe("sk-builtin-override");
       expect(reloadedBuiltin?.baseUrl).toBe("https://proxy.example.test/v1");
       expect(reloadedBuiltin?.enabled).toBe(true);
-      expect(reloadedBuiltin?.temperature).toBeUndefined();
+      expect(reloadedBuiltin?.displayName).toBeUndefined();
 
       // Custom row survives whole.
       const reloadedCustom = reloaded.activeModels.find((m) => m.name === "custom-gpt");

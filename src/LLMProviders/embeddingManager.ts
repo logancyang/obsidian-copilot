@@ -3,7 +3,7 @@ import { BREVILABS_MODELS_BASE_URL, EmbeddingModelProviders, ProviderInfo } from
 import { CustomError } from "@/error";
 import { logInfo, logWarn } from "@/logger";
 import { getModelKeyFromModel, getSettings, subscribeToSettingsChange } from "@/settings/model";
-import { err2String, safeFetch } from "@/utils";
+import { err2String, safeFetchNoThrow } from "@/utils";
 import { Embeddings } from "@langchain/core/embeddings";
 import { GoogleGenerativeAIEmbeddings } from "@langchain/google-genai";
 import { OllamaEmbeddings } from "@langchain/ollama";
@@ -216,7 +216,7 @@ export default class EmbeddingManager {
         batchSize: getSettings().embeddingBatchSize,
         configuration: {
           baseURL: BREVILABS_MODELS_BASE_URL,
-          fetch: customModel.enableCors ? safeFetch : undefined,
+          fetch: customModel.enableCors ? safeFetchNoThrow : undefined,
         },
       },
       [EmbeddingModelProviders.COPILOT_PLUS_JINA]: {
@@ -228,7 +228,7 @@ export default class EmbeddingManager {
         dimensions: customModel.dimensions,
         baseUrl: BREVILABS_MODELS_BASE_URL + "/embeddings",
         configuration: {
-          fetch: customModel.enableCors ? safeFetch : undefined,
+          fetch: customModel.enableCors ? safeFetchNoThrow : undefined,
         },
       },
       [EmbeddingModelProviders.OPENAI]: {
@@ -238,7 +238,7 @@ export default class EmbeddingManager {
         batchSize: getSettings().embeddingBatchSize,
         configuration: {
           baseURL: customModel.baseUrl,
-          fetch: customModel.enableCors ? safeFetch : undefined,
+          fetch: customModel.enableCors ? safeFetchNoThrow : undefined,
         },
       },
       [EmbeddingModelProviders.COHEREAI]: {
@@ -248,7 +248,7 @@ export default class EmbeddingManager {
         batchSize: getSettings().embeddingBatchSize,
         configuration: {
           baseURL: customModel.baseUrl || ProviderInfo[EmbeddingModelProviders.COHEREAI].host,
-          fetch: customModel.enableCors ? safeFetch : undefined,
+          fetch: customModel.enableCors ? safeFetchNoThrow : undefined,
         },
       },
       [EmbeddingModelProviders.GOOGLE]: {
@@ -278,7 +278,7 @@ export default class EmbeddingManager {
         openAIApiKey: customModel.apiKey || "default-key",
         configuration: {
           baseURL: customModel.baseUrl || "http://localhost:1234/v1",
-          fetch: customModel.enableCors ? safeFetch : undefined,
+          fetch: customModel.enableCors ? safeFetchNoThrow : undefined,
         },
       },
       [EmbeddingModelProviders.OPENAI_FORMAT]: {
@@ -287,7 +287,7 @@ export default class EmbeddingManager {
         batchSize: getSettings().embeddingBatchSize,
         configuration: {
           baseURL: customModel.baseUrl,
-          fetch: customModel.enableCors ? safeFetch : undefined,
+          fetch: customModel.enableCors ? safeFetchNoThrow : undefined,
           dangerouslyAllowBrowser: true,
         },
       },
@@ -297,7 +297,7 @@ export default class EmbeddingManager {
         batchSize: getSettings().embeddingBatchSize,
         configuration: {
           baseURL: customModel.baseUrl || ProviderInfo[EmbeddingModelProviders.SILICONFLOW].host,
-          fetch: customModel.enableCors ? safeFetch : undefined,
+          fetch: customModel.enableCors ? safeFetchNoThrow : undefined,
         },
       },
       [EmbeddingModelProviders.OPENROUTERAI]: {
@@ -306,7 +306,7 @@ export default class EmbeddingManager {
         batchSize: getSettings().embeddingBatchSize,
         configuration: {
           baseURL: customModel.baseUrl || "https://openrouter.ai/api/v1",
-          fetch: customModel.enableCors ? safeFetch : undefined,
+          fetch: customModel.enableCors ? safeFetchNoThrow : undefined,
         },
       },
     };

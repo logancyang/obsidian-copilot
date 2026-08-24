@@ -274,15 +274,14 @@ describe("chatModelManager", () => {
       });
     });
 
-    describe("getChatModelWithTemperature()", () => {
-      it("retains the active bridged model for temperature overrides", async () => {
+    describe("setChatModelFromBridged()", () => {
+      it("retains the bridged model as the active one", async () => {
         const manager = ChatModelManager.getInstance();
         const model = bridgedModel({ apiKey: "bridge-key" });
 
         await manager.setChatModelFromBridged(model);
 
         expect(manager.getActiveModel()).toBe(model);
-        await expect(manager.getChatModelWithTemperature(0)).resolves.toBeDefined();
       });
     });
   });
