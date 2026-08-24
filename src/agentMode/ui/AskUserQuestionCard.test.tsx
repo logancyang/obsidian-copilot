@@ -107,6 +107,13 @@ describe("AskUserQuestionCard", () => {
       fireEvent.click(screen.getByRole("checkbox", { name: "End-to-end test" }));
 
       expect((submitButton() as HTMLButtonElement).disabled).toBe(false);
+      fireEvent.click(screen.getByRole("checkbox", { name: "End-to-end test" }));
+      expect((submitButton() as HTMLButtonElement).disabled).toBe(true);
+      fireEvent.click(submitButton());
+      expect(onResolve).not.toHaveBeenCalled();
+
+      fireEvent.click(screen.getByRole("checkbox", { name: "End-to-end test" }));
+      expect((submitButton() as HTMLButtonElement).disabled).toBe(false);
       fireEvent.click(submitButton());
       expect(onResolve).toHaveBeenCalledTimes(1);
       expect(onResolve).toHaveBeenCalledWith(REQUEST_ID, {
