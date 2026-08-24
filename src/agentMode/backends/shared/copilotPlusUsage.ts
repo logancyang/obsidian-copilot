@@ -125,9 +125,10 @@ function withDeadline<T>(promise: Promise<T | null>, ms: number): Promise<T | nu
 function parseReasoningEfforts(raw: unknown): readonly string[] | null {
   if (!Array.isArray(raw)) return null;
   if (raw.length === 0) return NO_REASONING_EFFORTS;
-  const levels = raw.filter(
-    (level): level is string => typeof level === "string" && level.length > 0
-  );
+  const levels = raw
+    .filter((level): level is string => typeof level === "string")
+    .map((level) => level.trim())
+    .filter((level) => level.length > 0);
   // A list that arrived with entries but none usable is a malformed answer, not a model
   // that honors no level. Reading it as the latter would delete a working effort menu on
   // the strength of garbage.
@@ -185,10 +186,17 @@ export class CopilotPlusUsageReader {
   private async loadCatalog(): Promise<Map<string, CatalogEntry> | null> {
     if (this.catalog) return this.catalog;
     // Share one request between concurrent callers, but do not remember a failed one.
-    this.inFlight ??= this.fetchCatalog().finally(() => {
-      this.inFlight = null;
-    });
-    const catalog = await withDeadline(this.inFlight, CATALOG_TIMEOUT_MS);
+    // The deadline belongs to the shared promise rather than to each await: a request
+    // that never settles would otherwise stay the shared one forever, so every later
+    // read would wait out the same dead connection and never retry once the host came
+    // back. The identity check keeps a timed-out request from clearing its successor.
+    const pending: Promise<Map<string, CatalogEntry> | null> = (this.inFlight ??= withDeadline(
+      this.fetchCatalog(),
+      CATALOG_TIMEOUT_MS
+    ).finally(() => {
+      if (this.inFlight === pending) this.inFlight = null;
+    }));
+    const catalog = await pending;
     if (catalog) this.catalog = catalog;
     return catalog;
   }

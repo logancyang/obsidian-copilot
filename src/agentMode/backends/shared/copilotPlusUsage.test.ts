@@ -212,9 +212,9 @@ describe("copilotPlusUsage", () => {
       // the caller cannot act on has to read the same as the field being absent.
       mockGetModels.mockResolvedValue({
         data: [
-          { id: "garbage-levels", reasoning_efforts: [7, "", null] },
+          { id: "garbage-levels", reasoning_efforts: [7, "", null, "  "] },
           { id: "wrong-type", reasoning_efforts: "high" },
-          { id: "partly-usable", reasoning_efforts: ["high", 7] },
+          { id: "partly-usable", reasoning_efforts: [" high ", 7] },
         ],
       });
       const reader = new CopilotPlusUsageReader();
@@ -247,6 +247,28 @@ describe("copilotPlusUsage", () => {
         jest.advanceTimersByTime(3_000);
 
         await expect(pending).resolves.toBeNull();
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it("retries the catalog after a read times out instead of reusing the dead request (https://github.com/logancyang/obsidian-copilot/issues/2917)", async () => {
+      // Keeping the timed-out request as the shared one would make every later read wait
+      // out the same dead connection, so the menu would stay guessed even once the host
+      // came back.
+      jest.useFakeTimers();
+      try {
+        mockGetModels
+          .mockReturnValueOnce(new Promise(() => {}))
+          .mockResolvedValue({ data: [{ id: "gpt-5", reasoning_efforts: ["low", "high"] }] });
+        const reader = new CopilotPlusUsageReader();
+
+        const timedOut = reader.readReasoningEfforts("gpt-5");
+        jest.advanceTimersByTime(3_000);
+        await expect(timedOut).resolves.toBeNull();
+
+        await expect(reader.readReasoningEfforts("gpt-5")).resolves.toEqual(["low", "high"]);
+        expect(mockGetModels).toHaveBeenCalledTimes(2);
       } finally {
         jest.useRealTimers();
       }

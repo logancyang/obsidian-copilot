@@ -10,6 +10,7 @@ import type {
   BackendState,
   EffortOption,
   EnabledModelEntry,
+  ModelEntry,
   ModelState,
 } from "@/agentMode/session/types";
 import type { CopilotSettings } from "@/settings/model";
@@ -175,6 +176,16 @@ describe("descriptor", () => {
     });
 
     describe("applySelection()", () => {
+      /** Catalog entry for the model a test activates, carrying the levels it offers. */
+      function entryOffering(baseModelId: string, efforts: string[]): ModelEntry {
+        return {
+          baseModelId,
+          name: baseModelId,
+          provider: null,
+          effortOptions: efforts.map((effort) => ({ value: effort, label: effort })),
+        };
+      }
+
       function makeSession(state: BackendState): {
         session: AgentSession;
         applyModelWireId: jest.Mock;
@@ -213,7 +224,7 @@ describe("descriptor", () => {
         const { session, applyModelWireId, setConfigOption } = makeSession({
           model: {
             current: { baseModelId: "openai/gpt-5", effort: "low" },
-            availableModels: [],
+            availableModels: [entryOffering("openai/gpt-5", ["low", "high"])],
             apply: { kind: "setConfigOption", configId: "model", effortConfigId: "effort" },
           },
           mode: null,
@@ -230,7 +241,7 @@ describe("descriptor", () => {
         const { session, applyModelWireId, setConfigOption } = makeSession({
           model: {
             current: { baseModelId: "anthropic/claude-sonnet", effort: "low" },
-            availableModels: [],
+            availableModels: [entryOffering("openai/gpt-5", ["low", "high"])],
             apply: { kind: "setConfigOption", configId: "model", effortConfigId: "effort" },
           },
           mode: null,
@@ -250,7 +261,7 @@ describe("descriptor", () => {
         const { session, applyModelWireId, setConfigOption } = makeSession({
           model: {
             current: { baseModelId: "openai/gpt-5", effort: "high" },
-            availableModels: [],
+            availableModels: [entryOffering("openai/gpt-5", ["low", "high"])],
             apply: { kind: "setConfigOption", configId: "model", effortConfigId: "effort" },
           },
           mode: null,
@@ -264,6 +275,25 @@ describe("descriptor", () => {
 
         expect(applyModelWireId).toHaveBeenCalledWith("openai/gpt-5");
         expect(setConfigOption).toHaveBeenCalledWith("effort", "high");
+      });
+
+      it("leaves the model on its native effort when the saved level is no longer offered (https://github.com/logancyang/obsidian-copilot/issues/2917)", async () => {
+        const { session, applyModelWireId, setConfigOption } = makeSession({
+          model: {
+            current: { baseModelId: "anthropic/claude-sonnet", effort: null },
+            availableModels: [entryOffering("openai/gpt-5", ["low", "high"])],
+            apply: { kind: "setConfigOption", configId: "model", effortConfigId: "effort" },
+          },
+          mode: null,
+        });
+
+        await OpencodeBackendDescriptor.applySelection(session, {
+          baseModelId: "openai/gpt-5",
+          effort: "medium",
+        });
+
+        expect(applyModelWireId).toHaveBeenCalledWith("openai/gpt-5");
+        expect(setConfigOption).not.toHaveBeenCalled();
       });
     });
 

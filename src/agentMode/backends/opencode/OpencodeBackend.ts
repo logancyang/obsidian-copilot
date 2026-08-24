@@ -149,20 +149,27 @@ export class OpencodeBackend implements AcpBackend {
     // whitespace-only resolver result is treated as "unavailable" explicitly
     // rather than leaning on downstream truthiness.
     const cacheRoot = normalizeCacheRoot(this.#deps.getCacheRoot?.());
-    const config = await buildOpencodeConfig(
-      settings,
-      {
-        ...this.#deps,
-        getReasoningEfforts: (modelId) => this.#copilotPlus.readReasoningEfforts(modelId),
-      },
-      cacheRoot
-    );
     const envOverrides = sanitizeBuiltinSkillEnvOverrides(
       settings.agentMode?.backends?.opencode?.envOverrides
     );
     const configOverride = envOverrides.OPENCODE_CONFIG_CONTENT;
     delete envOverrides.OPENCODE_CONFIG_CONTENT;
-    let configContent = configOverride ?? JSON.stringify(config);
+    // Resolve the override before building anything: it replaces the generated config
+    // wholesale, so building one spends a Copilot Plus catalog read on JSON that is then
+    // thrown away — and an unreachable models host makes that read wait out its deadline
+    // before every spawn. https://github.com/logancyang/obsidian-copilot/issues/2917
+    let configContent =
+      configOverride ??
+      JSON.stringify(
+        await buildOpencodeConfig(
+          settings,
+          {
+            ...this.#deps,
+            getReasoningEfforts: (modelId) => this.#copilotPlus.readReasoningEfforts(modelId),
+          },
+          cacheRoot
+        )
+      );
     if (settings.enableSelfHostMode === true && configOverride !== undefined) {
       // An explicit config override must not reopen agent-native web tools while
       // Self-Host mode promises that queries stay on the configured route.
@@ -414,6 +421,7 @@ export async function buildOpencodeConfig(
       // has no such list and keeps opencode's own inference. Null means the catalog
       // could not be read, which must not be mistaken for "no levels" — dropping a
       // working control over a transient outage is worse than an imperfect menu.
+      // https://github.com/logancyang/obsidian-copilot/issues/2917
       const published =
         origin.kind === "copilot-plus"
           ? ((await deps.getReasoningEfforts?.(info.id)) ?? null)

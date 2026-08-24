@@ -29,6 +29,7 @@ import {
   buildAgentSystemPrompt,
   COPILOT_PROMPT_BASE,
 } from "@/agentMode/backends/shared/agentSystemPrompt";
+import { CopilotPlusUsageReader } from "@/agentMode/backends/shared/copilotPlusUsage";
 import {
   MIYO_SEARCH_FOLDER_ENV,
   MIYO_SEARCH_SCOPE_ENV,
@@ -730,7 +731,7 @@ describe("buildOpencodeConfig — provider/model injection", () => {
     expect(cfg.provider["copilot-plus"].models?.["honors-no-level"]).toEqual({});
   });
 
-  it("keeps the inferred menu when the published levels cannot be read", async () => {
+  it("keeps the inferred menu when the published levels cannot be read (https://github.com/logancyang/obsidian-copilot/issues/2917)", async () => {
     // A service too old to publish them, or one transient outage. Either way an
     // imperfect menu beats dropping a control that works.
     const deps = makeDeps({
@@ -1309,6 +1310,43 @@ describe("OpencodeBackend.buildSpawnDescriptor", () => {
     expect(cfg.agent.build.permission).toBeUndefined();
     expect(cfg.agent["copilot-build"].permission).toEqual({ bash: "ask", edit: "ask" });
     expect(logWarn).not.toHaveBeenCalled();
+  });
+
+  it("skips building the generated config when an override replaces it (https://github.com/logancyang/obsidian-copilot/issues/2917)", async () => {
+    // The override wins wholesale, so building a config would only spend a Copilot Plus
+    // catalog read on JSON that is thrown away — and an unreachable models host makes
+    // that read wait out its deadline before every spawn.
+    updateSetting("agentMode", {
+      byok: {},
+      activeBackend: "opencode",
+      debugFullFrames: false,
+      welcomeDismissed: false,
+      skills: { folder: "copilot/skills" },
+      backends: {
+        opencode: {
+          binaryPath: "/path/to/opencode",
+          envOverrides: { OPENCODE_CONFIG_CONTENT: '{"model":"custom"}' },
+        },
+      },
+    });
+    const readReasoningEfforts = jest.spyOn(
+      CopilotPlusUsageReader.prototype,
+      "readReasoningEfforts"
+    );
+    const resolveEnabled = jest.fn(() => [
+      okEntry(makePlusProvider(), makePlusReasoningModel("copilot-plus-flash")),
+    ]);
+    const backend = new OpencodeBackend({
+      ...makeDeps({ resolved: [], keys: { "p-plus": "plus-token-123" } }),
+      backendConfigRegistry: { resolveEnabled } as unknown as BackendConfigRegistry,
+    });
+
+    const desc = await backend.buildSpawnDescriptor({ vaultBasePath: "/vault/abs" });
+
+    expect(desc.env.OPENCODE_CONFIG_CONTENT).toBe('{"model":"custom"}');
+    expect(resolveEnabled).not.toHaveBeenCalled();
+    expect(readReasoningEfforts).not.toHaveBeenCalled();
+    readReasoningEfforts.mockRestore();
   });
 
   it("does not warn about the override when no cacheRoot is resolved", async () => {
