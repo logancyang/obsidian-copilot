@@ -202,7 +202,7 @@ describe("builtinSkillEnv", () => {
         const prev = { [key]: before } as unknown as ReturnType<typeof getSettings>;
         const next = { [key]: after } as unknown as ReturnType<typeof getSettings>;
 
-        expect(getBuiltinSkillEnvRestartPolicy(prev, next)).toBe("deferred");
+        expect(getBuiltinSkillEnvRestartPolicy(prev, next, "opencode")).toBe("deferred");
       }
     );
 
@@ -214,21 +214,40 @@ describe("builtinSkillEnv", () => {
         typeof getSettings
       >;
 
-      expect(getBuiltinSkillEnvRestartPolicy(prev, next)).toBe("immediate");
+      expect(getBuiltinSkillEnvRestartPolicy(prev, next, "opencode")).toBe("immediate");
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/165 immediately blocks native web tools when Self-Host mode is enabled", () => {
       const prev = { enableSelfHostMode: false } as ReturnType<typeof getSettings>;
       const next = { enableSelfHostMode: true } as ReturnType<typeof getSettings>;
 
-      expect(getBuiltinSkillEnvRestartPolicy(prev, next)).toBe("immediate");
+      expect(getBuiltinSkillEnvRestartPolicy(prev, next, "opencode")).toBe("immediate");
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/165 defers the routing refresh when Self-Host mode is disabled", () => {
+    it.each(["claude", "codex"])(
+      "https://github.com/Brevilabs/obsidian-copilot-private/issues/165 does not restart %s when OpenCode-only Self-Host routing is enabled",
+      (backendId) => {
+        const prev = { enableSelfHostMode: false } as ReturnType<typeof getSettings>;
+        const next = { enableSelfHostMode: true } as ReturnType<typeof getSettings>;
+
+        expect(getBuiltinSkillEnvRestartPolicy(prev, next, backendId)).toBe("none");
+      }
+    );
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/165 keeps Claude's shared environment refresh deferred when OpenCode-only routing changes too", () => {
+      const prev = { isPaidUser: false, enableSelfHostMode: false } as ReturnType<
+        typeof getSettings
+      >;
+      const next = { isPaidUser: true, enableSelfHostMode: true } as ReturnType<typeof getSettings>;
+
+      expect(getBuiltinSkillEnvRestartPolicy(prev, next, "claude")).toBe("deferred");
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/165 defers the OpenCode routing refresh when Self-Host mode is disabled", () => {
       const prev = { enableSelfHostMode: true } as ReturnType<typeof getSettings>;
       const next = { enableSelfHostMode: false } as ReturnType<typeof getSettings>;
 
-      expect(getBuiltinSkillEnvRestartPolicy(prev, next)).toBe("deferred");
+      expect(getBuiltinSkillEnvRestartPolicy(prev, next, "opencode")).toBe("deferred");
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/121 defers an enabled skill refresh when scope widens", () => {
@@ -239,7 +258,7 @@ describe("builtinSkillEnv", () => {
         typeof getSettings
       >;
 
-      expect(getBuiltinSkillEnvRestartPolicy(prev, next)).toBe("deferred");
+      expect(getBuiltinSkillEnvRestartPolicy(prev, next, "opencode")).toBe("deferred");
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/121 skips scope refreshes while the skill is disabled", () => {
@@ -250,14 +269,14 @@ describe("builtinSkillEnv", () => {
         typeof getSettings
       >;
 
-      expect(getBuiltinSkillEnvRestartPolicy(prev, next)).toBe("none");
+      expect(getBuiltinSkillEnvRestartPolicy(prev, next, "opencode")).toBe("none");
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/121 keeps spawn-time state for unrelated settings changes", () => {
       const prev = { miyoSearchAll: false, contextTurns: 5 } as ReturnType<typeof getSettings>;
       const next = { miyoSearchAll: false, contextTurns: 9 } as ReturnType<typeof getSettings>;
 
-      expect(getBuiltinSkillEnvRestartPolicy(prev, next)).toBe("none");
+      expect(getBuiltinSkillEnvRestartPolicy(prev, next, "opencode")).toBe("none");
     });
   });
 });

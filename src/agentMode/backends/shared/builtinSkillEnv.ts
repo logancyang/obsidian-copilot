@@ -15,6 +15,7 @@ import {
   resolveObsidianCliPath,
 } from "@/agentMode/backends/shared/obsidianCliPath";
 import { requireNodeModule } from "@/utils/desktopRuntime";
+import type { BackendId } from "@/agentMode/session/types";
 
 /** Env var the bundled `miyo` CLI reads to target a non-default Miyo service. */
 const MIYO_URL_ENV = "MIYO_URL";
@@ -135,16 +136,24 @@ export function sanitizeBuiltinSkillEnvOverrides(
   return sanitized;
 }
 
-/** How a persisted setting change should refresh the environment captured at spawn. */
+/**
+ * Decide how a persisted setting change refreshes one backend's spawn-time environment.
+ *
+ * @param prev Settings before the change.
+ * @param next Settings after the change.
+ * @param backendId Backend whose active process may need replacement.
+ */
 export function getBuiltinSkillEnvRestartPolicy(
   prev: CopilotSettings,
-  next: CopilotSettings
+  next: CopilotSettings,
+  backendId: BackendId
 ): "none" | "deferred" | "immediate" {
   const ordinaryEnvChanged =
     prev.isPaidUser !== next.isPaidUser ||
     prev.plusLicenseKey !== next.plusLicenseKey ||
-    prev.miyoServerUrl !== next.miyoServerUrl ||
-    prev.enableSelfHostMode !== next.enableSelfHostMode;
+    prev.miyoServerUrl !== next.miyoServerUrl;
+  const selfHostRoutingChanged =
+    backendId === "opencode" && prev.enableSelfHostMode !== next.enableSelfHostMode;
   // Scope changes only affect a currently enabled skill. Tightening an active
   // boundary must cancel the current turn; widening can wait until it is idle.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/121
@@ -153,11 +162,15 @@ export function getBuiltinSkillEnvRestartPolicy(
     next.enableMiyoSearchSkill === true &&
     prev.miyoSearchAll !== next.miyoSearchAll;
 
-  if (!ordinaryEnvChanged && !activeMiyoScopeChanged) return "none";
+  if (!ordinaryEnvChanged && !selfHostRoutingChanged && !activeMiyoScopeChanged) return "none";
   // Enabling Self-Host mode must stop a live native web tool before another
   // query can leave through the agent's provider.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/165
-  if (prev.enableSelfHostMode !== true && next.enableSelfHostMode === true) {
+  if (
+    selfHostRoutingChanged &&
+    prev.enableSelfHostMode !== true &&
+    next.enableSelfHostMode === true
+  ) {
     return "immediate";
   }
   if (activeMiyoScopeChanged && prev.miyoSearchAll === true && next.miyoSearchAll !== true) {
