@@ -840,6 +840,50 @@ describe("issueReport", () => {
       );
     });
 
+    it("stops calling a log truncated once the user replaces it with a complete one (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", async () => {
+      // The assembler writes its own banner into a tail it shortened, so the
+      // staged file says what it is. Carrying the flag across a rebuild instead
+      // would keep the review page claiming "truncated to newest" about bytes
+      // the user has since replaced with the whole log.
+      const tailBudget = 100 * 1024 + 1;
+      const { runtime, files } = makeRuntime();
+      const report = await assembleReportBundle(
+        {
+          ...baseInput,
+          screenshotPng: new Uint8Array(LOG_BUDGET_BYTES - tailBudget),
+          logs: [{ id: "chatLog", name: "copilot-chat-log.md", text: "line\n".repeat(60_000) }],
+        },
+        runtime
+      );
+      // Only tests anything if the assembler did shorten it.
+      expect(outcome(report, "chatLog").truncated).toBe(true);
+      files.set(`${BUNDLE_DIR}/copilot-chat-log.md`, "the complete log, pasted in\n");
+
+      const { attachments } = await zipReportBundle(report, runtime);
+
+      expect(attachments.find((a) => a.id === "chatLog")?.truncated).toBeUndefined();
+    });
+
+    it("keeps the truncated marking when the staged tail is still the one the assembler wrote (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", async () => {
+      // The counterpart: an untouched tail is still a tail, and dropping the
+      // marking there would tell the user the log is whole when it is not.
+      const tailBudget = 100 * 1024 + 1;
+      const { runtime } = makeRuntime();
+      const report = await assembleReportBundle(
+        {
+          ...baseInput,
+          screenshotPng: new Uint8Array(LOG_BUDGET_BYTES - tailBudget),
+          logs: [{ id: "chatLog", name: "copilot-chat-log.md", text: "line\n".repeat(60_000) }],
+        },
+        runtime
+      );
+      expect(outcome(report, "chatLog").truncated).toBe(true);
+
+      const { attachments } = await zipReportBundle(report, runtime);
+
+      expect(attachments.find((a) => a.id === "chatLog")?.truncated).toBe(true);
+    });
+
     it("packs an attachment again once the user restores it after a rebuild dropped it (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", async () => {
       const { runtime, writes, files } = makeRuntime();
       const assembled = await assembleReportBundle(baseInput, runtime);

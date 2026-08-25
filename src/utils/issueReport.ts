@@ -437,12 +437,17 @@ export async function zipReportBundle(
     // A successful read restates the whole outcome rather than patching `bytes`
     // onto it: this attachment may be arriving from a previous rebuild's
     // demotion, and leaving that `status`/`reason` in place would pack the file
-    // while still telling the user it was removed.
+    // while still telling the user it was removed. `truncated` is read back off
+    // the bytes for the same reason — the user is invited to edit this folder,
+    // and a log they replaced with the whole thing must stop being described as
+    // its own newest slice.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/202
     attachments.push({
       ...attachment,
       bytes: data.length,
       status: "included",
       reason: undefined,
+      truncated: startsTruncated(data) || undefined,
     });
   }
 
@@ -931,10 +936,25 @@ function headOfText(text: string, maxBytes: number): { text: string; totalBytes:
  *   caller leaves the source out entirely when it does not, since there would
  *   be no complete entry left once the partial line went.
  */
+/**
+ * Opening of the banner the assembler writes into a shortened log. It is also
+ * how a rebuild tells a tail from a whole file: the banner travels inside the
+ * staged bytes, so it still describes them after the user has edited the folder,
+ * where a flag carried alongside them would not.
+ */
+const TRUNCATION_MARKER = "… earlier entries omitted:";
+const TRUNCATION_MARKER_BYTES = new TextEncoder().encode(TRUNCATION_MARKER);
+
+/** Whether `data` opens with the banner {@link withTruncationNote} writes. */
+function startsTruncated(data: Uint8Array): boolean {
+  if (data.length < TRUNCATION_MARKER_BYTES.length) return false;
+  return TRUNCATION_MARKER_BYTES.every((byte, i) => data[i] === byte);
+}
+
 function withTruncationNote(tail: string, totalBytes: number): string {
   const whole = tail.slice(tail.indexOf("\n") + 1);
   return (
-    `… earlier entries omitted: only the newest ${formatBytes(byteLength(whole))} of ` +
+    `${TRUNCATION_MARKER} only the newest ${formatBytes(byteLength(whole))} of ` +
     `${formatBytes(totalBytes)} is included …\n${whole}`
   );
 }
