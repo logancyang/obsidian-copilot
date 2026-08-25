@@ -72,7 +72,11 @@ import {
   updateSetting,
 } from "@/settings/model";
 import { didMiyoSyncedRootsChange, shouldSurfaceMiyoResync } from "@/miyo/miyoUtils";
-import { type MiyoMutationSession, resetMiyoMutations } from "@/miyo/miyoResync";
+import {
+  type MiyoMutationSession,
+  resetMiyoMutations,
+  syncMiyoIndexScopeChange,
+} from "@/miyo/miyoResync";
 import { ensureCopilotSubfolders, getEffectiveConversationsFolder } from "@/settings/copilotFolder";
 import { buildUpgradeRelocationEntries } from "@/settings/upgradeNotice";
 import { dehydrateDeviceProfile, hydrateDeviceProfile } from "@/settings/deviceProfiles";
@@ -241,6 +245,11 @@ export default class CopilotPlugin extends Plugin {
     // from disk without firing the subscription, so register on load.
     syncPlus(getSettings().isPaidUser, getSettings().plusLicenseKey);
     this.settingsUnsubscriber = subscribeToSettingsChange((prev, next) => {
+      // Keep the registered Miyo folder aligned even when this change came from
+      // Obsidian Sync or another settings surface while the Miyo tab was closed.
+      // The reconciler no-ops for unrelated settings and unconfigured Miyo.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/310
+      void syncMiyoIndexScopeChange(this.app, prev, next, this.miyoMutationSession);
       void (async () => {
         try {
           await persistSettings(next, (data) => this.saveData(data), prev);

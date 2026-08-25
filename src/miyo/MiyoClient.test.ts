@@ -403,6 +403,49 @@ describe("MiyoClient", () => {
     });
   });
 
+  describe("updateFolder()", () => {
+    it("PATCHes the registered folder with only the supplied scope fields (https://github.com/Brevilabs/obsidian-copilot-private/issues/310)", async () => {
+      const folderRecord = { path: "my-vault", exclude_folders: ["copilot", "private"] };
+      mockedRequestUrl.mockResolvedValue({
+        status: 200,
+        json: folderRecord,
+        text: "",
+      } as RequestUrlResponse);
+
+      const client = new MiyoClient();
+      const result = await client.updateFolder({
+        path: "my-vault",
+        exclude_folders: ["copilot", "private"],
+      });
+
+      expect(result).toEqual(folderRecord);
+      expect(mockedRequestUrl).toHaveBeenCalledWith(
+        expect.objectContaining({
+          url: "http://127.0.0.1:8742/v0/folder",
+          method: "PATCH",
+          contentType: "application/json",
+          body: JSON.stringify({
+            path: "my-vault",
+            exclude_folders: ["copilot", "private"],
+          }),
+        })
+      );
+    });
+
+    it("does not PATCH after the caller's lifecycle guard expires (https://github.com/Brevilabs/obsidian-copilot-private/issues/310)", async () => {
+      const client = new MiyoClient();
+
+      await expect(
+        client.updateFolder({ path: "my-vault", exclude_folders: ["Private"] }, undefined, () => {
+          throw new Error("lifecycle expired");
+        })
+      ).rejects.toThrow("lifecycle expired");
+
+      expect(mockResolveBaseUrl).toHaveBeenCalled();
+      expect(mockedRequestUrl).not.toHaveBeenCalled();
+    });
+  });
+
   describe("deleteFolder", () => {
     it("DELETEs /v0/folder with the folder name in the JSON body", async () => {
       mockedRequestUrl.mockResolvedValue({

@@ -14,6 +14,7 @@ import { MiyoClient } from "@/miyo/MiyoClient";
 import { type CapabilityStatus, refreshMiyoStatus } from "@/miyo/miyoStatusStore";
 import {
   assertCurrentLifecycle,
+  buildMiyoIndexScopeReceipt,
   enqueueMiyoFolderMutation,
   resyncMiyoFolder,
   verifyMiyoScope,
@@ -434,13 +435,12 @@ export const MiyoSettings: React.FC = () => {
     const attempt = (connectAttemptRef.current += 1);
     const superseded = () => connectAttemptRef.current !== attempt || !mountedRef.current;
     try {
-      // DESIGN NOTE: the filters below are a REGISTRATION-TIME SNAPSHOT of the
-      // current scope, sent only on this first POST; registered folders are never
-      // PATCHed when scope changes later. The two sources drift differently:
-      //   - qaInclusions/qaExclusions: SAFE to snapshot. MiyoSemanticRetriever
-      //     re-applies the LIVE qa* scope at query time (filterByCopilotPatterns),
-      //     so even if Miyo's index drifts after a qa* change, retrieval results
-      //     still honor the current scope.
+      // DESIGN NOTE: the filters below seed the registration's initial scope.
+      // The two sources update differently afterward:
+      //   - Representable qaInclusions/qaExclusions changes are PATCHed through
+      //     the settings-store subscriber. Tags and individual notes have no
+      //     Miyo folder-API equivalent, so MiyoSemanticRetriever re-applies the
+      //     live qa* scope at query time for those patterns.
       //   - Obsidian userIgnoreFilters (extractAppIgnoreSettings): NOT re-applied
       //     at query time (shouldIndexFile ignores them), so this snapshot is the
       //     ONLY thing that scopes them. Editing Obsidian's "Excluded files" after
@@ -448,7 +448,7 @@ export const MiyoSettings: React.FC = () => {
       //     content from Miyo until re-registration — a real (if narrow) gap for a
       //     path excluded post-registration while Relay is on. Closing it properly
       //     needs either a query-time userIgnoreFilters filter in the retriever or
-      //     an idempotent folder-filter re-sync; both are out of this PR's scope.
+      //     its own settings-change trigger; both are outside this boundary.
       //     If a review flags this again, point them at this note.
       // Serialized with resync runs: the Resync button's DELETE/POST must never
       // interleave with this registration. The task reads settings when it RUNS,
@@ -510,7 +510,11 @@ export const MiyoSettings: React.FC = () => {
           freshUrl || undefined,
           () => assertCurrentLifecycle(lifecycle)
         );
-        return { created, receipt: buildMiyoSyncReceipt(app, fresh) };
+        return {
+          created,
+          receipt: buildMiyoSyncReceipt(app, fresh),
+          indexScopeReceipt: buildMiyoIndexScopeReceipt(app, fresh),
+        };
       }, miyoMutationSession);
       // Record the sync receipt only for a fresh 201 — a 409 (already
       // registered) means the server holds an EARLIER snapshot whose exclusions
@@ -518,8 +522,10 @@ export const MiyoSettings: React.FC = () => {
       // resync prompt over a stale scope. Written before the enable step and
       // regardless of `superseded()`: the server-side registration DID happen
       // with this exact body, whatever the UI does afterwards.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/310
       if (submission.created !== null) {
         updateSetting("miyoSyncedExclusions", submission.receipt);
+        updateSetting("miyoSyncedIndexScope", submission.indexScopeReceipt);
       }
     } catch (error) {
       logWarn(`Miyo add-folder failed: ${err2String(error)}`);
@@ -1054,7 +1060,7 @@ export const MiyoSettings: React.FC = () => {
           to include it. */}
       <SettingSection
         label="Index scope"
-        description="Which notes Copilot searches and shows in Relevant Notes; your Copilot folder is always excluded. Miyo's own index keeps the scope it was registered with until you re-add this folder in the Miyo app."
+        description="Which notes Copilot searches and shows in Relevant Notes; your Copilot folder is always excluded. Folder and file-extension changes also update this vault's Miyo index without widening stricter filters set in Miyo."
       >
         <SettingItem
           type="custom"

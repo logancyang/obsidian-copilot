@@ -1,5 +1,10 @@
 import { logInfo, logWarn } from "@/logger";
-import { MiyoClient, type MiyoAddFolderRequest, type MiyoFolderEntry } from "@/miyo/MiyoClient";
+import {
+  MiyoClient,
+  type MiyoAddFolderRequest,
+  type MiyoFolderEntry,
+  type MiyoUpdateFolderRequest,
+} from "@/miyo/MiyoClient";
 import {
   buildMiyoSyncReceipt,
   getMiyoCustomUrl,
@@ -15,16 +20,15 @@ import { type CopilotSettings, getSettings, updateSetting } from "@/settings/mod
 import { err2String } from "@/utils";
 import { getDeviceId } from "@/utils/deviceId";
 import { getVaultBase } from "@/utils/vaultPath";
-import type { App } from "obsidian";
+import { Notice, type App } from "obsidian";
 
 /**
  * Resynchronize the vault's Miyo registration with the current Copilot scope.
  *
- * Miyo only receives exclusions as a registration-time snapshot, so a Copilot
- * root change leaves the server indexing content that should be excluded (and
- * readable via Relay). This module owns the reconcile: verify the live record,
- * and only when it genuinely diverges, delete + re-register with the fresh
- * scope (deletion also purges the folder's index, verified empirically).
+ * Copilot patches user-edited inclusion and exclusion patterns in place. A
+ * Copilot root change still needs the stronger reconcile here: verify the live
+ * record, and only when it genuinely diverges, delete + re-register with the
+ * fresh scope (deletion also purges the folder's index, verified empirically).
  *
  * All Miyo folder mutations — resync runs AND the register flow — must pass
  * through {@link enqueueMiyoFolderMutation} so a resync can never interleave
@@ -291,7 +295,7 @@ function withLookupTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
  */
 function receiptMatchesIdentity(
   app: App,
-  receipt: MiyoSyncReceipt,
+  receipt: Pick<MiyoSyncReceipt, "device" | "url" | "folder">,
   settings: { miyoServerUrl?: string },
   folderName: string
 ): boolean {
@@ -306,6 +310,83 @@ function receiptMatchesIdentity(
 function recordArray(record: MiyoFolderEntry, key: string): string[] {
   const value = record[key];
   return Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : [];
+}
+
+interface MiyoIndexScopeReceipt {
+  device: string;
+  url: string;
+  folder: string;
+  include_extensions: string[];
+  include_folders: string[];
+  exclude_folders: string[];
+  include_patterns: string[];
+  exclude_patterns: string[];
+}
+
+type MiyoScopeField = Exclude<keyof MiyoUpdateFolderRequest, "path">;
+
+function parseMiyoIndexScopeReceipt(stored: unknown): MiyoIndexScopeReceipt | null {
+  // Synced or hand-edited data can carry a receipt from another schema version.
+  // Treat anything incomplete as unknown ownership instead of removing filters
+  // from Miyo based on untrusted local metadata.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/310
+  if (typeof stored !== "string" || stored.length === 0) return null;
+  try {
+    const parsed = JSON.parse(stored) as Partial<MiyoIndexScopeReceipt>;
+    const arrayFields: Array<keyof MiyoIndexScopeReceipt> = [
+      "include_extensions",
+      "include_folders",
+      "exclude_folders",
+      "include_patterns",
+      "exclude_patterns",
+    ];
+    if (
+      typeof parsed.device !== "string" ||
+      typeof parsed.url !== "string" ||
+      typeof parsed.folder !== "string" ||
+      !arrayFields.every(
+        (key) =>
+          Array.isArray(parsed[key]) &&
+          (parsed[key] as unknown[]).every((value) => typeof value === "string")
+      )
+    ) {
+      return null;
+    }
+    return parsed as MiyoIndexScopeReceipt;
+  } catch {
+    return null;
+  }
+}
+
+function commitIndexScopeReceipt(lifecycle: number, receipt: string): void {
+  assertCurrentLifecycle(lifecycle);
+  updateSetting("miyoSyncedIndexScope", receipt);
+}
+
+/**
+ * Record the Copilot-owned subset of a Miyo folder's index filters.
+ *
+ * The identity prevents a receipt synced through data.json from claiming scope
+ * on another device, endpoint, or vault registration.
+ *
+ * @param app - Active Obsidian app, used for device and folder identity.
+ * @param settings - Settings snapshot whose representable QA scope was synced.
+ */
+export function buildMiyoIndexScopeReceipt(app: App, settings: CopilotSettings): string {
+  const scope = {
+    ...getMiyoFolderInclusions(settings.qaInclusions),
+    ...getMiyoFolderExclusions(settings.qaExclusions),
+  };
+  return JSON.stringify({
+    device: getDeviceId(app),
+    url: getMiyoCustomUrl(settings),
+    folder: getMiyoFolderName(app),
+    include_extensions: scope.include_extensions ?? [],
+    include_folders: scope.include_folders ?? [],
+    exclude_folders: scope.exclude_folders ?? [],
+    include_patterns: scope.include_patterns ?? [],
+    exclude_patterns: scope.exclude_patterns ?? [],
+  } satisfies MiyoIndexScopeReceipt);
 }
 
 function isSuperset(container: readonly string[], required: readonly string[]): boolean {
@@ -325,10 +406,10 @@ function isSuperset(container: readonly string[], required: readonly string[]): 
  * Exclusions union: excludes always win server-side, so adding is always safe.
  * Include filters do NOT union — they are an OR whitelist (see
  * {@link getMiyoFolderInclusions}), so unioning would WIDEN scope. When the
- * record carries one, it is kept verbatim and ours is dropped; the cost is that
- * a `qaInclusions` edit stops propagating through a rebuild, which changes
- * nothing in practice since staleness detection is roots-only and never fires on
- * qa* drift anyway. When the record carries none, ours applies — a narrowing.
+ * record carries one, it is kept verbatim and ours is dropped. Ordinary
+ * `qaInclusions` edits use the in-place scope PATCH and never reach this
+ * destructive root-rebuild path. When the record carries none, ours applies —
+ * a narrowing.
  *
  * @param desired - Replacement body built from the current Copilot scope; mutated.
  * @param record - Live folder entry the rebuild is replacing.
@@ -399,6 +480,169 @@ function buildDesiredScope(app: App, settings = getSettings()): MiyoAddFolderReq
       ...extractAppIgnoreSettings(app),
     ]),
   };
+}
+
+/** Result of applying one Copilot index-scope settings change to Miyo. */
+export type MiyoIndexScopeSyncOutcome = "synced" | "unchanged" | "not-configured" | "failed";
+
+/**
+ * Apply a Copilot inclusion/exclusion edit to the registered Miyo folder.
+ *
+ * Copilot removes only the filter values derived from its previous settings and
+ * adds the new values. This keeps filters configured directly in Miyo intact,
+ * and PATCH avoids the destructive delete/re-register path used for root moves.
+ * https://github.com/Brevilabs/obsidian-copilot-private/issues/310
+ *
+ * @param app - Active Obsidian app, used to resolve the registered vault folder.
+ * @param previous - Settings snapshot immediately before the scope edit.
+ * @param next - Settings snapshot containing the new scope.
+ * @param session - Current plugin lifecycle's Miyo mutation session.
+ */
+export function syncMiyoIndexScopeChange(
+  app: App,
+  previous: CopilotSettings,
+  next: CopilotSettings,
+  session: MiyoMutationSession
+): Promise<MiyoIndexScopeSyncOutcome> {
+  // The central settings subscription invokes this for every persisted change;
+  // exact scope equality must stay off the mutation queue and network.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/310
+  if (previous.qaInclusions === next.qaInclusions && previous.qaExclusions === next.qaExclusions) {
+    return Promise.resolve("unchanged");
+  }
+  const previousQaScope = {
+    ...getMiyoFolderInclusions(previous.qaInclusions),
+    ...getMiyoFolderExclusions(previous.qaExclusions),
+  };
+  const nextQaScope = {
+    ...getMiyoFolderInclusions(next.qaInclusions),
+    ...getMiyoFolderExclusions(next.qaExclusions),
+  };
+  // Tags and individual-note patterns have no Miyo folder-API representation;
+  // Copilot continues enforcing those changes when it consumes search results.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/310
+  if (JSON.stringify(previousQaScope) === JSON.stringify(nextQaScope)) {
+    return Promise.resolve("unchanged");
+  }
+  const folderName = getMiyoFolderName(app);
+  const previousIndexReceipt = parseMiyoIndexScopeReceipt(previous.miyoSyncedIndexScope);
+  const nextIndexReceipt = parseMiyoIndexScopeReceipt(next.miyoSyncedIndexScope);
+  const previousRootReceipt = parseMiyoSyncReceipt(previous.miyoSyncedExclusions);
+  const nextRootReceipt = parseMiyoSyncReceipt(next.miyoSyncedExclusions);
+  const hasMiyoRegistrationEvidence =
+    previous.enableMiyo ||
+    next.enableMiyo ||
+    (previousIndexReceipt !== null &&
+      receiptMatchesIdentity(app, previousIndexReceipt, previous, folderName)) ||
+    (nextIndexReceipt !== null &&
+      receiptMatchesIdentity(app, nextIndexReceipt, next, folderName)) ||
+    (previousRootReceipt !== null &&
+      receiptMatchesIdentity(app, previousRootReceipt, previous, folderName)) ||
+    (nextRootReceipt !== null && receiptMatchesIdentity(app, nextRootReceipt, next, folderName));
+  // A synced receipt from another device does not prove this device owns a
+  // reachable registration, so local-only setups never gain surprise traffic.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/310
+  if (!hasMiyoRegistrationEvidence) {
+    return Promise.resolve("not-configured");
+  }
+  return enqueueMiyoFolderMutation<MiyoIndexScopeSyncOutcome>(async (lifecycle) => {
+    const ignoreFolders = extractAppIgnoreSettings(app);
+    // A failed PATCH leaves the receipt pointing at the last server state. Use
+    // that state, not merely the immediately previous local setting, or a later
+    // inclusion edit can leave an older OR-whitelist active in Miyo.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/310
+    const previousUserScope =
+      previousIndexReceipt && receiptMatchesIdentity(app, previousIndexReceipt, next, folderName)
+        ? previousIndexReceipt
+        : previousQaScope;
+    const previousSystemExclusions = getMiyoFolderExclusions("", [
+      ...getSystemExcludedFolders(previous),
+      ...ignoreFolders,
+    ]);
+    const previousScope = {
+      ...previousUserScope,
+      exclude_folders: [
+        ...new Set([
+          ...(previousUserScope.exclude_folders ?? []),
+          ...(previousSystemExclusions.exclude_folders ?? []),
+        ]),
+      ],
+      exclude_patterns: [
+        ...new Set([
+          ...(previousUserScope.exclude_patterns ?? []),
+          ...(previousSystemExclusions.exclude_patterns ?? []),
+        ]),
+      ],
+    };
+    const nextScope = {
+      ...nextQaScope,
+      ...getMiyoFolderExclusions(next.qaExclusions, [
+        ...getSystemExcludedFolders(next),
+        ...ignoreFolders,
+      ]),
+    };
+    const customUrl = getMiyoCustomUrl(next) || undefined;
+    const client = new MiyoClient({ plusLicenseKey: next.plusLicenseKey });
+    const baseUrl = await client.resolveBaseUrl(customUrl);
+    const record = await withLookupTimeout(client.getFolder(baseUrl, folderName), "folder lookup");
+    const reconcile = (key: MiyoScopeField): string[] => {
+      const prior = new Set(previousScope[key] ?? []);
+      return [
+        ...new Set([
+          ...recordArray(record, key).filter((value) => !prior.has(value)),
+          ...(nextScope[key] ?? []),
+        ]),
+      ];
+    };
+    const directIncludeScope = {
+      include_folders: reconcile("include_folders").filter(
+        (value) => !(nextScope.include_folders ?? []).includes(value)
+      ),
+      include_patterns: reconcile("include_patterns").filter(
+        (value) => !(nextScope.include_patterns ?? []).includes(value)
+      ),
+      include_extensions: reconcile("include_extensions").filter(
+        (value) => !(nextScope.include_extensions ?? []).includes(value)
+      ),
+    };
+    const hasDirectIncludeScope = Object.values(directIncludeScope).some(
+      (values) => values.length > 0
+    );
+    // Include arrays form one OR-whitelist. Unioning a Miyo-owned whitelist
+    // with Copilot's new whitelist would broaden what Miyo can index, so direct
+    // Miyo scope wins when both exist. Copilot still applies its own scope to
+    // every result it consumes.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/310
+    const includeScope = hasDirectIncludeScope ? directIncludeScope : nextScope;
+    await client.updateFolder(
+      {
+        path: record.path || folderName,
+        exclude_folders: reconcile("exclude_folders"),
+        exclude_patterns: reconcile("exclude_patterns"),
+        include_folders: includeScope.include_folders ?? [],
+        include_patterns: includeScope.include_patterns ?? [],
+        include_extensions: includeScope.include_extensions ?? [],
+      },
+      customUrl,
+      () => assertCurrentLifecycle(lifecycle)
+    );
+    const receiptSettings = hasDirectIncludeScope ? { ...next, qaInclusions: "" } : next;
+    commitIndexScopeReceipt(lifecycle, buildMiyoIndexScopeReceipt(app, receiptSettings));
+    return "synced";
+  }, session).catch((error) => {
+    // The Copilot setting is already committed when this background PATCH runs.
+    // Keep it and make the server-side drift visible instead of rolling local
+    // filtering back after the user saw their edit land.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/310
+    logWarn(`Miyo index-scope sync failed: ${err2String(error)}`);
+    if (session.lifecycle === mutationLifecycle) {
+      new Notice(
+        "Index scope was saved in Copilot, but Miyo couldn't be updated. " +
+          "Make sure Miyo is running, then change the scope again."
+      );
+    }
+    return "failed";
+  });
 }
 
 /**

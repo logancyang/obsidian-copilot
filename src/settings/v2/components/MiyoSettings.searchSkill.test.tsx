@@ -95,6 +95,7 @@ const enqueuedSessions: unknown[] = [];
 const verifyMiyoScope = jest.fn<Promise<string>, unknown[]>(async () => "unknown");
 jest.mock("@/miyo/miyoResync", () => ({
   assertCurrentLifecycle: () => undefined,
+  buildMiyoIndexScopeReceipt: () => "index-scope-receipt",
   enqueueMiyoFolderMutation: (task: (lifecycle: number) => Promise<unknown>, session: unknown) => {
     enqueuedSessions.push(session);
     return task(0);
@@ -186,7 +187,7 @@ beforeEach(() => {
   enqueuedSessions.length = 0;
 });
 
-it("registers through the queue with the plugin's session", async () => {
+it("registers through the queue with the plugin's session and records its initial index scope (https://github.com/Brevilabs/obsidian-copilot-private/issues/310)", async () => {
   // The Connect modal is a standalone Obsidian Modal that outlives onunload, so
   // its Add-this-vault callback is the producer most able to act for a closed
   // lifecycle. It must hand the queue the plugin's session, not a fresh one.
@@ -200,6 +201,7 @@ it("registers through the queue with the plugin's session", async () => {
   await lastModalOptions?.onAddVault?.();
 
   expect(enqueuedSessions).toEqual([mockPluginInstance.miyoMutationSession]);
+  expect(updateSetting).toHaveBeenCalledWith("miyoSyncedIndexScope", "index-scope-receipt");
 });
 
 it("verifies scope with the plugin's session, not one this tab obtained itself", async () => {
