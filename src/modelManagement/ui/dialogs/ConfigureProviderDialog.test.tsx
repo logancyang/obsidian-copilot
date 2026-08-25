@@ -377,16 +377,6 @@ describe("ConfigureProviderForm (new mode)", () => {
     expect(screen.getByTestId("model-row-remove-my-private-model")).toBeTruthy();
   });
 
-  it("ignores adapters that don't support listing (azure)", async () => {
-    mockListProviderModels.mockResolvedValue(null);
-    render(
-      <ConfigureProviderForm state={{ mode: "new", source: ollamaSource }} onClose={jest.fn()} />
-    );
-    await waitFor(() => expect(mockListProviderModels).toHaveBeenCalled());
-    // No error chrome rendered.
-    expect(screen.queryByText(/Listing not supported/i)).toBeNull();
-  });
-
   it("saves a keyless custom endpoint (https://github.com/logancyang/obsidian-copilot/issues/2895)", async () => {
     const onClose = jest.fn();
     render(

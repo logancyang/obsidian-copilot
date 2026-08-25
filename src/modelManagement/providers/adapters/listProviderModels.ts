@@ -4,10 +4,9 @@
  * can auto-populate its model picker without caring about the wire
  * shape differences (`{ data: [{ id }] }` vs `{ models: [{ name }] }`).
  *
- * Returns `null` for provider types we cannot list over plain HTTP
- * (Azure needs the deployment URL and a different endpoint). Callers
- * treat null as "skip auto-fetch"
- * — the picker is still functional via catalog metadata + manual add.
+ * Every provider type this dispatches on can be listed over plain HTTP, so the
+ * dialog always gets a result to work from; a provider that answers badly
+ * surfaces as `ok: false` rather than an absent answer.
  */
 
 import type { ProviderType } from "@/modelManagement/types/catalog";
@@ -15,7 +14,6 @@ import { listAnthropicModels } from "./listAnthropicModels";
 import { listGoogleModels } from "./listGoogleModels";
 import type { ListModelsResult } from "./listOpenAICompatibleModels";
 import { listOpenAICompatibleModels } from "./listOpenAICompatibleModels";
-import { logWarn } from "@/logger";
 
 export interface ListProviderModelsOptions {
   apiKey?: string | null;
@@ -24,15 +22,11 @@ export interface ListProviderModelsOptions {
   timeoutMs?: number;
 }
 
-/**
- * `null` => this provider type doesn't expose a listable endpoint; the
- * dialog should skip auto-fetch and rely on catalog + manual add.
- */
 export async function listProviderModels(
   providerType: ProviderType,
   baseUrl: string,
   opts: ListProviderModelsOptions = {}
-): Promise<ListModelsResult | null> {
+): Promise<ListModelsResult> {
   switch (providerType) {
     case "openai-compatible": {
       const openAIOrgId =
@@ -47,8 +41,5 @@ export async function listProviderModels(
       return listAnthropicModels(baseUrl, { apiKey: opts.apiKey, timeoutMs: opts.timeoutMs });
     case "google":
       return listGoogleModels(baseUrl, { apiKey: opts.apiKey, timeoutMs: opts.timeoutMs });
-    case "azure":
-      logWarn(`Listing provider models for ${providerType} is not yet supported`);
-      return null;
   }
 }

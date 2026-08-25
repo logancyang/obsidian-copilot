@@ -71,8 +71,6 @@ export function mapProviderTypeToChatModelProvider(provider: Provider): ChatMode
       return ChatModelProviders.ANTHROPIC;
     case "google":
       return ChatModelProviders.GOOGLE;
-    case "azure":
-      return ChatModelProviders.AZURE_OPENAI;
     case "openai-compatible": {
       const catalogId =
         provider.origin.kind === "byok" ? provider.origin.catalogProviderId : undefined;
@@ -168,8 +166,5 @@ export function configuredModelToCustomModel(params: {
     capabilities,
     maxTokens,
     openAIOrgId: extraString(extras, "openAIOrgId"),
-    azureOpenAIApiInstanceName: extraString(extras, "azureInstanceName"),
-    azureOpenAIApiDeploymentName: extraString(extras, "azureDeploymentName"),
-    azureOpenAIApiVersion: extraString(extras, "azureApiVersion"),
   };
 }

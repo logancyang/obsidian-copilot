@@ -14,16 +14,15 @@
  * The user never types this — the BYOK / agent / Plus setup wizard
  * assigns it from the catalog (via the `npm` field on `models.dev`
  * entries) or from a built-in template (Ollama, LMStudio, Custom
- * OpenAI-compatible, Azure OpenAI).
+ * OpenAI-compatible).
  *
  *   "anthropic"          → @langchain/anthropic
  *   "openai-compatible"  → @langchain/openai with custom baseUrl
  *                          (OpenAI, Mistral, Groq, OpenRouter, Together,
  *                          DeepSeek, Ollama, LMStudio, custom proxies)
  *   "google"             → @langchain/google-genai
- *   "azure"              → @langchain/openai (Azure path)
  */
-export type ProviderType = "anthropic" | "openai-compatible" | "google" | "azure";
+export type ProviderType = "anthropic" | "openai-compatible" | "google";
 
 /**
  * Description of a single model. Used both as the catalog's per-model
@@ -79,7 +78,6 @@ export interface CatalogProvider {
    * Derived from the catalog's `npm` field by the catalog fetcher.
    *   "@ai-sdk/anthropic"  → "anthropic"
    *   "@ai-sdk/google"     → "google"
-   *   "@ai-sdk/azure"      → "azure"
    *   anything else        → "openai-compatible"
    */
   providerType: ProviderType;
