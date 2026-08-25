@@ -23,6 +23,7 @@ jest.mock("@/logger", () => ({
 jest.mock("@/miyo/miyoResync", () => ({
   resetMiyoMutations: jest.fn(),
   startMiyoMutationSession: jest.fn(),
+  syncMiyoIndexScopeChange: jest.fn().mockResolvedValue("unchanged"),
 }));
 jest.mock("@/services/settingsPersistence", () => ({
   flushPersistence: jest.fn().mockResolvedValue(undefined),

@@ -83,6 +83,16 @@ export interface MiyoAddFolderRequest {
   allow_remote_read?: boolean;
 }
 
+/** Index-scope fields accepted by Miyo's in-place folder update endpoint. */
+export interface MiyoUpdateFolderRequest {
+  path: string;
+  include_extensions?: string[];
+  include_folders?: string[];
+  exclude_folders?: string[];
+  include_patterns?: string[];
+  exclude_patterns?: string[];
+}
+
 /**
  * Whether a vault folder is registered with Miyo, as a discriminated result
  * rather than a thrown error — so the connect flow can branch on it directly:
@@ -367,6 +377,27 @@ export class MiyoClient {
         ? `Miyo add-folder failed with status ${response.status}: ${detail}`
         : `Miyo add-folder failed with status ${response.status}`
     );
+  }
+
+  /**
+   * Update a registered folder's index scope without replacing its registration.
+   *
+   * @param request - Folder identifier and only the scope fields to change.
+   * @param overrideUrl - Explicit base URL or empty for local service discovery.
+   * @param beforeRequest - Final lifecycle guard before the request leaves.
+   * @returns The updated folder record.
+   */
+  public async updateFolder(
+    request: MiyoUpdateFolderRequest,
+    overrideUrl?: string,
+    beforeRequest?: () => void
+  ): Promise<MiyoFolderEntry> {
+    const baseUrl = await this.resolveBaseUrl(overrideUrl);
+    return this.requestJson<MiyoFolderEntry>(baseUrl, "/v0/folder", {
+      method: "PATCH",
+      body: request,
+      beforeRequest,
+    });
   }
 
   /**
@@ -677,9 +708,10 @@ export class MiyoClient {
     baseUrl: string,
     path: string,
     options: {
-      method: "GET" | "POST" | "DELETE";
+      method: "GET" | "POST" | "PATCH" | "DELETE";
       body?: unknown;
       query?: Record<string, string | number | boolean | undefined>;
+      beforeRequest?: () => void;
     }
   ): Promise<T> {
     const url = new URL(path, baseUrl);
@@ -693,6 +725,11 @@ export class MiyoClient {
 
     const body = options.body ? JSON.stringify(options.body) : undefined;
     const headers = await this.buildHeaders();
+    // Folder mutations can outlive their vault while URL and credentials
+    // resolve. Give their lifecycle owner the final refusal point before the
+    // uncancellable request leaves.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/310
+    options.beforeRequest?.();
     logInfo("Miyo request:", {
       method: options.method,
       url: url.toString(),

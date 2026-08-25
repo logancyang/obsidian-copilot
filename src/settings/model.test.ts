@@ -421,7 +421,7 @@ describe("sanitizeSettings - legacy Miyo settings cleanup", () => {
     expect("enableMiyoSearch" in sanitizedRecord).toBe(false);
   });
 
-  it("defaults a missing or malformed miyoSyncedExclusions to an empty receipt", () => {
+  it("defaults missing or malformed Miyo sync receipts while preserving strings (https://github.com/Brevilabs/obsidian-copilot-private/issues/310)", () => {
     const withoutReceipt = {
       ...DEFAULT_SETTINGS,
       miyoSyncedExclusions: undefined,
@@ -439,6 +439,26 @@ describe("sanitizeSettings - legacy Miyo settings cleanup", () => {
       miyoSyncedExclusions: '{"device":"d","roots":[]}',
     };
     expect(sanitizeSettings(preserved).miyoSyncedExclusions).toBe('{"device":"d","roots":[]}');
+
+    const withoutIndexScopeReceipt = {
+      ...DEFAULT_SETTINGS,
+      miyoSyncedIndexScope: undefined,
+    } as unknown as CopilotSettings;
+    expect(sanitizeSettings(withoutIndexScopeReceipt).miyoSyncedIndexScope).toBe("");
+
+    const malformedIndexScopeReceipt = {
+      ...DEFAULT_SETTINGS,
+      miyoSyncedIndexScope: 42,
+    } as unknown as CopilotSettings;
+    expect(sanitizeSettings(malformedIndexScopeReceipt).miyoSyncedIndexScope).toBe("");
+
+    const preservedIndexScopeReceipt = {
+      ...DEFAULT_SETTINGS,
+      miyoSyncedIndexScope: '{"device":"d","exclude_folders":[]}',
+    };
+    expect(sanitizeSettings(preservedIndexScopeReceipt).miyoSyncedIndexScope).toBe(
+      '{"device":"d","exclude_folders":[]}'
+    );
   });
 
   it("assigns a userId while stripping obsolete Miyo keys", () => {

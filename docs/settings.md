@@ -191,6 +191,12 @@ Miyo supplies Copilot's current semantic search and selected chat-history search
 
 If Miyo is reachable but the vault is not registered, the connection dialog offers **Register & connect** for a local Miyo. With a remote server or mobile setup, select **Open Miyo**, add the vault there, then **Retry**. Register only folders you intend Miyo and any enabled Relay clients to access.
 
+### Index scope
+
+Use **Exclusions** to skip folders, tags, individual notes, or file extensions. Use **Inclusions** to search only selected folders, tags, or notes. Exclusions take precedence, and Copilot's own working folder always stays excluded.
+
+Copilot applies every pattern to its own search results and Relevant Notes. Folder and file-extension changes also update the registered Miyo folder automatically, even when this settings tab is closed. Copilot preserves filters configured directly in Miyo and does not widen a stricter Miyo inclusion whitelist. Miyo's folder API cannot represent tags or individual notes, so those patterns remain Copilot-side filters. If Miyo is unavailable when a representable pattern changes, Copilot keeps the setting and shows that Miyo was not updated.
+
 ### Powered by Miyo
 
 | Control                          | Default                                    | Dependency and effect                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |

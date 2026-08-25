@@ -16,7 +16,7 @@ export const TitleAndDescription: StoryObj<SettingSectionProps> = {
   args: {
     label: "Index scope",
     description:
-      "Which notes Copilot searches and shows in Relevant Notes; your Copilot folder is always excluded. Miyo's own index keeps the scope it was registered with until you re-add this folder in the Miyo app.",
+      "Which notes Copilot searches and shows in Relevant Notes; your Copilot folder is always excluded. Folder and file-extension changes also update this vault's Miyo index without widening stricter filters set in Miyo.",
     children: (
       <SettingItem
         type="custom"

@@ -174,6 +174,12 @@ export interface CopilotSettings {
    * Copilot root change; see `getMiyoExclusionsFingerprint` in miyoUtils.
    */
   miyoSyncedExclusions: string;
+  /**
+   * Device-identified receipt of the Copilot-owned Miyo folder filters last
+   * patched successfully. Used to preserve filters configured directly in Miyo
+   * across later Copilot index-scope edits.
+   */
+  miyoSyncedIndexScope: string;
   /** Which provider to use for self-host web search */
   selfHostSearchProvider: SelfHostSearchProvider;
   /** Firecrawl API key for self-host web search */
@@ -1036,6 +1042,13 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   // Ensure miyoSyncedExclusions has a default value
   if (typeof sanitizedSettings.miyoSyncedExclusions !== "string") {
     sanitizedSettings.miyoSyncedExclusions = DEFAULT_SETTINGS.miyoSyncedExclusions;
+  }
+  // Old data.json files predate the device-scoped ownership receipt. An empty
+  // value makes the first PATCH fall back to the immediately previous Copilot
+  // scope without claiming filters configured directly in Miyo.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/310
+  if (typeof sanitizedSettings.miyoSyncedIndexScope !== "string") {
+    sanitizedSettings.miyoSyncedIndexScope = DEFAULT_SETTINGS.miyoSyncedIndexScope;
   }
 
   // Ensure selfHostSearchProvider is a valid value

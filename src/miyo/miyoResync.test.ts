@@ -15,6 +15,7 @@ const getFolder = jest.fn<Promise<unknown>, unknown[]>();
 const checkFolderRegistration = jest.fn<Promise<string>, unknown[]>();
 const deleteFolder = jest.fn<Promise<void>, unknown[]>();
 const addFolder = jest.fn<Promise<unknown>, unknown[]>();
+const updateFolder = jest.fn<Promise<unknown>, unknown[]>();
 const scanFolder = jest.fn<Promise<unknown>, unknown[]>();
 jest.mock("@/miyo/MiyoClient", () => ({
   MiyoClient: class {
@@ -32,6 +33,10 @@ jest.mock("@/miyo/MiyoClient", () => ({
     addFolder = (request: unknown, url: unknown, beforeRequest?: () => void) => {
       beforeRequest?.();
       return addFolder(request, url, beforeRequest);
+    };
+    updateFolder = (request: unknown, url: unknown, beforeRequest?: () => void) => {
+      beforeRequest?.();
+      return updateFolder(request, url, beforeRequest);
     };
     scanFolder = (...a: unknown[]) => scanFolder(...a);
   },
@@ -51,13 +56,15 @@ jest.mock("@/settings/model", () => ({
 
 jest.mock("@/utils/vaultPath", () => ({ getVaultBase: jest.fn(() => "/abs/vault") }));
 
-import type { App } from "obsidian";
+import { Notice, type App } from "obsidian";
 import type { MiyoAddFolderRequest, MiyoFolderEntry } from "@/miyo/MiyoClient";
 import {
+  buildMiyoIndexScopeReceipt,
   enqueueMiyoFolderMutation,
   miyoRecordCoversSystemRoots,
   resetMiyoMutations,
   resyncMiyoFolder,
+  syncMiyoIndexScopeChange,
   verifyMiyoScope,
 } from "@/miyo/miyoResync";
 import type { MiyoMutationSession } from "@/miyo/miyoResync";
@@ -122,6 +129,7 @@ beforeEach(() => {
   resolveBaseUrl.mockResolvedValue("http://miyo");
   deleteFolder.mockResolvedValue(undefined);
   addFolder.mockResolvedValue(record());
+  updateFolder.mockResolvedValue(record());
   scanFolder.mockResolvedValue({});
 });
 
@@ -135,6 +143,297 @@ function rootMovedSettings(): void {
 }
 
 describe("miyoResync", () => {
+  describe("buildMiyoIndexScopeReceipt()", () => {
+    it("records only Miyo-representable Copilot filters with the current registration identity (https://github.com/Brevilabs/obsidian-copilot-private/issues/310)", () => {
+      const settings = {
+        ...currentSettings,
+        qaExclusions: "Private,*.pdf,#draft",
+        qaInclusions: "Notes,*.md",
+      } as CopilotSettings;
+
+      expect(JSON.parse(buildMiyoIndexScopeReceipt(app, settings))).toEqual({
+        device: "device-A",
+        url: "",
+        folder: "my-vault",
+        include_extensions: ["md"],
+        include_folders: ["Notes"],
+        exclude_folders: ["Private"],
+        include_patterns: [],
+        exclude_patterns: ["**/*.pdf"],
+      });
+    });
+  });
+
+  describe("syncMiyoIndexScopeChange()", () => {
+    it("replaces Copilot's prior filters while retaining Miyo-owned scope (https://github.com/Brevilabs/obsidian-copilot-private/issues/310)", async () => {
+      const previous = {
+        ...currentSettings,
+        enableMiyo: true,
+        qaExclusions: "copilot,Private,*.pdf",
+        qaInclusions: "Notes",
+      } as unknown as CopilotSettings;
+      const next = {
+        ...previous,
+        qaExclusions: "copilot,Archive,*.canvas",
+        qaInclusions: "Projects",
+      };
+      getFolder.mockResolvedValue(
+        record({
+          exclude_folders: ["copilot", "Private", "MiyoOnly"],
+          exclude_patterns: ["**/*.pdf", "**/miyo-secret/**"],
+          include_folders: ["Notes", "MiyoPinned"],
+        })
+      );
+
+      await expect(syncMiyoIndexScopeChange(app, previous, next, session)).resolves.toBe("synced");
+
+      expect(updateFolder).toHaveBeenCalledWith(
+        {
+          path: "my-vault",
+          exclude_folders: ["MiyoOnly", "copilot", "Archive"],
+          exclude_patterns: ["**/miyo-secret/**", "**/*.canvas"],
+          include_folders: ["MiyoPinned"],
+          include_patterns: [],
+          include_extensions: [],
+        },
+        undefined,
+        expect.any(Function)
+      );
+      expect(deleteFolder).not.toHaveBeenCalled();
+      expect(addFolder).not.toHaveBeenCalled();
+      const receiptWrite = updateSetting.mock.calls.find(([key]) => key === "miyoSyncedIndexScope");
+      expect(JSON.parse(receiptWrite?.[1] as string)).toMatchObject({
+        include_folders: [],
+        include_patterns: [],
+        include_extensions: [],
+      });
+    });
+
+    it("does nothing when neither persisted scope value changed (https://github.com/Brevilabs/obsidian-copilot-private/issues/310)", async () => {
+      const previous = { ...currentSettings, enableMiyo: true } as CopilotSettings;
+      const next = { ...previous, debug: true } as CopilotSettings;
+
+      await expect(syncMiyoIndexScopeChange(app, previous, next, session)).resolves.toBe(
+        "unchanged"
+      );
+
+      expect(getFolder).not.toHaveBeenCalled();
+      expect(updateFolder).not.toHaveBeenCalled();
+    });
+
+    it("keeps a local-only edit off the network before Miyo has been configured (https://github.com/Brevilabs/obsidian-copilot-private/issues/310)", async () => {
+      const previous = {
+        ...currentSettings,
+        enableMiyo: false,
+        miyoSyncedExclusions: "",
+      } as CopilotSettings;
+      const next = { ...previous, qaExclusions: "copilot,Private" };
+
+      await expect(syncMiyoIndexScopeChange(app, previous, next, session)).resolves.toBe(
+        "not-configured"
+      );
+
+      expect(resolveBaseUrl).not.toHaveBeenCalled();
+      expect(updateFolder).not.toHaveBeenCalled();
+    });
+
+    it("does not treat another device's synced receipts as a local Miyo registration (https://github.com/Brevilabs/obsidian-copilot-private/issues/310)", async () => {
+      const previous = {
+        ...currentSettings,
+        enableMiyo: false,
+        miyoSyncedExclusions: receiptFor({ device: "device-B" }),
+        miyoSyncedIndexScope: JSON.stringify({
+          device: "device-B",
+          url: "",
+          folder: "my-vault",
+          exclude_folders: ["copilot"],
+          exclude_patterns: [],
+          include_folders: [],
+          include_patterns: [],
+          include_extensions: [],
+        }),
+      } as unknown as CopilotSettings;
+      const next = { ...previous, qaExclusions: "copilot,Private" };
+
+      await expect(syncMiyoIndexScopeChange(app, previous, next, session)).resolves.toBe(
+        "not-configured"
+      );
+
+      expect(resolveBaseUrl).not.toHaveBeenCalled();
+      expect(updateFolder).not.toHaveBeenCalled();
+    });
+
+    it("keeps tag and note changes local because Miyo cannot represent them (https://github.com/Brevilabs/obsidian-copilot-private/issues/310)", async () => {
+      const previous = {
+        ...currentSettings,
+        enableMiyo: true,
+        qaExclusions: "copilot,#draft",
+        qaInclusions: "[[Roadmap]]",
+      } as CopilotSettings;
+      const next = {
+        ...previous,
+        qaExclusions: "copilot,#private",
+        qaInclusions: "[[Launch plan]]",
+      };
+
+      await expect(syncMiyoIndexScopeChange(app, previous, next, session)).resolves.toBe(
+        "unchanged"
+      );
+
+      expect(getFolder).not.toHaveBeenCalled();
+      expect(updateFolder).not.toHaveBeenCalled();
+    });
+
+    it("reports a failed sync without rolling back the Copilot setting (https://github.com/Brevilabs/obsidian-copilot-private/issues/310)", async () => {
+      const previous = { ...currentSettings, enableMiyo: true } as CopilotSettings;
+      const next = { ...previous, qaExclusions: "copilot,Private" };
+      getFolder.mockRejectedValue(new Error("Miyo unavailable"));
+
+      await expect(syncMiyoIndexScopeChange(app, previous, next, session)).resolves.toBe("failed");
+
+      expect(Notice).toHaveBeenCalledWith(
+        "Index scope was saved in Copilot, but Miyo couldn't be updated. Make sure Miyo is running, then change the scope again."
+      );
+      expect(updateSetting).not.toHaveBeenCalledWith("qaExclusions", expect.anything());
+      expect(updateFolder).not.toHaveBeenCalled();
+    });
+
+    it("applies rapid scope edits in settings order (https://github.com/Brevilabs/obsidian-copilot-private/issues/310)", async () => {
+      const first = {
+        ...currentSettings,
+        enableMiyo: true,
+        qaExclusions: "copilot,Private",
+      } as CopilotSettings;
+      const second = { ...first, qaExclusions: "copilot,Archive" };
+      const third = { ...second, qaExclusions: "copilot,Final" };
+      let liveRecord = record({ exclude_folders: ["copilot", "Private"] });
+      getFolder.mockImplementation(async () => liveRecord);
+      const firstPatch = deferred<void>();
+      updateFolder
+        .mockImplementationOnce(async (request) => {
+          await firstPatch.promise;
+          liveRecord = { ...liveRecord, ...(request as MiyoFolderEntry) };
+          return liveRecord;
+        })
+        .mockImplementationOnce(async (request) => {
+          liveRecord = { ...liveRecord, ...(request as MiyoFolderEntry) };
+          return liveRecord;
+        });
+
+      const firstSync = syncMiyoIndexScopeChange(app, first, second, session);
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+      const secondSync = syncMiyoIndexScopeChange(app, second, third, session);
+
+      expect(updateFolder).toHaveBeenCalledTimes(1);
+      firstPatch.resolve();
+      await expect(Promise.all([firstSync, secondSync])).resolves.toEqual(["synced", "synced"]);
+
+      expect(updateFolder).toHaveBeenCalledTimes(2);
+      expect((updateFolder.mock.calls[1][0] as MiyoFolderEntry).exclude_folders).toEqual([
+        "copilot",
+        "Final",
+      ]);
+    });
+
+    it("reconciles from the last successful server scope after an earlier edit failed (https://github.com/Brevilabs/obsidian-copilot-private/issues/310)", async () => {
+      const previous = {
+        ...currentSettings,
+        enableMiyo: true,
+        qaExclusions: "copilot,Unsynced",
+        miyoSyncedIndexScope: JSON.stringify({
+          device: "device-A",
+          url: "",
+          folder: "my-vault",
+          exclude_folders: ["copilot", "LastSynced"],
+          exclude_patterns: [],
+          include_folders: [],
+          include_patterns: [],
+          include_extensions: [],
+        }),
+      } as unknown as CopilotSettings;
+      const next = { ...previous, qaExclusions: "copilot,Final" };
+      getFolder.mockResolvedValue(
+        record({ exclude_folders: ["copilot", "LastSynced", "MiyoOnly"] })
+      );
+
+      await expect(syncMiyoIndexScopeChange(app, previous, next, session)).resolves.toBe("synced");
+
+      expect((updateFolder.mock.calls[0][0] as MiyoFolderEntry).exclude_folders).toEqual([
+        "MiyoOnly",
+        "copilot",
+        "Final",
+      ]);
+      expect(updateSetting).toHaveBeenCalledWith(
+        "miyoSyncedIndexScope",
+        expect.stringContaining('"exclude_folders":["copilot","Final"]')
+      );
+    });
+
+    it("does not show a failure notice after the originating vault lifecycle ended (https://github.com/Brevilabs/obsidian-copilot-private/issues/310)", async () => {
+      const staleSession = session;
+      resetMiyoMutations();
+      const previous = { ...currentSettings, enableMiyo: true } as CopilotSettings;
+      const next = { ...previous, qaExclusions: "copilot,Private" };
+
+      await expect(syncMiyoIndexScopeChange(app, previous, next, staleSession)).resolves.toBe(
+        "failed"
+      );
+
+      expect(Notice).not.toHaveBeenCalled();
+      expect(updateFolder).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ["malformed", "not-json"],
+      [
+        "invalid",
+        JSON.stringify({
+          device: "device-A",
+          url: "",
+          folder: "my-vault",
+          include_folders: "not-an-array",
+        }),
+      ],
+      [
+        "foreign-device",
+        JSON.stringify({
+          device: "device-B",
+          url: "",
+          folder: "my-vault",
+          exclude_folders: ["LastSynced"],
+          exclude_patterns: [],
+          include_folders: [],
+          include_patterns: [],
+          include_extensions: [],
+        }),
+      ],
+    ])(
+      "ignores a %s ownership receipt and falls back to the prior local scope (https://github.com/Brevilabs/obsidian-copilot-private/issues/310)",
+      async (_label, miyoSyncedIndexScope) => {
+        const previous = {
+          ...currentSettings,
+          enableMiyo: true,
+          qaExclusions: "copilot,ImmediatePrevious",
+          miyoSyncedIndexScope,
+        } as unknown as CopilotSettings;
+        const next = { ...previous, qaExclusions: "copilot,Final" };
+        getFolder.mockResolvedValue(
+          record({ exclude_folders: ["copilot", "ImmediatePrevious", "MiyoOnly"] })
+        );
+
+        await expect(syncMiyoIndexScopeChange(app, previous, next, session)).resolves.toBe(
+          "synced"
+        );
+
+        expect((updateFolder.mock.calls[0][0] as MiyoFolderEntry).exclude_folders).toEqual([
+          "MiyoOnly",
+          "copilot",
+          "Final",
+        ]);
+      }
+    );
+  });
+
   describe("miyoRecordCoversSystemRoots()", () => {
     const movedRootSettings = () =>
       ({

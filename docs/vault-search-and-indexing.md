@@ -39,6 +39,8 @@ Use **Search scope** in the Miyo settings tab:
 
 The scope is a retrieval preference, not a security boundary. Keep Miyo's registered folders intentional, especially when you use an unrestricted scope or connect to a shared remote server.
 
+Under **Index scope**, Copilot's inclusions and exclusions control which notes its searches and Relevant Notes can return. Folder and file-extension changes also update this vault's registered Miyo folder automatically. Filters configured directly in Miyo remain in place, and Copilot does not widen a stricter Miyo inclusion whitelist. Tags and individual-note patterns still filter Copilot results, but Miyo continues indexing them because its folder API cannot represent those pattern types. If Miyo cannot be reached during an update, Copilot keeps the local setting and tells you that Miyo was not updated.
+
 ### Relevant Notes
 
 Relevant Notes always includes direct links and backlinks that pass Copilot's search scope. Miyo is the only source of semantic matches and similarity percentages in this pane; Copilot's legacy local embedding index no longer scores Relevant Notes.
@@ -74,7 +76,7 @@ Connector access is separate from Agent Chat search. Review the folders, remote 
 - **Relevant Notes has no semantic results:** **No semantic matches yet** means Miyo answered successfully but found no related notes. **This note isn't indexed in Miyo** means the note may still be indexing or may be excluded from Miyo. Links and backlinks remain visible in either state.
 - **Agent Chat Miyo document processing fails:** install Miyo on this computer so its local CLI is available, or switch **Document Processor** to **Plus**. A remote Miyo search connection does not provide the local CLI Agent Chat needs.
 - **Quick Chat Miyo document processing fails:** confirm that the connected Miyo service can access the registered vault and document. When a remote server is configured, troubleshoot the document on that server.
-- **Copilot asks for a resync:** use **Resync Miyo** so Miyo excludes Copilot's own working folder and conversation files.
+- **Copilot asks for a resync:** use **Resync Miyo** so Miyo excludes Copilot's own working folder and conversation files. Ordinary folder and file-extension edits under **Index scope** update Miyo automatically and do not require this rebuild.
 - **Mobile:** a remote Miyo server can be configured on mobile, but Agent Chat and its Skills are desktop features. Use Quick Chat on mobile.
 
 ## Related
