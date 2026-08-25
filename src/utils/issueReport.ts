@@ -16,12 +16,17 @@
  *   the bundle instead of echoing the user's checkboxes back at them.
  * - **`report.md` is mandatory.** If it cannot be written the whole assembly
  *   throws, because a bundle without it is not worth attaching.
- * - **Nothing reaches `report.md` or the issue URL unredacted.** Every text that
- *   crosses into either — log bodies, the user's own description, the issue
- *   title cut from it, and the failure reasons of sources that could not be read
- *   — goes through `redactLogText` first. The issue URL is the strictest case:
- *   it is handed to a browser before the user has reviewed anything, so a home
- *   path or a pasted key in the description would already be public.
+ * - **Every free-text input is redacted on its way in.** The log bodies, the
+ *   user's own description, the issue title cut from it, and the failure
+ *   reasons of sources that could not be read all pass `redactLogText` before
+ *   they reach `report.md` or the issue URL. The environment block and the
+ *   attachment names are composed here rather than taken from the user, so they
+ *   carry nothing to redact. Redaction is best effort — it matches shapes it
+ *   knows, so an unfamiliar credential format still reaches the other side —
+ *   which is why the flow hands the user the bundle to review. The issue URL is
+ *   the one surface that review cannot cover: it goes to a browser before the
+ *   user has seen anything, so a home path or a pasted key in the description
+ *   is public the moment the page opens.
  *
  * A failed assembly leaves nothing behind: the staging folder holds plaintext
  * prompts and note contents, so it is removed rather than orphaned when the

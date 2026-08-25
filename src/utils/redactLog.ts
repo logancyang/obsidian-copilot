@@ -114,10 +114,40 @@ const RULES: RedactionRule[] = [
   // Bearer tokens.
   { pattern: /(bearer\s+)[A-Za-z0-9._-]{12,}/gi, replacement: "$1<token>" },
 
+  // Basic credentials, which the field rule below cannot reach: its value
+  // pattern starts after the `:`, where it finds the five-character scheme word
+  // rather than the credential. What follows the word is base64 of
+  // `user:password`, so leaving it is leaving both. Anchored to the header name
+  // rather than matching `basic` anywhere, which would eat the next word of any
+  // sentence using it — "the basic principle" — and leave the log less
+  // diagnostic than it found it. The quote either side of the separator is what
+  // carries the JSON spelling, which is the one the frame log actually holds:
+  // it stores SDK and ACP payloads as NDJSON, so a request's headers arrive as
+  // `"authorization": "Basic ..."` rather than as a raw header line.
+  //
+  // The credential is matched with `+` rather than a minimum length. Once the
+  // header name and scheme are established there is nothing left to qualify —
+  // `dTpw` is four characters and decodes to `u:p` — and a counted lower bound
+  // costs more than it buys: V8 walks `{n,}` in a way that exhausts the regexp
+  // stack, which a log holding one unbroken multi-megabyte token reaches, and
+  // the throw takes the whole report down with it. The gap before it is spaces
+  // and tabs rather than any whitespace, so a header whose credential is empty
+  // ends at its own line instead of claiming the first word of the next one.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/202
+  {
+    pattern: /(authorization"?\s*[:=]\s*"?basic[ \t]+)[A-Za-z0-9+/]+={0,2}/gi,
+    replacement: "$1<redacted>",
+  },
+
   // Values of key/token/secret/password-ish fields, JSON or key=value form.
+  // The AWS names are spelled out because the alternation has no word boundary
+  // in front of it: `secret` does match inside `aws_secret_access_key`, but what
+  // follows the match is `_access_key`, not the separator the rule needs, so a
+  // compound field name only redacts when it is named whole.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/202
   {
     pattern:
-      /("?(?:api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|secret|password|passwd|authorization|license[_-]?key)"?\s*[:=]\s*"?)[^"'\s,}]{6,}/gi,
+      /("?(?:api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|secret|password|passwd|authorization|license[_-]?key|aws[_-]?secret[_-]?access[_-]?key|aws[_-]?session[_-]?token)"?\s*[:=]\s*"?)[^"'\s,}]{6,}/gi,
     replacement: "$1<redacted>",
   },
 ];

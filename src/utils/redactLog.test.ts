@@ -102,6 +102,62 @@ describe("redactLog", () => {
       expect(header).toContain("<token>");
     });
 
+    it("removes a Basic credential, which carries a password in plain base64 (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", () => {
+      // `Basic` is five characters, so the field rule's own value pattern never
+      // reaches it — and what follows decodes straight back to `user:password`.
+      // A report's description is prefilled into a public GitHub issue before
+      // the user has reviewed anything, so a pasted header goes out as typed.
+      const header = redactLogText("Authorization: Basic dXNlcjpwYXNzd29yZA==");
+      expect(header).not.toContain("dXNlcjpwYXNzd29yZA");
+      expect(header).toContain("<redacted>");
+      // The shape a pasted curl brings it in as.
+      const curl = redactLogText("-H 'Authorization: Basic YWRtaW46czNjcmV0'");
+      expect(curl).not.toContain("YWRtaW46czNjcmV0");
+      expect(curl).toContain("<redacted>");
+      // The spelling the frame log actually holds: it stores SDK and ACP
+      // payloads as NDJSON, so headers arrive quoted rather than as raw lines.
+      const json = redactLogText('"authorization": "Basic YWRtaW46czNjcmV0"');
+      expect(json).not.toContain("YWRtaW46czNjcmV0");
+      expect(json).toContain("<redacted>");
+      // Anchored to the header name: prose using the word keeps its next word,
+      // which an unanchored rule would take and leave the log less diagnostic.
+      expect(redactLogText("the basic principle applies")).toBe("the basic principle applies");
+      // Four characters, and `u:p` once decoded. The header name and scheme
+      // have already established what this is, so there is no length left to
+      // qualify it by.
+      expect(redactLogText("Authorization: Basic dTpw")).toBe("Authorization: Basic <redacted>");
+      // An empty credential ends at its own line. A rule that stepped over the
+      // newline would claim the next line's field name as its credential, and
+      // the field rule below — which never sees the name it needs — would then
+      // leave that field's value in the clear.
+      expect(redactLogText("Authorization: Basic \npassword=hunter2000")).toBe(
+        "Authorization: Basic \npassword=<redacted>"
+      );
+    });
+
+    it("redacts a credential too long for a counted quantifier to walk (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", () => {
+      // A log can hold one unbroken multi-megabyte run, and V8 exhausts the
+      // regexp stack walking `{n,}` over it — a throw here would take down the
+      // whole report, not just this line.
+      const huge = `Authorization: Basic ${"A".repeat(16 * 1024 * 1024)}`;
+
+      expect(redactLogText(huge)).toBe("Authorization: Basic <redacted>");
+    });
+
+    it("removes AWS secret and session values, whose field names the key/secret rule misses (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", () => {
+      expect(redactLogText("aws_secret_access_key=0123456789abcdefghijklmnopqrstuv")).toBe(
+        "aws_secret_access_key=<redacted>"
+      );
+      // Screamed by the convention every AWS credentials file and shell export
+      // uses, so the match cannot be case-sensitive.
+      expect(redactLogText("AWS_SECRET_ACCESS_KEY=0123456789abcdefghijklmnopqrstuv")).toBe(
+        "AWS_SECRET_ACCESS_KEY=<redacted>"
+      );
+      expect(redactLogText("aws_session_token=FwoGZXIvYXdzEB0aDLexample")).toBe(
+        "aws_session_token=<redacted>"
+      );
+    });
+
     it("replaces the value of a key/secret/password field in JSON or key=value form", () => {
       expect(redactLogText('"api_key": "s3cr3tvalue123"')).toBe('"api_key": "<redacted>"');
       expect(redactLogText("password=hunter2secret")).toBe("password=<redacted>");
