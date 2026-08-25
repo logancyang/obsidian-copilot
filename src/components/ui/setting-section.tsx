@@ -52,8 +52,8 @@ export function SettingSection({
     <div className={cn("tw-space-y-2", className)}>
       {(label || description) && (
         <div className="tw-space-y-1">
-          {label && <div className="tw-text-xs tw-font-semibold tw-text-muted">{label}</div>}
-          {description && <div className="tw-text-sm tw-text-muted">{description}</div>}
+          {label && <div className="tw-text-sm tw-font-semibold tw-text-muted">{label}</div>}
+          {description && <div className="tw-text-xs tw-text-muted">{description}</div>}
         </div>
       )}
       {gated && gateNotice && (
