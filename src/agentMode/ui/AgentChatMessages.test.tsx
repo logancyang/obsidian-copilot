@@ -1,7 +1,7 @@
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
 import type { AgentChatMessage } from "@/agentMode/session/types";
 import AgentChatMessages from "@/agentMode/ui/AgentChatMessages";
-import { AI_SENDER, USER_SENDER } from "@/constants";
+import { AI_SENDER } from "@/constants";
 import { act, render, screen } from "@testing-library/react";
 import React from "react";
 
@@ -19,13 +19,11 @@ jest.mock("@/components/chat-components/ChatSingleMessage", () => ({
   default: ({
     message,
     footerStart,
-    collapseLongUserMessages,
   }: {
     message: { message: string };
     footerStart?: React.ReactNode;
-    collapseLongUserMessages?: boolean;
   }) => (
-    <div data-collapse-long-user-messages={collapseLongUserMessages ? "true" : "false"}>
+    <div>
       {message.message}
       <div data-testid="single-message-footer">{footerStart}</div>
     </div>
@@ -120,28 +118,6 @@ describe("AgentChatMessages", () => {
       );
 
       expect(screen.getByTestId("agent-trail-timestamp").textContent).toBe(timestamp);
-    });
-
-    it("opts Agent Chat messages into long user text collapse (https://github.com/Brevilabs/obsidian-copilot-private/issues/151)", () => {
-      renderMessages(
-        [
-          {
-            id: "prompt-1",
-            sender: USER_SENDER,
-            message: "A long pasted prompt",
-            timestamp: { epoch: 1, display: "", fileName: "" },
-            isVisible: true,
-          },
-        ],
-        false
-      );
-
-      expect(
-        screen
-          .getByText("A long pasted prompt")
-          .closest("[data-collapse-long-user-messages]")
-          ?.getAttribute("data-collapse-long-user-messages")
-      ).toBe("true");
     });
   });
 });

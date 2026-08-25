@@ -32,6 +32,8 @@ Hover over a message to use its actions:
 - Your messages: **Copy**, **Edit**, and **Delete**.
 - Copilot responses: **Insert / Replace at cursor**, **Copy**, **Regenerate**, and **Delete**.
 
+Your messages collapse after 12 lines. Select **Show more** to read the full message or **Show less** to collapse it again. Copy and Edit still use the complete message.
+
 After a response, the token counter in the top bar shows the context used for the latest response when the provider reports token usage.
 
 ## Start or reopen a chat
