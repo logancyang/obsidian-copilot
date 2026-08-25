@@ -102,8 +102,18 @@ const MIN_LOG_TAIL_BYTES = 64 * 1024;
  * handful of long errors would eat the headroom `report.md` is promised.
  */
 const MAX_REASON_BYTES = 1024;
-/** Timestamp stamped into every zip entry; see the pack site for why it is fixed. */
-const ZIP_EPOCH = new Date("1980-01-01T00:00:00.000Z");
+/**
+ * Timestamp stamped into every zip entry; see the pack site for why it is fixed.
+ *
+ * Built from local calendar fields rather than an instant, because that is how
+ * it is read back: a DOS timestamp has no zone, so fflate encodes the `Date`'s
+ * local year, month and day and refuses anything outside 1980-2099. The same
+ * instant is 1979 west of UTC — `1980-01-01T00:00:00Z` is December 31st in
+ * every negative offset — so an instant here fails the pack outright for those
+ * users. Local fields also keep the bytes identical wherever the pack runs,
+ * which the rebuild comparison depends on.
+ */
+const ZIP_EPOCH = new Date(1980, 0, 1);
 
 export interface ReportEnvInfo {
   pluginVersion: string;
