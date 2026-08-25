@@ -1020,3 +1020,53 @@ If your plugin does not need CSS, delete this file.
 .copilot-fade-mask-bottom {
   background: linear-gradient(to top, var(--background-primary), transparent);
 }
+
+/* Obsidian's core `button` rules outrank single-class utilities, so the
+   floating scroll-to-bottom button re-points the background variables at the
+   page background and pins its box to a padding-free square (themes otherwise
+   inject their own button height/padding and squash the circle into an oval).
+   The element-qualified selector matches core/theme specificity; plugin CSS
+   loads later, so it wins the tie without !important. */
+button.copilot-scroll-to-bottom-button {
+  /* Hover keeps the same background on purpose: the affordance is a quiet
+     overlay, not an interactive-state showcase. */
+  --interactive-normal: var(--background-primary);
+  --interactive-hover: var(--background-primary);
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+}
+
+/* Typing indicator inside the scroll-to-bottom button: while a response is
+   streaming, three dots bounce in sequence (staggered delays on a shared
+   keyframe produce the wave). */
+.copilot-typing-dot {
+  animation: copilot-typing-bounce 1.2s ease-in-out infinite;
+}
+.copilot-typing-dot-1 {
+  animation-delay: 160ms;
+}
+.copilot-typing-dot-2 {
+  animation-delay: 320ms;
+}
+@keyframes copilot-typing-bounce {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+  30% {
+    transform: translateY(-2px);
+    opacity: 1;
+  }
+}
+
+/* Users who ask the OS for reduced motion get static dots instead of the
+   bounce (same convention as the JS matchMedia checks elsewhere in src/). */
+@media (prefers-reduced-motion: reduce) {
+  .copilot-typing-dot {
+    animation: none;
+    opacity: 0.7;
+  }
+}
