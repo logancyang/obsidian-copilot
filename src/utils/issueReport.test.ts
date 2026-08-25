@@ -811,6 +811,35 @@ describe("issueReport", () => {
       expect(shot?.reason).toContain("EACCES");
     });
 
+    it("packs the same folder to the same bytes every time, so a no-op rebuild is recognisable (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", async () => {
+      // fflate stamps the wall clock into each entry header unless told
+      // otherwise, which would make two packs of identical content differ and
+      // defeat the comparison a rebuild uses to decide whether the upload
+      // attempt it already has is still the right one.
+      const { runtime } = makeRuntime();
+      const report = await assembleReportBundle(baseInput, runtime);
+
+      const first = await zipReportBundle(report, runtime);
+      const second = await zipReportBundle(report, runtime);
+
+      expect(new Uint8Array(second.uploadAttempt.body)).toEqual(
+        new Uint8Array(first.uploadAttempt.body)
+      );
+    });
+
+    it("packs edited content to different bytes (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", async () => {
+      const { runtime, files } = makeRuntime();
+      const report = await assembleReportBundle(baseInput, runtime);
+      const first = await zipReportBundle(report, runtime);
+      files.set(`${BUNDLE_DIR}/screenshot.png`, "edited by the user");
+
+      const second = await zipReportBundle(report, runtime);
+
+      expect(new Uint8Array(second.uploadAttempt.body)).not.toEqual(
+        new Uint8Array(first.uploadAttempt.body)
+      );
+    });
+
     it("packs an attachment again once the user restores it after a rebuild dropped it (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", async () => {
       const { runtime, writes, files } = makeRuntime();
       const assembled = await assembleReportBundle(baseInput, runtime);

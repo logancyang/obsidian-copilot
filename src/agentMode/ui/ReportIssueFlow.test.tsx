@@ -486,6 +486,51 @@ describe("ReportIssueFlow", () => {
           resolveUpload({ ok: true, result: uploadResult, issueUrl: linkedIssueUrl });
         });
       });
+    });
+
+    describe("review step — rebuild", () => {
+      it("keeps a retryable failure on offer when the rebuild changed nothing (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", async () => {
+        // The rebuild handed back the attempt it was given, which is how it
+        // says nothing changed. Clearing the failure there would drop the Retry
+        // the user still needs — and the retry that stays on offer re-sends the
+        // one attempt the server may already hold, rather than a re-keyed copy
+        // of it.
+        const upload = jest
+          .fn()
+          .mockResolvedValue({ ok: false, error: "Network request failed", retryable: true });
+        const rebuildZip = jest.fn().mockResolvedValue(prepared);
+        renderFlow({ upload, rebuildZip });
+        submit();
+        await waitFor(() => expect(screen.getByText(prepared.zipName)).toBeTruthy());
+        fireEvent.click(uploadButton());
+        await waitFor(() => expect(screen.getByText("Could not upload the report")).toBeTruthy());
+
+        fireEvent.click(screen.getByRole("button", { name: "Rebuild zip" }));
+
+        await waitFor(() => expect(rebuildZip).toHaveBeenCalled());
+        expect(screen.getByText("Could not upload the report")).toBeTruthy();
+        expect(screen.getByRole("button", { name: "Retry upload" })).toBeTruthy();
+      });
+
+      it("clears a stale failure once the rebuild produced a different bundle (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", async () => {
+        const upload = jest
+          .fn()
+          .mockResolvedValue({ ok: false, error: "Network request failed", retryable: true });
+        const rebuildZip = jest.fn().mockResolvedValue({
+          ...prepared,
+          uploadAttempt: { body: new ArrayBuffer(8192), idempotencyKey: "a-new-key" },
+        });
+        renderFlow({ upload, rebuildZip });
+        submit();
+        await waitFor(() => expect(screen.getByText(prepared.zipName)).toBeTruthy());
+        fireEvent.click(uploadButton());
+        await waitFor(() => expect(screen.getByText("Could not upload the report")).toBeTruthy());
+
+        fireEvent.click(screen.getByRole("button", { name: "Rebuild zip" }));
+
+        await waitFor(() => expect(screen.queryByText("Could not upload the report")).toBeNull());
+        expect(screen.getByRole("button", { name: "Upload & open issue" })).toBeTruthy();
+      });
 
       it("disables Upload while a rebuild is in flight or has failed", async () => {
         let resolveRebuild: (report: PreparedReport) => void = () => {};
@@ -508,24 +553,6 @@ describe("ReportIssueFlow", () => {
         expect(uploadButton().getAttribute("disabled")).toBeNull();
       });
 
-      it("clears a stale upload failure once a rebuild succeeds", async () => {
-        const upload = jest
-          .fn()
-          .mockResolvedValue({ ok: false, error: "Network request failed", retryable: true });
-        renderFlow({ upload });
-        submit();
-        await waitFor(() => expect(screen.getByText(prepared.zipName)).toBeTruthy());
-
-        fireEvent.click(uploadButton());
-        await waitFor(() => expect(screen.getByText("Could not upload the report")).toBeTruthy());
-
-        fireEvent.click(screen.getByRole("button", { name: "Rebuild zip" }));
-        await waitFor(() => expect(screen.queryByText("Could not upload the report")).toBeNull());
-        expect(screen.getByRole("button", { name: "Upload & open issue" })).toBeTruthy();
-      });
-    });
-
-    describe("review step — rebuild", () => {
       it("withholds Upload and names the fix after a failed rebuild", async () => {
         const rebuildZip = jest.fn().mockRejectedValue(new Error("ENOENT: report.md"));
         renderFlow({ rebuildZip });

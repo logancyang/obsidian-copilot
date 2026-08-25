@@ -544,9 +544,14 @@ function ReviewStep({
       if (!mountedRef.current) return;
       onRebuilt(rebuilt);
       setRebuild({ status: "idle" });
-      // A fresh zip makes any earlier upload failure stale — it named a file
-      // that no longer exists in that form.
-      setUploadState({ status: "idle" });
+      // Only a rebuild that actually changed the bundle makes an earlier upload
+      // failure stale. When the bytes came back identical the rebuild kept the
+      // attempt it already had, and that attempt's outcome — including a retry
+      // still worth offering — is about bytes that still exist in that form.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/202
+      if (rebuilt.uploadAttempt !== packed.uploadAttempt) {
+        setUploadState({ status: "idle" });
+      }
     } catch (err) {
       if (!mountedRef.current) return;
       setRebuild({ status: "failed", error: err instanceof Error ? err.message : String(err) });

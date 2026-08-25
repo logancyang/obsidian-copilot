@@ -86,8 +86,13 @@ pair whole:
   the strong sense: if a "failed" upload actually landed (the response was lost,
   not the write), the retry returns the stored copy's ID instead of storing a
   second one.
-- **Rebuild zip** replaces the whole `PreparedReport`, so new bytes and a new
-  key are inseparable. A rebuild that fails leaves the old attempt untouched.
+- **Rebuild zip** repacks the folder and compares the result with the bytes it
+  already had. Different bytes replace the whole `PreparedReport`, so new bytes
+  and a new key stay inseparable. Identical bytes keep the existing attempt,
+  key included: the pack is byte-stable (entry timestamps are fixed), so "the
+  user rebuilt without changing anything" is observable, and re-keying there
+  would turn a repeatable retry into a second stored copy and a second upload
+  allowance spent. A rebuild that fails leaves the old attempt untouched.
 - The uploader takes the attempt object, not a path — a file on disk can change
   under a key that still names the old contents; in-memory bytes cannot. This is
   also what keeps the adapter free of Node imports, so it lives in `src/utils`

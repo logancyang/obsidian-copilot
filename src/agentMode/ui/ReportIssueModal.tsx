@@ -111,87 +111,15 @@ export async function createReportsRootDir(): Promise<string | null> {
   }
 }
 
-/** What the sink names its log, and the only basename a real path can have. */
-const FRAME_LOG_BASENAME = "acp-frames.ndjson";
-
-/**
- * Where the Agent Mode activity log is, or null when the sink cannot say.
- *
- * `FrameSink.getPath()` answers with a parenthesised sentence, not a path, when
- * it has no vault to key its location off. The settings tab can outrun that: it
- * is registered during load, while the sink is seeded behind a dynamic import
- * that resolves later, so a report opened in between asks a sink that does not
- * yet know where it writes. Telling the two apart matters because a sentence is
- * a relative path: handed to `stat`, it is looked for beside the running
- * process rather than rejected, and a hit there would be packed and uploaded.
- *
- * A real path is recognised by where it goes and what it is called — under the
- * OS temp dir, named for the log, and still under it once every link along the
- * way is resolved. Absoluteness alone is not the test: a relative `TMPDIR` is
- * passed through verbatim, so a genuine log path can be relative too, and
- * rejecting it would silently drop an attachment the user asked for. Nor is the
- * location alone enough, since a process whose working directory sits inside
- * the temp dir would resolve the sentence to somewhere under it.
- *
- * Returns the resolved path, so what gets read is what was checked.
- *
- * Exported for its own tests: both callers reach it through a private method of
- * the modal, so this is the only place the distinction can be observed.
- */
-export async function activityLogPath(): Promise<string | null> {
-  try {
-    const path = requireNodeModule<typeof import("node:path")>("path");
-    const os = requireNodeModule<typeof import("node:os")>("os");
-    const fs = requireNodeModule<typeof import("node:fs/promises")>("fs/promises");
-    const candidate = frameSink.getPath();
-    if (path.basename(candidate) !== FRAME_LOG_BASENAME) return null;
-    if (!isInside(os.tmpdir(), candidate)) return null;
-    // The name and the spelling describe only where the path claims to point.
-    // On a temp root shared with other accounts, a link planted at the leaf or
-    // at any directory above it spells out this same location and leads
-    // somewhere else, and the sink validates its own path only when it writes
-    // — so a report taken before the first frame is written asks a location
-    // nobody has checked. Resolving the links away and asking the containment
-    // question again makes the answer about the file rather than the string.
-    let resolved: string;
-    try {
-      resolved = await fs.realpath(candidate);
-    } catch {
-      // Nothing is there to resolve, so there is nothing to lead anywhere. The
-      // caller's own `stat` reports the absence as "nothing recorded yet".
-      return candidate;
-    }
-    // Both questions are asked again of the resolved path, because the first
-    // pair only described the spelling. A link named for the log and leading at
-    // a neighbour in the same temp dir satisfies containment honestly; what
-    // gives it away is that the file at the end of it is not called the log.
-    if (path.basename(resolved) !== FRAME_LOG_BASENAME) return null;
-    // The temp dir is resolved too: it is itself a link on macOS, and comparing
-    // a resolved path against an unresolved root would reject every real log.
-    return isInside(await fs.realpath(os.tmpdir()), resolved) ? resolved : null;
-  } catch {
-    return null;
+/** Whether two packed bundles hold byte-for-byte the same content. */
+function sameBytes(a: ArrayBuffer, b: ArrayBuffer): boolean {
+  if (a.byteLength !== b.byteLength) return false;
+  const left = new Uint8Array(a);
+  const right = new Uint8Array(b);
+  for (let i = 0; i < left.length; i++) {
+    if (left[i] !== right[i]) return false;
   }
-}
-
-/**
- * Whether `candidate` sits somewhere under `root`.
- *
- * Asked as a relative walk rather than a string prefix. A prefix has to be
- * written as `root + separator` to stop `/tmpfoo` passing for `/tmp`, and that
- * spelling breaks when the root *is* a filesystem root: it becomes `//` and
- * every real path underneath fails it. The walk covers both, and covers a
- * different Windows drive, which comes back absolute.
- */
-function isInside(root: string, candidate: string): boolean {
-  const path = requireNodeModule<typeof import("node:path")>("path");
-  const relative = path.relative(path.resolve(root), path.resolve(candidate));
-  return (
-    relative.length > 0 &&
-    relative !== ".." &&
-    !relative.startsWith(`..${path.sep}`) &&
-    !path.isAbsolute(relative)
-  );
+  return true;
 }
 
 /** Size of a file on disk, or null when it does not exist or cannot be read. */
@@ -539,7 +467,7 @@ export class ReportIssueModal extends Modal {
    * keeps the note and checkbox state across the second render.
    */
   private async loadActivityLogSize(): Promise<void> {
-    const path = await activityLogPath();
+    const path = await frameSink.getValidatedPath();
     const bytes = path === null ? null : await fileBytes(path);
     if (!this.root) return;
     this.render(this.buildSourceOptions(bytes));
@@ -733,10 +661,16 @@ export class ReportIssueModal extends Modal {
       ...report,
       zipPath: packed.zipPath,
       zipName: basename(packed.zipPath),
-      // A whole new attempt, not a patched one: the repack minted fresh bytes
-      // *and* a fresh idempotency key together, so the server cannot answer
-      // this upload with the pre-edit bundle stored under the old key.
-      uploadAttempt: packed.uploadAttempt,
+      // New bytes travel under the new key they were minted with, so the server
+      // can never answer an edited bundle with the one stored under the old
+      // one. Identical bytes keep the attempt they already have: a rebuild the
+      // user ran without changing anything would otherwise re-key a bundle the
+      // server may already hold, turning a retry that was safe to repeat into a
+      // second stored copy and a second upload allowance spent.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/202
+      uploadAttempt: sameBytes(report.uploadAttempt.body, packed.uploadAttempt.body)
+        ? report.uploadAttempt
+        : packed.uploadAttempt,
       attachments: packed.attachments,
       // Both are read back from the `report.md` that was just packed, so an
       // edit the user made to take something out reaches the issue too.
@@ -828,10 +762,12 @@ async function activityLogRequest(): Promise<ReportLogRequest> {
   if (!getSettings().agentMode.debugFullFrames) {
     return { ...base, unavailableReason: "The Agent Mode activity log is turned off." };
   }
-  // Flush queued frames so the tail we read includes the failure the user is
-  // reporting, not just whatever had already reached disk.
-  await frameSink.flush();
-  const path = await activityLogPath();
+  // The sink both owns the location and vouches for it, so a path it will not
+  // stand behind is one this report must not read, let alone upload. Asking it
+  // also settles the write queue on the way — it answers from the same chain
+  // the appends run on — so the tail read below includes the failure the user
+  // is reporting rather than whatever had already reached disk.
+  const path = await frameSink.getValidatedPath();
   if (path === null) {
     return { ...base, unavailableReason: "The Agent Mode activity log's location is unavailable." };
   }

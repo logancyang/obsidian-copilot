@@ -1,5 +1,4 @@
 import {
-  activityLogPath,
   buildReportSourceOptions,
   captureBehindOverlay,
   createReportsRootDir,
@@ -13,7 +12,6 @@ import {
 import type { PreparedReport, ReportSourceId } from "@/agentMode/ui/ReportIssueFlow";
 import { ReportUploadError, type ReportUploader } from "@/utils/reportUpload";
 import { Notice } from "obsidian";
-import fs from "node:fs/promises";
 import os from "node:os";
 import nodePath from "node:path";
 
@@ -36,12 +34,11 @@ jest.mock("@/logger", () => ({
   logWarn: jest.fn(),
 }));
 
-const frameSinkPath = jest.fn<string, []>();
+const frameSinkValidatedPath = jest.fn<Promise<string | null>, []>(async () => null);
 
 jest.mock("@/agentMode/session/debugSink", () => ({
   frameSink: {
-    getPath: () => frameSinkPath(),
-    flush: jest.fn(async () => {}),
+    getValidatedPath: () => frameSinkValidatedPath(),
   },
 }));
 
@@ -52,99 +49,6 @@ jest.mock("@/utils/captureViewScreenshot", () => ({
 }));
 
 describe("ReportIssueModal", () => {
-  describe("activityLogPath()", () => {
-    // Built from the real temp dir rather than a fixed "/tmp/…": the guard
-    // checks that the sink's answer actually lands there, and this platform's
-    // temp dir is not /tmp.
-    const realLogPath = nodePath.join(
-      os.tmpdir(),
-      "obsidian-copilot",
-      "acp-frames",
-      "3f9a",
-      "acp-frames.ndjson"
-    );
-
-    it("returns the log's path once the sink knows where it writes", async () => {
-      frameSinkPath.mockReturnValue(realLogPath);
-      await expect(activityLogPath()).resolves.toBe(realLogPath);
-    });
-
-    it("rejects a path that is named right but sits outside the temp dir (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", async () => {
-      // The name alone is not enough: anything the sink did not build belongs
-      // somewhere else, and packing it would attach a file nobody asked for.
-      frameSinkPath.mockReturnValue(nodePath.join(os.homedir(), "acp-frames.ndjson"));
-      await expect(activityLogPath()).resolves.toBeNull();
-    });
-
-    it("rejects a path inside the temp dir that is not the log (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", async () => {
-      // Location alone is not enough either. A process whose working directory
-      // sits inside the temp dir resolves the sink's placeholder sentence to
-      // somewhere underneath it, so the name has to be checked too.
-      frameSinkPath.mockReturnValue(nodePath.join(os.tmpdir(), "something-else.ndjson"));
-      await expect(activityLogPath()).resolves.toBeNull();
-    });
-
-    it("accepts the log when the temp dir is a filesystem root (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", async () => {
-      // Containment written as `root + separator` becomes `//` here, and every
-      // real path underneath fails it — dropping an attachment the user ticked.
-      const root = nodePath.parse(os.tmpdir()).root;
-      const spy = jest.spyOn(os, "tmpdir").mockReturnValue(root);
-      try {
-        const inRoot = nodePath.join(root, "obsidian-copilot", "acp-frames.ndjson");
-        frameSinkPath.mockReturnValue(inRoot);
-        await expect(activityLogPath()).resolves.toBe(inRoot);
-      } finally {
-        spy.mockRestore();
-      }
-    });
-
-    it("rejects the sink's placeholder rather than treating it as a path (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", async () => {
-      // The settings tab is registered during load, ahead of the dynamic import
-      // that tells the sink which vault it is logging for, so a report opened in
-      // that window asks a sink that has no path to give. What it answers with
-      // is a sentence, and a sentence is a relative path: statting it would look
-      // for it next to the process, and a hit there would be packed and uploaded
-      // as though it were the activity log.
-      frameSinkPath.mockReturnValue("(Agent Mode frame logs are desktop-only)");
-      await expect(activityLogPath()).resolves.toBeNull();
-    });
-
-    it("rejects a log path that leads out of the temp dir through a link (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", async () => {
-      // The sink checks its own directory chain only when it writes, so a
-      // report taken before the first frame lands asks a location nobody has
-      // vetted. On a temp root shared with other accounts, a link planted there
-      // spells out the log's name and leads at whatever its author chose —
-      // which a spelling check cannot see, and which would be uploaded.
-      const dir = await fs.mkdtemp(nodePath.join(os.tmpdir(), "report-link-"));
-      const secret = nodePath.join(dir, "secret.txt");
-      await fs.writeFile(secret, "private");
-      const link = nodePath.join(dir, "acp-frames.ndjson");
-      await fs.symlink(secret, link);
-      try {
-        frameSinkPath.mockReturnValue(link);
-        await expect(activityLogPath()).resolves.toBeNull();
-      } finally {
-        await fs.rm(dir, { recursive: true, force: true });
-      }
-    });
-
-    it("accepts a real log and answers with the path it checked (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", async () => {
-      // The counterpart: resolving links away must not cost the ordinary log
-      // its attachment. The answer is the resolved path so that what gets read
-      // is what was checked, which on macOS differs from the temp dir's own
-      // spelling because that is a link too.
-      const dir = await fs.mkdtemp(nodePath.join(os.tmpdir(), "report-real-"));
-      const log = nodePath.join(dir, "acp-frames.ndjson");
-      await fs.writeFile(log, "{}\n");
-      try {
-        frameSinkPath.mockReturnValue(log);
-        await expect(activityLogPath()).resolves.toBe(await fs.realpath(log));
-      } finally {
-        await fs.rm(dir, { recursive: true, force: true });
-      }
-    });
-  });
-
   describe("createReportsRootDir()", () => {
     const realFs = jest.requireActual<typeof import("node:fs/promises")>("node:fs/promises");
     const created: string[] = [];
@@ -291,6 +195,75 @@ describe("ReportIssueModal", () => {
       // a rebuild that went ahead would fail on the folder and then try to take
       // its own half-written zip back, a second attempt this never reaches.
       expect(rm).toHaveBeenCalledTimes(1);
+    });
+
+    // Real staging folder, real repack: the branch under test compares the bytes
+    // two packs produced, which a faked `zipReportBundle` could only assert
+    // against itself.
+    describe("on the real filesystem", () => {
+      const realFs = jest.requireActual<typeof import("node:fs/promises")>("node:fs/promises");
+      let dir: string;
+
+      beforeEach(async () => {
+        rm.mockImplementation((p: string, opts?: unknown) =>
+          realFs.rm(p, opts as { recursive?: boolean; force?: boolean })
+        );
+        dir = await realFs.mkdtemp(nodePath.join(os.tmpdir(), "rebuild-attempt-"));
+        await realFs.mkdir(nodePath.join(dir, "bundle"));
+        await realFs.writeFile(
+          nodePath.join(dir, "bundle", "report.md"),
+          "## Description\n\nit broke\n"
+        );
+      });
+
+      afterEach(async () => {
+        await realFs.rm(dir, { recursive: true, force: true });
+      });
+
+      const reportIn = (folder: string, attempt: PreparedReport["uploadAttempt"]) =>
+        ({
+          folderPath: nodePath.join(folder, "bundle"),
+          zipPath: nodePath.join(folder, "bundle.zip"),
+          attachments: [
+            {
+              id: "report",
+              name: "report.md",
+              absPath: nodePath.join(folder, "bundle", "report.md"),
+              bytes: 1,
+              status: "included",
+            },
+          ],
+          uploadAttempt: attempt,
+        }) as unknown as PreparedReport;
+
+      it("keeps the attempt it already has when the rebuild changed nothing (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", async () => {
+        // A rebuild the user ran without editing anything would otherwise re-key
+        // bytes the server may already hold, turning a retry that was safe to
+        // repeat into a second stored copy and a second allowance spent.
+        const first = await rebuild(
+          reportIn(dir, { body: new ArrayBuffer(0), idempotencyKey: "" })
+        );
+
+        const second = await rebuild(reportIn(dir, first.uploadAttempt));
+
+        expect(second.uploadAttempt).toBe(first.uploadAttempt);
+        expect(second.uploadAttempt.idempotencyKey).toBe(first.uploadAttempt.idempotencyKey);
+      });
+
+      it("mints a new attempt once the folder's contents changed (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", async () => {
+        const first = await rebuild(
+          reportIn(dir, { body: new ArrayBuffer(0), idempotencyKey: "" })
+        );
+        await realFs.writeFile(
+          nodePath.join(dir, "bundle", "report.md"),
+          "## Description\n\nit broke, and here is more\n"
+        );
+
+        const second = await rebuild(reportIn(dir, first.uploadAttempt));
+
+        expect(second.uploadAttempt).not.toBe(first.uploadAttempt);
+        expect(second.uploadAttempt.idempotencyKey).not.toBe(first.uploadAttempt.idempotencyKey);
+      });
     });
 
     it("names a half-written zip the failed repack could not take back (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", async () => {

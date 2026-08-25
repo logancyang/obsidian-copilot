@@ -97,6 +97,8 @@ const MIN_LOG_TAIL_BYTES = 64 * 1024;
  * handful of long errors would eat the headroom `report.md` is promised.
  */
 const MAX_REASON_BYTES = 1024;
+/** Timestamp stamped into every zip entry; see the pack site for why it is fixed. */
+const ZIP_EPOCH = new Date("1980-01-01T00:00:00.000Z");
 
 export interface ReportEnvInfo {
   pluginVersion: string;
@@ -476,7 +478,18 @@ export async function zipReportBundle(
   // `level: 0` (STORE) is the report endpoint's contract, not a preference: it
   // rejects any entry that is compressed. The size cost is bounded by
   // `MAX_BUNDLE_BYTES`, which now maps 1:1 onto the packed size.
-  const zipped = zipSync(entries, { level: 0 });
+  // A fixed timestamp, so the same folder packs to the same bytes every time.
+  // fflate stamps `Date.now()` into each entry's header otherwise, which makes
+  // two packs of identical content differ in four bytes — enough to defeat the
+  // "did anything actually change?" comparison a rebuild depends on to decide
+  // whether the upload attempt it already has is still the right one. Neither
+  // the report endpoint nor anything here reads the stamps back — the bundle
+  // travels as one upload and its own `report.md` carries the timestamp that
+  // matters — though an archive tool will show them to a user who extracts the
+  // zip by hand. The epoch itself is arbitrary beyond having to sit in the DOS
+  // range fflate accepts (1980-2099).
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/202
+  const zipped = zipSync(entries, { level: 0, mtime: ZIP_EPOCH });
   // Last line of defence, separate from the assembler's budget: redaction can
   // grow text (a short token becomes `<secret>`) and truncation adds a banner,
   // so the packed size is not fully predictable when sources were budgeted.

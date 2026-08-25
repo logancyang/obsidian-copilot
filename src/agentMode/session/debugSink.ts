@@ -213,6 +213,38 @@ export class FrameSink {
   }
 
   /**
+   * The log's path once this sink has established that the location is its
+   * own, or null when there is nothing safe to point at.
+   *
+   * Exists because owning the path and vouching for it are the same job. A
+   * caller that means to read the log — the issue reporter packs it into an
+   * upload — cannot answer "is this file mine?" from the string alone: a
+   * basename and a temp-root prefix describe where a path claims to point,
+   * and on a shared temp root another account can satisfy both with a file of
+   * its own. The answer needs the owner and mode checks `ensureFolder()`
+   * already performs for writes, so this runs them rather than restating a
+   * weaker version of them elsewhere.
+   *
+   * Runs on the write chain, so a caller never observes a path mid-rotation
+   * or mid-clear. Returns null rather than throwing: a report whose activity
+   * log cannot be vouched for is still worth filing without it.
+   * https://github.com/logancyang/obsidian-copilot-preview/issues/250
+   */
+  async getValidatedPath(): Promise<string | null> {
+    const task = this.writeChain.then(async () => {
+      const paths = this.resolvePaths();
+      if (!paths) return null;
+      const runtime = this.getRuntime();
+      if (!runtime) return null;
+      await this.ensureFolder(runtime, paths);
+      return paths.logPath;
+    });
+    const settled = task.catch(() => null);
+    this.writeChain = settled.then(() => {});
+    return settled;
+  }
+
+  /**
    * Narrow logs an earlier build left readable by other local accounts, for
    * the one case ordinary logging never reaches.
    *

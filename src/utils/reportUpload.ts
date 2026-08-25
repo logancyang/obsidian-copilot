@@ -8,8 +8,10 @@
 /**
  * One upload attempt: the exact bytes to send and the idempotency key minted
  * with them. The two travel as a pair on purpose — the key identifies *these
- * bytes* to the server, so retrying re-sends the same object and rebuilding
- * the zip mints a whole new pair. Handing an uploader a path instead would
+ * bytes* to the server, so retrying re-sends the same object, and a rebuild
+ * that produces different bytes mints a whole new pair. A rebuild that
+ * produces identical bytes keeps this one, so a retry stays repeatable rather
+ * than becoming a second stored copy. Handing an uploader a path instead would
  * let the file change under a key that still names the old contents.
  */
 export interface ReportUploadAttempt {
