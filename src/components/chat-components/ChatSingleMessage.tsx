@@ -56,7 +56,7 @@ const FOOTNOTE_SUFFIX_PATTERN = /^\d+-\d+$/;
  * off the chat surface, so a user message taller than this collapses behind a
  * Show more control: https://github.com/Brevilabs/obsidian-copilot-private/issues/151
  */
-const COLLAPSED_USER_MESSAGE_CLASS_NAME = cn("tw-max-h-[60vh]");
+const COLLAPSED_USER_MESSAGE_CLASS_NAME = cn("tw-max-h-[12lh]");
 
 /**
  * Normalizes rendered markdown footnotes to align with inline citation UX.
@@ -312,8 +312,6 @@ interface ChatSingleMessageProps {
   onDelete?: () => void;
   /** Agent Mode metadata placed at the response footer's leading edge, before the timestamp. */
   footerStart?: React.ReactNode;
-  /** Whether overflowing user text should start collapsed. Agent Chat opts in; Quick Chat does not. */
-  collapseLongUserMessages?: boolean;
 }
 
 const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
@@ -324,7 +322,6 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
   onEdit,
   onDelete,
   footerStart,
-  collapseLongUserMessages = false,
 }) => {
   const [isEditing, setIsEditing] = useState<boolean>(false);
   const parsedReasoningBlock = useMemo(
@@ -915,23 +912,6 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
     void insertAtCursor(app, message.message);
   };
 
-  const renderUserMessageText = () => {
-    const text = (
-      <div className="tw-whitespace-pre-wrap tw-break-words tw-text-[calc(var(--font-text-size)_-_2px)] tw-font-normal">
-        {message.message}
-      </div>
-    );
-
-    // Agent Chat can fold a pasted prompt without changing the shared Quick Chat
-    // renderer or moving images and message actions into the clipped region.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/151
-    return collapseLongUserMessages ? (
-      <ClampedContent collapsedClassName={COLLAPSED_USER_MESSAGE_CLASS_NAME}>{text}</ClampedContent>
-    ) : (
-      text
-    );
-  };
-
   const renderMessageContent = () => {
     if (message.content) {
       return (
@@ -943,7 +923,9 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
                   // eslint-disable-next-line @eslint-react/no-array-index-key -- content array is fixed once message is rendered; items not reordered
                   <div key={index}>
                     {message.sender === USER_SENDER ? (
-                      renderUserMessageText()
+                      <div className="tw-whitespace-pre-wrap tw-break-words tw-text-[calc(var(--font-text-size)_-_2px)] tw-font-normal">
+                        {message.message}
+                      </div>
                     ) : (
                       <div
                         ref={contentRef}
@@ -973,7 +955,9 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
 
     // Fallback for messages without content array
     return message.sender === USER_SENDER ? (
-      renderUserMessageText()
+      <div className="tw-whitespace-pre-wrap tw-break-words tw-text-[calc(var(--font-text-size)_-_2px)] tw-font-normal">
+        {message.message}
+      </div>
     ) : (
       <div ref={contentRef} className={message.isErrorMessage ? "tw-text-error" : ""}></div>
     );
@@ -1021,7 +1005,13 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
           )}
 
           <div className="message-content tw-break-words !tw-leading-[1.6]">
-            {renderMessageContent()}
+            {message.sender === USER_SENDER ? (
+              <ClampedContent collapsedClassName={COLLAPSED_USER_MESSAGE_CLASS_NAME}>
+                {renderMessageContent()}
+              </ClampedContent>
+            ) : (
+              renderMessageContent()
+            )}
           </div>
 
           {!isStreaming && (
