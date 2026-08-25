@@ -1,7 +1,7 @@
 {
   "id": "copilot",
   "name": "Copilot",
-  "version": "4.0.2",
+  "version": "4.0.3",
   "minAppVersion": "1.11.4",
   "isDesktopOnly": false,
   "description": "Run AI agents such as Claude Code, Codex, and OpenCode inside your vault. Turn your second brain into a smart assistant that gets knowledge work done.",
