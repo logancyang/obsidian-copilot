@@ -2,6 +2,7 @@ import { CHAT_AGENT_VIEWTYPE } from "@/constants";
 import { Button } from "@/components/ui/button";
 import { SettingItem } from "@/components/ui/setting-item";
 import { SettingSection } from "@/components/ui/setting-section";
+import { DebuggingSupportSection } from "@/settings/v2/components/DebuggingSupportSection";
 import { LegacyChatPromptsNotice } from "@/settings/v2/components/LegacyChatPromptsNotice";
 import { useApp } from "@/context";
 import { logFileManager } from "@/logFileManager";
@@ -51,6 +52,35 @@ export const AdvancedSettings: React.FC = () => {
       cancelled = true;
     };
   }, []);
+
+  const handleOpenFrameLog = safeAsyncHandler(async () => {
+    if (!isDesktopRuntime()) {
+      new Notice("Agent Mode frame logs are available on desktop only.");
+      return;
+    }
+    try {
+      const { acpFrameSink } = await import("@/agentMode");
+      await acpFrameSink.open();
+      setFrameLogPath(acpFrameSink.getPath());
+    } catch {
+      new Notice("Failed to open Agent Mode frame log.");
+    }
+  });
+
+  const handleClearFrameLog = safeAsyncHandler(async () => {
+    if (!isDesktopRuntime()) {
+      new Notice("Agent Mode frame logs are available on desktop only.");
+      return;
+    }
+    try {
+      const { acpFrameSink } = await import("@/agentMode");
+      await acpFrameSink.clear();
+      setFrameLogPath(acpFrameSink.getPath());
+      new Notice("Agent Mode frame log cleared.");
+    } catch {
+      new Notice("Failed to clear Agent Mode frame log.");
+    }
+  });
 
   const keychainAvailable = KeychainService.getInstance().isAvailable();
   const keychainAppearsEmpty = keychainAvailable && !hasPersistedSecrets(settings);
@@ -245,81 +275,18 @@ export const AdvancedSettings: React.FC = () => {
         </SettingItem>
       </SettingSection>
 
-      {/* Agent Mode debugging Section */}
-      <SettingSection
-        label="Agent Mode debugging"
-        description="Tools for diagnosing Agent Mode problems, separate from the regular Copilot chat logs above."
-      >
-        <SettingItem
-          type="custom"
-          title="Report an Issue"
-          description="Bundles a screenshot of the Agent Mode chat pane and a recent activity log into a folder, then opens a prefilled GitHub issue for you to attach them to."
-        >
-          <Button variant="secondary" size="sm" onClick={handleReportIssue}>
-            Report an Issue
-          </Button>
-        </SettingItem>
-
-        <SettingItem
-          type="switch"
-          title="Keep an Agent Mode activity log"
-          description="Records the behind-the-scenes messages between Copilot and the agent so the Report an Issue button always has recent activity to attach. Stored on this device only, outside your vault, and can include your prompts and note contents in plain text. On by default; turn off to stop logging."
-          checked={settings.agentMode.debugFullFrames}
-          onCheckedChange={(checked) => {
-            setSettings((cur) => ({
-              agentMode: { ...cur.agentMode, debugFullFrames: checked },
-            }));
-          }}
-        />
-
-        <SettingItem
-          type="custom"
-          title="Agent Mode activity log file"
-          description={`Open or clear the log file on disk (${frameLogPath}).`}
-        >
-          <div className="tw-flex tw-gap-2">
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={safeAsyncHandler(async () => {
-                if (!isDesktopRuntime()) {
-                  new Notice("Agent Mode frame logs are available on desktop only.");
-                  return;
-                }
-                try {
-                  const { acpFrameSink } = await import("@/agentMode");
-                  await acpFrameSink.open();
-                  setFrameLogPath(acpFrameSink.getPath());
-                } catch {
-                  new Notice("Failed to open Agent Mode frame log.");
-                }
-              })}
-            >
-              Open
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={safeAsyncHandler(async () => {
-                if (!isDesktopRuntime()) {
-                  new Notice("Agent Mode frame logs are available on desktop only.");
-                  return;
-                }
-                try {
-                  const { acpFrameSink } = await import("@/agentMode");
-                  await acpFrameSink.clear();
-                  setFrameLogPath(acpFrameSink.getPath());
-                  new Notice("Agent Mode frame log cleared.");
-                } catch {
-                  new Notice("Failed to clear Agent Mode frame log.");
-                }
-              })}
-            >
-              Clear
-            </Button>
-          </div>
-        </SettingItem>
-      </SettingSection>
+      <DebuggingSupportSection
+        frameLogEnabled={settings.agentMode.debugFullFrames}
+        onFrameLogChange={(checked) => {
+          setSettings((cur) => ({
+            agentMode: { ...cur.agentMode, debugFullFrames: checked },
+          }));
+        }}
+        frameLogPath={frameLogPath}
+        onReportIssue={handleReportIssue}
+        onOpenFrameLog={handleOpenFrameLog}
+        onClearFrameLog={handleClearFrameLog}
+      />
     </div>
   );
 };
