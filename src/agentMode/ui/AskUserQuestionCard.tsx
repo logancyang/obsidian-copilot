@@ -61,11 +61,22 @@ export const AskUserQuestionCard: React.FC<AskUserQuestionCardProps> = ({ reques
   const [otherActive, setOtherActive] = useState<Record<number, boolean>>({});
   const [customTexts, setCustomTexts] = useState<Record<number, string>>({});
 
+  const showTabs = questions.length > 1;
+  const active = questions[activeTab] ?? questions[0];
+  const activeIdx = questions[activeTab] ? activeTab : 0;
+
   // Gate Submit until every question has a preset selection or a non-empty
   // "Other" response. An armed "Other" must be filled even when presets remain.
   const canSubmit = questions.every((q, idx) =>
     isAnswered(q, selections[idx], otherActive[idx] ?? false, customTexts[idx] ?? "")
   );
+  const canAdvance = isAnswered(
+    active,
+    selections[activeIdx],
+    otherActive[activeIdx] ?? false,
+    customTexts[activeIdx] ?? ""
+  );
+  const isFinalQuestion = activeIdx === questions.length - 1;
 
   const submit = (): void => {
     if (busy || !canSubmit) return;
@@ -88,15 +99,23 @@ export const AskUserQuestionCard: React.FC<AskUserQuestionCardProps> = ({ reques
     onResolve(requestId, answers);
   };
 
+  // Tabs may skip questions, so Next validates only the visible answer while
+  // final Submit keeps the request-wide validation that prevents partial payloads.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/117
+  const runPrimaryAction = (): void => {
+    if (isFinalQuestion) {
+      submit();
+      return;
+    }
+    if (busy || !canAdvance) return;
+    setActiveTab(activeIdx + 1);
+  };
+
   const cancel = (): void => {
     if (busy) return;
     setBusy(true);
     onResolve(requestId, {});
   };
-
-  const showTabs = questions.length > 1;
-  const active = questions[activeTab] ?? questions[0];
-  const activeIdx = questions[activeTab] ? activeTab : 0;
 
   // Choosing a preset. Single-select picks one label and disarms "Other";
   // multi-select toggles the label in its Set and leaves "Other" alone.
@@ -176,7 +195,7 @@ export const AskUserQuestionCard: React.FC<AskUserQuestionCardProps> = ({ reques
           onTogglePreset={togglePreset}
           onToggleOther={toggleOther}
           onCustomTextChange={(text) => setCustomTexts((prev) => ({ ...prev, [activeIdx]: text }))}
-          onSubmitShortcut={submit}
+          onPrimaryActionShortcut={runPrimaryAction}
         />
       </div>
 
@@ -184,8 +203,13 @@ export const AskUserQuestionCard: React.FC<AskUserQuestionCardProps> = ({ reques
         <Button variant="secondary" size="sm" disabled={busy} onClick={cancel}>
           Cancel
         </Button>
-        <Button variant="default" size="sm" disabled={busy || !canSubmit} onClick={submit}>
-          Submit
+        <Button
+          variant="default"
+          size="sm"
+          disabled={busy || (isFinalQuestion ? !canSubmit : !canAdvance)}
+          onClick={runPrimaryAction}
+        >
+          {isFinalQuestion ? "Submit" : "Next"}
         </Button>
       </div>
     </div>
@@ -203,8 +227,8 @@ interface QuestionPanelProps {
   onTogglePreset: (label: string) => void;
   onToggleOther: () => void;
   onCustomTextChange: (text: string) => void;
-  /** Cmd/Ctrl+Enter in the textarea; the parent guards on `canSubmit`. */
-  onSubmitShortcut: () => void;
+  /** Cmd/Ctrl+Enter in the textarea; matches the parent's visible primary action. */
+  onPrimaryActionShortcut: () => void;
 }
 
 /** The active question's prompt text plus its single- or multi-select option list. */
@@ -218,7 +242,7 @@ const QuestionPanel: React.FC<QuestionPanelProps> = ({
   onTogglePreset,
   onToggleOther,
   onCustomTextChange,
-  onSubmitShortcut,
+  onPrimaryActionShortcut,
 }) => {
   const control = question.multiSelect ? "checkbox" : "radio";
   return (
@@ -289,7 +313,7 @@ const QuestionPanel: React.FC<QuestionPanelProps> = ({
           onKeyDown={(e) => {
             if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
               e.preventDefault();
-              onSubmitShortcut();
+              onPrimaryActionShortcut();
             }
           }}
           rows={2}

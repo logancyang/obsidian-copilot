@@ -5,6 +5,18 @@ import React from "react";
 
 const SESSION_ID = "s1" as SessionId;
 const REQUEST_ID = "req-1";
+const NAVIGATION_QUESTIONS: AskUserQuestionPrompt["questions"] = [
+  {
+    header: "Scope",
+    question: "Which scope?",
+    options: [{ label: "Current note" }, { label: "Vault" }],
+  },
+  {
+    header: "Format",
+    question: "Which format?",
+    options: [{ label: "Summary" }, { label: "Outline" }],
+  },
+];
 
 function makeRequest(questions: AskUserQuestionPrompt["questions"]): AskUserQuestionPrompt {
   return { sessionId: SESSION_ID, requestId: REQUEST_ID, questions };
@@ -23,6 +35,7 @@ function getOtherControl(role: "radio" | "checkbox"): HTMLElement {
 }
 
 const submitButton = (): HTMLElement => screen.getByRole("button", { name: /submit/i });
+const nextButton = (): HTMLElement => screen.getByRole("button", { name: /next/i });
 const cancelButton = (): HTMLElement => screen.getByRole("button", { name: /cancel/i });
 const otherTextarea = (): HTMLElement => screen.getByPlaceholderText(/type your response/i);
 
@@ -98,12 +111,12 @@ describe("AskUserQuestionCard", () => {
       fireEvent.click(screen.getByRole("tab", { name: "Timing" }));
       fireEvent.click(getOtherControl("radio"));
       fireEvent.change(otherTextarea(), { target: { value: "  Friday after QA  " } });
+      fireEvent.click(screen.getByRole("tab", { name: "Checks" }));
 
       expect((submitButton() as HTMLButtonElement).disabled).toBe(true);
       fireEvent.click(submitButton());
       expect(onResolve).not.toHaveBeenCalled();
 
-      fireEvent.click(screen.getByRole("tab", { name: "Checks" }));
       fireEvent.click(screen.getByRole("checkbox", { name: "End-to-end test" }));
 
       expect((submitButton() as HTMLButtonElement).disabled).toBe(false);
@@ -121,6 +134,69 @@ describe("AskUserQuestionCard", () => {
         "When should we ship?": "Friday after QA",
         "Which checks are required?": "End-to-end test",
       });
+    });
+
+    it("advances an answered non-final question without resolving the request (https://github.com/Brevilabs/obsidian-copilot-private/issues/117)", () => {
+      const onResolve = jest.fn();
+      const request = makeRequest(NAVIGATION_QUESTIONS);
+      renderCard(request, onResolve);
+
+      expect((nextButton() as HTMLButtonElement).disabled).toBe(true);
+      fireEvent.click(screen.getByRole("radio", { name: "Current note" }));
+      expect((nextButton() as HTMLButtonElement).disabled).toBe(false);
+
+      fireEvent.click(nextButton());
+
+      expect(screen.getByRole("tab", { name: "Format" }).getAttribute("aria-selected")).toBe(
+        "true"
+      );
+      expect(screen.getByText("Which format?")).not.toBeNull();
+      expect((submitButton() as HTMLButtonElement).disabled).toBe(true);
+      expect(onResolve).not.toHaveBeenCalled();
+
+      fireEvent.click(screen.getByRole("radio", { name: "Summary" }));
+      expect((submitButton() as HTMLButtonElement).disabled).toBe(false);
+      fireEvent.click(submitButton());
+
+      expect(onResolve).toHaveBeenCalledWith(REQUEST_ID, {
+        "Which scope?": "Current note",
+        "Which format?": "Summary",
+      });
+    });
+
+    it("keeps final Submit disabled when a middle question was skipped (https://github.com/Brevilabs/obsidian-copilot-private/issues/117)", () => {
+      const onResolve = jest.fn();
+      const request = makeRequest([
+        ...NAVIGATION_QUESTIONS,
+        {
+          header: "Length",
+          question: "How long?",
+          options: [{ label: "Short" }, { label: "Detailed" }],
+        },
+      ]);
+      renderCard(request, onResolve);
+
+      fireEvent.click(screen.getByRole("radio", { name: "Current note" }));
+      fireEvent.click(nextButton());
+      fireEvent.click(screen.getByRole("tab", { name: "Length" }));
+      fireEvent.click(screen.getByRole("radio", { name: "Short" }));
+
+      expect((submitButton() as HTMLButtonElement).disabled).toBe(true);
+      fireEvent.click(submitButton());
+      expect(onResolve).not.toHaveBeenCalled();
+    });
+
+    it("uses Cmd/Ctrl+Enter for the same Next action shown on a non-final question (https://github.com/Brevilabs/obsidian-copilot-private/issues/117)", () => {
+      const onResolve = jest.fn();
+      const request = makeRequest(NAVIGATION_QUESTIONS);
+      renderCard(request, onResolve);
+
+      fireEvent.click(getOtherControl("radio"));
+      fireEvent.change(otherTextarea(), { target: { value: "Open files" } });
+      fireEvent.keyDown(otherTextarea(), { key: "Enter", metaKey: true });
+
+      expect(screen.getByText("Which format?")).not.toBeNull();
+      expect(onResolve).not.toHaveBeenCalled();
     });
 
     it("disables Submit while 'Other' is armed with empty text, enabling it once text is typed", () => {
