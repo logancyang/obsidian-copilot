@@ -126,7 +126,7 @@ describe("findRelevantNotes", () => {
       });
     });
 
-    it("returns stable links without semantic scores when Miyo is disabled instead of reading the local index (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
+    it("returns no graph-only fallback rows when Miyo is disabled (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
       mockedGetLinkedNotes.mockReturnValue([
         createMarkdownFile("linked-only.md"),
         createMarkdownFile("alpha.md"),
@@ -138,17 +138,27 @@ describe("findRelevantNotes", () => {
 
       const result = await findRelevantNotes({ app: window.app, filePath: "source.md" });
 
-      expect(result.map((entry) => entry.note.path)).toEqual([
-        "linked-only.md",
-        "alpha.md",
-        "beta.md",
-      ]);
-      expect(result.every((entry) => entry.metadata.similarityScore === undefined)).toBe(true);
-      expect(result[1].metadata).toMatchObject({
-        hasOutgoingLinks: true,
-        hasBacklinks: true,
-      });
+      expect(result).toEqual([]);
       expect(mockSearchRelated).not.toHaveBeenCalled();
+      expect(mockedGetLinkedNotes).not.toHaveBeenCalled();
+      expect(mockedGetBacklinkedNotes).not.toHaveBeenCalled();
+    });
+
+    it("includes graph-only candidates after Miyo related-note search succeeds (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
+      mockedGetSearchBackend.mockReturnValue("miyo");
+      mockedGetLinkedNotes.mockReturnValue([createMarkdownFile("linked-only.md")]);
+
+      const result = await findRelevantNotes({ app: window.app, filePath: "source.md" });
+
+      expect(result).toHaveLength(1);
+      expect(result[0]).toMatchObject({
+        note: { path: "linked-only.md" },
+        metadata: {
+          similarityScore: undefined,
+          hasOutgoingLinks: true,
+          hasBacklinks: false,
+        },
+      });
     });
 
     it("ranks by Miyo similarity without boosting a backlinked lower-scoring note", async () => {
@@ -205,17 +215,16 @@ describe("findRelevantNotes", () => {
       expect(result[19].note.path).toBe("note-5.md");
     });
 
-    it("keeps links without scores when Miyo search fails (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
+    it("rejects without building graph-only fallback rows when Miyo search fails (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
       mockedGetSearchBackend.mockReturnValue("miyo");
       mockSearchRelated.mockRejectedValue(new Error("Miyo unavailable"));
       mockedGetLinkedNotes.mockReturnValue([createMarkdownFile("linked-only.md")]);
 
-      const result = await findRelevantNotes({ app: window.app, filePath: "source.md" });
-
-      expect(result).toHaveLength(1);
-      expect(result[0].note.path).toBe("linked-only.md");
-      expect(result[0].metadata.similarityScore).toBeUndefined();
-      expect(result[0].metadata.hasOutgoingLinks).toBe(true);
+      await expect(findRelevantNotes({ app: window.app, filePath: "source.md" })).rejects.toThrow(
+        "Miyo unavailable"
+      );
+      expect(mockedGetLinkedNotes).not.toHaveBeenCalled();
+      expect(mockedGetBacklinkedNotes).not.toHaveBeenCalled();
     });
   });
 });

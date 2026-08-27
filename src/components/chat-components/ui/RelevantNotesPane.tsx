@@ -1,5 +1,4 @@
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 import { Download } from "lucide-react";
 import React from "react";
 
@@ -22,16 +21,10 @@ export function RelevantNotesPane({
   onOpenMiyoSettings,
 }: RelevantNotesPaneProps): React.ReactElement {
   const isDownload = guidance === "download";
-  // A links-only result set must keep its rows and show the same actionable
-  // guidance as an empty semantic result. Otherwise backlinks hide Miyo setup.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
   const guidancePanel = guidance ? (
     <div
       data-miyo-guidance={guidance}
-      className={cn(
-        "tw-flex tw-w-full tw-flex-col tw-gap-3 tw-rounded-lg tw-border tw-border-solid tw-border-border tw-bg-secondary tw-p-3",
-        noteCount === 0 && "tw-max-w-xs tw-items-center tw-p-5 tw-text-center"
-      )}
+      className="tw-flex tw-w-full tw-max-w-xs tw-flex-col tw-items-center tw-gap-3 tw-rounded-lg tw-border tw-border-solid tw-border-border tw-bg-secondary tw-p-5 tw-text-center"
     >
       <div className="tw-flex tw-flex-col tw-gap-1">
         <span className="tw-text-sm tw-font-semibold tw-text-normal">
@@ -39,7 +32,7 @@ export function RelevantNotesPane({
         </span>
         <span className="tw-text-xs tw-leading-normal tw-text-muted">
           {isDownload
-            ? "Download Miyo, then connect it in Copilot settings. Links and backlinks still work without it."
+            ? "Download Miyo, then connect it in Copilot settings to find related notes."
             : "Check your connection and make sure this vault is registered and indexed."}
         </span>
       </div>
@@ -70,10 +63,5 @@ export function RelevantNotesPane({
     );
   }
 
-  return (
-    <div className="tw-flex tw-flex-col tw-gap-2">
-      {guidancePanel}
-      <div className="tw-flex tw-flex-col tw-gap-0.5">{noteRows}</div>
-    </div>
-  );
+  return <div className="tw-flex tw-flex-col tw-gap-0.5">{noteRows}</div>;
 }

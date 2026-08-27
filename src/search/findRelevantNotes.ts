@@ -89,25 +89,8 @@ async function calculateSimilarityScoreFromMiyo(
         (error as Error).message
       }`
     );
-    return new Map();
+    throw error;
   }
-}
-
-/**
- * Calculate Relevant Notes similarity scores through Miyo.
- *
- * @param app - The Obsidian app instance.
- * @param filePath - Source note path.
- * @returns Map of note paths to max similarity score.
- */
-async function calculateSimilarityScore(app: App, filePath: string): Promise<Map<string, number>> {
-  // Links and backlinks remain useful without Miyo, but the legacy local index
-  // must not assign them semantic scores or trigger a hidden Miyo fallback.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
-  if (getSearchBackend(getSettings()) !== "miyo") {
-    return new Map();
-  }
-  return calculateSimilarityScoreFromMiyo(app, filePath);
 }
 
 /**
@@ -158,7 +141,8 @@ export type RelevantNoteEntry = {
  * @param app - The Obsidian app instance.
  * @param filePath - The file path to find relevant notes for.
  * @returns Relevant-note hits allowed by the current inclusion/exclusion rules.
- *   Empty when no allowed notes are found.
+ *   Empty when no allowed notes are found or Miyo is not enabled as the search backend.
+ * @throws When the Miyo related-note request cannot complete.
  */
 export async function findRelevantNotes({
   app,
@@ -172,7 +156,15 @@ export async function findRelevantNotes({
     return [];
   }
 
-  const similarityScoreMap = await calculateSimilarityScore(app, filePath);
+  // A graph-only fallback makes Relevant Notes look partially functional when
+  // its Miyo-backed index is unavailable. Only build graph candidates after a
+  // Miyo search can run successfully.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
+  if (getSearchBackend(getSettings()) !== "miyo") {
+    return [];
+  }
+
+  const similarityScoreMap = await calculateSimilarityScoreFromMiyo(app, filePath);
   const noteLinks = getNoteLinks(app, file);
 
   // Rank purely by semantic similarity so the displayed percentages stay

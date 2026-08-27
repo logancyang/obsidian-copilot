@@ -56,10 +56,6 @@ export const NoMiyoEmptyGuidance: StoryObj<RelevantNotesPaneProps> = {
   args: { guidance: "download", noteCount: 0, noteRows: null },
 };
 
-export const LinksOnlyDownloadGuidance: StoryObj<RelevantNotesPaneProps> = {
-  args: { guidance: "download", noteRows: <NoteRows scored={false} /> },
-};
-
-export const LinksOnlySetupGuidance: StoryObj<RelevantNotesPaneProps> = {
-  args: { guidance: "setup", noteRows: <NoteRows scored={false} /> },
+export const MiyoSetupEmptyGuidance: StoryObj<RelevantNotesPaneProps> = {
+  args: { guidance: "setup", noteCount: 0, noteRows: null },
 };
