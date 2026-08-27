@@ -2480,6 +2480,9 @@ export class AgentSessionManager {
   setActiveSession(id: string): void {
     const session = this.sessions.get(id);
     if (!session) return;
+    // An active session can be marked while its chat lacks focus, so clicking
+    // that same tab must still acknowledge it. https://github.com/logancyang/obsidian-copilot/issues/2987
+    session.clearNeedsAttention();
     if (this.activeSessionId === id) return;
     if (session.projectId !== this.activeProjectId) {
       this.parkActiveScope();
@@ -2490,7 +2493,6 @@ export class AgentSessionManager {
     this.detachedFromTabIds.delete(id);
     this.activeSessionId = id;
     this.lastActiveByScope.set(session.projectId, id);
-    session.clearNeedsAttention();
     this.notify();
   }
 
@@ -3368,18 +3370,11 @@ export class AgentSessionManager {
         prev = next;
         void this.flushDeferredBackendRestartIfReady(session.backendId);
         // Only a turn that actually ran can newly demand attention. Permission
-        // sounds are emitted at request arrival instead, because another request
+        // signals are emitted at request arrival instead, because another request
         // may arrive while the session is already awaiting permission.
         // https://github.com/logancyang/obsidian-copilot/issues/2987
         const wantsUser = wasRunning && ATTENTION_TRIGGER_STATUSES.has(next);
-        if (wantsUser && this.activeSessionId !== session.internalId) {
-          session.markNeedsAttention();
-        }
-        // Focus inside this exact chat is the only reliable proof that the
-        // notification would be redundant. https://github.com/logancyang/obsidian-copilot/issues/2987
-        if (wantsUser && next !== "awaiting_permission" && !this.isSessionFocused(session)) {
-          this.playConfiguredNotificationSound();
-        }
+        if (wantsUser && next !== "awaiting_permission") this.signalSessionNeedsAttention(session);
         // Re-render recent-list rows when this session's running membership
         // flips, so the row's spinner appears/disappears in step.
         if (wasRunning !== isRunning) this.notify();
@@ -3400,6 +3395,15 @@ export class AgentSessionManager {
     return activeElement !== null && container.contains(activeElement);
   }
 
+  /** Raise the visual and audible attention signals from one shared focus decision. */
+  private signalSessionNeedsAttention(session: AgentSession): void {
+    // Focus inside this exact chat is the only reliable proof that neither
+    // signal is needed. https://github.com/logancyang/obsidian-copilot/issues/2987
+    if (this.isSessionFocused(session)) return;
+    session.markNeedsAttention();
+    this.playConfiguredNotificationSound();
+  }
+
   /** Play the user's chosen sound when agent notifications are enabled. */
   private playConfiguredNotificationSound(): void {
     const { notificationSound, notificationSoundId } = getSettings().agentMode;
@@ -3415,11 +3419,13 @@ export class AgentSessionManager {
    */
   private wirePrompters(proc: BackendProcess): void {
     proc.setPermissionPrompter((request) => {
-      // Each request gets its own notification even when an earlier permission
-      // card already keeps the session in `awaiting_permission`.
+      // Each request reasserts attention even when an earlier permission card
+      // already keeps the session in `awaiting_permission`; the audio layer
+      // collapses sounds that would land within its grace period.
       // https://github.com/logancyang/obsidian-copilot/issues/2987
       const session = this.getSessionByBackendId(request.sessionId);
-      if (!session || !this.isSessionFocused(session)) this.playConfiguredNotificationSound();
+      if (session) this.signalSessionNeedsAttention(session);
+      else this.playConfiguredNotificationSound();
       return this.opts.permissionPrompter(request);
     });
     if (this.opts.askUserQuestionPrompter) {

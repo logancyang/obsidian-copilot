@@ -75,6 +75,7 @@ describe("notificationSound", () => {
   afterEach(() => {
     // Also drops the module-level context so the next test starts cold.
     disposeNotificationSound();
+    jest.restoreAllMocks();
     delete (window as unknown as Record<string, unknown>).AudioContext;
   });
 
@@ -135,13 +136,29 @@ describe("notificationSound", () => {
       );
     });
 
-    it("reuses one audio context across repeated plays", () => {
+    it("reuses one audio context across plays outside the grace period", () => {
       const audio = installMockAudio();
+      jest.spyOn(Date, "now").mockReturnValueOnce(1_000).mockReturnValueOnce(2_000);
 
       playNotificationSound("piano");
       playNotificationSound("piano");
 
       expect(audio.constructorCalls).toBe(1);
+      expect(audio.instance.createOscillator).toHaveBeenCalledTimes(2);
+    });
+
+    it("allows at most one sound per second (https://github.com/logancyang/obsidian-copilot/issues/2987)", () => {
+      const audio = installMockAudio();
+      jest
+        .spyOn(Date, "now")
+        .mockReturnValueOnce(1_000)
+        .mockReturnValueOnce(1_999)
+        .mockReturnValueOnce(2_000);
+
+      playNotificationSound("piano");
+      playNotificationSound("piano");
+      playNotificationSound("piano");
+
       expect(audio.instance.createOscillator).toHaveBeenCalledTimes(2);
     });
 

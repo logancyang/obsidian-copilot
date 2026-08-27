@@ -1112,25 +1112,28 @@ describe("AgentSessionManager attention tracking", () => {
     expect(b.getNeedsAttention()).toBe(true);
   });
 
-  it("flags a backgrounded session that pauses for permission", async () => {
+  it("flags a backgrounded session when a permission request arrives (https://github.com/logancyang/obsidian-copilot/issues/2987)", async () => {
     const mgr = buildManager();
     const a = await mgr.createSession();
     const b = await mgr.createSession();
     mgr.setActiveSession(a.internalId);
-    const bHandle = getSessionTestHandle(b);
-    bHandle.setStatus("running");
-    bHandle.setStatus("awaiting_permission");
+    const notifyPermission = mockSetPermissionPrompter.mock.calls.at(-1)?.[0] as (
+      request: PermissionPrompt
+    ) => Promise<unknown>;
+
+    void notifyPermission(permissionPrompt(b.getBackendSessionId()!, "permission-1"));
+
     expect(b.getNeedsAttention()).toBe(true);
   });
 
-  it("does not flag the active session", async () => {
+  it("flags the active session when its chat is not focused (https://github.com/logancyang/obsidian-copilot/issues/2987)", async () => {
     const mgr = buildManager();
     const a = await mgr.createSession();
     expect(mgr.getActiveSession()).toBe(a);
     const aHandle = getSessionTestHandle(a);
     aHandle.setStatus("running");
     aHandle.setStatus("idle");
-    expect(a.getNeedsAttention()).toBe(false);
+    expect(a.getNeedsAttention()).toBe(true);
   });
 
   it("chimes when a turn ends (https://github.com/logancyang/obsidian-copilot/issues/2987)", async () => {
@@ -1155,6 +1158,7 @@ describe("AgentSessionManager attention tracking", () => {
     handle.setStatus("idle");
 
     expect(playNotificationSound).not.toHaveBeenCalled();
+    expect(session.getNeedsAttention()).toBe(false);
   });
 
   it.each([
@@ -1173,6 +1177,7 @@ describe("AgentSessionManager attention tracking", () => {
       handle.setStatus("idle");
 
       expect(playNotificationSound).toHaveBeenCalledWith("piano");
+      expect(session.getNeedsAttention()).toBe(true);
     }
   );
 
@@ -1187,6 +1192,7 @@ describe("AgentSessionManager attention tracking", () => {
     void notifyPermission(permissionPrompt(a.getBackendSessionId()!, "permission-2"));
 
     expect(playNotificationSound).toHaveBeenCalledTimes(2);
+    expect(a.getNeedsAttention()).toBe(true);
   });
 
   it("stays silent for a permission request in the focused Agent Chat (https://github.com/logancyang/obsidian-copilot/issues/2987)", async () => {
@@ -1200,6 +1206,7 @@ describe("AgentSessionManager attention tracking", () => {
     void notifyPermission(permissionPrompt(session.getBackendSessionId()!, "permission-1"));
 
     expect(playNotificationSound).not.toHaveBeenCalled();
+    expect(session.getNeedsAttention()).toBe(false);
   });
 
   it("chimes when a backgrounded session finishes (https://github.com/logancyang/obsidian-copilot/issues/2987)", async () => {
@@ -1214,6 +1221,7 @@ describe("AgentSessionManager attention tracking", () => {
     bHandle.setStatus("idle");
 
     expect(playNotificationSound).toHaveBeenCalledWith("piano");
+    expect(b.getNeedsAttention()).toBe(true);
   });
 
   it("stays silent when the notification sound setting is off (https://github.com/logancyang/obsidian-copilot/issues/2987)", async () => {
@@ -1226,6 +1234,7 @@ describe("AgentSessionManager attention tracking", () => {
     aHandle.setStatus("idle");
 
     expect(playNotificationSound).not.toHaveBeenCalled();
+    expect(a.getNeedsAttention()).toBe(true);
   });
 
   it("stays silent on the starting → idle transition of a fresh session (https://github.com/logancyang/obsidian-copilot/issues/2987)", async () => {
@@ -1249,6 +1258,19 @@ describe("AgentSessionManager attention tracking", () => {
     bHandle.setStatus("starting");
     bHandle.setStatus("idle");
     expect(b.getNeedsAttention()).toBe(false);
+  });
+
+  it("clears an unfocused active session's flag when the user clicks its tab (https://github.com/logancyang/obsidian-copilot/issues/2987)", async () => {
+    const mgr = buildManager();
+    const session = await mgr.createSession();
+    const handle = getSessionTestHandle(session);
+    handle.setStatus("running");
+    handle.setStatus("idle");
+    expect(session.getNeedsAttention()).toBe(true);
+
+    mgr.setActiveSession(session.internalId);
+
+    expect(session.getNeedsAttention()).toBe(false);
   });
 
   it("clears the flag when the user activates the tab", async () => {
@@ -1399,7 +1421,8 @@ describe("AgentSessionManager.getAttentionChatIds", () => {
     expect(mgr.getAttentionChatIds().has(nativeId)).toBe(true);
   });
 
-  it("does not include the active session (it never flags attention)", async () => {
+  it("does not include the focused active session (https://github.com/logancyang/obsidian-copilot/issues/2987)", async () => {
+    mockAgentChatFocus = "inside";
     const mgr = buildManager();
     const a = await mgr.createSession();
     const aHandle = getSessionTestHandle(a);

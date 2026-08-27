@@ -10,6 +10,8 @@ import {
 const ATTACK_SECONDS = 0.005;
 /** Exponential ramps cannot reach zero, so decay to an inaudible floor. */
 const SILENCE_GAIN = 0.0001;
+/** Prevent clustered agent events from producing an audio burst. */
+const SOUND_GRACE_PERIOD_MS = 1_000;
 
 /**
  * One context for the plugin's lifetime. Each context owns an OS audio
@@ -17,6 +19,7 @@ const SILENCE_GAIN = 0.0001;
  * latency on every play.
  */
 let context: AudioContext | null = null;
+let lastPlayedAtMs: number | undefined;
 
 /**
  * Play the named sound to tell the user something wants their attention.
@@ -34,10 +37,14 @@ let context: AudioContext | null = null;
  */
 export function playNotificationSound(id: NotificationSoundId): void {
   try {
+    const nowMs = Date.now();
+    // https://github.com/logancyang/obsidian-copilot/issues/2987
+    if (lastPlayedAtMs !== undefined && nowMs - lastPlayedAtMs < SOUND_GRACE_PERIOD_MS) return;
     if (!context) {
       if (!window.AudioContext) return;
       context = new window.AudioContext();
     }
+    lastPlayedAtMs = nowMs;
     // Chromium suspends a context constructed before any user gesture. By the
     // time an agent turn ends the user has typed and sent a message, so the
     // resume succeeds; it is a no-op on an already-running context.
@@ -82,6 +89,7 @@ export function playNotificationSound(id: NotificationSoundId): void {
 export function disposeNotificationSound(): void {
   const closing = context;
   context = null;
+  lastPlayedAtMs = undefined;
   closing?.close().catch((error) => {
     logWarn("Copilot: failed to close the notification audio context.", error);
   });
