@@ -81,6 +81,8 @@ describe("claude descriptor", () => {
           byok: {},
           activeBackend: "claude",
           debugFullFrames: false,
+          notificationSound: false,
+          notificationSoundId: "piano",
           welcomeDismissed: false,
           skills: { folder: "copilot/skills" },
           backends: {

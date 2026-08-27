@@ -205,9 +205,63 @@ describe("sanitizeSettings - agentMode shape migration", () => {
       activeBackend: "opencode",
       backends: {},
       debugFullFrames: true,
+      notificationSound: true,
+      notificationSoundId: "piano",
       welcomeDismissed: false,
       skills: { folder: "copilot/skills" },
     });
+  });
+
+  it("defaults notificationSound to on so an unattended turn still calls the user back", () => {
+    expect(DEFAULT_SETTINGS.agentMode.notificationSound).toBe(true);
+    const sanitized = sanitizeSettings({
+      ...DEFAULT_SETTINGS,
+      agentMode: {
+        byok: {},
+        activeBackend: "opencode",
+        backends: {},
+      },
+    } as unknown as CopilotSettings);
+    expect(sanitized.agentMode.notificationSound).toBe(true);
+  });
+
+  it("keeps a chosen notification sound and drops one no longer in the catalog (https://github.com/logancyang/obsidian-copilot/issues/2987)", () => {
+    const chosen = sanitizeSettings({
+      ...DEFAULT_SETTINGS,
+      agentMode: {
+        byok: {},
+        activeBackend: "opencode",
+        backends: {},
+        notificationSoundId: "doorbell",
+      },
+    } as unknown as CopilotSettings);
+    expect(chosen.agentMode.notificationSoundId).toBe("doorbell");
+
+    const removed = sanitizeSettings({
+      ...DEFAULT_SETTINGS,
+      agentMode: {
+        byok: {},
+        activeBackend: "opencode",
+        backends: {},
+        notificationSoundId: "removed-sound",
+      },
+    } as unknown as CopilotSettings);
+    expect(removed.agentMode.notificationSoundId).toBe(
+      DEFAULT_SETTINGS.agentMode.notificationSoundId
+    );
+  });
+
+  it("preserves an explicit notificationSound=false (a user who muted it stays muted)", () => {
+    const sanitized = sanitizeSettings({
+      ...DEFAULT_SETTINGS,
+      agentMode: {
+        byok: {},
+        activeBackend: "opencode",
+        backends: {},
+        notificationSound: false,
+      },
+    } as unknown as CopilotSettings);
+    expect(sanitized.agentMode.notificationSound).toBe(false);
   });
 
   it("defaults debugFullFrames to on for new installs", () => {

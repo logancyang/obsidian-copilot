@@ -37,6 +37,8 @@ import { AgentSession, ATTENTION_TRIGGER_STATUSES, DEFAULT_TITLE_PREFIX } from "
 import type { AgentChatPersistenceManager } from "./AgentChatPersistenceManager";
 import type { AgentModelPreloader } from "./AgentModelPreloader";
 import { buildNativeChatId, parseNativeChatId } from "@/utils/nativeChatId";
+import { CHAT_AGENT_VIEWTYPE } from "@/constants";
+import { playNotificationSound } from "@/utils/notificationSound";
 import type { AgentSessionIndex } from "./AgentSessionIndex";
 import {
   deriveChatTitleFromMessages,
@@ -2478,6 +2480,9 @@ export class AgentSessionManager {
   setActiveSession(id: string): void {
     const session = this.sessions.get(id);
     if (!session) return;
+    // An active session can be marked while its chat lacks focus, so clicking
+    // that same tab must still acknowledge it. https://github.com/logancyang/obsidian-copilot/issues/2987
+    session.clearNeedsAttention();
     if (this.activeSessionId === id) return;
     if (session.projectId !== this.activeProjectId) {
       this.parkActiveScope();
@@ -2488,7 +2493,6 @@ export class AgentSessionManager {
     this.detachedFromTabIds.delete(id);
     this.activeSessionId = id;
     this.lastActiveByScope.set(session.projectId, id);
-    session.clearNeedsAttention();
     this.notify();
   }
 
@@ -3352,11 +3356,9 @@ export class AgentSessionManager {
   }
 
   /**
-   * Watch this session's status transitions and flag `needsAttention` when
-   * it transitions out of `running` into a state that demands the user's
-   * eye (turn ended, errored, or paused for permission) while a *different*
-   * tab is active. The flag is cleared in `setActiveSession` when the user
-   * clicks back to this tab.
+   * Watch this session's status transitions out of `running` into a state
+   * that demands the user's eye (turn ended, errored, or paused for
+   * permission) and raise the two attention signals.
    */
   private attachAttentionTracking(session: AgentSession): void {
     let prev = session.getStatus();
@@ -3367,21 +3369,44 @@ export class AgentSessionManager {
         const isRunning = next === "running";
         prev = next;
         void this.flushDeferredBackendRestartIfReady(session.backendId);
-        // Existing attention marking — unchanged semantics: a backgrounded
-        // session that leaves `running` for a status that demands the user's eye.
-        if (
-          wasRunning &&
-          ATTENTION_TRIGGER_STATUSES.has(next) &&
-          this.activeSessionId !== session.internalId
-        ) {
-          session.markNeedsAttention();
-        }
+        // Only a turn that actually ran can newly demand attention.
+        // https://github.com/logancyang/obsidian-copilot/issues/2987
+        const wantsUser = wasRunning && ATTENTION_TRIGGER_STATUSES.has(next);
+        if (wantsUser) this.signalSessionNeedsAttention(session);
         // Re-render recent-list rows when this session's running membership
         // flips, so the row's spinner appears/disappears in step.
         if (wasRunning !== isRunning) this.notify();
       },
     });
     this.getSessionState(session.internalId).attentionUnsub = unsubscribe;
+  }
+
+  /** Whether keyboard focus is currently inside this session's active Agent Chat leaf. */
+  private isSessionFocused(session: AgentSession): boolean {
+    if (this.activeSessionId !== session.internalId) return false;
+    const leaf = this.app.workspace.getMostRecentLeaf();
+    if (leaf?.view.getViewType() !== CHAT_AGENT_VIEWTYPE) return false;
+    const container = leaf.view.containerEl;
+    const doc = container.ownerDocument;
+    if (!doc.hasFocus()) return false;
+    const activeElement = doc.activeElement;
+    return activeElement !== null && container.contains(activeElement);
+  }
+
+  /** Raise the visual and audible attention signals from one shared focus decision. */
+  private signalSessionNeedsAttention(session: AgentSession): void {
+    // Focus inside this exact chat is the only reliable proof that neither
+    // signal is needed. https://github.com/logancyang/obsidian-copilot/issues/2987
+    if (this.isSessionFocused(session)) return;
+    session.markNeedsAttention();
+    this.playConfiguredNotificationSound();
+  }
+
+  /** Play the user's chosen sound when agent notifications are enabled. */
+  private playConfiguredNotificationSound(): void {
+    const { notificationSound, notificationSoundId } = getSettings().agentMode;
+    if (!notificationSound) return;
+    playNotificationSound(notificationSoundId);
   }
 
   /**

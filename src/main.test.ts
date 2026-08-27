@@ -41,6 +41,7 @@ jest.mock("@/services/webViewerService/webViewerServiceSingleton", () => ({
   startActiveWebTabTracking: jest.fn(),
 }));
 jest.mock("@/utils/desktopRuntime", () => ({ isDesktopRuntime: jest.fn(() => false) }));
+jest.mock("@/utils/notificationSound", () => ({ disposeNotificationSound: jest.fn() }));
 const mockSkillManagerDispose = jest.fn();
 const mockSkillManagerHasInstance = jest.fn(() => true);
 jest.mock("@/agentMode", () => ({
@@ -56,6 +57,7 @@ import { logFileManager } from "@/logFileManager";
 import { resetMiyoMutations } from "@/miyo/miyoResync";
 import { flushPersistence } from "@/services/settingsPersistence";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
+import { disposeNotificationSound } from "@/utils/notificationSound";
 
 /**
  * Build a plugin instance without running Obsidian's `Plugin` constructor or
@@ -98,6 +100,7 @@ describe("main", () => {
     describe("onunload()", () => {
       beforeEach(() => {
         jest.clearAllMocks();
+        (disposeNotificationSound as jest.Mock).mockReset();
         (flushPersistence as jest.Mock).mockResolvedValue(undefined);
         (logFileManager.flush as jest.Mock).mockResolvedValue(undefined);
         (isDesktopRuntime as jest.Mock).mockReturnValue(false);
@@ -120,6 +123,25 @@ describe("main", () => {
         expect(resetMiyoMutations).toHaveBeenCalledTimes(1);
         expect(flushPersistence).toHaveBeenCalledTimes(1);
         expect(calls).toEqual([]);
+      });
+
+      it("releases audio before asynchronous teardown can overlap a later plugin lifecycle (https://github.com/logancyang/obsidian-copilot/issues/2987)", async () => {
+        const calls: string[] = [];
+        let releasePersistence: () => void = () => undefined;
+        (disposeNotificationSound as jest.Mock).mockImplementation(() => calls.push("audio"));
+        (flushPersistence as jest.Mock).mockImplementation(() => {
+          calls.push("persistence");
+          return new Promise<void>((resolve) => {
+            releasePersistence = resolve;
+          });
+        });
+        const plugin = createPluginUnderTest(calls);
+
+        plugin.onunload();
+
+        expect(calls).toEqual(["audio", "persistence"]);
+        releasePersistence();
+        await flushTeardown();
       });
 
       it("tears down collaborators in order, flushing persistence before session shutdown and the log last", async () => {

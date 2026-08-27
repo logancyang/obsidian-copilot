@@ -78,6 +78,7 @@ import { buildUpgradeRelocationEntries } from "@/settings/upgradeNotice";
 import { dehydrateDeviceProfile, hydrateDeviceProfile } from "@/settings/deviceProfiles";
 import { getDeviceId } from "@/utils/deviceId";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
+import { disposeNotificationSound } from "@/utils/notificationSound";
 import { installRendererEventsShim } from "@/utils/rendererEventsShim";
 import { ContextProcessor } from "@/contextProcessor";
 import { CustomCommandManager } from "@/commands/customCommandManager";
@@ -649,6 +650,10 @@ export default class CopilotPlugin extends Plugin {
     // teardown() is invoked synchronously, so everything above its first
     // `await` still runs before this call returns, and a failure partway
     // through is logged instead of becoming an unhandled rejection.
+    // The audio module is shared across hot-reloaded plugin instances, so an
+    // outgoing async teardown must release its context before a successor can
+    // create one. https://github.com/logancyang/obsidian-copilot/issues/2987
+    disposeNotificationSound();
     this.teardown().catch((error) => {
       logError("Copilot: plugin teardown failed during unload:", error);
     });

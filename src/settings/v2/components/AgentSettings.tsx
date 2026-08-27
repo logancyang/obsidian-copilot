@@ -9,6 +9,11 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { SettingItem } from "@/components/ui/setting-item";
+import { playNotificationSound } from "@/utils/notificationSound";
+import {
+  NOTIFICATION_SOUND_OPTIONS,
+  isNotificationSoundId,
+} from "@/utils/notificationSoundCatalog";
 import { SettingSection } from "@/components/ui/setting-section";
 import { TabContent, TabItem, type TabItem as TabItemType } from "@/components/ui/setting-tabs";
 import { TruncatedText } from "@/components/TruncatedText";
@@ -21,6 +26,7 @@ import { AlertTriangle, MessageCircle } from "lucide-react";
 import React from "react";
 import { ChatModelEnableList } from "./ChatModelEnableList";
 import { ConfiguredModelEnableList } from "./ConfiguredModelEnableList";
+import { AgentNotificationSoundSettings } from "./ui/AgentNotificationSoundSettings";
 
 /** Synthetic sub-tab id for the (non-backend) Quick Chat model curation. */
 const QUICK_CHAT_TAB_ID = "quickchat";
@@ -109,6 +115,21 @@ export const AgentSettings: React.FC = () => {
             setSettings((cur) => ({ agentMode: { ...cur.agentMode, activeBackend: value } }))
           }
           options={orderedDescriptors.map((d) => ({ label: d.displayName, value: d.id }))}
+        />
+        <AgentNotificationSoundSettings
+          enabled={settings.agentMode.notificationSound}
+          onEnabledChange={(enabled) =>
+            setSettings((cur) => ({ agentMode: { ...cur.agentMode, notificationSound: enabled } }))
+          }
+          onSoundChange={(value) => {
+            if (!isNotificationSoundId(value)) return;
+            setSettings((cur) => ({
+              agentMode: { ...cur.agentMode, notificationSoundId: value },
+            }));
+            playNotificationSound(value);
+          }}
+          soundId={settings.agentMode.notificationSoundId}
+          soundOptions={NOTIFICATION_SOUND_OPTIONS}
         />
       </SettingSection>
 
