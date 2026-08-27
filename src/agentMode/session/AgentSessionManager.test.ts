@@ -38,7 +38,6 @@ import type {
   BackendModelCatalog,
   BackendState,
   InstallState,
-  PermissionPrompt,
 } from "./types";
 
 const mockEnsureMaterialized = ensureProjectContextMaterialized as jest.Mock;
@@ -273,14 +272,6 @@ function buildWorkspace(): unknown {
   };
   return {
     getMostRecentLeaf: jest.fn(() => (mockAgentChatFocus === "none" ? null : leaf)),
-  };
-}
-
-function permissionPrompt(sessionId: string, toolCallId: string): PermissionPrompt {
-  return {
-    sessionId,
-    toolCall: { toolCallId, title: "Edit note", kind: "edit", status: "pending" },
-    options: [{ optionId: "allow_once", name: "Allow once", kind: "allow_once" }],
   };
 }
 
@@ -1112,16 +1103,15 @@ describe("AgentSessionManager attention tracking", () => {
     expect(b.getNeedsAttention()).toBe(true);
   });
 
-  it("flags a backgrounded session when a permission request arrives (https://github.com/logancyang/obsidian-copilot/issues/2987)", async () => {
+  it("flags a backgrounded session when it starts awaiting permission (https://github.com/logancyang/obsidian-copilot/issues/2987)", async () => {
     const mgr = buildManager();
     const a = await mgr.createSession();
     const b = await mgr.createSession();
     mgr.setActiveSession(a.internalId);
-    const notifyPermission = mockSetPermissionPrompter.mock.calls.at(-1)?.[0] as (
-      request: PermissionPrompt
-    ) => Promise<unknown>;
+    const bHandle = getSessionTestHandle(b);
 
-    void notifyPermission(permissionPrompt(b.getBackendSessionId()!, "permission-1"));
+    bHandle.setStatus("running");
+    bHandle.setStatus("awaiting_permission");
 
     expect(b.getNeedsAttention()).toBe(true);
   });
@@ -1181,29 +1171,26 @@ describe("AgentSessionManager attention tracking", () => {
     }
   );
 
-  it("chimes for each concurrent permission request while the session remains paused (https://github.com/logancyang/obsidian-copilot/issues/2987)", async () => {
+  it("chimes when a session starts awaiting permission (https://github.com/logancyang/obsidian-copilot/issues/2987)", async () => {
     const mgr = buildManager();
     const a = await mgr.createSession();
-    const notifyPermission = mockSetPermissionPrompter.mock.calls.at(-1)?.[0] as (
-      request: PermissionPrompt
-    ) => Promise<unknown>;
+    const aHandle = getSessionTestHandle(a);
 
-    void notifyPermission(permissionPrompt(a.getBackendSessionId()!, "permission-1"));
-    void notifyPermission(permissionPrompt(a.getBackendSessionId()!, "permission-2"));
+    aHandle.setStatus("running");
+    aHandle.setStatus("awaiting_permission");
 
-    expect(playNotificationSound).toHaveBeenCalledTimes(2);
+    expect(playNotificationSound).toHaveBeenCalledTimes(1);
     expect(a.getNeedsAttention()).toBe(true);
   });
 
-  it("stays silent for a permission request in the focused Agent Chat (https://github.com/logancyang/obsidian-copilot/issues/2987)", async () => {
+  it("stays silent when the focused Agent Chat starts awaiting permission (https://github.com/logancyang/obsidian-copilot/issues/2987)", async () => {
     mockAgentChatFocus = "inside";
     const mgr = buildManager();
     const session = await mgr.createSession();
-    const notifyPermission = mockSetPermissionPrompter.mock.calls.at(-1)?.[0] as (
-      request: PermissionPrompt
-    ) => Promise<unknown>;
+    const handle = getSessionTestHandle(session);
 
-    void notifyPermission(permissionPrompt(session.getBackendSessionId()!, "permission-1"));
+    handle.setStatus("running");
+    handle.setStatus("awaiting_permission");
 
     expect(playNotificationSound).not.toHaveBeenCalled();
     expect(session.getNeedsAttention()).toBe(false);

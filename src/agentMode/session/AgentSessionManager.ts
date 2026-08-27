@@ -3369,12 +3369,10 @@ export class AgentSessionManager {
         const isRunning = next === "running";
         prev = next;
         void this.flushDeferredBackendRestartIfReady(session.backendId);
-        // Only a turn that actually ran can newly demand attention. Permission
-        // signals are emitted at request arrival instead, because another request
-        // may arrive while the session is already awaiting permission.
+        // Only a turn that actually ran can newly demand attention.
         // https://github.com/logancyang/obsidian-copilot/issues/2987
         const wantsUser = wasRunning && ATTENTION_TRIGGER_STATUSES.has(next);
-        if (wantsUser && next !== "awaiting_permission") this.signalSessionNeedsAttention(session);
+        if (wantsUser) this.signalSessionNeedsAttention(session);
         // Re-render recent-list rows when this session's running membership
         // flips, so the row's spinner appears/disappears in step.
         if (wasRunning !== isRunning) this.notify();
@@ -3418,16 +3416,7 @@ export class AgentSessionManager {
    * the optional `setAskUserQuestionPrompter` surface (Claude SDK today).
    */
   private wirePrompters(proc: BackendProcess): void {
-    proc.setPermissionPrompter((request) => {
-      // Each request reasserts attention even when an earlier permission card
-      // already keeps the session in `awaiting_permission`; the audio layer
-      // collapses sounds that would land within its grace period.
-      // https://github.com/logancyang/obsidian-copilot/issues/2987
-      const session = this.getSessionByBackendId(request.sessionId);
-      if (session) this.signalSessionNeedsAttention(session);
-      else this.playConfiguredNotificationSound();
-      return this.opts.permissionPrompter(request);
-    });
+    proc.setPermissionPrompter(this.opts.permissionPrompter);
     if (this.opts.askUserQuestionPrompter) {
       proc.setAskUserQuestionPrompter?.(this.opts.askUserQuestionPrompter);
     }
