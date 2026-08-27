@@ -3358,11 +3358,15 @@ export class AgentSessionManager {
    * that demands the user's eye (turn ended, errored, or paused for
    * permission) and raise the two attention signals.
    *
-   * `needsAttention` is flagged only while a *different* tab is active, and
-   * cleared in `setActiveSession` when the user clicks back to this tab. The
-   * sound has its own, wider gate: a user reading a *different* tab in a
-   * focused window still gets the dot but no sound, while a user who left the
-   * window gets the sound even for the tab they left in front.
+   * Both signals answer "was the user looking?" through
+   * {@link isSessionOnScreen}, and the sound narrows that same answer with
+   * {@link isSessionWatched}: being on screen is not enough if the window is
+   * behind something else.
+   *
+   * The dot deliberately stops at "on screen" rather than adopting the
+   * narrower test. Its only clear path is `setActiveSession`, which returns
+   * early for the session that is already active, so a dot raised on the tab
+   * in front could never be cleared by returning to it.
    */
   private attachAttentionTracking(session: AgentSession): void {
     let prev = session.getStatus();
@@ -3374,7 +3378,7 @@ export class AgentSessionManager {
         prev = next;
         void this.flushDeferredBackendRestartIfReady(session.backendId);
         const wantsUser = wasRunning && ATTENTION_TRIGGER_STATUSES.has(next);
-        if (wantsUser && this.activeSessionId !== session.internalId) {
+        if (wantsUser && !this.isSessionOnScreen(session)) {
           session.markNeedsAttention();
         }
         if (
@@ -3392,18 +3396,22 @@ export class AgentSessionManager {
     this.getSessionState(session.internalId).attentionUnsub = unsubscribe;
   }
 
+  /** Whether this session is the tab the chat would show, rather than one behind it. */
+  private isSessionOnScreen(session: AgentSession): boolean {
+    return this.activeSessionId === session.internalId;
+  }
+
   /**
    * Whether the user is demonstrably looking at this session right now: it is
-   * the session on screen, its chat view is actually rendered (not a
-   * background tab or a collapsed sidebar), and that view's window has focus.
-   * A watched session needs no sound — the user already saw it stop.
+   * on screen, its chat view is actually rendered (not a background workspace
+   * tab or a collapsed sidebar), and that view's window has focus. A watched
+   * session needs no sound, because the user already saw it stop.
    *
    * Focus is read from the view's own document rather than the main window's,
-   * so a chat detached into a popout is judged by the window it actually
-   * lives in.
+   * so a chat detached into a popout is judged by the window it lives in.
    */
   private isSessionWatched(session: AgentSession): boolean {
-    if (this.activeSessionId !== session.internalId) return false;
+    if (!this.isSessionOnScreen(session)) return false;
     return this.app.workspace
       .getLeavesOfType(CHAT_AGENT_VIEWTYPE)
       .some(
