@@ -102,27 +102,27 @@ describe("RelevantNotes", () => {
       expect(mockOpenFile).toHaveBeenCalledWith(expect.objectContaining({ path: "Target.md" }));
     });
 
-    it("keeps links-only rows visible without a meter and shows Miyo download guidance (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
-      mockFindRelevantNotes.mockResolvedValue([
-        {
-          note: { path: "Target.md", title: "Target" },
-          metadata: {
-            score: 0,
-            similarityScore: undefined,
-            hasOutgoingLinks: false,
-            hasBacklinks: true,
-          },
-        },
-      ]);
+    it("shows Miyo download guidance without graph-only rows when Miyo is disabled (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
+      mockFindRelevantNotes.mockResolvedValue([]);
 
       render(<RelevantNotes onAddToChat={jest.fn()} />);
 
-      expect(await screen.findByText("Target")).toBeTruthy();
-      expect(screen.getByText("Add semantic matches with Miyo")).toBeTruthy();
-      expect(screen.queryByText(/%/)).toBeNull();
+      expect(await screen.findByText("Add semantic matches with Miyo")).toBeTruthy();
+      expect(screen.queryByText("Target")).toBeNull();
     });
 
-    it("shows setup guidance for links-only rows when Miyo is enabled and opens the Miyo settings tab (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
+    it("shows empty setup guidance when Miyo is unavailable and opens the Miyo settings tab (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
+      mockSettings = { ...mockSettings, enableMiyo: true };
+      mockFindRelevantNotes.mockResolvedValue([]);
+
+      render(<RelevantNotes onAddToChat={jest.fn()} />);
+
+      fireEvent.click(await screen.findByRole("button", { name: "Open Miyo settings" }));
+      expect(screen.queryByText("Target")).toBeNull();
+      expect(openCopilotSettings).toHaveBeenCalledWith(mockApp, window, "miyo");
+    });
+
+    it("shows graph-only rows without setup guidance after Miyo search succeeds (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
       mockSettings = { ...mockSettings, enableMiyo: true };
       mockFindRelevantNotes.mockResolvedValue([
         {
@@ -138,8 +138,9 @@ describe("RelevantNotes", () => {
 
       render(<RelevantNotes onAddToChat={jest.fn()} />);
 
-      fireEvent.click(await screen.findByRole("button", { name: "Open Miyo settings" }));
-      expect(openCopilotSettings).toHaveBeenCalledWith(mockApp, window, "miyo");
+      expect(await screen.findByText("Target")).toBeTruthy();
+      expect(screen.queryByText("Check your Miyo setup")).toBeNull();
+      expect(screen.queryByText(/%/)).toBeNull();
     });
 
     it("refetches Relevant Notes when Miyo settings change (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {

@@ -41,9 +41,9 @@ The scope is a retrieval preference, not a security boundary. Keep Miyo's regist
 
 ### Relevant Notes
 
-Relevant Notes always includes direct links and backlinks that pass Copilot's search scope. Miyo is the only source of semantic matches and similarity percentages in this pane; Copilot's legacy local embedding index no longer scores Relevant Notes.
+Miyo is the source of Relevant Notes results and similarity percentages; Copilot's legacy local embedding index no longer scores this pane. When Miyo is available, results can include direct links and backlinks that pass Copilot's search scope.
 
-If Miyo is not connected, link and backlink rows stay visible without percentages and the pane offers Miyo download and setup actions. If Miyo is enabled but returns no semantic matches, the same rows remain visible and the pane asks you to check the connection and confirm that this vault is registered and indexed. Use **Open Miyo settings** to return directly to the existing connection flow under **Settings → Copilot → Miyo**, including when you use a remote endpoint or mobile device.
+If Miyo is not connected or its related-note search is unavailable, the pane does not fall back to link and backlink rows. Instead, it offers Miyo download or setup actions. Use **Open Miyo settings** to return directly to the existing connection flow under **Settings → Copilot → Miyo**, including when you use a remote endpoint or mobile device.
 
 ## Search conversations and process documents
 

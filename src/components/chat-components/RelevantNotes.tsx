@@ -368,15 +368,11 @@ export const RelevantNotes = memo(
       onAddToChat(`[[${prompt}]]`);
     };
 
-    // A links-only result set signals the absence of Miyo scores directly. It
-    // must keep its rows visible while still showing download or setup help.
+    // Miyo help is an empty state, not a banner above graph-only fallback rows.
+    // A successful Miyo search can still return direct links and backlinks.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
-    const hasSemanticMatches = relevantNotes.some((note) => note.metadata.similarityScore != null);
-    const guidance: RelevantNotesGuidance = hasSemanticMatches
-      ? null
-      : settings.enableMiyo
-        ? "setup"
-        : "download";
+    const guidance: RelevantNotesGuidance =
+      relevantNotes.length > 0 ? null : settings.enableMiyo ? "setup" : "download";
 
     return (
       <div className={cn("tw-flex tw-min-h-full tw-w-full tw-flex-1 tw-flex-col", className)}>
