@@ -650,6 +650,10 @@ export default class CopilotPlugin extends Plugin {
     // teardown() is invoked synchronously, so everything above its first
     // `await` still runs before this call returns, and a failure partway
     // through is logged instead of becoming an unhandled rejection.
+    // The audio module is shared across hot-reloaded plugin instances, so an
+    // outgoing async teardown must release its context before a successor can
+    // create one. https://github.com/logancyang/obsidian-copilot/issues/2987
+    disposeNotificationSound();
     this.teardown().catch((error) => {
       logError("Copilot: plugin teardown failed during unload:", error);
     });
@@ -682,9 +686,6 @@ export default class CopilotPlugin extends Plugin {
 
     this.agentModelDiscoveryUnsubscriber?.();
     await this.agentSessionManager?.shutdown();
-    // After the manager stops, so no in-flight status change can reopen the
-    // audio context this releases.
-    disposeNotificationSound();
 
     // Cleanup VaultDataManager event listeners
     const vaultDataManager = VaultDataManager.getInstance();

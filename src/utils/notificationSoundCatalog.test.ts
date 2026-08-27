@@ -13,6 +13,12 @@ describe("notificationSoundCatalog", () => {
       expect(isNotificationSoundId("removed-sound")).toBe(false);
       expect(isNotificationSoundId(undefined)).toBe(false);
     });
+
+    it("rejects inherited property names from persisted data (https://github.com/logancyang/obsidian-copilot/issues/2987)", () => {
+      expect(isNotificationSoundId("toString")).toBe(false);
+      expect(isNotificationSoundId("constructor")).toBe(false);
+      expect(isNotificationSoundId("__proto__")).toBe(false);
+    });
   });
 
   describe("NOTIFICATION_SOUND_OPTIONS", () => {

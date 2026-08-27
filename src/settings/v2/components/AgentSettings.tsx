@@ -26,6 +26,7 @@ import { AlertTriangle, MessageCircle } from "lucide-react";
 import React from "react";
 import { ChatModelEnableList } from "./ChatModelEnableList";
 import { ConfiguredModelEnableList } from "./ConfiguredModelEnableList";
+import { AgentNotificationSoundSettings } from "./ui/AgentNotificationSoundSettings";
 
 /** Synthetic sub-tab id for the (non-backend) Quick Chat model curation. */
 const QUICK_CHAT_TAB_ID = "quickchat";
@@ -115,33 +116,21 @@ export const AgentSettings: React.FC = () => {
           }
           options={orderedDescriptors.map((d) => ({ label: d.displayName, value: d.id }))}
         />
-        <SettingItem
-          type="switch"
-          title="Notification sound"
-          description="Plays a short sound when an agent finishes a turn, stops on an error, or needs your approval, so you can look away while it works. Stays quiet while you are watching that chat."
-          checked={settings.agentMode.notificationSound}
-          onCheckedChange={(checked) =>
-            setSettings((cur) => ({ agentMode: { ...cur.agentMode, notificationSound: checked } }))
+        <AgentNotificationSoundSettings
+          enabled={settings.agentMode.notificationSound}
+          onEnabledChange={(enabled) =>
+            setSettings((cur) => ({ agentMode: { ...cur.agentMode, notificationSound: enabled } }))
           }
+          onSoundChange={(value) => {
+            if (!isNotificationSoundId(value)) return;
+            setSettings((cur) => ({
+              agentMode: { ...cur.agentMode, notificationSoundId: value },
+            }));
+            playNotificationSound(value);
+          }}
+          soundId={settings.agentMode.notificationSoundId}
+          soundOptions={NOTIFICATION_SOUND_OPTIONS}
         />
-        {/* Hidden while the sound is off: picking one there would be choosing
-            between sounds that never play. */}
-        {settings.agentMode.notificationSound && (
-          <SettingItem
-            type="select"
-            title="Sound"
-            description="Each one plays as you select it."
-            value={settings.agentMode.notificationSoundId}
-            onChange={(value) => {
-              if (!isNotificationSoundId(value)) return;
-              setSettings((cur) => ({
-                agentMode: { ...cur.agentMode, notificationSoundId: value },
-              }));
-              playNotificationSound(value);
-            }}
-            options={[...NOTIFICATION_SOUND_OPTIONS]}
-          />
-        )}
       </SettingSection>
 
       <div className="tw-flex tw-flex-col">

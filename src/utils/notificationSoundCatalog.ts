@@ -76,5 +76,11 @@ export const NOTIFICATION_SOUND_OPTIONS: ReadonlyArray<{ label: string; value: s
 
 /** Whether a persisted or user-supplied value names a sound that still exists. */
 export function isNotificationSoundId(value: unknown): value is NotificationSoundId {
-  return typeof value === "string" && value in NOTIFICATION_SOUNDS;
+  // Persisted ids are untrusted: Object.prototype names must not resolve as
+  // sounds and reach the player as malformed specs.
+  // https://github.com/logancyang/obsidian-copilot/issues/2987
+  return (
+    typeof value === "string" &&
+    Boolean(Object.prototype.hasOwnProperty.call(NOTIFICATION_SOUNDS, value))
+  );
 }

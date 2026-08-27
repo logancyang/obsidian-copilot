@@ -98,6 +98,7 @@ import type {
 } from "./types";
 
 const AUTOSAVE_DEBOUNCE_MS = 500;
+const OBSCURING_AGENT_VIEW_SELECTOR = ".modal-container, .prompt";
 /**
  * Upper bound on the opportunistic `listSessions` sweep that enriches the
  * recent-chats list from already-running backends. The session index answers
@@ -3381,16 +3382,15 @@ export class AgentSessionManager {
         const isRunning = next === "running";
         prev = next;
         void this.flushDeferredBackendRestartIfReady(session.backendId);
+        // Only a turn that actually ran can newly demand attention. Permission
+        // sounds are emitted at request arrival instead, because another request
+        // may arrive while the session is already awaiting permission.
+        // https://github.com/logancyang/obsidian-copilot/issues/2987
         const wantsUser = wasRunning && ATTENTION_TRIGGER_STATUSES.has(next);
-        if (wantsUser && !this.isSessionWatched(session)) {
+        const watched = wantsUser && this.isSessionWatched(session);
+        if (wantsUser && !watched) {
           session.markNeedsAttention();
-        }
-        if (
-          wantsUser &&
-          getSettings().agentMode.notificationSound &&
-          !this.isSessionWatched(session)
-        ) {
-          playNotificationSound(getSettings().agentMode.notificationSoundId);
+          if (next !== "awaiting_permission") this.playConfiguredNotificationSound();
         }
         // Re-render recent-list rows when this session's running membership
         // flips, so the row's spinner appears/disappears in step.
@@ -3469,11 +3469,34 @@ export class AgentSessionManager {
    */
   private isSessionWatched(session: AgentSession): boolean {
     if (!this.isSessionOnScreen(session)) return false;
-    return this.app.workspace
-      .getLeavesOfType(CHAT_AGENT_VIEWTYPE)
-      .some(
-        (leaf) => leaf.view.containerEl.isShown() && leaf.view.containerEl.ownerDocument.hasFocus()
-      );
+    return this.app.workspace.getLeavesOfType(CHAT_AGENT_VIEWTYPE).some((leaf) => {
+      const container = leaf.view.containerEl;
+      const doc = container.doc;
+      // Obsidian keeps the underlying leaf rendered and focused while a
+      // modal or command prompt covers it; that is not a chat the user can
+      // see. https://github.com/logancyang/obsidian-copilot/issues/2987
+      const isObscured = Array.from(
+        doc.querySelectorAll<HTMLElement>(OBSCURING_AGENT_VIEW_SELECTOR)
+      ).some((surface) => surface.isShown());
+      return container.isShown() && doc.hasFocus() && !isObscured;
+    });
+  }
+
+  /** Play the user's chosen sound when agent notifications are enabled. */
+  private playConfiguredNotificationSound(): void {
+    const { notificationSound, notificationSoundId } = getSettings().agentMode;
+    if (!notificationSound) return;
+    playNotificationSound(notificationSoundId);
+  }
+
+  /** Announce each visible approval request at its arrival boundary. */
+  private notifyPermissionRequest(request: PermissionPrompt): void {
+    const session = this.getSessionByBackendId(request.sessionId);
+    // Each request gets its own notification even when an earlier permission
+    // card already keeps the session in `awaiting_permission`.
+    // https://github.com/logancyang/obsidian-copilot/issues/2987
+    if (!session || this.isSessionWatched(session)) return;
+    this.playConfiguredNotificationSound();
   }
 
   /**
@@ -3483,7 +3506,10 @@ export class AgentSessionManager {
    * the optional `setAskUserQuestionPrompter` surface (Claude SDK today).
    */
   private wirePrompters(proc: BackendProcess): void {
-    proc.setPermissionPrompter(this.opts.permissionPrompter);
+    proc.setPermissionPrompter((request) => {
+      this.notifyPermissionRequest(request);
+      return this.opts.permissionPrompter(request);
+    });
     if (this.opts.askUserQuestionPrompter) {
       proc.setAskUserQuestionPrompter?.(this.opts.askUserQuestionPrompter);
     }
