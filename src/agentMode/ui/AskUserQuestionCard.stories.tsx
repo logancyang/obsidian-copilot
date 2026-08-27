@@ -39,4 +39,5 @@ const meta = {
 } satisfies Meta<AskUserQuestionCardProps>;
 export default meta;
 
+/** Answer with Next, or select Checks early to inspect the disabled final Submit state. */
 export const MultipleQuestions: StoryObj<AskUserQuestionCardProps> = {};
