@@ -205,9 +205,36 @@ describe("sanitizeSettings - agentMode shape migration", () => {
       activeBackend: "opencode",
       backends: {},
       debugFullFrames: true,
+      notificationSound: true,
       welcomeDismissed: false,
       skills: { folder: "copilot/skills" },
     });
+  });
+
+  it("defaults notificationSound to on so an unattended turn still calls the user back", () => {
+    expect(DEFAULT_SETTINGS.agentMode.notificationSound).toBe(true);
+    const sanitized = sanitizeSettings({
+      ...DEFAULT_SETTINGS,
+      agentMode: {
+        byok: {},
+        activeBackend: "opencode",
+        backends: {},
+      },
+    } as unknown as CopilotSettings);
+    expect(sanitized.agentMode.notificationSound).toBe(true);
+  });
+
+  it("preserves an explicit notificationSound=false (a user who muted it stays muted)", () => {
+    const sanitized = sanitizeSettings({
+      ...DEFAULT_SETTINGS,
+      agentMode: {
+        byok: {},
+        activeBackend: "opencode",
+        backends: {},
+        notificationSound: false,
+      },
+    } as unknown as CopilotSettings);
+    expect(sanitized.agentMode.notificationSound).toBe(false);
   });
 
   it("defaults debugFullFrames to on for new installs", () => {

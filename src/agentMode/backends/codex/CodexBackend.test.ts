@@ -58,6 +58,7 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
         byok: {},
         activeBackend: "codex",
         debugFullFrames: false,
+        notificationSound: false,
         welcomeDismissed: false,
         skills: { folder: "copilot/skills" },
         backends: {
@@ -116,6 +117,7 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
         byok: {},
         activeBackend: "codex",
         debugFullFrames: false,
+        notificationSound: false,
         welcomeDismissed: false,
         skills: { folder: "copilot/skills" },
         backends: {
@@ -191,6 +193,7 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
         byok: {},
         activeBackend: "codex",
         debugFullFrames: false,
+        notificationSound: false,
         welcomeDismissed: false,
         skills: { folder: "team-skills" },
         backends: { codex: { binaryPath: "/usr/local/bin/codex-acp" } },
@@ -270,6 +273,7 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
         byok: {},
         activeBackend: "codex",
         debugFullFrames: false,
+        notificationSound: false,
         welcomeDismissed: false,
         skills: { folder: "copilot/skills" },
         backends: {
@@ -311,6 +315,7 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
           byok: {},
           activeBackend: "codex",
           debugFullFrames: false,
+          notificationSound: false,
           welcomeDismissed: false,
           skills: { folder: "copilot/skills" },
           backends: {
@@ -340,6 +345,7 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
         byok: {},
         activeBackend: "codex",
         debugFullFrames: false,
+        notificationSound: false,
         welcomeDismissed: false,
         skills: { folder: "copilot/skills" },
         backends: {
@@ -369,6 +375,7 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
         byok: {},
         activeBackend: "codex",
         debugFullFrames: false,
+        notificationSound: false,
         welcomeDismissed: false,
         skills: { folder: "copilot/skills" },
         backends: {},

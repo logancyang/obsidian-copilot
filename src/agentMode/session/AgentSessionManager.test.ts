@@ -8,6 +8,7 @@ import { waitFor } from "@testing-library/react";
 import { AgentSession } from "./AgentSession";
 import type { AgentModelPreloader } from "./AgentModelPreloader";
 import { buildNativeChatId } from "@/utils/nativeChatId";
+import { playNotificationSound } from "@/utils/notificationSound";
 import { AgentSessionIndex } from "./AgentSessionIndex";
 import { AgentSessionManager } from "./AgentSessionManager";
 import { ProjectContentTracker } from "@/context/projectContentTracker";
@@ -90,9 +91,19 @@ jest.mock("@/context/projectContextMaterializer", () => {
   };
 });
 
+let mockNotificationSound = true;
+
+jest.mock("@/utils/notificationSound", () => ({
+  playNotificationSound: jest.fn(),
+}));
+
 jest.mock("@/settings/model", () => ({
   getSettings: jest.fn(() => ({
-    agentMode: { activeBackend: "opencode", backends: {} },
+    agentMode: {
+      activeBackend: "opencode",
+      backends: {},
+      notificationSound: mockNotificationSound,
+    },
   })),
   setSettings: jest.fn(),
   subscribeToSettingsChange: jest.fn(
@@ -316,6 +327,8 @@ function buildManager(
 
 beforeEach(() => {
   mockBackendIsRunning = true;
+  mockNotificationSound = true;
+  (playNotificationSound as jest.Mock).mockClear();
   mockBackendStart.mockClear();
   mockBackendShutdown.mockClear();
   mockSetPermissionPrompter.mockClear();
@@ -1078,6 +1091,55 @@ describe("AgentSessionManager attention tracking", () => {
     aHandle.setStatus("running");
     aHandle.setStatus("idle");
     expect(a.getNeedsAttention()).toBe(false);
+  });
+
+  it("chimes when a turn ends on the active session the user may have walked away from", async () => {
+    const mgr = buildManager();
+    const a = await mgr.createSession();
+    expect(mgr.getActiveSession()).toBe(a);
+    const aHandle = getSessionTestHandle(a);
+
+    aHandle.setStatus("running");
+    aHandle.setStatus("idle");
+
+    expect(playNotificationSound).toHaveBeenCalledTimes(1);
+  });
+
+  it("chimes once per pause for permission so each approval is announced", async () => {
+    const mgr = buildManager();
+    const a = await mgr.createSession();
+    const aHandle = getSessionTestHandle(a);
+
+    aHandle.setStatus("running");
+    aHandle.setStatus("awaiting_permission");
+    aHandle.setStatus("running");
+    aHandle.setStatus("awaiting_permission");
+
+    expect(playNotificationSound).toHaveBeenCalledTimes(2);
+  });
+
+  it("stays silent when the notification sound setting is off", async () => {
+    mockNotificationSound = false;
+    const mgr = buildManager();
+    const a = await mgr.createSession();
+    const aHandle = getSessionTestHandle(a);
+
+    aHandle.setStatus("running");
+    aHandle.setStatus("idle");
+
+    expect(playNotificationSound).not.toHaveBeenCalled();
+    expect(a.getNeedsAttention()).toBe(false);
+  });
+
+  it("stays silent on the starting → idle transition of a fresh session", async () => {
+    const mgr = buildManager();
+    const a = await mgr.createSession();
+    const aHandle = getSessionTestHandle(a);
+
+    aHandle.setStatus("starting");
+    aHandle.setStatus("idle");
+
+    expect(playNotificationSound).not.toHaveBeenCalled();
   });
 
   it("does not flag the starting → idle transition", async () => {

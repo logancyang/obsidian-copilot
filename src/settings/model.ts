@@ -292,6 +292,13 @@ export interface CopilotSettings {
      */
     debugFullFrames: boolean;
     /**
+     * Play a short chime whenever an agent session stops running and wants the
+     * user: the turn finished, the turn errored, or a permission prompt is
+     * waiting. On by default, so a user who walks away from a long turn is
+     * called back without having to watch the tab.
+     */
+    notificationSound: boolean;
+    /**
      * One-shot dismissal of the Agent Home "Try a project" welcome card. The card
      * only shows on the global landing while no projects exist; once dismissed it
      * stays hidden regardless of project count. Persisted so the nudge doesn't
@@ -1308,6 +1315,11 @@ function sanitizeAgentMode(raw: unknown): CopilotSettings["agentMode"] {
       ? r.debugFullFrames
       : DEFAULT_SETTINGS.agentMode.debugFullFrames;
 
+  const notificationSound =
+    typeof r.notificationSound === "boolean"
+      ? r.notificationSound
+      : DEFAULT_SETTINGS.agentMode.notificationSound;
+
   const welcomeDismissed =
     typeof r.welcomeDismissed === "boolean"
       ? r.welcomeDismissed
@@ -1344,6 +1356,7 @@ function sanitizeAgentMode(raw: unknown): CopilotSettings["agentMode"] {
     activeBackend,
     backends,
     debugFullFrames,
+    notificationSound,
     welcomeDismissed,
     skills,
     ...(claudeCli ? { claudeCli } : {}),

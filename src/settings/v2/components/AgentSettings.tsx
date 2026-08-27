@@ -110,6 +110,15 @@ export const AgentSettings: React.FC = () => {
           }
           options={orderedDescriptors.map((d) => ({ label: d.displayName, value: d.id }))}
         />
+        <SettingItem
+          type="switch"
+          title="Notification sound"
+          description="Plays a short chime when an agent finishes a turn, stops on an error, or needs your approval, so you can look away while it works."
+          checked={settings.agentMode.notificationSound}
+          onCheckedChange={(checked) =>
+            setSettings((cur) => ({ agentMode: { ...cur.agentMode, notificationSound: checked } }))
+          }
+        />
       </SettingSection>
 
       <div className="tw-flex tw-flex-col">

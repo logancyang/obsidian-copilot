@@ -78,6 +78,7 @@ import { buildUpgradeRelocationEntries } from "@/settings/upgradeNotice";
 import { dehydrateDeviceProfile, hydrateDeviceProfile } from "@/settings/deviceProfiles";
 import { getDeviceId } from "@/utils/deviceId";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
+import { disposeNotificationSound } from "@/utils/notificationSound";
 import { installRendererEventsShim } from "@/utils/rendererEventsShim";
 import { ContextProcessor } from "@/contextProcessor";
 import { CustomCommandManager } from "@/commands/customCommandManager";
@@ -681,6 +682,9 @@ export default class CopilotPlugin extends Plugin {
 
     this.agentModelDiscoveryUnsubscriber?.();
     await this.agentSessionManager?.shutdown();
+    // After the manager stops, so no in-flight status change can reopen the
+    // audio context this releases.
+    disposeNotificationSound();
 
     // Cleanup VaultDataManager event listeners
     const vaultDataManager = VaultDataManager.getInstance();

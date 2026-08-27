@@ -9,6 +9,7 @@ function makeAgentMode(partial: Partial<AgentMode> = {}): AgentMode {
     activeBackend: "opencode",
     backends: {},
     debugFullFrames: false,
+    notificationSound: false,
     welcomeDismissed: false,
     skills: { folder: "copilot/skills" },
     ...partial,

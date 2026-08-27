@@ -37,6 +37,7 @@ import { AgentSession, ATTENTION_TRIGGER_STATUSES, DEFAULT_TITLE_PREFIX } from "
 import type { AgentChatPersistenceManager } from "./AgentChatPersistenceManager";
 import type { AgentModelPreloader } from "./AgentModelPreloader";
 import { buildNativeChatId, parseNativeChatId } from "@/utils/nativeChatId";
+import { playNotificationSound } from "@/utils/notificationSound";
 import type { AgentSessionIndex } from "./AgentSessionIndex";
 import {
   deriveChatTitleFromMessages,
@@ -3352,11 +3353,15 @@ export class AgentSessionManager {
   }
 
   /**
-   * Watch this session's status transitions and flag `needsAttention` when
-   * it transitions out of `running` into a state that demands the user's
-   * eye (turn ended, errored, or paused for permission) while a *different*
-   * tab is active. The flag is cleared in `setActiveSession` when the user
-   * clicks back to this tab.
+   * Watch this session's status transitions out of `running` into a state
+   * that demands the user's eye (turn ended, errored, or paused for
+   * permission) and raise the two attention signals.
+   *
+   * `needsAttention` is flagged only while a *different* tab is active, and
+   * cleared in `setActiveSession` when the user clicks back to this tab. The
+   * chime is not gated that way: its job is to reach a user who is away from
+   * the screen, and the session they walked away from is usually the one
+   * still in front.
    */
   private attachAttentionTracking(session: AgentSession): void {
     let prev = session.getStatus();
@@ -3367,14 +3372,12 @@ export class AgentSessionManager {
         const isRunning = next === "running";
         prev = next;
         void this.flushDeferredBackendRestartIfReady(session.backendId);
-        // Existing attention marking — unchanged semantics: a backgrounded
-        // session that leaves `running` for a status that demands the user's eye.
-        if (
-          wasRunning &&
-          ATTENTION_TRIGGER_STATUSES.has(next) &&
-          this.activeSessionId !== session.internalId
-        ) {
+        const wantsUser = wasRunning && ATTENTION_TRIGGER_STATUSES.has(next);
+        if (wantsUser && this.activeSessionId !== session.internalId) {
           session.markNeedsAttention();
+        }
+        if (wantsUser && getSettings().agentMode.notificationSound) {
+          playNotificationSound();
         }
         // Re-render recent-list rows when this session's running membership
         // flips, so the row's spinner appears/disappears in step.
