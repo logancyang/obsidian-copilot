@@ -9,6 +9,11 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { SettingItem } from "@/components/ui/setting-item";
+import { playNotificationSound } from "@/utils/notificationSound";
+import {
+  NOTIFICATION_SOUND_OPTIONS,
+  isNotificationSoundId,
+} from "@/utils/notificationSoundCatalog";
 import { SettingSection } from "@/components/ui/setting-section";
 import { TabContent, TabItem, type TabItem as TabItemType } from "@/components/ui/setting-tabs";
 import { TruncatedText } from "@/components/TruncatedText";
@@ -113,12 +118,30 @@ export const AgentSettings: React.FC = () => {
         <SettingItem
           type="switch"
           title="Notification sound"
-          description="Plays a short chime when an agent finishes a turn, stops on an error, or needs your approval, so you can look away while it works."
+          description="Plays a short sound when an agent finishes a turn, stops on an error, or needs your approval, so you can look away while it works. Stays quiet while you are watching that chat."
           checked={settings.agentMode.notificationSound}
           onCheckedChange={(checked) =>
             setSettings((cur) => ({ agentMode: { ...cur.agentMode, notificationSound: checked } }))
           }
         />
+        {/* Hidden while the sound is off: picking one there would be choosing
+            between sounds that never play. */}
+        {settings.agentMode.notificationSound && (
+          <SettingItem
+            type="select"
+            title="Sound"
+            description="Each one plays as you select it."
+            value={settings.agentMode.notificationSoundId}
+            onChange={(value) => {
+              if (!isNotificationSoundId(value)) return;
+              setSettings((cur) => ({
+                agentMode: { ...cur.agentMode, notificationSoundId: value },
+              }));
+              playNotificationSound(value);
+            }}
+            options={[...NOTIFICATION_SOUND_OPTIONS]}
+          />
+        )}
       </SettingSection>
 
       <div className="tw-flex tw-flex-col">

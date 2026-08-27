@@ -1052,6 +1052,11 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
     // only thing that reaches a user who has looked away. Turned off in
     // Basic → Agents.
     notificationSound: true,
+    // Named rather than imported from the sound catalog: `@/logger` pulls in
+    // `@/settings/model`, so importing the catalog here would make this module
+    // load before its own DEFAULT_SETTINGS exists. The literal is still
+    // checked, since the field is typed to the catalog's ids.
+    notificationSoundId: "piano",
     welcomeDismissed: false,
     skills: {
       folder: DEFAULT_SKILLS_FOLDER,

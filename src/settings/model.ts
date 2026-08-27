@@ -7,6 +7,7 @@ import type { CopilotMode, ModelSelection } from "@/agentMode";
 import { ChainType } from "@/chainType";
 import type { BackendConfig, BackendType, ConfiguredModel, Provider } from "@/modelManagement";
 import { MODEL_SECRET_FIELDS, TOP_LEVEL_SECRET_FIELDS } from "@/services/settingsSecretTransforms";
+import { isNotificationSoundId, type NotificationSoundId } from "@/utils/notificationSoundCatalog";
 import { type SortStrategy, isSortStrategy } from "@/utils/recentUsageManager";
 import {
   AGENT_MAX_ITERATIONS_LIMIT,
@@ -298,6 +299,12 @@ export interface CopilotSettings {
      * called back without having to watch the tab.
      */
     notificationSound: boolean;
+    /**
+     * Which sound from the `NOTIFICATION_SOUNDS` catalog to play. Kept
+     * separate from the on/off switch so muting and unmuting does not lose the
+     * user's pick.
+     */
+    notificationSoundId: NotificationSoundId;
     /**
      * One-shot dismissal of the Agent Home "Try a project" welcome card. The card
      * only shows on the global landing while no projects exist; once dismissed it
@@ -1320,6 +1327,12 @@ function sanitizeAgentMode(raw: unknown): CopilotSettings["agentMode"] {
       ? r.notificationSound
       : DEFAULT_SETTINGS.agentMode.notificationSound;
 
+  // A sound dropped from the catalog would otherwise persist as a name nothing
+  // can play, leaving the user silently unnotified.
+  const notificationSoundId = isNotificationSoundId(r.notificationSoundId)
+    ? r.notificationSoundId
+    : DEFAULT_SETTINGS.agentMode.notificationSoundId;
+
   const welcomeDismissed =
     typeof r.welcomeDismissed === "boolean"
       ? r.welcomeDismissed
@@ -1357,6 +1370,7 @@ function sanitizeAgentMode(raw: unknown): CopilotSettings["agentMode"] {
     backends,
     debugFullFrames,
     notificationSound,
+    notificationSoundId,
     welcomeDismissed,
     skills,
     ...(claudeCli ? { claudeCli } : {}),

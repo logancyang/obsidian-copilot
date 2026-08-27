@@ -206,6 +206,7 @@ describe("sanitizeSettings - agentMode shape migration", () => {
       backends: {},
       debugFullFrames: true,
       notificationSound: true,
+      notificationSoundId: "piano",
       welcomeDismissed: false,
       skills: { folder: "copilot/skills" },
     });
@@ -222,6 +223,32 @@ describe("sanitizeSettings - agentMode shape migration", () => {
       },
     } as unknown as CopilotSettings);
     expect(sanitized.agentMode.notificationSound).toBe(true);
+  });
+
+  it("keeps a chosen notification sound and drops one no longer in the catalog", () => {
+    const chosen = sanitizeSettings({
+      ...DEFAULT_SETTINGS,
+      agentMode: {
+        byok: {},
+        activeBackend: "opencode",
+        backends: {},
+        notificationSoundId: "doorbell",
+      },
+    } as unknown as CopilotSettings);
+    expect(chosen.agentMode.notificationSoundId).toBe("doorbell");
+
+    const removed = sanitizeSettings({
+      ...DEFAULT_SETTINGS,
+      agentMode: {
+        byok: {},
+        activeBackend: "opencode",
+        backends: {},
+        notificationSoundId: "removed-sound",
+      },
+    } as unknown as CopilotSettings);
+    expect(removed.agentMode.notificationSoundId).toBe(
+      DEFAULT_SETTINGS.agentMode.notificationSoundId
+    );
   });
 
   it("preserves an explicit notificationSound=false (a user who muted it stays muted)", () => {

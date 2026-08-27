@@ -59,6 +59,7 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
         activeBackend: "codex",
         debugFullFrames: false,
         notificationSound: false,
+        notificationSoundId: "piano",
         welcomeDismissed: false,
         skills: { folder: "copilot/skills" },
         backends: {
@@ -118,6 +119,7 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
         activeBackend: "codex",
         debugFullFrames: false,
         notificationSound: false,
+        notificationSoundId: "piano",
         welcomeDismissed: false,
         skills: { folder: "copilot/skills" },
         backends: {
@@ -194,6 +196,7 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
         activeBackend: "codex",
         debugFullFrames: false,
         notificationSound: false,
+        notificationSoundId: "piano",
         welcomeDismissed: false,
         skills: { folder: "team-skills" },
         backends: { codex: { binaryPath: "/usr/local/bin/codex-acp" } },
@@ -274,6 +277,7 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
         activeBackend: "codex",
         debugFullFrames: false,
         notificationSound: false,
+        notificationSoundId: "piano",
         welcomeDismissed: false,
         skills: { folder: "copilot/skills" },
         backends: {
@@ -316,6 +320,7 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
           activeBackend: "codex",
           debugFullFrames: false,
           notificationSound: false,
+          notificationSoundId: "piano",
           welcomeDismissed: false,
           skills: { folder: "copilot/skills" },
           backends: {
@@ -346,6 +351,7 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
         activeBackend: "codex",
         debugFullFrames: false,
         notificationSound: false,
+        notificationSoundId: "piano",
         welcomeDismissed: false,
         skills: { folder: "copilot/skills" },
         backends: {
@@ -376,6 +382,7 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
         activeBackend: "codex",
         debugFullFrames: false,
         notificationSound: false,
+        notificationSoundId: "piano",
         welcomeDismissed: false,
         skills: { folder: "copilot/skills" },
         backends: {},

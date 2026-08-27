@@ -103,6 +103,7 @@ jest.mock("@/settings/model", () => ({
       activeBackend: "opencode",
       backends: {},
       notificationSound: mockNotificationSound,
+      notificationSoundId: "piano",
     },
   })),
   setSettings: jest.fn(),
@@ -246,6 +247,21 @@ const sessionCreateSpy = jest.spyOn(AgentSession, "start").mockImplementation((o
   })
 );
 
+/**
+ * Agent-chat leaves the mocked workspace reports. A leaf whose container is
+ * shown in a focused document is one the user is looking at.
+ */
+let mockAgentChatLeaves: Array<{ view: { containerEl: HTMLElement } }> = [];
+
+/** An agent chat view that is on screen, in a window that has focus. */
+function watchedLeaf(): { view: { containerEl: HTMLElement } } {
+  const containerEl = {
+    isShown: () => true,
+    ownerDocument: { hasFocus: () => true },
+  } as unknown as HTMLElement;
+  return { view: { containerEl } };
+}
+
 function buildApp(basePath = "/vault"): App {
   const adapter = new (FileSystemAdapter as unknown as new (basePath: string) => unknown)(basePath);
   // The ProjectContentTracker registers vault AND metadata-cache event listeners
@@ -267,6 +283,9 @@ function buildApp(basePath = "/vault"): App {
   return {
     vault: { adapter, ...events, ...vaultFiles },
     metadataCache: { ...events },
+    // The sound gate asks whether an agent chat view is on screen and focused.
+    // Default: no view is open, so nothing is being watched.
+    workspace: { getLeavesOfType: jest.fn(() => mockAgentChatLeaves) },
   } as unknown as App;
 }
 
@@ -328,6 +347,7 @@ function buildManager(
 beforeEach(() => {
   mockBackendIsRunning = true;
   mockNotificationSound = true;
+  mockAgentChatLeaves = [];
   (playNotificationSound as jest.Mock).mockClear();
   mockBackendStart.mockClear();
   mockBackendShutdown.mockClear();
@@ -1116,6 +1136,33 @@ describe("AgentSessionManager attention tracking", () => {
     aHandle.setStatus("awaiting_permission");
 
     expect(playNotificationSound).toHaveBeenCalledTimes(2);
+  });
+
+  it("stays silent when the user is watching the session that finished", async () => {
+    mockAgentChatLeaves = [watchedLeaf()];
+    const mgr = buildManager();
+    const a = await mgr.createSession();
+    expect(mgr.getActiveSession()).toBe(a);
+    const aHandle = getSessionTestHandle(a);
+
+    aHandle.setStatus("running");
+    aHandle.setStatus("idle");
+
+    expect(playNotificationSound).not.toHaveBeenCalled();
+  });
+
+  it("plays for a backgrounded session even while the user watches another one", async () => {
+    mockAgentChatLeaves = [watchedLeaf()];
+    const mgr = buildManager();
+    const a = await mgr.createSession();
+    const b = await mgr.createSession();
+    mgr.setActiveSession(a.internalId);
+    const bHandle = getSessionTestHandle(b);
+
+    bHandle.setStatus("running");
+    bHandle.setStatus("idle");
+
+    expect(playNotificationSound).toHaveBeenCalledWith("piano");
   });
 
   it("stays silent when the notification sound setting is off", async () => {

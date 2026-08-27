@@ -1,4 +1,9 @@
 import { disposeNotificationSound, playNotificationSound } from "@/utils/notificationSound";
+import {
+  DEFAULT_NOTIFICATION_SOUND_ID,
+  NOTIFICATION_SOUNDS,
+  type NotificationSoundId,
+} from "@/utils/notificationSoundCatalog";
 
 jest.mock("@/logger", () => ({
   logWarn: jest.fn(),
@@ -77,7 +82,7 @@ describe("notificationSound", () => {
     it("plays one enveloped tone that starts immediately and stops on its own", () => {
       const audio = installMockAudio();
 
-      playNotificationSound();
+      playNotificationSound("piano");
 
       expect(audio.oscillator.type).toBe("triangle");
       expect(audio.oscillator.frequency.setValueAtTime).toHaveBeenCalledWith(440, 0);
@@ -90,11 +95,51 @@ describe("notificationSound", () => {
       expect(audio.oscillator.stop).toHaveBeenCalledWith(0.6);
     });
 
+    it("sounds every frequency of a strike together, splitting the peak between them", () => {
+      const audio = installMockAudio();
+
+      playNotificationSound("bell");
+
+      // Two frequencies, one strike: both start at 0, both take half the peak.
+      expect(audio.instance.createOscillator).toHaveBeenCalledTimes(2);
+      expect(audio.oscillator.frequency.setValueAtTime.mock.calls).toEqual([
+        [659.25, 0],
+        [987.77, 0],
+      ]);
+      expect(audio.gain.gain.linearRampToValueAtTime.mock.calls).toEqual([
+        [0.06, 0.005],
+        [0.06, 0.005],
+      ]);
+    });
+
+    it("delays a second strike so a two-tone sound reads as two notes", () => {
+      const audio = installMockAudio();
+
+      playNotificationSound("doorbell");
+
+      expect(audio.oscillator.frequency.setValueAtTime.mock.calls).toEqual([
+        [659.25, 0],
+        [523.25, 0.18],
+      ]);
+      expect(audio.oscillator.stop.mock.calls).toEqual([[0.5], [0.78]]);
+    });
+
+    it("falls back to the default sound when the stored id is no longer in the catalog", () => {
+      const audio = installMockAudio();
+
+      playNotificationSound("removed-sound" as NotificationSoundId);
+
+      expect(audio.oscillator.frequency.setValueAtTime).toHaveBeenCalledWith(
+        NOTIFICATION_SOUNDS[DEFAULT_NOTIFICATION_SOUND_ID].strikes[0].hz[0],
+        0
+      );
+    });
+
     it("reuses one audio context across repeated plays", () => {
       const audio = installMockAudio();
 
-      playNotificationSound();
-      playNotificationSound();
+      playNotificationSound("piano");
+      playNotificationSound("piano");
 
       expect(audio.constructorCalls).toBe(1);
       expect(audio.instance.createOscillator).toHaveBeenCalledTimes(2);
@@ -103,7 +148,7 @@ describe("notificationSound", () => {
     it("resumes a suspended context so the tone is audible", () => {
       const audio = installMockAudio("suspended");
 
-      playNotificationSound();
+      playNotificationSound("piano");
 
       expect(audio.instance.resume).toHaveBeenCalled();
     });
@@ -111,7 +156,7 @@ describe("notificationSound", () => {
     it("does nothing when the runtime exposes no Web Audio", () => {
       delete (window as unknown as Record<string, unknown>).AudioContext;
 
-      expect(() => playNotificationSound()).not.toThrow();
+      expect(() => playNotificationSound("piano")).not.toThrow();
     });
 
     it("swallows a failure from the audio stack", () => {
@@ -120,17 +165,17 @@ describe("notificationSound", () => {
         throw new Error("no audio device");
       });
 
-      expect(() => playNotificationSound()).not.toThrow();
+      expect(() => playNotificationSound("piano")).not.toThrow();
     });
   });
 
   describe("disposeNotificationSound()", () => {
     it("closes the open context and builds a fresh one for the next play", () => {
       const audio = installMockAudio();
-      playNotificationSound();
+      playNotificationSound("piano");
 
       disposeNotificationSound();
-      playNotificationSound();
+      playNotificationSound("piano");
 
       expect(audio.instance.close).toHaveBeenCalledTimes(1);
       expect(audio.constructorCalls).toBe(2);

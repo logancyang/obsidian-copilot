@@ -10,6 +10,7 @@ function makeAgentMode(partial: Partial<AgentMode> = {}): AgentMode {
     backends: {},
     debugFullFrames: false,
     notificationSound: false,
+    notificationSoundId: "piano",
     welcomeDismissed: false,
     skills: { folder: "copilot/skills" },
     ...partial,

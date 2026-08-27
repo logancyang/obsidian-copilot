@@ -2,9 +2,15 @@ import { OpencodeAbsentInstallActions } from "@/agentMode/backends/opencode/Open
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import React from "react";
 import { setSettings } from "@/settings/model";
+import { playNotificationSound } from "@/utils/notificationSound";
 import { AgentSettings } from "./AgentSettings";
 
 jest.mock("@/logger", () => ({ logInfo: jest.fn(), logWarn: jest.fn(), logError: jest.fn() }));
+
+jest.mock("@/utils/notificationSound", () => {
+  const actual = jest.requireActual<object>("@/utils/notificationSound");
+  return { ...actual, playNotificationSound: jest.fn() };
+});
 
 // The inline install row is rendered for real (it is the panel's absent-state
 // branch and the first thing a new user touches), so the binary manager behind
@@ -38,6 +44,7 @@ let mockSettings: {
     activeBackend: string;
     backends: Record<string, unknown>;
     notificationSound: boolean;
+    notificationSoundId: string;
   };
   enableSelfHostMode: boolean;
 };
@@ -153,10 +160,16 @@ describe("AgentSettings", () => {
     jest.clearAllMocks();
     install.mockResolvedValue({ version: "1.2.3", path: MANAGED_BINARY_PATH });
     mockSettings = {
-      agentMode: { activeBackend: "opencode", backends: {}, notificationSound: true },
+      agentMode: {
+        activeBackend: "opencode",
+        backends: {},
+        notificationSound: true,
+        notificationSoundId: "piano",
+      },
       enableSelfHostMode: false,
     };
     (setSettings as jest.Mock).mockClear();
+    (playNotificationSound as jest.Mock).mockClear();
     installStates.opencode = { kind: "ready", source: "managed" };
     installStates.claude = { kind: "ready", source: "custom" };
     installStates.codex = { kind: "ready", source: "custom" };
@@ -212,6 +225,27 @@ describe("AgentSettings", () => {
     expect(applyUpdate(mockSettings)).toEqual({
       agentMode: { ...mockSettings.agentMode, notificationSound: false },
     });
+  });
+
+  it("plays a sound as soon as one is picked, and remembers the pick", () => {
+    render(<AgentSettings />);
+
+    fireEvent.change(screen.getByDisplayValue("Piano key"), { target: { value: "doorbell" } });
+
+    const applyUpdate = (setSettings as jest.Mock).mock.calls[0][0] as (
+      current: typeof mockSettings
+    ) => { agentMode: typeof mockSettings.agentMode };
+    expect(applyUpdate(mockSettings).agentMode.notificationSoundId).toBe("doorbell");
+    expect(playNotificationSound).toHaveBeenCalledWith("doorbell");
+  });
+
+  it("hides the sound picker while the notification sound is off", () => {
+    mockSettings.agentMode.notificationSound = false;
+
+    render(<AgentSettings />);
+
+    expect(screen.queryByText("Sound")).toBeNull();
+    expect(screen.getByText("Notification sound")).not.toBeNull();
   });
 
   it("shows the first backend's content by default and the default-model picker above the model list", () => {

@@ -1,39 +1,38 @@
 import { logWarn } from "@/logger";
+import {
+  DEFAULT_NOTIFICATION_SOUND_ID,
+  NOTIFICATION_SOUNDS,
+  type NotificationSoundId,
+  type NotificationSoundSpec,
+} from "@/utils/notificationSoundCatalog";
 
-/**
- * A4. Low enough to sit comfortably under whatever the user is doing, high
- * enough to carry across a room; a decaying tone here reads as a struck key
- * rather than an alarm.
- */
-const TONE_HZ = 440;
-/** Whole strike, decay tail included. */
-const TONE_SECONDS = 0.6;
-/** Deliberately quiet: this fires while the user is doing something else. */
-const PEAK_GAIN = 0.15;
+/** Near-instant, so every sound is struck rather than swelled. */
+const ATTACK_SECONDS = 0.005;
 /** Exponential ramps cannot reach zero, so decay to an inaudible floor. */
 const SILENCE_GAIN = 0.0001;
-/** Near-instant, so the tone is struck rather than swelled. */
-const ATTACK_SECONDS = 0.005;
 
 /**
  * One context for the plugin's lifetime. Each context owns an OS audio
- * thread, so creating one per chime would spend a thread and its startup
+ * thread, so creating one per sound would spend a thread and its startup
  * latency on every play.
  */
 let context: AudioContext | null = null;
 
 /**
- * Play a single short tone to tell the user something wants their attention.
+ * Play the named sound to tell the user something wants their attention.
  *
- * Synthesized rather than loaded from an audio file: an Obsidian plugin ships
- * only `main.js`, `styles.css`, and `manifest.json`, so a sound file would
- * have to ride along base64-encoded inside the bundle.
+ * Synthesized rather than loaded from audio files: an Obsidian plugin ships
+ * only `main.js`, `styles.css`, and `manifest.json`, so every sound would have
+ * to ride along base64-encoded inside the bundle.
  *
  * Best-effort by design — it never throws and does nothing on a runtime with
  * no Web Audio, because failing to make a sound must not fail the turn that
  * asked for one.
+ *
+ * @param id which catalog sound to play; an id no longer in the catalog falls
+ *   back to the default rather than leaving the user with silence.
  */
-export function playNotificationSound(): void {
+export function playNotificationSound(id: NotificationSoundId): void {
   try {
     if (!context) {
       if (!window.AudioContext) return;
@@ -44,22 +43,32 @@ export function playNotificationSound(): void {
     // resume succeeds; it is a no-op on an already-running context.
     if (context.state === "suspended") void context.resume();
 
-    const startAt = context.currentTime;
-    const oscillator = context.createOscillator();
-    oscillator.type = "triangle";
-    oscillator.frequency.setValueAtTime(TONE_HZ, startAt);
+    const spec: NotificationSoundSpec =
+      NOTIFICATION_SOUNDS[id] ?? NOTIFICATION_SOUNDS[DEFAULT_NOTIFICATION_SOUND_ID];
+    const now = context.currentTime;
+    for (const strike of spec.strikes) {
+      // Split the peak across the strike's frequencies, so a two-frequency
+      // strike is not twice as loud as a one-frequency one.
+      const peak = spec.peakGain / strike.hz.length;
+      for (const hz of strike.hz) {
+        const startAt = now + strike.at;
+        const oscillator = context.createOscillator();
+        oscillator.type = spec.wave;
+        oscillator.frequency.setValueAtTime(hz, startAt);
 
-    const envelope = context.createGain();
-    envelope.gain.setValueAtTime(0, startAt);
-    envelope.gain.linearRampToValueAtTime(PEAK_GAIN, startAt + ATTACK_SECONDS);
-    envelope.gain.exponentialRampToValueAtTime(SILENCE_GAIN, startAt + TONE_SECONDS);
+        const envelope = context.createGain();
+        envelope.gain.setValueAtTime(0, startAt);
+        envelope.gain.linearRampToValueAtTime(peak, startAt + ATTACK_SECONDS);
+        envelope.gain.exponentialRampToValueAtTime(SILENCE_GAIN, startAt + strike.seconds);
 
-    oscillator.connect(envelope);
-    envelope.connect(context.destination);
-    oscillator.start(startAt);
-    // Web Audio source nodes are single-use; the scheduled stop is what
-    // releases this one instead of leaving it running silently forever.
-    oscillator.stop(startAt + TONE_SECONDS);
+        oscillator.connect(envelope);
+        envelope.connect(context.destination);
+        oscillator.start(startAt);
+        // Web Audio source nodes are single-use; the scheduled stop is what
+        // releases this one instead of leaving it running silently forever.
+        oscillator.stop(startAt + strike.seconds);
+      }
+    }
   } catch (error) {
     logWarn("Copilot: failed to play the notification sound.", error);
   }

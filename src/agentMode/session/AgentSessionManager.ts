@@ -37,6 +37,7 @@ import { AgentSession, ATTENTION_TRIGGER_STATUSES, DEFAULT_TITLE_PREFIX } from "
 import type { AgentChatPersistenceManager } from "./AgentChatPersistenceManager";
 import type { AgentModelPreloader } from "./AgentModelPreloader";
 import { buildNativeChatId, parseNativeChatId } from "@/utils/nativeChatId";
+import { CHAT_AGENT_VIEWTYPE } from "@/constants";
 import { playNotificationSound } from "@/utils/notificationSound";
 import type { AgentSessionIndex } from "./AgentSessionIndex";
 import {
@@ -3359,9 +3360,9 @@ export class AgentSessionManager {
    *
    * `needsAttention` is flagged only while a *different* tab is active, and
    * cleared in `setActiveSession` when the user clicks back to this tab. The
-   * chime is not gated that way: its job is to reach a user who is away from
-   * the screen, and the session they walked away from is usually the one
-   * still in front.
+   * sound has its own, wider gate: a user reading a *different* tab in a
+   * focused window still gets the dot but no sound, while a user who left the
+   * window gets the sound even for the tab they left in front.
    */
   private attachAttentionTracking(session: AgentSession): void {
     let prev = session.getStatus();
@@ -3376,8 +3377,12 @@ export class AgentSessionManager {
         if (wantsUser && this.activeSessionId !== session.internalId) {
           session.markNeedsAttention();
         }
-        if (wantsUser && getSettings().agentMode.notificationSound) {
-          playNotificationSound();
+        if (
+          wantsUser &&
+          getSettings().agentMode.notificationSound &&
+          !this.isSessionWatched(session)
+        ) {
+          playNotificationSound(getSettings().agentMode.notificationSoundId);
         }
         // Re-render recent-list rows when this session's running membership
         // flips, so the row's spinner appears/disappears in step.
@@ -3385,6 +3390,25 @@ export class AgentSessionManager {
       },
     });
     this.getSessionState(session.internalId).attentionUnsub = unsubscribe;
+  }
+
+  /**
+   * Whether the user is demonstrably looking at this session right now: it is
+   * the session on screen, its chat view is actually rendered (not a
+   * background tab or a collapsed sidebar), and that view's window has focus.
+   * A watched session needs no sound — the user already saw it stop.
+   *
+   * Focus is read from the view's own document rather than the main window's,
+   * so a chat detached into a popout is judged by the window it actually
+   * lives in.
+   */
+  private isSessionWatched(session: AgentSession): boolean {
+    if (this.activeSessionId !== session.internalId) return false;
+    return this.app.workspace
+      .getLeavesOfType(CHAT_AGENT_VIEWTYPE)
+      .some(
+        (leaf) => leaf.view.containerEl.isShown() && leaf.view.containerEl.ownerDocument.hasFocus()
+      );
   }
 
   /**
