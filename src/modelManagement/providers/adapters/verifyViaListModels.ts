@@ -20,13 +20,12 @@
  * upstream from a connection refused (`code: "network"`).
  */
 
-import { safeFetchNoThrow } from "@/utils";
 import type { VerificationResult } from "@/modelManagement/types/runtime";
-
-const DEFAULT_TIMEOUT_MS = 8000;
-const MAX_BODY_CHARS = 200;
-
-class TimeoutError extends Error {}
+import {
+  fetchWithListModelsTimeout,
+  ListModelsTimeoutError,
+  readBodySnippet,
+} from "./listModelsHttp";
 
 export interface VerifyViaListModelsOptions {
   /** Overrides the 8s default. Tests pass a tiny value to force the
@@ -39,31 +38,20 @@ export async function verifyViaListModels(
   headers: Record<string, string>,
   opts: VerifyViaListModelsOptions = {}
 ): Promise<VerificationResult> {
-  const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-
-  let timer: number | undefined;
-  const timeoutPromise = new Promise<never>((_, reject) => {
-    timer = window.setTimeout(
-      () => reject(new TimeoutError(`Timed out after ${timeoutMs}ms`)),
-      timeoutMs
-    );
-  });
-
   try {
-    const response = await Promise.race([
-      safeFetchNoThrow(url, { method: "GET", headers }),
-      timeoutPromise,
-    ]);
+    const response = await fetchWithListModelsTimeout(
+      url,
+      { method: "GET", headers },
+      opts.timeoutMs
+    );
     return await mapResponse(response);
   } catch (err) {
     return {
       ok: false,
-      code: err instanceof TimeoutError ? "timeout" : "network",
+      code: err instanceof ListModelsTimeoutError ? "timeout" : "network",
       message: err instanceof Error ? err.message : String(err),
       checkedAt: Date.now(),
     };
-  } finally {
-    if (timer !== undefined) window.clearTimeout(timer);
   }
 }
 
@@ -96,13 +84,4 @@ async function mapResponse(response: Response): Promise<VerificationResult> {
     message: snippet ? `HTTP ${status}: ${snippet}` : `HTTP ${status}`,
     checkedAt,
   };
-}
-
-async function readBodySnippet(response: Response): Promise<string> {
-  try {
-    const body = (await response.text()).trim();
-    return body.length > MAX_BODY_CHARS ? `${body.slice(0, MAX_BODY_CHARS)}…` : body;
-  } catch {
-    return "";
-  }
 }
