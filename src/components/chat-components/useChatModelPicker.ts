@@ -79,7 +79,8 @@ export function useChatModelPicker(params: {
       // data so unknown models stay unblocked; only a populated array (which may
       // be empty) asserts "known". See the image guard in `Chat.tsx`.
       const capabilities = capabilitiesFromConfiguredInfo(configuredModel.info);
-      const needsKey = providerRequiresApiKey(provider) && !provider.apiKeyKeychainId;
+      const isAgent = provider.origin.kind === "agent";
+      const needsKey = !isAgent && providerRequiresApiKey(provider) && !provider.apiKeyKeychainId;
       const modelEntry: ModelSelectorEntry = {
         name: configuredModelId,
         provider: mapProviderTypeToChatModelProvider(provider),

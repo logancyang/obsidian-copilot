@@ -480,10 +480,7 @@ export default class ChatModelManager {
     model: CustomModel,
     allowLegacyCredentialFallback: boolean = true
   ): boolean {
-    if (
-      model.requiresApiKey === false &&
-      (model.provider as ChatModelProviders) === ChatModelProviders.OPENAI_FORMAT
-    ) {
+    if (model.requiresApiKey === false) {
       return true;
     }
 

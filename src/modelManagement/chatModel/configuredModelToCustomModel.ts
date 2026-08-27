@@ -137,7 +137,10 @@ export function configuredModelToCustomModel(params: {
   const extras = provider.extras ?? {};
 
   const trimmedKey = apiKey && apiKey.length > 0 ? apiKey : undefined;
-  const requiresApiKey = providerNeedsResolvedApiKey(provider) || !!trimmedKey;
+  const isAgentOrigin = provider.origin.kind === "agent";
+  const requiresApiKey = isAgentOrigin
+    ? false
+    : providerNeedsResolvedApiKey(provider) || !!trimmedKey;
 
   const chatProvider = mapProviderTypeToChatModelProvider(provider);
   const maxTokens =

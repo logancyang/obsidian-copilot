@@ -209,6 +209,19 @@ describe("configuredModelToCustomModel", () => {
     expect(custom.requiresApiKey).toBe(true);
   });
 
+  it("treats agent origin models as keyless (requiresApiKey: false)", () => {
+    const custom = configuredModelToCustomModel({
+      provider: provider({
+        origin: { kind: "agent", agentType: "antigravity" },
+        requiresApiKey: false,
+      }),
+      configuredModel: configuredModel(),
+      apiKey: null,
+    });
+    expect(custom.apiKey).toBeUndefined();
+    expect(custom.requiresApiKey).toBe(false);
+  });
+
   it("derives capabilities from the model snapshot", () => {
     const custom = configuredModelToCustomModel({
       provider: provider({ providerType: "anthropic" }),
