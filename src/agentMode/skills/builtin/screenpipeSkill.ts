@@ -2,6 +2,14 @@ import type { BuiltinSkill } from "./builtinSkills";
 
 const SCREENPIPE_ACTIVITY_VERSION = 1;
 
+// https://github.com/screenpipe/screenpipe/issues/4351 documents agents giving up
+// after an empty search even when a capture-method mismatch hides recorded content.
+// Treating that result as inconclusive avoids falsely telling users they had no activity.
+const EMPTY_CAPTURE_GUIDANCE = `An empty result is inconclusive. Check whether screenpipe is
+running and recording, broaden the range once when appropriate, and otherwise
+say that no matching capture was available. Do not turn an incomplete read
+into a claim that the user had no activity.`;
+
 /** Optional activity-history guidance for agents with a configured local screenpipe MCP server. */
 export const SCREENPIPE_ACTIVITY_SKILL: BuiltinSkill = {
   name: "screenpipe-activity",
@@ -43,10 +51,7 @@ run an installer unless the user explicitly asks.
 5. Narrow the range or page with \`offset\` if the first result set is too broad.
    Do not raise the result limit above 20 or dump raw result sets into the chat.
 
-An empty result is inconclusive. Check whether screenpipe is running and
-recording, broaden the range once when appropriate, and otherwise say that no
-matching capture was available. Do not turn an incomplete read into a claim
-that the user had no activity.
+${EMPTY_CAPTURE_GUIDANCE}
 
 ## Answer with traceable evidence
 

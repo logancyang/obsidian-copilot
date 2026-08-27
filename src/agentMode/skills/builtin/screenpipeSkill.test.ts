@@ -18,7 +18,7 @@ describe("screenpipeSkill", () => {
       );
     });
 
-    it("keeps retrieval bounded and treats missing capture as inconclusive", () => {
+    it("keeps retrieval bounded and treats missing capture as inconclusive per https://github.com/screenpipe/screenpipe/issues/4351", () => {
       const md = SCREENPIPE_ACTIVITY_SKILL.skillMd;
 
       expect(md).toContain("explicit ISO 8601 start and end times");
