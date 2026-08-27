@@ -11,6 +11,7 @@ export interface ResolvedCustomCommandPrefix {
  *
  * @param input - User-entered chat text that may begin with a command invocation.
  * @param commands - Custom commands available to the current chat surface.
+ * @see https://github.com/logancyang/obsidian-copilot/issues/2960#issuecomment-5445353610
  */
 export function resolveCustomCommandPrefix(
   input: string,

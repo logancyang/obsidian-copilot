@@ -39,6 +39,10 @@ jest.mock("@/commands/customCommandUtils", () => ({
   }),
 }));
 
+jest.mock("@/commands/state", () => ({
+  getCachedCustomCommands: jest.fn().mockReturnValue([]),
+}));
+
 jest.mock("@/services/webViewerService/webViewerServiceSingleton", () => ({
   getWebViewerService: jest.fn(),
 }));
@@ -53,6 +57,7 @@ import { getWebViewerService } from "@/services/webViewerService/webViewerServic
 import { ChatMessage, MessageContext } from "@/types/message";
 import { PromptContextEnvelope } from "@/context/PromptContextTypes";
 import { mockTFile } from "@/__tests__/mockObsidian";
+import { getCachedCustomCommands } from "@/commands/state";
 
 const USER_SENDER = "user";
 const createContextResult = (content = "Hello with context") => ({
@@ -187,6 +192,57 @@ describe("ChatManager", () => {
       expect(mockMessageRepo.updateProcessedText).toHaveBeenCalledWith(
         "msg-1",
         "Hello with context",
+        undefined
+      );
+    });
+
+    it("replaces a Quick Chat slash alias with its full prompt before displaying and sending it (https://github.com/logancyang/obsidian-copilot/issues/2960#issuecomment-5445353610)", async () => {
+      const expandedPrompt = "Summarize the active note.\n\nfocus on decisions";
+      const mockMessage = createMockMessage("msg-1", expandedPrompt, USER_SENDER);
+      const context: MessageContext = {
+        notes: [],
+        urls: [],
+        selectedTextContexts: [],
+      };
+      const command = {
+        title: "summarize",
+        content: "Summarize the active note.",
+        showInContextMenu: false,
+        showInSlashMenu: true,
+        order: 0,
+        modelKey: "",
+        lastUsedMs: 0,
+      };
+
+      (getCachedCustomCommands as jest.Mock).mockReturnValue([command]);
+      mockPlugin.app.workspace.getActiveFile.mockReturnValue(null);
+      mockMessageRepo.addMessage.mockReturnValue("msg-1");
+      mockMessageRepo.getMessage.mockReturnValue(mockMessage);
+      mockContextManager.processMessageContext.mockResolvedValue(
+        createContextResult(expandedPrompt)
+      );
+      mockMessageRepo.updateProcessedText.mockReturnValue(true);
+
+      await chatManager.sendMessage("/summarize focus on decisions", context, ChainType.LLM_CHAIN);
+
+      expect(mockMessageRepo.addMessage).toHaveBeenCalledWith(
+        expandedPrompt,
+        expandedPrompt,
+        USER_SENDER,
+        { ...context, webTabs: [] },
+        undefined
+      );
+      expect(mockContextManager.processMessageContext).toHaveBeenCalledWith(
+        mockPlugin.app,
+        mockMessage,
+        mockFileParserManager,
+        mockPlugin.app.vault,
+        ChainType.LLM_CHAIN,
+        false,
+        null,
+        expect.anything(),
+        expect.any(String),
+        expect.any(Array),
         undefined
       );
     });

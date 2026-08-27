@@ -1,8 +1,6 @@
 import { getSelectedTextContexts } from "@/aiParams";
 import { ChainType } from "@/chainType";
 import { processPrompt } from "@/commands/customCommandUtils";
-import { resolveCustomCommandPrefix } from "@/commands/resolveCustomCommandPrefix";
-import { getCachedCustomCommands } from "@/commands/state";
 import { LOADING_MESSAGES } from "@/constants";
 import { PromptContextEngine } from "@/context/PromptContextEngine";
 import { compactXmlBlock, getL2RefetchInstruction } from "@/context/L2ContextCompactor";
@@ -83,19 +81,10 @@ export class ContextManager {
 
       const processedMessage = message.originalMessage || message.message;
 
-      // Quick Chat keeps the slash alias visible, but the model cannot resolve
-      // Copilot's command catalog itself. Resolve here so edits and regenerated
-      // saved chats execute the alias instead of sending it literally.
-      // https://github.com/logancyang/obsidian-copilot/issues/2960#issuecomment-5445353610
-      const promptText = resolveCustomCommandPrefix(
-        processedMessage,
-        getCachedCustomCommands()
-      ).text;
-
       // 1. Process custom prompts first
       const { processedPrompt: processedUserMessage, includedFiles } = await processPrompt(
         app,
-        promptText,
+        processedMessage,
         "",
         vault,
         activeNote

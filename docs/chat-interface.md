@@ -25,7 +25,7 @@ By default, a new chat includes the active note. A text selection takes priority
 
 ## Run a saved command
 
-Type `/` and choose a saved command. You can add an instruction after the command name before sending. Quick Chat keeps `/command-name` in your message and sends the saved command prompt, followed by your extra instruction, to the selected model.
+Type `/` and choose a saved command. You can add an instruction after the command name before sending. When you send, Quick Chat replaces `/command-name` with the saved command prompt followed by your extra instruction, matching Agent Chat.
 
 Manage saved commands under **Settings → Copilot → Command**. See [Copilot Commands and Quick Ask](custom-commands.md).
 

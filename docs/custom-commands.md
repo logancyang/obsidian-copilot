@@ -51,7 +51,7 @@ Tags must be in note properties, not only written inline in the note body. When 
 
 - **From the editor:** select text if needed, then right-click and choose **Copilot → _command name_**. The command must have **Show in context menu** enabled.
 - **From the command palette:** run **Apply custom command**, then choose any command. Each saved command is also registered by name in the palette.
-- **From Quick Chat:** type `/`, choose a command, add any extra instruction, and send. The input stays as `/command-name`, while Copilot sends the saved prompt to the model.
+- **From Quick Chat:** type `/`, choose a command, add any extra instruction, and send. Copilot replaces `/command-name` with the saved prompt before displaying and sending the message, matching Agent Chat.
 - **From Agent Chat:** type `/`, choose a command, add any extra instruction, and send. Choosing an item inserts it without sending, so you can review it first.
 
 Editor and command-palette runs open a result panel. You can refine the result, copy it, insert it at the cursor, or replace the original selection.
