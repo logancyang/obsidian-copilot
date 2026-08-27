@@ -40,7 +40,7 @@ export const AgentNotificationSoundSettings: React.FC<AgentNotificationSoundSett
       <SettingItem
         type="select"
         title="Sound"
-        description="Each one plays as you select it."
+        description="Selecting one previews it unless another sound played in the last second."
         value={soundId}
         onChange={onSoundChange}
         options={[...soundOptions]}

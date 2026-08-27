@@ -1329,6 +1329,7 @@ function sanitizeAgentMode(raw: unknown): CopilotSettings["agentMode"] {
 
   // A sound dropped from the catalog would otherwise persist as a name nothing
   // can play, leaving the user silently unnotified.
+  // https://github.com/logancyang/obsidian-copilot/issues/2987
   const notificationSoundId = isNotificationSoundId(r.notificationSoundId)
     ? r.notificationSoundId
     : DEFAULT_SETTINGS.agentMode.notificationSoundId;

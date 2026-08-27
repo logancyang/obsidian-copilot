@@ -225,7 +225,7 @@ describe("sanitizeSettings - agentMode shape migration", () => {
     expect(sanitized.agentMode.notificationSound).toBe(true);
   });
 
-  it("keeps a chosen notification sound and drops one no longer in the catalog", () => {
+  it("keeps a chosen notification sound and drops one no longer in the catalog (https://github.com/logancyang/obsidian-copilot/issues/2987)", () => {
     const chosen = sanitizeSettings({
       ...DEFAULT_SETTINGS,
       agentMode: {
