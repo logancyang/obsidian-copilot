@@ -397,6 +397,9 @@ export class AgentSessionManager {
     return entry;
   }
 
+  /** Undoes the workspace and window listeners `attachAttentionClearing` installs. */
+  private attentionClearTeardown?: () => void;
+
   constructor(
     private readonly app: App,
     private readonly plugin: CopilotPlugin,
@@ -415,6 +418,7 @@ export class AgentSessionManager {
       this.markProjectContextDirty(projectId)
     );
     this.setupProjectRecordChangeMonitor();
+    this.attachAttentionClearing();
   }
 
   /**
@@ -2480,6 +2484,10 @@ export class AgentSessionManager {
   setActiveSession(id: string): void {
     const session = this.sessions.get(id);
     if (!session) return;
+    // Cleared before the already-active early return: a session flagged because
+    // its window lost focus is the active one, so this would otherwise be a
+    // no-op on exactly the session the click means to acknowledge.
+    session.clearNeedsAttention();
     if (this.activeSessionId === id) return;
     if (session.projectId !== this.activeProjectId) {
       this.parkActiveScope();
@@ -2490,7 +2498,6 @@ export class AgentSessionManager {
     this.detachedFromTabIds.delete(id);
     this.activeSessionId = id;
     this.lastActiveByScope.set(session.projectId, id);
-    session.clearNeedsAttention();
     this.notify();
   }
 
@@ -2686,6 +2693,8 @@ export class AgentSessionManager {
     this.contentTrackerUnsubscribe?.();
     this.contentTrackerUnsubscribe = undefined;
     this.contentTracker.dispose();
+    this.attentionClearTeardown?.();
+    this.attentionClearTeardown = undefined;
     logInfo(
       `[AgentMode] shutdown (pool size=${this.sessions.size}, backends=${this.backends.size})`
     );
@@ -3358,15 +3367,10 @@ export class AgentSessionManager {
    * that demands the user's eye (turn ended, errored, or paused for
    * permission) and raise the two attention signals.
    *
-   * Both signals answer "was the user looking?" through
-   * {@link isSessionOnScreen}, and the sound narrows that same answer with
-   * {@link isSessionWatched}: being on screen is not enough if the window is
-   * behind something else.
-   *
-   * The dot deliberately stops at "on screen" rather than adopting the
-   * narrower test. Its only clear path is `setActiveSession`, which returns
-   * early for the session that is already active, so a dot raised on the tab
-   * in front could never be cleared by returning to it.
+   * Both signals ask the same question, {@link isSessionWatched}: a session
+   * the user was not watching raises the dot and makes its sound. Since a tab
+   * in front of an unfocused window is now flagged too, clicking the tab is no
+   * longer the only way back — {@link attachAttentionClearing} owns the rest.
    */
   private attachAttentionTracking(session: AgentSession): void {
     let prev = session.getStatus();
@@ -3378,7 +3382,7 @@ export class AgentSessionManager {
         prev = next;
         void this.flushDeferredBackendRestartIfReady(session.backendId);
         const wantsUser = wasRunning && ATTENTION_TRIGGER_STATUSES.has(next);
-        if (wantsUser && !this.isSessionOnScreen(session)) {
+        if (wantsUser && !this.isSessionWatched(session)) {
           session.markNeedsAttention();
         }
         if (
@@ -3399,6 +3403,59 @@ export class AgentSessionManager {
   /** Whether this session is the tab the chat would show, rather than one behind it. */
   private isSessionOnScreen(session: AgentSession): boolean {
     return this.activeSessionId === session.internalId;
+  }
+
+  /**
+   * Drop `needsAttention` from every session the user is now watching, the
+   * moment they are watching it. Without this the flag would be raised by
+   * conditions `setActiveSession` cannot answer: a session flagged because its
+   * window lost focus is already the active tab, so there is no tab left to
+   * click back to.
+   */
+  private clearAttentionForWatchedSessions(): void {
+    let cleared = false;
+    for (const session of this.sessions.values()) {
+      if (!session.getNeedsAttention() || !this.isSessionWatched(session)) continue;
+      session.clearNeedsAttention();
+      cleared = true;
+    }
+    // The session's own listeners already redraw its tab; this redraws the
+    // recent-chat rows, which read the attention set off the manager.
+    if (cleared) this.notify();
+  }
+
+  /**
+   * Watch for the user's eye returning. `isSessionWatched` turns true through
+   * three routes and only one of them is a tab click: `active-leaf-change`
+   * covers opening the sidebar, selecting the chat leaf, and clicking into a
+   * popout, while a window `focus` listener covers coming back to Obsidian
+   * from another application, which changes no leaf at all.
+   */
+  private attachAttentionClearing(): void {
+    const workspace = this.app.workspace;
+    const clear = () => this.clearAttentionForWatchedSessions();
+    const refs = [workspace.on("active-leaf-change", clear)];
+    const listening = new Set<Window>();
+    const listen = (win: Window): void => {
+      if (listening.has(win)) return;
+      listening.add(win);
+      win.addEventListener("focus", clear);
+    };
+    // Popouts open and close over the manager's lifetime, so each is picked up
+    // as it appears rather than enumerated once here.
+    listen(workspace.rootSplit.win);
+    refs.push(
+      workspace.on("window-open", (_, win) => listen(win)),
+      workspace.on("window-close", (_, win) => {
+        win.removeEventListener("focus", clear);
+        listening.delete(win);
+      })
+    );
+    this.attentionClearTeardown = () => {
+      for (const ref of refs) workspace.offref(ref);
+      for (const win of listening) win.removeEventListener("focus", clear);
+      listening.clear();
+    };
   }
 
   /**

@@ -253,6 +253,50 @@ const sessionCreateSpy = jest.spyOn(AgentSession, "start").mockImplementation((o
  */
 let mockAgentChatLeaves: Array<{ view: { containerEl: HTMLElement } }> = [];
 
+/** Workspace event handlers the manager registered, by event name. */
+let mockWorkspaceHandlers: Map<string, Array<(...args: unknown[]) => void>>;
+/** `focus` listeners the manager put on the main window. */
+let mockWindowFocusHandlers: Array<() => void>;
+
+/** Fire a workspace event the manager subscribed to. */
+function emitWorkspaceEvent(name: string, ...args: unknown[]): void {
+  for (const handler of mockWorkspaceHandlers.get(name) ?? []) handler(...args);
+}
+
+/** Fire the OS window-focus event the manager listens for. */
+function emitWindowFocus(): void {
+  for (const handler of [...mockWindowFocusHandlers]) handler();
+}
+
+/**
+ * The workspace surface the attention gate uses: which agent chat views exist,
+ * and the events that say the user's eye came back. Default: no view is open,
+ * so nothing is being watched.
+ */
+function buildWorkspace(): unknown {
+  return {
+    getLeavesOfType: jest.fn(() => mockAgentChatLeaves),
+    on: jest.fn((name: string, callback: (...args: unknown[]) => void) => {
+      const handlers = mockWorkspaceHandlers.get(name) ?? [];
+      handlers.push(callback);
+      mockWorkspaceHandlers.set(name, handlers);
+      return { name } as never;
+    }),
+    offref: jest.fn(),
+    rootSplit: {
+      win: {
+        addEventListener: jest.fn((type: string, callback: () => void) => {
+          if (type === "focus") mockWindowFocusHandlers.push(callback);
+        }),
+        removeEventListener: jest.fn((type: string, callback: () => void) => {
+          if (type !== "focus") return;
+          mockWindowFocusHandlers = mockWindowFocusHandlers.filter((h) => h !== callback);
+        }),
+      },
+    },
+  };
+}
+
 /** An agent chat view that is on screen, in a window that has focus. */
 function watchedLeaf(): { view: { containerEl: HTMLElement } } {
   const containerEl = {
@@ -283,9 +327,7 @@ function buildApp(basePath = "/vault"): App {
   return {
     vault: { adapter, ...events, ...vaultFiles },
     metadataCache: { ...events },
-    // The sound gate asks whether an agent chat view is on screen and focused.
-    // Default: no view is open, so nothing is being watched.
-    workspace: { getLeavesOfType: jest.fn(() => mockAgentChatLeaves) },
+    workspace: buildWorkspace(),
   } as unknown as App;
 }
 
@@ -348,6 +390,8 @@ beforeEach(() => {
   mockBackendIsRunning = true;
   mockNotificationSound = true;
   mockAgentChatLeaves = [];
+  mockWorkspaceHandlers = new Map();
+  mockWindowFocusHandlers = [];
   (playNotificationSound as jest.Mock).mockClear();
   mockBackendStart.mockClear();
   mockBackendShutdown.mockClear();
@@ -1103,14 +1147,98 @@ describe("AgentSessionManager attention tracking", () => {
     expect(b.getNeedsAttention()).toBe(true);
   });
 
-  it("does not flag the active session", async () => {
+  it("does not flag a session the user is watching", async () => {
+    mockAgentChatLeaves = [watchedLeaf()];
     const mgr = buildManager();
     const a = await mgr.createSession();
     expect(mgr.getActiveSession()).toBe(a);
     const aHandle = getSessionTestHandle(a);
+
     aHandle.setStatus("running");
     aHandle.setStatus("idle");
+
     expect(a.getNeedsAttention()).toBe(false);
+  });
+
+  it("flags the tab in front when its window is not focused", async () => {
+    const mgr = buildManager();
+    const a = await mgr.createSession();
+    const aHandle = getSessionTestHandle(a);
+
+    aHandle.setStatus("running");
+    aHandle.setStatus("idle");
+
+    expect(a.getNeedsAttention()).toBe(true);
+  });
+
+  it("clears the flag when the window regains focus on a watched session", async () => {
+    const mgr = buildManager();
+    const a = await mgr.createSession();
+    const aHandle = getSessionTestHandle(a);
+    aHandle.setStatus("running");
+    aHandle.setStatus("idle");
+    expect(a.getNeedsAttention()).toBe(true);
+
+    // The user comes back to Obsidian: no leaf changed, only the window focus.
+    mockAgentChatLeaves = [watchedLeaf()];
+    emitWindowFocus();
+
+    expect(a.getNeedsAttention()).toBe(false);
+  });
+
+  it("clears the flag when the chat view becomes the active leaf", async () => {
+    const mgr = buildManager();
+    const a = await mgr.createSession();
+    const aHandle = getSessionTestHandle(a);
+    aHandle.setStatus("running");
+    aHandle.setStatus("idle");
+
+    // The user opens the collapsed sidebar the chat lives in.
+    mockAgentChatLeaves = [watchedLeaf()];
+    emitWorkspaceEvent("active-leaf-change");
+
+    expect(a.getNeedsAttention()).toBe(false);
+  });
+
+  it("keeps the flag when the eye returns to a different session than the flagged one", async () => {
+    const mgr = buildManager();
+    const a = await mgr.createSession();
+    const b = await mgr.createSession();
+    mgr.setActiveSession(a.internalId);
+    const bHandle = getSessionTestHandle(b);
+    bHandle.setStatus("running");
+    bHandle.setStatus("idle");
+
+    // Watching again, but `a` is the session on screen, not the flagged `b`.
+    mockAgentChatLeaves = [watchedLeaf()];
+    emitWindowFocus();
+
+    expect(b.getNeedsAttention()).toBe(true);
+  });
+
+  it("clears the flag when the user clicks the tab that is already active", async () => {
+    const mgr = buildManager();
+    const a = await mgr.createSession();
+    const aHandle = getSessionTestHandle(a);
+    aHandle.setStatus("running");
+    aHandle.setStatus("idle");
+    expect(a.getNeedsAttention()).toBe(true);
+
+    mgr.setActiveSession(a.internalId);
+
+    expect(a.getNeedsAttention()).toBe(false);
+  });
+
+  it("stops listening for the returning eye once shut down", async () => {
+    const mgr = buildManager();
+    const a = await mgr.createSession();
+    const aHandle = getSessionTestHandle(a);
+    aHandle.setStatus("running");
+    aHandle.setStatus("idle");
+
+    await mgr.shutdown();
+
+    expect(mockWindowFocusHandlers).toHaveLength(0);
   });
 
   it("chimes when a turn ends on the active session the user may have walked away from", async () => {
@@ -1175,7 +1303,6 @@ describe("AgentSessionManager attention tracking", () => {
     aHandle.setStatus("idle");
 
     expect(playNotificationSound).not.toHaveBeenCalled();
-    expect(a.getNeedsAttention()).toBe(false);
   });
 
   it("stays silent on the starting → idle transition of a fresh session", async () => {
@@ -1349,7 +1476,8 @@ describe("AgentSessionManager.getAttentionChatIds", () => {
     expect(mgr.getAttentionChatIds().has(nativeId)).toBe(true);
   });
 
-  it("does not include the active session (it never flags attention)", async () => {
+  it("does not include a session the user is watching", async () => {
+    mockAgentChatLeaves = [watchedLeaf()];
     const mgr = buildManager();
     const a = await mgr.createSession();
     const aHandle = getSessionTestHandle(a);
@@ -2234,6 +2362,7 @@ describe("AgentSessionManager chat history aggregation", () => {
         on: jest.fn(() => ({}) as never),
         offref: jest.fn(),
       },
+      workspace: buildWorkspace(),
     } as unknown as App;
     const plugin = {
       manifest: { version: "1.0.0" },
