@@ -42,6 +42,7 @@ const baseArgs: RelevantNotesPaneProps = {
   canOpenMiyoApp: true,
   onOpenMiyoApp: () => undefined,
   onOpenMiyoSettings: () => undefined,
+  onRefresh: () => undefined,
 };
 
 const meta = {

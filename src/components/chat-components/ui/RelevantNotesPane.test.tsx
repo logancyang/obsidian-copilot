@@ -11,6 +11,7 @@ const BASE_PROPS: RelevantNotesPaneProps = {
   canOpenMiyoApp: true,
   onOpenMiyoApp: jest.fn(),
   onOpenMiyoSettings: jest.fn(),
+  onRefresh: jest.fn(),
 };
 
 describe("RelevantNotesPane", () => {
@@ -80,10 +81,16 @@ describe("RelevantNotesPane", () => {
       expect(container.querySelector("[data-miyo-guidance]")?.className).toContain("tw-max-w-xs");
     });
 
-    it("shows a centered not-indexed card without setup actions beside link rows (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", () => {
+    it("shows a centered not-indexed card with configuration and refresh actions beside link rows (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", () => {
       const onOpenMiyoApp = jest.fn();
+      const onRefresh = jest.fn();
       const { container } = render(
-        <RelevantNotesPane {...BASE_PROPS} guidance="not-indexed" onOpenMiyoApp={onOpenMiyoApp} />
+        <RelevantNotesPane
+          {...BASE_PROPS}
+          guidance="not-indexed"
+          onOpenMiyoApp={onOpenMiyoApp}
+          onRefresh={onRefresh}
+        />
       );
 
       expect(screen.getByText("This note isn't indexed in Miyo")).toBeTruthy();
@@ -95,6 +102,8 @@ describe("RelevantNotesPane", () => {
       expect(screen.getByText("Related note")).toBeTruthy();
       fireEvent.click(screen.getByRole("button", { name: "Open Miyo" }));
       expect(onOpenMiyoApp).toHaveBeenCalledTimes(1);
+      fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+      expect(onRefresh).toHaveBeenCalledTimes(1);
       expect(container.querySelector("[data-miyo-guidance]")?.className).toContain("tw-max-w-xs");
     });
 

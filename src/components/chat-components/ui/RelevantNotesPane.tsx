@@ -18,6 +18,7 @@ export interface RelevantNotesPaneProps {
   canOpenMiyoApp: boolean;
   onOpenMiyoApp: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onOpenMiyoSettings: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  onRefresh: () => void;
 }
 
 /** Render the result, empty, and Miyo-help states without plugin or Obsidian runtime access. */
@@ -30,6 +31,7 @@ export function RelevantNotesPane({
   canOpenMiyoApp,
   onOpenMiyoApp,
   onOpenMiyoSettings,
+  onRefresh,
 }: RelevantNotesPaneProps): React.ReactElement {
   // A pending request has not established either an empty result or a setup
   // failure, so keep its status neutral until the request settles.
@@ -97,13 +99,21 @@ export function RelevantNotesPane({
             setup language. The container selects the runtime-safe destination.
             https://github.com/Brevilabs/obsidian-copilot-private/issues/280 */}
         {isNotIndexed && (
-          <Button
-            variant="default"
-            size="sm"
-            onClick={canOpenMiyoApp ? onOpenMiyoApp : onOpenMiyoSettings}
-          >
-            {canOpenMiyoApp ? "Open Miyo" : "Review Miyo connection"}
-          </Button>
+          <div className="tw-flex tw-flex-wrap tw-justify-center tw-gap-2">
+            {/* Miyo cannot emit Copilot's local index-change signal, so the
+                user needs an explicit way to recheck after indexing finishes.
+                https://github.com/Brevilabs/obsidian-copilot-private/issues/280 */}
+            <Button variant="secondary" size="sm" onClick={onRefresh}>
+              Refresh
+            </Button>
+            <Button
+              variant="default"
+              size="sm"
+              onClick={canOpenMiyoApp ? onOpenMiyoApp : onOpenMiyoSettings}
+            >
+              {canOpenMiyoApp ? "Open Miyo" : "Review Miyo connection"}
+            </Button>
+          </div>
         )}
       </div>
     </div>
