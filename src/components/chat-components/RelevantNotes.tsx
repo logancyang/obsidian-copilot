@@ -42,7 +42,12 @@ const UNAVAILABLE_RELEVANT_NOTES_RESULT = Object.freeze({
   semanticState: "unavailable" as const,
 });
 
-function useRelevantNotes(enableMiyo: boolean, miyoServerUrl: string) {
+function useRelevantNotes(
+  enableMiyo: boolean,
+  miyoServerUrl: string,
+  qaInclusions: string,
+  qaExclusions: string
+) {
   const app = useApp();
   const [result, setResult] = useState<RelevantNotesResult>(
     enableMiyo ? LOADING_RELEVANT_NOTES_RESULT : DISABLED_RELEVANT_NOTES_RESULT
@@ -88,7 +93,7 @@ function useRelevantNotes(enableMiyo: boolean, miyoServerUrl: string) {
     return () => {
       cancelled = true;
     };
-  }, [app, activeFile?.path, enableMiyo, miyoServerUrl, signalTick]);
+  }, [app, activeFile?.path, enableMiyo, miyoServerUrl, qaExclusions, qaInclusions, signalTick]);
 
   return { result, refresh };
 }
@@ -381,7 +386,12 @@ export const RelevantNotes = memo(
     const app = useApp();
     const activeFile = useActiveFile();
     const settings = useSettingsValue();
-    const { result, refresh } = useRelevantNotes(settings.enableMiyo, settings.miyoServerUrl);
+    const { result, refresh } = useRelevantNotes(
+      settings.enableMiyo,
+      settings.miyoServerUrl,
+      settings.qaInclusions,
+      settings.qaExclusions
+    );
     const relevantNotes = result.notes;
 
     // The active note itself is excluded from the index (by the QA

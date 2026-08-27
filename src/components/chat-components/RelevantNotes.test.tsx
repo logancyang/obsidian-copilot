@@ -285,6 +285,16 @@ describe("RelevantNotes", () => {
       await waitFor(() => expect(mockFindRelevantNotes).toHaveBeenCalledTimes(2));
     });
 
+    it("refetches Relevant Notes when the Copilot Index scope changes (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
+      const { rerender } = render(<RelevantNotes onAddToChat={jest.fn()} />);
+      await waitFor(() => expect(mockFindRelevantNotes).toHaveBeenCalledTimes(1));
+
+      mockSettings = { ...mockSettings, qaExclusions: "Archive" };
+      rerender(<RelevantNotes onAddToChat={jest.fn()} />);
+
+      await waitFor(() => expect(mockFindRelevantNotes).toHaveBeenCalledTimes(2));
+    });
+
     it("keeps a superseded Miyo request from overwriting newer results (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
       let resolveFirst:
         | ((notes: Awaited<ReturnType<typeof findRelevantNotes>>) => void)
