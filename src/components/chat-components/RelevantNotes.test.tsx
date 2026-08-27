@@ -195,6 +195,33 @@ describe("RelevantNotes", () => {
       openSpy.mockRestore();
     });
 
+    it("refetches an unindexed note after the user asks Miyo for its latest state (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
+      mockSettings = { ...mockSettings, enableMiyo: true };
+      mockFindRelevantNotes
+        .mockResolvedValueOnce({ notes: [], semanticState: "not-indexed" })
+        .mockResolvedValueOnce({
+          notes: [
+            {
+              note: { path: "Target.md", title: "Target" },
+              metadata: {
+                score: 0.9,
+                similarityScore: 0.9,
+                hasOutgoingLinks: false,
+                hasBacklinks: false,
+              },
+            },
+          ],
+          semanticState: "ready",
+        });
+
+      render(<RelevantNotes onAddToChat={jest.fn()} />);
+
+      fireEvent.click(await screen.findByRole("button", { name: "Refresh" }));
+
+      expect(await screen.findByText("Target")).toBeTruthy();
+      expect(mockFindRelevantNotes).toHaveBeenCalledTimes(2);
+    });
+
     it.each([
       { runtime: "mobile", isMobile: true, miyoServerUrl: "http://127.0.0.1:8742" },
       { runtime: "remote", isMobile: false, miyoServerUrl: "https://remote-miyo.example" },

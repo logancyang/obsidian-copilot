@@ -45,8 +45,9 @@ function useRelevantNotes(enableMiyo: boolean, miyoServerUrl: string) {
   );
   const [signalTick, setSignalTick] = useState(0);
   const activeFile = useActiveFile();
+  const refresh = useCallback(() => setSignalTick((tick) => tick + 1), []);
 
-  useEffect(() => onIndexChanged(() => setSignalTick((t) => t + 1)), []);
+  useEffect(() => onIndexChanged(refresh), [refresh]);
 
   useEffect(() => {
     let cancelled = false;
@@ -79,7 +80,7 @@ function useRelevantNotes(enableMiyo: boolean, miyoServerUrl: string) {
     };
   }, [app, activeFile?.path, enableMiyo, miyoServerUrl, signalTick]);
 
-  return result;
+  return { result, refresh };
 }
 
 /** Map a 0–1 similarity score directly to the meter fill width (70% → 70%). */
@@ -370,7 +371,7 @@ export const RelevantNotes = memo(
     const app = useApp();
     const activeFile = useActiveFile();
     const settings = useSettingsValue();
-    const result = useRelevantNotes(settings.enableMiyo, settings.miyoServerUrl);
+    const { result, refresh } = useRelevantNotes(settings.enableMiyo, settings.miyoServerUrl);
     const relevantNotes = result.notes;
 
     // The active note itself is excluded from the index (by the QA
@@ -467,6 +468,7 @@ export const RelevantNotes = memo(
                      onOpenMiyoSettings={(event) =>
                        openCopilotSettings(app, event.currentTarget.win, "miyo")
                      }
+                     onRefresh={refresh}
                    />
                  )}
               </div>
