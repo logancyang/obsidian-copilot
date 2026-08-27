@@ -98,7 +98,6 @@ import type {
 } from "./types";
 
 const AUTOSAVE_DEBOUNCE_MS = 500;
-const OBSCURING_AGENT_VIEW_SELECTOR = ".modal-container, .prompt";
 /**
  * Upper bound on the opportunistic `listSessions` sweep that enriches the
  * recent-chats list from already-running backends. The session index answers
@@ -398,9 +397,6 @@ export class AgentSessionManager {
     return entry;
   }
 
-  /** Undoes the workspace and window listeners `attachAttentionClearing` installs. */
-  private attentionClearTeardown?: () => void;
-
   constructor(
     private readonly app: App,
     private readonly plugin: CopilotPlugin,
@@ -419,7 +415,6 @@ export class AgentSessionManager {
       this.markProjectContextDirty(projectId)
     );
     this.setupProjectRecordChangeMonitor();
-    this.attachAttentionClearing();
   }
 
   /**
@@ -2485,10 +2480,6 @@ export class AgentSessionManager {
   setActiveSession(id: string): void {
     const session = this.sessions.get(id);
     if (!session) return;
-    // Cleared before the already-active early return: a session flagged because
-    // its window lost focus is the active one, so this would otherwise be a
-    // no-op on exactly the session the click means to acknowledge.
-    session.clearNeedsAttention();
     if (this.activeSessionId === id) return;
     if (session.projectId !== this.activeProjectId) {
       this.parkActiveScope();
@@ -2499,6 +2490,7 @@ export class AgentSessionManager {
     this.detachedFromTabIds.delete(id);
     this.activeSessionId = id;
     this.lastActiveByScope.set(session.projectId, id);
+    session.clearNeedsAttention();
     this.notify();
   }
 
@@ -2694,8 +2686,6 @@ export class AgentSessionManager {
     this.contentTrackerUnsubscribe?.();
     this.contentTrackerUnsubscribe = undefined;
     this.contentTracker.dispose();
-    this.attentionClearTeardown?.();
-    this.attentionClearTeardown = undefined;
     logInfo(
       `[AgentMode] shutdown (pool size=${this.sessions.size}, backends=${this.backends.size})`
     );
@@ -3367,11 +3357,6 @@ export class AgentSessionManager {
    * Watch this session's status transitions out of `running` into a state
    * that demands the user's eye (turn ended, errored, or paused for
    * permission) and raise the two attention signals.
-   *
-   * Both signals ask the same question, {@link isSessionWatched}: a session
-   * the user was not watching raises the dot and makes its sound. Since a tab
-   * in front of an unfocused window is now flagged too, clicking the tab is no
-   * longer the only way back — {@link attachAttentionClearing} owns the rest.
    */
   private attachAttentionTracking(session: AgentSession): void {
     let prev = session.getStatus();
@@ -3387,10 +3372,13 @@ export class AgentSessionManager {
         // may arrive while the session is already awaiting permission.
         // https://github.com/logancyang/obsidian-copilot/issues/2987
         const wantsUser = wasRunning && ATTENTION_TRIGGER_STATUSES.has(next);
-        const watched = wantsUser && this.isSessionWatched(session);
-        if (wantsUser && !watched) {
+        if (wantsUser && this.activeSessionId !== session.internalId) {
           session.markNeedsAttention();
-          if (next !== "awaiting_permission") this.playConfiguredNotificationSound();
+        }
+        // Focus inside this exact chat is the only reliable proof that the
+        // notification would be redundant. https://github.com/logancyang/obsidian-copilot/issues/2987
+        if (wantsUser && next !== "awaiting_permission" && !this.isSessionFocused(session)) {
+          this.playConfiguredNotificationSound();
         }
         // Re-render recent-list rows when this session's running membership
         // flips, so the row's spinner appears/disappears in step.
@@ -3400,86 +3388,16 @@ export class AgentSessionManager {
     this.getSessionState(session.internalId).attentionUnsub = unsubscribe;
   }
 
-  /** Whether this session is the tab the chat would show, rather than one behind it. */
-  private isSessionOnScreen(session: AgentSession): boolean {
-    return this.activeSessionId === session.internalId;
-  }
-
-  /**
-   * Drop `needsAttention` from every session the user is now watching, the
-   * moment they are watching it. Without this the flag would be raised by
-   * conditions `setActiveSession` cannot answer: a session flagged because its
-   * window lost focus is already the active tab, so there is no tab left to
-   * click back to.
-   */
-  private clearAttentionForWatchedSessions(): void {
-    let cleared = false;
-    for (const session of this.sessions.values()) {
-      if (!session.getNeedsAttention() || !this.isSessionWatched(session)) continue;
-      session.clearNeedsAttention();
-      cleared = true;
-    }
-    // The session's own listeners already redraw its tab; this redraws the
-    // recent-chat rows, which read the attention set off the manager.
-    if (cleared) this.notify();
-  }
-
-  /**
-   * Watch for the user's eye returning. `isSessionWatched` turns true through
-   * three routes and only one of them is a tab click: `active-leaf-change`
-   * covers opening the sidebar, selecting the chat leaf, and clicking into a
-   * popout, while a window `focus` listener covers coming back to Obsidian
-   * from another application, which changes no leaf at all.
-   */
-  private attachAttentionClearing(): void {
-    const workspace = this.app.workspace;
-    const clear = () => this.clearAttentionForWatchedSessions();
-    const refs = [workspace.on("active-leaf-change", clear)];
-    const listening = new Set<Window>();
-    const listen = (win: Window): void => {
-      if (listening.has(win)) return;
-      listening.add(win);
-      win.addEventListener("focus", clear);
-    };
-    // Popouts open and close over the manager's lifetime, so each is picked up
-    // as it appears rather than enumerated once here.
-    listen(workspace.rootSplit.win);
-    refs.push(
-      workspace.on("window-open", (_, win) => listen(win)),
-      workspace.on("window-close", (_, win) => {
-        win.removeEventListener("focus", clear);
-        listening.delete(win);
-      })
-    );
-    this.attentionClearTeardown = () => {
-      for (const ref of refs) workspace.offref(ref);
-      for (const win of listening) win.removeEventListener("focus", clear);
-      listening.clear();
-    };
-  }
-
-  /**
-   * Whether the user is demonstrably looking at this session right now: it is
-   * on screen, its chat view is actually rendered (not a background workspace
-   * tab or a collapsed sidebar), and that view's window has focus. A watched
-   * session needs no sound, because the user already saw it stop.
-   *
-   * Focus is read from the view's own document rather than the main window's,
-   * so a chat detached into a popout is judged by the window it lives in.
-   */
-  private isSessionWatched(session: AgentSession): boolean {
-    if (!this.isSessionOnScreen(session)) return false;
-    return this.app.workspace.getLeavesOfType(CHAT_AGENT_VIEWTYPE).some((leaf) => {
-      const container = leaf.view.containerEl;
-      const doc = container.doc;
-      // Obsidian keeps the underlying leaf rendered and focused while a
-      // modal or command prompt covers it; that is not a chat the user can
-      // see. https://github.com/logancyang/obsidian-copilot/issues/2987
-      const isObscured = Array.from(
-        doc.querySelectorAll<HTMLElement>(OBSCURING_AGENT_VIEW_SELECTOR)
-      ).some((surface) => surface.isShown());
-      return container.isShown() && doc.hasFocus() && !isObscured;
-    });
+  /** Whether keyboard focus is currently inside this session's active Agent Chat leaf. */
+  private isSessionFocused(session: AgentSession): boolean {
+    if (this.activeSessionId !== session.internalId) return false;
+    const leaf = this.app.workspace.getMostRecentLeaf();
+    if (leaf?.view.getViewType() !== CHAT_AGENT_VIEWTYPE) return false;
+    const container = leaf.view.containerEl;
+    const doc = container.ownerDocument;
+    if (!doc.hasFocus()) return false;
+    const activeElement = doc.activeElement;
+    return activeElement !== null && container.contains(activeElement);
   }
 
   /** Play the user's chosen sound when agent notifications are enabled. */
@@ -3487,16 +3405,6 @@ export class AgentSessionManager {
     const { notificationSound, notificationSoundId } = getSettings().agentMode;
     if (!notificationSound) return;
     playNotificationSound(notificationSoundId);
-  }
-
-  /** Announce each visible approval request at its arrival boundary. */
-  private notifyPermissionRequest(request: PermissionPrompt): void {
-    const session = this.getSessionByBackendId(request.sessionId);
-    // Each request gets its own notification even when an earlier permission
-    // card already keeps the session in `awaiting_permission`.
-    // https://github.com/logancyang/obsidian-copilot/issues/2987
-    if (!session || this.isSessionWatched(session)) return;
-    this.playConfiguredNotificationSound();
   }
 
   /**
@@ -3507,7 +3415,11 @@ export class AgentSessionManager {
    */
   private wirePrompters(proc: BackendProcess): void {
     proc.setPermissionPrompter((request) => {
-      this.notifyPermissionRequest(request);
+      // Each request gets its own notification even when an earlier permission
+      // card already keeps the session in `awaiting_permission`.
+      // https://github.com/logancyang/obsidian-copilot/issues/2987
+      const session = this.getSessionByBackendId(request.sessionId);
+      if (!session || !this.isSessionFocused(session)) this.playConfiguredNotificationSound();
       return this.opts.permissionPrompter(request);
     });
     if (this.opts.askUserQuestionPrompter) {

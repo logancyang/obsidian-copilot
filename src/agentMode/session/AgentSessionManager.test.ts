@@ -8,6 +8,7 @@ import { waitFor } from "@testing-library/react";
 import { AgentSession } from "./AgentSession";
 import type { AgentModelPreloader } from "./AgentModelPreloader";
 import { buildNativeChatId } from "@/utils/nativeChatId";
+import { CHAT_AGENT_VIEWTYPE } from "@/constants";
 import { playNotificationSound } from "@/utils/notificationSound";
 import { AgentSessionIndex } from "./AgentSessionIndex";
 import { AgentSessionManager } from "./AgentSessionManager";
@@ -248,69 +249,31 @@ const sessionCreateSpy = jest.spyOn(AgentSession, "start").mockImplementation((o
   })
 );
 
-/**
- * Agent-chat leaves the mocked workspace reports. A leaf whose container is
- * shown in a focused document is one the user is looking at.
- */
-let mockAgentChatLeaves: Array<{ view: { containerEl: HTMLElement } }> = [];
-let mockObscuringSurface = false;
+type MockAgentChatFocus = "none" | "inside" | "outside" | "other-leaf" | "unfocused-window";
+let mockAgentChatFocus: MockAgentChatFocus = "none";
 
-/** Workspace event handlers the manager registered, by event name. */
-let mockWorkspaceHandlers: Map<string, Array<(...args: unknown[]) => void>>;
-/** `focus` listeners the manager put on the main window. */
-let mockWindowFocusHandlers: Array<() => void>;
-
-/** Fire a workspace event the manager subscribed to. */
-function emitWorkspaceEvent(name: string, ...args: unknown[]): void {
-  for (const handler of mockWorkspaceHandlers.get(name) ?? []) handler(...args);
-}
-
-/** Fire the OS window-focus event the manager listens for. */
-function emitWindowFocus(): void {
-  for (const handler of [...mockWindowFocusHandlers]) handler();
-}
-
-/**
- * The workspace surface the attention gate uses: which agent chat views exist,
- * and the events that say the user's eye came back. Default: no view is open,
- * so nothing is being watched.
- */
 function buildWorkspace(): unknown {
-  return {
-    getLeavesOfType: jest.fn(() => mockAgentChatLeaves),
-    on: jest.fn((name: string, callback: (...args: unknown[]) => void) => {
-      const handlers = mockWorkspaceHandlers.get(name) ?? [];
-      handlers.push(callback);
-      mockWorkspaceHandlers.set(name, handlers);
-      return { name } as never;
-    }),
-    offref: jest.fn(),
-    rootSplit: {
-      win: {
-        addEventListener: jest.fn((type: string, callback: () => void) => {
-          if (type === "focus") mockWindowFocusHandlers.push(callback);
-        }),
-        removeEventListener: jest.fn((type: string, callback: () => void) => {
-          if (type !== "focus") return;
-          mockWindowFocusHandlers = mockWindowFocusHandlers.filter((h) => h !== callback);
-        }),
-      },
+  const inside = {} as Element;
+  const outside = {} as Element;
+  const ownerDocument = {
+    hasFocus: () => mockAgentChatFocus !== "unfocused-window",
+    get activeElement() {
+      return mockAgentChatFocus === "outside" ? outside : inside;
+    },
+  } as Document;
+  const containerEl = {
+    ownerDocument,
+    contains: (element: Element | null) => element === inside,
+  } as HTMLElement;
+  const leaf = {
+    view: {
+      containerEl,
+      getViewType: () => (mockAgentChatFocus === "other-leaf" ? "markdown" : CHAT_AGENT_VIEWTYPE),
     },
   };
-}
-
-/** An agent chat view that is on screen, in a window that has focus. */
-function watchedLeaf(): { view: { containerEl: HTMLElement } } {
-  const obscuringSurface = { isShown: () => mockObscuringSurface } as unknown as HTMLElement;
-  const doc = {
-    hasFocus: () => true,
-    querySelectorAll: () => (mockObscuringSurface ? [obscuringSurface] : []),
-  } as unknown as Document;
-  const containerEl = {
-    isShown: () => true,
-    doc,
-  } as unknown as HTMLElement;
-  return { view: { containerEl } };
+  return {
+    getMostRecentLeaf: jest.fn(() => (mockAgentChatFocus === "none" ? null : leaf)),
+  };
 }
 
 function permissionPrompt(sessionId: string, toolCallId: string): PermissionPrompt {
@@ -404,10 +367,7 @@ function buildManager(
 beforeEach(() => {
   mockBackendIsRunning = true;
   mockNotificationSound = true;
-  mockAgentChatLeaves = [];
-  mockObscuringSurface = false;
-  mockWorkspaceHandlers = new Map();
-  mockWindowFocusHandlers = [];
+  mockAgentChatFocus = "none";
   (playNotificationSound as jest.Mock).mockClear();
   mockBackendStart.mockClear();
   mockBackendShutdown.mockClear();
@@ -1128,7 +1088,7 @@ describe("AgentSessionManager.restartBackend", () => {
 });
 
 describe("AgentSessionManager attention tracking", () => {
-  it("flags a backgrounded session that finishes a turn (https://github.com/logancyang/obsidian-copilot/issues/2987)", async () => {
+  it("flags a backgrounded session that finishes a turn", async () => {
     const mgr = buildManager();
     const a = await mgr.createSession();
     const b = await mgr.createSession();
@@ -1141,7 +1101,7 @@ describe("AgentSessionManager attention tracking", () => {
     expect(a.getNeedsAttention()).toBe(false);
   });
 
-  it("flags a backgrounded session that errors out (https://github.com/logancyang/obsidian-copilot/issues/2987)", async () => {
+  it("flags a backgrounded session that errors out", async () => {
     const mgr = buildManager();
     const a = await mgr.createSession();
     const b = await mgr.createSession();
@@ -1152,7 +1112,7 @@ describe("AgentSessionManager attention tracking", () => {
     expect(b.getNeedsAttention()).toBe(true);
   });
 
-  it("flags a backgrounded session that pauses for permission (https://github.com/logancyang/obsidian-copilot/issues/2987)", async () => {
+  it("flags a backgrounded session that pauses for permission", async () => {
     const mgr = buildManager();
     const a = await mgr.createSession();
     const b = await mgr.createSession();
@@ -1163,101 +1123,17 @@ describe("AgentSessionManager attention tracking", () => {
     expect(b.getNeedsAttention()).toBe(true);
   });
 
-  it("does not flag a session the user is watching (https://github.com/logancyang/obsidian-copilot/issues/2987)", async () => {
-    mockAgentChatLeaves = [watchedLeaf()];
+  it("does not flag the active session", async () => {
     const mgr = buildManager();
     const a = await mgr.createSession();
     expect(mgr.getActiveSession()).toBe(a);
     const aHandle = getSessionTestHandle(a);
-
     aHandle.setStatus("running");
     aHandle.setStatus("idle");
-
     expect(a.getNeedsAttention()).toBe(false);
   });
 
-  it("flags the tab in front when its window is not focused (https://github.com/logancyang/obsidian-copilot/issues/2987)", async () => {
-    const mgr = buildManager();
-    const a = await mgr.createSession();
-    const aHandle = getSessionTestHandle(a);
-
-    aHandle.setStatus("running");
-    aHandle.setStatus("idle");
-
-    expect(a.getNeedsAttention()).toBe(true);
-  });
-
-  it("clears the flag when the window regains focus on a watched session (https://github.com/logancyang/obsidian-copilot/issues/2987)", async () => {
-    const mgr = buildManager();
-    const a = await mgr.createSession();
-    const aHandle = getSessionTestHandle(a);
-    aHandle.setStatus("running");
-    aHandle.setStatus("idle");
-    expect(a.getNeedsAttention()).toBe(true);
-
-    // The user comes back to Obsidian: no leaf changed, only the window focus.
-    mockAgentChatLeaves = [watchedLeaf()];
-    emitWindowFocus();
-
-    expect(a.getNeedsAttention()).toBe(false);
-  });
-
-  it("clears the flag when the chat view becomes the active leaf (https://github.com/logancyang/obsidian-copilot/issues/2987)", async () => {
-    const mgr = buildManager();
-    const a = await mgr.createSession();
-    const aHandle = getSessionTestHandle(a);
-    aHandle.setStatus("running");
-    aHandle.setStatus("idle");
-
-    // The user opens the collapsed sidebar the chat lives in.
-    mockAgentChatLeaves = [watchedLeaf()];
-    emitWorkspaceEvent("active-leaf-change");
-
-    expect(a.getNeedsAttention()).toBe(false);
-  });
-
-  it("keeps the flag when the eye returns to a different session than the flagged one (https://github.com/logancyang/obsidian-copilot/issues/2987)", async () => {
-    const mgr = buildManager();
-    const a = await mgr.createSession();
-    const b = await mgr.createSession();
-    mgr.setActiveSession(a.internalId);
-    const bHandle = getSessionTestHandle(b);
-    bHandle.setStatus("running");
-    bHandle.setStatus("idle");
-
-    // Watching again, but `a` is the session on screen, not the flagged `b`.
-    mockAgentChatLeaves = [watchedLeaf()];
-    emitWindowFocus();
-
-    expect(b.getNeedsAttention()).toBe(true);
-  });
-
-  it("clears the flag when the user clicks the tab that is already active (https://github.com/logancyang/obsidian-copilot/issues/2987)", async () => {
-    const mgr = buildManager();
-    const a = await mgr.createSession();
-    const aHandle = getSessionTestHandle(a);
-    aHandle.setStatus("running");
-    aHandle.setStatus("idle");
-    expect(a.getNeedsAttention()).toBe(true);
-
-    mgr.setActiveSession(a.internalId);
-
-    expect(a.getNeedsAttention()).toBe(false);
-  });
-
-  it("stops listening for the returning eye once shut down (https://github.com/logancyang/obsidian-copilot/issues/2987)", async () => {
-    const mgr = buildManager();
-    const a = await mgr.createSession();
-    const aHandle = getSessionTestHandle(a);
-    aHandle.setStatus("running");
-    aHandle.setStatus("idle");
-
-    await mgr.shutdown();
-
-    expect(mockWindowFocusHandlers).toHaveLength(0);
-  });
-
-  it("chimes when a turn ends on the active session the user may have walked away from (https://github.com/logancyang/obsidian-copilot/issues/2987)", async () => {
+  it("chimes when a turn ends (https://github.com/logancyang/obsidian-copilot/issues/2987)", async () => {
     const mgr = buildManager();
     const a = await mgr.createSession();
     expect(mgr.getActiveSession()).toBe(a);
@@ -1268,6 +1144,37 @@ describe("AgentSessionManager attention tracking", () => {
 
     expect(playNotificationSound).toHaveBeenCalledTimes(1);
   });
+
+  it("stays silent when focus is inside the active Agent Chat (https://github.com/logancyang/obsidian-copilot/issues/2987)", async () => {
+    mockAgentChatFocus = "inside";
+    const mgr = buildManager();
+    const session = await mgr.createSession();
+    const handle = getSessionTestHandle(session);
+
+    handle.setStatus("running");
+    handle.setStatus("idle");
+
+    expect(playNotificationSound).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["a modal outside the chat has focus", "outside"],
+    ["another workspace leaf has focus", "other-leaf"],
+    ["the Obsidian window is unfocused", "unfocused-window"],
+  ] as const)(
+    "chimes when %s (https://github.com/logancyang/obsidian-copilot/issues/2987)",
+    async (_label, focus) => {
+      mockAgentChatFocus = focus;
+      const mgr = buildManager();
+      const session = await mgr.createSession();
+      const handle = getSessionTestHandle(session);
+
+      handle.setStatus("running");
+      handle.setStatus("idle");
+
+      expect(playNotificationSound).toHaveBeenCalledWith("piano");
+    }
+  );
 
   it("chimes for each concurrent permission request while the session remains paused (https://github.com/logancyang/obsidian-copilot/issues/2987)", async () => {
     const mgr = buildManager();
@@ -1282,21 +1189,21 @@ describe("AgentSessionManager attention tracking", () => {
     expect(playNotificationSound).toHaveBeenCalledTimes(2);
   });
 
-  it("stays silent when the user is watching the session that finished (https://github.com/logancyang/obsidian-copilot/issues/2987)", async () => {
-    mockAgentChatLeaves = [watchedLeaf()];
+  it("stays silent for a permission request in the focused Agent Chat (https://github.com/logancyang/obsidian-copilot/issues/2987)", async () => {
+    mockAgentChatFocus = "inside";
     const mgr = buildManager();
-    const a = await mgr.createSession();
-    expect(mgr.getActiveSession()).toBe(a);
-    const aHandle = getSessionTestHandle(a);
+    const session = await mgr.createSession();
+    const notifyPermission = mockSetPermissionPrompter.mock.calls.at(-1)?.[0] as (
+      request: PermissionPrompt
+    ) => Promise<unknown>;
 
-    aHandle.setStatus("running");
-    aHandle.setStatus("idle");
+    void notifyPermission(permissionPrompt(session.getBackendSessionId()!, "permission-1"));
 
     expect(playNotificationSound).not.toHaveBeenCalled();
   });
 
-  it("plays for a backgrounded session even while the user watches another one (https://github.com/logancyang/obsidian-copilot/issues/2987)", async () => {
-    mockAgentChatLeaves = [watchedLeaf()];
+  it("chimes when a backgrounded session finishes (https://github.com/logancyang/obsidian-copilot/issues/2987)", async () => {
+    mockAgentChatFocus = "inside";
     const mgr = buildManager();
     const a = await mgr.createSession();
     const b = await mgr.createSession();
@@ -1332,7 +1239,7 @@ describe("AgentSessionManager attention tracking", () => {
     expect(playNotificationSound).not.toHaveBeenCalled();
   });
 
-  it("does not flag the starting → idle transition (https://github.com/logancyang/obsidian-copilot/issues/2987)", async () => {
+  it("does not flag the starting → idle transition", async () => {
     const mgr = buildManager();
     const a = await mgr.createSession();
     const b = await mgr.createSession();
@@ -1344,7 +1251,7 @@ describe("AgentSessionManager attention tracking", () => {
     expect(b.getNeedsAttention()).toBe(false);
   });
 
-  it("clears the flag when the user activates the tab (https://github.com/logancyang/obsidian-copilot/issues/2987)", async () => {
+  it("clears the flag when the user activates the tab", async () => {
     const mgr = buildManager();
     const a = await mgr.createSession();
     const b = await mgr.createSession();
@@ -1355,33 +1262,6 @@ describe("AgentSessionManager attention tracking", () => {
     expect(b.getNeedsAttention()).toBe(true);
     mgr.setActiveSession(b.internalId);
     expect(b.getNeedsAttention()).toBe(false);
-  });
-
-  it("chimes when a modal obscures the otherwise watched chat (https://github.com/logancyang/obsidian-copilot/issues/2987)", async () => {
-    mockAgentChatLeaves = [watchedLeaf()];
-    mockObscuringSurface = true;
-    const mgr = buildManager();
-    const session = await mgr.createSession();
-    const handle = getSessionTestHandle(session);
-
-    handle.setStatus("running");
-    handle.setStatus("idle");
-
-    expect(playNotificationSound).toHaveBeenCalledWith("piano");
-    expect(session.getNeedsAttention()).toBe(true);
-  });
-
-  it("stays silent for a permission request while the user watches its card appear (https://github.com/logancyang/obsidian-copilot/issues/2987)", async () => {
-    mockAgentChatLeaves = [watchedLeaf()];
-    const mgr = buildManager();
-    const session = await mgr.createSession();
-    const notifyPermission = mockSetPermissionPrompter.mock.calls.at(-1)?.[0] as (
-      request: PermissionPrompt
-    ) => Promise<unknown>;
-
-    void notifyPermission(permissionPrompt(session.getBackendSessionId()!, "permission-1"));
-
-    expect(playNotificationSound).not.toHaveBeenCalled();
   });
 });
 
@@ -1519,8 +1399,7 @@ describe("AgentSessionManager.getAttentionChatIds", () => {
     expect(mgr.getAttentionChatIds().has(nativeId)).toBe(true);
   });
 
-  it("does not include a session the user is watching", async () => {
-    mockAgentChatLeaves = [watchedLeaf()];
+  it("does not include the active session (it never flags attention)", async () => {
     const mgr = buildManager();
     const a = await mgr.createSession();
     const aHandle = getSessionTestHandle(a);
@@ -2405,7 +2284,6 @@ describe("AgentSessionManager chat history aggregation", () => {
         on: jest.fn(() => ({}) as never),
         offref: jest.fn(),
       },
-      workspace: buildWorkspace(),
     } as unknown as App;
     const plugin = {
       manifest: { version: "1.0.0" },
