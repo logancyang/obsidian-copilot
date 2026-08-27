@@ -37,10 +37,12 @@ let lastPlayedAtMs: number | undefined;
  */
 export function playNotificationSound(id: NotificationSoundId): void {
   try {
-    const nowMs = Date.now();
+    const nowMs = window.performance.now();
     // https://github.com/logancyang/obsidian-copilot/issues/2987
     if (lastPlayedAtMs !== undefined && nowMs - lastPlayedAtMs < SOUND_GRACE_PERIOD_MS) return;
     if (!context) {
+      // A runtime without Web Audio cannot notify audibly, but that must not
+      // interrupt the agent event. https://github.com/logancyang/obsidian-copilot/issues/2987
       if (!window.AudioContext) return;
       context = new window.AudioContext();
     }
@@ -48,7 +50,13 @@ export function playNotificationSound(id: NotificationSoundId): void {
     // Chromium suspends a context constructed before any user gesture. By the
     // time an agent turn ends the user has typed and sent a message, so the
     // resume succeeds; it is a no-op on an already-running context.
-    if (context.state === "suspended") void context.resume();
+    if (context.state === "suspended") {
+      // Autoplay policy can reject asynchronously, outside this function's
+      // synchronous guard. https://github.com/logancyang/obsidian-copilot/issues/2987
+      void context
+        .resume()
+        .catch((error) => logWarn("Copilot: failed to resume notification audio.", error));
+    }
 
     const spec: NotificationSoundSpec =
       NOTIFICATION_SOUNDS[id] ?? NOTIFICATION_SOUNDS[DEFAULT_NOTIFICATION_SOUND_ID];

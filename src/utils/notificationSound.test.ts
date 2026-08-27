@@ -4,6 +4,7 @@ import {
   NOTIFICATION_SOUNDS,
   type NotificationSoundId,
 } from "@/utils/notificationSoundCatalog";
+import { logWarn } from "@/logger";
 
 jest.mock("@/logger", () => ({
   logWarn: jest.fn(),
@@ -72,6 +73,10 @@ function installMockAudio(state: AudioContextState = "running"): MockAudio {
 }
 
 describe("notificationSound", () => {
+  beforeEach(() => {
+    (logWarn as jest.Mock).mockClear();
+  });
+
   afterEach(() => {
     // Also drops the module-level context so the next test starts cold.
     disposeNotificationSound();
@@ -138,7 +143,7 @@ describe("notificationSound", () => {
 
     it("reuses one audio context across plays outside the grace period", () => {
       const audio = installMockAudio();
-      jest.spyOn(Date, "now").mockReturnValueOnce(1_000).mockReturnValueOnce(2_000);
+      jest.spyOn(window.performance, "now").mockReturnValueOnce(1_000).mockReturnValueOnce(2_000);
 
       playNotificationSound("piano");
       playNotificationSound("piano");
@@ -150,12 +155,23 @@ describe("notificationSound", () => {
     it("allows at most one sound per second (https://github.com/logancyang/obsidian-copilot/issues/2987)", () => {
       const audio = installMockAudio();
       jest
-        .spyOn(Date, "now")
+        .spyOn(window.performance, "now")
         .mockReturnValueOnce(1_000)
         .mockReturnValueOnce(1_999)
         .mockReturnValueOnce(2_000);
 
       playNotificationSound("piano");
+      playNotificationSound("piano");
+      playNotificationSound("piano");
+
+      expect(audio.instance.createOscillator).toHaveBeenCalledTimes(2);
+    });
+
+    it("still plays after one monotonic second when the wall clock moves backward (https://github.com/logancyang/obsidian-copilot/issues/2987)", () => {
+      const audio = installMockAudio();
+      jest.spyOn(Date, "now").mockReturnValueOnce(2_000).mockReturnValueOnce(1_000);
+      jest.spyOn(window.performance, "now").mockReturnValueOnce(1_000).mockReturnValueOnce(2_000);
+
       playNotificationSound("piano");
       playNotificationSound("piano");
 
@@ -170,7 +186,18 @@ describe("notificationSound", () => {
       expect(audio.instance.resume).toHaveBeenCalled();
     });
 
-    it("does nothing when the runtime exposes no Web Audio", () => {
+    it("logs and absorbs a rejected context resume (https://github.com/logancyang/obsidian-copilot/issues/2987)", async () => {
+      const audio = installMockAudio("suspended");
+      const error = new Error("playback blocked");
+      audio.instance.resume.mockRejectedValue(error);
+
+      playNotificationSound("piano");
+      await Promise.resolve();
+
+      expect(logWarn).toHaveBeenCalledWith("Copilot: failed to resume notification audio.", error);
+    });
+
+    it("does nothing when the runtime exposes no Web Audio (https://github.com/logancyang/obsidian-copilot/issues/2987)", () => {
       delete (window as unknown as Record<string, unknown>).AudioContext;
 
       expect(() => playNotificationSound("piano")).not.toThrow();
