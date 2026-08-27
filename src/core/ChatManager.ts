@@ -9,6 +9,8 @@ import { getChainType } from "@/aiParams";
 import { logError, logInfo, logWarn } from "@/logger";
 import { ChatMessage, MessageContext } from "@/types/message";
 import { processPrompt, type ProcessedPromptResult } from "@/commands/customCommandUtils";
+import { resolveCustomCommandPrefix } from "@/commands/resolveCustomCommandPrefix";
+import { getCachedCustomCommands } from "@/commands/state";
 import { FileParserManager } from "@/tools/FileParserManager";
 import ChainManager from "@/LLMProviders/chainManager";
 import { updateChatMemory } from "@/chatUtils";
@@ -251,6 +253,12 @@ export class ChatManager {
       // Get active note
       const activeNote = this.plugin.app.workspace.getActiveFile();
 
+      // The slash menu leaves an alias in the composer for review. Expand it
+      // before creating the message so Quick Chat displays and sends the same
+      // full saved prompt as Agent Chat.
+      // https://github.com/logancyang/obsidian-copilot/issues/2960#issuecomment-5445353610
+      const messageText = resolveCustomCommandPrefix(displayText, getCachedCustomCommands()).text;
+
       // If includeActiveNote is true and there's an active note, add it to context
       const updatedContext = { ...context };
       if (includeActiveNote && activeNote) {
@@ -266,7 +274,7 @@ export class ChatManager {
       // BUT: any selection takes priority and suppresses active tab to avoid redundant context
       const hasAnySelection = (updatedContext.selectedTextContexts || []).length > 0;
       const shouldIncludeActiveWebTab =
-        !hasAnySelection && (includeActiveWebTab || displayText.includes(ACTIVE_WEB_TAB_MARKER));
+        !hasAnySelection && (includeActiveWebTab || messageText.includes(ACTIVE_WEB_TAB_MARKER));
       updatedContext.webTabs = buildWebTabsWithActiveSnapshot(
         this.plugin.app,
         updatedContext.webTabs || [],
@@ -275,8 +283,8 @@ export class ChatManager {
 
       // Create the message with initial content
       const messageId = this.messageRepo.addMessage(
-        displayText,
-        displayText, // Will be updated with processed content
+        messageText,
+        messageText, // Will be updated with processed content
         USER_SENDER,
         updatedContext,
         content

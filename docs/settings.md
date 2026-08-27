@@ -266,7 +266,7 @@ Custom commands are reusable prompt files loaded from `<Copilot folder>/copilot-
 | ------------------------ | --------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
 | **Drag handle**          | Saved order                 | Reorders commands. Choose **Manual** if you want drag order to control the slash menu.                                     |
 | **In Menu**              | On for a new command        | Shows the command in the editor right-click menu.                                                                          |
-| **Slash Cmd**            | On for a new command        | Shows the command after `/` in chat. In Agent Chat, the current agent resolves a slash invocation.                         |
+| **Slash Cmd**            | On for a new command        | Shows the command after `/` in Quick Chat and Agent Chat. Sending resolves the command name to its saved prompt.           |
 | **Edit**                 | Not applicable              | Opens the command editor.                                                                                                  |
 | **Duplicate**            | Not applicable              | Creates a uniquely named copy beside the original.                                                                         |
 | **Delete**               | Not applicable              | Permanently removes the command's Markdown file after confirmation.                                                        |
