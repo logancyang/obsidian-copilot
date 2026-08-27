@@ -169,6 +169,42 @@ describe("hydrateDeviceProfile", () => {
   });
 });
 
+it("dehydrates and hydrates antigravity backend settings per device", () => {
+  const settings = makeSettings(
+    makeAgentMode({
+      backends: {
+        antigravity: {
+          binaryPath: "/a/agy-acp",
+          defaultModel: { baseModelId: "gemini-3.7-flash", effort: null },
+          envOverrides: { AGY_BIN: "/a/agy" },
+        },
+      },
+    })
+  );
+
+  const disk = dehydrateDeviceProfile(settings, DEVICE_A);
+
+  // Flat binaryPath and envOverrides stripped, defaultModel kept synced
+  expect(disk.agentMode.backends.antigravity?.binaryPath).toBeUndefined();
+  expect(disk.agentMode.backends.antigravity?.envOverrides).toBeUndefined();
+  expect(disk.agentMode.backends.antigravity?.defaultModel?.baseModelId).toBe("gemini-3.7-flash");
+
+  // Profile contains device-specific fields
+  expect(disk.agentMode.deviceProfiles?.[DEVICE_A]?.antigravity).toEqual({
+    binaryPath: "/a/agy-acp",
+    envOverrides: { AGY_BIN: "/a/agy" },
+  });
+
+  // Hydrating on device A restores them
+  const restoredA = hydrateDeviceProfile(disk, DEVICE_A);
+  expect(restoredA.agentMode.backends.antigravity?.binaryPath).toBe("/a/agy-acp");
+  expect(restoredA.agentMode.backends.antigravity?.envOverrides).toEqual({ AGY_BIN: "/a/agy" });
+
+  // Device B sees no binaryPath
+  const loadedB = hydrateDeviceProfile(disk, DEVICE_B);
+  expect(loadedB.agentMode.backends.antigravity?.binaryPath).toBeUndefined();
+});
+
 describe("hydrate ∘ dehydrate round trip", () => {
   it("restores the same flat fields for the same device", () => {
     const agentMode = makeAgentMode({
