@@ -1,4 +1,5 @@
 import { translateCommandToAgentText } from "@/agentMode/session/translateCommandToAgentText";
+import { resolveCustomCommandPrefix } from "@/commands/resolveCustomCommandPrefix";
 import type { CustomCommand } from "@/commands/type";
 import type { TFile } from "obsidian";
 
@@ -30,24 +31,9 @@ export async function expandCustomCommandPrefix(
   selectedText: string,
   activeNote: TFile | null
 ): Promise<ExpandCustomCommandResult> {
-  if (!input.startsWith("/") || input.length < 2) return { text: input };
+  const resolved = resolveCustomCommandPrefix(input, commands);
+  if (!resolved.matched) return resolved;
 
-  const afterSlash = input.slice(1);
-  const lowerAfterSlash = afterSlash.toLowerCase();
-
-  // Longest-first so `/foo-bar` wins over `/foo`.
-  const candidates = [...commands].sort((a, b) => b.title.length - a.title.length);
-  const matched = candidates.find((cmd) => {
-    const title = cmd.title.toLowerCase();
-    if (!lowerAfterSlash.startsWith(title)) return false;
-    const next = afterSlash.charAt(title.length);
-    return next === "" || /\s/.test(next);
-  });
-  if (!matched) return { text: input };
-
-  const args = afterSlash.slice(matched.title.length).trim();
-  const body = args ? `${matched.content}\n\n${args}` : matched.content;
-
-  const text = translateCommandToAgentText(body, selectedText, activeNote);
-  return { text, matched };
+  const text = translateCommandToAgentText(resolved.text, selectedText, activeNote);
+  return { text, matched: resolved.matched };
 }

@@ -6,7 +6,7 @@ For a fast question or rewrite while you are editing, use **Quick Ask** instead.
 
 ## Commands or skills?
 
-Commands and Skills can both appear when you type `/` in Agent Chat. Outside Agent Chat, run saved commands from the editor or command palette. They serve different purposes:
+Commands appear when you type `/` in Quick Chat or Agent Chat. Skills appear only in Agent Chat. You can also run saved commands from the editor or command palette.
 
 | Use                 | Best for                                                                     | Managed in                                              |
 | ------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------- |
@@ -23,7 +23,7 @@ Skills can be shared with opencode, Claude, and Codex. Commands stay inside Copi
 4. Optionally choose **Model (Optional)**, **Show in context menu**, and **Show in slash menu**.
 5. Click **Save**.
 
-Choose **Inherit from chat model** when the command should use your current Quick Chat model. A command-specific model applies to editor and command-palette runs. A slash run in Agent Chat uses the model selected for that Agent Chat.
+Choose **Inherit from chat model** when the command should use your current Quick Chat model. A command-specific model applies to editor and command-palette runs. A slash run uses the model selected for that Quick Chat or Agent Chat.
 
 Use **Generate Default** for a starter set. You can edit, duplicate, delete, or drag commands to reorder them. **Custom Prompts Sort Strategy** controls their order in the slash menu.
 
@@ -51,6 +51,7 @@ Tags must be in note properties, not only written inline in the note body. When 
 
 - **From the editor:** select text if needed, then right-click and choose **Copilot → _command name_**. The command must have **Show in context menu** enabled.
 - **From the command palette:** run **Apply custom command**, then choose any command. Each saved command is also registered by name in the palette.
+- **From Quick Chat:** type `/`, choose a command, add any extra instruction, and send. The input stays as `/command-name`, while Copilot sends the saved prompt to the model.
 - **From Agent Chat:** type `/`, choose a command, add any extra instruction, and send. Choosing an item inserts it without sending, so you can review it first.
 
 Editor and command-palette runs open a result panel. You can refine the result, copy it, insert it at the cursor, or replace the original selection.
