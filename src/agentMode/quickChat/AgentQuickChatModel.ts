@@ -134,7 +134,12 @@ export class AgentQuickChatModel extends BaseChatModel<BaseChatModelCallOptions>
 }
 
 function messageRole(message: BaseMessage): string {
-  const type = message.getType();
+  const type =
+    (typeof message._getType === "function" ? message._getType() : undefined) ??
+    (typeof (message as { getType?: () => string }).getType === "function"
+      ? (message as { getType?: () => string }).getType?.()
+      : undefined) ??
+    message.type;
   switch (type) {
     case "human":
       return "user";

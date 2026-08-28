@@ -35,7 +35,7 @@ describe("serializeAgentQuickChatMessages", () => {
     expect(
       serializeAgentQuickChatMessages([
         message,
-        { getType: () => "tool", content: "tool output" } as never,
+        { _getType: () => "tool", getType: () => "tool", content: "tool output" } as never,
       ])
     ).toContain("[user]\nRead this\n[image_url content omitted]\n\n[tool]\ntool output");
   });
