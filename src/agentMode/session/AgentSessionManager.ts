@@ -2480,9 +2480,6 @@ export class AgentSessionManager {
   setActiveSession(id: string): void {
     const session = this.sessions.get(id);
     if (!session) return;
-    // An active session can be marked while its chat lacks focus, so clicking
-    // that same tab must still acknowledge it. https://github.com/logancyang/obsidian-copilot/issues/2987
-    session.clearNeedsAttention();
     if (this.activeSessionId === id) return;
     if (session.projectId !== this.activeProjectId) {
       this.parkActiveScope();
@@ -2493,6 +2490,7 @@ export class AgentSessionManager {
     this.detachedFromTabIds.delete(id);
     this.activeSessionId = id;
     this.lastActiveByScope.set(session.projectId, id);
+    session.clearNeedsAttention();
     this.notify();
   }
 
@@ -3358,7 +3356,7 @@ export class AgentSessionManager {
   /**
    * Watch this session's status transitions out of `running` into a state
    * that demands the user's eye (turn ended, errored, or paused for
-   * permission) and raise the two attention signals.
+   * permission) and raise the applicable attention signals.
    */
   private attachAttentionTracking(session: AgentSession): void {
     let prev = session.getStatus();
@@ -3394,12 +3392,14 @@ export class AgentSessionManager {
     });
   }
 
-  /** Raise the visual and audible attention signals from one shared focus decision. */
+  /** Raise visual attention for background tabs and audible attention outside the active chat. */
   private signalSessionNeedsAttention(session: AgentSession): void {
-    // Focus inside this exact chat is the only reliable proof that neither
-    // signal is needed. https://github.com/logancyang/obsidian-copilot/issues/2987
+    // The dot identifies a different Agent tab that wants the user; keyboard
+    // focus does not change which tab is selected. https://github.com/logancyang/obsidian-copilot/issues/2987
+    if (this.activeSessionId !== session.internalId) session.markNeedsAttention();
+    // Sound follows real focus so a selected but unattended chat can still
+    // call the user back. https://github.com/logancyang/obsidian-copilot/issues/2987
     if (this.isSessionFocused(session)) return;
-    session.markNeedsAttention();
     this.playConfiguredNotificationSound();
   }
 
