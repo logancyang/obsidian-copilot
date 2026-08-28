@@ -12,6 +12,7 @@ import RelevantNotesView from "@/components/RelevantNotesView";
 import { APPLY_VIEW_TYPE, ApplyView } from "@/components/composer/ApplyView";
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { LoadChatHistoryModal } from "@/components/modals/LoadChatHistoryModal";
+import { registerReleaseUpdatePrototypeCommandsForDevelopment } from "@/components/release-update/ReleaseUpdatePrototypeController";
 
 import { registerContextMenu, registerSymposiumFileMenu } from "@/commands/contextMenu";
 import { CustomCommandRegister } from "@/commands/customCommandRegister";
@@ -439,6 +440,7 @@ export default class CopilotPlugin extends Plugin {
       }
     });
     registerCommands(this, publishFile);
+    registerReleaseUpdatePrototypeCommandsForDevelopment(this);
     registerSymposiumFileMenu(this, publishFile);
 
     // Tool initialization is now handled automatically in CopilotPlusChainRunner and AutonomousAgentChainRunner

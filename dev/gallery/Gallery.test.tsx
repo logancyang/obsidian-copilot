@@ -708,6 +708,72 @@ describe("Gallery", () => {
       ).toBeTruthy();
     });
 
+    it("lets a frame-styled modal fill its native content width for https://github.com/Brevilabs/obsidian-copilot-private/issues/317", () => {
+      const catalog = createGalleryCatalog(
+        [
+          {
+            componentId: null,
+            storyModule: {
+              default: {
+                title: "Release/Dialog",
+                parameters: {
+                  gallery: {
+                    host: "modal",
+                    layout: "fullscreen",
+                    modalClass: "full-bleed-modal",
+                  },
+                },
+              },
+              Ready: { render: () => <div>Release content</div> },
+            },
+          },
+        ],
+        0
+      );
+      const gallery = render(<GalleryHarness catalog={catalog} />);
+      const modal = getGalleryModalMock().open.mock.calls[0][0] as {
+        renderContent(): React.ReactElement;
+      };
+
+      const modalContent = render(modal.renderContent());
+      const storyElement = modalContent.container.querySelector<HTMLElement>("[data-story]");
+
+      expect(storyElement?.style.width).toBe("100%");
+      modalContent.unmount();
+      gallery.unmount();
+    });
+
+    it("keeps the selected width for a padded modal with frame styling", () => {
+      const catalog = createGalleryCatalog(
+        [
+          {
+            componentId: null,
+            storyModule: {
+              default: {
+                title: "Config/Dialog",
+                parameters: {
+                  gallery: { host: "modal", layout: "padded", modalClass: "config-modal" },
+                },
+              },
+              Ready: { render: () => <div>Config content</div> },
+            },
+          },
+        ],
+        0
+      );
+      const gallery = render(<GalleryHarness catalog={catalog} />);
+      const modal = getGalleryModalMock().open.mock.calls[0][0] as {
+        renderContent(): React.ReactElement;
+      };
+
+      const modalContent = render(modal.renderContent());
+      const storyElement = modalContent.container.querySelector<HTMLElement>("[data-story]");
+
+      expect(storyElement?.style.width).toBe("400px");
+      modalContent.unmount();
+      gallery.unmount();
+    });
+
     it("contains a throwing story and recovers when another keyed story is selected", () => {
       const renderError = jest.spyOn(console, "error").mockImplementation(() => undefined);
       const catalog: GalleryCatalog = {

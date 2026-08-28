@@ -14,7 +14,7 @@ export abstract class ReactModal extends Modal {
   /**
    * @param app - Obsidian app the modal belongs to; also supplies the React context every plugin root provides.
    * @param title - Text for Obsidian's native title element. Omit for dialogs that draw their own heading — the native title collapses when empty.
-   * @param modalClass - Extra class for the modal frame itself, for stylesheet rules that need to reach the frame rather than its content (e.g. stripping the frame's padding for a full-bleed dialog). Applied in the constructor, so the frame is already styled the first time it is painted.
+   * @param modalClass - Extra class name for the modal frame itself, including whitespace-delimited Tailwind utilities when native modal chrome needs styling. Applied in the constructor, so the frame is already styled the first time it is painted.
    */
   constructor(app: App, title?: string, modalClass?: string) {
     super(app);
@@ -22,7 +22,9 @@ export abstract class ReactModal extends Modal {
       this.titleEl.setText(title);
     }
     if (modalClass) {
-      this.modalEl.addClass(modalClass);
+      for (const className of modalClass.split(/\s+/).filter(Boolean)) {
+        this.modalEl.addClass(className);
+      }
     }
   }
 
