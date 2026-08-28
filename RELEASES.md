@@ -1,6 +1,6 @@
 # Release Notes
 
-# Copilot for Obsidian - Release v4.0.4 🛠️
+# v4.0.4 - Agent notifications
 
 ![Notification and sound settings in Copilot, with Marimba selected](https://github.com/user-attachments/assets/a6d2084e-84cf-4f19-aeea-8fd08decc9e3)
 
@@ -17,7 +17,6 @@ Copilot can now play a short chime when an Agent Chat turn finishes, hits an err
 ## ⚠️ Compatibility Notes
 
 - **Some device-specific agent paths may need to be entered again.** Copilot no longer reads the retired browser-wide device ID, so a vault that missed the migration window cannot recover that path automatically. ([#3002](https://github.com/logancyang/obsidian-copilot/pull/3002), @brevilabs-agent-bot)
-- **The plugin exceeds Sync Standard's 5 MB per-file limit.** If you sync community plugins with Sync Standard, update Copilot separately on each device. ([Obsidian Sync plans](https://obsidian.md/help/sync/plans))
 
 ## 🧰 Troubleshoot
 
