@@ -2,16 +2,6 @@ import { AgentHomeTab } from "@/agentMode/ui/AgentHomeTab";
 import { cn } from "@/lib/utils";
 import React, { useId, useState } from "react";
 
-/**
- * Reserved floor for the shelf's panel body. Deliberately a *floor*, not an
- * equal-height lock: full tabs (INLINE_LIMIT rows) all land within ~10px of
- * each other naturally, and this floor just keeps short/empty lists from
- * collapsing the card — the standard reserve-space-to-avoid-layout-shift
- * pattern. AgentContextSection imports this for its standalone (no-shelf)
- * rendering so the two surfaces can't drift.
- */
-export const SHELF_BODY_FLOOR_CLASS = "tw-min-h-48";
-
 export interface AgentHomeShelfSection {
   /** Stable id used for tab selection. */
   id: string;
@@ -53,12 +43,39 @@ interface AgentHomeShelfProps {
   onSectionSelect?: (id: string) => void;
 }
 
+interface AgentHomeShelfViewportProps {
+  id: string;
+  labelledBy: string;
+  children: React.ReactNode;
+}
+
+/**
+ * Shared body viewport for every Agent Home shelf tab. A single component owns
+ * the height and overflow contract so individual sections cannot drift.
+ */
+function AgentHomeShelfViewport({
+  id,
+  labelledBy,
+  children,
+}: AgentHomeShelfViewportProps): React.ReactElement {
+  return (
+    <div
+      id={id}
+      role="tabpanel"
+      aria-labelledby={labelledBy}
+      className="tw-h-96 tw-max-h-96 tw-min-h-0 tw-overflow-y-auto"
+    >
+      <div className="tw-flex tw-h-full tw-min-h-full tw-flex-col tw-pb-1">{children}</div>
+    </div>
+  );
+}
+
 /**
  * Agent Home landing shelf: a persistent card whose header is a segmented tab
  * bar (one tab per section) over a single panel body. Exactly one tab is always
- * selected — clicking another swaps the body; there is no collapsed state. The
- * section bodies are sized to lead with the same number of rows, so switching
- * tabs doesn't change the card height.
+ * selected — clicking another swaps the body; there is no collapsed state.
+ * Every section renders through the same bounded viewport, so switching tabs
+ * never changes the card's height or scrolling rules.
  */
 export function AgentHomeShelf({
   sections,
@@ -93,9 +110,8 @@ export function AgentHomeShelf({
   return (
     <div
       className={cn(
-        // Flex column with min-h-0 so the card can shrink below its content when
-        // the region is short (see the panel comment) — then `overflow-hidden`
-        // still clips the rounded corners while the panel scrolls inside.
+        // Flex column with min-h-0 so the shared viewport can shrink when the
+        // region is short while overflow-hidden still clips the rounded corners.
         "tw-flex tw-min-h-0 tw-flex-col tw-overflow-hidden tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-primary",
         className
       )}
@@ -125,26 +141,9 @@ export function AgentHomeShelf({
           />
         ))}
       </div>
-      {/* The panel is the scroll container; the inner wrapper carries the
-          min-height floor (SHELF_BODY_FLOOR_CLASS) so a short/empty list can't
-          collapse the card. It is also a flex column so a section can tw-grow
-          to fill the floor (centering its empty-state copy). With room the card
-          sizes to that content and sits at the top of the region; on a pane
-          too short to fit it the card shrinks (min-h-0 on the card + min-h-0 here)
-          and this panel scrolls its list internally while the tab bar stays
-          pinned — instead of the card being clipped out of reach. The floor lives
-          on the inner div, not this scroll element, because `min-height` would
-          otherwise win over the shrink and re-break the overflow. */}
-      <div
-        id={panelId}
-        role="tabpanel"
-        aria-labelledby={tabId(active.id)}
-        className="tw-min-h-0 tw-overflow-y-auto"
-      >
-        <div className={cn(SHELF_BODY_FLOOR_CLASS, "tw-flex tw-flex-col tw-pb-1")}>
-          {active.renderBody()}
-        </div>
-      </div>
+      <AgentHomeShelfViewport id={panelId} labelledBy={tabId(active.id)}>
+        {active.renderBody()}
+      </AgentHomeShelfViewport>
     </div>
   );
 }

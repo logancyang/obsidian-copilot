@@ -183,9 +183,8 @@ export function ProjectContextSourceEditor({
   const editorBox = (
     <div
       className={cn(
-        // min/max keep the box ≈ one shelf-tab tall (the home Recent Chats / project
-        // tabs land near the `SHELF_BODY_FLOOR_CLASS` floor at ~200px), so the
-        // Context tab matches its siblings instead of growing with the chip count;
+        // min/max keep the box about one compact shelf section tall, so the Context
+        // tab matches its siblings instead of growing with the chip count;
         // a long context scrolls inside the box. The caller's `tw-grow` fills up to
         // this cap.
         "tw-flex tw-max-h-60 tw-min-h-[200px] tw-flex-col tw-rounded-xl tw-border tw-p-3 tw-transition-colors",

@@ -8,13 +8,12 @@ jest.mock("@/components/modals/project/context-manage-modal", () => ({
 import { ProjectConfig } from "@/aiParams";
 import { ProjectPickerList } from "@/agentMode/ui/ProjectPickerList";
 import { RecentUsageManager } from "@/utils/recentUsageManager";
-import { act, render } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import { App } from "obsidian";
 import React from "react";
 
 // jsdom lacks Obsidian's `activeDocument`; the View-all popover portals into it.
-// The tests below keep to the inline list (≤ INLINE_LIMIT projects) and never
-// open that surface, but alias defensively.
+// The tests below never open the View-all surface, but alias defensively.
 beforeAll(() => {
   (window as unknown as { activeDocument: Document }).activeDocument = window.document;
 });
@@ -90,6 +89,17 @@ describe("ProjectPickerList", () => {
       expect(plusSlot?.classList.contains("tw-size-6")).toBe(true);
       expect(folderSlot?.classList.contains("tw-size-6")).toBe(true);
       expect(folderSlot?.classList.contains("tw-justify-center")).toBe(true);
+    });
+
+    it("shows up to 10 projects before offering the View-all trigger", () => {
+      const projects = Array.from({ length: 11 }, (_, index) =>
+        makeProject(`Project ${index + 1}`, index)
+      );
+
+      render(<ProjectPickerList projects={projects} onSelect={noop} app={app} />);
+
+      expect(screen.getAllByText(/^Project \d+$/)).toHaveLength(10);
+      expect(screen.getByText("View all projects")).toBeTruthy();
     });
 
     it("falls back to persisted order when no usage manager is provided", () => {

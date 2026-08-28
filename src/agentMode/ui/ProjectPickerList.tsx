@@ -1,6 +1,7 @@
 import {
   AgentHomeCreateRow,
   AgentHomeListRow,
+  AgentHomePreviewList,
   AgentHomeViewAll,
   INLINE_LIMIT,
 } from "@/agentMode/ui/AgentHomeSection";
@@ -112,10 +113,10 @@ ProjectRow.displayName = "ProjectRow";
 /**
  * Project browser for the Agent Home landing (design A.2 + B.2).
  *
- * Shows the {@link INLINE_LIMIT} most-recent projects inline with a "View all
- * projects" affordance opening an in-pane search popover (not a fullscreen
- * modal). Selection and the optional create action are delegated to the caller;
- * this component never mutates project state directly. Entering a project (via the
+ * Offers up to {@link INLINE_LIMIT} recent projects inline, then uses the shared
+ * overflow-aware "View all projects" footer to open an in-pane search popover.
+ * Selection and the optional create action are delegated to the caller; this
+ * component never mutates project state directly. Entering a project (via the
  * caller) touches usage on the shared manager, which reorders this list live.
  */
 export const ProjectPickerList = memo(
@@ -134,31 +135,27 @@ export const ProjectPickerList = memo(
     const inlineProjects = useMemo(() => sortedProjects.slice(0, INLINE_LIMIT), [sortedProjects]);
 
     const total = projects.length;
-    const hasOverflow = total > INLINE_LIMIT;
+    const hasMoreItems = total > inlineProjects.length;
 
     return (
-      // tw-grow fills the shelf panel's fixed floor (AgentHomeShelf) so the
+      // h-full fills the shelf panel's fixed floor (AgentHomeShelf) so the
       // empty-state copy below can center inside the card; the "New project"
       // action row stays pinned at the top either way.
-      <div className={cn("tw-flex tw-grow tw-flex-col tw-divide-y tw-divide-border", className)}>
+      <div
+        className={cn(
+          "tw-flex tw-h-full tw-min-h-0 tw-flex-col tw-divide-y tw-divide-border",
+          className
+        )}
+      >
         {onCreate && <AgentHomeCreateRow label="New project" onClick={onCreate} />}
         {total === 0 ? (
           <div className="tw-flex tw-flex-1 tw-items-center tw-justify-center tw-px-2 tw-py-1.5 tw-text-xs tw-text-muted">
             No projects available
           </div>
         ) : (
-          <>
-            {inlineProjects.map((project) => (
-              <ProjectRow
-                key={project.id}
-                project={project}
-                timeMs={effectiveLastUsedMs(project, projectUsageTimestampsManager)}
-                onSelect={onSelect}
-                app={app}
-                onDeleted={onProjectDeleted}
-              />
-            ))}
-            {hasOverflow && (
+          <AgentHomePreviewList
+            hasMoreItems={hasMoreItems}
+            viewAll={
               <AgentHomeViewAll
                 items={sortedProjects}
                 total={total}
@@ -183,8 +180,21 @@ export const ProjectPickerList = memo(
                   />
                 )}
               />
-            )}
-          </>
+            }
+          >
+            <div className="tw-flex tw-flex-col tw-divide-y tw-divide-border">
+              {inlineProjects.map((project) => (
+                <ProjectRow
+                  key={project.id}
+                  project={project}
+                  timeMs={effectiveLastUsedMs(project, projectUsageTimestampsManager)}
+                  onSelect={onSelect}
+                  app={app}
+                  onDeleted={onProjectDeleted}
+                />
+              ))}
+            </div>
+          </AgentHomePreviewList>
         )}
       </div>
     );

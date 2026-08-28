@@ -31,11 +31,10 @@ interface AgentLandingStackProps {
  * variants render through this so the mount order is frozen in one place:
  * `hero → composer → [floating] → [context] → shelf`.
  *
- * The composer is **top-anchored**, not centered: a fixed-fraction (`h-1/4`)
- * spacer pins it a quarter of the way down so its own height changes (e.g. a
- * context chip appearing) don't shift it — the flex-1 shelf region below absorbs
- * the slack instead. This matches the shipped global landing (decision #2550);
- * the wireframe's vertically-centered hero is intentionally dropped.
+ * The composer is top-anchored by a fixed-fraction spacer so its own height
+ * changes (for example, a context chip appearing) don't shift the hero. The
+ * one-fifth offset balances the complete ten-row shelf around the middle of a
+ * full-height pane, while the flex-1 region below absorbs remaining space.
  *
  * Presentational only: the parent owns the scrolling/padded column wrapper and
  * feeds each slot.
@@ -49,7 +48,7 @@ export function AgentLandingStack({
 }: AgentLandingStackProps): React.ReactElement {
   return (
     <>
-      <div className="tw-h-1/4 tw-shrink-0" />
+      <div className="tw-h-1/5 tw-shrink-0" />
       <div className="tw-shrink-0 tw-pb-7">{hero}</div>
       <div className="tw-shrink-0">{composer}</div>
       {/* floating + context own their own padding (`tw-px-2 tw-pb-1`), so the

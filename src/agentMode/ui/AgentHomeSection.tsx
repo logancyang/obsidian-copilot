@@ -25,13 +25,11 @@ import React, {
  */
 
 /**
- * Rows shown inline before the rest collapse behind the "View all" popover.
- * Shared by the Projects and Recent Chats shelf tabs so both preview the same
- * number of rows — full tabs then land within ~10px of each other, which is
- * what keeps switching tabs from jumping (the shelf floor only covers the
- * short/empty end; see AgentHomeShelf.SHELF_BODY_FLOOR_CLASS).
+ * Maximum rows offered to the inline preview before the rest move behind the
+ * "View all" popover. The shared preview viewport can show the trigger sooner
+ * when section chrome leaves room for fewer rows.
  */
-export const INLINE_LIMIT = 5;
+export const INLINE_LIMIT = 10;
 
 /**
  * Rows rendered per page in the View-all popover. The list grows by this much
@@ -200,6 +198,110 @@ interface AgentHomeViewAllProps<TItem> {
   renderRow: (item: TItem, close: () => void) => React.ReactNode;
 }
 
+interface AgentHomePreviewListProps {
+  children: React.ReactNode;
+  /** True when the caller omitted items from the rendered preview. */
+  hasMoreItems: boolean;
+  /** Shared footer affordance. Omit while the inline list is in search mode. */
+  viewAll?: React.ReactNode;
+}
+
+const OVERFLOW_TOLERANCE_PX = 1;
+
+/**
+ * Shared bounded list region for Agent Home previews. It keeps the View-all
+ * affordance at the bottom and shows it only when rendered or omitted rows do
+ * not fit in the shelf.
+ */
+export function AgentHomePreviewList({
+  children,
+  hasMoreItems,
+  viewAll,
+}: AgentHomePreviewListProps): React.ReactElement {
+  const scrollRootRef = useRef<HTMLDivElement>(null);
+  const footerRef = useRef<HTMLDivElement>(null);
+  const [contentOverflows, setContentOverflows] = useState(false);
+  const showViewAll = viewAll != null && (hasMoreItems || contentOverflows);
+
+  const measure = useCallback(() => {
+    const root = scrollRootRef.current;
+    const viewport = root?.querySelector<HTMLElement>("[data-radix-scroll-area-viewport]");
+    if (!viewport) return;
+
+    // A visible footer reduces the viewport. Add its height back so the result
+    // answers whether the rows fit without the footer and cannot get stuck in
+    // an overflow state after content shrinks.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/169
+    const availableHeight =
+      viewport.clientHeight + (showViewAll ? (footerRef.current?.clientHeight ?? 0) : 0);
+    const nextOverflows = viewport.scrollHeight > availableHeight + OVERFLOW_TOLERANCE_PX;
+    setContentOverflows((current) => (current === nextOverflows ? current : nextOverflows));
+  }, [showViewAll]);
+
+  useLayoutEffect(measure);
+
+  useEffect(() => {
+    const root = scrollRootRef.current;
+    const viewport = root?.querySelector<HTMLElement>("[data-radix-scroll-area-viewport]");
+    const ResizeObserverConstructor = root?.ownerDocument.defaultView?.ResizeObserver;
+    if (!root || !viewport || !ResizeObserverConstructor) return;
+
+    const observer = new ResizeObserverConstructor(measure);
+    observer.observe(root);
+    observer.observe(viewport);
+    const content = viewport.firstElementChild;
+    if (content) observer.observe(content);
+    return () => observer.disconnect();
+  }, [measure]);
+
+  return (
+    <div className="tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-divide-y tw-divide-border">
+      <ScrollArea ref={scrollRootRef} className="tw-min-h-0 tw-flex-1 tw-overflow-y-auto">
+        {children}
+      </ScrollArea>
+      {showViewAll && (
+        <div ref={footerRef} className="tw-shrink-0">
+          {viewAll}
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface AgentHomeViewAllTriggerProps extends React.HTMLAttributes<HTMLDivElement> {
+  label: string;
+}
+
+/** Shared full-width trigger used by every Agent Home View-all footer. */
+export const AgentHomeViewAllTrigger = React.forwardRef<
+  HTMLDivElement,
+  AgentHomeViewAllTriggerProps
+>(function AgentHomeViewAllTrigger({ label, className, onKeyDown, ...props }, ref) {
+  return (
+    <div
+      {...props}
+      ref={ref}
+      role="button"
+      tabIndex={0}
+      className={cn(
+        "tw-flex tw-cursor-pointer tw-items-center tw-justify-between tw-rounded-md tw-px-2 tw-py-1.5",
+        "tw-text-xs tw-text-accent tw-transition-colors hover:tw-bg-modifier-hover hover:tw-text-accent-hover",
+        className
+      )}
+      onKeyDown={(event) => {
+        onKeyDown?.(event);
+        if (event.defaultPrevented || (event.key !== "Enter" && event.key !== " ")) return;
+        event.preventDefault();
+        event.currentTarget.click();
+      }}
+    >
+      <span>View all {label}</span>
+      <ChevronRight className="tw-size-3 tw-shrink-0" />
+    </div>
+  );
+});
+AgentHomeViewAllTrigger.displayName = "AgentHomeViewAllTrigger";
+
 /**
  * "View all" trigger + in-pane popover with search over the full list. Generic
  * over the item type so both projects and chats reuse it without the primitive
@@ -274,25 +376,9 @@ export function AgentHomeViewAll<TItem>({
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>
-        <div
-          role="button"
-          tabIndex={0}
-          className={cn(
-            "tw-flex tw-cursor-pointer tw-items-center tw-justify-between tw-rounded-md tw-px-2 tw-py-1.5",
-            "tw-text-xs tw-text-accent tw-transition-colors hover:tw-bg-modifier-hover hover:tw-text-accent-hover"
-          )}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") {
-              e.preventDefault();
-              setOpen(true);
-            }
-          }}
-        >
-          {/* Left-aligned to the leading-tile column (no indent), matching the
-              create row. The count is omitted — the tab already shows it. */}
-          <span>View all {label}</span>
-          <ChevronRight className="tw-size-3 tw-shrink-0" />
-        </div>
+        {/* Left-aligned to the leading-tile column (no indent), matching the
+            create row. The count is omitted — the tab already shows it. */}
+        <AgentHomeViewAllTrigger label={label} />
       </PopoverTrigger>
       <PopoverContent align="start" side="bottom" className="tw-w-72 tw-p-0">
         <div className="tw-flex tw-max-h-80 tw-flex-col">

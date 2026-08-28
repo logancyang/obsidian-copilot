@@ -92,6 +92,22 @@ describe("AgentHomeShelf", () => {
       expect(screen.getByRole("tab", { name: /Recent Chats/ }).textContent ?? "").not.toMatch(/\d/);
     });
 
+    it("uses the shared ten-row viewport for every section body", () => {
+      renderShelf([chats, projectsEnabled]);
+      const panel = screen.getByRole("tabpanel");
+      const panelBody = panel.firstElementChild as HTMLElement;
+
+      expect(panel.classList.contains("tw-h-96")).toBe(true);
+      expect(panel.classList.contains("tw-max-h-96")).toBe(true);
+      expect(panel.classList.contains("tw-overflow-y-auto")).toBe(true);
+      expect(panelBody.classList.contains("tw-h-full")).toBe(true);
+      expect(panelBody.classList.contains("tw-min-h-full")).toBe(true);
+
+      fireEvent.click(screen.getByRole("tab", { name: /Projects/ }));
+      expect(screen.getByRole("tabpanel")).toBe(panel);
+      expect(screen.queryByText("PROJECTS BODY")).not.toBeNull();
+    });
+
     it("hides the count badge when the count is zero", () => {
       renderShelf([withCount(0)]);
       expect(screen.getByRole("tab", { name: /Recent Chats/ }).textContent ?? "").not.toContain(

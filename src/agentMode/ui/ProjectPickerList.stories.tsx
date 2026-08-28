@@ -1,6 +1,8 @@
+import { AgentHomeShelf, type AgentHomeShelfSection } from "@/agentMode/ui/AgentHomeShelf";
 import { ProjectPickerList } from "@/agentMode/ui/ProjectPickerList";
 import { useApp } from "@/context";
 import type { Meta, StoryObj } from "@/lib/story";
+import { Folder } from "lucide-react";
 import React from "react";
 
 type ProjectPickerListProps = React.ComponentProps<typeof ProjectPickerList>;
@@ -39,16 +41,44 @@ const projects: ProjectPickerListProps["projects"] = [
   },
 ];
 
-const ProjectPickerDemo: React.FC = () => {
+const overflowProjects: ProjectPickerListProps["projects"] = Array.from(
+  { length: 14 },
+  (_, index) => ({
+    id: `project-${index + 1}`,
+    name: index === 4 ? "Long-running competitive research" : `Project ${index + 1}`,
+    systemPrompt: "",
+    projectModelKey: "",
+    modelConfigs: {},
+    contextSource: {},
+    created: now - index * 86_400_000,
+    UsageTimestamps: now - index * 60_000,
+  })
+);
+
+interface ProjectPickerDemoProps {
+  projects: ProjectPickerListProps["projects"];
+}
+
+const ProjectPickerDemo = ({ projects: demoProjects }: ProjectPickerDemoProps) => {
   const app = useApp();
-  return (
-    <ProjectPickerList
-      app={app}
-      projects={projects}
-      onSelect={() => undefined}
-      onCreate={() => undefined}
-    />
-  );
+  const sections: AgentHomeShelfSection[] = [
+    {
+      id: "projects",
+      icon: <Folder className="tw-size-4" />,
+      title: "Projects",
+      count: demoProjects.length,
+      renderBody: () => (
+        <ProjectPickerList
+          app={app}
+          projects={demoProjects}
+          onSelect={() => undefined}
+          onCreate={() => undefined}
+        />
+      ),
+    },
+  ];
+
+  return <AgentHomeShelf sections={sections} />;
 };
 
 const meta = {
@@ -60,5 +90,10 @@ export default meta;
 
 /** Project identities use the same neutral folder treatment in every row. */
 export const Default: StoryObj<ProjectPickerListProps> = {
-  render: () => <ProjectPickerDemo />,
+  render: () => <ProjectPickerDemo projects={projects} />,
+};
+
+/** Overflow uses the same bottom-pinned View-all footer as Recent Chats. */
+export const Overflow: StoryObj<ProjectPickerListProps> = {
+  render: () => <ProjectPickerDemo projects={overflowProjects} />,
 };
