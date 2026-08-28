@@ -8,7 +8,7 @@ import React from "react";
 type AgentLandingStackProps = React.ComponentProps<typeof AgentLandingStack>;
 
 interface LandingStackCanvasProps {
-  args: AgentLandingStackProps;
+  args: Partial<AgentLandingStackProps>;
   shelf?: React.ReactNode;
 }
 
