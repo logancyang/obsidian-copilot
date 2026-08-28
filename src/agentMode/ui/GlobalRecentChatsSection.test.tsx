@@ -151,15 +151,15 @@ describe("GlobalRecentChatsSection", () => {
       expect(titleElement.getAttribute("title")).toBe(title);
     });
 
-    it("caps the inline preview at 5 chats and offers a View-all trigger on overflow", () => {
-      const items = Array.from({ length: 7 }, (_, i) => makeItem(`overflow-${i}`));
+    it("caps the inline preview at 10 chats and offers a View-all trigger on overflow", () => {
+      const items = Array.from({ length: 12 }, (_, i) => makeItem(`overflow-${i}`));
       renderSection({ items });
-      expect(screen.getAllByText(/^Chat overflow-/)).toHaveLength(5);
+      expect(screen.getAllByText(/^Chat overflow-/)).toHaveLength(10);
       expect(screen.getByText("View all chats")).toBeTruthy();
     });
 
     it("renders project badges in the View-all popover from the global landing", () => {
-      const items = Array.from({ length: 6 }, (_, i) =>
+      const items = Array.from({ length: 11 }, (_, i) =>
         makeItem(`project-overflow-${i}`, { projectId: "project-1" })
       );
       renderSection({
@@ -167,9 +167,9 @@ describe("GlobalRecentChatsSection", () => {
         projectNamesById: { "project-1": "Product research" },
       });
 
-      expect(screen.getAllByLabelText("Project: Product research")).toHaveLength(5);
+      expect(screen.getAllByLabelText("Project: Product research")).toHaveLength(10);
       fireEvent.click(screen.getByText("View all chats"));
-      expect(screen.getAllByLabelText("Project: Product research")).toHaveLength(11);
+      expect(screen.getAllByLabelText("Project: Product research")).toHaveLength(21);
     });
 
     it("shows every match (no cap, no View-all) while searching", () => {

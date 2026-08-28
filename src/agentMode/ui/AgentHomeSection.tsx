@@ -31,7 +31,7 @@ import React, {
  * what keeps switching tabs from jumping (the shelf floor only covers the
  * short/empty end; see AgentHomeShelf.SHELF_BODY_FLOOR_CLASS).
  */
-export const INLINE_LIMIT = 5;
+export const INLINE_LIMIT = 10;
 
 /**
  * Rows rendered per page in the View-all popover. The list grows by this much
