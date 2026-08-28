@@ -27,9 +27,8 @@ import React, {
 /**
  * Rows shown inline before the rest collapse behind the "View all" popover.
  * Shared by the Projects and Recent Chats shelf tabs so both preview the same
- * number of rows — full tabs then land within ~10px of each other, which is
- * what keeps switching tabs from jumping (the shelf floor only covers the
- * short/empty end; see AgentHomeShelf.SHELF_BODY_FLOOR_CLASS).
+ * number of rows. AgentHomeShelf owns the shared body viewport, so every tab
+ * follows the same height and scrolling contract.
  */
 export const INLINE_LIMIT = 10;
 

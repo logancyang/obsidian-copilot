@@ -1,4 +1,3 @@
-import { SHELF_BODY_FLOOR_CLASS } from "@/agentMode/ui/AgentHomeShelf";
 import type { ProjectConfig } from "@/aiParams";
 import { ContextManageModal } from "@/components/modals/project/context-manage-modal";
 import { buildBadgeItems } from "@/components/project/ProjectContextBadgeList";
@@ -90,9 +89,8 @@ export function buildContextSummary(project: ProjectConfig | undefined): Context
  * height floor on the SAME element: that marker tells the chat container's
  * draft-attach handler (useChatFileDrop) to yield while a drag hovers this body,
  * so a taller wrapper would leave a dead strip where drops fall through to the
- * draft. The floor is the shelf panel's SHELF_BODY_FLOOR_CLASS (imported, not
- * hand-copied) and also covers this section's standalone (no-shelf) rendering;
- * `tw-grow` on the editor fills that floor.
+ * draft. The floor covers this section's standalone (no-shelf) rendering;
+ * inside a shelf, `tw-grow` lets the editor fill the shared shelf viewport.
  */
 export default function AgentContextSection({
   app,
@@ -179,7 +177,7 @@ export default function AgentContextSection({
     <div
       ref={sectionRef}
       data-copilot-drop-zone
-      className={cn(SHELF_BODY_FLOOR_CLASS, "tw-flex tw-grow tw-flex-col tw-p-2")}
+      className={cn("tw-flex tw-min-h-48 tw-grow tw-flex-col tw-p-2")}
     >
       <ProjectContextSourceEditor
         contextSource={draft}
@@ -187,7 +185,7 @@ export default function AgentContextSection({
         onManage={handleManage}
         popoverContainer={popoverContainer}
         isDragging={isDragging}
-        // Fill the shelf floor; the editor's own max-height caps it so a long
+        // Fill the available body; the editor's own max-height caps it so a long
         // context scrolls inside the box instead of taking over the whole tab.
         className="tw-grow"
       />

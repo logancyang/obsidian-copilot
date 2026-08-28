@@ -2,7 +2,7 @@ import { AgentHomeShelf, type AgentHomeShelfSection } from "@/agentMode/ui/Agent
 import { AgentLandingStack } from "@/agentMode/ui/AgentLandingStack";
 import { CopilotBrandIcon } from "@/components/ui/CopilotBrandIcon";
 import type { Meta, StoryObj } from "@/lib/story";
-import { MessageSquare } from "lucide-react";
+import { FileSearch, Folder, MessageSquare, RefreshCw } from "lucide-react";
 import React from "react";
 
 type AgentLandingStackProps = React.ComponentProps<typeof AgentLandingStack>;
@@ -32,6 +32,73 @@ const sections: AgentHomeShelfSection[] = [
     ),
   },
 ];
+
+const relevantNotes = [
+  ["Bay Area Events This Week", "26%"],
+  ["2026 Inspiration", "23%"],
+  ["Summer Travel Ideas", "21%"],
+  ["Restaurants to Try", "18%"],
+  ["Weekend Reading List", "16%"],
+  ["Places to Revisit", "14%"],
+] as const;
+
+const relevantNotesSections: AgentHomeShelfSection[] = [
+  {
+    id: "relevant-notes",
+    icon: <FileSearch className="tw-size-4" />,
+    title: "Relevant Notes",
+    renderBody: () => (
+      <div className="tw-flex tw-min-h-0 tw-flex-1 tw-flex-col">
+        <div className="tw-flex tw-shrink-0 tw-items-center tw-gap-2 tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-secondary tw-px-2 tw-py-1.5 tw-text-ui-smaller tw-text-muted">
+          <span className="tw-min-w-0 tw-flex-1">
+            Open Relevant Notes in its own pane to keep it while you chat.
+          </span>
+          <span className="tw-shrink-0 tw-text-normal">Open pane</span>
+        </div>
+        <div className="tw-flex tw-shrink-0 tw-items-center tw-justify-between tw-border-b tw-border-solid tw-border-border tw-p-2 tw-text-ui-small">
+          <span className="tw-text-normal">
+            Relevant to <span className="tw-font-medium tw-text-normal">Weekend Food Trip</span>
+          </span>
+          <span className="tw-flex tw-items-center tw-gap-1 tw-rounded-md tw-bg-secondary tw-px-2 tw-py-1 tw-font-medium tw-text-normal">
+            <RefreshCw className="tw-size-3.5" />
+            Build index
+          </span>
+        </div>
+        <div className="tw-relative tw-min-h-0 tw-flex-1">
+          <div className="tw-absolute tw-inset-0 tw-overflow-y-auto tw-p-2">
+            <div className="tw-flex tw-flex-col tw-gap-0.5">
+              {relevantNotes.map(([title, score]) => (
+                <div key={title} className="tw-flex tw-flex-col tw-gap-2 tw-rounded-md tw-p-2">
+                  <div className="tw-flex tw-items-center tw-justify-between tw-gap-3 tw-text-ui-small">
+                    <span className="tw-min-w-0 tw-truncate tw-font-medium tw-text-normal">
+                      {title}
+                    </span>
+                    <span className="tw-shrink-0 tw-text-normal">{score}</span>
+                  </div>
+                  <div className="tw-h-1 tw-rounded-full tw-bg-secondary">
+                    <div className="tw-h-full tw-w-1/4 tw-rounded-full tw-bg-interactive-accent" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    ),
+  },
+];
+
+const projectSections: AgentHomeShelfSection[] = [
+  {
+    id: "projects",
+    icon: <Folder className="tw-size-4" />,
+    title: "Projects",
+    count: 4,
+    renderBody: () => null,
+  },
+];
+
+const allSections = [...sections, ...relevantNotesSections, ...projectSections];
 
 const meta = {
   title: "Agent Mode/Agent Landing Stack",
@@ -67,4 +134,12 @@ export const FullPreview: StoryObj<AgentLandingStackProps> = {
       />
     </div>
   ),
+};
+
+/** The Relevant Notes tab exercises a content-rich shelf inside the shared body viewport. */
+export const RelevantNotesPreview: StoryObj<AgentLandingStackProps> = {
+  args: {
+    shelf: <AgentHomeShelf sections={allSections} activeSectionId="relevant-notes" />,
+  },
+  render: FullPreview.render,
 };
