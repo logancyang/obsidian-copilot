@@ -38,7 +38,13 @@ export type { AgentModelPickerOverride } from "./ui/useAgentModelPicker";
 export { useAgentModePicker } from "./ui/useAgentModePicker";
 export type { AgentModePickerOverride } from "./ui/useAgentModePicker";
 export type { AgentSessionManager } from "./session/AgentSessionManager";
-export type { AgentBrand, BackendDescriptor, BackendId, InstallState } from "./session/types";
+export type {
+  AgentBrand,
+  BackendDescriptor,
+  BackendId,
+  InstallState,
+  SessionEvent,
+} from "./session/types";
 export { partitionOpencodeOnlyWireIds } from "./backends/opencode/opencodeProbePartition";
 export {
   mapProviderToOpencodeId,
@@ -55,6 +61,7 @@ export type {
   ModelState,
 } from "./session/types";
 export { AgentDefaultModelSetting } from "./ui/AgentDefaultModelSetting";
+export { AgentQuickChatBridge } from "./quickChat/AgentQuickChatBridge";
 export { ModelEnableList } from "./ui/ModelEnableList";
 export type { ModelEnableGroup, ModelEnableRow } from "./ui/ModelEnableList";
 export { PlanPreviewView, PLAN_PREVIEW_VIEW_TYPE } from "./ui/PlanPreviewView";

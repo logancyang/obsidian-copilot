@@ -137,7 +137,8 @@ export function configuredModelToCustomModel(params: {
   const extras = provider.extras ?? {};
 
   const trimmedKey = apiKey && apiKey.length > 0 ? apiKey : undefined;
-  const requiresApiKey = providerNeedsResolvedApiKey(provider) || !!trimmedKey;
+  const agentType = provider.origin.kind === "agent" ? provider.origin.agentType : undefined;
+  const requiresApiKey = agentType ? false : providerNeedsResolvedApiKey(provider) || !!trimmedKey;
 
   const chatProvider = mapProviderTypeToChatModelProvider(provider);
   const maxTokens =
@@ -158,6 +159,7 @@ export function configuredModelToCustomModel(params: {
     baseUrl: provider.baseUrl,
     apiKey: trimmedKey,
     requiresApiKey,
+    ...(agentType ? { agentType } : {}),
     // https://github.com/logancyang/obsidian-copilot-preview/issues/313:
     // verification can pass through requestUrl while Quick Chat fails through
     // native fetch. Preserve the user's explicit compatibility-versus-streaming

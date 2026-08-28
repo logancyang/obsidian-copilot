@@ -8,11 +8,12 @@ Quick Chat remains available for lightweight conversation and is the main chat e
 
 Open [**Settings → Copilot → Basic → Agents**](settings.md#basic). Configure at least one agent, then choose the **Default backend** for new chats.
 
-| Agent        | Best starting point                             | Where model access comes from                                              |
-| ------------ | ----------------------------------------------- | -------------------------------------------------------------------------- |
-| **opencode** | Recommended for most people                     | Copilot-hosted models, your API providers, or local OpenAI-compatible APIs |
-| **Claude**   | You already use Claude Code                     | Your Claude Code installation and Anthropic account                        |
-| **Codex**    | You already use the Codex CLI and Codex account | Your Codex CLI login through the `codex-acp` adapter                       |
+| Agent           | Best starting point                             | Where model access comes from                                              |
+| --------------- | ----------------------------------------------- | -------------------------------------------------------------------------- |
+| **opencode**    | Recommended for most people                     | Copilot-hosted models, your API providers, or local OpenAI-compatible APIs |
+| **Claude**      | You already use Claude Code                     | Your Claude Code installation and Anthropic account                        |
+| **Codex**       | You already use the Codex CLI and Codex account | Your Codex CLI login through the `codex-acp` adapter                       |
+| **Antigravity** | You already use Antigravity 2.x                 | Your Antigravity account through the official `agy` CLI                    |
 
 A one-agent chat can work without a Copilot license when you bring your own model access. An eligible paid plan adds Copilot-hosted models and cloud-backed features. [Compare Copilot plans](copilot-plus-and-self-host.md).
 
@@ -55,6 +56,18 @@ Copilot uses your existing Codex CLI login. Models added under **BYOK** do not j
 
 For Windows-specific installation help, see [Windows setup for Agent Chat](agent-mode-windows-setup.md).
 
+### Antigravity
+
+Antigravity 2.x is connected through the official `agy` CLI:
+
+1. Install and sign in from the [official Antigravity website](https://antigravity.google/).
+2. Open **Basic → Agents → Antigravity → Configure**.
+3. Use **Auto-detect**, or enter the absolute path to `agy` (`agy.exe` on Windows).
+
+Antigravity owns the account authentication and model catalog. Models reported
+by `agy models` can be enabled for Agent Chat and, independently, for Quick
+Chat.
+
 ### Start a chat
 
 Select the **Agent Chat** ribbon icon or run **Open Copilot Agent Chat Window** from the command palette. If the default agent is not ready, Copilot opens **Select your agent**. Configure an agent, choose an installed row, then select **Start chat**.
@@ -76,7 +89,7 @@ The permission picker shows only choices supported by the current agent:
 | **Plan**    | Prepares a read-only plan before edits when the current agent supports this choice  |
 | **Auto**    | Reduces approval prompts according to the current agent's automatic permission rule |
 
-opencode supports **Default** and **Auto**. Claude supports **Default**, **Plan**, and **Auto**. Codex shows the choices supported by the installed adapter. Claude also has an **Auto mode permissions** setting that controls how much Auto may approve.
+opencode supports **Default** and **Auto**. Claude supports **Default**, **Plan**, and **Auto**. Codex shows the choices supported by the installed adapter. Antigravity uses the permissions policy of its `agy` CLI. Claude also has an **Auto mode permissions** setting that controls how much Auto may approve.
 
 When an action needs approval, Agent Chat displays a **Permission required** card with the proposed change or tool input. Choose one of the temporary or persistent allow or deny options offered by that agent. Stopping the turn cancels unanswered requests.
 
@@ -112,13 +125,13 @@ The default model and effort saved for each mentioned agent are used for its ans
 
 ## Skills across agents
 
-Skills are reusable instruction packets built around a `SKILL.md` file. One Skill can be made available to opencode, Claude, and Codex without maintaining three copies.
+Skills are reusable instruction packets built around a `SKILL.md` file. One Skill can be made available to opencode, Claude, Codex, and Antigravity without maintaining four copies.
 
 1. Open [**Settings → Copilot → Skills**](settings.md#skills).
-2. Find a Skill and toggle the opencode, Claude, or Codex icons for the agents that should use it.
+2. Find a Skill and toggle the opencode, Claude, Codex, or Antigravity icons for the agents that should use it.
 3. Type `/` in Agent Chat to choose it, or describe the task and let the agent select an enabled Skill.
 
-Shared Skills live under `<Copilot folder>/skills/`. Copilot links them into the native folders used by each agent: `.opencode/skills/`, `.claude/skills/`, and `.agents/skills/`. Skills already present in those native folders also appear in the settings list.
+Shared Skills live under `<Copilot folder>/skills/`. Copilot links them into the native folders used by each agent: `.opencode/skills/`, `.claude/skills/`, and `.agents/skills/` (used by Codex and Antigravity). Skills already present in those native folders also appear in the settings list.
 
 Custom Skills and built-in Obsidian Skills are free. Active Plus access adds cloud-backed Skills for web research, PDF reading, YouTube transcripts, X posts, and Symposium.
 

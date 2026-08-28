@@ -35,6 +35,7 @@ const PROVIDER_TYPE_BY_AGENT: Record<AgentType, ProviderType> = {
   claude: "anthropic",
   codex: "openai-compatible",
   opencode: "openai-compatible",
+  antigravity: "openai-compatible",
 };
 
 /**
@@ -188,8 +189,8 @@ async function enrollBackend(
     agentType,
     providerType: PROVIDER_TYPE_BY_AGENT[agentType],
     displayName: descriptor.displayName,
-    // No Copilot-side key: claude/codex are CLI-managed and opencode hosts its
-    // own models, so the keychain id stays null.
+    // No Copilot-side key: Agent models are managed by their bound CLI or
+    // account, so the keychain id stays null.
     apiKey: null,
     wireModelIds,
     autoEnrollModelIds,

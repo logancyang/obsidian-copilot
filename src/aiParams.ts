@@ -4,6 +4,7 @@ import { ChatPromptTemplate } from "@langchain/core/prompts";
 
 import { ModelCapability, ReasoningEffort, Verbosity } from "@/constants";
 import type { MaterializedSourceType } from "@/context/contextCacheStore";
+import type { AgentType } from "@/modelManagement";
 import { settingsAtom, settingsStore } from "@/settings/model";
 import { SelectedTextContext } from "@/types/message";
 import { atom, useAtom } from "jotai";
@@ -191,6 +192,8 @@ export interface SetChainOptions {
 export interface CustomModel {
   /** Present for chat-backend bridged models; distinguishes same wire id across providers. */
   configuredModelId?: string;
+  /** Agent binding used to execute this model without an API key. */
+  agentType?: AgentType;
   name: string;
   provider: string;
   baseUrl?: string;

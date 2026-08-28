@@ -10,7 +10,7 @@ Run **Open Copilot Chat Window** from the command palette. On mobile, the Copilo
 
 ## Choose a model
 
-Use the model picker below the message box. It shows only models enabled under **Settings → Copilot → Basic → Agents → Quick Chat**, including Copilot-hosted and bring-your-own-key models.
+Use the model picker below the message box. It shows only models enabled under **Settings → Copilot → Basic → Agents → Quick Chat**, including Copilot-hosted, bring-your-own-key, and bound-Agent models.
 
 The **Default model** in that settings panel controls which model a new Quick Chat starts with. See [Models, Effort, and Permissions](models-and-parameters.md) to manage the list.
 

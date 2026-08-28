@@ -39,7 +39,10 @@ export async function resolveChatBackendModel(
     );
   }
 
-  const apiKey = await api.providerRegistry.getApiKey(target.provider.providerId);
+  const apiKey =
+    target.provider.origin.kind === "agent"
+      ? null
+      : await api.providerRegistry.getApiKey(target.provider.providerId);
   const customModel = configuredModelToCustomModel({
     provider: target.provider,
     configuredModel: target.configuredModel,

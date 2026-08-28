@@ -187,7 +187,8 @@ const QuickChatPanel: React.FC = () => {
       <div className="tw-flex tw-min-w-0 tw-flex-col tw-py-4">
         <span className="tw-text-base tw-font-semibold">Quick Chat models</span>
         <span className="tw-text-xs tw-text-muted">
-          Models shown in the chat model picker. Add providers on the Models (BYOK) tab.
+          Models shown in the chat model picker. Add BYOK providers on the Models tab, or bind an
+          Agent account above.
         </span>
       </div>
       <SettingItem

@@ -2200,6 +2200,17 @@ export class AgentSessionManager {
   }
 
   /**
+   * Ensure a registered backend process is running for a non-UI caller such as
+   * the Quick Chat Agent bridge. Session UI still owns `createSession()`;
+   * callers using this seam must create and dispose their own backend session.
+   */
+  async ensureBackendProcess(backendId: BackendId): Promise<BackendProcess> {
+    if (this.disposed) throw new Error("AgentSessionManager has been shut down");
+    const descriptor = this.resolveDescriptor(backendId);
+    return this.ensureBackend(backendId, descriptor);
+  }
+
+  /**
    * Restart a backend process so spawn-time configuration, including native
    * skill discovery and deny rules, is rebuilt from current settings. By
    * default a busy backend waits until it is idle; privacy-boundary callers can

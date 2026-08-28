@@ -189,7 +189,7 @@ export const COPILOT_PROMPT_BASE = `You are Obsidian Copilot, an AI assistant th
  *
  * Project *file context* (folders/notes/URLs) is NOT part of the system prompt:
  * it is delivered as a `<project_context>` block inlined into the session's
- * first user message (reachable by all three backends), built by the context
+ * first user message (reachable by all four backends), built by the context
  * materializer's `buildProjectContextBlock`.
  */
 export function buildAgentSystemPrompt(): string {

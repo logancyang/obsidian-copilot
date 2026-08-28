@@ -9,7 +9,7 @@ const EMPTY_ENABLED_ENTRIES: readonly EnabledModelEntry[] = Object.freeze([]);
 export type WireDecode = (wireId: string) => { selection: { baseModelId: string } };
 
 /**
- * The enabled-model entries for a claude / codex backend — each enabled
+ * The enabled-model entries for a Claude / Codex / Antigravity backend — each enabled
  * `ConfiguredModel.info.id` decoded via the descriptor's `wire.decode` to the
  * baseModelId the picker compares against `ModelEntry.baseModelId`, enriched
  * with the model's display name/description. These backends are all
@@ -21,7 +21,7 @@ export type WireDecode = (wireId: string) => { selection: { baseModelId: string 
  */
 export function agentOriginEnabledModelEntries(
   settings: CopilotSettings,
-  agentType: "claude" | "codex",
+  agentType: "claude" | "codex" | "antigravity",
   wireDecode: WireDecode
 ): readonly EnabledModelEntry[] {
   const enabledIds = settings.backends[agentType]?.enabledModels ?? [];

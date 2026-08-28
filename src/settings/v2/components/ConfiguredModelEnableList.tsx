@@ -37,7 +37,8 @@ const isOpencodeRoutableProvider = (
  * Renders the shared `ModelEnableList` for one agent backend, sourcing
  * candidates from the `configuredModels` registry and toggling through
  * `BackendConfigRegistry`. opencode shows BYOK/Plus models plus its own
- * agent-origin models; claude/codex show only their agent-origin models.
+ * agent-origin models; Claude, Codex, and Antigravity show only their own
+ * agent-origin models.
  * Disabled rows stay visible.
  */
 export const ConfiguredModelEnableList: React.FC<ConfiguredModelEnableListProps> = ({

@@ -110,6 +110,21 @@ describe("configuredModelToCustomModel", () => {
     expect(custom.configuredModelId).toBe("cm1");
   });
 
+  it("marks agent-origin models as keyless and preserves their binding", () => {
+    const custom = configuredModelToCustomModel({
+      provider: provider({
+        origin: { kind: "agent", agentType: "codex" },
+        requiresApiKey: false,
+      }),
+      configuredModel: configuredModel(),
+      apiKey: null,
+    });
+
+    expect(custom.agentType).toBe("codex");
+    expect(custom.requiresApiKey).toBe(false);
+    expect(custom.apiKey).toBeUndefined();
+  });
+
   it("caps an Anthropic model's published ceiling rather than passing it through (https://github.com/logancyang/obsidian-copilot-preview/issues/312)", () => {
     const custom = configuredModelToCustomModel({
       provider: provider({ providerType: "anthropic" }),

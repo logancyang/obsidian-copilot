@@ -55,7 +55,7 @@ export const InlineVariant: StoryObj<TabItemProps> = {
 };
 
 /**
- * The real Agents strip: four tabs whose labels are long enough to wrap once the
+ * The real Agents strip: five tabs whose labels are long enough to wrap once the
  * canvas is narrow. Narrow the gallery's width toolbar over this one — a story
  * cannot pin a width, so the fixture supplies the content and the toolbar
  * supplies the boundary.
@@ -63,8 +63,11 @@ export const InlineVariant: StoryObj<TabItemProps> = {
 export const LongLabels: StoryObj<TabItemProps> = {
   render: () => (
     <div className="tw-flex tw-flex-col tw-gap-4">
-      <Strip variant="page" labels={["OpenCode", "Claude", "Codex", "Quick Chat"]} />
-      <Strip variant="inline" labels={["OpenCode", "Claude", "Codex", "Quick Chat"]} />
+      <Strip variant="page" labels={["OpenCode", "Claude", "Codex", "Antigravity", "Quick Chat"]} />
+      <Strip
+        variant="inline"
+        labels={["OpenCode", "Claude", "Codex", "Antigravity", "Quick Chat"]}
+      />
     </div>
   ),
 };

@@ -80,9 +80,10 @@ The label in the model picker tells you which service handles the conversation:
 | **Local BYOK**              | Ollama, LM Studio, or another local OpenAI-compatible endpoint | Your local endpoint                                             |
 | **opencode-reported model** | Authentication managed by opencode                             | The provider behind that opencode model                         |
 | **Claude**                  | Claude Code login or environment                               | Anthropic under your Claude account                             |
-| **Codex**                   | Codex CLI login through `codex-acp`                            | OpenAI under your Codex or ChatGPT account                      |
+| **Codex**                   | Codex CLI login through `codex-acp`                            | OpenAI under your Codex account                                 |
+| **Antigravity**             | Antigravity `agy` CLI login                                    | Google Antigravity under your bound account                     |
 
-A Claude or ChatGPT subscription is not an API key. Use the Claude or Codex Agent Chat setup for those subscriptions. Use BYOK only when you have API access or an OpenAI-compatible endpoint.
+A Claude, Codex, or Antigravity subscription is not an API key. Use the corresponding Agent Chat setup for those subscriptions. Use BYOK only when you have API access or an OpenAI-compatible endpoint.
 
 ## Understand service data routes
 
@@ -112,7 +113,7 @@ When it is on, Copilot:
 - Directs you to BYOK for local or self-hosted model endpoints.
 - Flags and sorts cloud agents and models below local or self-hosted choices.
 
-It does not disable the cloud. Claude, Codex, Copilot-hosted models, cloud BYOK providers, Firecrawl, Perplexity, Parallel, Exa, and Supadata can still send data to their services when you select them. The warnings make those routes visible so you can decide.
+It does not disable the cloud. Claude, Codex, Antigravity, Copilot-hosted models, cloud BYOK providers, Firecrawl, Perplexity, Parallel, Exa, and Supadata can still send data to their services when you select them. The warnings make those routes visible so you can decide.
 
 You do not need Self-Host Mode to use a local BYOK model or local Miyo. Those are available independently.
 

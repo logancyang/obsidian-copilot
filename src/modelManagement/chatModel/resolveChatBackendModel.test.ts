@@ -29,14 +29,15 @@ function okEntry(configuredModelId: string, prov: Provider): EnabledBackendEntry
 /** Minimal api stub exposing only what the resolver reads. */
 function makeApi(
   entries: readonly EnabledBackendEntry[],
-  keyByProvider: Record<string, string | null> = {}
+  keyByProvider: Record<string, string | null> = {},
+  getApiKey: jest.Mock = jest.fn(async (providerId: string) => keyByProvider[providerId] ?? null)
 ): Pick<ModelManagementApi, "backendConfigRegistry" | "providerRegistry"> {
   return {
     backendConfigRegistry: {
       resolveEnabled: (backend: string) => (backend === "chat" ? entries : []),
     } as unknown as ModelManagementApi["backendConfigRegistry"],
     providerRegistry: {
-      getApiKey: async (providerId: string) => keyByProvider[providerId] ?? null,
+      getApiKey,
     } as unknown as ModelManagementApi["providerRegistry"],
   };
 }
@@ -53,6 +54,25 @@ describe("resolveChatBackendModel", () => {
       expect(result.configuredModelId).toBe("b");
       expect(result.customModel.apiKey).toBe("key");
     }
+  });
+
+  it("does not read the keychain for an Agent-origin model", async () => {
+    const agentProvider = provider("codex", {
+      origin: { kind: "agent", agentType: "codex" },
+      requiresApiKey: false,
+    });
+    const getApiKey = jest.fn(async () => {
+      throw new Error("agent models must not read API keys");
+    });
+
+    const result = await resolveChatBackendModel(
+      makeApi([okEntry("agent-model", agentProvider)], {}, getApiKey),
+      undefined
+    );
+
+    expect(result.ok).toBe(true);
+    expect(getApiKey).not.toHaveBeenCalled();
+    if (result.ok) expect(result.customModel.agentType).toBe("codex");
   });
 
   it("falls back to the first enabled model when the preferred id is gone", async () => {

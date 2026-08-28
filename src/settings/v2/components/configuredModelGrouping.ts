@@ -67,12 +67,11 @@ export function partitionCandidates(
 }
 
 /**
- * Partition for the non-agent "chat" backend (Quick Chat). Every BYOK /
- * Copilot Plus configured chat model is a candidate, bucketed one-group-per-
- * provider by `buildModelEnableGroups`. Agent-origin models are excluded — the
- * chat backend instantiates via LangChain (`ChatModelManager`), which can't
- * drive an agent CLI's models — and embedding models are excluded since they
- * aren't chat models.
+ * Partition for the non-agent "chat" backend (Quick Chat). Every configured
+ * chat model is a candidate, bucketed one-group-per-provider by
+ * `buildModelEnableGroups`; Agent-origin rows are executed through the bound
+ * Agent backend instead of a LangChain API constructor. Embedding models are
+ * excluded since they aren't chat models.
  */
 export function partitionChatCandidates(
   configuredModels: readonly ConfiguredModel[],
@@ -80,18 +79,20 @@ export function partitionChatCandidates(
   enabledIds: ReadonlySet<string>
 ): CandidatePartition {
   const byokPlusCandidates: Candidate[] = [];
+  const agentOriginCandidates: Candidate[] = [];
   for (const configuredModel of configuredModels) {
     if (configuredModel.info.isEmbedding) continue;
     const provider = providers[configuredModel.providerId];
     if (!provider) continue;
-    if (provider.origin.kind === "agent") continue;
-    byokPlusCandidates.push({
+    const candidate = {
       configuredModel,
       provider,
       enabled: enabledIds.has(configuredModel.configuredModelId),
-    });
+    };
+    if (provider.origin.kind === "agent") agentOriginCandidates.push(candidate);
+    else byokPlusCandidates.push(candidate);
   }
-  return { byokPlusCandidates, agentOriginCandidates: [] };
+  return { byokPlusCandidates, agentOriginCandidates };
 }
 
 /**
@@ -108,8 +109,8 @@ export function opencodeOnlySubGroupLabel(model: ConfiguredModel, provider: Prov
 
 /**
  * A `ModelEnableRow` from a candidate. The secondary line is the model's
- * capability blurb (`info.description`), which only the curated agent backends
- * persist (claude, codex); BYOK/Plus and opencode carry none and so render a
+ * capability blurb (`info.description`), which the curated agent backends
+ * persist; BYOK/Plus and opencode carry none and so render a
  * single line. We deliberately don't fall back to the wire id for display — it
  * duplicates the label — but we still carry it in `wireId` so search keeps
  * matching it. This keeps the row identical to the chat picker.
@@ -163,12 +164,13 @@ interface OriginGroup {
 /**
  * Provider-grouped rows for the shared list. BYOK/Plus candidates get one group
  * per provider; agent-origin candidates get wire-prefix sub-groups for opencode
- * (`opencode`, `openrouter`, …) or a per-provider group for claude/codex. All
+ * (`opencode`, `openrouter`, …) or a per-provider group for
+ * Claude/Codex/Antigravity. All
  * groups render the same flat way. Groups emptied by `query` are dropped.
  *
  * Each group maps to a single origin, so when the list spans more than one
  * origin (opencode mixes BYOK/Plus/agent) we tag every group with an origin
- * badge to disambiguate; a single-origin list (claude/codex) gets none.
+ * badge to disambiguate; a single-origin list (Claude/Codex/Antigravity) gets none.
  *
  * @param copilotProviderMissing - Whether no Copilot provider is registered,
  *   which is when the lineup is worth advertising as a locked group. The caller
@@ -205,7 +207,7 @@ export function buildModelEnableGroups(
   }
 
   // Agent-origin models — opencode-only sub-groups (by wire prefix) or a
-  // provider group for claude/codex.
+  // provider group for Claude/Codex/Antigravity.
   const bySubGroup = new Map<string, { label: string; rows: ModelEnableRow[] }>();
   for (const candidate of partition.agentOriginCandidates) {
     const label = isOpencode

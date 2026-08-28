@@ -41,7 +41,7 @@ Open **Basic → Agents → Quick Chat**, enable a model, and choose a **Default
 - **Not offered by agent:** the active agent no longer advertises that saved model. Select one it currently offers.
 - A locked Copilot-hosted model requires an active license under **Basic → Copilot License**. **Invalid license key** means that key was not accepted.
 
-Claude and Codex models come from their CLI accounts; BYOK serves opencode and Quick Chat. See [Models](models-and-parameters.md) and [Providers](llm-providers.md).
+Claude, Codex, and Antigravity models come from their bound Agent accounts; OpenCode can use its bound account or BYOK, and Quick Chat can use any enabled model from those sources. See [Models](models-and-parameters.md) and [Providers](llm-providers.md).
 
 ### Keys disappeared, or “API Key Storage” says “Unavailable”
 
@@ -88,7 +88,7 @@ Open **Settings → Copilot → Miyo**.
 - **Chat sources are not set up:** this belongs to the separate **Search chat** row and does not block Agent Chat vault search. Configure chat sources only if you want ChatGPT or Claude history search.
 - If excluded folders no longer match the Copilot folder, choose **Resync Miyo**. For a remote connection, remove and re-add the vault in Miyo.
 
-Connection alone does not enable Agent Chat search. Under **Powered by Miyo**, turn on **Semantic search**. Copilot installs `miyo-search` for opencode, Claude, and Codex. If Copilot reports a same-name collision, rename or remove the existing Skill and try again.
+Connection alone does not enable Agent Chat search. Under **Powered by Miyo**, turn on **Semantic search**. Copilot installs `miyo-search` for opencode, Claude, Codex, and Antigravity. If Copilot reports a same-name collision, rename or remove the existing Skill and try again.
 
 ## Quick Ask does not open or has no model
 

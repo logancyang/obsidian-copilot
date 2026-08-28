@@ -78,6 +78,7 @@ import { buildUpgradeRelocationEntries } from "@/settings/upgradeNotice";
 import { dehydrateDeviceProfile, hydrateDeviceProfile } from "@/settings/deviceProfiles";
 import { getDeviceId } from "@/utils/deviceId";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
+import { getVaultBase } from "@/utils/vaultPath";
 import { disposeNotificationSound } from "@/utils/notificationSound";
 import { installRendererEventsShim } from "@/utils/rendererEventsShim";
 import { ContextProcessor } from "@/contextProcessor";
@@ -156,6 +157,7 @@ export default class CopilotPlugin extends Plugin {
   private PlanPreviewView?: typeof import("@/agentMode").PlanPreviewView;
   private planPreviewViewType?: typeof import("@/agentMode").PLAN_PREVIEW_VIEW_TYPE;
   private agentModelDiscoveryUnsubscriber?: () => void;
+  private agentQuickChatBridge?: { dispose: () => void };
   modelManagement!: ModelManagementApi;
   /** Frozen path-only facade available to Agent Mode's Obsidian CLI bridge. */
   symposiumAgentBridge?: Readonly<SymposiumAgentBridge>;
@@ -321,6 +323,7 @@ export default class CopilotPlugin extends Plugin {
         PLAN_PREVIEW_VIEW_TYPE,
         acpFrameSink,
         createAgentSessionManager,
+        AgentQuickChatBridge,
         setFrameSinkVaultBasePath,
       } = await import("@/agentMode");
       const { wireAgentModelDiscovery } = await import("@/agentMode/agentModelDiscovery");
@@ -345,6 +348,25 @@ export default class CopilotPlugin extends Plugin {
         this,
         this.agentSessionManager
       );
+
+      // Agent-origin models in Quick Chat must use the already-bound local
+      // Agent process (Codex/OpenCode/Claude/Antigravity), not a LangChain API
+      // constructor. Install the factory before re-running chain setup so an
+      // Agent model selected during plugin load follows this path as well.
+      const vaultBase = getVaultBase(this.app);
+      if (vaultBase) {
+        const agentQuickChatBridge = new AgentQuickChatBridge(this.agentSessionManager, vaultBase);
+        this.agentQuickChatBridge = agentQuickChatBridge;
+        const currentChainManager = this.chainOwner.getCurrentChainManager();
+        currentChainManager.chatModelManager.setAgentChatModelFactory((model) =>
+          agentQuickChatBridge.createModel(model)
+        );
+        void currentChainManager
+          .createChainWithNewModel()
+          .catch((error) => logError("Agent Quick Chat bridge initialization failed", error));
+      } else {
+        logWarn("Agent Quick Chat bridge unavailable: desktop vault path could not be resolved.");
+      }
     }
 
     // Always construct VectorStoreManager; it internally no-ops when semantic search is disabled
@@ -683,6 +705,12 @@ export default class CopilotPlugin extends Plugin {
 
     // Cleanup chat selection highlight controller
     this.chatSelectionHighlightController?.cleanup();
+
+    // Detach the factory before shutting down Agent Mode so a late settings
+    // callback cannot create a model against a disposed backend bridge.
+    this.chainOwner?.getCurrentChainManager().chatModelManager.setAgentChatModelFactory(null);
+    this.agentQuickChatBridge?.dispose();
+    this.agentQuickChatBridge = undefined;
 
     this.agentModelDiscoveryUnsubscriber?.();
     await this.agentSessionManager?.shutdown();

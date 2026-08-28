@@ -115,6 +115,8 @@ class FakeConfiguredModelRegistry {
 class FakeBackendConfigRegistry {
   enabled = new Map<BackendType, string[]>();
 
+  get = jest.fn((backend: BackendType) => ({ enabledModels: this.enabledFor(backend) }));
+
   enableModel = jest.fn(async (backend: BackendType, configuredModelId: string) => {
     const ids = this.enabled.get(backend) ?? [];
     if (!ids.includes(configuredModelId)) ids.push(configuredModelId);
@@ -224,7 +226,7 @@ beforeEach(() => {
 // ---------------------------------------------------------------------------
 
 describe("AgentSetupApi.registerAgentProvider", () => {
-  it("creates exactly one agent-origin provider, N models, all enrolled into the agent backend only", async () => {
+  it("creates exactly one agent-origin provider and enrolls first models into Agent and Quick Chat", async () => {
     const h = makeHarness();
     const result = await h.api.registerAgentProvider({
       agentType: "claude",
@@ -250,9 +252,9 @@ describe("AgentSetupApi.registerAgentProvider", () => {
         .sort()
     ).toEqual(["claude-opus-4-5", "claude-sonnet-4-5"]);
 
-    // Enrolled into backends["claude"] only — not chat or other agents.
+    // First enrollment is available in both the owning Agent and Quick Chat.
     expect(h.backends.enabledFor("claude").sort()).toEqual([...result.configuredModelIds].sort());
-    expect(h.backends.enabledFor("chat")).toEqual([]);
+    expect(h.backends.enabledFor("chat").sort()).toEqual([...result.configuredModelIds].sort());
     expect(h.backends.enabledFor("opencode")).toEqual([]);
     expect(h.backends.enabledFor("codex")).toEqual([]);
   });
