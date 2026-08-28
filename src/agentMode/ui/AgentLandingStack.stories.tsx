@@ -7,6 +7,11 @@ import React from "react";
 
 type AgentLandingStackProps = React.ComponentProps<typeof AgentLandingStack>;
 
+interface LandingStackCanvasProps {
+  args: AgentLandingStackProps;
+  shelf?: React.ReactNode;
+}
+
 const rows = Array.from({ length: 10 }, (_, index) => `Recent chat ${index + 1}`);
 const sections: AgentHomeShelfSection[] = [
   {
@@ -100,6 +105,37 @@ const projectSections: AgentHomeShelfSection[] = [
 
 const allSections = [...sections, ...relevantNotesSections, ...projectSections];
 
+function LandingStackCanvas({ args, shelf = args.shelf }: LandingStackCanvasProps) {
+  return (
+    <div className="tw-flex tw-size-full tw-flex-col tw-overflow-y-auto tw-px-2">
+      <AgentLandingStack
+        hero={args.hero ?? null}
+        composer={args.composer ?? null}
+        floating={args.floating}
+        context={args.context}
+        shelf={shelf}
+      />
+    </div>
+  );
+}
+
+function RelevantNotesPreviewCanvas({ args }: Pick<LandingStackCanvasProps, "args">) {
+  const [activeSectionId, setActiveSectionId] = React.useState("relevant-notes");
+
+  return (
+    <LandingStackCanvas
+      args={args}
+      shelf={
+        <AgentHomeShelf
+          sections={allSections}
+          activeSectionId={activeSectionId}
+          onSectionSelect={setActiveSectionId}
+        />
+      }
+    />
+  );
+}
+
 const meta = {
   title: "Agent Mode/Agent Landing Stack",
   component: AgentLandingStack,
@@ -123,23 +159,10 @@ export default meta;
 
 /** The ten-row preview exercises the landing's full-height centered composition. */
 export const FullPreview: StoryObj<AgentLandingStackProps> = {
-  render: (args) => (
-    <div className="tw-flex tw-size-full tw-flex-col tw-overflow-y-auto tw-px-2">
-      <AgentLandingStack
-        hero={args.hero ?? null}
-        composer={args.composer ?? null}
-        floating={args.floating}
-        context={args.context}
-        shelf={args.shelf}
-      />
-    </div>
-  ),
+  render: (args) => <LandingStackCanvas args={args} />,
 };
 
 /** The Relevant Notes tab exercises a content-rich shelf inside the shared body viewport. */
 export const RelevantNotesPreview: StoryObj<AgentLandingStackProps> = {
-  args: {
-    shelf: <AgentHomeShelf sections={allSections} activeSectionId="relevant-notes" />,
-  },
-  render: FullPreview.render,
+  render: (args) => <RelevantNotesPreviewCanvas args={args} />,
 };
