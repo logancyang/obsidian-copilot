@@ -1,5 +1,59 @@
 # Release Notes
 
+# Copilot for Obsidian 4.0.4: A chime when your agent needs you
+
+![Notification and sound settings in Copilot, with Marimba selected](https://github.com/user-attachments/assets/023de272-5fca-4816-aca3-f5f5b01a7ffb)
+
+Copilot can now play a short chime when an Agent Chat turn finishes, hits an
+error, or pauses for tool approval. It stays quiet while you are already
+focused in that chat. Choose from **Piano key**, **Marimba**, **Bell**, and
+**Doorbell**, or turn notifications off, in **Settings → Copilot → Basic →
+Agents**. ([#2988](https://github.com/logancyang/obsidian-copilot/pull/2988),
+[#2997](https://github.com/logancyang/obsidian-copilot/pull/2997),
+[#3003](https://github.com/logancyang/obsidian-copilot/pull/3003), @zeroliu)
+
+<details>
+<summary>Improvements</summary>
+
+- **Move through multi-question prompts one step at a time.** The button reads
+  **Next** until the final question, then enables **Submit** once every answer
+  is complete. ([#2981](https://github.com/logancyang/obsidian-copilot/pull/2981),
+  @zeroliu)
+
+</details>
+
+<details>
+<summary>Fixes</summary>
+
+- **Saved slash commands work in Quick Chat.** Sending a command expands it to
+  the full saved prompt, including instructions added after the command.
+  ([#2960](https://github.com/logancyang/obsidian-copilot/issues/2960),
+  [#2990](https://github.com/logancyang/obsidian-copilot/pull/2990), @zeroliu)
+
+</details>
+
+<details>
+<summary>Compatibility notes</summary>
+
+- Copilot no longer reads the retired browser-wide device ID. If a vault was
+  not opened during the migration window, you may need to enter that device's
+  agent path again.
+  ([#3002](https://github.com/logancyang/obsidian-copilot/pull/3002),
+  @brevilabs-agent-bot)
+- The 4.0.4 plugin bundle is 5.31 MB, above Obsidian Sync Standard's
+  [5 MB per-file limit](https://obsidian.md/help/sync/plans). If you sync
+  community plugins with Sync Standard, update Copilot separately on each
+  device.
+
+</details>
+
+## Troubleshoot
+
+- If models are missing, navigate to Copilot settings -> Models tab and click "Refresh Built-in Models".
+- Please report any issue you see in the member channel!
+
+---
+
 # Copilot for Obsidian - Release v4.0.3 🛠️
 
 Models on your own API key answer in Quick Chat again, web search runs through the provider you actually picked, and the documentation finally lives somewhere that stays current.
