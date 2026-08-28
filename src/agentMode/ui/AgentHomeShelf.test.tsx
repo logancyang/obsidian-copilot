@@ -100,6 +100,7 @@ describe("AgentHomeShelf", () => {
       expect(panel.classList.contains("tw-h-96")).toBe(true);
       expect(panel.classList.contains("tw-max-h-96")).toBe(true);
       expect(panel.classList.contains("tw-overflow-y-auto")).toBe(true);
+      expect(panelBody.classList.contains("tw-h-full")).toBe(true);
       expect(panelBody.classList.contains("tw-min-h-full")).toBe(true);
 
       fireEvent.click(screen.getByRole("tab", { name: /Projects/ }));

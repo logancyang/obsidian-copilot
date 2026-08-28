@@ -1,9 +1,12 @@
 import { backendRegistry } from "@/agentMode/backends/registry";
-import { INLINE_LIMIT } from "@/agentMode/ui/AgentHomeSection";
+import {
+  AgentHomePreviewList,
+  AgentHomeViewAllTrigger,
+  INLINE_LIMIT,
+} from "@/agentMode/ui/AgentHomeSection";
 import { RecentChatProjectBadge, RecentChatTitle } from "@/agentMode/ui/RecentChatTitle";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { SearchBar } from "@/components/ui/SearchBar";
 import {
   ChatHistoryItem,
@@ -14,16 +17,7 @@ import { cn } from "@/lib/utils";
 import { isNativeChatId } from "@/utils/nativeChatId";
 import { formatCompactRelativeTime } from "@/utils/formatRelativeTime";
 import { sortByStrategy } from "@/utils/recentUsageManager";
-import {
-  ArrowUpRight,
-  Check,
-  ChevronRight,
-  Edit2,
-  LoaderCircle,
-  MessageCircle,
-  Trash2,
-  X,
-} from "lucide-react";
+import { ArrowUpRight, Check, Edit2, LoaderCircle, MessageCircle, Trash2, X } from "lucide-react";
 import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
 
@@ -385,7 +379,7 @@ export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
     () => (isSearching ? filteredItems : filteredItems.slice(0, INLINE_LIMIT)),
     [filteredItems, isSearching]
   );
-  const hasOverflow = !isSearching && filteredItems.length > INLINE_LIMIT;
+  const hasMoreItems = !isSearching && filteredItems.length > visibleItems.length;
 
   const handleStartEdit = useCallback((id: string, title: string) => {
     setConfirmDeleteId(null);
@@ -443,10 +437,10 @@ export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
     <div
       role={title ? "group" : undefined}
       aria-label={title}
-      // tw-grow fills the shelf panel's fixed floor (AgentHomeShelf) so the
+      // h-full fills the shelf panel's fixed floor (AgentHomeShelf) so the
       // empty / no-match copy below can center inside the card instead of
       // hugging the top of a mostly blank panel.
-      className={cn("tw-flex tw-grow tw-flex-col tw-gap-2", className)}
+      className={cn("tw-flex tw-h-full tw-min-h-0 tw-flex-col tw-gap-2", className)}
     >
       {items.length > 0 && (
         <div className="tw-p-1">
@@ -469,67 +463,24 @@ export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
               : "No recent chats"}
         </div>
       ) : (
-        // Outer divide-y separates the scroll region from the "View all" row
-        // below with the same hairline the rows use between themselves — the
-        // exact look of the Projects tab, where the trigger sits in the list's
-        // divide-y container.
-        <div className="tw-flex tw-flex-col tw-divide-y tw-divide-border">
-          {/* max-h-56 keeps a long search-result list scrolling INSIDE the card
-              near the inline preview's height, so searching doesn't balloon the
-              card. The inline (non-search) 5-row preview never reaches this cap,
-              and the "View all" row lives outside the scroll region so it can't
-              scroll out of reach. */}
-          <ScrollArea className="tw-max-h-56 tw-overflow-y-auto">
-            <div className="tw-flex tw-flex-col tw-divide-y tw-divide-border">
-              {visibleItems.map((item) => (
-                <RecentChatRow
-                  key={item.id}
-                  item={item}
-                  projectName={getProjectName(item)}
-                  isEditing={editingId === item.id}
-                  // Only the row being renamed needs the live draft; passing a
-                  // stable "" to the rest keeps their memo from re-rendering on
-                  // every keystroke.
-                  editingTitle={editingId === item.id ? editingTitle : ""}
-                  confirmingDelete={confirmDeleteId === item.id}
-                  onOpen={handleOpen}
-                  onStartEdit={handleStartEdit}
-                  onEditingTitleChange={setEditingTitle}
-                  // Only the editing row needs the live save handler (it changes
-                  // per keystroke via editingTitle); the rest get a stable noop so
-                  // their memo isn't defeated mid-rename.
-                  onSaveEdit={editingId === item.id ? handleSaveEdit : NOOP_SAVE}
-                  onCancelEdit={handleCancelEdit}
-                  onStartDelete={setConfirmDeleteId}
-                  onConfirmDelete={handleConfirmDelete}
-                  onCancelDelete={handleCancelDelete}
-                  canOpenSourceFile={!isNativeChatId(item.id)}
-                  onOpenSourceFile={handleOpenSourceFile}
-                  isRunning={runningChatIds?.has(item.id) ?? false}
-                  hasAttention={!!item.needsAttention || (attentionChatIds?.has(item.id) ?? false)}
-                />
-              ))}
-            </div>
-          </ScrollArea>
-          {hasOverflow && (
-            <ChatHistoryPopover
-              chatHistory={items}
-              onUpdateTitle={onUpdateTitle}
-              onDeleteChat={onDeleteChat}
-              onLoadChat={onLoadChat}
-              onOpenSourceFile={onOpenSourceFile}
-              getIcon={resolveChatIcon}
-              getBadge={renderProjectBadge}
-              // Full-width row near the pane's lower half: open downward like
-              // an accordion. Radix flips to "top" if the area below is tight.
-              side="bottom"
-              align="start"
-            >
-              {/* Trigger styled identically to the Projects tab's "View all
-                  projects" row (AgentHomeViewAll) so the two shelf tabs read as
-                  one component family.
-
-                  DESIGN NOTE: unlike these inline rows, the popover's rows show
+        <AgentHomePreviewList
+          hasMoreItems={hasMoreItems}
+          viewAll={
+            !isSearching ? (
+              <ChatHistoryPopover
+                chatHistory={items}
+                onUpdateTitle={onUpdateTitle}
+                onDeleteChat={onDeleteChat}
+                onLoadChat={onLoadChat}
+                onOpenSourceFile={onOpenSourceFile}
+                getIcon={resolveChatIcon}
+                getBadge={renderProjectBadge}
+                // Full-width row near the pane's lower half: open downward like
+                // an accordion. Radix flips to "top" if the area below is tight.
+                side="bottom"
+                align="start"
+              >
+                {/* DESIGN NOTE: unlike these inline rows, the popover's rows show
                   the open-source-note action for native (autosave-off) chats
                   too — pre-existing shared ChatHistoryPopover behavior (same
                   exposure as the control bar's History button; the click
@@ -551,27 +502,42 @@ export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
                   shows near-identical data. A "refresh only on open" fix would
                   need ChatHistoryPopover to expose onOpenChange — not worth
                   touching the shared base for this. */}
-              <div
-                role="button"
-                tabIndex={0}
-                className={cn(
-                  "tw-flex tw-cursor-pointer tw-items-center tw-justify-between tw-rounded-md tw-px-2 tw-py-1.5",
-                  "tw-text-xs tw-text-accent tw-transition-colors hover:tw-bg-modifier-hover hover:tw-text-accent-hover"
-                )}
-                onClick={() => onLoadHistory?.()}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    e.currentTarget.click();
-                  }
-                }}
-              >
-                <span>View all chats</span>
-                <ChevronRight className="tw-size-3 tw-shrink-0" />
-              </div>
-            </ChatHistoryPopover>
-          )}
-        </div>
+                <AgentHomeViewAllTrigger label="chats" onClick={() => onLoadHistory?.()} />
+              </ChatHistoryPopover>
+            ) : undefined
+          }
+        >
+          <div className="tw-flex tw-flex-col tw-divide-y tw-divide-border">
+            {visibleItems.map((item) => (
+              <RecentChatRow
+                key={item.id}
+                item={item}
+                projectName={getProjectName(item)}
+                isEditing={editingId === item.id}
+                // Only the row being renamed needs the live draft; passing a
+                // stable "" to the rest keeps their memo from re-rendering on
+                // every keystroke.
+                editingTitle={editingId === item.id ? editingTitle : ""}
+                confirmingDelete={confirmDeleteId === item.id}
+                onOpen={handleOpen}
+                onStartEdit={handleStartEdit}
+                onEditingTitleChange={setEditingTitle}
+                // Only the editing row needs the live save handler (it changes
+                // per keystroke via editingTitle); the rest get a stable noop so
+                // their memo isn't defeated mid-rename.
+                onSaveEdit={editingId === item.id ? handleSaveEdit : NOOP_SAVE}
+                onCancelEdit={handleCancelEdit}
+                onStartDelete={setConfirmDeleteId}
+                onConfirmDelete={handleConfirmDelete}
+                onCancelDelete={handleCancelDelete}
+                canOpenSourceFile={!isNativeChatId(item.id)}
+                onOpenSourceFile={handleOpenSourceFile}
+                isRunning={runningChatIds?.has(item.id) ?? false}
+                hasAttention={!!item.needsAttention || (attentionChatIds?.has(item.id) ?? false)}
+              />
+            ))}
+          </div>
+        </AgentHomePreviewList>
       )}
     </div>
   );

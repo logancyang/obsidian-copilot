@@ -65,7 +65,7 @@ function AgentHomeShelfViewport({
       aria-labelledby={labelledBy}
       className="tw-h-96 tw-max-h-96 tw-min-h-0 tw-overflow-y-auto"
     >
-      <div className="tw-flex tw-min-h-full tw-flex-col tw-pb-1">{children}</div>
+      <div className="tw-flex tw-h-full tw-min-h-full tw-flex-col tw-pb-1">{children}</div>
     </div>
   );
 }

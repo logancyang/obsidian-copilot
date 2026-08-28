@@ -153,9 +153,17 @@ describe("GlobalRecentChatsSection", () => {
 
     it("caps the inline preview at 10 chats and offers a View-all trigger on overflow", () => {
       const items = Array.from({ length: 12 }, (_, i) => makeItem(`overflow-${i}`));
-      renderSection({ items });
+      const { container } = renderSection({ items });
       expect(screen.getAllByText(/^Chat overflow-/)).toHaveLength(10);
       expect(screen.getByText("View all chats")).toBeTruthy();
+
+      const scrollRegion = container.querySelector(
+        "[data-radix-scroll-area-viewport]"
+      )?.parentElement;
+      expect(scrollRegion?.classList.contains("tw-min-h-0")).toBe(true);
+      expect(scrollRegion?.classList.contains("tw-flex-1")).toBe(true);
+      expect(scrollRegion?.classList.contains("tw-max-h-56")).toBe(false);
+      expect(scrollRegion?.parentElement?.classList.contains("tw-flex-1")).toBe(true);
     });
 
     it("renders project badges in the View-all popover from the global landing", () => {
