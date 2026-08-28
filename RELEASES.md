@@ -1,34 +1,25 @@
 # Release Notes
 
-# Copilot for Obsidian 4.0.4: A chime when your agent needs you
+# Copilot for Obsidian - Release v4.0.4 🛠️
 
-![Notification and sound settings in Copilot, with Marimba selected](https://github.com/user-attachments/assets/3c0af7d6-384c-4d57-8b1d-c1f7e2b7975c)
+![Notification and sound settings in Copilot, with Marimba selected](https://github.com/user-attachments/assets/a6d2084e-84cf-4f19-aeea-8fd08decc9e3)
 
-Copilot can now play a short chime when an Agent Chat turn finishes, hits an error, or pauses for tool approval. It stays quiet while you are already focused in that chat. Choose from **Piano key**, **Marimba**, **Bell**, and **Doorbell**, or turn notifications off, in **Settings → Copilot → Basic → Agents**. ([#2988](https://github.com/logancyang/obsidian-copilot/pull/2988), [#2997](https://github.com/logancyang/obsidian-copilot/pull/2997), [#3003](https://github.com/logancyang/obsidian-copilot/pull/3003), @zeroliu)
+Copilot can now play a short chime when an Agent Chat turn finishes, hits an error, or pauses for tool approval, while staying quiet when you are already focused in that chat. Choose from **Piano key**, **Marimba**, **Bell**, and **Doorbell**, or turn notifications off, in **Settings → Copilot → Basic → Agents**. ([#2988](https://github.com/logancyang/obsidian-copilot/pull/2988), [#2997](https://github.com/logancyang/obsidian-copilot/pull/2997), [#3003](https://github.com/logancyang/obsidian-copilot/pull/3003), @zeroliu)
 
-<details>
-<summary>Improvements</summary>
+## ✨ Enhancements
 
 - **Move through multi-question prompts one step at a time.** The button reads **Next** until the final question, then enables **Submit** once every answer is complete. ([#2981](https://github.com/logancyang/obsidian-copilot/pull/2981), @zeroliu)
 
-</details>
-
-<details>
-<summary>Fixes</summary>
+## 🛠️ Bug Fixes
 
 - **Saved slash commands work in Quick Chat.** Sending a command expands it to the full saved prompt, including instructions added after the command. ([#2960](https://github.com/logancyang/obsidian-copilot/issues/2960), [#2990](https://github.com/logancyang/obsidian-copilot/pull/2990), @zeroliu)
 
-</details>
+## ⚠️ Compatibility Notes
 
-<details>
-<summary>Compatibility notes</summary>
+- **Some device-specific agent paths may need to be entered again.** Copilot no longer reads the retired browser-wide device ID, so a vault that missed the migration window cannot recover that path automatically. ([#3002](https://github.com/logancyang/obsidian-copilot/pull/3002), @brevilabs-agent-bot)
+- **The plugin exceeds Sync Standard's 5 MB per-file limit.** If you sync community plugins with Sync Standard, update Copilot separately on each device. ([Obsidian Sync plans](https://obsidian.md/help/sync/plans))
 
-- Copilot no longer reads the retired browser-wide device ID. If a vault was not opened during the migration window, you may need to enter that device's agent path again. ([#3002](https://github.com/logancyang/obsidian-copilot/pull/3002), @brevilabs-agent-bot)
-- The 4.0.4 plugin bundle is 5.31 MB, above Obsidian Sync Standard's [5 MB per-file limit](https://obsidian.md/help/sync/plans). If you sync community plugins with Sync Standard, update Copilot separately on each device.
-
-</details>
-
-## Troubleshoot
+## 🧰 Troubleshoot
 
 - If models are missing, navigate to Copilot settings -> Models tab and click "Refresh Built-in Models".
 - Please report any issue you see in the member channel!
