@@ -248,7 +248,13 @@ const sessionCreateSpy = jest.spyOn(AgentSession, "start").mockImplementation((o
   })
 );
 
-type MockAgentChatFocus = "none" | "inside" | "outside" | "other-leaf" | "unfocused-window";
+type MockAgentChatFocus =
+  | "none"
+  | "inside"
+  | "inside-sidebar"
+  | "outside"
+  | "other-leaf"
+  | "unfocused-window";
 let mockAgentChatFocus: MockAgentChatFocus = "none";
 
 function buildWorkspace(): unknown {
@@ -257,21 +263,37 @@ function buildWorkspace(): unknown {
   const ownerDocument = {
     hasFocus: () => mockAgentChatFocus !== "unfocused-window",
     get activeElement() {
-      return mockAgentChatFocus === "outside" ? outside : inside;
+      return ["inside", "inside-sidebar", "unfocused-window"].includes(mockAgentChatFocus)
+        ? inside
+        : outside;
     },
   } as Document;
   const containerEl = {
+    doc: ownerDocument,
     ownerDocument,
     contains: (element: Element | null) => element === inside,
   } as HTMLElement;
-  const leaf = {
+  const chatLeaf = {
     view: {
       containerEl,
-      getViewType: () => (mockAgentChatFocus === "other-leaf" ? "markdown" : CHAT_AGENT_VIEWTYPE),
+      getViewType: () => CHAT_AGENT_VIEWTYPE,
+    },
+  };
+  const otherLeaf = {
+    view: {
+      containerEl: { ownerDocument } as HTMLElement,
+      getViewType: () => "markdown",
     },
   };
   return {
-    getMostRecentLeaf: jest.fn(() => (mockAgentChatFocus === "none" ? null : leaf)),
+    getMostRecentLeaf: jest.fn(() => {
+      if (mockAgentChatFocus === "none") return null;
+      if (["inside-sidebar", "other-leaf"].includes(mockAgentChatFocus)) return otherLeaf;
+      return chatLeaf;
+    }),
+    getLeavesOfType: jest.fn((viewType: string) =>
+      viewType === CHAT_AGENT_VIEWTYPE ? [chatLeaf] : []
+    ),
   };
 }
 
@@ -1138,18 +1160,24 @@ describe("AgentSessionManager attention tracking", () => {
     expect(playNotificationSound).toHaveBeenCalledTimes(1);
   });
 
-  it("stays silent when focus is inside the active Agent Chat (https://github.com/logancyang/obsidian-copilot/issues/2987)", async () => {
-    mockAgentChatFocus = "inside";
-    const mgr = buildManager();
-    const session = await mgr.createSession();
-    const handle = getSessionTestHandle(session);
+  it.each([
+    ["the most recent Agent Chat", "inside"],
+    ["a sidebar Agent Chat whose leaf is not most recent", "inside-sidebar"],
+  ] as const)(
+    "stays silent when focus is inside %s (https://github.com/logancyang/obsidian-copilot/issues/2987)",
+    async (_label, focus) => {
+      mockAgentChatFocus = focus;
+      const mgr = buildManager();
+      const session = await mgr.createSession();
+      const handle = getSessionTestHandle(session);
 
-    handle.setStatus("running");
-    handle.setStatus("idle");
+      handle.setStatus("running");
+      handle.setStatus("idle");
 
-    expect(playNotificationSound).not.toHaveBeenCalled();
-    expect(session.getNeedsAttention()).toBe(false);
-  });
+      expect(playNotificationSound).not.toHaveBeenCalled();
+      expect(session.getNeedsAttention()).toBe(false);
+    }
+  );
 
   it.each([
     ["a modal outside the chat has focus", "outside"],

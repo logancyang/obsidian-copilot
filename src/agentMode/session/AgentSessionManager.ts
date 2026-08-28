@@ -3384,13 +3384,14 @@ export class AgentSessionManager {
   /** Whether keyboard focus is currently inside this session's active Agent Chat leaf. */
   private isSessionFocused(session: AgentSession): boolean {
     if (this.activeSessionId !== session.internalId) return false;
-    const leaf = this.app.workspace.getMostRecentLeaf();
-    if (leaf?.view.getViewType() !== CHAT_AGENT_VIEWTYPE) return false;
-    const container = leaf.view.containerEl;
-    const doc = container.ownerDocument;
-    if (!doc.hasFocus()) return false;
-    const activeElement = doc.activeElement;
-    return activeElement !== null && container.contains(activeElement);
+    // A sidebar input can own keyboard focus while Obsidian keeps the center
+    // editor as its most recent leaf. https://github.com/logancyang/obsidian-copilot/issues/2987
+    return this.app.workspace.getLeavesOfType(CHAT_AGENT_VIEWTYPE).some((leaf) => {
+      const container = leaf.view.containerEl;
+      const doc = container.doc;
+      const activeElement = doc.activeElement;
+      return doc.hasFocus() && activeElement !== null && container.contains(activeElement);
+    });
   }
 
   /** Raise the visual and audible attention signals from one shared focus decision. */
