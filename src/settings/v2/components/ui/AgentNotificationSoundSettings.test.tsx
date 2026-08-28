@@ -19,7 +19,9 @@ describe("AgentNotificationSoundSettings", () => {
       />
     );
 
-    expect(screen.getByText("Notification sound")).not.toBeNull();
+    expect(screen.getByText("Notification")).not.toBeNull();
+    expect(screen.getByText("Plays a short sound when an agent finishes a turn.")).not.toBeNull();
+    expect(screen.getByText("Choose which sound to play.")).not.toBeNull();
     expect(screen.getByDisplayValue("Piano key")).not.toBeNull();
   });
 
@@ -34,7 +36,7 @@ describe("AgentNotificationSoundSettings", () => {
       />
     );
 
-    expect(screen.getByText("Notification sound")).not.toBeNull();
+    expect(screen.getByText("Notification")).not.toBeNull();
     expect(screen.queryByText("Sound")).toBeNull();
   });
 

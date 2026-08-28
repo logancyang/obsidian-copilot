@@ -5,7 +5,7 @@ import {
 } from "./AgentNotificationSoundSettings";
 
 const meta = {
-  title: "Settings/Agent Notification Sound",
+  title: "Settings/Agent Notification",
   component: AgentNotificationSoundSettings,
   args: {
     enabled: true,

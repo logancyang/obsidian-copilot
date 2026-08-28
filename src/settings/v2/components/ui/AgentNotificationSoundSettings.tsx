@@ -28,8 +28,8 @@ export const AgentNotificationSoundSettings: React.FC<AgentNotificationSoundSett
   <>
     <SettingItem
       type="switch"
-      title="Notification sound"
-      description="Plays a short sound when an agent finishes a turn, stops on an error, or needs your approval, so you can look away while it works. Stays quiet while you are watching that chat."
+      title="Notification"
+      description="Plays a short sound when an agent finishes a turn."
       checked={enabled}
       onCheckedChange={onEnabledChange}
     />
@@ -40,7 +40,7 @@ export const AgentNotificationSoundSettings: React.FC<AgentNotificationSoundSett
       <SettingItem
         type="select"
         title="Sound"
-        description="Selecting one previews it unless another sound played in the last second."
+        description="Choose which sound to play."
         value={soundId}
         onChange={onSoundChange}
         options={[...soundOptions]}

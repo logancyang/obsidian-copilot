@@ -245,7 +245,7 @@ describe("AgentSettings", () => {
     render(<AgentSettings />);
 
     expect(screen.queryByText("Sound")).toBeNull();
-    expect(screen.getByText("Notification sound")).not.toBeNull();
+    expect(screen.getByText("Notification")).not.toBeNull();
   });
 
   it("shows the first backend's content by default and the default-model picker above the model list", () => {
