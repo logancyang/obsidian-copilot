@@ -36,6 +36,7 @@ describe("ReleaseNotesDialog", () => {
     it(`renders ready release Markdown and leads to both update destinations for ${ISSUE_URL}`, async () => {
       const onClose = jest.fn();
       jest.mocked(renderMarkdown).mockImplementation(async (_app, _markdown, el) => {
+        expect(el.classList.contains("markdown-rendered")).toBe(true);
         const heading = el.doc.createElement("h1");
         heading.textContent = "v4.0.4 - A chime when your agent is ready";
         const image = el.doc.createElement("img");

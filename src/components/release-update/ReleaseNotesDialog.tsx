@@ -55,6 +55,7 @@ function ReleaseNotesMarkdown({ body }: ReleaseNotesMarkdownProps): React.ReactE
 
     const component = new Component();
     component.load();
+    target.classList.add("markdown-rendered");
     target.replaceChildren();
 
     // Rendering the API's raw body keeps durable attachment URLs and native
@@ -74,7 +75,7 @@ function ReleaseNotesMarkdown({ body }: ReleaseNotesMarkdownProps): React.ReactE
   return (
     <div
       className={cn(
-        "markdown-rendered tw-min-w-0 tw-text-normal",
+        "tw-min-w-0 tw-text-normal",
         "[&>*:first-child]:tw-mt-0 [&>*:last-child]:tw-mb-0",
         "[&_a]:tw-break-words",
         "[&_img]:tw-mx-auto [&_img]:tw-block [&_img]:tw-h-auto [&_img]:tw-max-w-full [&_img]:tw-rounded-md"
