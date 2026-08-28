@@ -1,23 +1,23 @@
 # Release Notes
 
-# Copilot for Obsidian - Release v4.0.4 🛠️
+# v4.0.4 - A chime when your agent is ready
 
 ![Notification and sound settings in Copilot, with Marimba selected](https://github.com/user-attachments/assets/a6d2084e-84cf-4f19-aeea-8fd08decc9e3)
 
-Copilot can now play a short chime when an Agent Chat turn finishes, hits an error, or pauses for tool approval, while staying quiet when you are already focused in that chat. Choose from **Piano key**, **Marimba**, **Bell**, and **Doorbell**, or turn notifications off, in **Settings → Copilot → Basic → Agents**. ([#2988](https://github.com/logancyang/obsidian-copilot/pull/2988), [#2997](https://github.com/logancyang/obsidian-copilot/pull/2997), [#3003](https://github.com/logancyang/obsidian-copilot/pull/3003), @zeroliu)
+Copilot can now play a short chime when an agent finishes a long-running task, so you can work elsewhere without checking the chat for progress. When you hear it, return to review the result, handle an error, or approve the next tool call. Copilot stays quiet while you are already in that chat, and you can choose **Piano key**, **Marimba**, **Bell**, or **Doorbell**, or turn notifications off in **Settings → Copilot → Basic → Agents**. ([#2988](https://github.com/logancyang/obsidian-copilot/pull/2988), [#2997](https://github.com/logancyang/obsidian-copilot/pull/2997), [#3003](https://github.com/logancyang/obsidian-copilot/pull/3003), @zeroliu)
 
 ## ✨ Enhancements
 
-- **Move through multi-question prompts one step at a time.** The button reads **Next** until the final question, then enables **Submit** once every answer is complete. ([#2981](https://github.com/logancyang/obsidian-copilot/pull/2981), @zeroliu)
+- **Know what to do next in multi-question prompts.** The **Ask Me Questions** card now guides you through each question with a **Next** button, then switches to **Submit** on the final question. ([#2981](https://github.com/logancyang/obsidian-copilot/pull/2981), @zeroliu)
+- **See more chats, projects, and Relevant Notes from Agent Home.** Recent Chats and Projects now show up to ten items, Relevant Notes has more room, and **View all** stays pinned to the bottom only when a list overflows. ([#3005](https://github.com/logancyang/obsidian-copilot/pull/3005), @zeroliu)
 
 ## 🛠️ Bug Fixes
 
-- **Saved slash commands work in Quick Chat.** Sending a command expands it to the full saved prompt, including instructions added after the command. ([#2960](https://github.com/logancyang/obsidian-copilot/issues/2960), [#2990](https://github.com/logancyang/obsidian-copilot/pull/2990), @zeroliu)
+- **Custom Commands work again in Quick Chat.** Sending one now expands it to the full saved prompt in your chat history, including any extra instructions you add. ([#2960](https://github.com/logancyang/obsidian-copilot/issues/2960), [#2990](https://github.com/logancyang/obsidian-copilot/pull/2990), @zeroliu)
 
 ## ⚠️ Compatibility Notes
 
-- **Some device-specific agent paths may need to be entered again.** Copilot no longer reads the retired browser-wide device ID, so a vault that missed the migration window cannot recover that path automatically. ([#3002](https://github.com/logancyang/obsidian-copilot/pull/3002), @brevilabs-agent-bot)
-- **The plugin exceeds Sync Standard's 5 MB per-file limit.** If you sync community plugins with Sync Standard, update Copilot separately on each device. ([Obsidian Sync plans](https://obsidian.md/help/sync/plans))
+- **Agent paths may need to be entered again.** If you migrated from 4.0.0, re-enter them because of the vault storage migration. ([#3002](https://github.com/logancyang/obsidian-copilot/pull/3002), @brevilabs-agent-bot)
 
 ## 🧰 Troubleshoot
 
