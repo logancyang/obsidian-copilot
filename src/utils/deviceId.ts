@@ -3,14 +3,11 @@
  * settings (binary paths, env overrides) so a synced `data.json` never carries
  * one device's paths as a single global value.
  *
- * Design (see GitHub #2539, storage API per GitHub #298):
+ * Design (see GitHub #2539):
  *   - A random UUID generated once and persisted via Obsidian's
  *     `App.saveLocalStorage`, which is device-local (never synced) and
  *     vault-scoped — so each vault on a device keeps its own id and reads its
- *     own segment of `agentMode.deviceProfiles`. On first read the id is
- *     seeded from the legacy raw `localStorage` key that older releases shared
- *     across vaults, so existing profile segments stay attached; the legacy
- *     key is left in place for vaults that have not migrated yet.
+ *     own segment of `agentMode.deviceProfiles`.
  *   - We deliberately avoid OS/hardware identifiers (IOPlatformUUID,
  *     MachineGuid, /etc/machine-id): spawning system commands to read a
  *     hardware fingerprint raises privacy concerns and hardware identity isn't
@@ -67,19 +64,6 @@ export function getDeviceId(app: App): string {
     if (typeof existing === "string" && existing.length > 0) {
       cachedDeviceId = existing;
       return existing;
-    }
-
-    const legacy = window.localStorage.getItem(DEVICE_ID_STORAGE_KEY);
-    if (legacy && legacy.length > 0) {
-      // One-time forward migration: copy the pre-vault-scoped id so this
-      // vault's `deviceProfiles`, Miyo receipt, and pending credential recovery
-      // stay attached. Returned even if the copy silently fails — the legacy
-      // key remains, so the next launch resolves the same id and retries the
-      // copy. Remove after 2026-08-21 to clear the scorecard warning.
-      // https://github.com/logancyang/obsidian-copilot-preview/issues/298
-      app.saveLocalStorage(DEVICE_ID_STORAGE_KEY, legacy);
-      cachedDeviceId = legacy;
-      return legacy;
     }
 
     const id = generateDeviceId();

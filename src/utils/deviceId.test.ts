@@ -59,8 +59,6 @@ describe("deviceId", () => {
       expect(first.length).toBeGreaterThan(0);
       expect(getDeviceId(app)).toBe(first);
       expect(store.get(STORAGE_KEY)).toBe(first);
-      // A freshly generated id never touches the legacy raw key.
-      expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull();
     });
 
     it("reuses an id already present in vault-scoped storage", async () => {
@@ -70,33 +68,17 @@ describe("deviceId", () => {
       expect(getDeviceId(app)).toBe("preset-device-id");
     });
 
-    it("preserves the legacy device identity during the temporary migration window (https://github.com/logancyang/obsidian-copilot-preview/issues/298)", async () => {
-      window.localStorage.setItem(STORAGE_KEY, "legacy-device-id");
+    it("ignores an expired raw-storage value when vault-scoped storage is empty (https://github.com/Brevilabs/obsidian-copilot-private/issues/246)", async () => {
+      window.localStorage.setItem(STORAGE_KEY, "expired-device-id");
       const getDeviceId = await loadFreshGetDeviceId();
       const { app, store } = createFakeApp();
 
-      expect(getDeviceId(app)).toBe("legacy-device-id");
-      expect(store.get(STORAGE_KEY)).toBe("legacy-device-id");
-      // Left in place: other vaults on this device may not have migrated yet.
-      expect(window.localStorage.getItem(STORAGE_KEY)).toBe("legacy-device-id");
-    });
-
-    it("prefers the vault-scoped id over a differing legacy value", async () => {
-      window.localStorage.setItem(STORAGE_KEY, "legacy-device-id");
-      const getDeviceId = await loadFreshGetDeviceId();
-      const { app, store } = createFakeApp(new Map([[STORAGE_KEY, "vault-device-id"]]));
-
-      expect(getDeviceId(app)).toBe("vault-device-id");
-      expect(store.get(STORAGE_KEY)).toBe("vault-device-id");
-    });
-
-    it("keeps the legacy identity when its forward copy is silently dropped (https://github.com/logancyang/obsidian-copilot-preview/issues/298)", async () => {
-      window.localStorage.setItem(STORAGE_KEY, "legacy-device-id");
-      const getDeviceId = await loadFreshGetDeviceId();
-
-      // The legacy key survives, so the next launch resolves the same id and
-      // retries the copy — the profile segment never detaches.
-      expect(getDeviceId(createDroppedWriteApp())).toBe("legacy-device-id");
+      const id = getDeviceId(app);
+      expect(id).not.toBe("expired-device-id");
+      expect(store.get(STORAGE_KEY)).toBe(id);
+      // The expired browser key is ignored rather than mutated.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/246
+      expect(window.localStorage.getItem(STORAGE_KEY)).toBe("expired-device-id");
     });
 
     it("generates distinct ids for distinct vault stores (fresh module instances)", async () => {
