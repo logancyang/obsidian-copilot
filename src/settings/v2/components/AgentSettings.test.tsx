@@ -68,6 +68,7 @@ const installStates: Record<string, { kind: string; [key: string]: unknown }> = 
   opencode: { kind: "ready", source: "managed" },
   claude: { kind: "ready", source: "custom" },
   codex: { kind: "ready", source: "custom" },
+  antigravity: { kind: "ready", source: "custom" },
 };
 
 /** Binary path each backend reports as resolved; absent means "not installed". */
@@ -106,6 +107,7 @@ const DESCRIPTORS = [
   makeDescriptor("opencode", "OpenCode", true),
   makeDescriptor("claude", "Claude", false),
   makeDescriptor("codex", "Codex", false),
+  makeDescriptor("antigravity", "Antigravity", false),
 ];
 
 const mockGetCachedModelCatalog = jest.fn();
@@ -173,6 +175,7 @@ describe("AgentSettings", () => {
     installStates.opencode = { kind: "ready", source: "managed" };
     installStates.claude = { kind: "ready", source: "custom" };
     installStates.codex = { kind: "ready", source: "custom" };
+    installStates.antigravity = { kind: "ready", source: "custom" };
     mockGetCachedModelCatalog.mockReset().mockReturnValue({ availableModels: [] });
     mockPreloadModels.mockReset().mockResolvedValue(undefined);
     resolvedPaths = {};
@@ -199,10 +202,10 @@ describe("AgentSettings", () => {
     expect(screen.queryByText("alpha")).toBeNull();
   });
 
-  it("renders the four sub-tabs in order: OpenCode, Claude, Codex, Quick Chat", () => {
+  it("renders the five sub-tabs in order: OpenCode, Claude, Codex, Antigravity, Quick Chat", () => {
     render(<AgentSettings />);
     const tabs = screen.getAllByRole("tab").map((t) => t.textContent);
-    expect(tabs).toEqual(["OpenCode", "Claude", "Codex", "Quick Chat"]);
+    expect(tabs).toEqual(["OpenCode", "Claude", "Codex", "Antigravity", "Quick Chat"]);
   });
 
   it("keeps the default backend picker outside the tab strip", () => {

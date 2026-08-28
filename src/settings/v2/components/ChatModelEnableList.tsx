@@ -18,8 +18,8 @@ const EMPTY_ENABLED: readonly string[] = Object.freeze([]);
  * Curation list for the non-agent "chat" backend (Quick Chat). Sources every
  * BYOK / Copilot Plus configured chat model from the registry and toggles
  * `backends.chat` through `BackendConfigRegistry`. Reuses the shared
- * `ModelEnableList` UI and grouping helpers; agent-origin models are excluded
- * because the chat backend instantiates via LangChain, not an agent CLI.
+ * `ModelEnableList` UI and grouping helpers; Agent-origin models use their
+ * existing local Agent binding when selected.
  */
 export const ChatModelEnableList: React.FC = () => {
   const api = useModelManagement();
@@ -61,7 +61,8 @@ export const ChatModelEnableList: React.FC = () => {
   const emptyState = (
     <span>
       No models configured yet. Add a provider on the{" "}
-      <span className="tw-font-medium">Models (BYOK)</span> tab to populate Quick Chat.
+      <span className="tw-font-medium">Models (BYOK)</span> tab, or configure an Agent, to populate
+      Quick Chat.
     </span>
   );
 

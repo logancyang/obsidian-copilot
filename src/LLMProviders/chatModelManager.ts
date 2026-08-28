@@ -53,6 +53,8 @@ type ChatConstructorType = {
   new (config: Record<string, unknown>): BaseChatModel;
 };
 
+export type AgentChatModelFactory = (model: CustomModel) => BaseChatModel | Promise<BaseChatModel>;
+
 const CHAT_PROVIDER_CONSTRUCTORS = {
   [ChatModelProviders.OPENAI]: ChatOpenAI,
   [ChatModelProviders.ANTHROPIC]: ChatAnthropic,
@@ -104,6 +106,8 @@ export default class ChatModelManager {
     [ChatModelProviders.DEEPSEEK]: () => getSettings().deepseekApiKey,
     [ChatModelProviders.SILICONFLOW]: () => getSettings().siliconflowApiKey,
   } as const;
+
+  private agentChatModelFactory: AgentChatModelFactory | null = null;
 
   private constructor() {
     this.buildModelMap();
@@ -517,6 +521,15 @@ export default class ChatModelManager {
     return ChatModelManager.activeModel;
   }
 
+  /**
+   * Install the desktop-only adapter used by Agent-origin Quick Chat models.
+   * Keeping this as an injected factory prevents the mobile module graph from
+   * importing Agent Mode's Node subprocess implementation.
+   */
+  setAgentChatModelFactory(factory: AgentChatModelFactory | null): void {
+    this.agentChatModelFactory = factory;
+  }
+
   async setChatModel(model: CustomModel): Promise<void> {
     try {
       const modelInstance = await this.createModelInstance(model);
@@ -589,6 +602,13 @@ export default class ChatModelManager {
    * provider + key, so credentials are validated directly off the model here.
    */
   async createModelInstanceFromBridged(model: CustomModel): Promise<BaseChatModel> {
+    if (model.agentType) {
+      if (!this.agentChatModelFactory) {
+        throw new Error(`Agent Quick Chat is not initialized for the ${model.agentType} backend.`);
+      }
+      return await this.agentChatModelFactory(model);
+    }
+
     if (!this.hasProviderCredentials(model, false)) {
       if ((model.provider as ChatModelProviders) === ChatModelProviders.COPILOT_PLUS) {
         throw new MissingPlusLicenseError(

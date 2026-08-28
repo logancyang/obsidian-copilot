@@ -4,6 +4,7 @@ import { MissingApiKeyError } from "@/error";
 import { getSettings, setSettings } from "@/settings/model";
 
 import ChatModelManager from "./chatModelManager";
+import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
 
 jest.mock("@langchain/anthropic", () => {
   class ChatAnthropic {
@@ -64,6 +65,26 @@ describe("chatModelManager", () => {
     });
 
     describe("createModelInstanceFromBridged()", () => {
+      afterEach(() => {
+        ChatModelManager.getInstance().setAgentChatModelFactory(null);
+      });
+
+      it("delegates Agent-origin models to the bound Agent Quick Chat factory", async () => {
+        const factory = jest.fn(() => ({}) as BaseChatModel);
+        const manager = ChatModelManager.getInstance();
+        manager.setAgentChatModelFactory(factory);
+        const model = bridgedModel({
+          name: "gemini-2.5-pro",
+          agentType: "antigravity",
+          requiresApiKey: false,
+        });
+
+        const result = await manager.createModelInstanceFromBridged(model);
+
+        expect(result).toBe(factory.mock.results[0]?.value);
+        expect(factory).toHaveBeenCalledWith(model);
+      });
+
       it("does not fall back to a legacy top-level provider key", async () => {
         setSettings({ openAIApiKey: "legacy-key" });
 

@@ -8,8 +8,9 @@
  * caller's call: `registerAgentProvider` (first enrollment) auto-enrolls the
  * subset named by `autoEnrollModelIds`, or every model when that is omitted.
  * `syncAgentModels` (later probes) adds newly-reported models *disabled*, so a
- * model the agent introduces later never silently turns itself on. Either way
- * agent-owned models stay exclusive to their agent's picker.
+ * model the agent introduces later never silently turns itself on. Agent-owned
+ * models remain tied to their Agent and may also be enrolled in Quick Chat,
+ * which executes them through that same binding.
  *
  * `registerAgentProvider` is idempotent on `(agentType, providerType)`:
  * re-running reconciles the model list. `syncAgentModels` is the narrower
@@ -78,6 +79,7 @@ export interface AgentSyncResult {
  * constant rather than a fresh `[]`, which would be a new identity per call.
  */
 const ENROLL_NONE: readonly string[] = Object.freeze([]);
+const QUICK_CHAT_ENROLLMENT_INITIALIZED = "quickChatEnrollmentInitialized";
 
 export class AgentSetupApi {
   readonly #providers: ProviderRegistry;
@@ -116,6 +118,7 @@ export class AgentSetupApi {
     const existing = this.#findAgentProvider(input.agentType, input.providerType);
 
     let providerId: string;
+    let createdProvider = false;
     if (existing) {
       providerId = existing.providerId;
       // Reuse the existing row so re-running never spawns a second provider for
@@ -124,15 +127,16 @@ export class AgentSetupApi {
       await this.#providers.update(providerId, {
         displayName: input.displayName,
         baseUrl: input.baseUrl,
-        extras: input.extras,
+        extras: input.extras ?? existing.extras,
       });
     } else {
+      createdProvider = true;
       providerId = await this.#providers.add({
         providerType: input.providerType,
         displayName: input.displayName,
         baseUrl: input.baseUrl,
         origin: { kind: "agent", agentType: input.agentType },
-        extras: input.extras,
+        extras: { ...(input.extras ?? {}), [QUICK_CHAT_ENROLLMENT_INITIALIZED]: true },
         // Agent-owned providers route through the agent's own auth (native /
         // CLI-managed); the user never supplies a BYOK key for them.
         requiresApiKey: false,
@@ -152,6 +156,11 @@ export class AgentSetupApi {
     const { added, removed } = await this.#reconcileModels(input.agentType, providerId, infos, {
       autoEnrollModelIds: input.autoEnrollModelIds,
     });
+    if (createdProvider) {
+      await this.#seedInitialChatEnrollment(input.agentType, providerId);
+    } else {
+      await this.#ensureInitialChatEnrollment(input.agentType, providerId);
+    }
 
     // Return the configured-model ids in wire-id order, joining freshly-added
     // ids with the surviving ones.
@@ -195,6 +204,7 @@ export class AgentSetupApi {
 
     if (providers.length === 1) {
       const provider = providers[0];
+      await this.#ensureInitialChatEnrollment(input.agentType, provider.providerId);
       // Every reported wire id belongs to this one provider.
       const infos = await this.#resolveModelInfosForProvider(
         provider,
@@ -221,6 +231,7 @@ export class AgentSetupApi {
     const removedAll: string[] = [];
     const wireIdSet = new Set(input.wireModelIds);
     for (const provider of providers) {
+      await this.#ensureInitialChatEnrollment(input.agentType, provider.providerId);
       const ownedWireIds: string[] = [];
       for (const wireId of wireIdSet) {
         if (this.#models.getByWireId(provider.providerId, wireId)) {
@@ -251,6 +262,42 @@ export class AgentSetupApi {
   // -------------------------------------------------------------------------
   // Internals
   // -------------------------------------------------------------------------
+
+  /**
+   * Migrate an existing Agent binding into Quick Chat exactly once. The
+   * owning Agent backend remains the source for the initial enabled subset;
+   * after the marker is written, later discovery never re-enables a model the
+   * user turned off in Quick Chat.
+   */
+  async #ensureInitialChatEnrollment(agentType: AgentType, providerId: string): Promise<void> {
+    const provider = this.#providers.get(providerId);
+    if (!provider || provider.extras?.[QUICK_CHAT_ENROLLMENT_INITIALIZED] === true) return;
+
+    await this.#seedInitialChatEnrollment(agentType, providerId);
+    await this.#providers.update(providerId, {
+      extras: { ...(provider.extras ?? {}), [QUICK_CHAT_ENROLLMENT_INITIALIZED]: true },
+    });
+  }
+
+  async #seedInitialChatEnrollment(agentType: AgentType, providerId: string): Promise<void> {
+    const provider = this.#providers.get(providerId);
+    if (!provider) return;
+    const chatIds = this.#backends.get("chat").enabledModels;
+    const chatAlreadyCurated = chatIds.some(
+      (configuredModelId) => this.#models.get(configuredModelId)?.providerId === providerId
+    );
+    if (!chatAlreadyCurated) {
+      const agentEnabledIds = this.#backends.get(agentType).enabledModels;
+      const providerModelIds = new Set(
+        this.#models.listByProvider(providerId).map((model) => model.configuredModelId)
+      );
+      for (const configuredModelId of agentEnabledIds) {
+        if (providerModelIds.has(configuredModelId)) {
+          await this.#backends.enableModel("chat", configuredModelId);
+        }
+      }
+    }
+  }
 
   /**
    * Find the single agent-owned provider for `(agentType, providerType)`.

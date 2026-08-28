@@ -90,8 +90,14 @@ const ENABLED_AGENTS_RE = /^([ \t]*copilot-enabled-agents:[ \t]*)(.*)$/m;
 function preserveEnabledAgents(existingMd: string, bundledMd: string): string {
   const existing = existingMd.match(ENABLED_AGENTS_RE);
   if (!existing) return bundledMd;
-  // Replace the bundled copilot-enabled-agents value with the existing one.
-  return bundledMd.replace(ENABLED_AGENTS_RE, `$1${existing[2]}`);
+  // The old bundled default had no Antigravity entry. Treat that exact value
+  // as a version migration, while preserving any list the user customized.
+  const existingAgents = existing[2].trim();
+  const migratedAgents =
+    existingAgents === "claude, codex, opencode"
+      ? (bundledMd.match(ENABLED_AGENTS_RE)?.[2] ?? existing[2])
+      : existing[2];
+  return bundledMd.replace(ENABLED_AGENTS_RE, `$1${migratedAgents}`);
 }
 
 /**

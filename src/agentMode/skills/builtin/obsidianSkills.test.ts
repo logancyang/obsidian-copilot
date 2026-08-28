@@ -17,17 +17,17 @@ describe("obsidianSkills", () => {
         "obsidian-cli",
       ]);
       for (const skill of OBSIDIAN_SKILLS) {
-        expect(skill.enabledAgents).toEqual(["claude", "codex", "opencode"]);
+        expect(skill.enabledAgents).toEqual(["claude", "codex", "opencode", "antigravity"]);
         expect(skill.skillMd).toContain(`copilot-builtin-version: "${skill.version}"`);
       }
     });
 
     it("bumps only the changed CLI skill so existing vaults receive the safety update", () => {
       expect(OBSIDIAN_SKILLS.map((skill) => [skill.name, skill.version])).toEqual([
-        ["obsidian-markdown", 1],
-        ["obsidian-bases", 1],
-        ["json-canvas", 1],
-        ["obsidian-cli", 2],
+        ["obsidian-markdown", 2],
+        ["obsidian-bases", 2],
+        ["json-canvas", 2],
+        ["obsidian-cli", 3],
       ]);
     });
 
@@ -35,7 +35,12 @@ describe("obsidianSkills", () => {
       for (const skill of OBSIDIAN_SKILLS) {
         const parsed = parseSkillFile(skill.skillMd, skill.name);
         expect(parsed.frontmatter.name).toBe(skill.name);
-        expect(parsed.frontmatter.enabledAgents).toEqual(["claude", "codex", "opencode"]);
+        expect(parsed.frontmatter.enabledAgents).toEqual([
+          "claude",
+          "codex",
+          "opencode",
+          "antigravity",
+        ]);
       }
     });
 

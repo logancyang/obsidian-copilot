@@ -2,7 +2,8 @@
 
 Copilot V4 can get models from a Copilot plan, your own provider key or local
 endpoint, or an agent account you already use. These options are separate.
-Adding a key does not change the models supplied by Claude Code or Codex.
+Adding a key does not change the models supplied by Claude Code, Codex, or
+Antigravity.
 
 ## Choose a model source
 
@@ -10,9 +11,10 @@ Adding a key does not change the models supplied by Claude Code or Codex.
 | ----------------------------------- | ---------- | ------------------------------------------ |
 | **Copilot-hosted models**           | Yes        | opencode                                   |
 | **Your API key or endpoint (BYOK)** | Yes        | opencode, when the provider is shown there |
-| **Models reported by opencode**     | No         | opencode                                   |
-| **Claude Code account**             | No         | Claude                                     |
-| **Codex account**                   | No         | Codex                                      |
+| **Models reported by opencode**     | Yes        | opencode                                   |
+| **Claude Code account**             | Yes        | Claude                                     |
+| **Codex account**                   | Yes        | Codex                                      |
+| **Antigravity account**             | Yes        | Antigravity                                |
 
 Models reported by opencode are routed to their backing provider. Free
 opencode Zen models show a warning because that provider may log or train on
@@ -29,9 +31,9 @@ Licensed models can appear in both places:
 - **Basic → Agents → Quick Chat** for regular Copilot chat.
 - **Basic → Agents → opencode** for Agent Chat.
 
-They do not appear under Claude or Codex, because those agents use their own
-accounts and models. The available Copilot lineup changes over time, so use the
-model lists in settings as the source of truth.
+They do not appear under Claude, Codex, or Antigravity, because those agents
+use their own accounts and models. The available Copilot lineup changes over
+time, so use the model lists in settings as the source of truth.
 
 Copilot-hosted models are cloud services, not local models. Brevilabs's backend
 and its vetted enterprise model providers process the full request. Copilot's
@@ -89,23 +91,29 @@ and turn on **Enable CORS**. Responses then appear after completion instead of
 streaming token by token. For LM Studio, you can enable CORS in LM Studio to
 keep streaming instead.
 
-## Claude Code and Codex accounts
+## Bound Agent accounts
 
-Claude and Codex are Agent Chat backends, not BYOK providers:
+Claude, Codex, and Antigravity are Agent Chat backends, not BYOK providers.
+Their account-bound models can also be enrolled in Quick Chat; Quick Chat runs
+them through the same local Agent binding instead of constructing an API client.
 
 - **Claude** inherits authentication and models from the Claude Code CLI. Its
   usage follows your Claude Code account or CLI environment.
 - **Codex** inherits authentication and models from the Codex CLI through the
   Codex ACP adapter. Its usage follows your OpenAI account or ChatGPT plan.
+- **Antigravity** inherits authentication and models from the official `agy`
+  CLI. Install and sign in from the [Antigravity website](https://antigravity.google/),
+  then configure `agy` under **Basic → Agents → Antigravity**.
 
 Copilot discovers the models reported by each agent and lets you enable them
-under **Basic → Agents → Claude** or **Basic → Agents → Codex**. Those models
-stay inside their respective agents; they do not become Quick Chat or opencode
-models.
+under **Basic → Agents → Claude**, **Codex**, or **Antigravity**. In each Agent
+tab, the model remains available to that Agent; enabling it in **Basic →
+Agents → Quick Chat** additionally allows Quick Chat and Quick Ask to reuse the
+same binding.
 
-An OpenAI API key is different from a ChatGPT subscription, just as an
+An OpenAI API key is different from a ChatGPT/Codex subscription, just as an
 Anthropic API key is different from a Claude Code subscription. Use **BYOK** for
-API access and the matching agent setup for subscription access.
+API access and the matching Agent setup for subscription access.
 
 ## Where keys are stored
 

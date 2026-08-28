@@ -307,7 +307,7 @@ function parentDotFolder(rel: string): string {
   return idx === -1 ? trimmed : trimmed.slice(0, idx);
 }
 
-/** Look up an agent's display name (Claude/Codex/opencode) by id. */
+/** Look up an agent's display name (Claude/Codex/opencode/Antigravity) by id. */
 function agentDisplayName(agents: ReadonlyArray<AgentBrand>, id: BackendId): string {
   return agents.find((a) => a.id === id)?.displayName ?? id;
 }

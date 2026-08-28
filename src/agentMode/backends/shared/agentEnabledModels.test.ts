@@ -28,7 +28,7 @@ function model(configuredModelId: string, infoId: string): ConfiguredModel {
 }
 
 function settingsWith(
-  agentType: "claude" | "codex",
+  agentType: "claude" | "codex" | "antigravity",
   enabledModels: string[],
   configuredModels: ConfiguredModel[]
 ): CopilotSettings {
@@ -67,6 +67,17 @@ describe("agentOriginEnabledModelEntries", () => {
     const settings = settingsWith("codex", ["cm1"], [model("cm1", "gpt-5/high")]);
     const entries = agentOriginEnabledModelEntries(settings, "codex", suffixDecode);
     expect(entries.map((e) => e.baseModelId)).toEqual(["gpt-5"]);
+  });
+
+  it("antigravity: maps enabled account models without requiring a key", () => {
+    const settings = settingsWith("antigravity", ["cm1"], [model("cm1", "gemini-2.5-pro")]);
+    const entries = agentOriginEnabledModelEntries(settings, "antigravity", bareDecode);
+    expect(entries).toEqual([
+      expect.objectContaining({
+        baseModelId: "gemini-2.5-pro",
+        credentialState: "ok",
+      }),
+    ]);
   });
 
   it("skips enabled ids with no matching configured-model row", () => {

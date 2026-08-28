@@ -7,13 +7,13 @@
 import type { ModelInfo, ProviderType } from "./catalog";
 
 /**
- * The three agent backends. Each can own its own `Provider`(s) and
+ * The agent backends. Each can own its own `Provider`(s) and
  * reports a runtime model inventory.
  */
-export type AgentType = "opencode" | "claude" | "codex";
+export type AgentType = "opencode" | "claude" | "codex" | "antigravity";
 
 /**
- * The broader set used for per-backend model curation: the three agents
+ * The broader set used for per-backend model curation: the four agents
  * plus `"chat"` (Simple Chat). Used as the map key for `BackendConfig`
  * in `settings.backends: Record<BackendType, BackendConfig>`.
  *
@@ -21,6 +21,7 @@ export type AgentType = "opencode" | "claude" | "codex";
  *   "opencode"    → OpenCode agent picker
  *   "claude" → Claude Code agent picker
  *   "codex"       → Codex agent picker
+ *   "antigravity" → Antigravity agent picker
  *
  * Everything else either has no curated selection (vault-qa / project /
  * quick-chat use their own per-feature model id; custom commands store

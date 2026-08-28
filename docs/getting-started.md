@@ -1,6 +1,6 @@
 # Getting Started with Copilot V4
 
-Copilot V4 is built around **Agent Chat**, a desktop workspace where opencode, Claude Code, or Codex can read your vault, use tools, and complete multi-step work with the permissions you choose.
+Copilot V4 is built around **Agent Chat**, a desktop workspace where opencode, Claude Code, Codex, or Antigravity can read your vault, use tools, and complete multi-step work with the permissions you choose.
 
 Agent Chat is available in Obsidian on desktop. Quick Chat, Copilot Commands, and Quick Ask remain available for shorter tasks and on mobile.
 
@@ -35,6 +35,19 @@ If Claude Code is already installed, Copilot checks its common install locations
 
 Claude uses the account held by the Claude Code CLI. You do not paste that account's key into Copilot.
 
+### Alternative: Link Antigravity
+
+Antigravity 2.x can be linked through its official `agy` CLI:
+
+1. Install Antigravity and sign in through the [official Antigravity website](https://antigravity.google/).
+2. Open **Basic → Agents → Antigravity → Configure**.
+3. Click **Auto-detect**, or enter the absolute path to `agy` (`agy.exe` on Windows).
+
+Copilot runs the bound `agy` CLI and reuses its account credentials. It does not
+ask for an Antigravity API key. The models returned by `agy models` become
+available under **Basic → Agents → Antigravity** and can also be enabled for
+**Quick Chat**.
+
 ### Alternative: Link Codex
 
 Copilot connects to Codex through the `codex-acp` adapter. If you already use Codex:
@@ -68,7 +81,7 @@ From Agent Chat Home, open **Projects** and select **New project**. A project ke
 
 ### Share Skills Across Agents
 
-Skills are reusable instruction packets for jobs such as reviewing a change or drafting a release note. Open **Settings → Copilot → Skills** to see skills from Copilot's shared skills folder and the native opencode, Claude, and Codex skill folders. Enable each skill for the agents that should use it; Copilot links shared skills into the right agent folders for you.
+Skills are reusable instruction packets for jobs such as reviewing a change or drafting a release note. Open **Settings → Copilot → Skills** to see skills from Copilot's shared skills folder and the native opencode, Claude, Codex, and Antigravity skill folders. Enable each skill for the agents that should use it; Copilot links shared skills into the right agent folders for you.
 
 Type `/` in Agent Chat to choose an available skill. Copilot also includes skills for Obsidian Markdown, Bases, Canvas, and the Obsidian CLI. Learn more in [Skills across agents](agent-mode-and-tools.md#skills-across-agents).
 
@@ -78,12 +91,12 @@ Create preset prompts under **Settings → Copilot → Command**. Run them from 
 
 ### Ask Without Leaving the Editor
 
-Run **Quick Ask** from the command palette, or assign it a hotkey under **Obsidian Settings → Hotkeys**. It opens a small prompt beside your cursor or selection for quick rewrites, explanations, and follow-up questions. Quick Ask uses your Quick Chat model, so set up a Copilot-hosted or BYOK model first.
+Run **Quick Ask** from the command palette, or assign it a hotkey under **Obsidian Settings → Hotkeys**. It opens a small prompt beside your cursor or selection for quick rewrites, explanations, and follow-up questions. Quick Ask uses your Quick Chat model. Quick Chat can use Copilot-hosted/BYOK models, or any enabled model from a bound opencode, Claude, Codex, or Antigravity account.
 
 ## Next Steps
 
 - [Agent Chat](agent-mode-and-tools.md): agents, permissions, context, models, and skills
 - [Projects](projects.md): focused agent workspaces
 - [Copilot Commands and Quick Ask](custom-commands.md): reusable prompts and in-editor help
-- [Model Sources and BYOK](llm-providers.md): BYOK setup for opencode and Quick Chat
+- [Model Sources and BYOK](llm-providers.md): BYOK and bound Agent accounts for Quick Chat
 - [Copilot Settings](settings.md): every settings tab explained

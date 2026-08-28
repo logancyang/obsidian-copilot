@@ -457,7 +457,7 @@ async function runMaterialize(
 
     // Resolve each present snapshot to its absolute, off-vault path so the
     // manifest can point the agent straight at it (the shared cache lives outside
-    // every project cwd; an absolute path is the only pointer all three backends
+    // every project cwd; an absolute path is the only pointer all four backends
     // can reach). conversionsLocation owns the layout, so the type→bucket mapping
     // is not duplicated here. Desktop-only, like the rest of this function.
     const manifestEntries = entries.map((entry) => ({
@@ -674,7 +674,7 @@ function resolveFolderPaths(
  * (folders do; see {@link resolveFolderPaths}). Trigger: a note included from
  * OUTSIDE the project cwd. Assessment: NOT a defect (P-low, no live trigger).
  * Under the soft-scope model the note's absolute path listed in the
- * `<project_context>` block is readable on all three backends today via
+ * `<project_context>` block is readable on all four backends today via
  * explicit-path read (verified — `designdocs/agent-projects/verify/ADDDIR_FINDINGS.md`).
  * add-dir is a claude-only autonomous-search enhancement codex/opencode ignore;
  * granting one note's whole parent folder would over-grant — the exact thing

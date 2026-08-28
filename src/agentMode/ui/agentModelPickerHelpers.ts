@@ -151,7 +151,7 @@ function appendFromEnabledEntries(
     const reported = reportedById.get(keepBaseModelId);
     if (reported) {
       // This reported-but-not-enabled row carries no per-model cloud-egress flag.
-      // For a cloud agent (claude/codex) the section-level pass in
+      // For a cloud agent (claude/codex/antigravity) the section-level pass in
       // `buildPickerEntries` still marks it. For opencode it can only be a
       // native/Zen model (opencode reports solely providers injected from the
       // enabled set, so a cloud BYOK model can't be reported-but-unenabled) —

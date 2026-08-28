@@ -1,6 +1,7 @@
 import {
   buildModelEnableGroups,
   opencodeOnlySubGroupLabel,
+  partitionChatCandidates,
   partitionCandidates,
   rowMatches,
   toRow,
@@ -21,7 +22,7 @@ function byokProvider(id: string, displayName: string): Provider {
 
 function agentProvider(
   id: string,
-  agentType: "opencode" | "claude" | "codex",
+  agentType: "opencode" | "claude" | "codex" | "antigravity",
   displayName = id
 ): Provider {
   return {
@@ -175,6 +176,37 @@ describe("opencodeOnlySubGroupLabel", () => {
     expect(opencodeOnlySubGroupLabel(model("c", "oc-agent", "bare-model"), provider)).toBe(
       "opencode"
     );
+  });
+});
+
+describe("partitionChatCandidates", () => {
+  it("includes all four Agent origins in Quick Chat candidates", () => {
+    const providers = Object.fromEntries(
+      (["opencode", "claude", "codex", "antigravity"] as const).map((agentType) => {
+        const provider = agentProvider(`${agentType}-provider`, agentType, agentType);
+        return [provider.providerId, provider];
+      })
+    );
+    const models = Object.keys(providers).map((providerId) =>
+      model(`model-${providerId}`, providerId, `${providerId}-model`)
+    );
+
+    const partition = partitionChatCandidates(models, providers, new Set(["model-codex-provider"]));
+
+    expect(partition.byokPlusCandidates).toHaveLength(0);
+    expect(partition.agentOriginCandidates.map((candidate) => candidate.provider.origin)).toEqual([
+      { kind: "agent", agentType: "opencode" },
+      { kind: "agent", agentType: "claude" },
+      { kind: "agent", agentType: "codex" },
+      { kind: "agent", agentType: "antigravity" },
+    ]);
+    expect(
+      partition.agentOriginCandidates.find(
+        (candidate) =>
+          candidate.provider.origin.kind === "agent" &&
+          candidate.provider.origin.agentType === "codex"
+      )?.enabled
+    ).toBe(true);
   });
 });
 

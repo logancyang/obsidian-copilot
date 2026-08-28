@@ -72,7 +72,7 @@ Create a `.md` file in that folder. The filename becomes the prompt name, and th
 
 In Quick Chat, open **Chat Settings** and choose a **System Prompt**. Select **None (use built-in prompt)** to return to Copilot's default.
 
-The selected system prompt applies only to Quick Chat. It is not sent to opencode, Claude, or Codex. Agent Chat reads `AGENTS.md` instead.
+The selected system prompt applies only to Quick Chat. For a bound-Agent model, Copilot includes it in the text prompt sent through that Agent's CLI binding; it does not configure the Agent Chat session. Agent Chat reads `AGENTS.md` instead.
 
 ## Examples and next steps
 

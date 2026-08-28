@@ -34,8 +34,8 @@ function joinPath(...parts: string[]): string {
  *
  * ### Why this cache lives off-vault
  *
- * It exists to hand **absolute file paths** to three external agent subprocesses
- * (claude/codex/opencode) that read the files themselves — so it must live
+ * It exists to hand **absolute file paths** to external agent subprocesses
+ * (claude/codex/opencode/antigravity) that read the files themselves — so it must live
  * somewhere they can reach, dedupe by source identity across projects, and
  * survive without vault sync.
  */
@@ -67,7 +67,7 @@ export function markersDir(app: App, projectId: string): string {
  * basename: remote kinds (web/youtube) live under {@link remotesDir}, converted
  * vault files under {@link filesDir}. The manifest lists this so the agent reads
  * the snapshot directly (the shared cache is outside every project's cwd, so an
- * absolute path is the only pointer reachable across all three backends).
+ * absolute path is the only pointer reachable across all four backends).
  */
 export function snapshotAbsPath(app: App, type: MaterializedSourceType, fileName: string): string {
   return joinPath(type === "file" ? filesDir(app) : remotesDir(app), fileName);

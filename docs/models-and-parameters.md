@@ -10,9 +10,10 @@ enabled, then choose the default for new chats.
 | --------------------------------------- | ----------------------------------------------------------------- |
 | Copilot-hosted models from your license | Quick Chat and **opencode**                                       |
 | Your API key or endpoint (BYOK)         | Quick Chat and **opencode**, when opencode supports that provider |
-| Models reported by opencode             | **opencode** only                                                 |
-| Models reported by Claude Code          | **Claude** only                                                   |
-| Models reported by Codex                | **Codex** only                                                    |
+| Models reported by opencode             | **opencode** and Quick Chat                                       |
+| Models reported by Claude Code          | **Claude** and Quick Chat                                         |
+| Models reported by Codex                | **Codex** and Quick Chat                                          |
+| Models reported by Antigravity          | **Antigravity** and Quick Chat                                    |
 
 The available lineups can change, so the lists in Copilot are the source of
 truth. See [Model Sources and BYOK](llm-providers.md) to activate a Copilot license, add
@@ -30,15 +31,15 @@ Open **Settings → Copilot → Basic → Agents**.
 5. If the selected agent model supports it, choose **Default effort**. The
    available effort levels come from the agent and model, so they vary.
 
-The four lists are independent:
+The five lists are independent:
 
 - **opencode** can combine Copilot-hosted models, compatible BYOK models, and
   models reported by opencode.
-- **Claude** and **Codex** show only models reported by their installed tools.
-  Their CLI accounts own access and billing; BYOK models are not added to these
-  lists.
-- **Quick Chat models** contains Copilot-hosted and BYOK chat models. Agent-owned
-  models do not appear here.
+- **Claude**, **Codex**, and **Antigravity** show only models reported by their
+  installed tools. Their accounts own access and billing; BYOK models are not
+  added to these lists.
+- **Quick Chat models** contains Copilot-hosted, BYOK, and enabled Agent-owned
+  models. Agent-owned models continue to run through their bound local Agent.
 
 New BYOK chat models start enabled for both Quick Chat and opencode. You can
 turn either copy off without affecting the other. Models newly reported by an
@@ -67,7 +68,7 @@ In **Quick Chat**, the picker shows only enabled **Quick Chat models**. Its
 | **opencode**   | Model; effort when the model reports it; **Default** or **Auto** permissions. **Plan** is not available.                                                                                                                                         |
 | **Claude**     | Model; effort when supported; **Default**, **Plan**, and **Auto** permissions. **Auto mode permissions** controls what Auto may approve. **Show extended thinking** controls whether reasoning blocks are displayed; it is separate from effort. |
 | **Codex**      | Model; effort when reported; whichever of **Default**, **Plan**, and **Auto** the installed adapter supports.                                                                                                                                    |
-| **Quick Chat** | Model only. Agent effort and permission controls do not apply.                                                                                                                                                                                   |
+| **Quick Chat** | Model only. Agent effort and permission controls do not apply; Agent-origin choices run through the bound Agent CLI.                                                                                                                             |
 
 **Default** uses the agent's normal approval behavior, **Plan** prepares a plan
 before editing, and **Auto** uses the selected agent's automatic permission
