@@ -143,6 +143,7 @@ export class AntigravityBackendProcess implements BackendProcess {
       "stream-json",
       "--model",
       session.modelId,
+      "--dangerously-skip-permissions",
     ];
     if (session.conversationId) args.push("--conversation", session.conversationId);
 
@@ -199,17 +200,23 @@ export class AntigravityBackendProcess implements BackendProcess {
         }
       };
 
+      const stdoutDecoder = new TextDecoder("utf-8");
+      const stderrDecoder = new TextDecoder("utf-8");
+
       child.stdout.on("data", (chunk) => {
-        lineBuffer += toText(chunk);
+        lineBuffer +=
+          typeof chunk === "string" ? chunk : stdoutDecoder.decode(chunk, { stream: true });
         const lines = lineBuffer.split(/\r?\n/);
         lineBuffer = lines.pop() ?? "";
         for (const line of lines) handleLine(line);
       });
       child.stderr.on("data", (chunk) => {
-        stderr += toText(chunk);
+        stderr += typeof chunk === "string" ? chunk : stderrDecoder.decode(chunk, { stream: true });
       });
       child.on("error", (error) => finish(error, "cancelled"));
       child.on("close", (code) => {
+        lineBuffer += stdoutDecoder.decode();
+        stderr += stderrDecoder.decode();
         if (lineBuffer) handleLine(lineBuffer);
         if (session.cancelRequested) {
           finish(null, "cancelled");
@@ -220,6 +227,8 @@ export class AntigravityBackendProcess implements BackendProcess {
             new Error(stderr.trim() || `Antigravity exited with code ${String(code)}.`),
             "cancelled"
           );
+        } else if (!sawText && stderr.trim()) {
+          finish(new Error(stderr.trim()), "end_turn");
         } else {
           finish(null, resultStopReason);
         }
@@ -392,10 +401,6 @@ function stopReasonFor(status: string | undefined): StopReason {
 function isErrorStatus(status: string | undefined): boolean {
   const normalized = status?.toLowerCase() ?? "";
   return normalized.includes("error") || normalized.includes("fail");
-}
-
-function toText(chunk: string | Uint8Array): string {
-  return typeof chunk === "string" ? chunk : new TextDecoder().decode(chunk);
 }
 
 function errorMessage(error: unknown): string {

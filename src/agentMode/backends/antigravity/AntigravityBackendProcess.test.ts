@@ -97,11 +97,9 @@ describe("AntigravityBackendProcess", () => {
         "stream-json",
         "--model",
         "gemini-3.7-flash-high",
+        "--dangerously-skip-permissions",
       ],
       expect.objectContaining({ cwd: "C:\\vault", windowsHide: true })
-    );
-    expect((spawnProcess.mock.calls as unknown[][])[0][0]).not.toContain(
-      "--dangerously-skip-permissions"
     );
     expect(child.stdin.write).toHaveBeenCalledWith(
       `${JSON.stringify({ event: "user", message: { content: "<user>hello</user>" } })}\n`
@@ -127,6 +125,49 @@ describe("AntigravityBackendProcess", () => {
       },
     ]);
     expect(runModels).toHaveBeenCalledTimes(1);
+  });
+
+  it("decodes multibyte UTF-8 stream chunks split across data events", async () => {
+    const child = new FakeChild();
+    const backend = new AntigravityBackendProcess({
+      binaryPath: "agy",
+      runModels: async () => "model-a  Model A\n",
+      spawnProcess: () => child,
+    });
+
+    const session = await backend.newSession({ cwd: "C:\\vault" });
+    const events: SessionEvent[] = [];
+    backend.registerSessionHandler(session.sessionId, (event) => events.push(event));
+    const resultPromise = backend.prompt({ sessionId: session.sessionId, prompt });
+
+    const encoder = new TextEncoder();
+    const fullJson = `${JSON.stringify({ event: "step_update", step_update: { text_delta: "Hello 世界" } })}\n`;
+    const fullBytes = encoder.encode(fullJson);
+
+    // Split 1 byte into the first multibyte character.
+    const prefixBytes = encoder.encode(fullJson.slice(0, fullJson.indexOf("世")));
+    const byteSplitIndex = prefixBytes.length + 1;
+    const chunk1 = fullBytes.subarray(0, byteSplitIndex);
+    const chunk2 = fullBytes.subarray(byteSplitIndex);
+
+    child.stdout.emit("data", chunk1);
+    child.stdout.emit("data", chunk2);
+    child.stdout.emit(
+      "data",
+      `${JSON.stringify({ event: "result", status: "completed", response: "Hello 世界" })}\n`
+    );
+    child.emit("close", 0);
+
+    await expect(resultPromise).resolves.toEqual({ stopReason: "end_turn" });
+    expect(events).toEqual([
+      {
+        sessionId: session.sessionId,
+        update: {
+          sessionUpdate: "agent_message_chunk",
+          content: { type: "text", text: "Hello 世界" },
+        },
+      },
+    ]);
   });
 
   it("rejects a CLI result error and cancels only the active child", async () => {
