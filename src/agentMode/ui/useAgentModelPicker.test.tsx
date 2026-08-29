@@ -50,7 +50,9 @@ jest.mock("./agentModelPickerHelpers", () => ({
     models: [],
     value: `${
       manager.getActiveSession()?.getState()?.model?.current.baseModelId ?? ""
-    }:${manager.getModelCacheSignature("opencode")}:${descriptors[0].getInstallState({} as never).kind}`,
+    }:${manager.getModelCacheSignature("opencode")}:${
+      descriptors[0].getInstallState({} as never).kind
+    }:${manager.getActiveSession()?.getPendingModelSelection()?.baseModelId ?? "none"}`,
     onChange: jest.fn(),
   }),
 }));
@@ -73,7 +75,7 @@ describe("useAgentModelPicker", () => {
   });
 
   describe("useAgentModelPicker()", () => {
-    it("rerenders from session, catalog, and backend readiness signals", () => {
+    it("rerenders from session, catalog, and backend readiness signals (https://github.com/Brevilabs/obsidian-copilot-private/issues/319)", () => {
       let state = stateWithModel("first");
       let catalogSignal = "catalog-one";
       let activeListener: (() => void) | null = null;
@@ -91,6 +93,7 @@ describe("useAgentModelPicker", () => {
         backendId: "opencode",
         getStatus: () => "idle",
         getState: () => state,
+        getPendingModelSelection: () => null,
         hasUserVisibleMessages: () => false,
       } as unknown as AgentSession;
       const manager = {
@@ -107,19 +110,19 @@ describe("useAgentModelPicker", () => {
       } as unknown as AgentSessionManager;
 
       const { result } = renderHook(() => useAgentModelPicker(manager, plugin));
-      expect(result.current?.value).toBe("first:catalog-one:ready");
+      expect(result.current?.value).toBe("first:catalog-one:ready:none");
 
       state = stateWithModel("second");
       act(() => activeListener?.());
-      expect(result.current?.value).toBe("second:catalog-one:ready");
+      expect(result.current?.value).toBe("second:catalog-one:ready:none");
 
       catalogSignal = "catalog-two";
       act(() => cacheListener?.());
-      expect(result.current?.value).toBe("second:catalog-two:ready");
+      expect(result.current?.value).toBe("second:catalog-two:ready:none");
 
       mockInstallKind = "incompatible";
       act(() => mockInstallListener?.());
-      expect(result.current?.value).toBe("second:catalog-two:incompatible");
+      expect(result.current?.value).toBe("second:catalog-two:incompatible:none");
     });
   });
 });

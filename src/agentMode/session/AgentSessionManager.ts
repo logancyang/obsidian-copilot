@@ -92,6 +92,7 @@ import type {
   LoadSessionOutput,
   ModeApplySpec,
   ModelSelection,
+  BackendState,
   PermissionDecision,
   PermissionPrompt,
   SessionId,
@@ -228,6 +229,8 @@ export interface AgentSessionManagerOptions {
    */
   askUserQuestionPrompter?: AskUserQuestionPrompter;
   resolveDescriptor: DescriptorResolver;
+  /** Decide whether a saved model must remain pending instead of becoming the active fallback. */
+  deferModelSelection?: (state: BackendState | null, selection: ModelSelection) => boolean;
   modelPreloader: AgentModelPreloader;
   /**
    * Persistence layer for Agent Mode chats. Optional only so legacy callers
@@ -1289,6 +1292,7 @@ export class AgentSessionManager {
       backendId: resolvedId,
       projectId,
       defaultModelSelection: resolvedSeed,
+      deferModelSelection: this.opts.deferModelSelection,
       getDescriptor: () => this.opts.resolveDescriptor(resolvedId),
       runFanoutTurn: (input) => this.runFanoutTurn(input),
       getDisplayName: (backendId) => this.resolveDescriptor(backendId).displayName,

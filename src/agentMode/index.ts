@@ -20,6 +20,7 @@ import { preloadInitialModels } from "./session/initialModelPreload";
 import { SkillManager } from "./skills";
 import { planManagedBuiltins } from "./skills/builtin/builtinSkills";
 import { removeSeededBuiltin, seedBuiltinSkills } from "./skills/builtin/seedBuiltinSkills";
+import { copilotPlusModelId } from "./backends/opencode/opencodeModelResolve";
 import { buildBuiltinSeedFs } from "./skills/builtin/miyoSearchSeed";
 import {
   createDefaultAskUserQuestionPrompter,
@@ -208,6 +209,26 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     permissionPrompter: prompter,
     askUserQuestionPrompter,
     resolveDescriptor: (id) => backendRegistry[id],
+    // The public catalog, not OpenCode's persisted provider rows, decides
+    // whether a Plus model is still available. This intentionally returns
+    // loading even when a stale backend catalog already contains the saved id.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/319
+    deferModelSelection: (state, selection) => {
+      const modelId = copilotPlusModelId(selection.baseModelId);
+      if (!modelId) return false;
+      const settings = getSettings();
+      const catalog = plugin.copilotPlusSync?.getSnapshot();
+      return (
+        !settings.isPaidUser ||
+        !settings.plusLicenseKey ||
+        !catalog ||
+        catalog.status !== "ready" ||
+        !catalog.models.some((model) => model.id === modelId) ||
+        !!state?.model?.availableModels.every(
+          (model) => model.baseModelId !== selection.baseModelId
+        )
+      );
+    },
     modelPreloader: preloader,
     persistenceManager,
     sessionIndex,

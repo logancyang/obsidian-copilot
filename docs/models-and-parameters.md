@@ -57,6 +57,18 @@ defaults are used for new chats and multi-agent answers. Changes to an explicit
 default apply to open chats on their next turn; choosing **Agent default**
 leaves open chats unchanged.
 
+Copilot fetches the Copilot-hosted model lineup once per plugin load. The plugin,
+Claude, and Codex keep loading independently. For an eligible user, opencode's
+first startup waits with a progress indicator so its model list is complete
+before the local agent opens; opencode is also disabled as a cross-agent choice
+during that wait. Persisted model rows are not treated as proof that a Plus
+model is still available.
+
+If the catalog cannot be reached, opencode continues with its own and BYOK
+models. A saved Copilot default remains selected as **Unavailable** instead of
+silently falling back, and the picker lets you choose another ready model. A
+plugin reload starts one new catalog request.
+
 In **Quick Chat**, the picker shows only enabled **Quick Chat models**. Its
 **Default model** is the model new Quick Chat conversations start with.
 

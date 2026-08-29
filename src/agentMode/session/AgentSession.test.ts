@@ -2485,6 +2485,74 @@ describe("AgentSession.create (via start)", () => {
     expect(session.getState()?.model?.current.baseModelId).toBe("anthropic/sonnet");
   });
 
+  it("loads the agent without adopting its fallback while the saved model registers (https://github.com/Brevilabs/obsidian-copilot-private/issues/319)", async () => {
+    const mock = makeMockBackend();
+    const fallbackState: BackendState = {
+      model: {
+        current: { baseModelId: "opencode/big-pickle", effort: null },
+        apply: { kind: "setModel" },
+        availableModels: [
+          {
+            baseModelId: "opencode/big-pickle",
+            name: "Big Pickle",
+            provider: "opencode",
+            effortOptions: [],
+          },
+          {
+            baseModelId: "openai/gpt-5",
+            name: "GPT-5",
+            provider: "openai",
+            effortOptions: [],
+          },
+          {
+            baseModelId: "copilot-plus/copilot-plus-flash",
+            name: "Persisted Copilot Plus Flash",
+            provider: "copilot-plus",
+            effortOptions: [],
+          },
+        ],
+      },
+      mode: null,
+    };
+    const alternateState: BackendState = {
+      ...fallbackState,
+      model: {
+        ...fallbackState.model!,
+        current: { baseModelId: "openai/gpt-5", effort: null },
+      },
+    };
+    mock.newSession.mockResolvedValueOnce({ sessionId: "acp-1", state: fallbackState });
+    mock.setSessionModel.mockResolvedValueOnce(alternateState);
+    const pendingSelection = {
+      baseModelId: "copilot-plus/copilot-plus-flash",
+      effort: null,
+    };
+    const session = AgentSession.start({
+      backend: mock.asBackend,
+      cwd: "/vault",
+      internalId: "internal-1",
+      backendId: "opencode",
+      defaultModelSelection: pendingSelection,
+      // Persisted OpenCode rows are stale cache; the unresolved live endpoint
+      // remains authoritative even though the saved id appears above.
+      deferModelSelection: () => true,
+      getDescriptor: () => makeWireOnlyDescriptor(),
+    });
+
+    await session.ready;
+
+    expect(session.getStatus()).toBe("idle");
+    expect(session.getPendingModelSelection()).toEqual(pendingSelection);
+    expect(session.getState()?.model?.current.baseModelId).toBe("opencode/big-pickle");
+    expect(mock.setSessionModel).not.toHaveBeenCalled();
+    expect(() => session.sendPrompt("do not use the fallback")).toThrow("Blocked");
+
+    await session.applyModelWireId("openai/gpt-5");
+
+    expect(session.getPendingModelSelection()).toBeNull();
+    expect(session.getState()?.model?.current.baseModelId).toBe("openai/gpt-5");
+  });
+
   it("seeds config-option opencode effort via the effort option, not the model id", async () => {
     // Regression: a cross-backend pick to config-option opencode (≥1.15.13)
     // must set the bare model on the model config option and the effort on the
@@ -2884,6 +2952,63 @@ describe("AgentSession.setConfigOption", () => {
     });
     await session.setConfigOption("effort", "low");
     expect(onModelChanged).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a loading saved model through mode replay and clears it only for an explicit model option (https://github.com/Brevilabs/obsidian-copilot-private/issues/319)", async () => {
+    const mock = makeMockBackend();
+    const fallbackState: BackendState = {
+      model: {
+        current: { baseModelId: "opencode/big-pickle", effort: null },
+        apply: { kind: "setConfigOption", configId: "model" },
+        availableModels: [
+          {
+            baseModelId: "opencode/big-pickle",
+            name: "Big Pickle",
+            provider: "opencode",
+            effortOptions: [],
+          },
+          {
+            baseModelId: "openai/gpt-5",
+            name: "GPT-5",
+            provider: "openai",
+            effortOptions: [],
+          },
+        ],
+      },
+      mode: null,
+    };
+    const alternateState: BackendState = {
+      ...fallbackState,
+      model: {
+        ...fallbackState.model!,
+        current: { baseModelId: "openai/gpt-5", effort: null },
+      },
+    };
+    mock.setSessionConfigOption
+      .mockResolvedValueOnce(fallbackState)
+      .mockResolvedValueOnce(alternateState);
+    const pendingSelection = {
+      baseModelId: "copilot-plus/copilot-plus-flash",
+      effort: null,
+    };
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "opencode",
+      initialState: fallbackState,
+      defaultModelSelection: pendingSelection,
+      deferModelSelection: () => true,
+    });
+
+    await session.setConfigOption("mode", "auto");
+
+    expect(session.getPendingModelSelection()).toEqual(pendingSelection);
+
+    await session.setConfigOption("model", "openai/gpt-5");
+
+    expect(session.getPendingModelSelection()).toBeNull();
+    expect(session.getState()?.model?.current.baseModelId).toBe("openai/gpt-5");
   });
 
   it("rethrows MethodUnsupportedError without notifying", async () => {

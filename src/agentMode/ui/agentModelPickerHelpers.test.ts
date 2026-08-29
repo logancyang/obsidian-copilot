@@ -87,6 +87,7 @@ describe("collectModelActiveContext", () => {
       getActiveSession: () => ({
         backendId: "codex",
         getState: () => activeState,
+        getPendingModelSelection: () => null,
         hasUserVisibleMessages: () => false,
       }),
       getActiveChatUIState: () => null,
@@ -100,6 +101,7 @@ describe("collectModelActiveContext", () => {
       getActiveSession: () => ({
         backendId: "codex",
         getState: () => null,
+        getPendingModelSelection: () => null,
         hasUserVisibleMessages: () => false,
       }),
       getActiveChatUIState: () => null,
@@ -297,63 +299,6 @@ describe("buildPickerEntries", () => {
     expect(entries.map((model) => model.name)).toEqual(["catalog-model"]);
   });
 
-  it("blocks switching from Claude to OpenCode until the Plus catalog settles (https://github.com/Brevilabs/obsidian-copilot-private/issues/319)", () => {
-    const claude = {
-      ...makeDescriptor("claude"),
-      getEnabledModelEntries: () => [
-        { baseModelId: "claude-sonnet", name: "Sonnet", credentialState: "ok" as const },
-      ],
-    } as unknown as BackendDescriptor;
-    const opencode = {
-      ...makeDescriptor("opencode"),
-      routesCopilotModels: true,
-      getEnabledModelEntries: () => [
-        {
-          baseModelId: "copilot-plus/cached-model",
-          name: "Cached Plus Model",
-          credentialState: "ok" as const,
-        },
-        { baseModelId: "opencode/free-model", name: "Free Model", credentialState: "ok" as const },
-      ],
-    } as unknown as BackendDescriptor;
-    const current = makeModelEntry("claude-sonnet", "Sonnet");
-    const manager = makeManager({
-      catalogById: {
-        claude: makeCatalog([current]),
-        opencode: makeCatalog([
-          makeModelEntry("copilot-plus/cached-model"),
-          makeModelEntry("opencode/free-model"),
-        ]),
-      },
-      preloadStatusById: { claude: "ready", opencode: "pending" },
-    });
-    const ctx: ModelActiveContext = {
-      activeSession: { backendId: "claude" } as unknown as AgentSession,
-      activeChatUIState: makeUIState({ canSwitchModel: true }),
-      activeBackendId: "claude",
-      activeDescriptor: claude,
-      activeSessionHasHistory: false,
-      activeModelState: makeModelState(current.baseModelId, [current]),
-      activeCurrentEntry: current,
-    };
-
-    const { entries } = buildPickerEntries(
-      manager,
-      [claude, opencode],
-      ctx,
-      { ...emptySettings, isPaidUser: true, plusLicenseKey: "license" },
-      [],
-      "loading"
-    );
-    const openCodeRows = entries.filter((entry) => entry._backendId === "opencode");
-
-    expect(openCodeRows).toHaveLength(1);
-    expect(openCodeRows[0]).toMatchObject({
-      displayName: "Loading models…",
-      _disabledReason: "Loading…",
-    });
-  });
-
   it("still shows a loading placeholder for a routing agent whose preload has not settled", () => {
     // The locked rows must not satisfy the "section produced nothing" check, or
     // an unlicensed user loses the per-agent loading row.
@@ -522,6 +467,169 @@ describe("buildPickerEntries", () => {
     const { entries } = buildPickerEntries(manager, [codex], ctx, emptySettings);
     expect(entries).toHaveLength(1);
     expect(entries[0].name).toBe("gpt-5");
+  });
+
+  it("keeps a registering saved model selected as loading while alternatives remain selectable (https://github.com/Brevilabs/obsidian-copilot-private/issues/319)", () => {
+    const fallback = makeModelEntry("opencode/big-pickle", "Big Pickle");
+    const alternate = makeModelEntry("openai/gpt-5", "GPT-5");
+    const persistedPlus = makeModelEntry(
+      "copilot-plus/copilot-plus-flash",
+      "Persisted Copilot Plus Flash"
+    );
+    const opencode = {
+      ...makeDescriptor("opencode"),
+      routesCopilotModels: true,
+      getEnabledModelEntries: () => [
+        { baseModelId: fallback.baseModelId, name: fallback.name, credentialState: "ok" as const },
+        {
+          baseModelId: alternate.baseModelId,
+          name: alternate.name,
+          credentialState: "ok" as const,
+        },
+        {
+          baseModelId: persistedPlus.baseModelId,
+          name: persistedPlus.name,
+          credentialState: "ok" as const,
+        },
+      ],
+    } as unknown as BackendDescriptor;
+    const manager = makeManager({
+      catalogById: { opencode: makeCatalog([fallback, alternate, persistedPlus]) },
+      preloadStatusById: { opencode: "ready" },
+    });
+    const pendingSelection = {
+      baseModelId: "copilot-plus/copilot-plus-flash",
+      effort: null,
+    };
+    const ctx: ModelActiveContext = {
+      activeSession: { backendId: "opencode" } as unknown as AgentSession,
+      activeChatUIState: makeUIState({ canSwitchModel: true }),
+      activeBackendId: "opencode",
+      activeDescriptor: opencode,
+      activeSessionHasHistory: false,
+      activeModelState: makeModelState(fallback.baseModelId, [fallback, alternate, persistedPlus]),
+      activeCurrentEntry: fallback,
+      activePendingSelection: pendingSelection,
+    };
+    const settingsWithCachedPlus = {
+      ...emptySettings,
+      providers: {
+        "plus-provider": {
+          providerId: "plus-provider",
+          providerType: "openai-compatible",
+          displayName: "Copilot",
+          origin: { kind: "copilot-plus" },
+          addedAt: 0,
+        },
+      },
+      configuredModels: [
+        {
+          configuredModelId: "configured-plus",
+          providerId: "plus-provider",
+          info: {
+            id: "copilot-plus-flash",
+            displayName: "Cached Copilot Plus Flash",
+            description: "Cached display metadata",
+          },
+          configuredAt: 0,
+        },
+      ],
+    } as unknown as CopilotSettings;
+
+    const { entries, valueKey } = buildPickerEntries(
+      manager,
+      [opencode],
+      ctx,
+      settingsWithCachedPlus,
+      [
+        {
+          id: "copilot-plus-flash",
+          displayName: "Copilot Plus Flash",
+          description: "From the live endpoint",
+        },
+      ]
+    );
+
+    const pending = entries.find((entry) => entry.name === pendingSelection.baseModelId);
+    expect(pending).toMatchObject({
+      displayName: "copilot-plus-flash",
+      _disabledReason: "Loading…",
+    });
+    expect(entries.filter((entry) => entry.name === pendingSelection.baseModelId)).toHaveLength(1);
+    expect(valueKey).toBe("opencode:copilot-plus/copilot-plus-flash|agent");
+    expect(entries.find((entry) => entry.name === alternate.baseModelId)?._disabledReason).toBe(
+      undefined
+    );
+
+    const offline = buildPickerEntries(
+      manager,
+      [opencode],
+      ctx,
+      settingsWithCachedPlus,
+      [],
+      "error"
+    ).entries.find((entry) => entry.name === pendingSelection.baseModelId);
+    expect(offline).toMatchObject({
+      displayName: "copilot-plus-flash",
+      _disabledReason: "Unavailable",
+    });
+  });
+
+  it("blocks switching from Claude to OpenCode until the Plus catalog settles (https://github.com/Brevilabs/obsidian-copilot-private/issues/319)", () => {
+    const claude = {
+      ...makeDescriptor("claude"),
+      getEnabledModelEntries: () => [
+        { baseModelId: "claude-sonnet", name: "Sonnet", credentialState: "ok" as const },
+      ],
+    } as unknown as BackendDescriptor;
+    const opencode = {
+      ...makeDescriptor("opencode"),
+      routesCopilotModels: true,
+      getEnabledModelEntries: () => [
+        {
+          baseModelId: "copilot-plus/cached-model",
+          name: "Cached Plus Model",
+          credentialState: "ok" as const,
+        },
+        { baseModelId: "opencode/free-model", name: "Free Model", credentialState: "ok" as const },
+      ],
+    } as unknown as BackendDescriptor;
+    const current = makeModelEntry("claude-sonnet", "Sonnet");
+    const manager = makeManager({
+      catalogById: {
+        claude: makeCatalog([current]),
+        opencode: makeCatalog([
+          makeModelEntry("copilot-plus/cached-model"),
+          makeModelEntry("opencode/free-model"),
+        ]),
+      },
+      preloadStatusById: { claude: "ready", opencode: "pending" },
+    });
+    const ctx: ModelActiveContext = {
+      activeSession: { backendId: "claude" } as unknown as AgentSession,
+      activeChatUIState: makeUIState({ canSwitchModel: true }),
+      activeBackendId: "claude",
+      activeDescriptor: claude,
+      activeSessionHasHistory: false,
+      activeModelState: makeModelState(current.baseModelId, [current]),
+      activeCurrentEntry: current,
+    };
+
+    const { entries } = buildPickerEntries(
+      manager,
+      [claude, opencode],
+      ctx,
+      { ...emptySettings, isPaidUser: true, plusLicenseKey: "license" },
+      [],
+      "loading"
+    );
+    const openCodeRows = entries.filter((entry) => entry._backendId === "opencode");
+
+    expect(openCodeRows).toHaveLength(1);
+    expect(openCodeRows[0]).toMatchObject({
+      displayName: "Loading models…",
+      _disabledReason: "Loading…",
+    });
   });
 
   it("filters to the enabled set via getEnabledModelEntries", () => {
