@@ -3,7 +3,7 @@ import { selfHostYoutube4llm } from "@/LLMProviders/selfHostServices";
 import { isSelfHostModeValid } from "@/plusUtils";
 import { getSettings } from "@/settings/model";
 import { extractAllYoutubeUrls } from "@/utils";
-import { z } from "zod";
+import * as z from "zod";
 import { createLangChainTool } from "./createLangChainTool";
 import { logError } from "@/logger";
 

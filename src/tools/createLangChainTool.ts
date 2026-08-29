@@ -4,7 +4,7 @@
  */
 
 import { tool } from "@langchain/core/tools";
-import { z } from "zod";
+import * as z from "zod";
 
 /**
  * Options for creating a LangChain tool

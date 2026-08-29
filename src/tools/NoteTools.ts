@@ -1,5 +1,5 @@
 import { App, TFile } from "obsidian";
-import { z } from "zod";
+import * as z from "zod";
 import { logInfo, logWarn } from "@/logger";
 import { createLangChainTool } from "./createLangChainTool";
 

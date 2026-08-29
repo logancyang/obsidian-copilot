@@ -1,4 +1,4 @@
-import { z } from "zod";
+import * as z from "zod";
 import { runObsidianCliCommand } from "@/services/obsidianCli/ObsidianCliClient";
 import { throwCliFailure } from "@/services/obsidianCli/cliErrors";
 import { createLangChainTool } from "./createLangChainTool";

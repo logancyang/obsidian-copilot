@@ -2,7 +2,7 @@ import { App, TFile } from "obsidian";
 import { APPLY_VIEW_TYPE } from "@/components/composer/ApplyView";
 import { diffTrimmedLines } from "diff";
 import { ApplyViewResult } from "@/types";
-import { z } from "zod";
+import * as z from "zod";
 import { createLangChainTool } from "./createLangChainTool";
 import { ensureFolderExists, sanitizeFilePath } from "@/utils";
 import { getSettings } from "@/settings/model";

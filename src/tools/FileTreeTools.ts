@@ -1,6 +1,6 @@
 import { App, TFile, TFolder } from "obsidian";
 import { getMatchingPatterns, shouldIndexFile } from "@/search/searchUtils";
-import { z } from "zod";
+import * as z from "zod";
 import { createLangChainTool } from "./createLangChainTool";
 
 interface FileTreeNode {
