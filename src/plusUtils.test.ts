@@ -207,7 +207,7 @@ describe("plusUtils", () => {
     it("makes the configured Copilot model the chat default", async () => {
       mockGetSettings.mockReturnValue(settingsWithFlashConfigured());
 
-      await applyLicenseSettings();
+      await applyLicenseSettings("copilot-plus-flash");
 
       expect(mockSetModelKey).toHaveBeenCalledWith(FLASH_CONFIGURED_ID);
       expect(mockSetSettings).toHaveBeenCalledWith({ defaultModelKey: FLASH_CONFIGURED_ID });
@@ -216,7 +216,7 @@ describe("plusUtils", () => {
     it("writes no chain type or embedding model — both belong to retired surfaces", async () => {
       mockGetSettings.mockReturnValue(settingsWithFlashConfigured());
 
-      await applyLicenseSettings();
+      await applyLicenseSettings("copilot-plus-flash");
 
       const written = mockSetSettings.mock.calls.flatMap((call) => Object.keys(call[0]));
       expect(written).toEqual(["defaultModelKey"]);
@@ -226,7 +226,7 @@ describe("plusUtils", () => {
       mockGetSettings.mockReturnValue(settingsWithFlashConfigured());
       mockApplyCopilotDefaultModel.mockReturnValue(["opencode"]);
 
-      await applyLicenseSettings();
+      await applyLicenseSettings("copilot-plus-flash");
 
       expect(mockApplyCopilotDefaultModel).toHaveBeenCalledWith(FLASH_CONFIGURED_ID);
     });
@@ -235,7 +235,7 @@ describe("plusUtils", () => {
       mockIsDesktopRuntime.mockReturnValue(false);
       mockGetSettings.mockReturnValue(settingsWithFlashConfigured());
 
-      await applyLicenseSettings();
+      await applyLicenseSettings("copilot-plus-flash");
 
       expect(mockSetSettings).toHaveBeenCalledWith({ defaultModelKey: FLASH_CONFIGURED_ID });
       expect(mockApplyCopilotDefaultModel).not.toHaveBeenCalled();
@@ -244,7 +244,7 @@ describe("plusUtils", () => {
     it("applies once provider sync enrolls the model, rather than no-opping on a click that beat it", async () => {
       mockGetSettings.mockReturnValue(buildSettings({}));
 
-      const applied = applyLicenseSettings();
+      const applied = applyLicenseSettings("copilot-plus-flash");
       // Mid-flight: the click landed before enrollment, so nothing is written yet.
       expect(mockSetSettings).not.toHaveBeenCalled();
 
@@ -259,7 +259,7 @@ describe("plusUtils", () => {
     it("ignores settings changes that still lack the model", async () => {
       mockGetSettings.mockReturnValue(buildSettings({}));
 
-      const applied = applyLicenseSettings();
+      const applied = applyLicenseSettings("copilot-plus-flash");
       emitSettings(buildSettings({ userId: "user-123" }));
       expect(mockSetSettings).not.toHaveBeenCalled();
 
@@ -274,7 +274,7 @@ describe("plusUtils", () => {
       try {
         mockGetSettings.mockReturnValue(buildSettings({}));
 
-        const applied = applyLicenseSettings();
+        const applied = applyLicenseSettings("copilot-plus-flash");
         jest.advanceTimersByTime(15_000);
         await applied;
 
@@ -290,7 +290,7 @@ describe("plusUtils", () => {
     it("leaves no settings listener behind once it settles", async () => {
       mockGetSettings.mockReturnValue(buildSettings({}));
 
-      const applied = applyLicenseSettings();
+      const applied = applyLicenseSettings("copilot-plus-flash");
       emitSettings(settingsWithFlashConfigured());
       await applied;
 
@@ -322,7 +322,7 @@ describe("plusUtils", () => {
 
       jest.useFakeTimers();
       try {
-        const applied = applyLicenseSettings();
+        const applied = applyLicenseSettings("copilot-plus-flash");
         jest.advanceTimersByTime(15_000);
         await applied;
       } finally {
@@ -338,7 +338,7 @@ describe("plusUtils", () => {
         throw new Error("registry unavailable");
       });
 
-      await expect(applyLicenseSettings()).resolves.toBeUndefined();
+      await expect(applyLicenseSettings("copilot-plus-flash")).resolves.toBeUndefined();
       expect(mockSetSettings).toHaveBeenCalledWith({ defaultModelKey: FLASH_CONFIGURED_ID });
     });
   });

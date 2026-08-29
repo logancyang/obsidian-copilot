@@ -2,7 +2,6 @@ import { setModelKey } from "@/aiParams";
 import { CopilotPlusExpiredModal } from "@/components/modals/CopilotPlusExpiredModal";
 import {
   ChatModelProviders,
-  ChatModels,
   EmbeddingModelProviders,
   PLUS_UTM_MEDIUMS,
   PlusUtmMedium,
@@ -21,8 +20,6 @@ import {
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { App, Notice } from "obsidian";
 import React from "react";
-
-export const DEFAULT_COPILOT_PLUS_CHAT_MODEL = ChatModels.COPILOT_PLUS_FLASH;
 
 /**
  * How often a running session re-validates its license. Well inside the token's
@@ -57,24 +54,6 @@ export function isPlusModel(modelKey: string): boolean {
 }
 
 /**
- * Every wire form a Copilot chat model can take in a backend's stored default:
- * bare, and prefixed with the Copilot provider as opencode records it. Matching
- * these exactly, rather than searching for the model id inside the stored value,
- * is what keeps a BYOK model of a similar name (`openrouter/copilot-plus-flash`,
- * `copilot-plus-flash-v2`) from being mistaken for the licensed one.
- *
- * The prefix is `ChatModelProviders.COPILOT_PLUS` rather than opencode's own
- * copy of it, which lives behind the desktop-only Agent Mode barrel; a test in
- * `opencodeModelResolve.test.ts` pins the two together.
- */
-const LICENSED_DEFAULT_WIRE_IDS: ReadonlySet<string> = Object.freeze(
-  new Set([
-    DEFAULT_COPILOT_PLUS_CHAT_MODEL as string,
-    `${ChatModelProviders.COPILOT_PLUS}/${DEFAULT_COPILOT_PLUS_CHAT_MODEL}`,
-  ])
-);
-
-/**
  * Whether any default a license installed still points at a Copilot model — the
  * chat default, or an agent's stored default from {@link applyLicenseSettings}.
  * Both matter on expiry: a user can move chat onto their own model and leave an
@@ -88,7 +67,7 @@ export function isUsingLicensedModels(settings: CopilotSettings): boolean {
   if (isPlusModel(settings.defaultModelKey)) return true;
   return Object.values(settings.agentMode?.backends ?? {}).some((backend) => {
     const baseModelId = backend?.defaultModel?.baseModelId;
-    return baseModelId !== undefined && LICENSED_DEFAULT_WIRE_IDS.has(baseModelId);
+    return baseModelId?.startsWith(`${ChatModelProviders.COPILOT_PLUS}/`) === true;
   });
 }
 
@@ -423,17 +402,18 @@ export function useIsSelfHostEligible(): boolean | undefined {
  */
 const CONFIGURED_MODEL_WAIT_MS = 15_000;
 
-/** The configured Copilot chat model in `settings`, or `undefined` if the provider sync has not enrolled it. */
-function findLicensedChatModelId(settings: CopilotSettings): string | undefined {
+/** The requested server-published Copilot model in settings, once provider sync enrolls it. */
+function findLicensedChatModelId(
+  settings: CopilotSettings,
+  serverModelId: string
+): string | undefined {
   const plusProviderIds = new Set(
     Object.values(settings.providers)
       .filter((provider) => provider.origin.kind === "copilot-plus")
       .map((provider) => provider.providerId)
   );
   return settings.configuredModels.find(
-    (model) =>
-      plusProviderIds.has(model.providerId) &&
-      model.info.id === (DEFAULT_COPILOT_PLUS_CHAT_MODEL as string)
+    (model) => plusProviderIds.has(model.providerId) && model.info.id === serverModelId
   )?.configuredModelId;
 }
 
@@ -447,8 +427,8 @@ function findLicensedChatModelId(settings: CopilotSettings): string | undefined 
  * that persists the same change. Reading the configured set once would let a
  * user who clicks Apply Now inside that window apply nothing at all.
  */
-function waitForLicensedChatModelId(): Promise<string | undefined> {
-  const present = findLicensedChatModelId(getSettings());
+function waitForLicensedChatModelId(serverModelId: string): Promise<string | undefined> {
+  const present = findLicensedChatModelId(getSettings(), serverModelId);
   if (present) return Promise.resolve(present);
   return new Promise((resolve) => {
     let settled = false;
@@ -460,20 +440,20 @@ function waitForLicensedChatModelId(): Promise<string | undefined> {
       resolve(id);
     };
     const unsubscribe = subscribeToSettingsChange((_prev, next) => {
-      const id = findLicensedChatModelId(next);
+      const id = findLicensedChatModelId(next, serverModelId);
       if (id) settle(id);
     });
     const timer = window.setTimeout(() => settle(undefined), CONFIGURED_MODEL_WAIT_MS);
     // Enrollment can land between the check above and this subscription, which
     // would otherwise leave nothing left to notify us.
-    const raced = findLicensedChatModelId(getSettings());
+    const raced = findLicensedChatModelId(getSettings(), serverModelId);
     if (raced) settle(raced);
   });
 }
 
 /**
- * Install the licensed default model — Copilot Plus Flash — everywhere the
- * user will meet a model picker: chat, and every agent that can route it.
+ * Install the server-selected licensed default everywhere the user will meet a
+ * model picker: chat, and every agent that can route it.
  *
  * License activation already registers the Copilot provider and enrolls its
  * models; this is the opinionated half, choosing which of them a licensed user
@@ -483,13 +463,13 @@ function waitForLicensedChatModelId(): Promise<string | undefined> {
  * Applies nothing if the model never arrives, rather than storing a key no
  * picker can resolve — and says so, since by then the modal has closed and
  * silence would look like success.
+ *
+ * @param serverModelId - First model id from the current lifecycle's ordered server catalog.
  */
-export async function applyLicenseSettings(): Promise<void> {
-  const configuredModelId = await waitForLicensedChatModelId();
+export async function applyLicenseSettings(serverModelId: string): Promise<void> {
+  const configuredModelId = await waitForLicensedChatModelId(serverModelId);
   if (!configuredModelId) {
-    logWarn(
-      `applyLicenseSettings: ${DEFAULT_COPILOT_PLUS_CHAT_MODEL} was never configured, nothing to apply`
-    );
+    logWarn(`applyLicenseSettings: ${serverModelId} was never configured, nothing to apply`);
     new Notice(
       "Copilot could not set a default model. Pick one under Settings → Basic → Agents once your license is active."
     );

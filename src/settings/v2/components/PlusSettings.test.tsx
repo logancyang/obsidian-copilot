@@ -4,6 +4,11 @@ import React from "react";
 
 const updateSetting = jest.fn<void, unknown[]>();
 const mockApp = {};
+const mockWaitForSettled = jest.fn(async () => ({
+  status: "ready" as const,
+  models: [{ id: "tomorrow-model", displayName: "Tomorrow Model" }],
+}));
+const mockWelcomeConstructor = jest.fn();
 let currentSettings = { ...DEFAULT_SETTINGS };
 jest.mock("@/settings/model", () => ({
   updateSetting: (...a: unknown[]) => updateSetting(...a),
@@ -31,8 +36,16 @@ jest.mock("@/context", () => ({
   useApp: () => mockApp,
 }));
 
+jest.mock("@/contexts/PluginContext", () => ({
+  // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook
+  usePlugin: () => ({ copilotPlusSync: { waitForSettled: mockWaitForSettled } }),
+}));
+
 jest.mock("@/components/modals/CopilotPlusWelcomeModal", () => ({
   CopilotPlusWelcomeModal: class {
+    constructor(...args: unknown[]) {
+      mockWelcomeConstructor(...args);
+    }
     open() {}
   },
 }));
@@ -103,6 +116,22 @@ describe("PlusSettings", () => {
       });
 
       expect(screen.getByText("Inactive")).toBeTruthy();
+    });
+
+    it("offers the first model in the server catalog rather than a client-declared default (https://github.com/Brevilabs/obsidian-copilot-private/issues/319)", async () => {
+      checkIsPaidUser.mockResolvedValue(true);
+
+      render(<PlusSettings />);
+      await act(async () => {
+        screen.getByRole("button", { name: "Apply" }).click();
+      });
+
+      expect(mockWaitForSettled).toHaveBeenCalledTimes(1);
+      expect(mockWelcomeConstructor).toHaveBeenCalledWith(
+        mockApp,
+        "tomorrow-model",
+        "Tomorrow Model"
+      );
     });
   });
 });

@@ -90,12 +90,7 @@ export type {
 
 export { CopilotPlusSetupApi } from "./setup/CopilotPlusSetupApi";
 export type { PlusSetupResult, RegisterPlusProviderInput } from "./setup/CopilotPlusSetupApi";
-export {
-  COPILOT_PLUS_DEFAULT_ENABLED_MODELS,
-  COPILOT_PLUS_MODELS,
-  createCopilotPlusSyncQueue,
-  plusSyncNeeded,
-} from "./setup/copilotPlusSync";
+export { createCopilotPlusSyncQueue, plusSyncNeeded } from "./setup/copilotPlusSync";
 export type {
   CopilotPlusCatalogSnapshot,
   CopilotPlusCatalogStatus,

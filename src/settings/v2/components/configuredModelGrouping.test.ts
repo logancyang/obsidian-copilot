@@ -6,8 +6,12 @@ import {
   toRow,
   type Candidate,
 } from "./configuredModelGrouping";
-import type { ConfiguredModel, Provider } from "@/modelManagement";
+import type { ConfiguredModel, ModelInfo, Provider } from "@/modelManagement";
 import { ModelCapability } from "@/constants";
+
+const LIVE_PLUS_MODELS: readonly ModelInfo[] = Object.freeze([
+  { id: "tomorrow-flash", displayName: "Tomorrow Flash", description: "From the endpoint" },
+]);
 
 function byokProvider(id: string, displayName: string): Provider {
   return {
@@ -417,7 +421,7 @@ describe("buildModelEnableGroups", () => {
       agentOriginCandidates: [],
     };
 
-    const groups = buildModelEnableGroups(partition, true, "", true);
+    const groups = buildModelEnableGroups(partition, true, "", true, LIVE_PLUS_MODELS);
 
     // Same position, badge, and tooltip a licensed user's group gets — only the
     // rows differ, and only by being unusable.
@@ -485,8 +489,8 @@ describe("buildModelEnableGroups", () => {
   it("filters the locked rows by the search query like any others", () => {
     const empty = { byokPlusCandidates: [], agentOriginCandidates: [] };
 
-    const matching = buildModelEnableGroups(empty, true, "flash", true);
-    const missing = buildModelEnableGroups(empty, true, "no-such-model", true);
+    const matching = buildModelEnableGroups(empty, true, "flash", true, LIVE_PLUS_MODELS);
+    const missing = buildModelEnableGroups(empty, true, "no-such-model", true, LIVE_PLUS_MODELS);
 
     expect(matching[0].rows.length).toBeGreaterThan(0);
     expect(matching[0].rows.every((row) => /flash/i.test(row.label + row.wireId))).toBe(true);

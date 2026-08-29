@@ -4,15 +4,24 @@ import React from "react";
 
 describe("CopilotPlusWelcomeModal", () => {
   describe("CopilotPlusWelcomeModalContent()", () => {
-    it("names the model it is offering to make the default", () => {
-      render(<CopilotPlusWelcomeModalContent onConfirm={jest.fn()} onCancel={jest.fn()} />);
+    const renderContent = (onConfirm = jest.fn(), onCancel = jest.fn()) =>
+      render(
+        <CopilotPlusWelcomeModalContent
+          modelName="Tomorrow Model"
+          onConfirm={onConfirm}
+          onCancel={onCancel}
+        />
+      );
 
-      expect(screen.getByText("copilot-plus-flash")).toBeTruthy();
+    it("names the server-selected model it is offering to make the default (https://github.com/Brevilabs/obsidian-copilot-private/issues/319)", () => {
+      renderContent();
+
+      expect(screen.getByText("Tomorrow Model")).toBeTruthy();
       expect(screen.getByText(/default model for chat and your agents/)).toBeTruthy();
     });
 
     it("names what the license includes, including the symposium link", () => {
-      render(<CopilotPlusWelcomeModalContent onConfirm={jest.fn()} onCancel={jest.fn()} />);
+      renderContent();
 
       const link = screen.getByRole("link", { name: "symposium.md" });
       expect(link.getAttribute("href")).toBe("https://symposium.md");
@@ -21,9 +30,7 @@ describe("CopilotPlusWelcomeModal", () => {
     });
 
     it("promises no capability a lower paid tier may not have", () => {
-      const { container } = render(
-        <CopilotPlusWelcomeModalContent onConfirm={jest.fn()} onCancel={jest.fn()} />
-      );
+      const { container } = renderContent();
 
       // Multi-agent is tier >= Plus (see `canUseMultiAgent`), so a Lite user
       // opening this modal must not be told they have it. Same for a blanket
@@ -32,9 +39,7 @@ describe("CopilotPlusWelcomeModal", () => {
     });
 
     it("offers to apply no mode, no embedding model, and no vault rebuild", () => {
-      const { container } = render(
-        <CopilotPlusWelcomeModalContent onConfirm={jest.fn()} onCancel={jest.fn()} />
-      );
+      const { container } = renderContent();
 
       // The settings this used to apply, by the labels it applied them under —
       // "embedding models" still appears in the feature list, which is true and
@@ -46,7 +51,7 @@ describe("CopilotPlusWelcomeModal", () => {
     it("confirms on Apply Now and declines on Apply Later, never both", () => {
       const onConfirm = jest.fn();
       const onCancel = jest.fn();
-      render(<CopilotPlusWelcomeModalContent onConfirm={onConfirm} onCancel={onCancel} />);
+      renderContent(onConfirm, onCancel);
 
       fireEvent.click(screen.getByRole("button", { name: "Apply Now" }));
       expect(onConfirm).toHaveBeenCalledTimes(1);

@@ -4,17 +4,19 @@ import { Root } from "react-dom/client";
 import { Button } from "@/components/ui/button";
 import { createPluginRoot } from "@/utils/react/createPluginRoot";
 import { logError } from "@/logger";
-import { DEFAULT_COPILOT_PLUS_CHAT_MODEL, applyLicenseSettings } from "@/plusUtils";
+import { applyLicenseSettings } from "@/plusUtils";
 
 export interface CopilotPlusWelcomeModalContentProps {
   onConfirm: () => void;
   onCancel: () => void;
+  modelName: string;
 }
 
 /** Body of {@link CopilotPlusWelcomeModal}, exported prop-driven so the gallery can render it. */
 export function CopilotPlusWelcomeModalContent({
   onConfirm,
   onCancel,
+  modelName,
 }: CopilotPlusWelcomeModalContentProps) {
   return (
     <div className="tw-flex tw-flex-col tw-gap-4">
@@ -25,9 +27,8 @@ export function CopilotPlusWelcomeModalContent({
           much more!
         </p>
         <p>
-          Would you like to make <b className="tw-text-accent">{DEFAULT_COPILOT_PLUS_CHAT_MODEL}</b>{" "}
-          the default model for chat and your agents now? You can always change this later in
-          Settings.
+          Would you like to make <b className="tw-text-accent">{modelName}</b> the default model for
+          chat and your agents now? You can always change this later in Settings.
         </p>
       </div>
       <div className="tw-flex tw-w-full tw-justify-end tw-gap-2">
@@ -42,11 +43,16 @@ export function CopilotPlusWelcomeModalContent({
   );
 }
 
+/** Hosts the post-license default offer for one server-selected Plus model. */
 export class CopilotPlusWelcomeModal extends Modal {
   private root: Root;
+  private readonly modelId: string;
+  private readonly modelName: string;
 
-  constructor(app: App) {
+  constructor(app: App, modelId: string, modelName: string) {
     super(app);
+    this.modelId = modelId;
+    this.modelName = modelName;
     // https://docs.obsidian.md/Reference/TypeScript+API/Modal/setTitle
     // @ts-ignore
     this.setTitle("Welcome to Copilot 🚀");
@@ -57,7 +63,7 @@ export class CopilotPlusWelcomeModal extends Modal {
     this.root = createPluginRoot(contentEl, this.app);
 
     const handleConfirm = () => {
-      void applyLicenseSettings().catch((error) =>
+      void applyLicenseSettings(this.modelId).catch((error) =>
         logError("Failed to apply the licensed default model", error)
       );
       this.close();
@@ -68,7 +74,11 @@ export class CopilotPlusWelcomeModal extends Modal {
     };
 
     this.root.render(
-      <CopilotPlusWelcomeModalContent onConfirm={handleConfirm} onCancel={handleCancel} />
+      <CopilotPlusWelcomeModalContent
+        modelName={this.modelName}
+        onConfirm={handleConfirm}
+        onCancel={handleCancel}
+      />
     );
   }
 

@@ -246,15 +246,6 @@ export const DEFAULT_MODEL_SETTING = {
 export const DEFAULT_OLLAMA_NUM_CTX = 131072;
 
 export enum ChatModels {
-  COPILOT_PLUS_FLASH = "copilot-plus-flash",
-  // Additional Copilot Plus relay models (served via the brevilabs proxy).
-  COPILOT_PLUS_KIMI_K2_6 = "kimi-k2.6",
-  COPILOT_PLUS_GLM_5_2 = "glm-5.2",
-  COPILOT_PLUS_KIMI_K2_7_CODE = "kimi-k2.7-code",
-  COPILOT_PLUS_DEEPSEEK_V4_PRO = "deepseek-v4-pro",
-  COPILOT_PLUS_DEEPSEEK_V4_FLASH_0731 = "deepseek-v4-flash-0731",
-  COPILOT_PLUS_MIMO_V2_5 = "mimo-v2.5",
-  COPILOT_PLUS_MINIMAX_M2_7 = "minimax-m2.7",
   GPT_5_5 = "gpt-5.5",
   GPT_5_4_mini = "gpt-5.4-mini",
   GPT_41 = "gpt-4.1",
@@ -316,15 +307,6 @@ export const MODEL_CAPABILITIES: Record<ModelCapability, string> = {
 
 export const BUILTIN_CHAT_MODELS: CustomModel[] = [
   // Enabled models first
-  {
-    name: ChatModels.COPILOT_PLUS_FLASH,
-    provider: ChatModelProviders.COPILOT_PLUS,
-    enabled: true,
-    isBuiltIn: true,
-    core: true,
-    plusExclusive: true,
-    capabilities: [ModelCapability.VISION],
-  },
   {
     name: ChatModels.OPENROUTER_GEMINI_2_5_FLASH,
     provider: ChatModelProviders.OPENROUTERAI,

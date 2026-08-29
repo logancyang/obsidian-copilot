@@ -2,7 +2,11 @@ import { Notice } from "obsidian";
 import { logError } from "@/logger";
 import type { ModelCapability } from "@/constants";
 import type { ModelSelectorEntry } from "@/components/ui/ModelSelector";
-import { lockedCopilotEntries, shouldPreviewCopilotModels } from "@/lib/lockedCopilotEntries";
+import {
+  type CopilotPlusCatalogModel,
+  lockedCopilotEntries,
+  shouldPreviewCopilotModels,
+} from "@/lib/lockedCopilotEntries";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
 import type { AgentChatUIState } from "@/agentMode/session/AgentChatUIState";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
@@ -24,6 +28,7 @@ import type { AgentModelPickerOverride } from "./useAgentModelPicker";
 
 /** Frozen empty effort list — referential stability for the "no effort" case. */
 export const EMPTY_EFFORT_OPTIONS = Object.freeze([]) as unknown as EffortOption[];
+const EMPTY_PLUS_MODELS: readonly CopilotPlusCatalogModel[] = Object.freeze([]);
 
 /**
  * Right-side flag for an enabled model whose provider has no API key. Shared
@@ -312,7 +317,8 @@ export function buildPickerEntries(
   manager: AgentSessionManager,
   descriptors: BackendDescriptor[],
   ctx: ModelActiveContext,
-  settings: CopilotSettings
+  settings: CopilotSettings,
+  copilotPlusModels: readonly CopilotPlusCatalogModel[] = EMPTY_PLUS_MODELS
 ): { entries: ModelSelectorEntry[]; valueKey: string } {
   const entries: ModelSelectorEntry[] = [];
   for (const descriptor of descriptors) {
@@ -376,11 +382,15 @@ export function buildPickerEntries(
     // above so neither relabels these rows: an unset-up agent's readiness reason
     // would replace "Copilot license required" with the wrong fix, and the
     // emptiness check for the loading/error placeholder must not count them.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/319
     if (descriptor.routesCopilotModels && shouldPreviewCopilotModels(settings.providers)) {
       entries.splice(
         sectionStart,
         0,
-        ...lockedCopilotEntries({ group: descriptor.displayName, backendId: descriptor.id })
+        ...lockedCopilotEntries(copilotPlusModels, {
+          group: descriptor.displayName,
+          backendId: descriptor.id,
+        })
       );
     }
   }
@@ -633,11 +643,18 @@ export function buildAgentModelPicker(args: {
   manager: AgentSessionManager | null;
   descriptors: BackendDescriptor[];
   settings: CopilotSettings;
+  copilotPlusModels?: readonly CopilotPlusCatalogModel[];
 }): AgentModelPickerOverride | null {
-  const { manager, descriptors, settings } = args;
+  const { manager, descriptors, settings, copilotPlusModels = EMPTY_PLUS_MODELS } = args;
   if (!manager) return null;
   const ctx = collectModelActiveContext(manager);
-  const { entries, valueKey } = buildPickerEntries(manager, descriptors, ctx, settings);
+  const { entries, valueKey } = buildPickerEntries(
+    manager,
+    descriptors,
+    ctx,
+    settings,
+    copilotPlusModels
+  );
   const onChange = buildModelOnChange(manager, ctx, entries);
   return {
     models: entries,

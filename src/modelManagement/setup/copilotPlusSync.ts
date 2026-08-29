@@ -11,7 +11,7 @@ import {
   type BrevilabsModelEntry,
   type BrevilabsModelsResponse,
 } from "@/LLMProviders/brevilabsClient";
-import { BREVILABS_MODELS_BASE_URL, ChatModels } from "@/constants";
+import { BREVILABS_MODELS_BASE_URL } from "@/constants";
 import { logError, logWarn } from "@/logger";
 import type { ModelManagementApi } from "@/modelManagement/createModelManagement";
 import { parseCopilotPlusContextLength } from "@/modelManagement/setup/copilotPlusCatalog";
@@ -21,78 +21,6 @@ import type { CopilotSettings } from "@/settings/model";
 const EMPTY_MODELS: readonly ModelInfo[] = Object.freeze([]);
 const EMPTY_REASONING_EFFORTS: readonly string[] = Object.freeze([]);
 const CATALOG_TIMEOUT_MS = 30_000;
-
-export const COPILOT_PLUS_MODELS: readonly ModelInfo[] = Object.freeze([
-  {
-    id: ChatModels.COPILOT_PLUS_FLASH,
-    displayName: "Copilot Plus Flash",
-    description: "The default model: fastest responses and the most quota.",
-    toolCall: true,
-    reasoning: true,
-    modalities: { input: ["text", "image"], output: ["text"] },
-  },
-  {
-    id: ChatModels.COPILOT_PLUS_KIMI_K2_6,
-    displayName: "Kimi K2.6",
-    description: "Good for long-running reasoning tasks.",
-    toolCall: true,
-    modalities: { input: ["text"], output: ["text"] },
-  },
-  {
-    id: ChatModels.COPILOT_PLUS_GLM_5_2,
-    displayName: "GLM-5.2",
-    description: "A long-horizon frontier open model that beats some of the best closed models.",
-    toolCall: true,
-    reasoning: true,
-    modalities: { input: ["text"], output: ["text"] },
-  },
-  {
-    id: ChatModels.COPILOT_PLUS_KIMI_K2_7_CODE,
-    displayName: "Kimi K2.7 Code",
-    description: "Optimized for coding tasks.",
-    toolCall: true,
-    reasoning: true,
-    modalities: { input: ["text", "image"], output: ["text"] },
-  },
-  {
-    id: ChatModels.COPILOT_PLUS_DEEPSEEK_V4_PRO,
-    displayName: "DeepSeek V4 Pro",
-    description: "A top-tier model for the hardest reasoning and agentic tasks.",
-    toolCall: true,
-    reasoning: true,
-    modalities: { input: ["text"], output: ["text"] },
-  },
-  {
-    id: ChatModels.COPILOT_PLUS_DEEPSEEK_V4_FLASH_0731,
-    displayName: "DeepSeek V4 Flash 0731",
-    description: "The newest DeepSeek V4 Flash snapshot: fast, cheap, and broadly capable.",
-    toolCall: true,
-    reasoning: true,
-    modalities: { input: ["text"], output: ["text"] },
-  },
-  {
-    id: ChatModels.COPILOT_PLUS_MIMO_V2_5,
-    displayName: "MiMo V2.5",
-    description: "Cost-effective and capable for everyday use.",
-    toolCall: true,
-    reasoning: true,
-    modalities: { input: ["text"], output: ["text"] },
-  },
-  {
-    id: ChatModels.COPILOT_PLUS_MINIMAX_M2_7,
-    displayName: "MiniMax M2.7",
-    description: "A compact, efficient model for lightweight tasks.",
-    toolCall: true,
-    reasoning: true,
-    modalities: { input: ["text"], output: ["text"] },
-  },
-]);
-
-export const COPILOT_PLUS_DEFAULT_ENABLED_MODELS: readonly string[] = Object.freeze([
-  ChatModels.COPILOT_PLUS_FLASH,
-  ChatModels.COPILOT_PLUS_DEEPSEEK_V4_PRO,
-  ChatModels.COPILOT_PLUS_GLM_5_2,
-]);
 
 export type CopilotPlusCatalogStatus = "loading" | "ready" | "error";
 

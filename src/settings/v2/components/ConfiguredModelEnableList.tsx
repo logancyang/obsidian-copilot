@@ -5,6 +5,8 @@ import {
   type ModelEnableGroup,
 } from "@/agentMode";
 import { logError } from "@/logger";
+import { usePlugin } from "@/contexts/PluginContext";
+import { useCopilotPlusCatalog } from "@/contexts/useCopilotPlusCatalog";
 import {
   backendsAtom,
   configuredModelsAtom,
@@ -43,7 +45,9 @@ const isOpencodeRoutableProvider = (
 export const ConfiguredModelEnableList: React.FC<ConfiguredModelEnableListProps> = ({
   descriptor,
 }) => {
+  const plugin = usePlugin();
   const api = useModelManagement();
+  const copilotPlusCatalog = useCopilotPlusCatalog(plugin);
   // A backend's id doubles as its model-management AgentType.
   const agentType = descriptor.id as AgentType;
 
@@ -60,17 +64,34 @@ export const ConfiguredModelEnableList: React.FC<ConfiguredModelEnableListProps>
 
   const isOpencode = descriptor.id === "opencode";
 
+  const currentConfiguredModels = React.useMemo(
+    () =>
+      configuredModels.filter((model) => {
+        const provider = providers[model.providerId];
+        if (provider?.origin.kind !== "copilot-plus") return true;
+        // Persisted rows remain available for offline selection recovery, but
+        // the settings catalog lists only ids authorized by this lifecycle's
+        // successful server response.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/319
+        return (
+          copilotPlusCatalog.status === "ready" &&
+          copilotPlusCatalog.models.some((liveModel) => liveModel.id === model.info.id)
+        );
+      }),
+    [configuredModels, providers, copilotPlusCatalog]
+  );
+
   const partition = React.useMemo(
     () =>
       partitionCandidates(
-        configuredModels,
+        currentConfiguredModels,
         providers,
         enabledIds,
         agentType,
         isOpencode,
         isOpencodeRoutableProvider
       ),
-    [configuredModels, providers, enabledIds, agentType, isOpencode]
+    [currentConfiguredModels, providers, enabledIds, agentType, isOpencode]
   );
 
   // Ask the provider rows, as both pickers do, rather than letting the grouping
@@ -81,8 +102,15 @@ export const ConfiguredModelEnableList: React.FC<ConfiguredModelEnableListProps>
   const copilotProviderMissing = shouldPreviewCopilotModels(providers);
 
   const groups = React.useMemo<ModelEnableGroup[]>(
-    () => buildModelEnableGroups(partition, isOpencode, query, copilotProviderMissing),
-    [partition, isOpencode, query, copilotProviderMissing]
+    () =>
+      buildModelEnableGroups(
+        partition,
+        isOpencode,
+        query,
+        copilotProviderMissing,
+        copilotPlusCatalog.models
+      ),
+    [partition, isOpencode, query, copilotProviderMissing, copilotPlusCatalog.models]
   );
 
   const handleToggle = React.useCallback(

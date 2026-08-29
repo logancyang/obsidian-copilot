@@ -8,6 +8,7 @@ const meta = {
   title: "Modals/Copilot Welcome",
   component: CopilotPlusWelcomeModalContent,
   args: {
+    modelName: "Tomorrow Model",
     onConfirm: () => undefined,
     onCancel: () => undefined,
   },

@@ -215,7 +215,7 @@ function managerWithSonnet(): AgentSessionManager {
 // ---- buildPickerEntries ----
 
 describe("buildPickerEntries", () => {
-  it("previews the locked Copilot lineup above a routing agent's own models when unlicensed", () => {
+  it("previews the live locked Copilot lineup above a routing agent's own models when unlicensed (https://github.com/Brevilabs/obsidian-copilot-private/issues/319)", () => {
     const entry = makeModelEntry("catalog-model");
     const descriptor = {
       ...makeDescriptor("opencode"),
@@ -230,9 +230,13 @@ describe("buildPickerEntries", () => {
       getDefaultSelection: () => null,
     } as unknown as AgentSessionManager;
 
-    const { entries } = buildPickerEntries(manager, [descriptor], {} as ModelActiveContext, {
-      ...emptySettings,
-    });
+    const { entries } = buildPickerEntries(
+      manager,
+      [descriptor],
+      {} as ModelActiveContext,
+      { ...emptySettings },
+      [{ id: "tomorrow-model", displayName: "Tomorrow Model" }]
+    );
 
     const locked = entries.filter((model) => model._needsLicense);
     expect(locked.length).toBeGreaterThan(0);

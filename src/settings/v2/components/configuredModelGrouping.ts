@@ -2,11 +2,14 @@
 
 import { isOpencodeZenWireId, type ModelEnableGroup, type ModelEnableRow } from "@/agentMode";
 import {
-  COPILOT_PLUS_MODELS,
   capabilitiesFromConfiguredInfo,
   type ConfiguredModel,
+  type ModelInfo,
   type Provider,
 } from "@/modelManagement";
+
+/** See AGENTS.md → "Referential stability". */
+const EMPTY_MODELS: readonly ModelInfo[] = Object.freeze([]);
 
 /** One candidate model joined to its provider, plus current enabled state. */
 export interface Candidate {
@@ -180,7 +183,8 @@ export function buildModelEnableGroups(
   partition: CandidatePartition,
   isOpencode: boolean,
   query: string,
-  copilotProviderMissing: boolean
+  copilotProviderMissing: boolean,
+  copilotPlusModels: readonly ModelInfo[] = EMPTY_MODELS
 ): ModelEnableGroup[] {
   const q = query.trim().toLowerCase();
   const out: OriginGroup[] = [];
@@ -228,16 +232,18 @@ export function buildModelEnableGroups(
   // ability to act on it. Only opencode can route these models, and only its
   // list mixes in non-agent providers at all.
   if (isOpencode && copilotProviderMissing) {
-    const rows = COPILOT_PLUS_MODELS.map(
-      (model): ModelEnableRow => ({
-        id: `__locked_copilot__${model.id}`,
-        label: model.displayName || model.id,
-        description: model.description,
-        wireId: model.id,
-        enabled: false,
-        locked: true,
-      })
-    ).filter((row) => rowMatches(row, q));
+    const rows = copilotPlusModels
+      .map(
+        (model): ModelEnableRow => ({
+          id: `__locked_copilot__${model.id}`,
+          label: model.displayName || model.id,
+          description: model.description,
+          wireId: model.id,
+          enabled: false,
+          locked: true,
+        })
+      )
+      .filter((row) => rowMatches(row, q));
     if (rows.length > 0) {
       out.push({
         group: { key: "locked:copilot-plus", label: "Copilot", rows },
