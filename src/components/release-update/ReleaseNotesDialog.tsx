@@ -4,7 +4,7 @@ import {
   loadLatestReleaseNotes,
   type ReleaseNotes,
 } from "@/components/release-update/releaseNotes";
-import { ReactModal } from "@/components/modals/ReactModal";
+import { FullBleedReactModal } from "@/components/modals/ReactModal";
 import { Button } from "@/components/ui/button";
 import { useApp } from "@/context";
 import { cn } from "@/lib/utils";
@@ -15,8 +15,6 @@ import { App, Component } from "obsidian";
 import * as React from "react";
 
 const UPDATE_PLUGIN_URL = "obsidian://show-plugin?id=copilot";
-
-export const RELEASE_NOTES_MODAL_CLASS = "copilot-release-notes-modal";
 
 export type ReleaseNotesDialogState =
   | { status: "loading" }
@@ -178,7 +176,7 @@ export function ReleaseNotesDialog({
  * Owns the native Obsidian modal lifecycle for release notes while leaving
  * fetching and rendering behavior inside the testable React boundary.
  */
-export class ReleaseNotesModal extends ReactModal {
+export class ReleaseNotesModal extends FullBleedReactModal {
   /**
    * @param app - Obsidian app that owns the modal and its Markdown renderer.
    * @param loadReleaseNotes - Loader used to retrieve the release shown after opening.
@@ -187,7 +185,7 @@ export class ReleaseNotesModal extends ReactModal {
     app: App,
     private readonly loadReleaseNotes: () => Promise<ReleaseNotes> = loadLatestReleaseNotes
   ) {
-    super(app, undefined, RELEASE_NOTES_MODAL_CLASS);
+    super(app);
   }
 
   protected renderContent(close: () => void): React.ReactElement {

@@ -21,7 +21,7 @@ If your plugin does not need CSS, delete this file.
   max-width: calc(100vw - 2rem);
 }
 
-.modal.copilot-release-notes-modal {
+.modal.copilot-modal-full-bleed {
   width: min(46rem, calc(100vw - 2rem));
   min-width: 0;
   max-width: calc(100vw - 2rem);
@@ -31,12 +31,10 @@ If your plugin does not need CSS, delete this file.
 
 /* Dialogs with full-bleed bands make the hosting modal contribute no padding,
    otherwise their dividers stop short of both edges. Production and gallery
-   hosts opt in by applying the dialog's semantic class to the modal frame.
+   hosts opt in by applying the shared full-bleed class to the modal frame.
    Themes disagree about which element carries the padding, hence both targets. */
-.modal.copilot-config-modal,
-.modal.copilot-release-notes-modal,
-.modal.copilot-config-modal .modal-content,
-.modal.copilot-release-notes-modal .modal-content {
+.modal.copilot-modal-full-bleed,
+.modal.copilot-modal-full-bleed .modal-content {
   padding: 0;
 }
 
@@ -44,13 +42,11 @@ If your plugin does not need CSS, delete this file.
    host that sets a title anyway must not stack a second heading above the
    shell's own. Suppressing it here rather than per host keeps every future
    caller correct by default. */
-.modal.copilot-config-modal .modal-header,
-.modal.copilot-release-notes-modal .modal-header {
+.modal.copilot-modal-full-bleed .modal-header {
   margin-bottom: 0;
 }
 
-.modal.copilot-config-modal .modal-title,
-.modal.copilot-release-notes-modal .modal-title {
+.modal.copilot-modal-full-bleed .modal-title {
   display: none;
 }
 

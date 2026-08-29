@@ -1,7 +1,6 @@
 import {
   ReleaseNotesDialog,
   ReleaseNotesDialogContent,
-  RELEASE_NOTES_MODAL_CLASS,
   ReleaseNotesModal,
   type ReleaseNotesDialogState,
 } from "@/components/release-update/ReleaseNotesDialog";
@@ -129,11 +128,10 @@ describe("ReleaseNotesDialog", () => {
 
   describe("ReleaseNotesModal", () => {
     describe("constructor()", () => {
-      it(`uses the full-bleed release frame without duplicating the dialog title for ${ISSUE_URL}`, () => {
+      it(`uses the shared full-bleed frame without duplicating the dialog title for ${ISSUE_URL}`, () => {
         const modal = new ReleaseNotesModal(new App());
 
-        expect(modal.modalEl.classList.contains(RELEASE_NOTES_MODAL_CLASS)).toBe(true);
-        expect(modal.modalEl.className).toBe(`modal ${RELEASE_NOTES_MODAL_CLASS}`);
+        expect(modal.modalEl.className).toBe("modal copilot-modal-full-bleed");
         expect(modal.titleEl.textContent).toBe("");
       });
     });

@@ -19,13 +19,6 @@ interface ConfigDialogShellProps {
 }
 
 /**
- * Class the hosting modal must carry for the shell to lay out correctly. Pass it
- * as `ReactModal`'s `modalClass`; stylesheet rules key off it to zero the frame's
- * padding, collapse the native header, and hide the native title.
- */
-export const CONFIG_MODAL_CLASS = "copilot-config-modal";
-
-/**
  * Presentational layout shared by every agent's Configure dialog so the header,
  * sections, and footer stay visually consistent across the three (intentionally
  * bespoke) bodies. Rendered inside a per-agent `ReactModal` subclass — it is not
@@ -33,7 +26,7 @@ export const CONFIG_MODAL_CLASS = "copilot-config-modal";
  * Obsidian's native title element empty.
  *
  * Every band owns its own padding so the dividers between them run edge to edge.
- * That only holds inside a host marked with {@link CONFIG_MODAL_CLASS}; without
+ * That only holds inside a host using the shared full-bleed modal frame; without
  * it the frame's own padding insets every divider by a theme-dependent amount.
  */
 export const ConfigDialogShell: React.FC<ConfigDialogShellProps> = ({

@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@/lib/story";
+import { FULL_BLEED_MODAL_CLASS } from "@/components/modals/ReactModal";
 import {
-  RELEASE_NOTES_MODAL_CLASS,
   ReleaseNotesDialogContent,
   type ReleaseNotesDialogContentProps,
 } from "./ReleaseNotesDialog";
@@ -42,7 +42,7 @@ const meta = {
     gallery: {
       host: "modal",
       layout: "fullscreen",
-      modalClass: RELEASE_NOTES_MODAL_CLASS,
+      modalClass: FULL_BLEED_MODAL_CLASS,
     },
   },
 } satisfies Meta<ReleaseNotesDialogContentProps>;
