@@ -103,12 +103,7 @@ export function ReleaseNotesDialogContent({
         <span className="tw-flex tw-size-9 tw-shrink-0 tw-items-center tw-justify-center tw-rounded-full tw-bg-interactive-accent tw-text-on-accent">
           <ArrowUpCircle aria-hidden="true" className="tw-size-5" />
         </span>
-        <div className="tw-min-w-0">
-          <h2 className="tw-m-0 tw-text-ui-medium tw-font-semibold">Copilot update available</h2>
-          <p className="tw-m-0 tw-mt-0.5 tw-text-ui-smaller tw-text-muted">
-            Review what changed, then update this vault from Community Plugins.
-          </p>
-        </div>
+        <h2 className="tw-m-0 tw-text-ui-medium tw-font-semibold">Copilot update available</h2>
       </header>
 
       <div className="tw-h-[min(65vh,38rem)] tw-overflow-y-auto tw-overscroll-contain tw-px-5 tw-py-4">

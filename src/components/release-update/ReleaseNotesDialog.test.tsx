@@ -57,6 +57,9 @@ describe("ReleaseNotesDialog", () => {
         ).not.toBeNull()
       );
       expect(screen.getByRole("img", { name: "Notification settings" })).not.toBeNull();
+      expect(
+        screen.queryByText("Review what changed, then update this vault from Community Plugins.")
+      ).toBeNull();
       expect(screen.getByRole("link", { name: "View on GitHub" }).getAttribute("href")).toBe(
         READY_STATE.release.htmlUrl
       );
