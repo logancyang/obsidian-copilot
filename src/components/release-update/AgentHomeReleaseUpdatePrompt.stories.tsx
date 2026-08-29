@@ -8,7 +8,7 @@ import {
 type StoryProps = AgentHomeReleaseUpdatePromptProps;
 
 const meta = {
-  title: "Release/Agent Home Update Prototypes",
+  title: "Release/Agent Home Update Banner",
   component: AgentHomeReleaseUpdatePrompt,
   args: {
     onDismiss: () => undefined,
