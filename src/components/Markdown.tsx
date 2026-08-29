@@ -26,6 +26,7 @@ export function Markdown({ className, sourcePath, text }: MarkdownProps): React.
     const component = new Component();
     let cancelled = false;
     component.load();
+    target.classList.add("markdown-rendered");
     target.replaceChildren();
     void renderMarkdown(app, text, target, sourcePath, component).catch((error: unknown) => {
       // Markdown content must remain readable when Obsidian's renderer fails.
@@ -43,5 +44,5 @@ export function Markdown({ className, sourcePath, text }: MarkdownProps): React.
     };
   }, [app, sourcePath, text]);
 
-  return <div className={cn("markdown-rendered", className)} ref={targetRef} />;
+  return <div className={cn(className)} ref={targetRef} />;
 }
