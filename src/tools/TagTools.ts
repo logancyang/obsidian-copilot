@@ -1,5 +1,5 @@
 import { App, MetadataCache } from "obsidian";
-import { z } from "zod";
+import * as z from "zod";
 import { createLangChainTool } from "./createLangChainTool";
 
 const TAG_LIST_SIZE_LIMIT_BYTES = 500_000;

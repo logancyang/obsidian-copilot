@@ -8,7 +8,7 @@
  * key as a query parameter rather than a header.
  */
 
-import { z } from "zod";
+import * as z from "zod";
 
 import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
 

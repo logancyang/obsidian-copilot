@@ -1,6 +1,6 @@
 import * as chrono from "chrono-node";
 import { DateTime } from "luxon";
-import { z } from "zod";
+import * as z from "zod";
 import { createLangChainTool } from "./createLangChainTool";
 import { logWarn } from "@/logger";
 

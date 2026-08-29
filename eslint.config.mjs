@@ -493,7 +493,12 @@ export default [
   // CommonJS tools use require() by construction. The renderer patch also
   // runs only from the Node build pipeline despite its historical .js suffix.
   {
-    files: ["**/*.cjs", "scripts/patchRendererUnsafeUnref.js"],
+    files: [
+      "**/*.cjs",
+      "scripts/patchRendererUnsafeUnref.js",
+      "scripts/bundleSizeGuard.js",
+      "scripts/bundleSizeGuard.test.js",
+    ],
     rules: {
       "@typescript-eslint/no-require-imports": "off",
     },

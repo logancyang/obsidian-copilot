@@ -1,5 +1,5 @@
 import { App } from "obsidian";
-import { z } from "zod";
+import * as z from "zod";
 import { createLangChainTool } from "./createLangChainTool";
 import { UserMemoryManager } from "@/memory/UserMemoryManager";
 import { logError } from "@/logger";
