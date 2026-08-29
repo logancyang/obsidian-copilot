@@ -285,6 +285,7 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
         // shared conversions cache. vaultId/path derivation lives entirely in
         // conversionsLocation — this backend never duplicates it.
         getCacheRoot: () => cacheRoot(args.plugin.app),
+        getCopilotPlusCatalog: () => args.plugin.copilotPlusSync.getSnapshot(),
         getSelfHostWebSearchChannel: () => {
           // The native deny is safe only when this lifecycle can provide the
           // replacement route before OpenCode starts.

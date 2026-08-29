@@ -1,7 +1,7 @@
 import type { PlanUsageReading, UsageWindow } from "@/agentMode/session/planUsage";
 import { planUsageReading, toUsagePercent } from "@/agentMode/session/planUsage";
 import { BrevilabsClient, type UsageResponse } from "@/LLMProviders/brevilabsClient";
-import { logInfo } from "@/logger";
+import type { CopilotPlusCatalogSnapshot } from "@/modelManagement";
 
 /**
  * Copilot Plus account caps and model context windows, read from the Brevilabs hosts.
@@ -58,95 +58,19 @@ export function planUsageFromCopilotPlusUsage(
 }
 
 /**
- * Token count from the display string the models endpoint publishes (`1M`, `256K`,
- * `192K`), or null when it is not a form we recognize.
- *
- * The suffixes are binary: `1M` is the 1,048,576-token Gemini window and `256K` the
- * 262,144-token Kimi one, both rounded for display. Reading them as powers of ten would
- * put every meter about 5% off — harmless for a gauge, but wrong for no reason.
- */
-export function parseContextLength(display: unknown): number | null {
-  if (typeof display !== "string") return null;
-  const match = /^\s*([\d.]+)\s*([KMkm])?\s*$/.exec(display);
-  if (!match) return null;
-
-  const value = Number(match[1]);
-  if (!Number.isFinite(value) || value <= 0) return null;
-
-  const unit = match[2]?.toUpperCase();
-  const multiplier = unit === "M" ? 1024 * 1024 : unit === "K" ? 1024 : 1;
-  return Math.round(value * multiplier);
-}
-
-/** What the published catalog says about one Copilot Plus model. */
-interface CatalogEntry {
-  /** Input context window in tokens, or null when the endpoint published none. */
-  contextWindow: number | null;
-  /**
-   * Thinking-effort levels this model distinguishes, or null when the endpoint did
-   * not publish any — an older service the caller must not read a menu into.
-   */
-  reasoningEfforts: readonly string[] | null;
-}
-
-/** A model that honors no effort level at all, shared so "empty" stays one value. */
-const NO_REASONING_EFFORTS: readonly string[] = Object.freeze([]);
-
-/**
- * Upper bound on one catalog read.
- *
- * The opencode spawn path waits on this to learn a model's effort levels, and
- * `requestUrl` enforces no timeout of its own, so an unreachable host would otherwise
- * hold up starting the agent for as long as the OS takes to give up on the connection.
- * Giving up early costs an accurate effort menu for that session; not giving up costs
- * the agent.
- */
-const CATALOG_TIMEOUT_MS = 3_000;
-
-/** Resolve with null if `promise` has not settled within `ms`. */
-function withDeadline<T>(promise: Promise<T | null>, ms: number): Promise<T | null> {
-  return new Promise((resolve) => {
-    const timer = window.setTimeout(() => resolve(null), ms);
-    const settle = (value: T | null) => {
-      window.clearTimeout(timer);
-      resolve(value);
-    };
-    promise.then(settle, () => settle(null));
-  });
-}
-
-/**
- * Levels a published list may contain, or null when the field is missing or unusable.
- *
- * An empty list is a real answer — the model honors no level and its caller should
- * offer no control — so it is kept distinct from the absent case. Anything the caller
- * cannot act on collapses into the absent case rather than into the empty one.
- */
-function parseReasoningEfforts(raw: unknown): readonly string[] | null {
-  if (!Array.isArray(raw)) return null;
-  if (raw.length === 0) return NO_REASONING_EFFORTS;
-  const levels = raw
-    .filter((level): level is string => typeof level === "string")
-    .map((level) => level.trim())
-    .filter((level) => level.length > 0);
-  // A list that arrived with entries but none usable is a malformed answer, not a model
-  // that honors no level. Reading it as the latter would delete a working effort menu on
-  // the strength of garbage.
-  return levels.length > 0 ? Object.freeze(levels) : null;
-}
-
-/**
- * Reads Copilot Plus caps and per-model capabilities on behalf of whichever backend is
- * serving those models, caching the published catalog for that backend's lifetime.
- *
- * The catalog changes when we publish a new model list, not while a vault is open, so it
- * is fetched at most once — but only a successful fetch is remembered. Caching a failure
- * would strand the context ring for the rest of the session after one transient outage
- * (https://github.com/logancyang/obsidian-copilot-preview/issues/193).
+ * Reads Copilot Plus caps and per-model context windows on behalf of a backend.
+ * Catalog metadata comes from the plugin lifecycle's one server request; this
+ * reader never starts a second model-list request.
  */
 export class CopilotPlusUsageReader {
-  private catalog: Map<string, CatalogEntry> | null = null;
-  private inFlight: Promise<Map<string, CatalogEntry> | null> | null = null;
+  private readonly getCatalog: () => CopilotPlusCatalogSnapshot | undefined;
+
+  /**
+   * @param getCatalog - Current plugin lifecycle's server-authoritative catalog snapshot.
+   */
+  constructor(getCatalog: () => CopilotPlusCatalogSnapshot | undefined) {
+    this.getCatalog = getCatalog;
+  }
 
   /** The account's cap utilization as the models host currently reports it. */
   async readPlanUsage(): Promise<PlanUsageReading> {
@@ -162,59 +86,8 @@ export class CopilotPlusUsageReader {
    */
   async readContextWindow(modelId: string | null): Promise<number | null> {
     if (!modelId) return null;
-    const catalog = await this.loadCatalog();
-    return catalog?.get(modelId)?.contextWindow ?? null;
-  }
-
-  /**
-   * Thinking-effort levels a Copilot Plus model distinguishes, as the service publishes
-   * them, or null when they cannot be read.
-   *
-   * The caller must not treat null as "no levels": an agent harness left without a
-   * published list falls back to guessing the menu from the model id, and dropping the
-   * control instead would remove a working one over a transient outage.
-   *
-   * @param modelId - Bare Copilot Plus model id, with any backend-specific wire prefix
-   *   already stripped by the caller. Null for a model this account does not serve.
-   */
-  async readReasoningEfforts(modelId: string | null): Promise<readonly string[] | null> {
-    if (!modelId) return null;
-    const catalog = await this.loadCatalog();
-    return catalog?.get(modelId)?.reasoningEfforts ?? null;
-  }
-
-  private async loadCatalog(): Promise<Map<string, CatalogEntry> | null> {
-    if (this.catalog) return this.catalog;
-    // Share one request between concurrent callers, but do not remember a failed one.
-    // The deadline belongs to the shared promise rather than to each await: a request
-    // that never settles would otherwise stay the shared one forever, so every later
-    // read would wait out the same dead connection and never retry once the host came
-    // back. The identity check keeps a timed-out request from clearing its successor.
-    const pending: Promise<Map<string, CatalogEntry> | null> = (this.inFlight ??= withDeadline(
-      this.fetchCatalog(),
-      CATALOG_TIMEOUT_MS
-    ).finally(() => {
-      if (this.inFlight === pending) this.inFlight = null;
-    }));
-    const catalog = await pending;
-    if (catalog) this.catalog = catalog;
-    return catalog;
-  }
-
-  private async fetchCatalog(): Promise<Map<string, CatalogEntry> | null> {
-    const response = await BrevilabsClient.getInstance().getModels();
-    if (!response?.data) {
-      logInfo("[AgentMode] Copilot Plus catalog unavailable; context ring will retry");
-      return null;
-    }
-    const catalog = new Map<string, CatalogEntry>();
-    for (const entry of response.data) {
-      if (!entry?.id) continue;
-      catalog.set(entry.id, {
-        contextWindow: parseContextLength(entry.context_length),
-        reasoningEfforts: parseReasoningEfforts(entry.reasoning_efforts),
-      });
-    }
-    return catalog;
+    const catalog = this.getCatalog();
+    if (catalog?.status !== "ready") return null;
+    return catalog.models.find((model) => model.id === modelId)?.limits?.context ?? null;
   }
 }

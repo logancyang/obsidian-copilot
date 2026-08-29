@@ -3,12 +3,15 @@ import { AgentHome } from "@/agentMode/ui/AgentHome";
 import { AgentModeStatus } from "@/agentMode/ui/AgentModeStatus";
 import { AgentSelectPanel } from "@/agentMode/ui/AgentSelectPanel";
 import { AgentSelectPane } from "@/agentMode/ui/AgentSelectPane";
+import { AgentStartupProgress, type AgentStartupStage } from "@/agentMode/ui/AgentStartupProgress";
 import {
   useBackendInstallState,
   useSessionBackendDescriptor,
 } from "@/agentMode/ui/useBackendDescriptor";
 import type CopilotPlugin from "@/main";
 import { logError } from "@/logger";
+import { useCopilotPlusCatalog } from "@/contexts/useCopilotPlusCatalog";
+import { useSettingsValue } from "@/settings/model";
 import React from "react";
 
 interface Props {
@@ -31,6 +34,8 @@ export const AgentModeChat: React.FC<Props> = ({
   const manager = plugin.agentSessionManager;
   const descriptor = useSessionBackendDescriptor(manager);
   const installState = useBackendInstallState(descriptor, plugin);
+  const copilotPlusCatalog = useCopilotPlusCatalog(plugin);
+  const settings = useSettingsValue();
   const [tick, setTick] = React.useState(0);
 
   React.useEffect(() => {
@@ -82,9 +87,17 @@ export const AgentModeChat: React.FC<Props> = ({
   // guarantees the picker (and effort dropdown) read from a populated
   // cache on first paint instead of flashing an empty list.
   if (!preloadReady) {
+    const waitsForPlus =
+      descriptor.id === "opencode" && settings.isPaidUser === true && !!settings.plusLicenseKey;
+    const startupStage: AgentStartupStage =
+      waitsForPlus && copilotPlusCatalog.status === "loading"
+        ? "plus-catalog"
+        : waitsForPlus && copilotPlusCatalog.status === "error"
+          ? "backend-without-plus"
+          : "backend";
     return (
       <div className="tw-flex tw-size-full tw-items-center tw-justify-center tw-text-muted">
-        Loading agent models…
+        <AgentStartupProgress stage={startupStage} agentName={descriptor.displayName} />
       </div>
     );
   }
