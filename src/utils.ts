@@ -10,7 +10,6 @@ import {
   TEXT_READABLE_EXTENSIONS,
 } from "@/constants";
 import { logInfo, logWarn } from "@/logger";
-import { checkLatestRelease, type LatestRelease } from "@/utils/latestRelease";
 import { formatUsageCapError } from "@/utils/usageCapError";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { Document } from "@langchain/core/documents";
@@ -1065,18 +1064,57 @@ export function isNewerVersion(latest: string, current: string): boolean {
   return false;
 }
 
+const LATEST_RELEASE_API_URL =
+  "https://api.github.com/repos/logancyang/obsidian-copilot/releases/latest";
+
+export interface LatestRelease {
+  body: string;
+  htmlUrl: string;
+  version: string;
+}
+
+interface GitHubReleaseResponse {
+  body?: unknown;
+  html_url?: unknown;
+  tag_name?: unknown;
+}
+
 /** Check the latest GitHub release for both update detection and release-note presentation. */
 export async function checkLatestVersion(): Promise<{
   version: string | null;
   error: string | null;
   release: LatestRelease | null;
 }> {
-  const result = await checkLatestRelease();
-  return {
-    version: result.release?.version ?? null,
-    error: result.error,
-    release: result.release,
-  };
+  try {
+    const response = await requestUrl({
+      url: LATEST_RELEASE_API_URL,
+      method: "GET",
+    });
+    const responseRelease = response.json as GitHubReleaseResponse;
+    if (typeof responseRelease.tag_name !== "string") {
+      throw new Error("The latest Copilot release has no version tag.");
+    }
+
+    const release: LatestRelease = {
+      body: typeof responseRelease.body === "string" ? responseRelease.body : "",
+      htmlUrl:
+        typeof responseRelease.html_url === "string"
+          ? responseRelease.html_url
+          : "https://github.com/logancyang/obsidian-copilot/releases/latest",
+      version: responseRelease.tag_name.replace(/^v/, ""),
+    };
+    return {
+      version: release.version,
+      error: null,
+      release,
+    };
+  } catch (error) {
+    return {
+      version: null,
+      error: error instanceof Error ? error.message : "Failed to check for updates",
+      release: null,
+    };
+  }
 }
 
 // Note: LangChain 0.6.6+ handles O-series and GPT-5 models automatically

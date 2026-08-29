@@ -1,6 +1,7 @@
 import * as Obsidian from "obsidian";
 import { TFile } from "obsidian";
 import {
+  checkLatestVersion,
   extractNoteFiles,
   extractTemplateNoteFiles,
   formatDateTime,
@@ -71,6 +72,7 @@ jest.mock("obsidian", () => {
     Vault: MockVault,
     MarkdownView: class MockMarkdownView {},
     Notice: class MockNotice {},
+    requestUrl: jest.fn(),
   };
 });
 
@@ -344,6 +346,66 @@ describe("getNotesFromTags", () => {
 });
 
 describe("utils", () => {
+  describe("checkLatestVersion()", () => {
+    const issueUrl = "https://github.com/Brevilabs/obsidian-copilot-private/issues/317";
+    const mockedRequestUrl = Obsidian.requestUrl as jest.MockedFunction<typeof Obsidian.requestUrl>;
+
+    beforeEach(() => {
+      mockedRequestUrl.mockReset();
+    });
+
+    it(`returns the release body and destination from the version-check request for ${issueUrl}`, async () => {
+      mockedRequestUrl.mockResolvedValue({
+        status: 200,
+        text: "",
+        json: {
+          tag_name: "v4.0.4",
+          body: "# Copilot 4.0.4",
+          html_url: "https://github.com/logancyang/obsidian-copilot/releases/tag/4.0.4",
+        },
+        arrayBuffer: new ArrayBuffer(0),
+        headers: {},
+      });
+
+      await expect(checkLatestVersion()).resolves.toEqual({
+        version: "4.0.4",
+        error: null,
+        release: {
+          version: "4.0.4",
+          body: "# Copilot 4.0.4",
+          htmlUrl: "https://github.com/logancyang/obsidian-copilot/releases/tag/4.0.4",
+        },
+      });
+      expect(mockedRequestUrl).toHaveBeenCalledTimes(1);
+    });
+
+    it("returns an error when GitHub does not provide a release tag", async () => {
+      mockedRequestUrl.mockResolvedValue({
+        status: 200,
+        text: "",
+        json: {},
+        arrayBuffer: new ArrayBuffer(0),
+        headers: {},
+      });
+
+      await expect(checkLatestVersion()).resolves.toEqual({
+        version: null,
+        error: "The latest Copilot release has no version tag.",
+        release: null,
+      });
+    });
+
+    it("returns the request error when GitHub cannot be reached", async () => {
+      mockedRequestUrl.mockRejectedValue(new Error("offline"));
+
+      await expect(checkLatestVersion()).resolves.toEqual({
+        version: null,
+        error: "offline",
+        release: null,
+      });
+    });
+  });
+
   describe("getPropertyValuesFromNote()", () => {
     // getPropertyValuesFromNote only reads app.metadataCache.getFileCache(file),
     // which is mocked per-case, so the file argument itself is never inspected.

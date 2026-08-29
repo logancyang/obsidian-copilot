@@ -1,6 +1,5 @@
 import { logError } from "@/logger";
-import { checkLatestVersion, isNewerVersion } from "@/utils";
-import type { LatestRelease } from "@/utils/latestRelease";
+import { checkLatestVersion, isNewerVersion, type LatestRelease } from "@/utils";
 import { useEffect, useState } from "react";
 
 interface UseLatestVersionResult {
