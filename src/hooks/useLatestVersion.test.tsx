@@ -22,12 +22,23 @@ function LatestVersionProbe(): React.ReactElement {
 
 describe("useLatestVersion", () => {
   describe("useLatestVersion()", () => {
-    it(`keeps the release payload that Quick Chat opens for ${ISSUE_URL}`, async () => {
+    it(`shares one release payload and request across remounted consumers for ${ISSUE_URL}`, async () => {
       jest.mocked(checkLatestVersion).mockResolvedValue({
         error: null,
         release: RELEASE,
         version: RELEASE.version,
       });
+
+      const firstRender = render(<LatestVersionProbe />);
+
+      await waitFor(() =>
+        expect(JSON.parse(screen.getByRole("status").textContent ?? "{}")).toEqual({
+          hasUpdate: true,
+          latestRelease: RELEASE,
+          latestVersion: RELEASE.version,
+        })
+      );
+      firstRender.unmount();
 
       render(<LatestVersionProbe />);
 

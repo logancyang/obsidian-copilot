@@ -8,14 +8,24 @@ interface UseLatestVersionResult {
   hasUpdate: boolean;
 }
 
+let latestReleaseRequest: Promise<LatestRelease | null> | null = null;
+
+function requestLatestRelease(): Promise<LatestRelease | null> {
+  // Every mounted release surface shares the same request for the lifetime of
+  // the loaded plugin bundle, including settings opened after Agent Home.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/317
+  latestReleaseRequest ??= checkLatestVersion().then((result) => result.release);
+  return latestReleaseRequest;
+}
+
 export function useLatestVersion(currentVersion: string): UseLatestVersionResult {
   const [latestRelease, setLatestRelease] = useState<LatestRelease | null>(null);
 
   useEffect(() => {
     const checkVersion = async () => {
-      const result = await checkLatestVersion();
-      if (result.release) {
-        setLatestRelease(result.release);
+      const release = await requestLatestRelease();
+      if (release) {
+        setLatestRelease(release);
       }
     };
     void checkVersion().catch((err) => logError("checkVersion failed", err));

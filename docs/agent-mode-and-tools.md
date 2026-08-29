@@ -59,6 +59,8 @@ For Windows-specific installation help, see [Windows setup for Agent Chat](agent
 
 Select the **Agent Chat** ribbon icon or run **Open Copilot Agent Chat Window** from the command palette. If the default agent is not ready, Copilot opens **Select your agent**. Configure an agent, choose an installed row, then select **Start chat**.
 
+When a newer Copilot release is available, the global Agent Chat home shows an update banner along the bottom of the pane. The banner stays above the home tabs when space is tight. Select **See what’s new** to read the release notes, or dismiss the banner for that release. Project homes and active conversations do not show it.
+
 ## Models, effort, and permissions
 
 Each agent has its own model list. The models shown in one agent do not automatically appear in another.

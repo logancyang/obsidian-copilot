@@ -17,7 +17,6 @@ import ChatInput from "@/components/chat-components/ChatModeInput";
 import ChatMessages, { isChatEmpty } from "@/components/chat-components/ChatMessages";
 import { AgentModeBanner } from "@/components/chat-components/ui/AgentModeBanner";
 import { useChatModelPicker } from "@/components/chat-components/useChatModelPicker";
-import { NewVersionBanner } from "@/components/chat-components/NewVersionBanner";
 import IndexingProgressCard from "@/components/IndexingProgressCard";
 import {
   ABORT_REASON,
@@ -794,7 +793,6 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
   const renderChatComponents = () => (
     <>
       <div className="tw-flex tw-size-full tw-flex-col tw-overflow-hidden">
-        <NewVersionBanner currentVersion={plugin.manifest.version} />
         {isChatEmpty(chatHistory, currentAiMessage) && (
           <div className="tw-mx-auto tw-flex tw-w-full tw-max-w-lg tw-flex-1 tw-items-center tw-px-4">
             <AgentModeBanner onOpenAgent={safeAsyncHandler(() => plugin.activateAgentView())} />
