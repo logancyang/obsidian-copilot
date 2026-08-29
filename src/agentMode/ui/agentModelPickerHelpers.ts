@@ -22,6 +22,7 @@ import type {
   EnabledModelEntry,
   InstallState,
   ModelEntry,
+  ModelSelection,
   ModelState,
 } from "@/agentMode/session/types";
 import type { AgentModelPickerOverride } from "./useAgentModelPicker";
@@ -288,6 +289,8 @@ export interface ModelActiveContext {
   activeSessionHasHistory: boolean;
   activeModelState: ModelState | null;
   activeCurrentEntry: ModelEntry | undefined;
+  /** Saved selection waiting for host-side model registration. */
+  activePendingSelection?: ModelSelection | null;
 }
 
 export function collectModelActiveContext(manager: AgentSessionManager): ModelActiveContext {
@@ -301,6 +304,7 @@ export function collectModelActiveContext(manager: AgentSessionManager): ModelAc
   const activeCurrentEntry = activeModelState?.availableModels.find(
     (e) => e.baseModelId === activeModelState.current.baseModelId
   );
+  const activePendingSelection = activeSession?.getPendingModelSelection() ?? null;
   return {
     activeSession,
     activeChatUIState,
@@ -309,6 +313,22 @@ export function collectModelActiveContext(manager: AgentSessionManager): ModelAc
     activeSessionHasHistory,
     activeModelState,
     activeCurrentEntry,
+    activePendingSelection,
+  };
+}
+
+function synthesizePendingCopilotEntry(
+  selection: ModelSelection,
+  descriptor: BackendDescriptor,
+  disabledReason: string
+): ModelSelectorEntry {
+  return {
+    ...synthesizeAgentEntry(
+      selection.baseModelId,
+      selection.baseModelId.split("/").pop()!,
+      descriptor
+    ),
+    _disabledReason: disabledReason,
   };
 }
 
@@ -328,14 +348,17 @@ export function buildPickerEntries(
   copilotPlusStatus: "loading" | "ready" | "error" = "ready"
 ): { entries: ModelSelectorEntry[]; valueKey: string } {
   const entries: ModelSelectorEntry[] = [];
+  let pendingValueKey = "";
   for (const descriptor of descriptors) {
     const isActiveBackend = descriptor.id === ctx.activeBackendId;
     if (!isActiveBackend && ctx.activeSessionHasHistory) continue;
     const catalog = manager.getCachedModelCatalog(descriptor.id);
+    const pendingSelection = isActiveBackend ? ctx.activePendingSelection : null;
     const keepBaseModelId = isActiveBackend
       ? (ctx.activeModelState?.current.baseModelId ?? null)
       : (manager.getDefaultSelection(descriptor.id)?.baseModelId ?? null);
     const includeModel = (baseModelId: string): boolean => {
+      if (baseModelId === pendingSelection?.baseModelId) return false;
       const prefix = `${ChatModelProviders.COPILOT_PLUS}/`;
       if (!baseModelId.startsWith(prefix)) return true;
       if (copilotPlusStatus !== "ready") return false;
@@ -361,6 +384,18 @@ export function buildPickerEntries(
           hasNoCatalog && (preloadStatus === "ready" || preloadStatus === "error"),
         includeModel,
       });
+    }
+    // Keep the saved Plus row selected but disabled until registration makes
+    // it real; ready entries below remain explicit alternatives.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/319
+    if (pendingSelection) {
+      const pendingEntry = synthesizePendingCopilotEntry(
+        pendingSelection,
+        descriptor,
+        copilotPlusStatus === "error" ? "Unavailable" : "Loading…"
+      );
+      entries.splice(sectionStart, 0, pendingEntry);
+      pendingValueKey = getModelKeyFromModel(pendingEntry);
     }
     // No catalog discovered yet (distinct from a settled probe reporting no
     // model catalog). Show a per-backend loading / failure row so
@@ -406,8 +441,11 @@ export function buildPickerEntries(
     // above so neither relabels these rows: an unset-up agent's readiness reason
     // would replace "Copilot license required" with the wrong fix, and the
     // emptiness check for the loading/error placeholder must not count them.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/319
-    if (descriptor.routesCopilotModels && shouldPreviewCopilotModels(settings.providers)) {
+    if (
+      descriptor.routesCopilotModels &&
+      !pendingSelection &&
+      shouldPreviewCopilotModels(settings.providers)
+    ) {
       entries.splice(
         sectionStart,
         0,
@@ -419,8 +457,9 @@ export function buildPickerEntries(
     }
   }
 
-  let valueKey = "";
+  let valueKey = pendingValueKey;
   if (
+    !valueKey &&
     ctx.activeBackendId &&
     ctx.activeDescriptor &&
     ctx.activeModelState &&
@@ -465,6 +504,7 @@ export function buildEffortSibling(
   ctx: ModelActiveContext
 ): AgentModelPickerOverride["effort"] {
   const { activeBackendId, activeCurrentEntry, activeModelState, activeChatUIState } = ctx;
+  if (ctx.activePendingSelection) return undefined;
   if (!activeBackendId || !activeCurrentEntry) return undefined;
   if (activeCurrentEntry.effortOptions.length === 0) return undefined;
   if (!activeModelState) return undefined;

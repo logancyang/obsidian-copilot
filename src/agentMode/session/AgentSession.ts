@@ -239,6 +239,8 @@ export interface AgentSessionStartOptions extends ProjectContextUpdatesHooks {
    * manager's `applyInitialSessionConfig` hook).
    */
   defaultModelSelection?: ModelSelection;
+  /** Decide whether a saved model must remain pending instead of becoming the active fallback. */
+  deferModelSelection?: (state: BackendState | null, selection: ModelSelection) => boolean;
   /**
    * Optional descriptor accessor. The session uses it to resolve mode mappings
    * without coupling to specific backends. Manager-supplied; tests omit it.
@@ -297,6 +299,8 @@ export interface AgentSessionStateOptions extends ProjectContextUpdatesHooks {
    * seed on failure.
    */
   defaultModelSelection?: ModelSelection;
+  /** See {@link AgentSessionStartOptions.deferModelSelection}. */
+  deferModelSelection?: (state: BackendState | null, selection: ModelSelection) => boolean;
   cwd?: string | null;
   getDescriptor?: () => BackendDescriptor | undefined;
   runFanoutTurn?: RunFanoutTurn;
@@ -360,6 +364,14 @@ export class AgentSession {
   // Remains false until the backend has accepted or rejected the persisted
   // model selection, preventing a prompt from racing that startup write.
   private startupSettled = false;
+  // A saved model blocked by its live authority. The backend's temporary or
+  // persisted current model remains in `currentState`, but it is never treated
+  // as the user's validated selection or used for a prompt.
+  private pendingModelSelection: ModelSelection | null = null;
+  private readonly deferModelSelection: (
+    state: BackendState | null,
+    selection: ModelSelection
+  ) => boolean;
   // Set in `runTurn`'s catch; cleared at the top of `sendPrompt` once
   // preconditions pass. Yields the per-turn `"error"` status while the
   // session sits idle between a failed turn and the next prompt.
@@ -496,6 +508,7 @@ export class AgentSession {
     this.runFanoutTurn = opts.runFanoutTurn ?? null;
     this.getDisplayName = opts.getDisplayName ?? null;
     this.getApp = opts.getApp ?? null;
+    this.deferModelSelection = opts.deferModelSelection ?? (() => false);
     this.getProjectContextUpdatesFn = opts.getProjectContextUpdates ?? null;
     this.markProjectContextUpdatesDeliveredFn = opts.markProjectContextUpdatesDelivered ?? null;
     // Only the start path (newSession) awaits context roots; adopted/resumed
@@ -504,7 +517,9 @@ export class AgentSession {
     if ("backendSessionId" in opts) {
       this.backendSessionId = opts.backendSessionId;
       const originalState = opts.initialState ?? null;
-      this.currentState = seedSelectionIntoState(originalState, opts.defaultModelSelection);
+      // Warm/adopted sessions obey the same no-fallback contract as fresh ones.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/319
+      this.currentState = this.prepareInitialModel(originalState, opts.defaultModelSelection);
       this.unregisterSessionHandler = this.backend.registerSessionHandler(
         opts.backendSessionId,
         (event) => this.handleSessionEvent(event)
@@ -512,7 +527,7 @@ export class AgentSession {
       // Gate `ready` on the model confirmation round-trip so `sendPrompt`
       // can't fire on the probe's model before the user's persisted
       // selection is applied to the backend.
-      if (opts.defaultModelSelection && originalState) {
+      if (opts.defaultModelSelection && originalState && !this.pendingModelSelection) {
         this.ready = this.confirmSeededSelection(opts.defaultModelSelection, originalState).finally(
           () => {
             this.startupSettled = true;
@@ -547,6 +562,24 @@ export class AgentSession {
     return this.backendSessionId;
   }
 
+  /** Return the saved model blocked on live availability, or `null` when usable. */
+  getPendingModelSelection(): ModelSelection | null {
+    return this.pendingModelSelection;
+  }
+
+  private prepareInitialModel(
+    state: BackendState | null,
+    selection: ModelSelection | undefined
+  ): BackendState | null {
+    // A host-blocked saved model must not be seeded over the backend fallback.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/319
+    if (selection && this.deferModelSelection(state, selection)) {
+      this.pendingModelSelection = selection;
+      return state;
+    }
+    return seedSelectionIntoState(state, selection);
+  }
+
   private async initialize(opts: AgentSessionStartOptions): Promise<void> {
     const { backend, cwd, defaultModelSelection } = opts;
     try {
@@ -579,7 +612,11 @@ export class AgentSession {
         : "agent did not report model state";
       logInfo(`[AgentMode] session ${resp.sessionId} ${modelLog}`);
       this.backendSessionId = resp.sessionId;
-      this.currentState = seedSelectionIntoState(resp.state, defaultModelSelection);
+      // Keep a temporarily unavailable saved model separate from the agent's
+      // native current model. The session can finish loading and offer other
+      // choices, but cannot silently send through that native fallback.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/319
+      this.currentState = this.prepareInitialModel(resp.state, defaultModelSelection);
       this.unregisterSessionHandler = this.backend.registerSessionHandler(resp.sessionId, (event) =>
         this.handleSessionEvent(event)
       );
@@ -592,7 +629,7 @@ export class AgentSession {
       this.recomputeStatusIfChanged();
       this.notifyModelChanged();
 
-      if (defaultModelSelection) {
+      if (defaultModelSelection && !this.pendingModelSelection) {
         await this.confirmSeededSelection(defaultModelSelection, resp.state);
       }
       this.startupSettled = true;
@@ -632,6 +669,7 @@ export class AgentSession {
       modelId,
     });
     this.dropUsageWindowOnModelChange(next);
+    this.pendingModelSelection = null;
     this.currentState = next;
     this.notifyModelChanged();
   }
@@ -712,13 +750,18 @@ export class AgentSession {
   async setConfigOption(configId: string, value: string): Promise<void> {
     if (this.getStatus() === "closed") throw new Error("Session is closed");
     if (!this.backendSessionId) throw new Error("Session is still starting");
+    const modelApply = this.currentState?.model?.apply;
+    const appliesModel = modelApply?.kind === "setConfigOption" && modelApply.configId === configId;
     const next = await this.backend.setSessionConfigOption({
       sessionId: this.backendSessionId,
       configId,
       value,
     });
-    // A config option can be the model itself (opencode ≥ 1.15.13).
+    // Sticky mode replay also uses config options. Only an actual model-option
+    // write means the user replaced a saved Plus model that is still loading.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/319
     this.dropUsageWindowOnModelChange(next);
+    if (appliesModel) this.pendingModelSelection = null;
     this.currentState = next;
     this.notifyModelChanged();
     this.clearCurrentPlanIfModeLeft();
@@ -960,6 +1003,12 @@ export class AgentSession {
     const status = this.getStatus();
     if (status === "starting") {
       throw new Error("Session is still starting");
+    }
+    // The backend may report an idle fallback while the saved model registers;
+    // never let a direct caller send through it.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/319
+    if (this.pendingModelSelection) {
+      throw new Error("Blocked");
     }
     if (status === "running" || status === "awaiting_permission") {
       throw new Error("Session already has a turn in flight");

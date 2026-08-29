@@ -69,7 +69,8 @@ export function ModelEffortPicker({ override, className }: ModelEffortPickerProp
   }, [models]);
 
   const currentModel = models.find((m) => getModelKeyFromModel(m) === value);
-  const currentEffortLabel = effort?.options.find((o) => o.value === effort.value)?.label ?? null;
+  const currentEffortLabel =
+    currentModel?._disabledReason ?? effort?.options.find((o) => o.value === effort.value)?.label;
   const activeEffortValue = effort?.value ?? null;
 
   // Initialize the draft + highlight on open. Re-running on `value`
@@ -79,12 +80,18 @@ export function ModelEffortPicker({ override, className }: ModelEffortPickerProp
   useEffect(() => {
     if (open) {
       /* eslint-disable @eslint-react/hooks-extra/no-direct-set-state-in-use-effect -- seed the editable draft from props when the popover opens; drafts are committed on close, so this can't be pure derived state */
-      const initial = value && enabledKeys.includes(value) ? value : (enabledKeys[0] ?? null);
-      setHighlightKey(initial);
-      setDraftModelKey(initial);
-      const initialOpts = initial ? (effortOptionsByModelKey[initial] ?? []) : [];
+      const initialModel = value || enabledKeys[0] || null;
+      setHighlightKey(
+        initialModel && enabledKeys.includes(initialModel) ? initialModel : (enabledKeys[0] ?? null)
+      );
+      // A disabled current row can represent a saved model that is still
+      // loading. Keep it as the draft until the user actually picks another
+      // row; merely opening and closing the picker must not create a fallback.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/319
+      setDraftModelKey(initialModel);
+      const initialOpts = initialModel ? (effortOptionsByModelKey[initialModel] ?? []) : [];
       const initialEffort =
-        initial === value && activeEffortValue !== null
+        initialModel === value && activeEffortValue !== null
           ? activeEffortValue
           : initialOpts.length > 0
             ? (initialOpts[0]?.value ?? null)
