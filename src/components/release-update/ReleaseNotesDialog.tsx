@@ -4,14 +4,13 @@ import {
   loadLatestReleaseNotes,
   type ReleaseNotes,
 } from "@/components/release-update/releaseNotes";
+import { Markdown } from "@/components/Markdown";
 import { FullBleedReactModal } from "@/components/modals/ReactModal";
 import { Button } from "@/components/ui/button";
-import { useApp } from "@/context";
 import { cn } from "@/lib/utils";
 import { logWarn } from "@/logger";
-import { renderMarkdown } from "@/utils/renderMarkdown";
 import { AlertTriangle, ArrowUpCircle, ExternalLink, LoaderCircle } from "lucide-react";
-import { App, Component } from "obsidian";
+import type { App } from "obsidian";
 import * as React from "react";
 
 const UPDATE_PLUGIN_URL = "obsidian://show-plugin?id=copilot";
@@ -32,50 +31,6 @@ export interface ReleaseNotesDialogContentProps {
 export interface ReleaseNotesDialogProps {
   loadReleaseNotes?: () => Promise<ReleaseNotes>;
   onClose: () => void;
-}
-
-interface ReleaseNotesMarkdownProps {
-  body: string;
-}
-
-function ReleaseNotesMarkdown({ body }: ReleaseNotesMarkdownProps): React.ReactElement {
-  const app = useApp();
-  const targetRef = React.useRef<HTMLDivElement | null>(null);
-
-  React.useEffect(() => {
-    const target = targetRef.current;
-    if (!target) return;
-
-    const component = new Component();
-    component.load();
-    target.classList.add("markdown-rendered");
-    target.replaceChildren();
-
-    // Rendering the API's raw body keeps durable attachment URLs and native
-    // Obsidian typography. https://github.com/Brevilabs/obsidian-copilot-private/issues/317
-    void renderMarkdown(app, formatReleaseNotesForObsidian(body), target, "", component).catch(
-      (error: unknown) => {
-        logWarn("[ReleaseNotesDialog] markdown render failed", error);
-      }
-    );
-
-    return () => {
-      component.unload();
-      target.replaceChildren();
-    };
-  }, [app, body]);
-
-  return (
-    <div
-      className={cn(
-        "tw-min-w-0 tw-text-normal",
-        "[&>*:first-child]:tw-mt-0 [&>*:last-child]:tw-mb-0",
-        "[&_a]:tw-break-words",
-        "[&_img]:tw-mx-auto [&_img]:tw-block [&_img]:tw-h-auto [&_img]:tw-max-w-full [&_img]:tw-rounded-md"
-      )}
-      ref={targetRef}
-    />
-  );
 }
 
 /**
@@ -101,7 +56,16 @@ export function ReleaseNotesDialogContent({
 
       <div className="tw-h-[min(65vh,38rem)] tw-overflow-y-auto tw-overscroll-contain tw-px-5 tw-py-4">
         {state.status === "ready" ? (
-          <ReleaseNotesMarkdown body={state.release.body} />
+          <Markdown
+            className={cn(
+              "tw-min-w-0 tw-text-normal",
+              "[&>*:first-child]:tw-mt-0 [&>*:last-child]:tw-mb-0",
+              "[&_a]:tw-break-words",
+              "[&_img]:tw-mx-auto [&_img]:tw-block [&_img]:tw-h-auto [&_img]:tw-max-w-full [&_img]:tw-rounded-md"
+            )}
+            sourcePath=""
+            text={formatReleaseNotesForObsidian(state.release.body)}
+          />
         ) : state.status === "error" ? (
           <div
             aria-label="Couldn’t load release notes"
