@@ -93,8 +93,13 @@ export type { PlusSetupResult, RegisterPlusProviderInput } from "./setup/Copilot
 export {
   COPILOT_PLUS_DEFAULT_ENABLED_MODELS,
   COPILOT_PLUS_MODELS,
+  createCopilotPlusSyncQueue,
   plusSyncNeeded,
-  syncCopilotPlusProvider,
+} from "./setup/copilotPlusSync";
+export type {
+  CopilotPlusCatalogSnapshot,
+  CopilotPlusCatalogStatus,
+  CopilotPlusSyncQueue,
 } from "./setup/copilotPlusSync";
 
 // ---------------------------------------------------------------------------

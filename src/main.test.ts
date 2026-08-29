@@ -58,6 +58,11 @@ import { resetMiyoMutations } from "@/miyo/miyoResync";
 import { flushPersistence } from "@/services/settingsPersistence";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { disposeNotificationSound } from "@/utils/notificationSound";
+import { KeychainService } from "@/services/keychainService";
+import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
+import * as modelManagement from "@/modelManagement";
+import * as settingsMigrations from "@/settings/migrations";
+import * as settingsModel from "@/settings/model";
 
 /**
  * Build a plugin instance without running Obsidian's `Plugin` constructor or
@@ -97,6 +102,66 @@ async function flushTeardown(): Promise<void> {
 
 describe("main", () => {
   describe("CopilotPlugin", () => {
+    describe("onload()", () => {
+      afterEach(() => {
+        jest.restoreAllMocks();
+      });
+
+      it("continues plugin startup while initial Plus registration runs in the background (https://github.com/Brevilabs/obsidian-copilot-private/issues/319)", async () => {
+        const plugin = Object.create(CopilotPlugin.prototype) as CopilotPlugin;
+        Object.assign(plugin, {
+          app: {},
+          manifest: { version: "test" },
+          loadSettings: jest.fn(async () => undefined),
+        });
+        let finishRegistration: () => void = () => undefined;
+        const registerPlusProvider = jest.fn(
+          () =>
+            new Promise((resolve) => {
+              finishRegistration = () =>
+                resolve({ providerId: "plus-1", configuredModelIds: [] as string[] });
+            })
+        );
+        const api = {
+          setup: {
+            copilotPlus: {
+              registerPlusProvider,
+              unregisterPlusProvider: jest.fn(async () => undefined),
+            },
+          },
+        } as unknown as modelManagement.ModelManagementApi;
+        jest.spyOn(KeychainService, "resetInstance").mockImplementation(() => undefined);
+        jest.spyOn(KeychainService, "getInstance").mockReturnValue({} as KeychainService);
+        jest.spyOn(BrevilabsClient, "getInstance").mockReturnValue({
+          setPluginVersion: jest.fn(),
+          getModels: jest.fn(async () => ({
+            data: [{ id: "live-plus", label: "Live Plus" }],
+          })),
+        } as unknown as BrevilabsClient);
+        jest.spyOn(modelManagement, "createModelManagement").mockReturnValue(api);
+        jest.spyOn(settingsModel, "getSettings").mockReturnValue({
+          isPaidUser: true,
+          plusLicenseKey: "hydrated-token",
+        } as ReturnType<typeof settingsModel.getSettings>);
+        jest.spyOn(settingsModel, "subscribeToSettingsChange").mockReturnValue(() => undefined);
+        const stopAfterSync = new Error("stop after startup continues");
+        const runMigrations = jest
+          .spyOn(settingsMigrations, "runSettingsMigrations")
+          .mockRejectedValue(stopAfterSync);
+
+        const loading = plugin.onload();
+        const startupResult = loading.catch((error: unknown) => error);
+        await new Promise((resolve) => window.setTimeout(resolve, 0));
+
+        expect(registerPlusProvider).toHaveBeenCalledTimes(1);
+        expect(runMigrations).toHaveBeenCalledWith(api);
+        await expect(startupResult).resolves.toBe(stopAfterSync);
+
+        finishRegistration();
+        await Promise.resolve();
+      });
+    });
+
     describe("onunload()", () => {
       beforeEach(() => {
         jest.clearAllMocks();

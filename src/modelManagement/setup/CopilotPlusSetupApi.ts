@@ -12,10 +12,8 @@
  * `ModelManagementCoordinator`.
  *
  * Auto-enrollment targets the BYOK backends (`BYOK_DEFAULT_AUTO_ENROLL`:
- * Simple Chat + the OpenCode agent picker). `autoEnrollModelIds` narrows
- * *which* models enroll on first add: Plus passes just the default-on
- * subset (the flash model), so the rest of the lineup is created and shown
- * in the pickers but left off for the user to toggle on.
+ * Simple Chat + the OpenCode agent picker). Callers may use
+ * `autoEnrollModelIds` to narrow which newly discovered models enroll.
  */
 
 import type { ModelManagementCoordinator } from "@/modelManagement/createModelManagement";
@@ -45,9 +43,7 @@ export interface RegisterPlusProviderInput {
   /** Wire ids (`ModelInfo.id`) eligible for default auto-enrollment. When
    *  provided, only newly-added models whose id is in this set get enrolled
    *  into `autoEnrollIn`; the rest are added available-but-off. When omitted,
-   *  every newly-added (non-embedding) model is enrolled — the prior behavior.
-   *  Lets Plus curate a default-on subset (just the flash model today) while
-   *  still surfacing the full lineup in the pickers. */
+   *  every newly-added (non-embedding) model is enrolled. */
   autoEnrollModelIds?: readonly string[];
 }
 
@@ -202,11 +198,13 @@ export class CopilotPlusSetupApi {
       // re-synced too, otherwise an existing user keeps a stale snapshot and never
       // picks up newly-advertised capabilities (e.g. reasoning effort) on re-sign-in.
       // Plus models are server-curated, so there are no user overrides to clobber.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/319
       if (
         current.info.displayName !== info.displayName ||
         current.info.description !== info.description ||
         current.info.toolCall !== info.toolCall ||
         current.info.reasoning !== info.reasoning ||
+        JSON.stringify(current.info.reasoningEfforts) !== JSON.stringify(info.reasoningEfforts) ||
         JSON.stringify(current.info.modalities) !== JSON.stringify(info.modalities)
       ) {
         await this.#models.update(current.configuredModelId, {
@@ -215,6 +213,7 @@ export class CopilotPlusSetupApi {
             description: info.description,
             toolCall: info.toolCall,
             reasoning: info.reasoning,
+            reasoningEfforts: info.reasoningEfforts,
             modalities: info.modalities,
           },
         });

@@ -35,9 +35,10 @@ import { MessageRepository } from "@/core/MessageRepository";
 import { logError, logInfo, logWarn } from "@/logger";
 import { logFileManager } from "@/logFileManager";
 import {
+  createCopilotPlusSyncQueue,
   createModelManagement,
   plusSyncNeeded,
-  syncCopilotPlusProvider,
+  type CopilotPlusSyncQueue,
   type ModelManagementApi,
 } from "@/modelManagement";
 import { KeychainService } from "@/services/keychainService";
@@ -157,6 +158,8 @@ export default class CopilotPlugin extends Plugin {
   private planPreviewViewType?: typeof import("@/agentMode").PLAN_PREVIEW_VIEW_TYPE;
   private agentModelDiscoveryUnsubscriber?: () => void;
   modelManagement!: ModelManagementApi;
+  /** Live Plus catalog request queue owned by this plugin lifecycle. */
+  copilotPlusSync!: CopilotPlusSyncQueue;
   /** Frozen path-only facade available to Agent Mode's Obsidian CLI bridge. */
   symposiumAgentBridge?: Readonly<SymposiumAgentBridge>;
   /** Provider-credential-free channel available to the managed Agent Chat search skill. */
@@ -215,25 +218,22 @@ export default class CopilotPlugin extends Plugin {
     KeychainService.resetInstance();
     KeychainService.getInstance(this.app);
     await this.loadSettings();
+    // Initialize before the catalog queue starts so even its first background
+    // request carries the current plugin version.
+    this.brevilabsClient = BrevilabsClient.getInstance();
+    this.brevilabsClient.setPluginVersion(this.manifest.version);
     this.modelManagement = createModelManagement({
       app: this.app,
     });
     // Register/unregister the Copilot Plus provider (and its models) to match
     // Plus state, so Plus models surface in the chat + opencode pickers. The
     // license key is already hydrated from Keychain by the settings boundary.
-    // Idempotent, so the redundant initial call below + per-change calls are
-    // safe. Serialized through `plusSyncChain` so a fast
-    // sign-out→sign-in (each its own settings change) settles in issue order,
-    // not in whichever overlapping reconcile happens to finish last.
-    let plusSyncChain: Promise<void> = Promise.resolve();
-    const syncPlus = (isPaidUser: boolean | undefined, licenseKey: string): void => {
-      plusSyncChain = plusSyncChain.then(() =>
-        syncCopilotPlusProvider(this.modelManagement, !!isPaidUser, licenseKey)
-      );
-    };
-    // Initial reconcile: an already-signed-in user's `isPaidUser` is restored
-    // from disk without firing the subscription, so register on load.
-    syncPlus(getSettings().isPaidUser, getSettings().plusLicenseKey);
+    // The public catalog request runs once per plugin lifecycle. Later license
+    // changes reuse that result while provider writes follow the newest state,
+    // so a fast sign-out→sign-in cannot settle out of order.
+    const syncPlus = (this.copilotPlusSync = createCopilotPlusSyncQueue(this.modelManagement, () =>
+      this.brevilabsClient.getModels()
+    ));
     this.settingsUnsubscriber = subscribeToSettingsChange((prev, next) => {
       void (async () => {
         try {
@@ -250,10 +250,19 @@ export default class CopilotPlugin extends Plugin {
         }
         // Sign-in / sign-out (isPaidUser flip) or key rotation while signed in.
         if (plusSyncNeeded(prev, next)) {
-          syncPlus(next.isPaidUser, next.plusLicenseKey);
+          void syncPlus(!!next.isPaidUser, next.plusLicenseKey);
         }
       })();
     });
+    // Initial reconcile: an already-signed-in user's `isPaidUser` is restored
+    // from disk without firing the subscription. Start it before Agent Mode so
+    // a missing saved Plus model is identifiable as registration in progress.
+    // Plugin loading and non-OpenCode agents do not await this request; eligible
+    // OpenCode startup consumes the same promise through its preload gate.
+    // Keep the persistence subscriber above this call so first-time enrollment
+    // writes reach data.json.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/319
+    void syncPlus(!!getSettings().isPaidUser, getSettings().plusLicenseKey);
     // One-time settings migrations. Runs after the persist subscriber is wired
     // (so every mutation is saved) and after createModelManagement, and before
     // agent/model-discovery init below — so migrated BYOK providers are present
@@ -274,9 +283,6 @@ export default class CopilotPlugin extends Plugin {
     CustomCommandManager.getInstance(this.app);
     logFileManager.setApp(this.app);
 
-    // Initialize BrevilabsClient
-    this.brevilabsClient = BrevilabsClient.getInstance();
-    this.brevilabsClient.setPluginVersion(this.manifest.version);
     // Re-verify the cached entitlement token offline so the strict Plus and
     // self-host gates fail closed against an edited data.json until the
     // signature re-proves itself. The network re-validation below overrides
