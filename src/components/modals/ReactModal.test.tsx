@@ -29,18 +29,6 @@ describe("ReactModal", () => {
       expect(modal.contentEl.classList.contains("copilot-config-modal")).toBe(false);
     });
 
-    it("applies a Tailwind class name to native modal chrome for https://github.com/Brevilabs/obsidian-copilot-private/issues/317", () => {
-      const modal = new TestModal(
-        new App(),
-        undefined,
-        "copilot-release-notes-modal tw-overflow-hidden tw-p-0"
-      );
-
-      expect(modal.modalEl.classList.contains("copilot-release-notes-modal")).toBe(true);
-      expect(modal.modalEl.classList.contains("tw-overflow-hidden")).toBe(true);
-      expect(modal.modalEl.classList.contains("tw-p-0")).toBe(true);
-    });
-
     it("styles the frame before it is opened, so it is never painted unstyled", () => {
       const modal = new TestModal(new App(), undefined, "copilot-config-modal");
 

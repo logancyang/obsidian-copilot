@@ -133,6 +133,7 @@ describe("ReleaseNotesDialog", () => {
         const modal = new ReleaseNotesModal(new App());
 
         expect(modal.modalEl.classList.contains(RELEASE_NOTES_MODAL_CLASS)).toBe(true);
+        expect(modal.modalEl.className).toBe(`modal ${RELEASE_NOTES_MODAL_CLASS}`);
         expect(modal.titleEl.textContent).toBe("");
       });
     });

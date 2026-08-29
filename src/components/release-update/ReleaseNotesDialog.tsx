@@ -17,11 +17,6 @@ import * as React from "react";
 const UPDATE_PLUGIN_URL = "obsidian://show-plugin?id=copilot";
 
 export const RELEASE_NOTES_MODAL_CLASS = "copilot-release-notes-modal";
-export const RELEASE_NOTES_MODAL_CLASS_NAME = cn(
-  RELEASE_NOTES_MODAL_CLASS,
-  "tw-max-h-[calc(100vh-2rem)] tw-w-[min(46rem,calc(100vw-2rem))] tw-min-w-0 tw-max-w-[calc(100vw-2rem)] tw-overflow-hidden tw-p-0",
-  "[&_.modal-content]:tw-p-0 [&_.modal-header]:tw-mb-0 [&_.modal-title]:tw-hidden"
-);
 
 export type ReleaseNotesDialogState =
   | { status: "loading" }
@@ -192,7 +187,7 @@ export class ReleaseNotesModal extends ReactModal {
     app: App,
     private readonly loadReleaseNotes: () => Promise<ReleaseNotes> = loadLatestReleaseNotes
   ) {
-    super(app, undefined, RELEASE_NOTES_MODAL_CLASS_NAME);
+    super(app, undefined, RELEASE_NOTES_MODAL_CLASS);
   }
 
   protected renderContent(close: () => void): React.ReactElement {
