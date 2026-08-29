@@ -1,25 +1,33 @@
 import type { ModelSelectorEntry } from "@/components/ui/ModelSelector";
 import { ChatModelProviders } from "@/constants";
+import type { ModelInfo } from "@/modelManagement";
 import type { CopilotSettings } from "@/settings/model";
-import { COPILOT_PLUS_DEFAULT_ENABLED_MODELS, COPILOT_PLUS_MODELS } from "@/modelManagement";
 
 /** See AGENTS.md → "Referential stability". */
 const EMPTY_ENTRIES: readonly ModelSelectorEntry[] = Object.freeze([]);
 
 const LICENSE_REQUIRED = "Copilot license required";
+const MAX_PREVIEWED_MODELS = 3;
+
+/** Display metadata every live Plus picker surface consumes. */
+export type CopilotPlusCatalogModel = Pick<ModelInfo, "id" | "displayName" | "description">;
 
 /**
- * The lineup previewed to a user without a license: exactly the models a
- * license switches on, so the preview and the outcome match — activate, and
- * these three rows lose their locks in place rather than being replaced by a
- * different set.
+ * Resolve a Copilot Plus catalog row from either its raw id or an agent wire id.
+ * Returns the existing catalog object so callers do not allocate display
+ * metadata while rebuilding a picker.
  *
- * Showing all eight would bury the user's own models: the picker is 288px tall,
- * so a full lineup pushes the checkmark on their current model below the fold.
+ * @param wireModelId - Raw Plus id or an agent-prefixed wire id.
  */
-const PREVIEWED_MODELS = COPILOT_PLUS_MODELS.filter((model) =>
-  COPILOT_PLUS_DEFAULT_ENABLED_MODELS.includes(model.id)
-);
+export function findCopilotPlusModel(
+  wireModelId: string,
+  models: readonly CopilotPlusCatalogModel[]
+) {
+  return models.find(
+    (model) =>
+      wireModelId === model.id || wireModelId === `${ChatModelProviders.COPILOT_PLUS}/${model.id}`
+  );
+}
 
 /**
  * Whether a surface should advertise the lineup — true exactly when no Copilot
@@ -56,10 +64,13 @@ export function shouldPreviewCopilotModels(providers: CopilotSettings["providers
  *   keys distinct when several agents each preview the same model.
  */
 export function lockedCopilotEntries(
+  models: readonly CopilotPlusCatalogModel[],
   opts: { group?: string; backendId?: string } = {}
 ): readonly ModelSelectorEntry[] {
-  if (PREVIEWED_MODELS.length === 0) return EMPTY_ENTRIES;
-  return PREVIEWED_MODELS.map((model) => ({
+  if (models.length === 0) return EMPTY_ENTRIES;
+  // Keep the preview compact enough that a user's own current model stays in
+  // the 288px picker. The rows themselves always come from the live endpoint.
+  return models.slice(0, MAX_PREVIEWED_MODELS).map((model) => ({
     name: model.id,
     provider: ChatModelProviders.COPILOT_PLUS,
     displayName: model.displayName || model.id,

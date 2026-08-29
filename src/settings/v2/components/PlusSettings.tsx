@@ -1,5 +1,6 @@
 import { CopilotPlusWelcomeModal } from "@/components/modals/CopilotPlusWelcomeModal";
 import { useApp } from "@/context";
+import { usePlugin } from "@/contexts/PluginContext";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { PasswordInput } from "@/components/ui/password-input";
@@ -15,6 +16,7 @@ import { updateSetting, useSettingsValue } from "@/settings/model";
 import { ExternalLink, Loader2 } from "lucide-react";
 import React, { useState } from "react";
 import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
+import { Notice } from "obsidian";
 
 /**
  * B3 placeholder: mock Plus usage data until the real API is available.
@@ -35,6 +37,7 @@ const LIFETIME_PLAN = "believer";
 
 export function PlusSettings() {
   const app = useApp();
+  const plugin = usePlugin();
   const settings = useSettingsValue();
   const [error, setError] = useState<string | null>(null);
   const [isChecking, setIsChecking] = useState(false);
@@ -135,7 +138,19 @@ export function PlusSettings() {
               setError("Invalid license key");
             } else {
               setError(null);
-              new CopilotPlusWelcomeModal(app).open();
+              const catalog = await plugin.copilotPlusSync.waitForSettled();
+              const defaultModel = catalog.status === "ready" ? catalog.models[0] : undefined;
+              if (defaultModel) {
+                new CopilotPlusWelcomeModal(
+                  app,
+                  defaultModel.id,
+                  defaultModel.displayName || defaultModel.id
+                ).open();
+              } else {
+                new Notice(
+                  "Your license is active, but Copilot Plus models could not be loaded. Reload while online to choose a Plus model."
+                );
+              }
             }
           })}
           className="tw-min-w-10 tw-text-xs md:tw-text-sm"

@@ -347,9 +347,8 @@ export default class ChatModelManager {
         // Reasoning is opt-in: forward the user's per-model effort pick only for
         // REASONING-capable models, and gate enableReasoning on an EXPLICIT effort.
         // Without an effort, ChatOpenRouter.invocationParams falls back to
-        // `reasoning: { max_tokens: 1024 }`, which would make the default-on
-        // copilot-plus-flash spend reasoning budget/latency despite being the fast
-        // default. So flash stays fast until the user picks an effort.
+        // `reasoning: { max_tokens: 1024 }`, which would spend reasoning
+        // budget/latency for a model the service published as fast by default.
         enableReasoning:
           (customModel.capabilities?.includes(ModelCapability.REASONING) ?? false) &&
           !!customModel.reasoningEffort,
@@ -691,9 +690,8 @@ export default class ChatModelManager {
     // lookup. Chat-backend (bridged) models live in the Provider/ConfiguredModel
     // registries and carry the full capability set derived from their
     // modalities/reasoning (`configuredModelToCustomModel`). A model whose wire id
-    // ALSO exists in legacy `settings.activeModels` — notably `copilot-plus-flash`,
-    // whose built-in entry advertises only VISION — would otherwise mask the
-    // bridged REASONING/VISION capabilities, so a capability check
+    // ALSO exists in legacy `settings.activeModels` would otherwise mask the
+    // bridged capability snapshot, so a capability check
     // (CopilotPlusChainRunner.hasCapability / isMultimodalModel) reads `false` and
     // reasoning/image content is dropped. The bridged model is the one actually
     // running, so it wins.

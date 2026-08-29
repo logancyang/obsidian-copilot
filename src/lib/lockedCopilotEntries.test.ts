@@ -1,5 +1,9 @@
-import { COPILOT_PLUS_DEFAULT_ENABLED_MODELS, COPILOT_PLUS_MODELS } from "@/modelManagement";
-import { lockedCopilotEntries, shouldPreviewCopilotModels } from "./lockedCopilotEntries";
+import type { ModelInfo } from "@/modelManagement";
+import {
+  findCopilotPlusModel,
+  lockedCopilotEntries,
+  shouldPreviewCopilotModels,
+} from "./lockedCopilotEntries";
 
 import type { CopilotSettings } from "@/settings/model";
 
@@ -7,7 +11,25 @@ function providerRows(providers: Record<string, unknown>): CopilotSettings["prov
   return providers as unknown as CopilotSettings["providers"];
 }
 
+const LIVE_MODELS: readonly ModelInfo[] = Object.freeze([
+  { id: "tomorrow-one", displayName: "Tomorrow One", description: "First live model" },
+  { id: "tomorrow-two", displayName: "Tomorrow Two", description: "Second live model" },
+  { id: "tomorrow-three", displayName: "Tomorrow Three" },
+  { id: "tomorrow-four", displayName: "Tomorrow Four" },
+]);
+
 describe("lockedCopilotEntries", () => {
+  describe("findCopilotPlusModel()", () => {
+    it("resolves raw and agent-routed Plus ids without matching unrelated models (https://github.com/Brevilabs/obsidian-copilot-private/issues/319)", () => {
+      expect(findCopilotPlusModel("tomorrow-one", LIVE_MODELS)?.displayName).toBe("Tomorrow One");
+      expect(findCopilotPlusModel("copilot-plus/tomorrow-one", LIVE_MODELS)?.displayName).toBe(
+        "Tomorrow One"
+      );
+      expect(findCopilotPlusModel("openai/tomorrow-one-like", LIVE_MODELS)).toBeUndefined();
+      expect(findCopilotPlusModel("openrouter/tomorrow-one", LIVE_MODELS)).toBeUndefined();
+    });
+  });
+
   describe("shouldPreviewCopilotModels()", () => {
     it("previews when no Copilot provider is registered", () => {
       expect(shouldPreviewCopilotModels(providerRows({}))).toBe(true);
@@ -30,21 +52,17 @@ describe("lockedCopilotEntries", () => {
   });
 
   describe("lockedCopilotEntries()", () => {
-    it("previews exactly the models a license switches on, in lineup order", () => {
-      const previewed = lockedCopilotEntries().map((entry) => entry.name);
+    it("previews the first three live endpoint models in server order (https://github.com/Brevilabs/obsidian-copilot-private/issues/319)", () => {
+      const previewed = lockedCopilotEntries(LIVE_MODELS).map((entry) => entry.name);
 
-      expect(previewed).toEqual(
-        COPILOT_PLUS_MODELS.filter((model) =>
-          COPILOT_PLUS_DEFAULT_ENABLED_MODELS.includes(model.id)
-        ).map((model) => model.id)
-      );
+      expect(previewed).toEqual(["tomorrow-one", "tomorrow-two", "tomorrow-three"]);
       // The cap is the point: a full lineup would push the user's own models
       // past the fold of a 288px picker.
-      expect(previewed.length).toBeLessThan(COPILOT_PLUS_MODELS.length);
+      expect(previewed.length).toBeLessThan(LIVE_MODELS.length);
     });
 
     it("marks every row as needing a license and as non-selectable", () => {
-      const entries = lockedCopilotEntries();
+      const entries = lockedCopilotEntries(LIVE_MODELS);
 
       expect(entries.length).toBeGreaterThan(0);
       for (const entry of entries) {
@@ -56,16 +74,19 @@ describe("lockedCopilotEntries", () => {
     });
 
     it("carries each model's display name and description so the row says what it is for", () => {
-      const flash = lockedCopilotEntries()[0];
-      const source = COPILOT_PLUS_MODELS.find((model) => model.id === flash.name);
+      const first = lockedCopilotEntries(LIVE_MODELS)[0];
+      const source = LIVE_MODELS.find((model) => model.id === first.name);
 
-      expect(flash.displayName).toBe(source?.displayName);
-      expect(flash._subtitle).toBe(source?.description);
+      expect(first.displayName).toBe(source?.displayName);
+      expect(first._subtitle).toBe(source?.description);
     });
 
     it("files rows under a group and backend when one is given, and leaves them flat otherwise", () => {
-      const grouped = lockedCopilotEntries({ group: "OpenCode", backendId: "opencode" });
-      const flat = lockedCopilotEntries();
+      const grouped = lockedCopilotEntries(LIVE_MODELS, {
+        group: "OpenCode",
+        backendId: "opencode",
+      });
+      const flat = lockedCopilotEntries(LIVE_MODELS);
 
       expect(grouped.every((entry) => entry._group === "OpenCode")).toBe(true);
       expect(grouped.every((entry) => entry._backendId === "opencode")).toBe(true);

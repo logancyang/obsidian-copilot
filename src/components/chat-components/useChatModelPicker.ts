@@ -7,6 +7,8 @@ import {
 } from "@/modelManagement";
 import { getModelKeyFromModel, settingsStore, useSettingsValue } from "@/settings/model";
 import type { ModelSelectorEntry } from "@/components/ui/ModelSelector";
+import { usePlugin } from "@/contexts/PluginContext";
+import { useCopilotPlusCatalog } from "@/contexts/useCopilotPlusCatalog";
 import { lockedCopilotEntries, shouldPreviewCopilotModels } from "@/lib/lockedCopilotEntries";
 import { useAtomValue } from "jotai";
 import React from "react";
@@ -57,6 +59,8 @@ export function useChatModelPicker(params: {
   onChange: (configuredModelId: string) => void;
 }): ChatModelPickerOverride {
   const { value, onChange } = params;
+  const plugin = usePlugin();
+  const copilotPlusCatalog = useCopilotPlusCatalog(plugin);
   const entries = useAtomValue(backendPickerAtomFamily("chat"), { store: settingsStore });
   const settings = useSettingsValue();
 
@@ -64,8 +68,10 @@ export function useChatModelPicker(params: {
   // fallback, and the stored value can never resolve to one.
   const lockedRows = React.useMemo(
     () =>
-      shouldPreviewCopilotModels(settings.providers) ? lockedCopilotEntries() : EMPTY_LOCKED_ROWS,
-    [settings.providers]
+      shouldPreviewCopilotModels(settings.providers)
+        ? lockedCopilotEntries(copilotPlusCatalog.models)
+        : EMPTY_LOCKED_ROWS,
+    [settings.providers, copilotPlusCatalog.models]
   );
 
   const { models, byModelKey, idToModelKey } = React.useMemo(() => {
@@ -75,6 +81,15 @@ export function useChatModelPicker(params: {
     for (const entry of entries) {
       if (entry.state !== "ok") continue;
       const { configuredModel, provider, configuredModelId } = entry;
+      const isCurrentPlusModel =
+        provider.origin.kind !== "copilot-plus" ||
+        (copilotPlusCatalog.status === "ready" &&
+          copilotPlusCatalog.models.some((model) => model.id === configuredModel.info.id));
+      // A persisted Plus row can preserve the user's selected label offline,
+      // but it cannot declare current catalog membership. Hide every other
+      // stale row until this lifecycle's endpoint authorizes its exact id.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/319
+      if (!isCurrentPlusModel && configuredModelId !== value) continue;
       // Leave capabilities `undefined` when the snapshot carries no modality
       // data so unknown models stay unblocked; only a populated array (which may
       // be empty) asserts "known". See the image guard in `Chat.tsx`.
@@ -86,7 +101,13 @@ export function useChatModelPicker(params: {
         displayName: configuredModel.info.displayName || configuredModel.info.id,
         enabled: true,
         capabilities,
-        _disabledReason: needsKey ? "Add API key" : undefined,
+        _disabledReason: !isCurrentPlusModel
+          ? copilotPlusCatalog.status === "loading"
+            ? "Loading…"
+            : "Unavailable"
+          : needsKey
+            ? "Add API key"
+            : undefined,
         _needsSelfHostWarning: entry.needsSelfHostWarning,
       };
       const modelKey = getModelKeyFromModel(modelEntry);
@@ -95,7 +116,7 @@ export function useChatModelPicker(params: {
       idToModelKey.set(configuredModelId, modelKey);
     }
     return { models, byModelKey, idToModelKey };
-  }, [entries]);
+  }, [entries, value, copilotPlusCatalog]);
 
   const resolvedValue = React.useMemo(() => {
     const resolvedId = resolveChatModelSelectionId(entries, value);

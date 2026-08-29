@@ -9,6 +9,7 @@ import { useBackendInstallStates } from "@/agentMode/ui/useBackendDescriptor";
 import { buildAgentModelPicker } from "./agentModelPickerHelpers";
 import { useManagerSubscribe } from "./useManagerSubscribe";
 import type CopilotPlugin from "@/main";
+import { useCopilotPlusCatalog } from "@/contexts/useCopilotPlusCatalog";
 
 export interface AgentModelPickerOverride {
   models: ModelSelectorEntry[];
@@ -97,12 +98,18 @@ export function useAgentModelPicker(
   // The registry is static, so the descriptor list is a stable module constant.
   const descriptors = useMemo(() => listBackendDescriptors(), []);
   const installStates = useBackendInstallStates(plugin);
+  const copilotPlusCatalog = useCopilotPlusCatalog(plugin);
   const signal = useAgentModelSignal(manager, descriptors);
   return useMemo(() => {
     // These are memo invalidators: the builder reads the manager and
     // descriptors directly after either external store reports a change.
     void signal;
     void installStates;
-    return buildAgentModelPicker({ manager, descriptors, settings });
-  }, [manager, descriptors, settings, signal, installStates]);
+    return buildAgentModelPicker({
+      manager,
+      descriptors,
+      settings,
+      copilotPlusModels: copilotPlusCatalog.models,
+    });
+  }, [manager, descriptors, settings, signal, installStates, copilotPlusCatalog]);
 }
