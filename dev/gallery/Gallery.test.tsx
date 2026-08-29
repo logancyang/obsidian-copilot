@@ -25,6 +25,7 @@ jest.mock("@/components/modals/ReactModal", () => {
     ReactModal: class ReactModal {
       app: App;
       contentEl = activeDocument.createElement("div");
+      modalEl = activeDocument.createElement("div");
       title: string | undefined;
 
       constructor(app: App, title?: string) {
@@ -708,7 +709,7 @@ describe("Gallery", () => {
       ).toBeTruthy();
     });
 
-    it("lets a frame-styled modal fill its native content width for https://github.com/Brevilabs/obsidian-copilot-private/issues/317", () => {
+    it("applies the selected width to a fullscreen modal frame for https://github.com/Brevilabs/obsidian-copilot-private/issues/317", () => {
       const catalog = createGalleryCatalog(
         [
           {
@@ -730,14 +731,16 @@ describe("Gallery", () => {
         ],
         0
       );
-      const gallery = render(<GalleryHarness catalog={catalog} />);
+      const gallery = render(<GalleryHarness catalog={catalog} initialState={{ width: 300 }} />);
       const modal = getGalleryModalMock().open.mock.calls[0][0] as {
+        modalEl: HTMLElement;
         renderContent(): React.ReactElement;
       };
 
       const modalContent = render(modal.renderContent());
       const storyElement = modalContent.container.querySelector<HTMLElement>("[data-story]");
 
+      expect(modal.modalEl.style.width).toBe("300px");
       expect(storyElement?.style.width).toBe("100%");
       modalContent.unmount();
       gallery.unmount();

@@ -1,19 +1,18 @@
-import {
-  formatReleaseNotesForObsidian,
-  GITHUB_RELEASES_URL,
-  loadLatestReleaseNotes,
-  type ReleaseNotes,
-} from "@/components/release-update/releaseNotes";
 import { Markdown } from "@/components/Markdown";
-import { FullBleedReactModal } from "@/components/modals/ReactModal";
+import { formatReleaseNotesForObsidian } from "@/components/release-update/releaseNotes";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
-import { logWarn } from "@/logger";
 import { AlertTriangle, ArrowUpCircle, ExternalLink, LoaderCircle } from "lucide-react";
-import type { App } from "obsidian";
 import * as React from "react";
 
+export const GITHUB_RELEASES_URL = "https://github.com/logancyang/obsidian-copilot/releases/latest";
+
 const UPDATE_PLUGIN_URL = "obsidian://show-plugin?id=copilot";
+
+export interface ReleaseNotes {
+  body: string;
+  htmlUrl: string;
+  version: string;
+}
 
 export type ReleaseNotesDialogState =
   | { status: "loading" }
@@ -26,11 +25,6 @@ export type ReleaseNotesDialogState =
 export interface ReleaseNotesDialogContentProps {
   onClose: () => void;
   state: ReleaseNotesDialogState;
-}
-
-export interface ReleaseNotesDialogProps {
-  loadReleaseNotes?: () => Promise<ReleaseNotes>;
-  onClose: () => void;
 }
 
 /**
@@ -46,25 +40,20 @@ export function ReleaseNotesDialogContent({
   const releaseUrl = state.status === "ready" ? state.release.htmlUrl : GITHUB_RELEASES_URL;
 
   return (
-    <div className="tw-flex tw-flex-col tw-overflow-hidden tw-text-normal">
-      <header className="copilot-divider-b tw-flex tw-items-center tw-gap-3 tw-bg-secondary tw-px-5 tw-py-4 tw-pr-12">
+    <div className="tw-flex tw-h-[min(80vh,46rem)] tw-max-h-[calc(100vh-2rem)] tw-flex-col tw-overflow-hidden tw-text-normal">
+      <header className="copilot-divider-b tw-flex tw-shrink-0 tw-items-center tw-gap-3 tw-bg-secondary tw-px-5 tw-py-4 tw-pr-12">
         <span className="tw-flex tw-size-9 tw-shrink-0 tw-items-center tw-justify-center tw-rounded-full tw-bg-interactive-accent tw-text-on-accent">
           <ArrowUpCircle aria-hidden="true" className="tw-size-5" />
         </span>
         <h2 className="tw-m-0 tw-text-ui-medium tw-font-semibold">Copilot update available</h2>
       </header>
 
-      <div className="tw-h-[min(65vh,38rem)] tw-overflow-y-auto tw-overscroll-contain tw-px-5 tw-py-4">
+      <div className="tw-min-h-0 tw-flex-1 tw-overflow-y-auto tw-overscroll-contain tw-px-5 tw-py-4">
         {state.status === "ready" ? (
           <Markdown
-            className={cn(
-              "tw-min-w-0 tw-text-normal",
-              "[&>*:first-child]:tw-mt-0 [&>*:last-child]:tw-mb-0",
-              "[&_a]:tw-break-words",
-              "[&_img]:tw-mx-auto [&_img]:tw-block [&_img]:tw-h-auto [&_img]:tw-max-w-full [&_img]:tw-rounded-md"
-            )}
+            onRendered={formatReleaseNotesForObsidian}
             sourcePath=""
-            text={formatReleaseNotesForObsidian(state.release.body)}
+            text={state.release.body}
           />
         ) : state.status === "error" ? (
           <div
@@ -97,7 +86,7 @@ export function ReleaseNotesDialogContent({
         )}
       </div>
 
-      <footer className="copilot-divider-t tw-flex tw-flex-wrap tw-items-center tw-justify-end tw-gap-2 tw-bg-secondary tw-px-5 tw-py-3">
+      <footer className="copilot-divider-t tw-flex tw-shrink-0 tw-flex-wrap tw-items-center tw-justify-end tw-gap-2 tw-bg-secondary tw-px-5 tw-py-3">
         <Button asChild size="default" variant="secondary">
           <a href={releaseUrl} rel="noreferrer" target="_blank">
             View on GitHub
@@ -113,46 +102,4 @@ export function ReleaseNotesDialogContent({
       </footer>
     </div>
   );
-}
-
-/** Loads the latest release while keeping the visible dialog shell stable. */
-export function ReleaseNotesDialog({
-  loadReleaseNotes = loadLatestReleaseNotes,
-  onClose,
-}: ReleaseNotesDialogProps): React.ReactElement {
-  const [state, setState] = React.useState<ReleaseNotesDialogState>({ status: "loading" });
-
-  React.useEffect(() => {
-    // Release-note availability must never block the store path; network
-    // failures become an in-dialog fallback. https://github.com/Brevilabs/obsidian-copilot-private/issues/317
-    void loadReleaseNotes()
-      .then((release) => setState({ status: "ready", release }))
-      .catch((error: unknown) => {
-        logWarn("[ReleaseNotesDialog] release notes request failed", error);
-        setState({ status: "error" });
-      });
-  }, [loadReleaseNotes]);
-
-  return <ReleaseNotesDialogContent onClose={onClose} state={state} />;
-}
-
-/**
- * Owns the native Obsidian modal lifecycle for release notes while leaving
- * fetching and rendering behavior inside the testable React boundary.
- */
-export class ReleaseNotesModal extends FullBleedReactModal {
-  /**
-   * @param app - Obsidian app that owns the modal and its Markdown renderer.
-   * @param loadReleaseNotes - Loader used to retrieve the release shown after opening.
-   */
-  constructor(
-    app: App,
-    private readonly loadReleaseNotes: () => Promise<ReleaseNotes> = loadLatestReleaseNotes
-  ) {
-    super(app);
-  }
-
-  protected renderContent(close: () => void): React.ReactElement {
-    return <ReleaseNotesDialog loadReleaseNotes={this.loadReleaseNotes} onClose={close} />;
-  }
 }

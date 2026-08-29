@@ -31,6 +31,27 @@ describe("Markdown", () => {
       expect(container.firstElementChild?.classList.contains("tw-p-2")).toBe(true);
     });
 
+    it(`runs post-render handling only after Obsidian finishes for ${ISSUE_URL}`, async () => {
+      let finishRender: (() => void) | undefined;
+      jest.mocked(renderMarkdown).mockImplementation(
+        () =>
+          new Promise<void>((resolve) => {
+            finishRender = resolve;
+          })
+      );
+      const onRendered = jest.fn();
+      const view = render(
+        <AppContext.Provider value={new App()}>
+          <Markdown onRendered={onRendered} sourcePath="" text="Release notes" />
+        </AppContext.Provider>
+      );
+
+      expect(onRendered).not.toHaveBeenCalled();
+      await act(async () => finishRender?.());
+
+      expect(onRendered).toHaveBeenCalledWith(view.container.firstElementChild);
+    });
+
     it(`falls back to readable text when Obsidian cannot render the Markdown for ${ISSUE_URL}`, async () => {
       jest.mocked(renderMarkdown).mockRejectedValue(new Error("renderer unavailable"));
 
