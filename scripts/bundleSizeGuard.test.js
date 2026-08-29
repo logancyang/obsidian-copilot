@@ -2,6 +2,7 @@
 
 const {
   assertBundleSize,
+  createBundleSizeGuard,
   dedupeEsbuildLegalComments,
   rewriteExactZodImports,
 } = require("./bundleSizeGuard.js");
@@ -36,7 +37,7 @@ describe("bundleSizeGuard", () => {
       );
     });
 
-    it("leaves type-only, multi-symbol, namespace, unrelated, attributed, commented, and string imports unchanged for https://github.com/Brevilabs/obsidian-copilot-private/issues/94", () => {
+    it("leaves type-only, multi-symbol, namespace, unrelated, attributed, and string imports unchanged for https://github.com/Brevilabs/obsidian-copilot-private/issues/94", () => {
       const source = [
         'import type { z } from "zod";',
         'import zodDefault, { z } from "zod";',
@@ -49,6 +50,35 @@ describe("bundleSizeGuard", () => {
       ].join("\n");
 
       expect(rewriteExactZodImports(source, "dependency.ts")).toBe(source);
+    });
+
+    it("preserves comments inside exact imports for https://github.com/Brevilabs/obsidian-copilot-private/issues/94", () => {
+      const source = [
+        'import /*! Zod license */ { z } from "zod";',
+        "import { /*! Required notice */ z as schema } from 'zod/v4';",
+      ].join("\n");
+
+      expect(rewriteExactZodImports(source, "dependency.js")).toBe(source);
+    });
+  });
+
+  describe("createBundleSizeGuard()", () => {
+    it("registers only dependency rewriting in development for https://github.com/Brevilabs/obsidian-copilot-private/issues/94", () => {
+      const build = { onEnd: jest.fn(), onLoad: jest.fn() };
+
+      createBundleSizeGuard({ production: false }).setup(build);
+
+      expect(build.onLoad).toHaveBeenCalledTimes(1);
+      expect(build.onEnd).not.toHaveBeenCalled();
+    });
+
+    it("registers dependency rewriting and artifact enforcement in production for https://github.com/Brevilabs/obsidian-copilot-private/issues/94", () => {
+      const build = { onEnd: jest.fn(), onLoad: jest.fn() };
+
+      createBundleSizeGuard({ production: true }).setup(build);
+
+      expect(build.onLoad).toHaveBeenCalledTimes(1);
+      expect(build.onEnd).toHaveBeenCalledTimes(1);
     });
   });
 
