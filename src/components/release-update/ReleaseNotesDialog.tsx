@@ -1,8 +1,10 @@
 import { Markdown } from "@/components/Markdown";
+import { FullBleedReactModal } from "@/components/modals/ReactModal";
 import { formatReleaseNotesForObsidian } from "@/components/release-update/releaseNotes";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { AlertTriangle, ArrowUpCircle, ExternalLink, LoaderCircle } from "lucide-react";
+import { App } from "obsidian";
 import * as React from "react";
 
 export const GITHUB_RELEASES_URL = "https://github.com/logancyang/obsidian-copilot/releases/latest";
@@ -109,4 +111,27 @@ export function ReleaseNotesDialogContent({
       </footer>
     </div>
   );
+}
+
+/** Owns the Obsidian modal lifecycle for one already-loaded Copilot release. */
+export class ReleaseNotesModal extends FullBleedReactModal {
+  private readonly release: ReleaseNotes;
+
+  /**
+   * @param app - Obsidian app that owns the modal window.
+   * @param release - Release record to render without another network request.
+   */
+  constructor(app: App, release: ReleaseNotes) {
+    super(app);
+    this.release = release;
+  }
+
+  protected renderContent(close: () => void): React.ReactElement {
+    return (
+      <ReleaseNotesDialogContent
+        onClose={close}
+        state={{ status: "ready", release: this.release }}
+      />
+    );
+  }
 }

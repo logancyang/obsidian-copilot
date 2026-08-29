@@ -1,4 +1,6 @@
 import { Button } from "@/components/ui/button";
+import { ReleaseNotesModal } from "@/components/release-update/ReleaseNotesDialog";
+import { useApp } from "@/context";
 import { useLatestVersion } from "@/hooks/useLatestVersion";
 import { cn } from "@/lib/utils";
 import { updateSetting, useSettingsValue } from "@/settings/model";
@@ -11,7 +13,8 @@ interface NewVersionBannerProps {
 }
 
 export function NewVersionBanner({ currentVersion }: NewVersionBannerProps) {
-  const { latestVersion, hasUpdate } = useLatestVersion(currentVersion);
+  const app = useApp();
+  const { latestVersion, latestRelease, hasUpdate } = useLatestVersion(currentVersion);
   const lastDismissedVersion = useSettingsValue().lastDismissedVersion;
   const [isVisible, setIsVisible] = useState(true);
 
@@ -31,9 +34,19 @@ export function NewVersionBanner({ currentVersion }: NewVersionBannerProps) {
     }
   };
 
-  if (!showBanner) {
+  // A version without its matching release record cannot open the shared dialog,
+  // so wait for the complete response instead of showing a dead link.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/317
+  if (!showBanner || !latestRelease) {
     return null;
   }
+
+  const handleOpenReleaseNotes = () => {
+    // Version detection and dialog content share one GitHub response, so opening
+    // the notes never adds another content request.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/317
+    new ReleaseNotesModal(app, latestRelease).open();
+  };
 
   return (
     <div
@@ -47,14 +60,15 @@ export function NewVersionBanner({ currentVersion }: NewVersionBannerProps) {
       <div className="tw-mb-1 tw-flex tw-items-center tw-justify-between tw-gap-2 tw-rounded-md tw-border tw-border-solid tw-border-border tw-p-2 tw-pl-3 tw-text-xs">
         <div className="tw-flex tw-items-center tw-gap-2">
           <span className="tw-font-medium">Update available:</span>
-          <a
-            href={`https://github.com/logancyang/obsidian-copilot/releases/latest`}
-            target="_blank"
-            rel="noopener noreferrer"
+          <Button
+            aria-label={`View release notes for v${latestVersion}`}
             className="tw-text-normal"
+            onClick={handleOpenReleaseNotes}
+            size="fit"
+            variant="link"
           >
             v{latestVersion}
-          </a>
+          </Button>
         </div>
         <div className="tw-flex tw-items-center tw-gap-2">
           <Button

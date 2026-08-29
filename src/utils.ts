@@ -10,13 +10,14 @@ import {
   TEXT_READABLE_EXTENSIONS,
 } from "@/constants";
 import { logInfo, logWarn } from "@/logger";
+import { checkLatestRelease, type LatestRelease } from "@/utils/latestRelease";
+import { formatUsageCapError } from "@/utils/usageCapError";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { Document } from "@langchain/core/documents";
 import { MemoryVariables } from "@langchain/core/memory";
 import { DateTime } from "luxon";
 import { App, MarkdownView, Notice, TFile, Vault, normalizePath, requestUrl } from "obsidian";
 import { CustomModel } from "./aiParams";
-import { formatUsageCapError } from "@/utils/usageCapError";
 export { checkModelApiKey, err2String, getProviderLabel } from "@/lib/model-display-utils";
 
 /**
@@ -1064,25 +1065,18 @@ export function isNewerVersion(latest: string, current: string): boolean {
   return false;
 }
 
-/**
- * Check for latest version from GitHub releases.
- * @returns latest version string or error message
- */
+/** Check the latest GitHub release for both update detection and release-note presentation. */
 export async function checkLatestVersion(): Promise<{
   version: string | null;
   error: string | null;
+  release: LatestRelease | null;
 }> {
-  try {
-    const response = await requestUrl({
-      url: "https://api.github.com/repos/logancyang/obsidian-copilot/releases/latest",
-      method: "GET",
-    });
-    const version = (response.json as { tag_name: string }).tag_name.replace("v", "");
-    return { version, error: null };
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : "Failed to check for updates";
-    return { version: null, error: errorMessage };
-  }
+  const result = await checkLatestRelease();
+  return {
+    version: result.release?.version ?? null,
+    error: result.error,
+    release: result.release,
+  };
 }
 
 // Note: LangChain 0.6.6+ handles O-series and GPT-5 models automatically
