@@ -110,6 +110,7 @@ export function useAgentModelPicker(
       descriptors,
       settings,
       copilotPlusModels: copilotPlusCatalog.models,
+      copilotPlusStatus: copilotPlusCatalog.status,
     });
   }, [manager, descriptors, settings, signal, installStates, copilotPlusCatalog]);
 }

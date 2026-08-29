@@ -10,6 +10,16 @@ import React from "react";
 // Readiness of the backend the pane would run, swapped per test. Declared with
 // the `mock` prefix so Jest allows the mock factory below to close over it.
 let mockInstallState: InstallState = { kind: "ready", source: "custom" };
+let mockBackendId: "claude" | "opencode" = "claude";
+let mockPlusEligible = false;
+
+jest.mock("@/settings/model", () => ({
+  // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook
+  useSettingsValue: () => ({
+    isPaidUser: mockPlusEligible,
+    plusLicenseKey: mockPlusEligible ? "license" : "",
+  }),
+}));
 
 // Stub the descriptor hooks so the effect's `preloadReady`/install gates are
 // satisfied without the real backend registry / jotai atoms. The mock factory
@@ -17,7 +27,11 @@ let mockInstallState: InstallState = { kind: "ready", source: "custom" };
 // expected here.
 /* eslint-disable @eslint-react/hooks-extra/no-unnecessary-use-prefix */
 jest.mock("@/agentMode/ui/useBackendDescriptor", () => ({
-  useSessionBackendDescriptor: () => ({ id: "claude", openInstallUI: jest.fn() }),
+  useSessionBackendDescriptor: () => ({
+    id: mockBackendId,
+    displayName: mockBackendId,
+    openInstallUI: jest.fn(),
+  }),
   useBackendInstallState: () => mockInstallState,
 }));
 /* eslint-enable @eslint-react/hooks-extra/no-unnecessary-use-prefix */
@@ -43,6 +57,7 @@ interface ManagerStub {
   poolSessions: AgentSession[];
   lastError?: string | null;
   starting?: boolean;
+  preloadReady?: boolean;
 }
 
 function makeManager({
@@ -51,11 +66,12 @@ function makeManager({
   poolSessions,
   lastError = null,
   starting = false,
+  preloadReady = true,
 }: ManagerStub) {
   const getOrCreateActiveSession = jest.fn(async () => session("spawned"));
   const manager = {
     subscribe: jest.fn(() => () => {}),
-    isPreloadReady: jest.fn(() => true),
+    isPreloadReady: jest.fn(() => preloadReady),
     getSessions: jest.fn(() => poolSessions),
     getSessionsForScope: jest.fn(() => scopeSessions),
     getActiveProjectId: jest.fn(() => activeProjectId),
@@ -68,8 +84,19 @@ function makeManager({
   return { manager, getOrCreateActiveSession };
 }
 
-function renderChat(manager: AgentSessionManager) {
-  const plugin = { app: {}, agentSessionManager: manager } as unknown as CopilotPlugin;
+function renderChat(
+  manager: AgentSessionManager,
+  plusStatus: "loading" | "ready" | "error" = "error"
+) {
+  const plusSnapshot = { status: plusStatus, models: [] } as const;
+  const plugin = {
+    app: {},
+    agentSessionManager: manager,
+    copilotPlusSync: {
+      getSnapshot: () => plusSnapshot,
+      subscribe: () => () => undefined,
+    },
+  } as unknown as CopilotPlugin;
   return render(
     <AgentModeChat plugin={plugin} onSaveChat={() => {}} updateUserMessageHistory={() => {}} />
   );
@@ -91,6 +118,42 @@ function renderFallback(installState: InstallState, lastError: string | null, st
 describe("AgentModeChat", () => {
   afterEach(() => {
     mockInstallState = { kind: "ready", source: "custom" };
+    mockBackendId = "claude";
+    mockPlusEligible = false;
+  });
+
+  describe("startup progress", () => {
+    it("shows the Plus catalog wait and does not start OpenCode early (https://github.com/Brevilabs/obsidian-copilot-private/issues/319)", async () => {
+      mockBackendId = "opencode";
+      mockPlusEligible = true;
+      const { manager, getOrCreateActiveSession } = makeManager({
+        activeProjectId: GLOBAL_SCOPE,
+        scopeSessions: [],
+        poolSessions: [],
+        preloadReady: false,
+      });
+
+      renderChat(manager, "loading");
+
+      expect(screen.getByRole("status").textContent).toContain("Loading Plus catalog");
+      await waitFor(() => expect(manager.isPreloadReady).toHaveBeenCalled());
+      expect(getOrCreateActiveSession).not.toHaveBeenCalled();
+    });
+
+    it("shows that OpenCode continues without Plus after the catalog fails (https://github.com/Brevilabs/obsidian-copilot-private/issues/319)", () => {
+      mockBackendId = "opencode";
+      mockPlusEligible = true;
+      const { manager } = makeManager({
+        activeProjectId: GLOBAL_SCOPE,
+        scopeSessions: [],
+        poolSessions: [],
+        preloadReady: false,
+      });
+
+      renderChat(manager, "error");
+
+      expect(screen.getByRole("status").textContent).toContain("Starting opencode without Plus");
+    });
   });
 
   describe("auto-spawn guard (scope-aware)", () => {

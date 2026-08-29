@@ -9,6 +9,7 @@ import type {
   ProviderOrigin,
   ProviderRegistry,
   ProviderType,
+  CopilotPlusCatalogSnapshot,
 } from "@/modelManagement";
 import type { Skill } from "@/agentMode/skills";
 import {
@@ -29,7 +30,6 @@ import {
   buildAgentSystemPrompt,
   COPILOT_PROMPT_BASE,
 } from "@/agentMode/backends/shared/agentSystemPrompt";
-import { CopilotPlusUsageReader } from "@/agentMode/backends/shared/copilotPlusUsage";
 import {
   MIYO_SEARCH_FOLDER_ENV,
   MIYO_SEARCH_SCOPE_ENV,
@@ -160,10 +160,14 @@ function okEntry(provider: Provider, model: ConfiguredModel): EnabledBackendEntr
 function makeDeps(args: {
   resolved: EnabledBackendEntry[];
   keys?: Record<string, string | null>;
-  /** Published effort levels keyed by wire id; a missing key answers null. */
-  efforts?: Record<string, readonly string[] | null>;
+  plusCatalog?: CopilotPlusCatalogSnapshot;
 }): OpencodeModelDeps {
   const keys = args.keys ?? {};
+  const plusModels = args.resolved.flatMap((entry) =>
+    entry.state === "ok" && entry.provider.origin.kind === "copilot-plus"
+      ? [entry.configuredModel.info]
+      : []
+  );
   return {
     backendConfigRegistry: {
       resolveEnabled: (backend: string) => (backend === "opencode" ? args.resolved : []),
@@ -171,13 +175,11 @@ function makeDeps(args: {
     providerRegistry: {
       getApiKey: async (providerId: string) => keys[providerId] ?? null,
     } as unknown as ProviderRegistry,
+    getCopilotPlusCatalog: () => args.plusCatalog ?? { status: "ready", models: plusModels },
     getSelfHostWebSearchChannel: async () => ({
       url: "http://127.0.0.1:1234/search",
       token: "session-token",
     }),
-    ...(args.efforts
-      ? { getReasoningEfforts: async (id: string) => args.efforts?.[id] ?? null }
-      : {}),
   };
 }
 
@@ -194,7 +196,7 @@ function makePlusProvider(): Provider {
   );
 }
 
-/** A Copilot Plus reasoning model, as `COPILOT_PLUS_MODELS` snapshots it. */
+/** A Copilot Plus reasoning model shaped like the persisted live-catalog snapshot. */
 function makePlusReasoningModel(wireId: string): ConfiguredModel {
   const model = makeModel("p-plus", wireId);
   model.info.reasoning = true;
@@ -684,16 +686,57 @@ describe("buildOpencodeConfig — provider/model injection", () => {
     expect(cp.models).toEqual({ "copilot-plus-flash": {} });
   });
 
+  it("injects only Plus ids authorized by the current server catalog (https://github.com/Brevilabs/obsidian-copilot-private/issues/319)", async () => {
+    const provider = makePlusProvider();
+    const cached = makeModel("p-plus", "cached-model");
+    const current = makeModel("p-plus", "tomorrow-model");
+    const deps = makeDeps({
+      resolved: [okEntry(provider, cached), okEntry(provider, current)],
+      keys: { "p-plus": "plus-token-123" },
+      plusCatalog: {
+        status: "ready",
+        models: [{ id: "tomorrow-model", displayName: "Tomorrow Model" }],
+      },
+    });
+
+    const cfg = (await buildOpencodeConfig(getSettings(), deps)) as {
+      provider: Record<string, { models?: Record<string, unknown> }>;
+    };
+
+    expect(cfg.provider["copilot-plus"].models).toEqual({ "tomorrow-model": {} });
+  });
+
+  it("does not inject persisted Plus rows while the server catalog is loading or unavailable (https://github.com/Brevilabs/obsidian-copilot-private/issues/319)", async () => {
+    const entry = okEntry(makePlusProvider(), makeModel("p-plus", "cached-model"));
+    const loading = makeDeps({
+      resolved: [entry],
+      keys: { "p-plus": "plus-token-123" },
+      plusCatalog: { status: "loading", models: [] },
+    });
+    const unavailable = makeDeps({
+      resolved: [entry],
+      keys: { "p-plus": "plus-token-123" },
+      plusCatalog: { status: "error", models: [] },
+    });
+
+    await expect(buildOpencodeConfig(getSettings(), loading)).resolves.toMatchObject({
+      provider: {},
+    });
+    await expect(buildOpencodeConfig(getSettings(), unavailable)).resolves.toMatchObject({
+      provider: {},
+    });
+  });
+
   it("declares the effort levels Copilot Plus published, and disables the rest (https://github.com/logancyang/obsidian-copilot/issues/2917)", async () => {
     // Left to itself opencode infers the menu from the model id — a fixed
     // low/medium/high plus its own per-model special cases — which offers levels that
     // are synonyms of one another and misses levels the model has. The disables are
     // what removes an inferred level, since config variants merge over the guess.
     const model = makePlusReasoningModel("copilot-plus-flash");
+    model.info.reasoningEfforts = ["high", "max"];
     const deps = makeDeps({
       resolved: [okEntry(makePlusProvider(), model)],
       keys: { "p-plus": "plus-token-123" },
-      efforts: { "copilot-plus-flash": ["high", "max"] },
     });
 
     const cfg = (await buildOpencodeConfig(getSettings(), deps)) as {
@@ -714,14 +757,42 @@ describe("buildOpencodeConfig — provider/model injection", () => {
     });
   });
 
+  it("builds from synchronized Plus metadata without waiting on the catalog endpoint (https://github.com/Brevilabs/obsidian-copilot-private/issues/319)", async () => {
+    const model = makePlusReasoningModel("copilot-plus-flash");
+    model.info.reasoningEfforts = ["high", "max"];
+    // Supply the former network dependency as a probe: startup must ignore it.
+    const getReasoningEfforts = jest.fn(async () => ["low"]);
+    const deps = {
+      ...makeDeps({
+        resolved: [okEntry(makePlusProvider(), model)],
+        keys: { "p-plus": "plus-token-123" },
+      }),
+      getReasoningEfforts,
+    };
+
+    const cfg = (await buildOpencodeConfig(getSettings(), deps)) as {
+      provider: Record<string, { models?: Record<string, Record<string, unknown>> }>;
+    };
+
+    expect(getReasoningEfforts).not.toHaveBeenCalled();
+    expect(cfg.provider["copilot-plus"].models?.["copilot-plus-flash"]).toMatchObject({
+      reasoning: true,
+      variants: {
+        high: { reasoningEffort: "high" },
+        max: { reasoningEffort: "max" },
+      },
+    });
+  });
+
   it("offers no effort control for a Copilot Plus model that honors no level (https://github.com/logancyang/obsidian-copilot/issues/2917)", async () => {
     // opencode builds the menu only for models it is told reason, so withholding the
     // flag is what makes the control disappear. A menu whose every entry does nothing
     // is worse than no menu.
+    const model = makePlusReasoningModel("honors-no-level");
+    model.info.reasoningEfforts = [];
     const deps = makeDeps({
-      resolved: [okEntry(makePlusProvider(), makePlusReasoningModel("honors-no-level"))],
+      resolved: [okEntry(makePlusProvider(), model)],
       keys: { "p-plus": "plus-token-123" },
-      efforts: { "honors-no-level": [] },
     });
 
     const cfg = (await buildOpencodeConfig(getSettings(), deps)) as {
@@ -737,7 +808,6 @@ describe("buildOpencodeConfig — provider/model injection", () => {
     const deps = makeDeps({
       resolved: [okEntry(makePlusProvider(), makePlusReasoningModel("copilot-plus-flash"))],
       keys: { "p-plus": "plus-token-123" },
-      efforts: { "copilot-plus-flash": null },
     });
 
     const cfg = (await buildOpencodeConfig(getSettings(), deps)) as {
@@ -753,18 +823,16 @@ describe("buildOpencodeConfig — provider/model injection", () => {
     const provider = makeProvider("p-anthropic", { kind: "byok", catalogProviderId: "anthropic" });
     const model = makeModel("p-anthropic", "copilot-plus-flash");
     model.info.reasoning = true;
-    const getReasoningEfforts = jest.fn(async () => ["none", "low"]);
-    const deps = {
-      ...makeDeps({ resolved: [okEntry(provider, model)], keys: { "p-anthropic": "anth-123" } }),
-      getReasoningEfforts,
-    };
+    const deps = makeDeps({
+      resolved: [okEntry(provider, model)],
+      keys: { "p-anthropic": "anth-123" },
+    });
 
     const cfg = (await buildOpencodeConfig(getSettings(), deps)) as {
       provider: Record<string, { models?: Record<string, Record<string, unknown>> }>;
     };
 
     expect(cfg.provider.anthropic.models?.["copilot-plus-flash"]).toEqual({ reasoning: true });
-    expect(getReasoningEfforts).not.toHaveBeenCalled();
   });
 
   it("skips Copilot Plus when its provisioned relay token is unavailable (https://github.com/logancyang/obsidian-copilot/issues/2895)", async () => {
@@ -1337,9 +1405,8 @@ describe("OpencodeBackend.buildSpawnDescriptor", () => {
   });
 
   it("skips building the generated config when an override replaces it (https://github.com/logancyang/obsidian-copilot/issues/2917)", async () => {
-    // The override wins wholesale, so building a config would only spend a Copilot Plus
-    // catalog read on JSON that is thrown away — and an unreachable models host makes
-    // that read wait out its deadline before every spawn.
+    // The override wins wholesale, so resolving enabled models and building a generated
+    // config would only spend work on JSON that is thrown away.
     updateSetting("agentMode", {
       byok: {},
       activeBackend: "opencode",
@@ -1355,10 +1422,6 @@ describe("OpencodeBackend.buildSpawnDescriptor", () => {
         },
       },
     });
-    const readReasoningEfforts = jest.spyOn(
-      CopilotPlusUsageReader.prototype,
-      "readReasoningEfforts"
-    );
     const resolveEnabled = jest.fn(() => [
       okEntry(makePlusProvider(), makePlusReasoningModel("copilot-plus-flash")),
     ]);
@@ -1371,8 +1434,6 @@ describe("OpencodeBackend.buildSpawnDescriptor", () => {
 
     expect(desc.env.OPENCODE_CONFIG_CONTENT).toBe('{"model":"custom"}');
     expect(resolveEnabled).not.toHaveBeenCalled();
-    expect(readReasoningEfforts).not.toHaveBeenCalled();
-    readReasoningEfforts.mockRestore();
   });
 
   it("does not warn about the override when no cacheRoot is resolved", async () => {

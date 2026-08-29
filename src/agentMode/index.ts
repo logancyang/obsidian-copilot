@@ -16,6 +16,7 @@ import { AgentSessionIndex } from "./session/AgentSessionIndex";
 import { createNodeFileStorage } from "./session/nodeFileStorage";
 import { AgentSessionManager } from "./session/AgentSessionManager";
 import { seedCopilotDefaultModel } from "./session/copilotDefaultModel";
+import { preloadInitialModels } from "./session/initialModelPreload";
 import { SkillManager } from "./skills";
 import { planManagedBuiltins } from "./skills/builtin/builtinSkills";
 import { removeSeededBuiltin, seedBuiltinSkills } from "./skills/builtin/seedBuiltinSkills";
@@ -164,6 +165,9 @@ function backendEnvOverridesKey(settings: CopilotSettings, backendId: BackendId)
  *
  * `main.ts` calls this once on plugin load. To swap prompters, shut down
  * the existing manager and call this again.
+ *
+ * @param app - Obsidian app instance that owns this plugin lifecycle.
+ * @param plugin - Copilot plugin instance that owns model and backend state.
  */
 export function createAgentSessionManager(app: App, plugin: CopilotPlugin): AgentSessionManager {
   const os = requireNodeModule<typeof import("node:os")>("os");
@@ -455,7 +459,17 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
   // keeps them usable, so they load like any other.
   for (const descriptor of listBackendDescriptors()) {
     if (descriptor.getInstallState(settings).kind !== "ready") continue;
-    const promise = manager.preloadModels(descriptor.id);
+    // OpenCode's spawn config includes server-discovered Plus providers. Hold
+    // only its initial model probe until the one lifecycle catalog request has
+    // either reconciled or failed; other agents and plugin loading stay fully
+    // independent. Failure resolves this gate and starts OpenCode without Plus.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/319
+    const promise = preloadInitialModels(
+      manager,
+      descriptor.id,
+      plugin.copilotPlusSync,
+      settings.isPaidUser === true && !!settings.plusLicenseKey
+    );
     manager.registerPreload(
       descriptor.id,
       promise.catch((e) => {

@@ -1,6 +1,6 @@
 import { Notice } from "obsidian";
 import { logError } from "@/logger";
-import type { ModelCapability } from "@/constants";
+import { ChatModelProviders, type ModelCapability } from "@/constants";
 import type { ModelSelectorEntry } from "@/components/ui/ModelSelector";
 import {
   type CopilotPlusCatalogModel,
@@ -71,9 +71,15 @@ export function appendBackendSection(
     settings: CopilotSettings;
     /** Preload settled without a catalog, so persisted enabled models are the only recovery path. */
     useEnabledFallback?: boolean;
+    /** Optional current-lifecycle authorization check for persisted model rows. */
+    includeModel?: (baseModelId: string) => boolean;
   }
 ): void {
-  const enabledEntries = descriptor.getEnabledModelEntries?.(ctx.settings) ?? null;
+  const persistedEntries = descriptor.getEnabledModelEntries?.(ctx.settings) ?? null;
+  const enabledEntries =
+    persistedEntries && ctx.includeModel
+      ? persistedEntries.filter((entry) => ctx.includeModel?.(entry.baseModelId) === true)
+      : persistedEntries;
   if (!enabledEntries) return;
   if (!ctx.backendModels) {
     if (!ctx.useEnabledFallback) return;
@@ -318,7 +324,8 @@ export function buildPickerEntries(
   descriptors: BackendDescriptor[],
   ctx: ModelActiveContext,
   settings: CopilotSettings,
-  copilotPlusModels: readonly CopilotPlusCatalogModel[] = EMPTY_PLUS_MODELS
+  copilotPlusModels: readonly CopilotPlusCatalogModel[] = EMPTY_PLUS_MODELS,
+  copilotPlusStatus: "loading" | "ready" | "error" = "ready"
 ): { entries: ModelSelectorEntry[]; valueKey: string } {
   const entries: ModelSelectorEntry[] = [];
   for (const descriptor of descriptors) {
@@ -328,23 +335,40 @@ export function buildPickerEntries(
     const keepBaseModelId = isActiveBackend
       ? (ctx.activeModelState?.current.baseModelId ?? null)
       : (manager.getDefaultSelection(descriptor.id)?.baseModelId ?? null);
-    const backendModels = catalog?.availableModels ?? null;
+    const includeModel = (baseModelId: string): boolean => {
+      const prefix = `${ChatModelProviders.COPILOT_PLUS}/`;
+      if (!baseModelId.startsWith(prefix)) return true;
+      if (copilotPlusStatus !== "ready") return false;
+      const modelId = baseModelId.slice(prefix.length);
+      return copilotPlusModels.some((model) => model.id === modelId);
+    };
+    const backendModels =
+      catalog?.availableModels?.filter((model) => includeModel(model.baseModelId)) ?? null;
     const hasNoCatalog = catalog === null;
     const preloadStatus = manager.getPreloadStatus(descriptor.id);
     const sectionStart = entries.length;
-    appendBackendSection(entries, descriptor, {
-      backendModels,
-      keepBaseModelId,
-      settings,
-      useEnabledFallback: hasNoCatalog && (preloadStatus === "ready" || preloadStatus === "error"),
-    });
+    const plusGatePending =
+      descriptor.id === "opencode" &&
+      settings.isPaidUser === true &&
+      !!settings.plusLicenseKey &&
+      copilotPlusStatus === "loading";
+    if (!plusGatePending) {
+      appendBackendSection(entries, descriptor, {
+        backendModels,
+        keepBaseModelId,
+        settings,
+        useEnabledFallback:
+          hasNoCatalog && (preloadStatus === "ready" || preloadStatus === "error"),
+        includeModel,
+      });
+    }
     // No catalog discovered yet (distinct from a settled probe reporting no
     // model catalog). Show a per-backend loading / failure row so
     // the user can see every installed backend immediately — important
     // because the chat now unblocks on just the *active* backend's
     // preload, not the global preload.
-    if (hasNoCatalog && entries.length === sectionStart) {
-      if (preloadStatus === "pending") {
+    if ((hasNoCatalog || plusGatePending) && entries.length === sectionStart) {
+      if (preloadStatus === "pending" || plusGatePending) {
         entries.push(synthesizePreloadPlaceholder(descriptor, "pending"));
       } else if (preloadStatus === "ready" || preloadStatus === "error") {
         entries.push(synthesizePreloadPlaceholder(descriptor, "error"));
@@ -644,8 +668,15 @@ export function buildAgentModelPicker(args: {
   descriptors: BackendDescriptor[];
   settings: CopilotSettings;
   copilotPlusModels?: readonly CopilotPlusCatalogModel[];
+  copilotPlusStatus?: "loading" | "ready" | "error";
 }): AgentModelPickerOverride | null {
-  const { manager, descriptors, settings, copilotPlusModels = EMPTY_PLUS_MODELS } = args;
+  const {
+    manager,
+    descriptors,
+    settings,
+    copilotPlusModels = EMPTY_PLUS_MODELS,
+    copilotPlusStatus = "ready",
+  } = args;
   if (!manager) return null;
   const ctx = collectModelActiveContext(manager);
   const { entries, valueKey } = buildPickerEntries(
@@ -653,7 +684,8 @@ export function buildAgentModelPicker(args: {
     descriptors,
     ctx,
     settings,
-    copilotPlusModels
+    copilotPlusModels,
+    copilotPlusStatus
   );
   const onChange = buildModelOnChange(manager, ctx, entries);
   return {

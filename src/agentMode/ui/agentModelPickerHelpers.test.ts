@@ -297,6 +297,63 @@ describe("buildPickerEntries", () => {
     expect(entries.map((model) => model.name)).toEqual(["catalog-model"]);
   });
 
+  it("blocks switching from Claude to OpenCode until the Plus catalog settles (https://github.com/Brevilabs/obsidian-copilot-private/issues/319)", () => {
+    const claude = {
+      ...makeDescriptor("claude"),
+      getEnabledModelEntries: () => [
+        { baseModelId: "claude-sonnet", name: "Sonnet", credentialState: "ok" as const },
+      ],
+    } as unknown as BackendDescriptor;
+    const opencode = {
+      ...makeDescriptor("opencode"),
+      routesCopilotModels: true,
+      getEnabledModelEntries: () => [
+        {
+          baseModelId: "copilot-plus/cached-model",
+          name: "Cached Plus Model",
+          credentialState: "ok" as const,
+        },
+        { baseModelId: "opencode/free-model", name: "Free Model", credentialState: "ok" as const },
+      ],
+    } as unknown as BackendDescriptor;
+    const current = makeModelEntry("claude-sonnet", "Sonnet");
+    const manager = makeManager({
+      catalogById: {
+        claude: makeCatalog([current]),
+        opencode: makeCatalog([
+          makeModelEntry("copilot-plus/cached-model"),
+          makeModelEntry("opencode/free-model"),
+        ]),
+      },
+      preloadStatusById: { claude: "ready", opencode: "pending" },
+    });
+    const ctx: ModelActiveContext = {
+      activeSession: { backendId: "claude" } as unknown as AgentSession,
+      activeChatUIState: makeUIState({ canSwitchModel: true }),
+      activeBackendId: "claude",
+      activeDescriptor: claude,
+      activeSessionHasHistory: false,
+      activeModelState: makeModelState(current.baseModelId, [current]),
+      activeCurrentEntry: current,
+    };
+
+    const { entries } = buildPickerEntries(
+      manager,
+      [claude, opencode],
+      ctx,
+      { ...emptySettings, isPaidUser: true, plusLicenseKey: "license" },
+      [],
+      "loading"
+    );
+    const openCodeRows = entries.filter((entry) => entry._backendId === "opencode");
+
+    expect(openCodeRows).toHaveLength(1);
+    expect(openCodeRows[0]).toMatchObject({
+      displayName: "Loading models…",
+      _disabledReason: "Loading…",
+    });
+  });
+
   it("still shows a loading placeholder for a routing agent whose preload has not settled", () => {
     // The locked rows must not satisfy the "section produced nothing" check, or
     // an unlicensed user loses the per-agent loading row.
