@@ -3,6 +3,9 @@ import { App, Modal } from "obsidian";
 import type { ReactElement } from "react";
 import { type Root } from "react-dom/client";
 
+/** Shared native-frame reset for dialogs that draw their own full-bleed chrome. */
+export const FULL_BLEED_MODAL_CLASS = "copilot-modal-full-bleed";
+
 /**
  * Base class for Obsidian-hosted modals whose body is a React tree. Handles
  * the createRoot / unmount / contentEl.empty boilerplate so subclasses only
@@ -40,5 +43,15 @@ export abstract class ReactModal extends Modal {
     this.root?.unmount();
     this.root = null;
     this.contentEl.empty();
+  }
+}
+
+/**
+ * React modal base for dialogs that provide their own edge-to-edge header,
+ * body, and footer instead of using Obsidian's padded native chrome.
+ */
+export abstract class FullBleedReactModal extends ReactModal {
+  constructor(app: App, title?: string) {
+    super(app, title, FULL_BLEED_MODAL_CLASS);
   }
 }

@@ -23,7 +23,10 @@ import {
   type ProgressEvent,
   type RuntimeState,
 } from "@/agentMode/backends/opencode/OpencodeBinaryManager";
-import { OpencodeConfigContainer } from "@/agentMode/backends/opencode/OpencodeInstallModal";
+import {
+  OpencodeConfigContainer,
+  OpencodeInstallModal,
+} from "@/agentMode/backends/opencode/OpencodeInstallModal";
 import { getSettings, settingsAtom, settingsStore } from "@/settings/model";
 import type { OpencodeBackendSettings } from "@/settings/model";
 import { act, fireEvent, render, screen } from "@testing-library/react";
@@ -130,6 +133,18 @@ describe("OpencodeInstallModal", () => {
     jest.clearAllMocks();
     mockConfirmModals.length = 0;
     setOpencodeSettings(undefined);
+  });
+
+  describe("constructor()", () => {
+    it("uses the reusable full-bleed frame for https://github.com/Brevilabs/obsidian-copilot-private/issues/317", () => {
+      const { manager } = makeManager();
+      const modal = new OpencodeInstallModal(new App(), manager, {
+        platform: "darwin",
+        arch: "arm64",
+      });
+
+      expect(modal.modalEl.className).toBe("modal copilot-modal-full-bleed");
+    });
   });
 
   describe("OpencodeConfigContainer()", () => {

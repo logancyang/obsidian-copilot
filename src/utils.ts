@@ -10,13 +10,13 @@ import {
   TEXT_READABLE_EXTENSIONS,
 } from "@/constants";
 import { logInfo, logWarn } from "@/logger";
+import { formatUsageCapError } from "@/utils/usageCapError";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { Document } from "@langchain/core/documents";
 import { MemoryVariables } from "@langchain/core/memory";
 import { DateTime } from "luxon";
 import { App, MarkdownView, Notice, TFile, Vault, normalizePath, requestUrl } from "obsidian";
 import { CustomModel } from "./aiParams";
-import { formatUsageCapError } from "@/utils/usageCapError";
 export { checkModelApiKey, err2String, getProviderLabel } from "@/lib/model-display-utils";
 
 /**
@@ -1064,24 +1064,56 @@ export function isNewerVersion(latest: string, current: string): boolean {
   return false;
 }
 
-/**
- * Check for latest version from GitHub releases.
- * @returns latest version string or error message
- */
+const LATEST_RELEASE_API_URL =
+  "https://api.github.com/repos/logancyang/obsidian-copilot/releases/latest";
+
+export interface LatestRelease {
+  body: string;
+  htmlUrl: string;
+  version: string;
+}
+
+interface GitHubReleaseResponse {
+  body?: unknown;
+  html_url?: unknown;
+  tag_name?: unknown;
+}
+
+/** Check the latest GitHub release for both update detection and release-note presentation. */
 export async function checkLatestVersion(): Promise<{
   version: string | null;
   error: string | null;
+  release: LatestRelease | null;
 }> {
   try {
     const response = await requestUrl({
-      url: "https://api.github.com/repos/logancyang/obsidian-copilot/releases/latest",
+      url: LATEST_RELEASE_API_URL,
       method: "GET",
     });
-    const version = (response.json as { tag_name: string }).tag_name.replace("v", "");
-    return { version, error: null };
+    const responseRelease = response.json as GitHubReleaseResponse;
+    if (typeof responseRelease.tag_name !== "string") {
+      throw new Error("The latest Copilot release has no version tag.");
+    }
+
+    const release: LatestRelease = {
+      body: typeof responseRelease.body === "string" ? responseRelease.body : "",
+      htmlUrl:
+        typeof responseRelease.html_url === "string"
+          ? responseRelease.html_url
+          : "https://github.com/logancyang/obsidian-copilot/releases/latest",
+      version: responseRelease.tag_name.replace(/^v/, ""),
+    };
+    return {
+      version: release.version,
+      error: null,
+      release,
+    };
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : "Failed to check for updates";
-    return { version: null, error: errorMessage };
+    return {
+      version: null,
+      error: error instanceof Error ? error.message : "Failed to check for updates",
+      release: null,
+    };
   }
 }
 

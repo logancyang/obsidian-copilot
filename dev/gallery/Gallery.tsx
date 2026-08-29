@@ -296,6 +296,20 @@ class GalleryStoryModal extends ReactModal {
     private readonly onDidClose: () => void
   ) {
     super(app, story.name, story.modalClass);
+    this.syncFrameWidth();
+  }
+
+  private getContentWidth(): string {
+    // Fullscreen modal stories model content whose production frame owns its
+    // width. Constraining that child creates a false gutter in the preview.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/317
+    return this.story.layout === "fullscreen" ? "100%" : `${this.width}px`;
+  }
+
+  private syncFrameWidth(): void {
+    if (this.story.layout === "fullscreen") {
+      this.modalEl.style.width = `${this.width}px`;
+    }
   }
 
   protected renderContent(): React.ReactElement {
@@ -307,7 +321,7 @@ class GalleryStoryModal extends ReactModal {
         data-gallery-owner={this.ownerId}
         data-story={this.story.id}
         data-story-width={this.width}
-        style={{ maxWidth: "100%", width: this.width }}
+        style={{ maxWidth: "100%", width: this.getContentWidth() }}
       >
         {renderStoryContent(this.story)}
       </div>
@@ -321,10 +335,11 @@ class GalleryStoryModal extends ReactModal {
 
   setWidth(width: number): void {
     this.width = width;
+    this.syncFrameWidth();
     const storyElement = this.contentEl.querySelector<HTMLElement>("[data-story]");
     if (storyElement) {
       storyElement.dataset.storyWidth = String(width);
-      storyElement.style.width = `${width}px`;
+      storyElement.style.width = this.getContentWidth();
     }
   }
 }

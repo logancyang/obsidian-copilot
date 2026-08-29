@@ -25,6 +25,7 @@ jest.mock("@/components/modals/ReactModal", () => {
     ReactModal: class ReactModal {
       app: App;
       contentEl = activeDocument.createElement("div");
+      modalEl = activeDocument.createElement("div");
       title: string | undefined;
 
       constructor(app: App, title?: string) {
@@ -706,6 +707,74 @@ describe("Gallery", () => {
           '[data-gallery-host="settings-tab"][data-story="UI/Setting Item/Preferences"][data-story-width="400"]'
         )
       ).toBeTruthy();
+    });
+
+    it("applies the selected width to a fullscreen modal frame for https://github.com/Brevilabs/obsidian-copilot-private/issues/317", () => {
+      const catalog = createGalleryCatalog(
+        [
+          {
+            componentId: null,
+            storyModule: {
+              default: {
+                title: "Release/Dialog",
+                parameters: {
+                  gallery: {
+                    host: "modal",
+                    layout: "fullscreen",
+                    modalClass: "full-bleed-modal",
+                  },
+                },
+              },
+              Ready: { render: () => <div>Release content</div> },
+            },
+          },
+        ],
+        0
+      );
+      const gallery = render(<GalleryHarness catalog={catalog} initialState={{ width: 300 }} />);
+      const modal = getGalleryModalMock().open.mock.calls[0][0] as {
+        modalEl: HTMLElement;
+        renderContent(): React.ReactElement;
+      };
+
+      const modalContent = render(modal.renderContent());
+      const storyElement = modalContent.container.querySelector<HTMLElement>("[data-story]");
+
+      expect(modal.modalEl.style.width).toBe("300px");
+      expect(storyElement?.style.width).toBe("100%");
+      modalContent.unmount();
+      gallery.unmount();
+    });
+
+    it("keeps the selected width for a padded modal with frame styling", () => {
+      const catalog = createGalleryCatalog(
+        [
+          {
+            componentId: null,
+            storyModule: {
+              default: {
+                title: "Config/Dialog",
+                parameters: {
+                  gallery: { host: "modal", layout: "padded", modalClass: "config-modal" },
+                },
+              },
+              Ready: { render: () => <div>Config content</div> },
+            },
+          },
+        ],
+        0
+      );
+      const gallery = render(<GalleryHarness catalog={catalog} />);
+      const modal = getGalleryModalMock().open.mock.calls[0][0] as {
+        renderContent(): React.ReactElement;
+      };
+
+      const modalContent = render(modal.renderContent());
+      const storyElement = modalContent.container.querySelector<HTMLElement>("[data-story]");
+
+      expect(storyElement?.style.width).toBe("400px");
+      modalContent.unmount();
+      gallery.unmount();
     });
 
     it("contains a throwing story and recovers when another keyed story is selected", () => {

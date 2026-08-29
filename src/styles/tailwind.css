@@ -21,14 +21,20 @@ If your plugin does not need CSS, delete this file.
   max-width: calc(100vw - 2rem);
 }
 
-/* Agent Configure dialogs draw their own full-bleed bands (header, sections,
-   footer), so the hosting modal must contribute no padding of its own —
-   otherwise every band's divider stops short of both edges. ConfigDialogShell
-   toggles `copilot-config-modal` on its closest `.modal` host in an effect, so
-   every host that renders the shell opts in, the component gallery included.
+.modal.copilot-modal-full-bleed {
+  width: min(46rem, calc(100vw - 2rem));
+  min-width: 0;
+  max-width: calc(100vw - 2rem);
+  max-height: calc(100vh - 2rem);
+  overflow: hidden;
+}
+
+/* Dialogs with full-bleed bands make the hosting modal contribute no padding,
+   otherwise their dividers stop short of both edges. Production and gallery
+   hosts opt in by applying the shared full-bleed class to the modal frame.
    Themes disagree about which element carries the padding, hence both targets. */
-.modal.copilot-config-modal,
-.modal.copilot-config-modal .modal-content {
+.modal.copilot-modal-full-bleed,
+.modal.copilot-modal-full-bleed .modal-content {
   padding: 0;
 }
 
@@ -36,11 +42,11 @@ If your plugin does not need CSS, delete this file.
    host that sets a title anyway must not stack a second heading above the
    shell's own. Suppressing it here rather than per host keeps every future
    caller correct by default. */
-.modal.copilot-config-modal .modal-header {
+.modal.copilot-modal-full-bleed .modal-header {
   margin-bottom: 0;
 }
 
-.modal.copilot-config-modal .modal-title {
+.modal.copilot-modal-full-bleed .modal-title {
   display: none;
 }
 

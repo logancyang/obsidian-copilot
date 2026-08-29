@@ -96,6 +96,11 @@ module.exports = {
       this.onClose = jest.fn();
     }
   },
+  Component: class Component {
+    load() {}
+    unload() {}
+    register() {}
+  },
   // Base class for FolderSearchModal & friends; subclasses only need it to be
   // constructable so suites that pull them into the module graph can load.
   FuzzySuggestModal: class FuzzySuggestModal {

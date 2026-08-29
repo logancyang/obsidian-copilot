@@ -1,10 +1,10 @@
 import {
-  CONFIG_MODAL_CLASS,
   ConfigDialogShell,
   ConfigSection,
   ConfigWarningStrip,
 } from "@/agentMode/backends/shared/ui/ConfigDialogShell";
 import type { InstallState } from "@/agentMode/session/types";
+import { FULL_BLEED_MODAL_CLASS } from "@/components/modals/ReactModal";
 import { Button } from "@/components/ui/button";
 import type { Meta, StoryObj } from "@/lib/story";
 import * as React from "react";
@@ -62,7 +62,9 @@ const meta = {
     children: BODY,
     onClose: () => undefined,
   },
-  parameters: { gallery: { host: "modal", layout: "padded", modalClass: CONFIG_MODAL_CLASS } },
+  parameters: {
+    gallery: { host: "modal", layout: "padded", modalClass: FULL_BLEED_MODAL_CLASS },
+  },
 } satisfies Meta<ConfigDialogShellProps>;
 export default meta;
 
