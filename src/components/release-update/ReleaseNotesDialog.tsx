@@ -1,6 +1,7 @@
 import { Markdown } from "@/components/Markdown";
 import { formatReleaseNotesForObsidian } from "@/components/release-update/releaseNotes";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { AlertTriangle, ArrowUpCircle, ExternalLink, LoaderCircle } from "lucide-react";
 import * as React from "react";
 
@@ -51,6 +52,12 @@ export function ReleaseNotesDialogContent({
       <div className="tw-min-h-0 tw-flex-1 tw-overflow-y-auto tw-overscroll-contain tw-px-5 tw-py-4">
         {state.status === "ready" ? (
           <Markdown
+            className={cn(
+              "tw-min-w-0 tw-text-normal",
+              "[&>*:first-child]:tw-mt-0 [&>*:last-child]:tw-mb-0",
+              "[&_a]:tw-break-words",
+              "[&_img]:tw-mx-auto [&_img]:tw-block [&_img]:tw-h-auto [&_img]:tw-max-w-full [&_img]:tw-rounded-md"
+            )}
             onRendered={formatReleaseNotesForObsidian}
             sourcePath=""
             text={state.release.body}
