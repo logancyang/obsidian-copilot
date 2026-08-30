@@ -4,6 +4,17 @@ import React from "react";
 
 describe("AgentHomeSection", () => {
   describe("AgentHomePreviewList()", () => {
+    it("keeps preview row content clear of the overlaid scrollbar (https://github.com/logancyang/obsidian-copilot/issues/3017)", () => {
+      const { container } = render(
+        <AgentHomePreviewList hasMoreItems={false}>
+          <div>Preview rows</div>
+        </AgentHomePreviewList>
+      );
+      const viewport = container.querySelector<HTMLElement>("[data-radix-scroll-area-viewport]");
+
+      expect(viewport?.parentElement?.classList.contains("tw-pr-2.5")).toBe(true);
+    });
+
     it("shows the shared footer only when rows exceed the available height or preview limit (https://github.com/Brevilabs/obsidian-copilot-private/issues/169)", () => {
       const renderPreview = (hasMoreItems: boolean) => (
         <AgentHomePreviewList hasMoreItems={hasMoreItems} viewAll={<div>View all items</div>}>
