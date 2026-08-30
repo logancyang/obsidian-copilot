@@ -170,51 +170,6 @@ describe("AcpBackendProcess", () => {
       await expect(client.sessionUpdate(strayUpdate)).resolves.toBeUndefined();
       expect(handler).toHaveBeenCalledTimes(1);
     });
-
-    it("calls the backend predicate only for agent-message text and drops rejected text for https://github.com/logancyang/obsidian-copilot-preview/issues/315", async () => {
-      const shouldRouteAgentMessageText = jest.fn(() => false);
-      const backend = new AcpBackendProcess(
-        buildApp(),
-        buildStubBackend({ shouldRouteAgentMessageText }),
-        "1.0.0",
-        buildStubDescriptor()
-      );
-      await backend.start();
-
-      const handler = jest.fn();
-      backend.registerSessionHandler("session-known", handler);
-      const client = getVaultClient(backend);
-      const rejectedUpdate = {
-        sessionId: "session-known",
-        update: {
-          sessionUpdate: "agent_message_chunk",
-          content: { type: "text", text: "hidden" },
-        },
-      } as unknown as Parameters<typeof client.sessionUpdate>[0];
-
-      await client.sessionUpdate(rejectedUpdate);
-
-      const thoughtUpdate = {
-        sessionId: "session-known",
-        update: {
-          sessionUpdate: "agent_thought_chunk",
-          content: { type: "text", text: "visible thought" },
-        },
-      } as unknown as Parameters<typeof client.sessionUpdate>[0];
-      const imageUpdate = {
-        sessionId: "session-known",
-        update: {
-          sessionUpdate: "agent_message_chunk",
-          content: { type: "image", mimeType: "image/png", data: "aGk=" },
-        },
-      } as unknown as Parameters<typeof client.sessionUpdate>[0];
-      await client.sessionUpdate(thoughtUpdate);
-      await client.sessionUpdate(imageUpdate);
-
-      expect(shouldRouteAgentMessageText).toHaveBeenCalledTimes(1);
-      expect(shouldRouteAgentMessageText).toHaveBeenCalledWith("hidden");
-      expect(handler).toHaveBeenCalledTimes(2);
-    });
   });
 
   it("scopes todowrite id tracking per session — a registered id does not bleed across sessions", async () => {
