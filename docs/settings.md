@@ -265,20 +265,20 @@ Custom commands are reusable prompt files loaded from `<Copilot folder>/copilot-
 
 ### Command list and editor
 
-| Control                  | Default                     | What it does                                                                                                               |
-| ------------------------ | --------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| **Drag handle**          | Saved order                 | Reorders commands. Choose **Manual** if you want drag order to control the slash menu.                                     |
-| **In Menu**              | On for a new command        | Shows the command in the editor right-click menu.                                                                          |
-| **Slash Cmd**            | On for a new command        | Shows the command after `/` in Quick Chat and Agent Chat. Sending resolves the command name to its saved prompt.           |
-| **Edit**                 | Not applicable              | Opens the command editor.                                                                                                  |
-| **Duplicate**            | Not applicable              | Creates a uniquely named copy beside the original.                                                                         |
-| **Delete**               | Not applicable              | Permanently removes the command's Markdown file after confirmation.                                                        |
-| **Name**                 | Blank for a new command     | Required unique command name.                                                                                              |
-| **Prompt**               | Blank for a new command     | Required prompt body. With templating on, the syntax helper shows the supported note variables.                            |
-| **Model (Optional)**     | **Inherit from chat model** | Selects a Quick Chat model for editor and command-palette runs. An Agent Chat slash run uses the current Agent Chat model. |
-| **Show in context menu** | On                          | Same setting as **In Menu** in the list.                                                                                   |
-| **Show in slash menu**   | On                          | Same setting as **Slash Cmd** in the list.                                                                                 |
-| **Save / Cancel**        | Not applicable              | Save validates and writes the command file.                                                                                |
+| Control                  | Default                     | What it does                                                                                                                                     |
+| ------------------------ | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Drag handle**          | Saved order                 | Reorders commands. Choose **Manual** if you want drag order to control the slash menu.                                                           |
+| **In Menu**              | On for a new command        | Shows the command in the editor right-click menu.                                                                                                |
+| **Slash Cmd**            | On for a new command        | Shows the command after `/` in Quick Chat and Agent Chat. Sending resolves the command name to its saved prompt.                                 |
+| **Edit**                 | Not applicable              | Opens the command editor.                                                                                                                        |
+| **Duplicate**            | Not applicable              | Creates a uniquely named copy beside the original.                                                                                               |
+| **Delete**               | Not applicable              | Permanently removes the command's Markdown file after confirmation.                                                                              |
+| **Name**                 | Blank for a new command     | Required unique command name.                                                                                                                    |
+| **Prompt**               | Blank for a new command     | Required prompt body. With templating on, the syntax helper shows the supported note variables.                                                  |
+| **Model (Optional)**     | **Inherit from chat model** | Editor and command-palette runs snapshot the active Agent Chat model when opened if it is enabled for Quick Chat; otherwise they use Quick Chat. |
+| **Show in context menu** | On                          | Same setting as **In Menu** in the list.                                                                                                         |
+| **Show in slash menu**   | On                          | Same setting as **Slash Cmd** in the list.                                                                                                       |
+| **Save / Cancel**        | Not applicable              | Save validates and writes the command file.                                                                                                      |
 
 See [Copilot Commands and Quick Ask](custom-commands.md) for prompt variables, invocation, and Quick Ask.
 
