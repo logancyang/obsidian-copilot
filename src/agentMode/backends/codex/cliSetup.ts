@@ -14,7 +14,16 @@ export function codexBinaryPathPlaceholder(platform: NodeJS.Platform): string {
     : "/absolute/path/to/codex-acp";
 }
 
-export const CODEX_INSTALL_COMMAND = "npm install -g @agentclientprotocol/codex-acp";
+const CODEX_WINDOWS_INSTALL_COMMAND =
+  "irm https://raw.githubusercontent.com/logancyang/obsidian-copilot/ca3aa97df262a8b30b64818dcb19062a582e5e09/docs/install-codex-agent-mode-windows.ps1 | iex";
+
+export function codexInstallCommand(platform: NodeJS.Platform): string {
+  return platform === "win32"
+    ? CODEX_WINDOWS_INSTALL_COMMAND
+    : "npm install -g @agentclientprotocol/codex-acp";
+}
+
+export const CODEX_INSTALL_COMMAND = codexInstallCommand(process.platform);
 
 /** Sign-in the `codex` CLI owns end to end; Copilot only inherits the credentials it stores. */
 export const CODEX_AUTH_COMMAND = "codex login";

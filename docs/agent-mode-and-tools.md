@@ -47,7 +47,7 @@ The Codex backend needs the Codex CLI and `@agentclientprotocol/codex-acp` 0.0.3
 
 1. Install the Codex CLI and run `codex login`.
 2. Open **Basic → Agents → Codex → Configure**.
-3. Run the adapter installation command shown in the dialog: `npm install -g @agentclientprotocol/codex-acp`.
+3. Run the adapter installation command shown in the dialog. Windows uses a PowerShell helper that removes the conflicting Zed npm package first; macOS and Linux use `npm install -g @agentclientprotocol/codex-acp`.
 4. Select **Auto-detect**, or enter the absolute path to the `codex-acp` launcher on macOS/Linux or its `dist\index.js` entry point on Windows, and select **Apply**.
 5. Enable the models you want and choose a default.
 
