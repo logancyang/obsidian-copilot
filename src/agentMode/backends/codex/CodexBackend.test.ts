@@ -87,11 +87,8 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
   it("forwards the Copilot prompt through the current adapter config", async () => {
     const backend = new CodexBackend();
     const desc = await backend.buildSpawnDescriptor({ vaultBasePath: "/vault" });
-    expect(desc.command).toBe(process.execPath);
-    expect(desc.args).toEqual([
-      "/npm/lib/node_modules/@agentclientprotocol/codex-acp/dist/index.js",
-    ]);
-    expect(desc.env.ELECTRON_RUN_AS_NODE).toBe("1");
+    expect(desc.command).toBe("/npm/lib/node_modules/@agentclientprotocol/codex-acp/dist/index.js");
+    expect(desc.args).toEqual([]);
     expect(desc.env[SYMPOSIUM_WORKSPACE_ROOT_ENV]).toBe("/vault");
 
     const config = JSON.parse(desc.env.CODEX_CONFIG as string);
@@ -214,9 +211,7 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
   it("pins spawn-time approval policy, reviewer, and sandbox without legacy argv", async () => {
     const backend = new CodexBackend();
     const desc = await backend.buildSpawnDescriptor({ vaultBasePath: "/vault" });
-    expect(desc.args).toEqual([
-      "/npm/lib/node_modules/@agentclientprotocol/codex-acp/dist/index.js",
-    ]);
+    expect(desc.args).toEqual([]);
     expect(JSON.parse(desc.env.CODEX_CONFIG as string)).toEqual(
       expect.objectContaining({
         approval_policy: "on-request",

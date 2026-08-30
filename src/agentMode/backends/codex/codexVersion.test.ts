@@ -94,12 +94,35 @@ describe("codexVersion", () => {
   });
 
   describe("buildCodexAcpInvocation()", () => {
-    it("runs the validated package entry through Obsidian's Node runtime", () => {
+    it("runs the validated package entry directly on Unix", () => {
       expect(buildCodexAcpInvocation(UNIX_ENTRY, [], { PATH: "/usr/bin" })).toEqual({
-        command: process.execPath,
-        args: [UNIX_ENTRY],
-        env: { PATH: "/usr/bin", ELECTRON_RUN_AS_NODE: "1" },
+        command: UNIX_ENTRY,
+        args: [],
+        env: { PATH: "/usr/bin" },
       });
+    });
+
+    it("uses the installed Node runtime for the Windows package entry", () => {
+      const entry = "C:\\npm\\node_modules\\@agentclientprotocol\\codex-acp\\dist\\index.js";
+      expect(
+        buildCodexAcpInvocation(
+          entry,
+          ["--flag"],
+          { PATH: "C:\\Program Files\\nodejs" },
+          "win32",
+          "C:\\Program Files\\nodejs\\node.exe"
+        )
+      ).toEqual({
+        command: "C:\\Program Files\\nodejs\\node.exe",
+        args: [entry, "--flag"],
+        env: { PATH: "C:\\Program Files\\nodejs" },
+      });
+    });
+
+    it("fails with recovery guidance when Windows cannot find Node.js", () => {
+      expect(() => buildCodexAcpInvocation("C:\\npm\\dist\\index.js", [], {}, "win32")).toThrow(
+        "Node.js was not found"
+      );
     });
   });
 });

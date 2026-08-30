@@ -52,7 +52,7 @@ npm install -g @agentclientprotocol/codex-acp
 codex login
 ```
 
-Configure the package's `dist\index.js`, not `codex.exe`, `codex-acp.cmd`, or a legacy `codex-acp.exe`. Copilot launches the JavaScript entry point with Obsidian's bundled runtime and uses the Codex CLI login. Leave **Environment variables** empty unless you intentionally need an override.
+Configure the package's `dist\index.js`, not `codex.exe`, `codex-acp.cmd`, or a legacy `codex-acp.exe`. Copilot launches the JavaScript entry point with the Node.js installation that provided npm and uses the Codex CLI login. If Node was installed while Obsidian was open, restart Obsidian before Auto-detect. Leave **Environment variables** empty unless you intentionally need an override.
 
 ## Share Skills across agents
 

@@ -1,4 +1,5 @@
 import { getSettings } from "@/settings/model";
+import { detectBinary } from "@/utils/detectBinary";
 import { AcpBackend, AcpSpawnDescriptor } from "@/agentMode/acp/types";
 import { buildSimpleSpawnDescriptor } from "@/agentMode/backends/shared/simpleBinaryBackend";
 import { buildAgentSystemPrompt } from "@/agentMode/backends/shared/agentSystemPrompt";
@@ -62,7 +63,14 @@ export class CodexBackend implements AcpBackend {
     // Deliberately no `project_doc_fallback_filenames=["project.md"]`: project.md is metadata,
     // while Codex discovers the canonical AGENTS.md instructions from the session cwd.
     const entryPath = resolveSupportedCodexAcpEntry(descriptor.command);
-    const invocation = buildCodexAcpInvocation(entryPath, descriptor.args, descriptor.env);
+    const nodePath = process.platform === "win32" ? await detectBinary("node") : undefined;
+    const invocation = buildCodexAcpInvocation(
+      entryPath,
+      descriptor.args,
+      descriptor.env,
+      process.platform,
+      nodePath ?? undefined
+    );
     this.codexHome = invocation.env.CODEX_HOME ?? defaultCodexHome();
     return { ...descriptor, ...invocation };
   }

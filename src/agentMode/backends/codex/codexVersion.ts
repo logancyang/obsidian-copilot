@@ -104,20 +104,32 @@ export function isSupportedCodexAcpPath(adapterPath: string | undefined): boolea
 }
 
 /**
- * Launches the supported npm entry point through Obsidian's bundled Node
- * runtime, avoiding platform-specific npm launcher scripts.
+ * Launches the supported npm entry point directly on Unix and through the
+ * installed Node runtime on Windows, avoiding unspawnable npm command shims.
  * @param entryPath - Validated JavaScript entry point for the supported package.
  * @param args - Arguments to pass to the adapter.
  * @param env - Environment inherited by the adapter process.
+ * @param platform - Platform whose launcher rules should apply.
+ * @param nodePath - Installed Node executable required on Windows.
  */
 export function buildCodexAcpInvocation(
   entryPath: string,
   args: string[],
-  env: NodeJS.ProcessEnv
+  env: NodeJS.ProcessEnv,
+  platform: NodeJS.Platform = process.platform,
+  nodePath?: string
 ): CodexAcpInvocation {
+  if (platform === "win32") {
+    if (!nodePath) {
+      throw new Error(
+        "Node.js was not found. Install Node.js, restart Obsidian, then run Codex Auto-detect again."
+      );
+    }
+    return { command: nodePath, args: [entryPath, ...args], env };
+  }
   return {
-    command: process.execPath,
-    args: [entryPath, ...args],
-    env: { ...env, ELECTRON_RUN_AS_NODE: "1" },
+    command: entryPath,
+    args,
+    env,
   };
 }
