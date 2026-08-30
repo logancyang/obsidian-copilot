@@ -439,7 +439,7 @@ Deploy to the non-production test vault configured by `COPILOT_TEST_VAULT_PATH` 
 
 The gallery's stylesheet is built by concatenating `src/styles/tailwind.css` into its own source, so it carries a near-complete copy of the production stylesheet — and Obsidian injects every enabled plugin's `styles.css` document-wide. Both copies land in the same cascade at equal specificity, so a gallery copy built from an older `src/styles/tailwind.css` outranks the deployed production rules and the plugin's own views render pre-change behavior.
 
-`npm run test:vault` keeps the two in step: when the vault's gallery plugin resolves to the worktree being deployed, it rebuilds and reloads the gallery too. It cannot do that when the deployed gallery belongs to a different worktree — `gallery:vault` symlinks its whole source directory, so the live stylesheet is owned by whichever worktree deployed it last. In that case the deployment warns and names the owning path; run `npm run gallery:vault` from that worktree or disable the gallery plugin while testing.
+`npm run test:vault` keeps the two in step: whenever the vault has a gallery plugin installed, it rebuilds the gallery from the worktree being deployed and relinks it there, then reloads it. `gallery:vault` symlinks its whole source directory, so this also repairs a link left dangling by a deleted worktree; if the vault has no gallery plugin, the step is skipped.
 
 If a CSS change appears to have no effect, check for the same selector twice in the inspector before suspecting the change itself.
 

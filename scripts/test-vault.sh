@@ -175,29 +175,15 @@ fi
 
 if [[ -n "$GALLERY_ID" ]]; then
   GALLERY_PLUGIN_DIR="$VAULT_PATH/.obsidian/plugins/$GALLERY_ID"
+  # gallery-vault.sh symlinks its whole source directory into the vault, so the
+  # live copy belongs to whichever worktree deployed it last and dangles once
+  # that worktree is deleted. Taking it over here keeps both stylesheets in step
+  # and means a vanished worktree never blocks testing another branch. Obsidian
+  # injects styles.css when a plugin is enabled, so a rewrite in place would not
+  # re-inject it; gallery:vault rebuilds and reloads, which does.
   if [[ -e "$GALLERY_PLUGIN_DIR" || -L "$GALLERY_PLUGIN_DIR" ]]; then
-    # gallery-vault.sh symlinks its whole source directory into the vault, so the
-    # live stylesheet belongs to whichever worktree deployed it last. Only that
-    # worktree can refresh it.
-    GALLERY_SOURCE_REAL="$(cd "$WORKTREE_ROOT/dev/gallery" && pwd -P)"
-    GALLERY_DEPLOYED_REAL="$(cd "$GALLERY_PLUGIN_DIR" 2>/dev/null && pwd -P || true)"
-    if [[ "$GALLERY_DEPLOYED_REAL" == "$GALLERY_SOURCE_REAL" ]]; then
-      # Obsidian injects styles.css when a plugin is enabled, so rewriting the
-      # symlinked file in place does not re-inject it. gallery:vault rebuilds and
-      # reloads, which is what makes the new stylesheet take effect.
-      echo "==> Redeploying the gallery plugin so both stylesheets match"
-      npm run gallery:vault
-    else
-      cat >&2 <<EOF
-warning: the vault's gallery plugin comes from somewhere else, so nothing built
-here can refresh it. Its stale copy of the production stylesheet can outrank the
-CSS just deployed, making these changes look like they had no effect.
-  deployed: ${GALLERY_DEPLOYED_REAL:-unresolved ($GALLERY_PLUGIN_DIR)}
-  here:     $GALLERY_SOURCE_REAL
-Run \`npm run gallery:vault\` from that worktree, or disable the $GALLERY_ID
-plugin while testing this one.
-EOF
-    fi
+    echo "==> Redeploying the gallery plugin from this worktree so both stylesheets match"
+    npm run gallery:vault
   fi
 fi
 
