@@ -265,6 +265,7 @@ export interface CopilotSettings {
       opencode?: OpencodeBackendSettings;
       claude?: ClaudeBackendSettings;
       codex?: CodexBackendSettings;
+      antigravity?: AntigravityBackendSettings;
     };
     /**
      * Per-device agent config (binary paths, env overrides, …) keyed by a
@@ -392,6 +393,18 @@ export interface CodexBackendSettings {
   envOverrides?: Record<string, string>;
 }
 
+/** Settings slice owned by the Antigravity backend. */
+export interface AntigravityBackendSettings {
+  /** Path to the user-provided `antigravity-acp` binary. */
+  binaryPath?: string;
+  /** Sticky model preference — `{ baseModelId, effort }`. Unset = use the agent's default. */
+  defaultModel?: ModelSelection | null;
+  /** Sticky permission-mode preference (default/plan/auto). Unset = the agent's natural starting mode. */
+  defaultMode?: CopilotMode | null;
+  /** See `ClaudeBackendSettings.envOverrides`. Applied to the spawned `antigravity-acp` subprocess. */
+  envOverrides?: Record<string, string>;
+}
+
 /** Settings slice owned by the OpenCode backend. */
 export interface OpencodeBackendSettings {
   binaryVersion?: string;
@@ -445,6 +458,10 @@ export interface DeviceAgentProfile {
     envOverrides?: Record<string, string>;
   };
   claude?: {
+    envOverrides?: Record<string, string>;
+  };
+  antigravity?: {
+    binaryPath?: string;
     envOverrides?: Record<string, string>;
   };
 }
@@ -1303,17 +1320,22 @@ function sanitizeAgentMode(raw: unknown): CopilotSettings["agentMode"] {
   const existingOpencode = backendsRaw.opencode as Record<string, unknown> | undefined;
   const existingClaude = backendsRaw.claude as Record<string, unknown> | undefined;
   const existingCodex = backendsRaw.codex as Record<string, unknown> | undefined;
+  const existingAntigravity = backendsRaw.antigravity as Record<string, unknown> | undefined;
 
   const opencodeSlice = existingOpencode
     ? sanitizeOpencodeBackendSettings(existingOpencode)
     : undefined;
   const claudeSlice = existingClaude ? sanitizeClaudeBackendSettings(existingClaude) : undefined;
   const codexSlice = existingCodex ? sanitizeCodexBackendSettings(existingCodex) : undefined;
+  const antigravitySlice = existingAntigravity
+    ? sanitizeAntigravityBackendSettings(existingAntigravity)
+    : undefined;
 
   const backends: CopilotSettings["agentMode"]["backends"] = {};
   if (opencodeSlice) backends.opencode = opencodeSlice;
   if (claudeSlice) backends.claude = claudeSlice;
   if (codexSlice) backends.codex = codexSlice;
+  if (antigravitySlice) backends.antigravity = antigravitySlice;
 
   const deviceProfiles = sanitizeDeviceProfiles(r.deviceProfiles);
 
@@ -1654,6 +1676,17 @@ function sanitizeCodexBackendSettings(raw: unknown): CodexBackendSettings {
   };
 }
 
+function sanitizeAntigravityBackendSettings(raw: unknown): AntigravityBackendSettings {
+  if (!raw || typeof raw !== "object") return {};
+  const r = raw as Record<string, unknown>;
+  return {
+    binaryPath: nonEmptyString(r.binaryPath),
+    defaultModel: sanitizeDefaultModel(r.defaultModel),
+    defaultMode: sanitizeDefaultMode(r.defaultMode),
+    envOverrides: sanitizeEnvOverrides(r.envOverrides),
+  };
+}
+
 function sanitizeOpencodeBackendSettings(raw: unknown): OpencodeBackendSettings {
   if (!raw || typeof raw !== "object") return {};
   const r = raw as Record<string, unknown>;
@@ -1721,6 +1754,19 @@ function sanitizeDeviceAgentProfile(raw: unknown): DeviceAgentProfile | undefine
   if (claudeRaw) {
     const envOverrides = sanitizeEnvOverrides(claudeRaw.envOverrides);
     if (envOverrides) out.claude = { envOverrides };
+  }
+
+  const antigravityRaw =
+    r.antigravity && typeof r.antigravity === "object"
+      ? (r.antigravity as Record<string, unknown>)
+      : null;
+  if (antigravityRaw) {
+    const antigravity: NonNullable<DeviceAgentProfile["antigravity"]> = {};
+    const binaryPath = nonEmptyString(antigravityRaw.binaryPath);
+    if (binaryPath) antigravity.binaryPath = binaryPath;
+    const envOverrides = sanitizeEnvOverrides(antigravityRaw.envOverrides);
+    if (envOverrides) antigravity.envOverrides = envOverrides;
+    if (Object.keys(antigravity).length > 0) out.antigravity = antigravity;
   }
 
   return Object.keys(out).length > 0 ? out : undefined;

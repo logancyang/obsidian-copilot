@@ -363,7 +363,7 @@ function relaySkill(opts: {
   const [argKey, argPlaceholder] = opts.arg;
   const cmdFile = opts.scriptFile.replace(/\.sh$/, ".cmd");
   const ps1File = opts.scriptFile.replace(/\.sh$/, ".ps1");
-  const version = 6;
+  const version = 7;
   // Self-host search crosses back into the owning Obsidian renderer so API
   // keys never enter the agent process; fetch fails closed because there is no
   // provider-neutral page-fetch contract.
@@ -413,13 +413,13 @@ fi
   return {
     name: opts.name,
     version,
-    enabledAgents: ["claude", "codex", "opencode"],
+    enabledAgents: ["claude", "codex", "opencode", "antigravity"],
     skillMd: `---
 name: ${opts.name}
 description: ${opts.description}
 license: ${opts.license ?? "Copilot Plus"}
 metadata:
-  copilot-enabled-agents: claude, codex, opencode
+  copilot-enabled-agents: claude, codex, opencode, antigravity
   copilot-builtin-version: "${version}"
 ---
 
@@ -490,17 +490,17 @@ fetch tool. Use \`copilot-web-search\` when search results can answer the reques
 otherwise tell the user that fetching the page is unavailable.`,
 });
 
-const READ_PDF_VERSION = 6;
+const READ_PDF_VERSION = 7;
 const READ_PDF: BuiltinSkill = {
   name: "copilot-read-pdf",
   version: READ_PDF_VERSION,
-  enabledAgents: ["claude", "codex", "opencode"],
+  enabledAgents: ["claude", "codex", "opencode", "antigravity"],
   skillMd: `---
 name: copilot-read-pdf
 description: Extract the full text of a PDF as Markdown using Copilot Plus. Use when the user wants to read, summarize, or quote a PDF file (in the vault or an absolute path). Requires an active Copilot Plus license.
 license: Copilot Plus
 metadata:
-  copilot-enabled-agents: claude, codex, opencode
+  copilot-enabled-agents: claude, codex, opencode, antigravity
   copilot-builtin-version: "${READ_PDF_VERSION}"
 ---
 
@@ -577,16 +577,16 @@ const FETCH_X = relaySkill({
   scriptFile: "fetch-x.sh",
 });
 
-const SYMPOSIUM_PUBLISH_VERSION = 8;
+const SYMPOSIUM_PUBLISH_VERSION = 9;
 const SYMPOSIUM_PUBLISH: BuiltinSkill = {
   name: "symposium-publish",
   version: SYMPOSIUM_PUBLISH_VERSION,
-  enabledAgents: ["claude", "codex", "opencode"],
+  enabledAgents: ["claude", "codex", "opencode", "antigravity"],
   skillMd: `---
 name: symposium-publish
 description: Publish, update, or withdraw an existing Markdown note through Symposium's host-owned review flow. Use when the user asks to publish, share, update, delete, remove, or withdraw a Symposium page.
 metadata:
-  copilot-enabled-agents: claude, codex, opencode
+  copilot-enabled-agents: claude, codex, opencode, antigravity
   copilot-builtin-version: "${SYMPOSIUM_PUBLISH_VERSION}"
 ---
 
@@ -881,41 +881,8 @@ if errorlevel 1 (
 )
 `;
 
-const MIYO_PARSE_SH = `#!/bin/sh
-# Parse one local PDF or EPUB through the Miyo CLI and print Markdown/text.
-die() {
-  printf '%s\\n' "$1" >&2
-  exit "\${2:-2}"
-}
-
-FILE="$1"
-[ -n "$FILE" ] || die "Usage: sh miyo-parse.sh <file>" 1
-
-${MIYO_POSIX_RESOLVER}
-
-"$MIYO" parse "$FILE"
-`;
-
-const MIYO_PARSE_CMD = `@echo off
-setlocal enableextensions
-rem Parse one local PDF or EPUB through the Miyo CLI and print Markdown/text.
-if "%~1"=="" (
-  echo Usage: miyo-parse.cmd "file" 1>&2
-  exit /b 1
-)
-${MIYO_WINDOWS_RESOLVER}
-"%MIYO%" parse "%~1"
-`;
-
 /**
- * Vault semantic search via the local Miyo desktop app's `miyo` CLI.
- *
- * Ships a runnable wrapper per OS — `.sh` for macOS/Linux, `.cmd` for Windows —
- * rather than prose telling the agent to construct the command. Each resolves
- * the binary across the absolute install path and PATH, so the agent runs ONE
- * deterministic command (no Node, no shell/OS branching to reason through).
- * Smaller models were giving up after the old PATH-first prose attempt failed in
- * Obsidian's reduced-PATH shells.
+ * Searches the user's indexed Obsidian vault through the standalone Miyo CLI.
  *
  * The host seeds this skill only when the dedicated Miyo search-skill setting
  * is enabled (see `seedManagedBuiltins` in `agentMode/index`) and prunes the
@@ -924,12 +891,12 @@ ${MIYO_WINDOWS_RESOLVER}
 export const MIYO_SEARCH_SKILL: BuiltinSkill = {
   name: "miyo-search",
   version: MIYO_SEARCH_VERSION,
-  enabledAgents: ["claude", "codex", "opencode"],
+  enabledAgents: ["claude", "codex", "opencode", "antigravity"],
   skillMd: `---
 name: miyo-search
 description: Semantic (meaning-based) search over the user's Obsidian vault via the local Miyo app. For any vault-search intent, use it when builtin grep search is too slow or doesn't surface enough relevant notes, or when the user explicitly asks for Miyo search. Needs the Miyo desktop app installed and running.
 metadata:
-  copilot-enabled-agents: claude, codex, opencode
+  copilot-enabled-agents: claude, codex, opencode, antigravity
   copilot-builtin-version: "${MIYO_SEARCH_VERSION}"
 ---
 
@@ -998,6 +965,32 @@ The script exits with a clear message when Miyo can't be used:
   ],
 };
 
+const MIYO_PARSE_SH = `#!/bin/sh
+# Parse one local PDF or EPUB through the Miyo CLI and print Markdown/text.
+die() {
+  printf '%s\\n' "$1" >&2
+  exit "\${2:-2}"
+}
+
+FILE="$1"
+[ -n "$FILE" ] || die "Usage: sh miyo-parse.sh <file>" 1
+
+${MIYO_POSIX_RESOLVER}
+
+"$MIYO" parse "$FILE"
+`;
+
+const MIYO_PARSE_CMD = `@echo off
+setlocal enableextensions
+rem Parse one local PDF or EPUB through the Miyo CLI and print Markdown/text.
+if "%~1"=="" (
+  echo Usage: miyo-parse.cmd "file" 1>&2
+  exit /b 1
+)
+${MIYO_WINDOWS_RESOLVER}
+"%MIYO%" parse "%~1"
+`;
+
 /**
  * Parses local PDF and EPUB files through the standalone Miyo CLI.
  *
@@ -1008,12 +1001,12 @@ The script exits with a clear message when Miyo can't be used:
 export const MIYO_PARSE_SKILL: BuiltinSkill = {
   name: "miyo-parse",
   version: MIYO_PARSE_VERSION,
-  enabledAgents: ["claude", "codex", "opencode"],
+  enabledAgents: ["claude", "codex", "opencode", "antigravity"],
   skillMd: `---
 name: miyo-parse
 description: Parse a local PDF or EPUB file into Markdown/text with the local Miyo CLI. Use this for document reading when Miyo is the selected Document Processor. The file can be anywhere on the filesystem and does not need to be indexed or copied into the vault.
 metadata:
-  copilot-enabled-agents: claude, codex, opencode
+  copilot-enabled-agents: claude, codex, opencode, antigravity
   copilot-builtin-version: "${MIYO_PARSE_VERSION}"
 ---
 

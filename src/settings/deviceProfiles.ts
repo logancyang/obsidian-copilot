@@ -44,6 +44,7 @@ function omitKeys<T extends object>(obj: T, keys: readonly string[]): T {
 /** Device-specific field names per backend slice, removed on save / set on load. */
 const CODEX_DEVICE_KEYS = ["binaryPath", "envOverrides"] as const;
 const CLAUDE_DEVICE_KEYS = ["envOverrides"] as const;
+const ANTIGRAVITY_DEVICE_KEYS = ["binaryPath", "envOverrides"] as const;
 const OPENCODE_DEVICE_KEYS = [
   "binaryPath",
   "binaryVersion",
@@ -65,6 +66,14 @@ function buildProfileFromFlat(agentMode: AgentMode): DeviceAgentProfile {
     if (codexSrc.binaryPath) codex.binaryPath = codexSrc.binaryPath;
     if (codexSrc.envOverrides) codex.envOverrides = codexSrc.envOverrides;
     if (hasOwnKeys(codex)) profile.codex = codex;
+  }
+
+  const antigravitySrc = agentMode.backends?.antigravity;
+  if (antigravitySrc) {
+    const antigravity: NonNullable<DeviceAgentProfile["antigravity"]> = {};
+    if (antigravitySrc.binaryPath) antigravity.binaryPath = antigravitySrc.binaryPath;
+    if (antigravitySrc.envOverrides) antigravity.envOverrides = antigravitySrc.envOverrides;
+    if (hasOwnKeys(antigravity)) profile.antigravity = antigravity;
   }
 
   const opencodeSrc = agentMode.backends?.opencode;
@@ -99,6 +108,10 @@ function stripDeviceFieldsFromBackends(backends: Backends | undefined): Backends
   if (backends.codex) {
     const synced = omitKeys(backends.codex, CODEX_DEVICE_KEYS);
     if (hasOwnKeys(synced)) out.codex = synced;
+  }
+  if (backends.antigravity) {
+    const synced = omitKeys(backends.antigravity, ANTIGRAVITY_DEVICE_KEYS);
+    if (hasOwnKeys(synced)) out.antigravity = synced;
   }
   if (backends.claude) {
     const synced = omitKeys(backends.claude, CLAUDE_DEVICE_KEYS);
@@ -153,6 +166,9 @@ export function hydrateDeviceProfile(settings: CopilotSettings, deviceId: string
   // synced pref with `undefined` — the precise inverse of `buildProfileFromFlat`.
   const nextBackends = stripDeviceFieldsFromBackends(agentMode.backends);
   if (profile?.codex) nextBackends.codex = { ...nextBackends.codex, ...profile.codex };
+  if (profile?.antigravity) {
+    nextBackends.antigravity = { ...nextBackends.antigravity, ...profile.antigravity };
+  }
   if (profile?.opencode) nextBackends.opencode = { ...nextBackends.opencode, ...profile.opencode };
   if (profile?.claude) nextBackends.claude = { ...nextBackends.claude, ...profile.claude };
 
