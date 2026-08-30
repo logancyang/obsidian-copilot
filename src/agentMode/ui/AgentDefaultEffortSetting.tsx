@@ -1,5 +1,6 @@
 import type { EffortOption } from "@/agentMode/session/types";
 import { SettingItem } from "@/components/ui/setting-item";
+import { t } from "@/i18n";
 import React from "react";
 
 export interface AgentDefaultEffortSettingProps {
@@ -29,7 +30,7 @@ export function AgentDefaultEffortSetting({
   return (
     <SettingItem
       type="select"
-      title="Default effort"
+      title={t("settings.agents.defaultEffort.title")}
       value={supported ? (value ?? "") : ""}
       onChange={(nextValue) => onChange(nextValue === "" ? null : nextValue)}
       options={selectOptions}

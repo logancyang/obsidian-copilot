@@ -5,6 +5,21 @@ import { setSettings } from "@/settings/model";
 import { playNotificationSound } from "@/utils/notificationSound";
 import { AgentSettings } from "./AgentSettings";
 
+let mockLocale: "en" | "zh-CN" = "en";
+jest.mock("@/i18n", () => ({
+  t: (key: string, values: Record<string, number | string> = {}) => {
+    const { ENGLISH_TRANSLATIONS } =
+      jest.requireActual<typeof import("@/i18n/locales/en")>("@/i18n/locales/en");
+    const { ZH_CN_TRANSLATIONS } =
+      jest.requireActual<typeof import("@/i18n/locales/zh-CN")>("@/i18n/locales/zh-CN");
+    const catalog: Readonly<Record<string, string>> =
+      mockLocale === "zh-CN" ? ZH_CN_TRANSLATIONS : ENGLISH_TRANSLATIONS;
+    return (catalog[key] ?? key).replace(/\{\{(\w+)\}\}/g, (placeholder, name: string) =>
+      values[name] === undefined ? placeholder : String(values[name])
+    );
+  },
+}));
+
 jest.mock("@/logger", () => ({ logInfo: jest.fn(), logWarn: jest.fn(), logError: jest.fn() }));
 
 jest.mock("@/utils/notificationSound", () => {
@@ -158,6 +173,7 @@ jest.mock("./ConfiguredModelEnableList", () => ({
 describe("AgentSettings", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockLocale = "en";
     install.mockResolvedValue({ version: "1.2.3", path: MANAGED_BINARY_PATH });
     mockSettings = {
       agentMode: {
@@ -203,6 +219,29 @@ describe("AgentSettings", () => {
     render(<AgentSettings />);
     const tabs = screen.getAllByRole("tab").map((t) => t.textContent);
     expect(tabs).toEqual(["OpenCode", "Claude", "Codex", "Quick Chat"]);
+  });
+
+  it("localizes the Agent settings shell while preserving backend names for https://github.com/Brevilabs/obsidian-copilot-private/issues/326", () => {
+    mockLocale = "zh-CN";
+    mockSettings.enableSelfHostMode = true;
+
+    render(<AgentSettings />);
+
+    expect(screen.getByText("智能体")).not.toBeNull();
+    expect(screen.getByText("默认后端")).not.toBeNull();
+    expect(screen.getByText("通知")).not.toBeNull();
+    expect(screen.getByDisplayValue("钢琴键")).not.toBeNull();
+    expect(screen.getByText("就绪")).not.toBeNull();
+    expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
+      "OpenCode",
+      "Claude",
+      "Codex",
+      "快速对话",
+    ]);
+
+    fireEvent.click(screen.getByRole("tab", { name: "Claude" }));
+    expect(screen.getByText("云服务。")).not.toBeNull();
+    expect(screen.getByText(/Claude 仍在云端运行/)).not.toBeNull();
   });
 
   it("keeps the default backend picker outside the tab strip", () => {

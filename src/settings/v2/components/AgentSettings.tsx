@@ -19,6 +19,7 @@ import { TabContent, TabItem, type TabItem as TabItemType } from "@/components/u
 import { TruncatedText } from "@/components/TruncatedText";
 import { usePlugin } from "@/contexts/PluginContext";
 import { useChatBackendModelOptions } from "@/hooks/useChatBackendModelOptions";
+import { t } from "@/i18n";
 import { logError } from "@/logger";
 import { setSettings, updateSetting, useSettingsValue } from "@/settings/model";
 import { formatBinaryPathForDisplay } from "@/utils/binaryPath";
@@ -89,7 +90,11 @@ export const AgentSettings: React.FC = () => {
       icon: <d.Icon className="tw-size-4" />,
       label: d.displayName,
     })),
-    { id: QUICK_CHAT_TAB_ID, icon: <MessageCircle className="tw-size-4" />, label: "Quick Chat" },
+    {
+      id: QUICK_CHAT_TAB_ID,
+      icon: <MessageCircle className="tw-size-4" />,
+      label: t("settings.agents.quickChat"),
+    },
   ];
 
   // Guard against a persisted selection naming a removed backend id (unrelated
@@ -105,11 +110,11 @@ export const AgentSettings: React.FC = () => {
 
   return (
     <section className="tw-space-y-4">
-      <SettingSection label="Agents">
+      <SettingSection label={t("settings.agents.title")}>
         <SettingItem
           type="select"
-          title="Default backend"
-          description="Used when you click + to start a new session and for auto-spawn on mount. Selecting a model from the model picker also updates this."
+          title={t("settings.agents.defaultBackend.title")}
+          description={t("settings.agents.defaultBackend.description")}
           value={activeBackendValue}
           onChange={(value) =>
             setSettings((cur) => ({ agentMode: { ...cur.agentMode, activeBackend: value } }))
@@ -129,7 +134,10 @@ export const AgentSettings: React.FC = () => {
             playNotificationSound(value);
           }}
           soundId={settings.agentMode.notificationSoundId}
-          soundOptions={NOTIFICATION_SOUND_OPTIONS}
+          soundOptions={NOTIFICATION_SOUND_OPTIONS.map((option) => ({
+            ...option,
+            label: t(`settings.agents.sound.${option.value}`),
+          }))}
         />
       </SettingSection>
 
@@ -185,15 +193,17 @@ const QuickChatPanel: React.FC = () => {
   return (
     <SettingSection>
       <div className="tw-flex tw-min-w-0 tw-flex-col tw-py-4">
-        <span className="tw-text-base tw-font-semibold">Quick Chat models</span>
+        <span className="tw-text-base tw-font-semibold">
+          {t("settings.agents.quickChat.models")}
+        </span>
         <span className="tw-text-xs tw-text-muted">
-          Models shown in the chat model picker. Add providers on the Models (BYOK) tab.
+          {t("settings.agents.quickChat.description")}
         </span>
       </div>
       <SettingItem
         type="select"
-        title="Default model"
-        description="The model new chats start with. Pick from your enabled Quick Chat models."
+        title={t("settings.agents.defaultModel.title")}
+        description={t("settings.agents.defaultModel.description")}
         value={resolvedDefaultModelId ?? "Select Model"}
         onChange={(value) => {
           if (value === "Select Model") return;
@@ -202,9 +212,12 @@ const QuickChatPanel: React.FC = () => {
         options={
           hasDefault
             ? chatModelOptions
-            : [{ label: "Select Model", value: "Select Model" }, ...chatModelOptions]
+            : [
+                { label: t("settings.agents.selectModel"), value: "Select Model" },
+                ...chatModelOptions,
+              ]
         }
-        placeholder="Model"
+        placeholder={t("settings.agents.modelPlaceholder")}
       />
       <div className="tw-py-4">
         <ChatModelEnableList />
@@ -258,9 +271,9 @@ const BackendPanel: React.FC<{
         <div className="tw-flex tw-items-start tw-gap-2 tw-rounded-lg tw-border tw-border-solid tw-px-3 tw-py-2.5 tw-text-xs tw-text-normal tw-bg-warning/10 tw-border-warning/40">
           <AlertTriangle className="tw-mt-0.5 tw-size-4 tw-shrink-0 tw-text-warning" />
           <div className="tw-leading-relaxed">
-            <span className="tw-font-semibold">Cloud service.</span> Self-Host Mode is on, but{" "}
-            {descriptor.displayName} runs in the cloud — your prompts leave your machine for a third
-            party. It stays available; use it only if you're comfortable with that.
+            <span className="tw-font-semibold">{t("settings.agents.cloud.title")}</span>
+            {t("settings.agents.cloud.separator")}
+            {t("settings.agents.cloud.description", { backend: descriptor.displayName })}
           </div>
         </div>
       )}
@@ -280,7 +293,7 @@ const BackendPanel: React.FC<{
                   <InstallBadge state={installState} />
                   {InlineInstall && (
                     <Badge variant="accent" className="tw-font-normal">
-                      Recommended
+                      {t("settings.agents.recommended")}
                     </Badge>
                   )}
                 </div>
@@ -291,7 +304,7 @@ const BackendPanel: React.FC<{
                 )}
                 {InlineInstall && (
                   <span className="tw-text-xs tw-text-muted">
-                    Not installed — one download away.
+                    {t("settings.agents.notInstalled")}
                   </span>
                 )}
                 {(installState.kind === "incompatible" || installState.kind === "error") && (
@@ -308,14 +321,12 @@ const BackendPanel: React.FC<{
                 variant={installState.kind === "ready" ? "secondary" : "default"}
                 onClick={() => descriptor.openInstallUI(plugin)}
               >
-                Configure
+                {t("settings.agents.configure")}
               </Button>
             )}
           </div>
           {InlineInstall && (
-            <div className="tw-text-xs tw-text-muted">
-              Works with Copilot Plus or your own API keys — add providers on the BYOK tab.
-            </div>
+            <div className="tw-text-xs tw-text-muted">{t("settings.agents.byokHint")}</div>
           )}
         </div>
 

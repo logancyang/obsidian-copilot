@@ -4,6 +4,21 @@ import type { BackendDescriptor, EnabledModelEntry } from "@/agentMode/session/t
 import { fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
 
+let mockLocale: "en" | "zh-CN" = "en";
+jest.mock("@/i18n", () => ({
+  t: (key: string, values: Record<string, number | string> = {}) => {
+    const { ENGLISH_TRANSLATIONS } =
+      jest.requireActual<typeof import("@/i18n/locales/en")>("@/i18n/locales/en");
+    const { ZH_CN_TRANSLATIONS } =
+      jest.requireActual<typeof import("@/i18n/locales/zh-CN")>("@/i18n/locales/zh-CN");
+    const catalog: Readonly<Record<string, string>> =
+      mockLocale === "zh-CN" ? ZH_CN_TRANSLATIONS : ENGLISH_TRANSLATIONS;
+    return (catalog[key] ?? key).replace(/\{\{(\w+)\}\}/g, (placeholder, name: string) =>
+      values[name] === undefined ? placeholder : String(values[name])
+    );
+  },
+}));
+
 jest.mock("@/logger", () => ({ logInfo: jest.fn(), logWarn: jest.fn(), logError: jest.fn() }));
 
 jest.mock("@/settings/model", () => ({
@@ -52,6 +67,10 @@ function getSettingSelect(title: string): HTMLSelectElement {
 }
 
 describe("AgentDefaultModelSetting", () => {
+  beforeEach(() => {
+    mockLocale = "en";
+  });
+
   it("persists a model-only change with agent-default effort, not the first option", () => {
     const persist = jest.fn().mockResolvedValue(undefined);
     const manager = makeManager({
@@ -194,5 +213,21 @@ describe("AgentDefaultModelSetting", () => {
     // Picking a concrete effort persists it against the same model.
     fireEvent.change(effortSelect, { target: { value: "high" } });
     expect(persist).toHaveBeenCalledWith("opencode", { baseModelId: "opus", effort: "high" });
+  });
+
+  it("localizes static model defaults while preserving model names for https://github.com/Brevilabs/obsidian-copilot-private/issues/326", () => {
+    mockLocale = "zh-CN";
+    const manager = makeManager({
+      defaultSelection: { baseModelId: "opus", effort: null },
+      effortByModel: { opus: [{ value: "high", label: "High" }] },
+    });
+
+    render(<AgentDefaultModelSetting descriptor={makeDescriptor()} manager={manager} />);
+
+    expect(screen.getByText("默认模型")).not.toBeNull();
+    expect(screen.getByDisplayValue("Opus")).not.toBeNull();
+    expect(screen.getByText("BYOK（添加 API 密钥）")).not.toBeNull();
+    expect(screen.getByText("默认推理强度")).not.toBeNull();
+    expect(screen.getByDisplayValue("使用智能体默认设置")).not.toBeNull();
   });
 });

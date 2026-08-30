@@ -1,5 +1,6 @@
 import type { InstallState } from "@/agentMode/session/types";
 import { Badge } from "@/components/ui/badge";
+import { t } from "@/i18n";
 import { AlertTriangle, Check } from "lucide-react";
 import React from "react";
 
@@ -20,16 +21,24 @@ interface InstallBadgeSpec {
  */
 export function installBadge(state: InstallState): InstallBadgeSpec | null {
   if (state.kind === "ready") {
-    return { label: "Ready", variant: "success", showCheck: true };
+    return { label: t("settings.agents.install.ready"), variant: "success", showCheck: true };
   }
   if (state.kind === "checking") {
-    return { label: "Checking…", variant: "outline" };
+    return { label: t("settings.agents.install.checking"), variant: "outline" };
   }
   if (state.kind === "incompatible") {
-    return { label: "Incompatible version", variant: "destructive", title: state.message };
+    return {
+      label: t("settings.agents.install.incompatible"),
+      variant: "destructive",
+      title: state.message,
+    };
   }
   if (state.kind === "error") {
-    return { label: "Error", variant: "destructive", title: state.message };
+    return {
+      label: t("settings.agents.install.error"),
+      variant: "destructive",
+      title: state.message,
+    };
   }
   // absent → no badge.
   return null;
