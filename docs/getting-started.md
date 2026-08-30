@@ -39,18 +39,16 @@ Claude uses the account held by the Claude Code CLI. You do not paste that accou
 
 Copilot connects to Codex through the `codex-acp` adapter. If you already use Codex:
 
-1. Install the adapter for your platform:
-   - **Windows:** follow [Windows setup for Agent Chat](agent-mode-windows-setup.md#3-connect-codex). Its PowerShell installer downloads the native `codex-acp.exe` that Copilot requires.
-   - **macOS or Linux:** run:
+1. Install the supported adapter on Windows, macOS, or Linux:
 
-     ```bash
-     npm install -g @agentclientprotocol/codex-acp
-     ```
+   ```bash
+   npm install -g @agentclientprotocol/codex-acp
+   ```
 
 2. Run `codex login` if the Codex CLI is not already signed in.
-3. Open **Basic → Agents → Codex → Configure**, then use **Auto-detect** or enter the path to `codex-acp.exe` on Windows or `codex-acp` on macOS and Linux.
+3. Open **Basic → Agents → Codex → Configure**, then use **Auto-detect**. On Windows, manual setup points to the installed package's `dist\index.js`; on macOS and Linux, it points to the `codex-acp` launcher.
 
-Codex inherits the Codex CLI's credentials; there is no Codex key to paste into Copilot.
+Copilot requires `@agentclientprotocol/codex-acp` 0.0.38 or newer. The older `@zed-industries/codex-acp` package is not supported. Codex inherits the Codex CLI's credentials; there is no Codex key to paste into Copilot.
 
 ## Start Your First Agent Chat
 

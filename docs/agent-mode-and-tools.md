@@ -43,15 +43,15 @@ Claude models and billing come from your Claude Code account. Models added under
 
 ### Codex
 
-The Codex backend needs the Codex CLI and its `codex-acp` adapter:
+The Codex backend needs the Codex CLI and `@agentclientprotocol/codex-acp` 0.0.38 or newer:
 
 1. Install the Codex CLI and run `codex login`.
 2. Open **Basic → Agents → Codex → Configure**.
-3. Run the adapter installation command shown in the dialog.
-4. Select **Auto-detect**, or enter the absolute path to `codex-acp` and select **Apply**.
+3. Run the adapter installation command shown in the dialog: `npm install -g @agentclientprotocol/codex-acp`.
+4. Select **Auto-detect**, or enter the absolute path to the `codex-acp` launcher on macOS/Linux or its `dist\index.js` entry point on Windows, and select **Apply**.
 5. Enable the models you want and choose a default.
 
-Copilot uses your existing Codex CLI login. Models added under **BYOK** do not join the Codex model list.
+The older `@zed-industries/codex-acp` package is not supported. Copilot uses your existing Codex CLI login. Models added under **BYOK** do not join the Codex model list.
 
 For Windows-specific installation help, see [Windows setup for Agent Chat](agent-mode-windows-setup.md).
 

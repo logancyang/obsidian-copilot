@@ -95,13 +95,13 @@ Codex uses the `codex-acp` adapter and the login held by the Codex CLI. It does 
 
 Select **Configure** to open these controls:
 
-| Control                                             | Default                                  | What it does                                                                                                                           |
-| --------------------------------------------------- | ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| **codex-acp binary**                                | Blank until detected or applied          | **Auto-detect** searches known locations and `PATH`. **Apply** validates and saves an absolute `codex-acp` path. **Clear** forgets it. |
-| **Install it**                                      | Not applicable                           | Shows the platform-specific `codex-acp` installation command.                                                                          |
-| **Sign in**                                         | Not applicable                           | Shows `codex login`. Run it outside Copilot; the adapter inherits that login. There is no key field here.                              |
-| **Default model / Default effort / model switches** | Agent defaults; models reported by Codex | Curates the models available to Codex Agent Chat. Billing and limits belong to the OpenAI or ChatGPT account used by the CLI.          |
-| **Environment variables**                           | No rows                                  | Passes values such as `CODEX_HOME` or `OPENAI_BASE_URL` to the adapter.                                                                |
+| Control                                             | Default                                  | What it does                                                                                                                                                      |
+| --------------------------------------------------- | ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **codex-acp adapter**                               | Blank until detected or applied          | **Auto-detect** finds `@agentclientprotocol/codex-acp` 0.0.38 or newer. **Apply** validates the package and version before saving its path. **Clear** forgets it. |
+| **Install it**                                      | Not applicable                           | Shows the platform-specific `codex-acp` installation command.                                                                                                     |
+| **Sign in**                                         | Not applicable                           | Shows `codex login`. Run it outside Copilot; the adapter inherits that login. There is no key field here.                                                         |
+| **Default model / Default effort / model switches** | Agent defaults; models reported by Codex | Curates the models available to Codex Agent Chat. Billing and limits belong to the OpenAI or ChatGPT account used by the CLI.                                     |
+| **Environment variables**                           | No rows                                  | Passes values such as `CODEX_HOME` or `OPENAI_BASE_URL` to the adapter.                                                                                           |
 
 See [Agent Chat](agent-mode-and-tools.md) for setup, permissions, projects, multi-agent answers, and normal use.
 

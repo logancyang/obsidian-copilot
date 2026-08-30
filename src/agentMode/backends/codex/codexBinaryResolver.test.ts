@@ -12,49 +12,31 @@ function fsWith(paths: string[]) {
 }
 
 describe("resolveCodexAcpBinary", () => {
-  it("finds the Windows helper-script install path", () => {
+  it("finds the current adapter's Windows npm entry point", () => {
     const expected = path.win32.join(
       "C:\\Users\\me",
       "AppData",
-      "Local",
-      "Programs",
+      "Roaming",
+      "npm",
+      "node_modules",
+      "@agentclientprotocol",
       "codex-acp",
-      "codex-acp.exe"
+      "dist",
+      "index.js"
     );
 
     expect(
       resolveCodexAcpBinary({
         homeDir: "C:\\Users\\me",
         platform: "win32",
-        env: { LOCALAPPDATA: path.win32.join("C:\\Users\\me", "AppData", "Local") },
+        env: { APPDATA: path.win32.join("C:\\Users\\me", "AppData", "Roaming") },
         fs: fsWith([expected]),
       })
     ).toBe(expected);
   });
 
-  it("finds the direct npm platform tarball extraction path", () => {
-    const expected = path.win32.join(
-      "C:\\Users\\me",
-      "AppData",
-      "Local",
-      "codex-acp",
-      "package",
-      "bin",
-      "codex-acp.exe"
-    );
-
-    expect(
-      resolveCodexAcpBinary({
-        homeDir: "C:\\Users\\me",
-        platform: "win32",
-        env: { LOCALAPPDATA: path.win32.join("C:\\Users\\me", "AppData", "Local") },
-        fs: fsWith([expected]),
-      })
-    ).toBe(expected);
-  });
-
-  it("finds native npm optional-dependency binaries without selecting cmd shims", () => {
-    const expected = path.win32.join(
+  it("https://github.com/logancyang/obsidian-copilot/issues/2916 does not select the legacy Zed package", () => {
+    const legacy = path.win32.join(
       "C:\\Users\\me",
       "AppData",
       "Roaming",
@@ -76,22 +58,48 @@ describe("resolveCodexAcpBinary", () => {
         env: { APPDATA: path.win32.join("C:\\Users\\me", "AppData", "Roaming") },
         fs: fsWith([
           path.win32.join("C:\\Users\\me", "AppData", "Roaming", "npm", "codex-acp.cmd"),
-          expected,
+          legacy,
         ]),
       })
-    ).toBe(expected);
+    ).toBeNull();
   });
 
-  it("reports the Windows helper install directory in searched dirs", () => {
+  it("reports the current Windows package directory in searched dirs", () => {
     const dirs = codexAcpSearchDirs({
       homeDir: "C:\\Users\\me",
       platform: "win32",
-      env: { LOCALAPPDATA: path.win32.join("C:\\Users\\me", "AppData", "Local") },
+      env: { APPDATA: path.win32.join("C:\\Users\\me", "AppData", "Roaming") },
       fs: fsWith([]),
     });
 
     expect(dirs).toContain(
-      path.win32.join("C:\\Users\\me", "AppData", "Local", "Programs", "codex-acp")
+      path.win32.join(
+        "C:\\Users\\me",
+        "AppData",
+        "Roaming",
+        "npm",
+        "node_modules",
+        "@agentclientprotocol",
+        "codex-acp",
+        "dist"
+      )
     );
+  });
+
+  it("skips an existing candidate that fails the package support contract", () => {
+    const legacy = "/Users/me/.local/bin/codex-acp";
+    const current = "/usr/local/bin/codex-acp";
+
+    expect(
+      resolveCodexAcpBinary(
+        {
+          homeDir: "/Users/me",
+          platform: "darwin",
+          env: {},
+          fs: fsWith([legacy, current]),
+        },
+        (candidate) => candidate !== legacy
+      )
+    ).toBe(current);
   });
 });

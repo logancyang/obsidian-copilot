@@ -12,10 +12,7 @@ import CodexLogo from "./logo.svg";
 import { CodexSettingsPanel } from "./CodexSettingsPanel";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
 import { agentOriginEnabledModelEntries } from "@/agentMode/backends/shared/agentEnabledModels";
-import {
-  binaryPathInstallState,
-  simpleBinaryBackendProcess,
-} from "@/agentMode/backends/shared/simpleBinaryBackend";
+import { simpleBinaryBackendProcess } from "@/agentMode/backends/shared/simpleBinaryBackend";
 import type {
   EnabledModelEntry,
   ModelSelection,
@@ -23,10 +20,9 @@ import type {
   PermissionOption,
 } from "@/agentMode/session/types";
 import type { BackendDescriptor, BackendProcess, InstallState } from "@/agentMode/session/types";
-import { detectBinary } from "@/utils/detectBinary";
 import { codexAcpSearchDirs, resolveCodexAcpBinary } from "./codexBinaryResolver";
-import { CODEX_BINARY_NAME } from "./cliSetup";
 import { buildCodexModeMapping } from "./codexModeMapping";
+import { isSupportedCodexAcpPath, resolveSupportedCodexAcpEntry } from "./codexVersion";
 
 /**
  * Vocabulary mirrors codex-acp's advertised efforts. `minimal` is included
@@ -55,9 +51,14 @@ function codexAcpResolverEnv(): Parameters<typeof resolveCodexAcpBinary>[0] {
 }
 
 export async function detectCodexAcpPath(): Promise<string | null> {
-  const fromResolver = resolveCodexAcpBinary(codexAcpResolverEnv());
-  if (fromResolver) return fromResolver;
-  return detectBinary(CODEX_BINARY_NAME);
+  return resolveCodexAcpBinary(codexAcpResolverEnv(), (candidate) => {
+    try {
+      resolveSupportedCodexAcpEntry(candidate);
+      return true;
+    } catch {
+      return false;
+    }
+  });
 }
 
 export function codexAcpDetectionSearchDirs(): string[] {
@@ -153,7 +154,9 @@ export const CodexBackendDescriptor: BackendDescriptor = {
   },
 
   getInstallState(settings: CopilotSettings): InstallState {
-    return binaryPathInstallState(settings.agentMode?.backends?.codex?.binaryPath);
+    return isSupportedCodexAcpPath(settings.agentMode?.backends?.codex?.binaryPath)
+      ? { kind: "ready", source: "custom" }
+      : { kind: "absent" };
   },
 
   getResolvedBinaryPath(settings: CopilotSettings): string | null {

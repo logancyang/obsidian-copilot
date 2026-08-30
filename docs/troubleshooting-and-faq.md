@@ -25,8 +25,8 @@ Copilot uses your Claude Code login; there is no API key to paste here.
 Copilot connects through `codex-acp`, not the `codex` executable alone.
 
 1. Open **Basic → Agents → Codex → Configure**.
-2. Run the displayed install command. On macOS and Linux: `npm install -g @agentclientprotocol/codex-acp`.
-3. Choose **Auto-detect**, or enter the absolute path to `codex-acp` and choose **Apply**.
+2. Run `npm install -g @agentclientprotocol/codex-acp` on Windows, macOS, or Linux. Copilot requires version 0.0.38 or newer and does not support the older `@zed-industries/codex-acp` package.
+3. Choose **Auto-detect**. For manual setup, enter the absolute path to `codex-acp` on macOS/Linux or `%APPDATA%\npm\node_modules\@agentclientprotocol\codex-acp\dist\index.js` on Windows, then choose **Apply**.
 4. Run `codex login` in a terminal if Codex is not authenticated.
 
 See [Getting Started](getting-started.md) for the complete setup flow and [Windows setup for Agent Chat](agent-mode-windows-setup.md) for Windows-specific commands.

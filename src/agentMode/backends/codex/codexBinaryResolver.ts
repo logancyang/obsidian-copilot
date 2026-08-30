@@ -1,8 +1,8 @@
 /**
- * Locate a user-installed native `codex-acp` binary for the Codex Configure
- * dialog. On Windows, the npm shim (`codex-acp.cmd`) is not spawnable through
- * Agent Mode's no-shell ACP process path, so this resolver probes native
- * `.exe` locations first and only falls back to the generic PATH detector.
+ * Locate a user-installed `codex-acp` adapter for the Codex Configure dialog.
+ * On Windows, the npm shim (`codex-acp.cmd`) is not spawnable through Agent
+ * Mode's no-shell process path, so resolve the package's JavaScript entry point
+ * and let the backend launch it through Obsidian's bundled Node runtime.
  */
 import { requireNodeModule } from "@/utils/desktopRuntime";
 import { nodeToolBinDirCandidates, type NodeToolFs } from "@/utils/nodeToolBinDirs";
@@ -16,11 +16,14 @@ export interface CodexAcpBinaryResolverInput {
   fs: CodexAcpBinaryResolverFs;
 }
 
-export function resolveCodexAcpBinary(input: CodexAcpBinaryResolverInput): string | null {
+export function resolveCodexAcpBinary(
+  input: CodexAcpBinaryResolverInput,
+  accepts: (candidate: string) => boolean = () => true
+): string | null {
   const candidates = input.platform === "win32" ? windowsCandidates(input) : unixCandidates(input);
 
   for (const candidate of candidates) {
-    if (candidate && input.fs.existsSync(candidate)) {
+    if (candidate && input.fs.existsSync(candidate) && accepts(candidate)) {
       return candidate;
     }
   }
@@ -51,66 +54,13 @@ function unixCandidates(input: CodexAcpBinaryResolverInput): string[] {
 function windowsCandidates(input: CodexAcpBinaryResolverInput): string[] {
   const win = requireNodeModule<typeof import("node:path")>("path").win32;
   const { homeDir, env } = input;
-  const localAppData = env.LOCALAPPDATA ?? win.join(homeDir, "AppData", "Local");
   const appData = env.APPDATA ?? win.join(homeDir, "AppData", "Roaming");
   const npmGlobal = win.join(appData, "npm");
-  const out: string[] = [
-    // Copilot's docs helper installs the native release zip here.
-    win.join(localAppData, "Programs", "codex-acp", "codex-acp.exe"),
-    // Earlier direct-tarball docs extracted the npm platform package here.
-    win.join(localAppData, "codex-acp", "package", "bin", "codex-acp.exe"),
-    // Allow users who manually extracted the release zip to this simpler dir.
-    win.join(localAppData, "codex-acp", "codex-acp.exe"),
-    win.join(homeDir, ".local", "bin", "codex-acp.exe"),
-  ];
+  const out: string[] = [];
 
   for (const dir of [...nodeToolBinDirCandidates(input), npmGlobal]) {
-    out.push(win.join(dir, "codex-acp.exe"));
     out.push(
-      win.join(
-        dir,
-        "node_modules",
-        "@zed-industries",
-        "codex-acp-win32-x64",
-        "bin",
-        "codex-acp.exe"
-      )
-    );
-    out.push(
-      win.join(
-        dir,
-        "node_modules",
-        "@zed-industries",
-        "codex-acp-win32-arm64",
-        "bin",
-        "codex-acp.exe"
-      )
-    );
-    out.push(
-      win.join(
-        dir,
-        "node_modules",
-        "@zed-industries",
-        "codex-acp",
-        "node_modules",
-        "@zed-industries",
-        "codex-acp-win32-x64",
-        "bin",
-        "codex-acp.exe"
-      )
-    );
-    out.push(
-      win.join(
-        dir,
-        "node_modules",
-        "@zed-industries",
-        "codex-acp",
-        "node_modules",
-        "@zed-industries",
-        "codex-acp-win32-arm64",
-        "bin",
-        "codex-acp.exe"
-      )
+      win.join(dir, "node_modules", "@agentclientprotocol", "codex-acp", "dist", "index.js")
     );
   }
 

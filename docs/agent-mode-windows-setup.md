@@ -35,19 +35,24 @@ Copilot uses Claude Code's credentials. Do not add an Anthropic API key to this 
 
 ## 3. Connect Codex
 
-The Codex backend needs both the Codex CLI and the native `codex-acp.exe` adapter.
+The Codex backend needs the Codex CLI and `@agentclientprotocol/codex-acp` 0.0.38 or newer. Install the current npm package; the older `@zed-industries/codex-acp` adapter is not supported.
 
 1. Open **Settings → Copilot → Basic → Agents → Codex** and select **Configure**.
-2. Copy the current **Install it** command from the dialog and run it in PowerShell. The installer sets up the Codex CLI, starts login, downloads the matching Windows adapter, and copies the adapter path.
-3. Return to **Configure Codex** and select **Auto-detect** under **codex-acp binary**.
-4. If detection fails, enter the copied absolute path to `codex-acp.exe` and select **Apply**.
+2. Copy the **Install it** command from the dialog and run it in PowerShell:
+
+```powershell
+npm install -g @agentclientprotocol/codex-acp
+```
+
+3. Return to **Configure Codex** and select **Auto-detect** under **codex-acp adapter**.
+4. If detection fails, enter the absolute path to `%APPDATA%\npm\node_modules\@agentclientprotocol\codex-acp\dist\index.js` and select **Apply**.
 5. If login did not finish, run:
 
 ```powershell
 codex login
 ```
 
-Configure the path to `codex-acp.exe`, not `codex.exe` or a `.cmd` launcher. Copilot uses the Codex CLI login. Leave **Environment variables** empty unless you intentionally need an override.
+Configure the package's `dist\index.js`, not `codex.exe`, `codex-acp.cmd`, or a legacy `codex-acp.exe`. Copilot launches the JavaScript entry point with Obsidian's bundled runtime and uses the Codex CLI login. Leave **Environment variables** empty unless you intentionally need an override.
 
 ## Share Skills across agents
 

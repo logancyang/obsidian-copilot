@@ -4,6 +4,7 @@ import {
   CODEX_INSTALL_COMMAND,
   codexBinaryPathPlaceholder,
 } from "@/agentMode/backends/codex/cliSetup";
+import { CODEX_ACP_MIN_VERSION } from "@/agentMode/backends/codex/codexVersion";
 import { BinaryPathSetting } from "@/agentMode/backends/shared/BinaryPathSetting";
 import { ConfigDialogShell, ConfigSection } from "@/agentMode/backends/shared/ui/ConfigDialogShell";
 import { CommandBlock, SetupStep } from "@/agentMode/backends/shared/ui/SetupSteps";
@@ -45,16 +46,16 @@ export const CodexConfigView: React.FC<CodexConfigViewProps> = ({
   onClose,
 }) => (
   <ConfigDialogShell title="Configure Codex" state={state} onClose={onClose}>
-    <ConfigSection title="codex-acp binary">
+    <ConfigSection title="codex-acp adapter">
       <p className="tw-my-0 tw-text-sm tw-text-muted">
-        Copilot spawns the <code>{CODEX_BINARY_NAME}</code> adapter on this machine. Auto-detect
-        checks the usual install locations and your PATH.
+        Copilot supports <code>@agentclientprotocol/codex-acp</code> {CODEX_ACP_MIN_VERSION} or
+        newer. Auto-detect checks its usual npm install locations and your PATH.
       </p>
       <BinaryPathSetting
         binaryName={CODEX_BINARY_NAME}
         placeholder={codexBinaryPathPlaceholder(process.platform)}
         initialPath={binaryPath}
-        notFoundHint={`${CODEX_BINARY_NAME} not found in known install locations or PATH. Run the install command below, then click Auto-detect again.`}
+        notFoundHint={`A supported ${CODEX_BINARY_NAME} adapter was not found. Run the install command below, then click Auto-detect again.`}
         onSave={onSavePath}
         onClear={onClearPath}
         persistOnAutoDetect
