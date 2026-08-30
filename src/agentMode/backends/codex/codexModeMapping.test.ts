@@ -67,10 +67,10 @@ describe("buildCodexModeMapping", () => {
     expect(mapping.readOnlyModeId).toBeNull();
   });
 
-  it("retains the legacy read-only contract for inventory-free fan-out setup", () => {
+  it("keeps only the inventory-free fan-out contract (https://github.com/logancyang/obsidian-copilot/issues/2916)", () => {
     expect(buildCodexModeMapping(null)).toEqual({
       kind: "setMode",
-      canonical: { default: "auto", plan: "read-only", auto: "full-access" },
+      canonical: {},
       readOnlyModeId: "read-only",
     });
   });

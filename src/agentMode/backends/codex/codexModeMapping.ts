@@ -6,12 +6,6 @@ const CODEX_MODE_CANDIDATES = {
   auto: ["agent-full-access", "full-access", "bypassPermissions"],
 } as const;
 
-const LEGACY_CODEX_MODES = {
-  default: "auto",
-  plan: "read-only",
-  auto: "full-access",
-} as const;
-
 function firstAdvertised(
   advertised: ReadonlySet<string>,
   candidates: readonly string[]
@@ -28,7 +22,10 @@ export function buildCodexModeMapping(modeState: RawModeState | null): ModeMappi
   if (!modeState) {
     return {
       kind: "setMode",
-      canonical: LEGACY_CODEX_MODES,
+      // `applyMode` performs one inventory-free lookup before dispatch. Do not
+      // replace the live session's translated ids with guessed legacy ids here.
+      // https://github.com/logancyang/obsidian-copilot/issues/2916
+      canonical: {},
       readOnlyModeId: "read-only",
     };
   }
