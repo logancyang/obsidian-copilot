@@ -2,7 +2,7 @@
 
 Open **Settings → Copilot** to configure Copilot V4. Settings normally save as soon as you change them. Controls labeled **Apply** or **Save** are the exceptions.
 
-> **Simplified Chinese:** When Obsidian's interface language is Simplified Chinese, Copilot follows it for the currently supported Settings shell, Basic preferences, Copilot License card, core Agent settings, and supporting notices. Backend-specific setup panels and the rest of the Settings page are not yet translated. Unsupported or untranslated messages fall back to English. Localization never changes prompts, commands, your content, model or provider names, or AI output.
+> **Simplified Chinese:** When Obsidian's interface language is Simplified Chinese, Copilot follows it for the currently supported Settings shell, Basic preferences, Copilot License card, core Agent settings, Agent Chat composer/controls/recovery/approval flow, and supporting notices. Backend-specific setup panels and the rest of the Settings page are not yet translated. Unsupported or untranslated messages fall back to English. Localization never changes prompts, commands, your content, model or provider names, AI output or reasoning, tool calls, logs, or raw backend output.
 
 Copilot V4 starts with [Agent Chat](agent-mode-and-tools.md). Quick Chat remains available for lightweight conversations and as the main chat on mobile. Agent Chat, its backend settings, and Skills require desktop Obsidian.
 

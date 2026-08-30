@@ -9,6 +9,7 @@ import {
 } from "@/agentMode/ui/useBackendDescriptor";
 import type CopilotPlugin from "@/main";
 import { logError } from "@/logger";
+import { t } from "@/i18n";
 import React from "react";
 
 interface Props {
@@ -84,7 +85,7 @@ export const AgentModeChat: React.FC<Props> = ({
   if (!preloadReady) {
     return (
       <div className="tw-flex tw-size-full tw-items-center tw-justify-center tw-text-muted">
-        Loading agent models…
+        {t("agentChat.status.loadingModels")}
       </div>
     );
   }

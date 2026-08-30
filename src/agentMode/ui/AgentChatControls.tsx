@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { PLUS_UTM_MEDIUMS } from "@/constants";
 import { cn } from "@/lib/utils";
+import { t } from "@/i18n";
 import { navigateToPlusPage, useCanUseMultiAgent } from "@/plusUtils";
 import { useSettingsValue } from "@/settings/model";
 import { Download, History, MessageCirclePlus, Sparkles } from "lucide-react";
@@ -94,9 +95,7 @@ export const AgentChatControls: React.FC<AgentChatControlsProps> = ({
                 flex-container button would make the text an anonymous flex item,
                 which `text-overflow` never reaches, so narrow panes would hard-clip
                 the copy instead of ellipsizing it. */}
-            <span className="tw-truncate">
-              Mention multiple agents with @ (needs Plus tier or above)
-            </span>
+            <span className="tw-truncate">{t("agentChat.controls.multiAgentUpsell")}</span>
           </Button>
         )}
       </div>
@@ -105,11 +104,16 @@ export const AgentChatControls: React.FC<AgentChatControlsProps> = ({
         {onNewChat && (
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost2" size="icon" title="New Chat" onClick={onNewChat}>
+              <Button
+                variant="ghost2"
+                size="icon"
+                title={t("agentChat.controls.newChat")}
+                onClick={onNewChat}
+              >
                 <MessageCirclePlus className="tw-size-4" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>New Chat</TooltipContent>
+            <TooltipContent>{t("agentChat.controls.newChat")}</TooltipContent>
           </Tooltip>
         )}
         {!settings.autosaveChat && onSaveAsNote && (
@@ -118,13 +122,13 @@ export const AgentChatControls: React.FC<AgentChatControlsProps> = ({
               <Button
                 variant="ghost2"
                 size="icon"
-                title="Save Chat as Note"
+                title={t("agentChat.controls.saveAsNote")}
                 onClick={() => void onSaveAsNote()}
               >
                 <Download className="tw-size-4" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Save Chat as Note</TooltipContent>
+            <TooltipContent>{t("agentChat.controls.saveAsNote")}</TooltipContent>
           </Tooltip>
         )}
         {historyAvailable && (
@@ -141,7 +145,7 @@ export const AgentChatControls: React.FC<AgentChatControlsProps> = ({
                 <Button
                   variant="ghost2"
                   size="icon"
-                  title="Chat History"
+                  title={t("agentChat.controls.history")}
                   onClick={() => {
                     void onLoadHistory?.();
                   }}
@@ -150,7 +154,7 @@ export const AgentChatControls: React.FC<AgentChatControlsProps> = ({
                 </Button>
               </TooltipTrigger>
             </ChatHistoryPopover>
-            <TooltipContent>Chat History</TooltipContent>
+            <TooltipContent>{t("agentChat.controls.history")}</TooltipContent>
           </Tooltip>
         )}
       </div>
