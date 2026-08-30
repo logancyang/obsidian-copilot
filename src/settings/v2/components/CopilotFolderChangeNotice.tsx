@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { t } from "@/i18n";
 import { AlertTriangle, FolderSync } from "lucide-react";
 import React from "react";
 
@@ -23,13 +24,10 @@ export const CopilotFolderChangeNotice: React.FC<CopilotFolderChangeNoticeProps>
     <div className={cn("tw-flex tw-flex-col tw-gap-4")}>
       <div className={cn("tw-flex tw-items-center tw-gap-3 tw-text-normal")}>
         <FolderSync className={cn("tw-size-6 tw-shrink-0 tw-text-accent")} aria-hidden="true" />
-        <h2 className={cn("tw-m-0 tw-text-xl tw-font-bold")}>Change Copilot folder</h2>
+        <h2 className={cn("tw-m-0 tw-text-xl tw-font-bold")}>{t("settings.folderChange.title")}</h2>
       </div>
       <p className={cn("tw-m-0 tw-text-muted")}>
-        Copilot will keep new chats and data under <code>{newRoot}/</code>. Your files aren&apos;t
-        moved — your old data stays in <strong className={cn("tw-text-normal")}>{oldRoot}/</strong>,
-        which stays permanently excluded from Copilot search. Move it over if you want; Obsidian
-        updates the links.
+        {t("settings.folderChange.description", { newRoot, oldRoot })}
       </p>
       {containsMarkdown && (
         <div
@@ -43,12 +41,7 @@ export const CopilotFolderChangeNotice: React.FC<CopilotFolderChangeNoticeProps>
             className={cn("tw-mt-0.5 tw-size-4 tw-shrink-0 tw-text-warning")}
             aria-hidden="true"
           />
-          <span>
-            <strong>This folder already contains Markdown files.</strong> If you continue, every
-            Markdown file under <code>{newRoot}/</code> — including regular notes — will be excluded
-            from Copilot search. The folder stays excluded even if you change the Copilot folder
-            later.
-          </span>
+          <span>{t("settings.folderChange.markdownWarning", { newRoot })}</span>
         </div>
       )}
     </div>

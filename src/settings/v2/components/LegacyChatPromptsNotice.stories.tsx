@@ -18,6 +18,11 @@ export const OneSavedPrompt: StoryObj<LegacyChatPromptsNoticeViewProps> = {
   args: { promptCount: 1 },
 };
 
+/** Verifies interface prose can wrap naturally around a preserved CJK folder path. */
+export const CjkFolderPath: StoryObj<LegacyChatPromptsNoticeViewProps> = {
+  args: { promptCount: 2, folderPath: "资料/Copilot/系统提示词" },
+};
+
 /** A user who never saved a prompt sees no mention of the feature. */
 export const NoSavedPrompts: StoryObj<LegacyChatPromptsNoticeViewProps> = {
   args: { promptCount: 0 },

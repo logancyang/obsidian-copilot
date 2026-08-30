@@ -9,6 +9,7 @@ import { SettingSection } from "@/components/ui/setting-section";
 import { DEFAULT_OPEN_AREA, SEND_SHORTCUT } from "@/constants";
 import { useApp } from "@/context";
 import { usePlugin } from "@/contexts/PluginContext";
+import { t } from "@/i18n";
 import { cn } from "@/lib/utils";
 import { verifyMiyoScope } from "@/miyo/miyoResync";
 import { shouldSurfaceMiyoResync } from "@/miyo/miyoUtils";
@@ -54,7 +55,7 @@ const LazyAgentSettings = React.lazy(() =>
  */
 const AgentsSection: React.FC = () => {
   if (!isDesktopRuntime()) {
-    return <DesktopOnlySettingsPanel message="Agent settings are available on desktop." />;
+    return <DesktopOnlySettingsPanel message={t("settings.agents.desktopOnly")} />;
   }
   return (
     <React.Suspense fallback={null}>
@@ -104,7 +105,7 @@ export const BasicSettings: React.FC = () => {
       queue = queue.then(() =>
         writeAgentsFile(app, "", next).catch((error) => {
           logError("Failed to save vault instructions.", error);
-          new Notice("Failed to save AGENTS.md.");
+          new Notice(t("settings.notice.instructionsSaveFailed"));
         })
       );
       return queue;
@@ -126,19 +127,32 @@ export const BasicSettings: React.FC = () => {
       await openAgentsFile(app, "", "", true);
     } catch (error) {
       logError("Failed to open vault AGENTS.md.", error);
-      new Notice(error instanceof Error ? error.message : "Failed to open AGENTS.md.");
+      new Notice(
+        error instanceof Error ? error.message : t("settings.notice.instructionsOpenFailed")
+      );
     }
   };
 
   const applyFolderChange = () => {
     const validation = validateCopilotFolder(folderDraft, app.vault.configDir);
     if (!validation.ok) {
-      new Notice(`Invalid Copilot folder: ${validation.reason}`, 5000);
+      // The validator's stable code selects plugin copy while the original
+      // reason remains intact for logs. A reserved user-entered segment passes
+      // through without translation.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/325
+      new Notice(
+        t("settings.notice.invalidFolder", {
+          reason: t(`settings.validation.folder.${validation.code}`, {
+            name: validation.reservedName,
+          }),
+        }),
+        5000
+      );
       return;
     }
     const folder = validation.folder;
     if (folder === persistedRoot) {
-      new Notice("That's already the Copilot folder.", 3000);
+      new Notice(t("settings.notice.folderUnchanged"), 3000);
       return;
     }
     // Reason: a path (or ancestor) occupied by an existing FILE would accept
@@ -146,10 +160,7 @@ export const BasicSettings: React.FC = () => {
     // — the first visible symptom being a failed chat save much later.
     const conflict = findCopilotRootFileConflict(app, folder);
     if (conflict) {
-      new Notice(
-        `"${conflict}" is an existing file, so "${folder}" can't be used as a folder. Choose another location.`,
-        8000
-      );
+      new Notice(t("settings.notice.folderFileConflict", { conflict, folder }), 8000);
       return;
     }
     // Existing Markdown is allowed, but activating the root will exclude all of
@@ -167,8 +178,7 @@ export const BasicSettings: React.FC = () => {
             // banner carries the explicit Resync. Reads fresh settings — the
             // React `settings` closure predates the root change.
             const fresh = getSettings();
-            const notice = () =>
-              new Notice("Miyo search needs a resync — open the Miyo settings tab.", 6000);
+            const notice = () => new Notice(t("settings.notice.miyoResync"), 6000);
             if (shouldSurfaceMiyoResync(app, fresh)) {
               notice();
             } else if (fresh.miyoSyncedExclusions === "") {
@@ -186,8 +196,8 @@ export const BasicSettings: React.FC = () => {
             }
           })
           .then(() => ensureCopilotSubfolders(app.vault, { copilotFolder: folder }))
-          .then(() => new Notice(`Copilot folder changed to "${folder}".`, 4000))
-          .catch(() => new Notice("Failed to change the Copilot folder. Check the logs.", 5000));
+          .then(() => new Notice(t("settings.notice.folderChanged", { folder }), 4000))
+          .catch(() => new Notice(t("settings.notice.folderChangeFailed"), 5000));
       },
       <CopilotFolderChangeNotice
         oldRoot={persistedRoot}
@@ -195,8 +205,8 @@ export const BasicSettings: React.FC = () => {
         containsMarkdown={containsMarkdown}
       />,
       "",
-      containsMarkdown ? "Use folder" : "Change folder",
-      "Cancel",
+      containsMarkdown ? t("settings.folderChange.use") : t("settings.folderChange.change"),
+      t("settings.actions.cancel"),
       () => setFolderDraft(persistedRoot)
     ).open();
   };
@@ -211,7 +221,10 @@ export const BasicSettings: React.FC = () => {
       const missingVars = requiredVars.filter((v) => !format.includes(v));
 
       if (missingVars.length > 0) {
-        new Notice(`Error: Missing required variables: ${missingVars.join(", ")}`, 4000);
+        new Notice(
+          t("settings.notice.filenameMissingVariables", { variables: missingVars.join(", ") }),
+          4000
+        );
         return;
       }
 
@@ -223,7 +236,7 @@ export const BasicSettings: React.FC = () => {
         .replace(/\{\$topic}/g, "");
 
       if (illegalChars.test(formatWithoutVars)) {
-        new Notice(`Error: Format contains illegal characters (\\/:*?"<>|)`, 4000);
+        new Notice(t("settings.notice.filenameIllegalCharacters"), 4000);
         return;
       }
 
@@ -240,10 +253,12 @@ export const BasicSettings: React.FC = () => {
       // Save settings
       updateSetting("defaultConversationNoteName", format);
       setConversationNoteName(format);
-      new Notice(`Format applied successfully! Example: ${customFileName}`, 4000);
+      new Notice(t("settings.notice.filenameApplied", { fileName: customFileName }), 4000);
     } catch (error) {
       new Notice(
-        `Error applying format: ${error instanceof Error ? error.message : String(error)}`,
+        t("settings.notice.filenameApplyFailed", {
+          error: error instanceof Error ? error.message : String(error),
+        }),
         4000
       );
     } finally {
@@ -258,32 +273,34 @@ export const BasicSettings: React.FC = () => {
       <AgentsSection />
 
       {/* General Section */}
-      <SettingSection label="General">
+      <SettingSection label={t("settings.basic.general")}>
         <SettingItem
           type="select"
-          title="Open Plugin In"
-          description="Choose where to open the plugin."
+          title={t("settings.basic.openLocation.title")}
+          description={t("settings.basic.openLocation.description")}
           value={settings.defaultOpenArea}
           onChange={(value) => updateSetting("defaultOpenArea", value as DEFAULT_OPEN_AREA)}
           options={[
-            { label: "Sidebar View", value: DEFAULT_OPEN_AREA.VIEW },
-            { label: "Editor", value: DEFAULT_OPEN_AREA.EDITOR },
+            { label: t("settings.basic.openLocation.sidebar"), value: DEFAULT_OPEN_AREA.VIEW },
+            { label: t("settings.basic.openLocation.editor"), value: DEFAULT_OPEN_AREA.EDITOR },
           ]}
         />
 
         <SettingItem
           type="select"
-          title="Send Shortcut"
+          title={t("settings.basic.sendShortcut.title")}
           description={
             <div className="tw-flex tw-items-center tw-gap-1.5">
-              <span className="tw-leading-none">Keyboard shortcut to send messages.</span>
+              <span className="tw-leading-none">
+                {t("settings.basic.sendShortcut.description")}
+              </span>
               <HelpTooltip
                 content={
                   <div className="tw-flex tw-max-w-96 tw-flex-col tw-gap-2 tw-py-4">
                     <div className="tw-text-xs tw-text-muted">
-                      If your selected shortcut doesn&#39;t work, check{" "}
-                      <strong>Obsidian → Hotkeys</strong> to see if another command is using the
-                      same key combination.
+                      {t("settings.basic.sendShortcut.help", {
+                        hotkeysLocation: "Obsidian → Hotkeys",
+                      })}
                     </div>
                   </div>
                 }
@@ -300,8 +317,8 @@ export const BasicSettings: React.FC = () => {
 
         <SettingItem
           type="custom"
-          title="Copilot folder location"
-          description="Where Copilot keeps conversations, prompts, memory and more. All sub-folders derive from this."
+          title={t("settings.basic.folder.title")}
+          description={t("settings.basic.folder.description")}
         >
           <div className="tw-flex tw-items-center tw-gap-2">
             <Input
@@ -316,21 +333,21 @@ export const BasicSettings: React.FC = () => {
               }}
               placeholder="copilot"
               className="tw-w-full sm:tw-w-[160px]"
-              aria-label="Copilot folder"
+              aria-label={t("settings.basic.folder.inputLabel")}
             />
             <Button
               variant="secondary"
               onClick={applyFolderChange}
-              aria-label="Apply Copilot folder"
+              aria-label={t("settings.basic.folder.applyLabel")}
             >
-              Apply
+              {t("settings.actions.apply")}
             </Button>
             <Button
               variant="secondary"
               size="icon"
               onClick={() => revealFolderInExplorer(app, settings.copilotFolder)}
-              aria-label="Open Copilot folder"
-              title="Open Copilot folder"
+              aria-label={t("settings.basic.folder.openLabel")}
+              title={t("settings.basic.folder.openLabel")}
             >
               <Folder className="tw-size-4" />
             </Button>
@@ -338,7 +355,7 @@ export const BasicSettings: React.FC = () => {
         </SettingItem>
       </SettingSection>
 
-      <SettingSection label="Custom instructions">
+      <SettingSection label={t("settings.basic.instructions")}>
         <LegacyChatPromptsNotice />
         {vaultInstructions !== null && (
           <VaultInstructionsSetting
@@ -354,11 +371,13 @@ export const BasicSettings: React.FC = () => {
       </SettingSection>
 
       {/* Saving Conversations Section */}
-      <SettingSection label="Saving conversations">
+      <SettingSection label={t("settings.basic.saving")}>
         <SettingItem
           type="switch"
-          title="Autosave Chat as Markdown"
-          description="Writes each chat to a Markdown note in your vault after every user message and AI response. With this off, agent chats still appear in Recent Chats from session history; only the Markdown note is skipped."
+          title={t("settings.basic.autosave.title")}
+          description={t("settings.basic.autosave.description", {
+            recentChats: t("settings.basic.recentChats"),
+          })}
           checked={settings.autosaveChat}
           onCheckedChange={(checked) => updateSetting("autosaveChat", checked)}
         />
@@ -368,41 +387,47 @@ export const BasicSettings: React.FC = () => {
             so gating would hide the control exactly where it is the only one. */}
         <Collapsible open={templateOpen} onOpenChange={setTemplateOpen}>
           <CollapsibleTrigger asChild>
-            <SettingDisclosure open={templateOpen} />
+            <SettingDisclosure open={templateOpen} label={t("settings.tabs.advanced")} />
           </CollapsibleTrigger>
           <CollapsibleContent>
             <SettingItem
               type="custom"
-              title="Conversation Filename Template"
+              title={t("settings.basic.filename.title")}
               description={
                 <div className="tw-flex tw-items-start tw-gap-1.5 ">
                   <span className="tw-leading-none">
-                    Customize the format of saved conversation note names.
+                    {t("settings.basic.filename.description")}
                   </span>
                   <HelpTooltip
                     content={
                       <div className="tw-flex tw-max-w-96 tw-flex-col tw-gap-2 tw-py-4">
                         <div className="tw-text-sm tw-font-medium tw-text-accent">
-                          Note: All the following variables must be included in the template.
+                          {t("settings.basic.filename.required")}
                         </div>
                         <div>
                           <div className="tw-text-sm tw-font-medium tw-text-muted">
-                            Available variables:
+                            {t("settings.basic.filename.available")}
                           </div>
                           <ul className="tw-pl-4 tw-text-sm tw-text-muted">
                             <li>
-                              <strong>{"{$date}"}</strong>: Date in YYYYMMDD format
+                              {t("settings.basic.filename.date", {
+                                format: "YYYYMMDD",
+                                variable: "{$date}",
+                              })}
                             </li>
                             <li>
-                              <strong>{"{$time}"}</strong>: Time in HHMMSS format
+                              {t("settings.basic.filename.time", {
+                                format: "HHMMSS",
+                                variable: "{$time}",
+                              })}
                             </li>
-                            <li>
-                              <strong>{"{$topic}"}</strong>: Chat conversation topic
-                            </li>
+                            <li>{t("settings.basic.filename.topic", { variable: "{$topic}" })}</li>
                           </ul>
                           <i className="tw-mt-2 tw-text-sm tw-text-muted">
-                            Example: {"{$date}_{$time}__{$topic}"} →
-                            20250114_153232__polish_this_article_[[Readme]]
+                            {t("settings.basic.filename.example", {
+                              fileName: "20250114_153232__polish_this_article_[[Readme]]",
+                              template: "{$date}_{$time}__{$topic}",
+                            })}
                           </i>
                         </div>
                       </div>
@@ -432,10 +457,10 @@ export const BasicSettings: React.FC = () => {
                   {isChecking ? (
                     <>
                       <Loader2 className="tw-mr-2 tw-size-4 tw-animate-spin" />
-                      Apply
+                      {t("settings.actions.apply")}
                     </>
                   ) : (
-                    "Apply"
+                    t("settings.actions.apply")
                   )}
                 </Button>
               </div>

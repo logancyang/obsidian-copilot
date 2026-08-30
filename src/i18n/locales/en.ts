@@ -1,2 +1,92 @@
 /** English is the source catalog and final fallback for every interface locale. */
-export const ENGLISH_TRANSLATIONS = {} as const;
+export const ENGLISH_TRANSLATIONS = {
+  "settings.title": "Copilot Settings",
+  "settings.tabs.basic": "Basic",
+  "settings.tabs.byok": "BYOK",
+  "settings.tabs.miyo": "Miyo",
+  "settings.tabs.skills": "Skills",
+  "settings.tabs.command": "Command",
+  "settings.tabs.selfHost": "Self-Host",
+  "settings.tabs.advanced": "Advanced",
+  "settings.update.available": "(Update to v{{version}})",
+  "settings.update.current": "(up to date)",
+  "settings.reset.action": "Reset Settings",
+  "settings.skills.desktopOnly": "Skills are available on desktop.",
+  "settings.agents.desktopOnly": "Agent settings are available on desktop.",
+  "settings.reset.confirmation":
+    'Resetting settings will restore the default values. API keys are not cleared by this action — use "{{deleteAllKeys}}" in {{advancedSettings}} → {{apiKeyStorage}} if you also want to remove them. Are you sure you want to continue?',
+  "settings.actions.apply": "Apply",
+  "settings.actions.cancel": "Cancel",
+  "settings.actions.continue": "Continue",
+  "settings.basic.general": "General",
+  "settings.basic.openLocation.title": "Open Plugin In",
+  "settings.basic.openLocation.description": "Choose where to open the plugin.",
+  "settings.basic.openLocation.sidebar": "Sidebar View",
+  "settings.basic.openLocation.editor": "Editor",
+  "settings.basic.sendShortcut.title": "Send Shortcut",
+  "settings.basic.sendShortcut.description": "Keyboard shortcut to send messages.",
+  "settings.basic.sendShortcut.help":
+    "If your selected shortcut doesn't work, check {{hotkeysLocation}} to see if another command is using the same key combination.",
+  "settings.basic.folder.title": "Copilot folder location",
+  "settings.basic.folder.description":
+    "Where Copilot keeps conversations, prompts, memory and more. All sub-folders derive from this.",
+  "settings.basic.folder.inputLabel": "Copilot folder",
+  "settings.basic.folder.applyLabel": "Apply Copilot folder",
+  "settings.basic.folder.openLabel": "Open Copilot folder",
+  "settings.basic.instructions": "Custom instructions",
+  "settings.basic.instructions.title": "Custom vault instructions",
+  "settings.basic.instructions.description":
+    "Your custom instructions for the agent to follow for every vault interaction. Saved to AGENTS.md in your vault root, which you can also edit as a note.",
+  "settings.basic.instructions.open": "Open AGENTS.md",
+  "settings.basic.saving": "Saving conversations",
+  "settings.basic.autosave.title": "Autosave Chat as Markdown",
+  "settings.basic.autosave.description":
+    "Writes each chat to a Markdown note in your vault after every user message and AI response. With this off, agent chats still appear in {{recentChats}} from session history; only the Markdown note is skipped.",
+  "settings.basic.recentChats": "Recent Chats",
+  "settings.basic.filename.title": "Conversation Filename Template",
+  "settings.basic.filename.description": "Customize the format of saved conversation note names.",
+  "settings.basic.filename.required":
+    "Note: All the following variables must be included in the template.",
+  "settings.basic.filename.available": "Available variables:",
+  "settings.basic.filename.date": "{{variable}}: Date in {{format}} format",
+  "settings.basic.filename.time": "{{variable}}: Time in {{format}} format",
+  "settings.basic.filename.topic": "{{variable}}: Chat conversation topic",
+  "settings.basic.filename.example": "Example: {{template}} → {{fileName}}",
+  "settings.notice.instructionsSaveFailed": "Failed to save AGENTS.md.",
+  "settings.notice.instructionsOpenFailed": "Failed to open AGENTS.md.",
+  "settings.notice.invalidFolder": "Invalid Copilot folder: {{reason}}",
+  "settings.validation.folder.empty": "Folder name cannot be empty.",
+  "settings.validation.folder.relative": "Folder path must be relative to the vault root.",
+  "settings.validation.folder.config": "Folder path cannot use the Obsidian config folder.",
+  "settings.validation.folder.emptySegment": "Folder path cannot contain empty segments (//).",
+  "settings.validation.folder.parentSegment": 'Folder path cannot contain ".." segments.',
+  "settings.validation.folder.dotSegment": 'Folder path cannot contain "." segments.',
+  "settings.validation.folder.controlCharacters":
+    "Folder path contains illegal control characters.",
+  "settings.validation.folder.illegalCharacters":
+    'Folder path contains characters not allowed in folder names (< > : " | ? *).',
+  "settings.validation.folder.trailingDotOrSpace": "Folder names cannot end with a dot or space.",
+  "settings.validation.folder.windowsReserved": '"{{name}}" is a name reserved by Windows.',
+  "settings.notice.folderUnchanged": "That's already the Copilot folder.",
+  "settings.notice.folderFileConflict":
+    '"{{conflict}}" is an existing file, so "{{folder}}" can\'t be used as a folder. Choose another location.',
+  "settings.notice.miyoResync": "Miyo search needs a resync — open the Miyo settings tab.",
+  "settings.notice.folderChanged": 'Copilot folder changed to "{{folder}}".',
+  "settings.notice.folderChangeFailed": "Failed to change the Copilot folder. Check the logs.",
+  "settings.notice.filenameMissingVariables": "Error: Missing required variables: {{variables}}",
+  "settings.notice.filenameIllegalCharacters":
+    'Error: Format contains illegal characters (\\/:*?"<>|)',
+  "settings.notice.filenameApplied": "Format applied successfully! Example: {{fileName}}",
+  "settings.notice.filenameApplyFailed": "Error applying format: {{error}}",
+  "settings.folderChange.title": "Change Copilot folder",
+  "settings.folderChange.description":
+    "Copilot will keep new chats and data under {{newRoot}}/. Your files aren't moved — your old data stays in {{oldRoot}}/, which stays permanently excluded from Copilot search. Move it over if you want; Obsidian updates the links.",
+  "settings.folderChange.markdownWarning":
+    "This folder already contains Markdown files. If you continue, every Markdown file under {{newRoot}}/ — including regular notes — will be excluded from Copilot search. The folder stays excluded even if you change the Copilot folder later.",
+  "settings.folderChange.use": "Use folder",
+  "settings.folderChange.change": "Change folder",
+  "settings.legacyPrompts.notice_one":
+    "Agent Mode now reads your instructions from AGENTS.md. Your saved system prompt is still in {{folderPath}} — open one there and paste anything you want the agent to keep following.",
+  "settings.legacyPrompts.notice_other":
+    "Agent Mode now reads your instructions from AGENTS.md. Your {{count}} saved system prompts are still in {{folderPath}} — open one there and paste anything you want the agent to keep following.",
+} as const;

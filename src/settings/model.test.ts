@@ -897,6 +897,26 @@ describe("model", () => {
   });
 
   describe("validateCopilotFolder()", () => {
+    it("returns stable localization codes for every validation reason while preserving the reserved segment for https://github.com/Brevilabs/obsidian-copilot-private/issues/325", () => {
+      const cases = [
+        ["", "empty"],
+        ["/absolute", "relative"],
+        [".vault-config/plugins", "config"],
+        ["a//b", "emptySegment"],
+        ["a/../b", "parentSegment"],
+        ["a/./b", "dotSegment"],
+        ["a/\u0001", "controlCharacters"],
+        ['a/b"c', "illegalCharacters"],
+        ["a/b.", "trailingDotOrSpace"],
+        ["NUL", "windowsReserved"],
+      ] as const;
+
+      for (const [value, code] of cases) {
+        expect(validateCopilotFolder(value, ".vault-config")).toMatchObject({ ok: false, code });
+      }
+      expect(validateCopilotFolder("NUL")).toMatchObject({ reservedName: "NUL" });
+    });
+
     it("rejects empty and whitespace-only values", () => {
       expect(validateCopilotFolder("").ok).toBe(false);
       expect(validateCopilotFolder("   ").ok).toBe(false);

@@ -1,6 +1,9 @@
 import { resolveLocale } from "@/i18n/locale";
+import { ENGLISH_TRANSLATIONS } from "@/i18n/locales/en";
+import { ZH_CN_TRANSLATIONS } from "@/i18n/locales/zh-CN";
 
 const ISSUE_URL = "https://github.com/Brevilabs/obsidian-copilot-private/issues/324";
+const SETTINGS_ISSUE_URL = "https://github.com/Brevilabs/obsidian-copilot-private/issues/325";
 
 interface LoadedI18n {
   formatDate: typeof import("@/i18n").formatDate;
@@ -20,6 +23,19 @@ function loadI18n(obsidianLocale: string): LoadedI18n {
 }
 
 describe("i18n", () => {
+  describe("catalogs", () => {
+    it(`keeps the Simplified Chinese Settings catalog in parity with English for ${SETTINGS_ISSUE_URL}`, () => {
+      expect(Object.keys(ZH_CN_TRANSLATIONS).sort()).toEqual(
+        Object.keys(ENGLISH_TRANSLATIONS).sort()
+      );
+    });
+
+    it(`ships complete named English Settings messages for ${SETTINGS_ISSUE_URL}`, () => {
+      expect(Object.keys(ENGLISH_TRANSLATIONS)).not.toHaveLength(0);
+      expect(Object.values(ENGLISH_TRANSLATIONS).every((message) => message.length > 0)).toBe(true);
+    });
+  });
+
   describe("resolveLocale()", () => {
     it(`maps Obsidian Simplified Chinese variants to zh-CN for ${ISSUE_URL}`, () => {
       expect(resolveLocale("zh")).toBe("zh-CN");
@@ -60,6 +76,14 @@ describe("i18n", () => {
 
       expect(i18n.t("variant")).toBe("English variant");
     });
+
+    it(`activates the bundled Simplified Chinese Settings catalog for ${SETTINGS_ISSUE_URL}`, () => {
+      const i18n = loadI18n("zh");
+
+      i18n.initializeI18n();
+
+      expect(i18n.t("settings.title")).toBe("Copilot 设置");
+    });
   });
 
   describe("registerCatalog()", () => {
@@ -99,6 +123,15 @@ describe("i18n", () => {
       i18n.initializeI18n();
 
       expect(i18n.t("welcome", { name: "Ada" })).toBe("Welcome, Ada!");
+    });
+
+    it(`keeps a dynamic folder path unchanged inside Simplified Chinese for ${SETTINGS_ISSUE_URL}`, () => {
+      const i18n = loadI18n("zh");
+      i18n.initializeI18n();
+
+      expect(i18n.t("settings.notice.folderChanged", { folder: "资料/Copilot 数据" })).toBe(
+        "Copilot 文件夹已更改为“资料/Copilot 数据”。"
+      );
     });
 
     it(`preserves an interpolation placeholder when its value is missing for ${ISSUE_URL}`, () => {

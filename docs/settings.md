@@ -2,6 +2,8 @@
 
 Open **Settings → Copilot** to configure Copilot V4. Settings normally save as soon as you change them. Controls labeled **Apply** or **Save** are the exceptions.
 
+> **Simplified Chinese:** When Obsidian's interface language is Simplified Chinese, Copilot follows it for the currently supported Settings shell, Basic preferences, and supporting notices. The full Basic tab is not yet translated. Unsupported or untranslated messages fall back to English. Localization never changes prompts, commands, your content, model or provider names, or AI output.
+
 Copilot V4 starts with [Agent Chat](agent-mode-and-tools.md). Quick Chat remains available for lightweight conversations and as the main chat on mobile. Agent Chat, its backend settings, and Skills require desktop Obsidian.
 
 > **Choose your data route deliberately.** Copilot-hosted models, cloud BYOK providers, Claude, Codex, remote Miyo servers, and hosted skills can receive the prompt, note excerpts, or files needed for a request. Local models and local Miyo can keep model and search traffic on your computer, but an agent or skill can still use a network service when you ask it to. See [Copilot Plans, Privacy, and Self-Hosting](copilot-plus-and-self-host.md#understand-service-data-routes).

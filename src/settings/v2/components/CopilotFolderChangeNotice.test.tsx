@@ -16,9 +16,10 @@ describe("CopilotFolderChangeNotice", () => {
     it("explains where new and existing Copilot data will remain", () => {
       render(<CopilotFolderChangeNotice {...DEFAULT_PROPS} />);
 
-      expect(screen.getByText("90 System/copilot/", { selector: "code" })).not.toBeNull();
-      expect(screen.getByText("copilot/", { selector: "strong" })).not.toBeNull();
-      expect(screen.getByText(/stays permanently excluded from Copilot search/)).not.toBeNull();
+      const description = screen.getByText(/Copilot will keep new chats and data/);
+      expect(description.textContent).toContain("90 System/copilot/");
+      expect(description.textContent).toContain("copilot/");
+      expect(description.textContent).toContain("stays permanently excluded from Copilot search");
       expect(screen.queryByRole("alert")).toBeNull();
     });
 

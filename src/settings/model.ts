@@ -1477,24 +1477,47 @@ export function validateSkillsFolder(
  * @param value Raw user input.
  * @param configDir Active vault configuration directory when validating a new value.
  * @returns `{ ok: true, folder }` with the trimmed, trailing-slash-stripped
- *   value, or `{ ok: false, reason }` carrying a UI-ready message.
+ *   value, or a stable error code alongside the existing log-ready reason.
  */
+export type CopilotFolderValidationErrorCode =
+  | "empty"
+  | "relative"
+  | "config"
+  | "emptySegment"
+  | "parentSegment"
+  | "dotSegment"
+  | "controlCharacters"
+  | "illegalCharacters"
+  | "trailingDotOrSpace"
+  | "windowsReserved";
+
+export interface CopilotFolderValidationError {
+  ok: false;
+  code: CopilotFolderValidationErrorCode;
+  reason: string;
+  reservedName?: string;
+}
+
 export function validateCopilotFolder(
   value: string,
   configDir?: string
-): { ok: true; folder: string } | { ok: false; reason: string } {
+): { ok: true; folder: string } | CopilotFolderValidationError {
   if (typeof value !== "string" || value.trim().length === 0) {
-    return { ok: false, reason: "Folder name cannot be empty." };
+    return { ok: false, code: "empty", reason: "Folder name cannot be empty." };
   }
   const trimmed = value.trim();
   // Reject (do not strip) absolute and drive-letter paths so a root can never
   // escape the vault; a stray leading slash is surfaced as an error instead.
   if (/^[/\\]/.test(trimmed) || /^[a-zA-Z]:/.test(trimmed)) {
-    return { ok: false, reason: "Folder path must be relative to the vault root." };
+    return {
+      ok: false,
+      code: "relative",
+      reason: "Folder path must be relative to the vault root.",
+    };
   }
   const cleaned = trimmed.replace(/\\/g, "/").replace(/\/+$/, "");
   if (cleaned.length === 0) {
-    return { ok: false, reason: "Folder name cannot be empty." };
+    return { ok: false, code: "empty", reason: "Folder name cannot be empty." };
   }
   const normalizedConfigDir = configDir
     ?.trim()
@@ -1510,18 +1533,31 @@ export function validateCopilotFolder(
   ) {
     return {
       ok: false,
+      code: "config",
       reason: "Folder path cannot use the Obsidian config folder.",
     };
   }
   for (const segment of cleaned.split("/")) {
     if (segment.length === 0) {
-      return { ok: false, reason: "Folder path cannot contain empty segments (//)." };
+      return {
+        ok: false,
+        code: "emptySegment",
+        reason: "Folder path cannot contain empty segments (//).",
+      };
     }
     if (segment === "..") {
-      return { ok: false, reason: 'Folder path cannot contain ".." segments.' };
+      return {
+        ok: false,
+        code: "parentSegment",
+        reason: 'Folder path cannot contain ".." segments.',
+      };
     }
     if (segment === ".") {
-      return { ok: false, reason: 'Folder path cannot contain "." segments.' };
+      return {
+        ok: false,
+        code: "dotSegment",
+        reason: 'Folder path cannot contain "." segments.',
+      };
     }
     // DESIGN NOTE — leading-dot (hidden) folder names are deliberately
     // ACCEPTED.
@@ -1543,11 +1579,16 @@ export function validateCopilotFolder(
     // handling. Deferred as a follow-up.
     // If a future review flags this again, point them at this note.
     if (CONTROL_CHAR_RE.test(segment)) {
-      return { ok: false, reason: "Folder path contains illegal control characters." };
+      return {
+        ok: false,
+        code: "controlCharacters",
+        reason: "Folder path contains illegal control characters.",
+      };
     }
     if (/[<>:"|?*]/.test(segment)) {
       return {
         ok: false,
+        code: "illegalCharacters",
         reason: 'Folder path contains characters not allowed in folder names (< > : " | ? *).',
       };
     }
@@ -1556,10 +1597,19 @@ export function validateCopilotFolder(
     // folder creation on a Windows device — the same silent, persistent
     // write-failure mode as pointing the root at an existing file.
     if (/[. ]$/.test(segment)) {
-      return { ok: false, reason: "Folder names cannot end with a dot or space." };
+      return {
+        ok: false,
+        code: "trailingDotOrSpace",
+        reason: "Folder names cannot end with a dot or space.",
+      };
     }
     if (WINDOWS_RESERVED_NAME_RE.test(segment)) {
-      return { ok: false, reason: `"${segment}" is a name reserved by Windows.` };
+      return {
+        ok: false,
+        code: "windowsReserved",
+        reason: `"${segment}" is a name reserved by Windows.`,
+        reservedName: segment,
+      };
     }
   }
   return { ok: true, folder: cleaned };

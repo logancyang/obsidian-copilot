@@ -21,3 +21,12 @@ export const EmptyFolder: StoryObj<CopilotFolderChangeNoticeProps> = {};
 export const FolderWithMarkdown: StoryObj<CopilotFolderChangeNoticeProps> = {
   args: { containsMarkdown: true },
 };
+
+/** Verifies interface prose with preserved CJK folder paths and the warning state. */
+export const CjkFolderPaths: StoryObj<CopilotFolderChangeNoticeProps> = {
+  args: {
+    oldRoot: "资料/Copilot",
+    newRoot: "知识库/Copilot 数据",
+    containsMarkdown: true,
+  },
+};

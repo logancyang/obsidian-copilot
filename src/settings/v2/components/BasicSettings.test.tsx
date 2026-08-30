@@ -5,6 +5,25 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { Notice } from "obsidian";
 import React from "react";
 
+let mockLocale: "en" | "zh-CN" = "en";
+jest.mock("@/i18n", () => ({
+  t: (key: string, values: Record<string, number | string> = {}) => {
+    const { ENGLISH_TRANSLATIONS } =
+      jest.requireActual<typeof import("@/i18n/locales/en")>("@/i18n/locales/en");
+    const { ZH_CN_TRANSLATIONS } =
+      jest.requireActual<typeof import("@/i18n/locales/zh-CN")>("@/i18n/locales/zh-CN");
+    const catalog: Readonly<Record<string, string>> =
+      mockLocale === "zh-CN" ? ZH_CN_TRANSLATIONS : ENGLISH_TRANSLATIONS;
+    const pluralKey =
+      values.count === undefined ? key : `${key}_${values.count === 1 ? "one" : "other"}`;
+    return (catalog[pluralKey] ?? catalog[key] ?? key).replace(
+      /\{\{(\w+)\}\}/g,
+      (placeholder, name: string) =>
+        values[name] === undefined ? placeholder : String(values[name])
+    );
+  },
+}));
+
 // Stub the Plus banner to keep its dependency chain out of the test.
 jest.mock("@/settings/v2/components/PlusSettings", () => ({ PlusSettings: () => null }));
 
@@ -105,6 +124,7 @@ jest.mock("@/components/modals/ConfirmModal", () => ({
 describe("BasicSettings", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockLocale = "en";
     capturedOnConfirm = null;
     capturedConfirmButtonText = "";
     settingsStore.set(settingsAtom, { ...DEFAULT_SETTINGS, copilotFolder: "copilot" });
@@ -175,6 +195,37 @@ describe("BasicSettings", () => {
     expect(Notice).toHaveBeenCalledTimes(1);
     expect(modalCtor).not.toHaveBeenCalled();
     expect(applyCopilotRootChange).not.toHaveBeenCalled();
+  });
+
+  it("translates every current folder validation reason while preserving a Windows-reserved segment for https://github.com/Brevilabs/obsidian-copilot-private/issues/325", () => {
+    mockLocale = "zh-CN";
+    render(<BasicSettings />);
+    const folderInput = screen.getByLabelText("Copilot 文件夹");
+    const applyButton = screen.getByRole("button", { name: "应用 Copilot 文件夹" });
+    const cases = [
+      ["", "文件夹名称不能为空。"],
+      ["/absolute", "文件夹路径必须相对于仓库根目录。"],
+      [".vault-config/plugins", "文件夹路径不能使用 Obsidian 配置文件夹。"],
+      ["a//b", "文件夹路径不能包含空路径段（//）。"],
+      ["a/../b", "文件夹路径不能包含“..”路径段。"],
+      ["a/./b", "文件夹路径不能包含“.”路径段。"],
+      ["a/\u0001", "文件夹路径包含非法控制字符。"],
+      ['a/b"c', "文件夹路径包含文件夹名称中不允许的字符"],
+      ["a/b.", "文件夹名称不能以句点或空格结尾。"],
+      ["NUL", "“NUL”是 Windows 保留名称。"],
+    ];
+
+    for (const [value, expectedReason] of cases) {
+      fireEvent.change(folderInput, { target: { value } });
+      fireEvent.click(applyButton);
+
+      const notice = (Notice as unknown as jest.Mock<void, [string, number?]>).mock.calls.at(
+        -1
+      )?.[0];
+      expect(notice).toContain(expectedReason);
+    }
+
+    expect(modalCtor).not.toHaveBeenCalled();
   });
 
   it("rejects a root inside the vault's active config directory", () => {
@@ -430,12 +481,44 @@ describe("BasicSettings", () => {
   it("points a user who saved Chat prompts at the folder still holding them", () => {
     systemPrompts.mockReturnValue([{ title: "Editor" }, { title: "Researcher" }]);
     render(<BasicSettings />);
-    expect(screen.getByText(/2 saved system prompts are/)).toBeTruthy();
-    expect(screen.getByText("copilot/system-prompts")).toBeTruthy();
+    expect(
+      screen.getByText(/2 saved system prompts are still in copilot\/system-prompts/)
+    ).toBeTruthy();
   });
 
   it("says nothing about Chat prompts to a user who never saved one", () => {
     render(<BasicSettings />);
     expect(screen.queryByText(/saved system prompt/)).toBeNull();
+  });
+
+  it("renders the Simplified Chinese core flow while preserving paths and template tokens for https://github.com/Brevilabs/obsidian-copilot-private/issues/325", async () => {
+    mockLocale = "zh-CN";
+    isDesktopRuntime.mockReturnValue(false);
+    systemPrompts.mockReturnValue([{ title: "Editor" }, { title: "Researcher" }]);
+    render(<BasicSettings />);
+
+    expect(screen.getByText("智能体设置仅可在桌面端使用。")).not.toBeNull();
+    expect(screen.getByText("常规")).not.toBeNull();
+    expect(screen.getByText("自定义指令")).not.toBeNull();
+    expect(screen.getByText("保存对话")).not.toBeNull();
+    expect(screen.getByText(/最近对话/)).not.toBeNull();
+    expect(screen.getByLabelText<HTMLInputElement>("Copilot 文件夹").value).toBe("copilot");
+    expect(
+      screen.getByText(/你保存的 2 个系统提示词仍在 copilot\/system-prompts 中/)
+    ).not.toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "高级" }));
+    expect(screen.getByPlaceholderText("{$date}_{$time}__{$topic}")).not.toBeNull();
+
+    fireEvent.change(screen.getByLabelText("Copilot 文件夹"), {
+      target: { value: "资料/Copilot 数据" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "应用 Copilot 文件夹" }));
+
+    expect(capturedConfirmButtonText).toBe("更改文件夹");
+    capturedOnConfirm?.();
+    await waitFor(() =>
+      expect(applyCopilotRootChange).toHaveBeenCalledWith(expect.anything(), "资料/Copilot 数据")
+    );
   });
 });
