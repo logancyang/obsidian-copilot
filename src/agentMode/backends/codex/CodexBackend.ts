@@ -10,7 +10,6 @@ import {
 import type { PlanUsageReading } from "@/agentMode/session/planUsage";
 import { defaultCodexHome, readCodexPlanUsage } from "./codexPlanUsage";
 import { mergeCodexConfigEnv } from "./codexConfigEnv";
-import { shouldRouteCodexAgentMessageText } from "./codexSessionUpdateFilter";
 import { buildCodexAcpInvocation, resolveSupportedCodexAcpEntry } from "./codexVersion";
 
 /**
@@ -24,7 +23,6 @@ import { buildCodexAcpInvocation, resolveSupportedCodexAcpEntry } from "./codexV
 export class CodexBackend implements AcpBackend {
   readonly id = "codex" as const;
   readonly displayName = "Codex";
-  readonly shouldRouteAgentMessageText = shouldRouteCodexAgentMessageText;
 
   /**
    * Where the spawned Codex keeps its state, taken from the env we actually gave it so a
