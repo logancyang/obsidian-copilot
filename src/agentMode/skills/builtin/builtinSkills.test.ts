@@ -366,17 +366,19 @@ describe("builtinSkills", () => {
       expect(miyoScript(".cmd")).toContain("search %* -n 10 --json");
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/121 passes the exact active-vault identity in Current vault mode on POSIX and Windows", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/121 passes the active-vault path prefix in Current vault mode on POSIX and Windows", () => {
       const sh = miyoScript(".sh");
       const cmd = miyoScript(".cmd");
 
       expect(sh).toContain('case "${COPILOT_MIYO_SEARCH_SCOPE:-current}"');
-      expect(sh).toContain('--folder "$COPILOT_MIYO_SEARCH_FOLDER"');
+      expect(sh).toContain('--path "$COPILOT_MIYO_SEARCH_FOLDER/"');
+      expect(sh).not.toContain("--folder");
       expect(cmd).toContain('if /I "%COPILOT_MIYO_SEARCH_SCOPE%"=="unrestricted"');
-      expect(cmd).toContain('--folder "%COPILOT_MIYO_SEARCH_FOLDER%"');
+      expect(cmd).toContain('--path "%COPILOT_MIYO_SEARCH_FOLDER%/"');
+      expect(cmd).not.toContain("--folder");
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/121 omits the folder boundary only for explicit Unrestricted mode on POSIX and Windows", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/121 omits the vault path prefix only for explicit Unrestricted mode on POSIX and Windows", () => {
       const sh = miyoScript(".sh");
       const cmd = miyoScript(".cmd");
 
