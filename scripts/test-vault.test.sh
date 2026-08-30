@@ -152,12 +152,15 @@ mkdir -p "$FOREIGN_GALLERY"
 rm "$GALLERY_PLUGIN_DIR"
 ln -s "$FOREIGN_GALLERY" "$GALLERY_PLUGIN_DIR"
 run_deploy
-if grep -q "gallery:vault" "$NPM_CALL_LOG"; then
-  echo "rebuilt the gallery for a deployment owned by another worktree" >&2
+if ! grep -q "run gallery:vault" "$NPM_CALL_LOG"; then
+  echo "did not take over a gallery deployed from another worktree" >&2
   exit 1
 fi
-if ! grep -q "comes from somewhere else" "$DEPLOY_STDERR"; then
-  echo "did not warn that the deployed gallery belongs to another worktree" >&2
+
+rm -r "$FOREIGN_GALLERY"
+run_deploy
+if ! grep -q "run gallery:vault" "$NPM_CALL_LOG"; then
+  echo "did not take over a gallery whose worktree no longer exists" >&2
   exit 1
 fi
 

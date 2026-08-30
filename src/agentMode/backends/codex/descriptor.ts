@@ -1,5 +1,6 @@
 import type CopilotPlugin from "@/main";
 import { requireNodeModule } from "@/utils/desktopRuntime";
+import { detectBinary } from "@/utils/detectBinary";
 import {
   subscribeToSettingsChange,
   updateAgentModeBackendFields,
@@ -12,10 +13,7 @@ import CodexLogo from "./logo.svg";
 import { CodexSettingsPanel } from "./CodexSettingsPanel";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
 import { agentOriginEnabledModelEntries } from "@/agentMode/backends/shared/agentEnabledModels";
-import {
-  binaryPathInstallState,
-  simpleBinaryBackendProcess,
-} from "@/agentMode/backends/shared/simpleBinaryBackend";
+import { simpleBinaryBackendProcess } from "@/agentMode/backends/shared/simpleBinaryBackend";
 import type {
   EnabledModelEntry,
   ModelSelection,
@@ -23,10 +21,10 @@ import type {
   PermissionOption,
 } from "@/agentMode/session/types";
 import type { BackendDescriptor, BackendProcess, InstallState } from "@/agentMode/session/types";
-import { detectBinary } from "@/utils/detectBinary";
 import { codexAcpSearchDirs, resolveCodexAcpBinary } from "./codexBinaryResolver";
 import { CODEX_BINARY_NAME } from "./cliSetup";
 import { buildCodexModeMapping } from "./codexModeMapping";
+import { isSupportedCodexAcpPath } from "./codexVersion";
 
 /**
  * Vocabulary mirrors codex-acp's advertised efforts. `minimal` is included
@@ -55,9 +53,14 @@ function codexAcpResolverEnv(): Parameters<typeof resolveCodexAcpBinary>[0] {
 }
 
 export async function detectCodexAcpPath(): Promise<string | null> {
-  const fromResolver = resolveCodexAcpBinary(codexAcpResolverEnv());
-  if (fromResolver) return fromResolver;
-  return detectBinary(CODEX_BINARY_NAME);
+  const fromKnownLocations = resolveCodexAcpBinary(codexAcpResolverEnv(), isSupportedCodexAcpPath);
+  if (fromKnownLocations) return fromKnownLocations;
+
+  // npm can install into a user-selected prefix outside the known directories;
+  // retain PATH discovery while enforcing the same supported-package contract.
+  // https://github.com/logancyang/obsidian-copilot/issues/2916
+  const fromPath = await detectBinary(CODEX_BINARY_NAME);
+  return isSupportedCodexAcpPath(fromPath ?? undefined) ? fromPath : null;
 }
 
 export function codexAcpDetectionSearchDirs(): string[] {
@@ -90,7 +93,7 @@ const codexWire: ModelWireCodec = {
 
 /**
  * Codex backend — wraps the configured `codex-acp`, which inherits auth from
- * the Codex CLI login. Auth is CLI-owned (no Copilot-side keys),
+ * the bundled Codex CLI login. Auth is adapter-owned (no Copilot-side keys),
  * so the candidate models come entirely from the CLI's live `availableModels`
  * (active session or preloader cache); curation is the model-management
  * `backends.codex.enabledModels` set surfaced via `getEnabledModelEntries`.
@@ -153,7 +156,9 @@ export const CodexBackendDescriptor: BackendDescriptor = {
   },
 
   getInstallState(settings: CopilotSettings): InstallState {
-    return binaryPathInstallState(settings.agentMode?.backends?.codex?.binaryPath);
+    return isSupportedCodexAcpPath(settings.agentMode?.backends?.codex?.binaryPath)
+      ? { kind: "ready", source: "custom" }
+      : { kind: "absent" };
   },
 
   getResolvedBinaryPath(settings: CopilotSettings): string | null {

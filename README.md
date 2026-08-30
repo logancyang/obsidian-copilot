@@ -48,7 +48,7 @@ Already pay for Claude or ChatGPT, or already have model API access? You can bri
 3. Select **Download opencode**, or connect Claude Code or Codex with **Auto-detect**. Codex requires the `codex-acp` adapter first.
 4. Select the **Agent** ribbon icon, or run **Open Copilot Agent Chat Window**.
 
-The [Getting Started guide](./docs/getting-started.md) covers each setup path, including the Codex adapter commands and manual executable paths.
+The [Getting Started guide](./docs/getting-started.md) covers each setup path, including the Codex adapter commands and manual adapter paths.
 
 ## Built around your vault
 

@@ -38,22 +38,14 @@ describe("buildCodexModeMapping", () => {
     });
   });
 
-  it("keeps the legacy zed adapter inventory working", () => {
+  it("https://github.com/logancyang/obsidian-copilot/issues/2916 does not map the separate Zed adapter's legacy ids", () => {
     const mapping = buildCodexModeMapping(modes("auto", ["read-only", "auto", "full-access"]));
 
     expect(mapping.canonical).toEqual({
-      default: "auto",
+      default: undefined,
       plan: "read-only",
-      auto: "full-access",
+      auto: undefined,
     });
-  });
-
-  it("prefers a genuine native plan mode when advertised", () => {
-    const mapping = buildCodexModeMapping(
-      modes("plan", ["read-only", "agent", "plan", "agent-full-access"])
-    );
-
-    expect(mapping.canonical.plan).toBe("plan");
   });
 
   it("omits canonical choices that the adapter does not advertise", () => {
@@ -67,10 +59,10 @@ describe("buildCodexModeMapping", () => {
     expect(mapping.readOnlyModeId).toBeNull();
   });
 
-  it("retains the legacy read-only contract for inventory-free fan-out setup", () => {
+  it("keeps only the inventory-free fan-out contract (https://github.com/logancyang/obsidian-copilot/issues/2916)", () => {
     expect(buildCodexModeMapping(null)).toEqual({
       kind: "setMode",
-      canonical: { default: "auto", plan: "read-only", auto: "full-access" },
+      canonical: {},
       readOnlyModeId: "read-only",
     });
   });

@@ -32,6 +32,7 @@ import {
 import type { ProjectFileRecord } from "@/projects/type";
 import { getProjectContextSignature } from "@/projects/projectContextSignature";
 import { MethodUnsupportedError } from "@/agentMode/session/errors";
+import { buildCodexModeMapping } from "@/agentMode/backends/codex/codexModeMapping";
 import type {
   BackendDescriptor,
   BackendId,
@@ -1798,6 +1799,23 @@ describe("AgentSessionManager.applyMode", () => {
     });
 
     expect(session.setMode).toHaveBeenCalledWith("cached-auto");
+  });
+
+  it("preserves current Codex mode ids without an inventory (https://github.com/logancyang/obsidian-copilot/issues/2916)", async () => {
+    const manager = buildModeManager(buildCodexModeMapping);
+    const session = await manager.createSession("claude");
+
+    for (const [mode, nativeId] of [
+      ["default", "agent"],
+      ["plan", "read-only"],
+      ["auto", "agent-full-access"],
+    ] as const) {
+      await manager.applyMode("claude", mode, { kind: "setMode", nativeId });
+    }
+
+    expect(session.setMode).toHaveBeenNthCalledWith(1, "agent");
+    expect(session.setMode).toHaveBeenNthCalledWith(2, "read-only");
+    expect(session.setMode).toHaveBeenNthCalledWith(3, "agent-full-access");
   });
 });
 
