@@ -1,5 +1,6 @@
 import type CopilotPlugin from "@/main";
 import { requireNodeModule } from "@/utils/desktopRuntime";
+import { detectBinary } from "@/utils/detectBinary";
 import {
   subscribeToSettingsChange,
   updateAgentModeBackendFields,
@@ -21,8 +22,9 @@ import type {
 } from "@/agentMode/session/types";
 import type { BackendDescriptor, BackendProcess, InstallState } from "@/agentMode/session/types";
 import { codexAcpSearchDirs, resolveCodexAcpBinary } from "./codexBinaryResolver";
+import { CODEX_BINARY_NAME } from "./cliSetup";
 import { buildCodexModeMapping } from "./codexModeMapping";
-import { isSupportedCodexAcpPath, resolveSupportedCodexAcpEntry } from "./codexVersion";
+import { isSupportedCodexAcpPath } from "./codexVersion";
 
 /**
  * Vocabulary mirrors codex-acp's advertised efforts. `minimal` is included
@@ -51,14 +53,14 @@ function codexAcpResolverEnv(): Parameters<typeof resolveCodexAcpBinary>[0] {
 }
 
 export async function detectCodexAcpPath(): Promise<string | null> {
-  return resolveCodexAcpBinary(codexAcpResolverEnv(), (candidate) => {
-    try {
-      resolveSupportedCodexAcpEntry(candidate);
-      return true;
-    } catch {
-      return false;
-    }
-  });
+  const fromKnownLocations = resolveCodexAcpBinary(codexAcpResolverEnv(), isSupportedCodexAcpPath);
+  if (fromKnownLocations) return fromKnownLocations;
+
+  // npm can install into a user-selected prefix outside the known directories;
+  // retain PATH discovery while enforcing the same supported-package contract.
+  // https://github.com/logancyang/obsidian-copilot/issues/2916
+  const fromPath = await detectBinary(CODEX_BINARY_NAME);
+  return isSupportedCodexAcpPath(fromPath ?? undefined) ? fromPath : null;
 }
 
 export function codexAcpDetectionSearchDirs(): string[] {

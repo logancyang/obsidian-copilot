@@ -45,7 +45,7 @@ npm uninstall -g @zed-industries/codex-acp; npm install -g @agentclientprotocol/
 ```
 
 3. Return to **Configure Codex** and select **Auto-detect** under **codex-acp adapter**.
-4. If detection fails, enter the absolute path to `%APPDATA%\npm\node_modules\@agentclientprotocol\codex-acp\dist\index.js` and select **Apply**.
+4. If detection fails, enter the expanded absolute path to the package entry, such as `C:\Users\<your-user-name>\AppData\Roaming\npm\node_modules\@agentclientprotocol\codex-acp\dist\index.js`, and select **Apply**. Replace `<your-user-name>` with your Windows user folder; the path field does not expand `%APPDATA%`.
 5. Sign in through the installed adapter:
 
 ```powershell

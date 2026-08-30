@@ -1,7 +1,56 @@
 import type { PermissionOption } from "@/agentMode/session/types";
-import { CodexBackendDescriptor } from "./descriptor";
+import { detectBinary } from "@/utils/detectBinary";
+import { resolveCodexAcpBinary } from "./codexBinaryResolver";
+import { CodexBackendDescriptor, detectCodexAcpPath } from "./descriptor";
+import { isSupportedCodexAcpPath } from "./codexVersion";
+
+jest.mock("@/utils/detectBinary", () => ({ detectBinary: jest.fn() }));
+jest.mock("./codexBinaryResolver", () => ({
+  codexAcpSearchDirs: jest.fn(),
+  resolveCodexAcpBinary: jest.fn(),
+}));
+jest.mock("./codexVersion", () => ({
+  ...jest.requireActual("./codexVersion"),
+  isSupportedCodexAcpPath: jest.fn(),
+}));
+
+const mockedDetectBinary = jest.mocked(detectBinary);
+const mockedResolveCodexAcpBinary = jest.mocked(resolveCodexAcpBinary);
+const mockedIsSupportedCodexAcpPath = jest.mocked(isSupportedCodexAcpPath);
 
 describe("descriptor", () => {
+  describe("detectCodexAcpPath()", () => {
+    beforeEach(() => {
+      jest.clearAllMocks();
+    });
+
+    it("https://github.com/logancyang/obsidian-copilot/issues/2916 returns a supported adapter from the known locations", async () => {
+      mockedResolveCodexAcpBinary.mockReturnValue("/known/codex-acp");
+
+      await expect(detectCodexAcpPath()).resolves.toBe("/known/codex-acp");
+      expect(mockedResolveCodexAcpBinary.mock.calls[0]?.[1]).toBe(mockedIsSupportedCodexAcpPath);
+      expect(mockedDetectBinary).not.toHaveBeenCalled();
+    });
+
+    it("https://github.com/logancyang/obsidian-copilot/issues/2916 accepts a supported adapter from a custom directory on PATH", async () => {
+      const customPath = "/custom/npm/bin/codex-acp";
+      mockedResolveCodexAcpBinary.mockReturnValue(null);
+      mockedDetectBinary.mockResolvedValue(customPath);
+      mockedIsSupportedCodexAcpPath.mockImplementation((candidate) => candidate === customPath);
+
+      await expect(detectCodexAcpPath()).resolves.toBe(customPath);
+      expect(mockedIsSupportedCodexAcpPath).toHaveBeenCalledWith(customPath);
+    });
+
+    it("https://github.com/logancyang/obsidian-copilot/issues/2916 rejects an unsupported adapter found on PATH", async () => {
+      mockedResolveCodexAcpBinary.mockReturnValue(null);
+      mockedDetectBinary.mockResolvedValue("/custom/npm/bin/codex-acp");
+      mockedIsSupportedCodexAcpPath.mockReturnValue(false);
+
+      await expect(detectCodexAcpPath()).resolves.toBeNull();
+    });
+  });
+
   describe("CodexBackendDescriptor", () => {
     describe("presentPermissionOption()", () => {
       it.each([

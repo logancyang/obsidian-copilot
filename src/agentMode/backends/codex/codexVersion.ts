@@ -3,6 +3,8 @@ import { compareSemver } from "@/utils/semver";
 
 const CURRENT_PACKAGE_NAME = "@agentclientprotocol/codex-acp";
 const CURRENT_PACKAGE_ENTRY = "dist/index.js";
+const SEMVER_PATTERN =
+  /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
 
 export const CODEX_ACP_MIN_VERSION = "0.0.38";
 
@@ -82,10 +84,15 @@ export function resolveSupportedCodexAcpEntry(
   }
 
   const version = record.version;
-  if (typeof version !== "string" || !/^\d+\.\d+\.\d+$/.test(version)) {
+  if (typeof version !== "string") {
     throw unsupportedAdapter();
   }
-  if (compareSemver(version, CODEX_ACP_MIN_VERSION) < 0) {
+  const parsedVersion = SEMVER_PATTERN.exec(version);
+  if (!parsedVersion) {
+    throw unsupportedAdapter();
+  }
+  const versionOrder = compareSemver(version, CODEX_ACP_MIN_VERSION);
+  if (versionOrder < 0 || (versionOrder === 0 && parsedVersion[4] !== undefined)) {
     throw unsupportedAdapter(
       `${CURRENT_PACKAGE_NAME} ${version} is not supported. Install ${CODEX_ACP_MIN_VERSION} or newer, then run Auto-detect again.`
     );
@@ -120,6 +127,9 @@ export function buildCodexAcpInvocation(
   nodePath?: string
 ): CodexAcpInvocation {
   if (platform === "win32") {
+    // Windows cannot spawn npm command shims on the ACP no-shell process path,
+    // so the package entry must run through the Node installation that owns it.
+    // https://github.com/logancyang/obsidian-copilot/issues/2916
     if (!nodePath) {
       throw new Error(
         "Node.js was not found. Install Node.js, restart Obsidian, then run Codex Auto-detect again."

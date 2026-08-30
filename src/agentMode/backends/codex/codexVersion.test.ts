@@ -1,11 +1,17 @@
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+
 import {
   buildCodexAcpInvocation,
   CODEX_ACP_MIN_VERSION,
+  isSupportedCodexAcpPath,
   resolveSupportedCodexAcpEntry,
   type CodexAcpPackageFs,
 } from "./codexVersion";
 
 const UNIX_ENTRY = "/npm/lib/node_modules/@agentclientprotocol/codex-acp/dist/index.js";
+const tempDirs: string[] = [];
 
 function packageFs(entryPath: string, packageMetadata: unknown): CodexAcpPackageFs {
   return {
@@ -20,6 +26,19 @@ function metadata(version: string) {
     version,
     bin: { "codex-acp": "dist/index.js" },
   };
+}
+
+function installedAdapterPath(packageMetadata: unknown): string {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "codex-acp-test-"));
+  tempDirs.push(tempDir);
+  const packageRoot = path.join(tempDir, "node_modules", "@agentclientprotocol", "codex-acp");
+  const entryPath = path.join(packageRoot, "dist", "index.js");
+  fs.mkdirSync(path.dirname(entryPath), { recursive: true });
+  fs.writeFileSync(entryPath, "");
+  fs.writeFileSync(path.join(packageRoot, "package.json"), JSON.stringify(packageMetadata));
+  const launcherPath = path.join(tempDir, "codex-acp");
+  fs.symlinkSync(entryPath, launcherPath);
+  return launcherPath;
 }
 
 describe("codexVersion", () => {
@@ -68,7 +87,7 @@ describe("codexVersion", () => {
       ).toThrow("0.0.37 is not supported");
     });
 
-    it("rejects prerelease versions below the stable support contract", () => {
+    it("https://github.com/logancyang/obsidian-copilot/issues/2916 rejects a prerelease at the stable minimum", () => {
       expect(() =>
         resolveSupportedCodexAcpEntry(
           "/usr/local/bin/codex-acp",
@@ -78,9 +97,23 @@ describe("codexVersion", () => {
       ).toThrow("not supported");
     });
 
+    it.each(["1.8.0-beta.1", "1.7.0+build.1", "0.0.38+build.1"])(
+      "https://github.com/logancyang/obsidian-copilot/issues/2916 accepts supported versions with a semantic-version suffix: %s",
+      (version) => {
+        expect(
+          resolveSupportedCodexAcpEntry(
+            "/usr/local/bin/codex-acp",
+            "darwin",
+            packageFs(UNIX_ENTRY, metadata(version))
+          )
+        ).toBe(UNIX_ENTRY);
+      }
+    );
+
     it.each([
       ["wrong package", { ...metadata("1.7.0"), name: "other" }],
       ["wrong entry", { ...metadata("1.7.0"), bin: { "codex-acp": "bin/index.js" } }],
+      ["malformed version", metadata("1.7")],
       ["malformed metadata", []],
     ])("rejects %s metadata", (_label, packageMetadata) => {
       expect(() =>
@@ -93,6 +126,28 @@ describe("codexVersion", () => {
     });
   });
 
+  describe("isSupportedCodexAcpPath()", () => {
+    afterEach(() => {
+      for (const tempDir of tempDirs.splice(0)) {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
+
+    it("https://github.com/logancyang/obsidian-copilot/issues/2916 rejects an empty path", () => {
+      expect(isSupportedCodexAcpPath(undefined)).toBe(false);
+    });
+
+    it("https://github.com/logancyang/obsidian-copilot/issues/2916 accepts a supported adapter path", () => {
+      expect(isSupportedCodexAcpPath(installedAdapterPath(metadata("1.7.0")))).toBe(true);
+    });
+
+    it("https://github.com/logancyang/obsidian-copilot/issues/2916 rejects an unsupported adapter path", () => {
+      expect(
+        isSupportedCodexAcpPath(installedAdapterPath({ ...metadata("1.7.0"), name: "other" }))
+      ).toBe(false);
+    });
+  });
+
   describe("buildCodexAcpInvocation()", () => {
     it("runs the validated package entry directly on Unix", () => {
       expect(buildCodexAcpInvocation(UNIX_ENTRY, [], { PATH: "/usr/bin" })).toEqual({
@@ -102,7 +157,7 @@ describe("codexVersion", () => {
       });
     });
 
-    it("uses the installed Node runtime for the Windows package entry", () => {
+    it("https://github.com/logancyang/obsidian-copilot/issues/2916 uses the installed Node runtime for the Windows package entry", () => {
       const entry = "C:\\npm\\node_modules\\@agentclientprotocol\\codex-acp\\dist\\index.js";
       expect(
         buildCodexAcpInvocation(
@@ -119,7 +174,7 @@ describe("codexVersion", () => {
       });
     });
 
-    it("fails with recovery guidance when Windows cannot find Node.js", () => {
+    it("https://github.com/logancyang/obsidian-copilot/issues/2916 fails with recovery guidance when Windows cannot find Node.js", () => {
       expect(() => buildCodexAcpInvocation("C:\\npm\\dist\\index.js", [], {}, "win32")).toThrow(
         "Node.js was not found"
       );
