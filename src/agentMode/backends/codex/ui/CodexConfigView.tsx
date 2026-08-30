@@ -30,8 +30,8 @@ export interface CodexConfigViewProps {
 /**
  * Configure dialog body for the Codex backend, structured like Claude's: the
  * adapter path leads, installing and signing in follow as a numbered block.
- * Codex exposes no sign-in capability, so its second step is the command alone —
- * `codex login` is the only way in.
+ * Copilot does not run the adapter's ACP authentication flow from this dialog,
+ * so its second step signs in through the adapter CLI.
  *
  * Pure props, so the gallery and unit tests can drive every state;
  * `CodexInstallModal` supplies the settings reads, validation, and notices.
@@ -74,8 +74,7 @@ export const CodexConfigView: React.FC<CodexConfigViewProps> = ({
         <SetupStep index={2} title="Sign in">
           <CommandBlock command={CODEX_AUTH_COMMAND} />
           <p className="tw-my-0 tw-text-sm tw-text-muted">
-            Copilot inherits whatever credentials the Codex CLI holds — there is no key to paste
-            here.
+            The adapter stores the login for its bundled Codex CLI — there is no key to paste here.
           </p>
         </SetupStep>
       </div>

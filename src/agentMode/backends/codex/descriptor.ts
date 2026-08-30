@@ -91,7 +91,7 @@ const codexWire: ModelWireCodec = {
 
 /**
  * Codex backend — wraps the configured `codex-acp`, which inherits auth from
- * the Codex CLI login. Auth is CLI-owned (no Copilot-side keys),
+ * the bundled Codex CLI login. Auth is adapter-owned (no Copilot-side keys),
  * so the candidate models come entirely from the CLI's live `availableModels`
  * (active session or preloader cache); curation is the model-management
  * `backends.codex.enabledModels` set surfaced via `getEnabledModelEntries`.

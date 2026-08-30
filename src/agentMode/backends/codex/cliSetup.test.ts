@@ -1,4 +1,4 @@
-import { codexBinaryPathPlaceholder, codexInstallCommand } from "./cliSetup";
+import { CODEX_AUTH_COMMAND, CODEX_INSTALL_COMMAND, codexBinaryPathPlaceholder } from "./cliSetup";
 
 describe("cliSetup", () => {
   describe("codexBinaryPathPlaceholder()", () => {
@@ -10,15 +10,13 @@ describe("cliSetup", () => {
     });
   });
 
-  describe("codexInstallCommand()", () => {
-    it("uses the collision-safe native PowerShell bootstrap on Windows", () => {
-      expect(codexInstallCommand("win32")).toBe(
-        "irm https://raw.githubusercontent.com/logancyang/obsidian-copilot/ca3aa97df262a8b30b64818dcb19062a582e5e09/docs/install-codex-agent-mode-windows.ps1 | iex"
-      );
-    });
+  it("removes the conflicting Zed package before installing the supported adapter", () => {
+    expect(CODEX_INSTALL_COMMAND).toBe(
+      "npm uninstall -g @zed-industries/codex-acp; npm install -g @agentclientprotocol/codex-acp"
+    );
+  });
 
-    it("uses npm directly outside Windows", () => {
-      expect(codexInstallCommand("darwin")).toBe("npm install -g @agentclientprotocol/codex-acp");
-    });
+  it("signs in through the adapter's bundled Codex CLI", () => {
+    expect(CODEX_AUTH_COMMAND).toBe("codex-acp login");
   });
 });

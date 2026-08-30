@@ -16,7 +16,7 @@ import { buildCodexAcpInvocation, resolveSupportedCodexAcpEntry } from "./codexV
 /**
  * Spawns the configured `@agentclientprotocol/codex-acp` package entry point.
  * The package exposes Codex as an ACP server over stdio. Authentication is inherited
- * from the user's existing `codex login` (`~/.codex/auth.json`) or
+ * from the adapter's bundled Codex login (`~/.codex/auth.json`) or
  * `OPENAI_API_KEY` / `CODEX_API_KEY` exported in the user's shell — we
  * deliberately do not inject keys so ChatGPT-login subscriptions work
  * transparently.
