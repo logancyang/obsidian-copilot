@@ -91,12 +91,13 @@ describe("SkillLoadIssues", () => {
       expect(screen.getAllByText(makeIssue().reason)).toHaveLength(2);
       expect(screen.queryByText("Current")).toBeNull();
       expect(screen.queryByText("Change to")).toBeNull();
-      expect(screen.getByRole("button", { name: "Fix All with Agent" })).not.toBeNull();
-
+      const fixAllButton = screen.getByRole("button", { name: "Fix All with Agent" });
       const fixButton = screen.getAllByRole("button", { name: "Fix with Agent" })[0];
       const openButton = screen.getAllByRole("button", { name: "Open SKILL.md" })[0];
       const revealButton = screen.getAllByRole("button", { name: "Show in folder" })[0];
-      expect(fixButton.classList.contains("tw-bg-interactive-accent")).toBe(true);
+      expect(fixAllButton.classList.contains("tw-bg-interactive-accent")).toBe(true);
+      expect(fixButton.classList.contains("tw-bg-secondary")).toBe(true);
+      expect(fixButton.classList.contains("tw-bg-interactive-accent")).toBe(false);
       expect(openButton.classList.contains("tw-bg-transparent")).toBe(true);
       expect(openButton.classList.contains("tw-text-faint")).toBe(true);
       expect(revealButton.classList.contains("tw-bg-transparent")).toBe(true);
@@ -105,7 +106,7 @@ describe("SkillLoadIssues", () => {
       fireEvent.click(fixButton);
       fireEvent.click(openButton);
       fireEvent.click(revealButton);
-      fireEvent.click(screen.getByRole("button", { name: "Fix All with Agent" }));
+      fireEvent.click(fixAllButton);
       expect(order).toEqual([
         "close",
         "fix",
