@@ -16,6 +16,7 @@ function renderSection(props: Partial<React.ComponentProps<typeof GlobalRecentCh
       runningChatIds={props.runningChatIds}
       attentionChatIds={props.attentionChatIds}
       projectNamesById={props.projectNamesById}
+      sortStrategy={props.sortStrategy}
       onLoadChat={noop}
       onUpdateTitle={noop}
       onDeleteChat={noop}
@@ -228,6 +229,34 @@ describe("GlobalRecentChatsSection", () => {
       } finally {
         observer.restore();
       }
+    });
+
+    it("https://github.com/logancyang/obsidian-copilot/issues/3040 honors the saved name and created chat-history sort strategies", () => {
+      const items = [
+        makeItem("alpha", {
+          title: "Alpha",
+          createdAt: new Date("2026-01-01T00:00:00Z"),
+          lastAccessedAt: new Date("2026-01-03T00:00:00Z"),
+        }),
+        makeItem("zulu", {
+          title: "Zulu",
+          createdAt: new Date("2026-01-02T00:00:00Z"),
+          lastAccessedAt: new Date("2026-01-01T00:00:00Z"),
+        }),
+      ];
+
+      const { unmount } = renderSection({ items, sortStrategy: "name" });
+      expect(screen.getAllByText(/^(Alpha|Zulu)$/).map((element) => element.textContent)).toEqual([
+        "Alpha",
+        "Zulu",
+      ]);
+      unmount();
+
+      renderSection({ items, sortStrategy: "created" });
+      expect(screen.getAllByText(/^(Alpha|Zulu)$/).map((element) => element.textContent)).toEqual([
+        "Zulu",
+        "Alpha",
+      ]);
     });
 
     it("https://github.com/logancyang/obsidian-copilot/issues/3040 renders at most 50 chats before the user scrolls", () => {

@@ -562,6 +562,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
             runningChatIds={runningChatIds}
             attentionChatIds={attentionChatIds}
             projectNamesById={projectNamesById}
+            sortStrategy={settings.chatHistorySortStrategy}
           />
         ),
       },
@@ -617,6 +618,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       attentionChatIds,
       isRelevantNotesPaneOpen,
       plugin,
+      settings.chatHistorySortStrategy,
     ]
   );
 
@@ -649,6 +651,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
             onLoadHistory={handleLoadChatHistorySafely}
             runningChatIds={runningChatIds}
             attentionChatIds={attentionChatIds}
+            sortStrategy={settings.chatHistorySortStrategy}
           />
         ),
       },
@@ -675,6 +678,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       handleLoadChatHistorySafely,
       runningChatIds,
       attentionChatIds,
+      settings.chatHistorySortStrategy,
     ]
   );
 

@@ -9,7 +9,7 @@ import { ChatIconWithAttention } from "@/components/chat-components/ChatIconWith
 import { cn } from "@/lib/utils";
 import { isNativeChatId } from "@/utils/nativeChatId";
 import { formatCompactRelativeTime } from "@/utils/formatRelativeTime";
-import { sortByStrategy } from "@/utils/recentUsageManager";
+import { sortByStrategy, type SortStrategy } from "@/utils/recentUsageManager";
 import { ArrowUpRight, Check, Edit2, LoaderCircle, MessageCircle, Trash2, X } from "lucide-react";
 import React, {
   memo,
@@ -81,6 +81,8 @@ interface GlobalRecentChatsSectionProps {
   attentionChatIds?: ReadonlySet<string>;
   /** Current project names keyed by id. Used only by the global variant. */
   projectNamesById?: Readonly<Record<string, string>>;
+  /** Saved ordering used by the complete chat-history surface. */
+  sortStrategy?: SortStrategy;
   className?: string;
 }
 
@@ -95,11 +97,12 @@ function resolveChatIcon(
   return item.backendId ? backendRegistry[item.backendId]?.Icon : undefined;
 }
 
-// Most-recent-first, matching the rest of the landing (last-used desc, falling
-// back to created; ties broken by name then created). Upstream
-// `getChatHistoryItems()` returns vault-scan order, so the sort lives here.
-function sortChatsByRecent(items: ChatHistoryItem[]): ChatHistoryItem[] {
-  return sortByStrategy(items, "recent", {
+// Upstream `getChatHistoryItems()` returns vault-scan order. Apply the saved
+// history ordering here so removing the duplicate history surface does not
+// silently discard a user's preference.
+// https://github.com/logancyang/obsidian-copilot/issues/3040
+function sortChats(items: ChatHistoryItem[], strategy: SortStrategy): ChatHistoryItem[] {
+  return sortByStrategy(items, strategy, {
     getName: (item) => item.title,
     getCreatedAtMs: (item) => item.createdAt.getTime(),
     getLastUsedAtMs: (item) => item.lastAccessedAt.getTime(),
@@ -358,6 +361,7 @@ export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
   runningChatIds,
   attentionChatIds,
   projectNamesById,
+  sortStrategy = "recent",
   className,
 }: GlobalRecentChatsSectionProps): React.ReactElement {
   const [query, setQuery] = useState("");
@@ -373,8 +377,7 @@ export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
     onLoadHistory?.();
   }, [onLoadHistory]);
 
-  // Sort once for the landing's fixed recent-first order.
-  const sortedItems = useMemo(() => sortChatsByRecent(items), [items]);
+  const sortedItems = useMemo(() => sortChats(items, sortStrategy), [items, sortStrategy]);
   const filteredItems = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return sortedItems;
