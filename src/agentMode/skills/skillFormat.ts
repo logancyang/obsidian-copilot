@@ -12,6 +12,7 @@ const FRONTMATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n([\s\S]*))?$/;
 export const NAME_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 export const NAME_MAX = 64;
 export const DESCRIPTION_MAX = 1024;
+const NAME_REPAIR_MESSAGE = "Use the same lowercase, hyphenated name in the file and folder.";
 
 /**
  * Result of parsing a SKILL.md file. The Document is preserved so
@@ -201,16 +202,10 @@ export function validateName(name: string, parentDirName: string): void {
     );
   }
   if (!NAME_RE.test(name)) {
-    throw new SkillFormatError(
-      `Skill \`name\` must be lowercase a–z, 0–9, and hyphens with no leading, trailing, or consecutive hyphens (got "${name}")`,
-      nameFixSuggestion(parentDirName)
-    );
+    throw new SkillFormatError(NAME_REPAIR_MESSAGE, nameFixSuggestion(parentDirName));
   }
   if (name !== parentDirName) {
-    throw new SkillFormatError(
-      `Skill \`name\` ("${name}") must match the parent directory name ("${parentDirName}")`,
-      nameFixSuggestion(parentDirName)
-    );
+    throw new SkillFormatError(NAME_REPAIR_MESSAGE, nameFixSuggestion(parentDirName));
   }
 }
 

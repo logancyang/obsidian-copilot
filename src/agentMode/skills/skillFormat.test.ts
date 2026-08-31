@@ -78,27 +78,31 @@ describe("parseSkillFile — happy path", () => {
 describe("parseSkillFile — validation errors", () => {
   it("rejects uppercase names", () => {
     expect(() => parseSkillFile(minimalSkill({ name: "ReviewProse" }), "ReviewProse")).toThrow(
-      /lowercase/
+      /same lowercase, hyphenated name/
     );
   });
 
   it("rejects leading hyphen", () => {
-    expect(() => parseSkillFile(minimalSkill({ name: "-foo" }), "-foo")).toThrow(/leading/);
+    expect(() => parseSkillFile(minimalSkill({ name: "-foo" }), "-foo")).toThrow(
+      /same lowercase, hyphenated name/
+    );
   });
 
   it("rejects trailing hyphen", () => {
-    expect(() => parseSkillFile(minimalSkill({ name: "foo-" }), "foo-")).toThrow(/trailing/);
+    expect(() => parseSkillFile(minimalSkill({ name: "foo-" }), "foo-")).toThrow(
+      /same lowercase, hyphenated name/
+    );
   });
 
   it("rejects consecutive hyphens", () => {
     expect(() => parseSkillFile(minimalSkill({ name: "foo--bar" }), "foo--bar")).toThrow(
-      /consecutive/
+      /same lowercase, hyphenated name/
     );
   });
 
   it("rejects parent-dir mismatch", () => {
     expect(() => parseSkillFile(minimalSkill({ name: "foo" }), "bar")).toThrow(
-      /match the parent directory name/
+      /same lowercase, hyphenated name/
     );
   });
 
@@ -171,11 +175,14 @@ describe("parseSkillFile — validation errors", () => {
   });
 
   it("suggests matching lowercase file and folder names", () => {
-    expect.assertions(2);
+    expect.assertions(3);
     try {
       parseSkillFile(minimalSkill({ name: "Release Notes" }), "Release Notes");
     } catch (error) {
       expect(error).toBeInstanceOf(SkillFormatError);
+      expect((error as SkillFormatError).message).toBe(
+        "Use the same lowercase, hyphenated name in the file and folder."
+      );
       expect((error as SkillFormatError).suggestion).toBe(
         "name: release-notes\nfolder: release-notes/"
       );
