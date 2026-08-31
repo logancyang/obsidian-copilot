@@ -26,6 +26,11 @@ jest.mock("@/modelManagement", () => ({
   ModelManagementProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 jest.mock("@/settings/model", () => ({ resetSettings: jest.fn() }));
+let mockSkillLoadErrorCount = 0;
+jest.mock("@/settings/skillLoadErrorState", () => ({
+  // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook; the name must match the export
+  useSkillLoadErrorCount: () => mockSkillLoadErrorCount,
+}));
 jest.mock("@/hooks/useLatestVersion", () => ({
   // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook; the name must match the export
   useLatestVersion: () => ({ latestVersion: null, hasUpdate: false }),
@@ -35,6 +40,10 @@ const plugin = { app: {}, manifest: { version: "1.2.3" } } as unknown as Copilot
 
 describe("SettingsMainV2", () => {
   describe("SettingsMainV2()", () => {
+    beforeEach(() => {
+      mockSkillLoadErrorCount = 0;
+    });
+
     it("lists the tabs in the agreed order", () => {
       render(<SettingsMainV2 plugin={plugin} />);
 
@@ -53,6 +62,17 @@ describe("SettingsMainV2", () => {
       render(<SettingsMainV2 plugin={plugin} />);
 
       expect(screen.queryByRole("tab", { name: /agents/i })).toBeNull();
+    });
+
+    it("marks the Skills tab while a skill failed to load for https://github.com/Brevilabs/obsidian-copilot-private/issues/166", () => {
+      mockSkillLoadErrorCount = 1;
+
+      render(<SettingsMainV2 plugin={plugin} />);
+
+      expect(
+        screen.getByRole("tab", { name: "Skills: Some skills failed to load" })
+      ).not.toBeNull();
+      expect(screen.getByTitle("Some skills failed to load")).not.toBeNull();
     });
   });
 });

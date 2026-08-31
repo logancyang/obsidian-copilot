@@ -1,6 +1,7 @@
 import { logError, logInfo, logWarn } from "@/logger";
 import { getSettings, updateSetting } from "@/settings/model";
 import { getEffectiveSkillsFolder } from "@/settings/copilotFolder";
+import { publishSkillLoadErrorCount } from "@/settings/skillLoadErrorState";
 import { atom, createStore, useAtomValue } from "jotai";
 import { FileSystemAdapter, type App, type EventRef, type TAbstractFile } from "obsidian";
 import { normalizeAbsPath, parentDir } from "@/utils/pathUtils";
@@ -190,6 +191,7 @@ export class SkillManager {
     SkillManager.instance = null;
     skillManagerStore.set(skillsAtom, []);
     skillManagerStore.set(rejectedSkillsAtom, EMPTY_REJECTED_SKILLS);
+    publishSkillLoadErrorCount(0);
     skillManagerStore.set(lastScannedFolderAtom, DEFAULT_SKILLS_FOLDER);
     skillManagerStore.set(epermSeenAtom, false);
   }
@@ -219,6 +221,10 @@ export class SkillManager {
     this.internalMutationDepth = 0;
     this.pendingExpectations = [];
     this.clearSafetyTimer();
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/166
+    // The host-side count outlives this desktop-only manager during a hot
+    // reload, so clear it before a later plugin lifecycle opens Settings.
+    publishSkillLoadErrorCount(0);
     if (SkillManager.instance === this) {
       SkillManager.instance = null;
     }
@@ -361,6 +367,7 @@ export class SkillManager {
 
       skillManagerStore.set(skillsAtom, skills);
       skillManagerStore.set(rejectedSkillsAtom, rejectedSkills);
+      publishSkillLoadErrorCount(rejectedSkills.length);
       skillManagerStore.set(lastScannedFolderAtom, folder);
       this.publishSkillSetChanges(skills);
       logInfo(`[skills] Discovered ${skills.length} managed skill(s) under "${folder}"`);
