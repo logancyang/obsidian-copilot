@@ -2,6 +2,7 @@ import { SettingItem } from "@/components/ui/setting-item";
 import type { SelfHostSearchProvider } from "@/settings/model";
 import { ArrowUpRight } from "lucide-react";
 import React from "react";
+import { t } from "@/i18n";
 
 interface SearchProviderConfig {
   apiKeyTitle: string;
@@ -14,14 +15,14 @@ interface SearchProviderConfig {
 const SEARCH_PROVIDER_CONFIGS: Record<SelfHostSearchProvider, SearchProviderConfig> = {
   firecrawl: {
     apiKeyTitle: "Firecrawl API Key",
-    description: "Web search & fetch via Firecrawl.",
+    description: "settings.selfHost.webSearch.firecrawl",
     label: "Firecrawl",
     placeholder: "fc-…",
     signupUrl: "https://firecrawl.link/logan-yang",
   },
   perplexity: {
     apiKeyTitle: "Perplexity API Key",
-    description: "Web search via Perplexity Sonar.",
+    description: "settings.selfHost.webSearch.perplexity",
     label: "Perplexity Sonar",
     placeholder: "pplx-…",
     signupUrl: "https://docs.perplexity.ai",
@@ -30,14 +31,14 @@ const SEARCH_PROVIDER_CONFIGS: Record<SelfHostSearchProvider, SearchProviderConf
   // expose one service's key to another. https://github.com/Brevilabs/obsidian-copilot-private/issues/285
   parallel: {
     apiKeyTitle: "Parallel API Key",
-    description: "Web search via Parallel.",
+    description: "settings.selfHost.webSearch.parallel",
     label: "Parallel",
     placeholder: "parallel-…",
     signupUrl: "https://platform.parallel.ai/",
   },
   exa: {
     apiKeyTitle: "Exa API Key",
-    description: "Web search via Exa.",
+    description: "settings.selfHost.webSearch.exa",
     label: "Exa",
     placeholder: "exa-…",
     signupUrl: "https://dashboard.exa.ai/api-keys",
@@ -74,8 +75,8 @@ export const SelfHostWebSearchSettings: React.FC<SelfHostWebSearchSettingsProps>
     <>
       <SettingItem
         type="select"
-        title="Web Search Provider"
-        description="Your key turns this into an agent skill parameter."
+        title={t("settings.selfHost.webSearch.provider")}
+        description={t("settings.selfHost.webSearch.providerDescription")}
         value={provider}
         onChange={(value) => onProviderChange(value as SelfHostSearchProvider)}
         options={SEARCH_PROVIDER_OPTIONS}
@@ -87,14 +88,15 @@ export const SelfHostWebSearchSettings: React.FC<SelfHostWebSearchSettingsProps>
         title={config.apiKeyTitle}
         description={
           <span>
-            {config.description}{" "}
+            {t(config.description)}{" "}
             <a
               href={config.signupUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="tw-text-accent"
             >
-              Sign up <ArrowUpRight className="tw-inline tw-size-3 tw-align-text-bottom" />
+              {t("settings.actions.signUp")}{" "}
+              <ArrowUpRight className="tw-inline tw-size-3 tw-align-text-bottom" />
             </a>
           </span>
         }

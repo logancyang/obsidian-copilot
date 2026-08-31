@@ -1,6 +1,7 @@
 import { logError } from "@/logger";
 import { App, Modal } from "obsidian";
 import type { BackendId, Skill } from "@/agentMode/skills/types";
+import { t } from "@/i18n";
 
 /**
  * Which migration scenario the modal is confirming. Drives the title,
@@ -140,16 +141,17 @@ export class MigrateSkillConfirmModal extends Modal {
     if (this.args.resolvedCanonicalName !== this.args.skill.name) {
       contentEl.createEl("p", {
         cls: "tw-m-0 tw-text-ui-smaller tw-text-warning",
-        text:
-          `The name "${this.args.skill.name}" is already taken in your shared folder. ` +
-          `The migrated skill will be named "${this.args.resolvedCanonicalName}".`,
+        text: t("settings.skills.migrate.collision", {
+          skill: this.args.skill.name,
+          resolved: this.args.resolvedCanonicalName,
+        }),
       });
     }
 
     // "Copilot will:" action list.
     const willHeader = contentEl.createDiv({
       cls: "tw-text-ui-smaller tw-text-muted",
-      text: "Copilot will:",
+      text: t("settings.skills.migrate.will"),
     });
     willHeader.setAttr("data-test-id", "migrate-confirm-will-header");
     const actionList = contentEl.createEl("ul", {
@@ -194,7 +196,7 @@ export class MigrateSkillConfirmModal extends Modal {
     checkbox.addEventListener("change", () => {
       this.suppressFuture = checkbox.checked;
     });
-    checkboxRow.createSpan({ text: "Don't ask again for future migrations" });
+    checkboxRow.createSpan({ text: t("settings.skills.migrate.dontAskAgain") });
 
     // Buttons.
     const buttonRow = contentEl.createDiv({
@@ -202,7 +204,7 @@ export class MigrateSkillConfirmModal extends Modal {
     });
     const cancelBtn = buttonRow.createEl("button", {
       cls: "mod-secondary",
-      text: "Cancel",
+      text: t("settings.actions.cancel"),
     });
     cancelBtn.addEventListener("click", () => {
       this.close();
@@ -237,76 +239,75 @@ function buildTitle(args: MigrateSkillConfirmModalArgs): string {
   const name = args.skill.name;
   switch (args.variant) {
     case "project-single":
-      return `Move "${name}" to share with ${args.targetAgentDisplayName ?? "another agent"}?`;
+      return t("settings.skills.migrate.title.share", {
+        skill: name,
+        agent: args.targetAgentDisplayName ?? t("settings.skills.migrate.anotherAgent"),
+      });
     case "project-mirrored":
-      return `Consolidate "${name}" and share with ${args.targetAgentDisplayName ?? "another agent"}?`;
+      return t("settings.skills.migrate.title.consolidateShare", {
+        skill: name,
+        agent: args.targetAgentDisplayName ?? t("settings.skills.migrate.anotherAgent"),
+      });
     case "disable-last-agent":
-      return `Move "${name}" to your shared folder before disabling ${
-        args.targetAgentDisplayName ?? "this agent"
-      }?`;
+      return t("settings.skills.migrate.title.disable", {
+        skill: name,
+        agent: args.targetAgentDisplayName ?? t("settings.skills.migrate.thisAgent"),
+      });
     case "proactive-consolidate":
-      return `Consolidate "${name}" into your shared folder?`;
+      return t("settings.skills.migrate.title.consolidate", { skill: name });
   }
 }
 
 /** Body paragraph varies by variant; verbatim per §8 of the design doc. */
 function buildBody(args: MigrateSkillConfirmModalArgs): string {
-  const target = args.targetAgentDisplayName ?? "another agent";
+  const target = args.targetAgentDisplayName ?? t("settings.skills.migrate.anotherAgent");
   switch (args.variant) {
     case "project-single":
-      return (
-        `This skill currently lives only in your ${sourceAgentLabel(args)} project folder.\n` +
-        `To enable it for ${target}, Copilot needs to move it to a shared location\n` +
-        `so both agents stay in sync.`
-      );
+      return t("settings.skills.migrate.body.single", {
+        source: sourceAgentLabel(args),
+        target,
+      });
     case "project-mirrored":
-      return `The same skill is currently duplicated in ${pluralFolders(args.sourceDuplicatePaths.length)}:`;
+      return t("settings.skills.migrate.body.mirrored", {
+        folders: pluralFolders(args.sourceDuplicatePaths.length),
+      });
     case "disable-last-agent":
-      return `This skill currently lives only in:`;
+      return t("settings.skills.migrate.body.disable");
     case "proactive-consolidate":
-      return `The same skill is currently duplicated in:`;
+      return t("settings.skills.migrate.body.consolidate");
   }
 }
 
 /** Outro paragraph varies by variant; per §8 of the design doc. */
 function buildOutro(args: MigrateSkillConfirmModalArgs): string | null {
-  const source = args.targetAgentDisplayName ?? "this agent";
+  const source = args.targetAgentDisplayName ?? t("settings.skills.migrate.thisAgent");
   switch (args.variant) {
     case "project-single":
-      return (
-        `You can still edit the skill exactly as before — there's just one copy now,\n` +
-        `so changes are visible to both agents immediately.`
-      );
+      return t("settings.skills.migrate.outro.single");
     case "project-mirrored":
-      return `After this, edits to the skill are visible to all ${args.actionLines.filter((l) => l.verb === "Create").length} agents.`;
+      return t("settings.skills.migrate.outro.mirrored", {
+        count: args.actionLines.filter(
+          (line) => line.verb === t("settings.skills.migrate.verb.create")
+        ).length,
+      });
     case "disable-last-agent":
-      return (
-        `If you disable ${source}, the file has nowhere to live in its project folder.\n` +
-        `Copilot can preserve it by moving the skill to your shared skills folder with\n` +
-        `no agents enabled — you can toggle agents back on any time, or delete it later\n` +
-        `from the Skills tab.`
-      );
+      return t("settings.skills.migrate.outro.disable", { agent: source });
     case "proactive-consolidate":
-      return (
-        `Editing, renaming, or deleting one copy would silently diverge from the others.\n` +
-        `Copilot can consolidate them into a single shared location, with a shortcut in\n` +
-        `each agent folder so all agents still see the skill.\n\n` +
-        `After this, your edits stay in sync across all agents automatically.`
-      );
+      return t("settings.skills.migrate.outro.consolidate");
   }
 }
 
 /** Confirm-button label varies by variant; verbatim per §8 of the design doc. */
 function buildConfirmLabel(args: MigrateSkillConfirmModalArgs): string {
-  const target = args.targetAgentDisplayName ?? "agent";
+  const target = args.targetAgentDisplayName ?? t("settings.skills.migrate.agent");
   switch (args.variant) {
     case "project-single":
     case "project-mirrored":
-      return `Move and enable ${target}`;
+      return t("settings.skills.migrate.action.enable", { agent: target });
     case "disable-last-agent":
-      return `Move and disable ${target}`;
+      return t("settings.skills.migrate.action.disable", { agent: target });
     case "proactive-consolidate":
-      return "Consolidate";
+      return t("settings.skills.migrate.action.consolidate");
   }
 }
 
@@ -316,14 +317,14 @@ function buildConfirmLabel(args: MigrateSkillConfirmModalArgs): string {
  * one agent the skill currently lives under.
  */
 function sourceAgentLabel(args: MigrateSkillConfirmModalArgs): string {
-  if (args.skill.location.kind !== "project") return "agent";
+  if (args.skill.location.kind !== "project") return t("settings.skills.migrate.agent");
   const [first] = args.skill.location.agentDirs;
-  return first ?? "agent";
+  return first ?? t("settings.skills.migrate.agent");
 }
 
 /** Format the duplicate-folder count for the project-mirrored body. */
 function pluralFolders(n: number): string {
-  if (n === 2) return "two project folders";
-  if (n === 3) return "three project folders";
-  return `${n} project folders`;
+  if (n === 2) return t("settings.skills.migrate.twoFolders");
+  if (n === 3) return t("settings.skills.migrate.threeFolders");
+  return t("settings.skills.migrate.folderCount", { count: n });
 }

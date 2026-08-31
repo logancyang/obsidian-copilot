@@ -5,6 +5,7 @@ import {
   type ModelEnableGroup,
 } from "@/agentMode";
 import { logError } from "@/logger";
+import { t } from "@/i18n";
 import {
   backendsAtom,
   configuredModelsAtom,
@@ -97,16 +98,9 @@ export const ConfiguredModelEnableList: React.FC<ConfiguredModelEnableListProps>
 
   const emptyState =
     descriptor.id === "opencode" ? (
-      <span>
-        No models configured yet. Add a provider on the{" "}
-        <span className="tw-font-medium">Models (BYOK)</span> tab, or sign in to an opencode
-        subscription, to curate models here.
-      </span>
+      <span>{t("settings.agents.models.emptyOpencode")}</span>
     ) : (
-      <span>
-        No models reported yet. Sign in / install the {descriptor.displayName} CLI and reload, or
-        open a chat session with this agent.
-      </span>
+      <span>{t("settings.agents.models.emptyAgent", { agent: descriptor.displayName })}</span>
     );
 
   return (
@@ -115,7 +109,7 @@ export const ConfiguredModelEnableList: React.FC<ConfiguredModelEnableListProps>
       onToggle={handleToggle}
       query={query}
       onQueryChange={setQuery}
-      searchPlaceholder={`Search ${descriptor.displayName} models…`}
+      searchPlaceholder={t("settings.agents.models.search", { agent: descriptor.displayName })}
       emptyState={emptyState}
       // Only the first provider group starts expanded; the rest collapse so a
       // long multi-provider list (opencode) opens compact. A stable scalar, so

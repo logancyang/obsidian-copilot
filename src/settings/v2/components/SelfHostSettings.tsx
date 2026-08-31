@@ -9,6 +9,7 @@ import { updateSetting, useSettingsValue, type SelfHostSearchProvider } from "@/
 import { SelfHostWebSearchSettings } from "@/settings/v2/components/ui/SelfHostWebSearchSettings";
 import { ArrowUpRight, ShieldCheck } from "lucide-react";
 import React from "react";
+import { t } from "@/i18n";
 
 /** BYOK tab id in the settings tab strip (see SettingsMainV2 TAB_IDS). */
 const BYOK_TAB_ID = "byok";
@@ -24,7 +25,8 @@ const SEARCH_PROVIDER_KEY_FIELDS = {
 /** Small "Sign up ↗" affordance appended to a provider key description. */
 const SignUpLink: React.FC<{ href: string }> = ({ href }) => (
   <a href={href} target="_blank" rel="noopener noreferrer" className="tw-text-accent">
-    Sign up <ArrowUpRight className="tw-inline tw-size-3 tw-align-text-bottom" />
+    {t("settings.actions.signUp")}{" "}
+    <ArrowUpRight className="tw-inline tw-size-3 tw-align-text-bottom" />
   </a>
 );
 
@@ -49,22 +51,20 @@ export const SelfHostSettings: React.FC = () => {
   return (
     <div className="tw-space-y-4">
       <div className="tw-flex tw-items-start tw-gap-2.5 tw-text-sm tw-text-muted">
-        <span className="tw-max-w-[620px]">
-          Bring your own infrastructure — self-hosted search, web-search providers, and models.
-        </span>
+        <span className="tw-max-w-[620px]">{t("settings.selfHost.intro")}</span>
         <span className="tw-shrink-0 tw-rounded tw-bg-callout-warning/20 tw-px-2 tw-py-0.5 tw-text-smallest tw-font-semibold tw-text-warning">
-          Lifetime license
+          {t("settings.selfHost.lifetimeLicense")}
         </span>
       </div>
 
       <SettingSection>
         <SettingItem
           type="switch"
-          title="Enable Self-Host Mode"
+          title={t("settings.selfHost.enable.title")}
           description={
             <span className="tw-inline-flex tw-items-center tw-gap-1.5">
-              Route LLMs, embeddings and document understanding through your own endpoints.
-              <HelpTooltip content="Believer / Supporter only. Use your own infrastructure for full control and offline use. Stays available offline until your entitlement expires." />
+              {t("settings.selfHost.enable.description")}
+              <HelpTooltip content={t("settings.selfHost.enable.tooltip")} />
             </span>
           }
           checked={selfHostOn}
@@ -83,12 +83,7 @@ export const SelfHostSettings: React.FC = () => {
           )}
         >
           <ShieldCheck className="tw-mt-0.5 tw-size-4 tw-shrink-0 tw-text-accent" />
-          <div className="tw-leading-relaxed">
-            <span className="tw-font-semibold">Privacy-first.</span> While Self-Host is on, cloud
-            options (Claude, Codex, and BYOK cloud providers) are flagged with a warning and sorted
-            below your local / self-hosted models. They stay selectable — you decide whether to use
-            them.
-          </div>
+          <div className="tw-leading-relaxed">{t("settings.selfHost.privacyNotice")}</div>
         </div>
       </SettingSection>
 
@@ -97,7 +92,7 @@ export const SelfHostSettings: React.FC = () => {
           cloud-egress marking of models/providers lives at the enumeration
           chokepoints keyed off the same persisted flag. */}
       <div className={cn("tw-space-y-4", !selfHostOn && "tw-pointer-events-none tw-opacity-40")}>
-        <SettingSection label="Web search providers">
+        <SettingSection label={t("settings.selfHost.webSearch.section")}>
           <SelfHostWebSearchSettings
             apiKeys={{
               firecrawl: settings.firecrawlApiKey,
@@ -118,7 +113,8 @@ export const SelfHostSettings: React.FC = () => {
             title="Supadata API Key"
             description={
               <span>
-                YouTube transcripts via Supadata. <SignUpLink href={SUPADATA_SIGNUP_URL} />
+                {t("settings.selfHost.supadata.description")}{" "}
+                <SignUpLink href={SUPADATA_SIGNUP_URL} />
               </span>
             }
             value={settings.supadataApiKey}
@@ -128,13 +124,11 @@ export const SelfHostSettings: React.FC = () => {
           />
         </SettingSection>
 
-        <SettingSection label="Self-hosted models">
+        <SettingSection label={t("settings.selfHost.models.section")}>
           <SettingItem
             type="custom"
-            title="LLM & embedding models"
-            description={
-              <span>Add local / self-hosted models as an OpenAI-compatible endpoint in BYOK.</span>
-            }
+            title={t("settings.selfHost.models.title")}
+            description={<span>{t("settings.selfHost.models.description")}</span>}
           >
             {/* Pure navigation, not a truth-source write. Still needs an explicit
                 disabled: the wrapper's pointer-events-none doesn't block keyboard
@@ -145,7 +139,7 @@ export const SelfHostSettings: React.FC = () => {
               onClick={() => setSelectedTab(BYOK_TAB_ID)}
               disabled={!selfHostOn}
             >
-              Open BYOK
+              {t("settings.selfHost.models.openByok")}
             </Button>
           </SettingItem>
         </SettingSection>

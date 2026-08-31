@@ -1,6 +1,7 @@
 import { App, FuzzySuggestModal, TFile } from "obsidian";
 import { isAllowedFileForChainContext } from "@/utils";
 import { ChainType } from "@/chainType";
+import { t } from "@/i18n";
 
 export abstract class BaseNoteModal<T> extends FuzzySuggestModal<T> {
   protected activeNote: TFile | null;
@@ -49,7 +50,7 @@ export abstract class BaseNoteModal<T> extends FuzzySuggestModal<T> {
   protected formatNoteTitle(basename: string, isActive: boolean, extension?: string): string {
     let title = basename;
     if (isActive) {
-      title += " (current)";
+      title += t("settings.advanced.patterns.currentNote");
     }
     if (extension === "pdf") {
       title += " (PDF)";

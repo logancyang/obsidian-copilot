@@ -7,6 +7,7 @@ import { logError } from "@/logger";
 import { createPluginRoot } from "@/utils/react/createPluginRoot";
 import { App, Modal } from "obsidian";
 import React from "react";
+import { t } from "@/i18n";
 import { Root } from "react-dom/client";
 import { DESCRIPTION_MAX, NAME_MAX, NAME_RE } from "@/agentMode/skills/skillFormat";
 import type { Skill } from "@/agentMode/skills/types";
@@ -122,7 +123,7 @@ const PropertiesModalBody: React.FC<PropertiesModalBodyProps> = ({
   return (
     <div className="tw-flex tw-flex-col" style={{ maxHeight: "70vh" }}>
       <div className="tw-mb-3 tw-text-[12.5px] tw-text-muted">
-        Writes to{" "}
+        {t("settings.skills.properties.writesTo")}{" "}
         <code className="tw-font-mono tw-text-[12px]">
           {folder}/{skill.name}/SKILL.md
         </code>
@@ -132,7 +133,9 @@ const PropertiesModalBody: React.FC<PropertiesModalBodyProps> = ({
         <div className="tw-flex tw-flex-col tw-gap-4">
           {/* Name */}
           <Field>
-            <FieldLabel htmlFor="properties-name">Name</FieldLabel>
+            <FieldLabel htmlFor="properties-name">
+              {t("settings.skills.properties.name")}
+            </FieldLabel>
             <Input
               id="properties-name"
               type="text"
@@ -145,18 +148,19 @@ const PropertiesModalBody: React.FC<PropertiesModalBodyProps> = ({
             {nameError !== null ? (
               <FieldError>{nameError}</FieldError>
             ) : collisionError ? (
-              <FieldError>A skill named &ldquo;{values.name}&rdquo; already exists.</FieldError>
+              <FieldError>
+                {t("settings.skills.properties.nameExists", { skill: values.name })}
+              </FieldError>
             ) : (
-              <FieldHelp>
-                Lowercase, hyphenated. This is what users type after{" "}
-                <code className="tw-font-mono">/</code> in chat.
-              </FieldHelp>
+              <FieldHelp>{t("settings.skills.properties.nameHelp")}</FieldHelp>
             )}
           </Field>
 
           {/* Description */}
           <Field>
-            <FieldLabel htmlFor="properties-description">Description</FieldLabel>
+            <FieldLabel htmlFor="properties-description">
+              {t("settings.skills.properties.description")}
+            </FieldLabel>
             <Textarea
               id="properties-description"
               value={values.description}
@@ -180,7 +184,9 @@ const PropertiesModalBody: React.FC<PropertiesModalBodyProps> = ({
 
           {/* Allowed tools */}
           <Field>
-            <FieldLabel htmlFor="properties-allowed-tools">Allowed tools</FieldLabel>
+            <FieldLabel htmlFor="properties-allowed-tools">
+              {t("settings.skills.properties.allowedTools")}
+            </FieldLabel>
             <Input
               id="properties-allowed-tools"
               type="text"
@@ -196,7 +202,7 @@ const PropertiesModalBody: React.FC<PropertiesModalBodyProps> = ({
           {/* Model override (Claude Code only) */}
           <Field>
             <FieldLabel htmlFor="properties-model">
-              Model override <ClaudeOnlyChip />
+              {t("settings.skills.properties.modelOverride")} <ClaudeOnlyChip />
             </FieldLabel>
             <Input
               id="properties-model"
@@ -221,7 +227,7 @@ const PropertiesModalBody: React.FC<PropertiesModalBodyProps> = ({
             />
             <span className="tw-flex tw-flex-col tw-gap-0.5">
               <span className="tw-flex tw-items-center tw-gap-2 tw-text-sm tw-text-normal">
-                Don&apos;t let Claude invoke this on its own
+                {t("settings.skills.properties.disableAutoInvocation")}
                 <ClaudeOnlyChip />
               </span>
             </span>
@@ -238,7 +244,7 @@ const PropertiesModalBody: React.FC<PropertiesModalBodyProps> = ({
             />
             <span className="tw-flex tw-flex-col tw-gap-0.5">
               <span className="tw-flex tw-items-center tw-gap-2 tw-text-sm tw-text-normal">
-                Hide from slash menu
+                {t("settings.skills.properties.hideFromSlash")}
                 <ClaudeOnlyChip />
               </span>
             </span>
@@ -248,10 +254,10 @@ const PropertiesModalBody: React.FC<PropertiesModalBodyProps> = ({
 
       <div className="tw-mt-4 tw-flex tw-justify-end tw-gap-2 tw-border-t tw-border-solid tw-border-border tw-pt-3">
         <Button variant="secondary" onClick={onCancel} disabled={saving}>
-          Cancel
+          {t("settings.actions.cancel")}
         </Button>
         <Button variant="default" onClick={handleSave} disabled={!canSave}>
-          Save
+          {t("settings.actions.save")}
         </Button>
       </div>
     </div>
@@ -284,7 +290,7 @@ export class PropertiesModal extends Modal {
   ) {
     super(app);
     // @ts-expect-error — setTitle exists on Modal but is missing from @types/obsidian.
-    this.setTitle(`Properties · ${skill.name}`);
+    this.setTitle(t("settings.skills.properties.title", { skill: skill.name }));
   }
 
   onOpen(): void {
@@ -404,19 +410,23 @@ function computeInitialFormValues(skill: Skill): PropertiesFormValues {
 
 /** Validate the `name` form field against the spec. Returns the error string or null. */
 function validateNameField(name: string): string | null {
-  if (name.length === 0) return "Name is required.";
-  if (name.length > NAME_MAX) return `Name must be at most ${NAME_MAX} characters.`;
+  if (name.length === 0) return t("settings.skills.properties.validation.nameRequired");
+  if (name.length > NAME_MAX)
+    return t("settings.skills.properties.validation.nameLength", { count: NAME_MAX });
   if (!NAME_RE.test(name)) {
-    return "Lowercase a–z, 0–9, and hyphens only — no leading, trailing, or consecutive hyphens.";
+    return t("settings.skills.properties.validation.nameFormat");
   }
   return null;
 }
 
 /** Validate the `description` form field against the spec. */
 function validateDescriptionField(description: string): string | null {
-  if (description.trim().length === 0) return "Description is required.";
+  if (description.trim().length === 0)
+    return t("settings.skills.properties.validation.descriptionRequired");
   if (description.length > DESCRIPTION_MAX) {
-    return `Description must be at most ${DESCRIPTION_MAX} characters.`;
+    return t("settings.skills.properties.validation.descriptionLength", {
+      count: DESCRIPTION_MAX,
+    });
   }
   return null;
 }

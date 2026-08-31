@@ -40,6 +40,7 @@ import { App, FileSystemAdapter, Notice, TFolder } from "obsidian";
 import { useApp } from "@/context";
 import { usePlugin } from "@/contexts/PluginContext";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { t } from "@/i18n";
 
 /**
  * Substring → brand-name lookup for the sync-folder warning banner. The
@@ -171,7 +172,9 @@ export const SkillsSettings: React.FC = () => {
       };
       return {
         ...evidence,
-        revealLabel: indexed ? "Reveal in vault" : "Show in folder",
+        revealLabel: indexed
+          ? t("settings.skills.loadIssues.revealVault")
+          : t("settings.skills.loadIssues.showFolder"),
         onFixWithAgent: () => handleFixWithAgent([evidence]),
         onOpen: () => openVaultPath(app, skill.filePath, { newLeaf: true }),
         onReveal: () => handleRevealSkillFolder(skill.dirPath),
@@ -208,7 +211,10 @@ export const SkillsSettings: React.FC = () => {
               return "stay";
             }
             new Notice(
-              `Could not update ${req.nameChanged ? req.newName : skill.name}: ${result.message}`
+              t("settings.skills.notice.updateFailed", {
+                skill: req.nameChanged ? req.newName : skill.name,
+                error: result.message,
+              })
             );
             return "stay";
           }
@@ -231,7 +237,9 @@ export const SkillsSettings: React.FC = () => {
         async () => {
           const result = await manager.deleteSkill(skill);
           if (!result.ok) {
-            new Notice(`Failed to delete ${skill.name}: ${result.message}`);
+            new Notice(
+              t("settings.skills.notice.deleteFailed", { skill: skill.name, error: result.message })
+            );
           }
         }
       ).open();
@@ -247,13 +255,8 @@ export const SkillsSettings: React.FC = () => {
     <div ref={containerRef} className="tw-space-y-4">
       <section>
         <div className="tw-mb-4 tw-flex tw-flex-col tw-gap-2">
-          <div className="tw-text-xl tw-font-bold">Skills</div>
-          <div className="tw-text-sm tw-text-muted">
-            Skills are instruction packets your agents can run - things like &ldquo;review a
-            diff&rdquo; or &ldquo;write a release note&rdquo;. Skills you put under your shared
-            folder, or directly inside an agent&rsquo;s own skills folder, show up here
-            automatically.
-          </div>
+          <div className="tw-text-xl tw-font-bold">{t("settings.skills.title")}</div>
+          <div className="tw-text-sm tw-text-muted">{t("settings.skills.description")}</div>
         </div>
 
         {/* Durable banners — stack at the top of the tab body, above the toolbar. */}
@@ -289,12 +292,14 @@ export const SkillsSettings: React.FC = () => {
             <Input
               value={searchValue}
               onChange={(e) => setSearchValue(e.target.value)}
-              placeholder="Search skills…"
+              placeholder={t("settings.skills.search")}
               className="!tw-w-full !tw-pl-8 sm:!tw-w-64"
-              aria-label="Search skills"
+              aria-label={t("settings.skills.search")}
             />
           </div>
-          <span className="tw-text-xs tw-text-muted">{skills.length} loaded</span>
+          <span className="tw-text-xs tw-text-muted">
+            {t("settings.skills.loaded", { count: skills.length })}
+          </span>
         </div>
 
         {/* Body — empty placeholder, or the Tidy list. */}
@@ -312,7 +317,7 @@ export const SkillsSettings: React.FC = () => {
             <div className="tw-flex tw-flex-col tw-gap-1.5">
               {filteredSkills.length === 0 ? (
                 <div className="tw-rounded-sm tw-border tw-border-dashed tw-border-border tw-bg-primary tw-px-3 tw-py-6 tw-text-center tw-text-ui-smaller tw-text-muted">
-                  No skills match &ldquo;{searchValue}&rdquo;.
+                  {t("settings.skills.noMatches", { query: searchValue })}
                 </div>
               ) : (
                 filteredSkills.map((skill) => (
@@ -352,13 +357,9 @@ const EpermBanner: React.FC<{ onDismiss: () => void }> = ({ onDismiss }) => {
     >
       <AlertTriangle className="tw-mt-0.5 tw-size-4 tw-shrink-0" aria-hidden="true" />
       <div className="tw-flex-1">
-        <span className="tw-block tw-font-semibold">
-          Windows needs Developer Mode for multi-agent fanout.
-        </span>
+        <span className="tw-block tw-font-semibold">{t("settings.skills.windows.title")}</span>
         <span className="tw-mt-0.5 tw-block tw-text-normal">
-          Creating shortcuts in your agent folders requires admin, or Settings → Privacy &amp;
-          security → For developers → Developer Mode. Until then, agent toggles flip in the file but
-          no shortcut is created.
+          {t("settings.skills.windows.description")}
         </span>
       </div>
       <button
@@ -368,7 +369,7 @@ const EpermBanner: React.FC<{ onDismiss: () => void }> = ({ onDismiss }) => {
         // dismiss ✕ doesn't render as a beveled grey square.
         style={{ appearance: "none", border: 0, background: "transparent", padding: 0 }}
         className="tw-px-1 tw-text-faint hover:tw-text-normal"
-        aria-label="Dismiss"
+        aria-label={t("settings.actions.dismiss")}
       >
         ×
       </button>
@@ -393,10 +394,11 @@ const SyncFolderBanner: React.FC<{ brand: string; onDismiss: () => void }> = ({
       role="status"
     >
       <div className="tw-flex-1">
-        <span className="tw-block tw-font-semibold">This vault is inside {brand}.</span>
+        <span className="tw-block tw-font-semibold">
+          {t("settings.skills.sync.title", { brand })}
+        </span>
         <span className="tw-mt-0.5 tw-block tw-text-muted">
-          Sync sometimes replaces directory junctions with shortcuts. If a skill disappears from an
-          agent after a sync, re-toggle it here to recreate the link.
+          {t("settings.skills.sync.description")}
         </span>
       </div>
       <button
@@ -406,7 +408,7 @@ const SyncFolderBanner: React.FC<{ brand: string; onDismiss: () => void }> = ({
         // dismiss ✕ doesn't render as a beveled grey square.
         style={{ appearance: "none", border: 0, background: "transparent", padding: 0 }}
         className="tw-px-1 tw-text-faint hover:tw-text-normal"
-        aria-label="Dismiss"
+        aria-label={t("settings.actions.dismiss")}
       >
         ×
       </button>

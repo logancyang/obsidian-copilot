@@ -114,6 +114,7 @@ describe("SettingsMainV2", () => {
       mockLocale = "zh-CN";
       mockLatestVersion = "9.8.7";
       mockHasUpdate = true;
+      mockSkillLoadErrorCount = 1;
 
       render(<SettingsMainV2 plugin={plugin} />);
 
@@ -121,6 +122,7 @@ describe("SettingsMainV2", () => {
       expect(screen.getByRole("heading").textContent).toContain("v1.2.3");
       expect(screen.getByRole("link", { name: "（更新到 v9.8.7）" })).not.toBeNull();
       expect(screen.getByRole("button", { name: "重置设置" })).not.toBeNull();
+      expect(screen.getByRole("tab", { name: "技能: 部分技能加载失败" })).not.toBeNull();
       expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
         "基本",
         "BYOK",

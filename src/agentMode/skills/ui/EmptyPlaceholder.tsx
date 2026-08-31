@@ -1,6 +1,7 @@
 import { cn } from "@/lib/utils";
 import { LayoutGrid } from "lucide-react";
 import React from "react";
+import { t } from "@/i18n";
 
 interface EmptyPlaceholderProps {
   /**
@@ -36,14 +37,14 @@ export const EmptyPlaceholder: React.FC<EmptyPlaceholderProps> = ({ folder }) =>
       >
         <LayoutGrid className="tw-size-6 tw-text-faint" aria-hidden="true" />
       </div>
-      <div className="tw-text-smaller tw-font-medium tw-text-muted">No skills yet</div>
+      <div className="tw-text-smaller tw-font-medium tw-text-muted">
+        {t("settings.skills.empty.title")}
+      </div>
       <div className="tw-max-w-[420px] tw-text-center tw-text-ui-smaller tw-text-faint">
-        Skills you create or save into your shared folder show up here. Skills under{" "}
-        <code>.claude/skills/</code>, <code>.agents/skills/</code>, or{" "}
-        <code>.opencode/skills/</code> show up here automatically too.
+        {t("settings.skills.empty.description")}
       </div>
       <div className="tw-mt-3.5 tw-font-mono tw-text-smallest tw-text-faint">
-        shared home · <code>&lt;vault&gt;/{folder}/</code>
+        {t("settings.skills.empty.sharedHome")} · <code>&lt;vault&gt;/{folder}/</code>
       </div>
     </div>
   );

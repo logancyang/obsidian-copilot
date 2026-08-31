@@ -48,6 +48,7 @@ import { SettingItem } from "@/components/ui/setting-item";
 import { SettingSection } from "@/components/ui/setting-section";
 import { Notice } from "obsidian";
 import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
+import { t } from "@/i18n";
 
 const MobileCommandCard: React.FC<{
   command: CustomCommand;
@@ -68,25 +69,25 @@ const MobileCommandCard: React.FC<{
   const dropdownActions: MobileCardDropdownAction<CustomCommand>[] = [
     {
       icon: <PenLine className="tw-size-4" />,
-      label: "Edit",
+      label: t("settings.actions.edit"),
       onClick: handleEdit,
     },
     {
       icon: <CopyPlus className="tw-size-4" />,
-      label: "Duplicate",
+      label: t("settings.actions.duplicate"),
       onClick: onCopy,
     },
     {
       icon: <Trash2 className="tw-size-4" />,
-      label: "Delete",
+      label: t("settings.actions.delete"),
       onClick: (cmd) => {
         new ConfirmModal(
           app,
           () => onRemove(cmd),
-          `Are you sure you want to delete the command "${cmd.title}"? This will permanently remove the command file and cannot be undone.`,
-          "Delete Command",
-          "Delete",
-          "Cancel"
+          t("settings.command.delete.confirm", { command: cmd.title }),
+          t("settings.command.delete.title"),
+          t("settings.actions.delete"),
+          t("settings.actions.cancel")
         ).open();
       },
       variant: "destructive",
@@ -97,12 +98,11 @@ const MobileCommandCard: React.FC<{
     <div className="tw-flex tw-flex-wrap tw-justify-around">
       <div className="tw-flex tw-items-center tw-justify-between tw-gap-2">
         <div className="tw-flex tw-items-center tw-gap-1">
-          <span className="tw-text-sm tw-font-medium">In Menu</span>
+          <span className="tw-text-sm tw-font-medium">{t("settings.command.inMenu")}</span>
           <HelpTooltip
             content={
               <div className="tw-max-w-xs tw-text-xs">
-                If enabled, the command will be available in the context menu when you right-click
-                in the editor.
+                {t("settings.command.inMenu.description")}
               </div>
             }
           />
@@ -122,11 +122,11 @@ const MobileCommandCard: React.FC<{
       </div>
       <div className="tw-flex tw-items-center tw-justify-between  tw-gap-2">
         <div className="tw-flex tw-items-center tw-gap-1">
-          <span className="tw-text-sm tw-font-medium">In Slash</span>
+          <span className="tw-text-sm tw-font-medium">{t("settings.command.inSlash")}</span>
           <HelpTooltip
             content={
               <div className="tw-max-w-xs tw-text-xs">
-                If enabled, the command will be available as a slash command in the chat.
+                {t("settings.command.inSlash.description")}
               </div>
             }
           />
@@ -158,7 +158,7 @@ const MobileCommandCard: React.FC<{
       primaryAction={{
         icon: <PenLine className="tw-size-4" />,
         onClick: handleEdit,
-        tooltip: "Edit Command",
+        tooltip: t("settings.command.edit"),
       }}
       dropdownActions={dropdownActions}
       containerRef={containerRef}
@@ -260,7 +260,7 @@ const SortableTableRow: React.FC<{
             variant="ghost"
             size="icon"
             onClick={safeAsyncHandler(async () => onCopy(command))}
-            title="Duplicate command"
+            title={t("settings.command.duplicate")}
           >
             <CopyPlus className="tw-size-4" />
           </Button>
@@ -271,10 +271,10 @@ const SortableTableRow: React.FC<{
               new ConfirmModal(
                 app,
                 handleDelete,
-                `Are you sure you want to delete the command "${command.title}"? This will permanently remove the command file and cannot be undone.`,
-                "Delete Command",
-                "Delete",
-                "Cancel"
+                t("settings.command.delete.confirm", { command: command.title }),
+                t("settings.command.delete.title"),
+                t("settings.actions.delete"),
+                t("settings.actions.cancel")
               ).open();
             }}
           >
@@ -321,10 +321,10 @@ export const CommandSettings: React.FC = () => {
     try {
       await CustomCommandManager.getInstance().deleteCommand(command);
 
-      new Notice(`Command "${command.title}" deleted successfully!`);
+      new Notice(t("settings.command.notice.deleted", { command: command.title }));
     } catch (error) {
       logError("Failed to delete command:", error);
-      new Notice("Failed to delete command. Please try again.");
+      new Notice(t("settings.command.notice.deleteFailed"));
       throw error;
     }
   };
@@ -344,7 +344,7 @@ export const CommandSettings: React.FC = () => {
       });
     } catch (error) {
       logError("Failed to duplicate command:", error);
-      new Notice("Failed to duplicate command. Please try again.");
+      new Notice(t("settings.command.notice.duplicateFailed"));
     }
   };
 
@@ -385,7 +385,7 @@ export const CommandSettings: React.FC = () => {
           <div className="tw-space-y-2">
             {commands.length === 0 ? (
               <div className="tw-rounded-lg tw-border tw-border-border tw-bg-primary tw-p-8 tw-text-center tw-text-muted">
-                No custom prompt files found.
+                {t("settings.command.empty")}
               </div>
             ) : (
               commands.map((command) => (
@@ -410,27 +410,20 @@ export const CommandSettings: React.FC = () => {
     <div className="tw-space-y-4" ref={containerRef}>
       <section className={cn("tw-flex tw-flex-col tw-gap-4")}>
         <div className="tw-flex tw-flex-col tw-gap-2">
-          <div className="tw-text-xl tw-font-bold">Custom Commands</div>
-          <div className="tw-text-sm tw-text-muted">
-            Preset prompts you trigger from the editor right-click menu or with a <code>/</code>{" "}
-            command in chat.
-          </div>
+          <div className="tw-text-xl tw-font-bold">{t("settings.command.title")}</div>
+          <div className="tw-text-sm tw-text-muted">{t("settings.command.description")}</div>
         </div>
 
         <div className="tw-flex tw-items-start tw-gap-2 tw-rounded-md tw-border tw-border-solid tw-border-border tw-p-4 tw-text-muted tw-bg-interactive-accent/10">
           <Info className="tw-size-5 tw-shrink-0 tw-text-accent" />{" "}
-          <div>
-            Commands are automatically loaded from .md files in your custom prompts folder{" "}
-            <strong>{customPromptsFolder}</strong>. Modifying the files will also update the command
-            settings.
-          </div>
+          <div>{t("settings.command.folderDescription", { folder: customPromptsFolder })}</div>
         </div>
 
         <SettingSection>
           <SettingItem
             type="switch"
-            title="Custom Prompt Templating"
-            description="Process variables like {activenote}, {foldername}, or {#tag} in prompts. Disable for raw prompts."
+            title={t("settings.command.templating.title")}
+            description={t("settings.command.templating.description")}
             checked={settings.enableCustomPromptTemplating}
             onCheckedChange={(checked) => {
               updateSetting("enableCustomPromptTemplating", checked);
@@ -438,14 +431,17 @@ export const CommandSettings: React.FC = () => {
           />
           <SettingItem
             type="select"
-            title="Custom Prompts Sort Strategy"
-            description="Sort order for slash command menu prompts"
+            title={t("settings.command.sort.title")}
+            description={t("settings.command.sort.description")}
             value={settings.promptSortStrategy}
             onChange={(value) => updateSetting("promptSortStrategy", value)}
             options={[
-              { label: "Recency", value: PromptSortStrategy.TIMESTAMP },
-              { label: "Alphabetical", value: PromptSortStrategy.ALPHABETICAL },
-              { label: "Manual", value: PromptSortStrategy.MANUAL },
+              { label: t("settings.command.sort.recency"), value: PromptSortStrategy.TIMESTAMP },
+              {
+                label: t("settings.command.sort.alphabetical"),
+                value: PromptSortStrategy.ALPHABETICAL,
+              },
+              { label: t("settings.command.sort.manual"), value: PromptSortStrategy.MANUAL },
             ]}
           />
         </SettingSection>
@@ -459,12 +455,12 @@ export const CommandSettings: React.FC = () => {
                   new ConfirmModal(
                     app,
                     generateDefaultCommands,
-                    "This will add default commands to your custom prompts folder. Do you want to continue?",
-                    "Generate Default Commands"
+                    t("settings.command.generate.confirm"),
+                    t("settings.command.generate.title")
                   ).open()
                 }
               >
-                Generate Default
+                {t("settings.command.generate.action")}
               </Button>
             </div>
             <Button
@@ -486,7 +482,7 @@ export const CommandSettings: React.FC = () => {
               }}
             >
               <Plus className="tw-size-2 md:tw-size-4" />
-              Add Cmd
+              {t("settings.command.add")}
             </Button>
           </div>
 
@@ -501,15 +497,14 @@ export const CommandSettings: React.FC = () => {
                 <TableHeader>
                   <TableRow>
                     <TableHead className="tw-w-10"></TableHead>
-                    <TableHead>Name</TableHead>
+                    <TableHead>{t("settings.command.table.name")}</TableHead>
                     <TableHead className="tw-w-24 tw-text-center">
                       <div className="tw-flex tw-items-center tw-justify-center tw-gap-1">
-                        In Menu
+                        {t("settings.command.inMenu")}
                         <HelpTooltip
                           content={
                             <div className="tw-max-w-xs tw-text-xs">
-                              If enabled, the command will be available in the context menu when you
-                              right-click in the editor.
+                              {t("settings.command.inMenu.description")}
                             </div>
                           }
                         />
@@ -517,18 +512,19 @@ export const CommandSettings: React.FC = () => {
                     </TableHead>
                     <TableHead className="tw-w-28 tw-text-center">
                       <div className="tw-flex tw-items-center tw-justify-center tw-gap-1">
-                        Slash Cmd
+                        {t("settings.command.inSlash.short")}
                         <HelpTooltip
                           content={
                             <div className="tw-max-w-xs tw-text-xs">
-                              If enabled, the command will be available as a slash command in the
-                              chat.
+                              {t("settings.command.inSlash.description")}
                             </div>
                           }
                         />
                       </div>
                     </TableHead>
-                    <TableHead className="tw-w-32 tw-text-center">Actions</TableHead>
+                    <TableHead className="tw-w-32 tw-text-center">
+                      {t("settings.command.table.actions")}
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <SortableContext
@@ -539,7 +535,7 @@ export const CommandSettings: React.FC = () => {
                     {commands.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={5} className="tw-py-8 tw-text-center tw-text-muted">
-                          No custom prompt files found.
+                          {t("settings.command.empty")}
                         </TableCell>
                       </TableRow>
                     ) : (

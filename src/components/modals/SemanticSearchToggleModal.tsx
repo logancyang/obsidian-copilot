@@ -1,15 +1,20 @@
 import { App } from "obsidian";
 import { ConfirmModal } from "./ConfirmModal";
+import { t } from "@/i18n";
 
 export class SemanticSearchToggleModal extends ConfirmModal {
   constructor(app: App, onConfirm: () => void | Promise<void>, enabling: boolean) {
     const content = enabling
-      ? "Semantic search requires building an embedding index for your vault.\n\nUse 'Refresh Vault Index' or 'Force Reindex Vault' commands to build the index after enabling."
-      : "Disabling semantic search will fall back to index-free lexical search (less resource-intensive, could be less accurate).\n\nYour existing index will be preserved but not used.";
+      ? t("settings.advanced.semanticSearch.enableDescription")
+      : t("settings.advanced.semanticSearch.disableDescription");
 
-    const title = enabling ? "Enable Semantic Search" : "Disable Semantic Search";
-    const confirmButtonText = enabling ? "Enable" : "Disable";
+    const title = enabling
+      ? t("settings.advanced.semanticSearch.enableTitle")
+      : t("settings.advanced.semanticSearch.disableTitle");
+    const confirmButtonText = enabling
+      ? t("settings.actions.enable")
+      : t("settings.actions.disable");
 
-    super(app, onConfirm, content, title, confirmButtonText, "Cancel");
+    super(app, onConfirm, content, title, confirmButtonText, t("settings.actions.cancel"));
   }
 }
