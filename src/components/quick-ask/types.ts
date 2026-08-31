@@ -68,18 +68,3 @@ export interface QuickAskWidgetPayload {
     onClose: () => void;
   };
 }
-
-/**
- * Mode configuration for Quick Ask.
- */
-export interface QuickAskModeConfig {
-  id: QuickAskMode;
-  label: string;
-  icon: string;
-  description: string;
-  requiresSelection: boolean;
-  /** System prompt for this mode */
-  systemPrompt?: string;
-  /** Whether this mode is implemented */
-  implemented: boolean;
-}
