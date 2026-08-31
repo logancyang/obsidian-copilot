@@ -38,11 +38,6 @@ export function basename(p: string): string {
   return idx === -1 ? stripped : stripped.slice(idx + 1);
 }
 
-/** Ensure a path ends with `/`. */
-export function withTrailingSlash(p: string): string {
-  return p.endsWith("/") ? p : `${p}/`;
-}
-
 /**
  * Whether an absolute target path resolves inside the given absolute root.
  * Tolerates trailing slashes and mixed separators.

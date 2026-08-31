@@ -33,11 +33,6 @@ export function resolveScopeCwd(vaultBasePath: string, projectId: ProjectScopeId
   return path.join(vaultBasePath, path.dirname(record.filePath));
 }
 
-/** Whether `projectId` still resolves to a live scope (global is always live). */
-export function isLiveScope(projectId: ProjectScopeId): boolean {
-  return projectId === GLOBAL_SCOPE || getCachedProjectRecordById(projectId) !== undefined;
-}
-
 /**
  * Reverse of {@link resolveScopeCwd}: attribute a working directory reported by
  * a backend's native `listSessions` to the project whose folder it is. Lets the

@@ -194,15 +194,6 @@ export function extractChatLastAccessedAtMs(app: App, file: TFile): number | nul
 }
 
 /**
- * Extract chat last accessed date from a file.
- * Uses extractChatLastAccessedAtMs and returns a Date when available, null otherwise.
- */
-export function extractChatLastAccessedAt(app: App, file: TFile): Date | null {
-  const lastAccessedAtMs = extractChatLastAccessedAtMs(app, file);
-  return lastAccessedAtMs ? new Date(lastAccessedAtMs) : null;
-}
-
-/**
  * Build a `ChatHistoryItem` from a chat file, blending the in-memory
  * lastAccessedAt (for immediate UI feedback after a load/save) with the
  * persisted frontmatter value. Used by both the legacy and Agent Mode
