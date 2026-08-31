@@ -22,8 +22,7 @@ const ISSUES: readonly SkillLoadIssue[] = [
   {
     name: "Release Notes",
     location: "copilot/skills/Release Notes/",
-    reason:
-      'Skill `name` must be lowercase a–z, 0–9, and hyphens with no leading, trailing, or consecutive hyphens (got "Release Notes")',
+    reason: "Use the same lowercase, hyphenated name in the file and folder.",
     suggestion: "name: release-notes\nfolder: release-notes/",
     revealLabel: "Reveal in vault",
     onOpen: noop,
