@@ -256,7 +256,10 @@ export function AgentHomePreviewList({
 
   return (
     <div className="tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-divide-y tw-divide-border">
-      <ScrollArea ref={scrollRootRef} className="tw-min-h-0 tw-flex-1 tw-overflow-y-auto">
+      {/* Radix overlays its 10px scrollbar, so the matching gutter keeps every
+          Agent Home row's time and actions readable without narrowing all
+          ScrollArea consumers. https://github.com/logancyang/obsidian-copilot/issues/3017 */}
+      <ScrollArea ref={scrollRootRef} className="tw-min-h-0 tw-flex-1 tw-overflow-y-auto tw-pr-2.5">
         {children}
       </ScrollArea>
       {showViewAll && (
