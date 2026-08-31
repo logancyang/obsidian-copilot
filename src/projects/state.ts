@@ -33,14 +33,6 @@ export function getCachedProjectRecords(): ProjectFileRecord[] {
 }
 
 /**
- * Non-reactive: get cached ProjectConfig objects.
- * @returns Array of ProjectConfig
- */
-export function getCachedProjects(): ProjectConfig[] {
-  return projectsStore.get(projectRecordsAtom).map((r) => r.project);
-}
-
-/**
  * Non-reactive: find a cached record by project id.
  * @param projectId - Project id to look up
  * @returns Matching record or undefined
