@@ -9,6 +9,7 @@ export interface SkillLoadIssue {
   reason: string;
   offendingText?: string;
   revealLabel: "Reveal in vault" | "Show in folder";
+  onFixWithAgent: () => void;
   onOpen: () => void;
   onReveal: () => void;
 }
@@ -46,12 +47,14 @@ export const SkillLoadIssues: React.FC<SkillLoadIssuesProps> = ({ issues, onView
 
 export interface SkillLoadIssuesModalContentProps {
   issues: readonly SkillLoadIssue[];
+  onFixAll: () => void;
   onClose: () => void;
 }
 
 /** Complete repair list rendered inside the native details modal. */
 export const SkillLoadIssuesModalContent: React.FC<SkillLoadIssuesModalContentProps> = ({
   issues,
+  onFixAll,
   onClose,
 }) => {
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/166
@@ -63,34 +66,48 @@ export const SkillLoadIssuesModalContent: React.FC<SkillLoadIssuesModalContentPr
   };
 
   return (
-    <div className="tw-mt-3 tw-max-h-[min(65vh,40rem)] tw-overflow-y-auto tw-pr-1">
-      {issues.map((issue) => (
-        <article
-          className="tw-border-x-[0px] tw-border-b-[0px] tw-border-t tw-border-solid tw-py-3 tw-border-warning/30"
-          key={issue.location}
-        >
-          <div className="tw-break-words tw-font-mono tw-text-ui-small tw-font-semibold tw-text-normal">
-            {issue.location}
-          </div>
-          <p className="tw-mx-0 tw-mb-0 tw-mt-1 tw-text-ui-smaller tw-text-muted">{issue.reason}</p>
-          {issue.offendingText !== undefined && (
-            <ClampedContent collapsedClassName="tw-max-h-[6lh]">
-              <code className="tw-mt-1 tw-block tw-whitespace-pre-wrap tw-rounded-sm tw-bg-primary-alt tw-p-1 tw-text-smallest">
-                {issue.offendingText}
-              </code>
-            </ClampedContent>
-          )}
-          <div className="tw-mt-2 tw-flex tw-gap-1">
-            <Button variant="secondary" size="sm" onClick={() => runAction(issue.onOpen)}>
-              Open SKILL.md
-            </Button>
-            <Button variant="secondary" size="sm" onClick={() => runAction(issue.onReveal)}>
-              {issue.revealLabel}
-            </Button>
-          </div>
-        </article>
-      ))}
-    </div>
+    <>
+      {issues.length > 1 && (
+        <div className="tw-flex tw-justify-end">
+          <Button size="sm" onClick={() => runAction(onFixAll)}>
+            Fix All with Agent
+          </Button>
+        </div>
+      )}
+      <div className="tw-mt-3 tw-max-h-[min(65vh,40rem)] tw-overflow-y-auto tw-pr-1">
+        {issues.map((issue) => (
+          <article
+            className="tw-border-x-[0px] tw-border-b-[0px] tw-border-t tw-border-solid tw-py-3 tw-border-warning/30"
+            key={issue.location}
+          >
+            <div className="tw-break-words tw-font-mono tw-text-ui-small tw-font-semibold tw-text-normal">
+              {issue.location}
+            </div>
+            <p className="tw-mx-0 tw-mb-0 tw-mt-1 tw-text-ui-smaller tw-text-muted">
+              {issue.reason}
+            </p>
+            {issue.offendingText !== undefined && (
+              <ClampedContent collapsedClassName="tw-max-h-[6lh]">
+                <code className="tw-mt-1 tw-block tw-whitespace-pre-wrap tw-rounded-sm tw-bg-primary-alt tw-p-1 tw-text-smallest">
+                  {issue.offendingText}
+                </code>
+              </ClampedContent>
+            )}
+            <div className="tw-mt-2 tw-flex tw-gap-1">
+              <Button size="sm" onClick={() => runAction(issue.onFixWithAgent)}>
+                Fix with Agent
+              </Button>
+              <Button variant="ghost2" size="sm" onClick={() => runAction(issue.onOpen)}>
+                Open SKILL.md
+              </Button>
+              <Button variant="ghost2" size="sm" onClick={() => runAction(issue.onReveal)}>
+                {issue.revealLabel}
+              </Button>
+            </div>
+          </article>
+        ))}
+      </div>
+    </>
   );
 };
 
@@ -98,13 +115,16 @@ export const SkillLoadIssuesModalContent: React.FC<SkillLoadIssuesModalContentPr
 export class SkillLoadIssuesModal extends ReactModal {
   constructor(
     app: App,
-    private readonly issues: readonly SkillLoadIssue[]
+    private readonly issues: readonly SkillLoadIssue[],
+    private readonly onFixAll: () => void
   ) {
     super(app, `${issues.length} skill${issues.length === 1 ? "" : "s"} could not be loaded`);
   }
 
   protected renderContent(close: () => void): React.ReactElement {
-    return <SkillLoadIssuesModalContent issues={this.issues} onClose={close} />;
+    return (
+      <SkillLoadIssuesModalContent issues={this.issues} onFixAll={this.onFixAll} onClose={close} />
+    );
   }
 }
 

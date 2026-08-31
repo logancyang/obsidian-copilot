@@ -52,7 +52,7 @@ jest.mock("@/agentMode", () => ({
 }));
 
 import CopilotPlugin from "@/main";
-import { logError, logInfo } from "@/logger";
+import { logError, logInfo, logWarn } from "@/logger";
 import { logFileManager } from "@/logFileManager";
 import { resetMiyoMutations } from "@/miyo/miyoResync";
 import { flushPersistence } from "@/services/settingsPersistence";
@@ -228,6 +228,43 @@ describe("main", () => {
 
         expect(mockSkillManagerDispose).not.toHaveBeenCalled();
         expect(logInfo).toHaveBeenCalledWith("Copilot plugin unloaded");
+      });
+    });
+
+    describe("newAgentChatWithDraft()", () => {
+      beforeEach(() => {
+        jest.clearAllMocks();
+        (isDesktopRuntime as jest.Mock).mockReturnValue(true);
+      });
+
+      it("opens a global Agent session with reviewable text left as a draft for https://github.com/Brevilabs/obsidian-copilot-private/issues/166", async () => {
+        const plugin = createPluginUnderTest([]);
+        const createGlobalSessionWithDraft = jest.fn().mockResolvedValue(undefined);
+        Object.assign(plugin.agentSessionManager as object, {
+          createGlobalSessionWithDraft,
+        });
+        jest.spyOn(plugin, "activateAgentView").mockResolvedValue(null);
+
+        await plugin.newAgentChatWithDraft("Repair this skill");
+
+        expect(plugin.activateAgentView).toHaveBeenCalledTimes(1);
+        expect(createGlobalSessionWithDraft).toHaveBeenCalledWith("Repair this skill");
+      });
+
+      it("surfaces session creation failures without sending or throwing for https://github.com/Brevilabs/obsidian-copilot-private/issues/166", async () => {
+        const plugin = createPluginUnderTest([]);
+        const failure = new Error("create failed");
+        Object.assign(plugin.agentSessionManager as object, {
+          createGlobalSessionWithDraft: jest.fn().mockRejectedValue(failure),
+        });
+        jest.spyOn(plugin, "activateAgentView").mockResolvedValue(null);
+
+        await expect(plugin.newAgentChatWithDraft("Repair this skill")).resolves.toBeUndefined();
+
+        expect(logWarn).toHaveBeenCalledWith(
+          "[CopilotPlugin] Failed to create agent session with draft",
+          failure
+        );
       });
     });
   });

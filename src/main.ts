@@ -1167,6 +1167,23 @@ export default class CopilotPlugin extends Plugin {
     }
   }
 
+  /** Open a fresh global Agent chat with reviewable text left unsent in its composer. */
+  async newAgentChatWithDraft(initialDraft: string): Promise<void> {
+    const manager = this.requireAgentView();
+    if (!manager) return;
+    await this.activateAgentView();
+    try {
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/166
+      // Rejected skills can live outside the active project's folder. Return
+      // to the vault-wide workspace before creating the repair chat so the
+      // selected agent can inspect every path included in the draft.
+      await manager.createGlobalSessionWithDraft(initialDraft);
+    } catch (error) {
+      logWarn("[CopilotPlugin] Failed to create agent session with draft", error);
+      new Notice("Failed to create agent session. Check Copilot logs.");
+    }
+  }
+
   private async openOrRevealView(viewType: string): Promise<WorkspaceLeaf | null> {
     const leaves = this.app.workspace.getLeavesOfType(viewType);
     if (leaves.length > 0) {

@@ -16,6 +16,7 @@ const ISSUES: readonly SkillLoadIssue[] = [
     reason: 'The description contains ": " and must be quoted.',
     offendingText: "description: Use this skill for: reviewing daily notes",
     revealLabel: "Show in folder",
+    onFixWithAgent: noop,
     onOpen: noop,
     onReveal: noop,
   },
@@ -24,6 +25,7 @@ const ISSUES: readonly SkillLoadIssue[] = [
     reason: "Use the same lowercase, hyphenated name in the file and folder.",
     offendingText: "name: Release Notes",
     revealLabel: "Reveal in vault",
+    onFixWithAgent: noop,
     onOpen: noop,
     onReveal: noop,
   },
@@ -71,6 +73,7 @@ export const DetailsOverflow: StoryObj<SkillLoadIssuesProps> = {
         ...ISSUES[index % ISSUES.length],
         location: `.claude/skills/repair-${index + 1}/SKILL.md`,
       }))}
+      onFixAll={noop}
       onClose={noop}
     />
   ),
@@ -88,6 +91,7 @@ export const LongDescriptionPreview: StoryObj<SkillLoadIssuesProps> = {
           offendingText: LONG_DESCRIPTION,
         },
       ]}
+      onFixAll={noop}
       onClose={noop}
     />
   ),

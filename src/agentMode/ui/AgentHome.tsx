@@ -380,6 +380,16 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     liveChatInputIds,
     defaultIncludeActiveNote: settings.autoAddActiveContentToContext === true,
   });
+  const setDraftInput = draft.setInput;
+
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/166
+  // The manager binds a handoff draft to the new chat input before publishing
+  // that session. Consume it only after this input is live so the text cannot
+  // race into whichever composer was active before the session switch.
+  useEffect(() => {
+    const initialDraft = manager.consumeInitialDraft(chatInputId);
+    if (initialDraft !== undefined) setDraftInput(initialDraft);
+  }, [chatInputId, manager, setDraftInput]);
 
   // Whole chat area is the drop zone (bound to chatContainerRef), so files
   // dropped anywhere — not just on the composer — attach to the active draft.

@@ -70,6 +70,7 @@ describe("SkillLoadIssues", () => {
         <SkillLoadIssuesModalContent
           issues={[
             makeIssue({
+              onFixWithAgent: () => order.push("fix"),
               onOpen: () => order.push("open"),
               onReveal: () => order.push("reveal"),
             }),
@@ -78,6 +79,7 @@ describe("SkillLoadIssues", () => {
               offendingText: "description: [unfinished",
             }),
           ]}
+          onFixAll={() => order.push("fix-all")}
           onClose={() => order.push("close")}
         />
       );
@@ -89,10 +91,31 @@ describe("SkillLoadIssues", () => {
       expect(screen.getAllByText(makeIssue().reason)).toHaveLength(2);
       expect(screen.queryByText("Current")).toBeNull();
       expect(screen.queryByText("Change to")).toBeNull();
+      expect(screen.getByRole("button", { name: "Fix All with Agent" })).not.toBeNull();
 
-      fireEvent.click(screen.getAllByRole("button", { name: "Open SKILL.md" })[0]);
-      fireEvent.click(screen.getAllByRole("button", { name: "Show in folder" })[0]);
-      expect(order).toEqual(["close", "open", "close", "reveal"]);
+      const fixButton = screen.getAllByRole("button", { name: "Fix with Agent" })[0];
+      const openButton = screen.getAllByRole("button", { name: "Open SKILL.md" })[0];
+      const revealButton = screen.getAllByRole("button", { name: "Show in folder" })[0];
+      expect(fixButton.classList.contains("tw-bg-interactive-accent")).toBe(true);
+      expect(openButton.classList.contains("tw-bg-transparent")).toBe(true);
+      expect(openButton.classList.contains("tw-text-faint")).toBe(true);
+      expect(revealButton.classList.contains("tw-bg-transparent")).toBe(true);
+      expect(revealButton.classList.contains("tw-text-faint")).toBe(true);
+
+      fireEvent.click(fixButton);
+      fireEvent.click(openButton);
+      fireEvent.click(revealButton);
+      fireEvent.click(screen.getByRole("button", { name: "Fix All with Agent" }));
+      expect(order).toEqual([
+        "close",
+        "fix",
+        "close",
+        "open",
+        "close",
+        "reveal",
+        "close",
+        "fix-all",
+      ]);
     });
 
     it(`keeps each explanation attached to its own file for ${ISSUE_URL}`, () => {
@@ -107,6 +130,7 @@ describe("SkillLoadIssues", () => {
               offendingText: undefined,
             }),
           ]}
+          onFixAll={jest.fn()}
           onClose={jest.fn()}
         />
       );
@@ -123,6 +147,7 @@ describe("SkillLoadIssues", () => {
       render(
         <SkillLoadIssuesModalContent
           issues={[makeIssue({ offendingText: longDescription })]}
+          onFixAll={jest.fn()}
           onClose={jest.fn()}
         />
       );
@@ -141,7 +166,7 @@ describe("SkillLoadIssues", () => {
   describe("SkillLoadIssuesModal", () => {
     describe("constructor()", () => {
       it(`uses truthful singular native title copy for ${ISSUE_URL}`, () => {
-        const modal = new SkillLoadIssuesModal(new App(), [makeIssue()]);
+        const modal = new SkillLoadIssuesModal(new App(), [makeIssue()], jest.fn());
 
         expect(modal.titleEl.textContent).toBe("1 skill could not be loaded");
       });
@@ -149,7 +174,7 @@ describe("SkillLoadIssues", () => {
 
     describe("onOpen()", () => {
       it(`renders the complete repair list for ${ISSUE_URL}`, async () => {
-        const modal = new SkillLoadIssuesModal(new App(), [makeIssue()]);
+        const modal = new SkillLoadIssuesModal(new App(), [makeIssue()], jest.fn());
         modal.contentEl.empty = () => modal.contentEl.replaceChildren();
 
         await act(async () => ReactModal.prototype.onOpen.call(modal));
@@ -167,6 +192,7 @@ function makeIssue(overrides: Partial<SkillLoadIssue> = {}): SkillLoadIssue {
     reason: 'The description contains ": " and must be quoted.',
     offendingText: "description: Use this skill for: reviewing notes",
     revealLabel: "Show in folder",
+    onFixWithAgent: jest.fn(),
     onOpen: jest.fn(),
     onReveal: jest.fn(),
     ...overrides,

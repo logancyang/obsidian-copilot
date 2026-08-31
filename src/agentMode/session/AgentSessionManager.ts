@@ -319,6 +319,10 @@ export class AgentSessionManager {
   // Serializes replacements for one logical input even after its runtime session id changes.
   // The cursor retains the last successful owner when an individual replacement fails.
   private readonly replacementCursorByChatInputId = new Map<string, Promise<string>>();
+  // New-session drafts are keyed to the logical composer id, not the active
+  // session pointer. This prevents a handoff from landing in the prior chat
+  // while React commits the new active session.
+  private readonly initialDraftByChatInputId = new Map<string, string>();
   // Native session identity is stable across markdown/native history surfaces.
   // Sharing one resume prevents duplicate AgentSessions and backend handlers
   // when the same row is opened again before the first load settles.
@@ -1410,6 +1414,29 @@ export class AgentSessionManager {
     return session;
   }
 
+  /** Create a fresh global session with reviewable, unsent composer text. */
+  async createGlobalSessionWithDraft(initialDraft: string): Promise<AgentSession> {
+    const projectId = GLOBAL_SCOPE;
+    const previousActiveProjectId = this.activeProjectId;
+    this.setActiveScope(projectId);
+    const chatInputId = uuidv4();
+    this.initialDraftByChatInputId.set(chatInputId, initialDraft);
+    try {
+      return await this.createSession(undefined, projectId, undefined, chatInputId);
+    } catch (error) {
+      this.initialDraftByChatInputId.delete(chatInputId);
+      this.rollbackOptimisticScopeSwitch(projectId, previousActiveProjectId);
+      throw error;
+    }
+  }
+
+  /** Return and remove the initial draft assigned to one logical composer. */
+  consumeInitialDraft(chatInputId: string): string | undefined {
+    const initialDraft = this.initialDraftByChatInputId.get(chatInputId);
+    this.initialDraftByChatInputId.delete(chatInputId);
+    return initialDraft;
+  }
+
   /** Record a failure for the status surface, advancing the failure sequence. */
   private setLastError(message: string): void {
     this.lastError = message;
@@ -2012,23 +2039,18 @@ export class AgentSessionManager {
   }
 
   /**
-   * Undo the optimistic scope switch a history load performs before it has a
-   * session, when the resume/create that follows rejects. A history load calls
-   * `setActiveScope` to point `activeProjectId` at the chat's scope (so the new
-   * session activates there) while `activeSessionId` still references the
-   * previous scope's session; a failed load would otherwise strand the manager
-   * with `getActiveSession().projectId !== activeProjectId` until the user
-   * manually switches scopes. Only roll back if we're still parked in the scope
-   * we switched to — a concurrent scope switch during the awaited backend spawn
-   * means the user has moved on, and forcing them back would reintroduce the
-   * very race `createSession`'s activation guard already avoids.
+   * Undo a scope switch that precedes a specific session create/resume when that
+   * operation rejects. Only roll back if we're still parked in the attempted
+   * scope — a concurrent scope switch means the user has moved on, and forcing
+   * them back would reintroduce the race `createSession`'s activation guard avoids.
    */
-  private rollbackHistoryLoadScope(
+  private rollbackOptimisticScopeSwitch(
     attemptedProjectId: ProjectScopeId,
     previousProjectId: ProjectScopeId
   ): void {
     if (this.activeProjectId === attemptedProjectId) {
       this.activeProjectId = previousProjectId;
+      this.notify();
     }
   }
 
@@ -2045,7 +2067,7 @@ export class AgentSessionManager {
    * Guarded on still being parked in the attempted scope: a concurrent
    * `enterProject` during the awaited spawn means the user moved on, and forcing
    * them back would clobber that newer switch (mirrors
-   * {@link rollbackHistoryLoadScope}). The detached tabs are intentionally left
+   * {@link rollbackOptimisticScopeSwitch}). The detached tabs are intentionally left
    * detached — they belong to the project we failed to enter, are invisible from
    * the restored scope, and a later successful entry re-detaches them anyway as a
    * fresh visit.
@@ -2446,6 +2468,7 @@ export class AgentSessionManager {
     }
     this.detachAutoSave(id);
     this.sessions.delete(id);
+    this.initialDraftByChatInputId.delete(session.chatInputId);
     this.chatUIStates.delete(id);
     this.landingCaptureSignatures.delete(id);
     this.lastSeenProjectContentEpochBySession.delete(id);
@@ -2714,6 +2737,7 @@ export class AgentSessionManager {
       })
     );
     this.sessions.clear();
+    this.initialDraftByChatInputId.clear();
     this.chatUIStates.clear();
     this.landingCaptureSignatures.clear();
     this.lastSeenProjectContentEpochBySession.clear();
@@ -2807,7 +2831,7 @@ export class AgentSessionManager {
         : null;
       session = resumed ?? (await this.createSession(loaded.backendId, projectId));
     } catch (err) {
-      this.rollbackHistoryLoadScope(projectId, previousActiveProjectId);
+      this.rollbackOptimisticScopeSwitch(projectId, previousActiveProjectId);
       throw err;
     }
 
@@ -2909,7 +2933,7 @@ export class AgentSessionManager {
       }
       session = resumed;
     } catch (err) {
-      this.rollbackHistoryLoadScope(projectId, previousActiveProjectId);
+      this.rollbackOptimisticScopeSwitch(projectId, previousActiveProjectId);
       throw err;
     }
     // Rebuild the visible transcript for backends that resume without
@@ -3500,6 +3524,7 @@ export class AgentSessionManager {
       for (const s of dead) {
         this.detachAutoSave(s.internalId);
         this.sessions.delete(s.internalId);
+        this.initialDraftByChatInputId.delete(s.chatInputId);
         this.chatUIStates.delete(s.internalId);
         this.landingCaptureSignatures.delete(s.internalId);
         this.lastSeenProjectContentEpochBySession.delete(s.internalId);

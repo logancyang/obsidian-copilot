@@ -495,6 +495,90 @@ describe("AgentSessionManager.createSession", () => {
   });
 });
 
+describe("AgentSessionManager.createGlobalSessionWithDraft", () => {
+  it("binds an unsent draft to the new logical composer and consumes it once for https://github.com/Brevilabs/obsidian-copilot-private/issues/166", async () => {
+    const mgr = buildManager();
+
+    const session = await mgr.createGlobalSessionWithDraft("Review this repair");
+
+    expect(mgr.getActiveSession()).toBe(session);
+    expect(mgr.consumeInitialDraft(session.chatInputId)).toBe("Review this repair");
+    expect(mgr.consumeInitialDraft(session.chatInputId)).toBeUndefined();
+  });
+
+  it("switches directly to the requested scope without spawning an extra blank session for https://github.com/Brevilabs/obsidian-copilot-private/issues/166", async () => {
+    const projectId = "project-with-no-global-session";
+    const recordSpy = jest
+      .spyOn(projectsState, "getCachedProjectRecordById")
+      .mockImplementation((id: string) =>
+        id === projectId
+          ? ({
+              filePath: "Projects/project-with-no-global-session/project.md",
+              project: { id: projectId },
+            } as unknown as ReturnType<typeof projectsState.getCachedProjectRecordById>)
+          : undefined
+      );
+    try {
+      const mgr = buildManager();
+      await mgr.createSession(undefined, projectId);
+
+      const session = await mgr.createGlobalSessionWithDraft("Review this repair");
+
+      expect(mgr.getSessions()).toHaveLength(2);
+      expect(mgr.getSessions().filter((candidate) => candidate.projectId === GLOBAL_SCOPE)).toEqual(
+        [session]
+      );
+      expect(mgr.getActiveSession()).toBe(session);
+    } finally {
+      recordSpy.mockRestore();
+    }
+  });
+
+  it("drops the initial draft when the session closes before the composer consumes it for https://github.com/Brevilabs/obsidian-copilot-private/issues/166", async () => {
+    const mgr = buildManager();
+    const session = await mgr.createGlobalSessionWithDraft("Review this repair");
+
+    await mgr.closeSession(session.internalId);
+
+    expect(mgr.consumeInitialDraft(session.chatInputId)).toBeUndefined();
+  });
+
+  it("drops the initial draft when session creation fails for https://github.com/Brevilabs/obsidian-copilot-private/issues/166", async () => {
+    const projectId = "project-before-failed-draft";
+    const recordSpy = jest
+      .spyOn(projectsState, "getCachedProjectRecordById")
+      .mockImplementation((id: string) =>
+        id === projectId
+          ? ({
+              filePath: "Projects/project-before-failed-draft/project.md",
+              project: { id: projectId },
+            } as unknown as ReturnType<typeof projectsState.getCachedProjectRecordById>)
+          : undefined
+      );
+    try {
+      const mgr = buildManager();
+      await mgr.enterProject(projectId);
+      const previousSession = mgr.getActiveSession();
+      expect(previousSession).not.toBeNull();
+      let failedChatInputId: string | undefined;
+      sessionCreateSpy.mockImplementationOnce((opts) => {
+        failedChatInputId = opts.chatInputId;
+        throw new Error("session creation failed");
+      });
+
+      await expect(mgr.createGlobalSessionWithDraft("Review this repair")).rejects.toThrow(
+        "session creation failed"
+      );
+
+      expect(failedChatInputId).toBeDefined();
+      expect(mgr.consumeInitialDraft(failedChatInputId as string)).toBeUndefined();
+      expect(mgr.getActiveSession()).toBe(previousSession);
+    } finally {
+      recordSpy.mockRestore();
+    }
+  });
+});
+
 describe("AgentSessionManager warm-backend reuse", () => {
   const probeState = {
     model: {

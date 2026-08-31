@@ -1,4 +1,5 @@
 import { AppContext } from "@/context";
+import { PluginProvider } from "@/contexts/PluginContext";
 import { DEFAULT_SETTINGS } from "@/constants";
 import type { RejectedSkill, Skill } from "@/agentMode/skills/types";
 import { settingsAtom, settingsStore, updateSetting } from "@/settings/model";
@@ -8,6 +9,7 @@ import { __resetVaultBaseCache } from "@/utils/vaultPath";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { FileSystemAdapter, TFile, TFolder, type App } from "obsidian";
 import React from "react";
+import type CopilotPlugin from "@/main";
 import type { SkillLoadIssue } from "./SkillLoadIssues";
 import { SkillsSettings } from "./SkillsSettings";
 
@@ -19,7 +21,10 @@ const getAgentDirsProjectRel = jest.fn().mockReturnValue({});
 let mockManagedSkills: Skill[] = [];
 let mockRejectedSkills: RejectedSkill[] = [];
 let mockCapturedLoadIssues: readonly SkillLoadIssue[] = [];
+let mockCapturedFixAll: () => void = () => undefined;
 const mockOpenSkillLoadIssuesModal = jest.fn();
+const mockNewAgentChatWithDraft = jest.fn().mockResolvedValue(undefined);
+const mockCloseSettings = jest.fn();
 jest.mock("@/agentMode/skills/SkillManager", () => ({
   SkillManager: { getInstance: () => ({ refresh, getAgentDirsProjectRel }) },
   // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook; name must match the export
@@ -38,8 +43,9 @@ jest.mock("./SkillLoadIssues", () => {
     SkillLoadIssuesModal: class {
       open = mockOpenSkillLoadIssuesModal;
 
-      constructor(_app: App, issues: readonly SkillLoadIssue[]) {
+      constructor(_app: App, issues: readonly SkillLoadIssue[], onFixAll: () => void) {
         mockCapturedLoadIssues = issues;
+        mockCapturedFixAll = onFixAll;
       }
     },
   };
@@ -55,10 +61,16 @@ jest.mock("@/agentMode/backends/registry", () => ({
 }));
 
 function renderSettings(app: App = makeApp()) {
+  const plugin = {
+    app,
+    newAgentChatWithDraft: mockNewAgentChatWithDraft,
+  } as unknown as CopilotPlugin;
   return render(
-    <AppContext.Provider value={app}>
-      <SkillsSettings />
-    </AppContext.Provider>
+    <PluginProvider plugin={plugin}>
+      <AppContext.Provider value={app}>
+        <SkillsSettings />
+      </AppContext.Provider>
+    </PluginProvider>
   );
 }
 
@@ -70,6 +82,7 @@ describe("SkillsSettings", () => {
       mockManagedSkills = [];
       mockRejectedSkills = [];
       mockCapturedLoadIssues = [];
+      mockCapturedFixAll = () => undefined;
       settingsStore.set(settingsAtom, { ...DEFAULT_SETTINGS, copilotFolder: "copilot" });
     });
 
@@ -145,6 +158,33 @@ describe("SkillsSettings", () => {
         { newLeaf: true }
       );
       expect(openWithSystemDefault).toHaveBeenCalledWith("/vault/.claude/skills/broken-skill");
+    });
+
+    it("opens review-before-send Agent drafts for one or all rejected skills for https://github.com/Brevilabs/obsidian-copilot-private/issues/166", () => {
+      mockRejectedSkills = [
+        makeRejectedSkill(),
+        makeRejectedSkill({
+          filePath: "/vault/.codex/skills/second/SKILL.md",
+          dirPath: "/vault/.codex/skills/second",
+          reason: "Missing name.",
+          offendingText: undefined,
+        }),
+      ];
+      renderSettings();
+
+      fireEvent.click(screen.getByRole("button", { name: "View details" }));
+      mockCapturedLoadIssues[0].onFixWithAgent();
+      mockCapturedFixAll();
+
+      expect(mockCloseSettings).toHaveBeenCalledTimes(2);
+      expect(mockNewAgentChatWithDraft).toHaveBeenCalledTimes(2);
+      expect(mockNewAgentChatWithDraft.mock.calls[0][0]).toContain(
+        'File: ".claude/skills/broken-skill/SKILL.md"'
+      );
+      expect(mockNewAgentChatWithDraft.mock.calls[0][0]).not.toContain("Change to");
+      expect(mockNewAgentChatWithDraft.mock.calls[1][0]).toContain(
+        'File: ".codex/skills/second/SKILL.md"'
+      );
     });
 
     it("opens and reveals indexed rejected skills inside Obsidian for https://github.com/Brevilabs/obsidian-copilot-private/issues/166", () => {
@@ -228,6 +268,9 @@ function makeApp(indexRejectedSkill = false): App {
     },
     workspace: {
       openLinkText: jest.fn(),
+    },
+    setting: {
+      close: mockCloseSettings,
     },
     internalPlugins: {
       getPluginById: jest.fn(() => ({ enabled: true, instance: { revealInFolder } })),

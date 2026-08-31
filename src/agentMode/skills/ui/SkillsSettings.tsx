@@ -1,4 +1,8 @@
 import { formatSkillDisplayName } from "@/agentMode/skills/mergeDiscovery";
+import {
+  buildSkillRepairPrompt,
+  type SkillRepairEvidence,
+} from "@/agentMode/skills/skillRepairPrompt";
 import { listBackendDescriptors } from "@/agentMode/backends/registry";
 import type { AgentBrand } from "@/agentMode/session/types";
 import { DeleteConfirmModal } from "./DeleteConfirmDialog";
@@ -34,6 +38,7 @@ import { useSettingsValue } from "@/settings/model";
 import { AlertTriangle, Search } from "lucide-react";
 import { App, FileSystemAdapter, Notice, TFolder } from "obsidian";
 import { useApp } from "@/context";
+import { usePlugin } from "@/contexts/PluginContext";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 /**
@@ -67,6 +72,7 @@ const SYNC_BRANDS: ReadonlyArray<{ substr: string; brand: string }> = [
  */
 export const SkillsSettings: React.FC = () => {
   const app = useApp();
+  const plugin = usePlugin();
   const settings = useSettingsValue();
   // Skills live under the single configurable Copilot root. The derived path
   // drives discovery (the effect below) and the empty-state hint; it is not
@@ -142,21 +148,36 @@ export const SkillsSettings: React.FC = () => {
     [app]
   );
 
+  const handleFixWithAgent = useCallback(
+    (issues: readonly SkillRepairEvidence[]): void => {
+      // The Agent view opens behind Obsidian's Settings modal unless Settings
+      // is closed first. The user should land on the reviewable draft, not on
+      // the now-stale list of rejected skills.
+      (app as unknown as { setting: { close: () => void } }).setting.close();
+      void plugin.newAgentChatWithDraft(buildSkillRepairPrompt(issues));
+    },
+    [app, plugin]
+  );
+
   const loadIssues = useMemo<SkillLoadIssue[]>(() => {
     const vaultBase = getVaultBase(app);
     return rejectedSkills.map((skill) => {
       const folderRel = toVaultRelative(skill.dirPath, vaultBase);
       const indexed = app.vault.getAbstractFileByPath(folderRel) instanceof TFolder;
-      return {
+      const evidence: SkillRepairEvidence = {
         location: toVaultRelative(skill.filePath, vaultBase),
         reason: skill.reason,
         offendingText: skill.offendingText,
+      };
+      return {
+        ...evidence,
         revealLabel: indexed ? "Reveal in vault" : "Show in folder",
+        onFixWithAgent: () => handleFixWithAgent([evidence]),
         onOpen: () => openVaultPath(app, skill.filePath, { newLeaf: true }),
         onReveal: () => handleRevealSkillFolder(skill.dirPath),
       };
     });
-  }, [app, handleRevealSkillFolder, rejectedSkills]);
+  }, [app, handleFixWithAgent, handleRevealSkillFolder, rejectedSkills]);
 
   const filteredSkills = useMemo(() => filterSkills(skills, searchValue), [skills, searchValue]);
 
@@ -249,7 +270,11 @@ export const SkillsSettings: React.FC = () => {
           <div className="tw-mt-3">
             <SkillLoadIssues
               issues={loadIssues}
-              onViewDetails={() => new SkillLoadIssuesModal(app, loadIssues).open()}
+              onViewDetails={() =>
+                new SkillLoadIssuesModal(app, loadIssues, () =>
+                  handleFixWithAgent(loadIssues)
+                ).open()
+              }
             />
           </div>
         )}
