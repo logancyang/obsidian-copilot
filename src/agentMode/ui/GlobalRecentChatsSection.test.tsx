@@ -5,21 +5,6 @@ import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
 
 type SectionItems = React.ComponentProps<typeof GlobalRecentChatsSection>["items"];
 
-// jsdom lacks Obsidian's portal document and the observer used to page the open
-// View-all popover, so supply inert browser equivalents for that interaction.
-beforeAll(() => {
-  (window as unknown as { activeDocument: Document }).activeDocument = window.document;
-  window.IntersectionObserver = class implements IntersectionObserver {
-    readonly root = null;
-    readonly rootMargin = "";
-    readonly thresholds = [];
-    disconnect = jest.fn();
-    observe = jest.fn();
-    takeRecords = jest.fn(() => []);
-    unobserve = jest.fn();
-  };
-});
-
 const noop = async () => {};
 
 function renderSection(props: Partial<React.ComponentProps<typeof GlobalRecentChatsSection>> = {}) {
@@ -151,11 +136,11 @@ describe("GlobalRecentChatsSection", () => {
       expect(titleElement.getAttribute("title")).toBe(title);
     });
 
-    it("caps the inline preview at 10 chats and offers a View-all trigger on overflow", () => {
+    it("renders every chat in the existing scroll region without a View-all trigger", () => {
       const items = Array.from({ length: 12 }, (_, i) => makeItem(`overflow-${i}`));
       const { container } = renderSection({ items });
-      expect(screen.getAllByText(/^Chat overflow-/)).toHaveLength(10);
-      expect(screen.getByText("View all chats")).toBeTruthy();
+      expect(screen.getAllByText(/^Chat overflow-/)).toHaveLength(12);
+      expect(screen.queryByText("View all chats")).toBeNull();
 
       const scrollRegion = container.querySelector(
         "[data-radix-scroll-area-viewport]"
@@ -166,7 +151,7 @@ describe("GlobalRecentChatsSection", () => {
       expect(scrollRegion?.parentElement?.classList.contains("tw-flex-1")).toBe(true);
     });
 
-    it("renders project badges in the View-all popover from the global landing", () => {
+    it("renders project badges for every chat in the global scroll region", () => {
       const items = Array.from({ length: 11 }, (_, i) =>
         makeItem(`project-overflow-${i}`, { projectId: "project-1" })
       );
@@ -175,19 +160,16 @@ describe("GlobalRecentChatsSection", () => {
         projectNamesById: { "project-1": "Product research" },
       });
 
-      expect(screen.getAllByLabelText("Project: Product research")).toHaveLength(10);
-      fireEvent.click(screen.getByText("View all chats"));
-      expect(screen.getAllByLabelText("Project: Product research")).toHaveLength(21);
+      expect(screen.getAllByLabelText("Project: Product research")).toHaveLength(11);
     });
 
-    it("shows every match (no cap, no View-all) while searching", () => {
+    it("filters the full scrollable list while searching", () => {
       const items = Array.from({ length: 7 }, (_, i) => makeItem(`search-${i}`));
       renderSection({ items });
       fireEvent.change(screen.getByPlaceholderText("Search chats..."), {
         target: { value: "Chat search" },
       });
       expect(screen.getAllByText(/^Chat search-/)).toHaveLength(7);
-      expect(screen.queryByText("View all chats")).toBeNull();
     });
 
     it("refreshes once when the parent re-renders with the items that refresh produced", () => {

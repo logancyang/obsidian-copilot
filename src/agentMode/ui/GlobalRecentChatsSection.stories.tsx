@@ -50,11 +50,11 @@ function renderShelf(args: Partial<GlobalRecentChatsSectionProps>) {
   return <AgentHomeShelf sections={sections} />;
 }
 
-export const FitsWithoutFooter: StoryObj<GlobalRecentChatsSectionProps> = {
+export const ShortList: StoryObj<GlobalRecentChatsSectionProps> = {
   args: { items: items.slice(0, 5) },
   render: renderShelf,
 };
 
-export const Overflow: StoryObj<GlobalRecentChatsSectionProps> = {
+export const ScrollableList: StoryObj<GlobalRecentChatsSectionProps> = {
   render: renderShelf,
 };

@@ -1,17 +1,10 @@
 import { backendRegistry } from "@/agentMode/backends/registry";
-import {
-  AgentHomePreviewList,
-  AgentHomeViewAllTrigger,
-  INLINE_LIMIT,
-} from "@/agentMode/ui/AgentHomeSection";
+import { AgentHomePreviewList } from "@/agentMode/ui/AgentHomeSection";
 import { RecentChatProjectBadge, RecentChatTitle } from "@/agentMode/ui/RecentChatTitle";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SearchBar } from "@/components/ui/SearchBar";
-import {
-  ChatHistoryItem,
-  ChatHistoryPopover,
-} from "@/components/chat-components/ChatHistoryPopover";
+import { type ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
 import { ChatIconWithAttention } from "@/components/chat-components/ChatIconWithAttention";
 import { cn } from "@/lib/utils";
 import { isNativeChatId } from "@/utils/nativeChatId";
@@ -330,12 +323,11 @@ const RecentChatRow = memo(function RecentChatRow({
  * "Recent Chats" section for the Agent Home landing. A searchable list whose
  * rows manage chats in place — open, rename, delete, and (for markdown-saved
  * chats only) open the source note — the same affordances as the chat history
- * popover. The inline preview caps at {@link INLINE_LIMIT}; overflow lives
- * behind a "View all chats" trigger that opens the full
- * {@link ChatHistoryPopover}, while searching surfaces every match. Native
- * (autosave-off) sessions appear here too; they just have no source note. The
- * per-project landing reuses it (`variant="project"`) with scoped items and
- * project empty copy — identical rows, no extra chrome.
+ * popover. Every chat stays in this section's scrollable list, and search
+ * filters that same list without opening a second surface. Native (autosave-off)
+ * sessions appear here too; they just have no source note. The per-project
+ * landing reuses it (`variant="project"`) with scoped items and project empty
+ * copy — identical rows, no extra chrome.
  */
 export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
   items,
@@ -356,31 +348,19 @@ export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
   const [editingTitle, setEditingTitle] = useState("");
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
-  // Refresh once when the section first mounts (i.e. the user opened the
-  // Recent Chats tab), mirroring the old popover's refresh-on-open.
+  // Refresh once when the section first mounts so opening Recent Chats does
+  // not rely on a stale history snapshot.
   useEffect(() => {
     onLoadHistory?.();
   }, [onLoadHistory]);
 
-  // Sort once for the inline preview (fixed recent-first, like the rest of the
-  // landing); the View-all popover re-sorts the full list by the user's
-  // configured chatHistorySortStrategy — the same management surface as the
-  // control bar's History button — so it reads raw `items` directly below.
+  // Sort once for the landing's fixed recent-first order.
   const sortedItems = useMemo(() => sortChatsByRecent(items), [items]);
-  const isSearching = query.trim().length > 0;
   const filteredItems = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return sortedItems;
     return sortedItems.filter((item) => item.title.toLowerCase().includes(q));
   }, [sortedItems, query]);
-  // Inline preview caps at INLINE_LIMIT; a search shows every match (the cap
-  // would hide exactly what the user is looking for).
-  const visibleItems = useMemo(
-    () => (isSearching ? filteredItems : filteredItems.slice(0, INLINE_LIMIT)),
-    [filteredItems, isSearching]
-  );
-  const hasMoreItems = !isSearching && filteredItems.length > visibleItems.length;
-
   const handleStartEdit = useCallback((id: string, title: string) => {
     setConfirmDeleteId(null);
     setEditingId(id);
@@ -425,14 +405,6 @@ export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
       variant === "global" && item.projectId ? projectNamesById?.[item.projectId] : undefined,
     [projectNamesById, variant]
   );
-  const renderProjectBadge = useCallback(
-    (item: ChatHistoryItem): React.ReactNode => {
-      const projectName = getProjectName(item);
-      return projectName ? <RecentChatProjectBadge name={projectName} /> : null;
-    },
-    [getProjectName]
-  );
-
   return (
     <div
       role={title ? "group" : undefined}
@@ -463,52 +435,9 @@ export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
               : "No recent chats"}
         </div>
       ) : (
-        <AgentHomePreviewList
-          hasMoreItems={hasMoreItems}
-          viewAll={
-            !isSearching ? (
-              <ChatHistoryPopover
-                chatHistory={items}
-                onUpdateTitle={onUpdateTitle}
-                onDeleteChat={onDeleteChat}
-                onLoadChat={onLoadChat}
-                onOpenSourceFile={onOpenSourceFile}
-                getIcon={resolveChatIcon}
-                getBadge={renderProjectBadge}
-                // Full-width row near the pane's lower half: open downward like
-                // an accordion. Radix flips to "top" if the area below is tight.
-                side="bottom"
-                align="start"
-              >
-                {/* DESIGN NOTE: unlike these inline rows, the popover's rows show
-                  the open-source-note action for native (autosave-off) chats
-                  too — pre-existing shared ChatHistoryPopover behavior (same
-                  exposure as the control bar's History button; the click
-                  degrades to a "no saved note" notice). Hiding it would mean a
-                  per-row visibility prop on the shared popover — tracked as
-                  shared-popover debt, not worth an entry-point hack here.
-
-                  Radix merges its toggle onClick onto this child; Enter/Space
-                  dispatch a click so the popover opens for keyboard users
-                  without this row owning the popover's open state.
-
-                  DESIGN NOTE: onLoadHistory runs on every toggle (open *and*
-                  close), because Radix fires the merged onClick both ways and
-                  this row can't see the popover's open state. That's an
-                  intentional, harmless refresh — the same pattern the
-                  conversation control bar uses on its History button
-                  (AgentChatControls). loadChatHistory is mounted-guarded and
-                  self-correcting, so a fast open/close race only momentarily
-                  shows near-identical data. A "refresh only on open" fix would
-                  need ChatHistoryPopover to expose onOpenChange — not worth
-                  touching the shared base for this. */}
-                <AgentHomeViewAllTrigger label="chats" onClick={() => onLoadHistory?.()} />
-              </ChatHistoryPopover>
-            ) : undefined
-          }
-        >
+        <AgentHomePreviewList hasMoreItems={false}>
           <div className="tw-flex tw-flex-col tw-divide-y tw-divide-border">
-            {visibleItems.map((item) => (
+            {filteredItems.map((item) => (
               <RecentChatRow
                 key={item.id}
                 item={item}
