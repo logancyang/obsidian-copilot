@@ -65,5 +65,3 @@ export function AgentLandingStack({
     </>
   );
 }
-
-export default AgentLandingStack;
