@@ -2,6 +2,7 @@ import { useCallback, useMemo, useSyncExternalStore } from "react";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import { modeStateSignature } from "@/agentMode/session/translateBackendState";
 import type { CopilotMode } from "@/agentMode/session/types";
+import { t } from "@/i18n";
 import { buildAgentModePicker } from "./agentModePickerHelpers";
 import { useManagerSubscribe } from "./useManagerSubscribe";
 
@@ -10,6 +11,11 @@ export interface AgentModePickerOverride {
   value: CopilotMode | null;
   onChange: (value: CopilotMode) => void;
   disabled?: boolean;
+  copy?: {
+    label: string;
+    tooltip: string;
+    display: Partial<Record<CopilotMode, { label: string; description: string }>>;
+  };
 }
 
 /**
@@ -58,6 +64,28 @@ export function useAgentModePicker(
     // `signal` is the memo invalidator — referenced here so
     // react-hooks/exhaustive-deps accepts it in the dep array.
     void signal;
-    return buildAgentModePicker({ manager });
+    const picker = buildAgentModePicker({ manager });
+    if (!picker) return null;
+    return {
+      ...picker,
+      copy: {
+        label: t("agentChat.mode.label"),
+        tooltip: t("agentChat.mode.tooltip"),
+        display: {
+          default: {
+            label: t("agentChat.mode.safe"),
+            description: t("agentChat.mode.safeDescription"),
+          },
+          auto: {
+            label: t("agentChat.mode.auto"),
+            description: t("agentChat.mode.autoDescription"),
+          },
+          plan: {
+            label: t("agentChat.mode.plan"),
+            description: t("agentChat.mode.planDescription"),
+          },
+        },
+      },
+    };
   }, [manager, signal]);
 }

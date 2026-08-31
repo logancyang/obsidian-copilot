@@ -10,6 +10,7 @@ import { getCachedProjectRecordById } from "@/projects/state";
 import { FolderSearch, Pencil, Trash2 } from "lucide-react";
 import { App, Notice, TFolder } from "obsidian";
 import React, { memo } from "react";
+import { t } from "@/i18n";
 
 /**
  * Reveal a project's folder in Obsidian's file explorer via the internal
@@ -38,7 +39,7 @@ export function revealProjectFolder(app: App, project: ProjectConfig): void {
       return;
     }
   }
-  new Notice(`Can't reveal "${project.name}" — its folder isn't visible in the file explorer.`);
+  new Notice(t("agentChat.projects.revealFailed", { project: project.name }));
 }
 
 interface AgentProjectRowActionsProps {
@@ -97,13 +98,13 @@ export const AgentProjectRowActions = memo(
             onDeleted?.(project.id);
           } catch (e) {
             logError("[AgentProjectRowActions] deleteProject failed", e);
-            new Notice(`Failed to delete project "${project.name}".`);
+            new Notice(t("agentChat.projects.deleteFailed", { project: project.name }));
           }
         },
-        `Delete project "${project.name}"? This removes its configuration; your notes stay in the vault.`,
-        "Delete project",
-        "Delete",
-        "Cancel"
+        `${t("agentChat.projects.deleteTitle", { project: project.name })} ${t("agentChat.projects.deleteDescription")}`,
+        t("agentChat.projects.deleteAction"),
+        t("settings.actions.delete"),
+        t("settings.actions.cancel")
       ).open();
     };
 
@@ -112,8 +113,8 @@ export const AgentProjectRowActions = memo(
         <Button
           size="sm"
           variant="ghost"
-          aria-label={`Reveal ${project.name} in vault`}
-          title="Reveal in vault"
+          aria-label={t("agentChat.projects.revealProject", { project: project.name })}
+          title={t("agentChat.projects.reveal")}
           className="tw-size-5 tw-p-0"
           onClick={(e) => {
             e.stopPropagation();
@@ -125,8 +126,8 @@ export const AgentProjectRowActions = memo(
         <Button
           size="sm"
           variant="ghost"
-          aria-label={`Edit project ${project.name}`}
-          title="Edit project"
+          aria-label={t("agentChat.projects.editProject", { project: project.name })}
+          title={t("agentChat.projects.edit")}
           className="tw-size-5 tw-p-0"
           onClick={(e) => {
             e.stopPropagation();
@@ -138,8 +139,8 @@ export const AgentProjectRowActions = memo(
         <Button
           size="sm"
           variant="ghost"
-          aria-label={`Delete project ${project.name}`}
-          title="Delete"
+          aria-label={t("agentChat.projects.deleteProject", { project: project.name })}
+          title={t("settings.actions.delete")}
           className="tw-size-5 tw-p-0 tw-text-error hover:tw-text-error"
           onClick={(e) => {
             e.stopPropagation();

@@ -3,7 +3,7 @@ import { GLOBAL_SCOPE } from "@/agentMode/session/scope";
 import { expandCustomCommandPrefix } from "@/agentMode/session/expandCustomCommandPrefix";
 import { resolveActiveNoteToken } from "@/agentMode/session/resolveActiveNoteToken";
 import type { PromptContent } from "@/agentMode/session/types";
-import { AGENT_PROMPT_SUGGESTIONS } from "@/agentMode/ui/agentPromptSuggestions";
+import { getAgentPromptSuggestions } from "@/agentMode/ui/agentPromptSuggestions";
 import type {
   AgentInputDraftControls,
   QueuedAgentMessage,
@@ -568,7 +568,7 @@ export const AgentChatInput = memo(function AgentChatInput({
           // the placeholder slot only exists while it is, so a landing can
           // offer suggestions unconditionally and get "gone while they type,
           // back once they clear it" for free.
-          placeholderPrompts={isLanding ? AGENT_PROMPT_SUGGESTIONS : undefined}
+          placeholderPrompts={isLanding ? getAgentPromptSuggestions() : undefined}
           inputMessage={inputMessage}
           setInputMessage={setInputMessage}
           handleSendMessage={safeAsyncHandler((meta) => handleSendMessage(meta?.webTabs))}

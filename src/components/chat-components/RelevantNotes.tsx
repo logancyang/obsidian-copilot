@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { TFile } from "obsidian";
 import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { t } from "@/i18n";
 
 function useRelevantNotes(refresher: number) {
   const app = useApp();
@@ -204,7 +205,9 @@ function RelevantNoteHoverCard({
 
         {similarity != null && (
           <div className="tw-flex tw-items-center tw-gap-2">
-            <span className="tw-shrink-0 tw-text-xs tw-text-faint">Similarity</span>
+            <span className="tw-shrink-0 tw-text-xs tw-text-faint">
+              {t("agentChat.relevant.similarity")}
+            </span>
             <RelevanceMeter score={similarity} className="tw-h-1 tw-flex-1" />
             <span className="tw-shrink-0 tw-text-xs tw-font-medium tw-tabular-nums tw-text-normal">
               {(similarity * 100).toFixed(1)}%
@@ -217,13 +220,13 @@ function RelevantNoteHoverCard({
             {note.metadata.hasOutgoingLinks && (
               <span className="tw-flex tw-items-center tw-gap-1">
                 <FileOutput className="tw-size-3.5" />
-                Outgoing links
+                {t("agentChat.relevant.outgoing_other", { count: 2 })}
               </span>
             )}
             {note.metadata.hasBacklinks && (
               <span className="tw-flex tw-items-center tw-gap-1">
                 <FileInput className="tw-size-3.5" />
-                Backlinks
+                {t("agentChat.relevant.backlink_other", { count: 2 })}
               </span>
             )}
           </div>
@@ -237,7 +240,7 @@ function RelevantNoteHoverCard({
             className="tw-flex-1 tw-gap-1.5"
           >
             <PlusCircle className="tw-size-4" />
-            Add to Chat
+            {t("agentChat.relevant.addToChat")}
           </Button>
           <Button
             variant="default"
@@ -245,7 +248,7 @@ function RelevantNoteHoverCard({
             onClick={onNavigateToNote}
             className="tw-flex-1 tw-gap-1.5"
           >
-            Open note
+            {t("agentChat.relevant.openNote")}
             <ArrowRight className="tw-size-4" />
           </Button>
         </div>
@@ -300,10 +303,16 @@ function RelevantNoteRow({
 
           <div className="tw-flex tw-shrink-0 tw-items-center tw-gap-1.5 group-hover:tw-hidden">
             {note.metadata.hasOutgoingLinks && (
-              <LinkBadge icon={<FileOutput className="tw-size-3" />} label="Outgoing link" />
+              <LinkBadge
+                icon={<FileOutput className="tw-size-3" />}
+                label={t("agentChat.relevant.outgoing_one", { count: 1 })}
+              />
             )}
             {note.metadata.hasBacklinks && (
-              <LinkBadge icon={<FileInput className="tw-size-3" />} label="Backlink" />
+              <LinkBadge
+                icon={<FileInput className="tw-size-3" />}
+                label={t("agentChat.relevant.backlink_one", { count: 1 })}
+              />
             )}
             {similarity != null && (
               <span className="tw-text-xs tw-font-medium tw-tabular-nums tw-text-muted">
@@ -316,7 +325,7 @@ function RelevantNoteRow({
             <Button
               variant="ghost2"
               size="icon"
-              title="Add to Chat"
+              title={t("agentChat.relevant.addToChat")}
               className="tw-size-6 tw-p-0"
               onClick={(e) => {
                 e.stopPropagation();
@@ -328,7 +337,7 @@ function RelevantNoteRow({
             <Button
               variant="ghost2"
               size="icon"
-              title="Open note"
+              title={t("agentChat.relevant.openNote")}
               className="tw-size-6 tw-p-0"
               onClick={(e) => {
                 e.stopPropagation();
@@ -358,7 +367,7 @@ function RelevantNotesToolbar({
   return (
     <div className="tw-flex tw-flex-none tw-items-center tw-gap-2 tw-border-0 tw-border-b tw-border-solid tw-border-border tw-px-3 tw-py-2">
       <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-1.5 tw-text-xs tw-text-faint">
-        <span className="tw-shrink-0">Relevant to</span>
+        <span className="tw-shrink-0">{t("agentChat.relevant.relevantTo")}</span>
         {activeFileName ? (
           <span className="tw-flex tw-min-w-0 tw-items-center tw-gap-1 tw-text-muted">
             <FileText className="tw-size-3.5 tw-shrink-0" />
@@ -376,7 +385,7 @@ function RelevantNotesToolbar({
         className="tw-ml-auto tw-shrink-0 tw-gap-1.5"
       >
         <RefreshCw className={cn("tw-size-3.5", isBuilding && "tw-animate-spin")} />
-        {isBuilding ? "Building…" : "Build index"}
+        {isBuilding ? t("agentChat.relevant.building") : t("agentChat.relevant.buildIndex")}
       </Button>
     </div>
   );
@@ -387,11 +396,13 @@ function BuildOverlay({ indexedCount, totalFiles }: { indexedCount: number; tota
   return (
     <div className="tw-absolute tw-inset-0 tw-flex tw-flex-col tw-items-center tw-justify-center tw-gap-4 tw-px-10 tw-text-center tw-backdrop-blur-sm tw-bg-primary/90">
       <Loader2 className="tw-size-6 tw-animate-spin tw-text-accent" />
-      <span className="tw-text-sm tw-font-semibold tw-text-normal">Indexing your vault</span>
+      <span className="tw-text-sm tw-font-semibold tw-text-normal">
+        {t("agentChat.relevant.indexing")}
+      </span>
       <Progress value={progress} className="tw-h-1 tw-w-48" />
       {totalFiles > 0 && (
         <span className="tw-text-xs tw-tabular-nums tw-text-faint">
-          {indexedCount} / {totalFiles} notes embedded
+          {t("agentChat.relevant.embedded", { indexed: indexedCount, total: totalFiles })}
         </span>
       )}
     </div>
@@ -478,11 +489,10 @@ export const RelevantNotes = memo(
               </div>
               <div className="tw-flex tw-flex-col tw-gap-1.5">
                 <span className="tw-text-lg tw-font-semibold tw-text-normal">
-                  This note is excluded
+                  {t("agentChat.relevant.excludedTitle")}
                 </span>
                 <span className="tw-text-sm tw-text-muted">
-                  It falls outside your semantic index settings, so related notes can&apos;t be
-                  shown here. Adjust inclusions or exclusions in Copilot settings to include it.
+                  {t("agentChat.relevant.excludedDescription")}
                 </span>
               </div>
             </div>
@@ -500,10 +510,10 @@ export const RelevantNotes = memo(
               </div>
               <div className="tw-flex tw-flex-col tw-gap-1.5">
                 <span className="tw-text-lg tw-font-semibold tw-text-normal">
-                  No semantic index yet
+                  {t("agentChat.relevant.noIndex")}
                 </span>
                 <span className="tw-text-sm tw-text-muted">
-                  {"Build it once to surface notes related to whatever you're writing."}
+                  {t("agentChat.relevant.noIndexDescription")}
                 </span>
               </div>
               <div className="tw-flex tw-w-full tw-flex-col tw-items-center tw-gap-3">
@@ -513,7 +523,7 @@ export const RelevantNotes = memo(
                   className="tw-h-11 tw-w-full tw-gap-2 tw-rounded-lg"
                 >
                   <GitFork className="tw-size-4" />
-                  Build index
+                  {t("agentChat.relevant.buildIndex")}
                 </Button>
               </div>
             </div>
@@ -531,7 +541,9 @@ export const RelevantNotes = memo(
               <div className="tw-absolute tw-inset-0 tw-overflow-y-auto tw-p-2">
                 {relevantNotes.length === 0 ? (
                   <div className="tw-flex tw-h-full tw-items-center tw-justify-center tw-px-4 tw-text-center">
-                    <span className="tw-text-sm tw-text-muted">No relevant notes found</span>
+                    <span className="tw-text-sm tw-text-muted">
+                      {t("agentChat.relevant.empty")}
+                    </span>
                   </div>
                 ) : (
                   <div className="tw-flex tw-flex-col tw-gap-0.5">

@@ -3,6 +3,7 @@ import { computeVerticalPlacement } from "@/utils/panelPlacement";
 import * as React from "react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { t } from "@/i18n";
 
 interface CreateProjectPanelProps {
   /** The clicked trigger ("+ New project" row or Welcome button) to anchor to. */
@@ -117,15 +118,15 @@ export function CreateProjectPanel({
     <div
       ref={panelRef}
       role="dialog"
-      aria-label="New project"
+      aria-label={t("agentChat.home.newProject")}
       className="tw-fixed tw-z-popover tw-w-[260px] tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-primary tw-p-3 tw-shadow-lg"
       // Dynamic pixel position (computed from the anchor) — inline style is the
       // established pattern for this in `command-ui/draggable-modal.tsx`.
       style={{ top: position.top, left: position.left }}
     >
       <AgentProjectCreateForm
-        title="New project"
-        subtitle="Create a new project in your vault"
+        title={t("agentChat.home.newProject")}
+        subtitle={t("agentChat.home.createProjectDescription")}
         onSave={onSave}
         onCancel={onClose}
       />

@@ -1,6 +1,6 @@
 import { EMPTY_AGENT_MENTION_BRANDS } from "@/components/chat-components/hooks/useAtMentionCategories";
 import { AgentChatInput } from "@/agentMode/ui/AgentChatInput";
-import { AGENT_PROMPT_SUGGESTIONS } from "@/agentMode/ui/agentPromptSuggestions";
+import { getAgentPromptSuggestions } from "@/agentMode/ui/agentPromptSuggestions";
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
 import type { AgentInputDraftControls } from "@/agentMode/ui/hooks/useAgentInputDrafts";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -188,7 +188,7 @@ describe("AgentChatInput", () => {
 
     it("offers the sample prompts on an untouched landing", () => {
       renderInput(backend(), makeDraft({ input: "" }), { isLanding: true });
-      expect(capturedPlaceholderPrompts).toBe(AGENT_PROMPT_SUGGESTIONS);
+      expect(capturedPlaceholderPrompts).toBe(getAgentPromptSuggestions());
     });
 
     it("withholds them in a conversation, where the composer is no longer a landing", () => {
@@ -206,7 +206,7 @@ describe("AgentChatInput", () => {
         inputNode(chat, makeDraft({ input: "Summarize my week" }), { isLanding: true })
       );
       view.rerender(inputNode(chat, makeDraft({ input: "" }), { isLanding: true }));
-      expect(capturedPlaceholderPrompts).toBe(AGENT_PROMPT_SUGGESTIONS);
+      expect(capturedPlaceholderPrompts).toBe(getAgentPromptSuggestions());
     });
   });
 

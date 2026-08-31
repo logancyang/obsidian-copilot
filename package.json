@@ -137,6 +137,7 @@
     "lexical": "^0.34.0",
     "lucide-react": "^0.462.0",
     "luxon": "^3.5.0",
+    "lz-string": "1.5.0",
     "minisearch": "^7.2.0",
     "openai": "^6.41.0",
     "react": "^18.2.0",

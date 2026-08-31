@@ -5,6 +5,7 @@ import { useApp } from "@/context";
 import { cn } from "@/lib/utils";
 import { ExternalLink, X } from "lucide-react";
 import React, { useState } from "react";
+import { t } from "@/i18n";
 
 interface RelevantNotesShelfPanelProps {
   /** Open the dedicated Relevant Notes pane (the shelf is transient). */
@@ -37,9 +38,7 @@ export function RelevantNotesShelfPanel({ onPopOut, onAddToChat }: RelevantNotes
             "tw-border-border tw-bg-secondary tw-px-2 tw-py-1.5 tw-text-ui-smaller tw-text-muted"
           )}
         >
-          <span className="tw-min-w-0 tw-flex-1">
-            Open Relevant Notes in its own pane to keep it while you chat.
-          </span>
+          <span className="tw-min-w-0 tw-flex-1">{t("agentChat.relevant.hint")}</span>
           <Button
             variant="ghost2"
             size="fit"
@@ -47,14 +46,14 @@ export function RelevantNotesShelfPanel({ onPopOut, onAddToChat }: RelevantNotes
             onClick={onPopOut}
           >
             <ExternalLink className="tw-size-3" />
-            Open pane
+            {t("agentChat.relevant.openPane")}
           </Button>
           <Button
             variant="ghost2"
             size="fit"
             className={cn("tw-shrink-0 tw-text-muted", "hover:tw-text-normal")}
             onClick={handleDismiss}
-            aria-label="Dismiss hint"
+            aria-label={t("agentChat.relevant.dismissHint")}
           >
             <X className="tw-size-3" />
           </Button>

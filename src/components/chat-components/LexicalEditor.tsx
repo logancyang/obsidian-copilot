@@ -74,6 +74,8 @@ interface LexicalEditorProps {
   onAgentsChange?: (backendIds: string[]) => void;
   /** Installed coding agents mentionable in the composer (Agent Mode only). */
   agentBrands?: ReadonlyArray<AgentMentionBrand>;
+  /** Whether shared typeahead chrome should use Agent interface translations. */
+  isAgentMode?: boolean;
   /** Cloud (non-self-hostable) agent backend ids — the full registry set, not
    *  just installed ones, so a stale/pasted pill still resolves. Drives the
    *  Self-Host cloud-egress warning on agent pills. */
@@ -114,6 +116,7 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
   onActiveWebTabRemoved,
   onAgentsChange,
   agentBrands = EMPTY_AGENT_MENTION_BRANDS,
+  isAgentMode = false,
   cloudAgentIds = EMPTY_CLOUD_AGENT_IDS,
   onEditorReady,
   onImagePaste,
@@ -283,6 +286,7 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
               showTools={showTools}
               currentActiveFile={currentActiveFile}
               agentBrands={agentBrands}
+              localizeAgentUi={isAgentMode}
             />
             <TextInsertionPlugin />
           </div>

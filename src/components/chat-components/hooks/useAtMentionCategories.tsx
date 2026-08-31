@@ -4,6 +4,7 @@ import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { FileText, Wrench, Folder, Globe, Image, Bot } from "lucide-react";
 import { TypeaheadOption } from "@/components/chat-components/TypeaheadMenuContent";
 import type { WebTabContext } from "@/types/message";
+import { t } from "@/i18n";
 
 export type AtMentionCategory =
   | "agents"
@@ -114,11 +115,14 @@ export function shouldShowAtMentionTools(args: {
  *   signals (e.g. Copilot Plus on, Agent Mode off).
  * @param showAgents - Whether to include the Agents category (Agent Mode with
  *   at least one installed backend). Rendered first when present.
+ * @param localizeAgentUi - Whether Agent Mode should use localized category copy. Quick Chat
+ * remains unchanged for https://github.com/Brevilabs/obsidian-copilot-private/issues/326.
  * @returns Array of CategoryOption objects
  */
 export function useAtMentionCategories(
   showTools: boolean = false,
-  showAgents: boolean = false
+  showAgents: boolean = false,
+  localizeAgentUi: boolean = false
 ): CategoryOption[] {
   return useMemo(() => {
     const base = CATEGORY_OPTIONS.filter((cat) => {
@@ -129,7 +133,24 @@ export function useAtMentionCategories(
         return isDesktopRuntime();
       }
       return true;
+    }).map((cat) => {
+      if (!localizeAgentUi) return cat;
+      const keys: Partial<Record<AtMentionCategory, [string, string]>> = {
+        notes: ["agentChat.context.notes", "agentChat.context.notesDescription"],
+        webTabs: ["agentChat.context.webTabs", "agentChat.context.webTabsDescription"],
+        folders: ["agentChat.context.folders", "agentChat.context.foldersDescription"],
+        images: ["agentChat.context.images", "agentChat.context.imagesDescription"],
+      };
+      const key = keys[cat.category];
+      return key ? { ...cat, title: t(key[0]), subtitle: t(key[1]) } : cat;
     });
-    return showAgents ? [AGENTS_CATEGORY, ...base] : base;
-  }, [showTools, showAgents]);
+    const agentsCategory = localizeAgentUi
+      ? {
+          ...AGENTS_CATEGORY,
+          title: t("agentChat.context.agents"),
+          subtitle: t("agentChat.context.agentsDescription"),
+        }
+      : AGENTS_CATEGORY;
+    return showAgents ? [agentsCategory, ...base] : base;
+  }, [showTools, showAgents, localizeAgentUi]);
 }

@@ -10,11 +10,23 @@ import {
 import type { CopilotMode } from "@/agentMode";
 import { cn } from "@/lib/utils";
 
+interface ModeDisplayCopy {
+  label: string;
+  description: string;
+}
+
+interface ModePickerCopy {
+  label: string;
+  tooltip: string;
+  display: Partial<Record<CopilotMode, ModeDisplayCopy>>;
+}
+
 export interface ModePickerOverride {
   options: { label: string; value: CopilotMode }[];
   value: CopilotMode | null;
   onChange: (value: CopilotMode) => void;
   disabled?: boolean;
+  copy?: ModePickerCopy;
 }
 
 interface ModePickerProps {
@@ -25,7 +37,7 @@ interface ModePickerProps {
 /**
  * Display copy keyed by canonical `CopilotMode`.
  */
-const MODE_DISPLAY: Record<CopilotMode, { label: string; description: string }> = {
+const DEFAULT_MODE_DISPLAY: Record<CopilotMode, ModeDisplayCopy> = {
   auto: {
     label: "Auto",
     description: "Uses the agent's Auto permissions for tools and edits.",
@@ -45,13 +57,17 @@ const MODE_DISPLAY: Record<CopilotMode, { label: string; description: string }> 
  * that names a mode (currently this picker's trigger) shows the same copy for a
  * given `CopilotMode` — falls back to the raw value for any unmapped mode.
  */
-export function getModeLabel(value: CopilotMode): string {
-  return MODE_DISPLAY[value]?.label ?? value;
+export function getModeLabel(
+  value: CopilotMode,
+  displayCopy: Partial<Record<CopilotMode, ModeDisplayCopy>> = DEFAULT_MODE_DISPLAY
+): string {
+  return displayCopy[value]?.label ?? value;
 }
 
 export function ModePicker({ override, className }: ModePickerProps) {
-  const { options, value, onChange, disabled } = override;
-  const triggerLabel = value ? getModeLabel(value) : "Mode";
+  const { options, value, onChange, disabled, copy } = override;
+  const displayCopy = copy?.display ?? DEFAULT_MODE_DISPLAY;
+  const triggerLabel = value ? getModeLabel(value, displayCopy) : (copy?.label ?? "Mode");
 
   return (
     <DropdownMenu>
@@ -68,7 +84,7 @@ export function ModePicker({ override, className }: ModePickerProps) {
               "tw-text-red/70 hover:tw-text-red/100 focus-visible:tw-text-red/100",
             className
           )}
-          title="Operational mode"
+          title={copy?.tooltip ?? "Operational mode"}
         >
           <span className="tw-truncate">{triggerLabel}</span>
           {!disabled && <ChevronDown className="tw-mt-0.5 tw-size-4 tw-shrink-0" />}
@@ -76,7 +92,7 @@ export function ModePicker({ override, className }: ModePickerProps) {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="tw-w-[320px]">
         {options.map((opt) => {
-          const display = MODE_DISPLAY[opt.value];
+          const display = displayCopy[opt.value];
           const isActive = value === opt.value;
           return (
             <DropdownMenuItem
@@ -91,7 +107,7 @@ export function ModePicker({ override, className }: ModePickerProps) {
                 <span className="tw-text-sm tw-font-medium tw-text-normal">
                   {display?.label ?? opt.label}
                 </span>
-                {display?.description && (
+                {display && (
                   <span className="tw-text-xs tw-leading-snug tw-text-muted">
                     {display.description}
                   </span>

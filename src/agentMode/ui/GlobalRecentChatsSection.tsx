@@ -22,6 +22,7 @@ import React, {
   useState,
 } from "react";
 import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
+import { t } from "@/i18n";
 
 /** Stable noop for rows that aren't being renamed (they never invoke onSaveEdit). */
 const NOOP_SAVE = (): void => {};
@@ -252,7 +253,7 @@ const RecentChatRow = memo(function RecentChatRow({
               "tw-size-3.5 tw-shrink-0 tw-animate-spin tw-text-accent",
               "group-focus-within:tw-hidden group-hover:tw-hidden"
             )}
-            aria-label="Running"
+            aria-label={t("agentChat.recent.running")}
           />
         ) : (
           <span
@@ -273,7 +274,7 @@ const RecentChatRow = memo(function RecentChatRow({
                   onConfirmDelete(item.id);
                 }}
                 className="tw-size-5 tw-p-0 tw-text-error hover:tw-text-error"
-                title="Confirm delete"
+                title={t("agentChat.recent.confirmDelete")}
               >
                 <Check className="tw-size-3" />
               </Button>
@@ -285,7 +286,7 @@ const RecentChatRow = memo(function RecentChatRow({
                   onCancelDelete();
                 }}
                 className="tw-size-5 tw-p-0"
-                title="Cancel"
+                title={t("settings.actions.cancel")}
               >
                 <X className="tw-size-3" />
               </Button>
@@ -301,7 +302,7 @@ const RecentChatRow = memo(function RecentChatRow({
                     onOpenSourceFile(item.id);
                   }}
                   className="tw-size-5 tw-p-0"
-                  title="Open source note"
+                  title={t("agentChat.recent.openSource")}
                 >
                   <ArrowUpRight className="tw-size-4" />
                 </Button>
@@ -314,7 +315,7 @@ const RecentChatRow = memo(function RecentChatRow({
                   onStartEdit(item.id, item.title);
                 }}
                 className="tw-size-5 tw-p-0"
-                title="Rename"
+                title={t("agentChat.recent.rename")}
               >
                 <Edit2 className="tw-size-3" />
               </Button>
@@ -326,7 +327,7 @@ const RecentChatRow = memo(function RecentChatRow({
                   onStartDelete(item.id);
                 }}
                 className="tw-size-5 tw-p-0 tw-text-error hover:tw-text-error"
-                title="Delete"
+                title={t("settings.actions.delete")}
               >
                 <Trash2 className="tw-size-3" />
               </Button>
@@ -496,7 +497,7 @@ export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
           <SearchBar
             value={query}
             onChange={setQuery}
-            placeholder="Search chats..."
+            placeholder={t("agentChat.recent.search")}
             inputClassName="!tw-h-7"
           />
         </div>
@@ -504,10 +505,10 @@ export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
       {filteredItems.length === 0 ? (
         <div className="tw-flex tw-flex-1 tw-items-center tw-justify-center tw-px-2 tw-py-1.5 tw-text-xs tw-text-muted">
           {items.length > 0
-            ? "No matching chats"
+            ? t("agentChat.recent.noMatches")
             : variant === "project"
-              ? "No chats in this project yet"
-              : "No recent chats"}
+              ? t("agentChat.recent.emptyProject")
+              : t("agentChat.recent.empty")}
         </div>
       ) : (
         <AgentHomePreviewList hasMoreItems={false}>

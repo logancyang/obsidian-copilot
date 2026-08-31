@@ -14,6 +14,7 @@ import { filterProjects } from "@/utils/projectUtils";
 import { RecentUsageManager, sortByStrategy, type SortStrategy } from "@/utils/recentUsageManager";
 import { App } from "obsidian";
 import React, { memo, useMemo, useState } from "react";
+import { t } from "@/i18n";
 
 // Reason: the landing surfaces a fixed most-recently-used order with no switcher
 // and never writes the strategy back to settings.
@@ -147,10 +148,12 @@ export const ProjectPickerList = memo(
           className
         )}
       >
-        {onCreate && <AgentHomeCreateRow label="New project" onClick={onCreate} />}
+        {onCreate && (
+          <AgentHomeCreateRow label={t("agentChat.home.newProject")} onClick={onCreate} />
+        )}
         {total === 0 ? (
           <div className="tw-flex tw-flex-1 tw-items-center tw-justify-center tw-px-2 tw-py-1.5 tw-text-xs tw-text-muted">
-            No projects available
+            {t("agentChat.projects.empty")}
           </div>
         ) : (
           <AgentHomePreviewList
@@ -160,12 +163,13 @@ export const ProjectPickerList = memo(
                 items={sortedProjects}
                 total={total}
                 label="projects"
-                popoverTitle="All projects"
+                triggerText={t("agentChat.projects.viewAll")}
+                popoverTitle={t("agentChat.projects.all")}
                 searchValue={searchQuery}
                 onSearch={setSearchQuery}
                 filter={filterProjects}
-                searchPlaceholder="Search projects"
-                emptyMessage="No matching projects"
+                searchPlaceholder={t("agentChat.projects.search")}
+                emptyMessage={t("agentChat.projects.noMatches")}
                 renderRow={(project, close) => (
                   <ProjectRow
                     key={project.id}

@@ -836,6 +836,7 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
               onActiveWebTabAdded={handleActiveWebTabAdded}
               onActiveWebTabRemoved={handleActiveWebTabRemoved}
               agentBrands={agentBrands}
+              isAgentMode={isAgentMode}
               cloudAgentIds={cloudAgentIds}
               onAgentsChange={handleAgentsChange}
               onEditorReady={onEditorReady}
@@ -877,6 +878,7 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
               showTools={showAtMentionTools}
               currentActiveFile={currentActiveNote}
               lexicalEditorRef={lexicalEditorRef}
+              isAgentMode={isAgentMode}
             />
           )}
           {modelPickerOverride?.effortOptionsByModelKey && modelPickerOverride.commitSelection ? (

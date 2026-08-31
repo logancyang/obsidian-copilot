@@ -21,6 +21,7 @@ interface AtMentionTypeaheadProps {
   /** Whether to surface Copilot built-in `@` tools (category + search hits). */
   showTools?: boolean;
   currentActiveFile?: TFile | null;
+  isAgentMode?: boolean;
 }
 
 // Type guard functions
@@ -39,6 +40,7 @@ export function AtMentionTypeahead({
   isCopilotPlus = false,
   showTools = false,
   currentActiveFile = null,
+  isAgentMode = false,
 }: AtMentionTypeaheadProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -51,7 +53,7 @@ export function AtMentionTypeahead({
   const [prevIsOpen, setPrevIsOpen] = useState(isOpen);
   const [prevResultsLength, setPrevResultsLength] = useState(0);
 
-  const availableCategoryOptions = useAtMentionCategories(showTools);
+  const availableCategoryOptions = useAtMentionCategories(showTools, false, isAgentMode);
 
   // Get search results based on current state using unified search
   const searchResults = useAtMentionSearch(
@@ -61,7 +63,9 @@ export function AtMentionTypeahead({
     isCopilotPlus,
     showTools,
     availableCategoryOptions,
-    currentActiveFile
+    currentActiveFile,
+    undefined,
+    isAgentMode
   );
 
   // Handle selection
@@ -211,6 +215,8 @@ export function AtMentionTypeahead({
       searchQuery={searchQuery}
       onSearchChange={handleSearchChange}
       onKeyDown={handleKeyDown}
+      searchPlaceholder={isAgentMode ? "agentChat.context.search" : undefined}
+      previewLabel={isAgentMode ? "agentChat.context.preview" : undefined}
     />
   );
 }

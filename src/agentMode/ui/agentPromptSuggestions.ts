@@ -9,17 +9,20 @@
  * verbatim when accepted), and free of any assumption about how a vault is
  * organized — every one has to make sense in a stranger's notes.
  */
-export const AGENT_PROMPT_SUGGESTIONS: readonly string[] = Object.freeze([
-  "Summarize what I worked on this week",
-  "Turn my meeting notes into a task list with links",
-  "Find notes that say contradictory things and show me",
-  "Draft a note that connects my recent reading",
-  "Rename my untitled notes based on what's in them",
-  "Pull every open question out of my notes",
-  "Find near-duplicate notes and suggest which to merge",
-  "Rewrite the current note as a step-by-step guide",
-  "Build an index note linking everything on one theme",
-  "Clean up the headings and formatting across my notes",
-  "Tell me what my notes are missing on a topic I care about",
-  "Read this note and give me three sharper questions",
-]);
+import { t } from "@/i18n";
+
+let promptSource: string | undefined;
+let agentPromptSuggestions: readonly string[] = Object.freeze([]);
+
+/** Return the reviewed, locale-specific Agent Home discovery prompts. */
+export function getAgentPromptSuggestions(): readonly string[] {
+  const source = t("agentChat.home.promptSuggestions");
+  // A locale catalog can replace an English fallback after initialization, while unchanged
+  // copy must keep one stable array reference for React callers.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/326
+  if (source !== promptSource) {
+    promptSource = source;
+    agentPromptSuggestions = Object.freeze(source.split("|"));
+  }
+  return agentPromptSuggestions;
+}
