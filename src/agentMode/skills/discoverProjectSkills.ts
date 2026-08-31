@@ -135,7 +135,6 @@ export async function discoverProjectSkills(
                 dirPath: entryAbs,
                 reason,
                 offendingText: err.offendingText,
-                suggestion: err.suggestion,
               };
             }
             return null;

@@ -505,7 +505,6 @@ describe("SkillManager orchestration", () => {
       filePath: "/vault/copilot/skills/broken-skill/SKILL.md",
       dirPath: "/vault/copilot/skills/broken-skill",
       reason: "The description must be quoted.",
-      suggestion: 'description: "Use this skill for: reviewing notes"',
     };
     mockedDiscoverManagedSkills.mockResolvedValueOnce(discoveryResult([], [rejected]));
     mockedDiscoverManagedSkills.mockResolvedValueOnce(discoveryResult());

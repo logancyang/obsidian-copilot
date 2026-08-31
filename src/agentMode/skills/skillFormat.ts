@@ -68,7 +68,6 @@ function splitFrontmatter(content: string): { yaml: string; body: string } {
 export class SkillFormatError extends Error {
   constructor(
     message: string,
-    readonly suggestion?: string,
     readonly offendingText?: string
   ) {
     super(message);
@@ -89,7 +88,6 @@ function yamlFormatError(
     if (descriptionLine?.[1] !== undefined && descriptionLine[2] !== undefined) {
       return new SkillFormatError(
         'The description contains ": " and must be quoted.',
-        `description: ${JSON.stringify(descriptionLine[2])}`,
         descriptionLine[1]
       );
     }
@@ -99,7 +97,6 @@ function yamlFormatError(
   const offendingText = errorLine === undefined ? undefined : yaml.split(/\r?\n/)[errorLine - 1];
   return new SkillFormatError(
     `SKILL.md frontmatter YAML is invalid: ${error.message}`,
-    undefined,
     offendingText
   );
 }
@@ -107,23 +104,6 @@ function yamlFormatError(
 /** Preserve the exact frontmatter line that failed validation when it exists. */
 function frontmatterLine(yaml: string, key: string): string | undefined {
   return new RegExp(`^${key}:[^\\r\\n]*$`, "m").exec(yaml)?.[0];
-}
-
-/** Suggest a spec-safe file and folder name when the repair is unambiguous. */
-function nameFixSuggestion(parentDirName: string): string | undefined {
-  if (parentDirName.length <= NAME_MAX && NAME_RE.test(parentDirName)) {
-    return `name: ${parentDirName}`;
-  }
-
-  const normalized = parentDirName
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  if (!normalized || normalized.length > NAME_MAX) {
-    return undefined;
-  }
-  return `name: ${normalized}\nfolder: ${normalized}/`;
 }
 
 /** Read a top-level string scalar from a YAML Document, or return undefined. */
@@ -174,10 +154,7 @@ export function parseSkillFile(content: string, parentDirName: string): ParsedSk
 
   const name = readString(doc, "name");
   if (!name) {
-    throw new SkillFormatError(
-      "SKILL.md frontmatter is missing required field `name`",
-      nameFixSuggestion(parentDirName)
-    );
+    throw new SkillFormatError("SKILL.md frontmatter is missing required field `name`");
   }
   validateName(name, parentDirName, frontmatterLine(yaml, "name"));
 
@@ -210,28 +187,19 @@ export function parseSkillFile(content: string, parentDirName: string): ParsedSk
  */
 export function validateName(name: string, parentDirName: string, offendingText?: string): void {
   if (typeof name !== "string" || name.length === 0) {
-    throw new SkillFormatError("Skill `name` must be a non-empty string", undefined, offendingText);
+    throw new SkillFormatError("Skill `name` must be a non-empty string", offendingText);
   }
   if (name.length > NAME_MAX) {
     throw new SkillFormatError(
       `Skill \`name\` must be at most ${NAME_MAX} characters (got ${name.length})`,
-      undefined,
       offendingText
     );
   }
   if (!NAME_RE.test(name)) {
-    throw new SkillFormatError(
-      NAME_REPAIR_MESSAGE,
-      nameFixSuggestion(parentDirName),
-      offendingText
-    );
+    throw new SkillFormatError(NAME_REPAIR_MESSAGE, offendingText);
   }
   if (name !== parentDirName) {
-    throw new SkillFormatError(
-      NAME_REPAIR_MESSAGE,
-      nameFixSuggestion(parentDirName),
-      offendingText
-    );
+    throw new SkillFormatError(NAME_REPAIR_MESSAGE, offendingText);
   }
 }
 
@@ -243,16 +211,11 @@ export function validateName(name: string, parentDirName: string, offendingText?
  */
 export function validateDescription(description: string, offendingText?: string): void {
   if (typeof description !== "string" || description.length === 0) {
-    throw new SkillFormatError(
-      "Skill `description` must be a non-empty string",
-      undefined,
-      offendingText
-    );
+    throw new SkillFormatError("Skill `description` must be a non-empty string", offendingText);
   }
   if (description.length > DESCRIPTION_MAX) {
     throw new SkillFormatError(
       `Skill \`description\` must be at most ${DESCRIPTION_MAX} characters (got ${description.length})`,
-      undefined,
       offendingText
     );
   }

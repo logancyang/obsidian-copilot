@@ -142,16 +142,13 @@ describe("parseSkillFile — validation errors", () => {
       "body",
     ].join("\n");
 
-    expect.assertions(4);
+    expect.assertions(3);
     try {
       parseSkillFile(content, "review-prose");
     } catch (error) {
       expect(error).toBeInstanceOf(SkillFormatError);
       expect((error as SkillFormatError).message).toBe(
         'The description contains ": " and must be quoted.'
-      );
-      expect((error as SkillFormatError).suggestion).toBe(
-        'description: "Use this skill for: reviewing notes"'
       );
       expect((error as SkillFormatError).offendingText).toBe(
         "description: Use this skill for: reviewing notes"
@@ -177,17 +174,14 @@ describe("parseSkillFile — validation errors", () => {
     );
   });
 
-  it("suggests matching lowercase file and folder names", () => {
-    expect.assertions(4);
+  it("reports the offending name line", () => {
+    expect.assertions(3);
     try {
       parseSkillFile(minimalSkill({ name: "Release Notes" }), "Release Notes");
     } catch (error) {
       expect(error).toBeInstanceOf(SkillFormatError);
       expect((error as SkillFormatError).message).toBe(
         "Use the same lowercase, hyphenated name in the file and folder."
-      );
-      expect((error as SkillFormatError).suggestion).toBe(
-        "name: release-notes\nfolder: release-notes/"
       );
       expect((error as SkillFormatError).offendingText).toBe("name: Release Notes");
     }

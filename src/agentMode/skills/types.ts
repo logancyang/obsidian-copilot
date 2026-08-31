@@ -97,8 +97,6 @@ export interface RejectedSkill {
   reason: string;
   /** Exact frontmatter line that failed, when the parser can identify one. */
   offendingText?: string;
-  /** Optional copyable correction for failures with one unambiguous repair. */
-  suggestion?: string;
 }
 
 /** Accepted and rejected candidates produced by one discovery walk. */

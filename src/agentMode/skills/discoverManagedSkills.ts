@@ -99,7 +99,6 @@ export async function discoverManagedSkills(
             dirPath: absDir,
             reason,
             offendingText: err.offendingText,
-            suggestion: err.suggestion,
           };
         }
         return null;

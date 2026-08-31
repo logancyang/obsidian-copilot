@@ -127,7 +127,6 @@ describe("discoverManagedSkills", () => {
         filePath: "copilot/skills/Bad/SKILL.md",
         reason: expect.stringMatching(/lowercase/),
         offendingText: "name: Bad",
-        suggestion: "name: bad\nfolder: bad/",
       },
     ]);
     expect(mockedLogWarn).toHaveBeenCalledTimes(1);
