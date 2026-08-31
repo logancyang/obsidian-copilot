@@ -45,8 +45,3 @@ export const CUSTOM_OPENAI_DEFINITION: ProviderDefinition = {
   requiresApiKey: false,
   modelInputHint: "e.g. gpt-5.5",
 };
-
-export const BUILTIN_PROVIDER_DEFINITIONS: readonly ProviderDefinition[] = [
-  ...LOCAL_PROVIDER_DEFINITIONS,
-  CUSTOM_OPENAI_DEFINITION,
-];
