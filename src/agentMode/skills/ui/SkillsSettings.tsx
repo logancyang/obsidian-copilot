@@ -144,9 +144,9 @@ export const SkillsSettings: React.FC = () => {
       const folderRel = toVaultRelative(skill.dirPath, vaultBase);
       const indexed = app.vault.getAbstractFileByPath(folderRel) instanceof TFolder;
       return {
-        name: skill.name,
-        location: folderRel.endsWith("/") ? folderRel : `${folderRel}/`,
+        location: toVaultRelative(skill.filePath, vaultBase),
         reason: skill.reason,
+        offendingText: skill.offendingText,
         suggestion: skill.suggestion,
         revealLabel: indexed ? "Reveal in vault" : "Show in folder",
         onOpen: () => openVaultPath(app, skill.filePath, { newLeaf: true }),

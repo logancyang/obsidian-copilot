@@ -131,6 +131,12 @@ describe("SkillsSettings", () => {
 
       fireEvent.click(screen.getByRole("button", { name: "View details" }));
       expect(mockOpenSkillLoadIssuesModal).toHaveBeenCalledTimes(1);
+      expect(mockCapturedLoadIssues[0]).toMatchObject({
+        location: ".claude/skills/broken-skill/SKILL.md",
+        reason: 'The description contains ": " and must be quoted.',
+        offendingText: "description: Use this skill for: reviewing notes",
+        suggestion: 'description: "Use this skill for: reviewing notes"',
+      });
       mockCapturedLoadIssues[0].onOpen();
       mockCapturedLoadIssues[0].onReveal();
 
@@ -236,6 +242,7 @@ function makeRejectedSkill(overrides: Partial<RejectedSkill> = {}): RejectedSkil
     filePath: "/vault/.claude/skills/broken-skill/SKILL.md",
     dirPath: "/vault/.claude/skills/broken-skill",
     reason: 'The description contains ": " and must be quoted.',
+    offendingText: "description: Use this skill for: reviewing notes",
     suggestion: 'description: "Use this skill for: reviewing notes"',
     ...overrides,
   };

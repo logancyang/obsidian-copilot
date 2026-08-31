@@ -4,9 +4,9 @@ import { App } from "obsidian";
 import React from "react";
 
 export interface SkillLoadIssue {
-  name: string;
   location: string;
   reason: string;
+  offendingText?: string;
   suggestion?: string;
   revealLabel: "Reveal in vault" | "Show in folder";
   onOpen: () => void;
@@ -67,38 +67,33 @@ export const SkillLoadIssuesModalContent: React.FC<SkillLoadIssuesModalContentPr
     action();
   };
 
-  const groups = new Map<string, SkillLoadIssue[]>();
-  for (const issue of issues) {
-    const group = groups.get(issue.reason);
-    if (group === undefined) groups.set(issue.reason, [issue]);
-    else group.push(issue);
-  }
-
   return (
     <div className="skill-load-list">
-      {Array.from(groups, ([reason, group]) => (
-        <section className="skill-load-group" key={reason}>
-          <p className="skill-load-group-title">
-            {reason === UNQUOTED_DESCRIPTION_REASON ? "The description is not quoted." : reason}
-          </p>
-          {group.map((issue) => (
-            <article className="skill-load-item" key={issue.location}>
-              <strong className="skill-load-name">{issue.name}</strong>
-              <span className="skill-load-path">{issue.location}</span>
-              {issue.suggestion !== undefined && (
-                <code className="skill-load-fix">{issue.suggestion}</code>
-              )}
-              <div className="skill-load-actions">
-                <Button variant="secondary" size="sm" onClick={() => runAction(issue.onOpen)}>
-                  Open SKILL.md
-                </Button>
-                <Button variant="secondary" size="sm" onClick={() => runAction(issue.onReveal)}>
-                  {issue.revealLabel}
-                </Button>
-              </div>
-            </article>
-          ))}
-        </section>
+      {issues.map((issue) => (
+        <article className="skill-load-item" key={issue.location}>
+          <strong className="skill-load-path">{issue.location}</strong>
+          <p className="skill-load-reason">{issue.reason}</p>
+          {issue.offendingText !== undefined && (
+            <div className="skill-load-code-detail">
+              <span className="skill-load-code-label">Current</span>
+              <code className="skill-load-code">{issue.offendingText}</code>
+            </div>
+          )}
+          {issue.suggestion !== undefined && (
+            <div className="skill-load-code-detail">
+              <span className="skill-load-code-label">Change to</span>
+              <code className="skill-load-code">{issue.suggestion}</code>
+            </div>
+          )}
+          <div className="skill-load-actions">
+            <Button variant="secondary" size="sm" onClick={() => runAction(issue.onOpen)}>
+              Open SKILL.md
+            </Button>
+            <Button variant="secondary" size="sm" onClick={() => runAction(issue.onReveal)}>
+              {issue.revealLabel}
+            </Button>
+          </div>
+        </article>
       ))}
     </div>
   );

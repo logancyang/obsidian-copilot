@@ -12,18 +12,18 @@ const noop = (): void => {};
 
 const ISSUES: readonly SkillLoadIssue[] = [
   {
-    name: "daily-note-review",
-    location: ".claude/skills/daily-note-review/",
+    location: ".claude/skills/daily-note-review/SKILL.md",
     reason: 'The description contains ": " and must be quoted.',
+    offendingText: "description: Use this skill for: reviewing daily notes",
     suggestion: 'description: "Use this skill for: reviewing daily notes"',
     revealLabel: "Show in folder",
     onOpen: noop,
     onReveal: noop,
   },
   {
-    name: "Release Notes",
-    location: "copilot/skills/Release Notes/",
+    location: "copilot/skills/Release Notes/SKILL.md",
     reason: "Use the same lowercase, hyphenated name in the file and folder.",
+    offendingText: "name: Release Notes",
     suggestion: "name: release-notes\nfolder: release-notes/",
     revealLabel: "Reveal in vault",
     onOpen: noop,
@@ -45,10 +45,7 @@ export const OneNotLoaded: StoryObj<SkillLoadIssuesProps> = {
 
 export const SharedCause: StoryObj<SkillLoadIssuesProps> = {
   args: {
-    issues: [
-      ISSUES[0],
-      { ...ISSUES[0], name: "weekly-review", location: ".claude/skills/weekly-review/" },
-    ],
+    issues: [ISSUES[0], { ...ISSUES[0], location: ".claude/skills/weekly-review/SKILL.md" }],
     onViewDetails: noop,
   },
 };
@@ -74,8 +71,7 @@ export const DetailsOverflow: StoryObj<SkillLoadIssuesProps> = {
     <SkillLoadIssuesModalContent
       issues={Array.from({ length: 12 }, (_, index) => ({
         ...ISSUES[index % ISSUES.length],
-        name: `${ISSUES[index % ISSUES.length].name}-${index + 1}`,
-        location: `.claude/skills/repair-${index + 1}/`,
+        location: `.claude/skills/repair-${index + 1}/SKILL.md`,
       }))}
       onClose={noop}
     />
