@@ -11,7 +11,7 @@ export function buildSkillRepairPrompt(issues: readonly SkillRepairEvidence[]): 
     .map((issue, index) => {
       const lines = [
         `${index + 1}. File: ${JSON.stringify(issue.location)}`,
-        `   Validator error: ${JSON.stringify(issue.reason)}`,
+        `   Reason: ${JSON.stringify(issue.reason)}`,
       ];
       if (issue.offendingText !== undefined) {
         lines.push(`   Rejected line: ${JSON.stringify(issue.offendingText)}`);
@@ -27,6 +27,8 @@ export function buildSkillRepairPrompt(issues: readonly SkillRepairEvidence[]): 
     "",
     evidence,
     "",
-    "Inspect each complete SKILL.md and its folder before editing. Make the smallest valid change, preserve the author's intent and unrelated content, and do not edit unrelated files. Validate each repaired skill after the change.",
+    issues.length === 1
+      ? "Inspect the complete SKILL.md and its folder before editing. Make the smallest valid change, preserve the author's intent and unrelated content, and do not edit unrelated files. Validate the repaired skill after the change."
+      : "Inspect each complete SKILL.md and its folder before editing. Make the smallest valid change, preserve the author's intent and unrelated content, and do not edit unrelated files. Validate each repaired skill after the change.",
   ].join("\n");
 }
