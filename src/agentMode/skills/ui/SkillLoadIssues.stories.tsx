@@ -3,6 +3,7 @@ import React from "react";
 import {
   AllSkillsNotLoaded,
   SkillLoadIssues,
+  SkillLoadIssuesModalContent,
   type SkillLoadIssue,
   type SkillLoadIssuesProps,
 } from "./SkillLoadIssues";
@@ -38,16 +39,45 @@ const meta = {
 
 export default meta;
 
-export const MixedWithLoadedSkills: StoryObj<SkillLoadIssuesProps> = {
-  args: { issues: ISSUES },
+export const OneNotLoaded: StoryObj<SkillLoadIssuesProps> = {
+  args: { issues: ISSUES.slice(0, 1), onViewDetails: noop },
+};
+
+export const SharedCause: StoryObj<SkillLoadIssuesProps> = {
+  args: {
+    issues: [
+      ISSUES[0],
+      { ...ISSUES[0], name: "weekly-review", location: ".claude/skills/weekly-review/" },
+    ],
+    onViewDetails: noop,
+  },
+};
+
+export const MixedCauses: StoryObj<SkillLoadIssuesProps> = {
+  args: { issues: ISSUES, onViewDetails: noop },
 };
 
 export const AllSkillsNeedRepair: StoryObj<SkillLoadIssuesProps> = {
-  args: { issues: ISSUES },
+  args: { issues: ISSUES, onViewDetails: noop },
   render: (args) => (
     <div className="tw-space-y-4">
-      <SkillLoadIssues issues={args.issues ?? ISSUES} />
+      <SkillLoadIssues issues={args.issues ?? ISSUES} onViewDetails={noop} />
       <AllSkillsNotLoaded />
     </div>
+  ),
+};
+
+export const DetailsOverflow: StoryObj<SkillLoadIssuesProps> = {
+  args: { issues: ISSUES, onViewDetails: noop },
+  parameters: { gallery: { host: "modal", layout: "padded" } },
+  render: () => (
+    <SkillLoadIssuesModalContent
+      issues={Array.from({ length: 12 }, (_, index) => ({
+        ...ISSUES[index % ISSUES.length],
+        name: `${ISSUES[index % ISSUES.length].name}-${index + 1}`,
+        location: `.claude/skills/repair-${index + 1}/`,
+      }))}
+      onClose={noop}
+    />
   ),
 };

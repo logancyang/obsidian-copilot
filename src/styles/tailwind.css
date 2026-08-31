@@ -74,19 +74,31 @@ If your plugin does not need CSS, delete this file.
   color: color-mix(in srgb, var(--text-warning) 60%, var(--text-normal));
 }
 
-.skill-load-intro,
-.skill-load-reason {
+.skill-load-intro {
   margin: 2px 0 0;
   color: var(--text-normal);
 }
 
 .skill-load-list {
   margin-top: var(--size-4-3);
+  max-height: min(65vh, 40rem);
+  overflow-y: auto;
+  padding-right: var(--size-4-1);
 }
 
 .skill-load-item {
   padding: var(--size-4-3) 0;
   border-top: 1px solid color-mix(in srgb, var(--text-warning) 30%, transparent);
+}
+
+.skill-load-group + .skill-load-group {
+  margin-top: var(--size-4-3);
+}
+
+.skill-load-group-title {
+  margin: 0;
+  color: color-mix(in srgb, var(--text-warning) 60%, var(--text-normal));
+  font-weight: var(--font-semibold);
 }
 
 .skill-load-name,
@@ -95,7 +107,7 @@ If your plugin does not need CSS, delete this file.
   display: block;
 }
 
-.skill-load-issues .skill-load-name {
+.skill-load-list .skill-load-name {
   color: var(--text-normal);
   font-size: var(--font-ui-small);
 }

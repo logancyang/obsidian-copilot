@@ -217,7 +217,7 @@ Copilot discovers skills automatically from:
 
 There is no separate Skills folder setting. Change the root under **Basic → General → Copilot folder location**.
 
-If Copilot finds a `SKILL.md` that it cannot load, the top of the Skills tab names the folder, explains the required fix, and shows a copyable correction when one is unambiguous. Choose **Open SKILL.md** to edit an indexed file in Obsidian or a hidden agent file in your default editor. Choose **Reveal in vault** or **Show in folder** to locate it. The notice disappears after the repaired file loads successfully; returning to Obsidian refreshes files edited externally.
+If Copilot finds a `SKILL.md` that it cannot load, the top of the Skills tab shows how many skills are not available to agents and summarizes the cause. Choose **View details** for a repair list grouped by cause and any copyable correction. From there, **Open SKILL.md** edits an indexed file in Obsidian or a hidden agent file in your default editor, while **Reveal in vault** or **Show in folder** locates it. The notice disappears after the repaired file loads successfully; returning to Obsidian refreshes files edited externally.
 
 ### Skill list controls
 

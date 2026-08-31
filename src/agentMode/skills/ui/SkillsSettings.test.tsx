@@ -8,6 +8,7 @@ import { __resetVaultBaseCache } from "@/utils/vaultPath";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { FileSystemAdapter, TFile, TFolder, type App } from "obsidian";
 import React from "react";
+import type { SkillLoadIssue } from "./SkillLoadIssues";
 import { SkillsSettings } from "./SkillsSettings";
 
 // The manager owns filesystem discovery and a live subscription store; stub the
@@ -17,6 +18,8 @@ const refresh = jest.fn().mockResolvedValue(undefined);
 const getAgentDirsProjectRel = jest.fn().mockReturnValue({});
 let mockManagedSkills: Skill[] = [];
 let mockRejectedSkills: RejectedSkill[] = [];
+let mockCapturedLoadIssues: readonly SkillLoadIssue[] = [];
+const mockOpenSkillLoadIssuesModal = jest.fn();
 jest.mock("@/agentMode/skills/SkillManager", () => ({
   SkillManager: { getInstance: () => ({ refresh, getAgentDirsProjectRel }) },
   // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook; name must match the export
@@ -27,6 +30,20 @@ jest.mock("@/agentMode/skills/SkillManager", () => ({
   useEpermSeen: () => false,
   dismissEpermBanner: jest.fn(),
 }));
+
+jest.mock("./SkillLoadIssues", () => {
+  const actual = jest.requireActual("./SkillLoadIssues");
+  return {
+    ...actual,
+    SkillLoadIssuesModal: class {
+      open = mockOpenSkillLoadIssuesModal;
+
+      constructor(_app: App, issues: readonly SkillLoadIssue[]) {
+        mockCapturedLoadIssues = issues;
+      }
+    },
+  };
+});
 
 jest.mock("@/utils/openWithSystemDefault", () => ({ openWithSystemDefault: jest.fn() }));
 jest.mock("@/utils/openVaultPath", () => ({ openVaultPath: jest.fn() }));
@@ -52,6 +69,7 @@ describe("SkillsSettings", () => {
       __resetVaultBaseCache();
       mockManagedSkills = [];
       mockRejectedSkills = [];
+      mockCapturedLoadIssues = [];
       settingsStore.set(settingsAtom, { ...DEFAULT_SETTINGS, copilotFolder: "copilot" });
     });
 
@@ -98,9 +116,10 @@ describe("SkillsSettings", () => {
       renderSettings();
 
       expect(screen.getByRole("alert", { name: "1 skill could not be loaded" })).not.toBeNull();
-      expect(screen.getByText("broken-skill")).not.toBeNull();
-      expect(screen.getByText(".claude/skills/broken-skill/")).not.toBeNull();
-      expect(screen.getByText('description: "Use this skill for: reviewing notes"')).not.toBeNull();
+      expect(screen.getByText(/Not available to agents/)).not.toBeNull();
+      expect(screen.getByRole("button", { name: "View details" })).not.toBeNull();
+      expect(screen.queryByText("broken-skill")).toBeNull();
+      expect(screen.queryByText(".claude/skills/broken-skill/")).toBeNull();
       expect(screen.getByText("0 loaded")).not.toBeNull();
       expect(screen.getByText(/No skills are loaded yet/)).not.toBeNull();
       expect(screen.queryByText("No skills yet")).toBeNull();
@@ -110,8 +129,10 @@ describe("SkillsSettings", () => {
       mockRejectedSkills = [makeRejectedSkill()];
       renderSettings();
 
-      fireEvent.click(screen.getByRole("button", { name: "Open SKILL.md" }));
-      fireEvent.click(screen.getByRole("button", { name: "Show in folder" }));
+      fireEvent.click(screen.getByRole("button", { name: "View details" }));
+      expect(mockOpenSkillLoadIssuesModal).toHaveBeenCalledTimes(1);
+      mockCapturedLoadIssues[0].onOpen();
+      mockCapturedLoadIssues[0].onReveal();
 
       expect(openVaultPath).toHaveBeenCalledWith(
         expect.anything(),
@@ -131,8 +152,9 @@ describe("SkillsSettings", () => {
       ];
       renderSettings(app);
 
-      fireEvent.click(screen.getByRole("button", { name: "Open SKILL.md" }));
-      fireEvent.click(screen.getByRole("button", { name: "Reveal in vault" }));
+      fireEvent.click(screen.getByRole("button", { name: "View details" }));
+      mockCapturedLoadIssues[0].onOpen();
+      mockCapturedLoadIssues[0].onReveal();
 
       expect(openVaultPath).toHaveBeenCalledWith(
         app,
@@ -161,7 +183,8 @@ describe("SkillsSettings", () => {
       ];
       renderSettings(app);
 
-      fireEvent.click(screen.getByRole("button", { name: "Reveal in vault" }));
+      fireEvent.click(screen.getByRole("button", { name: "View details" }));
+      mockCapturedLoadIssues[0].onReveal();
 
       expect(
         (

@@ -3,7 +3,12 @@ import { listBackendDescriptors } from "@/agentMode/backends/registry";
 import type { AgentBrand } from "@/agentMode/session/types";
 import { DeleteConfirmModal } from "./DeleteConfirmDialog";
 import { EmptyPlaceholder } from "./EmptyPlaceholder";
-import { AllSkillsNotLoaded, SkillLoadIssues, type SkillLoadIssue } from "./SkillLoadIssues";
+import {
+  AllSkillsNotLoaded,
+  SkillLoadIssues,
+  SkillLoadIssuesModal,
+  type SkillLoadIssue,
+} from "./SkillLoadIssues";
 import {
   PropertiesModal,
   type PropertiesSaveOutcome,
@@ -239,7 +244,10 @@ export const SkillsSettings: React.FC = () => {
 
         {loadIssues.length > 0 && (
           <div className="tw-mt-3">
-            <SkillLoadIssues issues={loadIssues} />
+            <SkillLoadIssues
+              issues={loadIssues}
+              onViewDetails={() => new SkillLoadIssuesModal(app, loadIssues).open()}
+            />
           </div>
         )}
 
