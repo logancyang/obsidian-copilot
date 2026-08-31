@@ -135,7 +135,6 @@ describe("SkillsSettings", () => {
         location: ".claude/skills/broken-skill/SKILL.md",
         reason: 'The description contains ": " and must be quoted.',
         offendingText: "description: Use this skill for: reviewing notes",
-        suggestion: 'description: "Use this skill for: reviewing notes"',
       });
       mockCapturedLoadIssues[0].onOpen();
       mockCapturedLoadIssues[0].onReveal();
@@ -243,7 +242,6 @@ function makeRejectedSkill(overrides: Partial<RejectedSkill> = {}): RejectedSkil
     dirPath: "/vault/.claude/skills/broken-skill",
     reason: 'The description contains ": " and must be quoted.',
     offendingText: "description: Use this skill for: reviewing notes",
-    suggestion: 'description: "Use this skill for: reviewing notes"',
     ...overrides,
   };
 }

@@ -59,7 +59,7 @@ describe("SkillLoadIssues", () => {
   });
 
   describe("SkillLoadIssuesModalContent()", () => {
-    it(`shows every file path, reason, rejected line, and correction for ${ISSUE_URL}`, () => {
+    it(`shows every file path, reason, and rejected line for ${ISSUE_URL}`, () => {
       const order: string[] = [];
       render(
         <SkillLoadIssuesModalContent
@@ -71,7 +71,6 @@ describe("SkillLoadIssues", () => {
             makeIssue({
               location: ".claude/skills/without-fix/SKILL.md",
               offendingText: "description: [unfinished",
-              suggestion: undefined,
             }),
           ]}
           onClose={() => order.push("close")}
@@ -81,12 +80,10 @@ describe("SkillLoadIssues", () => {
       expect(screen.getByText(makeIssue().location)).not.toBeNull();
       expect(screen.getByText(makeIssue().location).tagName).toBe("DIV");
       expect(screen.getByText(makeIssue().offendingText as string)).not.toBeNull();
-      expect(screen.getByText(makeIssue().suggestion as string)).not.toBeNull();
       expect(screen.getByText(".claude/skills/without-fix/SKILL.md")).not.toBeNull();
-      expect(screen.getAllByText(makeIssue().suggestion as string)).toHaveLength(1);
       expect(screen.getAllByText(makeIssue().reason)).toHaveLength(2);
-      expect(screen.getAllByText("Current")).toHaveLength(2);
-      expect(screen.getAllByText("Change to")).toHaveLength(1);
+      expect(screen.queryByText("Current")).toBeNull();
+      expect(screen.queryByText("Change to")).toBeNull();
 
       fireEvent.click(screen.getAllByRole("button", { name: "Open SKILL.md" })[0]);
       fireEvent.click(screen.getAllByRole("button", { name: "Show in folder" })[0]);
@@ -103,7 +100,6 @@ describe("SkillLoadIssues", () => {
               location: ".claude/skills/third/SKILL.md",
               reason: "Missing name.",
               offendingText: undefined,
-              suggestion: undefined,
             }),
           ]}
           onClose={jest.fn()}
@@ -146,7 +142,6 @@ function makeIssue(overrides: Partial<SkillLoadIssue> = {}): SkillLoadIssue {
     location: ".claude/skills/broken-skill/SKILL.md",
     reason: 'The description contains ": " and must be quoted.',
     offendingText: "description: Use this skill for: reviewing notes",
-    suggestion: 'description: "Use this skill for: reviewing notes"',
     revealLabel: "Show in folder",
     onOpen: jest.fn(),
     onReveal: jest.fn(),

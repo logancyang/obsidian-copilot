@@ -93,7 +93,6 @@ If your plugin does not need CSS, delete this file.
 
 .skill-load-path,
 .skill-load-reason,
-.skill-load-code-label,
 .skill-load-code {
   display: block;
 }
@@ -112,17 +111,8 @@ If your plugin does not need CSS, delete this file.
   font-size: var(--font-ui-smaller);
 }
 
-.skill-load-code-detail {
-  margin-top: var(--size-4-1);
-}
-
-.skill-load-code-label {
-  color: var(--text-faint);
-  font-size: var(--font-smallest);
-}
-
 .skill-load-code {
-  margin-top: 2px;
+  margin-top: var(--size-4-1);
   padding: var(--size-4-1);
   border-radius: var(--radius-s);
   background: var(--background-primary-alt);

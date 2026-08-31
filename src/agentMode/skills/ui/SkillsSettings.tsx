@@ -147,7 +147,6 @@ export const SkillsSettings: React.FC = () => {
         location: toVaultRelative(skill.filePath, vaultBase),
         reason: skill.reason,
         offendingText: skill.offendingText,
-        suggestion: skill.suggestion,
         revealLabel: indexed ? "Reveal in vault" : "Show in folder",
         onOpen: () => openVaultPath(app, skill.filePath, { newLeaf: true }),
         onReveal: () => handleRevealSkillFolder(skill.dirPath),

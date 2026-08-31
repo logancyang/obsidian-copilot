@@ -7,7 +7,6 @@ export interface SkillLoadIssue {
   location: string;
   reason: string;
   offendingText?: string;
-  suggestion?: string;
   revealLabel: "Reveal in vault" | "Show in folder";
   onOpen: () => void;
   onReveal: () => void;
@@ -74,16 +73,7 @@ export const SkillLoadIssuesModalContent: React.FC<SkillLoadIssuesModalContentPr
           <div className="skill-load-path">{issue.location}</div>
           <p className="skill-load-reason">{issue.reason}</p>
           {issue.offendingText !== undefined && (
-            <div className="skill-load-code-detail">
-              <span className="skill-load-code-label">Current</span>
-              <code className="skill-load-code">{issue.offendingText}</code>
-            </div>
-          )}
-          {issue.suggestion !== undefined && (
-            <div className="skill-load-code-detail">
-              <span className="skill-load-code-label">Change to</span>
-              <code className="skill-load-code">{issue.suggestion}</code>
-            </div>
+            <code className="skill-load-code">{issue.offendingText}</code>
           )}
           <div className="skill-load-actions">
             <Button variant="secondary" size="sm" onClick={() => runAction(issue.onOpen)}>
