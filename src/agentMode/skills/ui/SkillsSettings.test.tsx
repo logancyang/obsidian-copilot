@@ -116,7 +116,7 @@ describe("SkillsSettings", () => {
       renderSettings();
 
       expect(screen.getByRole("alert", { name: "1 skill could not be loaded" })).not.toBeNull();
-      expect(screen.getByText(/Not available to agents/)).not.toBeNull();
+      expect(screen.getByText("The skills have format errors.")).not.toBeNull();
       expect(screen.getByRole("button", { name: "View details" })).not.toBeNull();
       expect(screen.queryByText("broken-skill")).toBeNull();
       expect(screen.queryByText(".claude/skills/broken-skill/")).toBeNull();

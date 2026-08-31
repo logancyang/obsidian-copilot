@@ -44,54 +44,15 @@ function stubContentDimensions(scrollHeightPx: number, clientHeightPx: number): 
 
 describe("SkillLoadIssues", () => {
   describe("SkillLoadIssues()", () => {
-    it(`keeps one rejected skill compact while surfacing its high-level cause for ${ISSUE_URL}`, () => {
+    it(`keeps rejected skills compact and links to their details for ${ISSUE_URL}`, () => {
       const onViewDetails = jest.fn();
       render(<SkillLoadIssues issues={[makeIssue()]} onViewDetails={onViewDetails} />);
 
       expect(screen.getByRole("alert", { name: "1 skill could not be loaded" })).not.toBeNull();
-      expect(
-        screen.getByText("Not available to agents. The description is not quoted.")
-      ).not.toBeNull();
-      expect(screen.getByText("1 skill could not be loaded").parentElement?.className).toBe(
-        "skill-load-copy"
-      );
-      expect(screen.getByRole("button", { name: "View details" }).parentElement?.className).toBe(
-        "skill-load-actions"
-      );
+      expect(screen.getByText("The skills have format errors.")).not.toBeNull();
       expect(screen.queryByText(makeIssue().location)).toBeNull();
       fireEvent.click(screen.getByRole("button", { name: "View details" }));
       expect(onViewDetails).toHaveBeenCalledTimes(1);
-    });
-
-    it(`collapses a shared cause into one explanation for ${ISSUE_URL}`, () => {
-      render(
-        <SkillLoadIssues
-          issues={[makeIssue(), makeIssue({ location: ".claude/skills/second/SKILL.md" })]}
-          onViewDetails={jest.fn()}
-        />
-      );
-
-      expect(
-        screen.getByText("Not available to agents. All have an unquoted description.")
-      ).not.toBeNull();
-    });
-
-    it(`summarizes mixed causes without expanding their repair rows for ${ISSUE_URL}`, () => {
-      render(
-        <SkillLoadIssues
-          issues={[
-            makeIssue(),
-            makeIssue({
-              location: ".claude/skills/second/SKILL.md",
-              reason: "Missing name.",
-            }),
-          ]}
-          onViewDetails={jest.fn()}
-        />
-      );
-
-      expect(screen.getByText(/Not available to agents.*different format errors/)).not.toBeNull();
-      expect(screen.queryByText("Missing name.")).toBeNull();
     });
   });
 
@@ -187,14 +148,12 @@ describe("SkillLoadIssues", () => {
     });
 
     describe("onOpen()", () => {
-      it(`renders a bounded complete repair list for ${ISSUE_URL}`, async () => {
+      it(`renders the complete repair list for ${ISSUE_URL}`, async () => {
         const modal = new SkillLoadIssuesModal(new App(), [makeIssue()]);
         modal.contentEl.empty = () => modal.contentEl.replaceChildren();
 
         await act(async () => ReactModal.prototype.onOpen.call(modal));
 
-        const list = modal.contentEl.querySelector(".skill-load-list");
-        expect(list?.classList.contains("skill-load-list")).toBe(true);
         expect(within(modal.contentEl).getByText(makeIssue().location)).not.toBeNull();
         await act(async () => ReactModal.prototype.onClose.call(modal));
       });

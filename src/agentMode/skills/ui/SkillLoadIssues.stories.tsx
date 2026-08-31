@@ -52,17 +52,6 @@ export const OneNotLoaded: StoryObj<SkillLoadIssuesProps> = {
   args: { issues: ISSUES.slice(0, 1), onViewDetails: noop },
 };
 
-export const SharedCause: StoryObj<SkillLoadIssuesProps> = {
-  args: {
-    issues: [ISSUES[0], { ...ISSUES[0], location: ".claude/skills/weekly-review/SKILL.md" }],
-    onViewDetails: noop,
-  },
-};
-
-export const MixedCauses: StoryObj<SkillLoadIssuesProps> = {
-  args: { issues: ISSUES, onViewDetails: noop },
-};
-
 export const AllSkillsNeedRepair: StoryObj<SkillLoadIssuesProps> = {
   args: { issues: ISSUES, onViewDetails: noop },
   render: (args) => (

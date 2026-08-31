@@ -282,7 +282,9 @@ export const SkillsSettings: React.FC = () => {
           ) : (
             <div className="tw-flex tw-flex-col tw-gap-1.5">
               {filteredSkills.length === 0 ? (
-                <div className="skill-list-empty">No skills match &ldquo;{searchValue}&rdquo;.</div>
+                <div className="tw-rounded-sm tw-border tw-border-dashed tw-border-border tw-bg-primary tw-px-3 tw-py-6 tw-text-center tw-text-ui-smaller tw-text-muted">
+                  No skills match &ldquo;{searchValue}&rdquo;.
+                </div>
               ) : (
                 filteredSkills.map((skill) => (
                   <SkillRow
