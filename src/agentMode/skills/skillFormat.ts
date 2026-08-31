@@ -68,7 +68,8 @@ function splitFrontmatter(content: string): { yaml: string; body: string } {
 export class SkillFormatError extends Error {
   constructor(
     message: string,
-    readonly suggestion?: string
+    readonly suggestion?: string,
+    readonly offendingText?: string
   ) {
     super(message);
     this.name = "SkillFormatError";
@@ -76,21 +77,36 @@ export class SkillFormatError extends Error {
 }
 
 /** Turn a YAML parser failure into the most actionable explanation available. */
-function yamlFormatError(yaml: string, error: { code: string; message: string }): SkillFormatError {
+function yamlFormatError(
+  yaml: string,
+  error: { code: string; message: string; linePos?: readonly { line: number }[] }
+): SkillFormatError {
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/166
   // YAML interprets `: ` inside an unquoted description as a nested mapping;
   // naming the required quoting repair is more useful than exposing that parser term.
   if (error.code === "BLOCK_AS_IMPLICIT_KEY") {
-    const description = /^description:\s*([^'"\r\n]*: [^\r\n]*)$/m.exec(yaml)?.[1];
-    if (description !== undefined) {
+    const descriptionLine = /^(description:\s*([^'"\r\n]*: [^\r\n]*))$/m.exec(yaml);
+    if (descriptionLine?.[1] !== undefined && descriptionLine[2] !== undefined) {
       return new SkillFormatError(
         'The description contains ": " and must be quoted.',
-        `description: ${JSON.stringify(description)}`
+        `description: ${JSON.stringify(descriptionLine[2])}`,
+        descriptionLine[1]
       );
     }
   }
 
-  return new SkillFormatError(`SKILL.md frontmatter YAML is invalid: ${error.message}`);
+  const errorLine = error.linePos?.[0]?.line;
+  const offendingText = errorLine === undefined ? undefined : yaml.split(/\r?\n/)[errorLine - 1];
+  return new SkillFormatError(
+    `SKILL.md frontmatter YAML is invalid: ${error.message}`,
+    undefined,
+    offendingText
+  );
+}
+
+/** Preserve the exact frontmatter line that failed validation when it exists. */
+function frontmatterLine(yaml: string, key: string): string | undefined {
+  return new RegExp(`^${key}:[^\\r\\n]*$`, "m").exec(yaml)?.[0];
 }
 
 /** Suggest a spec-safe file and folder name when the repair is unambiguous. */
@@ -163,13 +179,13 @@ export function parseSkillFile(content: string, parentDirName: string): ParsedSk
       nameFixSuggestion(parentDirName)
     );
   }
-  validateName(name, parentDirName);
+  validateName(name, parentDirName, frontmatterLine(yaml, "name"));
 
   const description = readString(doc, "description");
   if (description === undefined) {
     throw new SkillFormatError("SKILL.md frontmatter is missing required field `description`");
   }
-  validateDescription(description);
+  validateDescription(description, frontmatterLine(yaml, "description"));
 
   const frontmatter: SkillFrontmatter = {
     name,
@@ -192,20 +208,30 @@ export function parseSkillFile(content: string, parentDirName: string): ParsedSk
  *
  * @throws SkillFormatError with a descriptive message.
  */
-export function validateName(name: string, parentDirName: string): void {
+export function validateName(name: string, parentDirName: string, offendingText?: string): void {
   if (typeof name !== "string" || name.length === 0) {
-    throw new SkillFormatError("Skill `name` must be a non-empty string");
+    throw new SkillFormatError("Skill `name` must be a non-empty string", undefined, offendingText);
   }
   if (name.length > NAME_MAX) {
     throw new SkillFormatError(
-      `Skill \`name\` must be at most ${NAME_MAX} characters (got ${name.length})`
+      `Skill \`name\` must be at most ${NAME_MAX} characters (got ${name.length})`,
+      undefined,
+      offendingText
     );
   }
   if (!NAME_RE.test(name)) {
-    throw new SkillFormatError(NAME_REPAIR_MESSAGE, nameFixSuggestion(parentDirName));
+    throw new SkillFormatError(
+      NAME_REPAIR_MESSAGE,
+      nameFixSuggestion(parentDirName),
+      offendingText
+    );
   }
   if (name !== parentDirName) {
-    throw new SkillFormatError(NAME_REPAIR_MESSAGE, nameFixSuggestion(parentDirName));
+    throw new SkillFormatError(
+      NAME_REPAIR_MESSAGE,
+      nameFixSuggestion(parentDirName),
+      offendingText
+    );
   }
 }
 
@@ -215,13 +241,19 @@ export function validateName(name: string, parentDirName: string): void {
  *
  * @throws SkillFormatError when invalid.
  */
-export function validateDescription(description: string): void {
+export function validateDescription(description: string, offendingText?: string): void {
   if (typeof description !== "string" || description.length === 0) {
-    throw new SkillFormatError("Skill `description` must be a non-empty string");
+    throw new SkillFormatError(
+      "Skill `description` must be a non-empty string",
+      undefined,
+      offendingText
+    );
   }
   if (description.length > DESCRIPTION_MAX) {
     throw new SkillFormatError(
-      `Skill \`description\` must be at most ${DESCRIPTION_MAX} characters (got ${description.length})`
+      `Skill \`description\` must be at most ${DESCRIPTION_MAX} characters (got ${description.length})`,
+      undefined,
+      offendingText
     );
   }
 }

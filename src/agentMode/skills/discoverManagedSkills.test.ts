@@ -126,6 +126,7 @@ describe("discoverManagedSkills", () => {
         dirPath: "copilot/skills/Bad",
         filePath: "copilot/skills/Bad/SKILL.md",
         reason: expect.stringMatching(/lowercase/),
+        offendingText: "name: Bad",
         suggestion: "name: bad\nfolder: bad/",
       },
     ]);

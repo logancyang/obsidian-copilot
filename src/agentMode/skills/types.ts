@@ -95,6 +95,8 @@ export interface RejectedSkill {
   dirPath: string;
   /** User-facing explanation of what must change before the skill can load. */
   reason: string;
+  /** Exact frontmatter line that failed, when the parser can identify one. */
+  offendingText?: string;
   /** Optional copyable correction for failures with one unambiguous repair. */
   suggestion?: string;
 }

@@ -134,6 +134,7 @@ export async function discoverProjectSkills(
                 filePath: skillMd,
                 dirPath: entryAbs,
                 reason,
+                offendingText: err.offendingText,
                 suggestion: err.suggestion,
               };
             }

@@ -142,7 +142,7 @@ describe("parseSkillFile — validation errors", () => {
       "body",
     ].join("\n");
 
-    expect.assertions(3);
+    expect.assertions(4);
     try {
       parseSkillFile(content, "review-prose");
     } catch (error) {
@@ -152,6 +152,9 @@ describe("parseSkillFile — validation errors", () => {
       );
       expect((error as SkillFormatError).suggestion).toBe(
         'description: "Use this skill for: reviewing notes"'
+      );
+      expect((error as SkillFormatError).offendingText).toBe(
+        "description: Use this skill for: reviewing notes"
       );
     }
   });
@@ -175,7 +178,7 @@ describe("parseSkillFile — validation errors", () => {
   });
 
   it("suggests matching lowercase file and folder names", () => {
-    expect.assertions(3);
+    expect.assertions(4);
     try {
       parseSkillFile(minimalSkill({ name: "Release Notes" }), "Release Notes");
     } catch (error) {
@@ -186,6 +189,7 @@ describe("parseSkillFile — validation errors", () => {
       expect((error as SkillFormatError).suggestion).toBe(
         "name: release-notes\nfolder: release-notes/"
       );
+      expect((error as SkillFormatError).offendingText).toBe("name: Release Notes");
     }
   });
 });
