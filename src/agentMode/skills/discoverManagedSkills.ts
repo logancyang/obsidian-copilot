@@ -2,7 +2,7 @@ import { logWarn } from "@/logger";
 import { basename, joinPosix } from "@/utils/pathUtils";
 import { mapWithConcurrency } from "./concurrency";
 import { parseSkillFile, SkillFormatError } from "./skillFormat";
-import type { Skill } from "./types";
+import type { RejectedSkill, Skill, SkillDiscoveryResult } from "./types";
 
 /** Maximum concurrent SKILL.md reads during discovery. */
 const DISCOVERY_CONCURRENCY = 16;
@@ -42,20 +42,21 @@ export interface DiscoverManagedSkillsOptions {
 }
 
 /**
- * Walk `<vault>/<skillsFolder>/` once and return every SKILL.md that
- * parses against the Agent Skills spec.
+ * Walk `<vault>/<skillsFolder>/` once and classify every readable SKILL.md
+ * as accepted or rejected by the Agent Skills spec.
  *
  * Subdirectories without a `SKILL.md` are silently ignored — they may be
- * staging dirs or supporting-asset folders. Parse failures emit a one-line
- * `logWarn` with the path and reason but never throw.
+ * staging dirs or supporting-asset folders. Format failures are returned for
+ * user recovery and also emit a one-line `logWarn`; unexpected failures are
+ * logged and skipped rather than thrown.
  */
 export async function discoverManagedSkills(
   options: DiscoverManagedSkillsOptions
-): Promise<Skill[]> {
+): Promise<SkillDiscoveryResult<Skill>> {
   const { skillsFolderRelPath, skillsFolderAbsPath, adapter } = options;
 
   if (!(await adapter.exists(skillsFolderRelPath))) {
-    return [];
+    return { accepted: [], rejected: [] };
   }
 
   const listing = await adapter.list(skillsFolderRelPath);
@@ -66,9 +67,12 @@ export async function discoverManagedSkills(
   const results = await mapWithConcurrency(
     [...listing.folders].sort(),
     DISCOVERY_CONCURRENCY,
-    async (folderPath): Promise<Skill | null> => {
+    async (folderPath): Promise<Skill | RejectedSkill | null> => {
       const dirName = basename(folderPath);
       const skillMdRelPath = joinPosix(folderPath, "SKILL.md");
+      const absDir =
+        skillsFolderAbsPath !== null ? joinPosix(skillsFolderAbsPath, dirName) : folderPath;
+      const absFile = joinPosix(absDir, "SKILL.md");
 
       let content: string;
       try {
@@ -84,20 +88,23 @@ export async function discoverManagedSkills(
       try {
         parsed = parseSkillFile(content, dirName);
       } catch (err) {
-        const reason =
-          err instanceof SkillFormatError
-            ? err.message
-            : err instanceof Error
-              ? err.message
-              : String(err);
+        const reason = err instanceof Error ? err.message : String(err);
         logWarn(`[skills] Skipping ${skillMdRelPath}: ${reason}`);
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/166
+        // Preserve expected format failures so Settings can name the file and repair.
+        if (err instanceof SkillFormatError) {
+          return {
+            name: dirName,
+            filePath: absFile,
+            dirPath: absDir,
+            reason,
+            suggestion: err.suggestion,
+          };
+        }
         return null;
       }
 
       const fm = parsed.frontmatter;
-      const absDir =
-        skillsFolderAbsPath !== null ? joinPosix(skillsFolderAbsPath, dirName) : folderPath;
-      const absFile = joinPosix(absDir, "SKILL.md");
 
       return {
         name: fm.name,
@@ -117,5 +124,12 @@ export async function discoverManagedSkills(
     }
   );
 
-  return results.filter((skill): skill is Skill => skill !== null);
+  const accepted: Skill[] = [];
+  const rejected: RejectedSkill[] = [];
+  for (const result of results) {
+    if (result === null) continue;
+    if ("reason" in result) rejected.push(result);
+    else accepted.push(result);
+  }
+  return { accepted, rejected };
 }

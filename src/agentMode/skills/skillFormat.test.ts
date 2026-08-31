@@ -128,6 +128,59 @@ describe("parseSkillFile — validation errors", () => {
     const content = ["---", "description: A skill", "---", ""].join("\n");
     expect(() => parseSkillFile(content, "foo")).toThrow(/missing required field `name`/);
   });
+
+  it("explains how to quote a description containing colon-space for https://github.com/Brevilabs/obsidian-copilot-private/issues/166", () => {
+    const content = [
+      "---",
+      "name: review-prose",
+      "description: Use this skill for: reviewing notes",
+      "---",
+      "body",
+    ].join("\n");
+
+    expect.assertions(3);
+    try {
+      parseSkillFile(content, "review-prose");
+    } catch (error) {
+      expect(error).toBeInstanceOf(SkillFormatError);
+      expect((error as SkillFormatError).message).toBe(
+        'The description contains ": " and must be quoted.'
+      );
+      expect((error as SkillFormatError).suggestion).toBe(
+        'description: "Use this skill for: reviewing notes"'
+      );
+    }
+  });
+
+  it("keeps unrelated YAML parse failures generic", () => {
+    const content = ["---", "name: review-prose", "description: [unfinished", "---"].join("\n");
+    expect(() => parseSkillFile(content, "review-prose")).toThrow(/frontmatter YAML is invalid/);
+  });
+
+  it("accepts a Chinese description that uses full-width punctuation", () => {
+    const content = [
+      "---",
+      "name: review-prose",
+      "description: 用于审阅笔记：检查清晰度和结构",
+      "---",
+      "body",
+    ].join("\n");
+    expect(parseSkillFile(content, "review-prose").frontmatter.description).toBe(
+      "用于审阅笔记：检查清晰度和结构"
+    );
+  });
+
+  it("suggests matching lowercase file and folder names", () => {
+    expect.assertions(2);
+    try {
+      parseSkillFile(minimalSkill({ name: "Release Notes" }), "Release Notes");
+    } catch (error) {
+      expect(error).toBeInstanceOf(SkillFormatError);
+      expect((error as SkillFormatError).suggestion).toBe(
+        "name: release-notes\nfolder: release-notes/"
+      );
+    }
+  });
 });
 
 describe("serializeSkillFile — round-trip preservation", () => {

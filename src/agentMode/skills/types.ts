@@ -84,3 +84,23 @@ export interface Skill {
    */
   displayNameSuffix?: string;
 }
+
+/** A discovered SKILL.md that could not be parsed or validated. */
+export interface RejectedSkill {
+  /** Parent directory name, used as the best available display name. */
+  name: string;
+  /** Absolute path when available, otherwise a vault-relative path. */
+  filePath: string;
+  /** Absolute directory path when available, otherwise a vault-relative path. */
+  dirPath: string;
+  /** User-facing explanation of what must change before the skill can load. */
+  reason: string;
+  /** Optional copyable correction for failures with one unambiguous repair. */
+  suggestion?: string;
+}
+
+/** Accepted and rejected candidates produced by one discovery walk. */
+export interface SkillDiscoveryResult<T> {
+  accepted: T[];
+  rejected: RejectedSkill[];
+}

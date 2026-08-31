@@ -77,7 +77,7 @@ describe("discoverProjectSkills", () => {
       agentDirsProjectRel: AGENT_DIRS,
       fs,
     });
-    expect(out).toEqual([]);
+    expect(out).toEqual({ accepted: [], rejected: [] });
   });
 
   it("returns an empty list when an agent dir exists but is empty", async () => {
@@ -87,14 +87,14 @@ describe("discoverProjectSkills", () => {
       agentDirsProjectRel: AGENT_DIRS,
       fs,
     });
-    expect(out).toEqual([]);
+    expect(out).toEqual({ accepted: [], rejected: [] });
   });
 
   it("returns a single candidate when one valid skill lives under one agent dir", async () => {
     const fs = mkFs({
       "/vault/.claude/skills/foo/SKILL.md": { kind: "file", content: skillMd("foo") },
     });
-    const out = await discoverProjectSkills({
+    const { accepted: out } = await discoverProjectSkills({
       vaultRootAbsPath: VAULT,
       agentDirsProjectRel: AGENT_DIRS,
       fs,
@@ -110,7 +110,7 @@ describe("discoverProjectSkills", () => {
     expect(out[0].contentHash.length).toBeGreaterThan(0);
   });
 
-  it("skips a directory whose SKILL.md fails to parse", async () => {
+  it("returns hidden format failures for external-editor recovery in https://github.com/Brevilabs/obsidian-copilot-private/issues/166", async () => {
     const fs = mkFs({
       "/vault/.claude/skills/bad/SKILL.md": {
         kind: "file",
@@ -126,7 +126,15 @@ describe("discoverProjectSkills", () => {
       agentDirsProjectRel: AGENT_DIRS,
       fs,
     });
-    expect(out.map((c) => c.name)).toEqual(["good"]);
+    expect(out.accepted.map((c) => c.name)).toEqual(["good"]);
+    expect(out.rejected).toEqual([
+      {
+        name: "bad",
+        dirPath: "/vault/.claude/skills/bad",
+        filePath: "/vault/.claude/skills/bad/SKILL.md",
+        reason: expect.stringMatching(/frontmatter/),
+      },
+    ]);
   });
 
   it("skips a symlinked top-level entry (reconciliation handles those)", async () => {
@@ -140,7 +148,7 @@ describe("discoverProjectSkills", () => {
         content: skillMd("real"),
       },
     });
-    const out = await discoverProjectSkills({
+    const { accepted: out } = await discoverProjectSkills({
       vaultRootAbsPath: VAULT,
       agentDirsProjectRel: AGENT_DIRS,
       fs,
@@ -153,7 +161,7 @@ describe("discoverProjectSkills", () => {
       "/vault/.claude/skills/foo/SKILL.md": { kind: "file", content: skillMd("foo") },
       "/vault/.agents/skills/foo/SKILL.md": { kind: "file", content: skillMd("foo") },
     });
-    const out = await discoverProjectSkills({
+    const { accepted: out } = await discoverProjectSkills({
       vaultRootAbsPath: VAULT,
       agentDirsProjectRel: AGENT_DIRS,
       fs,
@@ -172,6 +180,6 @@ describe("discoverProjectSkills", () => {
       agentDirsProjectRel: AGENT_DIRS,
       fs,
     });
-    expect(out).toEqual([]);
+    expect(out).toEqual({ accepted: [], rejected: [] });
   });
 });

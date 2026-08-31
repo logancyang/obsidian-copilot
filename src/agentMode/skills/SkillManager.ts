@@ -23,7 +23,7 @@ import { reconcile, type ReconcileReport } from "./reconcile";
 import type { SkillFrontmatterPatch } from "./skillFormat";
 import { removeAgentLinksPointingTo } from "./symlinks";
 import { runDeleteSkill, runToggleAgent } from "./toggleAgent";
-import type { BackendId, Skill } from "./types";
+import type { BackendId, RejectedSkill, Skill } from "./types";
 import { runRenameSkill, runUpdateProperties } from "./updateProperties";
 import {
   buildDeleteExpectations,
@@ -47,6 +47,7 @@ const EXPECTATION_TIMEOUT_MS = 10_000;
 
 const skillManagerStore = createStore();
 const skillsAtom = atom<Skill[]>([]);
+const rejectedSkillsAtom = atom<RejectedSkill[]>([]);
 const lastScannedFolderAtom = atom<string>(DEFAULT_SKILLS_FOLDER);
 const epermSeenAtom = atom<boolean>(false);
 
@@ -187,6 +188,7 @@ export class SkillManager {
     }
     SkillManager.instance = null;
     skillManagerStore.set(skillsAtom, []);
+    skillManagerStore.set(rejectedSkillsAtom, []);
     skillManagerStore.set(lastScannedFolderAtom, DEFAULT_SKILLS_FOLDER);
     skillManagerStore.set(epermSeenAtom, false);
   }
@@ -294,7 +296,7 @@ export class SkillManager {
     const vaultRoot = resolveVaultRootAbs(this.app);
 
     try {
-      const canonicalSkills = await discoverManagedSkills({
+      const canonicalDiscovery = await discoverManagedSkills({
         skillsFolderRelPath: folder,
         skillsFolderAbsPath: absRoot,
         adapter,
@@ -304,13 +306,16 @@ export class SkillManager {
       // there's no on-disk vault (mobile / test environments) — the
       // canonical pass already used a vault-relative adapter.
       let projectCandidates: ProjectSkillCandidate[] = [];
+      let rejectedProjectSkills: RejectedSkill[] = [];
       if (vaultRoot !== null) {
         try {
-          projectCandidates = await discoverProjectSkills({
+          const projectDiscovery = await discoverProjectSkills({
             vaultRootAbsPath: vaultRoot,
             agentDirsProjectRel: this.agentDirsProjectRel,
             fs: createNodeProjectDiscoveryFs(),
           });
+          projectCandidates = projectDiscovery.accepted;
+          rejectedProjectSkills = projectDiscovery.rejected;
         } catch (err) {
           logWarn(
             `[skills] Project-skill walk failed: ${err instanceof Error ? err.message : String(err)}`
@@ -318,7 +323,10 @@ export class SkillManager {
         }
       }
 
-      const skills = mergeDiscovery(canonicalSkills, projectCandidates);
+      const skills = mergeDiscovery(canonicalDiscovery.accepted, projectCandidates);
+      const rejectedSkills = canonicalDiscovery.rejected
+        .concat(rejectedProjectSkills)
+        .sort((a, b) => a.dirPath.localeCompare(b.dirPath));
 
       // Reconcile against the agent dirs if we have an on-disk vault.
       // Only canonical rows are passed in — project skills are not part
@@ -348,6 +356,7 @@ export class SkillManager {
       }
 
       skillManagerStore.set(skillsAtom, skills);
+      skillManagerStore.set(rejectedSkillsAtom, rejectedSkills);
       skillManagerStore.set(lastScannedFolderAtom, folder);
       this.publishSkillSetChanges(skills);
       logInfo(`[skills] Discovered ${skills.length} managed skill(s) under "${folder}"`);
@@ -1095,6 +1104,11 @@ export function useManagedSkills(): Skill[] {
   return useAtomValue(skillsAtom, { store: skillManagerStore });
 }
 
+/** Hook: subscribe to discovered SKILL.md files that need a user repair. */
+export function useRejectedSkills(): RejectedSkill[] {
+  return useAtomValue(rejectedSkillsAtom, { store: skillManagerStore });
+}
+
 /**
  * Hook: subscribe to the session-local EPERM banner flag. Once any
  * symlink op has tripped EPERM, the banner stays up for the rest of the
@@ -1112,6 +1126,11 @@ export function dismissEpermBanner(): void {
 /** Synchronous getter — useful from non-React code (e.g. spawn descriptors). */
 export function getManagedSkills(): Skill[] {
   return skillManagerStore.get(skillsAtom);
+}
+
+/** Synchronous getter for tests and non-React consumers. */
+export function getRejectedSkills(): RejectedSkill[] {
+  return skillManagerStore.get(rejectedSkillsAtom);
 }
 
 /** Compute the next enabled-agent list for an incremental toggle update. */

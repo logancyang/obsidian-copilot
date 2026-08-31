@@ -84,12 +84,12 @@ describe("discoverManagedSkills", () => {
 
   it("returns an empty array when the skills folder does not exist", async () => {
     const adapter = makeAdapter({});
-    const skills = await discoverManagedSkills({
+    const result = await discoverManagedSkills({
       skillsFolderRelPath: SKILLS_ROOT,
       skillsFolderAbsPath: null,
       adapter,
     });
-    expect(skills).toEqual([]);
+    expect(result).toEqual({ accepted: [], rejected: [] });
     expect(mockedLogWarn).not.toHaveBeenCalled();
   });
 
@@ -97,7 +97,7 @@ describe("discoverManagedSkills", () => {
     const adapter = makeAdapter({
       [`${SKILLS_ROOT}/review-prose/SKILL.md`]: validSkillMd({ name: "review-prose" }),
     });
-    const skills = await discoverManagedSkills({
+    const { accepted: skills } = await discoverManagedSkills({
       skillsFolderRelPath: SKILLS_ROOT,
       skillsFolderAbsPath: null,
       adapter,
@@ -109,17 +109,26 @@ describe("discoverManagedSkills", () => {
     expect(skills[0].body).toBe("body");
   });
 
-  it("skips a SKILL.md with invalid frontmatter and emits one logWarn", async () => {
+  it("returns a rejected SKILL.md with its repair details for https://github.com/Brevilabs/obsidian-copilot-private/issues/166", async () => {
     // Uppercase name fails the spec regex.
     const adapter = makeAdapter({
       [`${SKILLS_ROOT}/Bad/SKILL.md`]: validSkillMd({ name: "Bad" }),
     });
-    const skills = await discoverManagedSkills({
+    const result = await discoverManagedSkills({
       skillsFolderRelPath: SKILLS_ROOT,
       skillsFolderAbsPath: null,
       adapter,
     });
-    expect(skills).toEqual([]);
+    expect(result.accepted).toEqual([]);
+    expect(result.rejected).toEqual([
+      {
+        name: "Bad",
+        dirPath: "copilot/skills/Bad",
+        filePath: "copilot/skills/Bad/SKILL.md",
+        reason: expect.stringMatching(/lowercase/),
+        suggestion: "name: bad\nfolder: bad/",
+      },
+    ]);
     expect(mockedLogWarn).toHaveBeenCalledTimes(1);
     expect(mockedLogWarn.mock.calls[0][0]).toMatch(/Skipping .*Bad\/SKILL\.md/);
   });
@@ -133,12 +142,13 @@ describe("discoverManagedSkills", () => {
       // Wrong parent-dir match: file claims name "wrong" but folder is "x-y".
       [`${SKILLS_ROOT}/x-y/SKILL.md`]: validSkillMd({ name: "wrong" }),
     });
-    const skills = await discoverManagedSkills({
+    const { accepted: skills, rejected } = await discoverManagedSkills({
       skillsFolderRelPath: SKILLS_ROOT,
       skillsFolderAbsPath: null,
       adapter,
     });
     expect(skills.map((s) => s.name).sort()).toEqual(["alpha", "beta", "gamma"]);
+    expect(rejected.map((skill) => skill.name).sort()).toEqual(["Bad1", "x-y"]);
     expect(mockedLogWarn).toHaveBeenCalledTimes(2);
   });
 
@@ -156,7 +166,7 @@ describe("discoverManagedSkills", () => {
       return read(rel);
     });
 
-    const skills = await discoverManagedSkills({
+    const { accepted: skills } = await discoverManagedSkills({
       skillsFolderRelPath: SKILLS_ROOT,
       skillsFolderAbsPath: null,
       adapter,
@@ -178,7 +188,7 @@ describe("discoverManagedSkills", () => {
     const adapter = makeAdapter({
       [`${SKILLS_ROOT}/multi/SKILL.md`]: content,
     });
-    const skills = await discoverManagedSkills({
+    const { accepted: skills } = await discoverManagedSkills({
       skillsFolderRelPath: SKILLS_ROOT,
       skillsFolderAbsPath: null,
       adapter,
@@ -191,7 +201,7 @@ describe("discoverManagedSkills", () => {
     const adapter = makeAdapter({
       [`${SKILLS_ROOT}/foo/SKILL.md`]: validSkillMd({ name: "foo" }),
     });
-    const skills = await discoverManagedSkills({
+    const { accepted: skills } = await discoverManagedSkills({
       skillsFolderRelPath: SKILLS_ROOT,
       skillsFolderAbsPath: "/abs/vault/copilot/skills",
       adapter,
@@ -206,7 +216,7 @@ describe("discoverManagedSkills", () => {
       [`${SKILLS_ROOT}/has-skill/SKILL.md`]: validSkillMd({ name: "has-skill" }),
       [`${SKILLS_ROOT}/no-skill/README.md`]: "not a skill",
     });
-    const skills = await discoverManagedSkills({
+    const { accepted: skills } = await discoverManagedSkills({
       skillsFolderRelPath: SKILLS_ROOT,
       skillsFolderAbsPath: null,
       adapter,
@@ -229,7 +239,7 @@ describe("discoverManagedSkills", () => {
     const adapter = makeAdapter({
       [`${SKILLS_ROOT}/foo/SKILL.md`]: content,
     });
-    const skills = await discoverManagedSkills({
+    const { accepted: skills } = await discoverManagedSkills({
       skillsFolderRelPath: SKILLS_ROOT,
       skillsFolderAbsPath: null,
       adapter,

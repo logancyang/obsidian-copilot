@@ -65,10 +65,48 @@ function splitFrontmatter(content: string): { yaml: string; body: string } {
 
 /** Domain error type — carries a human-readable message suitable for surfacing in the Skills tab. */
 export class SkillFormatError extends Error {
-  constructor(message: string) {
+  constructor(
+    message: string,
+    readonly suggestion?: string
+  ) {
     super(message);
     this.name = "SkillFormatError";
   }
+}
+
+/** Turn a YAML parser failure into the most actionable explanation available. */
+function yamlFormatError(yaml: string, error: { code: string; message: string }): SkillFormatError {
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/166
+  // YAML interprets `: ` inside an unquoted description as a nested mapping;
+  // naming the required quoting repair is more useful than exposing that parser term.
+  if (error.code === "BLOCK_AS_IMPLICIT_KEY") {
+    const description = /^description:\s*([^'"\r\n]*: [^\r\n]*)$/m.exec(yaml)?.[1];
+    if (description !== undefined) {
+      return new SkillFormatError(
+        'The description contains ": " and must be quoted.',
+        `description: ${JSON.stringify(description)}`
+      );
+    }
+  }
+
+  return new SkillFormatError(`SKILL.md frontmatter YAML is invalid: ${error.message}`);
+}
+
+/** Suggest a spec-safe file and folder name when the repair is unambiguous. */
+function nameFixSuggestion(parentDirName: string): string | undefined {
+  if (parentDirName.length <= NAME_MAX && NAME_RE.test(parentDirName)) {
+    return `name: ${parentDirName}`;
+  }
+
+  const normalized = parentDirName
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  if (!normalized || normalized.length > NAME_MAX) {
+    return undefined;
+  }
+  return `name: ${normalized}\nfolder: ${normalized}/`;
 }
 
 /** Read a top-level string scalar from a YAML Document, or return undefined. */
@@ -111,7 +149,7 @@ export function parseSkillFile(content: string, parentDirName: string): ParsedSk
   const doc = parseDocument(yaml, { keepSourceTokens: true });
 
   if (doc.errors.length > 0) {
-    throw new SkillFormatError(`SKILL.md frontmatter YAML is invalid: ${doc.errors[0].message}`);
+    throw yamlFormatError(yaml, doc.errors[0]);
   }
   if (!isMap(doc.contents)) {
     throw new SkillFormatError("SKILL.md frontmatter must be a YAML mapping");
@@ -119,7 +157,10 @@ export function parseSkillFile(content: string, parentDirName: string): ParsedSk
 
   const name = readString(doc, "name");
   if (!name) {
-    throw new SkillFormatError("SKILL.md frontmatter is missing required field `name`");
+    throw new SkillFormatError(
+      "SKILL.md frontmatter is missing required field `name`",
+      nameFixSuggestion(parentDirName)
+    );
   }
   validateName(name, parentDirName);
 
@@ -161,12 +202,14 @@ export function validateName(name: string, parentDirName: string): void {
   }
   if (!NAME_RE.test(name)) {
     throw new SkillFormatError(
-      `Skill \`name\` must be lowercase a–z, 0–9, and hyphens with no leading, trailing, or consecutive hyphens (got "${name}")`
+      `Skill \`name\` must be lowercase a–z, 0–9, and hyphens with no leading, trailing, or consecutive hyphens (got "${name}")`,
+      nameFixSuggestion(parentDirName)
     );
   }
   if (name !== parentDirName) {
     throw new SkillFormatError(
-      `Skill \`name\` ("${name}") must match the parent directory name ("${parentDirName}")`
+      `Skill \`name\` ("${name}") must match the parent directory name ("${parentDirName}")`,
+      nameFixSuggestion(parentDirName)
     );
   }
 }
