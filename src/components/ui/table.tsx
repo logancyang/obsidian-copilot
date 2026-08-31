@@ -29,18 +29,6 @@ const TableBody = React.forwardRef<
 >(({ className, ...props }, ref) => <tbody ref={ref} className={className} {...props} />);
 TableBody.displayName = "TableBody";
 
-const TableFooter = React.forwardRef<
-  HTMLTableSectionElement,
-  React.HTMLAttributes<HTMLTableSectionElement>
->(({ className, ...props }, ref) => (
-  <tfoot
-    ref={ref}
-    className={cn("tw-border-t tw-font-medium tw-bg-primary-alt/50", className)}
-    {...props}
-  />
-));
-TableFooter.displayName = "TableFooter";
-
 const TableRow = React.forwardRef<HTMLTableRowElement, React.HTMLAttributes<HTMLTableRowElement>>(
   ({ className, ...props }, ref) => (
     <tr
@@ -82,12 +70,4 @@ const TableCell = React.forwardRef<
 ));
 TableCell.displayName = "TableCell";
 
-const TableCaption = React.forwardRef<
-  HTMLTableCaptionElement,
-  React.HTMLAttributes<HTMLTableCaptionElement>
->(({ className, ...props }, ref) => (
-  <caption ref={ref} className={cn("tw-mt-4 tw-text-sm tw-text-muted", className)} {...props} />
-));
-TableCaption.displayName = "TableCaption";
-
-export { Table, TableHeader, TableBody, TableFooter, TableHead, TableRow, TableCell, TableCaption };
+export { Table, TableHeader, TableBody, TableHead, TableRow, TableCell };
