@@ -103,6 +103,7 @@ If your plugin does not need CSS, delete this file.
   color: var(--text-normal);
   font-family: var(--font-monospace);
   font-size: var(--font-ui-small);
+  font-weight: var(--font-semibold);
 }
 
 .skill-load-reason {

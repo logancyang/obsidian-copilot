@@ -79,6 +79,7 @@ describe("SkillLoadIssues", () => {
       );
 
       expect(screen.getByText(makeIssue().location)).not.toBeNull();
+      expect(screen.getByText(makeIssue().location).tagName).toBe("DIV");
       expect(screen.getByText(makeIssue().offendingText as string)).not.toBeNull();
       expect(screen.getByText(makeIssue().suggestion as string)).not.toBeNull();
       expect(screen.getByText(".claude/skills/without-fix/SKILL.md")).not.toBeNull();

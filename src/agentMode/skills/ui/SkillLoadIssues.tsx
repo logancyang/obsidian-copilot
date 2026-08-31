@@ -71,7 +71,7 @@ export const SkillLoadIssuesModalContent: React.FC<SkillLoadIssuesModalContentPr
     <div className="skill-load-list">
       {issues.map((issue) => (
         <article className="skill-load-item" key={issue.location}>
-          <strong className="skill-load-path">{issue.location}</strong>
+          <div className="skill-load-path">{issue.location}</div>
           <p className="skill-load-reason">{issue.reason}</p>
           {issue.offendingText !== undefined && (
             <div className="skill-load-code-detail">
