@@ -49,5 +49,3 @@ export const CopilotSpinner: React.FC<CopilotSpinnerProps> = ({ animated = true 
     </svg>
   );
 };
-
-export default CopilotSpinner;
