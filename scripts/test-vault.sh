@@ -131,29 +131,6 @@ BUILD_TAG="$(
 )"
 echo "==> Wrote development manifest (build: $BUILD_TAG, branch: $BRANCH)"
 
-# Reload by toggling disable -> enable, NOT `plugin:reload`. On this setup
-# `plugin:reload` returns success but does NOT re-run the plugin's onload, so the
-# freshly deployed main.js never executes. A disable+enable cycle re-runs onload.
-#
-# CRITICAL: the Obsidian CLI picks its TARGET VAULT from the current working
-# directory (it resolves the vault enclosing $PWD; `vault=` does NOT override
-# this). So we MUST run the CLI from inside the target vault's directory, or the
-# reload silently hits whatever vault the caller's cwd sits in (e.g. the
-# repo/worktree vault) instead of the deploy target. Hence the `cd "$VAULT_PATH"`.
-echo "==> Reloading plugin in Obsidian (vault dir: $VAULT_PATH)"
-if [[ ! -x "$OBSIDIAN_BIN" ]]; then
-  echo "warning: Obsidian CLI not found at $OBSIDIAN_BIN; skipping reload." >&2
-else
-  ( cd "$VAULT_PATH" && "$OBSIDIAN_BIN" plugin:disable id="$PLUGIN_ID" >/dev/null 2>&1 ) || true
-  if ( cd "$VAULT_PATH" && "$OBSIDIAN_BIN" plugin:enable id="$PLUGIN_ID" >/dev/null 2>&1 ); then
-    echo "    reloaded (onload re-ran). Note: the sidebar manifest label only"
-    echo "    refreshes on a full Obsidian restart; use a dev-console marker to"
-    echo "    confirm the loaded build, not the label."
-  else
-    echo "warning: could not reload via the CLI. Is Obsidian running with this vault open? The plugin will load on next open." >&2
-  fi
-fi
-
 # The component gallery plugin ships a near-complete copy of the production
 # stylesheet (scripts/prepare-gallery-css.mjs concatenates src/styles/tailwind.css
 # into its source), and Obsidian injects every enabled plugin's styles.css
@@ -184,6 +161,29 @@ if [[ -n "$GALLERY_ID" ]]; then
   if [[ -e "$GALLERY_PLUGIN_DIR" || -L "$GALLERY_PLUGIN_DIR" ]]; then
     echo "==> Redeploying the gallery plugin from this worktree so both stylesheets match"
     npm run gallery:vault
+  fi
+fi
+
+# Reload by toggling disable -> enable, NOT `plugin:reload`. On this setup
+# `plugin:reload` returns success but does NOT re-run the plugin's onload, so the
+# freshly deployed main.js never executes. A disable+enable cycle re-runs onload.
+#
+# CRITICAL: the Obsidian CLI picks its TARGET VAULT from the current working
+# directory (it resolves the vault enclosing $PWD; `vault=` does NOT override
+# this). So we MUST run the CLI from inside the target vault's directory, or the
+# reload silently hits whatever vault the caller's cwd sits in (e.g. the
+# repo/worktree vault) instead of the deploy target. Hence the `cd "$VAULT_PATH"`.
+echo "==> Reloading plugin in Obsidian (vault dir: $VAULT_PATH)"
+if [[ ! -x "$OBSIDIAN_BIN" ]]; then
+  echo "warning: Obsidian CLI not found at $OBSIDIAN_BIN; skipping reload." >&2
+else
+  ( cd "$VAULT_PATH" && "$OBSIDIAN_BIN" plugin:disable id="$PLUGIN_ID" >/dev/null 2>&1 ) || true
+  if ( cd "$VAULT_PATH" && "$OBSIDIAN_BIN" plugin:enable id="$PLUGIN_ID" >/dev/null 2>&1 ); then
+    echo "    reloaded (onload re-ran). Note: the sidebar manifest label only"
+    echo "    refreshes on a full Obsidian restart; use a dev-console marker to"
+    echo "    confirm the loaded build, not the label."
+  else
+    echo "warning: could not reload via the CLI. Is Obsidian running with this vault open? The plugin will load on next open." >&2
   fi
 fi
 
