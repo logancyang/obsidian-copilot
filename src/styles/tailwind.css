@@ -62,6 +62,10 @@ If your plugin does not need CSS, delete this file.
 
 /* Persistent recovery surface for SKILL.md files that discovery rejected. */
 .skill-load-issues {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--size-4-3);
   padding: var(--size-4-3);
   border: 1px solid color-mix(in srgb, var(--text-warning) 40%, transparent);
   border-radius: var(--radius-s);
@@ -72,6 +76,11 @@ If your plugin does not need CSS, delete this file.
 .skill-load-issues .skill-load-title {
   display: block;
   color: color-mix(in srgb, var(--text-warning) 60%, var(--text-normal));
+  font-size: var(--font-ui-small);
+}
+
+.skill-load-copy {
+  min-width: 0;
 }
 
 .skill-load-intro {
@@ -124,6 +133,10 @@ If your plugin does not need CSS, delete this file.
   display: flex;
   gap: var(--size-4-1);
   margin-top: var(--size-4-2);
+}
+
+.skill-load-issues > .skill-load-actions {
+  margin-top: 0;
 }
 
 .skill-list-empty {

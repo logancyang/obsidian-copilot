@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { ClampedContent } from "@/components/ui/clamped-content";
 import { ReactModal } from "@/components/modals/ReactModal";
 import { App } from "obsidian";
 import React from "react";
@@ -37,8 +38,10 @@ export const SkillLoadIssues: React.FC<SkillLoadIssuesProps> = ({ issues, onView
 
   return (
     <section className="skill-load-issues" role="alert" aria-label={title}>
-      <strong className="skill-load-title">{title}</strong>
-      <p className="skill-load-intro">{summary}</p>
+      <div className="skill-load-copy">
+        <strong className="skill-load-title">{title}</strong>
+        <p className="skill-load-intro">{summary}</p>
+      </div>
       <div className="skill-load-actions">
         <Button variant="secondary" size="sm" onClick={onViewDetails}>
           View details
@@ -73,7 +76,9 @@ export const SkillLoadIssuesModalContent: React.FC<SkillLoadIssuesModalContentPr
           <div className="skill-load-path">{issue.location}</div>
           <p className="skill-load-reason">{issue.reason}</p>
           {issue.offendingText !== undefined && (
-            <code className="skill-load-code">{issue.offendingText}</code>
+            <ClampedContent collapsedClassName="tw-max-h-[6lh]">
+              <code className="skill-load-code">{issue.offendingText}</code>
+            </ClampedContent>
           )}
           <div className="skill-load-actions">
             <Button variant="secondary" size="sm" onClick={() => runAction(issue.onOpen)}>

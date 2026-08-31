@@ -11,6 +11,37 @@ import {
 
 const ISSUE_URL = "https://github.com/Brevilabs/obsidian-copilot-private/issues/166";
 
+function stubContentDimensions(scrollHeightPx: number, clientHeightPx: number): () => void {
+  const originalScrollHeight = Object.getOwnPropertyDescriptor(
+    HTMLElement.prototype,
+    "scrollHeight"
+  );
+  const originalClientHeight = Object.getOwnPropertyDescriptor(
+    HTMLElement.prototype,
+    "clientHeight"
+  );
+  Object.defineProperty(HTMLElement.prototype, "scrollHeight", {
+    configurable: true,
+    get: () => scrollHeightPx,
+  });
+  Object.defineProperty(HTMLElement.prototype, "clientHeight", {
+    configurable: true,
+    get: () => clientHeightPx,
+  });
+  return () => {
+    if (originalScrollHeight) {
+      Object.defineProperty(HTMLElement.prototype, "scrollHeight", originalScrollHeight);
+    } else {
+      Reflect.deleteProperty(HTMLElement.prototype, "scrollHeight");
+    }
+    if (originalClientHeight) {
+      Object.defineProperty(HTMLElement.prototype, "clientHeight", originalClientHeight);
+    } else {
+      Reflect.deleteProperty(HTMLElement.prototype, "clientHeight");
+    }
+  };
+}
+
 describe("SkillLoadIssues", () => {
   describe("SkillLoadIssues()", () => {
     it(`keeps one rejected skill compact while surfacing its high-level cause for ${ISSUE_URL}`, () => {
@@ -21,6 +52,12 @@ describe("SkillLoadIssues", () => {
       expect(
         screen.getByText("Not available to agents. The description is not quoted.")
       ).not.toBeNull();
+      expect(screen.getByText("1 skill could not be loaded").parentElement?.className).toBe(
+        "skill-load-copy"
+      );
+      expect(screen.getByRole("button", { name: "View details" }).parentElement?.className).toBe(
+        "skill-load-actions"
+      );
       expect(screen.queryByText(makeIssue().location)).toBeNull();
       fireEvent.click(screen.getByRole("button", { name: "View details" }));
       expect(onViewDetails).toHaveBeenCalledTimes(1);
@@ -59,6 +96,13 @@ describe("SkillLoadIssues", () => {
   });
 
   describe("SkillLoadIssuesModalContent()", () => {
+    let restoreContentHeight: (() => void) | undefined;
+
+    afterEach(() => {
+      restoreContentHeight?.();
+      restoreContentHeight = undefined;
+    });
+
     it(`shows every file path, reason, and rejected line for ${ISSUE_URL}`, () => {
       const order: string[] = [];
       render(
@@ -109,6 +153,27 @@ describe("SkillLoadIssues", () => {
       expect(screen.getAllByText(makeIssue().reason)).toHaveLength(2);
       expect(screen.getByText("Missing name.")).not.toBeNull();
       expect(screen.getAllByRole("article")).toHaveLength(3);
+    });
+
+    it(`collapses an overflowing rejected description until Show more is selected for ${ISSUE_URL}`, () => {
+      restoreContentHeight = stubContentDimensions(400, 100);
+      const longDescription = `description: ${"Review long notes carefully. ".repeat(40)}`;
+
+      render(
+        <SkillLoadIssuesModalContent
+          issues={[makeIssue({ offendingText: longDescription })]}
+          onClose={jest.fn()}
+        />
+      );
+
+      const preview = screen.getByTestId("clamped-content");
+      expect(preview.classList.contains("tw-max-h-[6lh]")).toBe(true);
+      expect(preview.textContent).toBe(longDescription);
+
+      fireEvent.click(screen.getByRole("button", { name: "Show more" }));
+
+      expect(preview.classList.contains("tw-max-h-[6lh]")).toBe(false);
+      expect(screen.getByRole("button", { name: "Show less" })).not.toBeNull();
     });
   });
 
