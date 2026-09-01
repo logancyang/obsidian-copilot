@@ -5,6 +5,8 @@ export interface TabItem {
   icon: React.ReactNode;
   label: string;
   id: string;
+  /** Accessible explanation for the warning dot shown in the tab's top-right corner. */
+  warningLabel?: string;
 }
 
 /**
@@ -40,6 +42,7 @@ export const TabItem: React.FC<TabItemProps> = ({
       id={`tab-${tab.id}`}
       aria-controls={`tabpanel-${tab.id}`}
       aria-selected={isSelected}
+      aria-label={tab.warningLabel ? `${tab.label}: ${tab.warningLabel}` : tab.label}
       tabIndex={0}
       onClick={onClick}
       // Reason: a `role="tab"` div is not focusable or keyboard-operable on its
@@ -53,7 +56,7 @@ export const TabItem: React.FC<TabItemProps> = ({
         }
       }}
       className={cn(
-        "tw-flex tw-flex-row tw-items-center",
+        "tw-relative tw-flex tw-flex-row tw-items-center",
         "tw-h-8",
         "tw-px-2 tw-py-1",
         "tw-gap-1.5",
@@ -105,6 +108,16 @@ export const TabItem: React.FC<TabItemProps> = ({
       >
         {tab.label}
       </span>
+      {/* https://github.com/Brevilabs/obsidian-copilot-private/issues/166
+          A tab-level marker keeps rejected skills visible while the inactive
+          Skills panel is unmounted. */}
+      {tab.warningLabel && (
+        <span
+          aria-hidden="true"
+          title={tab.warningLabel}
+          className="tw-pointer-events-none tw-absolute tw-right-1 tw-top-1 tw-size-1.5 tw-rounded-full tw-bg-warning"
+        />
+      )}
     </div>
   );
 };

@@ -1,4 +1,4 @@
-import type { AgentSessionManager } from "@/agentMode";
+import type { AgentSessionManager, SkillManager } from "@/agentMode";
 // Deep import (not the barrel): these run on the load path for every
 // platform, and the barrel pulls Node-only modules that crash mobile.
 import { isNativeChatId, parseNativeChatId } from "@/utils/nativeChatId";
@@ -152,6 +152,7 @@ export default class CopilotPlugin extends Plugin {
   settingsUnsubscriber?: () => void;
   chatUIState: ChatManagerChatUIState;
   agentSessionManager?: AgentSessionManager;
+  skills?: SkillManager;
   private CopilotAgentView?: typeof import("@/agentMode").CopilotAgentView;
   private PlanPreviewView?: typeof import("@/agentMode").PlanPreviewView;
   private planPreviewViewType?: typeof import("@/agentMode").PLAN_PREVIEW_VIEW_TYPE;
@@ -322,6 +323,7 @@ export default class CopilotPlugin extends Plugin {
         acpFrameSink,
         createAgentSessionManager,
         setFrameSinkVaultBasePath,
+        SkillManager,
       } = await import("@/agentMode");
       const { wireAgentModelDiscovery } = await import("@/agentMode/agentModelDiscovery");
       this.CopilotAgentView = CopilotAgentView;
@@ -339,6 +341,7 @@ export default class CopilotPlugin extends Plugin {
       void acpFrameSink.narrowLegacyLogs();
 
       this.agentSessionManager = createAgentSessionManager(this.app, this);
+      this.skills = SkillManager.getInstance();
       // Enroll agent-reported models on probe settle, even when the settings
       // tab is closed. See `agentModelDiscovery.ts`.
       this.agentModelDiscoveryUnsubscriber = wireAgentModelDiscovery(
@@ -1163,6 +1166,22 @@ export default class CopilotPlugin extends Plugin {
       await manager.createSession();
     } catch (error) {
       logWarn("[CopilotPlugin] Failed to create agent session", error);
+      new Notice("Failed to create agent session. Check Copilot logs.");
+    }
+  }
+
+  /** Open a fresh global Agent chat with reviewable text left unsent in its composer. */
+  async newAgentChatWithDraft(initialDraft: string): Promise<void> {
+    const manager = this.requireAgentView();
+    if (!manager) return;
+    try {
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/166
+      // Create the drafted session before mounting the Agent view. A first-time
+      // mount otherwise auto-creates an empty session before this one exists.
+      await manager.createGlobalSessionWithDraft(initialDraft);
+      await this.activateAgentView();
+    } catch (error) {
+      logWarn("[CopilotPlugin] Failed to create agent session with draft", error);
       new Notice("Failed to create agent session. Check Copilot logs.");
     }
   }

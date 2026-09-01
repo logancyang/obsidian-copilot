@@ -85,7 +85,7 @@ export function AgentContextConversionModalContent({
     const hasConversionFreeContext = hasConfiguredContextSource || skippedMarkdownCount > 0;
     return (
       <div className="tw-flex tw-w-[368px] tw-max-w-full tw-flex-col">
-        <div className="tw-flex tw-items-center tw-gap-2 tw-border-x-[0px] tw-border-b tw-border-t-[0px] tw-border-solid tw-border-border tw-px-3.5 tw-py-3 tw-text-sm tw-font-semibold tw-text-normal">
+        <div className="tw-flex tw-items-center tw-gap-2 tw-border-x-0 tw-border-b tw-border-t-0 tw-border-solid tw-border-border tw-px-3.5 tw-py-3 tw-text-sm tw-font-semibold tw-text-normal">
           {hasConversionFreeContext ? (
             <CheckCircle2 className="tw-size-4 tw-text-success" />
           ) : (
@@ -108,7 +108,7 @@ export function AgentContextConversionModalContent({
             "This project has no context sources yet."
           )}
         </div>
-        <div className="tw-flex tw-justify-end tw-border-x-[0px] tw-border-b-[0px] tw-border-t tw-border-solid tw-border-border tw-px-3.5 tw-py-2.5">
+        <div className="tw-flex tw-justify-end tw-border-x-0 tw-border-b-0 tw-border-t tw-border-solid tw-border-border tw-px-3.5 tw-py-2.5">
           <Button
             variant="ghost"
             size="sm"
@@ -126,7 +126,7 @@ export function AgentContextConversionModalContent({
   return (
     <div className="tw-flex tw-min-h-0 tw-w-[368px] tw-max-w-full tw-flex-col">
       {/* Header */}
-      <div className="tw-flex tw-shrink-0 tw-items-center tw-gap-2 tw-border-x-[0px] tw-border-b tw-border-t-[0px] tw-border-solid tw-border-border tw-px-3.5 tw-py-3 tw-text-sm tw-font-semibold tw-text-normal">
+      <div className="tw-flex tw-shrink-0 tw-items-center tw-gap-2 tw-border-x-0 tw-border-b tw-border-t-0 tw-border-solid tw-border-border tw-px-3.5 tw-py-3 tw-text-sm tw-font-semibold tw-text-normal">
         {overall === "success" && <CheckCircle2 className="tw-size-4 tw-text-success" />}
         {overall === "processing" && (
           <Loader2 className="tw-size-4 tw-animate-spin tw-text-accent" />
@@ -208,7 +208,7 @@ export function AgentContextConversionModalContent({
       </div>
 
       {/* Footer */}
-      <div className="tw-flex tw-shrink-0 tw-gap-1.5 tw-border-x-[0px] tw-border-b-[0px] tw-border-t tw-border-solid tw-border-border tw-px-3.5 tw-py-2.5">
+      <div className="tw-flex tw-shrink-0 tw-gap-1.5 tw-border-x-0 tw-border-b-0 tw-border-t tw-border-solid tw-border-border tw-px-3.5 tw-py-2.5">
         <Button variant="ghost" size="sm" className="tw-gap-1.5 tw-text-muted" onClick={onRetryAll}>
           <RotateCcw className="tw-size-3.5" />
           {failedCount > 0 ? "Retry failed" : "Retry all"}

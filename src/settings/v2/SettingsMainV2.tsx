@@ -7,6 +7,7 @@ import { useLatestVersion } from "@/hooks/useLatestVersion";
 import CopilotPlugin from "@/main";
 import { ByokPanel, ModelManagementProvider } from "@/modelManagement";
 import { resetSettings } from "@/settings/model";
+import { useSkillLoadErrorCount } from "@/settings/skillLoadErrorState";
 import { CommandSettings } from "@/settings/v2/components/CommandSettings";
 import { Cog, Command, Cpu, ShieldCheck, Sigma, Sparkle, Wrench } from "lucide-react";
 import React from "react";
@@ -100,6 +101,7 @@ const tabs: TabItemType[] = TAB_IDS.map((id) => ({
 
 const SettingsContent: React.FC = () => {
   const { selectedTab, setSelectedTab } = useTab();
+  const skillLoadErrorCount = useSkillLoadErrorCount();
 
   return (
     <div className="tw-flex tw-flex-col">
@@ -107,7 +109,16 @@ const SettingsContent: React.FC = () => {
         {tabs.map((tab, index) => (
           <TabItem
             key={tab.id}
-            tab={tab}
+            tab={{
+              ...tab,
+              // https://github.com/Brevilabs/obsidian-copilot-private/issues/166
+              // The tab strip stays mounted while inactive panels do not, so
+              // load failures remain visible from every settings section.
+              warningLabel:
+                tab.id === "skills" && skillLoadErrorCount > 0
+                  ? "Some skills failed to load"
+                  : undefined,
+            }}
             isSelected={selectedTab === tab.id}
             onClick={() => setSelectedTab(tab.id)}
             isFirst={index === 0}
@@ -139,6 +150,14 @@ const SettingsMainV2: React.FC<SettingsMainV2Props> = ({ plugin }) => {
   // Add a key state that we'll change when resetting
   const [resetKey, setResetKey] = React.useState(0);
   const { latestVersion, hasUpdate } = useLatestVersion(plugin.manifest.version);
+
+  React.useEffect(() => {
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/166
+    // Agent repairs can change hidden files while the window stays focused and
+    // the Skills panel is unmounted. Refresh when Settings next opens so its tab
+    // marker never depends on visiting the Skills panel first.
+    void plugin.skills?.refresh();
+  }, [plugin]);
 
   const handleReset = () => {
     const modal = new ResetSettingsConfirmModal(plugin.app, () => {

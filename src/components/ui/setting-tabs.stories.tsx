@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@/lib/story";
-import { Cog, Cpu, Sigma } from "lucide-react";
+import { Cog, Cpu, Sigma, Sparkle } from "lucide-react";
 import * as React from "react";
 import { TabContent, TabItem, type TabVariant } from "./setting-tabs";
 
@@ -52,6 +52,37 @@ export const PageVariant: StoryObj<TabItemProps> = {
 /** Nested chips: uniformly rounded, accent outline when selected, no second backdrop. */
 export const InlineVariant: StoryObj<TabItemProps> = {
   render: () => <Strip variant="inline" />,
+};
+
+export const WarningDot: StoryObj<TabItemProps> = {
+  render: () => (
+    <div className="tw-flex tw-gap-2">
+      <TabItem
+        tab={{
+          id: "skills-idle",
+          label: "Skills",
+          icon: <Sparkle className="tw-size-5" />,
+          warningLabel: "Some skills failed to load",
+        }}
+        isSelected={false}
+        onClick={() => undefined}
+        isFirst={false}
+        isLast={false}
+      />
+      <TabItem
+        tab={{
+          id: "skills-selected",
+          label: "Skills",
+          icon: <Sparkle className="tw-size-5" />,
+          warningLabel: "Some skills failed to load",
+        }}
+        isSelected
+        onClick={() => undefined}
+        isFirst={false}
+        isLast={false}
+      />
+    </div>
+  ),
 };
 
 /**

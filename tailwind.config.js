@@ -70,6 +70,7 @@ module.exports = {
       secondary: "var(--background-secondary)",
       "secondary-alt": "var(--background-secondary-alt)",
       success: "rgba(var(--color-green-rgb),0.2)",
+      warning: "var(--text-warning)",
       error: "rgba(var(--color-red-rgb),0.2)",
       // Soft tints behind Agent Home project tiles; deeper `text.project` hue
       // sits on top. Same six hues, kept in sync with `textColor.project`.
@@ -183,6 +184,7 @@ module.exports = {
       },
     },
     borderWidth: {
+      0: "0px",
       DEFAULT: "var(--border-width)",
     },
     zIndex: {

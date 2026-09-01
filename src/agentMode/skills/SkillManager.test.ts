@@ -1,5 +1,6 @@
 import { act, renderHook } from "@testing-library/react";
 import { FileSystemAdapter, type App, type EventRef } from "obsidian";
+import { useSkillLoadErrorCount } from "@/settings/skillLoadErrorState";
 import { discoverManagedSkills } from "./discoverManagedSkills";
 import { reconcile } from "./reconcile";
 import {
@@ -502,6 +503,7 @@ describe("SkillManager orchestration", () => {
   it("publishes and clears rejected discovery state for https://github.com/Brevilabs/obsidian-copilot-private/issues/166", async () => {
     const app = makeApp();
     const manager = SkillManager.initialize(app, { claude: ".claude/skills" });
+    const { result: loadErrorCount } = renderHook(() => useSkillLoadErrorCount());
     const rejected: RejectedSkill = {
       name: "broken-skill",
       filePath: "/vault/copilot/skills/broken-skill/SKILL.md",
@@ -519,17 +521,43 @@ describe("SkillManager orchestration", () => {
     });
     expect(getRejectedSkills()).toEqual([rejected]);
     expect(result.current).toEqual([rejected]);
+    expect(loadErrorCount.current).toBe(1);
 
     await act(async () => {
       await manager.refresh();
     });
     expect(getRejectedSkills()).toEqual([]);
     expect(result.current).toBe(initialRejectedSkills);
+    expect(loadErrorCount.current).toBe(0);
 
     await act(async () => {
       await manager.refresh();
     });
     expect(result.current).toBe(initialRejectedSkills);
+  });
+
+  it("clears the rejected-skill count on disposal so plugin reloads do not keep a stale warning for https://github.com/Brevilabs/obsidian-copilot-private/issues/166", async () => {
+    const manager = SkillManager.initialize(makeApp(), { claude: ".claude/skills" });
+    const { result: loadErrorCount } = renderHook(() => useSkillLoadErrorCount());
+    mockedDiscoverManagedSkills.mockResolvedValueOnce(
+      discoveryResult(
+        [],
+        [
+          {
+            name: "broken-skill",
+            filePath: "/vault/copilot/skills/broken-skill/SKILL.md",
+            dirPath: "/vault/copilot/skills/broken-skill",
+            reason: "The description must be quoted.",
+          },
+        ]
+      )
+    );
+
+    await act(() => manager.refresh());
+    expect(loadErrorCount.current).toBe(1);
+
+    act(() => manager.dispose());
+    expect(loadErrorCount.current).toBe(0);
   });
 
   it("notifies when a backend-visible skill signature changes", async () => {
