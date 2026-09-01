@@ -47,7 +47,8 @@ const EXPECTATION_TIMEOUT_MS = 10_000;
 
 const skillManagerStore = createStore();
 const skillsAtom = atom<Skill[]>([]);
-const rejectedSkillsAtom = atom<RejectedSkill[]>([]);
+const EMPTY_REJECTED_SKILLS = Object.freeze([]) as unknown as RejectedSkill[];
+const rejectedSkillsAtom = atom<RejectedSkill[]>(EMPTY_REJECTED_SKILLS);
 const lastScannedFolderAtom = atom<string>(DEFAULT_SKILLS_FOLDER);
 const epermSeenAtom = atom<boolean>(false);
 
@@ -188,7 +189,7 @@ export class SkillManager {
     }
     SkillManager.instance = null;
     skillManagerStore.set(skillsAtom, []);
-    skillManagerStore.set(rejectedSkillsAtom, []);
+    skillManagerStore.set(rejectedSkillsAtom, EMPTY_REJECTED_SKILLS);
     skillManagerStore.set(lastScannedFolderAtom, DEFAULT_SKILLS_FOLDER);
     skillManagerStore.set(epermSeenAtom, false);
   }
@@ -324,9 +325,12 @@ export class SkillManager {
       }
 
       const skills = mergeDiscovery(canonicalDiscovery.accepted, projectCandidates);
-      const rejectedSkills = canonicalDiscovery.rejected
-        .concat(rejectedProjectSkills)
-        .sort((a, b) => a.dirPath.localeCompare(b.dirPath));
+      const rejectedSkills =
+        canonicalDiscovery.rejected.length === 0 && rejectedProjectSkills.length === 0
+          ? EMPTY_REJECTED_SKILLS
+          : canonicalDiscovery.rejected
+              .concat(rejectedProjectSkills)
+              .sort((a, b) => a.dirPath.localeCompare(b.dirPath));
 
       // Reconcile against the agent dirs if we have an on-disk vault.
       // Only canonical rows are passed in — project skills are not part

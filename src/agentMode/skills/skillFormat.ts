@@ -80,11 +80,16 @@ function yamlFormatError(
   yaml: string,
   error: { code: string; message: string; linePos?: readonly { line: number }[] }
 ): SkillFormatError {
+  const errorLine = error.linePos?.[0]?.line;
+  const offendingText = errorLine === undefined ? undefined : yaml.split(/\r?\n/)[errorLine - 1];
+
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/166
   // YAML interprets `: ` inside an unquoted description as a nested mapping;
   // naming the required quoting repair is more useful than exposing that parser term.
   if (error.code === "BLOCK_AS_IMPLICIT_KEY") {
-    const descriptionLine = /^(description:\s*([^'"\r\n]*: [^\r\n]*))$/m.exec(yaml);
+    const descriptionLine = /^(description[ \t]*:[ \t]*([^'"\r\n]*: [^\r\n]*))$/.exec(
+      offendingText ?? ""
+    );
     if (descriptionLine?.[1] !== undefined && descriptionLine[2] !== undefined) {
       return new SkillFormatError(
         'The description contains ": " and must be quoted.',
@@ -93,17 +98,18 @@ function yamlFormatError(
     }
   }
 
-  const errorLine = error.linePos?.[0]?.line;
-  const offendingText = errorLine === undefined ? undefined : yaml.split(/\r?\n/)[errorLine - 1];
   return new SkillFormatError(
     `SKILL.md frontmatter YAML is invalid: ${error.message}`,
     offendingText
   );
 }
 
-/** Preserve the exact frontmatter line that failed validation when it exists. */
+/**
+ * Preserve the exact frontmatter line that failed validation when it exists.
+ * https://github.com/Brevilabs/obsidian-copilot-private/issues/166
+ */
 function frontmatterLine(yaml: string, key: string): string | undefined {
-  return new RegExp(`^${key}:[^\\r\\n]*$`, "m").exec(yaml)?.[0];
+  return new RegExp(`^${key}[ \\t]*:[^\\r\\n]*$`, "m").exec(yaml)?.[0];
 }
 
 /** Read a top-level string scalar from a YAML Document, or return undefined. */

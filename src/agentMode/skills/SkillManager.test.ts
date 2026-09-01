@@ -1,3 +1,4 @@
+import { act, renderHook } from "@testing-library/react";
 import { FileSystemAdapter, type App, type EventRef } from "obsidian";
 import { discoverManagedSkills } from "./discoverManagedSkills";
 import { reconcile } from "./reconcile";
@@ -7,6 +8,7 @@ import {
   getRejectedSkills,
   SkillManager,
   type RefreshResult,
+  useRejectedSkills,
 } from "./SkillManager";
 import { runDeleteSkill, runToggleAgent } from "./toggleAgent";
 import { runRenameSkill, runUpdateProperties } from "./updateProperties";
@@ -508,12 +510,26 @@ describe("SkillManager orchestration", () => {
     };
     mockedDiscoverManagedSkills.mockResolvedValueOnce(discoveryResult([], [rejected]));
     mockedDiscoverManagedSkills.mockResolvedValueOnce(discoveryResult());
+    mockedDiscoverManagedSkills.mockResolvedValueOnce(discoveryResult());
+    const { result } = renderHook(() => useRejectedSkills());
+    const initialRejectedSkills = result.current;
 
-    await manager.refresh();
+    await act(async () => {
+      await manager.refresh();
+    });
     expect(getRejectedSkills()).toEqual([rejected]);
+    expect(result.current).toEqual([rejected]);
 
-    await manager.refresh();
+    await act(async () => {
+      await manager.refresh();
+    });
     expect(getRejectedSkills()).toEqual([]);
+    expect(result.current).toBe(initialRejectedSkills);
+
+    await act(async () => {
+      await manager.refresh();
+    });
+    expect(result.current).toBe(initialRejectedSkills);
   });
 
   it("notifies when a backend-visible skill signature changes", async () => {

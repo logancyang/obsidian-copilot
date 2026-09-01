@@ -161,6 +161,26 @@ describe("parseSkillFile — validation errors", () => {
     expect(() => parseSkillFile(content, "review-prose")).toThrow(/frontmatter YAML is invalid/);
   });
 
+  it("keeps a parser failure on another field generic for https://github.com/Brevilabs/obsidian-copilot-private/issues/166", () => {
+    const content = [
+      "---",
+      "name: review-prose",
+      "metadata: Use this for: reviews",
+      "description: Use this skill for: reviewing notes",
+      "---",
+      "body",
+    ].join("\n");
+
+    expect.assertions(3);
+    try {
+      parseSkillFile(content, "review-prose");
+    } catch (error) {
+      expect(error).toBeInstanceOf(SkillFormatError);
+      expect((error as SkillFormatError).message).toMatch(/frontmatter YAML is invalid/);
+      expect((error as SkillFormatError).offendingText).toBe("metadata: Use this for: reviews");
+    }
+  });
+
   it("accepts a Chinese description that uses full-width punctuation", () => {
     const content = [
       "---",
@@ -174,16 +194,18 @@ describe("parseSkillFile — validation errors", () => {
     );
   });
 
-  it("reports the offending name line", () => {
+  it("reports the offending name line with YAML key spacing for https://github.com/Brevilabs/obsidian-copilot-private/issues/166", () => {
+    const content = ["---", "name : Release Notes", "description: A skill", "---"].join("\n");
+
     expect.assertions(3);
     try {
-      parseSkillFile(minimalSkill({ name: "Release Notes" }), "Release Notes");
+      parseSkillFile(content, "Release Notes");
     } catch (error) {
       expect(error).toBeInstanceOf(SkillFormatError);
       expect((error as SkillFormatError).message).toBe(
         "Use the same lowercase, hyphenated name in the file and folder."
       );
-      expect((error as SkillFormatError).offendingText).toBe("name: Release Notes");
+      expect((error as SkillFormatError).offendingText).toBe("name : Release Notes");
     }
   });
 });
