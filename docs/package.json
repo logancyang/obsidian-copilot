@@ -15,6 +15,7 @@
   "dependencies": {
     "@astrojs/starlight": "0.41.7",
     "astro": "7.2.4",
+    "posthog-js": "1.422.5",
     "unist-util-visit": "5.1.0"
   }
 }

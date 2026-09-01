@@ -36,4 +36,33 @@ Create a separate Vercel project for this site with these settings:
 - **Production Branch:** `master`
 - **Node.js Version:** `22.x`
 
-Attach `docs.obsidiancopilot.com` to that project. No environment variables are required.
+Attach `docs.obsidiancopilot.com` to that project. No environment variables are required to build
+or preview the site.
+
+## Production analytics
+
+Analytics is optional and must remain disabled until the privacy policy is confirmed to cover the
+docs subdomain. After that approval, add `PUBLIC_POSTHOG_KEY` and `PUBLIC_POSTHOG_HOST` to the
+Vercel **Production** environment only, using values from the approved production configuration.
+Keep their values out of the repository, issue comments, build logs, and preview environments.
+
+After deploying, visit a few docs pages and run this query in PostHog to confirm that only the
+allowlisted events and canonical paths arrive:
+
+```sql
+SELECT
+  event,
+  if(event IN ('$pageview', '$pageleave'), 'allowed', 'unexpected') AS contract_status,
+  timestamp,
+  properties.$host AS host,
+  properties.$pathname AS path,
+  properties.$referring_domain AS referring_domain
+FROM events
+WHERE properties.$host = 'docs.obsidiancopilot.com'
+ORDER BY timestamp DESC
+LIMIT 100
+```
+
+Verify that every row is classified as `allowed`, paths contain no query strings, fragments, search
+terms, or ad-click identifiers, and no autocapture or replay events appear. To roll back, remove
+both variables from Vercel Production and redeploy; the docs continue to work without analytics.

@@ -67,6 +67,9 @@ export default defineConfig({
         light: "./src/assets/copilot-icon-dark.svg",
         alt: "",
       },
+      components: {
+        Head: "./src/components/Head.astro",
+      },
       sidebar,
     }),
   ],

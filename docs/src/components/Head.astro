@@ -1,0 +1,23 @@
+---
+import DefaultHead from "@astrojs/starlight/components/Head.astro";
+---
+
+<DefaultHead />
+
+<script>
+  import { startDocsAnalytics } from "../analytics.mjs";
+
+  void startDocsAnalytics({
+    loadPostHog: async () => (await import("posthog-js")).default,
+    hostname: window.location.hostname,
+    apiKey: import.meta.env.PUBLIC_POSTHOG_KEY,
+    apiHost: import.meta.env.PUBLIC_POSTHOG_HOST,
+    getStorage: () => window.localStorage,
+    getCanonicalUrl: () =>
+      document.querySelector<HTMLLinkElement>('link[rel="canonical"]')?.href,
+    addNavigationListener: (listener) => {
+      document.addEventListener("astro:page-load", listener);
+      return () => document.removeEventListener("astro:page-load", listener);
+    },
+  });
+</script>
