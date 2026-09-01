@@ -151,6 +151,14 @@ const SettingsMainV2: React.FC<SettingsMainV2Props> = ({ plugin }) => {
   const [resetKey, setResetKey] = React.useState(0);
   const { latestVersion, hasUpdate } = useLatestVersion(plugin.manifest.version);
 
+  React.useEffect(() => {
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/166
+    // Agent repairs can change hidden files while the window stays focused and
+    // the Skills panel is unmounted. Refresh when Settings next opens so its tab
+    // marker never depends on visiting the Skills panel first.
+    void plugin.skills?.refresh();
+  }, [plugin]);
+
   const handleReset = () => {
     const modal = new ResetSettingsConfirmModal(plugin.app, () => {
       resetSettings();

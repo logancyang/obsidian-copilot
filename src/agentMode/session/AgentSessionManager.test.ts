@@ -397,185 +397,232 @@ beforeEach(() => {
   settingsChangeCallbacks.clear();
 });
 
-describe("AgentSessionManager.createSession", () => {
-  it("creates a session and sets it as the active one", async () => {
-    const mgr = buildManager();
-    const session = await mgr.createSession();
-    expect(mgr.getSessions()).toEqual([session]);
-    expect(mgr.getActiveSession()).toBe(session);
-    expect(mgr.getActiveChatUIState()).not.toBeNull();
-    expect(mgr.getChatUIState(session.internalId)).toBe(mgr.getActiveChatUIState());
-  });
-
-  it("creating a second session sets it as active but keeps the first in the pool", async () => {
-    const mgr = buildManager();
-    const a = await mgr.createSession();
-    const b = await mgr.createSession();
-    expect(mgr.getSessions()).toEqual([a, b]);
-    expect(mgr.getActiveSession()).toBe(b);
-  });
-
-  it("two concurrent createSession calls each spawn their own session", async () => {
-    const mgr = buildManager();
-    const [a, b] = await Promise.all([mgr.createSession(), mgr.createSession()]);
-    expect(a).not.toBe(b);
-    expect(sessionCreateSpy).toHaveBeenCalledTimes(2);
-    expect(mgr.getSessions()).toHaveLength(2);
-  });
-
-  it("only spawns the backend once across multiple createSession calls", async () => {
-    const mgr = buildManager();
-    await mgr.createSession();
-    await mgr.createSession();
-    await mgr.createSession();
-    expect(mockBackendStart).toHaveBeenCalledTimes(1);
-  });
-
-  it("leaves the seed unset when a catalog exists but no explicit default is stored", async () => {
-    const mgr = buildManager({
-      getCachedModelCatalog: jest.fn(() => modelCatalog("catalog-first")),
-    });
-
-    await mgr.createSession();
-    expect(sessionCreateSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ defaultModelSelection: undefined })
-    );
-  });
-
-  it("leaves the seed unset when no default is stored and no catalog is probed", async () => {
-    // With nothing baked we have no native id to target, so the seed stays
-    // undefined and the session inherits the backend's own native behavior.
-    const mgr = buildManager();
-    await mgr.createSession();
-    expect(sessionCreateSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ defaultModelSelection: undefined })
-    );
-  });
-
-  it("a concurrent create that succeeds does not wipe a sibling create's lastError", async () => {
-    const mgr = buildManager();
-    // First call fails. Second call starts before first settles, so the
-    // pre-fix code would have cleared `lastError` at the second call's start
-    // and the failure surfaced by the first would be lost.
-    sessionCreateSpy
-      .mockImplementationOnce((opts) =>
-        makeMockSession({
-          internalId: opts.internalId,
-          backendId: opts.backendId,
-          // Failing session: ready rejects after a microtask. The second
-          // create's ready resolves immediately; with concurrent flushing,
-          // we still want the first failure to win in lastError.
-          ready: (async () => {
-            await Promise.resolve();
-            await Promise.resolve();
-            throw new Error("boom");
-          })(),
-        })
-      )
-      .mockImplementationOnce((opts) =>
-        makeMockSession({
-          internalId: opts.internalId,
-          backendSessionId: "backend-ok",
-          backendId: opts.backendId,
-        })
-      );
-
-    const failingSession = await mgr.createSession();
-    const succeedingSession = await mgr.createSession();
-    // Drain the ready continuations so lastError is populated.
-    await failingSession.ready.catch(() => undefined);
-    await succeedingSession.ready;
-    // Allow the manager's `.finally` continuation to run.
-    await Promise.resolve();
-    // Several microtasks: session creation awaits the scope's instruction ensure before the
-    // failing spawn settles.
-    for (let i = 0; i < 10; i++) await Promise.resolve();
-
-    expect(mgr.getLastError()).toMatch(/boom/);
-  });
-});
-
-describe("AgentSessionManager.createGlobalSessionWithDraft", () => {
-  it("binds an unsent draft to the new logical composer and consumes it once for https://github.com/Brevilabs/obsidian-copilot-private/issues/166", async () => {
-    const mgr = buildManager();
-
-    const session = await mgr.createGlobalSessionWithDraft("Review this repair");
-
-    expect(mgr.getActiveSession()).toBe(session);
-    expect(mgr.consumeInitialDraft(session.chatInputId)).toBe("Review this repair");
-    expect(mgr.consumeInitialDraft(session.chatInputId)).toBeUndefined();
-  });
-
-  it("switches directly to the requested scope without spawning an extra blank session for https://github.com/Brevilabs/obsidian-copilot-private/issues/166", async () => {
-    const projectId = "project-with-no-global-session";
-    const recordSpy = jest
-      .spyOn(projectsState, "getCachedProjectRecordById")
-      .mockImplementation((id: string) =>
-        id === projectId
-          ? ({
-              filePath: "Projects/project-with-no-global-session/project.md",
-              project: { id: projectId },
-            } as unknown as ReturnType<typeof projectsState.getCachedProjectRecordById>)
-          : undefined
-      );
-    try {
-      const mgr = buildManager();
-      await mgr.createSession(undefined, projectId);
-
-      const session = await mgr.createGlobalSessionWithDraft("Review this repair");
-
-      expect(mgr.getSessions()).toHaveLength(2);
-      expect(mgr.getSessions().filter((candidate) => candidate.projectId === GLOBAL_SCOPE)).toEqual(
-        [session]
-      );
-      expect(mgr.getActiveSession()).toBe(session);
-    } finally {
-      recordSpy.mockRestore();
-    }
-  });
-
-  it("drops the initial draft when the session closes before the composer consumes it for https://github.com/Brevilabs/obsidian-copilot-private/issues/166", async () => {
-    const mgr = buildManager();
-    const session = await mgr.createGlobalSessionWithDraft("Review this repair");
-
-    await mgr.closeSession(session.internalId);
-
-    expect(mgr.consumeInitialDraft(session.chatInputId)).toBeUndefined();
-  });
-
-  it("drops the initial draft when session creation fails for https://github.com/Brevilabs/obsidian-copilot-private/issues/166", async () => {
-    const projectId = "project-before-failed-draft";
-    const recordSpy = jest
-      .spyOn(projectsState, "getCachedProjectRecordById")
-      .mockImplementation((id: string) =>
-        id === projectId
-          ? ({
-              filePath: "Projects/project-before-failed-draft/project.md",
-              project: { id: projectId },
-            } as unknown as ReturnType<typeof projectsState.getCachedProjectRecordById>)
-          : undefined
-      );
-    try {
-      const mgr = buildManager();
-      await mgr.enterProject(projectId);
-      const previousSession = mgr.getActiveSession();
-      expect(previousSession).not.toBeNull();
-      let failedChatInputId: string | undefined;
-      sessionCreateSpy.mockImplementationOnce((opts) => {
-        failedChatInputId = opts.chatInputId;
-        throw new Error("session creation failed");
+describe("AgentSessionManager", () => {
+  describe("AgentSessionManager", () => {
+    describe("createSession()", () => {
+      it("creates a session and sets it as the active one", async () => {
+        const mgr = buildManager();
+        const session = await mgr.createSession();
+        expect(mgr.getSessions()).toEqual([session]);
+        expect(mgr.getActiveSession()).toBe(session);
+        expect(mgr.getActiveChatUIState()).not.toBeNull();
+        expect(mgr.getChatUIState(session.internalId)).toBe(mgr.getActiveChatUIState());
       });
 
-      await expect(mgr.createGlobalSessionWithDraft("Review this repair")).rejects.toThrow(
-        "session creation failed"
-      );
+      it("creating a second session sets it as active but keeps the first in the pool", async () => {
+        const mgr = buildManager();
+        const a = await mgr.createSession();
+        const b = await mgr.createSession();
+        expect(mgr.getSessions()).toEqual([a, b]);
+        expect(mgr.getActiveSession()).toBe(b);
+      });
 
-      expect(failedChatInputId).toBeDefined();
-      expect(mgr.consumeInitialDraft(failedChatInputId as string)).toBeUndefined();
-      expect(mgr.getActiveSession()).toBe(previousSession);
-    } finally {
-      recordSpy.mockRestore();
-    }
+      it("two concurrent createSession calls each spawn their own session", async () => {
+        const mgr = buildManager();
+        const [a, b] = await Promise.all([mgr.createSession(), mgr.createSession()]);
+        expect(a).not.toBe(b);
+        expect(sessionCreateSpy).toHaveBeenCalledTimes(2);
+        expect(mgr.getSessions()).toHaveLength(2);
+      });
+
+      it("only spawns the backend once across multiple createSession calls", async () => {
+        const mgr = buildManager();
+        await mgr.createSession();
+        await mgr.createSession();
+        await mgr.createSession();
+        expect(mockBackendStart).toHaveBeenCalledTimes(1);
+      });
+
+      it("leaves the seed unset when a catalog exists but no explicit default is stored", async () => {
+        const mgr = buildManager({
+          getCachedModelCatalog: jest.fn(() => modelCatalog("catalog-first")),
+        });
+
+        await mgr.createSession();
+        expect(sessionCreateSpy).toHaveBeenCalledWith(
+          expect.objectContaining({ defaultModelSelection: undefined })
+        );
+      });
+
+      it("leaves the seed unset when no default is stored and no catalog is probed", async () => {
+        // With nothing baked we have no native id to target, so the seed stays
+        // undefined and the session inherits the backend's own native behavior.
+        const mgr = buildManager();
+        await mgr.createSession();
+        expect(sessionCreateSpy).toHaveBeenCalledWith(
+          expect.objectContaining({ defaultModelSelection: undefined })
+        );
+      });
+
+      it("a concurrent create that succeeds does not wipe a sibling create's lastError", async () => {
+        const mgr = buildManager();
+        // First call fails. Second call starts before first settles, so the
+        // pre-fix code would have cleared `lastError` at the second call's start
+        // and the failure surfaced by the first would be lost.
+        sessionCreateSpy
+          .mockImplementationOnce((opts) =>
+            makeMockSession({
+              internalId: opts.internalId,
+              backendId: opts.backendId,
+              // Failing session: ready rejects after a microtask. The second
+              // create's ready resolves immediately; with concurrent flushing,
+              // we still want the first failure to win in lastError.
+              ready: (async () => {
+                await Promise.resolve();
+                await Promise.resolve();
+                throw new Error("boom");
+              })(),
+            })
+          )
+          .mockImplementationOnce((opts) =>
+            makeMockSession({
+              internalId: opts.internalId,
+              backendSessionId: "backend-ok",
+              backendId: opts.backendId,
+            })
+          );
+
+        const failingSession = await mgr.createSession();
+        const succeedingSession = await mgr.createSession();
+        // Drain the ready continuations so lastError is populated.
+        await failingSession.ready.catch(() => undefined);
+        await succeedingSession.ready;
+        // Allow the manager's `.finally` continuation to run.
+        await Promise.resolve();
+        // Several microtasks: session creation awaits the scope's instruction ensure before the
+        // failing spawn settles.
+        for (let i = 0; i < 10; i++) await Promise.resolve();
+
+        expect(mgr.getLastError()).toMatch(/boom/);
+      });
+    });
+
+    describe("createGlobalSessionWithDraft()", () => {
+      it("binds an unsent draft to the new logical composer and consumes it once for https://github.com/Brevilabs/obsidian-copilot-private/issues/166", async () => {
+        const mgr = buildManager();
+
+        const session = await mgr.createGlobalSessionWithDraft("Review this repair");
+
+        expect(mgr.getActiveSession()).toBe(session);
+        expect(mgr.consumeInitialDraft(session.chatInputId)).toBe("Review this repair");
+        expect(mgr.consumeInitialDraft(session.chatInputId)).toBeUndefined();
+      });
+
+      it("switches directly to the requested scope without spawning an extra blank session for https://github.com/Brevilabs/obsidian-copilot-private/issues/166", async () => {
+        const projectId = "project-with-no-global-session";
+        const recordSpy = jest
+          .spyOn(projectsState, "getCachedProjectRecordById")
+          .mockImplementation((id: string) =>
+            id === projectId
+              ? ({
+                  filePath: "Projects/project-with-no-global-session/project.md",
+                  project: { id: projectId },
+                } as unknown as ReturnType<typeof projectsState.getCachedProjectRecordById>)
+              : undefined
+          );
+        try {
+          const mgr = buildManager();
+          await mgr.createSession(undefined, projectId);
+
+          const session = await mgr.createGlobalSessionWithDraft("Review this repair");
+
+          expect(mgr.getSessions()).toHaveLength(2);
+          expect(
+            mgr.getSessions().filter((candidate) => candidate.projectId === GLOBAL_SCOPE)
+          ).toEqual([session]);
+          expect(mgr.getActiveSession()).toBe(session);
+        } finally {
+          recordSpy.mockRestore();
+        }
+      });
+
+      it("drops the initial draft when the session closes before the composer consumes it for https://github.com/Brevilabs/obsidian-copilot-private/issues/166", async () => {
+        const mgr = buildManager();
+        const session = await mgr.createGlobalSessionWithDraft("Review this repair");
+
+        await mgr.closeSession(session.internalId);
+
+        expect(mgr.consumeInitialDraft(session.chatInputId)).toBeUndefined();
+      });
+
+      it("drops the initial draft when session creation fails for https://github.com/Brevilabs/obsidian-copilot-private/issues/166", async () => {
+        const projectId = "project-before-failed-draft";
+        const recordSpy = jest
+          .spyOn(projectsState, "getCachedProjectRecordById")
+          .mockImplementation((id: string) =>
+            id === projectId
+              ? ({
+                  filePath: "Projects/project-before-failed-draft/project.md",
+                  project: { id: projectId },
+                } as unknown as ReturnType<typeof projectsState.getCachedProjectRecordById>)
+              : undefined
+          );
+        try {
+          const mgr = buildManager();
+          await mgr.enterProject(projectId);
+          const previousSession = mgr.getActiveSession();
+          expect(previousSession).not.toBeNull();
+          let failedChatInputId: string | undefined;
+          sessionCreateSpy.mockImplementationOnce((opts) => {
+            failedChatInputId = opts.chatInputId;
+            throw new Error("session creation failed");
+          });
+
+          await expect(mgr.createGlobalSessionWithDraft("Review this repair")).rejects.toThrow(
+            "session creation failed"
+          );
+
+          expect(failedChatInputId).toBeDefined();
+          expect(mgr.consumeInitialDraft(failedChatInputId as string)).toBeUndefined();
+          expect(mgr.getActiveSession()).toBe(previousSession);
+        } finally {
+          recordSpy.mockRestore();
+        }
+      });
+
+      it("does not roll back across newer ABA scope navigation for https://github.com/Brevilabs/obsidian-copilot-private/issues/166", async () => {
+        const recordSpy = jest
+          .spyOn(projectsState, "getCachedProjectRecordById")
+          .mockImplementation((id: string) =>
+            ["project-a", "project-b"].includes(id)
+              ? ({
+                  filePath: `Projects/${id}/project.md`,
+                  project: { id },
+                } as unknown as ReturnType<typeof projectsState.getCachedProjectRecordById>)
+              : undefined
+          );
+        try {
+          const mgr = buildManager();
+          const globalSession = await mgr.createSession(undefined, GLOBAL_SCOPE);
+          const projectBSession = await mgr.createSession(undefined, "project-b");
+          const projectASession = await mgr.createSession(undefined, "project-a");
+          mgr.setActiveSession(projectASession.internalId);
+
+          let releaseInstructionEnsure: (() => void) | undefined;
+          ensureAgentsFileForDiscoverySpy.mockImplementationOnce(
+            () =>
+              new Promise<void>((resolve) => {
+                releaseInstructionEnsure = resolve;
+              })
+          );
+          sessionCreateSpy.mockImplementationOnce(() => {
+            throw new Error("session creation failed");
+          });
+
+          const pendingDraft = mgr.createGlobalSessionWithDraft("Review this repair");
+          await waitFor(() => expect(releaseInstructionEnsure).toBeDefined());
+          mgr.setActiveSession(projectBSession.internalId);
+          mgr.setActiveSession(globalSession.internalId);
+          releaseInstructionEnsure?.();
+
+          await expect(pendingDraft).rejects.toThrow("session creation failed");
+          expect(mgr.getActiveProjectId()).toBe(GLOBAL_SCOPE);
+          expect(mgr.getActiveSession()).toBe(globalSession);
+        } finally {
+          recordSpy.mockRestore();
+        }
+      });
+    });
   });
 });
 

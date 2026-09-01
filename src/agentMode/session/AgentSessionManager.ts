@@ -266,6 +266,10 @@ export class AgentSessionManager {
   // `activeSession.projectId === activeProjectId` (active always belongs to the
   // current scope). `GLOBAL_SCOPE` is the implicit global workspace.
   private activeProjectId: ProjectScopeId = GLOBAL_SCOPE;
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/166
+  // Scope identity alone cannot detect A → B → A navigation while an async
+  // transition is pending, so rollback ownership uses this monotonic version.
+  private scopeVersion = 0;
   // Per-scope most-recently-used session id, so re-entering a scope restores
   // the tab the user last looked at there.
   private readonly lastActiveByScope = new Map<ProjectScopeId, string>();
@@ -1418,14 +1422,14 @@ export class AgentSessionManager {
   async createGlobalSessionWithDraft(initialDraft: string): Promise<AgentSession> {
     const projectId = GLOBAL_SCOPE;
     const previousActiveProjectId = this.activeProjectId;
-    this.setActiveScope(projectId);
+    const scopeVersion = this.setActiveScope(projectId);
     const chatInputId = uuidv4();
     this.initialDraftByChatInputId.set(chatInputId, initialDraft);
     try {
       return await this.createSession(undefined, projectId, undefined, chatInputId);
     } catch (error) {
       this.initialDraftByChatInputId.delete(chatInputId);
-      this.rollbackOptimisticScopeSwitch(projectId, previousActiveProjectId);
+      this.rollbackOptimisticScopeSwitch(previousActiveProjectId, scopeVersion);
       throw error;
     }
   }
@@ -1791,8 +1795,7 @@ export class AgentSessionManager {
     // rejected auto-spawn below can restore it (see `spawnEnteredScopeOrRollback`).
     const previousActiveProjectId = this.activeProjectId;
     const previousActiveSessionId = this.activeSessionId;
-    this.parkActiveScope();
-    this.activeProjectId = projectId;
+    const scopeVersion = this.setActiveScope(projectId);
 
     // A project scope opens as a FRESH visit: its prior conversational chats
     // move to chat history (detached from the tab strip — not closed, so a
@@ -1830,9 +1833,9 @@ export class AgentSessionManager {
       this.activeSessionId = null;
       this.notify();
       await this.spawnEnteredScopeOrRollback(
-        projectId,
         previousActiveProjectId,
-        previousActiveSessionId
+        previousActiveSessionId,
+        scopeVersion
       );
       this.touchProjectUsage(projectId);
       return;
@@ -2032,10 +2035,11 @@ export class AgentSessionManager {
    * restoring/spawning a session — used by history load, which creates the
    * specific saved session itself right after.
    */
-  private setActiveScope(projectId: ProjectScopeId): void {
-    if (projectId === this.activeProjectId) return;
+  private setActiveScope(projectId: ProjectScopeId): number {
+    if (projectId === this.activeProjectId) return this.scopeVersion;
     this.parkActiveScope();
     this.activeProjectId = projectId;
+    return ++this.scopeVersion;
   }
 
   /**
@@ -2045,11 +2049,12 @@ export class AgentSessionManager {
    * them back would reintroduce the race `createSession`'s activation guard avoids.
    */
   private rollbackOptimisticScopeSwitch(
-    attemptedProjectId: ProjectScopeId,
-    previousProjectId: ProjectScopeId
+    previousProjectId: ProjectScopeId,
+    attemptedScopeVersion: number
   ): void {
-    if (this.activeProjectId === attemptedProjectId) {
+    if (this.scopeVersion === attemptedScopeVersion) {
       this.activeProjectId = previousProjectId;
+      this.scopeVersion++;
       this.notify();
     }
   }
@@ -2064,24 +2069,25 @@ export class AgentSessionManager {
    * chat. Restores the previous scope's `activeProjectId` + active-session pointer
    * and re-notifies, then rethrows so the caller still reports the failure.
    *
-   * Guarded on still being parked in the attempted scope: a concurrent
-   * `enterProject` during the awaited spawn means the user moved on, and forcing
-   * them back would clobber that newer switch (mirrors
+   * Guarded by the attempted switch's version: concurrent navigation during
+   * the awaited spawn means the user moved on, and forcing them back would
+   * clobber that newer switch (mirrors
    * {@link rollbackOptimisticScopeSwitch}). The detached tabs are intentionally left
    * detached — they belong to the project we failed to enter, are invisible from
    * the restored scope, and a later successful entry re-detaches them anyway as a
    * fresh visit.
    */
   private async spawnEnteredScopeOrRollback(
-    attemptedProjectId: ProjectScopeId,
     previousProjectId: ProjectScopeId,
-    previousActiveSessionId: string | null
+    previousActiveSessionId: string | null,
+    attemptedScopeVersion: number
   ): Promise<void> {
     try {
       await this.getOrCreateActiveSession();
     } catch (err) {
-      if (this.activeProjectId === attemptedProjectId) {
+      if (this.scopeVersion === attemptedScopeVersion) {
         this.activeProjectId = previousProjectId;
+        this.scopeVersion++;
         this.activeSessionId = previousActiveSessionId;
         this.notify();
       }
@@ -2505,8 +2511,7 @@ export class AgentSessionManager {
     if (!session) return;
     if (this.activeSessionId === id) return;
     if (session.projectId !== this.activeProjectId) {
-      this.parkActiveScope();
-      this.activeProjectId = session.projectId;
+      this.setActiveScope(session.projectId);
     }
     // Surfacing a session (history open / tab click) re-attaches it to its
     // scope's tab strip if a prior project re-entry had detached it.
@@ -2743,6 +2748,7 @@ export class AgentSessionManager {
     this.lastSeenProjectContentEpochBySession.clear();
     this.activeSessionId = null;
     this.activeProjectId = GLOBAL_SCOPE;
+    this.scopeVersion++;
     this.lastActiveByScope.clear();
     this.detachedFromTabIds.clear();
     this.contextDirtySignatures.clear();
@@ -2817,7 +2823,7 @@ export class AgentSessionManager {
     // would let a scope switch raced in during `loadFile` make rollback restore
     // a stale scope.
     const previousActiveProjectId = this.activeProjectId;
-    this.setActiveScope(projectId);
+    const scopeVersion = this.setActiveScope(projectId);
 
     // Resume or create the saved session. Either await can reject (e.g. a
     // missing backend binary fails to spawn); on failure, undo the scope switch
@@ -2831,7 +2837,7 @@ export class AgentSessionManager {
         : null;
       session = resumed ?? (await this.createSession(loaded.backendId, projectId));
     } catch (err) {
-      this.rollbackOptimisticScopeSwitch(projectId, previousActiveProjectId);
+      this.rollbackOptimisticScopeSwitch(previousActiveProjectId, scopeVersion);
       throw err;
     }
 
@@ -2920,7 +2926,7 @@ export class AgentSessionManager {
     // `getEntry` await — capturing earlier would let a scope switch raced in
     // during the await make rollback restore a stale scope.
     const previousActiveProjectId = this.activeProjectId;
-    this.setActiveScope(projectId);
+    const scopeVersion = this.setActiveScope(projectId);
     // Unlike markdown history there is no fresh-session fallback — a failed
     // resume rejects, so undo the scope switch above before propagating it.
     let session: AgentSession;
@@ -2933,7 +2939,7 @@ export class AgentSessionManager {
       }
       session = resumed;
     } catch (err) {
-      this.rollbackOptimisticScopeSwitch(projectId, previousActiveProjectId);
+      this.rollbackOptimisticScopeSwitch(previousActiveProjectId, scopeVersion);
       throw err;
     }
     // Rebuild the visible transcript for backends that resume without
@@ -3553,7 +3559,10 @@ export class AgentSessionManager {
         this.activeSessionId = next?.internalId ?? null;
         // Crash repointing can cross scopes; keep `active.projectId ===
         // activeProjectId` rather than leaving a stale scope behind.
-        if (next) this.activeProjectId = next.projectId;
+        if (next) {
+          this.activeProjectId = next.projectId;
+          this.scopeVersion++;
+        }
       }
       // Surface the crash so the empty-state pill shows it and the
       // router's auto-spawn effect (which bails on lastError) doesn't

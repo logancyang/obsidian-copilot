@@ -243,12 +243,15 @@ describe("main", () => {
         Object.assign(plugin.agentSessionManager as object, {
           createGlobalSessionWithDraft,
         });
-        jest.spyOn(plugin, "activateAgentView").mockResolvedValue(null);
+        const activateAgentView = jest.spyOn(plugin, "activateAgentView").mockResolvedValue(null);
 
         await plugin.newAgentChatWithDraft("Repair this skill");
 
-        expect(plugin.activateAgentView).toHaveBeenCalledTimes(1);
         expect(createGlobalSessionWithDraft).toHaveBeenCalledWith("Repair this skill");
+        expect(activateAgentView).toHaveBeenCalledTimes(1);
+        expect(createGlobalSessionWithDraft.mock.invocationCallOrder[0]).toBeLessThan(
+          activateAgentView.mock.invocationCallOrder[0]
+        );
       });
 
       it("surfaces session creation failures without sending or throwing for https://github.com/Brevilabs/obsidian-copilot-private/issues/166", async () => {
@@ -257,7 +260,7 @@ describe("main", () => {
         Object.assign(plugin.agentSessionManager as object, {
           createGlobalSessionWithDraft: jest.fn().mockRejectedValue(failure),
         });
-        jest.spyOn(plugin, "activateAgentView").mockResolvedValue(null);
+        const activateAgentView = jest.spyOn(plugin, "activateAgentView").mockResolvedValue(null);
 
         await expect(plugin.newAgentChatWithDraft("Repair this skill")).resolves.toBeUndefined();
 
@@ -265,6 +268,7 @@ describe("main", () => {
           "[CopilotPlugin] Failed to create agent session with draft",
           failure
         );
+        expect(activateAgentView).not.toHaveBeenCalled();
       });
     });
   });
