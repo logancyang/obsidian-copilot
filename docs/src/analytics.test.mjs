@@ -88,7 +88,10 @@ describe("analytics", () => {
 
   describe("createPostHogOptions()", () => {
     it(`${ISSUE} disables automatic collection and identity joining`, () => {
-      const options = createPostHogOptions("https://us.i.posthog.com");
+      const options = createPostHogOptions(
+        "https://us.i.posthog.com",
+        () => "https://docs.obsidiancopilot.com/"
+      );
       assert.equal(options.autocapture, false);
       assert.equal(options.capture_pageview, false);
       assert.equal(options.capture_pageleave, true);
@@ -103,7 +106,30 @@ describe("analytics", () => {
       assert.equal(options.persistence, "localStorage");
       assert.equal(options.persistence_name, "obsidian-copilot-docs");
       assert.equal(options.cross_subdomain_cookie, false);
-      assert.equal(options.before_send, sanitizeAnalyticsEvent);
+    });
+
+    it(`${ISSUE} replaces pageleave request paths with the generated 404 route`, () => {
+      const options = createPostHogOptions(
+        "https://us.i.posthog.com",
+        () => "https://docs.obsidiancopilot.com/404/"
+      );
+
+      const result = options.before_send({
+        uuid: "event-id",
+        event: "$pageleave",
+        properties: {
+          $current_url: "https://docs.obsidiancopilot.com/reset/private-token",
+          $pathname: "/reset/private-token",
+          $prev_pageview_pathname: "/another/private-path",
+        },
+      });
+
+      assert.deepEqual(result.properties, {
+        $current_url: "https://docs.obsidiancopilot.com/404/",
+        $pathname: "/404/",
+        $host: "docs.obsidiancopilot.com",
+        $process_person_profile: false,
+      });
     });
   });
 
@@ -160,7 +186,7 @@ describe("analytics", () => {
         timestamp,
         properties: {
           $current_url: "https://docs.obsidiancopilot.com/getting-started/",
-          $referrer: "https://example.com/article/",
+          $referrer: "https://example.com/",
           $browser: "Chrome",
           $device_type: "Desktop",
           $geoip_country_code: "US",
@@ -223,55 +249,88 @@ describe("analytics", () => {
   });
 
   describe("startDocsAnalytics()", () => {
-    it(`${ISSUE} does not initialize when storage cannot be used`, () => {
-      let initialized = false;
-      const enabled = startDocsAnalytics({
-        posthog: { init: () => (initialized = true) },
-        hostname: "docs.obsidiancopilot.com",
-        apiKey: "phc_test",
-        apiHost: "https://us.i.posthog.com",
-        getStorage: () => null,
-        getCurrentUrl: () => "https://docs.obsidiancopilot.com/",
-        addNavigationListener: () => {},
-      });
-      assert.equal(enabled, false);
-      assert.equal(initialized, false);
+    it(`${ISSUE} does not load the SDK when analytics is ineligible`, async () => {
+      const usableStorage = { setItem: () => {}, getItem: () => "1", removeItem: () => {} };
+      const ineligibleInputs = [
+        { hostname: "preview.example.com", apiKey: "phc_test", getStorage: () => usableStorage },
+        {
+          hostname: "docs.obsidiancopilot.com",
+          apiKey: undefined,
+          getStorage: () => usableStorage,
+        },
+        { hostname: "docs.obsidiancopilot.com", apiKey: "phc_test", getStorage: () => null },
+      ];
+
+      for (const input of ineligibleInputs) {
+        let loaded = false;
+        const enabled = await startDocsAnalytics({
+          loadPostHog: async () => {
+            loaded = true;
+            return { init: () => {} };
+          },
+          ...input,
+          apiHost: "https://us.i.posthog.com",
+          getCanonicalUrl: () => "https://docs.obsidiancopilot.com/",
+          addNavigationListener: () => {},
+        });
+        assert.equal(enabled, false);
+        assert.equal(loaded, false);
+      }
     });
 
-    it(`${ISSUE} captures once per initial load or client-side navigation`, () => {
+    it(`${ISSUE} captures once per generated route and buckets missing requests as /404`, async () => {
       const captures = [];
       let navigationListener;
-      let currentUrl = "https://docs.obsidiancopilot.com/?private=one";
-      const enabled = startDocsAnalytics({
-        posthog: {
+      let canonicalUrl;
+      const enabled = await startDocsAnalytics({
+        loadPostHog: async () => ({
           init: () => {},
           capture: (event, properties) => captures.push({ event, properties }),
-        },
+        }),
         hostname: "docs.obsidiancopilot.com",
         apiKey: "phc_test",
         apiHost: "https://us.i.posthog.com",
         getStorage: () => ({ setItem: () => {}, getItem: () => "1", removeItem: () => {} }),
-        getCurrentUrl: () => currentUrl,
+        getCanonicalUrl: () => canonicalUrl,
         addNavigationListener: (listener) => (navigationListener = listener),
       });
 
+      assert.deepEqual(captures, []);
+      canonicalUrl = "https://docs.obsidiancopilot.com/404/";
       navigationListener();
-      currentUrl = "https://docs.obsidiancopilot.com/getting-started/?private=two";
+      navigationListener();
+      canonicalUrl = "https://docs.obsidiancopilot.com/getting-started/";
       navigationListener();
 
       assert.equal(enabled, true);
       assert.deepEqual(captures, [
         {
           event: "$pageview",
-          properties: { $current_url: "https://docs.obsidiancopilot.com/?private=one" },
+          properties: { $current_url: "https://docs.obsidiancopilot.com/404/" },
         },
         {
           event: "$pageview",
           properties: {
-            $current_url: "https://docs.obsidiancopilot.com/getting-started/?private=two",
+            $current_url: "https://docs.obsidiancopilot.com/getting-started/",
           },
         },
       ]);
+    });
+
+    it(`${ISSUE} fails closed when the SDK cannot load`, async () => {
+      const enabled = await startDocsAnalytics({
+        loadPostHog: async () => {
+          throw new Error("blocked");
+        },
+        hostname: "docs.obsidiancopilot.com",
+        apiKey: "phc_test",
+        apiHost: "https://us.i.posthog.com",
+        getStorage: () => ({ setItem: () => {}, getItem: () => "1", removeItem: () => {} }),
+        getCanonicalUrl: () => "https://docs.obsidiancopilot.com/",
+        addNavigationListener: () => {},
+      });
+
+      assert.equal(enabled, false);
     });
   });
 });

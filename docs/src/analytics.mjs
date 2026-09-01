@@ -3,7 +3,7 @@ const PERSISTENCE_NAME = "obsidian-copilot-docs";
 const STORAGE_PROBE_KEY = "__obsidian_copilot_docs_analytics_probe__";
 
 const URL_PROPERTIES = new Set(["$current_url", "$referrer"]);
-const PATH_PROPERTIES = new Set(["$pathname", "$prev_pageview_pathname"]);
+const PATH_PROPERTIES = new Set(["$pathname"]);
 const PASSTHROUGH_PROPERTIES = new Set([
   "$browser",
   "$device_id",
@@ -28,7 +28,7 @@ const PASSTHROUGH_PROPERTIES = new Set([
 const CAMPAIGN_PROPERTY = /^\$?(?:(?:initial|session_entry)_)?utm_(?:source|medium|campaign)$/;
 const ALLOWED_EVENTS = new Set(["$pageview", "$pageleave"]);
 
-function sanitizeUrl(value) {
+function sanitizeUrl(value, includePath = true) {
   if (typeof value !== "string" || value.length === 0) return undefined;
 
   try {
@@ -36,6 +36,9 @@ function sanitizeUrl(value) {
     if (url.protocol !== "https:" && url.protocol !== "http:") return undefined;
     url.username = "";
     url.password = "";
+    // Referring-domain attribution does not need arbitrary paths that may contain private input.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/335
+    if (!includePath) url.pathname = "/";
     url.search = "";
     url.hash = "";
     return url.toString();
@@ -67,7 +70,10 @@ function sanitizeProperties(properties) {
 
   for (const [key, value] of Object.entries(properties ?? {})) {
     if (URL_PROPERTIES.has(key)) {
-      const safeUrl = key === "$referrer" && value === "$direct" ? "$direct" : sanitizeUrl(value);
+      const safeUrl =
+        key === "$referrer" && value === "$direct"
+          ? "$direct"
+          : sanitizeUrl(value, key !== "$referrer");
       if (safeUrl) sanitized[key] = safeUrl;
       continue;
     }
@@ -151,7 +157,7 @@ export function sanitizeAnalyticsEvent(event) {
   };
 }
 
-export function createPostHogOptions(apiHost) {
+export function createPostHogOptions(apiHost, getCanonicalUrl) {
   return {
     api_host: apiHost,
     autocapture: false,
@@ -180,28 +186,44 @@ export function createPostHogOptions(apiHost) {
     disable_scroll_properties: true,
     save_referrer: true,
     save_campaign_params: true,
-    before_send: sanitizeAnalyticsEvent,
+    // The final event boundary replaces SDK-derived request paths with the generated route identity.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/335
+    before_send: (event) => {
+      const canonicalUrl = getCanonicalUrl();
+      return sanitizeAnalyticsEvent({
+        ...event,
+        properties: {
+          ...event.properties,
+          $current_url: canonicalUrl,
+          $pathname: canonicalUrl,
+        },
+      });
+    },
   };
 }
 
-export function startDocsAnalytics({
-  posthog,
+export async function startDocsAnalytics({
+  loadPostHog,
   hostname,
   apiKey,
   apiHost,
   getStorage,
-  getCurrentUrl,
+  getCanonicalUrl,
   addNavigationListener,
 }) {
   const config = resolveAnalyticsConfig({ hostname, apiKey, apiHost });
   if (!config || !hasUsableStorage(getStorage)) return false;
 
   try {
-    posthog.init(config.apiKey, createPostHogOptions(config.apiHost));
+    const posthog = await loadPostHog();
+    posthog.init(config.apiKey, createPostHogOptions(config.apiHost, getCanonicalUrl));
 
     let previousNavigation;
     const capturePageview = () => {
-      const currentNavigation = getCurrentUrl();
+      // Generated canonical URLs bucket missing routes as /404 instead of reporting arbitrary requests.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/335
+      const currentNavigation = getCanonicalUrl();
+      if (!currentNavigation) return;
       // Astro can announce the initial page after this module runs; de-duplication keeps one pageview.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/335
       if (currentNavigation === previousNavigation) return;
