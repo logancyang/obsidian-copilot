@@ -1,28 +1,37 @@
 import { backendRegistry } from "@/agentMode/backends/registry";
-import {
-  AgentHomePreviewList,
-  AgentHomeViewAllTrigger,
-  INLINE_LIMIT,
-} from "@/agentMode/ui/AgentHomeSection";
+import { AgentHomePreviewList } from "@/agentMode/ui/AgentHomeSection";
 import { RecentChatProjectBadge, RecentChatTitle } from "@/agentMode/ui/RecentChatTitle";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SearchBar } from "@/components/ui/SearchBar";
-import {
-  ChatHistoryItem,
-  ChatHistoryPopover,
-} from "@/components/chat-components/ChatHistoryPopover";
+import { type ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
 import { ChatIconWithAttention } from "@/components/chat-components/ChatIconWithAttention";
+import { logError } from "@/logger";
 import { cn } from "@/lib/utils";
 import { isNativeChatId } from "@/utils/nativeChatId";
 import { formatCompactRelativeTime } from "@/utils/formatRelativeTime";
-import { sortByStrategy } from "@/utils/recentUsageManager";
+import { sortByStrategy, type SortStrategy } from "@/utils/recentUsageManager";
 import { ArrowUpRight, Check, Edit2, LoaderCircle, MessageCircle, Trash2, X } from "lucide-react";
-import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
+import React, {
+  memo,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
 
 /** Stable noop for rows that aren't being renamed (they never invoke onSaveEdit). */
 const NOOP_SAVE = (): void => {};
+
+/**
+ * Bound the initial DOM work while keeping the complete history searchable.
+ * Saved chat history is unbounded, so mounting every row can slow Agent Home.
+ * https://github.com/logancyang/obsidian-copilot/issues/3040
+ */
+const PAGE_SIZE = 50;
 
 /**
  * Which landing this section renders under. `global` is the original Agent Home
@@ -73,6 +82,8 @@ interface GlobalRecentChatsSectionProps {
   attentionChatIds?: ReadonlySet<string>;
   /** Current project names keyed by id. Used only by the global variant. */
   projectNamesById?: Readonly<Record<string, string>>;
+  /** Saved ordering used by the complete chat-history surface. */
+  sortStrategy?: SortStrategy;
   className?: string;
 }
 
@@ -87,11 +98,12 @@ function resolveChatIcon(
   return item.backendId ? backendRegistry[item.backendId]?.Icon : undefined;
 }
 
-// Most-recent-first, matching the rest of the landing (last-used desc, falling
-// back to created; ties broken by name then created). Upstream
-// `getChatHistoryItems()` returns vault-scan order, so the sort lives here.
-function sortChatsByRecent(items: ChatHistoryItem[]): ChatHistoryItem[] {
-  return sortByStrategy(items, "recent", {
+// Upstream `getChatHistoryItems()` returns vault-scan order. Apply the saved
+// history ordering here so removing the duplicate history surface does not
+// silently discard a user's preference.
+// https://github.com/logancyang/obsidian-copilot/issues/3040
+function sortChats(items: ChatHistoryItem[], strategy: SortStrategy): ChatHistoryItem[] {
+  return sortByStrategy(items, strategy, {
     getName: (item) => item.title,
     getCreatedAtMs: (item) => item.createdAt.getTime(),
     getLastUsedAtMs: (item) => item.lastAccessedAt.getTime(),
@@ -330,12 +342,13 @@ const RecentChatRow = memo(function RecentChatRow({
  * "Recent Chats" section for the Agent Home landing. A searchable list whose
  * rows manage chats in place — open, rename, delete, and (for markdown-saved
  * chats only) open the source note — the same affordances as the chat history
- * popover. The inline preview caps at {@link INLINE_LIMIT}; overflow lives
- * behind a "View all chats" trigger that opens the full
- * {@link ChatHistoryPopover}, while searching surfaces every match. Native
- * (autosave-off) sessions appear here too; they just have no source note. The
- * per-project landing reuses it (`variant="project"`) with scoped items and
- * project empty copy — identical rows, no extra chrome.
+ * popover. Every chat stays in this section's scrollable list, and search
+ * filters that same list without opening a second surface. Rows mount in
+ * bounded batches as the user scrolls, while sorting and search still consider
+ * the complete history. Native (autosave-off) sessions appear here too; they
+ * just have no source note. The per-project landing reuses it
+ * (`variant="project"`) with scoped items and project empty copy — identical
+ * rows, no extra chrome.
  */
 export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
   items,
@@ -349,59 +362,101 @@ export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
   runningChatIds,
   attentionChatIds,
   projectNamesById,
+  sortStrategy = "recent",
   className,
 }: GlobalRecentChatsSectionProps): React.ReactElement {
   const [query, setQuery] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState("");
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [displayCount, setDisplayCount] = useState(PAGE_SIZE);
+  const observerRef = useRef<IntersectionObserver | null>(null);
 
-  // Refresh once when the section first mounts (i.e. the user opened the
-  // Recent Chats tab), mirroring the old popover's refresh-on-open.
+  // Refresh once when the section first mounts so opening Recent Chats does
+  // not rely on a stale history snapshot.
   useEffect(() => {
     onLoadHistory?.();
   }, [onLoadHistory]);
 
-  // Sort once for the inline preview (fixed recent-first, like the rest of the
-  // landing); the View-all popover re-sorts the full list by the user's
-  // configured chatHistorySortStrategy — the same management surface as the
-  // control bar's History button — so it reads raw `items` directly below.
-  const sortedItems = useMemo(() => sortChatsByRecent(items), [items]);
-  const isSearching = query.trim().length > 0;
+  const sortedItems = useMemo(() => sortChats(items, sortStrategy), [items, sortStrategy]);
   const filteredItems = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return sortedItems;
     return sortedItems.filter((item) => item.title.toLowerCase().includes(q));
   }, [sortedItems, query]);
-  // Inline preview caps at INLINE_LIMIT; a search shows every match (the cap
-  // would hide exactly what the user is looking for).
   const visibleItems = useMemo(
-    () => (isSearching ? filteredItems : filteredItems.slice(0, INLINE_LIMIT)),
-    [filteredItems, isSearching]
+    () => filteredItems.slice(0, displayCount),
+    [displayCount, filteredItems]
   );
-  const hasMoreItems = !isSearching && filteredItems.length > visibleItems.length;
 
+  // A new query starts from one bounded page before paint. Search still runs
+  // against filteredItems, so older matches remain discoverable by scrolling.
+  // https://github.com/logancyang/obsidian-copilot/issues/3040
+  useLayoutEffect(() => {
+    setDisplayCount(PAGE_SIZE);
+  }, [query]);
+
+  const sentinelRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      observerRef.current?.disconnect();
+      observerRef.current = null;
+      if (!node) return;
+
+      const IntersectionObserverConstructor =
+        node.ownerDocument.defaultView?.IntersectionObserver ?? IntersectionObserver;
+
+      const observer = new IntersectionObserverConstructor(
+        (entries) => {
+          if (!entries[0]?.isIntersecting) return;
+          setDisplayCount((current) => Math.min(current + PAGE_SIZE, filteredItems.length));
+        },
+        { threshold: 0.1 }
+      );
+      observer.observe(node);
+      observerRef.current = observer;
+    },
+    [filteredItems.length]
+  );
   const handleStartEdit = useCallback((id: string, title: string) => {
     setConfirmDeleteId(null);
     setEditingId(id);
     setEditingTitle(title);
   }, []);
 
-  const handleSaveEdit = useCallback(() => {
+  const handleSaveEdit = useCallback(async () => {
     const trimmed = editingTitle.trim();
     const id = editingId;
-    setEditingId(null);
-    if (!id || !trimmed) return;
-    void onUpdateTitle(id, trimmed);
+    if (!id || !trimmed) {
+      setEditingId(null);
+      return;
+    }
+
+    try {
+      await onUpdateTitle(id, trimmed);
+      setEditingId(null);
+    } catch (error) {
+      // Keep the draft editable when the underlying vault operation fails.
+      // https://github.com/logancyang/obsidian-copilot/issues/3040
+      logError("Error updating title:", error);
+    }
   }, [editingId, editingTitle, onUpdateTitle]);
 
   const handleConfirmDelete = useCallback(
-    (id: string) => {
-      setConfirmDeleteId(null);
-      void onDeleteChat(id);
+    async (id: string) => {
+      try {
+        await onDeleteChat(id);
+        setConfirmDeleteId(null);
+      } catch (error) {
+        // Keep confirmation available so the user can retry the failed delete.
+        // https://github.com/logancyang/obsidian-copilot/issues/3040
+        logError("Error deleting chat:", error);
+      }
     },
     [onDeleteChat]
   );
+
+  const handleSaveEditSafely = safeAsyncHandler(handleSaveEdit);
+  const handleConfirmDeleteSafely = safeAsyncHandler(handleConfirmDelete);
 
   const handleOpenSourceFile = useCallback(
     (id: string) => {
@@ -425,14 +480,6 @@ export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
       variant === "global" && item.projectId ? projectNamesById?.[item.projectId] : undefined,
     [projectNamesById, variant]
   );
-  const renderProjectBadge = useCallback(
-    (item: ChatHistoryItem): React.ReactNode => {
-      const projectName = getProjectName(item);
-      return projectName ? <RecentChatProjectBadge name={projectName} /> : null;
-    },
-    [getProjectName]
-  );
-
   return (
     <div
       role={title ? "group" : undefined}
@@ -463,50 +510,7 @@ export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
               : "No recent chats"}
         </div>
       ) : (
-        <AgentHomePreviewList
-          hasMoreItems={hasMoreItems}
-          viewAll={
-            !isSearching ? (
-              <ChatHistoryPopover
-                chatHistory={items}
-                onUpdateTitle={onUpdateTitle}
-                onDeleteChat={onDeleteChat}
-                onLoadChat={onLoadChat}
-                onOpenSourceFile={onOpenSourceFile}
-                getIcon={resolveChatIcon}
-                getBadge={renderProjectBadge}
-                // Full-width row near the pane's lower half: open downward like
-                // an accordion. Radix flips to "top" if the area below is tight.
-                side="bottom"
-                align="start"
-              >
-                {/* DESIGN NOTE: unlike these inline rows, the popover's rows show
-                  the open-source-note action for native (autosave-off) chats
-                  too — pre-existing shared ChatHistoryPopover behavior (same
-                  exposure as the control bar's History button; the click
-                  degrades to a "no saved note" notice). Hiding it would mean a
-                  per-row visibility prop on the shared popover — tracked as
-                  shared-popover debt, not worth an entry-point hack here.
-
-                  Radix merges its toggle onClick onto this child; Enter/Space
-                  dispatch a click so the popover opens for keyboard users
-                  without this row owning the popover's open state.
-
-                  DESIGN NOTE: onLoadHistory runs on every toggle (open *and*
-                  close), because Radix fires the merged onClick both ways and
-                  this row can't see the popover's open state. That's an
-                  intentional, harmless refresh — the same pattern the
-                  conversation control bar uses on its History button
-                  (AgentChatControls). loadChatHistory is mounted-guarded and
-                  self-correcting, so a fast open/close race only momentarily
-                  shows near-identical data. A "refresh only on open" fix would
-                  need ChatHistoryPopover to expose onOpenChange — not worth
-                  touching the shared base for this. */}
-                <AgentHomeViewAllTrigger label="chats" onClick={() => onLoadHistory?.()} />
-              </ChatHistoryPopover>
-            ) : undefined
-          }
-        >
+        <AgentHomePreviewList hasMoreItems={false}>
           <div className="tw-flex tw-flex-col tw-divide-y tw-divide-border">
             {visibleItems.map((item) => (
               <RecentChatRow
@@ -525,10 +529,10 @@ export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
                 // Only the editing row needs the live save handler (it changes
                 // per keystroke via editingTitle); the rest get a stable noop so
                 // their memo isn't defeated mid-rename.
-                onSaveEdit={editingId === item.id ? handleSaveEdit : NOOP_SAVE}
+                onSaveEdit={editingId === item.id ? handleSaveEditSafely : NOOP_SAVE}
                 onCancelEdit={handleCancelEdit}
                 onStartDelete={setConfirmDeleteId}
-                onConfirmDelete={handleConfirmDelete}
+                onConfirmDelete={handleConfirmDeleteSafely}
                 onCancelDelete={handleCancelDelete}
                 canOpenSourceFile={!isNativeChatId(item.id)}
                 onOpenSourceFile={handleOpenSourceFile}
@@ -536,6 +540,9 @@ export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
                 hasAttention={!!item.needsAttention || (attentionChatIds?.has(item.id) ?? false)}
               />
             ))}
+            {displayCount < filteredItems.length && (
+              <div ref={sentinelRef} className="tw-h-1" aria-hidden="true" />
+            )}
           </div>
         </AgentHomePreviewList>
       )}

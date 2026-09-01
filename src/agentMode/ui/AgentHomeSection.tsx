@@ -17,11 +17,9 @@ import React, {
 
 /**
  * Shared building blocks for the Agent Home landing section bodies (Projects,
- * Recent Chats): a few inline rows plus a "View all" popover with search. That
- * structure lives here once so each section supplies only its data and row click
- * behavior. The section title/count/collapse now live in the shelf chip above
- * the panel (see {@link AgentHomeShelf}); this file is just the row and view-all
- * primitives.
+ * Recent Chats): rows, a bounded scroll region, and the Projects "View all"
+ * popover. The section title/count/collapse live in the shelf chip above the
+ * panel (see {@link AgentHomeShelf}).
  */
 
 /**

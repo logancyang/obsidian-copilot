@@ -1,24 +1,9 @@
 import React from "react";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { GlobalRecentChatsSection } from "@/agentMode/ui/GlobalRecentChatsSection";
 import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
 
 type SectionItems = React.ComponentProps<typeof GlobalRecentChatsSection>["items"];
-
-// jsdom lacks Obsidian's portal document and the observer used to page the open
-// View-all popover, so supply inert browser equivalents for that interaction.
-beforeAll(() => {
-  (window as unknown as { activeDocument: Document }).activeDocument = window.document;
-  window.IntersectionObserver = class implements IntersectionObserver {
-    readonly root = null;
-    readonly rootMargin = "";
-    readonly thresholds = [];
-    disconnect = jest.fn();
-    observe = jest.fn();
-    takeRecords = jest.fn(() => []);
-    unobserve = jest.fn();
-  };
-});
 
 const noop = async () => {};
 
@@ -31,10 +16,11 @@ function renderSection(props: Partial<React.ComponentProps<typeof GlobalRecentCh
       runningChatIds={props.runningChatIds}
       attentionChatIds={props.attentionChatIds}
       projectNamesById={props.projectNamesById}
-      onLoadChat={noop}
-      onUpdateTitle={noop}
-      onDeleteChat={noop}
-      onOpenSourceFile={noop}
+      sortStrategy={props.sortStrategy}
+      onLoadChat={props.onLoadChat ?? noop}
+      onUpdateTitle={props.onUpdateTitle ?? noop}
+      onDeleteChat={props.onDeleteChat ?? noop}
+      onOpenSourceFile={props.onOpenSourceFile ?? noop}
     />
   );
 }
@@ -57,6 +43,56 @@ function makeItem(
     createdAt: new Date(),
     lastAccessedAt: new Date(),
     ...overrides,
+  };
+}
+
+function makeRecentItems(prefix: string, count: number): SectionItems {
+  const now = Date.now();
+  return Array.from({ length: count }, (_, index) =>
+    makeItem(`${prefix}-${index}`, {
+      createdAt: new Date(now - index),
+      lastAccessedAt: new Date(now - index),
+    })
+  );
+}
+
+function installIntersectionObserverMock(): {
+  intersect: () => void;
+  restore: () => void;
+} {
+  const original = window.IntersectionObserver;
+  let callback: IntersectionObserverCallback | undefined;
+  const observer = {
+    disconnect: jest.fn(),
+    observe: jest.fn(),
+    takeRecords: jest.fn(() => []),
+    unobserve: jest.fn(),
+    root: null,
+    rootMargin: "0px",
+    thresholds: [0.1],
+  } satisfies IntersectionObserver;
+
+  Object.defineProperty(window, "IntersectionObserver", {
+    configurable: true,
+    writable: true,
+    value: jest.fn((nextCallback: IntersectionObserverCallback) => {
+      callback = nextCallback;
+      return observer;
+    }),
+  });
+
+  return {
+    intersect: () => {
+      if (!callback) throw new Error("IntersectionObserver was not created");
+      callback([{ isIntersecting: true } as IntersectionObserverEntry], observer);
+    },
+    restore: () => {
+      Object.defineProperty(window, "IntersectionObserver", {
+        configurable: true,
+        writable: true,
+        value: original,
+      });
+    },
   };
 }
 
@@ -151,11 +187,11 @@ describe("GlobalRecentChatsSection", () => {
       expect(titleElement.getAttribute("title")).toBe(title);
     });
 
-    it("caps the inline preview at 10 chats and offers a View-all trigger on overflow", () => {
+    it("renders every chat in the existing scroll region without a View-all trigger", () => {
       const items = Array.from({ length: 12 }, (_, i) => makeItem(`overflow-${i}`));
       const { container } = renderSection({ items });
-      expect(screen.getAllByText(/^Chat overflow-/)).toHaveLength(10);
-      expect(screen.getByText("View all chats")).toBeTruthy();
+      expect(screen.getAllByText(/^Chat overflow-/)).toHaveLength(12);
+      expect(screen.queryByText("View all chats")).toBeNull();
 
       const scrollRegion = container.querySelector(
         "[data-radix-scroll-area-viewport]"
@@ -166,7 +202,7 @@ describe("GlobalRecentChatsSection", () => {
       expect(scrollRegion?.parentElement?.classList.contains("tw-flex-1")).toBe(true);
     });
 
-    it("renders project badges in the View-all popover from the global landing", () => {
+    it("renders project badges for every chat in the global scroll region", () => {
       const items = Array.from({ length: 11 }, (_, i) =>
         makeItem(`project-overflow-${i}`, { projectId: "project-1" })
       );
@@ -175,19 +211,131 @@ describe("GlobalRecentChatsSection", () => {
         projectNamesById: { "project-1": "Product research" },
       });
 
-      expect(screen.getAllByLabelText("Project: Product research")).toHaveLength(10);
-      fireEvent.click(screen.getByText("View all chats"));
-      expect(screen.getAllByLabelText("Project: Product research")).toHaveLength(21);
+      expect(screen.getAllByLabelText("Project: Product research")).toHaveLength(11);
     });
 
-    it("shows every match (no cap, no View-all) while searching", () => {
-      const items = Array.from({ length: 7 }, (_, i) => makeItem(`search-${i}`));
-      renderSection({ items });
-      fireEvent.change(screen.getByPlaceholderText("Search chats..."), {
-        target: { value: "Chat search" },
+    it("https://github.com/logancyang/obsidian-copilot/issues/3040 finds an older chat beyond the initial rendered batch", () => {
+      const observer = installIntersectionObserverMock();
+      try {
+        const items = makeRecentItems("search", 120);
+        renderSection({ items });
+        expect(screen.queryByText("Chat search-100")).toBeNull();
+
+        fireEvent.change(screen.getByPlaceholderText("Search chats..."), {
+          target: { value: "Chat search-100" },
+        });
+
+        expect(screen.getByText("Chat search-100")).toBeTruthy();
+      } finally {
+        observer.restore();
+      }
+    });
+
+    it("https://github.com/logancyang/obsidian-copilot/issues/3040 honors the saved name and created chat-history sort strategies", () => {
+      const items = [
+        makeItem("alpha", {
+          title: "Alpha",
+          createdAt: new Date("2026-01-01T00:00:00Z"),
+          lastAccessedAt: new Date("2026-01-03T00:00:00Z"),
+        }),
+        makeItem("zulu", {
+          title: "Zulu",
+          createdAt: new Date("2026-01-02T00:00:00Z"),
+          lastAccessedAt: new Date("2026-01-01T00:00:00Z"),
+        }),
+      ];
+
+      const { unmount } = renderSection({ items, sortStrategy: "name" });
+      expect(screen.getAllByText(/^(Alpha|Zulu)$/).map((element) => element.textContent)).toEqual([
+        "Alpha",
+        "Zulu",
+      ]);
+      unmount();
+
+      renderSection({ items, sortStrategy: "created" });
+      expect(screen.getAllByText(/^(Alpha|Zulu)$/).map((element) => element.textContent)).toEqual([
+        "Zulu",
+        "Alpha",
+      ]);
+    });
+
+    it("https://github.com/logancyang/obsidian-copilot/issues/3040 renders at most 50 chats before the user scrolls", () => {
+      const observer = installIntersectionObserverMock();
+      try {
+        const items = makeRecentItems("paged", 120);
+        renderSection({ items });
+
+        expect(screen.getAllByText(/^Chat paged-/)).toHaveLength(50);
+        expect(screen.queryByText("Chat paged-50")).toBeNull();
+      } finally {
+        observer.restore();
+      }
+    });
+
+    it("https://github.com/logancyang/obsidian-copilot/issues/3040 appends 50 chats when the scroll sentinel enters view", () => {
+      const observer = installIntersectionObserverMock();
+      try {
+        const items = makeRecentItems("paged", 120);
+        renderSection({ items });
+
+        act(() => observer.intersect());
+
+        expect(screen.getAllByText(/^Chat paged-/)).toHaveLength(100);
+        expect(screen.getByText("Chat paged-50")).toBeTruthy();
+        expect(screen.queryByText("Chat paged-100")).toBeNull();
+      } finally {
+        observer.restore();
+      }
+    });
+
+    it("https://github.com/logancyang/obsidian-copilot/issues/3040 resets a new search to the first 50 matching chats", () => {
+      const observer = installIntersectionObserverMock();
+      try {
+        const items = makeRecentItems("search-page", 120);
+        renderSection({ items });
+        act(() => observer.intersect());
+        expect(screen.getAllByText(/^Chat search-page-/)).toHaveLength(100);
+
+        fireEvent.change(screen.getByPlaceholderText("Search chats..."), {
+          target: { value: "Chat search-page" },
+        });
+
+        expect(screen.getAllByText(/^Chat search-page-/)).toHaveLength(50);
+      } finally {
+        observer.restore();
+      }
+    });
+
+    it("https://github.com/logancyang/obsidian-copilot/issues/3040 keeps a rename draft when updating the title fails", async () => {
+      const onUpdateTitle = jest.fn(async () => {
+        throw new Error("rename failed");
       });
-      expect(screen.getAllByText(/^Chat search-/)).toHaveLength(7);
-      expect(screen.queryByText("View all chats")).toBeNull();
+      renderSection({ items: [makeItem("rename-failure")], onUpdateTitle });
+
+      fireEvent.click(screen.getByTitle("Rename"));
+      const input = screen.getByDisplayValue("Chat rename-failure");
+      fireEvent.change(input, { target: { value: "Retained draft" } });
+      await act(async () => {
+        fireEvent.keyDown(input, { key: "Enter" });
+      });
+
+      expect(onUpdateTitle).toHaveBeenCalledWith("rename-failure", "Retained draft");
+      expect(screen.getByDisplayValue("Retained draft")).toBeTruthy();
+    });
+
+    it("https://github.com/logancyang/obsidian-copilot/issues/3040 keeps delete confirmation available when deletion fails", async () => {
+      const onDeleteChat = jest.fn(async () => {
+        throw new Error("delete failed");
+      });
+      renderSection({ items: [makeItem("delete-failure")], onDeleteChat });
+
+      fireEvent.click(screen.getByTitle("Delete"));
+      await act(async () => {
+        fireEvent.click(screen.getByTitle("Confirm delete"));
+      });
+
+      expect(onDeleteChat).toHaveBeenCalledWith("delete-failure");
+      expect(screen.getByTitle("Confirm delete")).toBeTruthy();
     });
 
     it("refreshes once when the parent re-renders with the items that refresh produced", () => {

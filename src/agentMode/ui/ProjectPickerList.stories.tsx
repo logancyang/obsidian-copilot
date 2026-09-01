@@ -93,7 +93,7 @@ export const Default: StoryObj<ProjectPickerListProps> = {
   render: () => <ProjectPickerDemo projects={projects} />,
 };
 
-/** Overflow uses the same bottom-pinned View-all footer as Recent Chats. */
+/** Overflow keeps the Projects View-all footer pinned to the bottom. */
 export const Overflow: StoryObj<ProjectPickerListProps> = {
   render: () => <ProjectPickerDemo projects={overflowProjects} />,
 };

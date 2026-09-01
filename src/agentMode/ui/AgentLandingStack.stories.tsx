@@ -31,7 +31,6 @@ const sections: AgentHomeShelfSection[] = [
               {row}
             </div>
           ))}
-          <div className="tw-px-2 tw-py-1.5 tw-text-xs tw-text-accent">View all chats</div>
         </div>
       </div>
     ),

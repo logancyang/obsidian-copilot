@@ -9,7 +9,7 @@ type GlobalRecentChatsSectionProps = React.ComponentProps<typeof GlobalRecentCha
 const noop = async () => {};
 const noopSync = () => {};
 
-const items: GlobalRecentChatsSectionProps["items"] = Array.from({ length: 14 }, (_, index) => ({
+const items: GlobalRecentChatsSectionProps["items"] = Array.from({ length: 60 }, (_, index) => ({
   id: `recent-chat-${index + 1}`,
   title:
     index === 3
@@ -50,11 +50,11 @@ function renderShelf(args: Partial<GlobalRecentChatsSectionProps>) {
   return <AgentHomeShelf sections={sections} />;
 }
 
-export const FitsWithoutFooter: StoryObj<GlobalRecentChatsSectionProps> = {
+export const ShortList: StoryObj<GlobalRecentChatsSectionProps> = {
   args: { items: items.slice(0, 5) },
   render: renderShelf,
 };
 
-export const Overflow: StoryObj<GlobalRecentChatsSectionProps> = {
+export const ScrollableList: StoryObj<GlobalRecentChatsSectionProps> = {
   render: renderShelf,
 };

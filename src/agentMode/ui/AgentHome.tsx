@@ -473,9 +473,9 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   //   previous visit (e.g. "New chat" right after a project's first
   //   conversation), so a refresh that finds chats corrects the layout — that
   //   flip lands within the visit's first moments, while the reverse
-  //   (shelf→standalone, e.g. deleting the last chat from the View-all popover
-  //   mid-visit) would yank the card out from under an open popover. The shelf
-  //   just shows the project empty copy until the next visit re-decides.
+  //   (shelf→standalone, e.g. deleting the last chat mid-visit) would yank the
+  //   card out from under the user. The shelf just shows the project empty copy
+  //   until the next visit re-decides.
   //
   // Written during render — the same derive-from-props pattern as the header
   // latch above.
@@ -562,6 +562,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
             runningChatIds={runningChatIds}
             attentionChatIds={attentionChatIds}
             projectNamesById={projectNamesById}
+            sortStrategy={settings.chatHistorySortStrategy}
           />
         ),
       },
@@ -617,6 +618,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       attentionChatIds,
       isRelevantNotesPaneOpen,
       plugin,
+      settings.chatHistorySortStrategy,
     ]
   );
 
@@ -649,6 +651,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
             onLoadHistory={handleLoadChatHistorySafely}
             runningChatIds={runningChatIds}
             attentionChatIds={attentionChatIds}
+            sortStrategy={settings.chatHistorySortStrategy}
           />
         ),
       },
@@ -675,6 +678,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       handleLoadChatHistorySafely,
       runningChatIds,
       attentionChatIds,
+      settings.chatHistorySortStrategy,
     ]
   );
 
