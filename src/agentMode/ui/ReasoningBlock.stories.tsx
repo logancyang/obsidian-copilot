@@ -11,6 +11,8 @@ type ReasoningBlockProps = React.ComponentProps<typeof ReasoningBlock>;
 const REASONING = {
   kind: "thought" as const,
   text: "Comparing the implementation with the current interface before making the change.",
+  startedAtMs: Date.now() - 18_426,
+  durationMs: 18_426,
 };
 
 const meta = {
@@ -24,7 +26,10 @@ export default meta;
 export const Complete: StoryObj<ReasoningBlockProps> = {};
 
 export const Active: StoryObj<ReasoningBlockProps> = {
-  args: { isStreaming: true },
+  args: {
+    part: { ...REASONING, startedAtMs: undefined, durationMs: undefined },
+    isStreaming: true,
+  },
 };
 
 /** Matches the completed trail order so the response footer can be inspected as one row. */

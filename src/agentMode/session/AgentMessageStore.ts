@@ -79,7 +79,7 @@ function partsEqual(a: AgentMessagePart, b: AgentMessagePart): boolean {
       return a.text === b.text;
     case "thought":
       if (b.kind !== "thought") return false;
-      return a.text === b.text;
+      return a.text === b.text && a.startedAtMs === b.startedAtMs && a.durationMs === b.durationMs;
     case "plan":
       if (b.kind !== "plan") return false;
       return planEntriesEqual(a.entries, b.entries);
@@ -241,6 +241,27 @@ export class AgentMessageStore {
     this.lastDisplay = null;
   }
 
+  /**
+   * Freeze the latest reasoning block at the event that ended it. React can
+   * batch over this transition, so render-time clocks cannot recover it later.
+   * https://github.com/Brevilabs/obsidian-copilot-private/issues/336
+   */
+  private finishTrailingThought(msg: StoredAgentMessage, endedAtMs = Date.now()): boolean {
+    const last = msg.parts?.[msg.parts.length - 1];
+    if (
+      !last ||
+      last.kind !== "thought" ||
+      last.startedAtMs === undefined ||
+      (last.durationMs !== undefined && msg.turnStopReason === undefined)
+    ) {
+      return false;
+    }
+    const durationMs = Math.max(last.durationMs ?? 0, endedAtMs - last.startedAtMs);
+    if (last.durationMs === durationMs) return false;
+    last.durationMs = durationMs;
+    return true;
+  }
+
   /** Add a message; returns its assigned id. */
   addMessage(message: NewAgentChatMessage): string {
     const id = message.id || this.generateId();
@@ -276,6 +297,7 @@ export class AgentMessageStore {
     const msg = this.messages.find((m) => m.id === id);
     if (!msg) return false;
     if (msg.turnStopReason !== undefined) return false;
+    this.finishTrailingThought(msg);
     msg.turnStopReason = stopReason;
     msg.turnDurationMs = Math.max(0, durationMs);
     this.touch(msg);
@@ -338,6 +360,7 @@ export class AgentMessageStore {
     if (!msg) return false;
     msg.displayText += text;
     if (!msg.parts) msg.parts = [];
+    this.finishTrailingThought(msg);
     const last = msg.parts[msg.parts.length - 1];
     if (last && last.kind === "text") {
       last.text += text;
@@ -358,10 +381,27 @@ export class AgentMessageStore {
     if (!msg) return false;
     if (!msg.parts) msg.parts = [];
     const last = msg.parts[msg.parts.length - 1];
-    if (last && last.kind === "thought") {
+    // A completed message can receive its final thought chunks after the
+    // prompt result. Extend a trailing span when possible; otherwise start a
+    // frozen span because another event may never arrive to finish it.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/336
+    if (
+      last &&
+      last.kind === "thought" &&
+      (last.durationMs === undefined || msg.turnStopReason !== undefined)
+    ) {
       last.text += text;
+      if (msg.turnStopReason !== undefined && last.startedAtMs !== undefined) {
+        last.durationMs = Math.max(0, Date.now() - last.startedAtMs);
+      }
     } else {
-      msg.parts.push({ kind: "thought", text });
+      const startedAtMs = Date.now();
+      msg.parts.push({
+        kind: "thought",
+        text,
+        startedAtMs,
+        ...(msg.turnStopReason !== undefined ? { durationMs: 0 } : {}),
+      });
     }
     this.touch(msg);
     return true;
@@ -381,12 +421,20 @@ export class AgentMessageStore {
     if (partId !== undefined) {
       const idx = msg.parts.findIndex((p) => agentPartId(p) === partId);
       if (idx !== -1) {
-        if (partsEqual(msg.parts[idx], part)) return false;
+        // A fresh plan snapshot can replace its earlier singleton while still
+        // ending the reasoning block at the live edge.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/336
+        const finishedThought = part.kind === "plan" && this.finishTrailingThought(msg);
+        if (partsEqual(msg.parts[idx], part)) {
+          if (finishedThought) this.touch(msg);
+          return finishedThought;
+        }
         msg.parts[idx] = part;
         this.touch(msg);
         return true;
       }
     }
+    this.finishTrailingThought(msg);
     msg.parts.push(part);
     this.touch(msg);
     return true;
@@ -418,6 +466,7 @@ export class AgentMessageStore {
   markMessageError(id: string, errorText: string, durationMs?: number): boolean {
     const msg = this.messages.find((m) => m.id === id);
     if (!msg) return false;
+    this.finishTrailingThought(msg);
     msg.isErrorMessage = true;
     if (durationMs !== undefined) msg.turnDurationMs = Math.max(0, durationMs);
     const suffix = msg.displayText.length > 0 ? "\n\n" : "";

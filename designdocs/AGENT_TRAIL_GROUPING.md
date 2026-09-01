@@ -36,7 +36,7 @@ run of machine rows before the next piece of prose.
 ## What an activity group is
 
 A maximal run of consecutive **tool calls and reasoning blocks**, folded into
-one collapsed row summarizing the work: `Read 2 files, ran 12 commands, thought
+one collapsed row summarizing the work: `Ran 12 commands, read 2 files, thought
 for 51s`. A run of one member keeps its own row — a single `Read` gets no group
 chrome.
 
@@ -63,18 +63,18 @@ chrome.
 
 ### How the line reads
 
-The vocabulary is deliberately coarse — three families plus reasoning, named in
-first-appearance order:
+The vocabulary is deliberately coarse: every grouped tool call contributes to
+the total command count, and file-specific tools add distinct file totals:
 
 - **read** — `Read` / `NotebookRead` by vendor name, or the ACP
   `toolKind: "read"` fallback, so a backend that sends no vendor names still
   says `read 2 files`.
 - **edit** — `Edit` / `MultiEdit` / `Write` / `NotebookEdit`, or
   `toolKind: "edit"`.
-- **command** — everything else, no exceptions: shell commands, searches,
-  fetches, skills, MCP calls, tools that do not exist yet.
+- **command** — every tool call, including reads and edits. This total matches
+  the number of tool rows in the expanded group.
 
-`Read 2 files, edited 1 file, ran 5 commands, thought for 51s` is the longest
+`Ran 8 commands, read 2 files, edited 1 file, thought for 51s` is the longest
 shape the line can take. An earlier revision named more families (searches,
 fetches, skills), kept unregistered tools under their own name (`Design sync
 ×16`), and keyed MCP tools per server — which then needed a family cap with
@@ -85,16 +85,17 @@ or an MCP call a "command" is a stretch that only lasts until the group is
 opened — and a lone call never enters a group at all, so it keeps its precise
 row.
 
-Reasoning duration is **not** derivable from the parts — `kind: "thought"`
-carries no timestamps. The caller measures it live and passes `thinkingMs` to
-`summarizeActivity`, the same way `ReasoningBlock` measures its own timer today.
-Because the clock lives in the group row, spans the row never saw go unmeasured:
-a leading thought only becomes a group when the first tool call arrives (by
-which point the thinking is over), and groups off the live edge never run the
-clock. The line therefore under-counts and never over-counts — accepted, since
-the duration is cosmetic and fixing it would mean timestamping thought parts in
-the session contract. `thought for Xs` simply drops off a line that measured
-nothing; the reasoning text itself stays in the expanded rows.
+Reasoning parts carry the local event time of their first chunk. The message
+store freezes a block's duration when prose, a new tool call, a plan update, an
+error, or turn completion proves the reasoning ended. Both the expanded
+reasoning row and its parent group use that duration. The active block adds its
+live elapsed time until the store freezes it. This keeps the two rows consistent
+when React batches several session updates or remounts a completed card.
+
+Read and edit totals prefer structured paths from tool locations and diff
+outputs. Paths are de-duplicated across the group. A file-classified tool with
+no structured path counts as one file, preserving useful output for backends
+that provide only a tool kind.
 
 ### Measured at pane width
 
@@ -151,5 +152,5 @@ absorbing their children — and every run of peers is pooled by
 
 `AgentTrailView` owns what a group cannot own itself: `useTrailExpansion` holds
 open/closed state above the node list (see invariant 2), and each group gets its
-own `useThinkingClock` via a per-group child component, because the trail's
-node list is a loop and hooks are not.
+own `useThinkingClock` for the active thought via a per-group child component,
+because the trail's node list is a loop and hooks are not.

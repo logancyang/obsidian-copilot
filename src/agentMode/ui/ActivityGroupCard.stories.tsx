@@ -17,6 +17,15 @@ function action(title: string, overrides: Partial<ToolCallPart> = {}): ActivityM
 
 const THINKING: ActivityMember = {
   type: "reasoning",
+  part: {
+    kind: "thought",
+    text: "The migration note is the one that changed most recently.",
+    durationMs: 51_000,
+  },
+};
+
+const LIVE_THINKING: ActivityMember = {
+  type: "reasoning",
   part: { kind: "thought", text: "The migration note is the one that changed most recently." },
 };
 
@@ -49,7 +58,7 @@ const meta = {
     open: false,
     onToggle: () => undefined,
     renderMember,
-    thinkingMs: 51_000,
+    thinkingMs: 0,
   },
   parameters: { gallery: { host: "leaf", layout: "padded" } },
 } satisfies Meta<ActivityGroupCardProps>;
@@ -65,7 +74,7 @@ export const WithFailure: StoryObj<ActivityGroupCardProps> = {
       THINKING,
       action("npm run build", { vendorToolName: "Bash" }),
     ]),
-    thinkingMs: 7_000,
+    thinkingMs: 0,
   },
 };
 
@@ -79,8 +88,31 @@ export const InFlight: StoryObj<ActivityGroupCardProps> = {
         status: "in_progress",
       }),
     ]),
-    thinkingMs: 3_000,
+    thinkingMs: 0,
     liveStep: "npm run test -- ActivityGroupCard",
+  },
+};
+
+export const MultiFileEdit: StoryObj<ActivityGroupCardProps> = {
+  args: {
+    group: group([
+      action("Calculate description lengths", { toolKind: "execute" }),
+      action("Edit skill definitions", {
+        toolKind: "edit",
+        output: ["a.md", "b.md", "c.md", "d.md", "e.md"].map((path) => ({
+          type: "diff" as const,
+          path,
+          oldText: "before",
+          newText: "after",
+        })),
+      }),
+      action("Validate skill definitions", { toolKind: "execute" }),
+      {
+        type: "reasoning",
+        part: { kind: "thought", text: "Check the repaired files.", durationMs: 18_426 },
+      },
+    ]),
+    thinkingMs: 0,
   },
 };
 
@@ -96,7 +128,7 @@ export const LongLine: StoryObj<ActivityGroupCardProps> = {
       action("Design sync", { vendorToolName: "DesignSyncFromFigmaWorkspace" }),
       THINKING,
     ]),
-    thinkingMs: 214_000,
+    thinkingMs: 0,
   },
 };
 
@@ -106,7 +138,7 @@ const ExpandedDemo: React.FC = () => {
   return (
     <ActivityGroupCard
       group={MIXED}
-      thinkingMs={51_000}
+      thinkingMs={0}
       open={open}
       onToggle={() => setOpen((v) => !v)}
       renderMember={renderMember}
@@ -122,10 +154,10 @@ export const Expanded: StoryObj<ActivityGroupCardProps> = { render: ExpandedDemo
  * frame is the settled turn, where the live row retires entirely.
  */
 const LIVE_FRAMES: ActivityMember[][] = [
-  [action("Read Projects/Copilot/Roadmap.md", { vendorToolName: "Read" }), THINKING],
+  [action("Read Projects/Copilot/Roadmap.md", { vendorToolName: "Read" }), LIVE_THINKING],
   [
     action("Read Projects/Copilot/Roadmap.md", { vendorToolName: "Read" }),
-    THINKING,
+    LIVE_THINKING,
     action("lint", {
       vendorToolName: "Bash",
       status: "in_progress",
@@ -134,7 +166,7 @@ const LIVE_FRAMES: ActivityMember[][] = [
   ],
   [
     action("Read Projects/Copilot/Roadmap.md", { vendorToolName: "Read" }),
-    THINKING,
+    LIVE_THINKING,
     action("lint", { vendorToolName: "Bash", input: { command: "npm run lint" } }),
     action("test", {
       vendorToolName: "Bash",
@@ -144,7 +176,7 @@ const LIVE_FRAMES: ActivityMember[][] = [
   ],
   [
     action("Read Projects/Copilot/Roadmap.md", { vendorToolName: "Read" }),
-    THINKING,
+    LIVE_THINKING,
     action("lint", { vendorToolName: "Bash", input: { command: "npm run lint" } }),
     action("test", {
       vendorToolName: "Bash",
