@@ -43,317 +43,319 @@ jest.mock("@/system-prompts/state", () => ({
   removePendingFileWrite: jest.fn(),
 }));
 
-describe("getSystemPromptsFolder", () => {
-  it("returns the effective (copilotFolder-derived) system prompts folder", () => {
-    jest.spyOn(settingsModel, "getSettings").mockReturnValue({
-      userSystemPromptsFolder: "CustomFolder/SystemPrompts",
-    } as CopilotSettings);
+describe("systemPromptUtils", () => {
+  describe("getSystemPromptsFolder()", () => {
+    it("returns the effective (copilotFolder-derived) system prompts folder", () => {
+      jest.spyOn(settingsModel, "getSettings").mockReturnValue({
+        userSystemPromptsFolder: "CustomFolder/SystemPrompts",
+      } as CopilotSettings);
 
-    const result = getSystemPromptsFolder();
-    expect(result).toBe("CustomFolder/SystemPrompts");
-  });
-});
-
-describe("getPromptFilePath", () => {
-  beforeEach(() => {
-    jest.spyOn(settingsModel, "getSettings").mockReturnValue({
-      userSystemPromptsFolder: "SystemPrompts",
-    } as CopilotSettings);
+      const result = getSystemPromptsFolder();
+      expect(result).toBe("CustomFolder/SystemPrompts");
+    });
   });
 
-  it("returns correct file path with .md extension", () => {
-    expect(getPromptFilePath("My Prompt")).toBe("SystemPrompts/My Prompt.md");
-  });
-
-  it("handles special characters in title", () => {
-    expect(getPromptFilePath("Prompt (copy)")).toBe("SystemPrompts/Prompt (copy).md");
-  });
-});
-
-describe("isSystemPromptFile", () => {
-  beforeEach(() => {
-    jest.spyOn(settingsModel, "getSettings").mockReturnValue({
-      userSystemPromptsFolder: "SystemPrompts",
-    } as CopilotSettings);
-  });
-
-  it("returns true for valid system prompt file", () => {
-    const mockFile = mockTFile({
-      path: "SystemPrompts/Test.md",
-      extension: "md",
+  describe("getPromptFilePath()", () => {
+    beforeEach(() => {
+      jest.spyOn(settingsModel, "getSettings").mockReturnValue({
+        userSystemPromptsFolder: "SystemPrompts",
+      } as CopilotSettings);
     });
 
-    // Mock instanceof check
-    Object.setPrototypeOf(mockFile, TFile.prototype);
-
-    expect(isSystemPromptFile(mockFile)).toBe(true);
-  });
-
-  it("returns false for non-TFile objects", () => {
-    const mockFile = {
-      path: "SystemPrompts/Test.md",
-    } as TAbstractFile;
-
-    expect(isSystemPromptFile(mockFile)).toBe(false);
-  });
-
-  it("returns false for non-markdown files", () => {
-    const mockFile = mockTFile({
-      path: "SystemPrompts/Test.txt",
-      extension: "txt",
+    it("returns correct file path with .md extension", () => {
+      expect(getPromptFilePath("My Prompt")).toBe("SystemPrompts/My Prompt.md");
     });
 
-    Object.setPrototypeOf(mockFile, TFile.prototype);
-
-    expect(isSystemPromptFile(mockFile)).toBe(false);
+    it("handles special characters in title", () => {
+      expect(getPromptFilePath("Prompt (copy)")).toBe("SystemPrompts/Prompt (copy).md");
+    });
   });
 
-  it("returns false for files outside system prompts folder", () => {
-    const mockFile = mockTFile({
-      path: "OtherFolder/Test.md",
-      extension: "md",
+  describe("isSystemPromptFile()", () => {
+    beforeEach(() => {
+      jest.spyOn(settingsModel, "getSettings").mockReturnValue({
+        userSystemPromptsFolder: "SystemPrompts",
+      } as CopilotSettings);
     });
 
-    Object.setPrototypeOf(mockFile, TFile.prototype);
+    it("returns true for valid system prompt file", () => {
+      const mockFile = mockTFile({
+        path: "SystemPrompts/Test.md",
+        extension: "md",
+      });
 
-    expect(isSystemPromptFile(mockFile)).toBe(false);
-  });
+      // Mock instanceof check
+      Object.setPrototypeOf(mockFile, TFile.prototype);
 
-  it("returns false for files in subfolders", () => {
-    const mockFile = mockTFile({
-      path: "SystemPrompts/Subfolder/Test.md",
-      extension: "md",
+      expect(isSystemPromptFile(mockFile)).toBe(true);
     });
 
-    Object.setPrototypeOf(mockFile, TFile.prototype);
+    it("returns false for non-TFile objects", () => {
+      const mockFile = {
+        path: "SystemPrompts/Test.md",
+      } as TAbstractFile;
 
-    expect(isSystemPromptFile(mockFile)).toBe(false);
-  });
-
-  it("returns false for files in unsupported subfolder", () => {
-    const mockFile = mockTFile({
-      path: "SystemPrompts/unsupported/Failed Migration.md",
-      extension: "md",
+      expect(isSystemPromptFile(mockFile)).toBe(false);
     });
 
-    Object.setPrototypeOf(mockFile, TFile.prototype);
+    it("returns false for non-markdown files", () => {
+      const mockFile = mockTFile({
+        path: "SystemPrompts/Test.txt",
+        extension: "txt",
+      });
 
-    expect(isSystemPromptFile(mockFile)).toBe(false);
-  });
+      Object.setPrototypeOf(mockFile, TFile.prototype);
 
-  it("works with custom userSystemPromptsFolder setting", () => {
-    jest.spyOn(settingsModel, "getSettings").mockReturnValue({
-      userSystemPromptsFolder: "CustomFolder/MyPrompts",
-    } as CopilotSettings);
-
-    const validFile = mockTFile({
-      path: "CustomFolder/MyPrompts/Test.md",
-      extension: "md",
+      expect(isSystemPromptFile(mockFile)).toBe(false);
     });
 
-    const unsupportedFile = mockTFile({
-      path: "CustomFolder/MyPrompts/unsupported/Failed.md",
-      extension: "md",
+    it("returns false for files outside system prompts folder", () => {
+      const mockFile = mockTFile({
+        path: "OtherFolder/Test.md",
+        extension: "md",
+      });
+
+      Object.setPrototypeOf(mockFile, TFile.prototype);
+
+      expect(isSystemPromptFile(mockFile)).toBe(false);
     });
 
-    Object.setPrototypeOf(validFile, TFile.prototype);
-    Object.setPrototypeOf(unsupportedFile, TFile.prototype);
+    it("returns false for files in subfolders", () => {
+      const mockFile = mockTFile({
+        path: "SystemPrompts/Subfolder/Test.md",
+        extension: "md",
+      });
 
-    expect(isSystemPromptFile(validFile)).toBe(true);
-    expect(isSystemPromptFile(unsupportedFile)).toBe(false);
-  });
-});
+      Object.setPrototypeOf(mockFile, TFile.prototype);
 
-describe("parseSystemPromptFile", () => {
-  let originalApp: typeof window.app;
-  let mockFile: TFile;
-
-  beforeEach(() => {
-    originalApp = window.app;
-    mockFile = mockTFile({
-      basename: "Test Prompt",
-      path: "SystemPrompts/Test Prompt.md",
-      extension: "md",
+      expect(isSystemPromptFile(mockFile)).toBe(false);
     });
 
-    window.app = {
-      vault: {
-        read: jest.fn(),
-      },
-      metadataCache: {
-        getFileCache: jest.fn(),
-      },
-    } as unknown as typeof window.app;
+    it("returns false for files in unsupported subfolder", () => {
+      const mockFile = mockTFile({
+        path: "SystemPrompts/unsupported/Failed Migration.md",
+        extension: "md",
+      });
+
+      Object.setPrototypeOf(mockFile, TFile.prototype);
+
+      expect(isSystemPromptFile(mockFile)).toBe(false);
+    });
+
+    it("works with custom userSystemPromptsFolder setting", () => {
+      jest.spyOn(settingsModel, "getSettings").mockReturnValue({
+        userSystemPromptsFolder: "CustomFolder/MyPrompts",
+      } as CopilotSettings);
+
+      const validFile = mockTFile({
+        path: "CustomFolder/MyPrompts/Test.md",
+        extension: "md",
+      });
+
+      const unsupportedFile = mockTFile({
+        path: "CustomFolder/MyPrompts/unsupported/Failed.md",
+        extension: "md",
+      });
+
+      Object.setPrototypeOf(validFile, TFile.prototype);
+      Object.setPrototypeOf(unsupportedFile, TFile.prototype);
+
+      expect(isSystemPromptFile(validFile)).toBe(true);
+      expect(isSystemPromptFile(unsupportedFile)).toBe(false);
+    });
   });
 
-  afterEach(() => {
-    window.app = originalApp;
-  });
+  describe("parseSystemPromptFile()", () => {
+    let originalApp: typeof window.app;
+    let mockFile: TFile;
 
-  it("parses a file with frontmatter and content", async () => {
-    const rawContent = `---
+    beforeEach(() => {
+      originalApp = window.app;
+      mockFile = mockTFile({
+        basename: "Test Prompt",
+        path: "SystemPrompts/Test Prompt.md",
+        extension: "md",
+      });
+
+      window.app = {
+        vault: {
+          read: jest.fn(),
+        },
+        metadataCache: {
+          getFileCache: jest.fn(),
+        },
+      } as unknown as typeof window.app;
+    });
+
+    afterEach(() => {
+      window.app = originalApp;
+    });
+
+    it("parses a file with frontmatter and content", async () => {
+      const rawContent = `---
 copilot-system-prompt-created: 1234567890
 copilot-system-prompt-modified: 1234567891
 copilot-system-prompt-last-used: 1234567892
 ---
 This is the prompt content.`;
 
-    (app.vault.read as jest.Mock).mockResolvedValue(rawContent);
-    (app.metadataCache.getFileCache as jest.Mock).mockReturnValue({
-      frontmatter: {
-        "copilot-system-prompt-created": 1234567890,
-        "copilot-system-prompt-modified": 1234567891,
-        "copilot-system-prompt-last-used": 1234567892,
-      },
+      (app.vault.read as jest.Mock).mockResolvedValue(rawContent);
+      (app.metadataCache.getFileCache as jest.Mock).mockReturnValue({
+        frontmatter: {
+          "copilot-system-prompt-created": 1234567890,
+          "copilot-system-prompt-modified": 1234567891,
+          "copilot-system-prompt-last-used": 1234567892,
+        },
+      });
+
+      const result = await parseSystemPromptFile(app, mockFile);
+
+      expect(result).toEqual({
+        title: "Test Prompt",
+        content: "This is the prompt content.",
+        createdMs: 1234567890,
+        modifiedMs: 1234567891,
+        lastUsedMs: 1234567892,
+      });
     });
 
-    const result = await parseSystemPromptFile(app, mockFile);
+    it("parses a file without frontmatter", async () => {
+      const rawContent = "This is the prompt content without frontmatter.";
 
-    expect(result).toEqual({
-      title: "Test Prompt",
-      content: "This is the prompt content.",
-      createdMs: 1234567890,
-      modifiedMs: 1234567891,
-      lastUsedMs: 1234567892,
+      (app.vault.read as jest.Mock).mockResolvedValue(rawContent);
+      (app.metadataCache.getFileCache as jest.Mock).mockReturnValue({});
+
+      const result = await parseSystemPromptFile(app, mockFile);
+
+      expect(result).toEqual({
+        title: "Test Prompt",
+        content: "This is the prompt content without frontmatter.",
+        createdMs: 0,
+        modifiedMs: 0,
+        lastUsedMs: 0,
+      });
     });
-  });
 
-  it("parses a file without frontmatter", async () => {
-    const rawContent = "This is the prompt content without frontmatter.";
-
-    (app.vault.read as jest.Mock).mockResolvedValue(rawContent);
-    (app.metadataCache.getFileCache as jest.Mock).mockReturnValue({});
-
-    const result = await parseSystemPromptFile(app, mockFile);
-
-    expect(result).toEqual({
-      title: "Test Prompt",
-      content: "This is the prompt content without frontmatter.",
-      createdMs: 0,
-      modifiedMs: 0,
-      lastUsedMs: 0,
-    });
-  });
-
-  it("uses default values for missing frontmatter fields", async () => {
-    const rawContent = `---
+    it("uses default values for missing frontmatter fields", async () => {
+      const rawContent = `---
 copilot-system-prompt-created: 1234567890
 ---
 Content here.`;
 
-    (app.vault.read as jest.Mock).mockResolvedValue(rawContent);
-    (app.metadataCache.getFileCache as jest.Mock).mockReturnValue({
-      frontmatter: {
-        "copilot-system-prompt-created": 1234567890,
-      },
+      (app.vault.read as jest.Mock).mockResolvedValue(rawContent);
+      (app.metadataCache.getFileCache as jest.Mock).mockReturnValue({
+        frontmatter: {
+          "copilot-system-prompt-created": 1234567890,
+        },
+      });
+
+      const result = await parseSystemPromptFile(app, mockFile);
+
+      expect(result).toEqual({
+        title: "Test Prompt",
+        content: "Content here.",
+        createdMs: 1234567890,
+        modifiedMs: 0,
+        lastUsedMs: 0,
+      });
     });
 
-    const result = await parseSystemPromptFile(app, mockFile);
-
-    expect(result).toEqual({
-      title: "Test Prompt",
-      content: "Content here.",
-      createdMs: 1234567890,
-      modifiedMs: 0,
-      lastUsedMs: 0,
-    });
-  });
-
-  it("strips frontmatter from content", async () => {
-    const rawContent = `---
+    it("strips frontmatter from content", async () => {
+      const rawContent = `---
 copilot-system-prompt-created: 1234567890
 ---
 Line 1
 Line 2`;
 
-    (app.vault.read as jest.Mock).mockResolvedValue(rawContent);
-    (app.metadataCache.getFileCache as jest.Mock).mockReturnValue({
-      frontmatter: {
-        "copilot-system-prompt-created": 1234567890,
-      },
+      (app.vault.read as jest.Mock).mockResolvedValue(rawContent);
+      (app.metadataCache.getFileCache as jest.Mock).mockReturnValue({
+        frontmatter: {
+          "copilot-system-prompt-created": 1234567890,
+        },
+      });
+
+      const result = await parseSystemPromptFile(app, mockFile);
+
+      expect(result.content).toBe("Line 1\nLine 2");
+      expect(result.content).not.toContain("---");
     });
 
-    const result = await parseSystemPromptFile(app, mockFile);
-
-    expect(result.content).toBe("Line 1\nLine 2");
-    expect(result.content).not.toContain("---");
-  });
-
-  it("handles content with --- in the middle", async () => {
-    const rawContent = `---
+    it("handles content with --- in the middle", async () => {
+      const rawContent = `---
 copilot-system-prompt-created: 1234567890
 ---
 Content with --- separator in the middle.`;
 
-    (app.vault.read as jest.Mock).mockResolvedValue(rawContent);
-    (app.metadataCache.getFileCache as jest.Mock).mockReturnValue({
-      frontmatter: {
-        "copilot-system-prompt-created": 1234567890,
-      },
+      (app.vault.read as jest.Mock).mockResolvedValue(rawContent);
+      (app.metadataCache.getFileCache as jest.Mock).mockReturnValue({
+        frontmatter: {
+          "copilot-system-prompt-created": 1234567890,
+        },
+      });
+
+      const result = await parseSystemPromptFile(app, mockFile);
+
+      expect(result.content).toBe("Content with --- separator in the middle.");
     });
-
-    const result = await parseSystemPromptFile(app, mockFile);
-
-    expect(result.content).toBe("Content with --- separator in the middle.");
   });
-});
 
-describe("fetchAllSystemPrompts", () => {
-  it("returns parsed prompts from the configured prompt folder", async () => {
-    jest.spyOn(settingsModel, "getSettings").mockReturnValue({
-      userSystemPromptsFolder: "SystemPrompts",
-    } as CopilotSettings);
-    const promptFile = mockTFile({
-      basename: "Test Prompt",
-      path: "SystemPrompts/Test Prompt.md",
-      extension: "md",
+  describe("fetchAllSystemPrompts()", () => {
+    it("returns parsed prompts from the configured prompt folder", async () => {
+      jest.spyOn(settingsModel, "getSettings").mockReturnValue({
+        userSystemPromptsFolder: "SystemPrompts",
+      } as CopilotSettings);
+      const promptFile = mockTFile({
+        basename: "Test Prompt",
+        path: "SystemPrompts/Test Prompt.md",
+        extension: "md",
+      });
+      Object.setPrototypeOf(promptFile, TFile.prototype);
+      const app = {
+        vault: {
+          getFiles: jest.fn().mockReturnValue([promptFile]),
+          read: jest.fn().mockResolvedValue("Prompt content"),
+        },
+        metadataCache: {
+          getFileCache: jest.fn().mockReturnValue({}),
+        },
+      } as unknown as App;
+
+      await expect(fetchAllSystemPrompts(app)).resolves.toEqual([
+        {
+          title: "Test Prompt",
+          content: "Prompt content",
+          createdMs: 0,
+          modifiedMs: 0,
+          lastUsedMs: 0,
+        },
+      ]);
     });
-    Object.setPrototypeOf(promptFile, TFile.prototype);
-    const app = {
-      vault: {
-        getFiles: jest.fn().mockReturnValue([promptFile]),
-        read: jest.fn().mockResolvedValue("Prompt content"),
-      },
-      metadataCache: {
-        getFileCache: jest.fn().mockReturnValue({}),
-      },
-    } as unknown as App;
-
-    await expect(fetchAllSystemPrompts(app)).resolves.toEqual([
-      {
-        title: "Test Prompt",
-        content: "Prompt content",
-        createdMs: 0,
-        modifiedMs: 0,
-        lastUsedMs: 0,
-      },
-    ]);
   });
-});
 
-describe("loadAllSystemPrompts", () => {
-  it("replaces the shared cache with prompts loaded from the vault", async () => {
-    jest.spyOn(settingsModel, "getSettings").mockReturnValue({
-      userSystemPromptsFolder: "SystemPrompts",
-    } as CopilotSettings);
-    const promptFile = mockTFile({
-      basename: "Test Prompt",
-      path: "SystemPrompts/Test Prompt.md",
-      extension: "md",
+  describe("loadAllSystemPrompts()", () => {
+    it("replaces the shared cache with prompts loaded from the vault", async () => {
+      jest.spyOn(settingsModel, "getSettings").mockReturnValue({
+        userSystemPromptsFolder: "SystemPrompts",
+      } as CopilotSettings);
+      const promptFile = mockTFile({
+        basename: "Test Prompt",
+        path: "SystemPrompts/Test Prompt.md",
+        extension: "md",
+      });
+      Object.setPrototypeOf(promptFile, TFile.prototype);
+      const app = {
+        vault: {
+          getFiles: jest.fn().mockReturnValue([promptFile]),
+          read: jest.fn().mockResolvedValue("Prompt content"),
+        },
+        metadataCache: {
+          getFileCache: jest.fn().mockReturnValue({}),
+        },
+      } as unknown as App;
+
+      const prompts = await loadAllSystemPrompts(app);
+
+      expect(state.updateCachedSystemPrompts).toHaveBeenCalledWith(prompts);
     });
-    Object.setPrototypeOf(promptFile, TFile.prototype);
-    const app = {
-      vault: {
-        getFiles: jest.fn().mockReturnValue([promptFile]),
-        read: jest.fn().mockResolvedValue("Prompt content"),
-      },
-      metadataCache: {
-        getFileCache: jest.fn().mockReturnValue({}),
-      },
-    } as unknown as App;
-
-    const prompts = await loadAllSystemPrompts(app);
-
-    expect(state.updateCachedSystemPrompts).toHaveBeenCalledWith(prompts);
   });
 });
