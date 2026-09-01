@@ -41,8 +41,3 @@ export function getYouTubeVideoId(url: string): string | null {
     return null;
   }
 }
-
-/** Check if URL is a YouTube video page */
-export function isYouTubeVideoUrl(url: string): boolean {
-  return getYouTubeVideoId(url) !== null;
-}

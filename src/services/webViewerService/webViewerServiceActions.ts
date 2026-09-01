@@ -155,71 +155,14 @@ export async function getSelectedMarkdown(leaf: WebViewerLeaf): Promise<string> 
   }
 }
 
-/**
- * Get the entire page content as Markdown.
- * Uses Turndown to convert the full page HTML to Markdown.
- * Unlike getReaderModeMarkdown which uses Obsidian's reader mode extraction,
- * this method converts the raw DOM content directly.
- */
-export async function getPageMarkdown(leaf: WebViewerLeaf): Promise<string> {
-  const webview = requireWebview(leaf);
-
-  // Get base URL for resolving relative paths
-  let baseUrl = "";
-  try {
-    baseUrl = typeof webview.getURL === "function" ? webview.getURL() : "";
-  } catch {
-    baseUrl = leaf.view?.url ?? "";
-  }
-
-  // Get body HTML, excluding script/style/noscript tags
-  const code = `(() => {
-    const clone = document.body.cloneNode(true);
-    clone.querySelectorAll('script, style, noscript').forEach(el => el.remove());
-    return clone.innerHTML;
-  })()`;
-
-  let html = "";
-  try {
-    const raw = await webview.executeJavaScript(code);
-    html = toStringSafe(raw);
-  } catch (err) {
-    logError("Failed to get page HTML:", err);
-    throw err;
-  }
-
-  try {
-    return htmlToMarkdown(html, baseUrl);
-  } catch (err) {
-    logError("Failed to convert page HTML to Markdown:", err);
-    throw err;
-  }
-}
-
-/** Get full HTML from the embedded page. */
-export async function getHtml(leaf: WebViewerLeaf, includeDocumentElement = true): Promise<string> {
-  const webview = requireWebview(leaf);
-  const code = includeDocumentElement
-    ? `(() => { try { return document.documentElement?.outerHTML ?? ""; } catch { return ""; } })()`
-    : `(() => { try { return document.body?.outerHTML ?? ""; } catch { return ""; } })()`;
-
-  try {
-    const raw = await webview.executeJavaScript(code);
-    return toStringSafe(raw);
-  } catch (err) {
-    logError("Failed to get HTML:", err);
-    throw err;
-  }
-}
-
 // ============================================================================
 // YouTube Transcript Extraction
 // ============================================================================
 
 // Re-exported from neutral utils to avoid circular dependencies.
-// Reason: Both utils (urlTagUtils) and services need these functions.
+// Reason: Both utils (urlTagUtils) and services need this function.
 // The implementation lives in src/utils/youtubeUrl.ts.
-export { getYouTubeVideoId, isYouTubeVideoUrl } from "@/utils/youtubeUrl";
+export { getYouTubeVideoId } from "@/utils/youtubeUrl";
 
 /** YouTube transcript segment */
 export interface YouTubeTranscriptSegment {

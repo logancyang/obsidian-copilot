@@ -335,12 +335,6 @@ export class WebViewerService {
   async getSelectedMarkdown(leaf: WebViewerLeaf): Promise<string> {
     return actions.getSelectedMarkdown(leaf);
   }
-  async getPageMarkdown(leaf: WebViewerLeaf): Promise<string> {
-    return actions.getPageMarkdown(leaf);
-  }
-  async getHtml(leaf: WebViewerLeaf, includeDocumentElement = true): Promise<string> {
-    return actions.getHtml(leaf, includeDocumentElement);
-  }
 
   // --------------------------------------------------------------------------
   // YouTube Transcript Extraction (delegated to actions)
@@ -352,11 +346,6 @@ export class WebViewerService {
    */
   getYouTubeVideoId(url: string): string | null {
     return actions.getYouTubeVideoId(url);
-  }
-
-  /** Check if URL is a YouTube video page */
-  isYouTubeVideoUrl(url: string): boolean {
-    return actions.isYouTubeVideoUrl(url);
   }
 
   /**
