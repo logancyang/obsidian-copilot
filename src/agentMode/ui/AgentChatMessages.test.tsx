@@ -79,20 +79,18 @@ const chatBackend = {
   resolveAskUserQuestion: jest.fn(),
 } as unknown as AgentChatBackend;
 
-function permission(id: string, pendingActionOrder: number): PermissionPrompt {
+function permission(id: string): PermissionPrompt {
   return {
     sessionId: "session-1",
-    pendingActionOrder,
     toolCall: { toolCallId: id, status: "pending", title: id },
     options: [{ optionId: "allow", name: "Allow", kind: "allow_once" }],
   };
 }
 
-function question(id: string, pendingActionOrder: number): AskUserQuestionPrompt {
+function question(id: string): AskUserQuestionPrompt {
   return {
     sessionId: "session-1",
     requestId: id,
-    pendingActionOrder,
     questions: [{ question: id, options: [{ label: "Yes" }] }],
   };
 }
@@ -181,39 +179,36 @@ describe("AgentChatMessages", () => {
       expect(screen.getByTestId("agent-trail-timestamp").textContent).toBe(timestamp);
     });
 
-    it("shows one blocking action at a time in arrival order for https://github.com/logancyang/obsidian-copilot/issues/2948", () => {
+    it("shows questions before permissions and reveals a permission after questions clear for https://github.com/logancyang/obsidian-copilot/issues/2948", () => {
       const { rerender, props } = renderMessages([assistantMessage("answer-1", 62_000)], false, {
-        pendingToolPermissions: [
-          permission("permission-first", 0),
-          permission("permission-second", 1),
-        ],
-        pendingAskUserQuestions: [question("question-last", 2)],
+        pendingToolPermissions: [permission("permission-first"), permission("permission-second")],
+        pendingAskUserQuestions: [question("question-first")],
       });
 
       const rail = screen.getByRole("region", { name: "Pending agent actions" });
       const firstAction = rail.querySelector("[data-action-id]");
       expect(Array.from(rail.querySelectorAll("[data-action-id]"), (el) => el.textContent)).toEqual(
-        ["Permission permission-first"]
+        ["Question question-first"]
       );
-      expect(screen.getByTestId("chat-messages").textContent).not.toContain("permission-first");
+      expect(screen.getByTestId("chat-messages").textContent).not.toContain("question-first");
 
       rerender(
         <AgentChatMessages
           {...props}
-          pendingToolPermissions={[permission("permission-second", 1)]}
-          pendingAskUserQuestions={[question("question-last", 2)]}
+          pendingToolPermissions={[permission("permission-first"), permission("permission-second")]}
+          pendingAskUserQuestions={[]}
         />
       );
 
       expect(Array.from(rail.querySelectorAll("[data-action-id]"), (el) => el.textContent)).toEqual(
-        ["Permission permission-second"]
+        ["Permission permission-first"]
       );
       expect(rail.querySelector("[data-action-id]")).not.toBe(firstAction);
     });
 
     it("bounds and scrolls a tall action rail so controls remain reachable for https://github.com/logancyang/obsidian-copilot/issues/2948", () => {
       renderMessages([], false, {
-        pendingAskUserQuestions: [question("empty-chat-question", 0)],
+        pendingAskUserQuestions: [question("empty-chat-question")],
       });
 
       const rail = screen.getByTestId("agent-action-rail");

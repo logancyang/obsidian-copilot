@@ -22,10 +22,9 @@ const message: AgentChatMessage = {
   isVisible: true,
 };
 
-function permission(id: string, order: number, title: string): PermissionPrompt {
+function permission(id: string, title: string): PermissionPrompt {
   return {
     sessionId: SESSION_ID,
-    pendingActionOrder: order,
     toolCall: { toolCallId: id, status: "pending", title },
     options: [
       { optionId: "allow_once", name: "Allow once", kind: "allow_once" },
@@ -34,28 +33,26 @@ function permission(id: string, order: number, title: string): PermissionPrompt 
   };
 }
 
-function question(id: string, order: number, text: string): AskUserQuestionPrompt {
+function question(id: string, text: string): AskUserQuestionPrompt {
   return {
     sessionId: SESSION_ID,
     requestId: id,
-    pendingActionOrder: order,
     questions: [{ question: text, options: [{ label: "Yes" }, { label: "No" }] }],
   };
 }
 
 const permissions = [
-  permission("read-roadmap", 0, "Read roadmap.md"),
-  permission("edit-brief", 2, "Edit launch brief.md"),
-  permission("run-checks", 4, "Run validation checks"),
+  permission("read-roadmap", "Read roadmap.md"),
+  permission("edit-brief", "Edit launch brief.md"),
+  permission("run-checks", "Run validation checks"),
 ];
 const questions = [
-  question("audience", 1, "Should the brief target existing customers?"),
-  question("publish", 3, "Should I prepare a publish-ready version?"),
+  question("audience", "Should the brief target existing customers?"),
+  question("publish", "Should I prepare a publish-ready version?"),
 ];
 const tallQuestion: AskUserQuestionPrompt = {
   sessionId: SESSION_ID,
   requestId: "deployment-strategy",
-  pendingActionOrder: 0,
   questions: [
     {
       question: "Which deployment strategy should I use for the staged rollout?",
@@ -126,7 +123,7 @@ const meta = {
 } satisfies Meta<AgentChatMessagesProps>;
 export default meta;
 
-/** Resolve each full-width action to reveal the next permission or question in arrival order. */
+/** Resolve questions first, then each full-width permission in queue order. */
 export const QueuedActions: StoryObj<AgentChatMessagesProps> = {
   render: () => <QueuedActionsDemo {...actionRailArgs} />,
 };

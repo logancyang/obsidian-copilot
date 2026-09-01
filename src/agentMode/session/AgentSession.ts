@@ -442,11 +442,6 @@ export class AgentSession {
       resolve: (answers: AgentQuestionAnswers) => void;
     }
   >();
-  // Permission and question resolvers live in separate maps, but their cards
-  // share one action rail. Stamp both from one counter so the rail preserves
-  // arrival order across action types.
-  // https://github.com/logancyang/obsidian-copilot/issues/2948
-  private nextPendingActionOrder = 0;
   // Singleton "current plan" for the floating card. At most one per session
   // while in canonical plan mode and a plan has been proposed; cleared on a
   // terminal user decision or when the canonical mode flips out of plan.
@@ -1671,10 +1666,7 @@ export class AgentSession {
   handleToolPermission(request: PermissionPrompt): Promise<PermissionDecision> {
     const toolCallId = request.toolCall.toolCallId;
     return new Promise<PermissionDecision>((resolve) => {
-      this.pendingToolResolvers.set(toolCallId, {
-        request: { ...request, pendingActionOrder: this.nextPendingActionOrder++ },
-        resolve,
-      });
+      this.pendingToolResolvers.set(toolCallId, { request, resolve });
       this.recomputeStatusIfChanged();
       this.notifyMessages();
     });
@@ -1714,10 +1706,7 @@ export class AgentSession {
   handleAskUserQuestion(request: AskUserQuestionPrompt): Promise<AgentQuestionAnswers> {
     const requestId = request.requestId;
     return new Promise<AgentQuestionAnswers>((resolve) => {
-      this.pendingQuestionResolvers.set(requestId, {
-        request: { ...request, pendingActionOrder: this.nextPendingActionOrder++ },
-        resolve,
-      });
+      this.pendingQuestionResolvers.set(requestId, { request, resolve });
       this.recomputeStatusIfChanged();
       this.notifyMessages();
     });

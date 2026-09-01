@@ -30,10 +30,6 @@ interface AgentChatMessagesProps {
   isLoading: boolean;
 }
 
-type PendingAction =
-  | { kind: "permission"; id: string; order?: number; request: PermissionPrompt }
-  | { kind: "question"; id: string; order?: number; request: AskUserQuestionPrompt };
-
 /**
  * Maps an AgentChatMessage to the subset of ChatMessage fields that
  * `ChatSingleMessage` consumes. Lets us reuse the leaf message renderer
@@ -80,30 +76,16 @@ const AgentChatMessages = memo(
     const inlinePlanCard = showPlanCard ? (
       <PlanProposalCard plan={currentPlan} app={app} chatBackend={chatBackend} />
     ) : null;
-    const pendingActions = useMemo<PendingAction[]>(
-      () =>
-        [
-          ...pendingToolPermissions.map((request) => ({
-            kind: "permission" as const,
-            id: `permission:${request.toolCall.toolCallId}`,
-            order: request.pendingActionOrder,
-            request,
-          })),
-          ...pendingAskUserQuestions.map((request) => ({
-            kind: "question" as const,
-            id: `question:${request.requestId}`,
-            order: request.pendingActionOrder,
-            request,
-          })),
-        ].sort(
-          (a, b) => (a.order ?? Number.MAX_SAFE_INTEGER) - (b.order ?? Number.MAX_SAFE_INTEGER)
-        ),
-      [pendingAskUserQuestions, pendingToolPermissions]
-    );
-    // Concurrent agents can enqueue several blocking decisions. Keep later
-    // actions out of view until the user resolves the earliest one.
+    const pendingQuestion = pendingAskUserQuestions[0];
+    const pendingPermission = pendingQuestion ? undefined : pendingToolPermissions[0];
+    // Questions take priority so the separate resolver queues have a stable
+    // presentation policy without carrying cross-type sequencing state.
     // https://github.com/logancyang/obsidian-copilot/issues/2948
-    const pendingAction = pendingActions[0];
+    const pendingActionId = pendingQuestion
+      ? `question:${pendingQuestion.requestId}`
+      : pendingPermission
+        ? `permission:${pendingPermission.toolCall.toolCallId}`
+        : null;
 
     // The latest assistant message owns both timer states: it ticks while that
     // turn is in flight, then retains the frozen duration until the next turn
@@ -217,7 +199,7 @@ const AgentChatMessages = memo(
           })}
           {inlinePlanCard}
         </div>
-        {pendingAction ? (
+        {pendingActionId ? (
           <div
             role="region"
             aria-label="Pending agent actions"
@@ -227,18 +209,18 @@ const AgentChatMessages = memo(
             // https://github.com/logancyang/obsidian-copilot/issues/2948
             className="tw-max-h-full tw-w-full tw-overflow-y-auto tw-bg-primary"
           >
-            <div key={pendingAction.id} data-action-id={pendingAction.id}>
-              {pendingAction.kind === "permission" ? (
-                <ToolPermissionCard
-                  request={pendingAction.request}
-                  onResolve={chatBackend.resolveToolPermission.bind(chatBackend)}
-                />
-              ) : (
+            <div key={pendingActionId} data-action-id={pendingActionId}>
+              {pendingQuestion ? (
                 <AskUserQuestionCard
-                  request={pendingAction.request}
+                  request={pendingQuestion}
                   onResolve={chatBackend.resolveAskUserQuestion.bind(chatBackend)}
                 />
-              )}
+              ) : pendingPermission ? (
+                <ToolPermissionCard
+                  request={pendingPermission}
+                  onResolve={chatBackend.resolveToolPermission.bind(chatBackend)}
+                />
+              ) : null}
             </div>
           </div>
         ) : null}

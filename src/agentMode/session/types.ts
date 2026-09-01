@@ -613,8 +613,6 @@ export interface PermissionPrompt {
   sessionId: SessionId;
   toolCall: ToolCallSnapshot;
   options: PermissionOption[];
-  /** Session-assigned order shared with other blocking action types. */
-  pendingActionOrder?: number;
 }
 
 /** The user's outcome on a `PermissionPrompt`. Mirrors ACP `RequestPermissionResponse`. */
@@ -663,8 +661,6 @@ export interface AskUserQuestionPrompt {
   sessionId: SessionId;
   requestId: string;
   questions: AgentQuestion[];
-  /** Session-assigned order shared with other blocking action types. */
-  pendingActionOrder?: number;
 }
 
 // ---- Session-creation I/O shapes ---------------------------------------
