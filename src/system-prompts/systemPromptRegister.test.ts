@@ -60,7 +60,6 @@ jest.mock("@/system-prompts/systemPromptManager", () => ({
   SystemPromptManager: {
     getInstance: jest.fn().mockReturnValue({
       initialize: jest.fn().mockResolvedValue(undefined),
-      reloadPrompts: jest.fn().mockResolvedValue([]),
       fetchPrompts: jest.fn().mockResolvedValue([]),
     }),
   },

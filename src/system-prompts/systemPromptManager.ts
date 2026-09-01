@@ -1,46 +1,19 @@
-import { App, TFile, Vault } from "obsidian";
-import { UserSystemPrompt } from "@/system-prompts/type";
-import {
-  ensurePromptFrontmatter,
-  fetchAllSystemPrompts,
-  generateCopyPromptName,
-  getPromptFilePath,
-  getPromptFilePathInFolder,
-  getSystemPromptsFolder,
-  loadAllSystemPrompts,
-  validatePromptName,
-} from "@/system-prompts/systemPromptUtils";
-import {
-  getCachedSystemPrompts,
-  upsertCachedSystemPrompt,
-  deleteCachedSystemPrompt,
-  addPendingFileWrite,
-  removePendingFileWrite,
-  getSelectedPromptTitle,
-  setSelectedPromptTitle,
-} from "@/system-prompts/state";
-import {
-  COPILOT_SYSTEM_PROMPT_CREATED,
-  COPILOT_SYSTEM_PROMPT_MODIFIED,
-  COPILOT_SYSTEM_PROMPT_LAST_USED,
-} from "@/system-prompts/constants";
+import type { App } from "obsidian";
+import type { UserSystemPrompt } from "@/system-prompts/type";
+import { fetchAllSystemPrompts, loadAllSystemPrompts } from "@/system-prompts/systemPromptUtils";
 import { logInfo } from "@/logger";
-import { ensureFolderExists } from "@/utils";
-import { trashFile } from "@/utils/vaultAdapterUtils";
-import { getSettings, updateSetting } from "@/settings/model";
 
 /**
- * Singleton manager for system prompts
- * Provides centralized CRUD operations for system prompts
+ * Owns the system-prompt loading lifecycle used by the vault event register.
+ * Initializes the shared cache at startup and provides cache-neutral snapshots
+ * for callers that coordinate their own cache replacement.
  */
 export class SystemPromptManager {
   private static instance: SystemPromptManager;
   private app: App;
-  private vault: Vault;
 
   private constructor(app: App) {
     this.app = app;
-    this.vault = app.vault;
   }
 
   /**
@@ -62,205 +35,6 @@ export class SystemPromptManager {
   public async initialize(): Promise<void> {
     logInfo("Initializing SystemPromptManager");
     await loadAllSystemPrompts(this.app);
-  }
-
-  /**
-   * Create a new system prompt
-   * @param prompt - The system prompt to create
-   * @param skipStoreUpdate - If true, skip updating the cache (useful for batch operations)
-   */
-  public async createPrompt(prompt: UserSystemPrompt, skipStoreUpdate = false): Promise<void> {
-    const existingPrompts = getCachedSystemPrompts();
-    const error = validatePromptName(prompt.title, existingPrompts);
-
-    if (error) {
-      throw new Error(error);
-    }
-
-    // One folder for the whole create: resolving it again for the file path
-    // could ensure one directory and create the prompt in another if the
-    // Copilot root moves in between.
-    const folderPath = getSystemPromptsFolder();
-    const filePath = getPromptFilePathInFolder(prompt.title, folderPath);
-
-    try {
-      addPendingFileWrite(filePath);
-
-      // Ensure nested folders are created cross-platform
-      await ensureFolderExists(this.vault, folderPath);
-
-      // Create the file
-      await this.vault.create(filePath, prompt.content);
-
-      // Add frontmatter
-      const file = this.vault.getAbstractFileByPath(filePath);
-      if (file instanceof TFile) {
-        await ensurePromptFrontmatter(this.app, file, prompt);
-      }
-
-      // Update cache directly instead of reloading all files
-      if (!skipStoreUpdate) {
-        upsertCachedSystemPrompt(prompt);
-      }
-
-      logInfo(`Created system prompt: ${prompt.title}`);
-    } finally {
-      removePendingFileWrite(filePath);
-    }
-  }
-
-  /**
-   * Update an existing system prompt
-   * @param oldTitle - The current title of the prompt
-   * @param newPrompt - The updated prompt data
-   * @param skipStoreUpdate - If true, skip updating the cache (useful for batch operations)
-   */
-  public async updatePrompt(
-    oldTitle: string,
-    newPrompt: UserSystemPrompt,
-    skipStoreUpdate = false
-  ): Promise<void> {
-    const oldPath = getPromptFilePath(oldTitle);
-    const newPath = getPromptFilePath(newPrompt.title);
-    const isRename = oldTitle !== newPrompt.title;
-
-    // Validate new name if renaming
-    if (isRename) {
-      const existingPrompts = getCachedSystemPrompts();
-      const validationError = validatePromptName(newPrompt.title, existingPrompts, oldTitle);
-      if (validationError) {
-        throw new Error(validationError);
-      }
-    }
-
-    try {
-      addPendingFileWrite(newPath);
-      if (isRename) {
-        addPendingFileWrite(oldPath);
-      }
-
-      // If title changed, rename the file
-      if (isRename) {
-        const oldFile = this.vault.getAbstractFileByPath(oldPath);
-        if (oldFile instanceof TFile) {
-          await this.app.fileManager.renameFile(oldFile, newPath);
-        }
-      }
-
-      // Update content
-      const file = this.vault.getAbstractFileByPath(newPath);
-      if (file instanceof TFile) {
-        await this.vault.modify(file, newPrompt.content);
-
-        // Update frontmatter - write back ALL fields since vault.modify clears frontmatter
-        // Reference: Command module writes all fields in processFrontMatter
-        await this.app.fileManager.processFrontMatter(
-          file,
-          (frontmatter: Record<string, unknown>) => {
-            frontmatter[COPILOT_SYSTEM_PROMPT_CREATED] = newPrompt.createdMs;
-            frontmatter[COPILOT_SYSTEM_PROMPT_MODIFIED] = newPrompt.modifiedMs;
-            frontmatter[COPILOT_SYSTEM_PROMPT_LAST_USED] = newPrompt.lastUsedMs;
-          }
-        );
-      }
-
-      // Update cache directly instead of reloading all files
-      if (!skipStoreUpdate) {
-        // If renamed, delete old cache entry first
-        if (isRename) {
-          deleteCachedSystemPrompt(oldTitle);
-
-          // Update defaultSystemPromptTitle if it was pointing to the old title
-          const settings = getSettings();
-          if (settings.defaultSystemPromptTitle === oldTitle) {
-            updateSetting("defaultSystemPromptTitle", newPrompt.title);
-            logInfo(`Updated defaultSystemPromptTitle: ${oldTitle} -> ${newPrompt.title}`);
-          }
-        }
-        upsertCachedSystemPrompt(newPrompt);
-      }
-
-      logInfo(`Updated system prompt: ${oldTitle} -> ${newPrompt.title}`);
-    } finally {
-      removePendingFileWrite(newPath);
-      if (isRename) {
-        removePendingFileWrite(oldPath);
-      }
-    }
-  }
-
-  /**
-   * Delete a system prompt
-   * @param title - The title of the prompt to delete
-   */
-  public async deletePrompt(title: string): Promise<void> {
-    const filePath = getPromptFilePath(title);
-
-    try {
-      addPendingFileWrite(filePath);
-
-      // Delete the file first
-      const file = this.vault.getAbstractFileByPath(filePath);
-      if (file instanceof TFile) {
-        await trashFile(this.app, file);
-      }
-
-      // Clear state only after successful deletion to maintain consistency
-      const settings = getSettings();
-      if (settings.defaultSystemPromptTitle === title) {
-        updateSetting("defaultSystemPromptTitle", "");
-        logInfo(`Cleared defaultSystemPromptTitle (deleted: ${title})`);
-      }
-
-      if (getSelectedPromptTitle() === title) {
-        setSelectedPromptTitle("");
-        logInfo(`Cleared session selectedPromptTitle (deleted: ${title})`);
-      }
-
-      // Update cache directly instead of reloading all files
-      deleteCachedSystemPrompt(title);
-
-      logInfo(`Deleted system prompt: ${title}`);
-    } finally {
-      removePendingFileWrite(filePath);
-    }
-  }
-
-  /**
-   * Duplicate a system prompt
-   */
-  public async duplicatePrompt(prompt: UserSystemPrompt): Promise<UserSystemPrompt> {
-    const existingPrompts = getCachedSystemPrompts();
-    const newTitle = generateCopyPromptName(prompt.title, existingPrompts);
-    const now = Date.now();
-
-    const duplicatedPrompt: UserSystemPrompt = {
-      title: newTitle,
-      content: prompt.content,
-      createdMs: now,
-      modifiedMs: now,
-      lastUsedMs: 0,
-    };
-
-    await this.createPrompt(duplicatedPrompt);
-
-    logInfo(`Duplicated system prompt: ${prompt.title} -> ${newTitle}`);
-
-    return duplicatedPrompt;
-  }
-
-  /**
-   * Get all prompts from cache
-   */
-  public getPrompts(): UserSystemPrompt[] {
-    return getCachedSystemPrompts();
-  }
-
-  /**
-   * Reload all prompts from file system and update cache
-   */
-  public async reloadPrompts(): Promise<UserSystemPrompt[]> {
-    return await loadAllSystemPrompts(this.app);
   }
 
   /**

@@ -285,7 +285,6 @@ export class SystemPromptRegister {
 
   /**
    * Handle file rename
-   * Reference: Similar to systemPromptManager.updatePrompt rename logic
    */
   private handleFileRename = async (file: TAbstractFile, oldPath: string) => {
     // Check pending status for both old and new paths
