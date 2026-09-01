@@ -125,7 +125,7 @@ describe("SkillsSettings", () => {
       expect(screen.queryByText("No skills yet")).toBeNull();
     });
 
-    it("opens hidden rejected skills and their folders with system apps", () => {
+    it("opens hidden rejected skills and their folders with system apps for https://github.com/Brevilabs/obsidian-copilot-private/issues/166", () => {
       mockRejectedSkills = [makeRejectedSkill()];
       renderSettings();
 
@@ -147,7 +147,7 @@ describe("SkillsSettings", () => {
       expect(openWithSystemDefault).toHaveBeenCalledWith("/vault/.claude/skills/broken-skill");
     });
 
-    it("opens and reveals indexed rejected skills inside Obsidian", () => {
+    it("opens and reveals indexed rejected skills inside Obsidian for https://github.com/Brevilabs/obsidian-copilot-private/issues/166", () => {
       const app = makeApp(true);
       mockRejectedSkills = [
         makeRejectedSkill({
@@ -178,7 +178,7 @@ describe("SkillsSettings", () => {
       expect(openWithSystemDefault).not.toHaveBeenCalled();
     });
 
-    it("reveals vault-relative rejected skills inside Obsidian when no absolute vault path exists", () => {
+    it("reveals vault-relative rejected skills inside Obsidian when no absolute vault path exists for https://github.com/Brevilabs/obsidian-copilot-private/issues/166", () => {
       const app = makeApp(true);
       mockRejectedSkills = [
         makeRejectedSkill({

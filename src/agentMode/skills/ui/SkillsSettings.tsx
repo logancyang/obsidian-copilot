@@ -125,7 +125,11 @@ export const SkillsSettings: React.FC = () => {
     [app]
   );
 
-  /** Reveal an indexed skill in Obsidian, or a hidden one in the OS file manager. */
+  /**
+   * Reveal indexed skills in Obsidian and hidden agent skills in the OS file manager.
+   * https://github.com/Brevilabs/obsidian-copilot-private/issues/166
+   * Hidden agent folders are outside Obsidian's index, so they cannot use the vault reveal path.
+   */
   const handleRevealSkillFolder = useCallback(
     (dirPath: string) => {
       const folderRel = toVaultRelative(dirPath, getVaultBase(app));
