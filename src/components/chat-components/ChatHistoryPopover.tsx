@@ -333,7 +333,7 @@ export function ChatHistoryPopover({
                   {groupedHistory.map((group) => (
                     <div
                       key={group.key}
-                      className="tw-mb-3 tw-border-x-[0px] tw-border-b tw-border-t-[0px] tw-border-border tw-pb-2"
+                      className="tw-mb-3 tw-border-x-0 tw-border-b tw-border-t-0 tw-border-border tw-pb-2"
                       style={{ borderBottomStyle: "solid" }}
                     >
                       <div className="tw-mb-2 tw-px-2 tw-text-xs tw-font-medium tw-tracking-wider tw-text-muted">

@@ -184,6 +184,7 @@ module.exports = {
       },
     },
     borderWidth: {
+      0: "0px",
       DEFAULT: "var(--border-width)",
     },
     zIndex: {

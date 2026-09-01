@@ -28,7 +28,7 @@ export const SkillLoadIssues: React.FC<SkillLoadIssuesProps> = ({ issues, onView
 
   return (
     <section
-      className="tw-grid tw-grid-cols-[minmax(0,1fr)_auto] tw-items-center tw-gap-3 tw-rounded-sm tw-border tw-border-solid tw-p-3 tw-text-ui-smaller tw-bg-warning/10 tw-border-warning/40"
+      className="tw-flex tw-items-center tw-justify-between tw-gap-3 tw-rounded-sm tw-border tw-border-solid tw-p-3 tw-text-ui-smaller tw-bg-warning/10 tw-border-warning/40"
       role="alert"
       aria-label={title}
     >
@@ -36,7 +36,7 @@ export const SkillLoadIssues: React.FC<SkillLoadIssuesProps> = ({ issues, onView
         <strong className="tw-block tw-text-ui-small tw-text-warning">{title}</strong>
         <p className="tw-mx-0 tw-mb-0 tw-mt-0.5 tw-text-normal">The skills have format errors.</p>
       </div>
-      <div className="tw-flex tw-gap-1">
+      <div className="tw-flex tw-shrink-0 tw-gap-1">
         <Button variant="secondary" size="sm" onClick={onViewDetails}>
           View details
         </Button>
@@ -74,10 +74,10 @@ export const SkillLoadIssuesModalContent: React.FC<SkillLoadIssuesModalContentPr
           </Button>
         </div>
       )}
-      <div className="tw-mt-3 tw-max-h-[min(65vh,40rem)] tw-overflow-y-auto tw-pr-1">
+      <div className="tw-mt-3 tw-max-h-96 tw-overflow-y-auto tw-pr-1">
         {issues.map((issue) => (
           <article
-            className="tw-border-x-[0px] tw-border-b-[0px] tw-border-t tw-border-solid tw-py-3 tw-border-warning/30"
+            className="tw-border-x-0 tw-border-b-0 tw-border-t tw-border-solid tw-py-3 tw-border-warning/30"
             key={issue.location}
           >
             <div className="tw-break-words tw-font-mono tw-text-ui-small tw-font-semibold tw-text-normal">
@@ -87,7 +87,7 @@ export const SkillLoadIssuesModalContent: React.FC<SkillLoadIssuesModalContentPr
               {issue.reason}
             </p>
             {issue.offendingText !== undefined && (
-              <ClampedContent collapsedClassName="tw-max-h-[6lh]">
+              <ClampedContent collapsedClassName="tw-max-h-28">
                 <code className="tw-mt-1 tw-block tw-whitespace-pre-wrap tw-rounded-sm tw-bg-primary-alt tw-p-1 tw-text-smallest">
                   {issue.offendingText}
                 </code>

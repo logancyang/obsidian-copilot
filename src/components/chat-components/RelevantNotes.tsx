@@ -356,7 +356,7 @@ function RelevantNotesToolbar({
   onBuild: () => void;
 }) {
   return (
-    <div className="tw-flex tw-flex-none tw-items-center tw-gap-2 tw-border-[0px] tw-border-b tw-border-solid tw-border-border tw-px-3 tw-py-2">
+    <div className="tw-flex tw-flex-none tw-items-center tw-gap-2 tw-border-0 tw-border-b tw-border-solid tw-border-border tw-px-3 tw-py-2">
       <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-1.5 tw-text-xs tw-text-faint">
         <span className="tw-shrink-0">Relevant to</span>
         {activeFileName ? (

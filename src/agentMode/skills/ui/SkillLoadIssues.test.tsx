@@ -154,12 +154,12 @@ describe("SkillLoadIssues", () => {
       );
 
       const preview = screen.getByTestId("clamped-content");
-      expect(preview.classList.contains("tw-max-h-[6lh]")).toBe(true);
+      expect(preview.classList.contains("tw-max-h-28")).toBe(true);
       expect(preview.textContent).toBe(longDescription);
 
       fireEvent.click(screen.getByRole("button", { name: "Show more" }));
 
-      expect(preview.classList.contains("tw-max-h-[6lh]")).toBe(false);
+      expect(preview.classList.contains("tw-max-h-28")).toBe(false);
       expect(screen.getByRole("button", { name: "Show less" })).not.toBeNull();
     });
   });

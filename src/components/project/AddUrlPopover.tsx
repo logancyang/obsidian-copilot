@@ -104,7 +104,7 @@ export function AddUrlPopover({ existingUrls, onAdd, container, trigger }: AddUr
         )}
       </PopoverTrigger>
       <PopoverContent align="start" container={container} className="tw-w-80 tw-p-0">
-        <div className="tw-flex tw-items-center tw-gap-2 tw-border-x-[0px] tw-border-b tw-border-t-[0px] tw-border-solid tw-border-border tw-px-3.5 tw-pb-2.5 tw-pt-3 tw-text-sm tw-font-semibold tw-text-normal">
+        <div className="tw-flex tw-items-center tw-gap-2 tw-border-x-0 tw-border-b tw-border-t-0 tw-border-solid tw-border-border tw-px-3.5 tw-pb-2.5 tw-pt-3 tw-text-sm tw-font-semibold tw-text-normal">
           <Link className="tw-size-3.5" />
           Add URLs
           <Button
@@ -173,7 +173,7 @@ export function AddUrlPopover({ existingUrls, onAdd, container, trigger }: AddUr
           </div>
         </div>
 
-        <div className="tw-flex tw-items-center tw-gap-2 tw-border-x-[0px] tw-border-b-[0px] tw-border-t tw-border-solid tw-border-border tw-px-3.5 tw-py-2.5">
+        <div className="tw-flex tw-items-center tw-gap-2 tw-border-x-0 tw-border-b-0 tw-border-t tw-border-solid tw-border-border tw-px-3.5 tw-py-2.5">
           <span className="tw-text-xs tw-text-faint">
             {validCount} to add
             {dupCount > 0 && ` · ${dupCount} exist`}

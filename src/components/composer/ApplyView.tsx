@@ -660,7 +660,7 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
 
               {/* Only show accept/reject buttons for blocks with changes that are undecided */}
               {!simple && hasChanges && blockStatus === "undecided" && (
-                <div className="tw-flex tw-items-center tw-justify-end tw-border-[0px] tw-border-t tw-border-solid tw-border-border tw-p-2">
+                <div className="tw-flex tw-items-center tw-justify-end tw-border-0 tw-border-t tw-border-solid tw-border-border tw-p-2">
                   <div className="tw-flex tw-items-center tw-gap-2">
                     <Button variant="destructive" size="sm" onClick={() => rejectBlock(blockIndex)}>
                       <XIcon className="tw-size-4" />
@@ -678,7 +678,7 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
               {!simple &&
                 hasChanges &&
                 (blockStatus === "accepted" || blockStatus === "rejected") && (
-                  <div className="tw-flex tw-items-center tw-justify-end tw-border-[0px] tw-border-t tw-border-solid tw-border-border tw-p-2">
+                  <div className="tw-flex tw-items-center tw-justify-end tw-border-0 tw-border-t tw-border-solid tw-border-border tw-p-2">
                     <div className="tw-flex tw-items-center tw-gap-2">
                       <div className="tw-mr-2 tw-text-sm tw-font-medium">
                         {blockStatus === "accepted" ? (
