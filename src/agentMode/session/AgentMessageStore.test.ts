@@ -121,6 +121,34 @@ describe("AgentMessageStore", () => {
         jest.useRealTimers();
       });
 
+      it("freezes a new late thought after completed prose and extends it with later chunks (https://github.com/Brevilabs/obsidian-copilot-private/issues/336)", () => {
+        jest.useFakeTimers();
+        jest.setSystemTime(1_000);
+        const store = new AgentMessageStore();
+        const id = store.addMessage(placeholder());
+        store.appendAgentText(id, "Done");
+        store.markTurnComplete(id, "end_turn", 1_000);
+
+        jest.setSystemTime(5_000);
+        store.appendAgentThought(id, "Late thought");
+        expect(store.getMessage(id)?.parts?.[1]).toEqual({
+          kind: "thought",
+          text: "Late thought",
+          startedAtMs: 5_000,
+          durationMs: 0,
+        });
+
+        jest.setSystemTime(7_000);
+        store.appendAgentThought(id, " continued");
+        expect(store.getMessage(id)?.parts?.[1]).toEqual({
+          kind: "thought",
+          text: "Late thought continued",
+          startedAtMs: 5_000,
+          durationMs: 2_000,
+        });
+        jest.useRealTimers();
+      });
+
       it("starts a new timed thought after a completed thought (https://github.com/Brevilabs/obsidian-copilot-private/issues/336)", () => {
         jest.useFakeTimers();
         jest.setSystemTime(1_000);

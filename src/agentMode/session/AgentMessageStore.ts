@@ -380,8 +380,8 @@ export class AgentMessageStore {
     if (!msg.parts) msg.parts = [];
     const last = msg.parts[msg.parts.length - 1];
     // A completed message can receive its final thought chunks after the
-    // prompt result. Keep those chunks in the frozen trailing span so the
-    // expanded row and grouped summary retain the same completed duration.
+    // prompt result. Extend a trailing span when possible; otherwise start a
+    // frozen span because another event may never arrive to finish it.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/336
     if (
       last &&
@@ -393,7 +393,13 @@ export class AgentMessageStore {
         last.durationMs = Math.max(0, Date.now() - last.startedAtMs);
       }
     } else {
-      msg.parts.push({ kind: "thought", text, startedAtMs: Date.now() });
+      const startedAtMs = Date.now();
+      msg.parts.push({
+        kind: "thought",
+        text,
+        startedAtMs,
+        ...(msg.turnStopReason !== undefined ? { durationMs: 0 } : {}),
+      });
     }
     this.touch(msg);
     return true;
