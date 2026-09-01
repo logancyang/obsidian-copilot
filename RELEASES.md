@@ -1,5 +1,46 @@
 # Release Notes
 
+# v4.0.5 - See what's new in Copilot without leaving Obsidian
+
+![Copilot's update notice and the release notes dialog inside Obsidian](https://github.com/user-attachments/assets/20bb1f1f-ff8a-47d6-90d2-6eec3a43cfbc)
+
+Copilot now tells you when a newer version is available. Read the full release notes inside Obsidian, then go straight to Community Plugins to update. ([#3007](https://github.com/logancyang/obsidian-copilot/pull/3007), @zeroliu)
+
+## Fix skill warnings with Copilot Agent
+
+![Skill warnings in Copilot settings with the Fix with Agent dialog](https://github.com/user-attachments/assets/8995d171-d751-4da3-9cdf-f07e3dbeddda)
+
+Copilot now catches `SKILL.md` format problems and shows which files need attention and why. With **Fix with Agent**, the Copilot Agent you already use can fix those warnings for you. ([#3037](https://github.com/logancyang/obsidian-copilot/pull/3037), [#3038](https://github.com/logancyang/obsidian-copilot/pull/3038), [#3051](https://github.com/logancyang/obsidian-copilot/pull/3051), @brevilabs-agent-bot)
+
+## Publishing moves to OpenArtifacts
+
+Symposium is now [OpenArtifacts](https://openartifacts.ai). Every new page your agent publishes goes to OpenArtifacts, and the pages you published on Symposium before redirect to their new OpenArtifacts address, so existing links keep working and you can still update or withdraw those pages from the same note. Older Copilot versions can no longer publish, so update to keep publishing. ([#3071](https://github.com/logancyang/obsidian-copilot/pull/3071), @logancyang)
+
+- **Your agent's publishing Skill follows along.** `symposium-publish` becomes `openartifacts-publish` on the next start, keeps the agents you enabled it for, and ships a `research-memo` report theme it applies by default. ([#3071](https://github.com/logancyang/obsidian-copilot/pull/3071), @logancyang)
+- **Publish history moves to `.openartifacts`.** The hidden `.symposium` folder in your vault is renamed once, with its history intact. ([#3071](https://github.com/logancyang/obsidian-copilot/pull/3071), @logancyang)
+
+## ✨ Enhancements
+
+- **Browse all Recent Chats in one place.** The searchable list now loads older chats as you scroll instead of opening a second **View all chats** window. ([#3040](https://github.com/logancyang/obsidian-copilot/issues/3040), [#3041](https://github.com/logancyang/obsidian-copilot/pull/3041), @logancyang)
+- **Questions and permission requests stay in view.** Agent Chat keeps actions above the composer even when you are reading earlier output, and concurrent Claude chats no longer show another session's request. ([#2948](https://github.com/logancyang/obsidian-copilot/issues/2948), [#3067](https://github.com/logancyang/obsidian-copilot/pull/3067), @brevilabs-agent-bot)
+
+## 🛠️ Bug Fixes
+
+- **Stopped turns keep their last usage reading.** A new Agent session starts with an empty context ring instead of a misleading zero, and stopping a later turn no longer erases the last valid reading. ([#2975](https://github.com/logancyang/obsidian-copilot/issues/2975), [#3069](https://github.com/logancyang/obsidian-copilot/pull/3069), @zeroliu)
+- **Agent activity summaries match their details.** Grouped activity now counts every command and edited file, while completed reasoning keeps the same duration shown in the expanded steps. ([#3066](https://github.com/logancyang/obsidian-copilot/pull/3066), @zeroliu)
+- **Codex mode switching works again.** Copilot now uses the current `@agentclientprotocol/codex-acp` adapter and sends the mode names it supports. Users of the old `@zed-industries/codex-acp` package should follow the updated setup instructions and run Auto-detect again. ([#2916](https://github.com/logancyang/obsidian-copilot/issues/2916), [#3016](https://github.com/logancyang/obsidian-copilot/pull/3016), @brevilabs-agent-bot)
+- **Codex no longer shortens your skills.** Copilot now gives Codex a proper context budget, so ordinary skill catalogs load in full instead of being truncated behind a hidden warning. ([#3020](https://github.com/logancyang/obsidian-copilot/pull/3020), @logancyang)
+- **Copilot fits under Obsidian Sync Standard's 5 MB limit again.** The production bundle is back below the per-file limit, and the build now prevents future releases from crossing it. ([#3008](https://github.com/logancyang/obsidian-copilot/pull/3008), [#3070](https://github.com/logancyang/obsidian-copilot/pull/3070), @brevilabs-agent-bot)
+- **Agent Home times stay clear of the scrollbar.** Relative times and hover actions in Recent Chats and Projects are no longer clipped when a shelf scrolls. ([#3017](https://github.com/logancyang/obsidian-copilot/issues/3017), [#3034](https://github.com/logancyang/obsidian-copilot/pull/3034), @logancyang)
+- **Under the hood.** Unused components, exports, and API layers pruned, test infrastructure hardened, and documentation visits are now measured without identifying readers. (@brevilabs-agent-bot, @zeroliu, @logancyang)
+
+## 🧰 Troubleshoot
+
+- If models are missing, navigate to Copilot settings -> Models tab and click "Refresh Built-in Models".
+- Please report any issue you see in the member channel!
+
+---
+
 # v4.0.4 - A chime when your agent is ready
 
 ![Notification and sound settings in Copilot, with Marimba selected](https://github.com/user-attachments/assets/a6d2084e-84cf-4f19-aeea-8fd08decc9e3)
