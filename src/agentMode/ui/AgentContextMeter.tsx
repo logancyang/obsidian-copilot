@@ -147,10 +147,12 @@ export interface UsageMeterProps {
 export function UsageMeter({ usage, contextWindow, planUsage }: UsageMeterProps) {
   // Guard a non-finite `usedTokens` (e.g. NaN from a malformed upstream value)
   // so it can't propagate into the rendered percent or the SVG dashoffset.
-  const used = usage && Number.isFinite(usage.usedTokens) ? usage.usedTokens : 0;
-  const fraction = contextWindow ? Math.min(1, Math.max(0, used / contextWindow)) : 0;
+  const hasUsage = !!usage;
+  const hasContext = contextWindow !== null;
+  const used = hasUsage && Number.isFinite(usage.usedTokens) ? usage.usedTokens : 0;
+  const fraction = hasContext ? Math.min(1, Math.max(0, used / contextWindow)) : 0;
   const percent = Math.round(fraction * 100);
-  const isWarning = contextWindow !== null && fraction >= WARNING_THRESHOLD;
+  const isWarning = hasContext && fraction >= WARNING_THRESHOLD;
 
   // Radix Tooltip handles hover/focus open/close and hoverable content natively,
   // so no manual open state or close timer is needed.
@@ -163,12 +165,12 @@ export function UsageMeter({ usage, contextWindow, planUsage }: UsageMeterProps)
           className={cn(isWarning ? "tw-text-warning" : "tw-text-accent")}
           aria-label="Usage"
         >
-          {contextWindow !== null ? <ContextRing fraction={fraction} /> : formatTokens(used)}
+          {!hasUsage || hasContext ? <ContextRing fraction={fraction} /> : formatTokens(used)}
         </Button>
       </TooltipTrigger>
       <TooltipContent align="end" side="top" className="tw-w-80">
         <div className="tw-flex tw-flex-col tw-gap-2">
-          {usage && (
+          {hasUsage && (
             <>
               <div className="tw-flex tw-items-center tw-justify-between tw-gap-3 tw-text-ui-smaller">
                 <span className="tw-whitespace-nowrap tw-text-muted">Context window</span>
@@ -178,12 +180,12 @@ export function UsageMeter({ usage, contextWindow, planUsage }: UsageMeterProps)
                     isWarning && "tw-text-warning"
                   )}
                 >
-                  {contextWindow !== null
+                  {hasContext
                     ? `${formatTokens(used)} / ${formatTokens(contextWindow)} (${percent}%)`
                     : formatTokens(used)}
                 </span>
               </div>
-              {contextWindow !== null && <Progress value={percent} className="tw-h-1.5" />}
+              {hasContext && <Progress value={percent} className="tw-h-1.5" />}
             </>
           )}
           {planUsage && <PlanUsageRows planUsage={planUsage} />}

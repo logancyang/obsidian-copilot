@@ -121,6 +121,18 @@ describe("AgentContextMeter", () => {
     expect(screen.queryByLabelText("Context usage")).toBeNull();
   });
 
+  it("shows an empty ring instead of 0 while plan usage is available before session usage", () => {
+    const planUsage: PlanUsage = {
+      windows: [{ id: "weekly", label: "Weekly", percent: 15 }],
+      updatedAt: 1,
+    };
+    renderMeter(makeBackend(null, planUsage));
+
+    const trigger = screen.getByLabelText("Usage");
+    expect(trigger.querySelector("svg")).not.toBeNull();
+    expect(trigger.textContent).not.toContain("0");
+  });
+
   it("shows each plan cap window, its percentage and its reset, under the context bar", () => {
     const usage: SessionUsage = { usedTokens: 50_000, contextWindow: 200_000, updatedAt: 1 };
     const planUsage: PlanUsage = {

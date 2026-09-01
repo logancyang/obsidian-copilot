@@ -480,6 +480,48 @@ describe("AgentSession session usage", () => {
     expect(session.getSessionUsage()?.usedTokens).toBe(42);
   });
 
+  it("keeps the last positive usage when a stopped turn reports zero (https://github.com/logancyang/obsidian-copilot/issues/2975)", async () => {
+    const mock = makeMockBackend();
+    let resolvePrompt!: (value: { stopReason: "cancelled" }) => void;
+    mock.prompt.mockImplementation(() => new Promise((resolve) => (resolvePrompt = resolve)));
+    const session = makeSession(mock);
+    mock.emit({
+      sessionId: "acp-1",
+      update: {
+        sessionUpdate: "usage_update",
+        usage: { usedTokens: 5000, contextWindow: 200_000, updatedAt: 1 },
+      },
+    });
+    const { turn } = session.sendPrompt("stop this turn");
+    await session.cancel();
+
+    mock.emit({
+      sessionId: "acp-1",
+      update: {
+        sessionUpdate: "usage_update",
+        usage: { usedTokens: 0, contextWindow: 200_000, updatedAt: 2 },
+      },
+    });
+
+    expect(session.getSessionUsage()).toEqual({
+      usedTokens: 5000,
+      contextWindow: 200_000,
+      updatedAt: 1,
+    });
+
+    resolvePrompt({ stopReason: "cancelled" });
+    await expect(turn).resolves.toBe("cancelled");
+
+    mock.emit({
+      sessionId: "acp-1",
+      update: {
+        sessionUpdate: "usage_update",
+        usage: { usedTokens: 6000, contextWindow: 200_000, updatedAt: 3 },
+      },
+    });
+    expect(session.getSessionUsage()?.usedTokens).toBe(6000);
+  });
+
   it("ignores a used-only fallback once an occupancy snapshot exists", () => {
     const mock = makeMockBackend();
     const session = makeSession(mock);

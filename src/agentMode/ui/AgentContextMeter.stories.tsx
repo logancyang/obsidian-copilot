@@ -29,6 +29,18 @@ const CONTEXT: UsageMeterProps["usage"] = {
   updatedAt: NOW,
 };
 
+/** Plan limits are ready, but this new session has not reported context usage yet. */
+export const AwaitingSessionUsage: StoryObj<UsageMeterProps> = {
+  args: {
+    usage: null,
+    contextWindow: null,
+    planUsage: {
+      windows: [{ id: "weekly", label: "Weekly", percent: 15, resetsAt: NOW + 80 * HOUR }],
+      updatedAt: NOW,
+    },
+  },
+};
+
 /** Both windows, mid-usage: the everyday Claude Code and Copilot Plus state. */
 export const ContextAndCaps: StoryObj<UsageMeterProps> = {
   args: {
