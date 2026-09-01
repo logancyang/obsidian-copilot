@@ -1,5 +1,15 @@
 import { UsageMeter, type UsageMeterProps } from "@/agentMode/ui/AgentContextMeter";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import type { Meta, StoryObj } from "@/lib/story";
+import React from "react";
+
+function UsageMeterStory(props: UsageMeterProps) {
+  return (
+    <TooltipProvider>
+      <UsageMeter {...props} />
+    </TooltipProvider>
+  );
+}
 
 /**
  * The meter has two independent inputs — context occupancy and account plan caps — and a
@@ -9,7 +19,7 @@ import type { Meta, StoryObj } from "@/lib/story";
  */
 const meta = {
   title: "Agent Mode/UsageMeter",
-  component: UsageMeter,
+  component: UsageMeterStory,
 } satisfies Meta<UsageMeterProps>;
 export default meta;
 
@@ -27,6 +37,18 @@ const CONTEXT: UsageMeterProps["usage"] = {
   usedTokens: 48_000,
   contextWindow: 200_000,
   updatedAt: NOW,
+};
+
+/** Plan limits are ready, but this new session has not reported context usage yet. */
+export const AwaitingSessionUsage: StoryObj<UsageMeterProps> = {
+  args: {
+    usage: null,
+    contextWindow: null,
+    planUsage: {
+      windows: [{ id: "weekly", label: "Weekly", percent: 15, resetsAt: NOW + 80 * HOUR }],
+      updatedAt: NOW,
+    },
+  },
 };
 
 /** Both windows, mid-usage: the everyday Claude Code and Copilot Plus state. */

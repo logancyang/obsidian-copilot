@@ -1533,6 +1533,10 @@ export class AgentSession {
    * render a bogus percentage ring. A later live occupancy update supersedes it.
    */
   private applyUsageUpdate(usage: SessionUsage): void {
+    // Some backends use zero as an empty terminal snapshot after cancellation.
+    // It does not measure consumed context, so wait for a positive reading.
+    // https://github.com/logancyang/obsidian-copilot/issues/2975
+    if (!usage.usedTokens) return;
     if (usage.contextWindow === undefined && this.currentUsage?.contextWindow !== undefined) {
       return;
     }
