@@ -693,23 +693,6 @@ export class DBOperations {
     });
   }
 
-  async getDocsJsonByPaths(paths: string[]): Promise<Record<string, OramaDocument[]>> {
-    if (!this.oramaDb) {
-      throw new CustomError("Semantic index database not found.");
-    }
-
-    const result: Record<string, OramaDocument[]> = {};
-
-    for (const path of paths) {
-      const docs = await DBOperations.getDocsByPath(this.oramaDb, path);
-      if (docs && docs.length > 0) {
-        result[path] = docs.map((hit) => hit.document);
-      }
-    }
-
-    return result;
-  }
-
   /**
    * Mark a file as missing embeddings
    */

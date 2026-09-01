@@ -16,6 +16,7 @@ import { TieredLexicalRetriever } from "@/search/v3/TieredLexicalRetriever";
 import { FilterRetriever } from "@/search/v3/FilterRetriever";
 import { RETURN_ALL_LIMIT } from "@/search/v3/SearchCore";
 import { mergeFilterAndSearchResults } from "@/search/v3/mergeResults";
+import type { Document } from "@langchain/core/documents";
 
 /**
  * Query expansion data returned with search results.
@@ -61,6 +62,26 @@ function computeRecallTerms(expansion: {
   (expansion.expandedQueries || []).forEach(addTerm);
 
   return recallTerms;
+}
+
+function projectSearchDocument(doc: Document, isFilterResult: boolean) {
+  const score = doc.metadata.rerank_score ?? doc.metadata.score ?? 0;
+  return {
+    title: doc.metadata.title || "Untitled",
+    content: doc.pageContent,
+    path: doc.metadata.path || "",
+    score,
+    rerank_score: score,
+    includeInContext: doc.metadata.includeInContext ?? true,
+    source: doc.metadata.source,
+    mtime: doc.metadata.mtime ?? null,
+    ctime: doc.metadata.ctime ?? null,
+    chunkId: (doc.metadata as Record<string, unknown>).chunkId ?? null,
+    isChunk: (doc.metadata as Record<string, unknown>).isChunk ?? false,
+    explanation: doc.metadata.explanation ?? null,
+    isFilterResult,
+    matchType: isFilterResult ? doc.metadata.source || "filter" : undefined,
+  };
 }
 
 // Define Zod schema for localSearch
@@ -201,26 +222,8 @@ async function performLexicalSearch({
   // --- Step 3: Merge filter + search results ---
   const { filterResults, searchResults } = mergeFilterAndSearchResults(filterDocs, searchDocs);
 
-  // Tag each result with isFilterResult and matchType
-  const mapDoc = (doc: import("@langchain/core/documents").Document, isFilter: boolean) => ({
-    title: doc.metadata.title || "Untitled",
-    content: doc.pageContent,
-    path: doc.metadata.path || "",
-    score: doc.metadata.rerank_score ?? doc.metadata.score ?? 0,
-    rerank_score: doc.metadata.rerank_score ?? doc.metadata.score ?? 0,
-    includeInContext: doc.metadata.includeInContext ?? true,
-    source: doc.metadata.source,
-    mtime: doc.metadata.mtime ?? null,
-    ctime: doc.metadata.ctime ?? null,
-    chunkId: (doc.metadata as Record<string, unknown>).chunkId ?? null,
-    isChunk: (doc.metadata as Record<string, unknown>).isChunk ?? false,
-    explanation: doc.metadata.explanation ?? null,
-    isFilterResult: isFilter,
-    matchType: isFilter ? doc.metadata.source || "filter" : (undefined as string | undefined),
-  });
-
-  const taggedFilterResults = filterResults.map((doc) => mapDoc(doc, true));
-  const taggedSearchResults = searchResults.map((doc) => mapDoc(doc, false));
+  const taggedFilterResults = filterResults.map((doc) => projectSearchDocument(doc, true));
+  const taggedSearchResults = searchResults.map((doc) => projectSearchDocument(doc, false));
 
   logInfo(
     `lexicalSearch found ${taggedFilterResults.length} filter + ${taggedSearchResults.length} search documents for query: "${query}"`
@@ -434,26 +437,9 @@ async function performMiyoSearch({
   // Merge: filter results first, then Miyo results (deduped)
   const { filterResults, searchResults } = mergeFilterAndSearchResults(filterDocs, miyoDocs);
 
-  const mapDoc = (doc: import("@langchain/core/documents").Document, isFilter: boolean) => ({
-    title: doc.metadata.title || "Untitled",
-    content: doc.pageContent,
-    path: doc.metadata.path || "",
-    score: doc.metadata.rerank_score ?? doc.metadata.score ?? 0,
-    rerank_score: doc.metadata.rerank_score ?? doc.metadata.score ?? 0,
-    includeInContext: doc.metadata.includeInContext ?? true,
-    source: doc.metadata.source,
-    mtime: doc.metadata.mtime ?? null,
-    ctime: doc.metadata.ctime ?? null,
-    chunkId: (doc.metadata as Record<string, unknown>).chunkId ?? null,
-    isChunk: (doc.metadata as Record<string, unknown>).isChunk ?? false,
-    explanation: doc.metadata.explanation ?? null,
-    isFilterResult: isFilter,
-    matchType: isFilter ? doc.metadata.source || "filter" : (undefined as string | undefined),
-  });
-
   const allDocs = [
-    ...filterResults.map((doc) => mapDoc(doc, true)),
-    ...searchResults.map((doc) => mapDoc(doc, false)),
+    ...filterResults.map((doc) => projectSearchDocument(doc, true)),
+    ...searchResults.map((doc) => projectSearchDocument(doc, false)),
   ].slice(0, effectiveMaxK);
 
   return { type: "local_search", documents: allDocs };

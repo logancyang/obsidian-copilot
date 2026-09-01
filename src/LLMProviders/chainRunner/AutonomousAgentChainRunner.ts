@@ -1,10 +1,8 @@
 import { AGENT_LOOP_TIMEOUT_MS } from "@/constants";
 import { MessageContent } from "@/imageProcessing/imageProcessor";
 import { logError, logInfo, logWarn } from "@/logger";
-import { UserMemoryManager } from "@/memory/UserMemoryManager";
 import { checkIsPaidUser } from "@/plusUtils";
 import { getSettings } from "@/settings/model";
-import { getSystemPromptWithMemory } from "@/system-prompts/systemPromptBuilder";
 import { initializeBuiltinTools } from "@/tools/builtinTools";
 import { ToolRegistry } from "@/tools/ToolRegistry";
 import { StructuredTool } from "@langchain/core/tools";
@@ -34,9 +32,7 @@ import {
 
 import { ensureCiCOrderingWithQuestion } from "./utils/cicPromptUtils";
 import { LayerToMessagesConverter } from "@/context/LayerToMessagesConverter";
-import { buildAgentPromptDebugReport } from "./utils/promptDebugService";
 import { recordPromptPayload } from "./utils/promptPayloadRecorder";
-import { PromptDebugReport } from "./utils/toolPromptDebugger";
 import {
   AgentReasoningState,
   createInitialReasoningState,
@@ -292,64 +288,6 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
     }
     // During reasoning, use the rolling window
     return serializeReasoningBlock(this.reasoningState);
-  }
-
-  // TODO: Unify system prompt construction -- this static method and prepareAgentConversation()
-  // both independently gather tool metadata, build tool instructions, and append AGENT_LOOP_GUIDANCE.
-  // Extract a shared helper like buildAgentSystemPromptSuffix(tools) to avoid drift.
-  /**
-   * Generate system prompt for the autonomous agent.
-   * Note: Tool schemas are handled by bindTools(), so we only include
-   * semantic guidance from tool metadata here.
-   */
-  public static async generateSystemPrompt(
-    availableTools: StructuredTool[],
-    _adapter?: ModelAdapter, // Unused, kept for backwards compatibility with tests
-    userMemoryManager?: UserMemoryManager
-  ): Promise<string> {
-    const basePrompt = await getSystemPromptWithMemory(userMemoryManager);
-
-    // Get tool metadata for custom instructions (semantic guidance only)
-    const registry = ToolRegistry.getInstance();
-    const toolMetadata = availableTools
-      .map((tool) => registry.getToolMetadata(tool.name))
-      .filter((meta): meta is NonNullable<typeof meta> => meta !== undefined);
-
-    // Build tool-specific instructions from metadata (no XML format needed)
-    const toolInstructions = toolMetadata
-      .filter((meta) => meta.customPromptInstructions)
-      .map((meta) => `For ${meta.displayName}: ${meta.customPromptInstructions}`)
-      .join("\n");
-
-    const parts = [basePrompt];
-    if (toolInstructions) {
-      parts.push(`## Tool Guidelines\n${toolInstructions}`);
-    }
-    parts.push(AGENT_LOOP_GUIDANCE);
-    return parts.join("\n\n");
-  }
-
-  /**
-   * Build an annotated prompt report for debugging tool call prompting.
-   *
-   * @param userMessage - The user chat message to inspect.
-   * @returns A prompt debug report containing sections and annotated string output.
-   */
-  public async buildToolPromptDebugReport(userMessage: ChatMessage): Promise<PromptDebugReport> {
-    const availableTools = this.getAvailableTools();
-    const adapter = ModelAdapterFactory.createAdapter(
-      this.chainManager.chatModelManager.getChatModel()
-    );
-    // Tool descriptions are now handled natively by bindTools()
-    const toolDescriptions = availableTools.map((t) => `${t.name}: ${t.description}`).join("\n");
-
-    return buildAgentPromptDebugReport({
-      chainManager: this.chainManager,
-      adapter,
-      availableTools,
-      toolDescriptions,
-      userMessage,
-    });
   }
 
   /**

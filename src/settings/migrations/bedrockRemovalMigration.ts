@@ -13,11 +13,13 @@
  *    the shared removal cascade, and deletes the legacy top-level API key.
  */
 
-import type { CustomModel } from "@/aiParams";
-import { logWarn } from "@/logger";
 import type { ModelManagementApi } from "@/modelManagement";
-import { KeychainService } from "@/services/keychainService";
-import { type CopilotSettings, setSettings } from "@/settings/model";
+import type { CopilotSettings } from "@/settings/model";
+import {
+  executeRetiredProviderRemoval,
+  planRetiredProviderRemoval,
+  type RetiredProviderRemovalPlan,
+} from "./retiredProviderRemovalMigration";
 
 /**
  * `Provider.providerType` of the removed rows. A plain string rather than a
@@ -26,7 +28,7 @@ import { type CopilotSettings, setSettings } from "@/settings/model";
 const REMOVED_PROVIDER_TYPE = "bedrock";
 
 /** Value the removed provider used in `CustomModel.provider` and in model keys. */
-const REMOVED_LEGACY_PROVIDER = "amazon-bedrock";
+const REMOVED_LEGACY_PROVIDERS = ["amazon-bedrock"] as const;
 
 /**
  * Settings field that held the Bedrock key before BYOK moved credentials onto
@@ -37,22 +39,8 @@ const REMOVED_LEGACY_PROVIDER = "amazon-bedrock";
  */
 const REMOVED_LEGACY_SECRET_FIELD = "amazonBedrockApiKey";
 
-/**
- * Whether a persisted model key names the removed provider. Legacy keys are
- * `name|provider`, optionally prefixed with an agent backend id, so the
- * provider is always the trailing segment.
- */
-function referencesRemovedProvider(modelKey: string): boolean {
-  return modelKey.endsWith(`|${REMOVED_LEGACY_PROVIDER}`);
-}
-
 /** What `planBedrockRemoval` found: the rows to cascade and the patch to write. */
-export interface BedrockRemovalPlan {
-  /** Every Bedrock `providerId`, for the caller to run through the cascade. */
-  providerIds: readonly string[];
-  /** Patch for the slices the cascade does not own: legacy models, selections. */
-  patch: Partial<CopilotSettings>;
-}
+export type BedrockRemovalPlan = RetiredProviderRemovalPlan;
 
 /**
  * Pure planner: what it takes to remove every Bedrock provider and everything
@@ -80,59 +68,7 @@ export interface BedrockRemovalPlan {
  * @param settings - Hydrated settings snapshot to plan against.
  */
 export function planBedrockRemoval(settings: CopilotSettings): BedrockRemovalPlan | null {
-  const providerIds = Object.values(settings.providers ?? {})
-    .filter((provider) => String(provider.providerType) === REMOVED_PROVIDER_TYPE)
-    .map((provider) => provider.providerId);
-
-  const removedProviderIds = new Set(providerIds);
-  const removedModelIds = new Set(
-    (settings.configuredModels ?? [])
-      .filter((model) => removedProviderIds.has(model.providerId))
-      .map((model) => model.configuredModelId)
-  );
-
-  // A stored selection names a removed model either by its configured-model id
-  // or, in a vault whose BYOK migration never ran, by the legacy
-  // `name|amazon-bedrock` key that has no row behind it.
-  const isRemovedSelection = (modelKey: string | undefined): boolean =>
-    !!modelKey && (removedModelIds.has(modelKey) || referencesRemovedProvider(modelKey));
-
-  const patch: Partial<CopilotSettings> = {};
-
-  const models = settings.activeModels ?? [];
-  const keptLegacyModels = models.filter(
-    (model: CustomModel) => model.provider !== REMOVED_LEGACY_PROVIDER
-  );
-  if (keptLegacyModels.length !== models.length) patch.activeModels = keptLegacyModels;
-
-  if (isRemovedSelection(settings.defaultModelKey)) patch.defaultModelKey = "";
-  if (isRemovedSelection(settings.quickCommandModelKey)) patch.quickCommandModelKey = undefined;
-
-  const projects = settings.projectList ?? [];
-  if (projects.some((project) => isRemovedSelection(project.projectModelKey))) {
-    patch.projectList = projects.map((project) =>
-      isRemovedSelection(project.projectModelKey) ? { ...project, projectModelKey: "" } : project
-    );
-  }
-
-  const hasWork = providerIds.length > 0 || Object.keys(patch).length > 0;
-  return hasWork ? { providerIds, patch } : null;
-}
-
-/**
- * Delete the pre-BYOK top-level Bedrock key. Never throws: a build without
- * SecretStorage, or a keychain locked at load time, leaves the entry in place
- * rather than wedging plugin load — the version bump in the caller is
- * unconditional either way, so the cost of a failure here is an orphaned entry.
- */
-function deleteLegacyApiKey(): void {
-  try {
-    const keychain = KeychainService.getInstance();
-    if (!keychain.isAvailable()) return;
-    keychain.deleteSecret(REMOVED_LEGACY_SECRET_FIELD);
-  } catch (error) {
-    logWarn("[bedrock-removal] could not delete the legacy stored API key", error);
-  }
+  return planRetiredProviderRemoval(settings, REMOVED_PROVIDER_TYPE, REMOVED_LEGACY_PROVIDERS);
 }
 
 /**
@@ -151,13 +87,10 @@ export async function executeBedrockRemoval(
   api: ModelManagementApi,
   settings: CopilotSettings
 ): Promise<void> {
-  deleteLegacyApiKey();
-
-  const plan = planBedrockRemoval(settings);
-  if (!plan) return;
-
-  if (Object.keys(plan.patch).length > 0) setSettings(plan.patch);
-  for (const providerId of plan.providerIds) {
-    await api.coordinator.removeProvider(providerId);
-  }
+  await executeRetiredProviderRemoval(
+    api,
+    planBedrockRemoval(settings),
+    REMOVED_LEGACY_SECRET_FIELD,
+    "bedrock-removal"
+  );
 }
