@@ -1,6 +1,7 @@
 import { UsageMeter, type UsageMeterProps } from "@/agentMode/ui/AgentContextMeter";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import type { Meta, StoryObj } from "@/lib/story";
+import React from "react";
 
 function UsageMeterStory(props: UsageMeterProps) {
   return (
