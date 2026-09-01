@@ -78,27 +78,31 @@ describe("parseSkillFile — happy path", () => {
 describe("parseSkillFile — validation errors", () => {
   it("rejects uppercase names", () => {
     expect(() => parseSkillFile(minimalSkill({ name: "ReviewProse" }), "ReviewProse")).toThrow(
-      /lowercase/
+      /same lowercase, hyphenated name/
     );
   });
 
   it("rejects leading hyphen", () => {
-    expect(() => parseSkillFile(minimalSkill({ name: "-foo" }), "-foo")).toThrow(/leading/);
+    expect(() => parseSkillFile(minimalSkill({ name: "-foo" }), "-foo")).toThrow(
+      /same lowercase, hyphenated name/
+    );
   });
 
   it("rejects trailing hyphen", () => {
-    expect(() => parseSkillFile(minimalSkill({ name: "foo-" }), "foo-")).toThrow(/trailing/);
+    expect(() => parseSkillFile(minimalSkill({ name: "foo-" }), "foo-")).toThrow(
+      /same lowercase, hyphenated name/
+    );
   });
 
   it("rejects consecutive hyphens", () => {
     expect(() => parseSkillFile(minimalSkill({ name: "foo--bar" }), "foo--bar")).toThrow(
-      /consecutive/
+      /same lowercase, hyphenated name/
     );
   });
 
   it("rejects parent-dir mismatch", () => {
     expect(() => parseSkillFile(minimalSkill({ name: "foo" }), "bar")).toThrow(
-      /match the parent directory name/
+      /same lowercase, hyphenated name/
     );
   });
 
@@ -127,6 +131,123 @@ describe("parseSkillFile — validation errors", () => {
   it("rejects missing name", () => {
     const content = ["---", "description: A skill", "---", ""].join("\n");
     expect(() => parseSkillFile(content, "foo")).toThrow(/missing required field `name`/);
+  });
+
+  it("explains how to quote a description containing colon-space for https://github.com/Brevilabs/obsidian-copilot-private/issues/166", () => {
+    const content = [
+      "---",
+      "name: review-prose",
+      "description: Use this skill for: reviewing notes",
+      "---",
+      "body",
+    ].join("\n");
+
+    expect.assertions(3);
+    try {
+      parseSkillFile(content, "review-prose");
+    } catch (error) {
+      expect(error).toBeInstanceOf(SkillFormatError);
+      expect((error as SkillFormatError).message).toBe(
+        'The description contains ": " and must be quoted.'
+      );
+      expect((error as SkillFormatError).offendingText).toBe(
+        "description: Use this skill for: reviewing notes"
+      );
+    }
+  });
+
+  it("keeps unrelated YAML parse failures generic", () => {
+    const content = ["---", "name: review-prose", "description: [unfinished", "---"].join("\n");
+    expect(() => parseSkillFile(content, "review-prose")).toThrow(/frontmatter YAML is invalid/);
+  });
+
+  it("keeps a parser failure on another field generic for https://github.com/Brevilabs/obsidian-copilot-private/issues/166", () => {
+    const content = [
+      "---",
+      "name: review-prose",
+      "metadata: Use this for: reviews",
+      "description: Use this skill for: reviewing notes",
+      "---",
+      "body",
+    ].join("\n");
+
+    expect.assertions(3);
+    try {
+      parseSkillFile(content, "review-prose");
+    } catch (error) {
+      expect(error).toBeInstanceOf(SkillFormatError);
+      expect((error as SkillFormatError).message).toMatch(/frontmatter YAML is invalid/);
+      expect((error as SkillFormatError).offendingText).toBe("metadata: Use this for: reviews");
+    }
+  });
+
+  it("accepts a Chinese description that uses full-width punctuation", () => {
+    const content = [
+      "---",
+      "name: review-prose",
+      "description: 用于审阅笔记：检查清晰度和结构",
+      "---",
+      "body",
+    ].join("\n");
+    expect(parseSkillFile(content, "review-prose").frontmatter.description).toBe(
+      "用于审阅笔记：检查清晰度和结构"
+    );
+  });
+
+  it("reports the offending name line with YAML key spacing for https://github.com/Brevilabs/obsidian-copilot-private/issues/166", () => {
+    const content = ["---", "name : Release Notes", "description: A skill", "---"].join("\n");
+
+    expect.assertions(3);
+    try {
+      parseSkillFile(content, "Release Notes");
+    } catch (error) {
+      expect(error).toBeInstanceOf(SkillFormatError);
+      expect((error as SkillFormatError).message).toBe(
+        "Use the same lowercase, hyphenated name in the file and folder."
+      );
+      expect((error as SkillFormatError).offendingText).toBe("name : Release Notes");
+    }
+  });
+
+  it("reports the offending name line with a quoted YAML key for https://github.com/Brevilabs/obsidian-copilot-private/issues/166", () => {
+    const content = ["---", '"name": Release Notes', "description: A skill", "---"].join("\n");
+
+    expect.assertions(3);
+    try {
+      parseSkillFile(content, "Release Notes");
+    } catch (error) {
+      expect(error).toBeInstanceOf(SkillFormatError);
+      expect((error as SkillFormatError).message).toBe(
+        "Use the same lowercase, hyphenated name in the file and folder."
+      );
+      expect((error as SkillFormatError).offendingText).toBe('"name": Release Notes');
+    }
+  });
+
+  it("distinguishes a non-string name from a missing field for https://github.com/Brevilabs/obsidian-copilot-private/issues/166", () => {
+    const content = ["---", "name: 42", "description: A skill", "---"].join("\n");
+
+    expect.assertions(3);
+    try {
+      parseSkillFile(content, "42");
+    } catch (error) {
+      expect(error).toBeInstanceOf(SkillFormatError);
+      expect((error as SkillFormatError).message).toBe("Skill `name` must be a string");
+      expect((error as SkillFormatError).offendingText).toBe("name: 42");
+    }
+  });
+
+  it("distinguishes a non-string description from a missing field for https://github.com/Brevilabs/obsidian-copilot-private/issues/166", () => {
+    const content = ["---", "name: review-prose", "description: []", "---"].join("\n");
+
+    expect.assertions(3);
+    try {
+      parseSkillFile(content, "review-prose");
+    } catch (error) {
+      expect(error).toBeInstanceOf(SkillFormatError);
+      expect((error as SkillFormatError).message).toBe("Skill `description` must be a string");
+      expect((error as SkillFormatError).offendingText).toBe("description: []");
+    }
   });
 });
 

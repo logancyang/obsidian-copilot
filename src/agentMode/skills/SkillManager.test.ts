@@ -1,15 +1,18 @@
+import { act, renderHook } from "@testing-library/react";
 import { FileSystemAdapter, type App, type EventRef } from "obsidian";
 import { discoverManagedSkills } from "./discoverManagedSkills";
 import { reconcile } from "./reconcile";
 import {
   computeSkillSetSignature,
   getManagedSkills,
+  getRejectedSkills,
   SkillManager,
   type RefreshResult,
+  useRejectedSkills,
 } from "./SkillManager";
 import { runDeleteSkill, runToggleAgent } from "./toggleAgent";
 import { runRenameSkill, runUpdateProperties } from "./updateProperties";
-import type { Skill } from "./types";
+import type { RejectedSkill, Skill, SkillDiscoveryResult } from "./types";
 
 jest.mock("@/logger", () => ({
   logInfo: jest.fn(),
@@ -49,7 +52,7 @@ jest.mock("./nodeFsAdapters", () => ({
 }));
 
 jest.mock("./discoverProjectSkills", () => ({
-  discoverProjectSkills: jest.fn(async () => []),
+  discoverProjectSkills: jest.fn(async () => ({ accepted: [], rejected: [] })),
 }));
 
 jest.mock("./mergeDiscovery", () => {
@@ -110,9 +113,9 @@ describe("SkillManager orchestration", () => {
       await new Promise<void>((resolve) => {
         releaseFirst = resolve;
       });
-      return [];
+      return discoveryResult();
     });
-    mockedDiscoverManagedSkills.mockResolvedValueOnce([]);
+    mockedDiscoverManagedSkills.mockResolvedValueOnce(discoveryResult());
 
     const resultPromise = manager.refresh();
     await Promise.resolve();
@@ -419,7 +422,7 @@ describe("SkillManager orchestration", () => {
     const app = makeApp();
     const manager = SkillManager.initialize(app, { claude: ".claude/skills" });
     const skill = makeSkill({ enabledAgents: [] });
-    mockedDiscoverManagedSkills.mockResolvedValueOnce([skill]);
+    mockedDiscoverManagedSkills.mockResolvedValueOnce(discoveryResult([skill]));
     await manager.refresh();
     mockedRunToggleAgent.mockResolvedValueOnce({ ok: true });
     await manager.toggleAgent(skill, "claude", true);
@@ -442,7 +445,7 @@ describe("SkillManager orchestration", () => {
     const app = makeApp();
     const manager = SkillManager.initialize(app, { claude: ".claude/skills" });
     const skill = makeSkill({ enabledAgents: [] });
-    mockedDiscoverManagedSkills.mockResolvedValueOnce([skill]);
+    mockedDiscoverManagedSkills.mockResolvedValueOnce(discoveryResult([skill]));
     await manager.refresh();
     mockedRunToggleAgent.mockResolvedValueOnce({ ok: true });
     await manager.toggleAgent(skill, "claude", true);
@@ -467,7 +470,7 @@ describe("SkillManager orchestration", () => {
     const app = makeApp();
     const manager = SkillManager.initialize(app, { claude: ".claude/skills" });
     const skill = makeSkill({ enabledAgents: [] });
-    mockedDiscoverManagedSkills.mockResolvedValueOnce([skill]);
+    mockedDiscoverManagedSkills.mockResolvedValueOnce(discoveryResult([skill]));
     await manager.refresh();
 
     const refreshResult: RefreshResult = {
@@ -496,15 +499,50 @@ describe("SkillManager orchestration", () => {
     expect(refreshSpy).toHaveBeenCalledTimes(1);
   });
 
+  it("publishes and clears rejected discovery state for https://github.com/Brevilabs/obsidian-copilot-private/issues/166", async () => {
+    const app = makeApp();
+    const manager = SkillManager.initialize(app, { claude: ".claude/skills" });
+    const rejected: RejectedSkill = {
+      name: "broken-skill",
+      filePath: "/vault/copilot/skills/broken-skill/SKILL.md",
+      dirPath: "/vault/copilot/skills/broken-skill",
+      reason: "The description must be quoted.",
+    };
+    mockedDiscoverManagedSkills.mockResolvedValueOnce(discoveryResult([], [rejected]));
+    mockedDiscoverManagedSkills.mockResolvedValueOnce(discoveryResult());
+    mockedDiscoverManagedSkills.mockResolvedValueOnce(discoveryResult());
+    const { result } = renderHook(() => useRejectedSkills());
+    const initialRejectedSkills = result.current;
+
+    await act(async () => {
+      await manager.refresh();
+    });
+    expect(getRejectedSkills()).toEqual([rejected]);
+    expect(result.current).toEqual([rejected]);
+
+    await act(async () => {
+      await manager.refresh();
+    });
+    expect(getRejectedSkills()).toEqual([]);
+    expect(result.current).toBe(initialRejectedSkills);
+
+    await act(async () => {
+      await manager.refresh();
+    });
+    expect(result.current).toBe(initialRejectedSkills);
+  });
+
   it("notifies when a backend-visible skill signature changes", async () => {
     const app = makeApp();
     const manager = SkillManager.initialize(app, { opencode: ".opencode/skills" });
     const listener = jest.fn();
     manager.subscribeToSkillSetChange(listener);
-    mockedDiscoverManagedSkills.mockResolvedValueOnce([makeSkill({ enabledAgents: ["opencode"] })]);
-    mockedDiscoverManagedSkills.mockResolvedValueOnce([
-      makeSkill({ body: "updated", enabledAgents: ["opencode"] }),
-    ]);
+    mockedDiscoverManagedSkills.mockResolvedValueOnce(
+      discoveryResult([makeSkill({ enabledAgents: ["opencode"] })])
+    );
+    mockedDiscoverManagedSkills.mockResolvedValueOnce(
+      discoveryResult([makeSkill({ body: "updated", enabledAgents: ["opencode"] })])
+    );
 
     await manager.refresh();
     await manager.refresh();
@@ -554,8 +592,15 @@ function makeApp(): App & {
 }
 
 async function seedSkills(manager: SkillManager, skills: Skill[]): Promise<void> {
-  mockedDiscoverManagedSkills.mockResolvedValueOnce(skills);
+  mockedDiscoverManagedSkills.mockResolvedValueOnce(discoveryResult(skills));
   await manager.refresh();
+}
+
+function discoveryResult(
+  accepted: Skill[] = [],
+  rejected: RejectedSkill[] = []
+): SkillDiscoveryResult<Skill> {
+  return { accepted, rejected };
 }
 
 function fireVaultEvent(

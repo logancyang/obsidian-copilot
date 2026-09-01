@@ -2,7 +2,7 @@ import { logWarn } from "@/logger";
 import { joinPosix } from "@/utils/pathUtils";
 import { computeDirHash, type DirHashFs } from "./dirHash";
 import { parseSkillFile, SkillFormatError, type ParsedSkillFile } from "./skillFormat";
-import type { BackendId } from "./types";
+import type { BackendId, RejectedSkill, SkillDiscoveryResult } from "./types";
 
 /**
  * Subset of `node:fs` consumed by {@link discoverProjectSkills}. Mirrors
@@ -39,6 +39,8 @@ export interface ProjectSkillCandidate {
   parsed: ParsedSkillFile;
 }
 
+type ProjectDiscoveryEntry = ProjectSkillCandidate | RejectedSkill | null;
+
 /** Options bag for {@link discoverProjectSkills}. All paths are absolute. */
 export interface DiscoverProjectSkillsOptions {
   /** Absolute path to the vault root. */
@@ -61,17 +63,18 @@ export interface DiscoverProjectSkillsOptions {
  *     elsewhere are user-owned and already covered by reconciliation).
  *   - Contains a `SKILL.md` that parses against the Agent Skills spec.
  *
- * Each result carries the parsed frontmatter + a recursive content hash
+ * Each accepted result carries the parsed frontmatter + a recursive content hash
  * so the merge layer can collapse identical duplicates across agents
- * into one row. Parse failures are skipped with a single `logWarn`
- * (mirrors `discoverManagedSkills` behavior).
+ * into one row. Format failures are returned separately for user recovery
+ * and emit a single `logWarn` (mirrors `discoverManagedSkills` behavior).
  */
 export async function discoverProjectSkills(
   options: DiscoverProjectSkillsOptions
-): Promise<ProjectSkillCandidate[]> {
+): Promise<SkillDiscoveryResult<ProjectSkillCandidate>> {
   const { vaultRootAbsPath, agentDirsProjectRel, fs } = options;
 
-  const results: ProjectSkillCandidate[] = [];
+  const accepted: ProjectSkillCandidate[] = [];
+  const rejected: RejectedSkill[] = [];
 
   await Promise.all(
     Object.entries(agentDirsProjectRel).map(async ([agent, projectRel]) => {
@@ -90,7 +93,7 @@ export async function discoverProjectSkills(
       }
 
       const candidates = await Promise.all(
-        entries.sort().map(async (name) => {
+        entries.sort().map(async (name): Promise<ProjectDiscoveryEntry> => {
           const entryAbs = joinPosix(agentDirAbs, name);
 
           // Symlinks at the top level — never include. Reconciliation
@@ -120,13 +123,20 @@ export async function discoverProjectSkills(
           try {
             parsed = parseSkillFile(content, name);
           } catch (err) {
-            const reason =
-              err instanceof SkillFormatError
-                ? err.message
-                : err instanceof Error
-                  ? err.message
-                  : String(err);
+            const reason = err instanceof Error ? err.message : String(err);
             logWarn(`[skills] Skipping ${skillMd}: ${reason}`);
+            // https://github.com/Brevilabs/obsidian-copilot-private/issues/166
+            // Hidden agent folders are not indexed by Obsidian, so Settings must
+            // retain their format failures to offer an external-editor recovery.
+            if (err instanceof SkillFormatError) {
+              return {
+                name,
+                filePath: skillMd,
+                dirPath: entryAbs,
+                reason,
+                offendingText: err.offendingText,
+              };
+            }
             return null;
           }
 
@@ -144,13 +154,15 @@ export async function discoverProjectSkills(
         })
       );
 
-      for (const candidate of candidates) {
-        if (candidate !== null) results.push(candidate);
+      for (const result of candidates) {
+        if (result === null) continue;
+        if ("reason" in result) rejected.push(result);
+        else accepted.push(result);
       }
     })
   );
 
-  return results;
+  return { accepted, rejected };
 }
 
 async function safeExists(fs: ProjectDiscoveryFs, abs: string): Promise<boolean> {

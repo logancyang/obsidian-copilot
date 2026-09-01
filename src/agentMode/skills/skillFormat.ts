@@ -12,6 +12,7 @@ const FRONTMATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n([\s\S]*))?$/;
 export const NAME_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 export const NAME_MAX = 64;
 export const DESCRIPTION_MAX = 1024;
+const NAME_REPAIR_MESSAGE = "Use the same lowercase, hyphenated name in the file and folder.";
 
 /**
  * Result of parsing a SKILL.md file. The Document is preserved so
@@ -65,10 +66,58 @@ function splitFrontmatter(content: string): { yaml: string; body: string } {
 
 /** Domain error type — carries a human-readable message suitable for surfacing in the Skills tab. */
 export class SkillFormatError extends Error {
-  constructor(message: string) {
+  constructor(
+    message: string,
+    readonly offendingText?: string
+  ) {
     super(message);
     this.name = "SkillFormatError";
   }
+}
+
+/** Turn a YAML parser failure into the most actionable explanation available. */
+function yamlFormatError(
+  yaml: string,
+  error: { code: string; message: string; linePos?: readonly { line: number }[] }
+): SkillFormatError {
+  const errorLine = error.linePos?.[0]?.line;
+  const offendingText = errorLine === undefined ? undefined : yaml.split(/\r?\n/)[errorLine - 1];
+
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/166
+  // YAML interprets `: ` inside an unquoted description as a nested mapping;
+  // naming the required quoting repair is more useful than exposing that parser term.
+  if (error.code === "BLOCK_AS_IMPLICIT_KEY") {
+    const descriptionLine = /^(description[ \t]*:[ \t]*([^'"\r\n]*: [^\r\n]*))$/.exec(
+      offendingText ?? ""
+    );
+    if (descriptionLine?.[1] !== undefined && descriptionLine[2] !== undefined) {
+      return new SkillFormatError(
+        'The description contains ": " and must be quoted.',
+        descriptionLine[1]
+      );
+    }
+  }
+
+  return new SkillFormatError(
+    `SKILL.md frontmatter YAML is invalid: ${error.message}`,
+    offendingText
+  );
+}
+
+/**
+ * Preserve the exact frontmatter line that failed validation when it exists.
+ * https://github.com/Brevilabs/obsidian-copilot-private/issues/166
+ */
+function frontmatterLine(doc: Document.Parsed, yaml: string, key: string): string | undefined {
+  if (!isMap(doc.contents)) return undefined;
+  const pair = doc.contents.items.find((item) => isScalar(item.key) && item.key.value === key);
+  const keyOffset = pair?.key?.range?.[0];
+  if (keyOffset === undefined) return undefined;
+
+  const lineStart = yaml.lastIndexOf("\n", keyOffset - 1) + 1;
+  const nextLine = yaml.indexOf("\n", keyOffset);
+  const lineEnd = nextLine === -1 ? yaml.length : nextLine;
+  return yaml.slice(lineStart, lineEnd).replace(/\r$/, "");
 }
 
 /** Read a top-level string scalar from a YAML Document, or return undefined. */
@@ -111,23 +160,35 @@ export function parseSkillFile(content: string, parentDirName: string): ParsedSk
   const doc = parseDocument(yaml, { keepSourceTokens: true });
 
   if (doc.errors.length > 0) {
-    throw new SkillFormatError(`SKILL.md frontmatter YAML is invalid: ${doc.errors[0].message}`);
+    throw yamlFormatError(yaml, doc.errors[0]);
   }
   if (!isMap(doc.contents)) {
     throw new SkillFormatError("SKILL.md frontmatter must be a YAML mapping");
   }
 
   const name = readString(doc, "name");
-  if (!name) {
+  if (name === undefined) {
+    if (doc.has("name")) {
+      throw new SkillFormatError(
+        "Skill `name` must be a string",
+        frontmatterLine(doc, yaml, "name")
+      );
+    }
     throw new SkillFormatError("SKILL.md frontmatter is missing required field `name`");
   }
-  validateName(name, parentDirName);
+  validateName(name, parentDirName, frontmatterLine(doc, yaml, "name"));
 
   const description = readString(doc, "description");
   if (description === undefined) {
+    if (doc.has("description")) {
+      throw new SkillFormatError(
+        "Skill `description` must be a string",
+        frontmatterLine(doc, yaml, "description")
+      );
+    }
     throw new SkillFormatError("SKILL.md frontmatter is missing required field `description`");
   }
-  validateDescription(description);
+  validateDescription(description, frontmatterLine(doc, yaml, "description"));
 
   const frontmatter: SkillFrontmatter = {
     name,
@@ -150,24 +211,21 @@ export function parseSkillFile(content: string, parentDirName: string): ParsedSk
  *
  * @throws SkillFormatError with a descriptive message.
  */
-export function validateName(name: string, parentDirName: string): void {
+export function validateName(name: string, parentDirName: string, offendingText?: string): void {
   if (typeof name !== "string" || name.length === 0) {
-    throw new SkillFormatError("Skill `name` must be a non-empty string");
+    throw new SkillFormatError("Skill `name` must be a non-empty string", offendingText);
   }
   if (name.length > NAME_MAX) {
     throw new SkillFormatError(
-      `Skill \`name\` must be at most ${NAME_MAX} characters (got ${name.length})`
+      `Skill \`name\` must be at most ${NAME_MAX} characters (got ${name.length})`,
+      offendingText
     );
   }
   if (!NAME_RE.test(name)) {
-    throw new SkillFormatError(
-      `Skill \`name\` must be lowercase a–z, 0–9, and hyphens with no leading, trailing, or consecutive hyphens (got "${name}")`
-    );
+    throw new SkillFormatError(NAME_REPAIR_MESSAGE, offendingText);
   }
   if (name !== parentDirName) {
-    throw new SkillFormatError(
-      `Skill \`name\` ("${name}") must match the parent directory name ("${parentDirName}")`
-    );
+    throw new SkillFormatError(NAME_REPAIR_MESSAGE, offendingText);
   }
 }
 
@@ -177,13 +235,14 @@ export function validateName(name: string, parentDirName: string): void {
  *
  * @throws SkillFormatError when invalid.
  */
-export function validateDescription(description: string): void {
+export function validateDescription(description: string, offendingText?: string): void {
   if (typeof description !== "string" || description.length === 0) {
-    throw new SkillFormatError("Skill `description` must be a non-empty string");
+    throw new SkillFormatError("Skill `description` must be a non-empty string", offendingText);
   }
   if (description.length > DESCRIPTION_MAX) {
     throw new SkillFormatError(
-      `Skill \`description\` must be at most ${DESCRIPTION_MAX} characters (got ${description.length})`
+      `Skill \`description\` must be at most ${DESCRIPTION_MAX} characters (got ${description.length})`,
+      offendingText
     );
   }
 }

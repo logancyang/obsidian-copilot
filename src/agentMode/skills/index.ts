@@ -1,4 +1,4 @@
-export type { Skill, SkillLocation, BackendId } from "./types";
+export type { Skill, SkillLocation, BackendId, RejectedSkill, SkillDiscoveryResult } from "./types";
 export {
   parseSkillFile,
   serializeSkillFile,
@@ -11,6 +11,7 @@ export {
   SkillManager,
   useManagedSkills,
   getManagedSkills,
+  useRejectedSkills,
   useEpermSeen,
   dismissEpermBanner,
 } from "./SkillManager";
