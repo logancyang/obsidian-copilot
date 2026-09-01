@@ -8,11 +8,12 @@ Quick Chat remains available for lightweight conversation and is the main chat e
 
 Open [**Settings → Copilot → Basic → Agents**](settings.md#basic). Configure at least one agent, then choose the **Default backend** for new chats.
 
-| Agent        | Best starting point                             | Where model access comes from                                              |
-| ------------ | ----------------------------------------------- | -------------------------------------------------------------------------- |
-| **opencode** | Recommended for most people                     | Copilot-hosted models, your API providers, or local OpenAI-compatible APIs |
-| **Claude**   | You already use Claude Code                     | Your Claude Code installation and Anthropic account                        |
-| **Codex**    | You already use the Codex CLI and Codex account | Your Codex CLI login through the `codex-acp` adapter                       |
+| Agent           | Best starting point                                | Where model access comes from                                              |
+| --------------- | -------------------------------------------------- | -------------------------------------------------------------------------- |
+| **opencode**    | Recommended for most people                        | Copilot-hosted models, your API providers, or local OpenAI-compatible APIs |
+| **Claude**      | You already use Claude Code                        | Your Claude Code installation and Anthropic account                        |
+| **Codex**       | You already use the Codex CLI and Codex account    | Your Codex CLI login through the `codex-acp` adapter                       |
+| **Antigravity** | You already use Google Antigravity and the agy CLI | Your Antigravity CLI login through the `antigravity-acp` adapter           |
 
 A one-agent chat can work without a Copilot license when you bring your own model access. An eligible paid plan adds Copilot-hosted models and cloud-backed features. [Compare Copilot plans](copilot-plus-and-self-host.md).
 
@@ -52,6 +53,17 @@ The Codex backend needs `@agentclientprotocol/codex-acp` 0.0.38 or newer. The pa
 5. Enable the models you want and choose a default.
 
 The older `@zed-industries/codex-acp` package is not supported. Copilot uses the login stored by the bundled Codex CLI. Models added under **BYOK** do not join the Codex model list.
+
+### Antigravity
+
+The Antigravity backend runs Google Gemini and thinking models via the `antigravity-acp` adapter:
+
+1. Open **Basic → Agents → Antigravity → Configure**.
+2. Run `npm install -g antigravity-acp` and authenticate with `agy auth`.
+3. Select **Auto-detect**, or enter the absolute path to `antigravity-acp` (or `antigravity-acp.exe` on Windows) and select **Apply**.
+4. Enable the models you want and choose a default.
+
+Antigravity models and billing come from your Antigravity account. Models added under **BYOK** do not join the Antigravity model list.
 
 For Windows-specific installation help, see [Windows setup for Agent Chat](agent-mode-windows-setup.md).
 
