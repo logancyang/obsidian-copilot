@@ -2,6 +2,17 @@ import starlight from "@astrojs/starlight";
 import { defineConfig } from "astro/config";
 import { remarkPublishedDocs } from "./src/remark-published-docs.mjs";
 
+// Missing analytics configuration is non-fatal, but local development should make it visible once.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/335
+if (
+  process.env.NODE_ENV === "development" &&
+  (!process.env.PUBLIC_POSTHOG_KEY || !process.env.PUBLIC_POSTHOG_HOST)
+) {
+  process.emitWarning(
+    "Docs analytics is disabled because PUBLIC_POSTHOG_KEY or PUBLIC_POSTHOG_HOST is missing."
+  );
+}
+
 // Existing guide routes stay stable while section links make the most important
 // workflows visible without splitting their source files.
 const sidebar = [
@@ -66,6 +77,9 @@ export default defineConfig({
         dark: "./src/assets/copilot-mark-cream.svg",
         light: "./src/assets/copilot-icon-dark.svg",
         alt: "",
+      },
+      components: {
+        Head: "./src/components/Head.astro",
       },
       sidebar,
     }),

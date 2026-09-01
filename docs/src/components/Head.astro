@@ -1,0 +1,20 @@
+---
+import DefaultHead from "@astrojs/starlight/components/Head.astro";
+---
+
+<DefaultHead />
+
+<script>
+  import posthog from "posthog-js";
+  import { startDocsAnalytics } from "../analytics.mjs";
+
+  startDocsAnalytics({
+    posthog,
+    hostname: window.location.hostname,
+    apiKey: import.meta.env.PUBLIC_POSTHOG_KEY,
+    apiHost: import.meta.env.PUBLIC_POSTHOG_HOST,
+    getStorage: () => window.localStorage,
+    getCurrentUrl: () => window.location.href,
+    addNavigationListener: (listener) => document.addEventListener("astro:page-load", listener),
+  });
+</script>
