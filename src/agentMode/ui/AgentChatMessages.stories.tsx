@@ -9,16 +9,11 @@ import AgentChatMessages from "@/agentMode/ui/AgentChatMessages";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useApp } from "@/context";
 import type { Meta, StoryObj } from "@/lib/story";
-import React from "react";
+import React, { useMemo, useState } from "react";
 
 type AgentChatMessagesProps = React.ComponentProps<typeof AgentChatMessages>;
 
 const SESSION_ID = "gallery-session" as SessionId;
-const chatBackend = {
-  resolveToolPermission: () => undefined,
-  resolveAskUserQuestion: () => undefined,
-} as unknown as AgentChatBackend;
-
 const message: AgentChatMessage = {
   id: "gallery-response",
   sender: "ai",
@@ -58,12 +53,41 @@ const questions = [
   question("publish", 3, "Should I prepare a publish-ready version?"),
 ];
 
-const ActionRailDemo: React.FC<AgentChatMessagesProps> = (props) => {
+const QueuedActionsDemo: React.FC<AgentChatMessagesProps> = (props) => {
   const app = useApp();
+  const [pendingToolPermissions, setPendingToolPermissions] = useState(
+    props.pendingToolPermissions
+  );
+  const [pendingAskUserQuestions, setPendingAskUserQuestions] = useState(
+    props.pendingAskUserQuestions
+  );
+  const chatBackend = useMemo(
+    () =>
+      ({
+        resolveToolPermission: (toolCallId: string) => {
+          setPendingToolPermissions((current) =>
+            current.filter((request) => request.toolCall.toolCallId !== toolCallId)
+          );
+        },
+        resolveAskUserQuestion: (requestId: string) => {
+          setPendingAskUserQuestions((current) =>
+            current.filter((request) => request.requestId !== requestId)
+          );
+        },
+      }) as unknown as AgentChatBackend,
+    []
+  );
+
   return (
     <TooltipProvider>
-      <div className="tw-h-96 tw-overflow-hidden tw-border tw-border-solid tw-border-border">
-        <AgentChatMessages {...props} app={app} />
+      <div className="tw-h-96 tw-overflow-hidden">
+        <AgentChatMessages
+          {...props}
+          app={app}
+          pendingToolPermissions={pendingToolPermissions}
+          pendingAskUserQuestions={pendingAskUserQuestions}
+          chatBackend={chatBackend}
+        />
       </div>
     </TooltipProvider>
   );
@@ -75,7 +99,7 @@ const actionRailArgs: AgentChatMessagesProps = {
   currentPlan: null,
   pendingToolPermissions: permissions,
   pendingAskUserQuestions: questions,
-  chatBackend,
+  chatBackend: {} as AgentChatBackend,
   isLoading: true,
 };
 
@@ -87,7 +111,7 @@ const meta = {
 } satisfies Meta<AgentChatMessagesProps>;
 export default meta;
 
-/** Blocking actions stay visible above the controls and scroll independently from the transcript. */
-export const PendingActionsOverflow: StoryObj<AgentChatMessagesProps> = {
-  render: () => <ActionRailDemo {...actionRailArgs} />,
+/** Resolve each full-width action to reveal the next permission or question in arrival order. */
+export const QueuedActions: StoryObj<AgentChatMessagesProps> = {
+  render: () => <QueuedActionsDemo {...actionRailArgs} />,
 };

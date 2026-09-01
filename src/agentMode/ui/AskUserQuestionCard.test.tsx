@@ -41,6 +41,15 @@ const otherTextarea = (): HTMLElement => screen.getByPlaceholderText(/type your 
 
 describe("AskUserQuestionCard", () => {
   describe("AskUserQuestionCard()", () => {
+    it("fills the available action-rail width", () => {
+      const { container } = renderCard(
+        makeRequest([{ question: "Continue?", options: [{ label: "Yes" }] }]),
+        jest.fn()
+      );
+
+      expect(container.firstElementChild?.classList.contains("tw-w-full")).toBe(true);
+    });
+
     it("single-select 'Other' → the trimmed typed text is the answer", () => {
       const onResolve = jest.fn();
       const request = makeRequest([

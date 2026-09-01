@@ -131,7 +131,6 @@ describe("AgentChatMessages", () => {
     beforeEach(() => {
       jest.useFakeTimers();
       jest.setSystemTime(200_000);
-      HTMLElement.prototype.scrollIntoView = jest.fn();
     });
 
     afterEach(() => jest.useRealTimers());
@@ -182,53 +181,47 @@ describe("AgentChatMessages", () => {
       expect(screen.getByTestId("agent-trail-timestamp").textContent).toBe(timestamp);
     });
 
-    it("renders blocking actions in arrival order outside the transcript for https://github.com/logancyang/obsidian-copilot/issues/2948", () => {
-      renderMessages([assistantMessage("answer-1", 62_000)], false, {
+    it("shows one blocking action at a time in arrival order for https://github.com/logancyang/obsidian-copilot/issues/2948", () => {
+      const { rerender, props } = renderMessages([assistantMessage("answer-1", 62_000)], false, {
         pendingToolPermissions: [
           permission("permission-first", 0),
-          permission("permission-last", 2),
+          permission("permission-second", 1),
         ],
-        pendingAskUserQuestions: [question("question-middle", 1)],
+        pendingAskUserQuestions: [question("question-last", 2)],
       });
 
       const rail = screen.getByRole("region", { name: "Pending agent actions" });
+      const firstAction = rail.querySelector("[data-action-id]");
       expect(Array.from(rail.querySelectorAll("[data-action-id]"), (el) => el.textContent)).toEqual(
-        ["Permission permission-first", "Question question-middle", "Permission permission-last"]
+        ["Permission permission-first"]
       );
       expect(screen.getByTestId("chat-messages").textContent).not.toContain("permission-first");
+
+      rerender(
+        <AgentChatMessages
+          {...props}
+          pendingToolPermissions={[permission("permission-second", 1)]}
+          pendingAskUserQuestions={[question("question-last", 2)]}
+        />
+      );
+
+      expect(Array.from(rail.querySelectorAll("[data-action-id]"), (el) => el.textContent)).toEqual(
+        ["Permission permission-second"]
+      );
+      expect(rail.querySelector("[data-action-id]")).not.toBe(firstAction);
     });
 
-    it("shows the independently scrolling action rail when the transcript is empty for https://github.com/logancyang/obsidian-copilot/issues/2948", () => {
+    it("lets the borderless action rail use its natural height when the transcript is empty for https://github.com/logancyang/obsidian-copilot/issues/2948", () => {
       renderMessages([], false, {
         pendingAskUserQuestions: [question("empty-chat-question", 0)],
       });
 
       const rail = screen.getByTestId("agent-action-rail");
       expect(rail.textContent).toContain("empty-chat-question");
-      expect(rail.className).toContain("tw-overflow-y-auto");
-      expect(rail.className).toContain("tw-max-h-[40%]");
-    });
-
-    it("reveals each new action once without stealing focus for https://github.com/logancyang/obsidian-copilot/issues/2948", () => {
-      const focusTarget = document.createElement("input");
-      document.body.appendChild(focusTarget);
-      focusTarget.focus();
-      const { rerender, props } = renderMessages([assistantMessage("answer-1", 62_000)], true, {
-        pendingToolPermissions: [permission("permission-1", 0)],
-      });
-
-      expect(HTMLElement.prototype.scrollIntoView).toHaveBeenCalledTimes(1);
-      expect(document.activeElement).toBe(focusTarget);
-
-      rerender(<AgentChatMessages {...props} messages={[assistantMessage("answer-1", 62_000)]} />);
-      expect(HTMLElement.prototype.scrollIntoView).toHaveBeenCalledTimes(1);
-
-      rerender(
-        <AgentChatMessages {...props} pendingAskUserQuestions={[question("question-2", 1)]} />
-      );
-      expect(HTMLElement.prototype.scrollIntoView).toHaveBeenCalledTimes(2);
-      expect(document.activeElement).toBe(focusTarget);
-      focusTarget.remove();
+      expect(rail.className).toContain("tw-w-full");
+      expect(rail.className).not.toContain("tw-overflow");
+      expect(rail.className).not.toContain("tw-max-h");
+      expect(rail.className).not.toContain("tw-border");
     });
 
     it("keeps a plan-only state in the transcript without creating an action rail", () => {

@@ -16,7 +16,7 @@ import type {
 } from "@/agentMode/session/types";
 import type { ChatMessage } from "@/types/message";
 import { App } from "obsidian";
-import React, { memo, useCallback, useMemo, useRef } from "react";
+import React, { memo, useMemo } from "react";
 
 interface AgentChatMessagesProps {
   messages: AgentChatMessage[];
@@ -100,15 +100,10 @@ const AgentChatMessages = memo(
         ),
       [pendingAskUserQuestions, pendingToolPermissions]
     );
-    const revealedActionIds = useRef(new Set<string>());
-    const revealNewAction = useCallback((id: string, node: HTMLDivElement | null) => {
-      if (!node || revealedActionIds.current.has(id)) return;
-      revealedActionIds.current.add(id);
-      // Reveal only the new blocking action. Scrolling never changes focus, so
-      // a user typing elsewhere is not interrupted when an agent asks.
-      // https://github.com/logancyang/obsidian-copilot/issues/2948
-      node.scrollIntoView({ behavior: "smooth", block: "nearest" });
-    }, []);
+    // Concurrent agents can enqueue several blocking decisions. Keep later
+    // actions out of view until the user resolves the earliest one.
+    // https://github.com/logancyang/obsidian-copilot/issues/2948
+    const pendingAction = pendingActions[0];
 
     // The latest assistant message owns both timer states: it ticks while that
     // turn is in flight, then retains the frozen duration until the next turn
@@ -222,32 +217,26 @@ const AgentChatMessages = memo(
           })}
           {inlinePlanCard}
         </div>
-        {pendingActions.length > 0 ? (
+        {pendingAction ? (
           <div
             role="region"
             aria-label="Pending agent actions"
             data-testid="agent-action-rail"
-            className="tw-max-h-[40%] tw-shrink-0 tw-overflow-y-auto tw-border-t tw-border-solid tw-border-border tw-bg-primary tw-py-1"
+            className="tw-w-full tw-shrink-0 tw-bg-primary"
           >
-            {pendingActions.map((action) => (
-              <div
-                key={action.id}
-                ref={(node) => revealNewAction(action.id, node)}
-                data-action-id={action.id}
-              >
-                {action.kind === "permission" ? (
-                  <ToolPermissionCard
-                    request={action.request}
-                    onResolve={chatBackend.resolveToolPermission.bind(chatBackend)}
-                  />
-                ) : (
-                  <AskUserQuestionCard
-                    request={action.request}
-                    onResolve={chatBackend.resolveAskUserQuestion.bind(chatBackend)}
-                  />
-                )}
-              </div>
-            ))}
+            <div key={pendingAction.id} data-action-id={pendingAction.id}>
+              {pendingAction.kind === "permission" ? (
+                <ToolPermissionCard
+                  request={pendingAction.request}
+                  onResolve={chatBackend.resolveToolPermission.bind(chatBackend)}
+                />
+              ) : (
+                <AskUserQuestionCard
+                  request={pendingAction.request}
+                  onResolve={chatBackend.resolveAskUserQuestion.bind(chatBackend)}
+                />
+              )}
+            </div>
           </div>
         ) : null}
       </div>

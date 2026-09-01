@@ -22,6 +22,14 @@ function makeRequest(options: PermissionOption[]): PermissionPrompt {
 
 describe("ToolPermissionCard", () => {
   describe("ToolPermissionCard()", () => {
+    it("fills the available action-rail width", () => {
+      const { container } = render(
+        <ToolPermissionCard request={makeRequest([])} onResolve={jest.fn()} />
+      );
+
+      expect(container.firstElementChild?.classList.contains("tw-w-full")).toBe(true);
+    });
+
     it("keeps duplicate described actions together and numbers their tooltip triggers", async () => {
       const onResolve = jest.fn();
       const firstRule = "Allow commands starting with mkdir";

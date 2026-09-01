@@ -45,7 +45,7 @@ export const ToolPermissionCard: React.FC<ToolPermissionCardProps> = ({ request,
   };
 
   return (
-    <div className="tw-mx-3 tw-my-2 tw-w-[calc(100%-1.5rem)] tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-secondary">
+    <div className="tw-w-full tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-secondary">
       <div className="copilot-divider-b tw-flex tw-items-center tw-gap-2 tw-px-3 tw-py-2">
         <ShieldQuestion className="tw-size-4 tw-shrink-0 tw-text-accent" />
         <div className="tw-truncate tw-text-sm tw-font-medium">Permission required</div>
@@ -86,7 +86,7 @@ export const ToolPermissionCard: React.FC<ToolPermissionCardProps> = ({ request,
         ) : null}
       </div>
 
-      <div className="tw-flex tw-flex-wrap tw-items-center tw-justify-end tw-gap-2 tw-border-t tw-border-solid tw-border-border tw-px-3 tw-py-2">
+      <div className="copilot-divider-t tw-flex tw-flex-wrap tw-items-center tw-justify-end tw-gap-2 tw-px-3 tw-py-2">
         <TooltipProvider delayDuration={0}>
           {orderedOptions.map((option, index) => {
             const button = (
