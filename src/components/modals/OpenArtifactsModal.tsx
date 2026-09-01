@@ -1,78 +1,85 @@
 import { Button } from "@/components/ui/button";
 import { openWithSystemDefault } from "@/utils/openWithSystemDefault";
 import { createPluginRoot } from "@/utils/react/createPluginRoot";
-import type { SymposiumAction, SymposiumDocument, SymposiumReceipt } from "@/symposium/types";
+import type {
+  OpenArtifactsAction,
+  OpenArtifactsDocument,
+  OpenArtifactsReceipt,
+} from "@/openArtifacts/types";
 import { App, Modal } from "obsidian";
 import React, { useState } from "react";
 import type { Root } from "react-dom/client";
 import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
 
-export interface SymposiumSuccessResult {
+export interface OpenArtifactsSuccessResult {
   kind: "success";
-  action: SymposiumAction;
-  receipt?: SymposiumReceipt;
+  action: OpenArtifactsAction;
+  receipt?: OpenArtifactsReceipt;
 }
 
-export interface SymposiumFailureResult {
+export interface OpenArtifactsFailureResult {
   kind: "failure";
-  action: SymposiumAction;
+  action: OpenArtifactsAction;
   message: string;
   accessNotice: boolean;
   retryable: boolean;
 }
 
-export interface SymposiumPersistenceResult {
+export interface OpenArtifactsPersistenceResult {
   kind: "persistence";
-  action: SymposiumAction;
+  action: OpenArtifactsAction;
   message: string;
-  receipt?: SymposiumReceipt;
-  retrySave?: () => Promise<SymposiumModalResult>;
+  receipt?: OpenArtifactsReceipt;
+  retrySave?: () => Promise<OpenArtifactsModalResult>;
 }
 
-export type SymposiumModalResult =
-  | SymposiumSuccessResult
-  | SymposiumFailureResult
-  | SymposiumPersistenceResult;
+export type OpenArtifactsModalResult =
+  | OpenArtifactsSuccessResult
+  | OpenArtifactsFailureResult
+  | OpenArtifactsPersistenceResult;
 
 /** Immutable host-owned data shown before an agent-authored document can be sent. */
-export interface SymposiumDocumentReview {
+export interface OpenArtifactsDocumentReview {
   readonly sourcePath: string;
   readonly digest: string;
-  readonly payload: SymposiumDocument;
+  readonly payload: OpenArtifactsDocument;
   readonly previewPath: string;
   readonly previewUrl: string;
 }
 
-export interface SymposiumModalOptions {
+export interface OpenArtifactsModalOptions {
   fileName: string;
   docId: string | null;
-  review?: SymposiumDocumentReview;
-  initialResult?: SymposiumModalResult;
-  onConfirm: (action: SymposiumAction, ownerDocument: Document) => Promise<SymposiumModalResult>;
+  review?: OpenArtifactsDocumentReview;
+  initialResult?: OpenArtifactsModalResult;
+  onConfirm: (
+    action: OpenArtifactsAction,
+    ownerDocument: Document
+  ) => Promise<OpenArtifactsModalResult>;
   onRegenerate?: () => void;
   onClosed?: () => void;
 }
 
-interface SymposiumModalContentProps extends SymposiumModalOptions {
+export interface OpenArtifactsModalContentProps extends OpenArtifactsModalOptions {
   onClose: () => void;
 }
 
-function actionLabel(action: SymposiumAction): string {
+function actionLabel(action: OpenArtifactsAction): string {
   return `${action[0].toUpperCase()}${action.slice(1)}`;
 }
 
-const WORKING_LABELS: Record<SymposiumAction, string> = {
+const WORKING_LABELS: Record<OpenArtifactsAction, string> = {
   publish: "Publishing…",
   update: "Updating…",
   delete: "Deleting…",
 };
 
-interface SymposiumReceiptViewProps {
-  receipt: SymposiumReceipt;
+interface OpenArtifactsReceiptViewProps {
+  receipt: OpenArtifactsReceipt;
   actions?: React.ReactNode;
 }
 
-function SymposiumReceiptView({ receipt, actions }: SymposiumReceiptViewProps) {
+function OpenArtifactsReceiptView({ receipt, actions }: OpenArtifactsReceiptViewProps) {
   const [copyMessage, setCopyMessage] = useState("");
 
   const copyUrl = async (event: React.MouseEvent<HTMLButtonElement>) => {
@@ -115,7 +122,7 @@ function SymposiumReceiptView({ receipt, actions }: SymposiumReceiptViewProps) {
   );
 }
 
-function SymposiumModalContent({
+export function OpenArtifactsModalContent({
   fileName,
   docId,
   review,
@@ -123,15 +130,15 @@ function SymposiumModalContent({
   onConfirm,
   onRegenerate,
   onClose,
-}: SymposiumModalContentProps) {
-  const [confirmationAction, setConfirmationAction] = useState<SymposiumAction | null>(
+}: OpenArtifactsModalContentProps) {
+  const [confirmationAction, setConfirmationAction] = useState<OpenArtifactsAction | null>(
     review ? (docId ? "update" : "publish") : docId ? null : "publish"
   );
-  const [result, setResult] = useState<SymposiumModalResult | null>(initialResult ?? null);
-  const [workingAction, setWorkingAction] = useState<SymposiumAction | null>(null);
+  const [result, setResult] = useState<OpenArtifactsModalResult | null>(initialResult ?? null);
+  const [workingAction, setWorkingAction] = useState<OpenArtifactsAction | null>(null);
   const working = workingAction !== null;
 
-  const runAction = async (nextAction: SymposiumAction, ownerDocument: Document) => {
+  const runAction = async (nextAction: OpenArtifactsAction, ownerDocument: Document) => {
     setWorkingAction(nextAction);
     try {
       setResult(await onConfirm(nextAction, ownerDocument));
@@ -168,11 +175,11 @@ function SymposiumModalContent({
       <div className="tw-flex tw-flex-col tw-gap-4">
         <div className="tw-font-semibold tw-text-normal">
           {result.action === "delete"
-            ? "Removed from Symposium"
+            ? "Removed from OpenArtifacts"
             : `${actionLabel(result.action)} complete`}
         </div>
         {result.receipt ? (
-          <SymposiumReceiptView receipt={result.receipt} actions={closeButton} />
+          <OpenArtifactsReceiptView receipt={result.receipt} actions={closeButton} />
         ) : (
           <div className="tw-flex tw-justify-end">{closeButton}</div>
         )}
@@ -185,7 +192,7 @@ function SymposiumModalContent({
       <div className="tw-flex tw-flex-col tw-gap-4" role="alert">
         <div className="tw-font-semibold tw-text-normal">
           {result.accessNotice
-            ? "Symposium access required"
+            ? "OpenArtifacts access required"
             : `${actionLabel(result.action)} failed`}
         </div>
         <p className="tw-m-0 tw-text-muted">{result.message}</p>
@@ -227,7 +234,7 @@ function SymposiumModalContent({
         </div>
         <p className="tw-m-0 tw-text-muted">{result.message}</p>
         {result.receipt ? (
-          <SymposiumReceiptView receipt={result.receipt} actions={actions} />
+          <OpenArtifactsReceiptView receipt={result.receipt} actions={actions} />
         ) : (
           <div className="tw-flex tw-justify-end tw-gap-2">{actions}</div>
         )}
@@ -243,7 +250,7 @@ function SymposiumModalContent({
   const description = review
     ? `These exact HTML bytes will ${confirmationAction === "update" ? "replace the current public page" : "become public"} only after you confirm.`
     : confirmationAction === "delete"
-      ? "Yes withdraws the link and deletes Symposium’s stored copy. Previously fetched or cached copies cannot be recalled."
+      ? "Yes withdraws the link and deletes OpenArtifacts’s stored copy. Previously fetched or cached copies cannot be recalled."
       : confirmationAction === "update"
         ? "Yes replaces the current public page with this note’s latest content."
         : confirmationAction === "publish"
@@ -289,7 +296,10 @@ function SymposiumModalContent({
         </div>
       )}
 
-      <div className="tw-flex tw-flex-wrap tw-justify-end tw-gap-2" aria-label="Symposium actions">
+      <div
+        className="tw-flex tw-flex-wrap tw-justify-end tw-gap-2"
+        aria-label="OpenArtifacts actions"
+      >
         {confirmationAction ? (
           <>
             {review && onRegenerate && (
@@ -332,24 +342,24 @@ function SymposiumModalContent({
 }
 
 /**
- * Hosts the complete state-aware Symposium confirmation and result flow for one note.
+ * Hosts the complete state-aware OpenArtifacts confirmation and result flow for one note.
  */
-export class SymposiumModal extends Modal {
+export class OpenArtifactsModal extends Modal {
   private root: Root | null = null;
 
   constructor(
     app: App,
-    private readonly options: SymposiumModalOptions
+    private readonly options: OpenArtifactsModalOptions
   ) {
     super(app);
-    this.modalEl.classList.add("copilot-symposium-modal");
-    this.titleEl.setText("Share with Symposium");
+    this.modalEl.classList.add("copilot-openartifacts-modal");
+    this.titleEl.setText("Share with OpenArtifacts");
   }
 
   onOpen(): void {
     this.contentEl.empty();
     this.root = createPluginRoot(this.contentEl, this.app);
-    this.root.render(<SymposiumModalContent {...this.options} onClose={() => this.close()} />);
+    this.root.render(<OpenArtifactsModalContent {...this.options} onClose={() => this.close()} />);
   }
 
   onClose(): void {

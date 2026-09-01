@@ -31,7 +31,7 @@ describe("commands", () => {
       expect(command?.name).not.toBe(COMMAND_NAMES[COMMAND_IDS.NEW_AGENT_CHAT]);
     });
 
-    it("registers the Symposium palette command and publishes the active Markdown file", () => {
+    it("registers the OpenArtifacts palette command and publishes the active Markdown file", () => {
       const activeFile = markdownFile("Notes/Active.md");
       const commands: Command[] = [];
       const plugin = {
@@ -46,10 +46,11 @@ describe("commands", () => {
 
       registerCommands(plugin, publish);
 
-      const command = commands.find(({ id }) => id === COMMAND_IDS.PUBLISH_FILE_TO_SYMPOSIUM);
+      const command = commands.find(({ id }) => id === COMMAND_IDS.PUBLISH_FILE_TO_OPENARTIFACTS);
+      expect(COMMAND_IDS.PUBLISH_FILE_TO_OPENARTIFACTS).toBe("publish-file-to-symposium");
       expect(command).toMatchObject({
-        name: COMMAND_NAMES[COMMAND_IDS.PUBLISH_FILE_TO_SYMPOSIUM],
-        icon: COMMAND_ICONS[COMMAND_IDS.PUBLISH_FILE_TO_SYMPOSIUM],
+        name: COMMAND_NAMES[COMMAND_IDS.PUBLISH_FILE_TO_OPENARTIFACTS],
+        icon: COMMAND_ICONS[COMMAND_IDS.PUBLISH_FILE_TO_OPENARTIFACTS],
       });
       expect(command?.checkCallback?.(true)).toBe(true);
       expect(publish).not.toHaveBeenCalled();
@@ -61,7 +62,7 @@ describe("commands", () => {
     it.each([
       ["no active file", null],
       ["a non-Markdown active file", markdownFile("Notes/Diagram.canvas")],
-    ])("hides the Symposium palette command for %s", (_case, activeFile) => {
+    ])("hides the OpenArtifacts palette command for %s", (_case, activeFile) => {
       const commands: Command[] = [];
       const plugin = {
         addCommand: jest.fn((command: Command) => commands.push(command)),
@@ -75,7 +76,7 @@ describe("commands", () => {
 
       registerCommands(plugin, publish);
 
-      const command = commands.find(({ id }) => id === COMMAND_IDS.PUBLISH_FILE_TO_SYMPOSIUM);
+      const command = commands.find(({ id }) => id === COMMAND_IDS.PUBLISH_FILE_TO_OPENARTIFACTS);
       expect(command?.checkCallback?.(true)).toBe(false);
       expect(command?.checkCallback?.(false)).toBe(false);
       expect(publish).not.toHaveBeenCalled();

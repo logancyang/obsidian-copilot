@@ -219,9 +219,9 @@ Prefer zero setup? The new [**Lite**](https://www.obsidiancopilot.com/en/pricing
 
 Ask in half-remembered language and Copilot finds the note by meaning, powered by [Miyo](https://miyo.md/), our local indexing engine. Your index stays on your machine — and with Miyo as your Document Processor, PDFs and EPUBs are parsed locally too, so nothing leaves your computer.
 
-### 🌐 Symposium — agent-first publishing _(Plus and above)_
+### 🌐 OpenArtifacts — agent-first publishing _(Plus and above)_
 
-Right-click any note and publish it as a clean webpage on [Symposium](https://symposium.md/), update it after edits, or withdraw it — all without leaving Obsidian. Or just tell your agent _"publish this note"_: it builds the page and shows you a preview and a confirmation before anything goes public.
+Run **Publish file to OpenArtifacts** from the command palette to publish a note as a clean webpage, update it after edits, or withdraw it — all without leaving Obsidian. Or just tell your agent _"publish this note"_: it builds the page and shows you a preview and a confirmation before anything goes public. Learn more at [OpenArtifacts](https://openartifacts.ai/).
 
 ### And a lot more from the preview cycle
 

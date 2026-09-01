@@ -1,9 +1,12 @@
 import type { BackendId } from "@/agentMode/session/types";
 import {
-  SYMPOSIUM_AGENT_HANDOFF_DIR,
-  SYMPOSIUM_MAX_HTML_BYTES,
-  SYMPOSIUM_WORKSPACE_ROOT_ENV,
-} from "@/symposium/constants";
+  OPENARTIFACTS_AGENT_BRIDGE_PROPERTY,
+  OPENARTIFACTS_AGENT_HANDOFF_DIR,
+  OPENARTIFACTS_MAX_HTML_BYTES,
+  OPENARTIFACTS_THEMES_DIR,
+  OPENARTIFACTS_WORKSPACE_ROOT_ENV,
+} from "@/openArtifacts/constants";
+import { OPENARTIFACTS_DEFAULT_THEME, RESEARCH_MEMO_THEME } from "./openArtifactsThemes";
 import { OBSIDIAN_SKILLS } from "./obsidianSkills";
 
 /**
@@ -33,6 +36,12 @@ import { OBSIDIAN_SKILLS } from "./obsidianSkills";
 export interface BuiltinSkill {
   /** Folder name + SKILL.md `name`. */
   readonly name: string;
+  /**
+   * Folder name of the managed predecessor this skill replaces. Its
+   * `copilot-enabled-agents` choice carries over and the old folder is removed
+   * once this one is seeded.
+   */
+  readonly legacyName?: string;
   /**
    * Bump when `skillMd` or any support file changes so seeded copies refresh.
    * Stamped into `metadata.copilot-builtin-version` in the seeded SKILL.md.
@@ -577,23 +586,24 @@ const FETCH_X = relaySkill({
   scriptFile: "fetch-x.sh",
 });
 
-const SYMPOSIUM_PUBLISH_VERSION = 8;
-const SYMPOSIUM_PUBLISH: BuiltinSkill = {
-  name: "symposium-publish",
-  version: SYMPOSIUM_PUBLISH_VERSION,
+const OPENARTIFACTS_PUBLISH_VERSION = 1;
+const OPENARTIFACTS_PUBLISH: BuiltinSkill = {
+  name: "openartifacts-publish",
+  legacyName: "symposium-publish",
+  version: OPENARTIFACTS_PUBLISH_VERSION,
   enabledAgents: ["claude", "codex", "opencode"],
   skillMd: `---
-name: symposium-publish
-description: Publish, update, or withdraw an existing Markdown note through Symposium's host-owned review flow. Use when the user asks to publish, share, update, delete, remove, or withdraw a Symposium page.
+name: openartifacts-publish
+description: Publish, update, or withdraw an existing Markdown note through OpenArtifacts' host-owned review flow. Use when the user asks to publish, share, update, delete, remove, or withdraw an OpenArtifacts page.
 metadata:
   copilot-enabled-agents: claude, codex, opencode
-  copilot-builtin-version: "${SYMPOSIUM_PUBLISH_VERSION}"
+  copilot-builtin-version: "${OPENARTIFACTS_PUBLISH_VERSION}"
 ---
 
-# Publish Markdown to Symposium
+# Publish Markdown to OpenArtifacts
 
 Require one existing Markdown source file. When the user asks to delete, remove, or
-withdraw its current Symposium page, do not generate HTML. Run the host wrapper with
+withdraw its current OpenArtifacts page, do not generate HTML. Run the host wrapper with
 only the vault-relative source-note path. Obsidian reads the note's current identity
 and opens its existing management modal; the user alone chooses Update or Delete.
 Never tell the user to delete the page at its public URL.
@@ -603,10 +613,20 @@ passive HTML document before asking Obsidian to review it. Render source-specifi
 content such as Mermaid and Obsidian Bases into static HTML or SVG, embed images,
 and include no scripts, frames, forms, handlers, redirects, or external assets. Treat
 YAML frontmatter as note metadata: never render the raw frontmatter block as page
-content. The exact UTF-8 HTML must not exceed \`${SYMPOSIUM_MAX_HTML_BYTES}\` bytes.
+content. The exact UTF-8 HTML must not exceed \`${OPENARTIFACTS_MAX_HTML_BYTES}\` bytes.
+
+Style the page from a theme file rather than improvising. Resolve the theme name in
+this order: \`OPENARTIFACTS_THEME\` from the environment when set, then a theme the
+user named in chat, then \`${OPENARTIFACTS_DEFAULT_THEME}\`. Read
+\`$${OPENARTIFACTS_WORKSPACE_ROOT_ENV}/${OPENARTIFACTS_THEMES_DIR}/<name>.md\` when the
+user has authored that theme, otherwise \`themes/<name>.md\` next to this file. Follow
+it exactly: tokens, type, scale, layout, components, and its theme-handling CSS, all
+inlined. If neither file exists, still publish with restrained defaults (system fonts,
+one accent, a readable measure, light and dark handled) and tell the user which theme
+was not found.
 
 Write those final bytes to a new unique \`.html\` file under
-\`${SYMPOSIUM_WORKSPACE_ROOT_ENV}/${SYMPOSIUM_AGENT_HANDOFF_DIR}/\`, creating that
+\`$${OPENARTIFACTS_WORKSPACE_ROOT_ENV}/${OPENARTIFACTS_AGENT_HANDOFF_DIR}/\`, creating that
 directory first when it does not exist. Do not show a prose substitute or ask
 for confirmation in chat. Instead run the host wrapper with exactly two
 vault-relative paths: the source note and the staged HTML.
@@ -614,19 +634,19 @@ vault-relative paths: the source note and the staged HTML.
 On macOS or Linux:
 
 \`\`\`bash
-sh "/absolute/path/to/this/skill/directory/symposium-publish.sh" "Notes/source.md" "${SYMPOSIUM_AGENT_HANDOFF_DIR}/unique.html"
+sh "/absolute/path/to/this/skill/directory/openartifacts-publish.sh" "Notes/source.md" "${OPENARTIFACTS_AGENT_HANDOFF_DIR}/unique.html"
 \`\`\`
 
 For withdrawal, omit the staged-HTML argument:
 
 \`\`\`bash
-sh "/absolute/path/to/this/skill/directory/symposium-publish.sh" "Notes/source.md"
+sh "/absolute/path/to/this/skill/directory/openartifacts-publish.sh" "Notes/source.md"
 \`\`\`
 
 On Windows, use the \`.cmd\` wrapper (prefix it with \`&\` in PowerShell):
 
 \`\`\`powershell
-& "/absolute/path/to/this/skill/directory/symposium-publish.cmd" "Notes/source.md" "${SYMPOSIUM_AGENT_HANDOFF_DIR}/unique.html"
+& "/absolute/path/to/this/skill/directory/openartifacts-publish.cmd" "Notes/source.md" "${OPENARTIFACTS_AGENT_HANDOFF_DIR}/unique.html"
 \`\`\`
 
 Omit the staged-HTML argument on Windows for withdrawal as well.
@@ -651,8 +671,9 @@ choose an action or document id.
   another filename, bypass the review, or publish directly.
 `,
   files: [
+    { path: `themes/${OPENARTIFACTS_DEFAULT_THEME}.md`, content: RESEARCH_MEMO_THEME },
     {
-      path: "symposium-publish.sh",
+      path: "openartifacts-publish.sh",
       content: `#!/bin/sh
 SOURCE=\${1:-}
 STAGED_HTML=\${2:-}
@@ -660,17 +681,17 @@ case "$#" in
   1) ;;
   2) ;;
   *)
-    printf '%s\\n' "Usage: sh symposium-publish.sh <source-note-path> [staged-html-path]" >&2
+    printf '%s\\n' "Usage: sh openartifacts-publish.sh <source-note-path> [staged-html-path]" >&2
     exit 1
     ;;
 esac
 [ -n "$SOURCE" ] && { [ "$#" -eq 1 ] || [ -n "$STAGED_HTML" ]; } || {
-  printf '%s\\n' "Usage: sh symposium-publish.sh <source-note-path> [staged-html-path]" >&2
+  printf '%s\\n' "Usage: sh openartifacts-publish.sh <source-note-path> [staged-html-path]" >&2
   exit 1
 }
 
 OBSIDIAN_CLI=\${COPILOT_OBSIDIAN_CLI:-}
-WORKSPACE_ROOT=\${${SYMPOSIUM_WORKSPACE_ROOT_ENV}:-}
+WORKSPACE_ROOT=\${${OPENARTIFACTS_WORKSPACE_ROOT_ENV}:-}
 [ -n "$WORKSPACE_ROOT" ] || {
   printf '%s\\n' "The owning Obsidian workspace is unavailable." >&2
   exit 1
@@ -694,10 +715,10 @@ VAULT_NAME=\${VAULT_NAME##*/}
 
 SOURCE_B64=$(printf '%s' "$SOURCE" | base64 | tr -d '\\r\\n')
 if [ "$#" -eq 1 ]; then
-  CODE="(()=>{const decode=(value)=>new TextDecoder().decode(Uint8Array.from(atob(value),(char)=>char.charCodeAt(0)));const bridge=app.plugins.plugins.copilot?.symposiumAgentBridge;if(!bridge)throw new Error('Copilot Symposium host is unavailable.');return bridge.reviewAgentManage(decode('$SOURCE_B64')).then(JSON.stringify);})()"
+  CODE="(()=>{const decode=(value)=>new TextDecoder().decode(Uint8Array.from(atob(value),(char)=>char.charCodeAt(0)));const bridge=app.plugins.plugins.copilot?.${OPENARTIFACTS_AGENT_BRIDGE_PROPERTY};if(!bridge)throw new Error('Copilot OpenArtifacts host is unavailable.');return bridge.reviewAgentManage(decode('$SOURCE_B64')).then(JSON.stringify);})()"
 else
   HTML_B64=$(printf '%s' "$STAGED_HTML" | base64 | tr -d '\\r\\n')
-  CODE="(()=>{const decode=(value)=>new TextDecoder().decode(Uint8Array.from(atob(value),(char)=>char.charCodeAt(0)));const bridge=app.plugins.plugins.copilot?.symposiumAgentBridge;if(!bridge)throw new Error('Copilot Symposium host is unavailable.');return bridge.reviewAgentPublish(decode('$SOURCE_B64'),decode('$HTML_B64')).then(JSON.stringify);})()"
+  CODE="(()=>{const decode=(value)=>new TextDecoder().decode(Uint8Array.from(atob(value),(char)=>char.charCodeAt(0)));const bridge=app.plugins.plugins.copilot?.${OPENARTIFACTS_AGENT_BRIDGE_PROPERTY};if(!bridge)throw new Error('Copilot OpenArtifacts host is unavailable.');return bridge.reviewAgentPublish(decode('$SOURCE_B64'),decode('$HTML_B64')).then(JSON.stringify);})()"
 fi
 
 CLI_OUTPUT=$("$OBSIDIAN_CLI" "vault=$VAULT_NAME" eval "code=$CODE") || exit $?
@@ -709,30 +730,30 @@ case "$CLI_RESULT" in
     exit 0
     ;;
   *)
-    printf '%s\\n' "Copilot could not complete the Symposium review." >&2
+    printf '%s\\n' "Copilot could not complete the OpenArtifacts review." >&2
     exit 1
     ;;
 esac
 `,
     },
     {
-      path: "symposium-publish.cmd",
-      content: cmdLauncher("symposium-publish.ps1"),
+      path: "openartifacts-publish.cmd",
+      content: cmdLauncher("openartifacts-publish.ps1"),
     },
     {
-      path: "symposium-publish.ps1",
+      path: "openartifacts-publish.ps1",
       content: `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding = [System.Text.Encoding]::UTF8
 
 $SOURCE = if ($args.Count -ge 1) { $args[0] } else { '' }
 $STAGED_HTML = if ($args.Count -ge 2) { $args[1] } else { '' }
 if (($args.Count -ne 1 -and $args.Count -ne 2) -or -not $SOURCE -or ($args.Count -eq 2 -and -not $STAGED_HTML)) {
-  [Console]::Error.WriteLine('Usage: symposium-publish.ps1 <source-note-path> [staged-html-path]')
+  [Console]::Error.WriteLine('Usage: openartifacts-publish.ps1 <source-note-path> [staged-html-path]')
   exit 1
 }
 
 $OBSIDIAN_CLI = [Environment]::GetEnvironmentVariable('COPILOT_OBSIDIAN_CLI')
-$WORKSPACE_ROOT = [Environment]::GetEnvironmentVariable('${SYMPOSIUM_WORKSPACE_ROOT_ENV}')
+$WORKSPACE_ROOT = [Environment]::GetEnvironmentVariable('${OPENARTIFACTS_WORKSPACE_ROOT_ENV}')
 if (-not $WORKSPACE_ROOT) {
   [Console]::Error.WriteLine('The owning Obsidian workspace is unavailable.')
   exit 1
@@ -746,17 +767,17 @@ try {
   if (-not $VAULT_NAME) { throw 'The owning Obsidian vault is unavailable.' }
   $SOURCE_B64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($SOURCE))
   if ($args.Count -eq 1) {
-    $CODE = "(()=>{const decode=(value)=>new TextDecoder().decode(Uint8Array.from(atob(value),(char)=>char.charCodeAt(0)));const bridge=app.plugins.plugins.copilot?.symposiumAgentBridge;if(!bridge)throw new Error('Copilot Symposium host is unavailable.');return bridge.reviewAgentManage(decode('$SOURCE_B64')).then(JSON.stringify);})()"
+    $CODE = "(()=>{const decode=(value)=>new TextDecoder().decode(Uint8Array.from(atob(value),(char)=>char.charCodeAt(0)));const bridge=app.plugins.plugins.copilot?.${OPENARTIFACTS_AGENT_BRIDGE_PROPERTY};if(!bridge)throw new Error('Copilot OpenArtifacts host is unavailable.');return bridge.reviewAgentManage(decode('$SOURCE_B64')).then(JSON.stringify);})()"
   } else {
     $HTML_B64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($STAGED_HTML))
-    $CODE = "(()=>{const decode=(value)=>new TextDecoder().decode(Uint8Array.from(atob(value),(char)=>char.charCodeAt(0)));const bridge=app.plugins.plugins.copilot?.symposiumAgentBridge;if(!bridge)throw new Error('Copilot Symposium host is unavailable.');return bridge.reviewAgentPublish(decode('$SOURCE_B64'),decode('$HTML_B64')).then(JSON.stringify);})()"
+    $CODE = "(()=>{const decode=(value)=>new TextDecoder().decode(Uint8Array.from(atob(value),(char)=>char.charCodeAt(0)));const bridge=app.plugins.plugins.copilot?.${OPENARTIFACTS_AGENT_BRIDGE_PROPERTY};if(!bridge)throw new Error('Copilot OpenArtifacts host is unavailable.');return bridge.reviewAgentPublish(decode('$SOURCE_B64'),decode('$HTML_B64')).then(JSON.stringify);})()"
   }
 
   $CLI_OUTPUT = & $OBSIDIAN_CLI "vault=$VAULT_NAME" 'eval' "code=$CODE"
-  if ($LASTEXITCODE -ne 0) { throw 'Copilot could not complete the Symposium review.' }
+  if ($LASTEXITCODE -ne 0) { throw 'Copilot could not complete the OpenArtifacts review.' }
   $CLI_RESULT = [string](@($CLI_OUTPUT | Where-Object { ([string]$_).StartsWith('=> {') })[-1])
   if (-not $CLI_RESULT.StartsWith('=> {')) {
-    throw 'Copilot could not complete the Symposium review.'
+    throw 'Copilot could not complete the OpenArtifacts review.'
   }
   $OUTCOME = $CLI_RESULT.Substring(3)
   [Console]::Out.Write($OUTCOME)
@@ -777,7 +798,7 @@ export const BUILTIN_SKILLS: readonly BuiltinSkill[] = [
   READ_PDF,
   YOUTUBE_TRANSCRIPT,
   FETCH_X,
-  SYMPOSIUM_PUBLISH,
+  OPENARTIFACTS_PUBLISH,
   ...OBSIDIAN_SKILLS,
 ];
 

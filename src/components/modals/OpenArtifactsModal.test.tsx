@@ -1,9 +1,9 @@
 import type {
-  SymposiumDocumentReview,
-  SymposiumModalOptions,
-  SymposiumModalResult,
-} from "@/components/modals/SymposiumModal";
-import type { SymposiumReceipt } from "@/symposium/types";
+  OpenArtifactsDocumentReview,
+  OpenArtifactsModalOptions,
+  OpenArtifactsModalResult,
+} from "@/components/modals/OpenArtifactsModal";
+import type { OpenArtifactsReceipt } from "@/openArtifacts/types";
 import { openWithSystemDefault } from "@/utils/openWithSystemDefault";
 import { act, fireEvent, screen } from "@testing-library/react";
 
@@ -35,21 +35,21 @@ jest.mock("obsidian", () => ({
   },
 }));
 
-import { SymposiumModal } from "@/components/modals/SymposiumModal";
+import { OpenArtifactsModal } from "@/components/modals/OpenArtifactsModal";
 import type { App } from "obsidian";
 
 const DOC_ID = "9f2k4mvq7t0xbz3n";
-const RECEIPT: SymposiumReceipt = {
+const RECEIPT: OpenArtifactsReceipt = {
   docId: DOC_ID,
-  url: `https://symposium.md/d/${DOC_ID}?server=exact`,
+  url: `https://openartifacts.site/d/${DOC_ID}?server=exact`,
   version: 2,
 };
 const REVIEW_HTML = "<!doctype html><html><body>Exact review</body></html>\n";
-const REVIEW: SymposiumDocumentReview = {
+const REVIEW: OpenArtifactsDocumentReview = {
   sourcePath: "Notes/Architecture.md",
   digest: "a".repeat(64),
-  previewPath: "/tmp/copilot-symposium-preview/preview.html",
-  previewUrl: "file:///tmp/copilot-symposium-preview/preview.html",
+  previewPath: "/tmp/copilot-openartifacts-preview/preview.html",
+  previewUrl: "file:///tmp/copilot-openartifacts-preview/preview.html",
   payload: Object.freeze({
     title: "Architecture",
     html: REVIEW_HTML,
@@ -57,21 +57,21 @@ const REVIEW: SymposiumDocumentReview = {
   }),
 };
 
-const mountedModals: SymposiumModal[] = [];
+const mountedModals: OpenArtifactsModal[] = [];
 
-function createConfirmMock(): jest.MockedFunction<SymposiumModalOptions["onConfirm"]> {
+function createConfirmMock(): jest.MockedFunction<OpenArtifactsModalOptions["onConfirm"]> {
   return jest.fn();
 }
 
 function renderModal(
-  onConfirm: jest.MockedFunction<SymposiumModalOptions["onConfirm"]>,
+  onConfirm: jest.MockedFunction<OpenArtifactsModalOptions["onConfirm"]>,
   docId: string | null = null,
   onClosed?: () => void,
-  initialResult?: SymposiumModalResult,
-  review?: SymposiumDocumentReview,
+  initialResult?: OpenArtifactsModalResult,
+  review?: OpenArtifactsDocumentReview,
   onRegenerate?: () => void
-): SymposiumModal {
-  const modal = new SymposiumModal({} as App, {
+): OpenArtifactsModal {
+  const modal = new OpenArtifactsModal({} as App, {
     fileName: "Architecture",
     docId,
     review,
@@ -103,7 +103,7 @@ function expectButtonsInSameRow(...names: string[]): void {
   }
 }
 
-describe("SymposiumModal", () => {
+describe("OpenArtifactsModal", () => {
   afterEach(() => {
     for (const modal of mountedModals.splice(0)) {
       act(() => {
@@ -115,7 +115,7 @@ describe("SymposiumModal", () => {
     jest.clearAllMocks();
   });
 
-  describe("SymposiumModal", () => {
+  describe("OpenArtifactsModal", () => {
     describe("onOpen()", () => {
       it("shows a compact explicit publish confirmation with the note name and warning", async () => {
         const onConfirm = createConfirmMock().mockResolvedValue({
@@ -131,7 +131,7 @@ describe("SymposiumModal", () => {
         expect(screen.queryByText(/theme/i)).toBeNull();
         expect(screen.queryByText(/preview/i)).toBeNull();
 
-        expect(modal.modalEl.classList.contains("copilot-symposium-modal")).toBe(true);
+        expect(modal.modalEl.classList.contains("copilot-openartifacts-modal")).toBe(true);
         expectButtonsInSameRow("No, cancel", "Yes, publish");
 
         fireEvent.click(screen.getByRole("button", { name: "No, cancel" }));
@@ -154,7 +154,7 @@ describe("SymposiumModal", () => {
         expect(screen.getByText(REVIEW.payload.title)).toBeTruthy();
         expect(screen.getByText(`${REVIEW.payload.byteLength} bytes`)).toBeTruthy();
         expect(screen.getByText(REVIEW.digest)).toBeTruthy();
-        expect(screen.queryByTitle("Symposium HTML preview")).toBeNull();
+        expect(screen.queryByTitle("OpenArtifacts HTML preview")).toBeNull();
         expect(
           screen.getByText(/open a sandboxed local preview of these exact html bytes/i)
         ).toBeTruthy();
@@ -192,7 +192,7 @@ describe("SymposiumModal", () => {
         const onConfirm = createConfirmMock().mockResolvedValue({
           kind: "failure",
           action: "update",
-          message: "Symposium is temporarily unavailable.",
+          message: "OpenArtifacts is temporarily unavailable.",
           accessNotice: false,
           retryable: true,
         });
@@ -201,12 +201,12 @@ describe("SymposiumModal", () => {
         await clickButton("Yes, update");
 
         expect(await screen.findByText("Update failed")).toBeTruthy();
-        expect(screen.getByText("Symposium is temporarily unavailable.")).toBeTruthy();
+        expect(screen.getByText("OpenArtifacts is temporarily unavailable.")).toBeTruthy();
         expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
       });
 
       it("allows native close while a confirmed action is pending", async () => {
-        let resolveConfirm: ((result: SymposiumModalResult) => void) | undefined;
+        let resolveConfirm: ((result: OpenArtifactsModalResult) => void) | undefined;
         const onConfirm = createConfirmMock().mockImplementation(
           () =>
             new Promise((resolve) => {
@@ -261,7 +261,7 @@ describe("SymposiumModal", () => {
 
         await clickButton("Yes, delete");
         expect(onConfirm).toHaveBeenCalledWith("delete", activeDocument);
-        expect(await screen.findByText("Removed from Symposium")).toBeTruthy();
+        expect(await screen.findByText("Removed from OpenArtifacts")).toBeTruthy();
       });
 
       it("shows the server's unauthorized message as a non-retryable access notice", async () => {
@@ -276,7 +276,7 @@ describe("SymposiumModal", () => {
 
         await clickButton("Yes, publish");
 
-        expect(await screen.findByText("Symposium access required")).toBeTruthy();
+        expect(await screen.findByText("OpenArtifacts access required")).toBeTruthy();
         expect(
           screen.getByText("Publishing is currently limited to lifetime license holders.")
         ).toBeTruthy();

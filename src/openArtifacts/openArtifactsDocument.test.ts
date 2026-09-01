@@ -1,11 +1,11 @@
 import {
-  buildSymposiumDocument,
-  createSymposiumDocument,
-  createSymposiumReviewDocument,
-  SYMPOSIUM_MAX_HTML_BYTES,
-  SymposiumDocumentTooLargeError,
-  SymposiumDocumentUnsafeError,
-} from "@/symposium/symposiumDocument";
+  buildOpenArtifactsDocument,
+  createOpenArtifactsDocument,
+  createOpenArtifactsReviewDocument,
+  OPENARTIFACTS_MAX_HTML_BYTES,
+  OpenArtifactsDocumentTooLargeError,
+  OpenArtifactsDocumentUnsafeError,
+} from "@/openArtifacts/openArtifactsDocument";
 import { App, Component, MarkdownRenderer, TFile } from "obsidian";
 
 jest.mock("obsidian", () => ({
@@ -74,43 +74,43 @@ function appendHtml(element: HTMLElement, html: string): void {
   element.append(...parsed.body.childNodes);
 }
 
-describe("symposiumDocument", () => {
+describe("openArtifactsDocument", () => {
   beforeEach(() => {
     renderMock.mockReset();
   });
 
-  describe("SymposiumDocumentTooLargeError", () => {
+  describe("OpenArtifactsDocumentTooLargeError", () => {
     describe("constructor()", () => {
       it("retains the measured byte length", () => {
-        const error = new SymposiumDocumentTooLargeError(SYMPOSIUM_MAX_HTML_BYTES + 1);
+        const error = new OpenArtifactsDocumentTooLargeError(OPENARTIFACTS_MAX_HTML_BYTES + 1);
 
         expect(error).toBeInstanceOf(Error);
-        expect(error.byteLength).toBe(SYMPOSIUM_MAX_HTML_BYTES + 1);
+        expect(error.byteLength).toBe(OPENARTIFACTS_MAX_HTML_BYTES + 1);
       });
     });
   });
 
-  describe("SymposiumDocumentUnsafeError", () => {
+  describe("OpenArtifactsDocumentUnsafeError", () => {
     describe("constructor()", () => {
       it("describes active or remote content as invalid finished HTML", () => {
-        const error = new SymposiumDocumentUnsafeError([
+        const error = new OpenArtifactsDocumentUnsafeError([
           "remove unsupported <script>",
           'embed or remove "src" on <img>',
         ]);
 
         expect(error).toBeInstanceOf(Error);
         expect(error.message).toBe(
-          'Symposium HTML is not publishable: remove unsupported <script>; embed or remove "src" on <img>.'
+          'OpenArtifacts HTML is not publishable: remove unsupported <script>; embed or remove "src" on <img>.'
         );
       });
     });
   });
 
-  describe("createSymposiumDocument()", () => {
+  describe("createOpenArtifactsDocument()", () => {
     it("freezes the exact HTML string and its UTF-8 byte length", () => {
       const html = "<!doctype html><html><body>Résumé</body></html>\n";
 
-      const result = createSymposiumDocument("Review", html);
+      const result = createOpenArtifactsDocument("Review", html);
 
       expect(result).toEqual({
         title: "Review",
@@ -121,20 +121,20 @@ describe("symposiumDocument", () => {
     });
 
     it("rejects HTML whose UTF-8 encoding exceeds the existing byte limit", () => {
-      const html = "é".repeat(Math.floor(SYMPOSIUM_MAX_HTML_BYTES / 2) + 1);
+      const html = "é".repeat(Math.floor(OPENARTIFACTS_MAX_HTML_BYTES / 2) + 1);
 
-      expect(() => createSymposiumDocument("Too large", html)).toThrow(
-        SymposiumDocumentTooLargeError
+      expect(() => createOpenArtifactsDocument("Too large", html)).toThrow(
+        OpenArtifactsDocumentTooLargeError
       );
     });
   });
 
-  describe("createSymposiumReviewDocument()", () => {
+  describe("createOpenArtifactsReviewDocument()", () => {
     it("returns exact immutable passive HTML with embedded styling and assets", () => {
       const html =
         '<!doctype html><html><head><style>:root{--ink:#123}@media (prefers-color-scheme:dark){:root{--ink:#eee}}circle{fill:var(--ink);filter:url("#shadow")}</style></head><body><a href="https://example.com">Source</a><img src="data:image/png;base64,iVBORw0KGgo="><svg><defs><filter id="shadow"></filter><linearGradient id="paint"></linearGradient></defs><circle cx="1" cy="1" r="1" fill="url(#paint)"></circle></svg></body></html>';
 
-      const result = createSymposiumReviewDocument("Review", html);
+      const result = createOpenArtifactsReviewDocument("Review", html);
 
       expect(result.html).toBe(html);
       expect(Object.isFrozen(result)).toBe(true);
@@ -159,8 +159,8 @@ describe("symposiumDocument", () => {
     ])("rejects %s before review", (_case, body) => {
       const html = `<!doctype html><html><body>${body}</body></html>`;
 
-      expect(() => createSymposiumReviewDocument("Unsafe", html)).toThrow(
-        SymposiumDocumentUnsafeError
+      expect(() => createOpenArtifactsReviewDocument("Unsafe", html)).toThrow(
+        OpenArtifactsDocumentUnsafeError
       );
     });
 
@@ -168,13 +168,13 @@ describe("symposiumDocument", () => {
       const html =
         '<!doctype html><script></script><img src="https://attacker.example/pixel"><p onclick="alert(1)">Review</p>';
 
-      expect(() => createSymposiumReviewDocument("Unsafe", html)).toThrow(
+      expect(() => createOpenArtifactsReviewDocument("Unsafe", html)).toThrow(
         'remove unsupported <script>; embed or remove "src" on <img>; remove "onclick" from <p>'
       );
     });
   });
 
-  describe("buildSymposiumDocument()", () => {
+  describe("buildOpenArtifactsDocument()", () => {
     it("serializes the settled Obsidian reading-view output as a complete HTML document", async () => {
       const app = createApp({ markdown: "# Markdown that must not be reparsed" });
       const file = createFile("Notes/Rendered note.md");
@@ -187,7 +187,7 @@ describe("symposiumDocument", () => {
         );
       });
 
-      const result = await buildSymposiumDocument(app, file, component, document);
+      const result = await buildOpenArtifactsDocument(app, file, component, document);
 
       expect(renderMock).toHaveBeenCalledWith(
         app,
@@ -202,7 +202,7 @@ describe("symposiumDocument", () => {
       expect(result.html).toContain('<meta charset="utf-8">');
       expect(result.html).toContain("<title>Rendered note</title>");
       expect(result.html).toContain(
-        '<article class="markdown-preview-view markdown-rendered symposium-document">'
+        '<article class="markdown-preview-view markdown-rendered openartifacts-document">'
       );
       expect(result.html).toContain(
         '<section class="callout" data-callout="info"><p>Postprocessed output</p></section>'
@@ -224,7 +224,7 @@ describe("symposiumDocument", () => {
         );
       });
 
-      const result = await buildSymposiumDocument(app, file, createComponent(), document);
+      const result = await buildOpenArtifactsDocument(app, file, createComponent(), document);
 
       expect(result.html).not.toContain("metadata-container");
       expect(result.html).not.toContain("frontmatter");
@@ -256,12 +256,12 @@ describe("symposiumDocument", () => {
         );
       });
 
-      const result = await buildSymposiumDocument(app, file, createComponent(), document);
+      const result = await buildOpenArtifactsDocument(app, file, createComponent(), document);
       const parsed = new DOMParser().parseFromString(result.html, "text/html");
 
       expect(
         parsed.querySelector(
-          "script, style:not(#symposium-obsidian-publish-baseline), iframe, form"
+          "script, style:not(#openartifacts-obsidian-publish-baseline), iframe, form"
         )
       ).toBeNull();
       expect(parsed.querySelector("#safe")?.hasAttribute("style")).toBe(false);
@@ -319,13 +319,15 @@ describe("symposiumDocument", () => {
         );
       });
 
-      const result = await buildSymposiumDocument(app, file, createComponent(), document);
+      const result = await buildOpenArtifactsDocument(app, file, createComponent(), document);
       const parsed = new DOMParser().parseFromString(result.html, "text/html");
 
       expect(parsed.querySelector("mjx-container")).toBeNull();
       expect(parsed.querySelector("math")?.textContent?.trim()).toBe("x");
       expect(
-        [...parsed.querySelectorAll(".symposium-task-marker")].map((marker) => marker.textContent)
+        [...parsed.querySelectorAll(".openartifacts-task-marker")].map(
+          (marker) => marker.textContent
+        )
       ).toEqual(["☐", "☑"]);
       expect(parsed.querySelector("input")).toBeNull();
     });
@@ -361,7 +363,7 @@ describe("symposiumDocument", () => {
         );
       });
 
-      const result = await buildSymposiumDocument(
+      const result = await buildOpenArtifactsDocument(
         app,
         createFile("Notes/Images.md"),
         createComponent(),
@@ -383,11 +385,11 @@ describe("symposiumDocument", () => {
         "data:image/gif;base64,R0lGODlh"
       );
       expect(parsed.querySelector("#corrupt")).toBeNull();
-      expect(parsed.querySelector(".symposium-missing-asset")?.textContent).toBe(
+      expect(parsed.querySelector(".openartifacts-missing-asset")?.textContent).toBe(
         "[Missing image: Corrupt image]"
       );
       expect(parsed.querySelector("#missing")).toBeNull();
-      expect(parsed.querySelectorAll(".symposium-missing-asset")[1]?.textContent).toBe(
+      expect(parsed.querySelectorAll(".openartifacts-missing-asset")[1]?.textContent).toBe(
         "[Missing image: Missing diagram]"
       );
       expect(app.vault.readBinary).toHaveBeenCalledTimes(3);
@@ -397,7 +399,7 @@ describe("symposiumDocument", () => {
       const oversized = createFile(
         "Assets/oversized.png",
         undefined,
-        Math.floor((SYMPOSIUM_MAX_HTML_BYTES * 3) / 4) + 1
+        Math.floor((OPENARTIFACTS_MAX_HTML_BYTES * 3) / 4) + 1
       );
       const app = createApp({ files: [oversized] });
       renderMock.mockImplementation(async (_app, _markdown, element) => {
@@ -405,13 +407,13 @@ describe("symposiumDocument", () => {
       });
 
       await expect(
-        buildSymposiumDocument(app, createFile("Images.md"), createComponent(), document)
-      ).rejects.toBeInstanceOf(SymposiumDocumentTooLargeError);
+        buildOpenArtifactsDocument(app, createFile("Images.md"), createComponent(), document)
+      ).rejects.toBeInstanceOf(OpenArtifactsDocumentTooLargeError);
       expect(app.vault.readBinary).not.toHaveBeenCalled();
     });
 
     it("rejects cumulative local image data before loading the image that exceeds the budget", async () => {
-      const imageSize = Math.floor((SYMPOSIUM_MAX_HTML_BYTES * 3) / 8);
+      const imageSize = Math.floor((OPENARTIFACTS_MAX_HTML_BYTES * 3) / 8);
       const first = createFile("Assets/first.png", undefined, imageSize);
       const second = createFile("Assets/second.png", undefined, imageSize);
       const bytes = new Uint8Array(imageSize);
@@ -428,8 +430,8 @@ describe("symposiumDocument", () => {
       });
 
       await expect(
-        buildSymposiumDocument(app, createFile("Images.md"), createComponent(), document)
-      ).rejects.toBeInstanceOf(SymposiumDocumentTooLargeError);
+        buildOpenArtifactsDocument(app, createFile("Images.md"), createComponent(), document)
+      ).rejects.toBeInstanceOf(OpenArtifactsDocumentTooLargeError);
       expect(app.vault.readBinary).toHaveBeenCalledTimes(1);
     });
 
@@ -437,23 +439,23 @@ describe("symposiumDocument", () => {
       const image = createFile(
         "Assets/large.png",
         undefined,
-        Math.floor((SYMPOSIUM_MAX_HTML_BYTES * 3) / 8)
+        Math.floor((OPENARTIFACTS_MAX_HTML_BYTES * 3) / 8)
       );
       const app = createApp({ files: [image] });
       renderMock.mockImplementation(async (_app, _markdown, element) => {
-        element.append("x".repeat(Math.floor(SYMPOSIUM_MAX_HTML_BYTES / 2)));
+        element.append("x".repeat(Math.floor(OPENARTIFACTS_MAX_HTML_BYTES / 2)));
         appendHtml(element, '<img alt="Large" src="Assets/large.png">');
       });
 
       await expect(
-        buildSymposiumDocument(app, createFile("Images.md"), createComponent(), document)
-      ).rejects.toBeInstanceOf(SymposiumDocumentTooLargeError);
+        buildOpenArtifactsDocument(app, createFile("Images.md"), createComponent(), document)
+      ).rejects.toBeInstanceOf(OpenArtifactsDocumentTooLargeError);
       expect(app.vault.readBinary).not.toHaveBeenCalled();
     });
 
     it("budgets the embedded image replacement delta instead of removed source markup", async () => {
       const longPath = `Assets/${"a".repeat(16_000)}.png`;
-      const dataUrlBudget = SYMPOSIUM_MAX_HTML_BYTES - 10_000;
+      const dataUrlBudget = OPENARTIFACTS_MAX_HTML_BYTES - 10_000;
       const imageSize = Math.floor(((dataUrlBudget - "data:image/png;base64,".length) * 3) / 4);
       const image = createFile(longPath, undefined, imageSize);
       const bytes = new Uint8Array(imageSize);
@@ -467,14 +469,14 @@ describe("symposiumDocument", () => {
         appendHtml(element, `<img alt="Near limit" data-path="${longPath}" src="local.png">`);
       });
 
-      const result = await buildSymposiumDocument(
+      const result = await buildOpenArtifactsDocument(
         app,
         createFile("Images.md"),
         createComponent(),
         document
       );
 
-      expect(result.byteLength).toBeLessThanOrEqual(SYMPOSIUM_MAX_HTML_BYTES);
+      expect(result.byteLength).toBeLessThanOrEqual(OPENARTIFACTS_MAX_HTML_BYTES);
       expect(result.html).not.toContain(longPath);
       expect(app.vault.readBinary).toHaveBeenCalledTimes(1);
     });
@@ -486,7 +488,7 @@ describe("symposiumDocument", () => {
         element.textContent = "你好 🌍";
       });
 
-      const result = await buildSymposiumDocument(app, file, createComponent(), document);
+      const result = await buildOpenArtifactsDocument(app, file, createComponent(), document);
 
       expect(result.title).toBe("Résumé 🚀");
       expect(result.byteLength).toBe(new TextEncoder().encode(result.html).byteLength);
@@ -501,15 +503,17 @@ describe("symposiumDocument", () => {
         element.textContent = renderedText;
       });
 
-      const empty = await buildSymposiumDocument(app, file, createComponent(), document);
-      renderedText = "x".repeat(SYMPOSIUM_MAX_HTML_BYTES - empty.byteLength);
-      const exact = await buildSymposiumDocument(app, file, createComponent(), document);
+      const empty = await buildOpenArtifactsDocument(app, file, createComponent(), document);
+      renderedText = "x".repeat(OPENARTIFACTS_MAX_HTML_BYTES - empty.byteLength);
+      const exact = await buildOpenArtifactsDocument(app, file, createComponent(), document);
 
-      expect(exact.byteLength).toBe(SYMPOSIUM_MAX_HTML_BYTES);
+      expect(exact.byteLength).toBe(OPENARTIFACTS_MAX_HTML_BYTES);
 
       renderedText += "x";
-      await expect(buildSymposiumDocument(app, file, createComponent(), document)).rejects.toThrow(
-        `Symposium HTML is ${SYMPOSIUM_MAX_HTML_BYTES + 1} bytes; the limit is ${SYMPOSIUM_MAX_HTML_BYTES} bytes.`
+      await expect(
+        buildOpenArtifactsDocument(app, file, createComponent(), document)
+      ).rejects.toThrow(
+        `OpenArtifacts HTML is ${OPENARTIFACTS_MAX_HTML_BYTES + 1} bytes; the limit is ${OPENARTIFACTS_MAX_HTML_BYTES} bytes.`
       );
     });
   });

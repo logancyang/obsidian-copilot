@@ -1,20 +1,24 @@
-import { SYMPOSIUM_API_ORIGIN, SYMPOSIUM_DOC_ID_PATTERN } from "@/symposium/constants";
+import {
+  OPENARTIFACTS_API_ORIGIN,
+  OPENARTIFACTS_DOCUMENT_ORIGIN,
+  OPENARTIFACTS_DOC_ID_PATTERN,
+} from "@/openArtifacts/constants";
 import type {
-  SymposiumDocument,
-  SymposiumErrorResponse,
-  SymposiumReceipt,
-} from "@/symposium/types";
+  OpenArtifactsDocument,
+  OpenArtifactsErrorResponse,
+  OpenArtifactsReceipt,
+} from "@/openArtifacts/types";
 import { requestUrl, type RequestUrlParam, type RequestUrlResponse } from "obsidian";
 
-const DOCS_ENDPOINT = `${SYMPOSIUM_API_ORIGIN}/api/v1/docs`;
-const NETWORK_ERROR_MESSAGE = "Could not reach Symposium. Please try again.";
+const DOCS_ENDPOINT = `${OPENARTIFACTS_API_ORIGIN}/api/v1/docs`;
+const NETWORK_ERROR_MESSAGE = "Could not reach OpenArtifacts. Please try again.";
 const AMBIGUOUS_PUBLISH_MESSAGE =
-  "Symposium may have published this note, but Copilot did not receive a valid receipt. To avoid creating a duplicate page, this publish cannot be retried until the plugin reloads.";
+  "OpenArtifacts may have published this note, but Copilot did not receive a valid receipt. To avoid creating a duplicate page, this publish cannot be retried until the plugin reloads.";
 
 /**
- * Carries a Symposium failure to the UI without interpreting server-side authorization policy.
+ * Carries an OpenArtifacts failure to the UI without interpreting server-side authorization policy.
  */
-export class SymposiumClientError extends Error {
+export class OpenArtifactsClientError extends Error {
   /**
    * @param message The human-readable server message or a transport-safe fallback.
    * @param code The stable server error code or a client transport/validation code.
@@ -28,33 +32,36 @@ export class SymposiumClientError extends Error {
     public readonly retryable: boolean
   ) {
     super(message);
-    this.name = "SymposiumClientError";
-    Object.setPrototypeOf(this, SymposiumClientError.prototype);
+    this.name = "OpenArtifactsClientError";
+    Object.setPrototypeOf(this, OpenArtifactsClientError.prototype);
   }
 }
 
 /**
- * Owns the fixed Symposium HTTP wire contract without managing credentials or note identity.
+ * Owns the fixed OpenArtifacts HTTP wire contract without managing credentials or note identity.
  */
-export class SymposiumClient {
+export class OpenArtifactsClient {
   /**
    * @param document The complete HTML document to publish.
    * @param licenseKey The decrypted license key used only for this request.
    */
-  async publish(document: SymposiumDocument, licenseKey: string): Promise<SymposiumReceipt> {
+  async publish(
+    document: OpenArtifactsDocument,
+    licenseKey: string
+  ): Promise<OpenArtifactsReceipt> {
     return this.push("POST", DOCS_ENDPOINT, document, licenseKey);
   }
 
   /**
-   * @param docId The existing Symposium document identity.
+   * @param docId The existing OpenArtifacts document identity.
    * @param document The complete HTML document for the new version.
    * @param licenseKey The decrypted license key used only for this request.
    */
   async update(
     docId: string,
-    document: SymposiumDocument,
+    document: OpenArtifactsDocument,
     licenseKey: string
-  ): Promise<SymposiumReceipt> {
+  ): Promise<OpenArtifactsReceipt> {
     return this.push(
       "PUT",
       `${DOCS_ENDPOINT}/${encodeURIComponent(docId)}`,
@@ -65,7 +72,7 @@ export class SymposiumClient {
   }
 
   /**
-   * @param docId The Symposium document identity to withdraw.
+   * @param docId The OpenArtifacts document identity to withdraw.
    * @param licenseKey The decrypted license key used only for this request.
    */
   async delete(docId: string, licenseKey: string): Promise<void> {
@@ -90,10 +97,10 @@ export class SymposiumClient {
   private async push(
     method: "POST" | "PUT",
     url: string,
-    document: SymposiumDocument,
+    document: OpenArtifactsDocument,
     licenseKey: string,
     expectedDocId?: string
-  ): Promise<SymposiumReceipt> {
+  ): Promise<OpenArtifactsReceipt> {
     let response: RequestUrlResponse;
     try {
       response = await this.request({
@@ -105,7 +112,11 @@ export class SymposiumClient {
         throw: false,
       });
     } catch (error) {
-      if (method === "POST" && error instanceof SymposiumClientError && error.code === "network") {
+      if (
+        method === "POST" &&
+        error instanceof OpenArtifactsClientError &&
+        error.code === "network"
+      ) {
         throw ambiguousPublishError(null);
       }
       throw error;
@@ -126,7 +137,7 @@ export class SymposiumClient {
     } catch (error) {
       if (
         method === "POST" &&
-        error instanceof SymposiumClientError &&
+        error instanceof OpenArtifactsClientError &&
         error.code === "malformed_response"
       ) {
         throw ambiguousPublishError(response.status);
@@ -139,7 +150,7 @@ export class SymposiumClient {
     try {
       return await requestUrl(options);
     } catch {
-      throw new SymposiumClientError(NETWORK_ERROR_MESSAGE, "network", null, true);
+      throw new OpenArtifactsClientError(NETWORK_ERROR_MESSAGE, "network", null, true);
     }
   }
 }
@@ -148,7 +159,7 @@ function authorizationHeaders(licenseKey: string): Record<string, string> {
   return { Authorization: `Bearer ${licenseKey}` };
 }
 
-function parseReceipt(response: RequestUrlResponse, expectedDocId?: string): SymposiumReceipt {
+function parseReceipt(response: RequestUrlResponse, expectedDocId?: string): OpenArtifactsReceipt {
   const value = responseJson(response);
   if (!isRecord(value)) {
     throw malformedResponse(response.status);
@@ -157,11 +168,10 @@ function parseReceipt(response: RequestUrlResponse, expectedDocId?: string): Sym
   const { docId, url, version } = value;
   if (
     typeof docId !== "string" ||
-    !SYMPOSIUM_DOC_ID_PATTERN.test(docId) ||
+    !OPENARTIFACTS_DOC_ID_PATTERN.test(docId) ||
     (expectedDocId !== undefined && docId !== expectedDocId) ||
     typeof url !== "string" ||
-    !isHttpsUrl(url) ||
-    new URL(url).pathname.replace(/\/$/, "") !== `/d/${docId}` ||
+    !isOpenArtifactsDocumentUrl(url, docId) ||
     typeof version !== "number" ||
     !Number.isSafeInteger(version) ||
     version < 1
@@ -172,14 +182,14 @@ function parseReceipt(response: RequestUrlResponse, expectedDocId?: string): Sym
   return { docId, url, version };
 }
 
-function errorFromResponse(response: RequestUrlResponse): SymposiumClientError {
+function errorFromResponse(response: RequestUrlResponse): OpenArtifactsClientError {
   const value = responseJson(response);
   if (!isErrorResponse(value)) {
     return malformedResponse(response.status);
   }
 
   const { code, message } = value.error;
-  return new SymposiumClientError(
+  return new OpenArtifactsClientError(
     message,
     code,
     response.status,
@@ -195,7 +205,7 @@ function responseJson(response: RequestUrlResponse): unknown {
   }
 }
 
-function isErrorResponse(value: unknown): value is SymposiumErrorResponse {
+function isErrorResponse(value: unknown): value is OpenArtifactsErrorResponse {
   if (!isRecord(value) || !isRecord(value.error)) {
     return false;
   }
@@ -211,23 +221,35 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function isHttpsUrl(value: string): boolean {
+function isOpenArtifactsDocumentUrl(value: string, docId: string): boolean {
   try {
-    return new URL(value).protocol === "https:";
+    const url = new URL(value);
+    // New server receipts must use the canonical document host; the legacy host is accepted only
+    // when reading an identity already persisted in a note.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/337
+    return (
+      url.origin === OPENARTIFACTS_DOCUMENT_ORIGIN &&
+      url.pathname.replace(/\/$/, "") === `/d/${docId}`
+    );
   } catch {
     return false;
   }
 }
 
-function malformedResponse(status: number): SymposiumClientError {
-  return new SymposiumClientError(
-    `Symposium returned an invalid response (HTTP ${status}).`,
+function malformedResponse(status: number): OpenArtifactsClientError {
+  return new OpenArtifactsClientError(
+    `OpenArtifacts returned an invalid response (HTTP ${status}).`,
     "malformed_response",
     status,
     status >= 500
   );
 }
 
-function ambiguousPublishError(status: number | null): SymposiumClientError {
-  return new SymposiumClientError(AMBIGUOUS_PUBLISH_MESSAGE, "ambiguous_publish", status, false);
+function ambiguousPublishError(status: number | null): OpenArtifactsClientError {
+  return new OpenArtifactsClientError(
+    AMBIGUOUS_PUBLISH_MESSAGE,
+    "ambiguous_publish",
+    status,
+    false
+  );
 }

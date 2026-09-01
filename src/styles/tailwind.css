@@ -15,7 +15,7 @@ If your plugin does not need CSS, delete this file.
 
 */
 
-.copilot-symposium-modal {
+.copilot-openartifacts-modal {
   width: min(32rem, calc(100vw - 2rem));
   min-width: 0;
   max-width: calc(100vw - 2rem);

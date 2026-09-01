@@ -13,7 +13,7 @@ import { APPLY_VIEW_TYPE, ApplyView } from "@/components/composer/ApplyView";
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { LoadChatHistoryModal } from "@/components/modals/LoadChatHistoryModal";
 
-import { registerContextMenu, registerSymposiumFileMenu } from "@/commands/contextMenu";
+import { registerContextMenu } from "@/commands/contextMenu";
 import { CustomCommandRegister } from "@/commands/customCommandRegister";
 import { migrateCommands } from "@/commands/migrator";
 import { migrateSystemPromptsFromSettings } from "@/system-prompts/migration";
@@ -128,10 +128,12 @@ import {
 } from "@/utils/vaultAdapterUtils";
 import { v4 as uuidv4 } from "uuid";
 import {
-  createSymposiumAgentBridge,
-  type SymposiumAgentBridge,
-  SymposiumPublisher,
-} from "@/symposium/SymposiumPublisher";
+  createOpenArtifactsAgentBridge,
+  type OpenArtifactsAgentBridge,
+  OpenArtifactsPublisher,
+} from "@/openArtifacts/OpenArtifactsPublisher";
+import { OPENARTIFACTS_AGENT_BRIDGE_PROPERTY } from "@/openArtifacts/constants";
+import { migrateOpenArtifactsFolder } from "@/openArtifacts/openArtifactsLedger";
 import {
   createSelfHostWebSearchAgentBridge,
   type SelfHostWebSearchAgentBridge,
@@ -158,8 +160,11 @@ export default class CopilotPlugin extends Plugin {
   private planPreviewViewType?: typeof import("@/agentMode").PLAN_PREVIEW_VIEW_TYPE;
   private agentModelDiscoveryUnsubscriber?: () => void;
   modelManagement!: ModelManagementApi;
-  /** Frozen path-only facade available to Agent Mode's Obsidian CLI bridge. */
-  symposiumAgentBridge?: Readonly<SymposiumAgentBridge>;
+  /**
+   * Frozen path-only facade available to Agent Mode's Obsidian CLI bridge. The seeded skill
+   * scripts reach it by this property name.
+   */
+  [OPENARTIFACTS_AGENT_BRIDGE_PROPERTY]?: Readonly<OpenArtifactsAgentBridge>;
   /** Provider-credential-free channel available to the managed Agent Chat search skill. */
   selfHostWebSearchAgentBridge?: Readonly<SelfHostWebSearchAgentBridge>;
   // Proof of THIS lifecycle for anything that enqueues a Miyo folder mutation.
@@ -427,28 +432,35 @@ export default class CopilotPlugin extends Plugin {
       () => (this.canUseAgentView() ? this.activateAgentView() : this.activateView())
     );
 
-    const symposiumPublisher = new SymposiumPublisher(this.app);
-    const symposiumAgentBridge = createSymposiumAgentBridge(symposiumPublisher);
-    this.symposiumAgentBridge = symposiumAgentBridge;
+    // Awaited so no publish can create .openartifacts before the old folder moves; a
+    // destination that already exists would strand the legacy history for good.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/337
+    try {
+      await migrateOpenArtifactsFolder(this.app.vault);
+    } catch (error) {
+      logError("Failed to move the Symposium publishing folder to .openartifacts.", error);
+    }
+    const openArtifactsPublisher = new OpenArtifactsPublisher(this.app);
+    const openArtifactsAgentBridge = createOpenArtifactsAgentBridge(openArtifactsPublisher);
+    this[OPENARTIFACTS_AGENT_BRIDGE_PROPERTY] = openArtifactsAgentBridge;
     const publishFile = (file: TFile): void => {
-      void symposiumPublisher
+      void openArtifactsPublisher
         .open(file)
-        .catch((error) => logError("Failed to open Symposium publishing.", error));
+        .catch((error) => logError("Failed to open OpenArtifacts publishing.", error));
     };
     this.register(() => {
-      symposiumPublisher.dispose();
-      if (this.symposiumAgentBridge === symposiumAgentBridge) {
-        this.symposiumAgentBridge = undefined;
+      openArtifactsPublisher.dispose();
+      if (this[OPENARTIFACTS_AGENT_BRIDGE_PROPERTY] === openArtifactsAgentBridge) {
+        this[OPENARTIFACTS_AGENT_BRIDGE_PROPERTY] = undefined;
       }
     });
     registerCommands(this, publishFile);
-    registerSymposiumFileMenu(this, publishFile);
 
     // Tool initialization is now handled automatically in CopilotPlusChainRunner and AutonomousAgentChainRunner
 
     this.registerEvent(
-      this.app.workspace.on("editor-menu", (menu: Menu, _editor, info) => {
-        registerContextMenu(menu, this.app, info.file, publishFile);
+      this.app.workspace.on("editor-menu", (menu: Menu) => {
+        registerContextMenu(menu, this.app);
       })
     );
 

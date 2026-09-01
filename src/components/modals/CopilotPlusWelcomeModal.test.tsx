@@ -11,11 +11,11 @@ describe("CopilotPlusWelcomeModal", () => {
       expect(screen.getByText(/default model for chat and your agents/)).toBeTruthy();
     });
 
-    it("names what the license includes, including the symposium link", () => {
+    it("names what the license includes, including the OpenArtifacts link", () => {
       render(<CopilotPlusWelcomeModalContent onConfirm={jest.fn()} onCancel={jest.fn()} />);
 
-      const link = screen.getByRole("link", { name: "symposium.md" });
-      expect(link.getAttribute("href")).toBe("https://symposium.md");
+      const link = screen.getByRole("link", { name: "OpenArtifacts" });
+      expect(link.getAttribute("href")).toBe("https://openartifacts.ai");
       expect(screen.getByText(/Copilot exclusive/)).toBeTruthy();
       expect(screen.getByText(/cross-agent skills/)).toBeTruthy();
     });

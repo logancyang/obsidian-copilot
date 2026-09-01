@@ -3,30 +3,30 @@ import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { consumeSymposiumAgentHandoff } from "@/symposium/symposiumAgentHandoff";
-import { SYMPOSIUM_MAX_HTML_BYTES } from "@/symposium/constants";
+import { consumeOpenArtifactsAgentHandoff } from "@/openArtifacts/openArtifactsAgentHandoff";
+import { OPENARTIFACTS_MAX_HTML_BYTES } from "@/openArtifacts/constants";
 
-const STAGED_PATH = ".symposium/handoffs/review.html";
+const STAGED_PATH = ".openartifacts/handoffs/review.html";
 
-describe("symposiumAgentHandoff", () => {
+describe("openArtifactsAgentHandoff", () => {
   let vaultRoot: string;
 
   beforeEach(async () => {
-    vaultRoot = await mkdtemp(path.join(tmpdir(), "symposium-handoff-"));
-    await mkdir(path.join(vaultRoot, ".symposium", "handoffs"), { recursive: true });
+    vaultRoot = await mkdtemp(path.join(tmpdir(), "openartifacts-handoff-"));
+    await mkdir(path.join(vaultRoot, ".openartifacts", "handoffs"), { recursive: true });
   });
 
   afterEach(async () => {
     await rm(vaultRoot, { recursive: true, force: true });
   });
 
-  describe("consumeSymposiumAgentHandoff()", () => {
+  describe("consumeOpenArtifactsAgentHandoff()", () => {
     it("wraps exact UTF-8 bytes in a verifiable sandboxed browser preview", async () => {
       const html = '\uFEFF<!doctype html><p data-label="A & B">Résumé</p>\n';
       const absolutePath = path.join(vaultRoot, ...STAGED_PATH.split("/"));
       await writeFile(absolutePath, new TextEncoder().encode(html));
 
-      const handoff = await consumeSymposiumAgentHandoff(vaultRoot, STAGED_PATH);
+      const handoff = await consumeOpenArtifactsAgentHandoff(vaultRoot, STAGED_PATH);
 
       expect(Object.isFrozen(handoff)).toBe(true);
       expect(handoff.html).toBe(html);
@@ -68,8 +68,8 @@ describe("symposiumAgentHandoff", () => {
       const absolutePath = path.join(vaultRoot, ...STAGED_PATH.split("/"));
       await writeFile(absolutePath, Uint8Array.from([0xff, 0xfe, 0x3c, 0x00]));
 
-      await expect(consumeSymposiumAgentHandoff(vaultRoot, STAGED_PATH)).rejects.toThrow(
-        "Staged Symposium HTML must be valid UTF-8."
+      await expect(consumeOpenArtifactsAgentHandoff(vaultRoot, STAGED_PATH)).rejects.toThrow(
+        "Staged OpenArtifacts HTML must be valid UTF-8."
       );
       await expect(readFile(absolutePath)).rejects.toMatchObject({ code: "ENOENT" });
     });
@@ -79,23 +79,23 @@ describe("symposiumAgentHandoff", () => {
       const rejected = '<!doctype html><script></script><img src="https://example.com/pixel">';
       await writeFile(absolutePath, rejected, "utf8");
 
-      await expect(consumeSymposiumAgentHandoff(vaultRoot, STAGED_PATH)).rejects.toThrow(
+      await expect(consumeOpenArtifactsAgentHandoff(vaultRoot, STAGED_PATH)).rejects.toThrow(
         `remove unsupported <script>; embed or remove "src" on <img>. Edit this staged file and retry once: ${STAGED_PATH}`
       );
       await expect(readFile(absolutePath, "utf8")).resolves.toBe(rejected);
 
       await writeFile(absolutePath, "<!doctype html><p>Corrected</p>", "utf8");
-      const handoff = await consumeSymposiumAgentHandoff(vaultRoot, STAGED_PATH);
+      const handoff = await consumeOpenArtifactsAgentHandoff(vaultRoot, STAGED_PATH);
       await expect(readFile(absolutePath)).rejects.toMatchObject({ code: "ENOENT" });
       await handoff.cleanup();
     });
 
     it("rejects an oversized artifact before reading and still removes it", async () => {
       const absolutePath = path.join(vaultRoot, ...STAGED_PATH.split("/"));
-      await writeFile(absolutePath, new Uint8Array(SYMPOSIUM_MAX_HTML_BYTES + 1).fill(0x61));
+      await writeFile(absolutePath, new Uint8Array(OPENARTIFACTS_MAX_HTML_BYTES + 1).fill(0x61));
 
-      await expect(consumeSymposiumAgentHandoff(vaultRoot, STAGED_PATH)).rejects.toThrow(
-        `Symposium HTML is ${SYMPOSIUM_MAX_HTML_BYTES + 1} bytes; the limit is ${SYMPOSIUM_MAX_HTML_BYTES} bytes.`
+      await expect(consumeOpenArtifactsAgentHandoff(vaultRoot, STAGED_PATH)).rejects.toThrow(
+        `OpenArtifacts HTML is ${OPENARTIFACTS_MAX_HTML_BYTES + 1} bytes; the limit is ${OPENARTIFACTS_MAX_HTML_BYTES} bytes.`
       );
       await expect(readFile(absolutePath)).rejects.toMatchObject({ code: "ENOENT" });
     });
@@ -106,7 +106,7 @@ describe("symposiumAgentHandoff", () => {
       await writeFile(externalPath, "external bytes", "utf8");
       await symlink(externalPath, stagedPath);
 
-      await expect(consumeSymposiumAgentHandoff(vaultRoot, STAGED_PATH)).rejects.toThrow(
+      await expect(consumeOpenArtifactsAgentHandoff(vaultRoot, STAGED_PATH)).rejects.toThrow(
         "one ordinary .html file inside the vault handoff folder"
       );
       await expect(readFile(stagedPath)).rejects.toMatchObject({ code: "ENOENT" });
@@ -114,7 +114,7 @@ describe("symposiumAgentHandoff", () => {
     });
 
     it("rejects a linked handoff root without changing its target", async () => {
-      const handoffRoot = path.join(vaultRoot, ".symposium", "handoffs");
+      const handoffRoot = path.join(vaultRoot, ".openartifacts", "handoffs");
       const externalRoot = path.join(vaultRoot, "external-handoffs");
       const externalPath = path.join(externalRoot, "review.html");
       await rm(handoffRoot, { recursive: true });
@@ -122,7 +122,7 @@ describe("symposiumAgentHandoff", () => {
       await writeFile(externalPath, "external bytes", "utf8");
       await symlink(externalRoot, handoffRoot);
 
-      await expect(consumeSymposiumAgentHandoff(vaultRoot, STAGED_PATH)).rejects.toThrow(
+      await expect(consumeOpenArtifactsAgentHandoff(vaultRoot, STAGED_PATH)).rejects.toThrow(
         "ordinary directory inside the current vault"
       );
       await expect(readFile(externalPath, "utf8")).resolves.toBe("external bytes");
@@ -130,7 +130,7 @@ describe("symposiumAgentHandoff", () => {
 
     it("rejects paths that do not name one direct HTML handoff", async () => {
       await expect(
-        consumeSymposiumAgentHandoff(vaultRoot, ".symposium/handoffs/nested/review.html")
+        consumeOpenArtifactsAgentHandoff(vaultRoot, ".openartifacts/handoffs/nested/review.html")
       ).rejects.toThrow("one ordinary .html file inside the vault handoff folder");
     });
   });

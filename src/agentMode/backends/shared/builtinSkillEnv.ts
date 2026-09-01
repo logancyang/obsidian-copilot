@@ -9,7 +9,7 @@ import {
   SELF_HOST_WEB_SEARCH_TOKEN_ENV,
   SELF_HOST_WEB_SEARCH_URL_ENV,
 } from "@/agentMode/skills/builtin/builtinSkills";
-import { SYMPOSIUM_WORKSPACE_ROOT_ENV } from "@/symposium/constants";
+import { OPENARTIFACTS_WORKSPACE_ROOT_ENV } from "@/openArtifacts/constants";
 import {
   COPILOT_OBSIDIAN_CLI_ENV,
   resolveObsidianCliPath,
@@ -45,7 +45,7 @@ const EMPTY_MANAGED_ENV: Readonly<Record<string, string>> = Object.freeze({});
  *   base URL + user id + client version, only for an active Plus subscriber with
  *   a key on file. Absent otherwise, so the relay skills exit with the upgrade
  *   prompt.
- * - **Host review** (`SYMPOSIUM_WORKSPACE_ROOT`): owning workspace used to
+ * - **Host review** (`OPENARTIFACTS_WORKSPACE_ROOT_ENV`): owning workspace used to
  *   stage HTML and derive the wrapper's explicit Obsidian CLI vault target.
  * - **Self-host web search**: a mode marker and per-lifecycle loopback channel
  *   route the managed skill back into Obsidian without exposing provider credentials.
@@ -70,7 +70,7 @@ export async function buildBuiltinSkillEnv(
   const settings = getSettings();
   const env: Record<string, string> = {};
 
-  if (workspaceRootAbs) env[SYMPOSIUM_WORKSPACE_ROOT_ENV] = workspaceRootAbs;
+  if (workspaceRootAbs) env[OPENARTIFACTS_WORKSPACE_ROOT_ENV] = workspaceRootAbs;
 
   const obsidianCliPath = resolveObsidianCliPath({
     platform: process.platform,

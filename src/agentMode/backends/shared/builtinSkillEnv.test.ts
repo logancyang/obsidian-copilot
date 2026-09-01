@@ -14,7 +14,7 @@ import {
   SELF_HOST_WEB_SEARCH_TOKEN_ENV,
   SELF_HOST_WEB_SEARCH_URL_ENV,
 } from "@/agentMode/skills/builtin/builtinSkills";
-import { SYMPOSIUM_WORKSPACE_ROOT_ENV } from "@/symposium/constants";
+import { OPENARTIFACTS_WORKSPACE_ROOT_ENV } from "@/openArtifacts/constants";
 import {
   COPILOT_OBSIDIAN_CLI_ENV,
   resolveObsidianCliPath,
@@ -57,7 +57,7 @@ describe("builtinSkillEnv", () => {
         [PLUS_ENV.userId]: "user-123",
         [PLUS_ENV.clientVersion]: "4.0.0",
       });
-      expect(env).not.toHaveProperty("SYMPOSIUM_TOKEN");
+      expect(env).not.toHaveProperty("OPENARTIFACTS_TOKEN");
     });
 
     it("returns empty when the user is not a Plus subscriber", async () => {
@@ -76,11 +76,15 @@ describe("builtinSkillEnv", () => {
       expect(await buildBuiltinSkillEnv()).toEqual({ MIYO_URL: "http://192.168.1.10:8742" });
     });
 
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/337 keeps the existing raw workspace key for retained managed wrappers", () => {
+      expect(OPENARTIFACTS_WORKSPACE_ROOT_ENV).toBe("OPENARTIFACTS_WORKSPACE_ROOT");
+    });
+
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/121 defaults scope closed when the active vault identity is unavailable", async () => {
       mockGetSettings.mockReturnValue({ isPaidUser: false });
 
       expect(await buildBuiltinSkillEnv("", "/vault")).toEqual({
-        [SYMPOSIUM_WORKSPACE_ROOT_ENV]: "/vault",
+        [OPENARTIFACTS_WORKSPACE_ROOT_ENV]: "/vault",
         [MIYO_SEARCH_SCOPE_ENV]: "current",
       });
     });
@@ -89,7 +93,7 @@ describe("builtinSkillEnv", () => {
       mockGetSettings.mockReturnValue({ isPaidUser: false, miyoSearchAll: false });
 
       expect(await buildBuiltinSkillEnv("", "/vault/root", "root")).toEqual({
-        [SYMPOSIUM_WORKSPACE_ROOT_ENV]: "/vault/root",
+        [OPENARTIFACTS_WORKSPACE_ROOT_ENV]: "/vault/root",
         [MIYO_SEARCH_SCOPE_ENV]: "current",
         [MIYO_SEARCH_FOLDER_ENV]: "root",
       });
@@ -99,7 +103,7 @@ describe("builtinSkillEnv", () => {
       mockGetSettings.mockReturnValue({ isPaidUser: false, miyoSearchAll: true });
 
       expect(await buildBuiltinSkillEnv("", "/vault/root", "root")).toEqual({
-        [SYMPOSIUM_WORKSPACE_ROOT_ENV]: "/vault/root",
+        [OPENARTIFACTS_WORKSPACE_ROOT_ENV]: "/vault/root",
         [MIYO_SEARCH_SCOPE_ENV]: "unrestricted",
         [MIYO_SEARCH_FOLDER_ENV]: "root",
       });
@@ -127,7 +131,7 @@ describe("builtinSkillEnv", () => {
           token: "session-token",
         })
       ).toEqual({
-        [SYMPOSIUM_WORKSPACE_ROOT_ENV]: "/vault/root",
+        [OPENARTIFACTS_WORKSPACE_ROOT_ENV]: "/vault/root",
         [MIYO_SEARCH_SCOPE_ENV]: "current",
         [MIYO_SEARCH_FOLDER_ENV]: "root",
         [SELF_HOST_WEB_SEARCH_ENV]: "1",

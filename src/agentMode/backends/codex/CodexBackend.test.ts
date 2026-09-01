@@ -6,7 +6,7 @@ import {
   updateCachedSystemPrompts,
 } from "@/system-prompts/state";
 import type { UserSystemPrompt } from "@/system-prompts/type";
-import { SYMPOSIUM_WORKSPACE_ROOT_ENV } from "@/symposium/constants";
+import { OPENARTIFACTS_WORKSPACE_ROOT_ENV } from "@/openArtifacts/constants";
 import { buildAgentSystemPrompt } from "@/agentMode/backends/shared/agentSystemPrompt";
 import {
   MIYO_SEARCH_FOLDER_ENV,
@@ -89,7 +89,7 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
     const desc = await backend.buildSpawnDescriptor({ vaultBasePath: "/vault" });
     expect(desc.command).toBe("/npm/lib/node_modules/@agentclientprotocol/codex-acp/dist/index.js");
     expect(desc.args).toEqual([]);
-    expect(desc.env[SYMPOSIUM_WORKSPACE_ROOT_ENV]).toBe("/vault");
+    expect(desc.env[OPENARTIFACTS_WORKSPACE_ROOT_ENV]).toBe("/vault");
 
     const config = JSON.parse(desc.env.CODEX_CONFIG as string);
     expect(config.developer_instructions).toContain("Obsidian Copilot");

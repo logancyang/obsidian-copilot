@@ -1,4 +1,4 @@
-import { OBSIDIAN_PUBLISH_BASELINE } from "@/symposium/obsidianPublishBaseline";
+import { OBSIDIAN_PUBLISH_BASELINE } from "@/openArtifacts/obsidianPublishBaseline";
 
 describe("obsidianPublishBaseline", () => {
   describe("OBSIDIAN_PUBLISH_BASELINE", () => {
@@ -12,7 +12,7 @@ describe("obsidianPublishBaseline", () => {
       expect(OBSIDIAN_PUBLISH_BASELINE).toContain(".markdown-rendered .canvas-minimap rect");
       expect(OBSIDIAN_PUBLISH_BASELINE).toContain("fill: var(--background-primary)");
       expect(OBSIDIAN_PUBLISH_BASELINE).toContain("stroke: var(--text-muted)");
-      expect(OBSIDIAN_PUBLISH_BASELINE).toContain(".symposium-missing-asset");
+      expect(OBSIDIAN_PUBLISH_BASELINE).toContain(".openartifacts-missing-asset");
     });
 
     it("defines a responsive neutral page without depending on Obsidian theme styles", () => {

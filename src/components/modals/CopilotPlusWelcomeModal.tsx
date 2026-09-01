@@ -21,8 +21,8 @@ export function CopilotPlusWelcomeModalContent({
       <div>
         <p>
           Thanks for purchasing! Your license includes Copilot exclusive models, cross-agent skills,
-          access to the <a href="https://symposium.md">symposium.md</a> doc sharing service, and
-          much more!
+          access to the <a href="https://openartifacts.ai">OpenArtifacts</a> doc sharing service,
+          and much more!
         </p>
         <p>
           Would you like to make <b className="tw-text-accent">{DEFAULT_COPILOT_PLUS_CHAT_MODEL}</b>{" "}

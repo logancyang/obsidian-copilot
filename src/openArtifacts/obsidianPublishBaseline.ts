@@ -137,7 +137,7 @@ body {
   list-style: none;
 }
 
-.symposium-task-marker {
+.openartifacts-task-marker {
   display: inline-block;
   width: 1.4em;
   margin-left: -1.4em;
@@ -197,7 +197,7 @@ body {
   overflow-x: auto;
 }
 
-.symposium-missing-asset {
+.openartifacts-missing-asset {
   display: inline-block;
   padding: 0.2rem 0.45rem;
   border: 1px dashed var(--background-modifier-border);

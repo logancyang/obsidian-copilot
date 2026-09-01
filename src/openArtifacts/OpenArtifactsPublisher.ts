@@ -1,74 +1,85 @@
 import {
-  SymposiumModal,
-  type SymposiumDocumentReview,
-  type SymposiumFailureResult,
-  type SymposiumModalOptions,
-  type SymposiumModalResult,
-  type SymposiumPersistenceResult,
-} from "@/components/modals/SymposiumModal";
+  OpenArtifactsModal,
+  type OpenArtifactsDocumentReview,
+  type OpenArtifactsFailureResult,
+  type OpenArtifactsModalOptions,
+  type OpenArtifactsModalResult,
+  type OpenArtifactsPersistenceResult,
+} from "@/components/modals/OpenArtifactsModal";
 import { logWarn } from "@/logger";
 import { getSettings } from "@/settings/model";
-import { SymposiumClient, SymposiumClientError } from "@/symposium/SymposiumClient";
-import type { SymposiumAgentHandoff } from "@/symposium/symposiumAgentHandoff";
+import { OpenArtifactsClient, OpenArtifactsClientError } from "@/openArtifacts/OpenArtifactsClient";
+import type { OpenArtifactsAgentHandoff } from "@/openArtifacts/openArtifactsAgentHandoff";
 import {
-  SymposiumFrontmatterParseError,
-  getSymposiumDocId,
-  removeSymposiumDocId,
-  saveSymposiumLink,
-  SymposiumPropertyConflictError,
-} from "@/symposium/symposiumFrontmatter";
+  OpenArtifactsFrontmatterParseError,
+  getOpenArtifactsDocId,
+  removeOpenArtifactsDocId,
+  saveOpenArtifactsLink,
+  OpenArtifactsPropertyConflictError,
+} from "@/openArtifacts/openArtifactsFrontmatter";
 import {
-  buildSymposiumDocument,
-  createSymposiumReviewDocument,
-  SymposiumDocumentTooLargeError,
-  SymposiumDocumentUnsafeError,
-} from "@/symposium/symposiumDocument";
-import { appendSymposiumLedgerEntry, type SymposiumLedgerEntry } from "@/symposium/symposiumLedger";
-import type { SymposiumAction, SymposiumDocument, SymposiumReceipt } from "@/symposium/types";
+  buildOpenArtifactsDocument,
+  createOpenArtifactsReviewDocument,
+  OpenArtifactsDocumentTooLargeError,
+  OpenArtifactsDocumentUnsafeError,
+} from "@/openArtifacts/openArtifactsDocument";
+import {
+  appendOpenArtifactsLedgerEntry,
+  type OpenArtifactsLedgerEntry,
+} from "@/openArtifacts/openArtifactsLedger";
+import type {
+  OpenArtifactsAction,
+  OpenArtifactsDocument,
+  OpenArtifactsReceipt,
+} from "@/openArtifacts/types";
 import { sha256 } from "@/utils/hash";
 import { App, Component, FileSystemAdapter, TFile } from "obsidian";
 
-interface SymposiumClientPort {
-  publish(document: SymposiumDocument, licenseKey: string): Promise<SymposiumReceipt>;
-  update(docId: string, document: SymposiumDocument, licenseKey: string): Promise<SymposiumReceipt>;
+interface OpenArtifactsClientPort {
+  publish(document: OpenArtifactsDocument, licenseKey: string): Promise<OpenArtifactsReceipt>;
+  update(
+    docId: string,
+    document: OpenArtifactsDocument,
+    licenseKey: string
+  ): Promise<OpenArtifactsReceipt>;
   delete(docId: string, licenseKey: string): Promise<void>;
 }
 
-interface SymposiumModalPort {
+interface OpenArtifactsModalPort {
   open(): void;
   close(): void;
 }
 
-interface SymposiumPublisherDependencies {
-  client?: SymposiumClientPort;
+interface OpenArtifactsPublisherDependencies {
+  client?: OpenArtifactsClientPort;
   loadLicenseKey?: () => Promise<string>;
-  buildDocument?: (file: TFile, ownerDocument: Document) => Promise<SymposiumDocument>;
-  consumeAgentHandoff?: (stagedHtmlPath: string) => Promise<SymposiumAgentHandoff>;
-  createModal?: (options: SymposiumModalOptions) => SymposiumModalPort;
-  recordLedger?: (entry: SymposiumLedgerEntry) => Promise<void>;
+  buildDocument?: (file: TFile, ownerDocument: Document) => Promise<OpenArtifactsDocument>;
+  consumeAgentHandoff?: (stagedHtmlPath: string) => Promise<OpenArtifactsAgentHandoff>;
+  createModal?: (options: OpenArtifactsModalOptions) => OpenArtifactsModalPort;
+  recordLedger?: (entry: OpenArtifactsLedgerEntry) => Promise<void>;
 }
 
 /** Result returned to the agent wrapper after the host-owned review closes. */
-export type AgentSymposiumReviewOutcome =
+export type AgentOpenArtifactsReviewOutcome =
   | { status: "cancelled" | "regenerate" }
   | { status: "deleted" }
   | { status: "published" | "updated"; url: string; message?: string }
   | { status: "failed"; message: string };
 
 /** Narrow runtime surface exposed to agent-controlled Obsidian CLI evaluations. */
-export interface SymposiumAgentBridge {
-  readonly reviewAgentManage: (sourcePathInput: string) => Promise<AgentSymposiumReviewOutcome>;
+export interface OpenArtifactsAgentBridge {
+  readonly reviewAgentManage: (sourcePathInput: string) => Promise<AgentOpenArtifactsReviewOutcome>;
   readonly reviewAgentPublish: (
     sourcePathInput: string,
     stagedHtmlPathInput: string
-  ) => Promise<AgentSymposiumReviewOutcome>;
+  ) => Promise<AgentOpenArtifactsReviewOutcome>;
 }
 
 const MISSING_LICENSE_MESSAGE =
-  "Add a Copilot Plus license key in Settings before publishing with Symposium.";
-const BUSY_MESSAGE = "A Symposium action is already in progress for this note.";
+  "Add a Copilot Plus license key in Settings before publishing with OpenArtifacts.";
+const BUSY_MESSAGE = "An OpenArtifacts action is already in progress for this note.";
 const INVALID_HANDOFF_PATH_MESSAGE =
-  "Symposium review paths must be relative paths inside the current vault.";
+  "OpenArtifacts review paths must be relative paths inside the current vault.";
 
 /**
  * Normalizes one portable vault-relative path without allowing it to escape the vault.
@@ -104,7 +115,7 @@ function normalizeWorkspaceRelativePath(value: string): string | null {
  *
  * @param message The user-safe host failure message.
  */
-function agentReviewFailure(message: string): AgentSymposiumReviewOutcome {
+function agentReviewFailure(message: string): AgentOpenArtifactsReviewOutcome {
   return { status: "failed", message };
 }
 
@@ -113,7 +124,9 @@ function agentReviewFailure(message: string): AgentSymposiumReviewOutcome {
  *
  * @param result The completed host publication or persistence result.
  */
-function agentOutcomeFromModalResult(result: SymposiumModalResult): AgentSymposiumReviewOutcome {
+function agentOutcomeFromModalResult(
+  result: OpenArtifactsModalResult
+): AgentOpenArtifactsReviewOutcome {
   if (result.kind === "success" && result.action === "delete") {
     return { status: "deleted" };
   }
@@ -132,7 +145,7 @@ function agentOutcomeFromModalResult(result: SymposiumModalResult): AgentSymposi
   if (result.kind === "failure" || result.kind === "persistence") {
     return agentReviewFailure(result.message);
   }
-  return agentReviewFailure("Copilot could not complete this Symposium action.");
+  return agentReviewFailure("Copilot could not complete this OpenArtifacts action.");
 }
 
 async function loadConfiguredLicenseKey(): Promise<string> {
@@ -143,20 +156,20 @@ async function buildDocumentWithComponent(
   app: App,
   file: TFile,
   ownerDocument: Document
-): Promise<SymposiumDocument> {
+): Promise<OpenArtifactsDocument> {
   const component = new Component();
   component.load();
   try {
-    return await buildSymposiumDocument(app, file, component, ownerDocument);
+    return await buildOpenArtifactsDocument(app, file, component, ownerDocument);
   } finally {
     component.unload();
   }
 }
 
-function operationFailure(action: SymposiumAction, error: unknown): SymposiumFailureResult {
+function operationFailure(action: OpenArtifactsAction, error: unknown): OpenArtifactsFailureResult {
   if (
-    error instanceof SymposiumFrontmatterParseError ||
-    error instanceof SymposiumPropertyConflictError
+    error instanceof OpenArtifactsFrontmatterParseError ||
+    error instanceof OpenArtifactsPropertyConflictError
   ) {
     return {
       kind: "failure",
@@ -167,8 +180,8 @@ function operationFailure(action: SymposiumAction, error: unknown): SymposiumFai
     };
   }
   if (
-    error instanceof SymposiumDocumentTooLargeError ||
-    error instanceof SymposiumDocumentUnsafeError
+    error instanceof OpenArtifactsDocumentTooLargeError ||
+    error instanceof OpenArtifactsDocumentUnsafeError
   ) {
     return {
       kind: "failure",
@@ -178,7 +191,7 @@ function operationFailure(action: SymposiumAction, error: unknown): SymposiumFai
       retryable: false,
     };
   }
-  if (error instanceof SymposiumClientError) {
+  if (error instanceof OpenArtifactsClientError) {
     return {
       kind: "failure",
       action,
@@ -191,24 +204,24 @@ function operationFailure(action: SymposiumAction, error: unknown): SymposiumFai
   return {
     kind: "failure",
     action,
-    message: "Copilot could not complete this Symposium action.",
+    message: "Copilot could not complete this OpenArtifacts action.",
     accessNotice: false,
     retryable: true,
   };
 }
 
-function identityChangedFailure(action: SymposiumAction): SymposiumFailureResult {
+function identityChangedFailure(action: OpenArtifactsAction): OpenArtifactsFailureResult {
   return {
     kind: "failure",
     action,
     message:
-      "This note's Symposium identity changed. Close and reopen this dialog before trying again.",
+      "This note's OpenArtifacts identity changed. Close and reopen this dialog before trying again.",
     accessNotice: false,
     retryable: false,
   };
 }
 
-function previewChangedFailure(action: SymposiumAction): SymposiumFailureResult {
+function previewChangedFailure(action: OpenArtifactsAction): OpenArtifactsFailureResult {
   return {
     kind: "failure",
     action,
@@ -219,34 +232,36 @@ function previewChangedFailure(action: SymposiumAction): SymposiumFailureResult 
 }
 
 /**
- * Coordinates one note's confirmed Symposium action, remote request, and local identity update.
+ * Coordinates one note's confirmed OpenArtifacts action, remote request, and local identity update.
  *
  * The publisher owns per-file concurrency and partial-success recovery. It does not decide
- * Symposium entitlement or retain decrypted credentials beyond an individual request.
+ * OpenArtifacts entitlement or retain decrypted credentials beyond an individual request.
  */
-export class SymposiumPublisher {
-  private readonly client: SymposiumClientPort;
+export class OpenArtifactsPublisher {
+  private readonly client: OpenArtifactsClientPort;
   private readonly loadLicenseKey: () => Promise<string>;
   private readonly buildDocument: (
     file: TFile,
     ownerDocument: Document
-  ) => Promise<SymposiumDocument>;
-  private readonly consumeAgentHandoff: (stagedHtmlPath: string) => Promise<SymposiumAgentHandoff>;
-  private readonly createModal: (options: SymposiumModalOptions) => SymposiumModalPort;
-  private readonly recordLedger: (entry: SymposiumLedgerEntry) => Promise<void>;
+  ) => Promise<OpenArtifactsDocument>;
+  private readonly consumeAgentHandoff: (
+    stagedHtmlPath: string
+  ) => Promise<OpenArtifactsAgentHandoff>;
+  private readonly createModal: (options: OpenArtifactsModalOptions) => OpenArtifactsModalPort;
+  private readonly recordLedger: (entry: OpenArtifactsLedgerEntry) => Promise<void>;
   private readonly inFlightFiles = new Set<TFile>();
   private readonly blockedPublishResults = new Map<
     TFile,
-    SymposiumFailureResult | SymposiumPersistenceResult
+    OpenArtifactsFailureResult | OpenArtifactsPersistenceResult
   >();
-  private readonly modals = new Set<SymposiumModalPort>();
+  private readonly modals = new Set<OpenArtifactsModalPort>();
   private disposed = false;
 
   constructor(
     private readonly app: App,
-    dependencies: SymposiumPublisherDependencies = {}
+    dependencies: OpenArtifactsPublisherDependencies = {}
   ) {
-    this.client = dependencies.client ?? new SymposiumClient();
+    this.client = dependencies.client ?? new OpenArtifactsClient();
     this.loadLicenseKey = dependencies.loadLicenseKey ?? loadConfiguredLicenseKey;
     this.buildDocument =
       dependencies.buildDocument ??
@@ -255,9 +270,10 @@ export class SymposiumPublisher {
       dependencies.consumeAgentHandoff ??
       ((stagedHtmlPath) => this.consumeDesktopAgentHandoff(stagedHtmlPath));
     this.createModal =
-      dependencies.createModal ?? ((options) => new SymposiumModal(this.app, options));
+      dependencies.createModal ?? ((options) => new OpenArtifactsModal(this.app, options));
     this.recordLedger =
-      dependencies.recordLedger ?? ((entry) => appendSymposiumLedgerEntry(this.app.vault, entry));
+      dependencies.recordLedger ??
+      ((entry) => appendOpenArtifactsLedgerEntry(this.app.vault, entry));
   }
 
   /**
@@ -270,15 +286,15 @@ export class SymposiumPublisher {
       return;
     }
     let docId: string | null = null;
-    let initialResult: SymposiumFailureResult | SymposiumPersistenceResult | undefined =
+    let initialResult: OpenArtifactsFailureResult | OpenArtifactsPersistenceResult | undefined =
       this.blockedPublishResults.get(file);
     if (!initialResult) {
       try {
-        docId = await getSymposiumDocId(this.app, file);
+        docId = await getOpenArtifactsDocId(this.app, file);
       } catch (error) {
         if (
-          !(error instanceof SymposiumFrontmatterParseError) &&
-          !(error instanceof SymposiumPropertyConflictError)
+          !(error instanceof OpenArtifactsFrontmatterParseError) &&
+          !(error instanceof OpenArtifactsPropertyConflictError)
         ) {
           throw error;
         }
@@ -289,7 +305,7 @@ export class SymposiumPublisher {
       return;
     }
     const openingResult = initialResult;
-    let modal: SymposiumModalPort;
+    let modal: OpenArtifactsModalPort;
     modal = this.createModal({
       fileName: file.basename,
       docId,
@@ -314,18 +330,18 @@ export class SymposiumPublisher {
    *
    * @param sourcePathInput The Markdown source path relative to the owning vault.
    */
-  async reviewAgentManage(sourcePathInput: string): Promise<AgentSymposiumReviewOutcome> {
+  async reviewAgentManage(sourcePathInput: string): Promise<AgentOpenArtifactsReviewOutcome> {
     const sourcePath = normalizeWorkspaceRelativePath(sourcePathInput);
     if (!sourcePath) {
       return agentReviewFailure(INVALID_HANDOFF_PATH_MESSAGE);
     }
     if (this.disposed) {
-      return agentReviewFailure("Symposium publishing is no longer available.");
+      return agentReviewFailure("OpenArtifacts publishing is no longer available.");
     }
 
     const sourceFile = this.app.vault.getAbstractFileByPath(sourcePath);
     if (!(sourceFile instanceof TFile) || sourceFile.extension !== "md") {
-      return agentReviewFailure("The Symposium source must be an existing Markdown note.");
+      return agentReviewFailure("The OpenArtifacts source must be an existing Markdown note.");
     }
     const blockedResult = this.blockedPublishResults.get(sourceFile);
     if (blockedResult) {
@@ -334,12 +350,12 @@ export class SymposiumPublisher {
 
     let docId: string | null;
     try {
-      docId = await getSymposiumDocId(this.app, sourceFile);
+      docId = await getOpenArtifactsDocId(this.app, sourceFile);
     } catch (error) {
       return agentReviewFailure(operationFailure("update", error).message);
     }
     if (!docId) {
-      return agentReviewFailure("This note does not have a valid Symposium link to manage.");
+      return agentReviewFailure("This note does not have a valid OpenArtifacts link to manage.");
     }
     return this.openAgentManage(sourceFile, docId);
   }
@@ -354,19 +370,19 @@ export class SymposiumPublisher {
   async reviewAgentPublish(
     sourcePathInput: string,
     stagedHtmlPathInput: string
-  ): Promise<AgentSymposiumReviewOutcome> {
+  ): Promise<AgentOpenArtifactsReviewOutcome> {
     const stagedHtmlPath = normalizeWorkspaceRelativePath(stagedHtmlPathInput);
     if (!stagedHtmlPath) {
       return agentReviewFailure(INVALID_HANDOFF_PATH_MESSAGE);
     }
-    let handoff: SymposiumAgentHandoff;
+    let handoff: OpenArtifactsAgentHandoff;
     try {
       handoff = await this.consumeAgentHandoff(stagedHtmlPath);
     } catch (error) {
       return agentReviewFailure(
-        error instanceof Error && error.name === "SymposiumAgentHandoffError"
+        error instanceof Error && error.name === "OpenArtifactsAgentHandoffError"
           ? error.message
-          : "Copilot could not read the staged Symposium HTML."
+          : "Copilot could not read the staged OpenArtifacts HTML."
       );
     }
 
@@ -377,29 +393,29 @@ export class SymposiumPublisher {
       }
 
       if (this.disposed) {
-        return agentReviewFailure("Symposium publishing is no longer available.");
+        return agentReviewFailure("OpenArtifacts publishing is no longer available.");
       }
 
       const sourceFile = this.app.vault.getAbstractFileByPath(sourcePath);
       if (!(sourceFile instanceof TFile) || sourceFile.extension !== "md") {
-        return agentReviewFailure("The Symposium source must be an existing Markdown note.");
+        return agentReviewFailure("The OpenArtifacts source must be an existing Markdown note.");
       }
       const blockedResult = this.blockedPublishResults.get(sourceFile);
       if (blockedResult) {
         return agentReviewFailure(blockedResult.message);
       }
 
-      let document: SymposiumDocument;
+      let document: OpenArtifactsDocument;
       let docId: string | null = null;
       try {
-        document = createSymposiumReviewDocument(sourceFile.basename, handoff.html);
-        docId = await getSymposiumDocId(this.app, sourceFile);
+        document = createOpenArtifactsReviewDocument(sourceFile.basename, handoff.html);
+        docId = await getOpenArtifactsDocId(this.app, sourceFile);
       } catch (error) {
-        const action: SymposiumAction = docId ? "update" : "publish";
+        const action: OpenArtifactsAction = docId ? "update" : "publish";
         return agentReviewFailure(operationFailure(action, error).message);
       }
 
-      const review: SymposiumDocumentReview = Object.freeze({
+      const review: OpenArtifactsDocumentReview = Object.freeze({
         sourcePath,
         digest: sha256(document.html),
         payload: document,
@@ -411,7 +427,7 @@ export class SymposiumPublisher {
       try {
         await handoff.cleanup();
       } catch (error) {
-        logWarn("Could not remove the temporary Symposium browser preview.", error);
+        logWarn("Could not remove the temporary OpenArtifacts browser preview.", error);
       }
     }
   }
@@ -434,7 +450,7 @@ export class SymposiumPublisher {
   private getDesktopVaultRoot(): string {
     const adapter = this.app.vault.adapter;
     if (!(adapter instanceof FileSystemAdapter)) {
-      throw new Error("Symposium agent review requires a desktop vault.");
+      throw new Error("OpenArtifacts agent review requires a desktop vault.");
     }
     return adapter.getBasePath();
   }
@@ -444,9 +460,12 @@ export class SymposiumPublisher {
    *
    * @param stagedHtmlPath The validated vault-relative staging path.
    */
-  private async consumeDesktopAgentHandoff(stagedHtmlPath: string): Promise<SymposiumAgentHandoff> {
-    const { consumeSymposiumAgentHandoff } = await import("@/symposium/symposiumAgentHandoff");
-    return consumeSymposiumAgentHandoff(this.getDesktopVaultRoot(), stagedHtmlPath);
+  private async consumeDesktopAgentHandoff(
+    stagedHtmlPath: string
+  ): Promise<OpenArtifactsAgentHandoff> {
+    const { consumeOpenArtifactsAgentHandoff } =
+      await import("@/openArtifacts/openArtifactsAgentHandoff");
+    return consumeOpenArtifactsAgentHandoff(this.getDesktopVaultRoot(), stagedHtmlPath);
   }
 
   private isAgentSourceCurrent(file: TFile, sourcePath: string): boolean {
@@ -456,17 +475,17 @@ export class SymposiumPublisher {
   private openAgentManage(
     file: TFile,
     expectedDocId: string
-  ): Promise<AgentSymposiumReviewOutcome> {
+  ): Promise<AgentOpenArtifactsReviewOutcome> {
     return new Promise((resolve) => {
       let pending = false;
       let settled = false;
-      const settle = (outcome: AgentSymposiumReviewOutcome): void => {
+      const settle = (outcome: AgentOpenArtifactsReviewOutcome): void => {
         if (settled) return;
         settled = true;
         resolve(outcome);
       };
 
-      let modal: SymposiumModalPort;
+      let modal: OpenArtifactsModalPort;
       modal = this.createModal({
         fileName: file.basename,
         docId: expectedDocId,
@@ -496,7 +515,7 @@ export class SymposiumPublisher {
         modal.open();
       } catch {
         this.modals.delete(modal);
-        settle(agentReviewFailure("Copilot could not open Symposium management."));
+        settle(agentReviewFailure("Copilot could not open OpenArtifacts management."));
       }
     });
   }
@@ -512,19 +531,19 @@ export class SymposiumPublisher {
   private openAgentReview(
     file: TFile,
     expectedDocId: string | null,
-    review: SymposiumDocumentReview,
+    review: OpenArtifactsDocumentReview,
     isPreviewCurrent: () => Promise<boolean>
-  ): Promise<AgentSymposiumReviewOutcome> {
+  ): Promise<AgentOpenArtifactsReviewOutcome> {
     return new Promise((resolve) => {
       let pending = false;
       let settled = false;
-      const settle = (outcome: AgentSymposiumReviewOutcome): void => {
+      const settle = (outcome: AgentOpenArtifactsReviewOutcome): void => {
         if (settled) return;
         settled = true;
         resolve(outcome);
       };
 
-      let modal: SymposiumModalPort;
+      let modal: OpenArtifactsModalPort;
       modal = this.createModal({
         fileName: file.basename,
         docId: expectedDocId,
@@ -563,7 +582,7 @@ export class SymposiumPublisher {
         modal.open();
       } catch {
         this.modals.delete(modal);
-        settle(agentReviewFailure("Copilot could not open the Symposium review."));
+        settle(agentReviewFailure("Copilot could not open the OpenArtifacts review."));
       }
     });
   }
@@ -571,12 +590,12 @@ export class SymposiumPublisher {
   private async execute(
     file: TFile,
     expectedDocId: string | null,
-    action: SymposiumAction,
+    action: OpenArtifactsAction,
     ownerDocument: Document,
-    review?: SymposiumDocumentReview,
+    review?: OpenArtifactsDocumentReview,
     isPreviewCurrent?: () => Promise<boolean>
-  ): Promise<SymposiumModalResult> {
-    const expectedAction: SymposiumAction = expectedDocId ? "update" : "publish";
+  ): Promise<OpenArtifactsModalResult> {
+    const expectedAction: OpenArtifactsAction = expectedDocId ? "update" : "publish";
     const deleteRequested = !review && action === "delete";
     const lockAction = deleteRequested ? "delete" : expectedAction;
     return this.withFileLock(file, lockAction, async () => {
@@ -584,7 +603,7 @@ export class SymposiumPublisher {
         return {
           kind: "failure",
           action: lockAction,
-          message: "Symposium publishing is no longer available.",
+          message: "OpenArtifacts publishing is no longer available.",
           accessNotice: false,
           retryable: false,
         };
@@ -606,14 +625,14 @@ export class SymposiumPublisher {
       }
       let docId: string | null;
       try {
-        docId = await getSymposiumDocId(this.app, file);
+        docId = await getOpenArtifactsDocId(this.app, file);
       } catch (error) {
         return operationFailure(lockAction, error);
       }
       if (docId !== expectedDocId) {
         return identityChangedFailure(lockAction);
       }
-      const resolvedAction: SymposiumAction = deleteRequested
+      const resolvedAction: OpenArtifactsAction = deleteRequested
         ? "delete"
         : docId
           ? "update"
@@ -639,7 +658,7 @@ export class SymposiumPublisher {
         return {
           kind: "failure",
           action: resolvedAction,
-          message: "This note no longer has a valid Symposium link.",
+          message: "This note no longer has a valid OpenArtifacts link.",
           accessNotice: false,
           retryable: false,
         };
@@ -647,7 +666,7 @@ export class SymposiumPublisher {
 
       try {
         if (resolvedAction === "delete") {
-          if ((await getSymposiumDocId(this.app, file)) !== docId) {
+          if ((await getOpenArtifactsDocId(this.app, file)) !== docId) {
             return identityChangedFailure(resolvedAction);
           }
           await this.client.delete(docId!, licenseKey);
@@ -664,7 +683,7 @@ export class SymposiumPublisher {
         }
 
         const document = review?.payload ?? (await this.buildDocument(file, ownerDocument));
-        const preRequestDocId = await getSymposiumDocId(this.app, file);
+        const preRequestDocId = await getOpenArtifactsDocId(this.app, file);
         if (
           preRequestDocId !== docId ||
           (review && !this.isAgentSourceCurrent(file, review.sourcePath))
@@ -686,16 +705,16 @@ export class SymposiumPublisher {
         await this.recordPublishedReceipt(file, document, receipt);
         let currentDocId: string | null | undefined;
         try {
-          currentDocId = await getSymposiumDocId(this.app, file);
+          currentDocId = await getOpenArtifactsDocId(this.app, file);
         } catch {
           // Remote success is still partial success when the local identity cannot be verified.
         }
         if (currentDocId !== docId) {
-          const result: SymposiumPersistenceResult = {
+          const result: OpenArtifactsPersistenceResult = {
             kind: "persistence",
             action: "update",
             message:
-              "The original page was updated, but this note’s Symposium identity changed or could not be verified. Its current identity was left unchanged.",
+              "The original page was updated, but this note’s OpenArtifacts identity changed or could not be verified. Its current identity was left unchanged.",
             receipt,
           };
           if (!currentDocId) {
@@ -706,7 +725,7 @@ export class SymposiumPublisher {
         return { kind: "success", action: "update", receipt };
       } catch (error) {
         const failure = operationFailure(resolvedAction, error);
-        if (error instanceof SymposiumClientError && error.code === "ambiguous_publish") {
+        if (error instanceof OpenArtifactsClientError && error.code === "ambiguous_publish") {
           this.blockedPublishResults.set(file, failure);
         }
         return failure;
@@ -716,8 +735,8 @@ export class SymposiumPublisher {
 
   private async recordPublishedReceipt(
     file: TFile,
-    document: SymposiumDocument,
-    receipt: SymposiumReceipt
+    document: OpenArtifactsDocument,
+    receipt: OpenArtifactsReceipt
   ): Promise<void> {
     await this.recordLedgerSafely({
       docId: receipt.docId,
@@ -730,31 +749,31 @@ export class SymposiumPublisher {
     });
   }
 
-  private async recordLedgerSafely(entry: SymposiumLedgerEntry): Promise<void> {
+  private async recordLedgerSafely(entry: OpenArtifactsLedgerEntry): Promise<void> {
     try {
       await this.recordLedger(entry);
     } catch (error) {
-      logWarn("Could not append a Symposium receipt to the recoverable ledger.", error);
+      logWarn("Could not append an OpenArtifacts receipt to the recoverable ledger.", error);
     }
   }
 
   private async savePublishedIdentity(
     file: TFile,
-    receipt: SymposiumReceipt
-  ): Promise<SymposiumModalResult> {
+    receipt: OpenArtifactsReceipt
+  ): Promise<OpenArtifactsModalResult> {
     try {
-      const saved = await saveSymposiumLink(this.app, file, receipt);
+      const saved = await saveOpenArtifactsLink(this.app, file, receipt);
       if (!saved) {
-        const result: SymposiumPersistenceResult = {
+        const result: OpenArtifactsPersistenceResult = {
           kind: "persistence",
           action: "publish",
           message:
-            "The page is public, but this note’s Symposium identity changed or could not be verified. Its current frontmatter was left unchanged.",
+            "The page is public, but this note’s OpenArtifacts identity changed or could not be verified. Its current frontmatter was left unchanged.",
           receipt,
         };
         let currentDocId: string | null | undefined;
         try {
-          currentDocId = await getSymposiumDocId(this.app, file);
+          currentDocId = await getOpenArtifactsDocId(this.app, file);
         } catch {
           // A successful POST must stay blocked when no valid identity can route reopen to Update.
         }
@@ -774,9 +793,9 @@ export class SymposiumPublisher {
 
   private publishPersistenceFailure(
     file: TFile,
-    receipt: SymposiumReceipt
-  ): SymposiumPersistenceResult {
-    const result: SymposiumPersistenceResult = {
+    receipt: OpenArtifactsReceipt
+  ): OpenArtifactsPersistenceResult {
+    const result: OpenArtifactsPersistenceResult = {
       kind: "persistence",
       action: "publish",
       message:
@@ -792,16 +811,16 @@ export class SymposiumPublisher {
   private async removeLocalIdentity(
     file: TFile,
     expectedDocId: string
-  ): Promise<SymposiumModalResult> {
+  ): Promise<OpenArtifactsModalResult> {
     try {
-      const removed = await removeSymposiumDocId(this.app, file, expectedDocId);
+      const removed = await removeOpenArtifactsDocId(this.app, file, expectedDocId);
       if (!removed) {
         this.blockedPublishResults.delete(file);
         return {
           kind: "persistence",
           action: "delete",
           message:
-            "The original page was withdrawn, but this note now points to a different Symposium document. Its newer identity was left unchanged.",
+            "The original page was withdrawn, but this note now points to a different OpenArtifacts document. Its newer identity was left unchanged.",
         };
       }
       this.blockedPublishResults.delete(file);
@@ -811,12 +830,15 @@ export class SymposiumPublisher {
     }
   }
 
-  private deletePersistenceFailure(file: TFile, expectedDocId: string): SymposiumPersistenceResult {
-    const result: SymposiumPersistenceResult = {
+  private deletePersistenceFailure(
+    file: TFile,
+    expectedDocId: string
+  ): OpenArtifactsPersistenceResult {
+    const result: OpenArtifactsPersistenceResult = {
       kind: "persistence",
       action: "delete",
       message:
-        "The public page is already deleted. Retry removing its link from this note; this will not contact Symposium again.",
+        "The public page is already deleted. Retry removing its link from this note; this will not contact OpenArtifacts again.",
       retrySave: () =>
         this.withFileLock(file, "delete", async () =>
           this.removeLocalIdentity(file, expectedDocId)
@@ -828,9 +850,9 @@ export class SymposiumPublisher {
 
   private async withFileLock(
     file: TFile,
-    action: SymposiumAction,
-    operation: () => Promise<SymposiumModalResult>
-  ): Promise<SymposiumModalResult> {
+    action: OpenArtifactsAction,
+    operation: () => Promise<OpenArtifactsModalResult>
+  ): Promise<OpenArtifactsModalResult> {
     if (this.inFlightFiles.has(file)) {
       return {
         kind: "failure",
@@ -855,11 +877,11 @@ export class SymposiumPublisher {
  * narrow shape prevents accidental routing choices; it is not a credential or
  * authorization boundary while agent processes retain the Plus license key.
  *
- * @param publisher The lifecycle-owned trusted Symposium publisher.
+ * @param publisher The lifecycle-owned trusted OpenArtifacts publisher.
  */
-export function createSymposiumAgentBridge(
-  publisher: SymposiumPublisher
-): Readonly<SymposiumAgentBridge> {
+export function createOpenArtifactsAgentBridge(
+  publisher: OpenArtifactsPublisher
+): Readonly<OpenArtifactsAgentBridge> {
   return Object.freeze({
     reviewAgentManage: (sourcePathInput: string) => publisher.reviewAgentManage(sourcePathInput),
     reviewAgentPublish: (sourcePathInput: string, stagedHtmlPathInput: string) =>

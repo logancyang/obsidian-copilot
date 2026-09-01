@@ -139,49 +139,87 @@ export async function seedBuiltinSkills(
     // existingContent is captured here so we can carry the user's
     // copilot-enabled-agents choice forward when re-seeding an upgrade.
     let existingContent: string | null = null;
+    let current = false;
     if (await fs.exists(skillMdPath)) {
       try {
         existingContent = await fs.read(skillMdPath);
         const existing = seededVersion(existingContent);
         // null = no copilot-builtin-version marker → user-authored file; skip.
-        if (existing === null) continue;
+        if (existing === null) {
+          // The user chose to own this name, so the managed predecessor still retires: its
+          // wrapper scripts no longer match the host and would only mislead an agent.
+          // https://github.com/Brevilabs/obsidian-copilot-private/issues/337
+          if (skill.legacyName)
+            await removeSeededBuiltin(skillsFolderRelPath, skill.legacyName, fs);
+          continue;
+        }
         // Version is current — only skip if all support files are also present.
         // A partial write (e.g. crash after SKILL.md but before the .sh file)
         // would leave the skill advertising a stale script; re-seed to self-heal.
         if (existing >= skill.version) {
-          const allFilesPresent = await Promise.all(
+          current = await Promise.all(
             skill.files.map((f) => fs.exists(joinPosix(dir, f.path)))
           ).then((results) => results.every(Boolean));
-          if (allFilesPresent) continue;
         }
       } catch (e) {
         // Unreadable existing copy — fall through and re-seed.
         logError(`[Skills] could not read builtin skill ${skill.name} for version check`, e);
+        // A renamed builtin also retires its predecessor below, so an unclassifiable target
+        // (possibly a user-authored collision) must leave both folders alone until the next
+        // startup can read it. https://github.com/Brevilabs/obsidian-copilot-private/issues/337
+        if (skill.legacyName) continue;
+      }
+    } else if (skill.legacyName) {
+      // A renamed builtin inherits the enable choices of its managed predecessor.
+      // An unmarked folder under the old name is user-authored and contributes nothing.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/337
+      const legacyMdPath = joinPosix(joinPosix(skillsFolderRelPath, skill.legacyName), "SKILL.md");
+      try {
+        if (await fs.exists(legacyMdPath)) {
+          const legacyContent = await fs.read(legacyMdPath);
+          if (seededVersion(legacyContent) !== null) existingContent = legacyContent;
+        }
+      } catch (e) {
+        logError(`[Skills] could not read legacy builtin skill ${skill.legacyName}`, e);
+        // Seeding now would carry the default agent list forward and the predecessor's
+        // enable choices would be lost when it is retired; retry next startup instead.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/337
+        continue;
       }
     }
 
-    try {
-      await ensureDir(fs, dir);
-      // Carry the user's agent-disable choices forward: if they toggled any
-      // agent off via the UI, copilot-enabled-agents was rewritten on disk.
-      // Preserve that value in the bundled replacement so the upgrade doesn't
-      // silently undo the user's preference.
-      const skillMd = existingContent
-        ? preserveEnabledAgents(existingContent, skill.skillMd)
-        : skill.skillMd;
-      // Write support files before SKILL.md so the version stamp in SKILL.md
-      // only appears once all scripts are on disk. A crash between writes then
-      // leaves no SKILL.md (or a stale-version one), so the next startup
-      // re-seeds the whole skill rather than skipping it as current.
-      for (const file of skill.files) {
-        const filePath = joinPosix(dir, file.path);
-        await ensureDir(fs, parentDir(filePath));
-        await fs.write(filePath, file.content);
+    if (!current) {
+      try {
+        await ensureDir(fs, dir);
+        // Carry the user's agent-disable choices forward: if they toggled any
+        // agent off via the UI, copilot-enabled-agents was rewritten on disk.
+        // Preserve that value in the bundled replacement so the upgrade doesn't
+        // silently undo the user's preference.
+        const skillMd = existingContent
+          ? preserveEnabledAgents(existingContent, skill.skillMd)
+          : skill.skillMd;
+        // Write support files before SKILL.md so the version stamp in SKILL.md
+        // only appears once all scripts are on disk. A crash between writes then
+        // leaves no SKILL.md (or a stale-version one), so the next startup
+        // re-seeds the whole skill rather than skipping it as current.
+        for (const file of skill.files) {
+          const filePath = joinPosix(dir, file.path);
+          await ensureDir(fs, parentDir(filePath));
+          await fs.write(filePath, file.content);
+        }
+        await fs.write(skillMdPath, skillMd);
+        seeded.push(skill.name);
+      } catch (e) {
+        logError(`[Skills] failed to seed builtin skill ${skill.name}`, e);
+        continue;
       }
-      await fs.write(skillMdPath, skillMd);
-      seeded.push(skill.name);
-    } catch (e) {
-      logError(`[Skills] failed to seed builtin skill ${skill.name}`, e);
+    }
+
+    // The renamed skill is on disk and current, so its managed predecessor can go.
+    // `removeSeededBuiltin` leaves a user-authored folder under the old name alone
+    // and a failed removal is retried on the next startup.
+    if (skill.legacyName) {
+      await removeSeededBuiltin(skillsFolderRelPath, skill.legacyName, fs);
     }
   }
 
