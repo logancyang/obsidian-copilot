@@ -5,6 +5,8 @@ import {
   parseSystemPromptFile,
   ensurePromptFrontmatter,
   updatePromptDefaultFlag,
+  fetchAllSystemPrompts,
+  loadAllSystemPrompts,
 } from "@/system-prompts/systemPromptUtils";
 import {
   isPendingFileWrite,
@@ -17,7 +19,6 @@ import {
 } from "@/system-prompts/state";
 import { getSettings, subscribeToSettingsChange, updateSetting } from "@/settings/model";
 import { deriveSystemPromptsFolder } from "@/settings/copilotFolder";
-import { SystemPromptManager } from "@/system-prompts/systemPromptManager";
 import { debounce } from "@/utils/debounce";
 import { logError, logInfo } from "@/logger";
 
@@ -29,7 +30,6 @@ export class SystemPromptRegister {
   private plugin: Plugin;
   private app: App;
   private vault: Vault;
-  private manager: SystemPromptManager;
   private settingsUnsubscriber?: () => void;
   /** Monotonically increasing request ID for latest-wins semantics */
   private folderChangeRequestId = 0;
@@ -38,7 +38,6 @@ export class SystemPromptRegister {
     this.plugin = plugin;
     this.app = app;
     this.vault = app.vault;
-    this.manager = SystemPromptManager.getInstance(app);
     this.initializeEventListeners();
   }
 
@@ -46,7 +45,7 @@ export class SystemPromptRegister {
    * Initialize the register by loading all prompts
    */
   async initialize(): Promise<void> {
-    await this.manager.initialize();
+    await loadAllSystemPrompts(this.app);
     // Initialize session prompt from global default
     initializeSessionPromptFromDefault();
   }
@@ -157,7 +156,7 @@ export class SystemPromptRegister {
       logInfo(`System prompts folder changed to: ${nextFolder}`);
 
       // Fetch prompts without updating cache (to avoid race condition)
-      const prompts = await this.manager.fetchPrompts();
+      const prompts = await fetchAllSystemPrompts(this.app);
 
       // Check if this is still the latest request
       if (currentRequestId !== this.folderChangeRequestId) {

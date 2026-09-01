@@ -43,6 +43,8 @@ jest.mock("@/system-prompts/systemPromptUtils", () => ({
   }),
   ensurePromptFrontmatter: jest.fn().mockResolvedValue(undefined),
   updatePromptDefaultFlag: jest.fn().mockResolvedValue(undefined),
+  fetchAllSystemPrompts: jest.fn().mockResolvedValue([]),
+  loadAllSystemPrompts: jest.fn().mockResolvedValue([]),
 }));
 
 // Mock settings
@@ -55,19 +57,10 @@ jest.mock("@/settings/model", () => ({
   subscribeToSettingsChange: jest.fn().mockReturnValue(() => {}),
 }));
 
-// Mock SystemPromptManager
-jest.mock("@/system-prompts/systemPromptManager", () => ({
-  SystemPromptManager: {
-    getInstance: jest.fn().mockReturnValue({
-      initialize: jest.fn().mockResolvedValue(undefined),
-      fetchPrompts: jest.fn().mockResolvedValue([]),
-    }),
-  },
-}));
-
 describe("SystemPromptRegister", () => {
   let mockPlugin: Plugin;
   let mockVault: Vault;
+  let mockApp: App;
   let register: SystemPromptRegister;
 
   let vaultEventHandlers: Record<string, (...args: unknown[]) => unknown>;
@@ -86,11 +79,26 @@ describe("SystemPromptRegister", () => {
       off: jest.fn(),
     } as unknown as Vault;
 
-    register = new SystemPromptRegister(mockPlugin, { vault: mockVault } as unknown as App);
+    mockApp = { vault: mockVault } as unknown as App;
+    register = new SystemPromptRegister(mockPlugin, mockApp);
   });
 
   afterEach(() => {
     register.cleanup();
+  });
+
+  describe("initialize()", () => {
+    it("loads prompts before initializing the session selection", async () => {
+      await register.initialize();
+
+      expect(systemPromptUtils.loadAllSystemPrompts).toHaveBeenCalledWith(mockApp);
+      expect(state.initializeSessionPromptFromDefault).toHaveBeenCalledTimes(1);
+      expect(
+        (systemPromptUtils.loadAllSystemPrompts as jest.Mock).mock.invocationCallOrder[0]
+      ).toBeLessThan(
+        (state.initializeSessionPromptFromDefault as jest.Mock).mock.invocationCallOrder[0]
+      );
+    });
   });
 
   describe("handleFileDeletion - selectedPromptTitle sync", () => {
@@ -234,7 +242,7 @@ describe("SystemPromptRegister", () => {
 
   describe("handleSystemPromptsFolderChange - validation", () => {
     let settingsChangeHandler: (prev: unknown, next: unknown) => void;
-    let mockManager: { fetchPrompts: jest.Mock };
+    let mockFetchAllSystemPrompts: jest.Mock;
 
     beforeEach(() => {
       jest.useFakeTimers();
@@ -246,11 +254,7 @@ describe("SystemPromptRegister", () => {
       settingsChangeHandler = subscribeToSettingsChange.mock
         .calls[0]?.[0] as typeof settingsChangeHandler;
 
-      // Get reference to mock manager
-      const { SystemPromptManager } = jest.requireMock<{
-        SystemPromptManager: { getInstance: () => { fetchPrompts: jest.Mock } };
-      }>("@/system-prompts/systemPromptManager");
-      mockManager = SystemPromptManager.getInstance();
+      mockFetchAllSystemPrompts = systemPromptUtils.fetchAllSystemPrompts as jest.Mock;
     });
 
     afterEach(() => {
@@ -261,8 +265,8 @@ describe("SystemPromptRegister", () => {
       // Set up: current selection points to a prompt that won't exist in new folder
       (state.getSelectedPromptTitle as jest.Mock).mockReturnValue("OldPrompt");
 
-      // Mock fetchPrompts to return prompts that don't include "OldPrompt"
-      mockManager.fetchPrompts.mockResolvedValueOnce([
+      // Mock the fetch to return prompts that don't include "OldPrompt"
+      mockFetchAllSystemPrompts.mockResolvedValueOnce([
         { title: "NewPrompt1", content: "", createdMs: 0, modifiedMs: 0, lastUsedMs: 0 },
         { title: "NewPrompt2", content: "", createdMs: 0, modifiedMs: 0, lastUsedMs: 0 },
       ]);
@@ -295,8 +299,8 @@ describe("SystemPromptRegister", () => {
       });
       (state.getSelectedPromptTitle as jest.Mock).mockReturnValue("");
 
-      // Mock fetchPrompts to return prompts that don't include "OldDefault"
-      mockManager.fetchPrompts.mockResolvedValueOnce([
+      // Mock the fetch to return prompts that don't include "OldDefault"
+      mockFetchAllSystemPrompts.mockResolvedValueOnce([
         { title: "NewPrompt1", content: "", createdMs: 0, modifiedMs: 0, lastUsedMs: 0 },
       ]);
 
@@ -328,8 +332,8 @@ describe("SystemPromptRegister", () => {
       });
       (state.getSelectedPromptTitle as jest.Mock).mockReturnValue("ExistingPrompt");
 
-      // Mock fetchPrompts to return prompts that include "ExistingPrompt"
-      mockManager.fetchPrompts.mockResolvedValueOnce([
+      // Mock the fetch to return prompts that include "ExistingPrompt"
+      mockFetchAllSystemPrompts.mockResolvedValueOnce([
         { title: "ExistingPrompt", content: "", createdMs: 0, modifiedMs: 0, lastUsedMs: 0 },
       ]);
 
@@ -393,12 +397,12 @@ describe("SystemPromptRegister", () => {
       await Promise.resolve();
 
       // Should only fetch once (debounced)
-      expect(mockManager.fetchPrompts).toHaveBeenCalledTimes(1);
+      expect(mockFetchAllSystemPrompts).toHaveBeenCalledTimes(1);
     });
 
     it("preserves old cache on reload failure (success-then-replace)", async () => {
-      // Mock fetchPrompts to fail
-      mockManager.fetchPrompts.mockRejectedValueOnce(new Error("Network error"));
+      // Mock the fetch to fail
+      mockFetchAllSystemPrompts.mockRejectedValueOnce(new Error("Network error"));
 
       // Trigger folder change
       settingsChangeHandler({ copilotFolder: "OldFolder" }, { copilotFolder: "NewFolder" });
@@ -440,7 +444,7 @@ describe("SystemPromptRegister", () => {
         resolveB = r;
       });
 
-      mockManager.fetchPrompts
+      mockFetchAllSystemPrompts
         .mockReturnValueOnce(promiseA) // First call (request A)
         .mockReturnValueOnce(promiseB); // Second call (request B)
 

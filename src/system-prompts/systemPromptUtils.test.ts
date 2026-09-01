@@ -1,14 +1,14 @@
 import {
-  validatePromptName,
   getSystemPromptsFolder,
   getPromptFilePath,
   isSystemPromptFile,
   parseSystemPromptFile,
-  generateCopyPromptName,
+  fetchAllSystemPrompts,
+  loadAllSystemPrompts,
 } from "@/system-prompts/systemPromptUtils";
-import { UserSystemPrompt } from "@/system-prompts/type";
-import { TFile, TAbstractFile } from "obsidian";
+import { App, TFile, TAbstractFile } from "obsidian";
 import * as settingsModel from "@/settings/model";
+import * as state from "@/system-prompts/state";
 import type { CopilotSettings } from "@/settings/model";
 import { mockTFile } from "@/__tests__/mockObsidian";
 
@@ -42,88 +42,6 @@ jest.mock("@/system-prompts/state", () => ({
   addPendingFileWrite: jest.fn(),
   removePendingFileWrite: jest.fn(),
 }));
-
-describe("validatePromptName", () => {
-  const basePrompts: UserSystemPrompt[] = [
-    {
-      title: "Prompt One",
-      content: "",
-      createdMs: 0,
-      modifiedMs: 0,
-      lastUsedMs: 0,
-    },
-    {
-      title: "Prompt Two",
-      content: "",
-      createdMs: 0,
-      modifiedMs: 0,
-      lastUsedMs: 0,
-    },
-    {
-      title: "Another Prompt",
-      content: "",
-      createdMs: 0,
-      modifiedMs: 0,
-      lastUsedMs: 0,
-    },
-  ];
-
-  it("returns null for a unique, valid name", () => {
-    expect(validatePromptName("New Prompt", basePrompts)).toBeNull();
-  });
-
-  it("returns error for duplicate name (case-insensitive)", () => {
-    expect(validatePromptName("prompt one", basePrompts)).toBe(
-      "A prompt with this name already exists"
-    );
-    expect(validatePromptName("PROMPT TWO", basePrompts)).toBe(
-      "A prompt with this name already exists"
-    );
-  });
-
-  it("returns error for empty name", () => {
-    expect(validatePromptName("", basePrompts)).toBe("Prompt name cannot be empty");
-    expect(validatePromptName("   ", basePrompts)).toBe("Prompt name cannot be empty");
-  });
-
-  it("returns error for invalid characters", () => {
-    const invalids = [
-      "Invalid#Name",
-      "Invalid<Name>",
-      'Invalid:"Name"',
-      "Invalid/Name",
-      "Invalid\\Name",
-      "Invalid|Name",
-      "Invalid?Name",
-      "Invalid*Name",
-      "Invalid[Name]",
-      "Invalid^Name",
-      "Invalid\x00Name",
-      "Invalid\x1FName",
-    ];
-    for (const name of invalids) {
-      expect(validatePromptName(name, basePrompts)).toMatch(
-        /Prompt name contains invalid characters/
-      );
-    }
-  });
-
-  it("returns null if unchanged currentPromptName", () => {
-    expect(validatePromptName("Prompt One", basePrompts, "Prompt One")).toBeNull();
-  });
-
-  it("returns error for names with leading or trailing whitespace", () => {
-    expect(validatePromptName("  Prompt One  ", basePrompts)).toBe(
-      "Prompt name cannot have leading or trailing spaces"
-    );
-    expect(validatePromptName(" Leading", basePrompts)).toBe(
-      "Prompt name cannot have leading or trailing spaces"
-    );
-    expect(validatePromptName("Trailing ", basePrompts)).toBe(
-      "Prompt name cannot have leading or trailing spaces"
-    );
-  });
-});
 
 describe("getSystemPromptsFolder", () => {
   it("returns the effective (copilotFolder-derived) system prompts folder", () => {
@@ -380,99 +298,62 @@ Content with --- separator in the middle.`;
   });
 });
 
-describe("generateCopyPromptName", () => {
-  it("generates (copy) suffix for first copy", () => {
-    const prompts: UserSystemPrompt[] = [
+describe("fetchAllSystemPrompts", () => {
+  it("returns parsed prompts from the configured prompt folder", async () => {
+    jest.spyOn(settingsModel, "getSettings").mockReturnValue({
+      userSystemPromptsFolder: "SystemPrompts",
+    } as CopilotSettings);
+    const promptFile = mockTFile({
+      basename: "Test Prompt",
+      path: "SystemPrompts/Test Prompt.md",
+      extension: "md",
+    });
+    Object.setPrototypeOf(promptFile, TFile.prototype);
+    const app = {
+      vault: {
+        getFiles: jest.fn().mockReturnValue([promptFile]),
+        read: jest.fn().mockResolvedValue("Prompt content"),
+      },
+      metadataCache: {
+        getFileCache: jest.fn().mockReturnValue({}),
+      },
+    } as unknown as App;
+
+    await expect(fetchAllSystemPrompts(app)).resolves.toEqual([
       {
-        title: "Original",
-        content: "",
+        title: "Test Prompt",
+        content: "Prompt content",
         createdMs: 0,
         modifiedMs: 0,
         lastUsedMs: 0,
       },
-    ];
-
-    expect(generateCopyPromptName("Original", prompts)).toBe("Original (copy)");
+    ]);
   });
+});
 
-  it("generates (copy 2) suffix when (copy) exists", () => {
-    const prompts: UserSystemPrompt[] = [
-      {
-        title: "Original",
-        content: "",
-        createdMs: 0,
-        modifiedMs: 0,
-        lastUsedMs: 0,
+describe("loadAllSystemPrompts", () => {
+  it("replaces the shared cache with prompts loaded from the vault", async () => {
+    jest.spyOn(settingsModel, "getSettings").mockReturnValue({
+      userSystemPromptsFolder: "SystemPrompts",
+    } as CopilotSettings);
+    const promptFile = mockTFile({
+      basename: "Test Prompt",
+      path: "SystemPrompts/Test Prompt.md",
+      extension: "md",
+    });
+    Object.setPrototypeOf(promptFile, TFile.prototype);
+    const app = {
+      vault: {
+        getFiles: jest.fn().mockReturnValue([promptFile]),
+        read: jest.fn().mockResolvedValue("Prompt content"),
       },
-      {
-        title: "Original (copy)",
-        content: "",
-        createdMs: 0,
-        modifiedMs: 0,
-        lastUsedMs: 0,
+      metadataCache: {
+        getFileCache: jest.fn().mockReturnValue({}),
       },
-    ];
+    } as unknown as App;
 
-    expect(generateCopyPromptName("Original", prompts)).toBe("Original (copy 2)");
-  });
+    const prompts = await loadAllSystemPrompts(app);
 
-  it("generates incrementing copy numbers", () => {
-    const prompts: UserSystemPrompt[] = [
-      {
-        title: "Original",
-        content: "",
-        createdMs: 0,
-        modifiedMs: 0,
-        lastUsedMs: 0,
-      },
-      {
-        title: "Original (copy)",
-        content: "",
-        createdMs: 0,
-        modifiedMs: 0,
-        lastUsedMs: 0,
-      },
-      {
-        title: "Original (copy 2)",
-        content: "",
-        createdMs: 0,
-        modifiedMs: 0,
-        lastUsedMs: 0,
-      },
-      {
-        title: "Original (copy 3)",
-        content: "",
-        createdMs: 0,
-        modifiedMs: 0,
-        lastUsedMs: 0,
-      },
-    ];
-
-    expect(generateCopyPromptName("Original", prompts)).toBe("Original (copy 4)");
-  });
-
-  it("handles case-insensitive duplicate checking", () => {
-    const prompts: UserSystemPrompt[] = [
-      {
-        title: "Original",
-        content: "",
-        createdMs: 0,
-        modifiedMs: 0,
-        lastUsedMs: 0,
-      },
-      {
-        title: "ORIGINAL (COPY)",
-        content: "",
-        createdMs: 0,
-        modifiedMs: 0,
-        lastUsedMs: 0,
-      },
-    ];
-
-    expect(generateCopyPromptName("Original", prompts)).toBe("Original (copy 2)");
-  });
-
-  it("works with empty prompts array", () => {
-    expect(generateCopyPromptName("Original", [])).toBe("Original (copy)");
+    expect(state.updateCachedSystemPrompts).toHaveBeenCalledWith(prompts);
   });
 });

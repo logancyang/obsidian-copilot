@@ -18,41 +18,6 @@ import {
 import { logWarn } from "@/logger";
 
 /**
- * Validate a system prompt name
- */
-export function validatePromptName(
-  name: string,
-  prompts: UserSystemPrompt[],
-  currentPromptName?: string
-): string | null {
-  const trimmedName = name.trim();
-
-  if (!trimmedName) {
-    return "Prompt name cannot be empty";
-  }
-
-  if (name !== trimmedName) {
-    return "Prompt name cannot have leading or trailing spaces";
-  }
-
-  if (currentPromptName && name === currentPromptName) {
-    return null; // No change needed
-  }
-
-  // eslint-disable-next-line no-control-regex -- prompt paths must reject embedded control bytes
-  const invalidChars = /[#<>:"/\\|?*[\]^\x00-\x1F]/g;
-  if (invalidChars.test(trimmedName)) {
-    return 'Prompt name contains invalid characters. Avoid using: < > : " / \\ | ? * [ ] ^';
-  }
-
-  if (prompts.some((p) => p.title.toLowerCase() === trimmedName.toLowerCase())) {
-    return "A prompt with this name already exists";
-  }
-
-  return null;
-}
-
-/**
  * Get the system prompts folder path, derived from the configurable copilotFolder root.
  */
 export function getSystemPromptsFolder(): string {
@@ -207,26 +172,6 @@ export async function ensurePromptFrontmatter(app: App, file: TFile, prompt: Use
       removePendingFileWrite(file.path);
     }
   }
-}
-
-/**
- * Generates a unique name for a copied prompt by adding "(copy)" or "(copy N)" suffix
- */
-export function generateCopyPromptName(
-  originalName: string,
-  existingPrompts: UserSystemPrompt[]
-): string {
-  const baseName = `${originalName} (copy)`;
-  let copyName = baseName;
-  let counter = 1;
-
-  // Check if the base copy name already exists
-  while (existingPrompts.some((p) => p.title.toLowerCase() === copyName.toLowerCase())) {
-    counter++;
-    copyName = `${originalName} (copy ${counter})`;
-  }
-
-  return copyName;
 }
 
 /**
