@@ -131,6 +131,16 @@ describe("analytics", () => {
         $process_person_profile: false,
       });
     });
+
+    it(`${ISSUE} drops events without a canonical docs route`, () => {
+      for (const canonicalUrl of [undefined, "not a URL", "https://example.com/private"]) {
+        const options = createPostHogOptions("https://us.i.posthog.com", () => canonicalUrl);
+        assert.equal(
+          options.before_send({ uuid: "event-id", event: "$pageleave", properties: {} }),
+          null
+        );
+      }
+    });
   });
 
   describe("sanitizeAnalyticsEvent()", () => {
@@ -158,7 +168,6 @@ describe("analytics", () => {
         properties: {
           $current_url:
             "https://person:secret@docs.obsidiancopilot.com/getting-started/?query=private#answer",
-          $pathname: "/wrong?query=private#answer",
           $referrer: "https://user:pass@example.com/article/?secret=yes#section",
           $referring_domain: "untrusted.example",
           $browser: "Chrome",
@@ -203,7 +212,7 @@ describe("analytics", () => {
       const direct = sanitizeAnalyticsEvent({
         uuid: "event-id",
         event: "$pageview",
-        properties: { $current_url: "not a URL", $referrer: "$direct", $pathname: "private" },
+        properties: { $current_url: "not a URL", $referrer: "$direct" },
       });
       assert.deepEqual(direct.properties, {
         $referrer: "$direct",
@@ -271,35 +280,39 @@ describe("analytics", () => {
           ...input,
           apiHost: "https://us.i.posthog.com",
           getCanonicalUrl: () => "https://docs.obsidiancopilot.com/",
-          addNavigationListener: () => {},
+          addNavigationListener: () => () => {},
         });
         assert.equal(enabled, false);
         assert.equal(loaded, false);
       }
     });
 
-    it(`${ISSUE} captures once per generated route and buckets missing requests as /404`, async () => {
+    it(`${ISSUE} buffers each generated route while the SDK loads`, async () => {
       const captures = [];
       let navigationListener;
-      let canonicalUrl;
+      let canonicalUrl = "https://docs.obsidiancopilot.com/404/";
       const enabled = await startDocsAnalytics({
-        loadPostHog: async () => ({
-          init: () => {},
-          capture: (event, properties) => captures.push({ event, properties }),
-        }),
+        loadPostHog: async () => {
+          canonicalUrl = "https://docs.obsidiancopilot.com/getting-started/";
+          navigationListener();
+          return {
+            init: () => {},
+            capture: (event, properties) => captures.push({ event, properties }),
+          };
+        },
         hostname: "docs.obsidiancopilot.com",
         apiKey: "phc_test",
         apiHost: "https://us.i.posthog.com",
         getStorage: () => ({ setItem: () => {}, getItem: () => "1", removeItem: () => {} }),
         getCanonicalUrl: () => canonicalUrl,
-        addNavigationListener: (listener) => (navigationListener = listener),
+        addNavigationListener: (listener) => {
+          navigationListener = listener;
+          return () => {};
+        },
       });
 
-      assert.deepEqual(captures, []);
-      canonicalUrl = "https://docs.obsidiancopilot.com/404/";
       navigationListener();
-      navigationListener();
-      canonicalUrl = "https://docs.obsidiancopilot.com/getting-started/";
+      canonicalUrl = "https://docs.obsidiancopilot.com/projects/";
       navigationListener();
 
       assert.equal(enabled, true);
@@ -314,10 +327,15 @@ describe("analytics", () => {
             $current_url: "https://docs.obsidiancopilot.com/getting-started/",
           },
         },
+        {
+          event: "$pageview",
+          properties: { $current_url: "https://docs.obsidiancopilot.com/projects/" },
+        },
       ]);
     });
 
     it(`${ISSUE} fails closed when the SDK cannot load`, async () => {
+      let listenerRemoved = false;
       const enabled = await startDocsAnalytics({
         loadPostHog: async () => {
           throw new Error("blocked");
@@ -327,10 +345,13 @@ describe("analytics", () => {
         apiHost: "https://us.i.posthog.com",
         getStorage: () => ({ setItem: () => {}, getItem: () => "1", removeItem: () => {} }),
         getCanonicalUrl: () => "https://docs.obsidiancopilot.com/",
-        addNavigationListener: () => {},
+        addNavigationListener: () => () => {
+          listenerRemoved = true;
+        },
       });
 
       assert.equal(enabled, false);
+      assert.equal(listenerRemoved, true);
     });
   });
 });

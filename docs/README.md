@@ -52,17 +52,17 @@ allowlisted events and canonical paths arrive:
 ```sql
 SELECT
   event,
+  if(event IN ('$pageview', '$pageleave'), 'allowed', 'unexpected') AS contract_status,
   timestamp,
   properties.$host AS host,
   properties.$pathname AS path,
   properties.$referring_domain AS referring_domain
 FROM events
-WHERE event IN ('$pageview', '$pageleave')
-  AND properties.$host = 'docs.obsidiancopilot.com'
+WHERE properties.$host = 'docs.obsidiancopilot.com'
 ORDER BY timestamp DESC
 LIMIT 100
 ```
 
-Verify that paths contain no query strings, fragments, search terms, or ad-click identifiers, and
-that no autocapture or replay events appear. To roll back, remove both variables from Vercel
-Production and redeploy; the docs continue to work without analytics.
+Verify that every row is classified as `allowed`, paths contain no query strings, fragments, search
+terms, or ad-click identifiers, and no autocapture or replay events appear. To roll back, remove
+both variables from Vercel Production and redeploy; the docs continue to work without analytics.

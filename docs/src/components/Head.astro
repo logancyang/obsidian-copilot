@@ -15,6 +15,9 @@ import DefaultHead from "@astrojs/starlight/components/Head.astro";
     getStorage: () => window.localStorage,
     getCanonicalUrl: () =>
       document.querySelector<HTMLLinkElement>('link[rel="canonical"]')?.href,
-    addNavigationListener: (listener) => document.addEventListener("astro:page-load", listener),
+    addNavigationListener: (listener) => {
+      document.addEventListener("astro:page-load", listener);
+      return () => document.removeEventListener("astro:page-load", listener);
+    },
   });
 </script>

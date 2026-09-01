@@ -3,7 +3,6 @@ const PERSISTENCE_NAME = "obsidian-copilot-docs";
 const STORAGE_PROBE_KEY = "__obsidian_copilot_docs_analytics_probe__";
 
 const URL_PROPERTIES = new Set(["$current_url", "$referrer"]);
-const PATH_PROPERTIES = new Set(["$pathname"]);
 const PASSTHROUGH_PROPERTIES = new Set([
   "$browser",
   "$device_id",
@@ -47,21 +46,11 @@ function sanitizeUrl(value, includePath = true) {
   }
 }
 
-function sanitizePath(value) {
-  if (typeof value !== "string" || (!value.startsWith("/") && !/^https?:\/\//i.test(value))) {
-    return undefined;
-  }
-
-  try {
-    return new URL(value, `https://${CANONICAL_HOSTNAME}`).pathname;
-  } catch {
-    return undefined;
-  }
-}
-
 function sanitizeCampaignValue(value) {
   if (typeof value !== "string") return undefined;
   const sanitized = value.trim();
+  // Campaign fields are free text, so a short bound prevents them from becoming a content channel.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/335
   return sanitized.length > 0 && sanitized.length <= 80 ? sanitized : undefined;
 }
 
@@ -75,12 +64,6 @@ function sanitizeProperties(properties) {
           ? "$direct"
           : sanitizeUrl(value, key !== "$referrer");
       if (safeUrl) sanitized[key] = safeUrl;
-      continue;
-    }
-
-    if (PATH_PROPERTIES.has(key)) {
-      const safePath = sanitizePath(value);
-      if (safePath) sanitized[key] = safePath;
       continue;
     }
 
@@ -189,7 +172,8 @@ export function createPostHogOptions(apiHost, getCanonicalUrl) {
     // The final event boundary replaces SDK-derived request paths with the generated route identity.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/335
     before_send: (event) => {
-      const canonicalUrl = getCanonicalUrl();
+      const canonicalUrl = sanitizeUrl(getCanonicalUrl());
+      if (!canonicalUrl || new URL(canonicalUrl).host !== CANONICAL_HOSTNAME) return null;
       return sanitizeAnalyticsEvent({
         ...event,
         properties: {
@@ -214,27 +198,33 @@ export async function startDocsAnalytics({
   const config = resolveAnalyticsConfig({ hostname, apiKey, apiHost });
   if (!config || !hasUsableStorage(getStorage)) return false;
 
+  const pendingNavigations = [];
+  let dispatchNavigation = (canonicalUrl) => pendingNavigations.push(canonicalUrl);
+  let previousNavigation;
+  const handleNavigation = () => {
+    const canonicalUrl = getCanonicalUrl();
+    // Missing route identity cannot satisfy the outgoing-event privacy contract.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/335
+    if (!canonicalUrl || canonicalUrl === previousNavigation) return;
+    previousNavigation = canonicalUrl;
+    dispatchNavigation(canonicalUrl);
+  };
+  let removeNavigationListener = () => {};
+
   try {
+    // Subscribe before the chunk load so cold-cache navigation still produces one event per route.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/335
+    removeNavigationListener = addNavigationListener(handleNavigation);
+    handleNavigation();
+
     const posthog = await loadPostHog();
     posthog.init(config.apiKey, createPostHogOptions(config.apiHost, getCanonicalUrl));
-
-    let previousNavigation;
-    const capturePageview = () => {
-      // Generated canonical URLs bucket missing routes as /404 instead of reporting arbitrary requests.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/335
-      const currentNavigation = getCanonicalUrl();
-      if (!currentNavigation) return;
-      // Astro can announce the initial page after this module runs; de-duplication keeps one pageview.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/335
-      if (currentNavigation === previousNavigation) return;
-      previousNavigation = currentNavigation;
-      posthog.capture("$pageview", { $current_url: currentNavigation });
-    };
-
-    capturePageview();
-    addNavigationListener(capturePageview);
+    dispatchNavigation = (canonicalUrl) =>
+      posthog.capture("$pageview", { $current_url: canonicalUrl });
+    pendingNavigations.forEach(dispatchNavigation);
     return true;
   } catch {
+    removeNavigationListener();
     return false;
   }
 }
