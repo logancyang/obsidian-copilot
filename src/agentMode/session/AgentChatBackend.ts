@@ -120,8 +120,8 @@ export interface AgentChatBackend {
 
   /**
    * Snapshot of every non-plan tool-permission request currently waiting on
-   * the user. Rendered as inline `ToolPermissionCard`s at the tail of the
-   * chat scroll container. Empty list when nothing is pending.
+   * the user. Rendered as `ToolPermissionCard`s in the chat action rail.
+   * Empty list when nothing is pending.
    */
   getPendingToolPermissions(): PermissionPrompt[];
 
@@ -134,8 +134,8 @@ export interface AgentChatBackend {
 
   /**
    * Snapshot of every pending AskUserQuestion request waiting on the user.
-   * Rendered as inline `AskUserQuestionCard`s at the tail of the chat scroll
-   * container, alongside any `ToolPermissionCard`s. Empty list when none.
+   * Rendered as `AskUserQuestionCard`s in the chat action rail alongside any
+   * `ToolPermissionCard`s. Empty list when none.
    */
   getPendingAskUserQuestions(): AskUserQuestionPrompt[];
 

@@ -76,38 +76,22 @@ const AgentChatMessages = memo(
     const inlinePlanCard = showPlanCard ? (
       <PlanProposalCard plan={currentPlan} app={app} chatBackend={chatBackend} />
     ) : null;
-    const inlineToolPermissionCards = pendingToolPermissions.map((req) => (
-      <ToolPermissionCard
-        key={req.toolCall.toolCallId}
-        request={req}
-        onResolve={chatBackend.resolveToolPermission.bind(chatBackend)}
-      />
-    ));
-    const inlineAskUserQuestionCards = pendingAskUserQuestions.map((req) => (
-      <AskUserQuestionCard
-        key={req.requestId}
-        request={req}
-        onResolve={chatBackend.resolveAskUserQuestion.bind(chatBackend)}
-      />
-    ));
-    const hasTailCards =
-      showPlanCard || pendingToolPermissions.length > 0 || pendingAskUserQuestions.length > 0;
+    const pendingQuestion = pendingAskUserQuestions[0];
+    const pendingPermission = pendingQuestion ? undefined : pendingToolPermissions[0];
+    // Questions take priority so the separate resolver queues have a stable
+    // presentation policy without carrying cross-type sequencing state.
+    // https://github.com/logancyang/obsidian-copilot/issues/2948
+    const pendingActionId = pendingQuestion
+      ? `question:${pendingQuestion.requestId}`
+      : pendingPermission
+        ? `permission:${pendingPermission.toolCall.toolCallId}`
+        : null;
 
     // The latest assistant message owns both timer states: it ticks while that
     // turn is in flight, then retains the frozen duration until the next turn
     // appends a newer placeholder and naturally retires this row.
     const latestAssistant = useMemo(() => lastAssistant(visible), [visible]);
     const streamingMessageId = isLoading ? latestAssistant?.id : undefined;
-
-    if (visible.length === 0) {
-      return (
-        <div className="tw-flex tw-size-full tw-flex-col tw-gap-2 tw-overflow-y-auto tw-px-3 tw-pt-2">
-          {inlinePlanCard}
-          {inlineToolPermissionCards}
-          {inlineAskUserQuestionCards}
-        </div>
-      );
-    }
 
     return (
       <div className="tw-flex tw-h-full tw-flex-1 tw-flex-col tw-overflow-hidden">
@@ -118,12 +102,11 @@ const AgentChatMessages = memo(
         >
           {visible.map((message, index) => {
             const isLastMessage = index === visible.length - 1;
-            // Reserve scroll headroom only when the last message is the
-            // assistant AND there's nothing pinned at the tail (plan card or
-            // tool-permission card) — those already provide visible content
-            // at the bottom of the stream.
+            // A plan remains part of the transcript, so it supplies tail
+            // content. Blocking actions live in their own rail and do not
+            // change the transcript's scroll headroom.
             const shouldApplyMinHeight =
-              isLastMessage && message.sender !== USER_SENDER && !hasTailCards;
+              isLastMessage && message.sender !== USER_SENDER && !showPlanCard;
             const adaptedMessage = adapted[index];
             // When an assistant message has structured parts, the trail owns
             // its entire body — `text` parts already cover streamed prose, so
@@ -215,9 +198,32 @@ const AgentChatMessages = memo(
             );
           })}
           {inlinePlanCard}
-          {inlineToolPermissionCards}
-          {inlineAskUserQuestionCards}
         </div>
+        {pendingActionId ? (
+          <div
+            role="region"
+            aria-label="Pending agent actions"
+            data-testid="agent-action-rail"
+            // A verbose question can exceed a short chat pane. Bound and scroll
+            // the rail so its resolution controls remain reachable.
+            // https://github.com/logancyang/obsidian-copilot/issues/2948
+            className="tw-max-h-full tw-w-full tw-overflow-y-auto tw-bg-primary"
+          >
+            <div key={pendingActionId} data-action-id={pendingActionId}>
+              {pendingQuestion ? (
+                <AskUserQuestionCard
+                  request={pendingQuestion}
+                  onResolve={chatBackend.resolveAskUserQuestion.bind(chatBackend)}
+                />
+              ) : pendingPermission ? (
+                <ToolPermissionCard
+                  request={pendingPermission}
+                  onResolve={chatBackend.resolveToolPermission.bind(chatBackend)}
+                />
+              ) : null}
+            </div>
+          </div>
+        ) : null}
       </div>
     );
   }

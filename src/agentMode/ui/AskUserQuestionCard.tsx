@@ -34,8 +34,8 @@ function isAnswered(
 }
 
 /**
- * Inline card rendered at the tail of the chat scroll container while the
- * agent's `AskUserQuestion` tool waits on the user — the sibling of
+ * Card rendered in the chat's action rail while the agent's
+ * `AskUserQuestion` tool waits on the user — the sibling of
  * `ToolPermissionCard`. Replaces the old `AskUserQuestionModal`: modals steal
  * focus and resolve as a cancel on accidental click-outside, which is
  * inconsistent with the rest of Agent Mode's inline-card model.
@@ -146,7 +146,7 @@ export const AskUserQuestionCard: React.FC<AskUserQuestionCardProps> = ({ reques
   };
 
   return (
-    <div className="tw-mx-3 tw-my-2 tw-w-[calc(100%-1.5rem)] tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-secondary">
+    <div className="tw-w-full tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-secondary">
       <div className="copilot-divider-b tw-flex tw-items-center tw-gap-2 tw-px-3 tw-py-2">
         <MessageCircleQuestion className="tw-size-4 tw-shrink-0 tw-text-accent" />
         <div className="tw-truncate tw-text-sm tw-font-medium">Question from agent</div>

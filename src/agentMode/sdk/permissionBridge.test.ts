@@ -11,14 +11,12 @@ describe("PermissionBridge.canUseTool", () => {
     prompter: ((req: PermissionPrompt) => Promise<PermissionDecision>) | null,
     askUserQuestionPrompter?: AskUserQuestionPrompter
   ) {
-    const bridge = new PermissionBridge({
+    return new PermissionBridge("session-1", {
       getPrompter: () => prompter,
       getAskUserQuestionPrompter: askUserQuestionPrompter
         ? () => askUserQuestionPrompter
         : undefined,
     });
-    bridge.setSessionContext("session-1");
-    return bridge;
   }
 
   /**
@@ -46,8 +44,7 @@ describe("PermissionBridge.canUseTool", () => {
   } as unknown as Parameters<PermissionBridge["canUseTool"]>[2];
 
   it("denies when no prompter is registered", async () => {
-    const bridge = new PermissionBridge({ getPrompter: () => null });
-    bridge.setSessionContext("session-1");
+    const bridge = new PermissionBridge("session-1", { getPrompter: () => null });
     const result = await bridge.canUseTool("Edit", { file_path: "a.md" }, ctx);
     expect(result.behavior).toBe("deny");
   });
@@ -240,12 +237,10 @@ describe("PermissionBridge.canUseTool", () => {
       isPlanModePlanFilePath: (p: string) => boolean,
       prompter: ((req: PermissionPrompt) => Promise<PermissionDecision>) | null = null
     ) {
-      const bridge = new PermissionBridge({
+      return new PermissionBridge("session-1", {
         getPrompter: () => prompter,
         isPlanModePlanFilePath,
       });
-      bridge.setSessionContext("session-1");
-      return bridge;
     }
 
     it("auto-allows Write when file_path matches the plan-mode predicate", async () => {
@@ -296,8 +291,7 @@ describe("PermissionBridge.canUseTool", () => {
       const prompter = jest.fn(async () => ({
         outcome: { outcome: "selected" as const, optionId: "reject_once" as const },
       }));
-      const bridge = new PermissionBridge({ getPrompter: () => prompter });
-      bridge.setSessionContext("session-1");
+      const bridge = new PermissionBridge("session-1", { getPrompter: () => prompter });
       const result = await bridge.canUseTool(
         "Write",
         { file_path: "/Users/x/.claude/plans/foo.md", content: "x" },
@@ -312,13 +306,12 @@ describe("PermissionBridge.canUseTool", () => {
     it("denies a plan-file Write BEFORE the plan-file auto-allow when the session is read-only", async () => {
       const planMatcher = jest.fn((p: string) => p.endsWith("/.claude/plans/foo.md"));
       const prompter = jest.fn();
-      const bridge = new PermissionBridge({
+      const bridge = new PermissionBridge("session-1", {
         getPrompter: () => prompter,
         isPlanModePlanFilePath: planMatcher,
         // The current session is a read-only fan-out sub-session.
         getIsReadOnlySession: () => () => true,
       });
-      bridge.setSessionContext("session-1");
 
       const result = await bridge.canUseTool(
         "Write",
@@ -340,11 +333,10 @@ describe("PermissionBridge.canUseTool", () => {
       const prompter = jest.fn(async () => ({
         outcome: { outcome: "selected" as const, optionId: "allow_once" as const },
       }));
-      const bridge = new PermissionBridge({
+      const bridge = new PermissionBridge("session-1", {
         getPrompter: () => prompter,
         getIsReadOnlySession: () => () => true,
       });
-      bridge.setSessionContext("session-1");
 
       const result = await bridge.canUseTool("Read", { file_path: "/tmp/a.md" }, ctx);
       // A read tool falls through to the normal prompter path.
@@ -354,11 +346,10 @@ describe("PermissionBridge.canUseTool", () => {
 
     it("denies an UNKNOWN MCP tool (kind 'other') in a read-only session — fail safe", async () => {
       const prompter = jest.fn();
-      const bridge = new PermissionBridge({
+      const bridge = new PermissionBridge("session-1", {
         getPrompter: () => prompter,
         getIsReadOnlySession: () => () => true,
       });
-      bridge.setSessionContext("session-1");
 
       // A third-party MCP tool whose name isn't a known built-in derives to
       // `other`; it can't be verified read-only, so the gate must deny it.
@@ -369,12 +360,11 @@ describe("PermissionBridge.canUseTool", () => {
 
     it("does not gate writes when the session is NOT read-only (plan auto-allow still applies)", async () => {
       const prompter = jest.fn();
-      const bridge = new PermissionBridge({
+      const bridge = new PermissionBridge("session-1", {
         getPrompter: () => prompter,
         isPlanModePlanFilePath: (p) => p.endsWith("/.claude/plans/foo.md"),
         getIsReadOnlySession: () => () => false,
       });
-      bridge.setSessionContext("session-1");
 
       const result = await bridge.canUseTool(
         "Write",

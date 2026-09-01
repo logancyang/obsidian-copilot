@@ -652,8 +652,8 @@ export type AgentQuestionAnswers = { [questionText: string]: string };
 /**
  * A request from the backend asking the user to answer one or more inline
  * multiple-choice questions (Claude SDK's `AskUserQuestion` tool). Routed
- * through the session-domain ask-question prompter and rendered as an inline
- * card at the tail of the chat — the sibling of `PermissionPrompt`.
+ * through the session-domain ask-question prompter and rendered in the chat's
+ * action rail — the sibling of `PermissionPrompt`.
  * `requestId` reuses the backend's tool-call id so the resolver can pair the
  * answer with the originating call.
  */

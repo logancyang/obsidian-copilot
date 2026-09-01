@@ -258,7 +258,6 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
   private isReadOnlySession: ((sessionId: SessionId) => boolean) | null = null;
   private exitListeners = new Set<() => void>();
   private shuttingDown = false;
-  private readonly bridge: PermissionBridge;
   /**
    * Process-scoped cache of the SDK's model catalog. Populated lazily by
    * `ensureModelCatalog()` so we only spawn one extra `claude` subprocess
@@ -275,12 +274,6 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
   private compatibilityProbe: Promise<void> | null = null;
 
   constructor(private readonly opts: ClaudeSdkBackendProcessOptions) {
-    this.bridge = new PermissionBridge({
-      getPrompter: () => this.permissionPrompter,
-      getAskUserQuestionPrompter: () => this.askUserQuestionPrompter,
-      isPlanModePlanFilePath: opts.isPlanModePlanFilePath,
-      getIsReadOnlySession: () => this.isReadOnlySession,
-    });
     logInfo(
       `[AgentMode] ClaudeSdkBackendProcess constructed (claude=${opts.pathToClaudeCodeExecutable})`
     );
@@ -405,8 +398,16 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
     // those control calls reject with "only available in streaming input mode".
     const messageContent = promptInputToAnthropicContent(params);
     const promptStream = makePromptStream(messageContent, params.sessionId);
-
-    this.bridge.setSessionContext(params.sessionId);
+    // A process can host concurrent queries for different chats. Bind the
+    // callback to this query's immutable owner so another query cannot reroute
+    // or clear its blocking action.
+    // https://github.com/logancyang/obsidian-copilot/issues/2948
+    const permissionBridge = new PermissionBridge(params.sessionId, {
+      getPrompter: () => this.permissionPrompter,
+      getAskUserQuestionPrompter: () => this.askUserQuestionPrompter,
+      isPlanModePlanFilePath: this.opts.isPlanModePlanFilePath,
+      getIsReadOnlySession: () => this.isReadOnlySession,
+    });
 
     const options: Options = {
       pathToClaudeCodeExecutable: this.opts.pathToClaudeCodeExecutable,
@@ -414,7 +415,7 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       includePartialMessages: true,
       allowedTools: ["Read", "Write", "Edit", "Glob", "Grep", "LS"],
       disallowedTools: ["TaskOutput", "Workflow", "Monitor"],
-      canUseTool: this.bridge.canUseTool,
+      canUseTool: permissionBridge.canUseTool,
     };
     // Append the composed Copilot system prompt (captured at newSession time)
     // to Claude's default `claude_code` preset. The SDK's preset+append form
@@ -548,7 +549,6 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       }
     } finally {
       if (session.active === q) session.active = undefined;
-      this.bridge.clearSessionContext();
     }
 
     if (resultErrorMessage) {

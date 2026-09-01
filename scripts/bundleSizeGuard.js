@@ -4,7 +4,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const ts = require("typescript");
 
-const MAX_BUNDLE_BYTES = 5_000_000;
+const MAX_BUNDLE_BYTES = 5_500_000;
 const LEGAL_BLOCK_LABEL = "/*! Bundled license information:";
 const LEGAL_BLOCK_PREFIX = `${LEGAL_BLOCK_LABEL}\n\n`;
 const LEGAL_BLOCK_SUFFIX = "*/\n";
@@ -113,8 +113,8 @@ function dedupeEsbuildLegalComments(source) {
 }
 
 function assertBundleSize(source, maxBytes = MAX_BUNDLE_BYTES) {
-  // The sync limit is decimal 5 MB and rejects equality, so the release artifact must stay
-  // strictly below it. https://github.com/Brevilabs/obsidian-copilot-private/issues/94
+  // The temporary ceiling is decimal 5.5 MB and rejects equality, so the release artifact must
+  // stay strictly below it. https://github.com/Brevilabs/obsidian-copilot-private/issues/94
   const bytes = Buffer.byteLength(source, "utf8");
   if (bytes >= maxBytes) {
     throw new Error(

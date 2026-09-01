@@ -4,7 +4,7 @@
  * `PermissionPrompt`, dispatched through the permission prompter, then
  * translated back to a SDK `PermissionResult`. AskUserQuestion gets a separate
  * branch that dispatches through the ask-question prompter — the session
- * surfaces an inline card and returns the answers map.
+ * surfaces a card in the action rail and returns the answers map.
  */
 import type {
   CanUseTool,
@@ -73,23 +73,12 @@ export interface PermissionBridgeOptions {
   getIsReadOnlySession?: () => ((sessionId: SessionId) => boolean) | null;
 }
 
+/** Translates Claude tool requests for one immutable backend session. */
 export class PermissionBridge {
-  constructor(private readonly opts: PermissionBridgeOptions) {}
-
-  /**
-   * Single-field rather than keyed-by-toolCallId because each backend has
-   * exactly one in-flight `query()` at a time. If we ever support concurrent
-   * prompts on the same backend instance, key this by toolCallId.
-   */
-  private currentSessionId: SessionId | null = null;
-
-  setSessionContext(sessionId: SessionId): void {
-    this.currentSessionId = sessionId;
-  }
-
-  clearSessionContext(): void {
-    this.currentSessionId = null;
-  }
+  constructor(
+    private readonly sessionId: SessionId,
+    private readonly opts: PermissionBridgeOptions
+  ) {}
 
   // This bridge always sends its response through the SDK. The upstream
   // nullable return is reserved for hosts that answered out of band.
@@ -98,7 +87,7 @@ export class PermissionBridge {
       return this.handleAskUserQuestion(input as unknown as AskUserQuestionInput, ctx);
     }
 
-    const sessionId = this.currentSessionId;
+    const sessionId = this.sessionId;
     logSdkInbound(
       `canUseTool:request`,
       { toolName, input, suggestions: ctx.suggestions },
@@ -142,10 +131,6 @@ export class PermissionBridge {
     if (!prompter) {
       return this.deny("canUseTool:response", "No permission prompter available", sessionId);
     }
-    if (!sessionId) {
-      return this.deny("canUseTool:response", "Permission requested outside a session", sessionId);
-    }
-
     const prompt = synthesizePermissionPrompt(toolName, input, sessionId, ctx);
     const decision = await prompter(prompt);
     const result = mapDecisionToSdk(decision, ctx.suggestions, input);
@@ -157,10 +142,10 @@ export class PermissionBridge {
     input: AskUserQuestionInput,
     ctx: Parameters<CanUseTool>[2]
   ): Promise<PermissionResult> {
-    const sessionId = this.currentSessionId;
+    const sessionId = this.sessionId;
     logSdkInbound("askUserQuestion:request", input, sessionId);
     const prompter = this.opts.getAskUserQuestionPrompter?.() ?? null;
-    if (!prompter || !sessionId) {
+    if (!prompter) {
       return this.deny(
         "askUserQuestion:response",
         "AskUserQuestion is not yet supported",
@@ -194,7 +179,7 @@ export class PermissionBridge {
     }
   }
 
-  private deny(method: string, message: string, sessionId: SessionId | null): PermissionResult {
+  private deny(method: string, message: string, sessionId: SessionId): PermissionResult {
     const result: PermissionResult = { behavior: "deny", message };
     logSdkOutbound(method, result, sessionId);
     return result;

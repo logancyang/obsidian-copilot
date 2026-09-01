@@ -1,9 +1,16 @@
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
-import type { AgentChatMessage } from "@/agentMode/session/types";
+import type {
+  AgentChatMessage,
+  AskUserQuestionPrompt,
+  CurrentPlan,
+  PermissionPrompt,
+} from "@/agentMode/session/types";
 import AgentChatMessages from "@/agentMode/ui/AgentChatMessages";
 import { AI_SENDER } from "@/constants";
 import { act, render, screen } from "@testing-library/react";
 import React from "react";
+
+type AgentChatMessagesProps = React.ComponentProps<typeof AgentChatMessages>;
 
 jest.mock("@/hooks/useChatScrolling", () => ({
   // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook; name must match the export
@@ -36,6 +43,22 @@ jest.mock("@/agentMode/ui/AgentTrailView", () => ({
   ),
 }));
 
+jest.mock("@/agentMode/ui/ToolPermissionCard", () => ({
+  ToolPermissionCard: ({ request }: { request: PermissionPrompt }) => (
+    <div>Permission {request.toolCall.toolCallId}</div>
+  ),
+}));
+
+jest.mock("@/agentMode/ui/AskUserQuestionCard", () => ({
+  AskUserQuestionCard: ({ request }: { request: AskUserQuestionPrompt }) => (
+    <div>Question {request.requestId}</div>
+  ),
+}));
+
+jest.mock("@/agentMode/ui/PlanProposalCard", () => ({
+  PlanProposalCard: ({ plan }: { plan: CurrentPlan }) => <div>Plan {plan.id}</div>,
+}));
+
 function assistantMessage(
   id: string,
   timestampMs: number,
@@ -51,18 +74,54 @@ function assistantMessage(
   };
 }
 
-function renderMessages(messages: AgentChatMessage[], isLoading: boolean) {
-  return render(
-    <AgentChatMessages
-      messages={messages}
-      app={{} as never}
-      currentPlan={null}
-      pendingToolPermissions={[]}
-      pendingAskUserQuestions={[]}
-      chatBackend={{} as AgentChatBackend}
-      isLoading={isLoading}
-    />
-  );
+const chatBackend = {
+  resolveToolPermission: jest.fn(),
+  resolveAskUserQuestion: jest.fn(),
+} as unknown as AgentChatBackend;
+
+function permission(id: string): PermissionPrompt {
+  return {
+    sessionId: "session-1",
+    toolCall: { toolCallId: id, status: "pending", title: id },
+    options: [{ optionId: "allow", name: "Allow", kind: "allow_once" }],
+  };
+}
+
+function question(id: string): AskUserQuestionPrompt {
+  return {
+    sessionId: "session-1",
+    requestId: id,
+    questions: [{ question: id, options: [{ label: "Yes" }] }],
+  };
+}
+
+function plan(id: string): CurrentPlan {
+  return {
+    id,
+    revision: 1,
+    body: "Review the plan",
+    title: "Plan",
+    permissionGated: true,
+    decision: "pending",
+  };
+}
+
+function renderMessages(
+  messages: AgentChatMessage[],
+  isLoading: boolean,
+  overrides: Partial<AgentChatMessagesProps> = {}
+) {
+  const props: AgentChatMessagesProps = {
+    messages,
+    app: {} as never,
+    currentPlan: null,
+    pendingToolPermissions: [],
+    pendingAskUserQuestions: [],
+    chatBackend,
+    isLoading,
+    ...overrides,
+  };
+  return { ...render(<AgentChatMessages {...props} />), props };
 }
 
 describe("AgentChatMessages", () => {
@@ -118,6 +177,54 @@ describe("AgentChatMessages", () => {
       );
 
       expect(screen.getByTestId("agent-trail-timestamp").textContent).toBe(timestamp);
+    });
+
+    it("shows questions before permissions and reveals a permission after questions clear for https://github.com/logancyang/obsidian-copilot/issues/2948", () => {
+      const { rerender, props } = renderMessages([assistantMessage("answer-1", 62_000)], false, {
+        pendingToolPermissions: [permission("permission-first"), permission("permission-second")],
+        pendingAskUserQuestions: [question("question-first")],
+      });
+
+      const rail = screen.getByRole("region", { name: "Pending agent actions" });
+      const firstAction = rail.querySelector("[data-action-id]");
+      expect(Array.from(rail.querySelectorAll("[data-action-id]"), (el) => el.textContent)).toEqual(
+        ["Question question-first"]
+      );
+      expect(screen.getByTestId("chat-messages").textContent).not.toContain("question-first");
+
+      rerender(
+        <AgentChatMessages
+          {...props}
+          pendingToolPermissions={[permission("permission-first"), permission("permission-second")]}
+          pendingAskUserQuestions={[]}
+        />
+      );
+
+      expect(Array.from(rail.querySelectorAll("[data-action-id]"), (el) => el.textContent)).toEqual(
+        ["Permission permission-first"]
+      );
+      expect(rail.querySelector("[data-action-id]")).not.toBe(firstAction);
+    });
+
+    it("bounds and scrolls a tall action rail so controls remain reachable for https://github.com/logancyang/obsidian-copilot/issues/2948", () => {
+      renderMessages([], false, {
+        pendingAskUserQuestions: [question("empty-chat-question")],
+      });
+
+      const rail = screen.getByTestId("agent-action-rail");
+      expect(rail.textContent).toContain("empty-chat-question");
+      expect(rail.className).toContain("tw-w-full");
+      expect(rail.className).toContain("tw-max-h-full");
+      expect(rail.className).toContain("tw-overflow-y-auto");
+      expect(rail.className).not.toContain("tw-shrink-0");
+      expect(rail.className).not.toContain("tw-border");
+    });
+
+    it("keeps a plan-only state in the transcript without creating an action rail", () => {
+      renderMessages([], false, { currentPlan: plan("plan-1") });
+
+      expect(screen.getByTestId("chat-messages").textContent).toContain("Plan plan-1");
+      expect(screen.queryByTestId("agent-action-rail")).toBeNull();
     });
   });
 });
