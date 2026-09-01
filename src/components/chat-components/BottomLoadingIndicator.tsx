@@ -26,5 +26,3 @@ export const BottomLoadingIndicator: React.FC<BottomLoadingIndicatorProps> = ({
     </div>
   );
 };
-
-export default BottomLoadingIndicator;
