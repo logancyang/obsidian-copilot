@@ -1,5 +1,14 @@
 import { UsageMeter, type UsageMeterProps } from "@/agentMode/ui/AgentContextMeter";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import type { Meta, StoryObj } from "@/lib/story";
+
+function UsageMeterStory(props: UsageMeterProps) {
+  return (
+    <TooltipProvider>
+      <UsageMeter {...props} />
+    </TooltipProvider>
+  );
+}
 
 /**
  * The meter has two independent inputs — context occupancy and account plan caps — and a
@@ -9,7 +18,7 @@ import type { Meta, StoryObj } from "@/lib/story";
  */
 const meta = {
   title: "Agent Mode/UsageMeter",
-  component: UsageMeter,
+  component: UsageMeterStory,
 } satisfies Meta<UsageMeterProps>;
 export default meta;
 
