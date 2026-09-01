@@ -6,14 +6,6 @@ export class RateLimiter {
     this.requestsPerMin = requestsPerMin;
   }
 
-  setRequestsPerMin(requestsPerMin: number) {
-    this.requestsPerMin = requestsPerMin;
-  }
-
-  getRequestsPerMin(): number {
-    return this.requestsPerMin;
-  }
-
   async wait(): Promise<void> {
     const now = Date.now();
     const timeSinceLastRequest = now - this.lastRequestTime;

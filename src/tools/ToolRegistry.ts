@@ -97,24 +97,10 @@ export class ToolRegistry {
   }
 
   /**
-   * Get configurable tools (excludes always-enabled tools)
-   */
-  getConfigurableTools(): ToolDefinition[] {
-    return Array.from(this.tools.values()).filter((def) => !def.metadata.isAlwaysEnabled);
-  }
-
-  /**
    * Get tool metadata by ID
    */
   getToolMetadata(id: string): ToolMetadata | undefined {
     return this.tools.get(id)?.metadata;
-  }
-
-  /**
-   * Get tool definition by ID
-   */
-  getToolDefinition(id: string): ToolDefinition | undefined {
-    return this.tools.get(id);
   }
 
   /**
