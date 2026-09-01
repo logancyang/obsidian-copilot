@@ -217,11 +217,13 @@ Copilot discovers skills automatically from:
 
 There is no separate Skills folder setting. Change the root under **Basic → General → Copilot folder location**.
 
+If Copilot finds a `SKILL.md` that it cannot load, the top of the Skills tab shows how many skills are not available to agents and summarizes the cause. Choose **View details** to see each file's path, its specific error, and the rejected line when available. Long rejected lines stay collapsed until you choose **Show more**. From there, **Open SKILL.md** edits an indexed file in Obsidian or a hidden agent file in your default editor, while **Reveal in vault** or **Show in folder** locates it. The notice disappears after the repaired file loads successfully; returning to Obsidian refreshes files edited externally.
+
 ### Skill list controls
 
 | Control                                       | What it does                                                                                                                                                                                                        |
 | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Search skills**                             | Filters the visible name and description. The adjacent count reports all discovered skills.                                                                                                                         |
+| **Search skills**                             | Filters the visible name and description. The adjacent count reports skills that loaded successfully; files awaiting repair are listed separately above it.                                                         |
 | **opencode, Claude, and Codex icon switches** | Enables or disables the skill for each agent by managing a link in that agent's native skills folder. A project-only or duplicated skill may first require migration into the shared folder.                        |
 | **Edit SKILL.md**                             | Opens the shared skill in Obsidian. A skill under a hidden agent folder opens with the system's default editor.                                                                                                     |
 | **Properties…**                               | Edits structured `SKILL.md` frontmatter.                                                                                                                                                                            |

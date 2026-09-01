@@ -1,9 +1,14 @@
 import { AppContext } from "@/context";
 import { DEFAULT_SETTINGS } from "@/constants";
+import type { RejectedSkill, Skill } from "@/agentMode/skills/types";
 import { settingsAtom, settingsStore, updateSetting } from "@/settings/model";
-import { act, render, screen } from "@testing-library/react";
-import type { App } from "obsidian";
+import { openWithSystemDefault } from "@/utils/openWithSystemDefault";
+import { openVaultPath } from "@/utils/openVaultPath";
+import { __resetVaultBaseCache } from "@/utils/vaultPath";
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import { FileSystemAdapter, TFile, TFolder, type App } from "obsidian";
 import React from "react";
+import type { SkillLoadIssue } from "./SkillLoadIssues";
 import { SkillsSettings } from "./SkillsSettings";
 
 // The manager owns filesystem discovery and a live subscription store; stub the
@@ -11,14 +16,37 @@ import { SkillsSettings } from "./SkillsSettings";
 // refresh triggered by a derived-path change.
 const refresh = jest.fn().mockResolvedValue(undefined);
 const getAgentDirsProjectRel = jest.fn().mockReturnValue({});
+let mockManagedSkills: Skill[] = [];
+let mockRejectedSkills: RejectedSkill[] = [];
+let mockCapturedLoadIssues: readonly SkillLoadIssue[] = [];
+const mockOpenSkillLoadIssuesModal = jest.fn();
 jest.mock("@/agentMode/skills/SkillManager", () => ({
   SkillManager: { getInstance: () => ({ refresh, getAgentDirsProjectRel }) },
   // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook; name must match the export
-  useManagedSkills: () => [],
+  useManagedSkills: () => mockManagedSkills,
+  // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook; name must match the export
+  useRejectedSkills: () => mockRejectedSkills,
   // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook; name must match the export
   useEpermSeen: () => false,
   dismissEpermBanner: jest.fn(),
 }));
+
+jest.mock("./SkillLoadIssues", () => {
+  const actual = jest.requireActual("./SkillLoadIssues");
+  return {
+    ...actual,
+    SkillLoadIssuesModal: class {
+      open = mockOpenSkillLoadIssuesModal;
+
+      constructor(_app: App, issues: readonly SkillLoadIssue[]) {
+        mockCapturedLoadIssues = issues;
+      }
+    },
+  };
+});
+
+jest.mock("@/utils/openWithSystemDefault", () => ({ openWithSystemDefault: jest.fn() }));
+jest.mock("@/utils/openVaultPath", () => ({ openVaultPath: jest.fn() }));
 
 // The registry pulls in every backend's icon/adapter chain; the row list is
 // empty in these tests, so an empty descriptor set keeps the surface minimal.
@@ -26,9 +54,9 @@ jest.mock("@/agentMode/backends/registry", () => ({
   listBackendDescriptors: () => [],
 }));
 
-function renderSettings() {
+function renderSettings(app: App = makeApp()) {
   return render(
-    <AppContext.Provider value={{ vault: { adapter: {} } } as unknown as App}>
+    <AppContext.Provider value={app}>
       <SkillsSettings />
     </AppContext.Provider>
   );
@@ -38,6 +66,10 @@ describe("SkillsSettings", () => {
   describe("SkillsSettings()", () => {
     beforeEach(() => {
       jest.clearAllMocks();
+      __resetVaultBaseCache();
+      mockManagedSkills = [];
+      mockRejectedSkills = [];
+      mockCapturedLoadIssues = [];
       settingsStore.set(settingsAtom, { ...DEFAULT_SETTINGS, copilotFolder: "copilot" });
     });
 
@@ -69,5 +101,147 @@ describe("SkillsSettings", () => {
       // guards against the effect regressing to a stale/retired dependency.
       expect(refresh).toHaveBeenCalledTimes(2);
     });
+
+    it("refreshes hidden external-editor repairs when Settings regains focus for https://github.com/Brevilabs/obsidian-copilot-private/issues/166", () => {
+      renderSettings();
+      expect(refresh).toHaveBeenCalledTimes(1);
+
+      fireEvent.focus(window);
+
+      expect(refresh).toHaveBeenCalledTimes(2);
+    });
+
+    it("shows actionable recovery instead of the creation empty state for https://github.com/Brevilabs/obsidian-copilot-private/issues/166", () => {
+      mockRejectedSkills = [makeRejectedSkill()];
+      renderSettings();
+
+      expect(screen.getByRole("alert", { name: "1 skill could not be loaded" })).not.toBeNull();
+      expect(screen.getByText("The skills have format errors.")).not.toBeNull();
+      expect(screen.getByRole("button", { name: "View details" })).not.toBeNull();
+      expect(screen.queryByText("broken-skill")).toBeNull();
+      expect(screen.queryByText(".claude/skills/broken-skill/")).toBeNull();
+      expect(screen.getByText("0 loaded")).not.toBeNull();
+      expect(screen.getByText(/No skills are loaded yet/)).not.toBeNull();
+      expect(screen.queryByText("No skills yet")).toBeNull();
+    });
+
+    it("opens hidden rejected skills and their folders with system apps for https://github.com/Brevilabs/obsidian-copilot-private/issues/166", () => {
+      mockRejectedSkills = [makeRejectedSkill()];
+      renderSettings();
+
+      fireEvent.click(screen.getByRole("button", { name: "View details" }));
+      expect(mockOpenSkillLoadIssuesModal).toHaveBeenCalledTimes(1);
+      expect(mockCapturedLoadIssues[0]).toMatchObject({
+        location: ".claude/skills/broken-skill/SKILL.md",
+        reason: 'The description contains ": " and must be quoted.',
+        offendingText: "description: Use this skill for: reviewing notes",
+      });
+      mockCapturedLoadIssues[0].onOpen();
+      mockCapturedLoadIssues[0].onReveal();
+
+      expect(openVaultPath).toHaveBeenCalledWith(
+        expect.anything(),
+        "/vault/.claude/skills/broken-skill/SKILL.md",
+        { newLeaf: true }
+      );
+      expect(openWithSystemDefault).toHaveBeenCalledWith("/vault/.claude/skills/broken-skill");
+    });
+
+    it("opens and reveals indexed rejected skills inside Obsidian for https://github.com/Brevilabs/obsidian-copilot-private/issues/166", () => {
+      const app = makeApp(true);
+      mockRejectedSkills = [
+        makeRejectedSkill({
+          filePath: "/vault/copilot/skills/broken-skill/SKILL.md",
+          dirPath: "/vault/copilot/skills/broken-skill",
+        }),
+      ];
+      renderSettings(app);
+
+      fireEvent.click(screen.getByRole("button", { name: "View details" }));
+      mockCapturedLoadIssues[0].onOpen();
+      mockCapturedLoadIssues[0].onReveal();
+
+      expect(openVaultPath).toHaveBeenCalledWith(
+        app,
+        "/vault/copilot/skills/broken-skill/SKILL.md",
+        { newLeaf: true }
+      );
+      expect(
+        (
+          app as unknown as {
+            internalPlugins: {
+              getPluginById: () => { instance: { revealInFolder: jest.Mock } };
+            };
+          }
+        ).internalPlugins.getPluginById().instance.revealInFolder
+      ).toHaveBeenCalledTimes(1);
+      expect(openWithSystemDefault).not.toHaveBeenCalled();
+    });
+
+    it("reveals vault-relative rejected skills inside Obsidian when no absolute vault path exists for https://github.com/Brevilabs/obsidian-copilot-private/issues/166", () => {
+      const app = makeApp(true);
+      mockRejectedSkills = [
+        makeRejectedSkill({
+          filePath: "copilot/skills/broken-skill/SKILL.md",
+          dirPath: "copilot/skills/broken-skill",
+        }),
+      ];
+      renderSettings(app);
+
+      fireEvent.click(screen.getByRole("button", { name: "View details" }));
+      mockCapturedLoadIssues[0].onReveal();
+
+      expect(
+        (
+          app as unknown as {
+            internalPlugins: {
+              getPluginById: () => { instance: { revealInFolder: jest.Mock } };
+            };
+          }
+        ).internalPlugins.getPluginById().instance.revealInFolder
+      ).toHaveBeenCalledTimes(1);
+      expect(openWithSystemDefault).not.toHaveBeenCalled();
+    });
   });
 });
+
+function makeApp(indexRejectedSkill = false): App {
+  const file = new (TFile as unknown as new (path: string) => TFile)(
+    "copilot/skills/broken-skill/SKILL.md"
+  );
+  const folder = new (TFolder as unknown as new (path: string) => TFolder)(
+    "copilot/skills/broken-skill"
+  );
+  const adapter = new (FileSystemAdapter as unknown as new (basePath: string) => FileSystemAdapter)(
+    "/vault"
+  );
+  const revealInFolder = jest.fn();
+  return {
+    vault: {
+      adapter,
+      getAbstractFileByPath: jest.fn((path: string) => {
+        if (!indexRejectedSkill) return null;
+        if (path.endsWith("/SKILL.md")) return file;
+        if (path === "copilot/skills/broken-skill") return folder;
+        return null;
+      }),
+    },
+    workspace: {
+      openLinkText: jest.fn(),
+    },
+    internalPlugins: {
+      getPluginById: jest.fn(() => ({ enabled: true, instance: { revealInFolder } })),
+    },
+  } as unknown as App;
+}
+
+function makeRejectedSkill(overrides: Partial<RejectedSkill> = {}): RejectedSkill {
+  return {
+    name: "broken-skill",
+    filePath: "/vault/.claude/skills/broken-skill/SKILL.md",
+    dirPath: "/vault/.claude/skills/broken-skill",
+    reason: 'The description contains ": " and must be quoted.',
+    offendingText: "description: Use this skill for: reviewing notes",
+    ...overrides,
+  };
+}

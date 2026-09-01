@@ -4,6 +4,12 @@ import type { AgentBrand } from "@/agentMode/session/types";
 import { DeleteConfirmModal } from "./DeleteConfirmDialog";
 import { EmptyPlaceholder } from "./EmptyPlaceholder";
 import {
+  AllSkillsNotLoaded,
+  SkillLoadIssues,
+  SkillLoadIssuesModal,
+  type SkillLoadIssue,
+} from "./SkillLoadIssues";
+import {
   PropertiesModal,
   type PropertiesSaveOutcome,
   type PropertiesSaveRequest,
@@ -13,18 +19,20 @@ import {
   SkillManager,
   useEpermSeen,
   useManagedSkills,
+  useRejectedSkills,
 } from "@/agentMode/skills/SkillManager";
 import { SkillRow } from "./SkillRow";
 import { type Skill } from "@/agentMode/skills/types";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { logWarn } from "@/logger";
 import { deriveSkillsFolder } from "@/settings/copilotFolder";
 import { openWithSystemDefault } from "@/utils/openWithSystemDefault";
+import { openVaultPath } from "@/utils/openVaultPath";
+import { revealFolderInExplorer } from "@/utils/revealFolderInExplorer";
 import { getVaultBase, toVaultRelative } from "@/utils/vaultPath";
 import { useSettingsValue } from "@/settings/model";
 import { AlertTriangle, Search } from "lucide-react";
-import { App, FileSystemAdapter, Notice, TFile, TFolder } from "obsidian";
+import { App, FileSystemAdapter, Notice, TFolder } from "obsidian";
 import { useApp } from "@/context";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -78,6 +86,7 @@ export const SkillsSettings: React.FC = () => {
     []
   );
   const skills = useManagedSkills();
+  const rejectedSkills = useRejectedSkills();
   const epermSeen = useEpermSeen();
 
   const [searchValue, setSearchValue] = useState("");
@@ -92,54 +101,62 @@ export const SkillsSettings: React.FC = () => {
   // EPERM banner. Neither persists across plugin reloads — by design.
   const [syncBannerDismissed, setSyncBannerDismissed] = useState(false);
 
-  // Trigger a discovery pass on mount and whenever the derived folder changes
-  // (e.g. the user moves the Copilot root) so the list reflects whatever lives
-  // at the currently configured path. The unified walker pulls in canonical +
-  // every agent's project-skills dir in one pass.
+  // Trigger discovery on mount, whenever the Copilot root changes, and when
+  // this Settings window regains focus. The focus refresh is necessary because
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/166 can require
+  // editing a hidden agent file in an external editor, outside Obsidian's watcher.
   useEffect(() => {
-    void SkillManager.getInstance().refresh();
+    const manager = SkillManager.getInstance();
+    void manager.refresh();
+    const hostWindow = containerRef.current?.win;
+    if (hostWindow === undefined) return;
+    const handleFocus = (): void => {
+      void manager.refresh();
+    };
+    hostWindow.addEventListener("focus", handleFocus);
+    return () => hostWindow.removeEventListener("focus", handleFocus);
   }, [skillsFolder]);
-
-  /**
-   * Open a SKILL.md (absolute path) for editing. Managed skills live inside
-   * the visible vault and open in Obsidian. Project-managed skills live
-   * under agent dotfile folders (e.g. `.claude/skills/`) that Obsidian
-   * doesn't index — falling through `openLinkText` there triggers a
-   * "Folder already exists" error as it tries to create a new note, so we
-   * hand those off to the OS default editor via Electron's shell instead.
-   */
-  const handleOpenSkillMdAbsPath = useCallback(
-    (absPath: string) => {
-      const vaultRel = toVaultRelative(absPath, getVaultBase(app));
-      if (vaultRel !== absPath && app.vault.getAbstractFileByPath(vaultRel) instanceof TFile) {
-        void app.workspace.openLinkText(vaultRel, "", true);
-        return;
-      }
-      void openWithSystemDefault(absPath);
-    },
-    [app]
-  );
 
   /** Open the canonical SKILL.md of a managed skill in Obsidian's editor. */
   const handleEditSkillMd = useCallback(
     (skill: Skill) => {
-      handleOpenSkillMdAbsPath(skill.filePath);
-    },
-    [handleOpenSkillMdAbsPath]
-  );
-
-  /** Reveal the canonical skill folder in Obsidian's file explorer. */
-  const handleRevealInVault = useCallback(
-    (skill: Skill) => {
-      const folderRel = toVaultRelative(skill.dirPath, getVaultBase(app));
-      if (folderRel === skill.dirPath) {
-        new Notice("Could not resolve the skill folder inside this vault.");
-        return;
-      }
-      revealInFileExplorer(app, folderRel);
+      openVaultPath(app, skill.filePath, { newLeaf: true });
     },
     [app]
   );
+
+  /**
+   * Reveal indexed skills in Obsidian and hidden agent skills in the OS file manager.
+   * https://github.com/Brevilabs/obsidian-copilot-private/issues/166
+   * Hidden agent folders are outside Obsidian's index, so they cannot use the vault reveal path.
+   */
+  const handleRevealSkillFolder = useCallback(
+    (dirPath: string) => {
+      const folderRel = toVaultRelative(dirPath, getVaultBase(app));
+      if (app.vault.getAbstractFileByPath(folderRel) instanceof TFolder) {
+        revealFolderInExplorer(app, folderRel);
+        return;
+      }
+      void openWithSystemDefault(dirPath);
+    },
+    [app]
+  );
+
+  const loadIssues = useMemo<SkillLoadIssue[]>(() => {
+    const vaultBase = getVaultBase(app);
+    return rejectedSkills.map((skill) => {
+      const folderRel = toVaultRelative(skill.dirPath, vaultBase);
+      const indexed = app.vault.getAbstractFileByPath(folderRel) instanceof TFolder;
+      return {
+        location: toVaultRelative(skill.filePath, vaultBase),
+        reason: skill.reason,
+        offendingText: skill.offendingText,
+        revealLabel: indexed ? "Reveal in vault" : "Show in folder",
+        onOpen: () => openVaultPath(app, skill.filePath, { newLeaf: true }),
+        onReveal: () => handleRevealSkillFolder(skill.dirPath),
+      };
+    });
+  }, [app, handleRevealSkillFolder, rejectedSkills]);
 
   const filteredSkills = useMemo(() => filterSkills(skills, searchValue), [skills, searchValue]);
 
@@ -228,6 +245,15 @@ export const SkillsSettings: React.FC = () => {
           </div>
         )}
 
+        {loadIssues.length > 0 && (
+          <div className="tw-mt-3">
+            <SkillLoadIssues
+              issues={loadIssues}
+              onViewDetails={() => new SkillLoadIssuesModal(app, loadIssues).open()}
+            />
+          </div>
+        )}
+
         {/* Toolbar — search + count */}
         <div className="tw-mt-4 tw-flex tw-items-center tw-gap-2">
           <div className="tw-relative tw-flex-1 sm:tw-flex-initial">
@@ -243,17 +269,24 @@ export const SkillsSettings: React.FC = () => {
               aria-label="Search skills"
             />
           </div>
-          <span className="tw-text-xs tw-text-muted">{formatSkillCount(skills.length)}</span>
+          <span className="tw-text-xs tw-text-muted">{skills.length} loaded</span>
         </div>
 
         {/* Body — empty placeholder, or the Tidy list. */}
         <div className="tw-mt-4">
           {skills.length === 0 ? (
-            <EmptyPlaceholder folder={displayFolder} />
+            // https://github.com/Brevilabs/obsidian-copilot-private/issues/166
+            // Rejected files prove skills exist, so the ordinary creation-first
+            // empty state would falsely tell the user they have none.
+            rejectedSkills.length > 0 ? (
+              <AllSkillsNotLoaded />
+            ) : (
+              <EmptyPlaceholder folder={displayFolder} />
+            )
           ) : (
             <div className="tw-flex tw-flex-col tw-gap-1.5">
               {filteredSkills.length === 0 ? (
-                <div className="tw-rounded-md tw-border tw-border-dashed tw-border-border tw-bg-primary tw-px-3.5 tw-py-6 tw-text-center tw-text-ui-smaller tw-text-muted">
+                <div className="tw-rounded-sm tw-border tw-border-dashed tw-border-border tw-bg-primary tw-px-3 tw-py-6 tw-text-center tw-text-ui-smaller tw-text-muted">
                   No skills match &ldquo;{searchValue}&rdquo;.
                 </div>
               ) : (
@@ -265,7 +298,7 @@ export const SkillsSettings: React.FC = () => {
                     agentDirsProjectRel={SkillManager.getInstance().getAgentDirsProjectRel()}
                     onEditSkillMd={() => handleEditSkillMd(skill)}
                     onEditProperties={() => handleEditProperties(skill)}
-                    onRevealInVault={() => handleRevealInVault(skill)}
+                    onRevealInVault={() => handleRevealSkillFolder(skill.dirPath)}
                     onDelete={() => handleAskDelete(skill)}
                     containerRef={containerRef}
                   />
@@ -368,46 +401,6 @@ function filterSkills(skills: Skill[], query: string): Skill[] {
     (s) =>
       formatSkillDisplayName(s).toLowerCase().includes(trimmed) ||
       s.description.toLowerCase().includes(trimmed)
-  );
-}
-
-/** Pluralise the skill count for the toolbar. */
-function formatSkillCount(n: number): string {
-  return `${n} skill${n === 1 ? "" : "s"}`;
-}
-
-/**
- * Reveal a vault-relative folder in Obsidian's internal file-explorer
- * plugin. Falls back to a Notice if the explorer isn't installed or the
- * folder isn't in the vault cache (hidden dotfile folder, etc.).
- */
-function revealInFileExplorer(app: App, relPath: string): void {
-  const folder = app.vault.getAbstractFileByPath(relPath);
-  if (folder instanceof TFolder) {
-    const fileExplorer = (
-      app as unknown as {
-        internalPlugins?: {
-          getPluginById?: (id: string) =>
-            | {
-                enabled?: boolean;
-                instance?: { revealInFolder?: (folder: TFolder) => void };
-              }
-            | undefined;
-        };
-      }
-    ).internalPlugins?.getPluginById?.("file-explorer");
-    if (fileExplorer?.enabled && fileExplorer.instance?.revealInFolder) {
-      fileExplorer.instance.revealInFolder(folder);
-      return;
-    }
-    logWarn("[skills] File Explorer plugin unavailable; cannot reveal folder.");
-    new Notice("File Explorer isn't enabled; can't reveal the folder.");
-    return;
-  }
-  // Hidden folders aren't in the vault cache. Surface a friendly notice
-  // rather than failing silently.
-  new Notice(
-    `Skill folder "${relPath}" isn't indexed by Obsidian — open it from your file manager.`
   );
 }
 
