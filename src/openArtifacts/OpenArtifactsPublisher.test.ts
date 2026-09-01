@@ -1,29 +1,33 @@
 import type {
-  SymposiumModalOptions,
-  SymposiumModalResult,
-} from "@/components/modals/SymposiumModal";
-import { SymposiumClientError } from "@/symposium/SymposiumClient";
-import { createSymposiumAgentBridge, SymposiumPublisher } from "@/symposium/SymposiumPublisher";
+  OpenArtifactsModalOptions,
+  OpenArtifactsModalResult,
+} from "@/components/modals/OpenArtifactsModal";
+import { OpenArtifactsClientError } from "@/openArtifacts/OpenArtifactsClient";
 import {
-  SYMPOSIUM_MAX_HTML_BYTES,
-  SymposiumDocumentTooLargeError,
-} from "@/symposium/symposiumDocument";
-import type { SymposiumLedgerEntry } from "@/symposium/symposiumLedger";
-import type { SymposiumAgentHandoff } from "@/symposium/symposiumAgentHandoff";
-import type { SymposiumDocument, SymposiumReceipt } from "@/symposium/types";
+  createOpenArtifactsAgentBridge,
+  OpenArtifactsPublisher,
+} from "@/openArtifacts/OpenArtifactsPublisher";
+import {
+  OPENARTIFACTS_MAX_HTML_BYTES,
+  OpenArtifactsDocumentTooLargeError,
+} from "@/openArtifacts/openArtifactsDocument";
+import type { OpenArtifactsLedgerEntry } from "@/openArtifacts/openArtifactsLedger";
+import type { OpenArtifactsAgentHandoff } from "@/openArtifacts/openArtifactsAgentHandoff";
+import type { OpenArtifactsDocument, OpenArtifactsReceipt } from "@/openArtifacts/types";
 import { sha256 } from "@/utils/hash";
 import { TFile, type App } from "obsidian";
 
 const DOC_ID = "9f2k4mvq7t0xbz3n";
 const NEW_DOC_ID = "0123456789abcdef";
-const DOC_URL = `https://symposium.md/d/${DOC_ID}?server=exact`;
-const NEW_DOC_URL = `https://symposium.md/d/${NEW_DOC_ID}?server=exact`;
-const DOCUMENT: SymposiumDocument = {
+const DOC_URL = `https://openartifacts.site/d/${DOC_ID}?server=exact`;
+const LEGACY_DOC_URL = `https://symposium.site/d/${DOC_ID}?stored=legacy`;
+const NEW_DOC_URL = `https://openartifacts.site/d/${NEW_DOC_ID}?server=exact`;
+const DOCUMENT: OpenArtifactsDocument = {
   title: "Architecture",
   html: "<!doctype html><html><body>Review</body></html>",
   byteLength: 52,
 };
-const RECEIPT: SymposiumReceipt = {
+const RECEIPT: OpenArtifactsReceipt = {
   docId: DOC_ID,
   url: DOC_URL,
   version: 1,
@@ -40,14 +44,14 @@ interface Harness {
   file: TFile;
   frontmatter: Record<string, unknown>;
   loadLicenseKey: jest.Mock;
-  modalOptions: SymposiumModalOptions[];
+  modalOptions: OpenArtifactsModalOptions[];
   closeModal: jest.Mock;
   openModal: jest.Mock;
   processFrontMatter: jest.Mock;
   previewIsCurrent: jest.Mock;
-  publisher: SymposiumPublisher;
+  publisher: OpenArtifactsPublisher;
   readStagedHtml: jest.Mock;
-  recordLedger: jest.Mock<Promise<void>, [SymposiumLedgerEntry]>;
+  recordLedger: jest.Mock<Promise<void>, [OpenArtifactsLedgerEntry]>;
   removePreview: jest.Mock;
 }
 
@@ -63,7 +67,7 @@ function createHarness(frontmatter: Record<string, unknown> = {}): Harness {
   const previewIsCurrent = jest.fn().mockResolvedValue(true);
   const removePreview = jest.fn().mockResolvedValue(undefined);
   const consumeAgentHandoff = jest.fn(
-    async (stagedHtmlPath: string): Promise<SymposiumAgentHandoff> => {
+    async (stagedHtmlPath: string): Promise<OpenArtifactsAgentHandoff> => {
       const html = (await readStagedHtml(stagedHtmlPath)) as string;
       const fileName = stagedHtmlPath.split("/").at(-1);
       const previewPath = `/tmp/${fileName}`;
@@ -96,13 +100,13 @@ function createHarness(frontmatter: Record<string, unknown> = {}): Harness {
   };
   const loadLicenseKey = jest.fn().mockResolvedValue("decrypted-license");
   const buildDocument = jest.fn().mockResolvedValue(DOCUMENT);
-  const modalOptions: SymposiumModalOptions[] = [];
+  const modalOptions: OpenArtifactsModalOptions[] = [];
   const openModal = jest.fn();
   const closeModal = jest.fn();
   const recordLedger = jest
-    .fn<Promise<void>, [SymposiumLedgerEntry]>()
+    .fn<Promise<void>, [OpenArtifactsLedgerEntry]>()
     .mockResolvedValue(undefined);
-  const publisher = new SymposiumPublisher(app, {
+  const publisher = new OpenArtifactsPublisher(app, {
     client,
     loadLicenseKey,
     buildDocument,
@@ -142,7 +146,7 @@ function createHarness(frontmatter: Record<string, unknown> = {}): Harness {
 async function openAndConfirm(
   harness: Harness,
   action: "publish" | "update" | "delete"
-): Promise<SymposiumModalResult> {
+): Promise<OpenArtifactsModalResult> {
   await harness.publisher.open(harness.file);
   return harness.modalOptions.at(-1)!.onConfirm(action, activeDocument);
 }
@@ -150,10 +154,10 @@ async function openAndConfirm(
 async function startAgentReview(
   harness: Harness,
   html = DOCUMENT.html,
-  stagedPath = ".symposium/handoffs/review.html"
+  stagedPath = ".openartifacts/handoffs/review.html"
 ): Promise<{
-  outcome: Promise<Awaited<ReturnType<SymposiumPublisher["reviewAgentPublish"]>>>;
-  options: SymposiumModalOptions;
+  outcome: Promise<Awaited<ReturnType<OpenArtifactsPublisher["reviewAgentPublish"]>>>;
+  options: OpenArtifactsModalOptions;
 }> {
   const initialModalCount = harness.modalOptions.length;
   harness.readStagedHtml.mockResolvedValueOnce(html);
@@ -167,8 +171,8 @@ async function startAgentReview(
 }
 
 async function startAgentManage(harness: Harness): Promise<{
-  outcome: Promise<Awaited<ReturnType<SymposiumPublisher["reviewAgentManage"]>>>;
-  options: SymposiumModalOptions;
+  outcome: Promise<Awaited<ReturnType<OpenArtifactsPublisher["reviewAgentManage"]>>>;
+  options: OpenArtifactsModalOptions;
 }> {
   const outcome = harness.publisher.reviewAgentManage(harness.file.path);
   for (let turn = 0; turn < 20 && harness.modalOptions.length === 0; turn += 1) {
@@ -179,8 +183,8 @@ async function startAgentManage(harness: Harness): Promise<{
   return { outcome, options };
 }
 
-describe("SymposiumPublisher", () => {
-  describe("createSymposiumAgentBridge()", () => {
+describe("OpenArtifactsPublisher", () => {
+  describe("createOpenArtifactsAgentBridge()", () => {
     it("exposes frozen path-only operations that delegate to the trusted publisher", async () => {
       const harness = createHarness();
       const manage = jest
@@ -190,7 +194,7 @@ describe("SymposiumPublisher", () => {
         .spyOn(harness.publisher, "reviewAgentPublish")
         .mockResolvedValue({ status: "cancelled" });
 
-      const bridge = createSymposiumAgentBridge(harness.publisher);
+      const bridge = createOpenArtifactsAgentBridge(harness.publisher);
 
       expect(Object.isFrozen(bridge)).toBe(true);
       expect(Object.keys(bridge)).toEqual(["reviewAgentManage", "reviewAgentPublish"]);
@@ -199,16 +203,16 @@ describe("SymposiumPublisher", () => {
       });
       expect(manage).toHaveBeenCalledWith("Notes/Architecture.md");
       await expect(
-        bridge.reviewAgentPublish("Notes/Architecture.md", ".symposium/handoffs/review.html")
+        bridge.reviewAgentPublish("Notes/Architecture.md", ".openartifacts/handoffs/review.html")
       ).resolves.toEqual({ status: "cancelled" });
       expect(review).toHaveBeenCalledWith(
         "Notes/Architecture.md",
-        ".symposium/handoffs/review.html"
+        ".openartifacts/handoffs/review.html"
       );
     });
   });
 
-  describe("SymposiumPublisher", () => {
+  describe("OpenArtifactsPublisher", () => {
     describe("open()", () => {
       it("opens an unpublished confirmation and posts when the property is missing", async () => {
         const value = {};
@@ -267,7 +271,7 @@ describe("SymposiumPublisher", () => {
           kind: "failure",
           action: "publish",
           message:
-            "This note already uses the symposium property for an unrecognized value. Recover its public link from .symposium/publish-history.md, then repair or remove the property before publishing.",
+            "This note already uses the symposium property for an unrecognized value. Recover its public link from .openartifacts/publish-history.md, then repair or remove the property before publishing.",
           accessNotice: false,
           retryable: false,
         });
@@ -290,7 +294,7 @@ describe("SymposiumPublisher", () => {
           kind: "failure",
           action: "publish",
           message:
-            "This note's frontmatter must be a YAML property map. Fix it before publishing to Symposium.",
+            "This note's frontmatter must be a YAML property map. Fix it before publishing to OpenArtifacts.",
           accessNotice: false,
           retryable: false,
         });
@@ -324,6 +328,20 @@ describe("SymposiumPublisher", () => {
         expect(harness.processFrontMatter).not.toHaveBeenCalled();
       });
 
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/337 routes a legacy stored document URL through update without publishing", async () => {
+        const harness = createHarness({ symposium: LEGACY_DOC_URL });
+
+        const result = await openAndConfirm(harness, "publish");
+
+        expect(result).toEqual({
+          kind: "success",
+          action: "update",
+          receipt: { ...RECEIPT, version: 2 },
+        });
+        expect(harness.client.update).toHaveBeenCalledWith(DOC_ID, DOCUMENT, "decrypted-license");
+        expect(harness.client.publish).not.toHaveBeenCalled();
+      });
+
       it("lets copied notes intentionally update the same remote id", async () => {
         const first = createHarness({ symposium: DOC_URL });
         const second = createHarness({ symposium: DOC_URL });
@@ -349,7 +367,7 @@ describe("SymposiumPublisher", () => {
           kind: "persistence",
           action: "update",
           message:
-            "The original page was updated, but this note’s Symposium identity changed or could not be verified. Its current identity was left unchanged.",
+            "The original page was updated, but this note’s OpenArtifacts identity changed or could not be verified. Its current identity was left unchanged.",
           receipt,
         });
         expect(harness.frontmatter.symposium).toBe(NEW_DOC_URL);
@@ -378,7 +396,7 @@ describe("SymposiumPublisher", () => {
           kind: "persistence",
           action: "update",
           message:
-            "The original page was updated, but this note’s Symposium identity changed or could not be verified. Its current identity was left unchanged.",
+            "The original page was updated, but this note’s OpenArtifacts identity changed or could not be verified. Its current identity was left unchanged.",
           receipt,
         });
         expect(harness.frontmatter.symposium).toBe(DOC_URL);
@@ -402,7 +420,7 @@ describe("SymposiumPublisher", () => {
           kind: "persistence",
           action: "update",
           message:
-            "The original page was updated, but this note’s Symposium identity changed or could not be verified. Its current identity was left unchanged.",
+            "The original page was updated, but this note’s OpenArtifacts identity changed or could not be verified. Its current identity was left unchanged.",
           receipt,
         });
 
@@ -418,10 +436,13 @@ describe("SymposiumPublisher", () => {
       });
 
       it.each([
-        ["404 not_found", new SymposiumClientError("Document is gone.", "not_found", 404, false)],
+        [
+          "404 not_found",
+          new OpenArtifactsClientError("Document is gone.", "not_found", 404, false),
+        ],
         [
           "authorization failure",
-          new SymposiumClientError(
+          new OpenArtifactsClientError(
             "Publishing is currently limited to lifetime license holders.",
             "unauthorized",
             401,
@@ -430,9 +451,12 @@ describe("SymposiumPublisher", () => {
         ],
         [
           "server failure",
-          new SymposiumClientError("Symposium is unavailable.", "internal", 500, true),
+          new OpenArtifactsClientError("OpenArtifacts is unavailable.", "internal", 500, true),
         ],
-        ["network failure", new SymposiumClientError("Could not connect.", "network", null, true)],
+        [
+          "network failure",
+          new OpenArtifactsClientError("Could not connect.", "network", null, true),
+        ],
       ])("preserves the existing identity and sends zero POSTs after %s", async (_case, error) => {
         const harness = createHarness({ symposium: DOC_URL });
         harness.client.update.mockRejectedValue(error);
@@ -451,7 +475,7 @@ describe("SymposiumPublisher", () => {
         const harness = createHarness({ symposium: DOC_URL });
         harness.client.update.mockImplementation(async () => {
           harness.frontmatter.symposium = NEW_DOC_URL;
-          throw new SymposiumClientError("Document is gone.", "not_found", 404, false);
+          throw new OpenArtifactsClientError("Document is gone.", "not_found", 404, false);
         });
 
         const result = await openAndConfirm(harness, "update");
@@ -468,7 +492,7 @@ describe("SymposiumPublisher", () => {
       it("keeps structured internal server failures retryable", async () => {
         const harness = createHarness();
         harness.client.publish.mockRejectedValue(
-          new SymposiumClientError(
+          new OpenArtifactsClientError(
             "License validation is temporarily unavailable.",
             "internal",
             500,
@@ -489,10 +513,10 @@ describe("SymposiumPublisher", () => {
 
       it("blocks another POST after a publish response is lost", async () => {
         const message =
-          "Symposium may have published this note, but Copilot did not receive a valid receipt. To avoid creating a duplicate page, this publish cannot be retried until the plugin reloads.";
+          "OpenArtifacts may have published this note, but Copilot did not receive a valid receipt. To avoid creating a duplicate page, this publish cannot be retried until the plugin reloads.";
         const harness = createHarness();
         harness.client.publish.mockRejectedValue(
-          new SymposiumClientError(message, "ambiguous_publish", null, false)
+          new OpenArtifactsClientError(message, "ambiguous_publish", null, false)
         );
         await harness.publisher.open(harness.file);
         await harness.publisher.open(harness.file);
@@ -527,7 +551,7 @@ describe("SymposiumPublisher", () => {
       it("reports an oversized rendered document without offering a futile retry", async () => {
         const harness = createHarness();
         harness.buildDocument.mockRejectedValue(
-          new SymposiumDocumentTooLargeError(10 * 1024 * 1024 + 1)
+          new OpenArtifactsDocumentTooLargeError(10 * 1024 * 1024 + 1)
         );
 
         const result = await openAndConfirm(harness, "publish");
@@ -535,7 +559,7 @@ describe("SymposiumPublisher", () => {
         expect(result).toEqual({
           kind: "failure",
           action: "publish",
-          message: "Symposium HTML is 10485761 bytes; the limit is 10485760 bytes.",
+          message: "OpenArtifacts HTML is 10485761 bytes; the limit is 10485760 bytes.",
           accessNotice: false,
           retryable: false,
         });
@@ -552,7 +576,7 @@ describe("SymposiumPublisher", () => {
         expect(result).toEqual({
           kind: "failure",
           action: "publish",
-          message: "Copilot could not complete this Symposium action.",
+          message: "Copilot could not complete this OpenArtifacts action.",
           accessNotice: false,
           retryable: true,
         });
@@ -590,7 +614,7 @@ describe("SymposiumPublisher", () => {
         expect(harness.buildDocument).toHaveBeenCalledTimes(1);
         expect(harness.client.publish).toHaveBeenCalledTimes(1);
 
-        const saved = await (resumed as Extract<SymposiumModalResult, { kind: "persistence" }>)
+        const saved = await (resumed as Extract<OpenArtifactsModalResult, { kind: "persistence" }>)
           .retrySave!();
 
         expect(saved).toEqual({ kind: "success", action: "publish", receipt: RECEIPT });
@@ -619,7 +643,7 @@ describe("SymposiumPublisher", () => {
           receipt: RECEIPT,
         });
         expect(
-          (result as Extract<SymposiumModalResult, { kind: "persistence" }>).retrySave
+          (result as Extract<OpenArtifactsModalResult, { kind: "persistence" }>).retrySave
         ).toBeInstanceOf(Function);
 
         harness.modalOptions[0].onClosed?.();
@@ -647,7 +671,7 @@ describe("SymposiumPublisher", () => {
           receipt: RECEIPT,
         });
         expect(
-          (result as Extract<SymposiumModalResult, { kind: "persistence" }>).retrySave
+          (result as Extract<OpenArtifactsModalResult, { kind: "persistence" }>).retrySave
         ).toBeUndefined();
         expect(harness.frontmatter.symposium).toBe(newerValue);
       });
@@ -664,7 +688,7 @@ describe("SymposiumPublisher", () => {
           kind: "failure",
           action: "publish",
           message:
-            "This note's Symposium identity changed. Close and reopen this dialog before trying again.",
+            "This note's OpenArtifacts identity changed. Close and reopen this dialog before trying again.",
           accessNotice: false,
           retryable: false,
         });
@@ -725,8 +749,9 @@ describe("SymposiumPublisher", () => {
         expect(harness.client.update).not.toHaveBeenCalled();
         expect(harness.client.publish).not.toHaveBeenCalled();
 
-        const removed = await (resumed as Extract<SymposiumModalResult, { kind: "persistence" }>)
-          .retrySave!();
+        const removed = await (
+          resumed as Extract<OpenArtifactsModalResult, { kind: "persistence" }>
+        ).retrySave!();
 
         expect(removed).toEqual({ kind: "success", action: "delete" });
         expect(harness.frontmatter).toEqual({ tags: ["shared"] });
@@ -736,6 +761,17 @@ describe("SymposiumPublisher", () => {
         await harness.publisher.open(harness.file);
         expect(harness.modalOptions[2]).toMatchObject({ docId: null });
         expect(harness.modalOptions[2].initialResult).toBeUndefined();
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/337 withdraws a legacy stored document URL through the current identity", async () => {
+        const harness = createHarness({ symposium: LEGACY_DOC_URL, tags: ["shared"] });
+
+        const result = await openAndConfirm(harness, "delete");
+
+        expect(result).toEqual({ kind: "success", action: "delete" });
+        expect(harness.client.delete).toHaveBeenCalledWith(DOC_ID, "decrypted-license");
+        expect(harness.client.publish).not.toHaveBeenCalled();
+        expect(harness.frontmatter).toEqual({ tags: ["shared"] });
       });
 
       it("does not remove a newer identity after a remote deletion completes", async () => {
@@ -748,7 +784,7 @@ describe("SymposiumPublisher", () => {
 
         expect(result).toMatchObject({ kind: "persistence", action: "delete" });
         expect(
-          (result as Extract<SymposiumModalResult, { kind: "persistence" }>).retrySave
+          (result as Extract<OpenArtifactsModalResult, { kind: "persistence" }>).retrySave
         ).toBeUndefined();
         expect(harness.frontmatter.symposium).toBe(NEW_DOC_URL);
       });
@@ -762,7 +798,8 @@ describe("SymposiumPublisher", () => {
         expect(result).toEqual({
           kind: "failure",
           action: "publish",
-          message: "Add a Copilot Plus license key in Settings before publishing with Symposium.",
+          message:
+            "Add a Copilot Plus license key in Settings before publishing with OpenArtifacts.",
           accessNotice: true,
           retryable: false,
         });
@@ -772,10 +809,10 @@ describe("SymposiumPublisher", () => {
 
       it("keeps one in-flight operation per file across renames and releases it afterward", async () => {
         const harness = createHarness();
-        let resolvePublish: ((receipt: SymposiumReceipt) => void) | undefined;
+        let resolvePublish: ((receipt: OpenArtifactsReceipt) => void) | undefined;
         harness.client.publish.mockImplementationOnce(
           () =>
-            new Promise<SymposiumReceipt>((resolve) => {
+            new Promise<OpenArtifactsReceipt>((resolve) => {
               resolvePublish = resolve;
             })
         );
@@ -793,7 +830,7 @@ describe("SymposiumPublisher", () => {
         expect(second).toEqual({
           kind: "failure",
           action: "publish",
-          message: "A Symposium action is already in progress for this note.",
+          message: "An OpenArtifacts action is already in progress for this note.",
           accessNotice: false,
           retryable: false,
         });
@@ -827,7 +864,7 @@ describe("SymposiumPublisher", () => {
         expect(result).toEqual({
           kind: "failure",
           action: "publish",
-          message: "Symposium publishing is no longer available.",
+          message: "OpenArtifacts publishing is no longer available.",
           accessNotice: false,
           retryable: false,
         });
@@ -901,7 +938,7 @@ describe("SymposiumPublisher", () => {
           unpublished.publisher.reviewAgentManage(unpublished.file.path)
         ).resolves.toEqual({
           status: "failed",
-          message: "This note does not have a valid Symposium link to manage.",
+          message: "This note does not have a valid OpenArtifacts link to manage.",
         });
         await expect(
           unpublished.publisher.reviewAgentManage("../outside.md")
@@ -919,7 +956,7 @@ describe("SymposiumPublisher", () => {
         const { outcome, options } = await startAgentReview(harness, html);
 
         expect(harness.readStagedHtml).toHaveBeenCalledTimes(1);
-        expect(harness.readStagedHtml).toHaveBeenCalledWith(".symposium/handoffs/review.html");
+        expect(harness.readStagedHtml).toHaveBeenCalledWith(".openartifacts/handoffs/review.html");
         expect(harness.readStagedHtml.mock.invocationCallOrder[0]).toBeLessThan(
           harness.openModal.mock.invocationCallOrder[0]
         );
@@ -950,7 +987,11 @@ describe("SymposiumPublisher", () => {
         const harness = createHarness();
         const firstHtml = "<!doctype html><html><body>First</body></html>";
         const secondHtml = "<!doctype html><html><body>Regenerated</body></html>\n";
-        const first = await startAgentReview(harness, firstHtml, ".symposium/handoffs/first.html");
+        const first = await startAgentReview(
+          harness,
+          firstHtml,
+          ".openartifacts/handoffs/first.html"
+        );
 
         first.options.onRegenerate?.();
         first.options.onClosed?.();
@@ -962,7 +1003,7 @@ describe("SymposiumPublisher", () => {
         const second = await startAgentReview(
           harness,
           secondHtml,
-          ".symposium/handoffs/second.html"
+          ".openartifacts/handoffs/second.html"
         );
         const result = await second.options.onConfirm("delete", activeDocument);
 
@@ -1040,7 +1081,7 @@ describe("SymposiumPublisher", () => {
       it("preserves a valid identity and sends zero POSTs when the agent PUT returns 404", async () => {
         const harness = createHarness({ symposium: DOC_URL });
         harness.client.update.mockRejectedValue(
-          new SymposiumClientError("Document is gone.", "not_found", 404, false)
+          new OpenArtifactsClientError("Document is gone.", "not_found", 404, false)
         );
         const review = await startAgentReview(harness);
 
@@ -1141,7 +1182,7 @@ describe("SymposiumPublisher", () => {
 
         const outcome = await harness.publisher.reviewAgentPublish(
           "../outside.md",
-          ".symposium/handoffs/review.html"
+          ".openartifacts/handoffs/review.html"
         );
 
         expect(outcome).toMatchObject({ status: "failed" });
@@ -1157,7 +1198,7 @@ describe("SymposiumPublisher", () => {
 
         const outcome = await harness.publisher.reviewAgentPublish(
           harness.file.path,
-          ".symposium/handoffs/review.html"
+          ".openartifacts/handoffs/review.html"
         );
 
         expect(previous).toMatchObject({ kind: "persistence", action: "publish" });
@@ -1173,16 +1214,16 @@ describe("SymposiumPublisher", () => {
 
       it("rejects oversized staged HTML before opening review", async () => {
         const harness = createHarness();
-        harness.readStagedHtml.mockResolvedValueOnce("x".repeat(SYMPOSIUM_MAX_HTML_BYTES + 1));
+        harness.readStagedHtml.mockResolvedValueOnce("x".repeat(OPENARTIFACTS_MAX_HTML_BYTES + 1));
 
         const outcome = await harness.publisher.reviewAgentPublish(
           harness.file.path,
-          ".symposium/handoffs/oversized.html"
+          ".openartifacts/handoffs/oversized.html"
         );
 
         expect(outcome).toEqual({
           status: "failed",
-          message: `Symposium HTML is ${SYMPOSIUM_MAX_HTML_BYTES + 1} bytes; the limit is ${SYMPOSIUM_MAX_HTML_BYTES} bytes.`,
+          message: `OpenArtifacts HTML is ${OPENARTIFACTS_MAX_HTML_BYTES + 1} bytes; the limit is ${OPENARTIFACTS_MAX_HTML_BYTES} bytes.`,
         });
         expect(harness.readStagedHtml).toHaveBeenCalledTimes(1);
         expect(harness.removePreview).toHaveBeenCalledTimes(1);
@@ -1198,12 +1239,12 @@ describe("SymposiumPublisher", () => {
 
         const outcome = await harness.publisher.reviewAgentPublish(
           harness.file.path,
-          ".symposium/handoffs/redirect.html"
+          ".openartifacts/handoffs/redirect.html"
         );
 
         expect(outcome).toEqual({
           status: "failed",
-          message: "Symposium HTML is not publishable: remove the automatic redirect.",
+          message: "OpenArtifacts HTML is not publishable: remove the automatic redirect.",
         });
         expect(harness.openModal).not.toHaveBeenCalled();
         expect(harness.client.publish).not.toHaveBeenCalled();
@@ -1215,7 +1256,7 @@ describe("SymposiumPublisher", () => {
 
         const outcome = await harness.publisher.reviewAgentPublish(
           harness.file.path,
-          ".symposium/handoffs/review.html"
+          ".openartifacts/handoffs/review.html"
         );
 
         expect(outcome.status).toBe("failed");

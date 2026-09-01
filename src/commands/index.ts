@@ -90,7 +90,7 @@ function addCheckCommand(
 }
 
 export function registerCommands(plugin: CopilotPlugin, publish: PublishFile) {
-  addCheckCommand(plugin, COMMAND_IDS.PUBLISH_FILE_TO_SYMPOSIUM, (checking) => {
+  addCheckCommand(plugin, COMMAND_IDS.PUBLISH_FILE_TO_OPENARTIFACTS, (checking) => {
     const activeFile = plugin.app.workspace.getActiveFile();
     if (!(activeFile instanceof TFile) || activeFile.extension !== "md") {
       return false;

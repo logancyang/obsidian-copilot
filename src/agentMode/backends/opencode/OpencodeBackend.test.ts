@@ -1,5 +1,6 @@
 import { ChatModelProviders } from "@/constants";
 import { logWarn } from "@/logger";
+import { OPENARTIFACTS_WORKSPACE_ROOT_ENV } from "@/openArtifacts/constants";
 import { getSettings, resetSettings, setSettings, updateSetting } from "@/settings/model";
 import type {
   BackendConfigRegistry,
@@ -1103,7 +1104,7 @@ describe("OpencodeBackend.buildSpawnDescriptor", () => {
     const desc = await backend.buildSpawnDescriptor({ vaultBasePath: "/vault/abs" });
     expect(desc.command).toBe("/path/to/opencode");
     expect(desc.args).toEqual(["acp", "--cwd", "/vault/abs"]);
-    expect(desc.env.SYMPOSIUM_WORKSPACE_ROOT).toBe("/vault/abs");
+    expect(desc.env[OPENARTIFACTS_WORKSPACE_ROOT_ENV]).toBe("/vault/abs");
     expect(desc.env.OPENCODE_CONFIG_CONTENT).toBeDefined();
     const cfg = JSON.parse(desc.env.OPENCODE_CONFIG_CONTENT as string);
     expect(cfg.provider.anthropic.options).toEqual({ apiKey: "anth-xyz" });

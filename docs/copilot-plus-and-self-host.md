@@ -10,7 +10,7 @@ This guide explains the practical difference between the plans, who supplies eac
 | ------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
 | **Free**      | You already have model access or want a local setup         | Agent Chat, Projects, Quick Ask, Copilot Commands, BYOK, local models, and custom Skills                                            |
 | **Lite**      | You want Copilot-hosted models without configuring API keys | Hosted models with plan allowances and optional credits                                                                             |
-| **Plus**      | You want Copilot's complete hosted research workflow        | Higher hosted allowance, multi-agent answers, premium web and document tools, capture Skills, and Symposium publishing              |
+| **Plus**      | You want Copilot's complete hosted research workflow        | Higher hosted allowance, multi-agent answers, premium web and document tools, capture Skills, and OpenArtifacts publishing          |
 | **Supporter** | You want a long-term local-first setup and early access     | Lifetime Self-Host Mode and Miyo, two years of Plus, preview access, and ongoing credit-purchase benefits shown on the pricing page |
 
 Existing Believer customers keep their original benefits. The plugin may show **Lifetime** for a Believer or Supporter license because both grant the same long-term self-host entitlement inside Copilot.
@@ -41,7 +41,7 @@ Lite does not include:
 - Multi-agent answers
 - Premium web search and PDF processing
 - Copilot's hosted YouTube and X capture Skills
-- Symposium publishing
+- OpenArtifacts publishing
 - Self-Host Mode
 
 Your own BYOK, Claude, Codex, local model, Commands, Projects, Quick Ask, and custom Skills continue to work independently of the Lite allowance.
@@ -53,7 +53,7 @@ Plus includes everything in Lite with a higher hosted-model allowance. It also u
 - **Multi-agent answers** that ask installed agents in parallel and have the current agent summarize their findings.
 - **Premium web and PDF tools** for research and document understanding.
 - Built-in **YouTube and X capture Skills**.
-- **Symposium publishing** for supported outputs.
+- **OpenArtifacts publishing** for supported outputs.
 
 Plus is for people who want Copilot to provide both the model access and the research services. It does not include Self-Host Mode.
 

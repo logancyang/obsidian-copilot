@@ -1,25 +1,29 @@
-import { SYMPOSIUM_AGENT_HANDOFF_DIR, SYMPOSIUM_MAX_HTML_BYTES } from "@/symposium/constants";
 import {
-  SymposiumDocumentUnsafeError,
-  validateSymposiumReviewHtml,
-} from "@/symposium/symposiumDocument";
+  OPENARTIFACTS_AGENT_HANDOFF_DIR,
+  OPENARTIFACTS_MAX_HTML_BYTES,
+  OPENARTIFACTS_VAULT_FOLDER,
+} from "@/openArtifacts/constants";
+import {
+  OpenArtifactsDocumentUnsafeError,
+  validateOpenArtifactsReviewHtml,
+} from "@/openArtifacts/openArtifactsDocument";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 
 /** Signals that a filesystem-backed agent handoff cannot be consumed safely. */
-class SymposiumAgentHandoffError extends Error {
+class OpenArtifactsAgentHandoffError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = "SymposiumAgentHandoffError";
-    Object.setPrototypeOf(this, SymposiumAgentHandoffError.prototype);
+    this.name = "OpenArtifactsAgentHandoffError";
+    Object.setPrototypeOf(this, OpenArtifactsAgentHandoffError.prototype);
   }
 }
 
 const UNSAFE_ROOT_MESSAGE =
-  "The Symposium handoff folder must be an ordinary directory inside the current vault.";
+  "The OpenArtifacts handoff folder must be an ordinary directory inside the current vault.";
 const UNSAFE_FILE_MESSAGE =
-  "Staged Symposium HTML must be one ordinary .html file inside the vault handoff folder.";
-const CLEANUP_FAILED_MESSAGE = "Copilot could not remove the staged Symposium HTML.";
-const PREVIEW_FOLDER_PREFIX = "copilot-symposium-preview-";
+  "Staged OpenArtifacts HTML must be one ordinary .html file inside the vault handoff folder.";
+const CLEANUP_FAILED_MESSAGE = "Copilot could not remove the staged OpenArtifacts HTML.";
+const PREVIEW_FOLDER_PREFIX = "copilot-openartifacts-preview-";
 const PREVIEW_FILE_NAME = "preview.html";
 const PREVIEW_CONTENT_SECURITY_DIRECTIVES = [
   "default-src 'none'",
@@ -34,7 +38,7 @@ const PREVIEW_CONTENT_SECURITY_DIRECTIVES = [
 ];
 
 /** Owns the temporary browser preview created from one consumed agent handoff. */
-export interface SymposiumAgentHandoff {
+export interface OpenArtifactsAgentHandoff {
   readonly html: string;
   readonly previewPath: string;
   readonly previewUrl: string;
@@ -43,7 +47,7 @@ export interface SymposiumAgentHandoff {
 }
 
 function getDirectHandoffName(stagedHtmlPath: string): string {
-  const prefix = `${SYMPOSIUM_AGENT_HANDOFF_DIR}/`;
+  const prefix = `${OPENARTIFACTS_AGENT_HANDOFF_DIR}/`;
   const fileName = stagedHtmlPath.startsWith(prefix) ? stagedHtmlPath.slice(prefix.length) : "";
   if (
     !fileName ||
@@ -51,7 +55,7 @@ function getDirectHandoffName(stagedHtmlPath: string): string {
     fileName.includes("\\") ||
     !fileName.toLowerCase().endsWith(".html")
   ) {
-    throw new SymposiumAgentHandoffError(UNSAFE_FILE_MESSAGE);
+    throw new OpenArtifactsAgentHandoffError(UNSAFE_FILE_MESSAGE);
   }
   return fileName;
 }
@@ -59,18 +63,18 @@ function getDirectHandoffName(stagedHtmlPath: string): string {
 async function getHandoffRoot(vaultRootAbs: string): Promise<string> {
   const { lstat } = requireNodeModule<typeof import("node:fs/promises")>("fs/promises");
   const path = requireNodeModule<typeof import("node:path")>("path");
-  const symposiumRoot = path.resolve(vaultRootAbs, ".symposium");
-  const handoffRoot = path.join(symposiumRoot, "handoffs");
+  const openArtifactsRoot = path.resolve(vaultRootAbs, OPENARTIFACTS_VAULT_FOLDER);
+  const handoffRoot = path.join(openArtifactsRoot, "handoffs");
   try {
-    const [symposiumStats, handoffStats] = await Promise.all([
-      lstat(symposiumRoot),
+    const [openArtifactsStats, handoffStats] = await Promise.all([
+      lstat(openArtifactsRoot),
       lstat(handoffRoot),
     ]);
-    if (!symposiumStats.isDirectory() || !handoffStats.isDirectory()) {
+    if (!openArtifactsStats.isDirectory() || !handoffStats.isDirectory()) {
       throw new Error("unsafe handoff root");
     }
   } catch {
-    throw new SymposiumAgentHandoffError(UNSAFE_ROOT_MESSAGE);
+    throw new OpenArtifactsAgentHandoffError(UNSAFE_ROOT_MESSAGE);
   }
   return handoffRoot;
 }
@@ -79,7 +83,7 @@ function decodeUtf8(bytes: Uint8Array): string {
   try {
     return new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);
   } catch {
-    throw new SymposiumAgentHandoffError("Staged Symposium HTML must be valid UTF-8.");
+    throw new OpenArtifactsAgentHandoffError("Staged OpenArtifacts HTML must be valid UTF-8.");
   }
 }
 
@@ -89,7 +93,7 @@ async function removeHandoff(stagedPath: string): Promise<void> {
     await unlink(stagedPath);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
-      throw new SymposiumAgentHandoffError(CLEANUP_FAILED_MESSAGE);
+      throw new OpenArtifactsAgentHandoffError(CLEANUP_FAILED_MESSAGE);
     }
   }
 }
@@ -123,11 +127,11 @@ function createBrowserPreview(html: string): string {
 <meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="${escapeHtmlAttribute(shellPolicy)}">
 <meta name="referrer" content="no-referrer">
-<title>Symposium local preview</title>
+<title>OpenArtifacts local preview</title>
 <style>html,body,iframe{border:0;height:100%;margin:0;padding:0;width:100%}body{overflow:hidden}iframe{display:block}</style>
 </head>
 <body>
-<iframe title="Symposium HTML preview" sandbox="allow-same-origin" referrerpolicy="no-referrer" srcdoc="${escapeHtmlAttribute(sandboxedContent)}"></iframe>
+<iframe title="OpenArtifacts HTML preview" sandbox="allow-same-origin" referrerpolicy="no-referrer" srcdoc="${escapeHtmlAttribute(sandboxedContent)}"></iframe>
 <script>
 const frame=document.querySelector("iframe");
 const block=(event)=>event.preventDefault();
@@ -146,7 +150,7 @@ seal();
 `;
 }
 
-async function createLocalPreview(html: string): Promise<SymposiumAgentHandoff> {
+async function createLocalPreview(html: string): Promise<OpenArtifactsAgentHandoff> {
   const { lstat, mkdtemp, readFile, rm, writeFile } =
     requireNodeModule<typeof import("node:fs/promises")>("fs/promises");
   const { tmpdir } = requireNodeModule<typeof import("node:os")>("os");
@@ -189,10 +193,10 @@ async function createLocalPreview(html: string): Promise<SymposiumAgentHandoff> 
  * @param vaultRootAbs The absolute desktop vault root that owns the handoff.
  * @param stagedHtmlPath The normalized vault-relative staged HTML path.
  */
-export async function consumeSymposiumAgentHandoff(
+export async function consumeOpenArtifactsAgentHandoff(
   vaultRootAbs: string,
   stagedHtmlPath: string
-): Promise<SymposiumAgentHandoff> {
+): Promise<OpenArtifactsAgentHandoff> {
   const { lstat, readFile } = requireNodeModule<typeof import("node:fs/promises")>("fs/promises");
   const path = requireNodeModule<typeof import("node:path")>("path");
   const fileName = getDirectHandoffName(stagedHtmlPath);
@@ -203,32 +207,32 @@ export async function consumeSymposiumAgentHandoff(
   try {
     const stats = await lstat(stagedPath);
     if (!stats.isFile()) {
-      throw new SymposiumAgentHandoffError(UNSAFE_FILE_MESSAGE);
+      throw new OpenArtifactsAgentHandoffError(UNSAFE_FILE_MESSAGE);
     }
-    if (stats.size > SYMPOSIUM_MAX_HTML_BYTES) {
-      throw new SymposiumAgentHandoffError(
-        `Symposium HTML is ${stats.size} bytes; the limit is ${SYMPOSIUM_MAX_HTML_BYTES} bytes.`
+    if (stats.size > OPENARTIFACTS_MAX_HTML_BYTES) {
+      throw new OpenArtifactsAgentHandoffError(
+        `OpenArtifacts HTML is ${stats.size} bytes; the limit is ${OPENARTIFACTS_MAX_HTML_BYTES} bytes.`
       );
     }
 
     const bytes = await readFile(stagedPath);
-    if (bytes.byteLength > SYMPOSIUM_MAX_HTML_BYTES) {
-      throw new SymposiumAgentHandoffError(
-        `Symposium HTML is ${bytes.byteLength} bytes; the limit is ${SYMPOSIUM_MAX_HTML_BYTES} bytes.`
+    if (bytes.byteLength > OPENARTIFACTS_MAX_HTML_BYTES) {
+      throw new OpenArtifactsAgentHandoffError(
+        `OpenArtifacts HTML is ${bytes.byteLength} bytes; the limit is ${OPENARTIFACTS_MAX_HTML_BYTES} bytes.`
       );
     }
     html = decodeUtf8(Uint8Array.from(bytes));
   } catch (error) {
     await removeHandoff(stagedPath);
-    if (error instanceof SymposiumAgentHandoffError) throw error;
-    throw new SymposiumAgentHandoffError(UNSAFE_FILE_MESSAGE);
+    if (error instanceof OpenArtifactsAgentHandoffError) throw error;
+    throw new OpenArtifactsAgentHandoffError(UNSAFE_FILE_MESSAGE);
   }
 
   try {
-    validateSymposiumReviewHtml(html);
+    validateOpenArtifactsReviewHtml(html);
   } catch (error) {
-    if (error instanceof SymposiumDocumentUnsafeError) {
-      throw new SymposiumAgentHandoffError(
+    if (error instanceof OpenArtifactsDocumentUnsafeError) {
+      throw new OpenArtifactsAgentHandoffError(
         `${error.message} Edit this staged file and retry once: ${stagedHtmlPath}`
       );
     }
