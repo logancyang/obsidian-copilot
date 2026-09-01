@@ -269,7 +269,7 @@ export class AgentSessionManager {
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/166
   // Scope identity alone cannot detect A → B → A navigation while an async
   // transition is pending, so rollback ownership uses this monotonic version.
-  private scopeVersion = 0;
+  private scopeSeq = 0;
   // Per-scope most-recently-used session id, so re-entering a scope restores
   // the tab the user last looked at there.
   private readonly lastActiveByScope = new Map<ProjectScopeId, string>();
@@ -1422,14 +1422,14 @@ export class AgentSessionManager {
   async createGlobalSessionWithDraft(initialDraft: string): Promise<AgentSession> {
     const projectId = GLOBAL_SCOPE;
     const previousActiveProjectId = this.activeProjectId;
-    const scopeVersion = this.setActiveScope(projectId);
+    const scopeSeq = this.setActiveScope(projectId);
     const chatInputId = uuidv4();
     this.initialDraftByChatInputId.set(chatInputId, initialDraft);
     try {
       return await this.createSession(undefined, projectId, undefined, chatInputId);
     } catch (error) {
       this.initialDraftByChatInputId.delete(chatInputId);
-      this.rollbackOptimisticScopeSwitch(previousActiveProjectId, scopeVersion);
+      this.rollbackOptimisticScopeSwitch(previousActiveProjectId, scopeSeq);
       throw error;
     }
   }
@@ -1795,7 +1795,7 @@ export class AgentSessionManager {
     // rejected auto-spawn below can restore it (see `spawnEnteredScopeOrRollback`).
     const previousActiveProjectId = this.activeProjectId;
     const previousActiveSessionId = this.activeSessionId;
-    const scopeVersion = this.setActiveScope(projectId);
+    const scopeSeq = this.setActiveScope(projectId);
 
     // A project scope opens as a FRESH visit: its prior conversational chats
     // move to chat history (detached from the tab strip — not closed, so a
@@ -1835,7 +1835,7 @@ export class AgentSessionManager {
       await this.spawnEnteredScopeOrRollback(
         previousActiveProjectId,
         previousActiveSessionId,
-        scopeVersion
+        scopeSeq
       );
       this.touchProjectUsage(projectId);
       return;
@@ -2036,10 +2036,10 @@ export class AgentSessionManager {
    * specific saved session itself right after.
    */
   private setActiveScope(projectId: ProjectScopeId): number {
-    if (projectId === this.activeProjectId) return this.scopeVersion;
+    if (projectId === this.activeProjectId) return this.scopeSeq;
     this.parkActiveScope();
     this.activeProjectId = projectId;
-    return ++this.scopeVersion;
+    return ++this.scopeSeq;
   }
 
   /**
@@ -2052,9 +2052,9 @@ export class AgentSessionManager {
     previousProjectId: ProjectScopeId,
     attemptedScopeVersion: number
   ): void {
-    if (this.scopeVersion === attemptedScopeVersion) {
+    if (this.scopeSeq === attemptedScopeVersion) {
       this.activeProjectId = previousProjectId;
-      this.scopeVersion++;
+      this.scopeSeq++;
       this.notify();
     }
   }
@@ -2085,9 +2085,9 @@ export class AgentSessionManager {
     try {
       await this.getOrCreateActiveSession();
     } catch (err) {
-      if (this.scopeVersion === attemptedScopeVersion) {
+      if (this.scopeSeq === attemptedScopeVersion) {
         this.activeProjectId = previousProjectId;
-        this.scopeVersion++;
+        this.scopeSeq++;
         this.activeSessionId = previousActiveSessionId;
         this.notify();
       }
@@ -2748,7 +2748,7 @@ export class AgentSessionManager {
     this.lastSeenProjectContentEpochBySession.clear();
     this.activeSessionId = null;
     this.activeProjectId = GLOBAL_SCOPE;
-    this.scopeVersion++;
+    this.scopeSeq++;
     this.lastActiveByScope.clear();
     this.detachedFromTabIds.clear();
     this.contextDirtySignatures.clear();
@@ -2823,7 +2823,7 @@ export class AgentSessionManager {
     // would let a scope switch raced in during `loadFile` make rollback restore
     // a stale scope.
     const previousActiveProjectId = this.activeProjectId;
-    const scopeVersion = this.setActiveScope(projectId);
+    const scopeSeq = this.setActiveScope(projectId);
 
     // Resume or create the saved session. Either await can reject (e.g. a
     // missing backend binary fails to spawn); on failure, undo the scope switch
@@ -2837,7 +2837,7 @@ export class AgentSessionManager {
         : null;
       session = resumed ?? (await this.createSession(loaded.backendId, projectId));
     } catch (err) {
-      this.rollbackOptimisticScopeSwitch(previousActiveProjectId, scopeVersion);
+      this.rollbackOptimisticScopeSwitch(previousActiveProjectId, scopeSeq);
       throw err;
     }
 
@@ -2926,7 +2926,7 @@ export class AgentSessionManager {
     // `getEntry` await — capturing earlier would let a scope switch raced in
     // during the await make rollback restore a stale scope.
     const previousActiveProjectId = this.activeProjectId;
-    const scopeVersion = this.setActiveScope(projectId);
+    const scopeSeq = this.setActiveScope(projectId);
     // Unlike markdown history there is no fresh-session fallback — a failed
     // resume rejects, so undo the scope switch above before propagating it.
     let session: AgentSession;
@@ -2939,7 +2939,7 @@ export class AgentSessionManager {
       }
       session = resumed;
     } catch (err) {
-      this.rollbackOptimisticScopeSwitch(previousActiveProjectId, scopeVersion);
+      this.rollbackOptimisticScopeSwitch(previousActiveProjectId, scopeSeq);
       throw err;
     }
     // Rebuild the visible transcript for backends that resume without
@@ -3561,7 +3561,7 @@ export class AgentSessionManager {
         // activeProjectId` rather than leaving a stale scope behind.
         if (next) {
           this.activeProjectId = next.projectId;
-          this.scopeVersion++;
+          this.scopeSeq++;
         }
       }
       // Surface the crash so the empty-state pill shows it and the
