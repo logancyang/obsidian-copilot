@@ -379,11 +379,19 @@ export class AgentMessageStore {
     if (!msg) return false;
     if (!msg.parts) msg.parts = [];
     const last = msg.parts[msg.parts.length - 1];
-    // A later thought chunk after another event starts a new timed block; it
-    // must not extend a duration that has already been frozen.
+    // A completed message can receive its final thought chunks after the
+    // prompt result. Keep those chunks in the frozen trailing span so the
+    // expanded row and grouped summary retain the same completed duration.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/336
-    if (last && last.kind === "thought" && last.durationMs === undefined) {
+    if (
+      last &&
+      last.kind === "thought" &&
+      (last.durationMs === undefined || msg.turnStopReason !== undefined)
+    ) {
       last.text += text;
+      if (msg.turnStopReason !== undefined && last.startedAtMs !== undefined) {
+        last.durationMs = Math.max(0, Date.now() - last.startedAtMs);
+      }
     } else {
       msg.parts.push({ kind: "thought", text, startedAtMs: Date.now() });
     }

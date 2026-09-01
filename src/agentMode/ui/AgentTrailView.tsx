@@ -201,8 +201,12 @@ interface ActivityGroupRowProps {
 // A component rather than a branch of `renderNode` because each group owns its
 // own thinking clock, and hooks cannot run in a loop.
 const ActivityGroupRow: React.FC<ActivityGroupRowProps> = ({ group, atLiveEdge, ctx, trailId }) => {
-  const reasoningActive = isReasoningActive(group.members, atLiveEdge);
   const trailingMember = group.members[group.members.length - 1];
+  // A hidden trailing tool is absent from the rendered group but still ends
+  // the preceding reasoning span in the raw message parts.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/336
+  const groupAtLiveEdge = atLiveEdge && trailingMember?.part === ctx.lastPart;
+  const reasoningActive = isReasoningActive(group.members, groupAtLiveEdge);
   const activeThoughtStartedAtMs =
     reasoningActive && trailingMember?.type === "reasoning"
       ? trailingMember.part.startedAtMs
@@ -238,11 +242,11 @@ const ActivityGroupRow: React.FC<ActivityGroupRowProps> = ({ group, atLiveEdge, 
           member,
           member.type === "action" ? member.part.id : `thought-${i}`,
           ctx,
-          atLiveEdge,
+          groupAtLiveEdge,
           trailId
         )
       }
-      liveStep={activityLiveStep(group.members, atLiveEdge, ctx.summaryCtx)}
+      liveStep={activityLiveStep(group.members, groupAtLiveEdge, ctx.summaryCtx)}
     />
   );
 };

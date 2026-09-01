@@ -6,8 +6,9 @@ const REASONING_LABEL = "Reasoning";
 
 /**
  * Whether the group is reasoning right now. Like the trail's own check, a
- * `thought` counts as live only while it trails the run: anything after it
- * proves the agent moved on, and no backend emits a "reasoning ended" event.
+ * `thought` counts as live only while it trails the run and has no frozen
+ * duration: anything after it proves the agent moved on, and no backend emits
+ * a "reasoning ended" event.
  *
  * @param members - The group's members, in stream order.
  * @param atLiveEdge - Whether this group is the streaming trail's live edge —
@@ -16,7 +17,15 @@ const REASONING_LABEL = "Reasoning";
  *   "reasoning" until the entire turn finished.
  */
 export function isReasoningActive(members: ActivityMember[], atLiveEdge: boolean): boolean {
-  return atLiveEdge && members[members.length - 1]?.type === "reasoning";
+  const trailingMember = members[members.length - 1];
+  // A frozen thought can remain at the visible edge when a trailing internal
+  // tool is filtered out, but restarting its clock would double-count it.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/336
+  return (
+    atLiveEdge &&
+    trailingMember?.type === "reasoning" &&
+    trailingMember.part.durationMs === undefined
+  );
 }
 
 /**

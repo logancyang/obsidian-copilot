@@ -268,6 +268,32 @@ describe("AgentTrail", () => {
     expect(screen.queryByText("Thought for")).toBeNull();
   });
 
+  it("does not restart a frozen thought when a hidden tool trails it (https://github.com/Brevilabs/obsidian-copilot-private/issues/336)", () => {
+    jest.useFakeTimers();
+    try {
+      jest.setSystemTime(30_000);
+      renderTrail({
+        parts: [
+          READ_A,
+          {
+            kind: "thought",
+            text: "Finished reasoning",
+            startedAtMs: 12_000,
+            durationMs: 18_000,
+          },
+          toolCall("hidden", { vendorToolName: "ToolSearch", status: "in_progress" }),
+        ],
+        isStreaming: true,
+        turnStopReason: undefined,
+      });
+
+      expect(screen.getByText("Ran 1 command, read 1 file, thought for 18s")).toBeTruthy();
+      expect(screen.queryByText("Reasoning")).toBeNull();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it("renders prose between two groups at full size", () => {
     renderTrail({ parts: STREAMING_PARTS, isStreaming: true, turnStopReason: undefined });
 

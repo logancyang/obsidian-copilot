@@ -19,6 +19,15 @@ describe("activityLiveStep", () => {
       expect(isReasoningActive([REASONING, action("a")], true)).toBe(false);
       expect(isReasoningActive([], true)).toBe(false);
     });
+
+    it("is false for a frozen trailing thought (https://github.com/Brevilabs/obsidian-copilot-private/issues/336)", () => {
+      const frozen: ActivityMember = {
+        type: "reasoning",
+        part: { kind: "thought", text: "done", durationMs: 18_000 },
+      };
+
+      expect(isReasoningActive([action("a"), frozen], true)).toBe(false);
+    });
   });
 
   describe("activityLiveStep()", () => {
