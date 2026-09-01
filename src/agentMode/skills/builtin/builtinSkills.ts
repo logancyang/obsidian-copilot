@@ -5,6 +5,7 @@ import {
   SYMPOSIUM_WORKSPACE_ROOT_ENV,
 } from "@/symposium/constants";
 import { OBSIDIAN_SKILLS } from "./obsidianSkills";
+import { SCREENPIPE_ACTIVITY_SKILL } from "./screenpipeSkill";
 
 /**
  * Plugin-shipped ("builtin") Agent Mode skills. Unlike user-authored skills,
@@ -778,6 +779,7 @@ export const BUILTIN_SKILLS: readonly BuiltinSkill[] = [
   YOUTUBE_TRANSCRIPT,
   FETCH_X,
   SYMPOSIUM_PUBLISH,
+  SCREENPIPE_ACTIVITY_SKILL,
   ...OBSIDIAN_SKILLS,
 ];
 
