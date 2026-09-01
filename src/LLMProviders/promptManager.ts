@@ -10,15 +10,12 @@ import {
 export default class PromptManager {
   private static instance: PromptManager;
   private chatPrompt: ChatPromptTemplate;
-  private qaPrompt: ChatPromptTemplate;
 
   private constructor() {
     this.initChatPrompt();
-    this.initQAPrompt();
 
     subscribeToSettingsChange(() => {
       this.initChatPrompt();
-      this.initQAPrompt();
     });
   }
 
@@ -40,20 +37,6 @@ export default class PromptManager {
     ]);
   }
 
-  private initQAPrompt(): void {
-    const qaTemplate = `{system_message}
-
-Answer the question with as detailed as possible based only on the following context:
-{context}
-
-Question: {question}
-`;
-
-    this.qaPrompt = ChatPromptTemplate.fromMessages([
-      SystemMessagePromptTemplate.fromTemplate(qaTemplate),
-    ]);
-  }
-
   // Add this new method to escape curly braces
   private escapeTemplateString(str: string): string {
     return str.replace(/\{/g, "{{").replace(/\}/g, "}}");
@@ -61,22 +44,5 @@ Question: {question}
 
   getChatPrompt(): ChatPromptTemplate {
     return this.chatPrompt;
-  }
-
-  async getQAPrompt({
-    question,
-    context,
-    systemMessage,
-  }: {
-    question: string;
-    context: string;
-    systemMessage: string;
-  }): Promise<string> {
-    const promptResult = await this.qaPrompt.format({
-      question,
-      context,
-      system_message: systemMessage,
-    });
-    return promptResult;
   }
 }
