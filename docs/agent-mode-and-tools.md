@@ -84,6 +84,8 @@ When an action needs approval, Agent Chat displays a **Permission required** car
 
 When an agent asks a set of questions, answer the current tab and select **Next**. On the final tab, **Submit** becomes available after every question has an answer. You can use the tabs to review or skip ahead; **Cancel** declines the entire request.
 
+Permission and question cards stay in a scrolling action area above the message box until you answer them, even while the response continues streaming.
+
 Your vault or project is the agent's working directory, not a security sandbox. Auto or bypass permissions can reach other files and services available to the agent or your account. Use **Default** for unfamiliar work and review persistent permissions carefully.
 
 ## Context and history

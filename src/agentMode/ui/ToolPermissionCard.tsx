@@ -18,11 +18,11 @@ interface ToolPermissionCardProps {
 const EMPTY_OPTION_NAMES: readonly string[] = Object.freeze([]);
 
 /**
- * Inline permission card rendered at the tail of the chat scroll container
- * while a tool call is awaiting the user's decision. Replaces the modal that
+ * Permission card rendered in the chat's action rail while a tool call is
+ * awaiting the user's decision. Replaces the modal that
  * used to sit on top of every chat — modals are easy to dismiss by accident
  * (click-outside resolves as deny) and they steal focus across concurrent
- * sessions. The card stays in-place until the user picks an option or the
+ * sessions. The card stays visible until the user picks an option or the
  * turn is cancelled.
  *
  * The backend translates one-time and persistent decisions from the selected

@@ -34,8 +34,8 @@ function isAnswered(
 }
 
 /**
- * Inline card rendered at the tail of the chat scroll container while the
- * agent's `AskUserQuestion` tool waits on the user — the sibling of
+ * Card rendered in the chat's action rail while the agent's
+ * `AskUserQuestion` tool waits on the user — the sibling of
  * `ToolPermissionCard`. Replaces the old `AskUserQuestionModal`: modals steal
  * focus and resolve as a cancel on accidental click-outside, which is
  * inconsistent with the rest of Agent Mode's inline-card model.

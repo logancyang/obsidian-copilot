@@ -3858,6 +3858,39 @@ describe("AgentSession plan proposal lifecycle", () => {
     await turn;
   });
 
+  it("assigns one arrival order across permission and question actions for https://github.com/logancyang/obsidian-copilot/issues/2948", async () => {
+    const session = new AgentSession({
+      backend: makeMockBackend().asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "claude",
+    });
+    const makePermission = (toolCallId: string) =>
+      session.handleToolPermission({
+        sessionId: "acp-1",
+        toolCall: { toolCallId, status: "pending", title: toolCallId },
+        options: [{ optionId: "allow_once", name: "Allow once", kind: "allow_once" }],
+      });
+
+    const first = makePermission("permission-1");
+    const question = session.handleAskUserQuestion({
+      sessionId: "acp-1",
+      requestId: "question-1",
+      questions: [{ question: "Continue?", options: [{ label: "Yes" }] }],
+    });
+    const last = makePermission("permission-2");
+
+    expect(
+      session.getPendingToolPermissions().map((request) => request.pendingActionOrder)
+    ).toEqual([0, 2]);
+    expect(session.getPendingAskUserQuestions()[0].pendingActionOrder).toBe(1);
+
+    session.resolveToolPermission("permission-1", "allow_once");
+    session.resolveAskUserQuestion("question-1", { "Continue?": "Yes" });
+    session.resolveToolPermission("permission-2", "allow_once");
+    await Promise.all([first, question, last]);
+  });
+
   it("returns the shared empty array when no AskUserQuestion is pending", () => {
     const mock = makeMockBackend();
     const session = new AgentSession({

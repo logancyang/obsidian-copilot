@@ -16,7 +16,7 @@ import type {
 } from "@/agentMode/session/types";
 import type { ChatMessage } from "@/types/message";
 import { App } from "obsidian";
-import React, { memo, useMemo } from "react";
+import React, { memo, useCallback, useMemo, useRef } from "react";
 
 interface AgentChatMessagesProps {
   messages: AgentChatMessage[];
@@ -29,6 +29,10 @@ interface AgentChatMessagesProps {
    *  visible list is treated as the streaming placeholder. */
   isLoading: boolean;
 }
+
+type PendingAction =
+  | { kind: "permission"; id: string; order?: number; request: PermissionPrompt }
+  | { kind: "question"; id: string; order?: number; request: AskUserQuestionPrompt };
 
 /**
  * Maps an AgentChatMessage to the subset of ChatMessage fields that
@@ -76,38 +80,41 @@ const AgentChatMessages = memo(
     const inlinePlanCard = showPlanCard ? (
       <PlanProposalCard plan={currentPlan} app={app} chatBackend={chatBackend} />
     ) : null;
-    const inlineToolPermissionCards = pendingToolPermissions.map((req) => (
-      <ToolPermissionCard
-        key={req.toolCall.toolCallId}
-        request={req}
-        onResolve={chatBackend.resolveToolPermission.bind(chatBackend)}
-      />
-    ));
-    const inlineAskUserQuestionCards = pendingAskUserQuestions.map((req) => (
-      <AskUserQuestionCard
-        key={req.requestId}
-        request={req}
-        onResolve={chatBackend.resolveAskUserQuestion.bind(chatBackend)}
-      />
-    ));
-    const hasTailCards =
-      showPlanCard || pendingToolPermissions.length > 0 || pendingAskUserQuestions.length > 0;
+    const pendingActions = useMemo<PendingAction[]>(
+      () =>
+        [
+          ...pendingToolPermissions.map((request) => ({
+            kind: "permission" as const,
+            id: `permission:${request.toolCall.toolCallId}`,
+            order: request.pendingActionOrder,
+            request,
+          })),
+          ...pendingAskUserQuestions.map((request) => ({
+            kind: "question" as const,
+            id: `question:${request.requestId}`,
+            order: request.pendingActionOrder,
+            request,
+          })),
+        ].sort(
+          (a, b) => (a.order ?? Number.MAX_SAFE_INTEGER) - (b.order ?? Number.MAX_SAFE_INTEGER)
+        ),
+      [pendingAskUserQuestions, pendingToolPermissions]
+    );
+    const revealedActionIds = useRef(new Set<string>());
+    const revealNewAction = useCallback((id: string, node: HTMLDivElement | null) => {
+      if (!node || revealedActionIds.current.has(id)) return;
+      revealedActionIds.current.add(id);
+      // Reveal only the new blocking action. Scrolling never changes focus, so
+      // a user typing elsewhere is not interrupted when an agent asks.
+      // https://github.com/logancyang/obsidian-copilot/issues/2948
+      node.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }, []);
 
     // The latest assistant message owns both timer states: it ticks while that
     // turn is in flight, then retains the frozen duration until the next turn
     // appends a newer placeholder and naturally retires this row.
     const latestAssistant = useMemo(() => lastAssistant(visible), [visible]);
     const streamingMessageId = isLoading ? latestAssistant?.id : undefined;
-
-    if (visible.length === 0) {
-      return (
-        <div className="tw-flex tw-size-full tw-flex-col tw-gap-2 tw-overflow-y-auto tw-px-3 tw-pt-2">
-          {inlinePlanCard}
-          {inlineToolPermissionCards}
-          {inlineAskUserQuestionCards}
-        </div>
-      );
-    }
 
     return (
       <div className="tw-flex tw-h-full tw-flex-1 tw-flex-col tw-overflow-hidden">
@@ -118,12 +125,11 @@ const AgentChatMessages = memo(
         >
           {visible.map((message, index) => {
             const isLastMessage = index === visible.length - 1;
-            // Reserve scroll headroom only when the last message is the
-            // assistant AND there's nothing pinned at the tail (plan card or
-            // tool-permission card) — those already provide visible content
-            // at the bottom of the stream.
+            // A plan remains part of the transcript, so it supplies tail
+            // content. Blocking actions live in their own rail and do not
+            // change the transcript's scroll headroom.
             const shouldApplyMinHeight =
-              isLastMessage && message.sender !== USER_SENDER && !hasTailCards;
+              isLastMessage && message.sender !== USER_SENDER && !showPlanCard;
             const adaptedMessage = adapted[index];
             // When an assistant message has structured parts, the trail owns
             // its entire body — `text` parts already cover streamed prose, so
@@ -215,9 +221,35 @@ const AgentChatMessages = memo(
             );
           })}
           {inlinePlanCard}
-          {inlineToolPermissionCards}
-          {inlineAskUserQuestionCards}
         </div>
+        {pendingActions.length > 0 ? (
+          <div
+            role="region"
+            aria-label="Pending agent actions"
+            data-testid="agent-action-rail"
+            className="tw-max-h-[40%] tw-shrink-0 tw-overflow-y-auto tw-border-t tw-border-solid tw-border-border tw-bg-primary tw-py-1"
+          >
+            {pendingActions.map((action) => (
+              <div
+                key={action.id}
+                ref={(node) => revealNewAction(action.id, node)}
+                data-action-id={action.id}
+              >
+                {action.kind === "permission" ? (
+                  <ToolPermissionCard
+                    request={action.request}
+                    onResolve={chatBackend.resolveToolPermission.bind(chatBackend)}
+                  />
+                ) : (
+                  <AskUserQuestionCard
+                    request={action.request}
+                    onResolve={chatBackend.resolveAskUserQuestion.bind(chatBackend)}
+                  />
+                )}
+              </div>
+            ))}
+          </div>
+        ) : null}
       </div>
     );
   }
