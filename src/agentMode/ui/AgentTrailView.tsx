@@ -201,7 +201,13 @@ interface ActivityGroupRowProps {
 // A component rather than a branch of `renderNode` because each group owns its
 // own thinking clock, and hooks cannot run in a loop.
 const ActivityGroupRow: React.FC<ActivityGroupRowProps> = ({ group, atLiveEdge, ctx, trailId }) => {
-  const thinkingMs = useThinkingClock(isReasoningActive(group.members, atLiveEdge));
+  const reasoningActive = isReasoningActive(group.members, atLiveEdge);
+  const trailingMember = group.members[group.members.length - 1];
+  const activeThoughtStartedAtMs =
+    reasoningActive && trailingMember?.type === "reasoning"
+      ? trailingMember.part.startedAtMs
+      : undefined;
+  const thinkingMs = useThinkingClock(reasoningActive, activeThoughtStartedAtMs);
   const groupExpansionId = `${trailId}/group:${group.id}`;
   const memberExpansionIds = group.members.flatMap((member) =>
     member.type === "action" ? [actionExpansionId(trailId, member.part.id)] : []

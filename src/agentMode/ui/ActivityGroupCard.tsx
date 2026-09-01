@@ -11,9 +11,8 @@ import { AgentActivityCard } from "@/components/chat-components/AgentActivityCar
 export interface ActivityGroupCardProps {
   group: ActivityGroupNode;
   /**
-   * Measured reasoning wall-clock for this group, passed through to
-   * `summarizeActivity`. The card never measures time itself — `thought`
-   * parts carry no timestamps, so the trail owns the clock.
+   * Live elapsed time for the trailing reasoning span. Completed spans keep
+   * their duration on the thought parts, while the trail owns the active clock.
    */
   thinkingMs?: number;
   /**

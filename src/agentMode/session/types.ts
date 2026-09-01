@@ -887,6 +887,10 @@ export type AgentMessagePart =
   | {
       kind: "thought";
       text: string;
+      /** Local event time for the first chunk in this reasoning block. */
+      startedAtMs?: number;
+      /** Frozen elapsed time once a later event proves the block ended. */
+      durationMs?: number;
     }
   | {
       // Streamed assistant prose. Each interruption by a tool_call or thought

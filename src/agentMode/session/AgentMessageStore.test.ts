@@ -67,14 +67,75 @@ describe("AgentMessageStore", () => {
     expect(store.appendAgentText("missing", "x")).toBe(false);
   });
 
-  it("appendAgentThought folds successive chunks into one part", () => {
+  it("appendAgentThought folds successive chunks into one timed part (https://github.com/Brevilabs/obsidian-copilot-private/issues/336)", () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(1_000);
     const store = new AgentMessageStore();
     const id = store.addMessage(placeholder());
     store.appendAgentThought(id, "Thinking");
     store.appendAgentThought(id, " harder");
     const parts = store.getMessage(id)?.parts ?? [];
     expect(parts).toHaveLength(1);
-    expect(parts[0]).toEqual({ kind: "thought", text: "Thinking harder" });
+    expect(parts[0]).toEqual({
+      kind: "thought",
+      text: "Thinking harder",
+      startedAtMs: 1_000,
+    });
+    jest.useRealTimers();
+  });
+
+  it("freezes a thought when a tool call follows it (https://github.com/Brevilabs/obsidian-copilot-private/issues/336)", () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(1_000);
+    const store = new AgentMessageStore();
+    const id = store.addMessage(placeholder());
+    store.appendAgentThought(id, "Thinking");
+    jest.advanceTimersByTime(12_648);
+    store.upsertAgentPart(id, {
+      kind: "tool_call",
+      id: "tc1",
+      title: "Edit files",
+      status: "completed",
+    });
+
+    expect(store.getMessage(id)?.parts?.[0]).toMatchObject({
+      kind: "thought",
+      startedAtMs: 1_000,
+      durationMs: 12_648,
+    });
+    jest.useRealTimers();
+  });
+
+  it("starts a new timed thought after a completed thought (https://github.com/Brevilabs/obsidian-copilot-private/issues/336)", () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(1_000);
+    const store = new AgentMessageStore();
+    const id = store.addMessage(placeholder());
+    store.appendAgentThought(id, "First");
+    jest.advanceTimersByTime(2_000);
+    store.appendAgentText(id, "Update");
+    jest.advanceTimersByTime(3_000);
+    store.appendAgentThought(id, "Second");
+
+    expect(store.getMessage(id)?.parts).toEqual([
+      { kind: "thought", text: "First", startedAtMs: 1_000, durationMs: 2_000 },
+      { kind: "text", text: "Update" },
+      { kind: "thought", text: "Second", startedAtMs: 6_000 },
+    ]);
+    jest.useRealTimers();
+  });
+
+  it("freezes a trailing thought when the turn completes (https://github.com/Brevilabs/obsidian-copilot-private/issues/336)", () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(1_000);
+    const store = new AgentMessageStore();
+    const id = store.addMessage(placeholder());
+    store.appendAgentThought(id, "Final thought");
+    jest.advanceTimersByTime(5_778);
+    store.markTurnComplete(id, "end_turn", 10_000);
+
+    expect(store.getMessage(id)?.parts?.[0]).toMatchObject({ durationMs: 5_778 });
+    jest.useRealTimers();
   });
 
   it("upsertAgentPart appends new tool_call by toolCallId", () => {
@@ -194,6 +255,24 @@ describe("AgentMessageStore", () => {
         expect.objectContaining({ content: "step 2" }),
       ]),
     });
+  });
+
+  it("lets a replacement plan freeze the trailing thought (https://github.com/Brevilabs/obsidian-copilot-private/issues/336)", () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(1_000);
+    const store = new AgentMessageStore();
+    const id = store.addMessage(placeholder());
+    const plan: AgentMessagePart = {
+      kind: "plan",
+      entries: [{ content: "step 1", priority: "high", status: "pending" }],
+    };
+    store.upsertAgentPart(id, plan);
+    store.appendAgentThought(id, "Reconsider the next step");
+    jest.advanceTimersByTime(3_000);
+
+    expect(store.upsertAgentPart(id, { ...plan })).toBe(true);
+    expect(store.getMessage(id)?.parts?.[1]).toMatchObject({ durationMs: 3_000 });
+    jest.useRealTimers();
   });
 
   it("getDisplayMessages includes parts", () => {

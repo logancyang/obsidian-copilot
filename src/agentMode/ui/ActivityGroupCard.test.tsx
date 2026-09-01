@@ -48,7 +48,7 @@ describe("ActivityGroupCard", () => {
       });
 
       expect(screen.getByRole("button").textContent).toContain(
-        "Read 1 file, ran 2 commands, thought for 51s"
+        "Ran 3 commands, read 1 file, thought for 51s"
       );
     });
 

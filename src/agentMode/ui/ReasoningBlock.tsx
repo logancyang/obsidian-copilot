@@ -12,35 +12,13 @@ interface ReasoningBlockProps {
 /**
  * Adapter that maps an agent-mode `thought` part onto the existing
  * `AgentReasoningBlock` UI (brain icon, final duration, collapse-on-done). The store
- * folds streamed `agent_thought_chunk`s into a single `thought` part, so
- * we have one part per assistant turn — `steps` derives from paragraph
- * splits within `part.text`.
+ * folds consecutive `agent_thought_chunk`s into one `thought` part per
+ * uninterrupted reasoning span. `steps` derives from paragraph splits within
+ * `part.text`.
  */
 export const ReasoningBlock: React.FC<ReasoningBlockProps> = ({ part, isStreaming }) => {
-  const startedAtRef = useRef<number | null>(null);
-  const frozenAtRef = useRef<number | null>(null);
-  const prevIsStreamingRef = useRef(isStreaming);
+  const fallbackStartedAtRef = useRef(Date.now());
   const [now, setNow] = useState(() => Date.now());
-
-  // Initialize start timestamp on first mount when the thought has content.
-  useEffect(() => {
-    if (startedAtRef.current === null && part.text.length > 0) {
-      startedAtRef.current = Date.now();
-    }
-  }, [part.text]);
-
-  // Derive the freeze timestamp during render so we don't render one frame
-  // with `isStreaming=false` and a still-null completion mark. Mutating a
-  // ref during render is safe as long as the result is deterministic for
-  // this set of inputs.
-  if (prevIsStreamingRef.current !== isStreaming) {
-    if (!isStreaming && startedAtRef.current !== null) {
-      frozenAtRef.current = Date.now();
-    } else if (isStreaming) {
-      frozenAtRef.current = null;
-    }
-    prevIsStreamingRef.current = isStreaming;
-  }
 
   // Tick the clock while streaming.
   useEffect(() => {
@@ -49,11 +27,12 @@ export const ReasoningBlock: React.FC<ReasoningBlockProps> = ({ part, isStreamin
     return () => window.clearInterval(id);
   }, [isStreaming]);
 
-  const frozenAt = frozenAtRef.current;
-
-  const startedAt = startedAtRef.current ?? Date.now();
-  const endedAt = frozenAt ?? (isStreaming ? now : startedAt);
-  const elapsedSeconds = Math.max(0, Math.round((endedAt - startedAt) / 1000));
+  // Older saved parts have no timing metadata. They retain the prior local
+  // fallback while live and render as `< 1s` once complete.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/336
+  const startedAt = part.startedAtMs ?? fallbackStartedAtRef.current;
+  const elapsedMs = part.durationMs ?? (isStreaming ? Math.max(0, now - startedAt) : 0);
+  const elapsedSeconds = Math.floor(elapsedMs / 1000);
 
   const steps = part.text
     .split(/\n\n+/)

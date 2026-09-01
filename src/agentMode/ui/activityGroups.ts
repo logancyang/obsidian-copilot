@@ -91,16 +91,12 @@ export function foldActivityGroups(nodes: RenderNode[]): GroupedTrailNode[] {
 }
 
 /**
- * Bucket for the summary line. The vocabulary is deliberately coarse: reads and
- * edits are named because they are what users scan a turn for; everything else —
- * searches, fetches, skills, MCP calls, tools that do not exist yet — counts as
- * a command, so no new tool can ever change how the line reads. The identity
- * the line gives up is one click away in the expanded rows, and a lone call
- * never enters a group at all, so it keeps its precise row.
+ * File-specific work supplements the total command count. Every action remains
+ * a command, while reads and edits add the file totals users scan a turn for.
  */
-type ActivityFamily = "read" | "edit" | "command";
+type FileActivityFamily = "read" | "edit";
 
-function familyFor(part: ToolCallPart): ActivityFamily {
+function fileFamilyFor(part: ToolCallPart): FileActivityFamily | null {
   // An MCP tool whose bare name collides with a native one (e.g.
   // `mcp__srv__read`) must not masquerade as it; only the ACP `toolKind` —
   // a semantic classification, not a name — can vouch for an MCP call.
@@ -122,33 +118,46 @@ function familyFor(part: ToolCallPart): ActivityFamily {
     case "edit":
       return "edit";
     default:
-      return "command";
+      return null;
   }
 }
 
-/** Lowercase sentence fragment for one family's contribution to the line. */
-function phraseFor(family: ActivityFamily, n: number): string {
+/** Lowercase sentence fragment for one file family's contribution to the line. */
+function filePhraseFor(family: FileActivityFamily, n: number): string {
   switch (family) {
     case "read":
       return `read ${pluralize(n, "file")}`;
     case "edit":
       return `edited ${pluralize(n, "file")}`;
-    case "command":
-      return `ran ${pluralize(n, "command")}`;
   }
+}
+
+interface FileCount {
+  paths: Set<string>;
+  withoutPath: number;
+}
+
+function filePathsFor(part: ToolCallPart): Set<string> {
+  // Codex sends one edit tool with a diff record per file, while other
+  // backends may put the same paths in `locations`.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/336
+  const paths = new Set(part.locations?.map((location) => location.path) ?? []);
+  for (const output of part.output ?? []) {
+    if (output.type === "diff") paths.add(output.path);
+  }
+  return paths;
 }
 
 export interface ActivitySummaryOptions {
   /**
-   * Wall-clock the group spent reasoning. `kind: "thought"` parts carry no
-   * timestamps, so the duration cannot be derived here — the rendering layer
-   * measures it live and passes it in. Omitted or zero renders no duration.
+   * Elapsed time for the one reasoning block still in flight. Completed
+   * blocks carry their frozen durations in `members`.
    */
   thinkingMs?: number;
 }
 
 export interface ActivitySummary {
-  /** The collapsed row's line, e.g. `Read 2 files, ran 12 commands, thought for 51s`. */
+  /** The collapsed row's line, e.g. `Ran 12 commands, read 2 files, thought for 51s`. */
   line: string;
   /** Members that failed, surfaced by the card as a badge. */
   failed: number;
@@ -165,25 +174,43 @@ export function summarizeActivity(
   members: ActivityMember[],
   options: ActivitySummaryOptions = {}
 ): ActivitySummary {
-  const order: ActivityFamily[] = [];
-  const counts = new Map<ActivityFamily, number>();
+  const fileOrder: FileActivityFamily[] = [];
+  const fileCounts = new Map<FileActivityFamily, FileCount>();
+  let commands = 0;
   let thoughts = 0;
+  let completedThinkingMs = 0;
   let failed = 0;
 
   for (const member of members) {
     if (member.type === "reasoning") {
       thoughts++;
+      completedThinkingMs += member.part.durationMs ?? 0;
       continue;
     }
+    commands++;
     if (member.part.status === "failed") failed++;
-    const family = familyFor(member.part);
-    if (!counts.has(family)) order.push(family);
-    counts.set(family, (counts.get(family) ?? 0) + 1);
+    const family = fileFamilyFor(member.part);
+    if (!family) continue;
+    if (!fileCounts.has(family)) {
+      fileOrder.push(family);
+      fileCounts.set(family, { paths: new Set(), withoutPath: 0 });
+    }
+    const count = fileCounts.get(family)!;
+    const paths = filePathsFor(member.part);
+    // Some backends classify a file tool but omit structured paths. Count the
+    // call as one file instead of dropping it from the summary entirely.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/336
+    if (paths.size === 0) count.withoutPath++;
+    else for (const path of paths) count.paths.add(path);
   }
 
-  const parts = order.map((family) => phraseFor(family, counts.get(family) ?? 0));
+  const parts = commands > 0 ? [`ran ${pluralize(commands, "command")}`] : [];
+  for (const family of fileOrder) {
+    const count = fileCounts.get(family)!;
+    parts.push(filePhraseFor(family, count.paths.size + count.withoutPath));
+  }
 
-  const thinkingMs = options.thinkingMs ?? 0;
+  const thinkingMs = completedThinkingMs + (options.thinkingMs ?? 0);
   if (thoughts > 0) {
     if (thinkingMs >= 1000) parts.push(`thought for ${formatDuration(thinkingMs)}`);
     else if (parts.length === 0) parts.push("thought");

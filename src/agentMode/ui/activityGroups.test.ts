@@ -198,16 +198,16 @@ describe("activityGroups", () => {
         member("b", { vendorToolName: "Read" }),
         member("c", { vendorToolName: "Bash" }),
       ]);
-      expect(line).toBe("Read 2 files, ran 1 command");
+      expect(line).toBe("Ran 3 commands, read 2 files");
     });
 
-    it("pools tools that mean the same thing into one phrase", () => {
+    it("uses one-file fallbacks when file tools omit paths (https://github.com/Brevilabs/obsidian-copilot-private/issues/336)", () => {
       const { line } = summarizeActivity([
         member("a", { vendorToolName: "Edit" }),
         member("b", { vendorToolName: "Write" }),
         member("c", { vendorToolName: "MultiEdit" }),
       ]);
-      expect(line).toBe("Edited 3 files");
+      expect(line).toBe("Ran 3 commands, edited 3 files");
     });
 
     it("falls back to the ACP tool kind when there is no vendor name", () => {
@@ -215,10 +215,10 @@ describe("activityGroups", () => {
         member("a", { toolKind: "execute" }),
         member("b", { toolKind: "read" }),
       ]);
-      expect(line).toBe("Ran 1 command, read 1 file");
+      expect(line).toBe("Ran 2 commands, read 1 file");
     });
 
-    it("counts every tool that is not a read or an edit as a command", () => {
+    it("counts every grouped tool call as a command (https://github.com/Brevilabs/obsidian-copilot-private/issues/336)", () => {
       const { line } = summarizeActivity([
         member("a", { vendorToolName: "Grep" }),
         member("b", { vendorToolName: "WebFetch" }),
@@ -235,7 +235,7 @@ describe("activityGroups", () => {
         member("r", { vendorToolName: "Read" }),
         member("g", { vendorToolName: "Grep" }),
       ]);
-      expect(line).toBe("Ran 2 commands, read 1 file");
+      expect(line).toBe("Ran 3 commands, read 1 file");
     });
 
     it("does not let an MCP tool named like a native read count as one", () => {
@@ -251,6 +251,46 @@ describe("activityGroups", () => {
         { thinkingMs: 51_000 }
       );
       expect(line).toBe("Ran 1 command, thought for 51s");
+    });
+
+    it("adds frozen reasoning spans to the active span (https://github.com/Brevilabs/obsidian-copilot-private/issues/336)", () => {
+      const recorded: ActivityMember = {
+        type: "reasoning",
+        part: { kind: "thought", text: "first", durationMs: 12_648 },
+      };
+      const { line } = summarizeActivity(
+        [member("a", { vendorToolName: "Bash" }), recorded, REASONING_MEMBER],
+        { thinkingMs: 5_778 }
+      );
+
+      expect(line).toBe("Ran 1 command, thought for 18s");
+    });
+
+    it("counts structured diff paths and every tool call (https://github.com/Brevilabs/obsidian-copilot-private/issues/336)", () => {
+      const { line } = summarizeActivity([
+        member("python", { toolKind: "execute" }),
+        member("edit", {
+          toolKind: "edit",
+          output: ["a.md", "b.md", "c.md", "d.md", "e.md"].map((path) => ({
+            type: "diff" as const,
+            path,
+            oldText: "before",
+            newText: "after",
+          })),
+        }),
+        member("validate", { toolKind: "execute" }),
+      ]);
+
+      expect(line).toBe("Ran 3 commands, edited 5 files");
+    });
+
+    it("de-duplicates structured paths across file tools (https://github.com/Brevilabs/obsidian-copilot-private/issues/336)", () => {
+      const { line } = summarizeActivity([
+        member("a", { toolKind: "edit", locations: [{ path: "same.md" }] }),
+        member("b", { toolKind: "edit", locations: [{ path: "same.md" }] }),
+      ]);
+
+      expect(line).toBe("Ran 2 commands, edited 1 file");
     });
 
     it("omits a reasoning duration under a second rather than saying '< 1s'", () => {
