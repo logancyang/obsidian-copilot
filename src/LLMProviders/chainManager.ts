@@ -24,7 +24,6 @@ import { Document } from "@langchain/core/documents";
 import { App } from "obsidian";
 import ChatModelManager from "./chatModelManager";
 import MemoryManager from "./memoryManager";
-import PromptManager from "./promptManager";
 import { UserMemoryManager } from "@/memory/UserMemoryManager";
 
 export default class ChainManager {
@@ -37,7 +36,6 @@ export default class ChainManager {
   public app: App;
   public chatModelManager: ChatModelManager;
   public memoryManager: MemoryManager;
-  public promptManager: PromptManager;
   public userMemoryManager: UserMemoryManager;
   private pendingModelError: Error | null = null;
   /** Model-management API — resolves the chat backend's selected model. */
@@ -49,7 +47,6 @@ export default class ChainManager {
     this.modelManagement = modelManagement;
     this.memoryManager = MemoryManager.getInstance();
     this.chatModelManager = ChatModelManager.getInstance();
-    this.promptManager = PromptManager.getInstance();
     this.userMemoryManager = new UserMemoryManager(app);
 
     // Initialize async operations

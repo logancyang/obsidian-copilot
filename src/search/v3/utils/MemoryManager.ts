@@ -5,25 +5,16 @@ import { getSettings } from "@/settings/model";
  * Manages memory budget for search operations
  */
 export class MemoryManager {
-  private static readonly DEFAULT_CANDIDATE_LIMIT = 500;
   private static readonly MB_TO_BYTES = 1024 * 1024;
 
   private bytesUsed: number = 0;
   private readonly maxBytes: number;
-  private readonly candidateLimit: number;
 
   constructor() {
     const settings = getSettings();
     // Convert MB to bytes, with bounds checking
     const ramLimitMB = Math.min(1000, Math.max(20, settings.lexicalSearchRamLimit || 100));
     this.maxBytes = ramLimitMB * MemoryManager.MB_TO_BYTES;
-
-    // Keep a reasonable candidate limit based on RAM available
-    // Roughly 200KB average per document means ~500 docs for 100MB
-    this.candidateLimit = Math.min(
-      MemoryManager.DEFAULT_CANDIDATE_LIMIT,
-      Math.floor(ramLimitMB * 5) // Approximately 5 docs per MB
-    );
   }
 
   /**
@@ -31,13 +22,6 @@ export class MemoryManager {
    */
   getMaxBytes(): number {
     return this.maxBytes;
-  }
-
-  /**
-   * Get the maximum number of candidates to index
-   */
-  getCandidateLimit(): number {
-    return this.candidateLimit;
   }
 
   /**

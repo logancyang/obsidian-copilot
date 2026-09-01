@@ -36,10 +36,6 @@ export class Mention {
     return Mention.instance;
   }
 
-  extractAllUrls(text: string): string[] {
-    return extractUrlsFromText(text);
-  }
-
   extractUrls(text: string): string[] {
     return extractUrlsFromText(text);
   }
@@ -182,34 +178,5 @@ export class Mention {
     });
 
     return { urlContext, imageUrls, processedErrorUrls };
-  }
-
-  /**
-   * Process URLs from user input text (both regular and YouTube URLs).
-   *
-   * IMPORTANT: This method should ONLY be called with the user's direct chat input,
-   * NOT with content from context notes.
-   *
-   * @param text The user's chat input text
-   * @returns Processed URL context and any errors
-   */
-  async processUrls(
-    vault: Vault,
-    text: string
-  ): Promise<{
-    urlContext: string;
-    imageUrls: string[];
-    processedErrorUrls: Record<string, string>;
-  }> {
-    const urls = this.extractUrls(text);
-    return this.processUrlList(vault, urls);
-  }
-
-  getMentions(): Map<string, MentionData> {
-    return this.mentions;
-  }
-
-  clearMentions(): void {
-    this.mentions.clear();
   }
 }

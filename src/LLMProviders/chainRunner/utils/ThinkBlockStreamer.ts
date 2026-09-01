@@ -1,13 +1,7 @@
 import { StreamingResult, TokenUsage } from "@/types/message";
-import { AIMessage } from "@langchain/core/messages";
 import { detectTruncation, extractTokenUsage } from "./finishReasonDetector";
 import { formatErrorChunk } from "@/utils/toolResultUtils";
-import {
-  NativeToolCall,
-  ToolCallChunk,
-  buildToolCallsFromChunks,
-  createAIMessageWithToolCalls,
-} from "./nativeToolCalling";
+import { NativeToolCall, ToolCallChunk, buildToolCallsFromChunks } from "./nativeToolCalling";
 import { logInfo, logWarn } from "@/logger";
 import { stripSpecialTokens } from "@/utils/stripSpecialTokens";
 
@@ -31,7 +25,6 @@ export class ThinkBlockStreamer {
 
   // Native tool call accumulation
   private toolCallChunks: Map<number, ToolCallChunk> = new Map();
-  private accumulatedToolCalls: NativeToolCall[] = [];
 
   constructor(
     private updateCurrentAiMessage: (message: string) => void,
@@ -344,35 +337,7 @@ export class ThinkBlockStreamer {
    * Call this after streaming is complete to get all tool calls.
    */
   getToolCalls(): NativeToolCall[] {
-    // If we have pre-accumulated tool calls (from non-streaming), return those
-    if (this.accumulatedToolCalls.length > 0) {
-      return this.accumulatedToolCalls;
-    }
-    // Otherwise build from streaming chunks
     return buildToolCallsFromChunks(this.toolCallChunks);
-  }
-
-  /**
-   * Check if there are any tool calls accumulated
-   */
-  hasToolCalls(): boolean {
-    return this.toolCallChunks.size > 0 || this.accumulatedToolCalls.length > 0;
-  }
-
-  /**
-   * Set tool calls directly (for non-streaming responses)
-   */
-  setToolCalls(toolCalls: NativeToolCall[]) {
-    this.accumulatedToolCalls = toolCalls;
-  }
-
-  /**
-   * Build an AIMessage with the accumulated content and tool calls.
-   * Use this to add the complete response to conversation history.
-   */
-  buildAIMessage(): AIMessage {
-    const toolCalls = this.getToolCalls();
-    return createAIMessageWithToolCalls(this.fullResponse, toolCalls);
   }
 
   close(): StreamingResult {
