@@ -78,6 +78,27 @@ describe("AgentMessageStore", () => {
         const store = new AgentMessageStore();
         expect(store.appendAgentText("missing", "x")).toBe(false);
       });
+
+      it("extends a provisional late thought when completed prose ends it (https://github.com/Brevilabs/obsidian-copilot-private/issues/336)", () => {
+        jest.useFakeTimers();
+        jest.setSystemTime(1_000);
+        const store = new AgentMessageStore();
+        const id = store.addMessage(placeholder());
+        store.appendAgentText(id, "Done");
+        store.markTurnComplete(id, "end_turn", 1_000);
+        jest.setSystemTime(5_000);
+        store.appendAgentThought(id, "Late thought");
+
+        jest.setSystemTime(7_000);
+        store.appendAgentText(id, "After");
+
+        expect(store.getMessage(id)?.parts).toEqual([
+          { kind: "text", text: "Done" },
+          { kind: "thought", text: "Late thought", startedAtMs: 5_000, durationMs: 2_000 },
+          { kind: "text", text: "After" },
+        ]);
+        jest.useRealTimers();
+      });
     });
 
     describe("appendAgentThought()", () => {

@@ -180,7 +180,11 @@ function renderNode(
       );
     }
     case "reasoning": {
-      const isActive = atLiveEdge && node.part === ctx.lastPart;
+      // Replacing an earlier singleton plan can freeze the final thought
+      // without appending another raw part, so duration also ends live state.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/336
+      const isActive =
+        atLiveEdge && node.part === ctx.lastPart && node.part.durationMs === undefined;
       return <ReasoningBlock key={key} part={node.part} isStreaming={isActive} />;
     }
     case "text":

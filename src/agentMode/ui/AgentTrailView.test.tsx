@@ -294,6 +294,29 @@ describe("AgentTrail", () => {
     }
   });
 
+  it("renders a frozen standalone trailing thought as complete (https://github.com/Brevilabs/obsidian-copilot-private/issues/336)", () => {
+    renderTrail({
+      parts: [
+        {
+          kind: "plan",
+          entries: [{ content: "Inspect the result", priority: "medium", status: "pending" }],
+        },
+        {
+          kind: "thought",
+          text: "Finished reasoning",
+          startedAtMs: 12_000,
+          durationMs: 18_000,
+        },
+      ],
+      isStreaming: true,
+      turnStopReason: undefined,
+    });
+
+    expect(screen.getByText("Thought for")).toBeTruthy();
+    expect(screen.getByText("18s")).toBeTruthy();
+    expect(screen.queryByText("Reasoning")).toBeNull();
+  });
+
   it("renders prose between two groups at full size", () => {
     renderTrail({ parts: STREAMING_PARTS, isStreaming: true, turnStopReason: undefined });
 

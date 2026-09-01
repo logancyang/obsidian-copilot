@@ -252,11 +252,13 @@ export class AgentMessageStore {
       !last ||
       last.kind !== "thought" ||
       last.startedAtMs === undefined ||
-      last.durationMs !== undefined
+      (last.durationMs !== undefined && msg.turnStopReason === undefined)
     ) {
       return false;
     }
-    last.durationMs = Math.max(0, endedAtMs - last.startedAtMs);
+    const durationMs = Math.max(last.durationMs ?? 0, endedAtMs - last.startedAtMs);
+    if (last.durationMs === durationMs) return false;
+    last.durationMs = durationMs;
     return true;
   }
 
