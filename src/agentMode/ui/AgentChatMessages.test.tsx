@@ -211,7 +211,7 @@ describe("AgentChatMessages", () => {
       expect(rail.querySelector("[data-action-id]")).not.toBe(firstAction);
     });
 
-    it("lets the borderless action rail use its natural height when the transcript is empty for https://github.com/logancyang/obsidian-copilot/issues/2948", () => {
+    it("bounds and scrolls a tall action rail so controls remain reachable for https://github.com/logancyang/obsidian-copilot/issues/2948", () => {
       renderMessages([], false, {
         pendingAskUserQuestions: [question("empty-chat-question", 0)],
       });
@@ -219,8 +219,9 @@ describe("AgentChatMessages", () => {
       const rail = screen.getByTestId("agent-action-rail");
       expect(rail.textContent).toContain("empty-chat-question");
       expect(rail.className).toContain("tw-w-full");
-      expect(rail.className).not.toContain("tw-overflow");
-      expect(rail.className).not.toContain("tw-max-h");
+      expect(rail.className).toContain("tw-max-h-full");
+      expect(rail.className).toContain("tw-overflow-y-auto");
+      expect(rail.className).not.toContain("tw-shrink-0");
       expect(rail.className).not.toContain("tw-border");
     });
 

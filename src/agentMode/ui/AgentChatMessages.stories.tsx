@@ -52,6 +52,21 @@ const questions = [
   question("audience", 1, "Should the brief target existing customers?"),
   question("publish", 3, "Should I prepare a publish-ready version?"),
 ];
+const tallQuestion: AskUserQuestionPrompt = {
+  sessionId: SESSION_ID,
+  requestId: "deployment-strategy",
+  pendingActionOrder: 0,
+  questions: [
+    {
+      question: "Which deployment strategy should I use for the staged rollout?",
+      options: Array.from({ length: 8 }, (_, index) => ({
+        label: `Strategy ${index + 1}: staged rollout with regional validation`,
+        description:
+          "Validate telemetry, rollback readiness, and user impact before expanding to the next region.",
+      })),
+    },
+  ],
+};
 
 const QueuedActionsDemo: React.FC<AgentChatMessagesProps> = (props) => {
   const app = useApp();
@@ -114,4 +129,15 @@ export default meta;
 /** Resolve each full-width action to reveal the next permission or question in arrival order. */
 export const QueuedActions: StoryObj<AgentChatMessagesProps> = {
   render: () => <QueuedActionsDemo {...actionRailArgs} />,
+};
+
+/** A verbose blocking question remains resolvable when the chat pane is shorter than the card. */
+export const TallQuestion: StoryObj<AgentChatMessagesProps> = {
+  render: () => (
+    <QueuedActionsDemo
+      {...actionRailArgs}
+      pendingToolPermissions={[]}
+      pendingAskUserQuestions={[tallQuestion]}
+    />
+  ),
 };

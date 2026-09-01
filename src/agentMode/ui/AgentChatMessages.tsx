@@ -222,7 +222,10 @@ const AgentChatMessages = memo(
             role="region"
             aria-label="Pending agent actions"
             data-testid="agent-action-rail"
-            className="tw-w-full tw-shrink-0 tw-bg-primary"
+            // A verbose question can exceed a short chat pane. Bound and scroll
+            // the rail so its resolution controls remain reachable.
+            // https://github.com/logancyang/obsidian-copilot/issues/2948
+            className="tw-max-h-full tw-w-full tw-overflow-y-auto tw-bg-primary"
           >
             <div key={pendingAction.id} data-action-id={pendingAction.id}>
               {pendingAction.kind === "permission" ? (
