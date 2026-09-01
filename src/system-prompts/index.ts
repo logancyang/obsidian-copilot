@@ -17,9 +17,6 @@ export {
   getSystemPromptWithMemory,
 } from "./systemPromptBuilder";
 
-// Manager
-export { SystemPromptManager } from "./systemPromptManager";
-
 // Register
 export { SystemPromptRegister } from "./systemPromptRegister";
 
