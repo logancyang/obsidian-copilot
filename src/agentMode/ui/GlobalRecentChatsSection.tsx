@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { SearchBar } from "@/components/ui/SearchBar";
 import { type ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
 import { ChatIconWithAttention } from "@/components/chat-components/ChatIconWithAttention";
+import { logError } from "@/logger";
 import { cn } from "@/lib/utils";
 import { isNativeChatId } from "@/utils/nativeChatId";
 import { formatCompactRelativeTime } from "@/utils/formatRelativeTime";
@@ -422,21 +423,40 @@ export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
     setEditingTitle(title);
   }, []);
 
-  const handleSaveEdit = useCallback(() => {
+  const handleSaveEdit = useCallback(async () => {
     const trimmed = editingTitle.trim();
     const id = editingId;
-    setEditingId(null);
-    if (!id || !trimmed) return;
-    void onUpdateTitle(id, trimmed);
+    if (!id || !trimmed) {
+      setEditingId(null);
+      return;
+    }
+
+    try {
+      await onUpdateTitle(id, trimmed);
+      setEditingId(null);
+    } catch (error) {
+      // Keep the draft editable when the underlying vault operation fails.
+      // https://github.com/logancyang/obsidian-copilot/issues/3040
+      logError("Error updating title:", error);
+    }
   }, [editingId, editingTitle, onUpdateTitle]);
 
   const handleConfirmDelete = useCallback(
-    (id: string) => {
-      setConfirmDeleteId(null);
-      void onDeleteChat(id);
+    async (id: string) => {
+      try {
+        await onDeleteChat(id);
+        setConfirmDeleteId(null);
+      } catch (error) {
+        // Keep confirmation available so the user can retry the failed delete.
+        // https://github.com/logancyang/obsidian-copilot/issues/3040
+        logError("Error deleting chat:", error);
+      }
     },
     [onDeleteChat]
   );
+
+  const handleSaveEditSafely = safeAsyncHandler(handleSaveEdit);
+  const handleConfirmDeleteSafely = safeAsyncHandler(handleConfirmDelete);
 
   const handleOpenSourceFile = useCallback(
     (id: string) => {
@@ -509,10 +529,10 @@ export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
                 // Only the editing row needs the live save handler (it changes
                 // per keystroke via editingTitle); the rest get a stable noop so
                 // their memo isn't defeated mid-rename.
-                onSaveEdit={editingId === item.id ? handleSaveEdit : NOOP_SAVE}
+                onSaveEdit={editingId === item.id ? handleSaveEditSafely : NOOP_SAVE}
                 onCancelEdit={handleCancelEdit}
                 onStartDelete={setConfirmDeleteId}
-                onConfirmDelete={handleConfirmDelete}
+                onConfirmDelete={handleConfirmDeleteSafely}
                 onCancelDelete={handleCancelDelete}
                 canOpenSourceFile={!isNativeChatId(item.id)}
                 onOpenSourceFile={handleOpenSourceFile}

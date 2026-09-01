@@ -17,10 +17,10 @@ function renderSection(props: Partial<React.ComponentProps<typeof GlobalRecentCh
       attentionChatIds={props.attentionChatIds}
       projectNamesById={props.projectNamesById}
       sortStrategy={props.sortStrategy}
-      onLoadChat={noop}
-      onUpdateTitle={noop}
-      onDeleteChat={noop}
-      onOpenSourceFile={noop}
+      onLoadChat={props.onLoadChat ?? noop}
+      onUpdateTitle={props.onUpdateTitle ?? noop}
+      onDeleteChat={props.onDeleteChat ?? noop}
+      onOpenSourceFile={props.onOpenSourceFile ?? noop}
     />
   );
 }
@@ -304,6 +304,38 @@ describe("GlobalRecentChatsSection", () => {
       } finally {
         observer.restore();
       }
+    });
+
+    it("https://github.com/logancyang/obsidian-copilot/issues/3040 keeps a rename draft when updating the title fails", async () => {
+      const onUpdateTitle = jest.fn(async () => {
+        throw new Error("rename failed");
+      });
+      renderSection({ items: [makeItem("rename-failure")], onUpdateTitle });
+
+      fireEvent.click(screen.getByTitle("Rename"));
+      const input = screen.getByDisplayValue("Chat rename-failure");
+      fireEvent.change(input, { target: { value: "Retained draft" } });
+      await act(async () => {
+        fireEvent.keyDown(input, { key: "Enter" });
+      });
+
+      expect(onUpdateTitle).toHaveBeenCalledWith("rename-failure", "Retained draft");
+      expect(screen.getByDisplayValue("Retained draft")).toBeTruthy();
+    });
+
+    it("https://github.com/logancyang/obsidian-copilot/issues/3040 keeps delete confirmation available when deletion fails", async () => {
+      const onDeleteChat = jest.fn(async () => {
+        throw new Error("delete failed");
+      });
+      renderSection({ items: [makeItem("delete-failure")], onDeleteChat });
+
+      fireEvent.click(screen.getByTitle("Delete"));
+      await act(async () => {
+        fireEvent.click(screen.getByTitle("Confirm delete"));
+      });
+
+      expect(onDeleteChat).toHaveBeenCalledWith("delete-failure");
+      expect(screen.getByTitle("Confirm delete")).toBeTruthy();
     });
 
     it("refreshes once when the parent re-renders with the items that refresh produced", () => {
