@@ -10,8 +10,11 @@
  * same pair). 401/403 surface as a readable auth message.
  */
 
-import { fetchWithListModelsTimeout, readBodySnippet } from "./listModelsHttp";
-import type { ListModelsResult } from "./listOpenAICompatibleModels";
+import {
+  fetchWithListModelsTimeout,
+  parseModelListResponse,
+  type ListModelsResult,
+} from "./listModelsHttp";
 
 const ANTHROPIC_VERSION = "2023-06-01";
 
@@ -43,43 +46,9 @@ export async function listAnthropicModels(
       { method: "GET", headers },
       opts.timeoutMs
     );
-    return await mapResponse(response);
+    const result = await parseModelListResponse(response, { listKey: "data", idKey: "id" });
+    return result.ok ? result : { ok: false, message: result.message };
   } catch (err) {
     return { ok: false, message: err instanceof Error ? err.message : String(err) };
   }
-}
-
-async function mapResponse(response: Response): Promise<ListModelsResult> {
-  const { status } = response;
-  if (status === 401 || status === 403) {
-    return { ok: false, message: "Authentication failed — check your API key." };
-  }
-  if (status < 200 || status >= 300) {
-    const snippet = await readBodySnippet(response);
-    return { ok: false, message: snippet ? `HTTP ${status}: ${snippet}` : `HTTP ${status}` };
-  }
-
-  let payload: unknown;
-  try {
-    payload = await response.json();
-  } catch {
-    return { ok: false, message: "Endpoint returned an unreadable response." };
-  }
-
-  const data = (payload as { data?: unknown })?.data;
-  if (!Array.isArray(data)) {
-    return { ok: false, message: "Endpoint did not return a model list." };
-  }
-
-  const seen = new Set<string>();
-  const modelIds: string[] = [];
-  for (const entry of data) {
-    const id = (entry as { id?: unknown })?.id;
-    if (typeof id !== "string") continue;
-    const trimmedId = id.trim();
-    if (!trimmedId || seen.has(trimmedId)) continue;
-    seen.add(trimmedId);
-    modelIds.push(trimmedId);
-  }
-  return { ok: true, modelIds };
 }

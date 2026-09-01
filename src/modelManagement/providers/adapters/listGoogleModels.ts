@@ -13,8 +13,11 @@
  * the catalog and manual-add input pick up anything missing.
  */
 
-import { fetchWithListModelsTimeout, readBodySnippet } from "./listModelsHttp";
-import type { ListModelsResult } from "./listOpenAICompatibleModels";
+import {
+  fetchWithListModelsTimeout,
+  parseModelListResponse,
+  type ListModelsResult,
+} from "./listModelsHttp";
 
 const MODEL_PREFIX = "models/";
 
@@ -44,45 +47,13 @@ export async function listGoogleModels(
       { method: "GET", headers: {} },
       opts.timeoutMs
     );
-    return await mapResponse(response);
+    const result = await parseModelListResponse(response, {
+      listKey: "models",
+      idKey: "name",
+      normalizeId: (id) => (id.startsWith(MODEL_PREFIX) ? id.slice(MODEL_PREFIX.length) : id),
+    });
+    return result.ok ? result : { ok: false, message: result.message };
   } catch (err) {
     return { ok: false, message: err instanceof Error ? err.message : String(err) };
   }
-}
-
-async function mapResponse(response: Response): Promise<ListModelsResult> {
-  const { status } = response;
-  if (status === 401 || status === 403) {
-    return { ok: false, message: "Authentication failed — check your API key." };
-  }
-  if (status < 200 || status >= 300) {
-    const snippet = await readBodySnippet(response);
-    return { ok: false, message: snippet ? `HTTP ${status}: ${snippet}` : `HTTP ${status}` };
-  }
-
-  let payload: unknown;
-  try {
-    payload = await response.json();
-  } catch {
-    return { ok: false, message: "Endpoint returned an unreadable response." };
-  }
-
-  const models = (payload as { models?: unknown })?.models;
-  if (!Array.isArray(models)) {
-    return { ok: false, message: "Endpoint did not return a model list." };
-  }
-
-  const seen = new Set<string>();
-  const modelIds: string[] = [];
-  for (const entry of models) {
-    const name = (entry as { name?: unknown })?.name;
-    if (typeof name !== "string") continue;
-    const trimmed = name.trim();
-    if (!trimmed) continue;
-    const id = trimmed.startsWith(MODEL_PREFIX) ? trimmed.slice(MODEL_PREFIX.length) : trimmed;
-    if (!id || seen.has(id)) continue;
-    seen.add(id);
-    modelIds.push(id);
-  }
-  return { ok: true, modelIds };
 }

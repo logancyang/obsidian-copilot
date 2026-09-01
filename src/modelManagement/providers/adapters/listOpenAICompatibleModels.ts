@@ -22,14 +22,14 @@
  * `verifyViaListModels` (safeFetch ignores `AbortSignal`).
  */
 
-import { fetchWithListModelsTimeout, readBodySnippet } from "./listModelsHttp";
+import {
+  fetchWithListModelsTimeout,
+  parseModelListResponse,
+  type ListModelsResponseResult,
+  type ListModelsResult,
+} from "./listModelsHttp";
 
-export type ListModelsResult = { ok: true; modelIds: string[] } | { ok: false; message: string };
-
-/** Outcome of a single endpoint probe; `status` distinguishes the auth case. */
-type AttemptResult =
-  | { ok: true; modelIds: string[] }
-  | { ok: false; message: string; status?: number };
+export type { ListModelsResult } from "./listModelsHttp";
 
 export interface ListOpenAICompatibleModelsOptions {
   apiKey?: string | null;
@@ -73,54 +73,15 @@ async function attempt(
   base: string,
   headers: Record<string, string>,
   timeoutMs?: number
-): Promise<AttemptResult> {
+): Promise<ListModelsResponseResult> {
   try {
     const response = await fetchWithListModelsTimeout(
       `${base}/models`,
       { method: "GET", headers },
       timeoutMs
     );
-    return await mapResponse(response);
+    return await parseModelListResponse(response, { listKey: "data", idKey: "id" });
   } catch (err) {
     return { ok: false, message: err instanceof Error ? err.message : String(err) };
   }
-}
-
-async function mapResponse(response: Response): Promise<AttemptResult> {
-  const { status } = response;
-  if (status === 401 || status === 403) {
-    return { ok: false, message: "Authentication failed — check your API key.", status };
-  }
-  if (status < 200 || status >= 300) {
-    const snippet = await readBodySnippet(response);
-    return {
-      ok: false,
-      message: snippet ? `HTTP ${status}: ${snippet}` : `HTTP ${status}`,
-      status,
-    };
-  }
-
-  let payload: unknown;
-  try {
-    payload = await response.json();
-  } catch {
-    return { ok: false, message: "Endpoint returned an unreadable response.", status };
-  }
-
-  const data = (payload as { data?: unknown })?.data;
-  if (!Array.isArray(data)) {
-    return { ok: false, message: "Endpoint did not return a model list.", status };
-  }
-
-  const seen = new Set<string>();
-  const modelIds: string[] = [];
-  for (const entry of data) {
-    const id = (entry as { id?: unknown })?.id;
-    if (typeof id !== "string") continue;
-    const trimmedId = id.trim();
-    if (!trimmedId || seen.has(trimmedId)) continue;
-    seen.add(trimmedId);
-    modelIds.push(trimmedId);
-  }
-  return { ok: true, modelIds };
 }

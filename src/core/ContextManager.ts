@@ -16,8 +16,8 @@ import { logInfo } from "@/logger";
 import { Mention } from "@/mentions/Mention";
 import { getSettings } from "@/settings/model";
 import { FileParserManager } from "@/tools/FileParserManager";
-import { ChatMessage, MessageContext } from "@/types/message";
-import { extractNoteFiles, getNotesFromPath, getNotesFromTags } from "@/utils";
+import { ChatMessage } from "@/types/message";
+import { getNotesFromPath, getNotesFromTags } from "@/utils";
 import { App, TFile, Vault } from "obsidian";
 import { MessageRepository } from "./MessageRepository";
 
@@ -644,40 +644,6 @@ export class ContextManager {
         metadata: { source: "unparsed", ...extraMetadata },
       });
     }
-  }
-
-  /**
-   * Create message context from various sources
-   */
-  createMessageContext(
-    contextNotes: TFile[],
-    contextUrls: string[],
-    selectedTextContexts = getSelectedTextContexts()
-  ): MessageContext {
-    return {
-      notes: contextNotes,
-      urls: contextUrls,
-      selectedTextContexts,
-    };
-  }
-
-  /**
-   * Extract note files from various sources
-   */
-  async extractContextNotes(
-    content: string,
-    vault: Vault,
-    additionalNotes: TFile[] = []
-  ): Promise<TFile[]> {
-    const extractedNotes = extractNoteFiles(content, vault);
-
-    // Combine and deduplicate
-    const allNotes = [...extractedNotes, ...additionalNotes];
-    const uniqueNotes = allNotes.filter(
-      (note, index, array) => array.findIndex((n) => n.path === note.path) === index
-    );
-
-    return uniqueNotes;
   }
 
   /**

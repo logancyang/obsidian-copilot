@@ -648,43 +648,6 @@ export class ContextProcessor {
     return additionalContext;
   }
 
-  async hasEmbeddedPDFs(content: string): Promise<boolean> {
-    const pdfRegex = /!\[\[(.*?\.pdf)\]\]/g;
-    return pdfRegex.test(content);
-  }
-
-  async addNoteToContext(
-    note: TFile,
-    vault: Vault,
-    contextNotes: TFile[],
-    activeNote: TFile | null,
-    setContextNotes: (notes: TFile[] | ((prev: TFile[]) => TFile[])) => void,
-    setIncludeActiveNote: (include: boolean) => void
-  ): Promise<void> {
-    // Only check if the note exists in contextNotes
-    if (contextNotes.some((existing) => existing.path === note.path)) {
-      return; // Note already exists in context
-    }
-
-    // Read the note content
-    const content = await vault.read(note);
-    const hasEmbeddedPDFs = await this.hasEmbeddedPDFs(content);
-
-    // Set includeActiveNote if it's the active note
-    if (activeNote && note.path === activeNote.path) {
-      setIncludeActiveNote(true);
-    }
-
-    // Add to contextNotes with wasAddedViaReference flag
-    setContextNotes((prev: TFile[]) => [
-      ...prev,
-      Object.assign(note, {
-        wasAddedViaReference: true,
-        hasEmbeddedPDFs,
-      }),
-    ]);
-  }
-
   processSelectedTextContexts(): string {
     const selectedTextContexts = getSelectedTextContexts();
 

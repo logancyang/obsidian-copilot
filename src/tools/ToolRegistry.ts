@@ -97,54 +97,10 @@ export class ToolRegistry {
   }
 
   /**
-   * Get tool metadata by category for UI organization
-   */
-  getToolsByCategory(): Map<string, ToolDefinition[]> {
-    const byCategory = new Map<string, ToolDefinition[]>();
-
-    for (const definition of this.tools.values()) {
-      const category = definition.metadata.category;
-      if (!byCategory.has(category)) {
-        byCategory.set(category, []);
-      }
-      byCategory.get(category)!.push(definition);
-    }
-
-    return byCategory;
-  }
-
-  /**
    * Get configurable tools (excludes always-enabled tools)
    */
   getConfigurableTools(): ToolDefinition[] {
     return Array.from(this.tools.values()).filter((def) => !def.metadata.isAlwaysEnabled);
-  }
-
-  /**
-   * Build a map of Copilot command aliases to tool definitions.
-   *
-   * @returns Map keyed by lower-case Copilot command aliases pointing to their tool definitions.
-   */
-  getCopilotCommandMappings(): Map<string, ToolDefinition> {
-    const mappings = new Map<string, ToolDefinition>();
-
-    for (const definition of this.tools.values()) {
-      const commands = definition.metadata.copilotCommands;
-
-      if (!commands) {
-        continue;
-      }
-
-      for (const command of commands) {
-        const normalizedCommand = command.toLowerCase();
-
-        if (!mappings.has(normalizedCommand)) {
-          mappings.set(normalizedCommand, definition);
-        }
-      }
-    }
-
-    return mappings;
   }
 
   /**

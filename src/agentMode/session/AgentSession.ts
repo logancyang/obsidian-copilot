@@ -1633,27 +1633,6 @@ export class AgentSession {
   }
 
   /**
-   * Resolve once the session reaches a terminal state for the current turn
-   * (`idle`, `error`, or `closed`). Used by the UI orchestrator to await
-   * completion of a permission-resolution-then-followup sequence.
-   */
-  waitForIdle(): Promise<void> {
-    const terminal = (s: AgentSessionStatus) => s === "idle" || s === "error" || s === "closed";
-    if (this.disposed || terminal(this.getStatus())) return Promise.resolve();
-    return new Promise((resolve) => {
-      const unsub = this.subscribe({
-        onMessagesChanged: () => {},
-        onStatusChanged: (s) => {
-          if (terminal(s)) {
-            unsub();
-            resolve();
-          }
-        },
-      });
-    });
-  }
-
-  /**
    * Whether this session has any pending ExitPlanMode permission. The chat
    * input disables itself while one is outstanding so the user is funneled
    * toward the proposal card's actions.

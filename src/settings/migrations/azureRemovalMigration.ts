@@ -13,12 +13,15 @@
  *    the shared removal cascade, and deletes the legacy top-level API key.
  */
 
-import type { CustomModel } from "@/aiParams";
 import { DEFAULT_SETTINGS } from "@/constants";
-import { logWarn } from "@/logger";
 import type { ModelManagementApi } from "@/modelManagement";
-import { KeychainService } from "@/services/keychainService";
-import { type CopilotSettings, setSettings } from "@/settings/model";
+import type { CopilotSettings } from "@/settings/model";
+import {
+  executeRetiredProviderRemoval,
+  planRetiredProviderRemoval,
+  referencesRetiredProvider,
+  type RetiredProviderRemovalPlan,
+} from "./retiredProviderRemovalMigration";
 
 /**
  * `Provider.providerType` of the removed rows. A plain string rather than a
@@ -42,22 +45,8 @@ const REMOVED_LEGACY_PROVIDERS = ["azure openai", "azure_openai"] as const;
  */
 const REMOVED_LEGACY_SECRET_FIELD = "azureOpenAIApiKey";
 
-/**
- * Whether a persisted model key names the removed provider. Legacy keys are
- * `name|provider`, optionally prefixed with an agent backend id, so the
- * provider is always the trailing segment.
- */
-function referencesRemovedProvider(modelKey: string): boolean {
-  return REMOVED_LEGACY_PROVIDERS.some((provider) => modelKey.endsWith(`|${provider}`));
-}
-
 /** What `planAzureRemoval` found: the rows to cascade and the patch to write. */
-export interface AzureRemovalPlan {
-  /** Every Azure `providerId`, for the caller to run through the cascade. */
-  providerIds: readonly string[];
-  /** Patch for the slices the cascade does not own: legacy models, selections. */
-  patch: Partial<CopilotSettings>;
-}
+export type AzureRemovalPlan = RetiredProviderRemovalPlan;
 
 /**
  * Pure planner: what it takes to remove every Azure provider and everything
@@ -79,41 +68,12 @@ export interface AzureRemovalPlan {
  * @param settings - Hydrated settings snapshot to plan against.
  */
 export function planAzureRemoval(settings: CopilotSettings): AzureRemovalPlan | null {
-  const providerIds = Object.values(settings.providers ?? {})
-    .filter((provider) => String(provider.providerType) === REMOVED_PROVIDER_TYPE)
-    .map((provider) => provider.providerId);
-
-  const removedProviderIds = new Set(providerIds);
-  const removedModelIds = new Set(
-    (settings.configuredModels ?? [])
-      .filter((model) => removedProviderIds.has(model.providerId))
-      .map((model) => model.configuredModelId)
+  const sharedPlan = planRetiredProviderRemoval(
+    settings,
+    REMOVED_PROVIDER_TYPE,
+    REMOVED_LEGACY_PROVIDERS
   );
-
-  // A stored selection names a removed model either by its configured-model id
-  // or, in a vault whose BYOK migration never ran, by the legacy
-  // `name|azure openai` key that has no row behind it.
-  const isRemovedSelection = (modelKey: string | undefined): boolean =>
-    !!modelKey && (removedModelIds.has(modelKey) || referencesRemovedProvider(modelKey));
-
-  const patch: Partial<CopilotSettings> = {};
-
-  const models = settings.activeModels ?? [];
-  const keptLegacyModels = models.filter(
-    (model: CustomModel) =>
-      !REMOVED_LEGACY_PROVIDERS.some((provider) => model.provider === provider)
-  );
-  if (keptLegacyModels.length !== models.length) patch.activeModels = keptLegacyModels;
-
-  if (isRemovedSelection(settings.defaultModelKey)) patch.defaultModelKey = "";
-  if (isRemovedSelection(settings.quickCommandModelKey)) patch.quickCommandModelKey = undefined;
-
-  const projects = settings.projectList ?? [];
-  if (projects.some((project) => isRemovedSelection(project.projectModelKey))) {
-    patch.projectList = projects.map((project) =>
-      isRemovedSelection(project.projectModelKey) ? { ...project, projectModelKey: "" } : project
-    );
-  }
+  const patch: Partial<CopilotSettings> = { ...sharedPlan?.patch };
 
   // An Azure embedding selection outlives the provider that served it, and
   // `EmbeddingManager.getEmbeddingsAPI` throws `No embedding model found for:
@@ -122,28 +82,12 @@ export function planAzureRemoval(settings: CopilotSettings): AzureRemovalPlan | 
   // that already has an OpenRouter key, and for one that does not it asks for a
   // key instead of naming a provider that no longer exists.
   // https://github.com/logancyang/obsidian-copilot/issues/2932
-  if (referencesRemovedProvider(settings.embeddingModelKey ?? "")) {
+  if (referencesRetiredProvider(settings.embeddingModelKey ?? "", REMOVED_LEGACY_PROVIDERS)) {
     patch.embeddingModelKey = DEFAULT_SETTINGS.embeddingModelKey;
   }
 
-  const hasWork = providerIds.length > 0 || Object.keys(patch).length > 0;
-  return hasWork ? { providerIds, patch } : null;
-}
-
-/**
- * Delete the pre-BYOK top-level Azure key. Never throws: a build without
- * SecretStorage, or a keychain locked at load time, leaves the entry in place
- * rather than wedging plugin load — the version bump in the caller is
- * unconditional either way, so the cost of a failure here is an orphaned entry.
- */
-function deleteLegacyApiKey(): void {
-  try {
-    const keychain = KeychainService.getInstance();
-    if (!keychain.isAvailable()) return;
-    keychain.deleteSecret(REMOVED_LEGACY_SECRET_FIELD);
-  } catch (error) {
-    logWarn("[azure-removal] could not delete the legacy stored API key", error);
-  }
+  const providerIds = sharedPlan?.providerIds ?? [];
+  return providerIds.length > 0 || Object.keys(patch).length > 0 ? { providerIds, patch } : null;
 }
 
 /**
@@ -162,13 +106,10 @@ export async function executeAzureRemoval(
   api: ModelManagementApi,
   settings: CopilotSettings
 ): Promise<void> {
-  deleteLegacyApiKey();
-
-  const plan = planAzureRemoval(settings);
-  if (!plan) return;
-
-  if (Object.keys(plan.patch).length > 0) setSettings(plan.patch);
-  for (const providerId of plan.providerIds) {
-    await api.coordinator.removeProvider(providerId);
-  }
+  await executeRetiredProviderRemoval(
+    api,
+    planAzureRemoval(settings),
+    REMOVED_LEGACY_SECRET_FIELD,
+    "azure-removal"
+  );
 }
