@@ -208,6 +208,47 @@ describe("parseSkillFile — validation errors", () => {
       expect((error as SkillFormatError).offendingText).toBe("name : Release Notes");
     }
   });
+
+  it("reports the offending name line with a quoted YAML key for https://github.com/Brevilabs/obsidian-copilot-private/issues/166", () => {
+    const content = ["---", '"name": Release Notes', "description: A skill", "---"].join("\n");
+
+    expect.assertions(3);
+    try {
+      parseSkillFile(content, "Release Notes");
+    } catch (error) {
+      expect(error).toBeInstanceOf(SkillFormatError);
+      expect((error as SkillFormatError).message).toBe(
+        "Use the same lowercase, hyphenated name in the file and folder."
+      );
+      expect((error as SkillFormatError).offendingText).toBe('"name": Release Notes');
+    }
+  });
+
+  it("distinguishes a non-string name from a missing field for https://github.com/Brevilabs/obsidian-copilot-private/issues/166", () => {
+    const content = ["---", "name: 42", "description: A skill", "---"].join("\n");
+
+    expect.assertions(3);
+    try {
+      parseSkillFile(content, "42");
+    } catch (error) {
+      expect(error).toBeInstanceOf(SkillFormatError);
+      expect((error as SkillFormatError).message).toBe("Skill `name` must be a string");
+      expect((error as SkillFormatError).offendingText).toBe("name: 42");
+    }
+  });
+
+  it("distinguishes a non-string description from a missing field for https://github.com/Brevilabs/obsidian-copilot-private/issues/166", () => {
+    const content = ["---", "name: review-prose", "description: []", "---"].join("\n");
+
+    expect.assertions(3);
+    try {
+      parseSkillFile(content, "review-prose");
+    } catch (error) {
+      expect(error).toBeInstanceOf(SkillFormatError);
+      expect((error as SkillFormatError).message).toBe("Skill `description` must be a string");
+      expect((error as SkillFormatError).offendingText).toBe("description: []");
+    }
+  });
 });
 
 describe("serializeSkillFile — round-trip preservation", () => {

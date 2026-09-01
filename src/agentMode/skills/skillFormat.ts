@@ -108,8 +108,16 @@ function yamlFormatError(
  * Preserve the exact frontmatter line that failed validation when it exists.
  * https://github.com/Brevilabs/obsidian-copilot-private/issues/166
  */
-function frontmatterLine(yaml: string, key: string): string | undefined {
-  return new RegExp(`^${key}[ \\t]*:[^\\r\\n]*$`, "m").exec(yaml)?.[0];
+function frontmatterLine(doc: Document.Parsed, yaml: string, key: string): string | undefined {
+  if (!isMap(doc.contents)) return undefined;
+  const pair = doc.contents.items.find((item) => isScalar(item.key) && item.key.value === key);
+  const keyOffset = pair?.key?.range?.[0];
+  if (keyOffset === undefined) return undefined;
+
+  const lineStart = yaml.lastIndexOf("\n", keyOffset - 1) + 1;
+  const nextLine = yaml.indexOf("\n", keyOffset);
+  const lineEnd = nextLine === -1 ? yaml.length : nextLine;
+  return yaml.slice(lineStart, lineEnd).replace(/\r$/, "");
 }
 
 /** Read a top-level string scalar from a YAML Document, or return undefined. */
@@ -159,16 +167,28 @@ export function parseSkillFile(content: string, parentDirName: string): ParsedSk
   }
 
   const name = readString(doc, "name");
-  if (!name) {
+  if (name === undefined) {
+    if (doc.has("name")) {
+      throw new SkillFormatError(
+        "Skill `name` must be a string",
+        frontmatterLine(doc, yaml, "name")
+      );
+    }
     throw new SkillFormatError("SKILL.md frontmatter is missing required field `name`");
   }
-  validateName(name, parentDirName, frontmatterLine(yaml, "name"));
+  validateName(name, parentDirName, frontmatterLine(doc, yaml, "name"));
 
   const description = readString(doc, "description");
   if (description === undefined) {
+    if (doc.has("description")) {
+      throw new SkillFormatError(
+        "Skill `description` must be a string",
+        frontmatterLine(doc, yaml, "description")
+      );
+    }
     throw new SkillFormatError("SKILL.md frontmatter is missing required field `description`");
   }
-  validateDescription(description, frontmatterLine(yaml, "description"));
+  validateDescription(description, frontmatterLine(doc, yaml, "description"));
 
   const frontmatter: SkillFrontmatter = {
     name,
