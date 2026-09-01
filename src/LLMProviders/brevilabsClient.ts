@@ -193,8 +193,11 @@ export interface UsageResponse {
 export interface BrevilabsModelEntry {
   id?: string;
   label?: string;
+  description?: string;
   /** Input context window as a display string: `1M`, `256K`. */
   context_length?: string;
+  supports_images?: boolean;
+  supports_reasoning?: boolean;
   /**
    * Thinking-effort levels this model distinguishes, ascending. Empty means the model
    * honors none of them. Absent from services older than the field, which is why the
@@ -485,11 +488,11 @@ export class BrevilabsClient {
   }
 
   /**
-   * The models host's public catalog. Unauthenticated, and the only place the context
-   * window of a Copilot Plus model is published, so the usage meter can size its ring.
+   * The models host's public catalog. Unauthenticated and authoritative for the
+   * current Plus lineup; it also supplies usage-meter capability metadata.
    *
-   * Returns null rather than throwing, for the same reason as {@link getUsage}: this
-   * feeds a gauge, and a gauge that cannot be drawn is not an error worth raising.
+   * Returns null rather than throwing so callers can represent network failure
+   * without turning it into plugin-startup failure.
    */
   async getModels(): Promise<BrevilabsModelsResponse | null> {
     try {

@@ -53,6 +53,8 @@ export interface ModelInfo {
   modalities?: { input?: string[]; output?: string[] };
   limits?: { context?: number; output?: number; input?: number };
   reasoning?: boolean;
+  /** Ordered reasoning-effort levels published by this model's catalog. */
+  reasoningEfforts?: readonly string[];
   toolCall?: boolean;
   /** True when the catalog `family` marks this as an embedding model. */
   isEmbedding?: boolean;
