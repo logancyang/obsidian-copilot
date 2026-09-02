@@ -13,7 +13,9 @@ import React from "react";
 // Every tab body is stubbed empty. The real panels reach for the keychain, Node,
 // and the network, none of which has any bearing on the strip above them.
 jest.mock("@/settings/v2/components/BasicSettings", () => ({ BasicSettings: () => null }));
-jest.mock("@/settings/v2/components/MiyoSettings", () => ({ MiyoSettings: () => null }));
+jest.mock("@/settings/v2/components/MiyoSettings", () => ({
+  MiyoSettings: () => <div>Miyo settings content</div>,
+}));
 jest.mock("@/settings/v2/components/SelfHostSettings", () => ({ SelfHostSettings: () => null }));
 jest.mock("@/settings/v2/components/CommandSettings", () => ({ CommandSettings: () => null }));
 jest.mock("@/settings/v2/components/AdvancedSettings", () => ({ AdvancedSettings: () => null }));
@@ -88,6 +90,13 @@ describe("SettingsMainV2", () => {
       render(<SettingsMainV2 plugin={plugin} />);
 
       await waitFor(() => expect(mockSkillManagerRefresh).toHaveBeenCalledTimes(1));
+    });
+
+    it("opens on a requested tab (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", () => {
+      render(<SettingsMainV2 plugin={plugin} initialTab="miyo" />);
+
+      expect(screen.getByRole("tab", { name: "Miyo" }).getAttribute("aria-selected")).toBe("true");
+      expect(screen.getByText("Miyo settings content")).toBeTruthy();
     });
   });
 });
