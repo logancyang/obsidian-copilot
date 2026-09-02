@@ -5,7 +5,7 @@ import {
   getMiyoFilePath,
   getMiyoFolderName,
   getVaultRelativeMiyoPath,
-  getSearchBackend,
+  shouldUseMiyo,
 } from "@/miyo/miyoUtils";
 import { getBacklinkedNotes, getLinkedNotes } from "@/noteUtils";
 import { createCopilotPatternFilter } from "@/search/searchUtils";
@@ -141,7 +141,7 @@ export type RelevantNoteEntry = {
  * @param app - The Obsidian app instance.
  * @param filePath - The file path to find relevant notes for.
  * @returns Relevant-note hits allowed by the current inclusion/exclusion rules.
- *   Empty when no allowed notes are found or Miyo is not enabled as the search backend.
+ *   Empty when no allowed notes are found or Miyo cannot run in the current environment.
  * @throws When the Miyo related-note request cannot complete.
  */
 export async function findRelevantNotes({
@@ -156,11 +156,11 @@ export async function findRelevantNotes({
     return [];
   }
 
-  // A graph-only fallback makes Relevant Notes look partially functional when
-  // its Miyo-backed index is unavailable. Only build graph candidates after a
-  // Miyo search can run successfully.
+  // Relevant Notes has no non-Miyo scoring path. Avoid querying Miyo when the
+  // user disabled it or the current platform cannot reach it, such as mobile
+  // without a configured remote endpoint.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
-  if (getSearchBackend(getSettings()) !== "miyo") {
+  if (!shouldUseMiyo(getSettings())) {
     return [];
   }
 

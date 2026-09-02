@@ -2,8 +2,8 @@ import { MiyoClient } from "@/miyo/MiyoClient";
 import {
   getMiyoFilePath,
   getMiyoFolderName,
-  getSearchBackend,
   getVaultRelativeMiyoPath,
+  shouldUseMiyo,
 } from "@/miyo/miyoUtils";
 import { getBacklinkedNotes, getLinkedNotes } from "@/noteUtils";
 import { findRelevantNotes } from "@/search/findRelevantNotes";
@@ -34,7 +34,7 @@ jest.mock("@/miyo/miyoUtils", () => ({
   getMiyoFilePath: jest.fn((_: unknown, path: string) => `vault/${path}`),
   getVaultRelativeMiyoPath: jest.fn((_: unknown, path: string) => path.replace(/^vault\//, "")),
   getMiyoCustomUrl: jest.fn().mockReturnValue(""),
-  getSearchBackend: jest.fn(),
+  shouldUseMiyo: jest.fn(),
 }));
 
 jest.mock("@/logger", () => ({
@@ -49,7 +49,7 @@ function createMarkdownFile(path: string): TFile {
 
 describe("findRelevantNotes", () => {
   const mockedGetSettings = getSettings as jest.MockedFunction<typeof getSettings>;
-  const mockedGetSearchBackend = getSearchBackend as jest.MockedFunction<typeof getSearchBackend>;
+  const mockedShouldUseMiyo = shouldUseMiyo as jest.MockedFunction<typeof shouldUseMiyo>;
   const mockedCreateCopilotPatternFilter = createCopilotPatternFilter as jest.MockedFunction<
     typeof createCopilotPatternFilter
   >;
@@ -69,7 +69,7 @@ describe("findRelevantNotes", () => {
   describe("findRelevantNotes()", () => {
     beforeEach(() => {
       jest.clearAllMocks();
-      mockedGetSearchBackend.mockReturnValue("keyword");
+      mockedShouldUseMiyo.mockReturnValue(false);
       mockedCreateCopilotPatternFilter.mockReturnValue(() => true);
       mockedGetSettings.mockReturnValue({
         debug: false,
@@ -104,7 +104,7 @@ describe("findRelevantNotes", () => {
     });
 
     it("uses Miyo as the only semantic scorer and preserves vault-scoped path stripping (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
-      mockedGetSearchBackend.mockReturnValue("miyo");
+      mockedShouldUseMiyo.mockReturnValue(true);
       mockSearchRelated.mockResolvedValue({
         results: [
           { path: "vault/source.md", score: 0.99 },
@@ -145,7 +145,7 @@ describe("findRelevantNotes", () => {
     });
 
     it("includes graph-only candidates after Miyo related-note search succeeds (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
-      mockedGetSearchBackend.mockReturnValue("miyo");
+      mockedShouldUseMiyo.mockReturnValue(true);
       mockedGetLinkedNotes.mockReturnValue([createMarkdownFile("linked-only.md")]);
 
       const result = await findRelevantNotes({ app: window.app, filePath: "source.md" });
@@ -162,7 +162,7 @@ describe("findRelevantNotes", () => {
     });
 
     it("ranks by Miyo similarity without boosting a backlinked lower-scoring note", async () => {
-      mockedGetSearchBackend.mockReturnValue("miyo");
+      mockedShouldUseMiyo.mockReturnValue(true);
       mockSearchRelated.mockResolvedValue({
         results: [
           { path: "vault/alpha.md", score: 0.6 },
@@ -178,7 +178,7 @@ describe("findRelevantNotes", () => {
     });
 
     it("applies the live Copilot scope to Miyo and linked candidates", async () => {
-      mockedGetSearchBackend.mockReturnValue("miyo");
+      mockedShouldUseMiyo.mockReturnValue(true);
       mockSearchRelated.mockResolvedValue({
         results: [
           { path: "vault/beta.md", score: 0.8 },
@@ -200,7 +200,7 @@ describe("findRelevantNotes", () => {
     });
 
     it("caps Miyo results at the existing 20-note limit", async () => {
-      mockedGetSearchBackend.mockReturnValue("miyo");
+      mockedShouldUseMiyo.mockReturnValue(true);
       mockSearchRelated.mockResolvedValue({
         results: Array.from({ length: 25 }, (_, index) => ({
           path: `vault/note-${index}.md`,
@@ -216,7 +216,7 @@ describe("findRelevantNotes", () => {
     });
 
     it("rejects without building graph-only fallback rows when Miyo search fails (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
-      mockedGetSearchBackend.mockReturnValue("miyo");
+      mockedShouldUseMiyo.mockReturnValue(true);
       mockSearchRelated.mockRejectedValue(new Error("Miyo unavailable"));
       mockedGetLinkedNotes.mockReturnValue([createMarkdownFile("linked-only.md")]);
 
