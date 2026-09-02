@@ -30,6 +30,7 @@ import {
   shouldSurfaceMiyoResync,
 } from "@/miyo/miyoUtils";
 import { useMiyoStatus } from "@/miyo/useMiyoStatus";
+import { notifyIndexChanged } from "@/search/indexSignal";
 import { deriveSkillsFolder } from "@/settings/copilotFolder";
 import { getSettings, updateSetting, useSettingsValue } from "@/settings/model";
 import {
@@ -520,6 +521,11 @@ export const MiyoSettings: React.FC = () => {
       if (submission.created !== null) {
         updateSetting("miyoSyncedExclusions", submission.receipt);
       }
+      // Registration can make semantic results available without changing the
+      // endpoint or its healthy status. Retry any Relevant Notes request that
+      // previously settled on setup guidance.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
+      notifyIndexChanged();
     } catch (error) {
       logWarn(`Miyo add-folder failed: ${err2String(error)}`);
       return "error";

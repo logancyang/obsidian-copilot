@@ -25,6 +25,7 @@ let mockSettings = {
   qaExclusions: "",
 };
 let mockMiyoBackend = "unknown";
+let indexChangedListener: (() => void) | null = null;
 
 jest.mock("@/context", () => ({
   useApp: () => mockApp,
@@ -47,7 +48,12 @@ jest.mock("@/search/findRelevantNotes", () => ({
 }));
 
 jest.mock("@/search/indexSignal", () => ({
-  onIndexChanged: () => jest.fn(),
+  onIndexChanged: (listener: () => void) => {
+    indexChangedListener = listener;
+    return () => {
+      if (indexChangedListener === listener) indexChangedListener = null;
+    };
+  },
 }));
 
 jest.mock("@/search/searchUtils", () => ({
@@ -79,6 +85,7 @@ describe("RelevantNotes", () => {
       qaExclusions: "",
     };
     mockMiyoBackend = "unknown";
+    indexChangedListener = null;
     const sourceFile = makeMarkdownFile("Source.md");
     const targetFile = makeMarkdownFile("Target.md");
     mockUseActiveFile.mockReturnValue(sourceFile);
@@ -189,6 +196,30 @@ describe("RelevantNotes", () => {
 
       mockMiyoBackend = "available";
       rerender(<RelevantNotes onAddToChat={jest.fn()} />);
+
+      expect(await screen.findByText("Target")).toBeTruthy();
+      expect(mockFindRelevantNotes).toHaveBeenCalledTimes(2);
+    });
+
+    it("refetches after Miyo registration or resync signals an index change (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
+      mockSettings = { ...mockSettings, enableMiyo: true };
+      mockMiyoBackend = "available";
+      mockFindRelevantNotes.mockResolvedValueOnce([]).mockResolvedValueOnce([
+        {
+          note: { path: "Target.md", title: "Target" },
+          metadata: {
+            score: 0.9,
+            similarityScore: 0.9,
+            hasOutgoingLinks: false,
+            hasBacklinks: false,
+          },
+        },
+      ]);
+
+      render(<RelevantNotes onAddToChat={jest.fn()} />);
+      expect(await screen.findByText("Check your Miyo setup")).toBeTruthy();
+
+      act(() => indexChangedListener?.());
 
       expect(await screen.findByText("Target")).toBeTruthy();
       expect(mockFindRelevantNotes).toHaveBeenCalledTimes(2);
