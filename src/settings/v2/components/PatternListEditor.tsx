@@ -69,17 +69,11 @@ export const PatternListEditor: React.FC<PatternListEditorProps> = ({
   // Parse and deduplicate patterns
   const patterns = useMemo(() => getUniquePatterns(value), [value]);
 
-  // DESIGN NOTE — this editor owns four of the five categories `categorizePatterns`
-  // returns. The fifth, `propertyPatterns`, belongs to project context; here it has
-  // no badge, and the rebuilds in `updatePatterns` and `handleAddCustom` name their
-  // keys explicitly, so a property pattern typed in or synced from elsewhere is
-  // dropped on the next edit. The matcher itself honours stored property patterns,
-  // which is why nothing in this UI may offer `[key:value]` until the editor can
-  // show and remove them. If a future review flags this again, point them at this note.
-  const { tagPatterns, extensionPatterns, folderPatterns, notePatterns } = useMemo(
-    () => categorizePatterns(patterns),
-    [patterns]
-  );
+  // This editor shows four of the five categories returned by `categorizePatterns`.
+  // Property patterns are created on other surfaces, so visible edits must round-trip
+  // them unchanged until this editor can also show and remove them.
+  const { tagPatterns, extensionPatterns, folderPatterns, notePatterns, propertyPatterns } =
+    useMemo(() => categorizePatterns(patterns), [patterns]);
 
   // Use ResizeObserver to detect overflow (responds to container size changes)
   useLayoutEffect(() => {
@@ -121,6 +115,11 @@ export const PatternListEditor: React.FC<PatternListEditorProps> = ({
       extensionPatterns: newCategories.extensionPatterns ?? extensionPatterns,
       folderPatterns: newCategories.folderPatterns ?? folderPatterns,
       notePatterns: newCategories.notePatterns ?? notePatterns,
+      // Property rules are valid persisted filters even though this editor does
+      // not render them. Editing a visible rule must not widen scope by deleting
+      // a hidden rule.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
+      propertyPatterns,
     });
     onChange(newValue);
   };
@@ -219,6 +218,7 @@ export const PatternListEditor: React.FC<PatternListEditorProps> = ({
           ...fresh.notePatterns,
           ...newNotePatterns.filter((p) => !fresh.notePatterns.includes(p)),
         ],
+        propertyPatterns: fresh.propertyPatterns,
       });
       onChange(newValue);
     }).open();
