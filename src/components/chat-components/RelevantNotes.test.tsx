@@ -90,13 +90,12 @@ describe("RelevantNotes", () => {
           note: { path: targetFile.path, title: targetFile.basename },
           metadata: {
             score: 0.8,
-            similarityScore: 0.8,
             hasOutgoingLinks: false,
             hasBacklinks: false,
           },
         },
       ],
-      semanticState: "ready",
+      status: "matches",
     });
   });
 
@@ -118,7 +117,7 @@ describe("RelevantNotes", () => {
     it("shows Miyo download guidance without graph-only rows when Miyo is disabled (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
       mockFindRelevantNotes.mockResolvedValue({
         notes: [],
-        semanticState: "disabled",
+        status: "disabled",
       });
 
       render(<RelevantNotes onAddToChat={jest.fn()} />);
@@ -131,7 +130,7 @@ describe("RelevantNotes", () => {
       mockSettings = { ...mockSettings, enableMiyo: true };
       mockFindRelevantNotes.mockResolvedValue({
         notes: [],
-        semanticState: "unavailable",
+        status: "unavailable",
       });
 
       render(<RelevantNotes onAddToChat={jest.fn()} />);
@@ -148,14 +147,13 @@ describe("RelevantNotes", () => {
           {
             note: { path: "Target.md", title: "Target" },
             metadata: {
-              score: 0,
-              similarityScore: undefined,
+              score: undefined,
               hasOutgoingLinks: false,
               hasBacklinks: true,
             },
           },
         ],
-        semanticState: "ready",
+        status: "no-matches",
       });
 
       render(<RelevantNotes onAddToChat={jest.fn()} />);
@@ -175,14 +173,13 @@ describe("RelevantNotes", () => {
           {
             note: { path: "Target.md", title: "Target" },
             metadata: {
-              score: 0,
-              similarityScore: undefined,
+              score: undefined,
               hasOutgoingLinks: true,
               hasBacklinks: false,
             },
           },
         ],
-        semanticState: "not-indexed",
+        status: "not-indexed",
       });
 
       const openSpy = jest.spyOn(window, "open").mockImplementation(() => null);
@@ -203,20 +200,19 @@ describe("RelevantNotes", () => {
     it("refetches an unindexed note after the user asks Miyo for its latest state (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
       mockSettings = { ...mockSettings, enableMiyo: true };
       mockFindRelevantNotes
-        .mockResolvedValueOnce({ notes: [], semanticState: "not-indexed" })
+        .mockResolvedValueOnce({ notes: [], status: "not-indexed" })
         .mockResolvedValueOnce({
           notes: [
             {
               note: { path: "Target.md", title: "Target" },
               metadata: {
                 score: 0.9,
-                similarityScore: 0.9,
                 hasOutgoingLinks: false,
                 hasBacklinks: false,
               },
             },
           ],
-          semanticState: "ready",
+          status: "matches",
         });
 
       render(<RelevantNotes onAddToChat={jest.fn()} />);
@@ -235,7 +231,7 @@ describe("RelevantNotes", () => {
       async ({ isMobile, miyoServerUrl }) => {
         (Platform as { isMobile: boolean }).isMobile = isMobile;
         mockSettings = { ...mockSettings, enableMiyo: true, miyoServerUrl };
-        mockFindRelevantNotes.mockResolvedValue({ notes: [], semanticState: "not-indexed" });
+        mockFindRelevantNotes.mockResolvedValue({ notes: [], status: "not-indexed" });
         const openSpy = jest.spyOn(window, "open").mockImplementation(() => null);
 
         render(<RelevantNotes onAddToChat={jest.fn()} />);
@@ -292,13 +288,12 @@ describe("RelevantNotes", () => {
             note: { path: "Current.md", title: "Current" },
             metadata: {
               score: 0.9,
-              similarityScore: 0.9,
               hasOutgoingLinks: false,
               hasBacklinks: false,
             },
           },
         ],
-        semanticState: "ready",
+        status: "matches",
       });
 
       const { rerender } = render(<RelevantNotes onAddToChat={jest.fn()} />);
@@ -315,13 +310,12 @@ describe("RelevantNotes", () => {
               note: { path: "Stale.md", title: "Stale" },
               metadata: {
                 score: 0.7,
-                similarityScore: 0.7,
                 hasOutgoingLinks: false,
                 hasBacklinks: false,
               },
             },
           ],
-          semanticState: "ready",
+          status: "matches",
         });
         await firstResult;
       });
@@ -343,13 +337,12 @@ describe("RelevantNotes", () => {
             note: { path: "Current.md", title: "Current" },
             metadata: {
               score: 0.9,
-              similarityScore: 0.9,
               hasOutgoingLinks: false,
               hasBacklinks: false,
             },
           },
         ],
-        semanticState: "ready",
+        status: "matches",
       });
 
       const { rerender } = render(<RelevantNotes onAddToChat={jest.fn()} />);

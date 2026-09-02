@@ -1,9 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
-import {
-  RelevantNotesPane,
-  type RelevantNotesGuidance,
-} from "@/components/chat-components/ui/RelevantNotesPane";
+import { RelevantNotesPane } from "@/components/chat-components/ui/RelevantNotesPane";
 import { MIYO_HOMEPAGE_URL } from "@/constants";
 import { useApp } from "@/context";
 import { useActiveFile } from "@/hooks/useActiveFile";
@@ -11,11 +8,7 @@ import { useNoteDrag } from "@/hooks/useNoteDrag";
 import { cn } from "@/lib/utils";
 import { logError, logWarn } from "@/logger";
 import { isLocalMiyoUrl, MIYO_DEEPLINK_URL } from "@/miyo/miyoUtils";
-import {
-  findRelevantNotes,
-  type RelevantNoteEntry,
-  type RelevantNotesResult,
-} from "@/search/findRelevantNotes";
+import { findRelevantNotes, type RelevantNoteEntry } from "@/search/findRelevantNotes";
 import { onIndexChanged } from "@/search/indexSignal";
 import { openCopilotSettings } from "@/settings/openSettings";
 import { useSettingsValue } from "@/settings/model";
@@ -23,27 +16,34 @@ import { ArrowRight, FileInput, FileOutput, FileText, PlusCircle } from "lucide-
 import { Platform, TFile } from "obsidian";
 import React, { memo, useCallback, useEffect, useState } from "react";
 
-const EMPTY_RELEVANT_NOTES = Object.freeze([]) as unknown as RelevantNoteEntry[];
+const EMPTY_RELEVANT_NOTES: readonly RelevantNoteEntry[] = Object.freeze([]);
 const IDLE_RELEVANT_NOTES_RESULT = Object.freeze({
   notes: EMPTY_RELEVANT_NOTES,
-  semanticState: "idle" as const,
+  status: "idle" as const,
 });
 const DISABLED_RELEVANT_NOTES_RESULT = Object.freeze({
   notes: EMPTY_RELEVANT_NOTES,
-  semanticState: "disabled" as const,
+  status: "disabled" as const,
 });
 const LOADING_RELEVANT_NOTES_RESULT = Object.freeze({
   notes: EMPTY_RELEVANT_NOTES,
-  semanticState: "loading" as const,
+  status: "loading" as const,
 });
 const UNAVAILABLE_RELEVANT_NOTES_RESULT = Object.freeze({
   notes: EMPTY_RELEVANT_NOTES,
-  semanticState: "unavailable" as const,
+  status: "unavailable" as const,
 });
+
+type RelevantNotesViewResult =
+  | typeof IDLE_RELEVANT_NOTES_RESULT
+  | typeof DISABLED_RELEVANT_NOTES_RESULT
+  | typeof LOADING_RELEVANT_NOTES_RESULT
+  | typeof UNAVAILABLE_RELEVANT_NOTES_RESULT
+  | Awaited<ReturnType<typeof findRelevantNotes>>;
 
 function useRelevantNotes(enableMiyo: boolean, miyoServerUrl: string) {
   const app = useApp();
-  const [result, setResult] = useState<RelevantNotesResult>(
+  const [result, setResult] = useState<RelevantNotesViewResult>(
     enableMiyo ? LOADING_RELEVANT_NOTES_RESULT : DISABLED_RELEVANT_NOTES_RESULT
   );
   const [signalTick, setSignalTick] = useState(0);
@@ -150,7 +150,7 @@ function RelevantNoteHoverCard({
   const app = useApp();
   const [open, setOpen] = useState(false);
   const [fileContent, setFileContent] = useState<string | null>(null);
-  const similarity = note.metadata.similarityScore;
+  const similarity = note.metadata.score;
 
   const loadContent = useCallback(async () => {
     if (fileContent) return; // Don't reload once cached
@@ -268,7 +268,7 @@ function RelevantNoteRow({
 }) {
   const app = useApp();
   const handleDragStart = useNoteDrag();
-  const similarity = note.metadata.similarityScore;
+  const similarity = note.metadata.score;
 
   return (
     <RelevantNoteHoverCard
@@ -390,22 +390,6 @@ export const RelevantNotes = memo(
       onAddToChat(`[[${prompt}]]`);
     };
 
-    // Backend health distinguishes a healthy zero-match note from a broken
-    // setup. Disabled and unavailable states contain no fallback rows.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
-    const hasSemanticMatches = relevantNotes.some((note) => note.metadata.similarityScore != null);
-    const guidance: RelevantNotesGuidance =
-      result.semanticState === "disabled"
-        ? "download"
-        : result.semanticState === "unavailable"
-          ? "unavailable"
-          : result.semanticState === "not-indexed"
-            ? "not-indexed"
-            : result.semanticState === "loading" || result.semanticState === "idle"
-              ? null
-              : hasSemanticMatches
-                ? null
-                : "no-matches";
     // A local-app deeplink cannot configure the remote server used on mobile
     // or by an explicit remote endpoint, so those runtimes stay in Copilot.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
@@ -416,30 +400,33 @@ export const RelevantNotes = memo(
         <RelevantNotesToolbar activeFileName={activeFile?.basename} />
         <div className="tw-relative tw-min-h-0 tw-flex-1">
           <div className="tw-absolute tw-inset-0 tw-overflow-y-auto tw-p-2">
-            {/* A pending request has not established a semantic result or
-                    setup failure, so keep the pane neutral until it settles.
-                    https://github.com/Brevilabs/obsidian-copilot-private/issues/280 */}
-            {result.semanticState !== "loading" && (
-              <RelevantNotesPane
-                guidance={guidance}
-                noteCount={relevantNotes.length}
-                noteRows={relevantNotes.map((note) => (
-                  <RelevantNoteRow
-                    key={note.note.path}
-                    note={note}
-                    onAddToChat={() => addToChat(note.note.title)}
-                    onNavigateToNote={() => navigateToNote(note.note.path)}
-                  />
-                ))}
-                miyoDownloadUrl={MIYO_HOMEPAGE_URL}
-                canOpenMiyoApp={canOpenMiyoApp}
-                onOpenMiyoApp={(event) => event.currentTarget.win.open(MIYO_DEEPLINK_URL, "_blank")}
-                onOpenMiyoSettings={(event) =>
-                  openCopilotSettings(app, event.currentTarget.win, "miyo")
-                }
-                onRefresh={refresh}
-              />
-            )}
+            <RelevantNotesPane
+              status={result.status}
+              noteRows={relevantNotes.map((note) => (
+                <RelevantNoteRow
+                  key={note.note.path}
+                  note={note}
+                  onAddToChat={() => addToChat(note.note.title)}
+                  onNavigateToNote={() => navigateToNote(note.note.path)}
+                />
+              ))}
+              actions={{
+                miyoDownloadUrl: MIYO_HOMEPAGE_URL,
+                onOpenMiyoSettings: (event) =>
+                  openCopilotSettings(app, event.currentTarget.win, "miyo"),
+                onRefresh: refresh,
+                reviewIndexing: {
+                  destination: canOpenMiyoApp ? "miyo" : "settings",
+                  onSelect: (event) => {
+                    if (canOpenMiyoApp) {
+                      event.currentTarget.win.open(MIYO_DEEPLINK_URL, "_blank");
+                    } else {
+                      openCopilotSettings(app, event.currentTarget.win, "miyo");
+                    }
+                  },
+                },
+              }}
+            />
           </div>
         </div>
       </div>

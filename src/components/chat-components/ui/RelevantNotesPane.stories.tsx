@@ -6,43 +6,45 @@ import type { Meta, StoryObj } from "@/lib/story";
 import { FileInput, FileOutput } from "lucide-react";
 import React from "react";
 
-function NoteRows({ scored }: { scored: boolean }) {
-  return (
-    <>
-      {[
-        { title: "Design principles", score: 0.86, outgoing: true, backlink: false },
-        { title: "Product research", score: 0.72, outgoing: false, backlink: true },
-      ].map((note) => (
-        <div
-          key={note.title}
-          className="tw-flex tw-min-h-8 tw-items-center tw-gap-2 tw-rounded-md tw-px-2.5 tw-py-1.5"
-        >
-          <span className="tw-min-w-0 tw-flex-1 tw-truncate tw-text-sm tw-font-medium tw-text-normal">
-            {note.title}
-          </span>
-          {note.outgoing && <FileOutput className="tw-size-3 tw-text-faint" />}
-          {note.backlink && <FileInput className="tw-size-3 tw-text-faint" />}
-          {scored && (
-            <span className="tw-text-xs tw-font-medium tw-tabular-nums tw-text-muted">
-              {Math.round(note.score * 100)}%
-            </span>
-          )}
-        </div>
-      ))}
-    </>
-  );
+interface NoteRowsProps {
+  scored: boolean;
+}
+
+function NoteRows({ scored }: NoteRowsProps): React.ReactNode[] {
+  return [
+    { title: "Design principles", score: 0.86, outgoing: true, backlink: false },
+    { title: "Product research", score: 0.72, outgoing: false, backlink: true },
+  ].map((note) => (
+    <div
+      key={note.title}
+      className="tw-flex tw-min-h-8 tw-items-center tw-gap-2 tw-rounded-md tw-px-2.5 tw-py-1.5"
+    >
+      <span className="tw-min-w-0 tw-flex-1 tw-truncate tw-text-sm tw-font-medium tw-text-normal">
+        {note.title}
+      </span>
+      {note.outgoing && <FileOutput className="tw-size-3 tw-text-faint" />}
+      {note.backlink && <FileInput className="tw-size-3 tw-text-faint" />}
+      {scored && (
+        <span className="tw-text-xs tw-font-medium tw-tabular-nums tw-text-muted">
+          {Math.round(note.score * 100)}%
+        </span>
+      )}
+    </div>
+  ));
 }
 
 const baseArgs: RelevantNotesPaneProps = {
-  guidance: null,
-  isPending: false,
-  noteCount: 2,
-  noteRows: <NoteRows scored />,
-  miyoDownloadUrl: "https://www.miyo.md/",
-  canOpenMiyoApp: true,
-  onOpenMiyoApp: () => undefined,
-  onOpenMiyoSettings: () => undefined,
-  onRefresh: () => undefined,
+  status: "matches",
+  noteRows: NoteRows({ scored: true }),
+  actions: {
+    miyoDownloadUrl: "https://www.miyo.md/",
+    onOpenMiyoSettings: () => undefined,
+    onRefresh: () => undefined,
+    reviewIndexing: {
+      destination: "miyo",
+      onSelect: () => undefined,
+    },
+  },
 };
 
 const meta = {
@@ -61,25 +63,32 @@ export const Loading: StoryObj<RelevantNotesPaneProps> = {
 };
 
 export const NoMiyoEmptyGuidance: StoryObj<RelevantNotesPaneProps> = {
-  args: { guidance: "download", noteCount: 0, noteRows: null },
+  args: { status: "disabled", noteRows: [] },
 };
 
 export const MiyoUnavailableEmptyGuidance: StoryObj<RelevantNotesPaneProps> = {
-  args: { guidance: "unavailable", noteCount: 0, noteRows: null },
+  args: { status: "unavailable", noteRows: [] },
 };
 
 export const EmptyNoSemanticMatches: StoryObj<RelevantNotesPaneProps> = {
-  args: { guidance: "no-matches", noteCount: 0, noteRows: null },
+  args: { status: "no-matches", noteRows: [] },
+};
+
+export const LinksOnlyNoSemanticMatches: StoryObj<RelevantNotesPaneProps> = {
+  args: { status: "no-matches", noteRows: NoteRows({ scored: false }) },
 };
 
 export const LinksOnlyNotIndexedGuidance: StoryObj<RelevantNotesPaneProps> = {
-  args: { guidance: "not-indexed", noteRows: <NoteRows scored={false} /> },
+  args: { status: "not-indexed", noteRows: NoteRows({ scored: false }) },
 };
 
 export const LinksOnlyNotIndexedRemoteGuidance: StoryObj<RelevantNotesPaneProps> = {
   args: {
-    guidance: "not-indexed",
-    noteRows: <NoteRows scored={false} />,
-    canOpenMiyoApp: false,
+    status: "not-indexed",
+    noteRows: NoteRows({ scored: false }),
+    actions: {
+      ...baseArgs.actions,
+      reviewIndexing: { ...baseArgs.actions.reviewIndexing, destination: "settings" },
+    },
   },
 };

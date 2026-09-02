@@ -1,125 +1,121 @@
 import { Button } from "@/components/ui/button";
-import { Download, Loader2 } from "lucide-react";
+import {
+  getRelevantNotesPresentation,
+  type RelevantNotesGuidance,
+  type RelevantNotesGuidanceAction,
+  type RelevantNotesGuidanceActionId,
+  type RelevantNotesIndexingReviewDestination,
+  type RelevantNotesPaneStatus,
+} from "@/components/chat-components/ui/relevantNotesPresentation";
+import { Download } from "lucide-react";
 import React from "react";
 
-export type RelevantNotesGuidance =
-  | "download"
-  | "unavailable"
-  | "no-matches"
-  | "not-indexed"
-  | null;
-
-export interface RelevantNotesPaneProps {
-  guidance: RelevantNotesGuidance;
-  isPending: boolean;
-  noteCount: number;
-  noteRows: React.ReactNode;
-  miyoDownloadUrl: string;
-  canOpenMiyoApp: boolean;
-  onOpenMiyoApp: (event: React.MouseEvent<HTMLButtonElement>) => void;
-  onOpenMiyoSettings: (event: React.MouseEvent<HTMLButtonElement>) => void;
-  onRefresh: () => void;
+interface RelevantNotesIndexingReviewAction {
+  destination: RelevantNotesIndexingReviewDestination;
+  onSelect: (event: React.MouseEvent<HTMLButtonElement>) => void;
 }
 
-/** Render the result, empty, and Miyo-help states without plugin or Obsidian runtime access. */
-export function RelevantNotesPane({
-  guidance,
-  isPending,
-  noteCount,
-  noteRows,
-  miyoDownloadUrl,
-  canOpenMiyoApp,
-  onOpenMiyoApp,
-  onOpenMiyoSettings,
-  onRefresh,
-}: RelevantNotesPaneProps): React.ReactElement {
-  // A pending request has not established either an empty result or a setup
-  // failure, so keep its status neutral until the request settles.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
-  if (isPending) {
-    return (
-      <div className="tw-flex tw-h-full tw-items-center tw-justify-center tw-gap-2 tw-text-sm tw-text-normal">
-        <Loader2 className="tw-size-4 tw-animate-spin" />
-        Finding relevant notes…
-      </div>
-    );
-  }
+export interface RelevantNotesPaneActions {
+  miyoDownloadUrl: string;
+  onOpenMiyoSettings: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  onRefresh: () => void;
+  reviewIndexing: RelevantNotesIndexingReviewAction;
+}
 
-  const isDownload = guidance === "download";
-  const isNoMatches = guidance === "no-matches";
-  const isNotIndexed = guidance === "not-indexed";
-  const isInformational = isNoMatches || isNotIndexed;
-  // Healthy links-only results stay beneath the same centered state card as
-  // empty semantic results. Disabled and unavailable states have no rows.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
-  const guidancePanel = guidance ? (
+export interface RelevantNotesPaneProps {
+  status: RelevantNotesPaneStatus;
+  noteRows: readonly React.ReactNode[];
+  actions: RelevantNotesPaneActions;
+}
+
+type GuidanceActionRenderer = (
+  action: RelevantNotesGuidanceAction,
+  actions: RelevantNotesPaneActions
+) => React.ReactNode;
+
+interface GuidancePanelProps {
+  guidance: RelevantNotesGuidance;
+  actions: RelevantNotesPaneActions;
+}
+
+const GUIDANCE_ACTION_RENDERERS: Record<RelevantNotesGuidanceActionId, GuidanceActionRenderer> = {
+  download: (action, actions) => (
+    <Button asChild variant="secondary" size="sm">
+      <a href={actions.miyoDownloadUrl} target="_blank" rel="noopener noreferrer">
+        <Download className="tw-size-3.5" />
+        {action.label}
+      </a>
+    </Button>
+  ),
+  "open-settings": (action, actions) => (
+    <Button variant="default" size="sm" onClick={actions.onOpenMiyoSettings}>
+      {action.label}
+    </Button>
+  ),
+  refresh: (action, actions) => (
+    <Button variant="secondary" size="sm" onClick={actions.onRefresh}>
+      {action.label}
+    </Button>
+  ),
+  "review-indexing": (action, actions) => (
+    <Button variant="default" size="sm" onClick={actions.reviewIndexing.onSelect}>
+      {action.label}
+    </Button>
+  ),
+};
+
+function GuidancePanel({ guidance, actions }: GuidancePanelProps): React.ReactElement {
+  return (
     <div className="tw-flex tw-w-full tw-justify-center">
       <div
-        data-miyo-guidance={guidance}
+        data-miyo-guidance={guidance.id}
         className="tw-flex tw-w-full tw-max-w-xs tw-flex-col tw-items-center tw-gap-3 tw-rounded-lg tw-border tw-border-solid tw-border-border tw-bg-secondary tw-p-5 tw-text-center"
       >
         <div className="tw-flex tw-flex-col tw-gap-1">
-          <span className="tw-text-sm tw-font-semibold tw-text-normal">
-            {isDownload
-              ? "Add semantic matches with Miyo"
-              : isNoMatches
-                ? "No semantic matches yet"
-                : isNotIndexed
-                  ? "This note isn't indexed in Miyo"
-                  : "Check your Miyo setup"}
-          </span>
-          <span className="tw-text-xs tw-leading-normal tw-text-muted">
-            {isDownload
-              ? "Download Miyo, then connect it in Copilot settings to find related notes."
-              : isNoMatches
-                ? "Miyo is connected, but no related notes were found."
-                : isNotIndexed
-                  ? canOpenMiyoApp
-                    ? "It may still be indexing or be excluded from Miyo. Open Miyo to review this folder's indexing and exclusion settings."
-                    : "It may still be indexing or be excluded from Miyo. Review the configured Miyo connection or server in Copilot."
-                  : "Check your connection and make sure this vault is registered and indexed."}
-          </span>
+          <span className="tw-text-sm tw-font-semibold tw-text-normal">{guidance.title}</span>
+          <span className="tw-text-xs tw-leading-normal tw-text-muted">{guidance.description}</span>
         </div>
-        {!isInformational && (
+        {guidance.actions.length > 0 && (
           <div className="tw-flex tw-flex-wrap tw-justify-center tw-gap-2">
-            {isDownload && (
-              <Button asChild variant="secondary" size="sm">
-                <a href={miyoDownloadUrl} target="_blank" rel="noopener noreferrer">
-                  <Download className="tw-size-3.5" />
-                  Download Miyo
-                </a>
-              </Button>
-            )}
-            <Button variant="default" size="sm" onClick={onOpenMiyoSettings}>
-              {isDownload ? "Set up in Copilot" : "Open Miyo settings"}
-            </Button>
-          </div>
-        )}
-        {/* An unindexed source needs a configuration handoff, not install or
-            setup language. The container selects the runtime-safe destination.
-            https://github.com/Brevilabs/obsidian-copilot-private/issues/280 */}
-        {isNotIndexed && (
-          <div className="tw-flex tw-flex-wrap tw-justify-center tw-gap-2">
-            {/* Miyo cannot emit Copilot's local index-change signal, so the
-                user needs an explicit way to recheck after indexing finishes.
-                https://github.com/Brevilabs/obsidian-copilot-private/issues/280 */}
-            <Button variant="secondary" size="sm" onClick={onRefresh}>
-              Refresh
-            </Button>
-            <Button
-              variant="default"
-              size="sm"
-              onClick={canOpenMiyoApp ? onOpenMiyoApp : onOpenMiyoSettings}
-            >
-              {canOpenMiyoApp ? "Open Miyo" : "Review Miyo connection"}
-            </Button>
+            {guidance.actions.map((action) => (
+              <React.Fragment key={action.id}>
+                {GUIDANCE_ACTION_RENDERERS[action.id](action, actions)}
+              </React.Fragment>
+            ))}
           </div>
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * Render Relevant Notes states without plugin or Obsidian runtime access.
+ *
+ * @param status - Current lifecycle or settled search status.
+ * @param noteRows - Rendered note rows in result order.
+ * @param actions - Runtime-owned destinations for presentation action IDs.
+ */
+export function RelevantNotesPane({
+  status,
+  noteRows,
+  actions,
+}: RelevantNotesPaneProps): React.ReactElement {
+  const presentation = getRelevantNotesPresentation(
+    status,
+    noteRows.length > 0,
+    actions.reviewIndexing.destination
+  );
+
+  if (!presentation.showPane) {
+    return <></>;
+  }
+
+  const guidancePanel = presentation.guidance ? (
+    <GuidancePanel guidance={presentation.guidance} actions={actions} />
   ) : null;
 
-  if (noteCount === 0) {
+  if (presentation.layout === "empty") {
     return (
       <div
         data-relevant-notes-empty-state
@@ -133,7 +129,7 @@ export function RelevantNotesPane({
   return (
     <div className="tw-flex tw-flex-col tw-gap-2">
       {guidancePanel}
-      <div className="tw-flex tw-flex-col tw-gap-0.5">{noteRows}</div>
+      {presentation.showRows && <div className="tw-flex tw-flex-col tw-gap-0.5">{noteRows}</div>}
     </div>
   );
 }

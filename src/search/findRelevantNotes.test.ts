@@ -72,12 +72,12 @@ describe("findRelevantNotes", () => {
   describe("findRelevantNotes()", () => {
     beforeEach(() => {
       jest.clearAllMocks();
-      mockedShouldUseMiyo.mockReturnValue(false);
       mockedGetSettings.mockReturnValue({
-        debug: false,
+        enableMiyo: true,
         miyoServerUrl: "",
-        enableMiyo: false,
+        debug: false,
       } as CopilotSettings);
+      mockedShouldUseMiyo.mockReturnValue(true);
       mockedGetLinkedNotes.mockReturnValue([]);
       mockedGetBacklinkedNotes.mockReturnValue([]);
       mockedGetMiyoFolderName.mockReturnValue("vault");
@@ -107,9 +107,7 @@ describe("findRelevantNotes", () => {
       );
     });
 
-    it("uses Miyo as the only semantic scorer and preserves vault-scoped path stripping (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
-      mockedShouldUseMiyo.mockReturnValue(true);
-      mockedGetSettings.mockReturnValue({ enableMiyo: true, debug: false } as CopilotSettings);
+    it("preserves Miyo result order and the first score for each file (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
       mockSearchRelated.mockResolvedValue({
         results: [
           { path: "vault/source.md", score: 0.99 },
@@ -119,58 +117,45 @@ describe("findRelevantNotes", () => {
         ],
       });
 
-      const result = await findRelevantNotes({ app: window.app, filePath: "source.md" });
+      const result = await findRelevantNotes({
+        app: window.app,
+        filePath: "source.md",
+      });
 
-      expect(result.notes.map((entry) => entry.note.path)).toEqual(["beta.md", "alpha.md"]);
-      expect(
-        result.notes.find((entry) => entry.note.path === "alpha.md")?.metadata.similarityScore
-      ).toBe(0.6);
-      expect(result.semanticState).toBe("ready");
+      expect(result.notes.map((entry) => entry.note.path)).toEqual(["alpha.md", "beta.md"]);
+      expect(result.notes[0].metadata.score).toBe(0.45);
+      expect(result.status).toBe("matches");
       expect(mockSearchRelated).toHaveBeenCalledWith("http://127.0.0.1:8742", "vault/source.md", {
         folderName: "vault",
         limit: 20,
       });
     });
 
-    it("returns no link-only rows when Miyo is disabled (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
-      mockedGetLinkedNotes.mockReturnValue([
-        createMarkdownFile("linked-only.md"),
-        createMarkdownFile("alpha.md"),
-      ]);
-      mockedGetBacklinkedNotes.mockReturnValue([
-        createMarkdownFile("alpha.md"),
-        createMarkdownFile("beta.md"),
-      ]);
-
-      const result = await findRelevantNotes({ app: window.app, filePath: "source.md" });
-
-      expect(result).toEqual({ notes: [], semanticState: "disabled" });
-      expect(mockSearchRelated).not.toHaveBeenCalled();
-      expect(mockedGetLinkedNotes).not.toHaveBeenCalled();
-      expect(mockedGetBacklinkedNotes).not.toHaveBeenCalled();
-    });
-
-    it("ranks by Miyo similarity without boosting a backlinked lower-scoring note", async () => {
-      mockedShouldUseMiyo.mockReturnValue(true);
-      mockedGetSettings.mockReturnValue({ enableMiyo: true, debug: false } as CopilotSettings);
+    it("appends link-only candidates after Miyo results without changing semantic order (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
       mockSearchRelated.mockResolvedValue({
         results: [
           { path: "vault/alpha.md", score: 0.6 },
           { path: "vault/beta.md", score: 0.58 },
         ],
       });
-      mockedGetLinkedNotes.mockReturnValue([createMarkdownFile("alpha.md")]);
+      mockedGetLinkedNotes.mockReturnValue([createMarkdownFile("linked-only.md")]);
       mockedGetBacklinkedNotes.mockReturnValue([createMarkdownFile("beta.md")]);
 
-      const result = await findRelevantNotes({ app: window.app, filePath: "source.md" });
+      const result = await findRelevantNotes({
+        app: window.app,
+        filePath: "source.md",
+      });
 
-      expect(result.notes.map((entry) => entry.note.path)).toEqual(["alpha.md", "beta.md"]);
+      expect(result.notes.map((entry) => entry.note.path)).toEqual([
+        "alpha.md",
+        "beta.md",
+        "linked-only.md",
+      ]);
       expect(result.notes[1].metadata.hasBacklinks).toBe(true);
+      expect(result.notes[2].metadata.score).toBeUndefined();
     });
 
-    it("caps Miyo results at the existing 20-note limit", async () => {
-      mockedShouldUseMiyo.mockReturnValue(true);
-      mockedGetSettings.mockReturnValue({ enableMiyo: true, debug: false } as CopilotSettings);
+    it("trusts Miyo to apply the requested result limit instead of capping or sorting again (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
       mockSearchRelated.mockResolvedValue({
         results: Array.from({ length: 25 }, (_, index) => ({
           path: `vault/note-${index}.md`,
@@ -178,115 +163,148 @@ describe("findRelevantNotes", () => {
         })),
       });
 
-      const result = await findRelevantNotes({ app: window.app, filePath: "source.md" });
+      const result = await findRelevantNotes({
+        app: window.app,
+        filePath: "source.md",
+      });
 
-      expect(result.notes).toHaveLength(20);
-      expect(result.notes[0].note.path).toBe("note-24.md");
-      expect(result.notes[19].note.path).toBe("note-5.md");
+      expect(result.notes).toHaveLength(25);
+      expect(result.notes[0].note.path).toBe("note-0.md");
+      expect(result.notes[24].note.path).toBe("note-24.md");
     });
 
-    it("reports ready when a successful Miyo search has no semantic matches (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
-      mockedShouldUseMiyo.mockReturnValue(true);
-      mockedGetSettings.mockReturnValue({
-        debug: false,
-        miyoServerUrl: "",
-        enableMiyo: true,
-      } as CopilotSettings);
+    it("returns Miyo's no-match state while retaining link-only rows (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
+      mockedGetLinkedNotes.mockReturnValue([createMarkdownFile("linked-only.md")]);
 
-      const result = await findRelevantNotes({ app: window.app, filePath: "source.md" });
+      const result = await findRelevantNotes({
+        app: window.app,
+        filePath: "source.md",
+      });
 
-      expect(result).toEqual({ notes: [], semanticState: "ready" });
+      expect(result).toMatchObject({
+        status: "no-matches",
+        notes: [
+          {
+            note: { path: "linked-only.md" },
+            metadata: { score: undefined, hasOutgoingLinks: true, hasBacklinks: false },
+          },
+        ],
+      });
       expect(mockGetFolder).not.toHaveBeenCalled();
     });
 
-    it("keeps links and reports not-indexed when the specific no-chunks response still finds the registered folder (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
-      mockedShouldUseMiyo.mockReturnValue(true);
-      mockedGetSettings.mockReturnValue({
-        debug: false,
-        miyoServerUrl: "",
-        enableMiyo: true,
-      } as CopilotSettings);
+    it("returns no graph-only rows when Miyo is disabled (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
+      mockedGetSettings.mockReturnValue({ enableMiyo: false } as CopilotSettings);
+      mockedGetLinkedNotes.mockReturnValue([createMarkdownFile("linked-only.md")]);
+
+      const result = await findRelevantNotes({
+        app: window.app,
+        filePath: "source.md",
+      });
+
+      expect(result).toEqual({ notes: [], status: "disabled" });
+      expect(mockSearchRelated).not.toHaveBeenCalled();
+      expect(mockedGetLinkedNotes).not.toHaveBeenCalled();
+      expect(mockedGetBacklinkedNotes).not.toHaveBeenCalled();
+    });
+
+    it("returns no graph-only rows when enabled Miyo cannot run (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
+      mockedShouldUseMiyo.mockReturnValue(false);
+      mockedGetLinkedNotes.mockReturnValue([createMarkdownFile("linked-only.md")]);
+
+      const result = await findRelevantNotes({
+        app: window.app,
+        filePath: "source.md",
+      });
+
+      expect(result).toEqual({ notes: [], status: "unavailable" });
+      expect(mockResolveBaseUrl).not.toHaveBeenCalled();
+      expect(mockedGetLinkedNotes).not.toHaveBeenCalled();
+    });
+
+    it("reports unavailable when the source path is not a Markdown file (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
+      const result = await findRelevantNotes({
+        app: window.app,
+        filePath: "missing.md",
+      });
+
+      expect(result).toEqual({ notes: [], status: "unavailable" });
+      expect(mockResolveBaseUrl).not.toHaveBeenCalled();
+    });
+
+    it("keeps links and reports not-indexed when Miyo confirms the registered folder (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
       mockSearchRelated.mockRejectedValue(
         new MiyoRequestError(404, "No indexed chunks found for file_path")
       );
       mockedGetLinkedNotes.mockReturnValue([createMarkdownFile("linked-only.md")]);
 
-      const result = await findRelevantNotes({ app: window.app, filePath: "source.md" });
+      const result = await findRelevantNotes({
+        app: window.app,
+        filePath: "source.md",
+      });
 
       expect(result.notes).toHaveLength(1);
       expect(result.notes[0].note.path).toBe("linked-only.md");
-      expect(result.notes[0].metadata.similarityScore).toBeUndefined();
-      expect(result.semanticState).toBe("not-indexed");
+      expect(result.notes[0].metadata.score).toBeUndefined();
+      expect(result.status).toBe("not-indexed");
       expect(mockGetFolder).toHaveBeenCalledWith("http://127.0.0.1:8742", "vault");
       expect(mockedLogError).not.toHaveBeenCalled();
     });
 
-    it("returns no graph-only fallback rows when the no-chunks response cannot confirm folder registration (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
-      mockedShouldUseMiyo.mockReturnValue(true);
-      mockedGetSettings.mockReturnValue({
-        debug: false,
-        miyoServerUrl: "",
-        enableMiyo: true,
-      } as CopilotSettings);
+    it("returns no graph-only rows when an unindexed source cannot confirm folder registration (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
       mockSearchRelated.mockRejectedValue(
         new MiyoRequestError(404, "No indexed chunks found for file_path")
       );
       mockGetFolder.mockRejectedValue(new MiyoRequestError(404, "Folder unavailable"));
       mockedGetBacklinkedNotes.mockReturnValue([createMarkdownFile("linked-only.md")]);
 
-      const result = await findRelevantNotes({ app: window.app, filePath: "source.md" });
+      const result = await findRelevantNotes({
+        app: window.app,
+        filePath: "source.md",
+      });
 
-      expect(result).toEqual({ notes: [], semanticState: "unavailable" });
+      expect(result).toEqual({ notes: [], status: "unavailable" });
       expect(mockedGetLinkedNotes).not.toHaveBeenCalled();
       expect(mockedGetBacklinkedNotes).not.toHaveBeenCalled();
       expect(mockedLogError).toHaveBeenCalledTimes(1);
     });
 
-    it("reports unavailable when the no-chunks registration probe times out instead of hanging the pane (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
+    it("reports unavailable when the registration probe times out (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
       jest.useFakeTimers();
       try {
-        mockedShouldUseMiyo.mockReturnValue(true);
-        mockedGetSettings.mockReturnValue({
-          debug: false,
-          miyoServerUrl: "",
-          enableMiyo: true,
-        } as CopilotSettings);
         mockSearchRelated.mockRejectedValue(
           new MiyoRequestError(404, "No indexed chunks found for file_path")
         );
         mockGetFolder.mockReturnValue(new Promise(() => undefined));
 
-        const resultPromise = findRelevantNotes({ app: window.app, filePath: "source.md" });
+        const resultPromise = findRelevantNotes({
+          app: window.app,
+          filePath: "source.md",
+        });
         await jest.advanceTimersByTimeAsync(0);
         await jest.advanceTimersByTimeAsync(8000);
 
-        await expect(resultPromise).resolves.toMatchObject({ semanticState: "unavailable" });
+        await expect(resultPromise).resolves.toMatchObject({ status: "unavailable" });
         expect(mockedLogError).toHaveBeenCalledTimes(1);
       } finally {
         jest.useRealTimers();
       }
     });
 
-    it("returns no graph-only fallback rows when the primary related search never settles (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
+    it("returns no graph-only rows when the primary search times out (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
       jest.useFakeTimers();
       try {
-        mockedShouldUseMiyo.mockReturnValue(true);
-        mockedGetSettings.mockReturnValue({
-          debug: false,
-          miyoServerUrl: "",
-          enableMiyo: true,
-        } as CopilotSettings);
         mockSearchRelated.mockReturnValue(new Promise(() => undefined));
         mockedGetLinkedNotes.mockReturnValue([createMarkdownFile("linked-only.md")]);
 
-        const resultPromise = findRelevantNotes({ app: window.app, filePath: "source.md" });
+        const resultPromise = findRelevantNotes({
+          app: window.app,
+          filePath: "source.md",
+        });
         await jest.advanceTimersByTimeAsync(0);
         await jest.advanceTimersByTimeAsync(8000);
 
-        await expect(resultPromise).resolves.toEqual({
-          notes: [],
-          semanticState: "unavailable",
-        });
+        await expect(resultPromise).resolves.toEqual({ notes: [], status: "unavailable" });
         expect(mockGetFolder).not.toHaveBeenCalled();
         expect(mockedGetLinkedNotes).not.toHaveBeenCalled();
       } finally {
@@ -294,51 +312,36 @@ describe("findRelevantNotes", () => {
       }
     });
 
-    it("reports unavailable when Miyo endpoint resolution never settles (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
+    it("reports unavailable when endpoint resolution times out (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
       jest.useFakeTimers();
       try {
-        mockedShouldUseMiyo.mockReturnValue(true);
-        mockedGetSettings.mockReturnValue({
-          debug: false,
-          miyoServerUrl: "",
-          enableMiyo: true,
-        } as CopilotSettings);
         mockResolveBaseUrl.mockReturnValue(new Promise(() => undefined));
 
-        const resultPromise = findRelevantNotes({ app: window.app, filePath: "source.md" });
+        const resultPromise = findRelevantNotes({
+          app: window.app,
+          filePath: "source.md",
+        });
         await jest.advanceTimersByTimeAsync(0);
         await jest.advanceTimersByTimeAsync(8000);
 
-        await expect(resultPromise).resolves.toMatchObject({ semanticState: "unavailable" });
+        await expect(resultPromise).resolves.toMatchObject({ status: "unavailable" });
         expect(mockSearchRelated).not.toHaveBeenCalled();
       } finally {
         jest.useRealTimers();
       }
     });
 
-    it("reports a 503 related-search outage as unavailable without trusting a registered folder (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
-      mockedShouldUseMiyo.mockReturnValue(true);
-      mockedGetSettings.mockReturnValue({
-        debug: false,
-        miyoServerUrl: "",
-        enableMiyo: true,
-      } as CopilotSettings);
+    it("reports a related-search outage as unavailable without probing registration (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
       mockSearchRelated.mockRejectedValue(new MiyoRequestError(503, "Service unavailable"));
 
-      const result = await findRelevantNotes({ app: window.app, filePath: "source.md" });
+      const result = await findRelevantNotes({
+        app: window.app,
+        filePath: "source.md",
+      });
 
-      expect(result.semanticState).toBe("unavailable");
+      expect(result.status).toBe("unavailable");
       expect(mockGetFolder).not.toHaveBeenCalled();
       expect(mockedLogError).toHaveBeenCalledTimes(1);
-    });
-
-    it("reports unavailable when Miyo is enabled but the runtime cannot use it (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
-      mockedGetSettings.mockReturnValue({ enableMiyo: true } as CopilotSettings);
-
-      const result = await findRelevantNotes({ app: window.app, filePath: "source.md" });
-
-      expect(result).toEqual({ notes: [], semanticState: "unavailable" });
-      expect(mockResolveBaseUrl).not.toHaveBeenCalled();
     });
   });
 });
