@@ -54,5 +54,13 @@ describe("AgentHomeSection", () => {
       fireEvent.keyDown(trigger, { key: " " });
       expect(onClick).toHaveBeenCalledTimes(2);
     });
+
+    it("uses complete localized project copy without changing View all chats for https://github.com/Brevilabs/obsidian-copilot-private/issues/326", () => {
+      const { rerender } = render(<AgentHomeViewAllTrigger label="projects" text="查看所有项目" />);
+      expect(screen.getByRole("button", { name: "查看所有项目" })).toBeTruthy();
+
+      rerender(<AgentHomeViewAllTrigger label="chats" />);
+      expect(screen.getByRole("button", { name: "View all chats" })).toBeTruthy();
+    });
   });
 });

@@ -8,6 +8,7 @@ import {
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { COMMAND_PRIORITY_LOW, KEY_TAB_COMMAND } from "lexical";
 import React, { useEffect, useMemo, useState } from "react";
+import { t } from "@/i18n";
 
 interface PromptSuggestionPlaceholderProps {
   /**
@@ -105,7 +106,7 @@ export const PromptSuggestionPlaceholder: React.FC<PromptSuggestionPlaceholderPr
         </span>
       )}
       <span id={descriptionId} className="tw-sr-only">
-        {acceptText ? `Suggested prompt: ${acceptText}. Press Tab to insert it.` : ""}
+        {acceptText ? t("agentChat.home.promptSuggestionA11y", { prompt: acceptText }) : ""}
       </span>
     </>
   );

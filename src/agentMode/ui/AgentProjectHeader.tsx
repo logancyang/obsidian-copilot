@@ -4,6 +4,7 @@ import { ProjectFolderIcon } from "@/components/ui/ProjectFolderIcon";
 import { cn } from "@/lib/utils";
 import { ChevronLeft } from "lucide-react";
 import React, { memo } from "react";
+import { t } from "@/i18n";
 
 interface AgentProjectHeaderProps {
   /** Live project name (read from `useProjects` by the parent so renames reflect). */
@@ -43,8 +44,8 @@ export const AgentProjectHeader = memo(
         variant="ghost2"
         size="sm"
         onClick={onExit}
-        aria-label="Leave project"
-        title="Leave project"
+        aria-label={t("agentChat.projects.leave")}
+        title={t("agentChat.projects.leave")}
         className="tw-flex tw-shrink-0 tw-items-center tw-px-1.5 tw-text-muted hover:tw-text-normal"
       >
         <ChevronLeft className="tw-size-4" />

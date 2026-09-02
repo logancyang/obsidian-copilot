@@ -185,6 +185,9 @@ interface AgentHomeViewAllProps<TItem> {
   total: number;
   /** Lowercase noun for the trigger, e.g. "projects" → "View all projects (5)". */
   label: string;
+  /** Complete localized trigger copy; omitted for the retiring View-all-chats surface.
+   * https://github.com/Brevilabs/obsidian-copilot-private/issues/326 */
+  triggerText?: string;
   popoverTitle: string;
   searchValue: string;
   onSearch: (value: string) => void;
@@ -271,13 +274,15 @@ export function AgentHomePreviewList({
 
 interface AgentHomeViewAllTriggerProps extends React.HTMLAttributes<HTMLDivElement> {
   label: string;
+  /** Localized full label; the English construction remains the default for View all chats. */
+  text?: string;
 }
 
 /** Shared full-width trigger used by every Agent Home View-all footer. */
 export const AgentHomeViewAllTrigger = React.forwardRef<
   HTMLDivElement,
   AgentHomeViewAllTriggerProps
->(function AgentHomeViewAllTrigger({ label, className, onKeyDown, ...props }, ref) {
+>(function AgentHomeViewAllTrigger({ label, text, className, onKeyDown, ...props }, ref) {
   return (
     <div
       {...props}
@@ -296,7 +301,7 @@ export const AgentHomeViewAllTrigger = React.forwardRef<
         event.currentTarget.click();
       }}
     >
-      <span>View all {label}</span>
+      <span>{text ?? `View all ${label}`}</span>
       <ChevronRight className="tw-size-3 tw-shrink-0" />
     </div>
   );
@@ -312,6 +317,7 @@ export function AgentHomeViewAll<TItem>({
   items,
   total,
   label,
+  triggerText,
   popoverTitle,
   searchValue,
   onSearch,
@@ -379,7 +385,7 @@ export function AgentHomeViewAll<TItem>({
       <PopoverTrigger asChild>
         {/* Left-aligned to the leading-tile column (no indent), matching the
             create row. The count is omitted — the tab already shows it. */}
-        <AgentHomeViewAllTrigger label={label} />
+        <AgentHomeViewAllTrigger label={label} text={triggerText} />
       </PopoverTrigger>
       <PopoverContent align="start" side="bottom" className="tw-w-72 tw-p-0">
         <div className="tw-flex tw-max-h-80 tw-flex-col">

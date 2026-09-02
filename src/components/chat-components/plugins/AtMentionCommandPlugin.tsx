@@ -28,6 +28,7 @@ interface AtMentionCommandPluginProps {
    * Agent Mode; surfaces the "Agents" typeahead group and inserts agent pills.
    */
   agentBrands?: ReadonlyArray<AgentMentionBrand>;
+  localizeAgentUi?: boolean;
 }
 
 export function AtMentionCommandPlugin({
@@ -35,6 +36,7 @@ export function AtMentionCommandPlugin({
   showTools = false,
   currentActiveFile = null,
   agentBrands = EMPTY_AGENT_MENTION_BRANDS,
+  localizeAgentUi = false,
 }: AtMentionCommandPluginProps): JSX.Element {
   const app = useApp();
   const [editor] = useLexicalComposerContext();
@@ -51,7 +53,11 @@ export function AtMentionCommandPlugin({
   // Use the shared at-mention categories hook. Action categories (e.g. Images,
   // which opens a file picker) are not supported inline because the editor has
   // no pill representation for them — they only appear in the `+` popover.
-  const allCategoryOptions = useAtMentionCategories(showTools, agentBrands.length > 0);
+  const allCategoryOptions = useAtMentionCategories(
+    showTools,
+    agentBrands.length > 0,
+    localizeAgentUi
+  );
   const availableCategoryOptions = useMemo(
     () => allCategoryOptions.filter((c) => !c.isAction),
     [allCategoryOptions]
@@ -100,7 +106,8 @@ export function AtMentionCommandPlugin({
     showTools,
     availableCategoryOptions,
     currentActiveFile,
-    agentBrands
+    agentBrands,
+    localizeAgentUi
   );
 
   // Type guard functions

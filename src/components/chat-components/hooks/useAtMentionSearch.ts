@@ -18,12 +18,17 @@ import {
 } from "./useAtMentionCategories";
 import { getEffectiveCustomPromptsFolder } from "@/settings/copilotFolder";
 import { SelfHostCloudWarningIcon } from "@/components/ui/SelfHostCloudWarningIcon";
+import { t } from "@/i18n";
 
 // Maximum number of results to show in @ mention search
 const MAX_SEARCH_RESULTS = 30;
 
 /**
- * Custom hook for @ mention search results with unified fuzzy search
+ * Custom hook for @ mention search results with unified fuzzy search.
+ *
+ * @param localizeAgentUi - Whether Agent Mode should localize plugin-authored result labels.
+ * Quick Chat remains unchanged for
+ * https://github.com/Brevilabs/obsidian-copilot-private/issues/326.
  */
 export function useAtMentionSearch(
   query: string,
@@ -33,7 +38,8 @@ export function useAtMentionSearch(
   showTools: boolean,
   availableCategoryOptions: CategoryOption[],
   currentActiveFile: TFile | null = null,
-  agentBrands: ReadonlyArray<AgentMentionBrand> = EMPTY_AGENT_MENTION_BRANDS
+  agentBrands: ReadonlyArray<AgentMentionBrand> = EMPTY_AGENT_MENTION_BRANDS,
+  localizeAgentUi: boolean = false
 ): (CategoryOption | AtMentionOption)[] {
   // Get raw data without pre-filtering
   const allNotes = useAllNotes(isCopilotPlus);
@@ -105,13 +111,19 @@ export function useAtMentionSearch(
             const isLoaded = tab.isLoaded !== false;
             return {
               key: `webtab-${tab.url || tab.title || index}-${index}`,
-              title: tab.title || "Untitled",
-              subtitle: isLoaded ? tab.url : "Tab not loaded",
+              title: tab.title || (localizeAgentUi ? t("agentChat.context.untitled") : "Untitled"),
+              subtitle: isLoaded
+                ? tab.url
+                : localizeAgentUi
+                  ? t("agentChat.context.tabNotLoaded")
+                  : "Tab not loaded",
               category: "webTabs",
               data: tab,
               content: undefined,
               disabled: !isLoaded,
-              disabledReason: "Switch to this tab to load it first",
+              disabledReason: localizeAgentUi
+                ? t("agentChat.context.tabNotLoadedHelp")
+                : "Switch to this tab to load it first",
               icon: isLoaded
                 ? React.createElement(Globe, { className: "tw-size-4" })
                 : React.createElement(CircleDashed, { className: "tw-size-4 tw-text-muted" }),
@@ -119,7 +131,7 @@ export function useAtMentionSearch(
             };
           })
         : [],
-    [openWebTabs]
+    [openWebTabs, localizeAgentUi]
   );
 
   const agentItems: AtMentionOption[] = useMemo(
@@ -157,7 +169,7 @@ export function useAtMentionSearch(
         if (activeWebTab) {
           activeOptions.push({
             key: "active-web-tab",
-            title: "Active Web Tab",
+            title: localizeAgentUi ? t("agentChat.context.activeWebTab") : "Active Web Tab",
             subtitle: undefined,
             category: "activeWebTab",
             data: activeWebTab,
@@ -170,7 +182,7 @@ export function useAtMentionSearch(
         if (currentActiveFile) {
           activeOptions.push({
             key: `active-note-${currentActiveFile.path}`,
-            title: "Active Note",
+            title: localizeAgentUi ? t("agentChat.context.activeNote") : "Active Note",
             subtitle: undefined,
             category: "activeNote",
             data: currentActiveFile,
@@ -203,7 +215,7 @@ export function useAtMentionSearch(
         activeNoteMatches && currentActiveFile
           ? {
               key: `active-note-${currentActiveFile.path}`,
-              title: "Active Note",
+              title: localizeAgentUi ? t("agentChat.context.activeNote") : "Active Note",
               subtitle: undefined,
               category: "activeNote" as AtMentionCategory,
               data: currentActiveFile,
@@ -219,7 +231,7 @@ export function useAtMentionSearch(
         activeWebTabMatches && activeWebTab
           ? {
               key: "active-web-tab",
-              title: "Active Web Tab",
+              title: localizeAgentUi ? t("agentChat.context.activeWebTab") : "Active Web Tab",
               subtitle: undefined,
               category: "activeWebTab" as AtMentionCategory,
               data: activeWebTab,
@@ -315,5 +327,6 @@ export function useAtMentionSearch(
     availableCategoryOptions,
     activeWebTab,
     currentActiveFile,
+    localizeAgentUi,
   ]);
 }

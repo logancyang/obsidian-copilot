@@ -2,6 +2,7 @@ import { resolveLocale } from "@/i18n/locale";
 import { ENGLISH_TRANSLATIONS } from "@/i18n/locales/en";
 import { ENGLISH_TRANSLATIONS as ENGLISH_TRANSLATION_SOURCE } from "@/i18n/locales/en.source";
 import { ZH_CN_TRANSLATIONS } from "@/i18n/locales/zh-CN";
+import { ZH_CN_TRANSLATIONS as PACKED_ZH_CN_TRANSLATIONS } from "@/i18n/locales/zh-CN.packed";
 
 const ISSUE_URL = "https://github.com/Brevilabs/obsidian-copilot-private/issues/324";
 const SETTINGS_ISSUE_URL = "https://github.com/Brevilabs/obsidian-copilot-private/issues/325";
@@ -33,6 +34,7 @@ describe("i18n", () => {
       expect(
         Object.values(ZH_CN_TRANSLATIONS).every((message) => typeof message === "string")
       ).toBe(true);
+      expect(PACKED_ZH_CN_TRANSLATIONS).toEqual(ZH_CN_TRANSLATIONS);
     });
 
     it(`ships complete named English Settings messages for ${SETTINGS_ISSUE_URL}`, () => {
@@ -140,10 +142,22 @@ describe("i18n", () => {
       );
     });
 
-    it(`localizes the Agent Chat shell while preserving dynamic product values for ${ZH_CN_ISSUE_URL}`, () => {
+    it(`localizes Agent Chat home and shell while preserving protected dynamic values for ${ZH_CN_ISSUE_URL}`, () => {
       const i18n = loadI18n("zh");
       i18n.initializeI18n();
 
+      expect(i18n.t("agentChat.home.recentChats")).toBe("最近对话");
+      expect(i18n.t("agentChat.home.chatInProject", { project: "研究 Research" })).toBe(
+        "在 研究 Research 中对话"
+      );
+      expect(i18n.t("agentChat.recent.search")).toBe("搜索对话…");
+      expect(i18n.t("agentChat.context.webTabs")).toBe("网页标签页");
+      expect(i18n.t("agentChat.mode.safe")).toBe("安全");
+      expect(i18n.t("agentChat.projects.viewAll")).toBe("查看所有项目");
+      expect(i18n.t("agentChat.projects.deleteTitle", { project: "Alpha 项目" })).toBe(
+        "删除项目“Alpha 项目”？"
+      );
+      expect(i18n.t("agentChat.relevant.empty")).toBe("未找到相关笔记");
       expect(i18n.t("agentChat.composer.placeholder")).toBe(
         "有问题尽管问 • 输入 @ 添加上下文 • 输入 / 使用命令"
       );

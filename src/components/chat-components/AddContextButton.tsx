@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { AtMentionTypeahead } from "./AtMentionTypeahead";
+import { t } from "@/i18n";
 
 interface AddContextButtonProps {
   onSelect: (category: string, data: unknown) => void;
@@ -12,6 +13,9 @@ interface AddContextButtonProps {
   showTools?: boolean;
   currentActiveFile: TFile | null;
   lexicalEditorRef?: React.RefObject<{ focus: () => void }>;
+  /** Localize only the Agent Mode mount; Quick Chat remains outside the first locale scope.
+   * https://github.com/Brevilabs/obsidian-copilot-private/issues/326 */
+  isAgentMode?: boolean;
 }
 
 export const AddContextButton: React.FC<AddContextButtonProps> = ({
@@ -20,6 +24,7 @@ export const AddContextButton: React.FC<AddContextButtonProps> = ({
   showTools = false,
   currentActiveFile,
   lexicalEditorRef,
+  isAgentMode = false,
 }) => {
   const [open, setOpen] = useState(false);
 
@@ -41,13 +46,15 @@ export const AddContextButton: React.FC<AddContextButtonProps> = ({
                 variant="ghost2"
                 size="icon"
                 className="tw-text-muted hover:tw-text-accent"
-                aria-label="Add context"
+                aria-label={isAgentMode ? t("agentChat.context.add") : "Add context"}
               >
                 <Plus className="tw-size-4" />
               </Button>
             </PopoverTrigger>
           </TooltipTrigger>
-          <TooltipContent className="tw-px-1 tw-py-0.5">Add context</TooltipContent>
+          <TooltipContent className="tw-px-1 tw-py-0.5">
+            {isAgentMode ? t("agentChat.context.add") : "Add context"}
+          </TooltipContent>
         </Tooltip>
       </TooltipProvider>
       <PopoverContent
@@ -67,6 +74,7 @@ export const AddContextButton: React.FC<AddContextButtonProps> = ({
           isCopilotPlus={isCopilotPlus}
           showTools={showTools}
           currentActiveFile={currentActiveFile}
+          isAgentMode={isAgentMode}
         />
       </PopoverContent>
     </Popover>

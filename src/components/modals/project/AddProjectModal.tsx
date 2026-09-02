@@ -25,6 +25,7 @@ import { App, Modal, Notice } from "obsidian";
 import React, { useEffect, useMemo, useState } from "react";
 import { Root } from "react-dom/client";
 import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
+import { t } from "@/i18n";
 
 export interface AddProjectModalContentProps {
   initialProject?: ProjectConfig;
@@ -209,7 +210,7 @@ export function AddProjectModalContent({
 
     if (!saveData.name) {
       setTouched((prev) => ({ ...prev, name: true }));
-      new Notice("Please fill in all required fields");
+      new Notice(t("agentChat.projects.required"));
       return;
     }
 
@@ -262,10 +263,10 @@ export function AddProjectModalContent({
       {/* Header */}
       <div className="tw-shrink-0 tw-px-4 tw-pb-2 tw-pt-4">
         <div className="tw-text-xl tw-font-bold tw-text-normal">
-          {initialProject ? "Edit Project" : "New Project"}
+          {initialProject ? t("agentChat.projects.editTitle") : t("agentChat.projects.newTitle")}
         </div>
         <p className="tw-mt-1 tw-text-sm tw-text-muted">
-          Configure your project settings and context sources
+          {t("agentChat.projects.configureDescription")}
         </p>
       </div>
 
@@ -274,13 +275,15 @@ export function AddProjectModalContent({
         <div className="tw-flex tw-flex-col tw-gap-6 tw-p-4">
           {/* Basic Info Card */}
           <div className="tw-rounded-lg tw-border tw-border-border tw-p-4 tw-bg-secondary/50">
-            <h3 className="tw-mb-3 tw-text-sm tw-font-medium tw-text-normal">Basic Info</h3>
+            <h3 className="tw-mb-3 tw-text-sm tw-font-medium tw-text-normal">
+              {t("agentChat.projects.basicInfo")}
+            </h3>
             <div className="tw-flex tw-flex-col tw-gap-3">
               <FormField
-                label="Project Name"
+                label={t("agentChat.projects.name")}
                 required
                 error={touched.name && !formData.name}
-                errorMessage="Project name is required"
+                errorMessage={t("agentChat.projects.nameRequired")}
               >
                 <Input
                   type="text"
@@ -292,8 +295,8 @@ export function AddProjectModalContent({
               </FormField>
 
               <FormField
-                label="Description"
-                description="Briefly describe the purpose and goals of the project"
+                label={t("agentChat.projects.description")}
+                description={t("agentChat.projects.descriptionHelp")}
               >
                 <Input
                   type="text"
@@ -329,10 +332,10 @@ export function AddProjectModalContent({
       <div className="tw-shrink-0 tw-border-t tw-border-border tw-px-4 tw-py-3">
         <div className="tw-flex tw-items-center tw-justify-end tw-gap-2">
           <Button variant="ghost" onClick={onCancel} disabled={isSubmitting}>
-            Cancel
+            {t("settings.actions.cancel")}
           </Button>
           <Button onClick={safeAsyncHandler(handleSave)} disabled={isSubmitting || !isFormValid()}>
-            {isSubmitting ? "Saving..." : "Save"}
+            {isSubmitting ? t("agentChat.home.saving") : t("settings.actions.save")}
           </Button>
         </div>
       </div>

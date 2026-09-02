@@ -5,25 +5,27 @@
  * Keep entries short, friendly, and assistant-neutral (no name interpolation —
  * Obsidian doesn't expose one).
  */
-export const LANDING_GREETINGS: readonly string[] = Object.freeze([
-  "What can I help with?",
-  "Where should we start?",
-  "What's on your mind?",
-  "What are you working on?",
-  "How can I help today?",
-  "Ready when you are.",
-  "What would you like to explore?",
-  "Let's pick up where you left off.",
-  "What can I do for you?",
-  "Got something to capture?",
-  "What's next on your list?",
-  "Where to begin?",
-  "What shall we dig into?",
-  "Ask me anything.",
-]);
+import { t } from "@/i18n";
+
+let greetingSource: string | undefined;
+let landingGreetings: readonly string[] = Object.freeze([]);
+
+/** Return the locale-specific greeting pool after the i18n runtime is initialized. */
+export function getLandingGreetings(): readonly string[] {
+  const source = t("agentChat.home.greetings");
+  // A locale catalog can replace an English fallback after initialization, while unchanged
+  // copy must keep one stable array reference for React callers.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/326
+  if (source !== greetingSource) {
+    greetingSource = source;
+    landingGreetings = Object.freeze(source.split("|"));
+  }
+  return landingGreetings;
+}
 
 /** Pick a random greeting from the pool. The pool is guaranteed non-empty. */
 export function pickRandomGreeting(): string {
-  const index = Math.floor(Math.random() * LANDING_GREETINGS.length);
-  return LANDING_GREETINGS[index];
+  const greetings = getLandingGreetings();
+  const index = Math.floor(Math.random() * greetings.length);
+  return greetings[index];
 }

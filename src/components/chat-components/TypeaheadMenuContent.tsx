@@ -1,6 +1,7 @@
 import React, { useRef, useEffect } from "react";
 import { ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { t } from "@/i18n";
 
 export interface TypeaheadOption {
   key: string;
@@ -32,6 +33,10 @@ interface TypeaheadMenuContentProps {
   onKeyDown?: (event: React.KeyboardEvent) => void;
   className?: string;
   width?: number;
+  /** Optional i18n key supplied by an Agent-only caller. */
+  searchPlaceholder?: string;
+  /** Optional i18n key supplied by an Agent-only caller. */
+  previewLabel?: string;
 }
 
 const PREVIEW_MIN_HEIGHT = 120;
@@ -51,6 +56,8 @@ export function TypeaheadMenuContent({
   onKeyDown,
   className,
   width,
+  searchPlaceholder,
+  previewLabel,
 }: TypeaheadMenuContentProps) {
   const selectedItemRef = useRef<HTMLDivElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
@@ -106,7 +113,9 @@ export function TypeaheadMenuContent({
             ...(width && { width }),
           }}
         >
-          <div className="tw-mb-1 tw-text-xs tw-text-muted">Preview</div>
+          <div className="tw-mb-1 tw-text-xs tw-text-muted">
+            {previewLabel ? t(previewLabel) : "Preview"}
+          </div>
           {options[selectedIndex].subtitle && (
             <div className="tw-mb-2 tw-text-xs tw-text-muted">
               {options[selectedIndex].subtitle}
@@ -213,7 +222,7 @@ export function TypeaheadMenuContent({
               value={searchQuery}
               onChange={handleSearchChange}
               onKeyDown={handleSearchKeyDown}
-              placeholder="Search..."
+              placeholder={searchPlaceholder ? t(searchPlaceholder) : "Search..."}
               autoFocus
               className="tw-w-full tw-rounded-md !tw-border-none !tw-bg-transparent tw-px-1 tw-py-0 tw-text-sm tw-text-normal placeholder:tw-text-muted focus:!tw-shadow-none"
             />

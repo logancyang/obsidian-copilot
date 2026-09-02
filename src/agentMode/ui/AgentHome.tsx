@@ -46,6 +46,7 @@ import { AppContext, ChatViewEventTarget, EventTargetContext } from "@/context";
 import { ChatInputProvider, useChatInput } from "@/context/ChatInputContext";
 import { useChatFileDrop } from "@/hooks/useChatFileDrop";
 import { cn } from "@/lib/utils";
+import { t } from "@/i18n";
 import { logError } from "@/logger";
 import type CopilotPlugin from "@/main";
 import { ProjectFileManager } from "@/projects/ProjectFileManager";
@@ -158,13 +159,13 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     try {
       const result = await manager.saveActiveSession();
       if (result) {
-        new Notice("Chat saved as note.");
+        new Notice(t("agentChat.notice.chatSaved"));
       } else {
-        new Notice("Nothing to save yet.");
+        new Notice(t("agentChat.notice.nothingToSave"));
       }
     } catch (error) {
       logError("[AgentMode] manual save failed", error);
-      new Notice("Failed to save chat as note. Check console for details.");
+      new Notice(t("agentChat.notice.saveFailed"));
     }
   }, [manager]);
 
@@ -183,7 +184,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
         await manager.replaceSessionInPlace(oldId, active.backendId);
       } catch (e) {
         logError("[AgentMode] new chat failed", e);
-        new Notice("Failed to start a new chat. Please try again.");
+        new Notice(t("agentChat.notice.newChatFailed"));
       }
     })();
     // A New Chat replacement gets a fresh chat input, so its draft and
@@ -280,7 +281,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   const handleExitProject = useCallback(() => {
     manager.exitProject().catch((e) => {
       logError("[AgentMode] exit project failed", e);
-      new Notice("Failed to leave project. Please try again.");
+      new Notice(t("agentChat.notice.leaveProjectFailed"));
     });
   }, [manager]);
 
@@ -303,7 +304,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     (project: ProjectConfig) => {
       manager.enterProject(project.id).catch((e) => {
         logError("[AgentMode] enter project failed", e);
-        new Notice("Failed to open project. Please try again.");
+        new Notice(t("agentChat.notice.openProjectFailed"));
       });
     },
     [manager]
@@ -347,7 +348,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   // out from under the active session). The header + disabled composer let the
   // user back out via the `‹` escape hatch.
   useEffect(() => {
-    if (isOrphanedProject) new Notice("This project no longer exists.");
+    if (isOrphanedProject) new Notice(t("agentChat.notice.projectMissing"));
   }, [isOrphanedProject]);
 
   const modelPickerOverride = useAgentModelPicker(manager, plugin);
@@ -558,7 +559,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       {
         id: "chats",
         icon: <MessageSquare className="tw-size-4" />,
-        title: "Recent Chats",
+        title: t("agentChat.home.recentChats"),
         // Chat history grows indefinitely, so its cumulative total is not a
         // useful tab-level status. The list itself remains fully searchable.
         renderBody: () => (
@@ -584,7 +585,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
             {
               id: "relevant-notes",
               icon: <FileSearch className="tw-size-4" />,
-              title: "Relevant Notes",
+              title: t("agentChat.home.relevantNotes"),
               renderBody: () => (
                 <RelevantNotesShelfPanel
                   onPopOut={() => void plugin.activateRelevantNotesView()}
@@ -596,7 +597,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       {
         id: "projects",
         icon: <Folder className="tw-size-4" />,
-        title: "Projects",
+        title: t("agentChat.home.projects"),
         count: projects.length,
         renderBody: () => (
           <ProjectPickerList
@@ -648,7 +649,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       {
         id: "project-chats",
         icon: <MessageSquare className="tw-size-4" />,
-        title: "Recent Chats",
+        title: t("agentChat.home.recentChats"),
         // Match the global shelf: an ever-growing history tally adds noise.
         renderBody: () => (
           <GlobalRecentChatsSection
@@ -778,7 +779,9 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   // back to the neutral greeting so no "Chat in" line renders against a blank
   // name. The project landing carries no subtitle: just the title.
   const showProjectHero = isProjectLanding && !isOrphanedProject;
-  const heroText = showProjectHero ? `Chat in ${projectName}` : greeting;
+  const heroText = showProjectHero
+    ? t("agentChat.home.chatInProject", { project: projectName })
+    : greeting;
   const hero = (
     <div className="tw-flex tw-min-w-0 tw-items-center tw-justify-center tw-gap-3">
       <CopilotBrandIcon className="tw-size-6 tw-shrink-0 tw-text-normal" />
@@ -865,7 +868,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                 // target it and inner drop zones (the project context section)
                 // would become unreachable.
                 <div className="tw-pointer-events-none tw-absolute tw-inset-0 tw-z-modal tw-flex tw-items-center tw-justify-center tw-rounded-md tw-border tw-border-dashed tw-bg-primary tw-opacity-80">
-                  <span>Drop files here...</span>
+                  <span>{t("agentChat.home.dropFiles")}</span>
                 </div>
               )}
               {/* Two surfaces share this padded, scrollable column: a landing

@@ -13,6 +13,8 @@ interface TypeaheadMenuPopoverProps {
   searchQuery?: string;
   onSearchChange?: (query: string) => void;
   onKeyDown?: (event: React.KeyboardEvent) => void;
+  searchPlaceholder?: string;
+  previewLabel?: string;
 }
 
 export function TypeaheadMenuPopover({
@@ -27,6 +29,8 @@ export function TypeaheadMenuPopover({
   searchQuery = "",
   onSearchChange,
   onKeyDown,
+  searchPlaceholder,
+  previewLabel,
 }: TypeaheadMenuPopoverProps) {
   return (
     <TypeaheadMenuContent
@@ -41,6 +45,8 @@ export function TypeaheadMenuPopover({
       searchQuery={searchQuery}
       onSearchChange={onSearchChange}
       onKeyDown={onKeyDown}
+      searchPlaceholder={searchPlaceholder}
+      previewLabel={previewLabel}
     />
   );
 }

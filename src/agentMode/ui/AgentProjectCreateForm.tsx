@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { err2String, randomUUID } from "@/utils";
 import { Notice } from "obsidian";
 import React, { useState } from "react";
+import { t } from "@/i18n";
 
 interface AgentProjectCreateFormProps {
   /**
@@ -55,7 +56,7 @@ export function AgentProjectCreateForm({
       type="text"
       value={name}
       onChange={(e) => setName(e.target.value)}
-      placeholder="Project name"
+      placeholder={t("agentChat.home.projectNamePlaceholder")}
       autoFocus
       onKeyDown={(e) => {
         // Enter submits straight from the single name field.
@@ -81,17 +82,17 @@ export function AgentProjectCreateForm({
       {title ? (
         nameInput
       ) : (
-        <FormField label="Name" required>
+        <FormField label={t("agentChat.home.name")} required>
           {nameInput}
         </FormField>
       )}
 
       <div className="tw-flex tw-justify-end tw-gap-2">
         <Button variant="secondary" onClick={onCancel} disabled={isSaving}>
-          Cancel
+          {t("settings.actions.cancel")}
         </Button>
         <Button variant="default" onClick={() => void handleSave()} disabled={!canSave}>
-          {isSaving ? "Saving..." : "Create"}
+          {isSaving ? t("agentChat.home.saving") : t("agentChat.home.create")}
         </Button>
       </div>
     </div>

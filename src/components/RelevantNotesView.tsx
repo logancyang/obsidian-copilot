@@ -6,6 +6,7 @@ import { createPluginRoot } from "@/utils/react/createPluginRoot";
 import { registerActiveLeafChangeBridge } from "@/utils/registerActiveLeafChangeBridge";
 import { ItemView, WorkspaceLeaf } from "obsidian";
 import * as React from "react";
+import { t } from "@/i18n";
 import { Root } from "react-dom/client";
 
 /**
@@ -39,11 +40,11 @@ export default class RelevantNotesView extends ItemView {
   }
 
   getTitle(): string {
-    return "Copilot Relevant Notes";
+    return t("agentChat.relevant.title");
   }
 
   getDisplayText(): string {
-    return "Copilot Relevant Notes";
+    return t("agentChat.relevant.title");
   }
 
   async onOpen(): Promise<void> {
