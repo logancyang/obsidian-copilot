@@ -43,7 +43,7 @@ function installedAdapterPath(packageMetadata: unknown): string {
 
 describe("codexVersion", () => {
   describe("resolveSupportedCodexAcpEntry()", () => {
-    it("accepts a launcher that resolves to the earliest published current adapter", () => {
+    it("https://github.com/logancyang/obsidian-copilot/issues/2967 accepts the earliest adapter with bundled CLI authentication", () => {
       const packageFileSystem = packageFs(UNIX_ENTRY, metadata(CODEX_ACP_MIN_VERSION));
 
       expect(
@@ -77,28 +77,28 @@ describe("codexVersion", () => {
       ).toThrow("not supported");
     });
 
-    it("https://github.com/logancyang/obsidian-copilot/issues/2916 asks users to upgrade an older current adapter", () => {
+    it("https://github.com/logancyang/obsidian-copilot/issues/2967 rejects an adapter without bundled CLI authentication", () => {
       expect(() =>
         resolveSupportedCodexAcpEntry(
           "/usr/local/bin/codex-acp",
           "darwin",
-          packageFs(UNIX_ENTRY, metadata("0.0.37"))
+          packageFs(UNIX_ENTRY, metadata("0.0.44"))
         )
-      ).toThrow("0.0.37 is not supported");
+      ).toThrow("0.0.44 is not supported");
     });
 
-    it("https://github.com/logancyang/obsidian-copilot/issues/2916 rejects a prerelease at the stable minimum", () => {
+    it("https://github.com/logancyang/obsidian-copilot/issues/2967 rejects a prerelease at the bundled CLI authentication minimum", () => {
       expect(() =>
         resolveSupportedCodexAcpEntry(
           "/usr/local/bin/codex-acp",
           "darwin",
-          packageFs(UNIX_ENTRY, metadata("0.0.38-beta.1"))
+          packageFs(UNIX_ENTRY, metadata("0.0.45-beta.1"))
         )
       ).toThrow("not supported");
     });
 
-    it.each(["1.8.0-beta.1", "1.7.0+build.1", "0.0.38+build.1"])(
-      "https://github.com/logancyang/obsidian-copilot/issues/2916 accepts supported versions with a semantic-version suffix: %s",
+    it.each(["1.8.0-beta.1", "1.7.0+build.1", "0.0.45+build.1"])(
+      "https://github.com/logancyang/obsidian-copilot/issues/2967 accepts supported versions with a semantic-version suffix: %s",
       (version) => {
         expect(
           resolveSupportedCodexAcpEntry(

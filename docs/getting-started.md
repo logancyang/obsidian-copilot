@@ -47,10 +47,10 @@ Copilot connects to Codex through the `codex-acp` adapter, which includes a comp
 
    Removing the unsupported Zed package first prevents its global `codex-acp` command from blocking installation.
 
-2. Run `codex-acp login` if Codex is not already signed in.
+2. Run `codex-acp cli login` if Codex is not already signed in.
 3. Use **Auto-detect**. On Windows, manual setup points to the installed package's `dist\index.js`; on macOS and Linux, it points to the `codex-acp` launcher.
 
-Copilot requires `@agentclientprotocol/codex-acp` 0.0.38 or newer. The older `@zed-industries/codex-acp` package is not supported. Codex uses the login stored by the bundled Codex CLI; there is no Codex key to paste into Copilot.
+Copilot requires `@agentclientprotocol/codex-acp` 0.0.45 or newer. The older `@zed-industries/codex-acp` package is not supported. Codex uses the login stored by the bundled Codex CLI; there is no Codex key to paste into Copilot.
 
 ## Start Your First Agent Chat
 

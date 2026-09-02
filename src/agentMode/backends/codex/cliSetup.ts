@@ -17,5 +17,8 @@ export function codexBinaryPathPlaceholder(platform: NodeJS.Platform): string {
 export const CODEX_INSTALL_COMMAND =
   "npm uninstall -g @zed-industries/codex-acp; npm install -g @agentclientprotocol/codex-acp";
 
-/** Sign in through the adapter's bundled, compatible Codex CLI. */
-export const CODEX_AUTH_COMMAND = "codex-acp login";
+/**
+ * Sign in through the bundled CLI because the dedicated login command requires
+ * a separate `codex` on PATH: https://github.com/agentclientprotocol/codex-acp/issues/459
+ */
+export const CODEX_AUTH_COMMAND = "codex-acp cli login";
