@@ -1,15 +1,12 @@
 import { SettingItem } from "@/components/ui/setting-item";
+import { t } from "@/i18n";
 import { logError } from "@/logger";
 import { useSettingsValue } from "@/settings/model";
 import React, { useSyncExternalStore } from "react";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import type { BackendDescriptor, EnabledModelEntry } from "@/agentMode/session/types";
 import { AgentDefaultEffortSetting } from "@/agentMode/ui/AgentDefaultEffortSetting";
-import {
-  EMPTY_EFFORT_OPTIONS,
-  MISSING_KEY_LABEL,
-  resolveEffortOptions,
-} from "./agentModelPickerHelpers";
+import { EMPTY_EFFORT_OPTIONS, resolveEffortOptions } from "./agentModelPickerHelpers";
 import { useManagerSubscribe } from "./useManagerSubscribe";
 
 interface Props {
@@ -19,8 +16,6 @@ interface Props {
 
 /** Sentinel option representing "no stored default — let the agent choose". */
 const AGENT_DEFAULT_VALUE = "__agent_default__";
-const AGENT_DEFAULT_LABEL = "Agent default";
-const EFFORT_NOT_SUPPORTED_LABEL = "Not supported";
 
 /**
  * Per-agent "Default model" picker shown in each toggled-on agent's settings
@@ -32,6 +27,7 @@ const EFFORT_NOT_SUPPORTED_LABEL = "Not supported";
  * chat picks it up on the next turn (see `AgentSessionManager`).
  */
 export const AgentDefaultModelSetting: React.FC<Props> = ({ descriptor, manager }) => {
+  const agentDefaultLabel = t("settings.agents.agentDefault");
   // Re-render when the model cache settles so freshly-probed effort options
   // and model names appear without a settings-tab reopen. The snapshot is a
   // cache signature, not just the preload status, so the post-`"ready"`
@@ -75,7 +71,7 @@ export const AgentDefaultModelSetting: React.FC<Props> = ({ descriptor, manager 
   // doesn't already carry one.
   const effortOptions =
     rawEffortOptions.length > 0 && !rawEffortOptions.some((o) => o.value === null)
-      ? [{ value: null, label: AGENT_DEFAULT_LABEL }, ...rawEffortOptions]
+      ? [{ value: null, label: agentDefaultLabel }, ...rawEffortOptions]
       : rawEffortOptions;
   const onModelChange = (baseModelId: string): void => {
     if (baseModelId === AGENT_DEFAULT_VALUE) {
@@ -113,18 +109,21 @@ export const AgentDefaultModelSetting: React.FC<Props> = ({ descriptor, manager 
     hasExplicitDefault && !enabledOptions.some((o) => o.value === selectedBaseId);
   const modelOptions = defaultMissingFromEnabled
     ? [
-        { label: AGENT_DEFAULT_LABEL, value: AGENT_DEFAULT_VALUE },
-        { label: `${current?.baseModelId} (disabled)`, value: selectedBaseId },
+        { label: agentDefaultLabel, value: AGENT_DEFAULT_VALUE },
+        {
+          label: t("settings.agents.disabledModel", { model: current?.baseModelId }),
+          value: selectedBaseId,
+        },
         ...enabledOptions,
       ]
-    : [{ label: AGENT_DEFAULT_LABEL, value: AGENT_DEFAULT_VALUE }, ...enabledOptions];
+    : [{ label: agentDefaultLabel, value: AGENT_DEFAULT_VALUE }, ...enabledOptions];
 
   return (
     <>
       <SettingItem
         type="select"
-        title="Default model"
-        description="Used for new chats and multi-agent answers on this agent. Open chats switch on their next turn."
+        title={t("settings.agents.defaultModel.title")}
+        description={t("settings.agents.backendDefaultModel.description")}
         value={selectedBaseId}
         onChange={onModelChange}
         options={modelOptions}
@@ -132,7 +131,9 @@ export const AgentDefaultModelSetting: React.FC<Props> = ({ descriptor, manager 
       <AgentDefaultEffortSetting
         value={current?.effort ?? null}
         options={effortOptions}
-        disabledLabel={hasExplicitDefault ? EFFORT_NOT_SUPPORTED_LABEL : AGENT_DEFAULT_LABEL}
+        disabledLabel={
+          hasExplicitDefault ? t("settings.agents.effortNotSupported") : agentDefaultLabel
+        }
         onChange={onEffortChange}
       />
     </>
@@ -142,6 +143,8 @@ export const AgentDefaultModelSetting: React.FC<Props> = ({ descriptor, manager 
 function modelOptionLabel(entry: EnabledModelEntry): string {
   const base = entry.name || entry.baseModelId;
   // Keep a missing-key model selectable (a default can be set before the key
-  // is added) but flag it, mirroring the chat picker's `MISSING_KEY_LABEL`.
-  return entry.credentialState === "missing_key" ? `${base} (${MISSING_KEY_LABEL})` : base;
+  // is added) but flag it, matching the chat picker's recovery label.
+  return entry.credentialState === "missing_key"
+    ? t("settings.agents.modelRequiresApiKey", { model: base })
+    : base;
 }

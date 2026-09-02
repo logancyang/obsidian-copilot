@@ -1,4 +1,5 @@
 import { SettingItem } from "@/components/ui/setting-item";
+import { t } from "@/i18n";
 import React from "react";
 
 interface NotificationSoundOption {
@@ -28,8 +29,8 @@ export const AgentNotificationSoundSettings: React.FC<AgentNotificationSoundSett
   <>
     <SettingItem
       type="switch"
-      title="Notification"
-      description="Plays a short sound when an agent finishes a turn."
+      title={t("settings.agents.notification.title")}
+      description={t("settings.agents.notification.description")}
       checked={enabled}
       onCheckedChange={onEnabledChange}
     />
@@ -39,8 +40,8 @@ export const AgentNotificationSoundSettings: React.FC<AgentNotificationSoundSett
     {enabled && (
       <SettingItem
         type="select"
-        title="Sound"
-        description="Choose which sound to play."
+        title={t("settings.agents.sound.title")}
+        description={t("settings.agents.sound.description")}
         value={soundId}
         onChange={onSoundChange}
         options={[...soundOptions]}

@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { PasswordInput } from "@/components/ui/password-input";
 import { MIYO_HOMEPAGE_URL, PLUS_UTM_MEDIUMS } from "@/constants";
+import { t } from "@/i18n";
 import {
   checkIsPaidUser,
   createPlusPageUrl,
@@ -50,14 +51,18 @@ export function PlusSettings() {
   return (
     <section className="tw-flex tw-flex-col tw-gap-4 tw-rounded-xl tw-border tw-border-solid tw-border-border tw-p-4 tw-shadow-sm tw-bg-interactive-accent/10">
       <div className="tw-flex tw-items-center tw-justify-between tw-gap-2 tw-text-lg tw-font-semibold">
-        <span>Copilot License</span>
+        <span>{t("settings.plus.title")}</span>
         {licenseStatus === "active" && (
           <Badge className="tw-rounded-full tw-bg-success tw-capitalize tw-text-success">
-            {license.plan === LIFETIME_PLAN ? "Lifetime" : (license.plan ?? "Active")}
+            {license.plan === LIFETIME_PLAN
+              ? t("settings.plus.status.lifetime")
+              : (license.plan ?? t("settings.plus.status.active"))}
           </Badge>
         )}
         {licenseStatus === "inactive" && (
-          <Badge className="tw-rounded-full tw-bg-error tw-text-error">Inactive</Badge>
+          <Badge className="tw-rounded-full tw-bg-error tw-text-error">
+            {t("settings.plus.status.inactive")}
+          </Badge>
         )}
       </div>
       <div className="tw-flex tw-flex-col tw-gap-2 tw-text-sm tw-text-muted">
@@ -68,13 +73,25 @@ export function PlusSettings() {
             rel="noopener noreferrer"
             className="tw-font-semibold tw-text-accent"
           >
-            Copilot paid plans
-          </a>{" "}
-          add <strong className="tw-font-semibold tw-text-normal">premium chat models</strong>,{" "}
-          <strong className="tw-font-semibold tw-text-normal">document understanding</strong>,{" "}
-          <strong className="tw-font-semibold tw-text-normal">advanced web search</strong>, and{" "}
-          <strong className="tw-font-semibold tw-text-normal">multi-agent capabilities</strong> to
-          your Copilot agentic experience. Pair it with{" "}
+            {t("settings.plus.plans")}
+          </a>
+          {t("settings.plus.pitch.intro")}
+          <strong className="tw-font-semibold tw-text-normal">
+            {t("settings.plus.pitch.premiumModels")}
+          </strong>
+          {t("settings.plus.pitch.separator")}
+          <strong className="tw-font-semibold tw-text-normal">
+            {t("settings.plus.pitch.documentUnderstanding")}
+          </strong>
+          {t("settings.plus.pitch.separator")}
+          <strong className="tw-font-semibold tw-text-normal">
+            {t("settings.plus.pitch.webSearch")}
+          </strong>
+          {t("settings.plus.pitch.finalSeparator")}
+          <strong className="tw-font-semibold tw-text-normal">
+            {t("settings.plus.pitch.multiAgent")}
+          </strong>
+          {t("settings.plus.pitch.afterFeatures")}
           <a
             href={MIYO_HOMEPAGE_URL}
             target="_blank"
@@ -82,8 +99,8 @@ export function PlusSettings() {
             className="tw-font-semibold tw-text-accent"
           >
             Miyo
-          </a>{" "}
-          and turn your vault into a centralized workspace for all your AI tools across devices.
+          </a>
+          {t("settings.plus.pitch.afterMiyo")}
         </div>
       </div>
 
@@ -95,13 +112,13 @@ export function PlusSettings() {
           cached flag still reads paid. */}
       {(isPaidUser === false || licenseStatus === "inactive") && !isChecking && (
         <div className="tw-flex tw-flex-col tw-gap-2 tw-rounded-lg tw-border tw-border-solid tw-border-border tw-bg-primary tw-p-3">
-          <div className="tw-text-sm tw-text-normal">All of it for a few dollars a month.</div>
+          <div className="tw-text-sm tw-text-normal">{t("settings.plus.tagline")}</div>
           <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-2">
             <Button
               className="tw-text-xs md:tw-text-sm"
               onClick={() => navigateToPlusPage(PLUS_UTM_MEDIUMS.SETTINGS)}
             >
-              See plans <ExternalLink className="tw-size-2 md:tw-size-4" />
+              {t("settings.plus.seePlans")} <ExternalLink className="tw-size-2 md:tw-size-4" />
             </Button>
             <a
               href={MIYO_HOMEPAGE_URL}
@@ -109,7 +126,7 @@ export function PlusSettings() {
               rel="noopener noreferrer"
               className="tw-inline-flex tw-items-center tw-gap-0.5 tw-text-sm tw-text-accent"
             >
-              New: pair Copilot with Miyo <ExternalLink className="tw-size-3.5" />
+              {t("settings.plus.pairMiyo")} <ExternalLink className="tw-size-3.5" />
             </a>
           </div>
         </div>
@@ -118,7 +135,7 @@ export function PlusSettings() {
       <div className="tw-flex tw-items-center tw-gap-2">
         <PasswordInput
           className="tw-w-full"
-          placeholder="Enter your license key"
+          placeholder={t("settings.plus.licensePlaceholder")}
           value={localLicenseKey}
           onChange={(value) => {
             setLocalLicenseKey(value);
@@ -132,7 +149,7 @@ export function PlusSettings() {
             const result = await checkIsPaidUser(app, { trigger: "manual" });
             setIsChecking(false);
             if (!result) {
-              setError("Invalid license key");
+              setError(t("settings.plus.invalidLicense"));
             } else {
               setError(null);
               new CopilotPlusWelcomeModal(app).open();
@@ -140,7 +157,11 @@ export function PlusSettings() {
           })}
           className="tw-min-w-10 tw-text-xs md:tw-text-sm"
         >
-          {isChecking ? <Loader2 className="tw-size-2 tw-animate-spin md:tw-size-4" /> : "Apply"}
+          {isChecking ? (
+            <Loader2 className="tw-size-2 tw-animate-spin md:tw-size-4" />
+          ) : (
+            t("settings.actions.apply")
+          )}
         </Button>
       </div>
       {error && <div className="tw-text-error">{error}</div>}
