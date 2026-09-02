@@ -80,6 +80,54 @@ export const NotIndexedGuidance: StoryObj<RelevantNotesPaneProps> = {
   args: { status: "not-indexed", noteRows: [] },
 };
 
+export const NoTextGuidance: StoryObj<RelevantNotesPaneProps> = {
+  args: { status: "no-text", noteRows: [] },
+};
+
+export const IndexingGuidance: StoryObj<RelevantNotesPaneProps> = {
+  args: { status: "indexing", noteRows: [] },
+};
+
+export const IndexErrorGuidance: StoryObj<RelevantNotesPaneProps> = {
+  args: {
+    status: "index-error",
+    details: { errorMessage: "Markdown parser failed" },
+    noteRows: [],
+  },
+};
+
+export const IndexErrorRemoteGuidance: StoryObj<RelevantNotesPaneProps> = {
+  args: {
+    status: "index-error",
+    details: { errorMessage: "Markdown parser failed" },
+    noteRows: [],
+    actions: {
+      ...baseArgs.actions,
+      reviewIndexing: { ...baseArgs.actions.reviewIndexing, destination: "settings" },
+    },
+  },
+};
+
+export const ExcludedGuidance: StoryObj<RelevantNotesPaneProps> = {
+  args: {
+    status: "excluded",
+    details: { exclusionReason: "exclude_pattern", exclusionRule: "**/journal/**" },
+    noteRows: [],
+  },
+};
+
+export const ExcludedRemoteGuidance: StoryObj<RelevantNotesPaneProps> = {
+  args: {
+    status: "excluded",
+    details: { exclusionReason: "exclude_pattern", exclusionRule: "**/journal/**" },
+    noteRows: [],
+    actions: {
+      ...baseArgs.actions,
+      reviewIndexing: { ...baseArgs.actions.reviewIndexing, destination: "settings" },
+    },
+  },
+};
+
 export const NotIndexedRemoteGuidance: StoryObj<RelevantNotesPaneProps> = {
   args: {
     status: "not-indexed",

@@ -19,7 +19,8 @@ export type {
 export class MiyoRequestError extends Error {
   public constructor(
     public readonly status: number,
-    public readonly detail: string
+    public readonly detail: string,
+    public readonly errorCode?: string
   ) {
     // Some Miyo failures have no response body; retaining the prior status-only
     // message keeps those callers stable while exposing structured fields.
@@ -164,6 +165,35 @@ export interface MiyoRelatedSearchResult {
  */
 export interface MiyoRelatedSearchResponse {
   results: MiyoRelatedSearchResult[];
+}
+
+export type MiyoFileStatus =
+  | "indexed"
+  | "pending"
+  | "error"
+  | "excluded"
+  | "not_scanned"
+  | "missing";
+
+export type MiyoFileStatusReason =
+  | "exclude_folder"
+  | "exclude_pattern"
+  | "include_folder"
+  | "include_pattern"
+  | "extension"
+  | "hidden";
+
+/**
+ * Miyo's classification of one vault-relative file within a registered folder.
+ */
+export interface MiyoFileStatusResponse {
+  status: MiyoFileStatus;
+  file_path: string;
+  total_chunks?: number;
+  last_indexed_at?: string;
+  error_message?: string;
+  reason?: MiyoFileStatusReason;
+  rule?: string;
 }
 
 /**
@@ -629,6 +659,28 @@ export class MiyoClient {
   }
 
   /**
+   * Classify one file when related search cannot find indexed chunks for it.
+   *
+   * @param baseUrl - Miyo base URL.
+   * @param folderName - Vault folder name registered in Miyo.
+   * @param filePath - File path relative to the registered folder.
+   * @returns Miyo's current file classification and available details.
+   */
+  public async fileStatus(
+    baseUrl: string,
+    folderName: string,
+    filePath: string
+  ): Promise<MiyoFileStatusResponse> {
+    return this.requestJson<MiyoFileStatusResponse>(baseUrl, "/v0/folder/file-status", {
+      method: "GET",
+      query: {
+        folder_name: folderName,
+        file_path: filePath,
+      },
+    });
+  }
+
+  /**
    * Parse a local document via Miyo.
    *
    * @param baseUrl - Miyo base URL.
@@ -711,16 +763,16 @@ export class MiyoClient {
     });
 
     if (response.status >= 400) {
-      const errorPayload = this.parseResponseJson<{ detail?: string }>(
+      const errorPayload = this.parseResponseJson<{ detail?: string; error?: string }>(
         response.json,
         response.text
       );
-      const errorText = errorPayload?.detail || response.text || "";
+      const errorText = errorPayload?.detail || response.text || errorPayload?.error || "";
       logWarn(`Miyo request failed (${response.status}): ${errorText}`);
       // Relevant Notes must distinguish an unindexed source from a service
       // outage without parsing human-readable error messages.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
-      throw new MiyoRequestError(response.status, errorText);
+      throw new MiyoRequestError(response.status, errorText, errorPayload?.error);
     }
 
     const parsed = this.parseResponseJson<T>(response.json, response.text);

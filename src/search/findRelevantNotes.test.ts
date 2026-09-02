@@ -20,7 +20,7 @@ jest.mock("@/settings/model", () => ({ getSettings: jest.fn() }));
 
 const mockResolveBaseUrl = jest.fn();
 const mockSearchRelated = jest.fn();
-const mockGetFolder = jest.fn();
+const mockFileStatus = jest.fn();
 
 jest.mock("@/miyo/MiyoClient", () => {
   const actual = jest.requireActual<typeof import("@/miyo/MiyoClient")>("@/miyo/MiyoClient");
@@ -29,7 +29,7 @@ jest.mock("@/miyo/MiyoClient", () => {
     MiyoClient: jest.fn().mockImplementation(() => ({
       resolveBaseUrl: (...args: unknown[]) => mockResolveBaseUrl(...args) as unknown,
       searchRelated: (...args: unknown[]) => mockSearchRelated(...args) as unknown,
-      getFolder: (...args: unknown[]) => mockGetFolder(...args) as unknown,
+      fileStatus: (...args: unknown[]) => mockFileStatus(...args) as unknown,
     })),
   };
 });
@@ -87,11 +87,11 @@ describe("findRelevantNotes", () => {
       );
       mockResolveBaseUrl.mockResolvedValue("http://127.0.0.1:8742");
       mockSearchRelated.mockResolvedValue({ results: [] });
-      mockGetFolder.mockResolvedValue({ path: "vault" });
+      mockFileStatus.mockResolvedValue({ status: "pending", file_path: "source.md" });
       mockedMiyoClient.mockImplementation(() => ({
         resolveBaseUrl: mockResolveBaseUrl,
         searchRelated: mockSearchRelated,
-        getFolder: mockGetFolder,
+        fileStatus: mockFileStatus,
       }));
 
       const paths = [
@@ -205,7 +205,7 @@ describe("findRelevantNotes", () => {
       });
 
       expect(result).toEqual({ status: "no-matches", notes: [] });
-      expect(mockGetFolder).not.toHaveBeenCalled();
+      expect(mockFileStatus).not.toHaveBeenCalled();
       expect(mockedGetLinkedNotes).not.toHaveBeenCalled();
       expect(mockedGetBacklinkedNotes).not.toHaveBeenCalled();
     });
@@ -292,6 +292,9 @@ describe("findRelevantNotes", () => {
       const noMatchesResult = await findRelevantNotes({ app: window.app, filePath: "source.md" });
 
       mockSearchRelated.mockRejectedValue(new MiyoRequestError(404, ""));
+      mockFileStatus.mockRejectedValue(
+        new MiyoRequestError(501, '{"error":"not_implemented"}', "not_implemented")
+      );
       const notIndexedResult = await findRelevantNotes({
         app: window.app,
         filePath: "source.md",
@@ -327,9 +330,76 @@ describe("findRelevantNotes", () => {
     });
 
     it.each(["", "Source file is not indexed"])(
-      "returns no rows and reports not-indexed for 404 detail %p (https://github.com/Brevilabs/obsidian-copilot-private/issues/280; https://github.com/logancyang/obsidian-copilot/pull/2992#discussion_r3919646861)",
+      "classifies every related-search 404 regardless of detail %p (https://github.com/Brevilabs/obsidian-copilot-private/issues/280; https://github.com/logancyang/obsidian-copilot/pull/2992#discussion_r3919646861)",
       async (detail) => {
         mockSearchRelated.mockRejectedValue(new MiyoRequestError(404, detail));
+        mockFileStatus.mockResolvedValue({ status: "pending", file_path: "source.md" });
+
+        const result = await findRelevantNotes({
+          app: window.app,
+          filePath: "source.md",
+        });
+
+        expect(result.status).toBe("indexing");
+        expect(mockFileStatus).toHaveBeenCalledWith("http://127.0.0.1:8742", "vault", "source.md");
+      }
+    );
+
+    it.each([
+      {
+        fileStatus: { status: "indexed", file_path: "source.md", total_chunks: 4 },
+        expectedStatus: "no-matches",
+        expectedDetails: undefined,
+      },
+      {
+        fileStatus: { status: "indexed", file_path: "source.md", total_chunks: 0 },
+        expectedStatus: "no-text",
+        expectedDetails: undefined,
+      },
+      {
+        fileStatus: { status: "pending", file_path: "source.md" },
+        expectedStatus: "indexing",
+        expectedDetails: undefined,
+      },
+      {
+        fileStatus: { status: "not_scanned", file_path: "source.md" },
+        expectedStatus: "indexing",
+        expectedDetails: undefined,
+      },
+      {
+        fileStatus: { status: "missing", file_path: "source.md" },
+        expectedStatus: "indexing",
+        expectedDetails: undefined,
+      },
+      {
+        fileStatus: {
+          status: "error",
+          file_path: "source.md",
+          error_message: "Markdown parser failed",
+        },
+        expectedStatus: "index-error",
+        expectedDetails: { errorMessage: "Markdown parser failed" },
+      },
+      {
+        fileStatus: {
+          status: "excluded",
+          file_path: "source.md",
+          reason: "exclude_pattern",
+          rule: "private/**",
+        },
+        expectedStatus: "excluded",
+        expectedDetails: {
+          exclusionReason: "exclude_pattern",
+          exclusionRule: "private/**",
+        },
+      },
+    ])(
+      "maps $fileStatus.status status without returning link-only rows (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)",
+      async ({ fileStatus, expectedStatus, expectedDetails }) => {
+        mockSearchRelated.mockRejectedValue(
+          new MiyoRequestError(404, "No indexed chunks found for file_path")
+        );
+        mockFileStatus.mockResolvedValue(fileStatus);
         mockedGetLinkedNotes.mockReturnValue([createMarkdownFile("linked-only.md")]);
 
         const result = await findRelevantNotes({
@@ -338,15 +408,17 @@ describe("findRelevantNotes", () => {
         });
 
         expect(result.notes).toEqual([]);
-        expect(result.status).toBe("not-indexed");
-        expect(mockGetFolder).toHaveBeenCalledWith("http://127.0.0.1:8742", "vault");
+        expect(result.status).toBe(expectedStatus);
+        expect(result.details).toEqual(expectedDetails);
+        expect(mockFileStatus).toHaveBeenCalledWith("http://127.0.0.1:8742", "vault", "source.md");
+        expect(mockedGetMiyoFilePath).toHaveBeenCalledWith(window.app, "source.md");
         expect(mockedGetLinkedNotes).not.toHaveBeenCalled();
         expect(mockedGetBacklinkedNotes).not.toHaveBeenCalled();
         expect(mockedLogError).not.toHaveBeenCalled();
       }
     );
 
-    it("keeps the original authorization identity for related search and its 404 folder probe after live settings change (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
+    it("keeps the original authorization identity for related search and its file-status probe after live settings change (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
       const requestAuthorizationIdentities: Array<string | undefined> = [];
       mockedGetSettings.mockReturnValue({
         enableMiyo: true,
@@ -368,27 +440,76 @@ describe("findRelevantNotes", () => {
             } as CopilotSettings);
             return mockSearchRelated(...args) as unknown;
           },
-          getFolder: (...args: unknown[]) => {
+          fileStatus: (...args: unknown[]) => {
             requestAuthorizationIdentities.push(clientAuthSnapshot.plusLicenseKey);
-            return mockGetFolder(...args) as unknown;
+            return mockFileStatus(...args) as unknown;
           },
         };
       });
       mockSearchRelated.mockRejectedValue(new MiyoRequestError(404, ""));
+      mockFileStatus.mockResolvedValue({ status: "pending" });
 
       const result = await findRelevantNotes({ app: window.app, filePath: "source.md" });
 
-      expect(result.status).toBe("not-indexed");
+      expect(result.status).toBe("indexing");
       expect(mockedMiyoClient).toHaveBeenCalledWith({ plusLicenseKey: "old-license" });
       expect(requestAuthorizationIdentities).toEqual(["old-license", "old-license"]);
       expect(mockedGetSettings).toHaveBeenCalledTimes(1);
     });
 
-    it("returns no link-only rows when an unindexed source cannot confirm folder registration (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
+    it("returns no link-only rows for the compatibility state from an exact old-Miyo response (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
       mockSearchRelated.mockRejectedValue(
         new MiyoRequestError(404, "No indexed chunks found for file_path")
       );
-      mockGetFolder.mockRejectedValue(new MiyoRequestError(404, "Folder unavailable"));
+      mockFileStatus.mockRejectedValue(
+        new MiyoRequestError(501, '{"error":"not_implemented"}', "not_implemented")
+      );
+      mockedGetLinkedNotes.mockReturnValue([createMarkdownFile("linked-only.md")]);
+
+      const result = await findRelevantNotes({
+        app: window.app,
+        filePath: "source.md",
+      });
+
+      expect(result.notes).toEqual([]);
+      expect(result.status).toBe("not-indexed");
+      expect(mockFileStatus).toHaveBeenCalledWith("http://127.0.0.1:8742", "vault", "source.md");
+      expect(mockedGetLinkedNotes).not.toHaveBeenCalled();
+      expect(mockedGetBacklinkedNotes).not.toHaveBeenCalled();
+      expect(mockedLogError).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      new MiyoRequestError(501, "not supported", "other_error"),
+      new MiyoRequestError(501, "not_implemented"),
+      new MiyoRequestError(404, "Folder unavailable"),
+      new Error("network down"),
+    ])(
+      "returns no graph-only rows when file status fails with $message (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)",
+      async (statusError) => {
+        mockSearchRelated.mockRejectedValue(
+          new MiyoRequestError(404, "No indexed chunks found for file_path")
+        );
+        mockFileStatus.mockRejectedValue(statusError);
+        mockedGetBacklinkedNotes.mockReturnValue([createMarkdownFile("linked-only.md")]);
+
+        const result = await findRelevantNotes({
+          app: window.app,
+          filePath: "source.md",
+        });
+
+        expect(result).toEqual({ notes: [], status: "unavailable" });
+        expect(mockedGetLinkedNotes).not.toHaveBeenCalled();
+        expect(mockedGetBacklinkedNotes).not.toHaveBeenCalled();
+        expect(mockedLogError).toHaveBeenCalledTimes(1);
+      }
+    );
+
+    it("returns no graph-only rows for an unknown file-status classification (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
+      mockSearchRelated.mockRejectedValue(
+        new MiyoRequestError(404, "No indexed chunks found for file_path")
+      );
+      mockFileStatus.mockResolvedValue({ status: "future_status", file_path: "source.md" });
       mockedGetBacklinkedNotes.mockReturnValue([createMarkdownFile("linked-only.md")]);
 
       const result = await findRelevantNotes({
@@ -402,13 +523,13 @@ describe("findRelevantNotes", () => {
       expect(mockedLogError).toHaveBeenCalledTimes(1);
     });
 
-    it("reports unavailable when the registration probe times out (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
+    it("reports unavailable when the file-status request times out (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
       jest.useFakeTimers();
       try {
         mockSearchRelated.mockRejectedValue(
           new MiyoRequestError(404, "No indexed chunks found for file_path")
         );
-        mockGetFolder.mockReturnValue(new Promise(() => undefined));
+        mockFileStatus.mockReturnValue(new Promise(() => undefined));
 
         const resultPromise = findRelevantNotes({
           app: window.app,
@@ -438,7 +559,7 @@ describe("findRelevantNotes", () => {
         await jest.advanceTimersByTimeAsync(8000);
 
         await expect(resultPromise).resolves.toEqual({ notes: [], status: "unavailable" });
-        expect(mockGetFolder).not.toHaveBeenCalled();
+        expect(mockFileStatus).not.toHaveBeenCalled();
         expect(mockedGetLinkedNotes).not.toHaveBeenCalled();
       } finally {
         jest.useRealTimers();
@@ -473,7 +594,7 @@ describe("findRelevantNotes", () => {
       });
 
       expect(result.status).toBe("unavailable");
-      expect(mockGetFolder).not.toHaveBeenCalled();
+      expect(mockFileStatus).not.toHaveBeenCalled();
       expect(mockedLogError).toHaveBeenCalledTimes(1);
     });
   });

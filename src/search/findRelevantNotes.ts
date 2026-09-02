@@ -1,5 +1,5 @@
 import { logError, logInfo } from "@/logger";
-import { MiyoClient, MiyoRequestError } from "@/miyo/MiyoClient";
+import { MiyoClient, MiyoRequestError, type MiyoFileStatusReason } from "@/miyo/MiyoClient";
 import {
   getMiyoCustomUrl,
   getMiyoFilePath,
@@ -14,7 +14,7 @@ import { App, TFile } from "obsidian";
 
 const MAX_RESULTS = 20;
 const MIYO_RELATED_SEARCH_TIMEOUT_MS = 8000;
-const MIYO_FOLDER_LOOKUP_TIMEOUT_MS = 8000;
+const MIYO_FILE_STATUS_TIMEOUT_MS = 8000;
 
 /**
  * Fetch Miyo's ordered related-note results.
@@ -122,21 +122,62 @@ async function searchRelatedNotesWithMiyo(
     }
 
     try {
-      // A registered folder proves setup is healthy, but Miyo cannot tell
-      // whether this particular path is still indexing or excluded.
+      // A search miss does not distinguish indexing, filter, parse, and absent-file
+      // states. Ask Miyo for the source classification without converting the
+      // vault-relative path to the absolute path used by related search.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
-      await withTimeout(
-        () => miyoClient.getFolder(baseUrl, folderName),
-        MIYO_FOLDER_LOOKUP_TIMEOUT_MS,
-        "Relevant Notes Miyo folder lookup"
+      const fileStatus = await withTimeout(
+        () => miyoClient.fileStatus(baseUrl, folderName, filePath),
+        MIYO_FILE_STATUS_TIMEOUT_MS,
+        "Relevant Notes Miyo file status"
       );
-      return { scoreByPath: new Map(), status: "not-indexed" };
-    } catch (folderError) {
-      // Without a successful folder probe, Copilot cannot distinguish an
-      // unindexed note from a broken Miyo setup, so recovery must stay generic.
+      switch (fileStatus.status) {
+        case "indexed":
+          return {
+            scoreByPath: new Map(),
+            status: fileStatus.total_chunks === 0 ? "no-text" : "no-matches",
+          };
+        case "pending":
+        case "not_scanned":
+        case "missing":
+          return { scoreByPath: new Map(), status: "indexing" };
+        case "error":
+          return {
+            scoreByPath: new Map(),
+            status: "index-error",
+            details: { errorMessage: fileStatus.error_message },
+          };
+        case "excluded":
+          return {
+            scoreByPath: new Map(),
+            status: "excluded",
+            details: {
+              exclusionReason: fileStatus.reason,
+              exclusionRule: fileStatus.rule,
+            },
+          };
+        default:
+          // Unknown classifications must not expose graph-only rows as if Miyo
+          // had confirmed a healthy state.
+          // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
+          logError(
+            `RelevantNotes(Miyo): unknown file status for file_path=${filePath} folder_name=${folderName}: ${String(fileStatus.status)}`
+          );
+          return { scoreByPath: new Map(), status: "unavailable" };
+      }
+    } catch (statusError) {
+      // Old Miyo builds use this exact structured response for unknown routes.
+      // Other 501s are real failures and must not be misreported as compatibility.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
+      if (
+        statusError instanceof MiyoRequestError &&
+        statusError.status === 501 &&
+        statusError.errorCode === "not_implemented"
+      ) {
+        return { scoreByPath: new Map(), status: "not-indexed" };
+      }
       logError(
-        `RelevantNotes(Miyo): source has no indexed chunks and folder lookup failed for folder_name=${folderName}: ${(folderError as Error).message}`
+        `RelevantNotes(Miyo): source has no indexed chunks and file status failed for file_path=${filePath} folder_name=${folderName}: ${(statusError as Error).message}`
       );
       return { scoreByPath: new Map(), status: "unavailable" };
     }
@@ -147,12 +188,23 @@ export type RelevantNotesSearchStatus =
   | "disabled"
   | "matches"
   | "no-matches"
+  | "no-text"
+  | "indexing"
+  | "index-error"
+  | "excluded"
   | "not-indexed"
   | "unavailable";
+
+export interface RelevantNotesStatusDetails {
+  errorMessage?: string;
+  exclusionReason?: MiyoFileStatusReason;
+  exclusionRule?: string;
+}
 
 interface RelatedNotesSearchResult {
   scoreByPath: Map<string, number>;
   status: RelevantNotesSearchStatus;
+  details?: RelevantNotesStatusDetails;
 }
 
 /**
@@ -198,6 +250,7 @@ export interface RelevantNoteEntry {
 export interface RelevantNotesResult {
   notes: readonly RelevantNoteEntry[];
   status: RelevantNotesSearchStatus;
+  details?: RelevantNotesStatusDetails;
 }
 
 const EMPTY_RELEVANT_NOTES: readonly RelevantNoteEntry[] = Object.freeze([]);
@@ -241,13 +294,17 @@ export async function findRelevantNotes({
     return { notes: EMPTY_RELEVANT_NOTES, status: "unavailable" };
   }
 
-  const { scoreByPath, status } = await searchRelatedNotesWithMiyo(app, filePath, settings);
+  const { scoreByPath, status, details } = await searchRelatedNotesWithMiyo(
+    app,
+    filePath,
+    settings
+  );
   // Every result row must come from Miyo. Showing link-only rows for any empty
   // search state makes Relevant Notes look partially functional without the
   // index that defines relevance.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
   if (status !== "matches") {
-    return { notes: EMPTY_RELEVANT_NOTES, status };
+    return { notes: EMPTY_RELEVANT_NOTES, status, details };
   }
   const noteLinks = getNoteLinks(app, file);
 
@@ -272,5 +329,5 @@ export async function findRelevantNotes({
       };
     })
     .filter((entry) => entry !== null);
-  return { notes: notes.length === 0 ? EMPTY_RELEVANT_NOTES : notes, status };
+  return { notes: notes.length === 0 ? EMPTY_RELEVANT_NOTES : notes, status, details };
 }
