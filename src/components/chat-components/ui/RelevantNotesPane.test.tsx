@@ -4,6 +4,7 @@ import React from "react";
 
 const BASE_PROPS: RelevantNotesPaneProps = {
   guidance: null,
+  isPending: false,
   noteCount: 1,
   noteRows: <div>Related note</div>,
   miyoDownloadUrl: "https://www.miyo.md/",
@@ -12,6 +13,22 @@ const BASE_PROPS: RelevantNotesPaneProps = {
 
 describe("RelevantNotesPane", () => {
   describe("RelevantNotesPane()", () => {
+    it("shows neutral loading feedback while the Miyo request is pending (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", () => {
+      render(
+        <RelevantNotesPane
+          {...BASE_PROPS}
+          guidance="setup"
+          isPending
+          noteCount={0}
+          noteRows={null}
+        />
+      );
+
+      expect(screen.getByText("Finding relevant notes…")).toBeTruthy();
+      expect(screen.queryByText("Check your Miyo setup")).toBeNull();
+      expect(screen.queryByText("No relevant notes found")).toBeNull();
+    });
+
     it("renders scored results without setup guidance", () => {
       render(<RelevantNotesPane {...BASE_PROPS} />);
 

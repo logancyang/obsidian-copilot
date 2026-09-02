@@ -24,6 +24,7 @@ let mockSettings = {
   qaInclusions: "",
   qaExclusions: "",
 };
+let mockMiyoBackend = "unknown";
 
 jest.mock("@/context", () => ({
   useApp: () => mockApp,
@@ -35,6 +36,10 @@ jest.mock("@/hooks/useActiveFile", () => ({
 
 jest.mock("@/hooks/useNoteDrag", () => ({
   useNoteDrag: () => jest.fn(),
+}));
+
+jest.mock("@/miyo/useMiyoStatus", () => ({
+  useMiyoStatus: () => ({ backend: mockMiyoBackend }),
 }));
 
 jest.mock("@/search/findRelevantNotes", () => ({
@@ -73,6 +78,7 @@ describe("RelevantNotes", () => {
       qaInclusions: "",
       qaExclusions: "",
     };
+    mockMiyoBackend = "unknown";
     const sourceFile = makeMarkdownFile("Source.md");
     const targetFile = makeMarkdownFile("Target.md");
     mockUseActiveFile.mockReturnValue(sourceFile);
@@ -120,6 +126,72 @@ describe("RelevantNotes", () => {
       fireEvent.click(await screen.findByRole("button", { name: "Open Miyo settings" }));
       expect(screen.queryByText("Target")).toBeNull();
       expect(openCopilotSettings).toHaveBeenCalledWith(mockApp, window, "miyo");
+    });
+
+    it("keeps setup guidance hidden while the Miyo request is pending (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
+      mockSettings = { ...mockSettings, enableMiyo: true };
+      mockFindRelevantNotes.mockReturnValue(new Promise(() => undefined));
+
+      render(<RelevantNotes onAddToChat={jest.fn()} />);
+
+      expect(await screen.findByText("Finding relevant notes…")).toBeTruthy();
+      expect(screen.queryByText("Check your Miyo setup")).toBeNull();
+      expect(screen.queryByText("No relevant notes found")).toBeNull();
+    });
+
+    it("keeps setup guidance hidden when no Markdown note is active (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", () => {
+      mockSettings = { ...mockSettings, enableMiyo: true };
+      mockUseActiveFile.mockReturnValue(null);
+
+      render(<RelevantNotes onAddToChat={jest.fn()} />);
+
+      expect(screen.queryByText("Check your Miyo setup")).toBeNull();
+      expect(screen.getByText("No relevant notes found")).toBeTruthy();
+      expect(mockFindRelevantNotes).not.toHaveBeenCalled();
+    });
+
+    it("starts a fresh request when the same note reopens after no note was active (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
+      mockSettings = { ...mockSettings, enableMiyo: true };
+      const sourceFile = makeMarkdownFile("Source.md");
+
+      const { rerender } = render(<RelevantNotes onAddToChat={jest.fn()} />);
+      expect(await screen.findByText("Target")).toBeTruthy();
+
+      mockUseActiveFile.mockReturnValue(null);
+      rerender(<RelevantNotes onAddToChat={jest.fn()} />);
+      expect(screen.getByText("No relevant notes found")).toBeTruthy();
+
+      mockFindRelevantNotes.mockReturnValueOnce(new Promise(() => undefined));
+      mockUseActiveFile.mockReturnValue(sourceFile);
+      rerender(<RelevantNotes onAddToChat={jest.fn()} />);
+
+      expect(await screen.findByText("Finding relevant notes…")).toBeTruthy();
+      expect(screen.queryByText("Target")).toBeNull();
+    });
+
+    it("refetches when the configured Miyo backend becomes available (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
+      mockSettings = { ...mockSettings, enableMiyo: true };
+      mockMiyoBackend = "unavailable";
+      mockFindRelevantNotes.mockResolvedValueOnce([]).mockResolvedValueOnce([
+        {
+          note: { path: "Target.md", title: "Target" },
+          metadata: {
+            score: 0.9,
+            similarityScore: 0.9,
+            hasOutgoingLinks: false,
+            hasBacklinks: false,
+          },
+        },
+      ]);
+
+      const { rerender } = render(<RelevantNotes onAddToChat={jest.fn()} />);
+      expect(await screen.findByText("Check your Miyo setup")).toBeTruthy();
+
+      mockMiyoBackend = "available";
+      rerender(<RelevantNotes onAddToChat={jest.fn()} />);
+
+      expect(await screen.findByText("Target")).toBeTruthy();
+      expect(mockFindRelevantNotes).toHaveBeenCalledTimes(2);
     });
 
     it("shows graph-only rows without setup guidance after Miyo search succeeds (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {

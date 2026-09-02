@@ -35,6 +35,7 @@ function NoteRows({ scored }: { scored: boolean }) {
 
 const baseArgs: RelevantNotesPaneProps = {
   guidance: null,
+  isPending: false,
   noteCount: 2,
   noteRows: <NoteRows scored />,
   miyoDownloadUrl: "https://www.miyo.md/",
@@ -51,6 +52,10 @@ const meta = {
 export default meta;
 
 export const ConnectedScoredResults: StoryObj<RelevantNotesPaneProps> = {};
+
+export const Loading: StoryObj<RelevantNotesPaneProps> = {
+  args: { isPending: true, noteCount: 0, noteRows: null },
+};
 
 export const NoMiyoEmptyGuidance: StoryObj<RelevantNotesPaneProps> = {
   args: { guidance: "download", noteCount: 0, noteRows: null },

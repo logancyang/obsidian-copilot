@@ -1,11 +1,12 @@
 import { Button } from "@/components/ui/button";
-import { Download } from "lucide-react";
+import { Download, Loader2 } from "lucide-react";
 import React from "react";
 
 export type RelevantNotesGuidance = "download" | "setup" | null;
 
 export interface RelevantNotesPaneProps {
   guidance: RelevantNotesGuidance;
+  isPending: boolean;
   noteCount: number;
   noteRows: React.ReactNode;
   miyoDownloadUrl: string;
@@ -15,11 +16,24 @@ export interface RelevantNotesPaneProps {
 /** Render the result, empty, and Miyo-help states without plugin or Obsidian runtime access. */
 export function RelevantNotesPane({
   guidance,
+  isPending,
   noteCount,
   noteRows,
   miyoDownloadUrl,
   onOpenMiyoSettings,
 }: RelevantNotesPaneProps): React.ReactElement {
+  // A pending request has not established either an empty result or a setup
+  // failure, so keep its status neutral until the request settles.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
+  if (isPending) {
+    return (
+      <div className="tw-flex tw-h-full tw-items-center tw-justify-center tw-gap-2 tw-text-sm tw-text-normal">
+        <Loader2 className="tw-size-4 tw-animate-spin" />
+        Finding relevant notes…
+      </div>
+    );
+  }
+
   const isDownload = guidance === "download";
   const guidancePanel = guidance ? (
     <div
