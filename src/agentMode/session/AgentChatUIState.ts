@@ -114,14 +114,6 @@ export class AgentChatUIState implements AgentChatBackend {
     return this.session.getStatus() === "starting";
   }
 
-  isBusy(): boolean {
-    const status = this.session.getStatus();
-    // The session status is synchronous and authoritative, including after a
-    // running chat is reconstructed with a fresh UI draft.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/357
-    return status === "starting" || status === "running" || status === "awaiting_permission";
-  }
-
   getBackendState(): BackendState | null {
     return this.session.getState();
   }

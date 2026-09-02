@@ -3,15 +3,9 @@ import { AgentChatInput } from "@/agentMode/ui/AgentChatInput";
 import { AGENT_PROMPT_SUGGESTIONS } from "@/agentMode/ui/agentPromptSuggestions";
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
 import type { AgentInputDraftControls } from "@/agentMode/ui/hooks/useAgentInputDrafts";
-import { ChatViewEventTarget, EventTargetContext } from "@/context";
-import {
-  ChatInputProvider,
-  type ChatInputComposerSnapshot,
-  useChatInput,
-} from "@/context/ChatInputContext";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { App } from "obsidian";
-import React, { useEffect, useLayoutEffect } from "react";
+import React from "react";
 
 // Mock factory names must match the real `use*` exports, so the no-hook `use`
 // prefix is expected on the mocked hooks below.
@@ -93,39 +87,6 @@ jest.mock("@/services/webViewerService/activeWebTabSnapshot", () => ({
 
 const makeApp = (): App => ({ workspace: { getActiveFile: () => null } }) as unknown as App;
 
-const mockCaptureComposer = jest.fn<ChatInputComposerSnapshot, []>(() => ({
-  editorState: null,
-  contextUrls: [],
-  contextFolders: [],
-  contextWebTabs: [],
-}));
-
-const ComposerSnapshotProbe = () => {
-  const chatInput = useChatInput();
-  useEffect(
-    () =>
-      chatInput.registerComposerSnapshotBridge({
-        capture: mockCaptureComposer,
-        restore: jest.fn(),
-      }),
-    [chatInput]
-  );
-  return null;
-};
-
-const SubmitPromptOnLayout = ({
-  eventTarget,
-  prompt,
-}: {
-  eventTarget: ChatViewEventTarget;
-  prompt: string;
-}) => {
-  useLayoutEffect(() => {
-    eventTarget.queueSubmitPrompt(prompt);
-  }, [eventTarget, prompt]);
-  return null;
-};
-
 const makeDraft = (overrides: Partial<AgentInputDraftControls> = {}): AgentInputDraftControls => ({
   input: "hello",
   images: [],
@@ -149,11 +110,9 @@ const makeDraft = (overrides: Partial<AgentInputDraftControls> = {}): AgentInput
 function inputNode(
   backend: AgentChatBackend,
   draft: AgentInputDraftControls,
-  extraProps: Partial<React.ComponentProps<typeof AgentChatInput>> = {},
-  eventTarget?: EventTarget,
-  submitPromptOnLayout?: string
+  extraProps: Partial<React.ComponentProps<typeof AgentChatInput>> = {}
 ) {
-  const input = (
+  return (
     <AgentChatInput
       backend={backend}
       plugin={{} as never}
@@ -162,7 +121,7 @@ function inputNode(
       app={makeApp()}
       mainAgentId={null}
       updateUserMessageHistory={jest.fn()}
-      isBusy={false}
+      isStarting={false}
       hasPendingPlanPermission={false}
       modelPickerOverride={undefined}
       modePickerOverride={undefined}
@@ -170,30 +129,13 @@ function inputNode(
       {...extraProps}
     />
   );
-  const inputWithEventTarget = eventTarget ? (
-    <EventTargetContext.Provider value={eventTarget}>
-      {input}
-      {submitPromptOnLayout && eventTarget instanceof ChatViewEventTarget ? (
-        <SubmitPromptOnLayout eventTarget={eventTarget} prompt={submitPromptOnLayout} />
-      ) : null}
-    </EventTargetContext.Provider>
-  ) : (
-    input
-  );
-  return (
-    <ChatInputProvider>
-      <ComposerSnapshotProbe />
-      {inputWithEventTarget}
-    </ChatInputProvider>
-  );
 }
 
 const renderInput = (
   backend: AgentChatBackend,
   draft: AgentInputDraftControls,
-  extraProps: Partial<React.ComponentProps<typeof AgentChatInput>> = {},
-  eventTarget?: EventTarget
-) => render(inputNode(backend, draft, extraProps, eventTarget));
+  extraProps: Partial<React.ComponentProps<typeof AgentChatInput>> = {}
+) => render(inputNode(backend, draft, extraProps));
 
 describe("AgentChatInput", () => {
   describe("identity and agent-mention gate", () => {
@@ -205,11 +147,7 @@ describe("AgentChatInput", () => {
     it("passes the real installed-agent list when entitled", () => {
       mockUseCanUseMultiAgent.mockReturnValue(true);
       renderInput(
-        {
-          sendMessage: jest.fn(),
-          cancel: jest.fn(),
-          isBusy: () => false,
-        } as unknown as AgentChatBackend,
+        { sendMessage: jest.fn(), cancel: jest.fn() } as unknown as AgentChatBackend,
         makeDraft()
       );
       expect(capturedAgentBrands).toBe(FAKE_BRANDS);
@@ -219,11 +157,7 @@ describe("AgentChatInput", () => {
       const clearSelectedTextContexts = jest.requireMock("@/aiParams")
         .clearSelectedTextContexts as jest.Mock;
       clearSelectedTextContexts.mockClear();
-      const backend = {
-        sendMessage: jest.fn(),
-        cancel: jest.fn(),
-        isBusy: () => false,
-      } as unknown as AgentChatBackend;
+      const backend = { sendMessage: jest.fn(), cancel: jest.fn() } as unknown as AgentChatBackend;
       const draft = makeDraft();
       const view = renderInput(backend, draft);
 
@@ -236,11 +170,7 @@ describe("AgentChatInput", () => {
     it("passes the frozen empty list (not a fresh []) when not entitled", () => {
       mockUseCanUseMultiAgent.mockReturnValue(false);
       renderInput(
-        {
-          sendMessage: jest.fn(),
-          cancel: jest.fn(),
-          isBusy: () => false,
-        } as unknown as AgentChatBackend,
+        { sendMessage: jest.fn(), cancel: jest.fn() } as unknown as AgentChatBackend,
         makeDraft()
       );
       expect(capturedAgentBrands).toBe(EMPTY_AGENT_MENTION_BRANDS);
@@ -249,11 +179,7 @@ describe("AgentChatInput", () => {
 
   describe("sample-prompt placeholder", () => {
     const backend = () =>
-      ({
-        sendMessage: jest.fn(),
-        cancel: jest.fn(),
-        isBusy: () => false,
-      }) as unknown as AgentChatBackend;
+      ({ sendMessage: jest.fn(), cancel: jest.fn() }) as unknown as AgentChatBackend;
 
     beforeEach(() => {
       capturedPlaceholderPrompts = undefined;
@@ -297,7 +223,6 @@ describe("AgentChatInput", () => {
       const backend = {
         sendMessage: jest.fn(() => ({ turn })),
         cancel: jest.fn(),
-        isBusy: () => false,
       } as unknown as AgentChatBackend;
       const draft = makeDraft();
 
@@ -320,154 +245,11 @@ describe("AgentChatInput", () => {
     });
   });
 
-  describe("external prompt submission", () => {
-    const makeBackend = (isBusy = false) =>
-      ({
-        sendMessage: jest.fn(() => ({ turn: Promise.resolve() })),
-        cancel: jest.fn(),
-        isBusy: () => isBusy,
-      }) as unknown as AgentChatBackend;
-
-    /** Apply the functional updater handed to setQueue and return the enqueued item. */
-    const enqueuedItem = (setQueue: jest.Mock) => {
-      const updater = setQueue.mock.calls[0][0] as (
-        q: readonly unknown[]
-      ) => Array<{ queueReason?: string; rawInput?: string; text?: string }>;
-      return updater([])[0];
-    };
-
-    beforeEach(() => {
-      mockUseCanUseMultiAgent.mockReturnValue(true);
-      mockCaptureComposer.mockClear();
-    });
-
-    it("drains a pre-mount request without replacing the composer draft for https://github.com/Brevilabs/obsidian-copilot-private/issues/357", async () => {
-      const eventTarget = new ChatViewEventTarget();
-      const prompt = "Publish Notes/Active.md to OpenArtifacts";
-      eventTarget.queueSubmitPrompt(prompt);
-      const backend = makeBackend();
-      const draft = makeDraft({ input: "unfinished thought" });
-
-      renderInput(backend, draft, { isLanding: true }, eventTarget);
-
-      await waitFor(() => expect(backend.sendMessage).toHaveBeenCalledTimes(1));
-      expect(backend.sendMessage).toHaveBeenCalledWith(prompt, undefined, undefined, undefined);
-      expect(draft.resetCompose).not.toHaveBeenCalled();
-      expect(draft.setInput).not.toHaveBeenCalled();
-      expect(mockCaptureComposer).toHaveBeenCalledTimes(1);
-    });
-
-    it("drains two pre-mount requests in order and queues the second for https://github.com/Brevilabs/obsidian-copilot-private/issues/357", async () => {
-      const eventTarget = new ChatViewEventTarget();
-      eventTarget.queueSubmitPrompt("Publish Notes/First.md to OpenArtifacts");
-      eventTarget.queueSubmitPrompt("Publish Notes/Second.md to OpenArtifacts");
-      let busy = false;
-      const backend = {
-        sendMessage: jest.fn(() => {
-          busy = true;
-          return { turn: new Promise<void>(() => undefined) };
-        }),
-        cancel: jest.fn(),
-        isBusy: () => busy,
-      } as unknown as AgentChatBackend;
-      const draft = makeDraft({ input: "unfinished thought" });
-
-      renderInput(backend, draft, { isLanding: true }, eventTarget);
-
-      await waitFor(() => expect(draft.setQueue).toHaveBeenCalledTimes(1));
-      expect(backend.sendMessage).toHaveBeenCalledTimes(1);
-      expect(backend.sendMessage).toHaveBeenCalledWith(
-        "Publish Notes/First.md to OpenArtifacts",
-        undefined,
-        undefined,
-        undefined
-      );
-      expect(enqueuedItem(draft.setQueue as jest.Mock)).toMatchObject({
-        text: "Publish Notes/Second.md to OpenArtifacts",
-        queueReason: "busy",
-        preserveComposerOnSend: true,
-      });
-    });
-
-    it("sends the first of two rapid live requests and queues the second for https://github.com/Brevilabs/obsidian-copilot-private/issues/357", async () => {
-      const eventTarget = new ChatViewEventTarget();
-      let busy = false;
-      const backend = {
-        sendMessage: jest.fn(() => {
-          busy = true;
-          return { turn: new Promise<void>(() => undefined) };
-        }),
-        cancel: jest.fn(),
-        isBusy: () => busy,
-      } as unknown as AgentChatBackend;
-      const draft = makeDraft({ input: "unfinished thought" });
-      renderInput(backend, draft, {}, eventTarget);
-
-      act(() => {
-        eventTarget.queueSubmitPrompt("Publish Notes/First.md to OpenArtifacts");
-        eventTarget.queueSubmitPrompt("Publish Notes/Second.md to OpenArtifacts");
-      });
-
-      await waitFor(() => expect(draft.setQueue).toHaveBeenCalledTimes(1));
-      expect(backend.sendMessage).toHaveBeenCalledTimes(1);
-      expect(enqueuedItem(draft.setQueue as jest.Mock)).toMatchObject({
-        text: "Publish Notes/Second.md to OpenArtifacts",
-        queueReason: "busy",
-      });
-    });
-
-    it("queues a live request for a reconstructed running session whose draft is not loading for https://github.com/Brevilabs/obsidian-copilot-private/issues/357", async () => {
-      const eventTarget = new ChatViewEventTarget();
-      const backend = makeBackend(true);
-      const draft = makeDraft({ input: "unfinished thought" });
-      renderInput(backend, draft, {}, eventTarget);
-
-      act(() => eventTarget.queueSubmitPrompt("Publish Notes/Active.md to OpenArtifacts"));
-
-      await waitFor(() => expect(draft.setQueue).toHaveBeenCalledTimes(1));
-      expect(enqueuedItem(draft.setQueue as jest.Mock)).toMatchObject({
-        text: "Publish Notes/Active.md to OpenArtifacts",
-        rawInput: "Publish Notes/Active.md to OpenArtifacts",
-        queueReason: "busy",
-      });
-      expect(backend.sendMessage).not.toHaveBeenCalled();
-      expect(draft.resetCompose).not.toHaveBeenCalled();
-      expect(draft.setInput).not.toHaveBeenCalled();
-    });
-
-    it("queues a pre-mount request while the default session starts for https://github.com/Brevilabs/obsidian-copilot-private/issues/357", async () => {
-      const eventTarget = new ChatViewEventTarget();
-      eventTarget.queueSubmitPrompt("Publish Notes/Active.md to OpenArtifacts");
-      const backend = makeBackend(true);
-      const draft = makeDraft({ input: "unfinished thought" });
-
-      renderInput(backend, draft, { isBusy: true }, eventTarget);
-
-      await waitFor(() => expect(draft.setQueue).toHaveBeenCalledTimes(1));
-      expect(enqueuedItem(draft.setQueue as jest.Mock).queueReason).toBe("busy");
-      expect(backend.sendMessage).not.toHaveBeenCalled();
-      expect(draft.resetCompose).not.toHaveBeenCalled();
-      expect(draft.setInput).not.toHaveBeenCalled();
-    });
-
-    it("leaves normal composer sends working without an Agent Chat event bus for https://github.com/Brevilabs/obsidian-copilot-private/issues/357", async () => {
-      const backend = makeBackend();
-      const draft = makeDraft();
-
-      renderInput(backend, draft, { isLanding: true });
-      fireEvent.click(screen.getByText("send"));
-
-      await waitFor(() => expect(backend.sendMessage).toHaveBeenCalledTimes(1));
-      expect(mockCaptureComposer).not.toHaveBeenCalled();
-    });
-  });
-
   describe("queue reason", () => {
-    const makeBackend = (isBusy = false) =>
+    const makeBackend = () =>
       ({
         sendMessage: jest.fn(() => ({ turn: Promise.resolve() })),
         cancel: jest.fn(),
-        isBusy: () => isBusy,
       }) as unknown as AgentChatBackend;
 
     /** Apply the functional updater handed to setQueue and return the enqueued item. */
@@ -495,8 +277,8 @@ describe("AgentChatInput", () => {
     });
 
     it("snapshots 'busy' when queued behind an in-flight turn", async () => {
-      const backend = makeBackend(true);
-      const draft = makeDraft();
+      const backend = makeBackend();
+      const draft = makeDraft({ loading: true });
 
       renderInput(backend, draft);
       fireEvent.click(screen.getByText("send"));
@@ -561,124 +343,6 @@ describe("AgentChatInput", () => {
     });
   });
 
-  describe("queue flush", () => {
-    const queuedMessage = {
-      id: "queued-command",
-      text: "Publish Notes/Active.md to OpenArtifacts",
-      rawInput: "Publish Notes/Active.md to OpenArtifacts",
-      queueReason: "busy" as const,
-    };
-
-    beforeEach(() => {
-      mockUseCanUseMultiAgent.mockReturnValue(true);
-    });
-
-    it("flushes an ordinary busy draft when the reactive backend snapshot becomes idle for https://github.com/Brevilabs/obsidian-copilot-private/issues/357", async () => {
-      let busy = true;
-      const backend = {
-        sendMessage: jest.fn(() => ({ turn: Promise.resolve() })),
-        cancel: jest.fn(),
-        isBusy: () => busy,
-      } as unknown as AgentChatBackend;
-      const runningDraft = makeDraft({ loading: true, queue: [queuedMessage] });
-      const view = renderInput(backend, runningDraft, { isBusy: true });
-      expect(backend.sendMessage).not.toHaveBeenCalled();
-
-      busy = false;
-      view.rerender(
-        inputNode(backend, makeDraft({ loading: false, queue: [queuedMessage] }), {
-          isBusy: false,
-        })
-      );
-
-      await waitFor(() => expect(backend.sendMessage).toHaveBeenCalledTimes(1));
-    });
-
-    it("flushes a reconstructed running session with draft.loading false when the reactive backend snapshot becomes idle for https://github.com/Brevilabs/obsidian-copilot-private/issues/357", async () => {
-      let busy = true;
-      const backend = {
-        sendMessage: jest.fn(() => ({ turn: Promise.resolve() })),
-        cancel: jest.fn(),
-        isBusy: () => busy,
-      } as unknown as AgentChatBackend;
-      const restoredDraft = makeDraft({ loading: false, queue: [queuedMessage] });
-      const view = renderInput(backend, restoredDraft, { isBusy: true });
-      expect(backend.sendMessage).not.toHaveBeenCalled();
-
-      busy = false;
-      view.rerender(inputNode(backend, restoredDraft, { isBusy: false }));
-
-      await waitFor(() => expect(backend.sendMessage).toHaveBeenCalledTimes(1));
-    });
-
-    it("keeps the queued prompt when another turn starts after the idle render but before its passive flush for https://github.com/Brevilabs/obsidian-copilot-private/issues/357", async () => {
-      let busy = true;
-      const backend = {
-        sendMessage: jest.fn(() => ({ turn: Promise.resolve() })),
-        cancel: jest.fn(),
-        isBusy: () => busy,
-      } as unknown as AgentChatBackend;
-      const draft = makeDraft({ queue: [queuedMessage] });
-      const view = renderInput(backend, draft, { isBusy: false });
-
-      await act(async () => {});
-      expect(backend.sendMessage).not.toHaveBeenCalled();
-      expect(draft.setQueue).not.toHaveBeenCalled();
-
-      busy = false;
-      view.rerender(inputNode(backend, draft, { isBusy: true }));
-      view.rerender(inputNode(backend, draft, { isBusy: false }));
-
-      await waitFor(() => expect(backend.sendMessage).toHaveBeenCalledTimes(1));
-      expect(backend.sendMessage).toHaveBeenCalledWith(
-        queuedMessage.text,
-        undefined,
-        undefined,
-        undefined
-      );
-      expect(draft.setQueue).toHaveBeenCalledWith([]);
-    });
-
-    it("keeps an older queued prompt ahead of a prompt arriving between commit and passive flush for https://github.com/Brevilabs/obsidian-copilot-private/issues/357", async () => {
-      const eventTarget = new ChatViewEventTarget();
-      const nextPrompt = "Publish Notes/Next.md to OpenArtifacts";
-      const backend = {
-        sendMessage: jest.fn(() => ({ turn: Promise.resolve() })),
-        cancel: jest.fn(),
-        isBusy: () => false,
-      } as unknown as AgentChatBackend;
-      const setQueue = jest.fn();
-      const view = renderInput(backend, makeDraft({ setQueue }), {}, eventTarget);
-
-      view.rerender(
-        inputNode(
-          backend,
-          makeDraft({ queue: [queuedMessage], setQueue }),
-          { isBusy: false },
-          eventTarget,
-          nextPrompt
-        )
-      );
-
-      await waitFor(() => expect(backend.sendMessage).toHaveBeenCalledTimes(1));
-      expect(backend.sendMessage).toHaveBeenCalledWith(
-        `${queuedMessage.text}\n\n${nextPrompt}`,
-        undefined,
-        undefined,
-        undefined
-      );
-      expect(setQueue).toHaveBeenCalledTimes(2);
-      const enqueue = setQueue.mock.calls[0][0] as (
-        queue: (typeof queuedMessage)[]
-      ) => Array<{ text: string }>;
-      expect(enqueue([queuedMessage]).map((item) => item.text)).toEqual([
-        queuedMessage.text,
-        nextPrompt,
-      ]);
-      expect(setQueue).toHaveBeenLastCalledWith([]);
-    });
-  });
-
   describe("status-icon boundary", () => {
     // Locks the #205 layering decision: AgentChatInput owns the project-context
     // status node and hands it to the shared ChatInput only through the neutral
@@ -689,11 +353,7 @@ describe("AgentChatInput", () => {
     });
 
     it("passes the indicator through the accessory slot when mounted", () => {
-      const backend = {
-        sendMessage: jest.fn(),
-        cancel: jest.fn(),
-        isBusy: () => false,
-      } as unknown as AgentChatBackend;
+      const backend = { sendMessage: jest.fn(), cancel: jest.fn() } as unknown as AgentChatBackend;
 
       renderInput(backend, makeDraft(), { contextStatusIndicator: <span>status</span> });
       expect(capturedTopRightAccessory).toBeTruthy();
@@ -701,11 +361,7 @@ describe("AgentChatInput", () => {
     });
 
     it("passes no accessory when there is no indicator (global scope)", () => {
-      const backend = {
-        sendMessage: jest.fn(),
-        cancel: jest.fn(),
-        isBusy: () => false,
-      } as unknown as AgentChatBackend;
+      const backend = { sendMessage: jest.fn(), cancel: jest.fn() } as unknown as AgentChatBackend;
 
       renderInput(backend, makeDraft());
       expect(capturedTopRightAccessory).toBeUndefined();
@@ -735,7 +391,6 @@ describe("AgentChatInput", () => {
       const backend = {
         sendMessage: jest.fn(() => ({ turn: Promise.resolve() })),
         cancel: jest.fn(),
-        isBusy: () => false,
       } as unknown as AgentChatBackend;
       const draft = makeDraft({ images: [image] });
 
@@ -768,7 +423,6 @@ describe("AgentChatInput", () => {
       const backend = {
         sendMessage: jest.fn(() => ({ turn: Promise.resolve() })),
         cancel: jest.fn(),
-        isBusy: () => false,
       } as unknown as AgentChatBackend;
       const draft = makeDraft();
 

@@ -42,7 +42,6 @@ import { cn } from "@/lib/utils";
 import { type AgentMentionBrand, EMPTY_AGENT_MENTION_BRANDS } from "./hooks/useAtMentionCategories";
 import { EMPTY_CLOUD_AGENT_IDS } from "./context/CloudAgentContext";
 import { $createAgentPillNode } from "./pills/AgentPillNode";
-import { type ChatInputComposerSnapshot, useChatInput } from "@/context/ChatInputContext";
 
 const ACCENT_CIRCLE_BUTTON_CLASS =
   "tw-rounded-full tw-bg-interactive-accent tw-text-on-accent hover:tw-bg-interactive-accent-hover";
@@ -265,8 +264,6 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
   const [contextWebTabs, setContextWebTabs] = useState<WebTabContext[]>([]);
   const containerRef = useRef<HTMLDivElement>(null);
   const lexicalEditorRef = useRef<LexicalEditorType | null>(null);
-  const pendingEditorStateRef = useRef<ChatInputComposerSnapshot["editorState"]>(null);
-  const chatInput = useChatInput();
   const [currentModelKey, setCurrentModelKey] = useModelKey();
   const settings = useSettingsValue();
   const [currentChain] = useChainType();
@@ -706,55 +703,8 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
     };
   }, [app.workspace]);
 
-  const captureComposerSnapshot = useCallback(
-    (): ChatInputComposerSnapshot => ({
-      editorState: lexicalEditorRef.current?.getEditorState().toJSON() ?? null,
-      contextUrls: [...contextUrls],
-      contextFolders: [...contextFolders],
-      contextWebTabs: contextWebTabs.map((tab) => ({ ...tab })),
-    }),
-    [contextFolders, contextUrls, contextWebTabs]
-  );
-
-  const restoreComposerSnapshot = useCallback((snapshot: ChatInputComposerSnapshot) => {
-    setContextUrls([...snapshot.contextUrls]);
-    setContextFolders([...snapshot.contextFolders]);
-    setContextWebTabs(snapshot.contextWebTabs.map((tab) => ({ ...tab })));
-    const editor = lexicalEditorRef.current;
-    // The replacement Lexical editor may register just after ChatInput's
-    // provider bridge. Hold its serialized pills and text until it is ready.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/357
-    if (!editor) {
-      pendingEditorStateRef.current = snapshot.editorState;
-      return;
-    }
-    // If the old editor had not registered yet, only its badge state existed;
-    // parent-owned text and attachments already survive independently.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/357
-    if (snapshot.editorState) {
-      editor.setEditorState(editor.parseEditorState(snapshot.editorState));
-    }
-  }, []);
-
-  const composerSnapshotBridge = useMemo(
-    () => ({ capture: captureComposerSnapshot, restore: restoreComposerSnapshot }),
-    [captureComposerSnapshot, restoreComposerSnapshot]
-  );
-
-  useEffect(
-    () => chatInput.registerComposerSnapshotBridge(composerSnapshotBridge),
-    [chatInput, composerSnapshotBridge]
-  );
-
   const onEditorReady = useCallback((editor: LexicalEditorType) => {
     lexicalEditorRef.current = editor;
-    // Complete a restore that arrived before Lexical's ready callback.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/357
-    if (pendingEditorStateRef.current) {
-      const editorState = pendingEditorStateRef.current;
-      pendingEditorStateRef.current = null;
-      editor.setEditorState(editor.parseEditorState(editorState));
-    }
   }, []);
 
   // Handle Escape key for edit mode

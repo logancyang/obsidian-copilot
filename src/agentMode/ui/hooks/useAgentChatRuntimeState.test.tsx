@@ -13,7 +13,6 @@ import React, { useEffect } from "react";
 interface FakeBackendState {
   messages: AgentChatMessage[];
   isStarting: boolean;
-  isBusy: boolean;
   hasPendingPlanPermission: boolean;
   currentPlan: CurrentPlan | null;
   currentTodoList?: AgentTodoListEntry[] | null;
@@ -30,7 +29,6 @@ function makeFakeBackend(initial: Partial<FakeBackendState> = {}) {
   const state: FakeBackendState = {
     messages: initial.messages ?? [],
     isStarting: initial.isStarting ?? false,
-    isBusy: initial.isBusy ?? false,
     hasPendingPlanPermission: initial.hasPendingPlanPermission ?? false,
     currentPlan: initial.currentPlan ?? null,
     currentTodoList: initial.currentTodoList ?? null,
@@ -46,7 +44,6 @@ function makeFakeBackend(initial: Partial<FakeBackendState> = {}) {
     },
     getMessages: () => state.messages,
     isStarting: () => state.isStarting,
-    isBusy: () => state.isBusy,
     hasPendingPlanPermission: () => state.hasPendingPlanPermission,
     getCurrentPlan: () => state.currentPlan,
     getCurrentTodoList: () => state.currentTodoList ?? null,
@@ -90,19 +87,6 @@ describe("useAgentChatRuntimeState", () => {
     expect(result.current.messages).toHaveLength(2);
     expect(result.current.isStarting).toBe(true);
     expect(result.current.hasPendingPlanPermission).toBe(true);
-  });
-
-  it("reactively publishes busy-to-idle transitions so queued commands flush for https://github.com/Brevilabs/obsidian-copilot-private/issues/357", () => {
-    const fake = makeFakeBackend({ isBusy: true });
-    const { result } = renderHook(() => useAgentChatRuntimeState(fake.backend));
-    expect(result.current.isBusy).toBe(true);
-
-    act(() => {
-      fake.state.isBusy = false;
-      fake.emit();
-    });
-
-    expect(result.current.isBusy).toBe(false);
   });
 
   it("imperatively syncs to the new backend when the backend prop changes", () => {

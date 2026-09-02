@@ -256,6 +256,15 @@ export interface AgentSessionManagerOptions {
  * never imports a specific backend class. The permission prompter is
  * injected so this file stays out of the UI layer.
  */
+/**
+ * Text bound to a logical composer before its session is shown. A draft is
+ * left in the composer for review; a submit is sent as the chat's next turn.
+ */
+export interface ComposerHandoff {
+  text: string;
+  submit: boolean;
+}
+
 export class AgentSessionManager {
   private backends = new Map<BackendId, BackendProcess>();
   private starting = new Map<BackendId, Promise<BackendProcess>>();
@@ -323,10 +332,10 @@ export class AgentSessionManager {
   // Serializes replacements for one logical input even after its runtime session id changes.
   // The cursor retains the last successful owner when an individual replacement fails.
   private readonly replacementCursorByChatInputId = new Map<string, Promise<string>>();
-  // New-session drafts are keyed to the logical composer id, not the active
+  // Composer handoffs are keyed to the logical composer id, not the active
   // session pointer. This prevents a handoff from landing in the prior chat
   // while React commits the new active session.
-  private readonly initialDraftByChatInputId = new Map<string, string>();
+  private readonly composerHandoffByChatInputId = new Map<string, ComposerHandoff>();
   // Native session identity is stable across markdown/native history surfaces.
   // Sharing one resume prevents duplicate AgentSessions and backend handlers
   // when the same row is opened again before the first load settles.
@@ -1424,21 +1433,54 @@ export class AgentSessionManager {
     const previousActiveProjectId = this.activeProjectId;
     const scopeSeq = this.setActiveScope(projectId);
     const chatInputId = uuidv4();
-    this.initialDraftByChatInputId.set(chatInputId, initialDraft);
+    this.composerHandoffByChatInputId.set(chatInputId, { text: initialDraft, submit: false });
     try {
       return await this.createSession(undefined, projectId, undefined, chatInputId);
     } catch (error) {
-      this.initialDraftByChatInputId.delete(chatInputId);
+      this.composerHandoffByChatInputId.delete(chatInputId);
       this.rollbackOptimisticScopeSwitch(previousActiveProjectId, scopeSeq);
       throw error;
     }
   }
 
-  /** Return and remove the initial draft assigned to one logical composer. */
-  consumeInitialDraft(chatInputId: string): string | undefined {
-    const initialDraft = this.initialDraftByChatInputId.get(chatInputId);
-    this.initialDraftByChatInputId.delete(chatInputId);
-    return initialDraft;
+  /**
+   * Start a chat in the active scope that sends `prompt` as its next turn, for
+   * command-palette actions that hand work to the agent. An active chat with
+   * no messages yet takes the prompt itself so the action does not leave a
+   * blank tab behind; any other active chat keeps running untouched in its
+   * own tab. https://github.com/Brevilabs/obsidian-copilot-private/issues/357
+   * @param prompt - The complete user prompt to send.
+   */
+  async createSessionWithPrompt(prompt: string): Promise<AgentSession> {
+    const handoff: ComposerHandoff = { text: prompt, submit: true };
+    const active = this.getActiveSession();
+    if (
+      active &&
+      active.projectId === this.activeProjectId &&
+      active.getStatus() !== "closed" &&
+      !active.hasUserVisibleMessages()
+    ) {
+      this.composerHandoffByChatInputId.set(active.chatInputId, handoff);
+      // This composer is already mounted; the shell re-reads handoffs on the
+      // re-render this notification triggers.
+      this.notify();
+      return active;
+    }
+    const chatInputId = uuidv4();
+    this.composerHandoffByChatInputId.set(chatInputId, handoff);
+    try {
+      return await this.createSession(undefined, this.activeProjectId, undefined, chatInputId);
+    } catch (error) {
+      this.composerHandoffByChatInputId.delete(chatInputId);
+      throw error;
+    }
+  }
+
+  /** Return and remove the handoff bound to one logical composer. */
+  consumeComposerHandoff(chatInputId: string): ComposerHandoff | undefined {
+    const handoff = this.composerHandoffByChatInputId.get(chatInputId);
+    this.composerHandoffByChatInputId.delete(chatInputId);
+    return handoff;
   }
 
   /** Record a failure for the status surface, advancing the failure sequence. */
@@ -2474,7 +2516,7 @@ export class AgentSessionManager {
     }
     this.detachAutoSave(id);
     this.sessions.delete(id);
-    this.initialDraftByChatInputId.delete(session.chatInputId);
+    this.composerHandoffByChatInputId.delete(session.chatInputId);
     this.chatUIStates.delete(id);
     this.landingCaptureSignatures.delete(id);
     this.lastSeenProjectContentEpochBySession.delete(id);
@@ -2742,7 +2784,7 @@ export class AgentSessionManager {
       })
     );
     this.sessions.clear();
-    this.initialDraftByChatInputId.clear();
+    this.composerHandoffByChatInputId.clear();
     this.chatUIStates.clear();
     this.landingCaptureSignatures.clear();
     this.lastSeenProjectContentEpochBySession.clear();
@@ -3530,7 +3572,7 @@ export class AgentSessionManager {
       for (const s of dead) {
         this.detachAutoSave(s.internalId);
         this.sessions.delete(s.internalId);
-        this.initialDraftByChatInputId.delete(s.chatInputId);
+        this.composerHandoffByChatInputId.delete(s.chatInputId);
         this.chatUIStates.delete(s.internalId);
         this.landingCaptureSignatures.delete(s.internalId);
         this.lastSeenProjectContentEpochBySession.delete(s.internalId);

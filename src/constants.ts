@@ -1073,7 +1073,6 @@ export const EVENT_NAMES = {
   ACTIVE_LEAF_CHANGE: "active-leaf-change",
   ABORT_STREAM: "abort-stream",
   INSERT_TEXT_TO_CHAT: "insert-text-to-chat",
-  SUBMIT_AGENT_PROMPT: "submit-agent-prompt",
 };
 
 export enum ABORT_REASON {

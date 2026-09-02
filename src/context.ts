@@ -6,16 +6,14 @@ import * as React from "react";
 export const AppContext = React.createContext<App | undefined>(undefined);
 
 /**
- * Per-chat-view event bus. Beyond plain pub/sub it latches requests so a
- * consumer that subscribes while the view is still mounting receives them.
- * This removes any dependence on a freshly-opened view's mount timing.
+ * Per-chat-view event bus. Beyond plain pub/sub it *latches* a queued
+ * "insert text" payload so a consumer that subscribes after the text was
+ * queued — e.g. a chat view still mounting when the Relevant Notes pane routes
+ * a wikilink to it — still receives it. This removes any dependence on a
+ * freshly-opened view's mount timing (previously papered over with a setTimeout).
  */
 export class ChatViewEventTarget extends EventTarget {
   private pendingInsertText: string | null = null;
-  // A command-launched Agent Chat request must survive a newly revealed view's
-  // mount without being copied into or replacing its composer draft.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/357
-  private pendingSubmitPrompts: string[] = [];
   private visiblePending = false;
 
   /** Queue text for the chat input and notify any already-attached listener. */
@@ -29,23 +27,6 @@ export class ChatViewEventTarget extends EventTarget {
     const text = this.pendingInsertText;
     this.pendingInsertText = null;
     return text;
-  }
-
-  /**
-   * Queue a prompt for Agent Chat's normal send lifecycle.
-   * @param prompt - The complete user prompt to submit.
-   */
-  queueSubmitPrompt(prompt: string): void {
-    // Command requests can arrive back-to-back before Agent Chat finishes
-    // mounting; keep every request in arrival order instead of replacing one.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/357
-    this.pendingSubmitPrompts.push(prompt);
-    this.dispatchEvent(new CustomEvent(EVENT_NAMES.SUBMIT_AGENT_PROMPT));
-  }
-
-  /** Take the oldest latched Agent Chat prompt. */
-  consumePendingSubmitPrompt(): string | null {
-    return this.pendingSubmitPrompts.shift() ?? null;
   }
 
   /**

@@ -504,8 +504,11 @@ describe("AgentSessionManager", () => {
         const session = await mgr.createGlobalSessionWithDraft("Review this repair");
 
         expect(mgr.getActiveSession()).toBe(session);
-        expect(mgr.consumeInitialDraft(session.chatInputId)).toBe("Review this repair");
-        expect(mgr.consumeInitialDraft(session.chatInputId)).toBeUndefined();
+        expect(mgr.consumeComposerHandoff(session.chatInputId)).toEqual({
+          text: "Review this repair",
+          submit: false,
+        });
+        expect(mgr.consumeComposerHandoff(session.chatInputId)).toBeUndefined();
       });
 
       it("switches directly to the requested scope without spawning an extra blank session for https://github.com/Brevilabs/obsidian-copilot-private/issues/166", async () => {
@@ -542,7 +545,7 @@ describe("AgentSessionManager", () => {
 
         await mgr.closeSession(session.internalId);
 
-        expect(mgr.consumeInitialDraft(session.chatInputId)).toBeUndefined();
+        expect(mgr.consumeComposerHandoff(session.chatInputId)).toBeUndefined();
       });
 
       it("drops the initial draft when session creation fails for https://github.com/Brevilabs/obsidian-copilot-private/issues/166", async () => {
@@ -573,7 +576,7 @@ describe("AgentSessionManager", () => {
           );
 
           expect(failedChatInputId).toBeDefined();
-          expect(mgr.consumeInitialDraft(failedChatInputId as string)).toBeUndefined();
+          expect(mgr.consumeComposerHandoff(failedChatInputId as string)).toBeUndefined();
           expect(mgr.getActiveSession()).toBe(previousSession);
         } finally {
           recordSpy.mockRestore();
@@ -621,6 +624,61 @@ describe("AgentSessionManager", () => {
         } finally {
           recordSpy.mockRestore();
         }
+      });
+    });
+
+    describe("createSessionWithPrompt()", () => {
+      it("binds a submit handoff to a new chat in the active scope and consumes it once for https://github.com/Brevilabs/obsidian-copilot-private/issues/357", async () => {
+        const mgr = buildManager();
+        const running = await mgr.createSession();
+        sessionTestHandles.get(running.internalId)?.setHasUserVisibleMessages(true);
+
+        const session = await mgr.createSessionWithPrompt("Publish this note");
+
+        expect(session).not.toBe(running);
+        expect(mgr.getSessions()).toEqual([running, session]);
+        expect(mgr.getActiveSession()).toBe(session);
+        expect(mgr.consumeComposerHandoff(session.chatInputId)).toEqual({
+          text: "Publish this note",
+          submit: true,
+        });
+        expect(mgr.consumeComposerHandoff(session.chatInputId)).toBeUndefined();
+      });
+
+      it("hands the prompt to the active chat when it has no messages instead of opening a blank tab beside it for https://github.com/Brevilabs/obsidian-copilot-private/issues/357", async () => {
+        const mgr = buildManager();
+        const landing = await mgr.createSession();
+        const listener = jest.fn();
+        mgr.subscribe(listener);
+
+        const session = await mgr.createSessionWithPrompt("Publish this note");
+
+        expect(session).toBe(landing);
+        expect(mgr.getSessions()).toEqual([landing]);
+        expect(listener).toHaveBeenCalled();
+        expect(mgr.consumeComposerHandoff(landing.chatInputId)).toEqual({
+          text: "Publish this note",
+          submit: true,
+        });
+      });
+
+      it("drops the handoff and keeps the running chat active when session creation fails for https://github.com/Brevilabs/obsidian-copilot-private/issues/357", async () => {
+        const mgr = buildManager();
+        const running = await mgr.createSession();
+        sessionTestHandles.get(running.internalId)?.setHasUserVisibleMessages(true);
+        let failedChatInputId: string | undefined;
+        sessionCreateSpy.mockImplementationOnce((opts) => {
+          failedChatInputId = opts.chatInputId;
+          throw new Error("session creation failed");
+        });
+
+        await expect(mgr.createSessionWithPrompt("Publish this note")).rejects.toThrow(
+          "session creation failed"
+        );
+
+        expect(failedChatInputId).toBeDefined();
+        expect(mgr.consumeComposerHandoff(failedChatInputId as string)).toBeUndefined();
+        expect(mgr.getActiveSession()).toBe(running);
       });
     });
   });

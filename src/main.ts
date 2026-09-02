@@ -159,7 +159,6 @@ export default class CopilotPlugin extends Plugin {
   private PlanPreviewView?: typeof import("@/agentMode").PlanPreviewView;
   private planPreviewViewType?: typeof import("@/agentMode").PLAN_PREVIEW_VIEW_TYPE;
   private agentModelDiscoveryUnsubscriber?: () => void;
-  private agentPromptViewActivation: Promise<WorkspaceLeaf | null> | null = null;
   modelManagement!: ModelManagementApi;
   /**
    * Frozen path-only facade available to Agent Mode's Obsidian CLI bridge. The seeded skill
@@ -450,7 +449,7 @@ export default class CopilotPlugin extends Plugin {
         this[OPENARTIFACTS_AGENT_BRIDGE_PROPERTY] = undefined;
       }
     });
-    registerCommands(this, (prompt) => void this.submitPromptToAgentChat(prompt));
+    registerCommands(this, (prompt) => void this.newAgentChatWithPrompt(prompt));
 
     // Tool initialization is now handled automatically in CopilotPlusChainRunner and AutonomousAgentChainRunner
 
@@ -1128,40 +1127,6 @@ export default class CopilotPlugin extends Plugin {
     return leaf;
   }
 
-  /**
-   * Reveal Agent Chat and submit a prompt through its composer lifecycle.
-   * @param prompt - The complete user prompt to submit.
-   */
-  async submitPromptToAgentChat(prompt: string): Promise<void> {
-    try {
-      // Two palette invocations can arrive before an Editor-area leaf finishes
-      // setViewState. Share that activation so both prompts reach one event bus
-      // in invocation order instead of creating competing Agent Chat leaves.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/357
-      const activation =
-        this.agentPromptViewActivation ??
-        (this.agentPromptViewActivation = this.activateAgentView());
-      let leaf: WorkspaceLeaf | null;
-      try {
-        leaf = await activation;
-      } finally {
-        if (this.agentPromptViewActivation === activation) {
-          this.agentPromptViewActivation = null;
-        }
-      }
-      const view = leaf?.view;
-      // Agent Chat may be unavailable on this runtime. Never fall back to the
-      // deterministic publisher or another chat surface for this command.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/357
-      if (!this.isCopilotAgentView(view)) return;
-      view.eventTarget.queueSubmitPrompt(prompt);
-    } catch (error) {
-      // A failed reveal must not become an unhandled command-palette rejection.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/357
-      logError("Failed to delegate OpenArtifacts publishing to Agent Chat.", error);
-    }
-  }
-
   async deactivateAgentView() {
     this.app.workspace.detachLeavesOfType(CHAT_AGENT_VIEWTYPE);
   }
@@ -1224,6 +1189,26 @@ export default class CopilotPlugin extends Plugin {
       await this.activateAgentView();
     } catch (error) {
       logWarn("[CopilotPlugin] Failed to create agent session with draft", error);
+      new Notice("Failed to create agent session. Check Copilot logs.");
+    }
+  }
+
+  /**
+   * Open Agent Chat and send `prompt` as the next turn of a chat in the active
+   * scope, leaving whatever chat the user is running untouched.
+   * https://github.com/Brevilabs/obsidian-copilot-private/issues/357
+   * @param prompt - The complete user prompt to send.
+   */
+  async newAgentChatWithPrompt(prompt: string): Promise<void> {
+    const manager = this.requireAgentView();
+    if (!manager) return;
+    try {
+      // Bind the prompt before mounting the Agent view so a first-time mount
+      // cannot auto-create a blank session ahead of this one.
+      await manager.createSessionWithPrompt(prompt);
+      await this.activateAgentView();
+    } catch (error) {
+      logWarn("[CopilotPlugin] Failed to create agent session with prompt", error);
       new Notice("Failed to create agent session. Check Copilot logs.");
     }
   }

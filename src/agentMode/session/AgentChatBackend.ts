@@ -48,9 +48,6 @@ export interface AgentChatBackend {
   /** True while ACP `session/new` is still in flight. Send is gated on this. */
   isStarting(): boolean;
 
-  /** True while the session cannot accept another prompt without interrupting current work. */
-  isBusy(): boolean;
-
   /** Latest unified picker state, or `null` while the backend session is still starting. */
   getBackendState(): BackendState | null;
   /**

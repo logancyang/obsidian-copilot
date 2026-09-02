@@ -56,6 +56,7 @@ import { useAtomValue } from "jotai";
 import { FileSearch, Files, Folder, MessageSquare } from "lucide-react";
 import { Notice } from "obsidian";
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { v4 as uuidv4 } from "uuid";
 import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
 
 interface AgentHomeProps {
@@ -129,7 +130,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
 
   const {
     messages,
-    isBusy,
+    isStarting,
     hasPendingPlanPermission,
     currentPlan,
     currentTodoList,
@@ -381,15 +382,30 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     defaultIncludeActiveNote: settings.autoAddActiveContentToContext === true,
   });
   const setDraftInput = draft.setInput;
+  const setDraftQueue = draft.setQueue;
 
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/166
-  // The manager binds a handoff draft to the new chat input before publishing
-  // that session. Consume it only after this input is live so the text cannot
-  // race into whichever composer was active before the session switch.
+  // The manager binds a handoff to a logical chat input before publishing its
+  // session. Consume it only once this input is live so the text cannot race
+  // into whichever composer was active before the session switch. No dependency
+  // list: a handoff can also be bound to the already-mounted empty chat, which
+  // the manager announces by re-rendering this shell, not by a new `chatInputId`.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/357
   useEffect(() => {
-    const initialDraft = manager.consumeInitialDraft(chatInputId);
-    if (initialDraft !== undefined) setDraftInput(initialDraft);
-  }, [chatInputId, manager, setDraftInput]);
+    const handoff = manager.consumeComposerHandoff(chatInputId);
+    if (handoff === undefined) return;
+    if (!handoff.submit) {
+      setDraftInput(handoff.text);
+      return;
+    }
+    // A submitted handoff joins the composer queue so the existing flush sends
+    // it once the session is started and idle, showing a queued row until then
+    // and leaving any typed draft untouched.
+    setDraftQueue((queue) => [
+      ...queue,
+      { id: uuidv4(), text: handoff.text, rawInput: handoff.text },
+    ]);
+  });
 
   // Whole chat area is the drop zone (bound to chatContainerRef), so files
   // dropped anywhere — not just on the composer — attach to the active draft.
@@ -760,7 +776,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       app={app}
       mainAgentId={mainAgentId}
       updateUserMessageHistory={updateUserMessageHistory}
-      isBusy={isBusy}
+      isStarting={isStarting}
       hasPendingPlanPermission={hasPendingPlanPermission}
       modelPickerOverride={modelPickerOverride ?? undefined}
       modePickerOverride={modePickerOverride ?? undefined}
