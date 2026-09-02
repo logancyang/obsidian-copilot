@@ -19,7 +19,7 @@ const mockApp = {
   },
 };
 let mockSettings = {
-  enableMiyo: false,
+  enableMiyo: true,
   miyoServerUrl: "",
 };
 let mockMiyoBackend = "unknown";
@@ -73,7 +73,7 @@ describe("RelevantNotes", () => {
     jest.clearAllMocks();
     (Platform as { isMobile: boolean }).isMobile = false;
     mockSettings = {
-      enableMiyo: false,
+      enableMiyo: true,
       miyoServerUrl: "",
     };
     mockMiyoBackend = "unknown";
@@ -114,20 +114,18 @@ describe("RelevantNotes", () => {
       expect(mockOpenFile).toHaveBeenCalledWith(expect.objectContaining({ path: "Target.md" }));
     });
 
-    it("shows Miyo download guidance without graph-only rows when Miyo is disabled (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
-      mockFindRelevantNotes.mockResolvedValue({
-        notes: [],
-        status: "disabled",
-      });
+    it("shows Miyo download guidance without searching when Miyo is disabled, even without an active note (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
+      mockSettings = { ...mockSettings, enableMiyo: false };
+      mockUseActiveFile.mockReturnValue(null);
 
       render(<RelevantNotes onAddToChat={jest.fn()} />);
 
       expect(await screen.findByText("Add semantic matches with Miyo")).toBeTruthy();
       expect(screen.queryByText("Target")).toBeNull();
+      expect(mockFindRelevantNotes).not.toHaveBeenCalled();
     });
 
     it("shows empty setup guidance when Miyo is unavailable and opens the Miyo settings tab (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
-      mockSettings = { ...mockSettings, enableMiyo: true };
       mockFindRelevantNotes.mockResolvedValue({
         notes: [],
         status: "unavailable",
@@ -141,7 +139,6 @@ describe("RelevantNotes", () => {
     });
 
     it("shows an informational no-matches state without setup actions when registered Miyo is ready (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
-      mockSettings = { ...mockSettings, enableMiyo: true };
       mockFindRelevantNotes.mockResolvedValue({
         notes: [
           {
@@ -167,7 +164,6 @@ describe("RelevantNotes", () => {
     });
 
     it("shows an informational not-indexed state beside links without claiming a setup problem (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
-      mockSettings = { ...mockSettings, enableMiyo: true };
       mockFindRelevantNotes.mockResolvedValue({
         notes: [
           {
@@ -198,7 +194,6 @@ describe("RelevantNotes", () => {
     });
 
     it("refetches an unindexed note after the user asks Miyo for its latest state (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
-      mockSettings = { ...mockSettings, enableMiyo: true };
       mockFindRelevantNotes
         .mockResolvedValueOnce({ notes: [], status: "not-indexed" })
         .mockResolvedValueOnce({
@@ -230,7 +225,7 @@ describe("RelevantNotes", () => {
       "routes the $runtime not-indexed action to Copilot settings instead of a local deeplink (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)",
       async ({ isMobile, miyoServerUrl }) => {
         (Platform as { isMobile: boolean }).isMobile = isMobile;
-        mockSettings = { ...mockSettings, enableMiyo: true, miyoServerUrl };
+        mockSettings = { ...mockSettings, miyoServerUrl };
         mockFindRelevantNotes.mockResolvedValue({ notes: [], status: "not-indexed" });
         const openSpy = jest.spyOn(window, "open").mockImplementation(() => null);
 
@@ -244,7 +239,6 @@ describe("RelevantNotes", () => {
     );
 
     it("shows no readiness or setup guidance while the current Miyo request is loading (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
-      mockSettings = { ...mockSettings, enableMiyo: true };
       mockFindRelevantNotes.mockReturnValue(new Promise(() => undefined));
 
       const { container } = render(<RelevantNotes onAddToChat={jest.fn()} />);
@@ -255,7 +249,6 @@ describe("RelevantNotes", () => {
     });
 
     it("shows the neutral empty state when no Markdown note is active instead of loading forever (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
-      mockSettings = { ...mockSettings, enableMiyo: true };
       mockUseActiveFile.mockReturnValue(null);
 
       render(<RelevantNotes onAddToChat={jest.fn()} />);
@@ -265,14 +258,15 @@ describe("RelevantNotes", () => {
       expect(screen.queryByText("No semantic matches yet")).toBeNull();
     });
 
-    it("refetches Relevant Notes when Miyo settings change (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
+    it("starts fetching Relevant Notes when Miyo is enabled (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
+      mockSettings = { ...mockSettings, enableMiyo: false };
       const { rerender } = render(<RelevantNotes onAddToChat={jest.fn()} />);
-      await waitFor(() => expect(mockFindRelevantNotes).toHaveBeenCalledTimes(1));
+      expect(mockFindRelevantNotes).not.toHaveBeenCalled();
 
       mockSettings = { ...mockSettings, enableMiyo: true };
       rerender(<RelevantNotes onAddToChat={jest.fn()} />);
 
-      await waitFor(() => expect(mockFindRelevantNotes).toHaveBeenCalledTimes(2));
+      await waitFor(() => expect(mockFindRelevantNotes).toHaveBeenCalledTimes(1));
     });
 
     it("keeps a superseded Miyo request from overwriting newer results (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
@@ -299,7 +293,7 @@ describe("RelevantNotes", () => {
       const { rerender } = render(<RelevantNotes onAddToChat={jest.fn()} />);
       await waitFor(() => expect(mockFindRelevantNotes).toHaveBeenCalledTimes(1));
 
-      mockSettings = { ...mockSettings, enableMiyo: true, miyoServerUrl: "https://new-miyo" };
+      mockSettings = { ...mockSettings, miyoServerUrl: "https://new-miyo" };
       rerender(<RelevantNotes onAddToChat={jest.fn()} />);
       expect(await screen.findByText("Current")).toBeTruthy();
 
@@ -348,7 +342,7 @@ describe("RelevantNotes", () => {
       const { rerender } = render(<RelevantNotes onAddToChat={jest.fn()} />);
       await waitFor(() => expect(mockFindRelevantNotes).toHaveBeenCalledTimes(1));
 
-      mockSettings = { ...mockSettings, enableMiyo: true, miyoServerUrl: "https://new-miyo" };
+      mockSettings = { ...mockSettings, miyoServerUrl: "https://new-miyo" };
       rerender(<RelevantNotes onAddToChat={jest.fn()} />);
       expect(await screen.findByText("Current")).toBeTruthy();
 

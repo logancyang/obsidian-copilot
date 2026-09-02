@@ -56,6 +56,14 @@ function useRelevantNotes(enableMiyo: boolean, miyoServerUrl: string) {
     let cancelled = false;
 
     async function fetchNotes() {
+      // Disabled Miyo always owns the pane state and must not start a search,
+      // even when there is no active Markdown note.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
+      if (!enableMiyo) {
+        setResult(DISABLED_RELEVANT_NOTES_RESULT);
+        return;
+      }
+
       // With no active Markdown note there is no source to query. Keep the
       // neutral empty state instead of entering loading forever.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
@@ -66,7 +74,7 @@ function useRelevantNotes(enableMiyo: boolean, miyoServerUrl: string) {
       // Do not claim that Miyo is ready or unavailable while the request that
       // establishes its current state is still pending.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
-      setResult(enableMiyo ? LOADING_RELEVANT_NOTES_RESULT : DISABLED_RELEVANT_NOTES_RESULT);
+      setResult(LOADING_RELEVANT_NOTES_RESULT);
       try {
         const notes = await findRelevantNotes({ app, filePath: activeFile.path });
         // A settings or active-note change can supersede an in-flight Miyo
@@ -76,9 +84,7 @@ function useRelevantNotes(enableMiyo: boolean, miyoServerUrl: string) {
       } catch (error) {
         if (!cancelled) {
           logWarn("Failed to fetch relevant notes", error);
-          setResult(
-            enableMiyo ? UNAVAILABLE_RELEVANT_NOTES_RESULT : DISABLED_RELEVANT_NOTES_RESULT
-          );
+          setResult(UNAVAILABLE_RELEVANT_NOTES_RESULT);
         }
       }
     }
