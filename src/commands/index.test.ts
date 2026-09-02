@@ -31,7 +31,7 @@ describe("commands", () => {
       expect(command?.name).not.toBe(COMMAND_NAMES[COMMAND_IDS.NEW_AGENT_CHAT]);
     });
 
-    it("registers the OpenArtifacts palette command and publishes the active Markdown file", () => {
+    it("delegates the exact active Markdown path to Agent Chat for https://github.com/Brevilabs/obsidian-copilot-private/issues/357", () => {
       const activeFile = markdownFile("Notes/Active.md");
       const commands: Command[] = [];
       const plugin = {
@@ -42,9 +42,9 @@ describe("commands", () => {
           },
         },
       } as unknown as CopilotPlugin;
-      const publish = jest.fn().mockResolvedValue(undefined);
+      const submitAgentPrompt = jest.fn();
 
-      registerCommands(plugin, publish);
+      registerCommands(plugin, submitAgentPrompt);
 
       const command = commands.find(({ id }) => id === COMMAND_IDS.PUBLISH_FILE_TO_OPENARTIFACTS);
       expect(COMMAND_IDS.PUBLISH_FILE_TO_OPENARTIFACTS).toBe("publish-file-to-symposium");
@@ -53,10 +53,12 @@ describe("commands", () => {
         icon: COMMAND_ICONS[COMMAND_IDS.PUBLISH_FILE_TO_OPENARTIFACTS],
       });
       expect(command?.checkCallback?.(true)).toBe(true);
-      expect(publish).not.toHaveBeenCalled();
+      expect(submitAgentPrompt).not.toHaveBeenCalled();
 
       expect(command?.checkCallback?.(false)).toBe(true);
-      expect(publish).toHaveBeenCalledWith(activeFile);
+      expect(submitAgentPrompt).toHaveBeenCalledWith(
+        'Publish this Markdown note to OpenArtifacts. Use its exact vault-relative path:\n\n"Notes/Active.md"'
+      );
     });
 
     it.each([
@@ -72,14 +74,14 @@ describe("commands", () => {
           },
         },
       } as unknown as CopilotPlugin;
-      const publish = jest.fn().mockResolvedValue(undefined);
+      const submitAgentPrompt = jest.fn();
 
-      registerCommands(plugin, publish);
+      registerCommands(plugin, submitAgentPrompt);
 
       const command = commands.find(({ id }) => id === COMMAND_IDS.PUBLISH_FILE_TO_OPENARTIFACTS);
       expect(command?.checkCallback?.(true)).toBe(false);
       expect(command?.checkCallback?.(false)).toBe(false);
-      expect(publish).not.toHaveBeenCalled();
+      expect(submitAgentPrompt).not.toHaveBeenCalled();
     });
   });
 });

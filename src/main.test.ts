@@ -58,6 +58,8 @@ import { resetMiyoMutations } from "@/miyo/miyoResync";
 import { flushPersistence } from "@/services/settingsPersistence";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { disposeNotificationSound } from "@/utils/notificationSound";
+import { DEFAULT_OPEN_AREA } from "@/constants";
+import { resetSettings, setSettings } from "@/settings/model";
 
 /**
  * Build a plugin instance without running Obsidian's `Plugin` constructor or
@@ -269,6 +271,110 @@ describe("main", () => {
           failure
         );
         expect(activateAgentView).not.toHaveBeenCalled();
+      });
+    });
+
+    describe("submitPromptToAgentChat()", () => {
+      afterEach(() => {
+        resetSettings();
+      });
+
+      it("reveals Agent Chat and latches the prompt for https://github.com/Brevilabs/obsidian-copilot-private/issues/357", async () => {
+        const plugin = createPluginUnderTest([]);
+        const queueSubmitPrompt = jest.fn();
+        class FakeAgentView {
+          eventTarget = { queueSubmitPrompt };
+        }
+        const view = new FakeAgentView();
+        Object.assign(plugin, { CopilotAgentView: FakeAgentView });
+        const activateAgentView = jest
+          .spyOn(plugin, "activateAgentView")
+          .mockResolvedValue({ view } as never);
+
+        await plugin.submitPromptToAgentChat("Publish Notes/Active.md");
+
+        expect(activateAgentView).toHaveBeenCalledTimes(1);
+        expect(queueSubmitPrompt).toHaveBeenCalledWith("Publish Notes/Active.md");
+      });
+
+      it("shares a deferred Editor-area activation and preserves FIFO prompt delivery for https://github.com/Brevilabs/obsidian-copilot-private/issues/357", async () => {
+        const plugin = createPluginUnderTest([]);
+        const queueSubmitPrompt = jest.fn();
+        class FakeAgentView {
+          eventTarget = { queueSubmitPrompt, queueVisible: jest.fn() };
+        }
+        let view: FakeAgentView | null = null;
+        let releaseView!: () => void;
+        const leaf = {
+          get view() {
+            return view;
+          },
+          setViewState: jest.fn(
+            () =>
+              new Promise<void>((resolve) => {
+                releaseView = () => {
+                  view = new FakeAgentView();
+                  resolve();
+                };
+              })
+          ),
+        };
+        const getLeaf = jest.fn(() => leaf);
+        Object.assign(plugin, {
+          CopilotAgentView: FakeAgentView,
+          app: {
+            workspace: {
+              getLeavesOfType: jest.fn(() => []),
+              getLeaf,
+              getRightLeaf: jest.fn(),
+              revealLeaf: jest.fn(),
+            },
+          },
+        });
+        setSettings({ defaultOpenArea: DEFAULT_OPEN_AREA.EDITOR });
+
+        const first = plugin.submitPromptToAgentChat("Publish Notes/First.md");
+        const second = plugin.submitPromptToAgentChat("Publish Notes/Second.md");
+        expect(getLeaf).toHaveBeenCalledTimes(1);
+        expect(leaf.setViewState).toHaveBeenCalledTimes(1);
+        releaseView();
+        await Promise.all([first, second]);
+
+        expect(queueSubmitPrompt.mock.calls.map(([prompt]) => String(prompt))).toEqual([
+          "Publish Notes/First.md",
+          "Publish Notes/Second.md",
+        ]);
+      });
+
+      it("does not fall back when Agent Chat is unavailable for https://github.com/Brevilabs/obsidian-copilot-private/issues/357", async () => {
+        const plugin = createPluginUnderTest([]);
+        const queueSubmitPrompt = jest.fn();
+        class FakeAgentView {
+          eventTarget = { queueSubmitPrompt };
+        }
+        Object.assign(plugin, { CopilotAgentView: FakeAgentView });
+        jest.spyOn(plugin, "activateAgentView").mockResolvedValue(null);
+
+        await expect(
+          plugin.submitPromptToAgentChat("Publish Notes/Active.md")
+        ).resolves.toBeUndefined();
+
+        expect(queueSubmitPrompt).not.toHaveBeenCalled();
+      });
+
+      it("contains Agent Chat reveal failures for https://github.com/Brevilabs/obsidian-copilot-private/issues/357", async () => {
+        const plugin = createPluginUnderTest([]);
+        const failure = new Error("reveal failed");
+        jest.spyOn(plugin, "activateAgentView").mockRejectedValue(failure);
+
+        await expect(
+          plugin.submitPromptToAgentChat("Publish Notes/Active.md")
+        ).resolves.toBeUndefined();
+
+        expect(logError).toHaveBeenCalledWith(
+          "Failed to delegate OpenArtifacts publishing to Agent Chat.",
+          failure
+        );
       });
     });
   });

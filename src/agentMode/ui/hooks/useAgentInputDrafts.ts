@@ -18,6 +18,12 @@ export interface QueuedAgentMessage {
    * rendered as queue rows.
    */
   queueReason?: "context" | "busy";
+  /**
+   * Preserve the current editor-owned composer state if this send causes the
+   * fresh-landing input to remount. External requests set this; typed sends do not.
+   * https://github.com/Brevilabs/obsidian-copilot-private/issues/357
+   */
+  preserveComposerOnSend?: boolean;
   /** Image blocks for the backend prompt. */
   promptContent?: PromptContent[];
   /**

@@ -129,7 +129,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
 
   const {
     messages,
-    isStarting,
+    isBusy,
     hasPendingPlanPermission,
     currentPlan,
     currentTodoList,
@@ -760,7 +760,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       app={app}
       mainAgentId={mainAgentId}
       updateUserMessageHistory={updateUserMessageHistory}
-      isStarting={isStarting}
+      isBusy={isBusy}
       hasPendingPlanPermission={hasPendingPlanPermission}
       modelPickerOverride={modelPickerOverride ?? undefined}
       modePickerOverride={modePickerOverride ?? undefined}

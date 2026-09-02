@@ -25,7 +25,7 @@ import { Button } from "@/components/ui/button";
 import { ACTIVE_WEB_TAB_MARKER, EVENT_NAMES } from "@/constants";
 import { cn } from "@/lib/utils";
 import { useCanUseMultiAgent } from "@/plusUtils";
-import { EventTargetContext } from "@/context";
+import { ChatViewEventTarget, EventTargetContext } from "@/context";
 import { logError, logWarn } from "@/logger";
 import {
   isFanout,
@@ -51,6 +51,7 @@ import { App, Notice, TFile } from "obsidian";
 import React, { memo, useCallback, useContext, useEffect, useMemo, useRef } from "react";
 import { v4 as uuidv4 } from "uuid";
 import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
+import { useChatInput } from "@/context/ChatInputContext";
 
 interface AgentChatInputProps {
   backend: AgentChatBackend;
@@ -72,7 +73,8 @@ interface AgentChatInputProps {
    */
   mainAgentId: BackendId | null;
   updateUserMessageHistory: (newMessage: string) => void;
-  isStarting: boolean;
+  /** Reactive snapshot used to wake queued work when the backend becomes idle. */
+  isBusy: boolean;
   hasPendingPlanPermission: boolean;
   modelPickerOverride: ChatInputProps["modelPickerOverride"];
   modePickerOverride: ChatInputProps["modePickerOverride"];
@@ -158,6 +160,7 @@ const combineQueuedMessages = (items: QueuedAgentMessage[]): QueuedAgentMessage 
     ),
     promptContent: allPromptContent.length > 0 ? allPromptContent : undefined,
     mentionedAgents: mergedAgents.length > 0 ? mergedAgents : undefined,
+    preserveComposerOnSend: items.some((item) => item.preserveComposerOnSend),
   };
 };
 
@@ -192,7 +195,7 @@ export const AgentChatInput = memo(function AgentChatInput({
   app,
   mainAgentId,
   updateUserMessageHistory,
-  isStarting,
+  isBusy,
   hasPendingPlanPermission,
   modelPickerOverride,
   modePickerOverride,
@@ -204,6 +207,7 @@ export const AgentChatInput = memo(function AgentChatInput({
   isLanding = false,
 }: AgentChatInputProps) {
   const eventTarget = useContext(EventTargetContext);
+  const chatInput = useChatInput();
 
   // Hold sends only while a *real* project's context is materializing. Global
   // scope never holds, so the global landing's send path is byte-identical.
@@ -261,6 +265,19 @@ export const AgentChatInput = memo(function AgentChatInput({
     setQueue: setQueuedMessages,
     resetCompose,
   } = draft;
+  const queuedMessagesRef = useRef(queuedMessages);
+  queuedMessagesRef.current = queuedMessages;
+  const updateQueuedMessages = useCallback(
+    (value: React.SetStateAction<QueuedAgentMessage[]>) => {
+      const next = typeof value === "function" ? value(queuedMessagesRef.current) : value;
+      // Keep a synchronous queue snapshot so a prompt arriving before React
+      // commits the previous update cannot bypass or overwrite older work.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/357
+      queuedMessagesRef.current = next;
+      setQueuedMessages(value);
+    },
+    [setQueuedMessages]
+  );
   const activeModelEntry = modelPickerOverride?.models.find(
     (model) => getModelKeyFromModel(model) === modelPickerOverride.value
   );
@@ -287,12 +304,19 @@ export const AgentChatInput = memo(function AgentChatInput({
     }
     // Stop = user is bailing on the current turn; don't auto-flush queued
     // follow-ups they composed while the agent was running.
-    setQueuedMessages([]);
+    updateQueuedMessages([]);
     setLoading(false);
-  }, [backend, setLoading, setQueuedMessages]);
+  }, [backend, setLoading, updateQueuedMessages]);
 
   const runSend = useCallback(
     async (item: QueuedAgentMessage) => {
+      let cancelComposerPreservation: (() => void) | undefined;
+      // Only an external request on the fresh landing needs this one-remount
+      // bridge. Ordinary typed sends keep their established clear-on-send flow.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/357
+      if (item.preserveComposerOnSend && isLanding) {
+        cancelComposerPreservation = chatInput.preserveComposerAcrossNextMount();
+      }
       setLoading(true);
       try {
         const { turn } = backend.sendMessage(
@@ -301,9 +325,13 @@ export const AgentChatInput = memo(function AgentChatInput({
           item.promptContent,
           item.mentionedAgents
         );
+        // `sendMessage` appends synchronously. From here the landing remount
+        // owns the snapshot, so an eventual turn rejection must not cancel it.
+        cancelComposerPreservation = undefined;
         if (item.rawInput) updateUserMessageHistory(item.rawInput);
         await turn;
       } catch (error) {
+        cancelComposerPreservation?.();
         logError("Error sending agent message:", error);
         new Notice("Failed to send message. Please try again.");
       } finally {
@@ -317,8 +345,58 @@ export const AgentChatInput = memo(function AgentChatInput({
         setLoading(false);
       }
     },
-    [backend, setLoading, updateUserMessageHistory]
+    [backend, chatInput, isLanding, setLoading, updateUserMessageHistory]
   );
+
+  const sendOrQueue = useCallback(
+    async (item: QueuedAgentMessage) => {
+      if (disabled) return;
+      // Command-launched prompts share the same gates as composer sends. An
+      // existing queue is itself a gate so a request arriving before its
+      // passive flush cannot jump ahead and start a newer turn.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/357
+      if (backend.isBusy() || holdForContext || queuedMessagesRef.current.length > 0) {
+        updateQueuedMessages((q) => [
+          ...q,
+          { ...item, queueReason: holdForContext ? "context" : "busy" },
+        ]);
+        return;
+      }
+
+      await runSend(item);
+    },
+    [backend, disabled, holdForContext, runSend, updateQueuedMessages]
+  );
+
+  useEffect(() => {
+    // Only Agent Chat's per-view bus supports external prompt submission; other
+    // contexts and Quick Chat must keep their existing behavior.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/357
+    if (!(eventTarget instanceof ChatViewEventTarget)) return;
+
+    const submitPendingPrompts = () => {
+      let prompt = eventTarget.consumePendingSubmitPrompt();
+      // Drain every pre-mount command in FIFO order. Each send updates the
+      // synchronous session status before the next item is considered, so
+      // later requests queue without interrupting the first turn.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/357
+      while (prompt !== null) {
+        void sendOrQueue({
+          id: `external-${uuidv4()}`,
+          text: prompt,
+          rawInput: prompt,
+          preserveComposerOnSend: true,
+        });
+        prompt = eventTarget.consumePendingSubmitPrompt();
+      }
+    };
+
+    eventTarget.addEventListener(EVENT_NAMES.SUBMIT_AGENT_PROMPT, submitPendingPrompts);
+    submitPendingPrompts();
+    return () => {
+      eventTarget.removeEventListener(EVENT_NAMES.SUBMIT_AGENT_PROMPT, submitPendingPrompts);
+    };
+  }, [eventTarget, sendOrQueue]);
 
   const handleSendMessage = useCallback(
     async (webTabs?: WebTabContext[]) => {
@@ -428,20 +506,7 @@ export const AgentChatInput = memo(function AgentChatInput({
         mentionedAgents,
       };
 
-      // Queue-and-hold: while a turn is in flight, starting, or the project's
-      // context is still materializing, park the message instead of sending.
-      // The flush effect below drains it once all three clear. Context-held
-      // rows get an amber "Waiting for context" label; the reason is an
-      // enqueue-time snapshot, not re-derived as blockers evolve.
-      if (loading || isStarting || holdForContext) {
-        setQueuedMessages((q) => [
-          ...q,
-          { ...item, queueReason: holdForContext ? "context" : "busy" },
-        ]);
-        return;
-      }
-
-      await runSend(item);
+      await sendOrQueue(item);
     },
     [
       app,
@@ -451,21 +516,17 @@ export const AgentChatInput = memo(function AgentChatInput({
       includeActiveNote,
       includeActiveWebTab,
       selectedTextContexts,
-      loading,
-      isStarting,
       unsupportedImageModelLabel,
-      holdForContext,
       disabled,
       resetCompose,
-      runSend,
-      setQueuedMessages,
+      sendOrQueue,
       mainAgentId,
       installedAgentIds,
     ]
   );
 
   // When a turn ends, flush the queue as one combined message. The
-  // `loading` and `queuedMessages.length` guards prevent re-entry: the
+  // backend busy status and `queuedMessages.length` guards prevent re-entry: the
   // synchronous `setQueuedMessages([])` + `setLoading(true)` inside
   // runSend are batched, so the next effect run sees both updates.
   //
@@ -488,8 +549,16 @@ export const AgentChatInput = memo(function AgentChatInput({
     // `disabled` guards the same hard-disable as the send path: a project
     // orphaned while messages are queued must not drain its queue into a
     // disabled composer.
-    if (disabled || loading || isStarting || holdForContext || queuedMessages.length === 0) return;
-    const combined = combineQueuedMessages(queuedMessages);
+    // A reconstructed running session can have a fresh draft.loading=false;
+    // consult the backend before flushing so queued work never interrupts it.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/357
+    if (disabled || isBusy || holdForContext || queuedMessagesRef.current.length === 0) return;
+    // The reactive snapshot wakes this effect, but another turn can begin
+    // before passive effects run. Recheck the backend synchronously before
+    // claiming the queue so stale idle renders cannot drop queued work.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/357
+    if (backend.isBusy()) return;
+    const combined = combineQueuedMessages(queuedMessagesRef.current);
     if (
       combined.promptContent?.some((content) => content.type === "image") &&
       unsupportedImageModelLabel
@@ -499,24 +568,24 @@ export const AgentChatInput = memo(function AgentChatInput({
       );
       return;
     }
-    setQueuedMessages([]);
+    updateQueuedMessages([]);
     void runSend(combined);
   }, [
+    backend,
     disabled,
-    loading,
-    isStarting,
+    isBusy,
     holdForContext,
     queuedMessages,
     runSend,
-    setQueuedMessages,
+    updateQueuedMessages,
     unsupportedImageModelLabel,
   ]);
 
   const handleRemoveQueuedMessage = useCallback(
     (id: string) => {
-      setQueuedMessages((q) => q.filter((m) => m.id !== id));
+      updateQueuedMessages((q) => q.filter((m) => m.id !== id));
     },
-    [setQueuedMessages]
+    [updateQueuedMessages]
   );
 
   // Global ABORT_STREAM events (Chat selection / new-chat triggers) stop the

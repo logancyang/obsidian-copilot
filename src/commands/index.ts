@@ -33,7 +33,7 @@ import { v4 as uuidv4 } from "uuid";
 import { COMMAND_IDS, COMMAND_ICONS, COMMAND_NAMES, CommandId } from "@/constants";
 import { setSelectedTextContexts } from "@/aiParams";
 
-type PublishFile = (file: TFile) => void;
+type SubmitAgentPrompt = (prompt: string) => void;
 
 /**
  * Add a command to the plugin. Supports async callbacks; errors are logged.
@@ -89,7 +89,7 @@ function addCheckCommand(
   });
 }
 
-export function registerCommands(plugin: CopilotPlugin, publish: PublishFile) {
+export function registerCommands(plugin: CopilotPlugin, submitAgentPrompt: SubmitAgentPrompt) {
   addCheckCommand(plugin, COMMAND_IDS.PUBLISH_FILE_TO_OPENARTIFACTS, (checking) => {
     const activeFile = plugin.app.workspace.getActiveFile();
     if (!(activeFile instanceof TFile) || activeFile.extension !== "md") {
@@ -97,7 +97,12 @@ export function registerCommands(plugin: CopilotPlugin, publish: PublishFile) {
     }
 
     if (!checking) {
-      publish(activeFile);
+      // Snapshot the exact path at invocation time so a later active-note
+      // change cannot redirect the agent's publishing request.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/357
+      submitAgentPrompt(
+        `Publish this Markdown note to OpenArtifacts. Use its exact vault-relative path:\n\n${JSON.stringify(activeFile.path)}`
+      );
     }
     return true;
   });

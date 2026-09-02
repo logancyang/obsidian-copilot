@@ -59,6 +59,8 @@ For Windows-specific installation help, see [Windows setup for Agent Chat](agent
 
 Select the **Agent Chat** ribbon icon or run **Open Copilot Agent Chat Window** from the command palette. If the default agent is not ready, Copilot opens **Select your agent**. Configure an agent, choose an installed row, then select **Start chat**.
 
+With a Markdown note active, run **Publish file to OpenArtifacts** from the command palette to hand publishing to Agent Chat. Copilot reveals Agent Chat and submits the request to its active session, or starts a session with your configured default agent when none exists. A busy session queues the request, and any text already in the composer stays untouched.
+
 An empty Agent Chat suggests example requests in the composer. If your operating system requests reduced motion, the composer shows a fixed hint instead.
 
 Agent Chat groups consecutive tool calls and reasoning into a compact activity row. The row reports the total tool commands, distinct files read or edited, and recorded reasoning time. Open it to inspect every step.
