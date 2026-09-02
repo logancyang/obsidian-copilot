@@ -8,7 +8,6 @@ import {
 } from "@/miyo/miyoUtils";
 import { getBacklinkedNotes, getLinkedNotes } from "@/noteUtils";
 import { findRelevantNotes } from "@/search/findRelevantNotes";
-import { createCopilotPatternFilter } from "@/search/searchUtils";
 import { getSettings, type CopilotSettings } from "@/settings/model";
 import { TFile } from "obsidian";
 
@@ -18,7 +17,6 @@ jest.mock("@/noteUtils", () => ({
 }));
 
 jest.mock("@/settings/model", () => ({ getSettings: jest.fn() }));
-jest.mock("@/search/searchUtils", () => ({ createCopilotPatternFilter: jest.fn() }));
 
 const mockResolveBaseUrl = jest.fn();
 const mockSearchRelated = jest.fn();
@@ -57,9 +55,6 @@ function createMarkdownFile(path: string): TFile {
 describe("findRelevantNotes", () => {
   const mockedGetSettings = getSettings as jest.MockedFunction<typeof getSettings>;
   const mockedShouldUseMiyo = shouldUseMiyo as jest.MockedFunction<typeof shouldUseMiyo>;
-  const mockedCreateCopilotPatternFilter = createCopilotPatternFilter as jest.MockedFunction<
-    typeof createCopilotPatternFilter
-  >;
   const mockedGetLinkedNotes = getLinkedNotes as jest.MockedFunction<typeof getLinkedNotes>;
   const mockedGetBacklinkedNotes = getBacklinkedNotes as jest.MockedFunction<
     typeof getBacklinkedNotes
@@ -78,7 +73,6 @@ describe("findRelevantNotes", () => {
     beforeEach(() => {
       jest.clearAllMocks();
       mockedShouldUseMiyo.mockReturnValue(false);
-      mockedCreateCopilotPatternFilter.mockReturnValue(() => true);
       mockedGetSettings.mockReturnValue({
         debug: false,
         miyoServerUrl: "",
@@ -172,29 +166,6 @@ describe("findRelevantNotes", () => {
 
       expect(result.notes.map((entry) => entry.note.path)).toEqual(["alpha.md", "beta.md"]);
       expect(result.notes[1].metadata.hasBacklinks).toBe(true);
-    });
-
-    it("applies the live Copilot scope only to Miyo candidates", async () => {
-      mockedShouldUseMiyo.mockReturnValue(true);
-      mockedGetSettings.mockReturnValue({ enableMiyo: true, debug: false } as CopilotSettings);
-      mockSearchRelated.mockResolvedValue({
-        results: [
-          { path: "vault/beta.md", score: 0.8 },
-          { path: "vault/alpha.md", score: 0.9 },
-        ],
-      });
-      mockedGetLinkedNotes.mockReturnValue([createMarkdownFile("linked-only.md")]);
-      const isAllowed = jest.fn((path: string) => path === "beta.md");
-      mockedCreateCopilotPatternFilter.mockReturnValue(isAllowed);
-
-      const result = await findRelevantNotes({ app: window.app, filePath: "source.md" });
-
-      expect(result.notes.map((entry) => entry.note.path)).toEqual(["beta.md"]);
-      expect(isAllowed.mock.calls.map(([path]) => path)).toEqual([
-        "beta.md",
-        "alpha.md",
-        "linked-only.md",
-      ]);
     });
 
     it("caps Miyo results at the existing 20-note limit", async () => {

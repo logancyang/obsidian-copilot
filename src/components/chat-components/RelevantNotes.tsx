@@ -17,12 +17,11 @@ import {
   type RelevantNotesResult,
 } from "@/search/findRelevantNotes";
 import { onIndexChanged } from "@/search/indexSignal";
-import { getMatchingPatterns, shouldIndexFile } from "@/search/searchUtils";
 import { openCopilotSettings } from "@/settings/openSettings";
 import { useSettingsValue } from "@/settings/model";
-import { ArrowRight, EyeOff, FileInput, FileOutput, FileText, PlusCircle } from "lucide-react";
+import { ArrowRight, FileInput, FileOutput, FileText, PlusCircle } from "lucide-react";
 import { Platform, TFile } from "obsidian";
-import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
+import React, { memo, useCallback, useEffect, useState } from "react";
 
 const EMPTY_RELEVANT_NOTES = Object.freeze([]) as unknown as RelevantNoteEntry[];
 const IDLE_RELEVANT_NOTES_RESULT = Object.freeze({
@@ -380,18 +379,6 @@ export const RelevantNotes = memo(
     const { result, refresh } = useRelevantNotes(settings.enableMiyo, settings.miyoServerUrl);
     const relevantNotes = result.notes;
 
-    // The active note itself is excluded from the index (by the QA
-    // inclusion/exclusion settings or an internal exclusion), so no relevant
-    // notes can ever be computed for it — surface that instead of a build
-    // prompt or a bare "none found".
-    const isActiveFileExcluded = useMemo(() => {
-      if (!activeFile) return false;
-      const { inclusions, exclusions } = getMatchingPatterns({
-        inclusions: settings.qaInclusions,
-        exclusions: settings.qaExclusions,
-      });
-      return !shouldIndexFile(app, activeFile, inclusions, exclusions);
-    }, [app, activeFile, settings.qaInclusions, settings.qaExclusions]);
     const navigateToNote = (notePath: string) => {
       const file = app.vault.getAbstractFileByPath(notePath);
       if (file instanceof TFile) {
@@ -426,61 +413,35 @@ export const RelevantNotes = memo(
 
     return (
       <div className={cn("tw-flex tw-min-h-full tw-w-full tw-flex-1 tw-flex-col", className)}>
-        {isActiveFileExcluded ? (
-          <div
-            data-relevant-notes-empty-state
-            className="tw-flex tw-flex-1 tw-flex-col tw-items-center tw-justify-center tw-px-6"
-          >
-            <div className="tw-flex tw-w-full tw-max-w-xs tw-flex-col tw-items-center tw-gap-6 tw-text-center">
-              <div className="tw-flex tw-size-16 tw-items-center tw-justify-center tw-rounded-xl tw-border tw-border-solid tw-border-border tw-bg-secondary">
-                <EyeOff className="tw-size-7 tw-text-muted" />
-              </div>
-              <div className="tw-flex tw-flex-col tw-gap-1.5">
-                <span className="tw-text-lg tw-font-semibold tw-text-normal">
-                  This note is excluded
-                </span>
-                <span className="tw-text-sm tw-text-muted">
-                  It falls outside your semantic index settings, so related notes can&apos;t be
-                  shown here. Adjust inclusions or exclusions in Copilot settings to include it.
-                </span>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <>
-            <RelevantNotesToolbar activeFileName={activeFile?.basename} />
-            <div className="tw-relative tw-min-h-0 tw-flex-1">
-              <div className="tw-absolute tw-inset-0 tw-overflow-y-auto tw-p-2">
-                {/* A pending request has not established a semantic result or
+        <RelevantNotesToolbar activeFileName={activeFile?.basename} />
+        <div className="tw-relative tw-min-h-0 tw-flex-1">
+          <div className="tw-absolute tw-inset-0 tw-overflow-y-auto tw-p-2">
+            {/* A pending request has not established a semantic result or
                     setup failure, so keep the pane neutral until it settles.
                     https://github.com/Brevilabs/obsidian-copilot-private/issues/280 */}
-                {result.semanticState !== "loading" && (
-                  <RelevantNotesPane
-                    guidance={guidance}
-                    noteCount={relevantNotes.length}
-                    noteRows={relevantNotes.map((note) => (
-                      <RelevantNoteRow
-                        key={note.note.path}
-                        note={note}
-                        onAddToChat={() => addToChat(note.note.title)}
-                        onNavigateToNote={() => navigateToNote(note.note.path)}
-                      />
-                    ))}
-                    miyoDownloadUrl={MIYO_HOMEPAGE_URL}
-                    canOpenMiyoApp={canOpenMiyoApp}
-                    onOpenMiyoApp={(event) =>
-                      event.currentTarget.win.open(MIYO_DEEPLINK_URL, "_blank")
-                    }
-                    onOpenMiyoSettings={(event) =>
-                      openCopilotSettings(app, event.currentTarget.win, "miyo")
-                    }
-                    onRefresh={refresh}
+            {result.semanticState !== "loading" && (
+              <RelevantNotesPane
+                guidance={guidance}
+                noteCount={relevantNotes.length}
+                noteRows={relevantNotes.map((note) => (
+                  <RelevantNoteRow
+                    key={note.note.path}
+                    note={note}
+                    onAddToChat={() => addToChat(note.note.title)}
+                    onNavigateToNote={() => navigateToNote(note.note.path)}
                   />
-                )}
-              </div>
-            </div>
-          </>
-        )}
+                ))}
+                miyoDownloadUrl={MIYO_HOMEPAGE_URL}
+                canOpenMiyoApp={canOpenMiyoApp}
+                onOpenMiyoApp={(event) => event.currentTarget.win.open(MIYO_DEEPLINK_URL, "_blank")}
+                onOpenMiyoSettings={(event) =>
+                  openCopilotSettings(app, event.currentTarget.win, "miyo")
+                }
+                onRefresh={refresh}
+              />
+            )}
+          </div>
+        </div>
       </div>
     );
   }

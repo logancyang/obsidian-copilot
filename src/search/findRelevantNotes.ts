@@ -8,7 +8,6 @@ import {
   shouldUseMiyo,
 } from "@/miyo/miyoUtils";
 import { getBacklinkedNotes, getLinkedNotes } from "@/noteUtils";
-import { createCopilotPatternFilter } from "@/search/searchUtils";
 import { getSettings } from "@/settings/model";
 import { withTimeout } from "@/utils";
 import { App, TFile } from "obsidian";
@@ -265,16 +264,14 @@ export async function findRelevantNotes({
   // the bottom (they render without a meter in the UI).
   const candidatePaths = new Set<string>([...similarityScoreMap.keys(), ...noteLinks.keys()]);
   candidatePaths.delete(filePath);
-  const sortedPaths = Array.from(candidatePaths)
-    .filter(createCopilotPatternFilter(app))
-    .sort((aPath, bPath) => {
-      const aScore = similarityScoreMap.get(aPath);
-      const bScore = similarityScoreMap.get(bPath);
-      if (aScore == null && bScore == null) return 0;
-      if (aScore == null) return 1;
-      if (bScore == null) return -1;
-      return bScore - aScore;
-    });
+  const sortedPaths = Array.from(candidatePaths).sort((aPath, bPath) => {
+    const aScore = similarityScoreMap.get(aPath);
+    const bScore = similarityScoreMap.get(bPath);
+    if (aScore == null && bScore == null) return 0;
+    if (aScore == null) return 1;
+    if (bScore == null) return -1;
+    return bScore - aScore;
+  });
   const notes = sortedPaths
     .map((path) => {
       const file = app.vault.getAbstractFileByPath(path);

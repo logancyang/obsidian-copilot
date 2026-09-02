@@ -9,7 +9,6 @@ import React from "react";
 
 const mockOpenFile = jest.fn().mockResolvedValue(undefined);
 const mockGetLeaf = jest.fn(() => ({ openFile: mockOpenFile }));
-const mockShouldIndexFile = jest.fn(() => true);
 const mockApp = {
   vault: {
     getAbstractFileByPath: jest.fn(),
@@ -22,8 +21,6 @@ const mockApp = {
 let mockSettings = {
   enableMiyo: false,
   miyoServerUrl: "",
-  qaInclusions: "",
-  qaExclusions: "",
 };
 let mockMiyoBackend = "unknown";
 let indexChangedListener: (() => void) | null = null;
@@ -57,11 +54,6 @@ jest.mock("@/search/indexSignal", () => ({
   },
 }));
 
-jest.mock("@/search/searchUtils", () => ({
-  getMatchingPatterns: () => ({ inclusions: [], exclusions: [] }),
-  shouldIndexFile: () => mockShouldIndexFile(),
-}));
-
 jest.mock("@/settings/model", () => ({
   useSettingsValue: () => mockSettings,
 }));
@@ -80,12 +72,9 @@ describe("RelevantNotes", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     (Platform as { isMobile: boolean }).isMobile = false;
-    mockShouldIndexFile.mockReturnValue(true);
     mockSettings = {
       enableMiyo: false,
       miyoServerUrl: "",
-      qaInclusions: "",
-      qaExclusions: "",
     };
     mockMiyoBackend = "unknown";
     indexChangedListener = null;
@@ -278,17 +267,6 @@ describe("RelevantNotes", () => {
       expect(await screen.findByText("No relevant notes found")).toBeTruthy();
       expect(mockFindRelevantNotes).not.toHaveBeenCalled();
       expect(screen.queryByText("No semantic matches yet")).toBeNull();
-    });
-
-    it("keeps the excluded-note card and suppresses semantic guidance (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
-      mockSettings = { ...mockSettings, enableMiyo: true };
-      mockShouldIndexFile.mockReturnValue(false);
-      mockFindRelevantNotes.mockResolvedValue({ notes: [], semanticState: "unavailable" });
-
-      const { container } = render(<RelevantNotes onAddToChat={jest.fn()} />);
-
-      expect(await screen.findByText("This note is excluded")).toBeTruthy();
-      expect(container.querySelector("[data-miyo-guidance]")).toBeNull();
     });
 
     it("refetches Relevant Notes when Miyo settings change (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
