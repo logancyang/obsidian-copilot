@@ -1,4 +1,5 @@
 import CopilotPlugin from "@/main";
+import { consumeRequestedCopilotSettingsTab } from "@/settings/openSettings";
 import { App, PluginSettingTab } from "obsidian";
 import React from "react";
 import SettingsMainV2 from "@/settings/v2/SettingsMainV2";
@@ -19,6 +20,8 @@ export class CopilotSettingTab extends PluginSettingTab {
     const div = containerEl.createDiv("div");
     const sections = createPluginRoot(div, this.app);
 
-    sections.render(<SettingsMainV2 plugin={this.plugin} />);
+    sections.render(
+      <SettingsMainV2 plugin={this.plugin} initialTab={consumeRequestedCopilotSettingsTab()} />
+    );
   }
 }
