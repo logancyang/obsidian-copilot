@@ -43,11 +43,11 @@ Claude models and billing come from your Claude Code account. Models added under
 
 ### Codex
 
-The Codex backend needs `@agentclientprotocol/codex-acp` 0.0.38 or newer. The package includes a compatible Codex CLI:
+The Codex backend needs `@agentclientprotocol/codex-acp` 0.0.45 or newer. The package includes a compatible Codex CLI:
 
 1. Open **Basic → Agents → Codex → Configure**.
 2. Run the adapter installation command shown in the dialog. It removes the conflicting Zed npm package before installing the supported adapter.
-3. Run `codex-acp login`.
+3. Run `codex-acp cli login`.
 4. Select **Auto-detect**, or enter the absolute path to the `codex-acp` launcher on macOS/Linux or its `dist\index.js` entry point on Windows, and select **Apply**.
 5. Enable the models you want and choose a default.
 

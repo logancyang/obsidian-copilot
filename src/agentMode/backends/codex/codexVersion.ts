@@ -6,7 +6,9 @@ const CURRENT_PACKAGE_ENTRY = "dist/index.js";
 const SEMVER_PATTERN =
   /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
 
-export const CODEX_ACP_MIN_VERSION = "0.0.38";
+// Bundled CLI authentication requires the passthrough added in version 0.0.45.
+// https://github.com/logancyang/obsidian-copilot/issues/2967
+export const CODEX_ACP_MIN_VERSION = "0.0.45";
 
 export interface CodexAcpInvocation {
   command: string;

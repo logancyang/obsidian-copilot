@@ -17,6 +17,6 @@ describe("cliSetup", () => {
   });
 
   it("signs in through the adapter's bundled Codex CLI", () => {
-    expect(CODEX_AUTH_COMMAND).toBe("codex-acp login");
+    expect(CODEX_AUTH_COMMAND).toBe("codex-acp cli login");
   });
 });

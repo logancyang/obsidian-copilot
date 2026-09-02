@@ -35,7 +35,7 @@ Copilot uses Claude Code's credentials. Do not add an Anthropic API key to this 
 
 ## 3. Connect Codex
 
-The Codex backend needs `@agentclientprotocol/codex-acp` 0.0.38 or newer. The package includes a compatible Codex CLI; the older `@zed-industries/codex-acp` adapter is not supported.
+The Codex backend needs `@agentclientprotocol/codex-acp` 0.0.45 or newer. The package includes a compatible Codex CLI; the older `@zed-industries/codex-acp` adapter is not supported.
 
 1. Open **Settings → Copilot → Basic → Agents → Codex** and select **Configure**.
 2. Copy the **Install it** command from the dialog and run it in PowerShell. The first command removes the unsupported Zed npm package because both packages create the same global `codex-acp` command; the second installs the supported adapter.
@@ -49,7 +49,7 @@ npm uninstall -g @zed-industries/codex-acp; npm install -g @agentclientprotocol/
 5. Sign in through the installed adapter:
 
 ```powershell
-codex-acp login
+codex-acp cli login
 ```
 
 Configure the package's `dist\index.js`, not `codex.exe`, `codex-acp.cmd`, or a legacy `codex-acp.exe`. Copilot launches the JavaScript entry point with the Node.js installation that provided npm and uses the bundled Codex CLI's login. If Node was installed while Obsidian was open, restart Obsidian before Auto-detect. Leave **Environment variables** empty unless you intentionally need an override.
