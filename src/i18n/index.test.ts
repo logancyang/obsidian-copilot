@@ -1,5 +1,6 @@
 import { resolveLocale } from "@/i18n/locale";
 import { ENGLISH_TRANSLATIONS } from "@/i18n/locales/en";
+import { ENGLISH_TRANSLATIONS as ENGLISH_TRANSLATION_SOURCE } from "@/i18n/locales/en.source";
 import { ZH_CN_TRANSLATIONS } from "@/i18n/locales/zh-CN";
 
 const ISSUE_URL = "https://github.com/Brevilabs/obsidian-copilot-private/issues/324";
@@ -29,9 +30,13 @@ describe("i18n", () => {
       expect(Object.keys(ZH_CN_TRANSLATIONS).sort()).toEqual(
         Object.keys(ENGLISH_TRANSLATIONS).sort()
       );
+      expect(
+        Object.values(ZH_CN_TRANSLATIONS).every((message) => typeof message === "string")
+      ).toBe(true);
     });
 
     it(`ships complete named English Settings messages for ${SETTINGS_ISSUE_URL}`, () => {
+      expect(ENGLISH_TRANSLATIONS).toEqual(ENGLISH_TRANSLATION_SOURCE);
       expect(Object.keys(ENGLISH_TRANSLATIONS)).not.toHaveLength(0);
       expect(Object.values(ENGLISH_TRANSLATIONS).every((message) => message.length > 0)).toBe(true);
     });
@@ -146,6 +151,31 @@ describe("i18n", () => {
       expect(i18n.t("agentChat.notice.imagesUnsupported", { model: "Sonnet 4.5" })).toBe(
         "Sonnet 4.5 不支持图片。请切换到支持视觉的模型后再发送图片。"
       );
+    });
+
+    it(`localizes every Settings tab while preserving protected product and technical terms for ${ZH_CN_ISSUE_URL}`, () => {
+      const i18n = loadI18n("zh");
+      i18n.initializeI18n();
+
+      expect(i18n.t("settings.tabs.byok")).toBe("BYOK");
+      expect(i18n.t("settings.tabs.miyo")).toBe("Miyo");
+      expect(i18n.t("settings.miyo.documentProcessor.description")).toContain("PDF 和 EPUB");
+      expect(i18n.t("settings.miyo.documentProcessor.description")).toContain("Miyo");
+      expect(i18n.t("settings.miyo.documentProcessor.description")).toContain("Plus");
+      expect(i18n.t("settings.byok.removeProvider.confirm", { provider: "Anthropic" })).toContain(
+        "Anthropic"
+      );
+      expect(i18n.t("settings.byok.providerFamily.claude")).toBe("Claude 系列");
+      expect(i18n.t("settings.agents.quickChatModels.empty")).toContain("Models (BYOK)");
+      expect(i18n.t("settings.advanced.patterns.addCustom")).toBe("添加自定义模式");
+      expect(i18n.t("settings.command.delete.confirm", { command: "summarize-note" })).toContain(
+        "summarize-note"
+      );
+      expect(i18n.t("settings.skills.properties.title", { skill: "release-note" })).toBe(
+        "属性 · release-note"
+      );
+      expect(i18n.t("settings.skills.loadIssues.title", { count: 2 })).toBe("2 个技能无法加载");
+      expect(i18n.t("settings.skills.loadIssues.tabWarning")).toBe("部分技能加载失败");
     });
 
     it(`preserves an interpolation placeholder when its value is missing for ${ISSUE_URL}`, () => {

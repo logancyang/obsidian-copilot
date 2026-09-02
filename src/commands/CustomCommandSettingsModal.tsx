@@ -14,6 +14,7 @@ import { CustomPromptSyntaxInstruction } from "@/components/CustomPromptSyntaxIn
 import { CustomCommand } from "@/commands/type";
 import { validateCommandName } from "@/commands/customCommandUtils";
 import { useChatBackendModelOptions } from "@/hooks/useChatBackendModelOptions";
+import { t } from "@/i18n";
 
 type FormErrors = {
   title?: string;
@@ -56,11 +57,21 @@ function CustomCommandSettingsModalContent({
 
     const nameError = validateCommandName(command.title, commands, initialCommand.title);
     if (nameError) {
-      newErrors.title = nameError;
+      newErrors.title =
+        {
+          "Command name cannot be empty": t("settings.command.validation.nameEmpty"),
+          "Command name cannot have leading or trailing spaces": t(
+            "settings.command.validation.nameWhitespace"
+          ),
+          'Command name contains invalid characters. Avoid using: < > : " / \\ | ? * [ ] ^': t(
+            "settings.command.validation.nameCharacters"
+          ),
+          "A command with this name already exists": t("settings.command.validation.nameDuplicate"),
+        }[nameError] ?? nameError;
     }
 
     if (!command.content.trim()) {
-      newErrors.content = "Prompt is required";
+      newErrors.content = t("settings.command.validation.promptRequired");
     }
 
     if (Object.keys(newErrors).length > 0) {
@@ -74,31 +85,31 @@ function CustomCommandSettingsModalContent({
   return (
     <div className="tw-flex tw-flex-col tw-gap-4 tw-p-4">
       <div className="tw-flex tw-flex-col tw-gap-2">
-        <Label htmlFor="title">Name</Label>
+        <Label htmlFor="title">{t("settings.command.editor.name")}</Label>
         <Input
           id="title"
           value={command.title}
           onChange={(e) => handleUpdate("title", e.target.value)}
-          placeholder="Enter command name"
+          placeholder={t("settings.command.editor.namePlaceholder")}
         />
         {errors.title && <div className="tw-text-sm tw-text-error">{errors.title}</div>}
       </div>
 
       <div className="tw-flex tw-flex-col tw-gap-2">
-        <Label htmlFor="content">Prompt</Label>
+        <Label htmlFor="content">{t("settings.command.editor.prompt")}</Label>
         <CustomPromptSyntaxInstruction />
         <Textarea
           id="content"
           value={command.content}
           onChange={(e) => handleUpdate("content", e.target.value)}
-          placeholder="Enter command prompt"
+          placeholder={t("settings.command.editor.promptPlaceholder")}
           className="tw-min-h-[200px]"
         />
         {errors.content && <div className="tw-text-sm tw-text-error">{errors.content}</div>}
       </div>
 
       <div className="tw-flex tw-flex-col tw-gap-2">
-        <Label htmlFor="modelKey">Model (Optional)</Label>
+        <Label htmlFor="modelKey">{t("settings.command.editor.model")}</Label>
         <div className="tw-group tw-relative tw-w-full">
           <select
             value={command.modelKey}
@@ -125,7 +136,7 @@ function CustomCommandSettingsModalContent({
               "hover:tw-bg-interactive-hover hover:tw-text-normal"
             )}
           >
-            <option value="">Inherit from chat model</option>
+            <option value="">{t("settings.command.editor.inheritModel")}</option>
             {activeModels.map((option) => (
               <option key={option.value} value={option.value.toString()}>
                 {option.label}
@@ -149,7 +160,7 @@ function CustomCommandSettingsModalContent({
           checked={command.showInContextMenu}
           onCheckedChange={(checked) => handleUpdate("showInContextMenu", checked)}
         />
-        <Label htmlFor="showInContextMenu">Show in context menu</Label>
+        <Label htmlFor="showInContextMenu">{t("settings.command.editor.showInMenu")}</Label>
       </div>
 
       <div className="tw-flex tw-items-center tw-gap-2">
@@ -158,15 +169,15 @@ function CustomCommandSettingsModalContent({
           checked={command.showInSlashMenu}
           onCheckedChange={(checked) => handleUpdate("showInSlashMenu", checked)}
         />
-        <Label htmlFor="showInSlashMenu">Show in slash menu</Label>
+        <Label htmlFor="showInSlashMenu">{t("settings.command.editor.showInSlash")}</Label>
       </div>
 
       <div className="tw-flex tw-justify-end tw-gap-2">
         <Button variant="secondary" onClick={onCancel}>
-          Cancel
+          {t("settings.actions.cancel")}
         </Button>
         <Button variant="default" onClick={handleSubmit}>
-          Save
+          {t("settings.actions.save")}
         </Button>
       </div>
     </div>
@@ -185,7 +196,7 @@ export class CustomCommandSettingsModal extends Modal {
     super(app);
     // https://docs.obsidian.md/Reference/TypeScript+API/Modal/setTitle
     // @ts-ignore
-    this.setTitle("Edit Command");
+    this.setTitle(t("settings.command.edit"));
   }
 
   onOpen() {

@@ -28,6 +28,7 @@ import {
 import { orderCatalogModels } from "@/modelManagement/ui/utils/orderCatalogModels";
 import { Loader2, X, XCircle } from "lucide-react";
 import React, { useMemo, useState } from "react";
+import { t } from "@/i18n";
 
 export interface ModelChecklistProps {
   /** Merged candidate pool — caller-owned union of fetched, manual,
@@ -108,21 +109,25 @@ export const ModelChecklist: React.FC<ModelChecklistProps> = ({
                 handleManualAdd();
               }
             }}
-            placeholder={modelInputHint ?? "Enter a model ID"}
+            placeholder={modelInputHint ?? t("settings.byok.models.enterId")}
             data-testid="model-checklist-manual-input"
           />
           <Button variant="secondary" onClick={handleManualAdd} disabled={!manualId.trim()}>
-            Add
+            {t("settings.actions.add")}
           </Button>
         </div>
       </FormField>
 
-      <SearchBar value={query} onChange={onQueryChange} placeholder="Search available models…" />
+      <SearchBar
+        value={query}
+        onChange={onQueryChange}
+        placeholder={t("settings.byok.models.search")}
+      />
 
       {fetching && (
         <div className="tw-flex tw-items-center tw-gap-2 tw-text-xs tw-text-muted">
           <Loader2 className="tw-size-3.5 tw-shrink-0 tw-animate-spin" />
-          <span>Loading models…</span>
+          <span>{t("settings.byok.models.loading")}</span>
         </div>
       )}
 
@@ -171,7 +176,7 @@ export const ModelChecklist: React.FC<ModelChecklistProps> = ({
                   <span className="tw-truncate tw-text-normal">{model.displayName}</span>
                   {model.isEmbedding && (
                     <Badge variant="secondary" className="tw-shrink-0 tw-text-ui-smaller">
-                      Embedding
+                      {t("settings.byok.models.embedding")}
                     </Badge>
                   )}
                   {hasCapabilityIcons(capabilities) && (
@@ -188,7 +193,7 @@ export const ModelChecklist: React.FC<ModelChecklistProps> = ({
                   <Button
                     variant="ghost"
                     size="icon"
-                    aria-label={`Remove ${model.id}`}
+                    aria-label={t("settings.byok.removeModel.label", { model: model.id })}
                     data-testid={`model-row-remove-${model.id}`}
                     onClick={(e) => {
                       // The row is a <label>, so a bare click would toggle the
@@ -214,10 +219,10 @@ export const ModelChecklist: React.FC<ModelChecklistProps> = ({
           data-testid="model-checklist-empty"
         >
           {fetching
-            ? "Loading models…"
+            ? t("settings.byok.models.loading")
             : query.trim()
-              ? "No models match the current filters."
-              : "No models discovered — enter a model ID above or test your credentials."}
+              ? t("settings.byok.models.noMatches")
+              : t("settings.byok.models.noneDiscovered")}
         </div>
       )}
     </div>

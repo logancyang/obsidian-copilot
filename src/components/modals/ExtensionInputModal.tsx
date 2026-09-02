@@ -4,6 +4,7 @@ import { Root } from "react-dom/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { createPluginRoot } from "@/utils/react/createPluginRoot";
+import { t } from "@/i18n";
 
 function ExtensionInputModalContent({
   onConfirm,
@@ -17,7 +18,7 @@ function ExtensionInputModalContent({
 
   const validateAndConfirm = (value: string) => {
     if (value.includes(" ")) {
-      setError("Extension cannot contain spaces");
+      setError(t("settings.advanced.patterns.extensionSpaces"));
       return;
     }
     setError(null);
@@ -36,7 +37,7 @@ function ExtensionInputModalContent({
     <div className="tw-flex tw-flex-col tw-gap-4">
       <div className="tw-flex tw-flex-col tw-gap-2">
         <Input
-          placeholder="Enter the extension (e.g. txt, excalidraw.md)"
+          placeholder={t("settings.advanced.patterns.extensionPlaceholder")}
           value={extension}
           onChange={(e) => {
             setExtension(e.target.value);
@@ -48,10 +49,10 @@ function ExtensionInputModalContent({
       </div>
       <div className="tw-flex tw-justify-end tw-gap-2">
         <Button variant="secondary" onClick={onCancel}>
-          Cancel
+          {t("settings.common.cancel")}
         </Button>
         <Button variant="default" onClick={() => validateAndConfirm(extension)}>
-          Confirm
+          {t("settings.advanced.patterns.confirm")}
         </Button>
       </div>
     </div>
@@ -68,7 +69,7 @@ export class ExtensionInputModal extends Modal {
     super(app);
     // https://docs.obsidian.md/Reference/TypeScript+API/Modal/setTitle
     // @ts-ignore
-    this.setTitle("Add Extension");
+    this.setTitle(t("settings.advanced.patterns.addExtension"));
   }
 
   onOpen() {

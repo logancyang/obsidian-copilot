@@ -115,7 +115,7 @@ const SettingsContent: React.FC = () => {
               // load failures remain visible from every settings section.
               warningLabel:
                 tab.id === "skills" && skillLoadErrorCount > 0
-                  ? "Some skills failed to load"
+                  ? t("settings.skills.loadIssues.tabWarning")
                   : undefined,
             }}
             isSelected={selectedTab === tab.id}

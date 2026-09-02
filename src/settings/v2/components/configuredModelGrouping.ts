@@ -1,6 +1,7 @@
 /** Pure grouping logic for `ConfiguredModelEnableList`, split from the React container so it's testable with plain data. */
 
 import { isOpencodeZenWireId, type ModelEnableGroup, type ModelEnableRow } from "@/agentMode";
+import { t } from "@/i18n";
 import {
   COPILOT_PLUS_MODELS,
   capabilitiesFromConfiguredInfo,
@@ -150,7 +151,7 @@ function originBadgeLabel(kind: OriginKind): string {
     case "copilot-plus":
       return "Copilot";
     case "agent":
-      return "Agent Provided";
+      return t("settings.agents.models.agentProvided");
   }
 }
 
@@ -254,8 +255,8 @@ export function buildModelEnableGroups(
   for (const o of out) {
     if (o.kind === "copilot-plus") {
       o.group.highlight = true;
-      o.group.badge = "privacy";
-      o.group.tooltip = "Copilot license required";
+      o.group.badge = t("settings.agents.models.privacy");
+      o.group.tooltip = t("settings.agents.models.licenseRequired");
     } else if (mixed) {
       o.group.badge = originBadgeLabel(o.kind);
     }

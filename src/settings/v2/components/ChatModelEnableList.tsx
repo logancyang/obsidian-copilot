@@ -1,5 +1,6 @@
 import { ModelEnableList, type ModelEnableGroup } from "@/agentMode";
 import { logError } from "@/logger";
+import { t } from "@/i18n";
 import {
   backendsAtom,
   configuredModelsAtom,
@@ -58,12 +59,7 @@ export const ChatModelEnableList: React.FC = () => {
     [api]
   );
 
-  const emptyState = (
-    <span>
-      No models configured yet. Add a provider on the{" "}
-      <span className="tw-font-medium">Models (BYOK)</span> tab to populate Quick Chat.
-    </span>
-  );
+  const emptyState = <span>{t("settings.agents.quickChatModels.empty")}</span>;
 
   return (
     <ModelEnableList
@@ -71,7 +67,7 @@ export const ChatModelEnableList: React.FC = () => {
       onToggle={handleToggle}
       query={query}
       onQueryChange={setQuery}
-      searchPlaceholder="Search chat models…"
+      searchPlaceholder={t("settings.agents.quickChatModels.search")}
       emptyState={emptyState}
     />
   );

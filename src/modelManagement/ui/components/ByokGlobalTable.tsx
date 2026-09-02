@@ -27,6 +27,7 @@ import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { useApp } from "@/context";
 import { logError } from "@/logger";
 import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
+import { t } from "@/i18n";
 
 /** One provider plus the configured models that belong to it. */
 export interface ByokTableGroup {
@@ -72,7 +73,7 @@ export const ByokGlobalTable: React.FC<ByokGlobalTableProps> = ({
         )}
         data-testid="byok-table-empty"
       >
-        {emptyMessage ?? "No providers yet — click + Add a provider to start."}
+        {emptyMessage ?? t("settings.byok.empty")}
       </div>
     );
   }
@@ -121,12 +122,24 @@ const ProviderCard: React.FC<ProviderCardProps> = ({
     const requiresKey = providerRequiresApiKey(provider);
     const successClassName = "tw-rounded-full tw-bg-success tw-text-success";
     if (!requiresKey) {
-      return { label: "Running", variant: "default", className: successClassName };
+      return {
+        label: t("settings.byok.status.running"),
+        variant: "default",
+        className: successClassName,
+      };
     }
     if (provider.apiKeyKeychainId) {
-      return { label: "API key set", variant: "default", className: successClassName };
+      return {
+        label: t("settings.byok.status.apiKeySet"),
+        variant: "default",
+        className: successClassName,
+      };
     }
-    return { label: "No key", variant: "secondary", className: "tw-rounded-full" };
+    return {
+      label: t("settings.byok.status.noKey"),
+      variant: "secondary",
+      className: "tw-rounded-full",
+    };
   };
 
   const handleRemoveModel = async (configuredModelId: string, modelName: string): Promise<void> => {
@@ -137,13 +150,13 @@ const ProviderCard: React.FC<ProviderCardProps> = ({
           await api.coordinator.removeConfiguredModel(configuredModelId);
         } catch (err) {
           logError("[ByokGlobalTable] removeConfiguredModel failed", err);
-          new Notice("Failed to remove model.");
+          new Notice(t("settings.byok.notice.removeModelFailed"));
         }
       },
-      `Remove ${modelName} from ${provider.displayName}?`,
-      "Remove model",
-      "Remove",
-      "Cancel"
+      t("settings.byok.removeModel.confirm", { model: modelName, provider: provider.displayName }),
+      t("settings.byok.removeModel.title"),
+      t("settings.actions.remove"),
+      t("settings.actions.cancel")
     );
     modal.open();
   };
@@ -156,12 +169,12 @@ const ProviderCard: React.FC<ProviderCardProps> = ({
   // a bare "0 models".
   const getSubLine = (): string => {
     if (!providerRequiresApiKey(provider)) {
-      return "Local models on your machine";
+      return t("settings.byok.models.local");
     }
     if (models.length === 0) {
-      return "No models added";
+      return t("settings.byok.models.noneAdded");
     }
-    return `${models.length} ${models.length === 1 ? "model" : "models"}`;
+    return t("settings.byok.models.count", { count: models.length });
   };
 
   return (
@@ -224,7 +237,7 @@ const ProviderCard: React.FC<ProviderCardProps> = ({
                   variant="ghost"
                   size="icon"
                   onClick={(e) => e.stopPropagation()}
-                  aria-label={`More actions for ${provider.displayName}`}
+                  aria-label={t("settings.byok.moreActions", { provider: provider.displayName })}
                   className="tw-shrink-0"
                 >
                   <MoreVertical className="tw-size-4" />
@@ -238,7 +251,7 @@ const ProviderCard: React.FC<ProviderCardProps> = ({
                   }}
                 >
                   <Settings2 className="tw-mr-2 tw-size-4" />
-                  Edit key
+                  {t("settings.byok.editKey")}
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={(e) => {
@@ -248,7 +261,7 @@ const ProviderCard: React.FC<ProviderCardProps> = ({
                   className="tw-text-error"
                 >
                   <Trash2 className="tw-mr-2 tw-size-4" />
-                  Remove
+                  {t("settings.actions.remove")}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -305,7 +318,7 @@ const ModelRow: React.FC<{ model: ConfiguredModel; onRemove: () => void }> = ({
           e.stopPropagation();
           onRemove();
         }}
-        aria-label={`Remove ${model.info.displayName}`}
+        aria-label={t("settings.byok.removeModel.label", { model: model.info.displayName })}
         tabIndex={0}
       >
         <XIcon className="tw-size-4" />

@@ -49,6 +49,7 @@ import { App, Notice } from "obsidian";
 import React, { useEffect, useMemo, useState } from "react";
 import { useModelCandidatePool } from "./useModelCandidatePool";
 import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
+import { t } from "@/i18n";
 
 /**
  * Default API endpoints for SDK-native catalog providers that `models.dev`
@@ -304,7 +305,7 @@ const ConfigureProviderBody: React.FC<ConfigureProviderBodyProps> = ({
       setVerification({
         ok: false,
         code: "missing_api_key",
-        message: "Enter an API key to verify this provider.",
+        message: t("settings.byok.configure.enterApiKey"),
         checkedAt: Date.now(),
       });
       return;
@@ -358,7 +359,7 @@ const ConfigureProviderBody: React.FC<ConfigureProviderBodyProps> = ({
       onClose();
     } catch (err) {
       logError("[ConfigureProviderDialog] setupProvider failed", err);
-      new Notice("Failed to save provider. See console for details.");
+      new Notice(t("settings.byok.notice.saveProviderFailed"));
     } finally {
       setSaving(false);
     }
@@ -394,7 +395,7 @@ const ConfigureProviderBody: React.FC<ConfigureProviderBodyProps> = ({
       onClose();
     } catch (err) {
       logError("[ConfigureProviderDialog] save changes failed", err);
-      new Notice("Failed to save changes. See console for details.");
+      new Notice(t("settings.byok.notice.saveChangesFailed"));
     } finally {
       setSaving(false);
     }
@@ -418,13 +419,13 @@ const ConfigureProviderBody: React.FC<ConfigureProviderBodyProps> = ({
           onClose();
         } catch (err) {
           logError("[ConfigureProviderDialog] removeProvider failed", err);
-          new Notice("Failed to remove provider.");
+          new Notice(t("settings.byok.notice.removeProviderFailed"));
         }
       },
-      `Remove ${provider.displayName}? This also removes all of its models from every model picker.`,
-      "Remove provider",
-      "Remove",
-      "Cancel"
+      t("settings.byok.removeProvider.confirm", { provider: provider.displayName }),
+      t("settings.byok.removeProvider.title"),
+      t("settings.actions.remove"),
+      t("settings.actions.cancel")
     );
     modal.open();
   };
@@ -464,15 +465,13 @@ const ConfigureProviderBody: React.FC<ConfigureProviderBodyProps> = ({
     <div className="tw-flex tw-h-full tw-min-h-0 tw-flex-col tw-gap-4 tw-overflow-hidden">
       <div className="tw-flex tw-flex-col tw-gap-1 tw-border-b tw-border-border tw-px-2 tw-pb-3">
         <div className="tw-text-lg tw-font-semibold tw-leading-none tw-tracking-tight">
-          Configure {headerName}
+          {t("settings.byok.configure.title", { provider: headerName })}
         </div>
-        <div className="tw-text-sm tw-text-muted">
-          Enter credentials and choose which models to enable.
-        </div>
+        <div className="tw-text-sm tw-text-muted">{t("settings.byok.configure.description")}</div>
       </div>
 
       <div className="tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-gap-4 tw-overflow-y-auto tw-px-2 tw-py-1">
-        <FormField label="Display name">
+        <FormField label={t("settings.byok.configure.displayName")}>
           <Input value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
         </FormField>
 
@@ -481,12 +480,14 @@ const ConfigureProviderBody: React.FC<ConfigureProviderBodyProps> = ({
             <span className="tw-inline-flex tw-items-center tw-gap-2">
               API key
               <span className="tw-text-ui-smaller tw-font-normal tw-text-muted">
-                {requiresApiKey ? "required" : "optional"}
+                {requiresApiKey
+                  ? t("settings.byok.configure.required")
+                  : t("settings.byok.configure.optional")}
               </span>
               {verification?.ok === true && (
                 <Badge className="tw-gap-1 tw-bg-success tw-text-success">
                   <CheckCircle2 className="tw-size-3" />
-                  Verified
+                  {t("settings.byok.configure.verified")}
                 </Badge>
               )}
             </span>
@@ -500,26 +501,36 @@ const ConfigureProviderBody: React.FC<ConfigureProviderBodyProps> = ({
                 setApiKey(v);
                 setVerification(null);
               }}
-              placeholder={state.mode === "edit" ? "No API key set" : "Paste your API key"}
+              placeholder={
+                state.mode === "edit"
+                  ? t("settings.byok.configure.noApiKey")
+                  : t("settings.byok.configure.pasteApiKey")
+              }
             />
             <Button variant="secondary" onClick={safeAsyncHandler(handleTest)} disabled={testing}>
-              {testing ? <Loader2 className="tw-size-4 tw-animate-spin" /> : "Test"}
+              {testing ? (
+                <Loader2 className="tw-size-4 tw-animate-spin" />
+              ) : (
+                t("settings.actions.test")
+              )}
             </Button>
             {state.mode === "edit" && apiKey.length > 0 && (
               <Button variant="destructive" onClick={handleClearKey} data-testid="api-key-clear">
-                Clear
+                {t("settings.actions.clear")}
               </Button>
             )}
           </div>
           {testFailed ? (
             <div className="tw-flex tw-items-center tw-gap-1.5 tw-text-xs tw-text-error">
               <XCircle className="tw-size-3.5 tw-shrink-0" />
-              <span>{verification?.message || "Verification failed"}</span>
+              <span>
+                {verification?.message || t("settings.byok.configure.verificationFailed")}
+              </span>
             </div>
           ) : (
             missingRequiredKey && (
               <div className="tw-text-xs tw-text-muted">
-                An API key is required for this provider.
+                {t("settings.byok.configure.apiKeyRequired")}
               </div>
             )
           )}
@@ -539,7 +550,9 @@ const ConfigureProviderBody: React.FC<ConfigureProviderBodyProps> = ({
         <CorsCompatibilitySetting checked={enableCors} onCheckedChange={setEnableCors} />
 
         <div className="tw-flex tw-flex-col tw-gap-2">
-          <div className="tw-text-sm tw-font-medium tw-text-normal">Models</div>
+          <div className="tw-text-sm tw-font-medium tw-text-normal">
+            {t("settings.byok.configure.models")}
+          </div>
           <ModelChecklist
             availableModels={pool.availableModels}
             selected={pool.selectedWireIds}
@@ -559,31 +572,39 @@ const ConfigureProviderBody: React.FC<ConfigureProviderBodyProps> = ({
       {state.mode === "new" ? (
         <div className="tw-flex tw-flex-col-reverse tw-gap-2 tw-px-2 sm:tw-flex-row sm:tw-justify-end">
           <Button variant="secondary" onClick={onClose} disabled={saving}>
-            Cancel
+            {t("settings.actions.cancel")}
           </Button>
           <Button
             variant="default"
             onClick={safeAsyncHandler(handleSaveNew)}
             disabled={!canSave || saving}
           >
-            {saving ? <Loader2 className="tw-size-4 tw-animate-spin" /> : "Save"}
+            {saving ? (
+              <Loader2 className="tw-size-4 tw-animate-spin" />
+            ) : (
+              t("settings.actions.save")
+            )}
           </Button>
         </div>
       ) : (
         <div className="tw-flex tw-flex-col-reverse tw-gap-2 tw-px-2 sm:tw-flex-row sm:tw-justify-between">
           <Button variant="destructive" onClick={handleRemove} disabled={saving}>
-            Remove provider
+            {t("settings.byok.removeProvider.title")}
           </Button>
           <div className="tw-flex tw-gap-2">
             <Button variant="secondary" onClick={onClose} disabled={saving}>
-              Cancel
+              {t("settings.actions.cancel")}
             </Button>
             <Button
               variant="default"
               onClick={safeAsyncHandler(handleSaveEdit)}
               disabled={!canSave || saving}
             >
-              {saving ? <Loader2 className="tw-size-4 tw-animate-spin" /> : "Save"}
+              {saving ? (
+                <Loader2 className="tw-size-4 tw-animate-spin" />
+              ) : (
+                t("settings.actions.save")
+              )}
             </Button>
           </div>
         </div>

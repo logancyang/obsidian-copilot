@@ -17,6 +17,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useApp } from "@/context";
+import { t } from "@/i18n";
 import { cn } from "@/lib/utils";
 import {
   categorizePatterns,
@@ -29,10 +30,10 @@ import {
 
 // Pattern type configuration (consistent with context-manage-modal)
 const PATTERN_TYPE_CONFIG = {
-  folder: { icon: Folder, label: "Folder", colorClass: "tw-text-context-manager-yellow" },
-  tag: { icon: Tag, label: "Tag", colorClass: "tw-text-context-manager-orange" },
-  note: { icon: FileText, label: "Note", colorClass: "tw-text-context-manager-blue" },
-  extension: { icon: Hash, label: "Extension", colorClass: "tw-text-context-manager-green" },
+  folder: { icon: Folder, colorClass: "tw-text-context-manager-yellow" },
+  tag: { icon: Tag, colorClass: "tw-text-context-manager-orange" },
+  note: { icon: FileText, colorClass: "tw-text-context-manager-blue" },
+  extension: { icon: Hash, colorClass: "tw-text-context-manager-green" },
 } as const;
 
 type PatternType = keyof typeof PATTERN_TYPE_CONFIG;
@@ -240,7 +241,7 @@ export const PatternListEditor: React.FC<PatternListEditorProps> = ({
         <Button
           variant="ghost2"
           size="fit"
-          aria-label={`Remove ${pattern}`}
+          aria-label={t("settings.advanced.patterns.remove", { pattern })}
           className="tw-h-auto tw-p-0"
           onClick={() => handleRemove(pattern, type)}
         >
@@ -279,7 +280,7 @@ export const PatternListEditor: React.FC<PatternListEditorProps> = ({
           {/* Empty state */}
           {!hasPatterns && (
             <div className="tw-py-2 tw-text-center tw-text-sm tw-italic tw-text-muted">
-              No patterns configured
+              {t("settings.advanced.patterns.empty")}
             </div>
           )}
 
@@ -309,11 +310,13 @@ export const PatternListEditor: React.FC<PatternListEditorProps> = ({
           >
             {isExpanded ? (
               <>
-                Show less <ChevronUp className="tw-size-4 sm:tw-size-3" />
+                {t("settings.advanced.patterns.showLess")}
+                <ChevronUp className="tw-size-4 sm:tw-size-3" />
               </>
             ) : (
               <>
-                Show {allBadges.length} items <ChevronDown className="tw-size-4 sm:tw-size-3" />
+                {t("settings.advanced.patterns.showItems", { count: allBadges.length })}
+                <ChevronDown className="tw-size-4 sm:tw-size-3" />
               </>
             )}
           </Button>
@@ -326,38 +329,38 @@ export const PatternListEditor: React.FC<PatternListEditorProps> = ({
           <DropdownMenuTrigger asChild>
             <Button size="sm" className="tw-h-9 tw-gap-1 tw-px-3 sm:tw-h-auto sm:tw-px-2">
               <Plus className="tw-size-5 sm:tw-size-4" />
-              Add...
+              {t("settings.advanced.patterns.add")}
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" container={containerRef.current}>
             <DropdownMenuItem onSelect={handleAddFolder} className="tw-py-2.5 sm:tw-py-1.5">
               <div className="tw-flex tw-items-center tw-gap-2">
                 <Folder className="tw-size-5 tw-text-context-manager-yellow sm:tw-size-4" />
-                Folder
+                {t("settings.advanced.patterns.folder")}
               </div>
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={handleAddTag} className="tw-py-2.5 sm:tw-py-1.5">
               <div className="tw-flex tw-items-center tw-gap-2">
                 <Tag className="tw-size-5 tw-text-context-manager-orange sm:tw-size-4" />
-                Tag
+                {t("settings.advanced.patterns.tag")}
               </div>
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={handleAddNote} className="tw-py-2.5 sm:tw-py-1.5">
               <div className="tw-flex tw-items-center tw-gap-2">
                 <FileText className="tw-size-5 tw-text-context-manager-blue sm:tw-size-4" />
-                Note
+                {t("settings.advanced.patterns.note")}
               </div>
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={handleAddExtension} className="tw-py-2.5 sm:tw-py-1.5">
               <div className="tw-flex tw-items-center tw-gap-2">
                 <Hash className="tw-size-5 tw-text-context-manager-green sm:tw-size-4" />
-                Extension
+                {t("settings.advanced.patterns.extension")}
               </div>
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={handleAddCustom} className="tw-py-2.5 sm:tw-py-1.5">
               <div className="tw-flex tw-items-center tw-gap-2">
                 <Wrench className="tw-size-5 tw-text-context-manager-purple sm:tw-size-4" />
-                Custom
+                {t("settings.advanced.patterns.custom")}
               </div>
             </DropdownMenuItem>
           </DropdownMenuContent>

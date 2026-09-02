@@ -7,6 +7,7 @@ import { App, Modal } from "obsidian";
 import React from "react";
 import { Root } from "react-dom/client";
 import type { BackendId, Skill } from "@/agentMode/skills/types";
+import { t } from "@/i18n";
 
 /**
  * Body of the delete confirmation modal. Enumerates every concrete path
@@ -39,13 +40,15 @@ const DeleteConfirmBody: React.FC<{
         />
         <p className="tw-m-0 tw-text-ui-smaller tw-leading-relaxed tw-text-normal">
           {isProject
-            ? `This removes the skill ${paths.length > 1 ? "folders" : "folder"} from your project. Vault sync / git is the only rollback path.`
-            : "This removes the canonical copy and every agent symlink. Vault sync / git is the only rollback path."}
+            ? t("settings.skills.delete.projectDescription")
+            : t("settings.skills.delete.canonicalDescription")}
         </p>
       </div>
 
       <div className="tw-flex tw-flex-col tw-gap-2">
-        <div className="tw-text-ui-smaller tw-text-muted">Will remove:</div>
+        <div className="tw-text-ui-smaller tw-text-muted">
+          {t("settings.skills.delete.willRemove")}
+        </div>
         <ul className="tw-m-0 tw-list-none tw-space-y-1 tw-p-0 tw-font-mono tw-text-ui-smaller tw-text-normal">
           {paths.map(({ path, note }) => (
             <li key={path} className="tw-flex tw-items-baseline tw-gap-2">
@@ -65,10 +68,10 @@ const DeleteConfirmBody: React.FC<{
 
       <div className="tw-flex tw-justify-end tw-gap-2 tw-pt-2">
         <Button variant="secondary" onClick={onCancel}>
-          Cancel
+          {t("settings.actions.cancel")}
         </Button>
         <Button variant="destructive" onClick={onConfirm}>
-          Delete skill
+          {t("settings.skills.delete.action")}
         </Button>
       </div>
     </div>
@@ -94,7 +97,7 @@ export class DeleteConfirmModal extends Modal {
     super(app);
     // https://docs.obsidian.md/Reference/TypeScript+API/Modal/setTitle
     // @ts-ignore
-    this.setTitle(`Delete ${skill.name}?`);
+    this.setTitle(t("settings.skills.delete.title", { skill: skill.name }));
   }
 
   onOpen() {

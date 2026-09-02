@@ -24,6 +24,7 @@ import {
   type MigrateConfirmVariant,
 } from "./MigrateSkillConfirmModal";
 import { AgentIconButton } from "./AgentIconButton";
+import { t } from "@/i18n";
 
 interface SkillRowProps {
   skill: Skill;
@@ -88,9 +89,7 @@ export const SkillRow: React.FC<SkillRowProps> = ({
   const lockdownCount = skill.location.kind === "project" ? skill.location.agentDirs.length : 0;
   const mirroredLockdown = lockdownCount >= 2;
   const lockdownTooltip = mirroredLockdown
-    ? `This skill is duplicated in ${lockdownCount} agent folders. ` +
-      `Editing one copy would silently diverge from the others. ` +
-      `Migrate it to your shared folder first to enable edits.`
+    ? t("settings.skills.lockdown", { count: lockdownCount })
     : null;
 
   /**
@@ -110,7 +109,12 @@ export const SkillRow: React.FC<SkillRowProps> = ({
           const result = await manager.toggleAgent(skill, agent, decision.enabled);
           if (!result.ok && result.code !== "eperm") {
             new Notice(
-              `Could not ${decision.enabled ? "enable" : "disable"} ${agent}: ${result.message}`
+              t(
+                decision.enabled
+                  ? "settings.skills.notice.enableFailed"
+                  : "settings.skills.notice.disableFailed",
+                { agent, error: result.message }
+              )
             );
           }
           return;
@@ -118,7 +122,13 @@ export const SkillRow: React.FC<SkillRowProps> = ({
         case "mirrored-remove-one": {
           const result = await manager.removeProjectAgentDir(skill, decision.agent);
           if (!result.ok) {
-            new Notice(`Could not remove ${skill.name} from ${decision.agent}: ${result.message}`);
+            new Notice(
+              t("settings.skills.notice.removeFailed", {
+                skill: skill.name,
+                agent: decision.agent,
+                error: result.message,
+              })
+            );
             return;
           }
           const survivors = (
@@ -126,7 +136,11 @@ export const SkillRow: React.FC<SkillRowProps> = ({
           ).filter((a) => a !== decision.agent);
           const survivorLabel = survivors.length === 1 ? survivors[0] : survivors.join(", ");
           new Notice(
-            `Removed ${skill.name} from ${decision.agent} project folder; still active in ${survivorLabel}.`
+            t("settings.skills.notice.removed", {
+              skill: skill.name,
+              agent: decision.agent,
+              survivors: survivorLabel,
+            })
           );
           return;
         }
@@ -221,8 +235,8 @@ export const SkillRow: React.FC<SkillRowProps> = ({
           <Button
             variant="ghost"
             size="icon"
-            title="More actions"
-            aria-label={`More actions for ${skill.name}`}
+            title={t("settings.actions.more")}
+            aria-label={t("settings.skills.moreActions", { skill: skill.name })}
           >
             <MoreVertical className="tw-size-4" />
           </Button>
@@ -242,22 +256,22 @@ export const SkillRow: React.FC<SkillRowProps> = ({
             <>
               <DropdownMenuItem className="tw-gap-2.5 tw-text-ui-small" onSelect={onEditSkillMd}>
                 <Edit3 className="tw-size-3.5" aria-hidden="true" />
-                Edit SKILL.md
+                {t("settings.skills.actions.editSkill")}
               </DropdownMenuItem>
               <DropdownMenuItem className="tw-gap-2.5 tw-text-ui-small" onSelect={onEditProperties}>
                 <Settings className="tw-size-3.5" aria-hidden="true" />
-                Properties…
+                {t("settings.skills.actions.properties")}
               </DropdownMenuItem>
               <DropdownMenuItem className="tw-gap-2.5 tw-text-ui-small" onSelect={onRevealInVault}>
                 <FolderSearch className="tw-size-3.5" aria-hidden="true" />
-                Reveal in vault
+                {t("settings.skills.actions.reveal")}
               </DropdownMenuItem>
               <DropdownMenuItem
                 className="tw-gap-2.5 tw-text-ui-small tw-text-error focus:tw-bg-modifier-error-rgb/15 focus:tw-text-error"
                 onSelect={onDelete}
               >
                 <Trash2 className="tw-size-3.5" aria-hidden="true" />
-                Delete…
+                {t("settings.skills.actions.delete")}
               </DropdownMenuItem>
             </>
           )}
@@ -320,10 +334,10 @@ function agentDisplayName(agents: ReadonlyArray<AgentBrand>, id: BackendId): str
 function computeChips(skill: Skill): ChipSpec[] {
   const chips: ChipSpec[] = [];
   if (skill.disableModelInvocation === true) {
-    chips.push({ variant: "warn", label: "model-invoke off" });
+    chips.push({ variant: "warn", label: t("settings.skills.chip.modelInvokeOff") });
   }
   if (skill.userInvocable === false) {
-    chips.push({ variant: "default", label: "hidden from /" });
+    chips.push({ variant: "default", label: t("settings.skills.chip.hiddenFromSlash") });
   }
   if (skill.model !== undefined && skill.model.length > 0) {
     chips.push({ variant: "solid", label: `claude · ${truncateModel(skill.model)}` });
@@ -338,7 +352,9 @@ function truncateModel(model: string): string {
 
 /** Tooltip copy for a single agent icon in its current state. */
 function tooltipFor(agentName: string, enabled: boolean): string {
-  return enabled ? `Enabled for ${agentName}` : `Disabled for ${agentName} · click to enable`;
+  return t(enabled ? "settings.skills.enabledForAgent" : "settings.skills.disabledForAgent", {
+    agent: agentName,
+  });
 }
 
 /**
@@ -361,7 +377,7 @@ const MirroredLockdownMenu: React.FC<{
     <TooltipProvider delayDuration={120}>
       <DropdownMenuItem className="tw-gap-2.5 tw-text-ui-small" onSelect={onMigrate}>
         <Move className="tw-size-3.5" aria-hidden="true" />
-        Migrate to shared folder
+        {t("settings.skills.actions.migrate")}
       </DropdownMenuItem>
       <Tooltip>
         <TooltipTrigger asChild>
@@ -371,7 +387,7 @@ const MirroredLockdownMenu: React.FC<{
             onSelect={(e) => e.preventDefault()}
           >
             <Edit3 className="tw-size-3.5" aria-hidden="true" />
-            Edit SKILL.md
+            {t("settings.skills.actions.editSkill")}
           </DropdownMenuItem>
         </TooltipTrigger>
         <TooltipContent side="left">{tooltip}</TooltipContent>
@@ -384,14 +400,14 @@ const MirroredLockdownMenu: React.FC<{
             onSelect={(e) => e.preventDefault()}
           >
             <Settings className="tw-size-3.5" aria-hidden="true" />
-            Properties…
+            {t("settings.skills.actions.properties")}
           </DropdownMenuItem>
         </TooltipTrigger>
         <TooltipContent side="left">{tooltip}</TooltipContent>
       </Tooltip>
       <DropdownMenuItem className="tw-gap-2.5 tw-text-ui-small" onSelect={onRevealInVault}>
         <FolderSearch className="tw-size-3.5" aria-hidden="true" />
-        Reveal in vault
+        {t("settings.skills.actions.reveal")}
       </DropdownMenuItem>
       <Tooltip>
         <TooltipTrigger asChild>
@@ -401,7 +417,7 @@ const MirroredLockdownMenu: React.FC<{
             onSelect={(e) => e.preventDefault()}
           >
             <Trash2 className="tw-size-3.5" aria-hidden="true" />
-            Delete…
+            {t("settings.skills.actions.delete")}
           </DropdownMenuItem>
         </TooltipTrigger>
         <TooltipContent side="left">{tooltip}</TooltipContent>
@@ -451,7 +467,10 @@ function runMigration(args: RunMigrationArgs): Promise<void> {
     resolvedName = manager.resolveCanonicalNameForMigration(args.skill.name);
   } catch (err) {
     new Notice(
-      `Could not migrate ${args.skill.name}: ${err instanceof Error ? err.message : String(err)}`
+      t("settings.skills.notice.migrateFailed", {
+        skill: args.skill.name,
+        error: err instanceof Error ? err.message : String(err),
+      })
     );
     return Promise.resolve();
   }
@@ -478,16 +497,29 @@ function runMigration(args: RunMigrationArgs): Promise<void> {
     // success so the user doesn't see a contradictory "Could not migrate"
     // toast while the row flips to a working canonical skill.
     if (!result.ok && result.reason !== "eperm") {
-      new Notice(`Could not migrate ${args.skill.name}: ${result.reason}`);
+      new Notice(
+        t("settings.skills.notice.migrateFailed", {
+          skill: args.skill.name,
+          error: result.reason,
+        })
+      );
       return;
     }
     if (args.action === "expandToNewAgent") {
       new Notice(
-        `Moved ${args.skill.name} to ${canonicalFolderRel}/ and enabled ${args.targetAgentDisplayName}.`
+        t("settings.skills.notice.migratedEnabled", {
+          skill: args.skill.name,
+          path: `${canonicalFolderRel}/`,
+          agent: args.targetAgentDisplayName,
+        })
       );
     } else {
       new Notice(
-        `Moved ${args.skill.name} to ${canonicalFolderRel}/ and disabled ${args.targetAgentDisplayName}.`
+        t("settings.skills.notice.migratedDisabled", {
+          skill: args.skill.name,
+          path: `${canonicalFolderRel}/`,
+          agent: args.targetAgentDisplayName,
+        })
       );
     }
   };
@@ -543,7 +575,10 @@ function runProactiveConsolidate(args: RunProactiveConsolidateArgs): Promise<voi
     resolvedName = manager.resolveCanonicalNameForMigration(args.skill.name);
   } catch (err) {
     new Notice(
-      `Could not consolidate ${args.skill.name}: ${err instanceof Error ? err.message : String(err)}`
+      t("settings.skills.notice.consolidateFailed", {
+        skill: args.skill.name,
+        error: err instanceof Error ? err.message : String(err),
+      })
     );
     return Promise.resolve();
   }
@@ -566,10 +601,20 @@ function runProactiveConsolidate(args: RunProactiveConsolidateArgs): Promise<voi
     // written, duplicates removed) and only the symlinks are pending — the
     // banner explains it. Treat as success, like the toggle path above.
     if (!result.ok && result.reason !== "eperm") {
-      new Notice(`Could not consolidate ${args.skill.name}: ${result.reason}`);
+      new Notice(
+        t("settings.skills.notice.consolidateFailed", {
+          skill: args.skill.name,
+          error: result.reason,
+        })
+      );
       return;
     }
-    new Notice(`Consolidated ${args.skill.name} into ${canonicalFolderRel}/.`);
+    new Notice(
+      t("settings.skills.notice.consolidated", {
+        skill: args.skill.name,
+        path: `${canonicalFolderRel}/`,
+      })
+    );
   };
 
   if (manager.getSuppressMigrationConfirm()) {
@@ -618,7 +663,7 @@ function buildToggleMigrationActionLines(args: BuildLinesArgs): MigrateActionLin
 
   // Move the representative source into canonical.
   out.push({
-    verb: "Move",
+    verb: t("settings.skills.migrate.verb.move"),
     detail: `<vault>/${repDir}/${skill.name}/   →   ${canonicalDest}`,
   });
 
@@ -627,17 +672,17 @@ function buildToggleMigrationActionLines(args: BuildLinesArgs): MigrateActionLin
     const dir = agentDirsProjectRel[agent];
     if (dir === undefined) continue;
     out.push({
-      verb: "Delete",
+      verb: t("settings.skills.migrate.verb.delete"),
       detail: `<vault>/${dir}/${skill.name}/`,
-      note: "(identical duplicate)",
+      note: t("settings.skills.migrate.note.duplicate"),
     });
   }
 
   if (variant === "disable-last-agent") {
     // The body explicitly says "Not create any shortcuts (no agents enabled)."
     out.push({
-      verb: "Not create",
-      detail: "any shortcuts (no agents enabled).",
+      verb: t("settings.skills.migrate.verb.notCreate"),
+      detail: t("settings.skills.migrate.noShortcuts"),
     });
     return out;
   }
@@ -648,9 +693,9 @@ function buildToggleMigrationActionLines(args: BuildLinesArgs): MigrateActionLin
     const dir = agentDirsProjectRel[agent];
     if (dir === undefined) continue;
     out.push({
-      verb: "Create",
+      verb: t("settings.skills.migrate.verb.create"),
       detail: `<vault>/${dir}/${resolvedName}`,
-      note: "(shortcut to the new location)",
+      note: t("settings.skills.migrate.note.shortcut"),
     });
   }
   return out;
@@ -678,25 +723,25 @@ function buildConsolidateActionLines(args: BuildConsolidateLinesArgs): MigrateAc
   if (repDir === undefined) return [];
 
   out.push({
-    verb: "Move",
+    verb: t("settings.skills.migrate.verb.move"),
     detail: `<vault>/${repDir}/${skill.name}/   →   <vault>/${canonicalFolderRel}/${resolvedName}/`,
   });
   for (const agent of sourceDirs.slice(1)) {
     const dir = agentDirsProjectRel[agent];
     if (dir === undefined) continue;
     out.push({
-      verb: "Delete",
+      verb: t("settings.skills.migrate.verb.delete"),
       detail: `<vault>/${dir}/${skill.name}/`,
-      note: "(identical duplicate)",
+      note: t("settings.skills.migrate.note.duplicate"),
     });
   }
   for (const agent of sourceDirs) {
     const dir = agentDirsProjectRel[agent];
     if (dir === undefined) continue;
     out.push({
-      verb: "Create",
+      verb: t("settings.skills.migrate.verb.create"),
       detail: `<vault>/${dir}/${resolvedName}`,
-      note: "(shortcut to the new location)",
+      note: t("settings.skills.migrate.note.shortcut"),
     });
   }
   return out;

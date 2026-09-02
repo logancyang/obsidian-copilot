@@ -15,6 +15,7 @@
     "gallery:dev": "npm run gallery:stories && npm run gallery:css:source && run-p \"gallery:css:source -- --watch\" \"gallery:css:tailwind -- --watch --poll\" \"gallery:esbuild -- --watch\"",
     "gallery:build": "npm run gallery:stories && npm run gallery:css && npm run gallery:esbuild -- production",
     "gallery:vault": "npm run gallery:build && bash scripts/gallery-vault.sh",
+    "prebuild": "node scripts/generatePackedI18nCatalog.mjs",
     "build": "npm run build:tailwind && npm run build:esbuild || exit 1",
     "build:tailwind": "npx tailwindcss -i src/styles/tailwind.css -o styles.css --minify",
     "build:esbuild": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",

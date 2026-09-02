@@ -6,6 +6,7 @@ import { ArrowUpRight, CheckSquare, CircleAlert, MonitorDown, RefreshCw } from "
 import { App, Modal } from "obsidian";
 import React from "react";
 import { Root } from "react-dom/client";
+import { t } from "@/i18n";
 
 /**
  * Which step of the connect flow is showing.
@@ -116,11 +117,10 @@ export const MiyoConnectContent: React.FC<MiyoConnectContentProps> = ({
               <CircleAlert className="tw-size-5" />
             </IconTile>
             <div className="tw-text-lg tw-font-semibold tw-text-normal">
-              Miyo isn&apos;t running
+              {t("settings.miyo.connectModal.notRunning.title")}
             </div>
             <div className="tw-text-sm tw-text-muted">
-              Copilot couldn&apos;t reach a local Miyo instance. If you haven&apos;t installed Miyo
-              yet, download it; if it&apos;s installed, open the app, then retry.
+              {t("settings.miyo.connectModal.notRunning.description")}
             </div>
           </div>
           <div className="tw-flex tw-gap-2">
@@ -129,19 +129,19 @@ export const MiyoConnectContent: React.FC<MiyoConnectContentProps> = ({
               className="tw-flex-1 tw-justify-center"
               onClick={() => window.open(downloadUrl, "_blank")}
             >
-              Download Miyo <ArrowUpRight className="tw-size-3.5" />
+              {t("settings.miyo.connectModal.download")} <ArrowUpRight className="tw-size-3.5" />
             </Button>
             <Button
               variant="secondary"
               className="tw-flex-1 tw-justify-center tw-border-none tw-shadow-none"
               onClick={() => window.open(MIYO_DEEPLINK_URL, "_blank")}
             >
-              <MonitorDown className="tw-size-3.5" /> Open Miyo
+              <MonitorDown className="tw-size-3.5" /> {t("settings.miyo.connectModal.open")}
             </Button>
           </div>
           <div className="tw-flex tw-items-center tw-justify-between">
             <Button variant="ghost2" size="sm" onClick={onClose}>
-              Cancel
+              {t("settings.actions.cancel")}
             </Button>
             <Button
               variant="link"
@@ -149,7 +149,7 @@ export const MiyoConnectContent: React.FC<MiyoConnectContentProps> = ({
               className="tw-border-none tw-bg-transparent tw-shadow-none"
               onClick={onRetry}
             >
-              <RefreshCw className="tw-size-3.5" /> Retry connection
+              <RefreshCw className="tw-size-3.5" /> {t("settings.miyo.connectModal.retry")}
             </Button>
           </div>
         </>
@@ -162,30 +162,16 @@ export const MiyoConnectContent: React.FC<MiyoConnectContentProps> = ({
               <CheckSquare className="tw-size-5" />
             </IconTile>
             <div className="tw-text-lg tw-font-semibold tw-text-normal">
-              Register this vault with Miyo
+              {t("settings.miyo.connectModal.register.title")}
             </div>
             <div className="tw-text-sm tw-text-muted">
-              {canAutoAdd ? (
-                <>
-                  Miyo is running. Copilot will register{" "}
-                  <span className="tw-font-semibold tw-text-normal">this vault</span> so Miyo can
-                  index it locally for search and chat — unlimited, no credits. The folders you
-                  register are the boundary Miyo works within; if you turn on Miyo&apos;s Relay
-                  connector, ChatGPT and Claude can reach this vault too.
-                </>
-              ) : (
-                <>
-                  Miyo is running, but{" "}
-                  <span className="tw-font-semibold tw-text-normal">this vault</span> isn&apos;t
-                  added to it yet. Open Miyo, add this vault as a folder, then retry — Miyo indexes
-                  it locally for search and chat, unlimited and no credits. If you turn on
-                  Miyo&apos;s Relay connector, ChatGPT and Claude can reach it too.
-                </>
-              )}
+              {canAutoAdd
+                ? t("settings.miyo.connectModal.register.autoDescription")
+                : t("settings.miyo.connectModal.register.manualDescription")}
             </div>
             {addError && (
               <div className="tw-text-sm tw-text-error">
-                Couldn&apos;t register this vault with Miyo. Please try again.
+                {t("settings.miyo.connectModal.register.failed")}
               </div>
             )}
           </div>
@@ -194,7 +180,7 @@ export const MiyoConnectContent: React.FC<MiyoConnectContentProps> = ({
             // bottom-right (no Retry — a direct POST has nothing to re-probe).
             <div className="tw-flex tw-items-center tw-justify-end tw-gap-2">
               <Button variant="secondary" size="sm" onClick={onClose}>
-                Cancel
+                {t("settings.actions.cancel")}
               </Button>
               <Button
                 variant="default"
@@ -204,10 +190,11 @@ export const MiyoConnectContent: React.FC<MiyoConnectContentProps> = ({
               >
                 {adding ? (
                   <>
-                    <RefreshCw className="tw-size-3.5 tw-animate-spin" /> Registering…
+                    <RefreshCw className="tw-size-3.5 tw-animate-spin" />{" "}
+                    {t("settings.miyo.connectModal.registering")}
                   </>
                 ) : (
-                  "Register & connect"
+                  t("settings.miyo.connectModal.register.action")
                 )}
               </Button>
             </div>
@@ -222,12 +209,12 @@ export const MiyoConnectContent: React.FC<MiyoConnectContentProps> = ({
                   className="tw-flex-1 tw-justify-center"
                   onClick={() => window.open(MIYO_ADD_FOLDER_DEEPLINK_URL, "_blank")}
                 >
-                  <MonitorDown className="tw-size-3.5" /> Open Miyo
+                  <MonitorDown className="tw-size-3.5" /> {t("settings.miyo.connectModal.open")}
                 </Button>
               </div>
               <div className="tw-flex tw-items-center tw-justify-between">
                 <Button variant="ghost2" size="sm" onClick={onClose}>
-                  Cancel
+                  {t("settings.actions.cancel")}
                 </Button>
                 <Button
                   variant="link"
@@ -235,7 +222,7 @@ export const MiyoConnectContent: React.FC<MiyoConnectContentProps> = ({
                   className="tw-border-none tw-bg-transparent tw-shadow-none"
                   onClick={onRetry}
                 >
-                  <RefreshCw className="tw-size-3.5" /> Retry
+                  <RefreshCw className="tw-size-3.5" /> {t("settings.actions.retry")}
                 </Button>
               </div>
             </>

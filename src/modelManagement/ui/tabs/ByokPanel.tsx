@@ -32,6 +32,7 @@ import { useAtomValue } from "jotai";
 import { Plus, ShieldCheck } from "lucide-react";
 import { Notice } from "obsidian";
 import React, { useEffect, useMemo, useState } from "react";
+import { t } from "@/i18n";
 
 const EMPTY_CATALOG: readonly CatalogProvider[] = Object.freeze([]);
 const EMPTY_MODELS: readonly ConfiguredModel[] = Object.freeze([]);
@@ -125,13 +126,13 @@ export const ByokPanel: React.FC = () => {
           await api.coordinator.removeProvider(providerId);
         } catch (err) {
           logError("[ByokPanel] removeProvider failed", err);
-          new Notice("Failed to remove provider.");
+          new Notice(t("settings.byok.notice.removeProviderFailed"));
         }
       },
-      `Remove ${provider.displayName}? This also removes all of its models from every model picker.`,
-      "Remove provider",
-      "Remove",
-      "Cancel"
+      t("settings.byok.removeProvider.confirm", { provider: provider.displayName }),
+      t("settings.byok.removeProvider.title"),
+      t("settings.actions.remove"),
+      t("settings.actions.cancel")
     );
     modal.open();
   };
@@ -140,38 +141,40 @@ export const ByokPanel: React.FC = () => {
     <div className="tw-flex tw-flex-col tw-gap-4 tw-py-4">
       <div className="tw-flex tw-items-start tw-justify-between tw-gap-4">
         <div className="tw-flex tw-flex-col tw-gap-1">
-          <div className="tw-text-xl tw-font-bold tw-text-normal">Bring Your Own Key</div>
+          <div className="tw-text-xl tw-font-bold tw-text-normal">BYOK</div>
           <div className="tw-max-w-xl tw-text-sm tw-text-muted">
-            Set up your own providers and models to use in Copilot.
+            {t("settings.byok.description")}
           </div>
         </div>
         <Button className="tw-shrink-0" onClick={handleAddProvider}>
           <Plus className="tw-size-4" />
-          Add a provider
+          {t("settings.byok.addProvider")}
         </Button>
       </div>
 
       {selfHostOn && (
         <div className="tw-flex tw-items-start tw-gap-2 tw-rounded-lg tw-border tw-border-solid tw-px-3 tw-py-2.5 tw-text-xs tw-text-normal tw-bg-interactive-accent/10 tw-border-interactive-accent/30">
           <ShieldCheck className="tw-mt-0.5 tw-size-4 tw-shrink-0 tw-text-accent" />
-          <div className="tw-leading-relaxed">
-            <span className="tw-font-semibold">Self-Host Mode is on.</span> Cloud providers stay
-            available but are flagged and listed below your local and self-hosted endpoints — their
-            prompts leave your machine. You decide whether to use them.
-          </div>
+          <div className="tw-leading-relaxed">{t("settings.byok.selfHostNotice")}</div>
         </div>
       )}
 
-      <SearchBar value={query} onChange={setQuery} placeholder="Search providers…" />
+      <SearchBar
+        value={query}
+        onChange={setQuery}
+        placeholder={t("settings.byok.searchProviders")}
+      />
 
       <div className="tw-flex tw-flex-col">
         {loadState === "loading" ? (
-          <div className="tw-text-sm tw-text-muted">Loading catalog…</div>
+          <div className="tw-text-sm tw-text-muted">{t("settings.byok.loadingCatalog")}</div>
         ) : (
           <ByokGlobalTable
             groups={groups}
             emptyMessage={
-              query.trim() && providers.length > 0 ? "No providers match your search." : undefined
+              query.trim() && providers.length > 0
+                ? t("settings.byok.noProviderMatches")
+                : undefined
             }
             onConfigure={(id) =>
               new ConfigureProviderModal(app, {

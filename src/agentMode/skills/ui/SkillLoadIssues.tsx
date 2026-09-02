@@ -3,12 +3,13 @@ import { ClampedContent } from "@/components/ui/clamped-content";
 import { ReactModal } from "@/components/modals/ReactModal";
 import { App } from "obsidian";
 import React from "react";
+import { t } from "@/i18n";
 
 export interface SkillLoadIssue {
   location: string;
   reason: string;
   offendingText?: string;
-  revealLabel: "Reveal in vault" | "Show in folder";
+  revealLabel: string;
   onFixWithAgent: () => void;
   onOpen: () => void;
   onReveal: () => void;
@@ -24,7 +25,7 @@ export interface SkillLoadIssuesProps {
  * https://github.com/Brevilabs/obsidian-copilot-private/issues/166
  */
 export const SkillLoadIssues: React.FC<SkillLoadIssuesProps> = ({ issues, onViewDetails }) => {
-  const title = `${issues.length} skill${issues.length === 1 ? "" : "s"} could not be loaded`;
+  const title = t("settings.skills.loadIssues.title", { count: issues.length });
 
   return (
     <section
@@ -34,11 +35,13 @@ export const SkillLoadIssues: React.FC<SkillLoadIssuesProps> = ({ issues, onView
     >
       <div className="tw-min-w-0">
         <strong className="tw-block tw-text-ui-small tw-text-warning">{title}</strong>
-        <p className="tw-mx-0 tw-mb-0 tw-mt-0.5 tw-text-normal">The skills have format errors.</p>
+        <p className="tw-mx-0 tw-mb-0 tw-mt-0.5 tw-text-normal">
+          {t("settings.skills.loadIssues.formatErrors")}
+        </p>
       </div>
       <div className="tw-flex tw-shrink-0 tw-gap-1">
         <Button variant="secondary" size="sm" onClick={onViewDetails}>
-          View details
+          {t("settings.skills.loadIssues.viewDetails")}
         </Button>
       </div>
     </section>
@@ -70,7 +73,7 @@ export const SkillLoadIssuesModalContent: React.FC<SkillLoadIssuesModalContentPr
       {issues.length > 1 && (
         <div className="tw-flex tw-justify-end">
           <Button size="sm" onClick={() => runAction(onFixAll)}>
-            Fix All with Agent
+            {t("settings.skills.loadIssues.fixAll")}
           </Button>
         </div>
       )}
@@ -95,10 +98,10 @@ export const SkillLoadIssuesModalContent: React.FC<SkillLoadIssuesModalContentPr
             )}
             <div className="tw-mt-2 tw-flex tw-gap-1">
               <Button variant="secondary" size="sm" onClick={() => runAction(issue.onFixWithAgent)}>
-                Fix with Agent
+                {t("settings.skills.loadIssues.fix")}
               </Button>
               <Button variant="ghost2" size="sm" onClick={() => runAction(issue.onOpen)}>
-                Open SKILL.md
+                {t("settings.skills.loadIssues.openSkill")}
               </Button>
               <Button variant="ghost2" size="sm" onClick={() => runAction(issue.onReveal)}>
                 {issue.revealLabel}
@@ -118,7 +121,7 @@ export class SkillLoadIssuesModal extends ReactModal {
     private readonly issues: readonly SkillLoadIssue[],
     private readonly onFixAll: () => void
   ) {
-    super(app, `${issues.length} skill${issues.length === 1 ? "" : "s"} could not be loaded`);
+    super(app, t("settings.skills.loadIssues.title", { count: issues.length }));
   }
 
   protected renderContent(close: () => void): React.ReactElement {
@@ -131,7 +134,6 @@ export class SkillLoadIssuesModal extends ReactModal {
 /** Empty loaded-list copy shown when every discovered skill needs repair. */
 export const AllSkillsNotLoaded: React.FC = () => (
   <div className="tw-rounded-sm tw-border tw-border-dashed tw-border-border tw-bg-primary tw-px-3 tw-py-6 tw-text-center tw-text-ui-smaller tw-text-muted">
-    No skills are loaded yet. Choose View details above to repair a SKILL.md. When it loads
-    successfully, it will move into the loaded list.
+    {t("settings.skills.loadIssues.allNotLoaded")}
   </div>
 );

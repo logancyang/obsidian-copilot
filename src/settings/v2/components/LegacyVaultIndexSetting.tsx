@@ -3,15 +3,7 @@ import { SettingItem } from "@/components/ui/setting-item";
 import { updateSetting } from "@/settings/model";
 import { App } from "obsidian";
 import React from "react";
-
-const DESCRIPTION =
-  "The built-in embedding index that powers semantic search when you are not using Miyo. " +
-  "Turning it off stops all indexing and falls back to keyword search; the index already on " +
-  "disk is kept, but no longer read or updated.";
-
-const MIYO_MANAGED_DESCRIPTION =
-  "Miyo is handling semantic search, so the built-in index is not in use and has nothing to " +
-  "index. Disconnect from the Miyo tab to return to keyword search.";
+import { t } from "@/i18n";
 
 export interface LegacyVaultIndexSettingProps {
   /** Whether the built-in index is on, which is what makes vault indexing run. */
@@ -33,8 +25,12 @@ export const LegacyVaultIndexSetting: React.FC<LegacyVaultIndexSettingProps> = (
 }) => (
   <SettingItem
     type="switch"
-    title="Legacy vault index"
-    description={miyoManaged ? MIYO_MANAGED_DESCRIPTION : DESCRIPTION}
+    title={t("settings.advanced.legacyIndex.title")}
+    description={
+      miyoManaged
+        ? t("settings.advanced.legacyIndex.miyoDescription")
+        : t("settings.advanced.legacyIndex.description")
+    }
     checked={enabled}
     disabled={miyoManaged}
     onCheckedChange={onToggle}

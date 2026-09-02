@@ -44,6 +44,7 @@ import { extractAppIgnoreSettings, getSystemExcludedFolders } from "@/search/sea
 import { ArrowUpRight, CornerDownRight, TriangleAlert } from "lucide-react";
 import { Notice, Platform } from "obsidian";
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { t } from "@/i18n";
 
 /** Landing page for users who don't have Miyo installed yet. */
 const MIYO_DOWNLOAD_URL = MIYO_HOMEPAGE_URL;
@@ -59,12 +60,12 @@ const RelayTag: React.FC = () => (
 function connectorStatusText(status: CapabilityStatus): string {
   switch (status) {
     case "available":
-      return "Connected — tunnel & sign-in active";
+      return t("settings.miyo.connector.connected");
     case "unavailable":
-      return "Not set up — finish tunnel & sign-in in Miyo";
+      return t("settings.miyo.connector.notSetUp");
     default:
       // unknown / stale: no live relay signal yet.
-      return "Checking…";
+      return t("settings.status.checking");
   }
 }
 
@@ -72,14 +73,14 @@ function connectorStatusText(status: CapabilityStatus): string {
 function chatSyncStatusText(status: CapabilityStatus): string {
   switch (status) {
     case "available":
-      return "Ready · chats indexed";
+      return t("settings.miyo.chat.ready");
     case "syncing":
-      return "Syncing chats…";
+      return t("settings.miyo.chat.syncing");
     case "unavailable":
-      return "Not set up — add chat sources in Miyo";
+      return t("settings.miyo.chat.notSetUp");
     default:
       // unknown / stale: no live chat-sync signal yet.
-      return "Checking…";
+      return t("settings.status.checking");
   }
 }
 
@@ -290,42 +291,35 @@ export const MiyoSettings: React.FC = () => {
       if (!mountedRef.current) return;
       switch (outcome) {
         case "verified":
-          new Notice("Miyo is already in sync with your Copilot folders.");
+          new Notice(t("settings.miyo.notice.inSync"));
           setServerScopeStale(false);
           break;
         case "resynced":
-          new Notice("Miyo resynced — excluded folders updated, re-index started.");
+          new Notice(t("settings.miyo.notice.resynced"));
           setServerScopeStale(false);
           break;
         case "resynced-scan-failed":
-          new Notice("Miyo resynced; indexing will catch up on Miyo's next scan.");
+          new Notice(t("settings.miyo.notice.resyncedScanPending"));
           setServerScopeStale(false);
           break;
         case "resynced-grants-reset":
           // The rebuild could not recover this folder's Miyo-side permissions,
           // so they were reset to off. Say so plainly: a user who had remote
           // read enabled would otherwise keep believing it still is.
-          new Notice(
-            "Miyo resynced. This folder's registration had to be rebuilt, so its " +
-              "remote read and write access were turned off — re-enable them in the Miyo app if you want them.",
-            10000
-          );
+          new Notice(t("settings.miyo.notice.resyncedAccessReset"), 10000);
           setServerScopeStale(false);
           break;
         case "conflict":
-          new Notice(
-            "Miyo reports a conflicting registration (possibly under this vault's previous name). " +
-              "Remove it in the Miyo app, then retry."
-          );
+          new Notice(t("settings.miyo.notice.registrationConflict"));
           break;
         case "unregistered":
           // Nothing on the server exposes this vault, so the stale banner can
           // clear; re-registering is the register flow's job (explicit consent).
-          new Notice("This vault isn't registered with Miyo. Reconnect to register it.");
+          new Notice(t("settings.miyo.notice.unregistered"));
           setServerScopeStale(false);
           break;
         case "failed":
-          new Notice("Couldn't resync Miyo. Make sure Miyo is running, then retry.");
+          new Notice(t("settings.miyo.notice.resyncFailed"));
           break;
       }
     } finally {
@@ -593,7 +587,7 @@ export const MiyoSettings: React.FC = () => {
       return "error";
     }
     if (outcome === "error" && mountedRef.current) {
-      new Notice("Couldn't confirm this vault with Miyo. Please try again.");
+      new Notice(t("settings.miyo.notice.confirmFailed"));
     }
     return outcome;
   }, [attemptConnection]);
@@ -692,15 +686,13 @@ export const MiyoSettings: React.FC = () => {
           if (result === "installed") {
             // Persist regardless of unmount: the files ARE on disk now.
             updateSetting("enableMiyoSearchSkill", true);
-            if (!unmounted()) new Notice("Miyo search skill installed");
+            if (!unmounted()) new Notice(t("settings.miyo.notice.skillInstalled"));
           } else if (result === "collision") {
             if (!unmounted()) {
-              new Notice(
-                "A skill named “miyo-search” already exists in your skills folder. Rename or remove it, then try again."
-              );
+              new Notice(t("settings.miyo.notice.skillCollision"));
             }
           } else if (!unmounted()) {
-            new Notice("Couldn't install the Miyo search skill. Please try again.");
+            new Notice(t("settings.miyo.notice.skillInstallFailed"));
           }
         } else {
           const result = await removeMiyoSearchSkill(app, skillsFolder);
@@ -709,7 +701,7 @@ export const MiyoSettings: React.FC = () => {
             // The skill is still on disk — keep the flag on so UI and disk agree,
             // and surface the failure instead of a silent no-op.
             if (!unmounted()) {
-              new Notice("Couldn't remove the Miyo search skill. Please try again.");
+              new Notice(t("settings.miyo.notice.skillRemoveFailed"));
             }
             return;
           }
@@ -718,14 +710,12 @@ export const MiyoSettings: React.FC = () => {
           // collision so they can clean up.
           updateSetting("enableMiyoSearchSkill", false);
           if (result === "collision" && !unmounted()) {
-            new Notice(
-              "Disabled. A user-created “miyo-search” skill was left in place — remove it manually if you don't want it."
-            );
+            new Notice(t("settings.miyo.notice.skillUserCopyKept"));
           }
         }
       } catch {
         if (!superseded() && !unmounted()) {
-          new Notice("Couldn't update the Miyo search skill. Please try again.");
+          new Notice(t("settings.miyo.notice.skillUpdateFailed"));
         }
       } finally {
         if (!superseded() && !unmounted()) setPendingSkillEnabled(null);
@@ -765,18 +755,13 @@ export const MiyoSettings: React.FC = () => {
 
   return (
     <div className="tw-space-y-4">
-      <div className="tw-text-sm tw-text-muted">
-        Local, private context that stays on your machine — unlimited, no credits.
-      </div>
+      <div className="tw-text-sm tw-text-muted">{t("settings.miyo.intro")}</div>
 
       {(serverScopeStale === true ||
         (serverScopeStale === null && shouldSurfaceMiyoResync(app, settings))) && (
         <div className="tw-flex tw-items-center tw-gap-2 tw-rounded-lg tw-border tw-border-solid tw-px-3 tw-py-2.5 tw-text-xs tw-text-warning tw-bg-warning/10 tw-border-warning/30">
           <TriangleAlert className="tw-size-4 tw-shrink-0" />
-          <span className="tw-flex-1">
-            Miyo&apos;s excluded folders don&apos;t match your Copilot folder — chats could be
-            indexed and exposed. Resync to update them.
-          </span>
+          <span className="tw-flex-1">{t("settings.miyo.scopeWarning")}</span>
           {canAutoAddVault() ? (
             <Button
               size="sm"
@@ -784,28 +769,28 @@ export const MiyoSettings: React.FC = () => {
               disabled={resyncPending}
               onClick={() => void handleResync()}
             >
-              {resyncPending ? "Resyncing…" : "Resync Miyo"}
+              {resyncPending ? t("settings.miyo.resyncing") : t("settings.miyo.resyncAction")}
             </Button>
           ) : (
-            <span className="tw-shrink-0">Remove and re-add this folder in the Miyo app.</span>
+            <span className="tw-shrink-0">{t("settings.miyo.resyncManual")}</span>
           )}
         </div>
       )}
 
       {/* Connection */}
-      <SettingSection label="Connection">
+      <SettingSection label={t("settings.miyo.connection")}>
         <CapabilityRow
           title="Miyo"
           description={
             <span>
-              Runs locally and connects automatically. Don&apos;t have Miyo yet?{" "}
+              {t("settings.miyo.connection.description")}{" "}
               <a
                 href={MIYO_DOWNLOAD_URL}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="tw-inline-flex tw-items-center tw-gap-0.5 tw-text-accent"
               >
-                Download <ArrowUpRight className="tw-size-3.5" />
+                {t("settings.actions.download")} <ArrowUpRight className="tw-size-3.5" />
               </a>
             </span>
           }
@@ -822,7 +807,7 @@ export const MiyoSettings: React.FC = () => {
                 type="button"
                 onClick={() => void handleDisconnect()}
                 disabled={refreshing}
-                title="Disconnect Miyo"
+                title={t("settings.miyo.disconnect")}
                 className={cn(
                   "tw-group tw-inline-flex tw-shrink-0 tw-cursor-pointer tw-items-center tw-gap-1.5 tw-rounded-full !tw-border-none !tw-px-3 !tw-py-1 tw-text-smallest tw-font-semibold !tw-shadow-none tw-transition-colors",
                   capabilitiesEnabled
@@ -837,11 +822,15 @@ export const MiyoSettings: React.FC = () => {
                 <span className="tw-grid tw-text-center">
                   <span className="tw-col-start-1 tw-row-start-1 group-hover:tw-invisible">
                     {capabilitiesEnabled
-                      ? `Connected · ${connectedRemote ? "remote" : "local"}`
-                      : "Unavailable"}
+                      ? t("settings.miyo.connected", {
+                          location: connectedRemote
+                            ? t("settings.miyo.remote")
+                            : t("settings.miyo.local"),
+                        })
+                      : t("settings.status.unavailable")}
                   </span>
                   <span className="tw-invisible tw-col-start-1 tw-row-start-1 group-hover:tw-visible">
-                    Disconnect
+                    {t("settings.actions.disconnect")}
                   </span>
                 </span>
               </button>
@@ -852,7 +841,7 @@ export const MiyoSettings: React.FC = () => {
                 onClick={() => void handleConnect()}
                 disabled={refreshing}
               >
-                {refreshing ? "Connecting…" : "Connect"}
+                {refreshing ? t("settings.miyo.connecting") : t("settings.actions.connect")}
               </Button>
             )
           }
@@ -867,10 +856,10 @@ export const MiyoSettings: React.FC = () => {
               Connector <RelayTag />
             </>
           }
-          description="Let ChatGPT / Claude read-write your local files and vault from the cloud."
+          description={t("settings.miyo.connector.description")}
           status={status.connector}
           statusText={connectorStatusText(status.connector)}
-          actionLabel="Set up in Miyo"
+          actionLabel={t("settings.miyo.connector.setup")}
           onAction={() => window.open(MIYO_CONNECT_DEEPLINK_URL, "_blank")}
         />
 
@@ -885,14 +874,14 @@ export const MiyoSettings: React.FC = () => {
                   SettingItem's `custom` slot rather than the debounced text mode. */}
               <SettingItem
                 type="custom"
-                title="Remote Miyo server (advanced)"
-                description="Leave blank for local discovery, or point at a remote Miyo instance. The Connector above uses this endpoint."
+                title={t("settings.miyo.remoteServer.title")}
+                description={t("settings.miyo.remoteServer.description")}
               >
                 <Input
                   value={urlDraft}
                   onChange={(event) => setUrlDraft(event.target.value)}
                   onBlur={commitUrl}
-                  placeholder="Leave blank for local discovery"
+                  placeholder={t("settings.miyo.remoteServer.placeholder")}
                   className="tw-w-full sm:tw-w-[260px]"
                 />
               </SettingItem>
@@ -906,17 +895,20 @@ export const MiyoSettings: React.FC = () => {
           editable (it applies to Plus document conversion too), so this can't use
           SettingSection's all-or-nothing `gated`. */}
       <div className="tw-space-y-2">
-        <div className="tw-text-xs tw-font-semibold tw-text-muted">Powered by Miyo</div>
+        <div className="tw-text-xs tw-font-semibold tw-text-muted">
+          {t("settings.miyo.powered.title")}
+        </div>
         <div className="tw-text-sm tw-text-muted">
-          <span className="tw-font-semibold tw-text-normal">Plus</span> = Copilot cloud, uses
-          credits · <span className="tw-font-semibold tw-text-accent">Miyo</span> = local,
-          unlimited, on your machine
+          <span className="tw-font-semibold tw-text-normal">Plus</span>{" "}
+          {t("settings.miyo.powered.plus")} ·{" "}
+          <span className="tw-font-semibold tw-text-accent">Miyo</span>{" "}
+          {t("settings.miyo.powered.miyo")}
         </div>
 
         {!capabilitiesEnabled && (
           <div className="tw-flex tw-items-center tw-gap-2 tw-rounded-lg tw-border tw-border-solid tw-px-3 tw-py-2.5 tw-text-xs tw-text-warning tw-bg-warning/10 tw-border-warning/30">
             <TriangleAlert className="tw-size-4 tw-shrink-0" />
-            Connect to Miyo to configure these capabilities.
+            {t("settings.miyo.capabilities.connectFirst")}
           </div>
         )}
 
@@ -946,8 +938,8 @@ export const MiyoSettings: React.FC = () => {
                   aria-disabled={!skillToggleUsable}
                 >
                   <CapabilityRow
-                    title="Semantic search"
-                    description="Understands meaning, not just keywords — finds related notes on-device."
+                    title={t("settings.miyo.semantic.title")}
+                    description={t("settings.miyo.semantic.description")}
                     control={
                       <SettingSwitch
                         checked={pendingSkillEnabled ?? settings.enableMiyoSearchSkill}
@@ -955,7 +947,7 @@ export const MiyoSettings: React.FC = () => {
                         disabled={
                           Platform.isMobile || !skillToggleUsable || pendingSkillEnabled !== null
                         }
-                        aria-label="Enable Miyo semantic search skill"
+                        aria-label={t("settings.miyo.semantic.toggleLabel")}
                       />
                     }
                   />
@@ -986,16 +978,16 @@ export const MiyoSettings: React.FC = () => {
                 title={
                   <span className="tw-flex tw-items-center tw-gap-1.5">
                     <CornerDownRight className="tw-size-3 tw-text-faint" />
-                    Search scope
+                    {t("settings.miyo.scope.title")}
                   </span>
                 }
-                description="Only the current vault, or everything Miyo has indexed."
+                description={t("settings.miyo.scope.description")}
                 control={
                   <SegmentedControl
-                    aria-label="Search scope"
+                    aria-label={t("settings.miyo.scope.title")}
                     options={[
-                      { label: "Current vault", value: "current" },
-                      { label: "Unrestricted", value: "unrestricted" },
+                      { label: t("settings.miyo.scope.current"), value: "current" },
+                      { label: t("settings.miyo.scope.unrestricted"), value: "unrestricted" },
                     ]}
                     value={settings.miyoSearchAll ? "unrestricted" : "current"}
                     onChange={(value) => updateSetting("miyoSearchAll", value === "unrestricted")}
@@ -1008,11 +1000,11 @@ export const MiyoSettings: React.FC = () => {
                   deeplink button also takes `disabled` so the gate holds for
                   keyboard users, not just pointer. */}
               <MiyoStatusRow
-                title="Search chat"
-                description="Search your ChatGPT / Claude chats locally. Set up chat sources and indexing in Miyo."
+                title={t("settings.miyo.chat.title")}
+                description={t("settings.miyo.chat.description")}
                 status={status.chatSync}
                 statusText={chatSyncStatusText(status.chatSync)}
-                actionLabel="Manage in Miyo"
+                actionLabel={t("settings.miyo.chat.manage")}
                 onAction={() => window.open(MIYO_CHATS_DEEPLINK_URL, "_blank")}
                 disabled={!capabilitiesEnabled}
               />
@@ -1027,11 +1019,11 @@ export const MiyoSettings: React.FC = () => {
                 preference. */}
             <div className="tw-px-4">
               <CapabilityRow
-                title="Document Processor"
-                description="Processes PDF & EPUB locally via Miyo; other formats use Plus cloud."
+                title={t("settings.miyo.documentProcessor.title")}
+                description={t("settings.miyo.documentProcessor.description")}
                 control={
                   <SegmentedControl
-                    aria-label="Document Processor backend"
+                    aria-label={t("settings.miyo.documentProcessor.backendLabel")}
                     options={[
                       { label: "Plus", value: "plus" },
                       { label: "Miyo", value: "miyo" },

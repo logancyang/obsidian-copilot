@@ -32,6 +32,7 @@ import { Notice } from "obsidian";
 import React, { useCallback, useEffect, useState } from "react";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
+import { t } from "@/i18n";
 
 const DESKTOP_UNAVAILABLE_FRAME_LOG_PATH = "(Agent Mode frame logs are desktop-only)";
 
@@ -64,7 +65,7 @@ export const AdvancedSettings: React.FC = () => {
     // Node-only modules that throw during evaluation, so the desktop check must
     // happen first (mirrors the frame-log buttons below).
     if (!isDesktopRuntime()) {
-      new Notice("Reporting an issue is available on desktop only.");
+      new Notice(t("settings.advanced.notice.reportDesktopOnly"));
       return;
     }
     void (async () => {
@@ -115,13 +116,10 @@ export const AdvancedSettings: React.FC = () => {
       new ConfirmModal(
         app,
         () => resolve(true),
-        "This will remove all API keys for this vault from the Obsidian Keychain, data.json, " +
-          "and memory. You will need to re-enter them. Any credential backup files written " +
-          "during the v4 upgrade are left in place — delete those yourself once you no longer " +
-          "need them.",
-        "\u26A0\uFE0F Forget All Secrets",
-        "Remove",
-        "Cancel",
+        t("settings.advanced.secrets.confirm"),
+        t("settings.advanced.secrets.confirmTitle"),
+        t("settings.actions.remove"),
+        t("settings.actions.cancel"),
         () => resolve(false)
       ).open();
     });
@@ -153,7 +151,7 @@ export const AdvancedSettings: React.FC = () => {
       );
     } catch (error) {
       logError("Failed to forget secrets.", error);
-      new Notice("Failed to remove API keys. Please try again.");
+      new Notice(t("settings.advanced.notice.removeKeysFailed"));
     } finally {
       setForgetting(false);
     }
@@ -164,29 +162,17 @@ export const AdvancedSettings: React.FC = () => {
       <LegacyChatPromptsNotice />
 
       {/* Others Section */}
-      <SettingSection label="Others">
+      <SettingSection label={t("settings.advanced.others")}>
         <SettingItem
           type="custom"
-          title="API Key Storage"
+          title={t("settings.advanced.apiStorage.title")}
           description={
             !keychainAvailable ? (
-              <>
-                Update Obsidian to <code>1.11.4+</code> to use the{" "}
-                <strong className="tw-font-semibold tw-text-normal">Obsidian Keychain</strong>. Keys
-                cannot be loaded or saved in this build.
-              </>
+              <>{t("settings.advanced.apiStorage.unavailable")}</>
             ) : keychainAppearsEmpty ? (
-              <span className="tw-text-warning">
-                No API keys found in this device&apos;s{" "}
-                <strong className="tw-font-semibold tw-text-normal">Obsidian Keychain</strong>.
-                Re-enter your API keys in the relevant settings sections — each device has a
-                separate Keychain.
-              </span>
+              <span className="tw-text-warning">{t("settings.advanced.apiStorage.empty")}</span>
             ) : (
-              <>
-                API keys are stored in this device&apos;s{" "}
-                <strong className="tw-font-semibold tw-text-normal">Obsidian Keychain</strong>.
-              </>
+              <>{t("settings.advanced.apiStorage.stored")}</>
             )
           }
         >
@@ -199,7 +185,7 @@ export const AdvancedSettings: React.FC = () => {
             ) : (
               <div className="tw-inline-flex tw-items-center tw-gap-1.5 tw-rounded-md tw-border tw-border-border tw-bg-secondary tw-px-3 tw-py-1 tw-text-smallest tw-font-semibold tw-text-muted">
                 <Info className="tw-size-4" />
-                Unavailable
+                {t("settings.status.unavailable")}
               </div>
             )}
             <Button
@@ -208,14 +194,14 @@ export const AdvancedSettings: React.FC = () => {
               onClick={safeAsyncHandler(handleForgetAllSecrets)}
               disabled={forgetting || !keychainAvailable}
               title={
-                keychainAvailable
-                  ? undefined
-                  : "Update Obsidian to 1.11.4+ to delete Keychain entries."
+                keychainAvailable ? undefined : t("settings.advanced.apiStorage.updateTooltip")
               }
               className="tw-gap-1.5"
             >
               <Trash2 className="tw-size-4" />
-              {forgetting ? "Removing..." : "Delete All Keys"}
+              {forgetting
+                ? t("settings.advanced.apiStorage.removing")
+                : t("settings.advanced.apiStorage.deleteAll")}
             </Button>
           </div>
         </SettingItem>
@@ -236,16 +222,18 @@ export const AdvancedSettings: React.FC = () => {
 
         <SettingItem
           type="switch"
-          title="Debug Mode"
-          description="Logs Copilot chat activity to the developer console (View → Toggle Developer Tools). For troubleshooting the regular chat — Agent Mode has its own log below."
+          title={t("settings.advanced.debug.title")}
+          description={t("settings.advanced.debug.description")}
           checked={settings.debug}
           onCheckedChange={(checked) => updateSetting("debug", checked)}
         />
 
         <SettingItem
           type="custom"
-          title="Create Log File"
-          description={`Save and open the regular Copilot chat log (${logFileManager.getLogPath()}) to share when reporting a chat issue. Agent Mode issues are handled by the "Report an Issue" button in the agent pane instead.`}
+          title={t("settings.advanced.chatLog.title")}
+          description={t("settings.advanced.chatLog.description", {
+            path: logFileManager.getLogPath(),
+          })}
         >
           <Button
             variant="secondary"
@@ -258,30 +246,30 @@ export const AdvancedSettings: React.FC = () => {
               })();
             }}
           >
-            Create Log File
+            {t("settings.advanced.chatLog.action")}
           </Button>
         </SettingItem>
       </SettingSection>
 
       {/* Agent Mode debugging Section */}
       <SettingSection
-        label="Agent Mode debugging"
-        description="Tools for diagnosing Agent Mode problems, separate from the regular Copilot chat logs above."
+        label={t("settings.advanced.agentDebug.section")}
+        description={t("settings.advanced.agentDebug.description")}
       >
         <SettingItem
           type="custom"
-          title="Report an Issue"
-          description="Bundles a screenshot of the Agent Mode chat pane and a recent activity log into a folder, then opens a prefilled GitHub issue for you to attach them to."
+          title={t("settings.advanced.report.title")}
+          description={t("settings.advanced.report.description")}
         >
           <Button variant="secondary" size="sm" onClick={handleReportIssue}>
-            Report an Issue
+            {t("settings.advanced.report.title")}
           </Button>
         </SettingItem>
 
         <SettingItem
           type="switch"
-          title="Keep an Agent Mode activity log"
-          description="Records the behind-the-scenes messages between Copilot and the agent so the Report an Issue button always has recent activity to attach. Stored on this device only, outside your vault, and can include your prompts and note contents in plain text. On by default; turn off to stop logging."
+          title={t("settings.advanced.agentLog.title")}
+          description={t("settings.advanced.agentLog.description")}
           checked={settings.agentMode.debugFullFrames}
           onCheckedChange={(checked) => {
             setSettings((cur) => ({
@@ -292,8 +280,8 @@ export const AdvancedSettings: React.FC = () => {
 
         <SettingItem
           type="custom"
-          title="Agent Mode activity log file"
-          description={`Open or clear the log file on disk (${frameLogPath}).`}
+          title={t("settings.advanced.agentLog.fileTitle")}
+          description={t("settings.advanced.agentLog.fileDescription", { path: frameLogPath })}
         >
           <div className="tw-flex tw-gap-2">
             <Button
@@ -301,7 +289,7 @@ export const AdvancedSettings: React.FC = () => {
               size="sm"
               onClick={safeAsyncHandler(async () => {
                 if (!isDesktopRuntime()) {
-                  new Notice("Agent Mode frame logs are available on desktop only.");
+                  new Notice(t("settings.advanced.notice.agentLogDesktopOnly"));
                   return;
                 }
                 try {
@@ -309,31 +297,31 @@ export const AdvancedSettings: React.FC = () => {
                   await acpFrameSink.open();
                   setFrameLogPath(acpFrameSink.getPath());
                 } catch {
-                  new Notice("Failed to open Agent Mode frame log.");
+                  new Notice(t("settings.advanced.notice.openAgentLogFailed"));
                 }
               })}
             >
-              Open
+              {t("settings.actions.open")}
             </Button>
             <Button
               variant="secondary"
               size="sm"
               onClick={safeAsyncHandler(async () => {
                 if (!isDesktopRuntime()) {
-                  new Notice("Agent Mode frame logs are available on desktop only.");
+                  new Notice(t("settings.advanced.notice.agentLogDesktopOnly"));
                   return;
                 }
                 try {
                   const { acpFrameSink } = await import("@/agentMode");
                   await acpFrameSink.clear();
                   setFrameLogPath(acpFrameSink.getPath());
-                  new Notice("Agent Mode frame log cleared.");
+                  new Notice(t("settings.advanced.notice.agentLogCleared"));
                 } catch {
-                  new Notice("Failed to clear Agent Mode frame log.");
+                  new Notice(t("settings.advanced.notice.clearAgentLogFailed"));
                 }
               })}
             >
-              Clear
+              {t("settings.actions.clear")}
             </Button>
           </div>
         </SettingItem>
