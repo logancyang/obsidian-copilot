@@ -4,6 +4,7 @@ import { TabContent, TabItem, type TabItem as TabItemType } from "@/components/u
 import { PluginProvider } from "@/contexts/PluginContext";
 import { TabProvider, useTab } from "@/contexts/TabContext";
 import { useLatestVersion } from "@/hooks/useLatestVersion";
+import { t } from "@/i18n";
 import CopilotPlugin from "@/main";
 import { ByokPanel, ModelManagementProvider } from "@/modelManagement";
 import { resetSettings } from "@/settings/model";
@@ -49,7 +50,7 @@ const SkillsSettingsPanel: React.FC = () => {
   // Node-only modules that throw while being evaluated, so the desktop check
   // has to happen before the import is ever requested.
   if (!isDesktopRuntime()) {
-    return <DesktopOnlySettingsPanel message="Skills are available on desktop." />;
+    return <DesktopOnlySettingsPanel message={t("settings.skills.desktopOnly")} />;
   }
   return (
     <React.Suspense fallback={null}>
@@ -82,26 +83,24 @@ const components: Record<TabId, React.FC> = {
 
 // Tab labels — most tabs derive from the id, but a few need a display form the
 // id can't produce ("byok" → "BYOK", "selfhost" → "Self-Host").
-const TAB_LABELS: Record<TabId, string> = {
-  basic: "Basic",
-  byok: "BYOK",
-  miyo: "Miyo",
-  selfhost: "Self-Host",
-  command: "Command",
-  skills: "Skills",
-  advanced: "Advanced",
+const TAB_LABEL_KEYS: Record<TabId, string> = {
+  basic: "settings.tabs.basic",
+  byok: "settings.tabs.byok",
+  miyo: "settings.tabs.miyo",
+  selfhost: "settings.tabs.selfHost",
+  command: "settings.tabs.command",
+  skills: "settings.tabs.skills",
+  advanced: "settings.tabs.advanced",
 };
-
-// tabs
-const tabs: TabItemType[] = TAB_IDS.map((id) => ({
-  id,
-  icon: icons[id],
-  label: TAB_LABELS[id],
-}));
 
 const SettingsContent: React.FC = () => {
   const { selectedTab, setSelectedTab } = useTab();
   const skillLoadErrorCount = useSkillLoadErrorCount();
+  const tabs: TabItemType[] = TAB_IDS.map((id) => ({
+    id,
+    icon: icons[id],
+    label: t(TAB_LABEL_KEYS[id]),
+  }));
 
   return (
     <div className="tw-flex tw-flex-col">
@@ -187,7 +186,7 @@ const SettingsMainV2: React.FC<SettingsMainV2Props> = ({ plugin }) => {
                 className="tw-flex tw-flex-col tw-gap-2 tw-text-base tw-font-semibold sm:tw-flex-row sm:tw-items-center sm:tw-justify-between"
               >
                 <div className="tw-flex tw-items-center tw-gap-2">
-                  <span>Copilot Settings</span>
+                  <span>{t("settings.title")}</span>
                   <div className="tw-flex tw-items-center tw-gap-1">
                     <span className="tw-text-xs tw-font-normal tw-text-muted">
                       v{plugin.manifest.version}
@@ -201,12 +200,12 @@ const SettingsMainV2: React.FC<SettingsMainV2Props> = ({ plugin }) => {
                             rel="noopener noreferrer"
                             className="tw-text-xs tw-font-normal tw-text-accent hover:tw-underline"
                           >
-                            (Update to v{latestVersion})
+                            {t("settings.update.available", { version: latestVersion })}
                           </a>
                         ) : (
                           <span className="tw-text-xs tw-font-normal tw-text-normal">
                             {" "}
-                            (up to date)
+                            {t("settings.update.current")}
                           </span>
                         )}
                       </>
@@ -215,7 +214,7 @@ const SettingsMainV2: React.FC<SettingsMainV2Props> = ({ plugin }) => {
                 </div>
                 <div className="tw-self-end sm:tw-self-auto">
                   <Button variant="secondary" size="sm" onClick={handleReset}>
-                    Reset Settings
+                    {t("settings.reset.action")}
                   </Button>
                 </div>
               </div>

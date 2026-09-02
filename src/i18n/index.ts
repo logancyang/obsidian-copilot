@@ -1,5 +1,6 @@
 import { DEFAULT_LOCALE, resolveLocale, type SupportedLocale } from "@/i18n/locale";
 import { ENGLISH_TRANSLATIONS } from "@/i18n/locales/en";
+import { ZH_CN_TRANSLATIONS } from "@/i18n/locales/zh-CN";
 import { getLanguage } from "obsidian";
 
 export { DEFAULT_LOCALE, SUPPORTED_LOCALES, resolveLocale } from "@/i18n/locale";
@@ -14,6 +15,7 @@ export type TranslationCatalog = Readonly<Record<string, string>>;
 
 const catalogs: Partial<Record<SupportedLocale, TranslationCatalog>> = {
   [DEFAULT_LOCALE]: ENGLISH_TRANSLATIONS,
+  "zh-CN": ZH_CN_TRANSLATIONS,
 };
 let requestedLocale: SupportedLocale | undefined;
 let activeLocale: SupportedLocale = DEFAULT_LOCALE;

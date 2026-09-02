@@ -1,4 +1,5 @@
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
+import { t } from "@/i18n";
 import { App } from "obsidian";
 
 export class ResetSettingsConfirmModal extends ConfirmModal {
@@ -11,10 +12,14 @@ export class ResetSettingsConfirmModal extends ConfirmModal {
       // claim is dropped rather than replaced with a list of what resets —
       // reset fans out through settings subscribers (Copilot Plus, Agent Mode
       // setup, per-agent model enrollment), so any such list goes stale.
-      "Resetting settings will restore the default values. " +
-        'API keys are not cleared by this action — use "Delete All Keys" in Advanced Settings ' +
-        "→ API Key Storage if you also want to remove them. Are you sure you want to continue?",
-      "Reset Settings"
+      t("settings.reset.confirmation", {
+        advancedSettings: t("settings.tabs.advanced"),
+        apiKeyStorage: "API Key Storage",
+        deleteAllKeys: "Delete All Keys",
+      }),
+      t("settings.reset.action"),
+      t("settings.actions.continue"),
+      t("settings.actions.cancel")
     );
   }
 }

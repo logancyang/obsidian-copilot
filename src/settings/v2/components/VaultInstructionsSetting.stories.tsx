@@ -18,3 +18,10 @@ const meta = {
 export default meta;
 
 export const Default: StoryObj<VaultInstructionsSettingProps> = {};
+
+/** User-authored CJK instructions remain unchanged within the active interface locale. */
+export const CjkUserInstructions: StoryObj<VaultInstructionsSettingProps> = {
+  args: {
+    value: "新笔记保存在 Inbox/。编辑 Archive/ 下的文件前先询问我。",
+  },
+};
