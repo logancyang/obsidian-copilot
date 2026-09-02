@@ -6,6 +6,7 @@ import {
 } from "@/agentMode/ui/useBackendDescriptor";
 import { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import { logError } from "@/logger";
+import { t } from "@/i18n";
 import type CopilotPlugin from "@/main";
 import { Notice } from "obsidian";
 import React from "react";
@@ -41,13 +42,13 @@ export const AgentModeStatus: React.FC<Props> = ({ manager, plugin, onInstallCli
   const handleUpgrade = React.useCallback(() => {
     if (!descriptor.upgrade || upgrading) return;
     setUpgrading(true);
-    new Notice(`Upgrading ${descriptor.displayName}…`);
+    new Notice(t("agentChat.notice.upgrading", { backend: descriptor.displayName }));
     descriptor
       .upgrade(plugin)
-      .then(() => new Notice(`${descriptor.displayName} upgraded.`))
+      .then(() => new Notice(t("agentChat.notice.upgraded", { backend: descriptor.displayName })))
       .catch((e) => {
         logError("[AgentMode] upgrade failed", e);
-        new Notice(`Failed to upgrade ${descriptor.displayName}. See console for details.`);
+        new Notice(t("agentChat.notice.upgradeFailed", { backend: descriptor.displayName }));
       })
       .finally(() => setUpgrading(false));
   }, [descriptor, plugin, upgrading]);
@@ -55,14 +56,21 @@ export const AgentModeStatus: React.FC<Props> = ({ manager, plugin, onInstallCli
   if (installState.kind === "absent") {
     return (
       <AgentStatusCard
-        message={`${descriptor.displayName} not installed`}
-        action={{ label: `Install ${descriptor.displayName}`, onClick: onInstallClick }}
+        message={t("agentChat.status.notInstalled", { backend: descriptor.displayName })}
+        action={{
+          label: t("agentChat.status.install", { backend: descriptor.displayName }),
+          onClick: onInstallClick,
+        }}
       />
     );
   }
 
   if (installState.kind === "checking") {
-    return <AgentStatusCard message={`Checking ${descriptor.displayName} version…`} />;
+    return (
+      <AgentStatusCard
+        message={t("agentChat.status.checkingVersion", { backend: descriptor.displayName })}
+      />
+    );
   }
 
   if (installState.kind === "incompatible") {
@@ -74,9 +82,9 @@ export const AgentModeStatus: React.FC<Props> = ({ manager, plugin, onInstallCli
         action={{
           label: canUpgrade
             ? upgrading
-              ? "Upgrading…"
-              : "Upgrade"
-            : `Configure ${descriptor.displayName}`,
+              ? t("agentChat.status.upgrading")
+              : t("agentChat.status.upgrade")
+            : t("agentChat.status.configure", { backend: descriptor.displayName }),
           disabled: canUpgrade && upgrading,
           onClick: canUpgrade ? handleUpgrade : () => descriptor.openInstallUI(plugin),
         }}
@@ -90,7 +98,7 @@ export const AgentModeStatus: React.FC<Props> = ({ manager, plugin, onInstallCli
         tone="error"
         message={installState.message}
         action={{
-          label: `Configure ${descriptor.displayName}`,
+          label: t("agentChat.status.configure", { backend: descriptor.displayName }),
           onClick: () => descriptor.openInstallUI(plugin),
         }}
       />
@@ -105,15 +113,18 @@ export const AgentModeStatus: React.FC<Props> = ({ manager, plugin, onInstallCli
       <AgentStatusCard
         message={
           auth.signingIn
-            ? `Signing in to ${descriptor.displayName}…`
-            : `${descriptor.displayName} not signed in`
+            ? t("agentChat.status.signingIn", { backend: descriptor.displayName })
+            : t("agentChat.status.notSignedIn", { backend: descriptor.displayName })
         }
         action={
           auth.signingIn
             ? auth.url
-              ? { label: "Open sign-in page", href: auth.url }
+              ? { label: t("agentChat.status.openSignIn"), href: auth.url }
               : undefined
-            : { label: `Sign in to ${descriptor.displayName}`, onClick: auth.signIn }
+            : {
+                label: t("agentChat.status.signIn", { backend: descriptor.displayName }),
+                onClick: auth.signIn,
+              }
         }
       />
     );
@@ -138,7 +149,7 @@ export const AgentModeStatus: React.FC<Props> = ({ manager, plugin, onInstallCli
     <AgentStatusCard
       tone="error"
       message={bootError}
-      action={{ label: "Retry", onClick: handleRetry }}
+      action={{ label: t("agentChat.status.retry"), onClick: handleRetry }}
     />
   );
 };

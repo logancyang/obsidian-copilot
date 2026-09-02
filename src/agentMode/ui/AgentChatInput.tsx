@@ -3,10 +3,7 @@ import { GLOBAL_SCOPE } from "@/agentMode/session/scope";
 import { expandCustomCommandPrefix } from "@/agentMode/session/expandCustomCommandPrefix";
 import { resolveActiveNoteToken } from "@/agentMode/session/resolveActiveNoteToken";
 import type { PromptContent } from "@/agentMode/session/types";
-import {
-  AGENT_COMPOSER_PLACEHOLDER,
-  AGENT_PROMPT_SUGGESTIONS,
-} from "@/agentMode/ui/agentPromptSuggestions";
+import { AGENT_PROMPT_SUGGESTIONS } from "@/agentMode/ui/agentPromptSuggestions";
 import type {
   AgentInputDraftControls,
   QueuedAgentMessage,
@@ -24,6 +21,7 @@ import { useActiveWebTabState } from "@/components/chat-components/hooks/useActi
 import { Button } from "@/components/ui/button";
 import { ACTIVE_WEB_TAB_MARKER, EVENT_NAMES } from "@/constants";
 import { cn } from "@/lib/utils";
+import { t } from "@/i18n";
 import { useCanUseMultiAgent } from "@/plusUtils";
 import { EventTargetContext } from "@/context";
 import { logError, logWarn } from "@/logger";
@@ -305,7 +303,7 @@ export const AgentChatInput = memo(function AgentChatInput({
         await turn;
       } catch (error) {
         logError("Error sending agent message:", error);
-        new Notice("Failed to send message. Please try again.");
+        new Notice(t("agentChat.notice.sendFailed"));
       } finally {
         // No mounted guard here: this composer remounts on the
         // landing→conversation flip (AgentHome renders it at different tree
@@ -375,9 +373,7 @@ export const AgentChatInput = memo(function AgentChatInput({
       // resolve an active entry, so it's also treated as unknown. Inputs are left
       // intact (guard precedes resetCompose) so the user can switch models.
       if (selectedImages.length > 0 && unsupportedImageModelLabel) {
-        new Notice(
-          `${unsupportedImageModelLabel} doesn't support images. Switch to a vision-capable model to send images.`
-        );
+        new Notice(t("agentChat.notice.imagesUnsupported", { model: unsupportedImageModelLabel }));
         return;
       }
 
@@ -494,9 +490,7 @@ export const AgentChatInput = memo(function AgentChatInput({
       combined.promptContent?.some((content) => content.type === "image") &&
       unsupportedImageModelLabel
     ) {
-      new Notice(
-        `${unsupportedImageModelLabel} doesn't support images. Switch to a vision-capable model to send images.`
-      );
+      new Notice(t("agentChat.notice.imagesUnsupported", { model: unsupportedImageModelLabel }));
       return;
     }
     setQueuedMessages([]);
@@ -569,7 +563,7 @@ export const AgentChatInput = memo(function AgentChatInput({
         <ChatInput
           key={chatInputId}
           isAgentMode
-          placeholder={AGENT_COMPOSER_PLACEHOLDER}
+          placeholder={t("agentChat.composer.placeholder")}
           // Whether the composer is empty is not this component's business:
           // the placeholder slot only exists while it is, so a landing can
           // offer suggestions unconditionally and get "gone while they type,
@@ -638,7 +632,9 @@ const QueuedMessageList: React.FC<QueuedMessageListProps> = ({ messages, onRemov
           />
           <span className="tw-min-w-0 tw-flex-1 tw-truncate tw-whitespace-nowrap tw-text-normal">
             {m.queueReason === "context" && (
-              <span className="tw-font-semibold tw-text-warning">Waiting for context · </span>
+              <span className="tw-font-semibold tw-text-warning">
+                {t("agentChat.queue.waitingForContext")}
+              </span>
             )}
             {m.text}
           </span>
@@ -647,7 +643,7 @@ const QueuedMessageList: React.FC<QueuedMessageListProps> = ({ messages, onRemov
             size="fit"
             className="tw-shrink-0 tw-text-muted hover:tw-text-error"
             onClick={() => onRemove(m.id)}
-            aria-label="Remove queued message"
+            aria-label={t("agentChat.queue.remove")}
           >
             <X className="tw-size-3" />
           </Button>

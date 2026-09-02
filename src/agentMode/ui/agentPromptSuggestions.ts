@@ -23,10 +23,3 @@ export const AGENT_PROMPT_SUGGESTIONS: readonly string[] = Object.freeze([
   "Tell me what my notes are missing on a topic I care about",
   "Read this note and give me three sharper questions",
 ]);
-
-/**
- * Static composer copy for Agent Mode — shown before the rotation starts, and
- * once the user has typed. Names the affordances the agent composer actually
- * has (`/` opens skills and commands here, not chat's custom prompts).
- */
-export const AGENT_COMPOSER_PLACEHOLDER = "Ask anything • @ to add context • / for commands";

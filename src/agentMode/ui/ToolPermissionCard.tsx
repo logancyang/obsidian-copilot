@@ -8,6 +8,7 @@ import type {
 } from "@/agentMode/session/types";
 import { PERMISSION_OPTION_KINDS } from "@/agentMode/session/types";
 import { ShieldQuestion } from "lucide-react";
+import { t } from "@/i18n";
 import React, { useMemo, useState } from "react";
 
 interface ToolPermissionCardProps {
@@ -48,16 +49,20 @@ export const ToolPermissionCard: React.FC<ToolPermissionCardProps> = ({ request,
     <div className="tw-w-full tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-secondary">
       <div className="copilot-divider-b tw-flex tw-items-center tw-gap-2 tw-px-3 tw-py-2">
         <ShieldQuestion className="tw-size-4 tw-shrink-0 tw-text-accent" />
-        <div className="tw-truncate tw-text-sm tw-font-medium">Permission required</div>
+        <div className="tw-truncate tw-text-sm tw-font-medium">
+          {t("agentChat.permission.title")}
+        </div>
       </div>
 
       <div className="tw-flex tw-flex-col tw-gap-2 tw-px-3 tw-py-2">
         <p className="tw-m-0 tw-text-sm">
-          Agent Mode wants to run <strong>{title}</strong>.
+          {t("agentChat.permission.requestBeforeTool")}
+          <strong>{title}</strong>
+          {t("agentChat.permission.requestAfterTool")}
         </p>
         {toolCall.kind ? (
           <p className="tw-m-0 tw-text-xs tw-text-muted">
-            Kind: <code>{toolCall.kind}</code>
+            {t("agentChat.permission.kind")} <code>{toolCall.kind}</code>
           </p>
         ) : null}
 
@@ -78,7 +83,9 @@ export const ToolPermissionCard: React.FC<ToolPermissionCardProps> = ({ request,
           </div>
         ) : inputJson ? (
           <details>
-            <summary className="tw-cursor-pointer tw-text-xs tw-text-muted">Show inputs</summary>
+            <summary className="tw-cursor-pointer tw-text-xs tw-text-muted">
+              {t("agentChat.permission.showInputs")}
+            </summary>
             <pre className="tw-mt-1 tw-max-h-48 tw-overflow-auto tw-rounded tw-bg-primary tw-p-2 tw-text-xs">
               {inputJson}
             </pre>

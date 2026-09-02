@@ -4,6 +4,7 @@ import { ZH_CN_TRANSLATIONS } from "@/i18n/locales/zh-CN";
 
 const ISSUE_URL = "https://github.com/Brevilabs/obsidian-copilot-private/issues/324";
 const SETTINGS_ISSUE_URL = "https://github.com/Brevilabs/obsidian-copilot-private/issues/325";
+const ZH_CN_ISSUE_URL = "https://github.com/Brevilabs/obsidian-copilot-private/issues/326";
 
 interface LoadedI18n {
   formatDate: typeof import("@/i18n").formatDate;
@@ -131,6 +132,19 @@ describe("i18n", () => {
 
       expect(i18n.t("settings.notice.folderChanged", { folder: "资料/Copilot 数据" })).toBe(
         "Copilot 文件夹已更改为“资料/Copilot 数据”。"
+      );
+    });
+
+    it(`localizes the Agent Chat shell while preserving dynamic product values for ${ZH_CN_ISSUE_URL}`, () => {
+      const i18n = loadI18n("zh");
+      i18n.initializeI18n();
+
+      expect(i18n.t("agentChat.composer.placeholder")).toBe(
+        "有问题尽管问 • 输入 @ 添加上下文 • 输入 / 使用命令"
+      );
+      expect(i18n.t("agentChat.status.configure", { backend: "Claude" })).toBe("配置 Claude");
+      expect(i18n.t("agentChat.notice.imagesUnsupported", { model: "Sonnet 4.5" })).toBe(
+        "Sonnet 4.5 不支持图片。请切换到支持视觉的模型后再发送图片。"
       );
     });
 
