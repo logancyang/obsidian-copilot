@@ -5,6 +5,7 @@ import {
   visiblePromptText,
 } from "@/components/chat-components/utils/promptTypewriter";
 import { Textarea } from "@/components/ui/textarea";
+import { useReducedMotion } from "@/hooks/useReducedMotion";
 import { cn } from "@/lib/utils";
 import React, { useEffect, useMemo, useState } from "react";
 
@@ -55,11 +56,7 @@ export const InstructionsTextarea: React.FC<InstructionsTextareaProps> = ({
   className,
 }) => {
   const pool = useMemo(() => shufflePrompts(examples), [examples]);
-  // Read once at mount: an OS preference nobody flips mid-edit, so this stays free of a
-  // media-query subscription.
-  const [instant] = useState(
-    () => window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ?? false
-  );
+  const reduceMotion = useReducedMotion();
   const [state, setState] = useState(initialTypewriterState);
 
   // Each frame schedules the next one, so the per-phase delays vary without an interval that
@@ -67,10 +64,10 @@ export const InstructionsTextarea: React.FC<InstructionsTextareaProps> = ({
   const idle = value.length > 0;
   useEffect(() => {
     if (idle) return;
-    const { state: next, delayMs } = nextTypewriterFrame(state, pool, instant);
+    const { state: next, delayMs } = nextTypewriterFrame(state, pool, reduceMotion);
     const timer = window.setTimeout(() => setState(next), delayMs);
     return () => window.clearTimeout(timer);
-  }, [idle, state, pool, instant]);
+  }, [idle, state, pool, reduceMotion]);
 
   return (
     <Textarea

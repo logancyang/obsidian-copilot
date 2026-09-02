@@ -5,11 +5,12 @@ import {
   shufflePrompts,
   visiblePromptText,
 } from "@/components/chat-components/utils/promptTypewriter";
+import { useReducedMotion } from "@/hooks/useReducedMotion";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { COMMAND_PRIORITY_LOW, KEY_TAB_COMMAND } from "lexical";
 import React, { useEffect, useMemo, useState } from "react";
 
-interface PromptSuggestionPlaceholderProps {
+export interface PromptSuggestionPlaceholderProps {
   /**
    * Non-empty pool of sample prompts to cycle through. Must be referentially
    * stable (a frozen module constant) — a new array identity reshuffles the
@@ -22,6 +23,8 @@ interface PromptSuggestionPlaceholderProps {
    * needs describing is the editor, not anything rendered here.
    */
   descriptionId: string;
+  /** Static composer guidance shown when the operating system requests reduced motion. */
+  staticPlaceholder: string;
 }
 
 /**
@@ -40,29 +43,30 @@ interface PromptSuggestionPlaceholderProps {
 export const PromptSuggestionPlaceholder: React.FC<PromptSuggestionPlaceholderProps> = ({
   prompts,
   descriptionId,
+  staticPlaceholder,
 }) => {
   const [editor] = useLexicalComposerContext();
   const pool = useMemo(() => shufflePrompts(prompts), [prompts]);
-  // Read once at mount: an OS preference nobody flips mid-chat, so this stays
-  // free of a media-query subscription.
-  const [instant] = useState(
-    () => window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ?? false
-  );
+  const reduceMotion = useReducedMotion();
   const [state, setState] = useState(initialTypewriterState);
 
   // Each frame schedules the next one, so the per-phase delays vary without an
   // interval that has to be reconciled against them.
   useEffect(() => {
-    const { state: next, delayMs } = nextTypewriterFrame(state, pool, instant);
+    // Replacing one whole prompt with another still creates motion, so the
+    // accessibility preference keeps both the timer and Tab binding inactive.
+    // https://github.com/logancyang/obsidian-copilot/issues/3078
+    if (reduceMotion) return;
+    const { state: next, delayMs } = nextTypewriterFrame(state, pool);
     const timer = window.setTimeout(() => setState(next), delayMs);
     return () => window.clearTimeout(timer);
-  }, [state, pool, instant]);
+  }, [state, pool, reduceMotion]);
 
   const visible = visiblePromptText(state, pool);
   // Tab commits the WHOLE prompt even mid-animation — what you accept is the
   // prompt, never the fragment on screen. In the beat between two prompts
   // there's nothing to accept, so Tab falls through to its default behavior.
-  const acceptText = visible.length > 0 ? pool[state.index] : null;
+  const acceptText = !reduceMotion && visible.length > 0 ? pool[state.index] : null;
 
   useEffect(() => {
     if (!acceptText) return;
@@ -85,6 +89,10 @@ export const PromptSuggestionPlaceholder: React.FC<PromptSuggestionPlaceholderPr
       COMMAND_PRIORITY_LOW
     );
   }, [editor, acceptText]);
+
+  if (reduceMotion) {
+    return <span id={descriptionId}>{staticPlaceholder}</span>;
+  }
 
   // The animation is hidden from assistive tech — a string that rewrites itself
   // every 45ms is noise — but Tab is bound whenever a prompt is loaded, so what
