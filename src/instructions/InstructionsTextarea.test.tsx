@@ -4,6 +4,14 @@ import React from "react";
 
 const EXAMPLES: readonly string[] = Object.freeze(["First example", "Second example"]);
 
+const mockReducedMotion = jest.fn<boolean, []>();
+// Mock factory names must match the real hook export.
+/* eslint-disable @eslint-react/hooks-extra/no-unnecessary-use-prefix */
+jest.mock("@/hooks/useReducedMotion", () => ({
+  useReducedMotion: () => mockReducedMotion(),
+}));
+/* eslint-enable @eslint-react/hooks-extra/no-unnecessary-use-prefix */
+
 function textarea(): HTMLTextAreaElement {
   return screen.getByRole<HTMLTextAreaElement>("textbox");
 }
@@ -21,12 +29,12 @@ describe("InstructionsTextarea", () => {
   describe("InstructionsTextarea()", () => {
     beforeEach(() => {
       jest.useFakeTimers();
+      mockReducedMotion.mockReturnValue(false);
     });
 
     afterEach(() => {
       jest.useRealTimers();
       jest.restoreAllMocks();
-      Reflect.deleteProperty(window, "matchMedia");
     });
 
     it("types an example into the placeholder one character at a time", () => {
@@ -116,10 +124,7 @@ describe("InstructionsTextarea", () => {
     });
 
     it("shows a whole example at once for a reader who asked for reduced motion", () => {
-      Object.defineProperty(window, "matchMedia", {
-        configurable: true,
-        value: () => ({ matches: true }),
-      });
+      mockReducedMotion.mockReturnValue(true);
 
       render(
         <InstructionsTextarea

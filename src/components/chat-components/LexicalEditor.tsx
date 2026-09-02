@@ -32,7 +32,7 @@ import { ActiveNotePillSyncPlugin } from "./plugins/ActiveNotePillSyncPlugin";
 import { WebTabPillSyncPlugin } from "./plugins/WebTabPillSyncPlugin";
 import { AgentPillSyncPlugin } from "./plugins/AgentPillSyncPlugin";
 import { PastePlugin } from "./plugins/PastePlugin";
-import { PromptSuggestionPlaceholder } from "./PromptSuggestionPlaceholder";
+import { PromptSuggestionPlaceholder } from "./ui/PromptSuggestionPlaceholder";
 import { TextInsertionPlugin } from "./plugins/TextInsertionPlugin";
 import { useChatInput } from "@/context/ChatInputContext";
 import { cn } from "@/lib/utils";
@@ -226,6 +226,7 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
                     <PromptSuggestionPlaceholder
                       prompts={placeholderPrompts}
                       descriptionId={promptSuggestionId}
+                      staticPlaceholder={placeholder}
                     />
                   ) : (
                     placeholder

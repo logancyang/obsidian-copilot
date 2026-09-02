@@ -4,6 +4,27 @@ import { TextEncoder, TextDecoder } from "util";
 window.TextEncoder = TextEncoder;
 window.TextDecoder = TextDecoder;
 
+// jsdom does not implement media queries. Default to no user preference so
+// components exercise their ordinary rendering unless a test supplies one.
+if (typeof window.matchMedia !== "function") {
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    value: (query) => {
+      const events = new EventTarget();
+      return {
+        matches: false,
+        media: query,
+        onchange: null,
+        addListener: (listener) => events.addEventListener("change", listener),
+        removeListener: (listener) => events.removeEventListener("change", listener),
+        addEventListener: events.addEventListener.bind(events),
+        removeEventListener: events.removeEventListener.bind(events),
+        dispatchEvent: events.dispatchEvent.bind(events),
+      };
+    },
+  });
+}
+
 // Polyfill Obsidian's Node.doc / Node.win augmentation so plugin code that
 // reads `element.doc` / `element.win` works under jsdom.
 if (typeof Node !== "undefined" && !Object.prototype.hasOwnProperty.call(Node.prototype, "doc")) {
