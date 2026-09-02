@@ -307,6 +307,33 @@ describe("debugSink", () => {
       });
     });
 
+    describe("getValidatedPath()", () => {
+      it("returns the log path once the location passes the sink's own checks", async () => {
+        const runtime = makeRuntime();
+        const sink = new FrameSink({ runtime, vaultBasePath: "/vault" });
+
+        await expect(sink.getValidatedPath()).resolves.toBe(
+          getFrameLogPaths("/vault", runtime).logPath
+        );
+      });
+
+      it("returns null when there is no vault to key the location off (https://github.com/logancyang/obsidian-copilot-preview/issues/250)", async () => {
+        const runtime = makeRuntime();
+        const sink = new FrameSink({ runtime });
+
+        await expect(sink.getValidatedPath()).resolves.toBeNull();
+      });
+
+      it("returns null rather than throwing when the temp root cannot be trusted (https://github.com/logancyang/obsidian-copilot-preview/issues/250)", async () => {
+        // World-writable with no sticky bit, which `validateTempRoot` refuses.
+        // A caller assembling a report needs an answer, not an exception.
+        const runtime = makeRuntime("/tmp", 0o0777);
+        const sink = new FrameSink({ runtime, vaultBasePath: "/vault" });
+
+        await expect(sink.getValidatedPath()).resolves.toBeNull();
+      });
+    });
+
     describe("clear()", () => {
       it("clears active and rotated log files", async () => {
         const runtime = makeRuntime();
@@ -548,6 +575,59 @@ describe("debugSink", () => {
           expect(exists(paths.rotatedPath)).toBe(true);
           expect(modeOf(paths.rotatedPath)).toBe(0o600);
           expect(modeOf(paths.logPath)).toBe(0o600);
+        });
+      });
+
+      describe("getValidatedPath()", () => {
+        it("unlinks a same-name symlink planted at the log path instead of vouching for its target (https://github.com/logancyang/obsidian-copilot-preview/issues/250)", async () => {
+          // The redirect the string checks cannot catch: the link sits at the
+          // log path, and its target is called the log too and lives under the
+          // same temp root, so basename and containment both hold of the
+          // resolved path. Only the owner-and-mode pass reaches the fact that
+          // the entry is a link at all.
+          const runtime = makeRealRuntime(tmpBase);
+          const paths = getFrameLogPaths("/vault", runtime);
+          const decoyDir = path.join(tmpBase, "decoy");
+          await fs.mkdir(decoyDir, { recursive: true });
+          const decoy = path.join(decoyDir, path.basename(paths.logPath));
+          await fs.writeFile(decoy, "planted\n");
+          await fs.mkdir(paths.dirPath, { recursive: true, mode: 0o700 });
+          await fs.symlink(decoy, paths.logPath);
+
+          const resolved = await new FrameSink({
+            vaultBasePath: "/vault",
+            runtime,
+          }).getValidatedPath();
+
+          expect(resolved).toBe(paths.logPath);
+          expect(fsSync.lstatSync(decoy).isFile()).toBe(true);
+          expect(await fs.readFile(decoy, "utf8")).toBe("planted\n");
+          // The link is gone, so the caller's own read finds nothing recorded
+          // rather than the planted file's contents.
+          expect(exists(paths.logPath)).toBe(false);
+        });
+
+        it("refuses a log file another account owns (https://github.com/logancyang/obsidian-copilot-preview/issues/250)", async () => {
+          const runtime = makeRealRuntime(tmpBase);
+          const paths = getFrameLogPaths("/vault", runtime);
+          await fs.mkdir(paths.dirPath, { recursive: true, mode: 0o700 });
+          await fs.writeFile(paths.logPath, "someone else's\n", { mode: 0o600 });
+          // Ownership is the one property a test cannot fabricate on disk
+          // without root, so it is asked of the runtime instead.
+          const foreign: NodeRuntime = {
+            ...runtime,
+            lstat: async (p) =>
+              p === paths.logPath
+                ? { uid: 4242, mode: 0o600, isDirectory: false, isSymbolicLink: false }
+                : runtime.lstat(p),
+          };
+
+          const resolved = await new FrameSink({
+            vaultBasePath: "/vault",
+            runtime: foreign,
+          }).getValidatedPath();
+
+          expect(resolved).toBeNull();
         });
       });
 

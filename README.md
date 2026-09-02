@@ -123,6 +123,8 @@ Your notes remain files in your vault, and local Miyo indexes stay on your devic
 
 [Documentation](./docs/index.md) · [YouTube](https://www.youtube.com/@loganhallucinates) · [Report a bug](https://github.com/logancyang/obsidian-copilot/issues/new?template=bug_report.md) · [Request a feature](https://github.com/logancyang/obsidian-copilot/issues/new?template=feature_request.md) · [Privacy](https://www.obsidiancopilot.com/en/privacy)
 
+To report a bug with its evidence attached, use **Settings → Copilot → Advanced → Debugging & support → Report an issue**. It packs a screenshot and recent logs into a zip you review before anything is sent, uploads it privately, and hands your browser a prefilled issue carrying the report ID.
+
 ## Support the project
 
 If Copilot is useful to you, consider [sponsoring the project on GitHub](https://github.com/sponsors/logancyang) or buying us a coffee.
@@ -142,7 +144,8 @@ Copilot is a product of Brevilabs LLC and is not affiliated with Obsidian. Visit
 - An account and payment are required for paid access.
 - Hosted models and cloud-backed features require network access.
 - **Privacy and data handling:**
-  - **Free use:** Messages and note context go to the LLM provider, local endpoint, or CLI agent you configure. Brevilabs does not receive them unless you invoke a Brevilabs-hosted feature.
+  - **Free use:** Messages and note context go to the LLM provider, local endpoint, or CLI agent you configure. Brevilabs does not receive them unless you invoke a Brevilabs-hosted feature, or upload a diagnostic report yourself.
+  - **Diagnostic reports:** The zip you review under **Report an issue** reaches Brevilabs only when you press **Upload & open issue**. It is stored privately for support, referenced only by an opaque report ID, carries no license or account identity, and is deleted after 60 days. The public issue carries the ID, never the bundle. The copy on your own machine is yours and is not part of that deletion.
   - **Paid hosted services:** Brevilabs's backend and its vetted enterprise model providers process the full request. A Copilot-hosted embedding model receives the note text being indexed. Hosted features also receive the inputs they need, such as search queries, URLs, and files used by Quick Chat tools or Agent project context. The privacy policy says request content is processed transiently, not retained, and not used for training.
   - **User ID:** Hosted feature requests include a randomly generated UUID for service delivery, license abuse prevention, and rate limiting. It is not used for tracking, profiling, or analytics.
 - See the [privacy policy](https://www.obsidiancopilot.com/en/privacy) for full terms.
