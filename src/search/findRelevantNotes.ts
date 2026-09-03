@@ -43,6 +43,9 @@ async function searchRelatedNotesWithMiyo(
       "Relevant Notes Miyo endpoint resolution"
     );
   } catch (error) {
+    // An unresolved endpoint cannot produce a trustworthy result. Settle as
+    // unavailable so the pane offers recovery instead of loading indefinitely.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
     logError(`RelevantNotes(Miyo): could not resolve Miyo: ${(error as Error).message}`);
     return { scoreByPath: new Map(), status: "unavailable" };
   }

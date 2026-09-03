@@ -106,7 +106,7 @@ describe("RelevantNotesPane", () => {
       expect(BASE_ACTIONS.reviewIndexing.onSelect).toHaveBeenCalledTimes(1);
     });
 
-    it("renders the neutral empty state when no source note is active", () => {
+    it("renders the neutral empty state when no source note is active (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", () => {
       render(<RelevantNotesPane {...BASE_PROPS} status="idle" noteRows={[]} />);
 
       expect(screen.getByText("No relevant notes found")).toBeTruthy();
