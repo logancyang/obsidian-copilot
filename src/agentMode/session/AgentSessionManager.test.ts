@@ -694,6 +694,42 @@ describe("AgentSessionManager", () => {
         expect(mgr.getActiveSession()).toBe(session);
       });
 
+      it("keeps the chat in the scope the command was invoked from when the scope changes during the probe for https://github.com/Brevilabs/obsidian-copilot-private/issues/357", async () => {
+        const projectId = "project-publishing-from";
+        const recordSpy = jest
+          .spyOn(projectsState, "getCachedProjectRecordById")
+          .mockImplementation((id: string) =>
+            id === projectId
+              ? ({
+                  filePath: `Projects/${projectId}/project.md`,
+                  project: { id: projectId },
+                } as unknown as ReturnType<typeof projectsState.getCachedProjectRecordById>)
+              : undefined
+          );
+        try {
+          let releaseProbe: (() => void) | undefined;
+          const probe = new Promise<void>((resolve) => {
+            releaseProbe = resolve;
+          });
+          const mgr = buildManager({ preload: jest.fn(() => probe) });
+          const globalSession = await mgr.createSession(undefined, GLOBAL_SCOPE);
+          const projectSession = await mgr.createSession(undefined, projectId);
+          mgr.setActiveSession(projectSession.internalId);
+          mgr.registerPreload("opencode", probe);
+
+          const pending = mgr.createSessionWithPrompt("Publish this note");
+          await waitFor(() => expect(releaseProbe).toBeDefined());
+          // The user leaves the project while the probe is still running.
+          mgr.setActiveSession(globalSession.internalId);
+          releaseProbe?.();
+          const session = await pending;
+
+          expect(session.projectId).toBe(projectId);
+        } finally {
+          recordSpy.mockRestore();
+        }
+      });
+
       it("creates the chat without re-probing a backend whose models already loaded for https://github.com/Brevilabs/obsidian-copilot-private/issues/357", async () => {
         const preload = jest.fn(async () => undefined);
         const mgr = buildManager({ preload });

@@ -1232,6 +1232,14 @@ export default class CopilotPlugin extends Plugin {
     } catch (error) {
       logWarn("[CopilotPlugin] Failed to create agent session with prompt", error);
       new Notice("Failed to create agent session. Check Copilot logs.");
+      // The command is offered wherever Agent Chat could run, which includes a
+      // vault whose agent is not installed or configured yet: starting the
+      // backend is what fails here. Reveal the pane anyway so the user lands on
+      // its install and agent-selection surface instead of only a notice.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/357
+      await this.activateAgentView().catch((revealError) =>
+        logWarn("[CopilotPlugin] Failed to reveal Agent Chat after a failed prompt", revealError)
+      );
     }
   }
 

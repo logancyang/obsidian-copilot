@@ -368,7 +368,7 @@ describe("main", () => {
         expect(createSessionWithPrompt).toHaveBeenNthCalledWith(2, "second");
       });
 
-      it("surfaces session creation failures without revealing Agent Chat or throwing for https://github.com/Brevilabs/obsidian-copilot-private/issues/357", async () => {
+      it("reveals the agent setup surface without throwing when creating the chat fails for https://github.com/Brevilabs/obsidian-copilot-private/issues/357", async () => {
         const plugin = createPluginUnderTest([]);
         const failure = new Error("create failed");
         Object.assign(plugin.agentSessionManager as object, {
@@ -382,7 +382,25 @@ describe("main", () => {
           "[CopilotPlugin] Failed to create agent session with prompt",
           failure
         );
-        expect(activateAgentView).not.toHaveBeenCalled();
+        // Starting an uninstalled or unconfigured backend fails here, and the
+        // pane is where the user installs or picks one.
+        expect(activateAgentView).toHaveBeenCalledTimes(1);
+      });
+
+      it("stays quiet when revealing the pane also fails for https://github.com/Brevilabs/obsidian-copilot-private/issues/357", async () => {
+        const plugin = createPluginUnderTest([]);
+        const revealFailure = new Error("reveal failed");
+        Object.assign(plugin.agentSessionManager as object, {
+          createSessionWithPrompt: jest.fn().mockRejectedValue(new Error("create failed")),
+        });
+        jest.spyOn(plugin, "activateAgentView").mockRejectedValue(revealFailure);
+
+        await expect(plugin.newAgentChatWithPrompt("Publish this note")).resolves.toBeUndefined();
+
+        expect(logWarn).toHaveBeenCalledWith(
+          "[CopilotPlugin] Failed to reveal Agent Chat after a failed prompt",
+          revealFailure
+        );
       });
     });
   });

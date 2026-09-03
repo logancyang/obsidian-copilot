@@ -1455,6 +1455,11 @@ export class AgentSessionManager {
     // Pin the backend before awaiting so the probe and the chat cannot land on
     // two different agents if the default changes in between.
     const backendId = this.resolveBackendId();
+    // Pin the scope with it. The probe below can outlast the command, and a
+    // project switch while it runs would otherwise put the request in a chat
+    // carrying another project's working directory, instructions, and tabs.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/357
+    const projectId = this.activeProjectId;
     // A command can fire before this backend's model probe has settled. Its
     // `session/new` then reports a bare catalog, so the configured default
     // model is not among the models the chat can apply and the chat silently
@@ -1468,7 +1473,7 @@ export class AgentSessionManager {
     const chatInputId = uuidv4();
     this.composerHandoffByChatInputId.set(chatInputId, { text: prompt, submit: true });
     try {
-      return await this.createSession(backendId, this.activeProjectId, undefined, chatInputId);
+      return await this.createSession(backendId, projectId, undefined, chatInputId);
     } catch (error) {
       this.composerHandoffByChatInputId.delete(chatInputId);
       throw error;
