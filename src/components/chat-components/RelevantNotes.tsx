@@ -202,15 +202,13 @@ function RelevantNoteHoverCard({
           </p>
         )}
 
-        {similarity != null && (
-          <div className="tw-flex tw-items-center tw-gap-2">
-            <span className="tw-shrink-0 tw-text-xs tw-text-faint">Similarity</span>
-            <RelevanceMeter score={similarity} className="tw-h-1 tw-flex-1" />
-            <span className="tw-shrink-0 tw-text-xs tw-font-medium tw-tabular-nums tw-text-normal">
-              {(similarity * 100).toFixed(1)}%
-            </span>
-          </div>
-        )}
+        <div className="tw-flex tw-items-center tw-gap-2">
+          <span className="tw-shrink-0 tw-text-xs tw-text-faint">Similarity</span>
+          <RelevanceMeter score={similarity} className="tw-h-1 tw-flex-1" />
+          <span className="tw-shrink-0 tw-text-xs tw-font-medium tw-tabular-nums tw-text-normal">
+            {(similarity * 100).toFixed(1)}%
+          </span>
+        </div>
 
         {(note.metadata.hasOutgoingLinks || note.metadata.hasBacklinks) && (
           <div className="tw-flex tw-items-center tw-gap-4 tw-text-xs tw-text-faint">
@@ -305,11 +303,9 @@ function RelevantNoteRow({
             {note.metadata.hasBacklinks && (
               <LinkBadge icon={<FileInput className="tw-size-3" />} label="Backlink" />
             )}
-            {similarity != null && (
-              <span className="tw-text-xs tw-font-medium tw-tabular-nums tw-text-muted">
-                {Math.round(similarity * 100)}%
-              </span>
-            )}
+            <span className="tw-text-xs tw-font-medium tw-tabular-nums tw-text-muted">
+              {Math.round(similarity * 100)}%
+            </span>
           </div>
 
           <div className="tw-hidden tw-shrink-0 tw-items-center tw-gap-0.5 group-hover:tw-flex">
@@ -340,7 +336,7 @@ function RelevantNoteRow({
           </div>
         </div>
 
-        {similarity != null && <RelevanceMeter score={similarity} className="tw-mt-1.5" />}
+        <RelevanceMeter score={similarity} className="tw-mt-1.5" />
       </div>
     </RelevantNoteHoverCard>
   );
@@ -405,9 +401,9 @@ export const RelevantNotes = memo(
       onAddToChat(`[[${prompt}]]`);
     };
 
-    // Miyo help is an empty state, not a banner above graph-only fallback rows.
-    // A successful search can include links and backlinks, but without a source
-    // note or a settled request there is no evidence of a setup failure.
+    // Links only annotate Miyo matches, so a settled empty search has no result
+    // rows to show. Without a source note or a settled request, there is no
+    // evidence of a setup or indexing problem.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
     const guidance: RelevantNotesGuidance =
       !activeFile || isPending || relevantNotes.length > 0

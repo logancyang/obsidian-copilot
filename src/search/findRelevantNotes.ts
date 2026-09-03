@@ -128,7 +128,7 @@ export type RelevantNoteEntry = {
   };
   metadata: {
     score: number;
-    similarityScore: number | undefined;
+    similarityScore: number;
     hasOutgoingLinks: boolean;
     hasBacklinks: boolean;
   };
@@ -165,38 +165,32 @@ export async function findRelevantNotes({
   }
 
   const similarityScoreMap = await calculateSimilarityScoreFromMiyo(app, filePath);
+  if (similarityScoreMap.size === 0) {
+    return [];
+  }
+
   const noteLinks = getNoteLinks(app, file);
 
-  // Rank purely by semantic similarity so the displayed percentages stay
-  // monotonic down the list. Linked/backlinked notes still appear, but a link
-  // never boosts ranking: link-only notes have no similarity score and sort to
-  // the bottom (they render without a meter in the UI).
-  const candidatePaths = new Set<string>([...similarityScoreMap.keys(), ...noteLinks.keys()]);
-  candidatePaths.delete(filePath);
-  const sortedPaths = Array.from(candidatePaths)
-    .filter(createCopilotPatternFilter(app))
-    .sort((aPath, bPath) => {
-      const aScore = similarityScoreMap.get(aPath);
-      const bScore = similarityScoreMap.get(bPath);
-      if (aScore == null && bScore == null) return 0;
-      if (aScore == null) return 1;
-      if (bScore == null) return -1;
-      return bScore - aScore;
-    });
-  return sortedPaths
-    .map((path) => {
+  // Links describe Miyo results but cannot make an otherwise unindexed note
+  // relevant, so every displayed row retains a semantic basis.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
+  const isAllowed = createCopilotPatternFilter(app);
+  const sortedMatches = Array.from(similarityScoreMap.entries())
+    .filter(([path]) => isAllowed(path))
+    .sort(([, aScore], [, bScore]) => bScore - aScore);
+  return sortedMatches
+    .map(([path, similarityScore]) => {
       const file = app.vault.getAbstractFileByPath(path);
       if (!(file instanceof TFile) || file.extension !== "md") {
         return null;
       }
-      const similarityScore = similarityScoreMap.get(path);
       return {
         note: {
           path,
           title: file.basename,
         },
         metadata: {
-          score: similarityScore ?? 0,
+          score: similarityScore,
           similarityScore,
           hasOutgoingLinks: noteLinks.get(path)?.links ?? false,
           hasBacklinks: noteLinks.get(path)?.backlinks ?? false,

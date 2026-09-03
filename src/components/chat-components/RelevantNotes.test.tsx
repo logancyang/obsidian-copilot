@@ -225,27 +225,6 @@ describe("RelevantNotes", () => {
       expect(mockFindRelevantNotes).toHaveBeenCalledTimes(2);
     });
 
-    it("shows graph-only rows without setup guidance after Miyo search succeeds (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
-      mockSettings = { ...mockSettings, enableMiyo: true };
-      mockFindRelevantNotes.mockResolvedValue([
-        {
-          note: { path: "Target.md", title: "Target" },
-          metadata: {
-            score: 0,
-            similarityScore: undefined,
-            hasOutgoingLinks: true,
-            hasBacklinks: false,
-          },
-        },
-      ]);
-
-      render(<RelevantNotes onAddToChat={jest.fn()} />);
-
-      expect(await screen.findByText("Target")).toBeTruthy();
-      expect(screen.queryByText("Check your Miyo setup")).toBeNull();
-      expect(screen.queryByText(/%/)).toBeNull();
-    });
-
     it("refetches Relevant Notes when Miyo settings change (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
       const { rerender } = render(<RelevantNotes onAddToChat={jest.fn()} />);
       await waitFor(() => expect(mockFindRelevantNotes).toHaveBeenCalledTimes(1));
