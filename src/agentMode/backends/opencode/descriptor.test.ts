@@ -277,6 +277,26 @@ describe("descriptor", () => {
         expect(setConfigOption).toHaveBeenCalledWith("effort", "high");
       });
 
+      it("activates the bare model when the catalog is config-option backed but publishes no effort option, dropping a saved level instead of suffixing it (https://github.com/Brevilabs/obsidian-copilot-private/issues/364)", async () => {
+        const { session, applyModelWireId, setConfigOption } = makeSession({
+          model: {
+            current: { baseModelId: "opencode/big-pickle", effort: null },
+            availableModels: [entryOffering("copilot-plus/copilot-plus-flash", [])],
+            apply: { kind: "setConfigOption", configId: "model" },
+          },
+          mode: null,
+        });
+
+        await OpencodeBackendDescriptor.applySelection(session, {
+          baseModelId: "copilot-plus/copilot-plus-flash",
+          effort: "high",
+        });
+
+        expect(applyModelWireId).toHaveBeenCalledTimes(1);
+        expect(applyModelWireId).toHaveBeenCalledWith("copilot-plus/copilot-plus-flash");
+        expect(setConfigOption).not.toHaveBeenCalled();
+      });
+
       it("leaves the model on its native effort when the saved level is no longer offered (https://github.com/logancyang/obsidian-copilot/issues/2917)", async () => {
         const { session, applyModelWireId, setConfigOption } = makeSession({
           model: {

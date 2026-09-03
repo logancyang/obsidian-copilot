@@ -185,7 +185,12 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
 
   async applySelection(session: AgentSession, selection: ModelSelection, context): Promise<void> {
     const apply = session.getState()?.model?.apply;
-    if (apply?.kind === "setConfigOption" && apply.effortConfigId) {
+    // A config-option catalog takes bare model ids only. Effort travels through
+    // its own option when the model publishes one and is dropped otherwise; a
+    // saved level the model does not offer must never become a `/<effort>`
+    // suffix, which opencode rejects, and that rejection reverts the whole
+    // seed to the agent's own default model. https://github.com/Brevilabs/obsidian-copilot-private/issues/364
+    if (apply?.kind === "setConfigOption") {
       // The effort option is model-specific, so activate the bare model first
       // and use the option id from the refreshed state.
       const currentBase = context
