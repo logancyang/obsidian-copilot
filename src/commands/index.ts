@@ -95,6 +95,13 @@ export function registerCommands(plugin: CopilotPlugin, submitAgentPrompt: Submi
     if (!(activeFile instanceof TFile) || activeFile.extension !== "md") {
       return false;
     }
+    // Publishing runs entirely inside Agent Chat, which does not exist on
+    // mobile. Without this the palette would offer an enabled command whose
+    // only effect is an "Agent Chat is not available" notice.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/357
+    if (!plugin.canUseAgentView()) {
+      return false;
+    }
 
     if (!checking) {
       // Snapshot the exact path at invocation time so a later active-note

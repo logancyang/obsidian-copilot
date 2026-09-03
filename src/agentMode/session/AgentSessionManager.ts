@@ -1454,10 +1454,16 @@ export class AgentSessionManager {
   async createSessionWithPrompt(prompt: string): Promise<AgentSession> {
     const handoff: ComposerHandoff = { text: prompt, submit: true };
     const active = this.getActiveSession();
+    // Reuse only an empty chat that can still send. A startup failure leaves
+    // the session active, empty, and permanently unable to open a backend
+    // session, so reusing it would flush the prompt into a dead chat instead
+    // of the promised new one.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/357
+    const activeStatus = active?.getStatus();
     if (
       active &&
       active.projectId === this.activeProjectId &&
-      active.getStatus() !== "closed" &&
+      (activeStatus === "idle" || activeStatus === "starting") &&
       !active.hasUserVisibleMessages()
     ) {
       this.composerHandoffByChatInputId.set(active.chatInputId, handoff);

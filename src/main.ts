@@ -1240,7 +1240,12 @@ export default class CopilotPlugin extends Plugin {
     return this.agentSessionManager;
   }
 
-  private canUseAgentView(): boolean {
+  /**
+   * Whether Agent Chat can run here at all. False on mobile, where the session
+   * manager is never constructed, so callers can hide agent-only entry points
+   * instead of offering an action that can only report its own unavailability.
+   */
+  canUseAgentView(): boolean {
     return !!this.agentSessionManager && isDesktopRuntime();
   }
 

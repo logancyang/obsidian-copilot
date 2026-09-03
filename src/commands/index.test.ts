@@ -36,6 +36,7 @@ describe("commands", () => {
       const commands: Command[] = [];
       const plugin = {
         addCommand: jest.fn((command: Command) => commands.push(command)),
+        canUseAgentView: () => true,
         app: {
           workspace: {
             getActiveFile: jest.fn(() => activeFile),
@@ -62,12 +63,17 @@ describe("commands", () => {
     });
 
     it.each([
-      ["no active file", null],
-      ["a non-Markdown active file", markdownFile("Notes/Diagram.canvas")],
-    ])("hides the OpenArtifacts palette command for %s", (_case, activeFile) => {
+      ["no active file", null, true],
+      ["a non-Markdown active file", markdownFile("Notes/Diagram.canvas"), true],
+      // Mobile never constructs the agent session manager, so the command has
+      // nothing to delegate to.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/357
+      ["a Markdown file where Agent Chat cannot run", markdownFile("Notes/Active.md"), false],
+    ])("hides the OpenArtifacts palette command for %s", (_case, activeFile, canUseAgentView) => {
       const commands: Command[] = [];
       const plugin = {
         addCommand: jest.fn((command: Command) => commands.push(command)),
+        canUseAgentView: () => canUseAgentView,
         app: {
           workspace: {
             getActiveFile: jest.fn(() => activeFile),

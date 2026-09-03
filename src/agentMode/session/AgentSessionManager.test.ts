@@ -662,6 +662,21 @@ describe("AgentSessionManager", () => {
         });
       });
 
+      it("opens a new chat instead of reusing an empty chat whose startup failed for https://github.com/Brevilabs/obsidian-copilot-private/issues/357", async () => {
+        const mgr = buildManager();
+        const failed = await mgr.createSession();
+        sessionTestHandles.get(failed.internalId)?.setStatus("error");
+
+        const session = await mgr.createSessionWithPrompt("Publish this note");
+
+        expect(session).not.toBe(failed);
+        expect(mgr.consumeComposerHandoff(failed.chatInputId)).toBeUndefined();
+        expect(mgr.consumeComposerHandoff(session.chatInputId)).toEqual({
+          text: "Publish this note",
+          submit: true,
+        });
+      });
+
       it("drops the handoff and keeps the running chat active when session creation fails for https://github.com/Brevilabs/obsidian-copilot-private/issues/357", async () => {
         const mgr = buildManager();
         const running = await mgr.createSession();
