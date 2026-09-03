@@ -58,6 +58,10 @@ export default meta;
 
 export const ConnectedScoredResults: StoryObj<RelevantNotesPaneProps> = {};
 
+export const NoActiveNote: StoryObj<RelevantNotesPaneProps> = {
+  args: { status: "idle", noteRows: [] },
+};
+
 export const Loading: StoryObj<RelevantNotesPaneProps> = {
   args: { isPending: true, noteCount: 0, noteRows: null },
 };

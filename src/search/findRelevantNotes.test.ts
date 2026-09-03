@@ -99,6 +99,7 @@ describe("findRelevantNotes", () => {
         "alpha.md",
         "beta.md",
         "linked-only.md",
+        "attachment.pdf",
         ...Array.from({ length: 25 }, (_, index) => `note-${index}.md`),
       ];
       const filesByPath = new Map(paths.map((path) => [path, createMarkdownFile(path)]));
@@ -131,7 +132,30 @@ describe("findRelevantNotes", () => {
       });
     });
 
-    it("appends link-only candidates after Miyo results without changing semantic order (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
+    it("uses the first finite score and ignores malformed Miyo results (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
+      mockSearchRelated.mockResolvedValue({
+        results: [
+          { path: "vault/alpha.md", score: undefined },
+          { path: "vault/alpha.md", score: 0.6 },
+          { path: "vault/beta.md", score: Number.POSITIVE_INFINITY },
+          { path: "vault/beta.md", score: 0.5 },
+          { path: "vault/linked-only.md", score: "invalid" },
+        ],
+      });
+
+      const result = await findRelevantNotes({
+        app: window.app,
+        filePath: "source.md",
+      });
+
+      expect(result.notes.map((entry) => [entry.note.path, entry.metadata.score])).toEqual([
+        ["alpha.md", 0.6],
+        ["beta.md", 0.5],
+      ]);
+      expect(result.status).toBe("matches");
+    });
+
+    it("annotates Miyo results without appending link-only candidates (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
       mockSearchRelated.mockResolvedValue({
         results: [
           { path: "vault/alpha.md", score: 0.6 },
@@ -225,7 +249,7 @@ describe("findRelevantNotes", () => {
     it("reports unavailable when the source path is not a Markdown file (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
       const result = await findRelevantNotes({
         app: window.app,
-        filePath: "missing.md",
+        filePath: "attachment.pdf",
       });
 
       expect(result).toEqual({ notes: [], status: "unavailable" });

@@ -48,6 +48,10 @@ function useRelevantNotes(enableMiyo: boolean, miyoServerUrl: string) {
   );
   const [signalTick, setSignalTick] = useState(0);
   const activeFile = useActiveFile();
+  // Non-Markdown leaves do not provide a note Miyo can relate, so they share
+  // the neutral no-source state instead of showing setup guidance.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
+  const activeFilePath = activeFile?.extension === "md" ? activeFile.path : undefined;
   const refresh = useCallback(() => setSignalTick((tick) => tick + 1), []);
   // Without an active note there is nothing to search, so setup state must not
   // replace the pane's neutral empty state.
@@ -72,17 +76,10 @@ function useRelevantNotes(enableMiyo: boolean, miyoServerUrl: string) {
         return;
       }
 
-      // With no active Markdown note there is no source to query. Keep the
-      // neutral empty state instead of entering loading forever.
+      // A request key can recur after visiting another note. Clear its earlier
+      // result so the repeated request cannot render stale rows while loading.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
-      if (!activeFile?.path) {
-        setResult(IDLE_RELEVANT_NOTES_RESULT);
-        return;
-      }
-      // Do not claim that Miyo is ready or unavailable while the request that
-      // establishes its current state is still pending.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
-      setResult(LOADING_RELEVANT_NOTES_RESULT);
+      setSettledRequest(null);
       try {
         const notes = await findRelevantNotes({ app, filePath: activeFile.path });
         // A settings or active-note change can supersede an in-flight Miyo

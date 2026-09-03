@@ -68,6 +68,12 @@ async function searchRelatedNotesWithMiyo(
     // sorting embedding scores again in Copilot.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
     for (const result of results) {
+      // Custom and older Miyo endpoints may return malformed scores. Only a
+      // finite score can establish relevance or reserve a path's first result.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
+      if (typeof result.score !== "number" || !Number.isFinite(result.score)) {
+        continue;
+      }
       const relativePath = getVaultRelativeMiyoPath(app, result.path);
       if (relativePath !== filePath && !scoreByPath.has(relativePath)) {
         scoreByPath.set(relativePath, result.score);
@@ -201,7 +207,10 @@ export async function findRelevantNotes({
 }: FindRelevantNotesOptions): Promise<RelevantNotesResult> {
   const settings = getSettings();
   const file = app.vault.getAbstractFileByPath(filePath);
-  if (!(file instanceof TFile)) {
+  // Vault churn can remove or replace the source after the UI captures its
+  // path. Never query Miyo or derive rows without a Markdown source.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
+  if (!(file instanceof TFile) || file.extension !== "md") {
     return {
       notes: EMPTY_RELEVANT_NOTES,
       status: settings.enableMiyo ? "unavailable" : "disabled",

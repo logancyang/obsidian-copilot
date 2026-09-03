@@ -126,6 +126,16 @@ describe("RelevantNotes", () => {
       expect(mockFindRelevantNotes).not.toHaveBeenCalled();
     });
 
+    it("shows the neutral empty state without searching when the active file is not Markdown (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
+      mockUseActiveFile.mockReturnValue(makeMarkdownFile("Attachment.pdf"));
+
+      render(<RelevantNotes onAddToChat={jest.fn()} />);
+
+      expect(await screen.findByText("No relevant notes found")).toBeTruthy();
+      expect(screen.queryByText("Check your Miyo setup")).toBeNull();
+      expect(mockFindRelevantNotes).not.toHaveBeenCalled();
+    });
+
     it("shows empty setup guidance when Miyo is unavailable and opens the Miyo settings tab (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
       mockFindRelevantNotes.mockResolvedValue({
         notes: [],
@@ -155,6 +165,68 @@ describe("RelevantNotes", () => {
       });
 
       render(<RelevantNotes onAddToChat={jest.fn()} />);
+
+      expect(await screen.findByText("No semantic matches yet")).toBeTruthy();
+      expect(screen.queryByText("Target")).toBeNull();
+      expect(screen.queryByRole("button", { name: "Open Miyo settings" })).toBeNull();
+    });
+
+    it("starts a fresh request when the same note reopens after no note was active (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
+      const sourceFile = makeMarkdownFile("Source.md");
+      const { rerender } = render(<RelevantNotes onAddToChat={jest.fn()} />);
+      expect(await screen.findByText("Target")).toBeTruthy();
+
+      mockUseActiveFile.mockReturnValue(null);
+      rerender(<RelevantNotes onAddToChat={jest.fn()} />);
+      expect(screen.getByText("No relevant notes found")).toBeTruthy();
+
+      mockFindRelevantNotes.mockReturnValueOnce(new Promise(() => undefined));
+      mockUseActiveFile.mockReturnValue(sourceFile);
+      rerender(<RelevantNotes onAddToChat={jest.fn()} />);
+
+      expect(await screen.findByText("Finding relevant notes…")).toBeTruthy();
+      expect(screen.queryByText("Target")).toBeNull();
+    });
+
+    it("hides an earlier result when the same note is requested again after another note (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
+      const sourceFile = makeMarkdownFile("Source.md");
+      const otherFile = makeMarkdownFile("Other.md");
+      const { rerender } = render(<RelevantNotes onAddToChat={jest.fn()} />);
+      expect(await screen.findByText("Target")).toBeTruthy();
+
+      mockFindRelevantNotes.mockReturnValueOnce(new Promise(() => undefined));
+      mockUseActiveFile.mockReturnValue(otherFile);
+      rerender(<RelevantNotes onAddToChat={jest.fn()} />);
+      expect(await screen.findByText("Finding relevant notes…")).toBeTruthy();
+
+      mockFindRelevantNotes.mockReturnValueOnce(new Promise(() => undefined));
+      mockUseActiveFile.mockReturnValue(sourceFile);
+      rerender(<RelevantNotes onAddToChat={jest.fn()} />);
+
+      expect(await screen.findByText("Finding relevant notes…")).toBeTruthy();
+      expect(screen.queryByText("Target")).toBeNull();
+      expect(mockFindRelevantNotes).toHaveBeenCalledTimes(3);
+    });
+
+    it("refetches when the configured Miyo backend becomes available (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
+      mockMiyoBackend = "unavailable";
+      mockFindRelevantNotes
+        .mockResolvedValueOnce({ notes: [], status: "unavailable" })
+        .mockResolvedValueOnce({
+          notes: [
+            {
+              note: { path: "Target.md", title: "Target" },
+              metadata: {
+                score: 0.9,
+                hasOutgoingLinks: false,
+                hasBacklinks: false,
+              },
+            },
+          ],
+          status: "matches",
+        });
+
+      const { rerender } = render(<RelevantNotes onAddToChat={jest.fn()} />);
       expect(await screen.findByText("Check your Miyo setup")).toBeTruthy();
 
       act(() => indexChangedListener?.());
