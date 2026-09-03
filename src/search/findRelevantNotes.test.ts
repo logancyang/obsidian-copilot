@@ -232,24 +232,86 @@ describe("findRelevantNotes", () => {
       expect(mockResolveBaseUrl).not.toHaveBeenCalled();
     });
 
-    it("keeps links and reports not-indexed when Miyo confirms the registered folder (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
-      mockSearchRelated.mockRejectedValue(
-        new MiyoRequestError(404, "No indexed chunks found for file_path")
-      );
-      mockedGetLinkedNotes.mockReturnValue([createMarkdownFile("linked-only.md")]);
+    it("reuses one frozen notes array for every empty result", async () => {
+      const missingFileResult = await findRelevantNotes({
+        app: window.app,
+        filePath: "missing.md",
+      });
 
-      const result = await findRelevantNotes({
+      mockedGetSettings.mockReturnValue({ enableMiyo: false } as CopilotSettings);
+      const disabledResult = await findRelevantNotes({ app: window.app, filePath: "source.md" });
+
+      mockedGetSettings.mockReturnValue({ enableMiyo: true } as CopilotSettings);
+      mockedShouldUseMiyo.mockReturnValue(false);
+      const runtimeUnavailableResult = await findRelevantNotes({
         app: window.app,
         filePath: "source.md",
       });
 
-      expect(result.notes).toHaveLength(1);
-      expect(result.notes[0].note.path).toBe("linked-only.md");
-      expect(result.notes[0].metadata.score).toBeUndefined();
-      expect(result.status).toBe("not-indexed");
-      expect(mockGetFolder).toHaveBeenCalledWith("http://127.0.0.1:8742", "vault");
-      expect(mockedLogError).not.toHaveBeenCalled();
+      mockedShouldUseMiyo.mockReturnValue(true);
+      mockSearchRelated.mockRejectedValue(new MiyoRequestError(503, "Service unavailable"));
+      const failedSearchResult = await findRelevantNotes({
+        app: window.app,
+        filePath: "source.md",
+      });
+
+      mockSearchRelated.mockResolvedValue({ results: [] });
+      const noMatchesResult = await findRelevantNotes({ app: window.app, filePath: "source.md" });
+
+      mockSearchRelated.mockRejectedValue(new MiyoRequestError(404, ""));
+      const notIndexedResult = await findRelevantNotes({
+        app: window.app,
+        filePath: "source.md",
+      });
+
+      mockSearchRelated.mockResolvedValue({
+        results: [{ path: "vault/missing-result.md", score: 0.5 }],
+      });
+      const filteredResult = await findRelevantNotes({ app: window.app, filePath: "source.md" });
+
+      const emptyResults = [
+        missingFileResult,
+        disabledResult,
+        runtimeUnavailableResult,
+        failedSearchResult,
+        noMatchesResult,
+        notIndexedResult,
+        filteredResult,
+      ];
+      expect(emptyResults.map((result) => result.status)).toEqual([
+        "unavailable",
+        "disabled",
+        "unavailable",
+        "unavailable",
+        "no-matches",
+        "not-indexed",
+        "matches",
+      ]);
+      expect(Object.isFrozen(missingFileResult.notes)).toBe(true);
+      for (const result of emptyResults) {
+        expect(result.notes).toBe(missingFileResult.notes);
+      }
     });
+
+    it.each(["", "Source file is not indexed"])(
+      "keeps links and reports not-indexed for 404 detail %p (https://github.com/logancyang/obsidian-copilot/pull/2992#discussion_r3919646861)",
+      async (detail) => {
+        mockSearchRelated.mockRejectedValue(new MiyoRequestError(404, detail));
+        mockedGetLinkedNotes.mockReturnValue([createMarkdownFile("linked-only.md")]);
+
+        const result = await findRelevantNotes({
+          app: window.app,
+          filePath: "source.md",
+        });
+
+        expect(result.notes).toHaveLength(1);
+        expect(result.notes[0].note.path).toBe("linked-only.md");
+        expect(result.notes[0].metadata.score).toBeUndefined();
+        expect(result.status).toBe("not-indexed");
+        expect(mockGetFolder).toHaveBeenCalledWith("http://127.0.0.1:8742", "vault");
+        expect(mockedLogError).not.toHaveBeenCalled();
+      }
+    );
 
     it("returns no graph-only rows when an unindexed source cannot confirm folder registration (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
       mockSearchRelated.mockRejectedValue(

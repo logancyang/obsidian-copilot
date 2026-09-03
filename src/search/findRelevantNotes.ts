@@ -15,7 +15,6 @@ import { App, TFile } from "obsidian";
 const MAX_RESULTS = 20;
 const MIYO_RELATED_SEARCH_TIMEOUT_MS = 8000;
 const MIYO_FOLDER_LOOKUP_TIMEOUT_MS = 8000;
-const MIYO_UNINDEXED_SOURCE_DETAIL = "No indexed chunks found for file_path";
 
 /**
  * Fetch Miyo's ordered related-note results.
@@ -89,15 +88,11 @@ async function searchRelatedNotesWithMiyo(
       status: scoreByPath.size > 0 ? "matches" : "no-matches",
     };
   } catch (error) {
-    // Miyo uses this one response for a source that has no indexed chunks,
-    // including a new note and a note excluded by Miyo. Only that response
-    // merits a bounded registration probe; an outage must remain unavailable.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
-    if (
-      !(error instanceof MiyoRequestError) ||
-      error.status !== 404 ||
-      error.detail !== MIYO_UNINDEXED_SOURCE_DETAIL
-    ) {
+    // Miyo defines every 404 from related search as a source with no indexed
+    // chunks. The detail text is not part of that contract, so gating on it can
+    // misreport a healthy registered folder as unavailable.
+    // https://github.com/logancyang/obsidian-copilot/pull/2992#discussion_r3919646861
+    if (!(error instanceof MiyoRequestError) || error.status !== 404) {
       logError(
         `RelevantNotes(Miyo): searchRelated failed for file_path=${miyoFilePath} folder_name=${folderName}: ${
           (error as Error).message
@@ -182,6 +177,8 @@ export interface RelevantNotesResult {
   status: RelevantNotesSearchStatus;
 }
 
+const EMPTY_RELEVANT_NOTES: readonly RelevantNoteEntry[] = Object.freeze([]);
+
 export interface FindRelevantNotesOptions {
   app: App;
   filePath: string;
@@ -203,7 +200,7 @@ export async function findRelevantNotes({
   const file = app.vault.getAbstractFileByPath(filePath);
   if (!(file instanceof TFile)) {
     return {
-      notes: [],
+      notes: EMPTY_RELEVANT_NOTES,
       status: settings.enableMiyo ? "unavailable" : "disabled",
     };
   }
@@ -212,10 +209,10 @@ export async function findRelevantNotes({
   // even though neither state can return graph-only fallback rows.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
   if (!settings.enableMiyo) {
-    return { notes: [], status: "disabled" };
+    return { notes: EMPTY_RELEVANT_NOTES, status: "disabled" };
   }
   if (!shouldUseMiyo(settings)) {
-    return { notes: [], status: "unavailable" };
+    return { notes: EMPTY_RELEVANT_NOTES, status: "unavailable" };
   }
 
   const { scoreByPath, status } = await searchRelatedNotesWithMiyo(app, filePath, settings);
@@ -224,7 +221,7 @@ export async function findRelevantNotes({
   // Miyo establishes a healthy ready or not-indexed state.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
   if (status === "unavailable") {
-    return { notes: [], status };
+    return { notes: EMPTY_RELEVANT_NOTES, status };
   }
   const noteLinks = getNoteLinks(app, file);
 
@@ -252,5 +249,5 @@ export async function findRelevantNotes({
       };
     })
     .filter((entry) => entry !== null);
-  return { notes, status };
+  return { notes: notes.length === 0 ? EMPTY_RELEVANT_NOTES : notes, status };
 }
