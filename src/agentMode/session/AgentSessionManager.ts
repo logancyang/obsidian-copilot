@@ -1449,14 +1449,16 @@ export class AgentSessionManager {
    * prompt into one turn, conflating two unrelated requests, and its emptiness
    * is no guarantee it can still reach a backend.
    * https://github.com/Brevilabs/obsidian-copilot-private/issues/357
-   * @param prompt - The complete user prompt to send.
+   * @param buildPrompt - Composes the complete user prompt. Called only once
+   *   the chat is about to be created, after any probe wait, so a note renamed
+   *   in the meantime is still addressed by its current path.
    * @param projectId - The scope the command was invoked from. Callers that
    *   may wait before reaching this method capture it up front so a project
    *   switch in the meantime cannot move the request into another project's
    *   working directory and instructions.
    */
   async createSessionWithPrompt(
-    prompt: string,
+    buildPrompt: () => string,
     projectId: ProjectScopeId = this.activeProjectId
   ): Promise<AgentSession> {
     // Pin the backend before awaiting so the probe and the chat cannot land on
@@ -1474,7 +1476,7 @@ export class AgentSessionManager {
       await this.preloadModels(backendId).catch(() => undefined);
     }
     const chatInputId = uuidv4();
-    this.composerHandoffByChatInputId.set(chatInputId, { text: prompt, submit: true });
+    this.composerHandoffByChatInputId.set(chatInputId, { text: buildPrompt(), submit: true });
     try {
       return await this.createSession(backendId, projectId, undefined, chatInputId);
     } catch (error) {

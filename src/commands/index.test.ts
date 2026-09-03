@@ -57,8 +57,18 @@ describe("commands", () => {
       expect(submitAgentPrompt).not.toHaveBeenCalled();
 
       expect(command?.checkCallback?.(false)).toBe(true);
-      expect(submitAgentPrompt).toHaveBeenCalledWith(
+      expect(submitAgentPrompt).toHaveBeenCalledTimes(1);
+      const buildPrompt = submitAgentPrompt.mock.calls[0][0] as () => string;
+      expect(buildPrompt()).toBe(
         'Publish this Markdown note to OpenArtifacts. Use its exact vault-relative path:\n\n"Notes/Active.md"'
+      );
+
+      // The request can wait on a probe or an earlier command; a rename in
+      // that window must still address the same note.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/357
+      activeFile.path = "Notes/Renamed.md";
+      expect(buildPrompt()).toBe(
+        'Publish this Markdown note to OpenArtifacts. Use its exact vault-relative path:\n\n"Notes/Renamed.md"'
       );
     });
 

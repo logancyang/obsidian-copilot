@@ -289,9 +289,10 @@ describe("main", () => {
         });
         const activateAgentView = jest.spyOn(plugin, "activateAgentView").mockResolvedValue(null);
 
-        await plugin.newAgentChatWithPrompt("Publish this note");
+        await plugin.newAgentChatWithPrompt(() => "Publish this note");
 
-        expect(createSessionWithPrompt).toHaveBeenCalledWith("Publish this note", "global");
+        expect(createSessionWithPrompt).toHaveBeenCalledWith(expect.any(Function), "global");
+        expect(createSessionWithPrompt.mock.calls[0][0]()).toBe("Publish this note");
         expect(activateAgentView).toHaveBeenCalledTimes(1);
         expect(createSessionWithPrompt.mock.invocationCallOrder[0]).toBeLessThan(
           activateAgentView.mock.invocationCallOrder[0]
@@ -309,7 +310,7 @@ describe("main", () => {
         });
         const activateAgentView = jest.spyOn(plugin, "activateAgentView").mockResolvedValue(null);
 
-        await plugin.newAgentChatWithPrompt("Publish this note");
+        await plugin.newAgentChatWithPrompt(() => "Publish this note");
 
         expect(setActiveSession).toHaveBeenCalledWith("session-1");
         expect(setActiveSession.mock.invocationCallOrder[0]).toBeLessThan(
@@ -322,7 +323,7 @@ describe("main", () => {
         let releaseFirstReveal: (() => void) | undefined;
         const createSessionWithPrompt = jest
           .fn()
-          .mockImplementation((prompt: string) => Promise.resolve({ internalId: prompt }));
+          .mockImplementation((build: () => string) => Promise.resolve({ internalId: build() }));
         Object.assign(plugin.agentSessionManager as object, {
           createSessionWithPrompt,
           setActiveSession: jest.fn(),
@@ -335,8 +336,8 @@ describe("main", () => {
             })
         );
 
-        const first = plugin.newAgentChatWithPrompt("first");
-        const second = plugin.newAgentChatWithPrompt("second");
+        const first = plugin.newAgentChatWithPrompt(() => "first");
+        const second = plugin.newAgentChatWithPrompt(() => "second");
         for (let turn = 0; turn < 20 && !releaseFirstReveal; turn += 1) {
           await Promise.resolve();
         }
@@ -344,13 +345,13 @@ describe("main", () => {
         // Only one composer mounts at a time, so the second chat must not be
         // created while the first request is still being handed to the view.
         expect(createSessionWithPrompt).toHaveBeenCalledTimes(1);
-        expect(createSessionWithPrompt).toHaveBeenCalledWith("first", "global");
+        expect(createSessionWithPrompt.mock.calls[0][0]()).toBe("first");
 
         releaseFirstReveal?.();
         activateAgentView.mockResolvedValue(null);
         await Promise.all([first, second]);
 
-        expect(createSessionWithPrompt).toHaveBeenNthCalledWith(2, "second", "global");
+        expect(createSessionWithPrompt.mock.calls[1][0]()).toBe("second");
       });
 
       it("sends a queued request to the project it was invoked from even after the user switches projects for https://github.com/Brevilabs/obsidian-copilot-private/issues/357", async () => {
@@ -359,7 +360,7 @@ describe("main", () => {
         let activeProjectId = "project-a";
         const createSessionWithPrompt = jest
           .fn()
-          .mockImplementation((prompt: string) => Promise.resolve({ internalId: prompt }));
+          .mockImplementation((build: () => string) => Promise.resolve({ internalId: build() }));
         Object.assign(plugin.agentSessionManager as object, {
           createSessionWithPrompt,
           setActiveSession: jest.fn(),
@@ -372,8 +373,8 @@ describe("main", () => {
             })
         );
 
-        const first = plugin.newAgentChatWithPrompt("first");
-        const second = plugin.newAgentChatWithPrompt("second");
+        const first = plugin.newAgentChatWithPrompt(() => "first");
+        const second = plugin.newAgentChatWithPrompt(() => "second");
         for (let turn = 0; turn < 20 && !releaseFirstReveal; turn += 1) {
           await Promise.resolve();
         }
@@ -383,7 +384,11 @@ describe("main", () => {
         activateAgentView.mockResolvedValue(null);
         await Promise.all([first, second]);
 
-        expect(createSessionWithPrompt).toHaveBeenNthCalledWith(2, "second", "project-a");
+        expect(createSessionWithPrompt).toHaveBeenNthCalledWith(
+          2,
+          expect.any(Function),
+          "project-a"
+        );
       });
 
       it("keeps delivering later requests after one fails for https://github.com/Brevilabs/obsidian-copilot-private/issues/357", async () => {
@@ -399,10 +404,10 @@ describe("main", () => {
         });
         jest.spyOn(plugin, "activateAgentView").mockResolvedValue(null);
 
-        await plugin.newAgentChatWithPrompt("first");
-        await plugin.newAgentChatWithPrompt("second");
+        await plugin.newAgentChatWithPrompt(() => "first");
+        await plugin.newAgentChatWithPrompt(() => "second");
 
-        expect(createSessionWithPrompt).toHaveBeenNthCalledWith(2, "second", "global");
+        expect(createSessionWithPrompt.mock.calls[1][0]()).toBe("second");
       });
 
       it("reveals the agent setup surface without throwing when creating the chat fails for https://github.com/Brevilabs/obsidian-copilot-private/issues/357", async () => {
@@ -414,7 +419,9 @@ describe("main", () => {
         });
         const activateAgentView = jest.spyOn(plugin, "activateAgentView").mockResolvedValue(null);
 
-        await expect(plugin.newAgentChatWithPrompt("Publish this note")).resolves.toBeUndefined();
+        await expect(
+          plugin.newAgentChatWithPrompt(() => "Publish this note")
+        ).resolves.toBeUndefined();
 
         expect(logWarn).toHaveBeenCalledWith(
           "[CopilotPlugin] Failed to create agent session with prompt",
@@ -434,7 +441,9 @@ describe("main", () => {
         });
         jest.spyOn(plugin, "activateAgentView").mockRejectedValue(revealFailure);
 
-        await expect(plugin.newAgentChatWithPrompt("Publish this note")).resolves.toBeUndefined();
+        await expect(
+          plugin.newAgentChatWithPrompt(() => "Publish this note")
+        ).resolves.toBeUndefined();
 
         expect(logWarn).toHaveBeenCalledWith(
           "[CopilotPlugin] Failed to reveal Agent Chat after a failed prompt",

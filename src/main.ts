@@ -451,7 +451,7 @@ export default class CopilotPlugin extends Plugin {
         this[OPENARTIFACTS_AGENT_BRIDGE_PROPERTY] = undefined;
       }
     });
-    registerCommands(this, (prompt) => void this.newAgentChatWithPrompt(prompt));
+    registerCommands(this, (buildPrompt) => void this.newAgentChatWithPrompt(buildPrompt));
 
     // Tool initialization is now handled automatically in CopilotPlusChainRunner and AutonomousAgentChainRunner
 
@@ -1199,9 +1199,10 @@ export default class CopilotPlugin extends Plugin {
    * Open Agent Chat and send `prompt` as the next turn of a chat in the active
    * scope, leaving whatever chat the user is running untouched.
    * https://github.com/Brevilabs/obsidian-copilot-private/issues/357
-   * @param prompt - The complete user prompt to send.
+   * @param buildPrompt - Composes the complete user prompt when the request is
+   *   sent, so details that can change while it waits are read at that point.
    */
-  async newAgentChatWithPrompt(prompt: string): Promise<void> {
+  async newAgentChatWithPrompt(buildPrompt: () => string): Promise<void> {
     const manager = this.requireAgentView();
     if (!manager) return;
     // Capture the scope now. A request can wait behind an earlier one below,
@@ -1216,20 +1217,22 @@ export default class CopilotPlugin extends Plugin {
     // to match that single-consumer shape. A failed run must not wedge the
     // chain. https://github.com/Brevilabs/obsidian-copilot-private/issues/357
     const previous = this.agentPromptDelivery ?? Promise.resolve();
-    const delivery = previous.then(() => this.deliverAgentChatPrompt(manager, prompt, projectId));
+    const delivery = previous.then(() =>
+      this.deliverAgentChatPrompt(manager, buildPrompt, projectId)
+    );
     this.agentPromptDelivery = delivery.catch(() => undefined);
     return delivery;
   }
 
   private async deliverAgentChatPrompt(
     manager: AgentSessionManager,
-    prompt: string,
+    buildPrompt: () => string,
     projectId: ReturnType<AgentSessionManager["getActiveProjectId"]>
   ): Promise<void> {
     try {
       // Bind the prompt before mounting the Agent view so a first-time mount
       // cannot auto-create a blank session ahead of this one.
-      const session = await manager.createSessionWithPrompt(prompt, projectId);
+      const session = await manager.createSessionWithPrompt(buildPrompt, projectId);
       // Creating the chat awaits a model probe and a backend spawn, and a scope
       // change or a second command can leave a different chat active by the
       // time this returns. The composer only submits the request bound to the

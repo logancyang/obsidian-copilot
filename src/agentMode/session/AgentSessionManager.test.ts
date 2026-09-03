@@ -633,7 +633,7 @@ describe("AgentSessionManager", () => {
         const running = await mgr.createSession();
         sessionTestHandles.get(running.internalId)?.setHasUserVisibleMessages(true);
 
-        const session = await mgr.createSessionWithPrompt("Publish this note");
+        const session = await mgr.createSessionWithPrompt(() => "Publish this note");
 
         expect(session).not.toBe(running);
         expect(mgr.getSessions()).toEqual([running, session]);
@@ -661,7 +661,7 @@ describe("AgentSessionManager", () => {
           const existing = await mgr.createSession();
           sessionTestHandles.get(existing.internalId)?.setStatus(status);
 
-          const session = await mgr.createSessionWithPrompt("Publish this note");
+          const session = await mgr.createSessionWithPrompt(() => "Publish this note");
 
           expect(session).not.toBe(existing);
           expect(mgr.getSessions()).toEqual([existing, session]);
@@ -682,7 +682,7 @@ describe("AgentSessionManager", () => {
         const mgr = buildManager({ preload });
         mgr.registerPreload("opencode", probe);
 
-        const pending = mgr.createSessionWithPrompt("Publish this note");
+        const pending = mgr.createSessionWithPrompt(() => "Publish this note");
         await waitFor(() => expect(preload).toHaveBeenCalledWith("opencode"));
 
         // Creating the chat first hands `session/new` a bare catalog, and the
@@ -717,7 +717,7 @@ describe("AgentSessionManager", () => {
           mgr.setActiveSession(projectSession.internalId);
           mgr.registerPreload("opencode", probe);
 
-          const pending = mgr.createSessionWithPrompt("Publish this note");
+          const pending = mgr.createSessionWithPrompt(() => "Publish this note");
           await waitFor(() => expect(releaseProbe).toBeDefined());
           // The user leaves the project while the probe is still running.
           mgr.setActiveSession(globalSession.internalId);
@@ -728,6 +728,28 @@ describe("AgentSessionManager", () => {
         } finally {
           recordSpy.mockRestore();
         }
+      });
+
+      it("composes the prompt only once the chat is about to be created, after the probe for https://github.com/Brevilabs/obsidian-copilot-private/issues/357", async () => {
+        let releaseProbe: (() => void) | undefined;
+        const probe = new Promise<void>((resolve) => {
+          releaseProbe = resolve;
+        });
+        const mgr = buildManager({ preload: jest.fn(() => probe) });
+        mgr.registerPreload("opencode", probe);
+        // Stands in for a note path that changes while the request waits.
+        let notePath = "Notes/Before.md";
+
+        const pending = mgr.createSessionWithPrompt(() => `Publish ${notePath}`);
+        await waitFor(() => expect(releaseProbe).toBeDefined());
+        notePath = "Notes/After.md";
+        releaseProbe?.();
+        const session = await pending;
+
+        expect(mgr.consumeComposerHandoff(session.chatInputId)).toEqual({
+          text: "Publish Notes/After.md",
+          submit: true,
+        });
       });
 
       it("creates the chat in an explicitly supplied scope rather than the active one for https://github.com/Brevilabs/obsidian-copilot-private/issues/357", async () => {
@@ -746,7 +768,7 @@ describe("AgentSessionManager", () => {
           const mgr = buildManager();
           await mgr.createSession(undefined, GLOBAL_SCOPE);
 
-          const session = await mgr.createSessionWithPrompt("Publish this note", projectId);
+          const session = await mgr.createSessionWithPrompt(() => "Publish this note", projectId);
 
           expect(session.projectId).toBe(projectId);
         } finally {
@@ -758,7 +780,7 @@ describe("AgentSessionManager", () => {
         const preload = jest.fn(async () => undefined);
         const mgr = buildManager({ preload });
 
-        const session = await mgr.createSessionWithPrompt("Publish this note");
+        const session = await mgr.createSessionWithPrompt(() => "Publish this note");
 
         expect(preload).not.toHaveBeenCalled();
         expect(mgr.consumeComposerHandoff(session.chatInputId)).toEqual({
@@ -777,7 +799,7 @@ describe("AgentSessionManager", () => {
           throw new Error("session creation failed");
         });
 
-        await expect(mgr.createSessionWithPrompt("Publish this note")).rejects.toThrow(
+        await expect(mgr.createSessionWithPrompt(() => "Publish this note")).rejects.toThrow(
           "session creation failed"
         );
 

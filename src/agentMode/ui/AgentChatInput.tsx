@@ -623,7 +623,12 @@ interface QueuedMessageListProps {
   onRemove: (id: string) => void;
 }
 
-const QueuedMessageList: React.FC<QueuedMessageListProps> = ({ messages, onRemove }) => {
+/**
+ * Rows for sends waiting on the chat: typed follow-ups held behind a running
+ * turn, sends held for project context, and requests a command handed to a chat
+ * that is still starting. Exported for the component gallery only.
+ */
+export const QueuedMessageList: React.FC<QueuedMessageListProps> = ({ messages, onRemove }) => {
   return (
     <div className="tw-flex tw-max-h-24 tw-flex-col tw-gap-1 tw-overflow-y-auto tw-px-2 tw-pb-1">
       {messages.map((m) => (

@@ -33,7 +33,8 @@ import { v4 as uuidv4 } from "uuid";
 import { COMMAND_IDS, COMMAND_ICONS, COMMAND_NAMES, CommandId } from "@/constants";
 import { setSelectedTextContexts } from "@/aiParams";
 
-type SubmitAgentPrompt = (prompt: string) => void;
+/** Receives a builder rather than text so the prompt is composed when the request is actually sent. */
+type SubmitAgentPrompt = (buildPrompt: () => string) => void;
 
 /**
  * Add a command to the plugin. Supports async callbacks; errors are logged.
@@ -104,11 +105,14 @@ export function registerCommands(plugin: CopilotPlugin, submitAgentPrompt: Submi
     }
 
     if (!checking) {
-      // Snapshot the exact path at invocation time so a later active-note
-      // change cannot redirect the agent's publishing request.
+      // Capture the note itself, not its path. A later active-note change must
+      // not redirect the request, but the request can wait on a model probe or
+      // an earlier command, and a rename in that window must still reach the
+      // same note, so its path is read when the prompt is built.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/357
       submitAgentPrompt(
-        `Publish this Markdown note to OpenArtifacts. Use its exact vault-relative path:\n\n${JSON.stringify(activeFile.path)}`
+        () =>
+          `Publish this Markdown note to OpenArtifacts. Use its exact vault-relative path:\n\n${JSON.stringify(activeFile.path)}`
       );
     }
     return true;
