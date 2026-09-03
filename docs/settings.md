@@ -302,17 +302,16 @@ All controls below the main switch are disabled while Self-Host Mode is off. See
 
 ## Advanced
 
-Advanced contains credential storage, one retiring search switch, and diagnostic controls.
+Advanced contains credential storage and diagnostic controls.
 
 ### Others
 
-| Control                | Default                                           | What it does                                                                                                                                                                                                                                                      |
-| ---------------------- | ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **API Key Storage**    | **Obsidian Keychain** on Obsidian 1.11.4 or newer | Reports whether secure storage is available and whether this device appears to have keys. Each device has a separate Keychain, so vault sync does not copy credentials. Older Obsidian builds cannot load, save, or delete Keychain entries.                      |
-| **Delete All Keys**    | Not applicable                                    | After confirmation, removes Copilot API and license keys from the Obsidian Keychain, `data.json`, and in-memory settings. You must enter them again. Credential backup files created during a V4 upgrade are left in place for you to review and delete manually. |
-| **Legacy vault index** | Off                                               | Retiring. Copilot V3 semantic search has moved to [Miyo](vault-search-and-indexing.md), powered by [miyo.md](https://www.miyo.md/).                                                                                                                               |
-| **Debug Mode**         | Off                                               | Logs Quick Chat activity to **View → Toggle Developer Tools**. It does not control the separate Agent Chat activity log below.                                                                                                                                    |
-| **Create Log File**    | Not applicable                                    | Flushes, saves, and opens the regular Quick Chat log for troubleshooting. Review it before sharing because diagnostic data can contain conversation content.                                                                                                      |
+| Control             | Default                                           | What it does                                                                                                                                                                                                                                                      |
+| ------------------- | ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **API Key Storage** | **Obsidian Keychain** on Obsidian 1.11.4 or newer | Reports whether secure storage is available and whether this device appears to have keys. Each device has a separate Keychain, so vault sync does not copy credentials. Older Obsidian builds cannot load, save, or delete Keychain entries.                      |
+| **Delete All Keys** | Not applicable                                    | After confirmation, removes Copilot API and license keys from the Obsidian Keychain, `data.json`, and in-memory settings. You must enter them again. Credential backup files created during a V4 upgrade are left in place for you to review and delete manually. |
+| **Debug Mode**      | Off                                               | Logs Quick Chat activity to **View → Toggle Developer Tools**. It does not control the separate Agent Chat activity log below.                                                                                                                                    |
+| **Create Log File** | Not applicable                                    | Flushes, saves, and opens the regular Quick Chat log for troubleshooting. Review it before sharing because diagnostic data can contain conversation content.                                                                                                      |
 
 ### Agent Chat debugging
 

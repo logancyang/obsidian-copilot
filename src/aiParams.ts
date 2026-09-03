@@ -119,19 +119,21 @@ interface IndexingProgressState {
   isCancelled: boolean;
   indexedCount: number;
   totalFiles: number;
-  errors: string[];
+  errors: readonly string[];
   completionStatus: "none" | "success" | "cancelled" | "error";
 }
 
-const indexingProgressAtom = atom<IndexingProgressState>({
+const EMPTY_INDEXING_ERRORS: readonly string[] = Object.freeze([]);
+const DEFAULT_INDEXING_PROGRESS_STATE: Readonly<IndexingProgressState> = Object.freeze({
   isActive: false,
   isPaused: false,
   isCancelled: false,
   indexedCount: 0,
   totalFiles: 0,
-  errors: [],
+  errors: EMPTY_INDEXING_ERRORS,
   completionStatus: "none",
 });
+let indexingProgressState: Readonly<IndexingProgressState> = DEFAULT_INDEXING_PROGRESS_STATE;
 
 const selectedTextContextsAtom = atom<SelectedTextContext[]>([]);
 
@@ -291,27 +293,27 @@ export function useSelectedTextContexts() {
 }
 
 /**
- * Gets the indexing progress state from the atom.
+ * Gets the internal progress state used by the legacy indexing runtime.
  */
 export function getIndexingProgressState(): Readonly<IndexingProgressState> {
-  return settingsStore.get(indexingProgressAtom);
+  return indexingProgressState;
 }
 
 /**
- * Sets the indexing progress state in the atom.
+ * Replaces the internal progress state used by the legacy indexing runtime.
  */
 export function setIndexingProgressState(state: IndexingProgressState) {
-  settingsStore.set(indexingProgressAtom, state);
+  indexingProgressState = state;
 }
 
 /**
  * Updates specific fields in the indexing progress state.
  */
 export function updateIndexingProgressState(partial: Partial<IndexingProgressState>) {
-  settingsStore.set(indexingProgressAtom, (prev) => ({
-    ...prev,
+  indexingProgressState = {
+    ...indexingProgressState,
     ...partial,
-  }));
+  };
 }
 
 // --- Throttled indexing count updater ---
@@ -336,15 +338,7 @@ export function resetIndexingProgressState() {
   _lastUpdateTime = 0;
   _pendingCount = 0;
 
-  settingsStore.set(indexingProgressAtom, {
-    isActive: false,
-    isPaused: false,
-    isCancelled: false,
-    indexedCount: 0,
-    totalFiles: 0,
-    errors: [],
-    completionStatus: "none",
-  });
+  indexingProgressState = DEFAULT_INDEXING_PROGRESS_STATE;
 }
 
 /**
@@ -388,13 +382,4 @@ export function flushIndexingCount(): void {
   updateIndexingProgressState({ indexedCount: _pendingCount });
   _lastUpdateTime = 0;
   _pendingCount = 0;
-}
-
-/**
- * Hook to get the indexing progress state from the atom.
- */
-export function useIndexingProgress() {
-  return useAtom(indexingProgressAtom, {
-    store: settingsStore,
-  });
 }

@@ -24,7 +24,6 @@ jest.mock("@/context", () => ({
 
 jest.mock("@/aiParams", () => ({
   useChainType: () => ["llm_chain"],
-  useIndexingProgress: () => [{ isActive: false }],
 }));
 
 /* eslint-enable @eslint-react/hooks-extra/no-unnecessary-use-prefix */

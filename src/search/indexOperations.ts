@@ -458,11 +458,9 @@ export class IndexOperations {
   }
 
   /**
-   * Whether a run in flight must stop: the user cancelled it, or turned the vault index off from
-   * Advanced settings while it was running. The setting is re-read on each check rather than
-   * latched at entry, so a run started before the switch was flipped ends at the next batch
-   * instead of embedding the rest of the vault
-   * (https://github.com/logancyang/obsidian-copilot-preview/issues/319).
+   * Whether a run in flight must stop because it was cancelled or the persisted
+   * runtime gate no longer enables indexing. The setting is re-read between
+   * batches so a synchronized configuration change stops the remaining work.
    */
   private shouldStopIndexing(): boolean {
     return (
@@ -473,15 +471,13 @@ export class IndexOperations {
   }
 
   private async handlePause(): Promise<void> {
-    // Sync pause state from atom (UI may have toggled it)
-    const atomState = getIndexingProgressState();
-    this.state.isIndexingPaused = atomState.isPaused;
-    this.state.isIndexingCancelled = atomState.isCancelled;
+    const progressState = getIndexingProgressState();
+    this.state.isIndexingPaused = progressState.isPaused;
+    this.state.isIndexingCancelled = progressState.isCancelled;
 
     if (this.state.isIndexingPaused) {
       while (this.state.isIndexingPaused && !this.shouldStopIndexing()) {
         await new Promise((resolve) => window.setTimeout(resolve, 100));
-        // Re-read atom state each iteration
         const current = getIndexingProgressState();
         this.state.isIndexingPaused = current.isPaused;
         this.state.isIndexingCancelled = current.isCancelled;
@@ -669,8 +665,8 @@ export class IndexOperations {
     }
   }
 
-  public async cancelIndexing(): Promise<void> {
-    logInfo("Indexing cancelled by user");
+  private async cancelIndexing(): Promise<void> {
+    logInfo("Indexing cancelled");
     this.state.isIndexingCancelled = true;
     updateIndexingProgressState({
       isCancelled: true,

@@ -3,8 +3,6 @@ import {
   getSelectedTextContexts,
   removeSelectedTextContext,
   useChainType,
-  updateIndexingProgressState,
-  useIndexingProgress,
   useModelKey,
   useSelectedTextContexts,
 } from "@/aiParams";
@@ -17,7 +15,6 @@ import ChatInput from "@/components/chat-components/ChatModeInput";
 import ChatMessages, { isChatEmpty } from "@/components/chat-components/ChatMessages";
 import { AgentModeBanner } from "@/components/chat-components/ui/AgentModeBanner";
 import { useChatModelPicker } from "@/components/chat-components/useChatModelPicker";
-import IndexingProgressCard from "@/components/IndexingProgressCard";
 import {
   ABORT_REASON,
   AI_SENDER,
@@ -116,10 +113,6 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
   );
   const [selectedImages, setSelectedImages] = useState<File[]>([]);
   const [chatHistoryItems, setChatHistoryItems] = useState<ChatHistoryItem[]>([]);
-  // null: keep default behavior; true: show; false: hide
-  const [indexingCardVisible, setIndexingCardVisible] = useState<boolean | null>(null);
-  const [indexingState] = useIndexingProgress();
-
   // Track if component is mounted to prevent state updates after unmount
   const isMountedRef = useRef(false);
 
@@ -155,56 +148,6 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
   const effectiveIncludeActiveWebTab = includeActiveWebTab && !hasAnySelection;
 
   const { activeWebTabForMentions: currentActiveWebTab } = useActiveWebTabState();
-
-  /**
-   * Whether to show the indexing progress card.
-   * Hidden when the user explicitly closed it.
-   */
-  const shouldShowIndexingCard = () => {
-    if (indexingCardVisible === false) return false;
-    // Show when indexing is active or just completed (before auto-close)
-    return indexingState.isActive || indexingState.completionStatus !== "none";
-  };
-
-  const [prevIndexingActivity, setPrevIndexingActivity] = useState({
-    isActive: indexingState.isActive,
-    completionStatus: indexingState.completionStatus,
-  });
-  if (
-    prevIndexingActivity.isActive !== indexingState.isActive ||
-    prevIndexingActivity.completionStatus !== indexingState.completionStatus
-  ) {
-    setPrevIndexingActivity({
-      isActive: indexingState.isActive,
-      completionStatus: indexingState.completionStatus,
-    });
-    if (indexingState.isActive || indexingState.completionStatus !== "none") {
-      setIndexingCardVisible(null);
-    }
-  }
-
-  const handleIndexingCardClose = useCallback(() => {
-    setIndexingCardVisible(false);
-    // Reset atom completion status so stale card doesn't reappear on remount
-    if (!indexingState.isActive) {
-      updateIndexingProgressState({ completionStatus: "none" });
-    }
-  }, [indexingState.isActive]);
-
-  const handleIndexingPause = useCallback(async () => {
-    const VectorStoreManager = (await import("@/search/vectorStoreManager")).default;
-    VectorStoreManager.getInstance().pauseIndexing();
-  }, []);
-
-  const handleIndexingResume = useCallback(async () => {
-    const VectorStoreManager = (await import("@/search/vectorStoreManager")).default;
-    VectorStoreManager.getInstance().resumeIndexing();
-  }, []);
-
-  const handleIndexingStop = useCallback(async () => {
-    const VectorStoreManager = (await import("@/search/vectorStoreManager")).default;
-    await VectorStoreManager.getInstance().cancelIndexing();
-  }, []);
 
   const latestTokenCount = useMemo(() => {
     for (let i = chatHistory.length - 1; i >= 0; i--) {
@@ -809,54 +752,38 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
           onEdit={safeAsyncHandler(handleEdit)}
           onDelete={safeAsyncHandler(handleDelete)}
         />
-        {shouldShowIndexingCard() ? (
-          <div className="tw-inset-0 tw-z-modal tw-flex tw-items-center tw-justify-center tw-rounded-xl">
-            <IndexingProgressCard
-              onClose={handleIndexingCardClose}
-              onPause={() => void handleIndexingPause()}
-              onResume={() => void handleIndexingResume()}
-              onStop={() => void handleIndexingStop()}
-            />
-          </div>
-        ) : (
-          <>
-            <ChatControls
-              onNewChat={() => void handleNewChat()}
-              onSaveAsNote={() => handleSaveAsNote()}
-              onLoadHistory={() => void handleLoadChatHistory()}
-              chatHistory={chatHistoryItems}
-              onUpdateChatTitle={handleUpdateChatTitle}
-              onDeleteChat={handleDeleteChat}
-              onLoadChat={handleLoadChat}
-              onOpenSourceFile={handleOpenSourceFile}
-              latestTokenCount={latestTokenCount}
-            />
-            <ChatInput
-              inputMessage={inputMessage}
-              setInputMessage={setInputMessage}
-              handleSendMessage={safeAsyncHandler(handleSendMessage)}
-              isGenerating={loading}
-              onStopGenerating={() => handleStopGenerating(ABORT_REASON.USER_STOPPED)}
-              app={app}
-              contextNotes={contextNotes}
-              setContextNotes={setContextNotes}
-              includeActiveNote={includeActiveNote}
-              setIncludeActiveNote={setIncludeActiveNote}
-              includeActiveWebTab={includeActiveWebTab}
-              setIncludeActiveWebTab={setIncludeActiveWebTab}
-              activeWebTab={currentActiveWebTab}
-              selectedImages={selectedImages}
-              onAddImage={handleAddImage}
-              setSelectedImages={setSelectedImages}
-              modelPickerOverride={chatModelPicker}
-              selectedTextContexts={selectedTextContexts}
-              onRemoveSelectedText={handleRemoveSelectedText}
-              showIndexingCard={() => {
-                setIndexingCardVisible(true);
-              }}
-            />
-          </>
-        )}
+        <ChatControls
+          onNewChat={() => void handleNewChat()}
+          onSaveAsNote={() => handleSaveAsNote()}
+          onLoadHistory={() => void handleLoadChatHistory()}
+          chatHistory={chatHistoryItems}
+          onUpdateChatTitle={handleUpdateChatTitle}
+          onDeleteChat={handleDeleteChat}
+          onLoadChat={handleLoadChat}
+          onOpenSourceFile={handleOpenSourceFile}
+          latestTokenCount={latestTokenCount}
+        />
+        <ChatInput
+          inputMessage={inputMessage}
+          setInputMessage={setInputMessage}
+          handleSendMessage={safeAsyncHandler(handleSendMessage)}
+          isGenerating={loading}
+          onStopGenerating={() => handleStopGenerating(ABORT_REASON.USER_STOPPED)}
+          app={app}
+          contextNotes={contextNotes}
+          setContextNotes={setContextNotes}
+          includeActiveNote={includeActiveNote}
+          setIncludeActiveNote={setIncludeActiveNote}
+          includeActiveWebTab={includeActiveWebTab}
+          setIncludeActiveWebTab={setIncludeActiveWebTab}
+          activeWebTab={currentActiveWebTab}
+          selectedImages={selectedImages}
+          onAddImage={handleAddImage}
+          setSelectedImages={setSelectedImages}
+          modelPickerOverride={chatModelPicker}
+          selectedTextContexts={selectedTextContexts}
+          onRemoveSelectedText={handleRemoveSelectedText}
+        />
       </div>
     </>
   );
