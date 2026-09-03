@@ -169,37 +169,4 @@ describe("ScoreNormalizer", () => {
       });
     });
   });
-
-  describe("getStatistics", () => {
-    it("should calculate correct statistics", () => {
-      const normalizer = new ScoreNormalizer();
-
-      const results: NoteIdRank[] = [
-        { id: "note1", score: 1.0 },
-        { id: "note2", score: 2.0 },
-        { id: "note3", score: 3.0 },
-        { id: "note4", score: 4.0 },
-        { id: "note5", score: 5.0 },
-      ];
-
-      const stats = normalizer.getStatistics(results);
-
-      expect(stats.mean).toBe(3.0);
-      expect(stats.min).toBe(1.0);
-      expect(stats.max).toBe(5.0);
-      expect(stats.median).toBe(3.0);
-      expect(stats.std).toBeCloseTo(1.414, 2);
-    });
-
-    it("should handle empty results", () => {
-      const normalizer = new ScoreNormalizer();
-      const stats = normalizer.getStatistics([]);
-
-      expect(stats.mean).toBe(0);
-      expect(stats.std).toBe(0);
-      expect(stats.min).toBe(0);
-      expect(stats.max).toBe(0);
-      expect(stats.median).toBe(0);
-    });
-  });
 });

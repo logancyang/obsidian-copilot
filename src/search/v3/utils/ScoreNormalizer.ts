@@ -186,35 +186,4 @@ export class ScoreNormalizer {
       };
     });
   }
-
-  /**
-   * Get statistics about the score distribution
-   * Useful for debugging and understanding the normalization
-   *
-   * @param results - Search results
-   * @returns Statistics object
-   */
-  getStatistics(results: NoteIdRank[]): {
-    mean: number;
-    std: number;
-    min: number;
-    max: number;
-    median: number;
-  } {
-    if (results.length === 0) {
-      return { mean: 0, std: 0, min: 0, max: 0, median: 0 };
-    }
-
-    const scores = results.map((r) => r.score);
-    const sorted = [...scores].sort((a, b) => a - b);
-
-    const mean = scores.reduce((sum, s) => sum + s, 0) / scores.length;
-    const variance = scores.reduce((sum, s) => sum + Math.pow(s - mean, 2), 0) / scores.length;
-    const std = Math.sqrt(variance);
-    const min = sorted[0];
-    const max = sorted[sorted.length - 1];
-    const median = sorted[Math.floor(sorted.length / 2)];
-
-    return { mean, std, min, max, median };
-  }
 }
