@@ -202,12 +202,11 @@ describe("MiyoClient", () => {
   });
 
   describe("fileStatus()", () => {
-    it("gets one vault-relative file status with encoded folder and file queries (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
+    it("gets one file status using Miyo's encoded public path (https://github.com/Brevilabs/miyo/issues/543)", async () => {
       mockedRequestUrl.mockResolvedValue({
         status: 200,
         json: {
           status: "excluded",
-          file_path: "daily notes/Today.md",
           reason: "exclude_pattern",
           rule: "daily notes/**",
         },
@@ -216,19 +215,17 @@ describe("MiyoClient", () => {
 
       const result = await new MiyoClient().fileStatus(
         "http://127.0.0.1:8742",
-        "Work Vault",
-        "daily notes/Today.md"
+        "Work Vault/daily notes/Today.md"
       );
 
       expect(result).toEqual({
         status: "excluded",
-        file_path: "daily notes/Today.md",
         reason: "exclude_pattern",
         rule: "daily notes/**",
       });
       expect(mockedRequestUrl).toHaveBeenCalledWith(
         expect.objectContaining({
-          url: "http://127.0.0.1:8742/v0/folder/file-status?folder_name=Work+Vault&file_path=daily+notes%2FToday.md",
+          url: "http://127.0.0.1:8742/v0/folder/file-status?file_path=Work+Vault%2Fdaily+notes%2FToday.md",
           method: "GET",
           throw: false,
         })
@@ -243,7 +240,7 @@ describe("MiyoClient", () => {
       } as RequestUrlResponse);
 
       await expect(
-        new MiyoClient().fileStatus("http://127.0.0.1:8742", "vault", "source.md")
+        new MiyoClient().fileStatus("http://127.0.0.1:8742", "vault/source.md")
       ).rejects.toMatchObject({
         status: 501,
         errorCode: "not_implemented",

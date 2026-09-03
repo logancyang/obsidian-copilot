@@ -1,5 +1,10 @@
 import { logError, logInfo } from "@/logger";
-import { MiyoClient, MiyoRequestError, type MiyoFileStatusReason } from "@/miyo/MiyoClient";
+import {
+  MiyoClient,
+  MiyoRequestError,
+  type MiyoFileStatusReason,
+  type MiyoRelatedSearchResponse,
+} from "@/miyo/MiyoClient";
 import {
   getMiyoCustomUrl,
   getMiyoFilePath,
@@ -50,11 +55,8 @@ async function searchRelatedNotesWithMiyo(
     return { scoreByPath: new Map(), status: "unavailable" };
   }
 
-  try {
-    // Obsidian's requestUrl can stay pending after a connection is accepted.
-    // Bound the primary request so unavailable guidance can replace loading.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
-    const response = await withTimeout(
+  const requestRelated = () =>
+    withTimeout(
       () =>
         miyoClient.searchRelated(baseUrl, miyoFilePath, {
           folderName,
@@ -63,6 +65,10 @@ async function searchRelatedNotesWithMiyo(
       MIYO_RELATED_SEARCH_TIMEOUT_MS,
       "Relevant Notes Miyo related search"
     );
+
+  const classifyRelatedResponse = (
+    response: MiyoRelatedSearchResponse
+  ): RelatedNotesSearchResult => {
     // A successful HTTP status without Miyo's result collection does not prove
     // a valid empty search. Keep recovery guidance visible for malformed peers.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
@@ -106,6 +112,13 @@ async function searchRelatedNotesWithMiyo(
       scoreByPath,
       status: scoreByPath.size > 0 ? "matches" : "no-matches",
     };
+  };
+
+  try {
+    // Obsidian's requestUrl can stay pending after a connection is accepted.
+    // Bound the primary request so unavailable guidance can replace loading.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
+    return classifyRelatedResponse(await requestRelated());
   } catch (error) {
     // Miyo defines every 404 from related search as a source with no indexed
     // chunks. The detail text is not part of that contract, so gating on it can
@@ -123,20 +136,30 @@ async function searchRelatedNotesWithMiyo(
 
     try {
       // A search miss does not distinguish indexing, filter, parse, and absent-file
-      // states. Ask Miyo for the source classification without converting the
-      // vault-relative path to the absolute path used by related search.
+      // states. Ask Miyo for the source classification using its public path.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
       const fileStatus = await withTimeout(
-        () => miyoClient.fileStatus(baseUrl, folderName, filePath),
+        () => miyoClient.fileStatus(baseUrl, miyoFilePath),
         MIYO_FILE_STATUS_TIMEOUT_MS,
         "Relevant Notes Miyo file status"
       );
       switch (fileStatus.status) {
-        case "indexed":
-          return {
-            scoreByPath: new Map(),
-            status: fileStatus.total_chunks === 0 ? "no-text" : "no-matches",
-          };
+        case "indexed": {
+          if (fileStatus.total_chunks === 0) {
+            return { scoreByPath: new Map(), status: "no-text" };
+          }
+          try {
+            // Indexing can finish between the first 404 and this status response.
+            // Retry once so newly available semantic matches are not hidden.
+            // https://github.com/logancyang/obsidian-copilot/pull/3088#discussion_r3921456717
+            return classifyRelatedResponse(await requestRelated());
+          } catch (retryError) {
+            logError(
+              `RelevantNotes(Miyo): searchRelated retry failed for file_path=${miyoFilePath} folder_name=${folderName}: ${(retryError as Error).message}`
+            );
+            return { scoreByPath: new Map(), status: "unavailable" };
+          }
+        }
         case "pending":
         case "not_scanned":
         case "missing":
@@ -145,7 +168,7 @@ async function searchRelatedNotesWithMiyo(
           return {
             scoreByPath: new Map(),
             status: "index-error",
-            details: { errorMessage: fileStatus.error_message },
+            details: { errorMessage: fileStatus.error_message ?? undefined },
           };
         case "excluded":
           return {

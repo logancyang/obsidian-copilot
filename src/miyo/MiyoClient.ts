@@ -188,10 +188,9 @@ export type MiyoFileStatusReason =
  */
 export interface MiyoFileStatusResponse {
   status: MiyoFileStatus;
-  file_path: string;
   total_chunks?: number;
-  last_indexed_at?: string;
-  error_message?: string;
+  last_indexed_at?: number | null;
+  error_message?: string | null;
   reason?: MiyoFileStatusReason;
   rule?: string;
 }
@@ -662,21 +661,13 @@ export class MiyoClient {
    * Classify one file when related search cannot find indexed chunks for it.
    *
    * @param baseUrl - Miyo base URL.
-   * @param folderName - Vault folder name registered in Miyo.
-   * @param filePath - File path relative to the registered folder.
+   * @param filePath - File path in Miyo's public `FolderName/path/to/file` format.
    * @returns Miyo's current file classification and available details.
    */
-  public async fileStatus(
-    baseUrl: string,
-    folderName: string,
-    filePath: string
-  ): Promise<MiyoFileStatusResponse> {
+  public async fileStatus(baseUrl: string, filePath: string): Promise<MiyoFileStatusResponse> {
     return this.requestJson<MiyoFileStatusResponse>(baseUrl, "/v0/folder/file-status", {
       method: "GET",
-      query: {
-        folder_name: folderName,
-        file_path: filePath,
-      },
+      query: { file_path: filePath },
     });
   }
 
