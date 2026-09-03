@@ -7,7 +7,11 @@ import {
   shouldUseMiyo,
 } from "@/miyo/miyoUtils";
 import { getBacklinkedNotes, getLinkedNotes } from "@/noteUtils";
-import { findRelevantNotes } from "@/search/findRelevantNotes";
+import {
+  findRelevantNotes,
+  isSameRelevantNotesResult,
+  type RelevantNoteEntry,
+} from "@/search/findRelevantNotes";
 import { getSettings, type CopilotSettings } from "@/settings/model";
 import { TFile } from "obsidian";
 
@@ -652,6 +656,80 @@ describe("findRelevantNotes", () => {
       expect(result.status).toBe("unavailable");
       expect(mockFileStatus).not.toHaveBeenCalled();
       expect(mockedLogError).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("isSameRelevantNotesResult()", () => {
+    const note = (path: string, score: number): RelevantNoteEntry => ({
+      note: { path, title: path.replace(/\.md$/, "") },
+      metadata: { score, hasOutgoingLinks: false, hasBacklinks: false },
+    });
+
+    it("treats two separately built results with the same ranking as identical (https://github.com/Brevilabs/obsidian-copilot-private/issues/362)", () => {
+      expect(
+        isSameRelevantNotesResult(
+          { notes: [note("a.md", 0.7), note("b.md", 0.4)], status: "matches" },
+          { notes: [note("a.md", 0.7), note("b.md", 0.4)], status: "matches" }
+        )
+      ).toBe(true);
+    });
+
+    it("separates results whose scores moved", () => {
+      expect(
+        isSameRelevantNotesResult(
+          { notes: [note("a.md", 0.7)], status: "matches" },
+          { notes: [note("a.md", 0.71)], status: "matches" }
+        )
+      ).toBe(false);
+    });
+
+    it("separates results whose ranking order changed", () => {
+      expect(
+        isSameRelevantNotesResult(
+          { notes: [note("a.md", 0.7), note("b.md", 0.4)], status: "matches" },
+          { notes: [note("b.md", 0.7), note("a.md", 0.4)], status: "matches" }
+        )
+      ).toBe(false);
+    });
+
+    it("separates results whose link annotations changed", () => {
+      const linked: RelevantNoteEntry = {
+        note: { path: "a.md", title: "a" },
+        metadata: { score: 0.7, hasOutgoingLinks: true, hasBacklinks: false },
+      };
+      expect(
+        isSameRelevantNotesResult(
+          { notes: [note("a.md", 0.7)], status: "matches" },
+          { notes: [linked], status: "matches" }
+        )
+      ).toBe(false);
+    });
+
+    it("separates results that settled on different statuses", () => {
+      expect(
+        isSameRelevantNotesResult(
+          { notes: [], status: "no-matches" },
+          { notes: [], status: "indexing" }
+        )
+      ).toBe(false);
+    });
+
+    it("separates results that differ only in their status details", () => {
+      expect(
+        isSameRelevantNotesResult(
+          { notes: [], status: "excluded", details: { exclusionRule: "**/journal/**" } },
+          { notes: [], status: "excluded", details: { exclusionRule: "**/archive/**" } }
+        )
+      ).toBe(false);
+    });
+
+    it("separates a result that gained a note from the one before it", () => {
+      expect(
+        isSameRelevantNotesResult(
+          { notes: [note("a.md", 0.7)], status: "matches" },
+          { notes: [note("a.md", 0.7), note("b.md", 0.4)], status: "matches" }
+        )
+      ).toBe(false);
     });
   });
 });

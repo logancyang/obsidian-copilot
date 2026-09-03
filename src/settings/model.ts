@@ -150,6 +150,12 @@ export interface CopilotSettings {
   enableMiyoSearchSkill: boolean;
   /** When true, omit folder_name from Miyo search requests so all indexed content is searched */
   miyoSearchAll: boolean;
+  /**
+   * Keep Relevant Notes in step with the note being written. Miyo re-embeds a
+   * file a few seconds after it lands on disk, so the pane can re-rank itself
+   * while the user types instead of only when they switch notes.
+   */
+  relevantNotesLiveUpdate: boolean;
   /** URL endpoint for the self-host mode backend */
   /** API key for the self-host mode backend (if required) */
   /** Custom Miyo server URL, e.g. "http://192.168.1.10:8742" (empty = use local service discovery) */
@@ -977,6 +983,11 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   // Ensure miyoSearchAll has a default value
   if (typeof sanitizedSettings.miyoSearchAll !== "boolean") {
     sanitizedSettings.miyoSearchAll = DEFAULT_SETTINGS.miyoSearchAll;
+  }
+
+  // Ensure relevantNotesLiveUpdate has a default value
+  if (typeof sanitizedSettings.relevantNotesLiveUpdate !== "boolean") {
+    sanitizedSettings.relevantNotesLiveUpdate = DEFAULT_SETTINGS.relevantNotesLiveUpdate;
   }
 
   // Ensure miyoServerUrl has a default value

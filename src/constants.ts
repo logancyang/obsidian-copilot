@@ -829,6 +829,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   enableMiyo: false,
   enableMiyoSearchSkill: false,
   miyoSearchAll: false,
+  relevantNotesLiveUpdate: true,
   miyoServerUrl: "",
   selfHostSearchProvider: "firecrawl",
   firecrawlApiKey: "",
