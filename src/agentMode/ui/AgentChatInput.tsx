@@ -72,7 +72,8 @@ interface AgentChatInputProps {
    */
   mainAgentId: BackendId | null;
   updateUserMessageHistory: (newMessage: string) => void;
-  isStarting: boolean;
+  /** Whether the session can start a turn now; queued work waits until it can. */
+  canAcceptPrompt: boolean;
   hasPendingPlanPermission: boolean;
   modelPickerOverride: ChatInputProps["modelPickerOverride"];
   modePickerOverride: ChatInputProps["modePickerOverride"];
@@ -192,7 +193,7 @@ export const AgentChatInput = memo(function AgentChatInput({
   app,
   mainAgentId,
   updateUserMessageHistory,
-  isStarting,
+  canAcceptPrompt,
   hasPendingPlanPermission,
   modelPickerOverride,
   modePickerOverride,
@@ -433,7 +434,7 @@ export const AgentChatInput = memo(function AgentChatInput({
       // The flush effect below drains it once all three clear. Context-held
       // rows get an amber "Waiting for context" label; the reason is an
       // enqueue-time snapshot, not re-derived as blockers evolve.
-      if (loading || isStarting || holdForContext) {
+      if (loading || !canAcceptPrompt || holdForContext) {
         setQueuedMessages((q) => [
           ...q,
           { ...item, queueReason: holdForContext ? "context" : "busy" },
@@ -452,7 +453,7 @@ export const AgentChatInput = memo(function AgentChatInput({
       includeActiveWebTab,
       selectedTextContexts,
       loading,
-      isStarting,
+      canAcceptPrompt,
       unsupportedImageModelLabel,
       holdForContext,
       disabled,
@@ -488,7 +489,8 @@ export const AgentChatInput = memo(function AgentChatInput({
     // `disabled` guards the same hard-disable as the send path: a project
     // orphaned while messages are queued must not drain its queue into a
     // disabled composer.
-    if (disabled || loading || isStarting || holdForContext || queuedMessages.length === 0) return;
+    if (disabled || loading || !canAcceptPrompt || holdForContext || queuedMessages.length === 0)
+      return;
     const combined = combineQueuedMessages(queuedMessages);
     if (
       combined.promptContent?.some((content) => content.type === "image") &&
@@ -504,7 +506,7 @@ export const AgentChatInput = memo(function AgentChatInput({
   }, [
     disabled,
     loading,
-    isStarting,
+    canAcceptPrompt,
     holdForContext,
     queuedMessages,
     runSend,

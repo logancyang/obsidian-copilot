@@ -45,8 +45,13 @@ export interface AgentChatBackend {
   clearMessages(): void;
   getMessages(): AgentChatMessage[];
 
-  /** True while ACP `session/new` is still in flight. Send is gated on this. */
-  isStarting(): boolean;
+  /**
+   * True only while the session can start a turn now. False when it is still
+   * starting, already working, or can no longer reach a backend session at
+   * all, so queued work is held rather than drained into a chat that cannot
+   * run it. https://github.com/Brevilabs/obsidian-copilot-private/issues/357
+   */
+  canAcceptPrompt(): boolean;
 
   /** Latest unified picker state, or `null` while the backend session is still starting. */
   getBackendState(): BackendState | null;

@@ -12,7 +12,7 @@ import React, { useEffect } from "react";
 
 interface FakeBackendState {
   messages: AgentChatMessage[];
-  isStarting: boolean;
+  canAcceptPrompt: boolean;
   hasPendingPlanPermission: boolean;
   currentPlan: CurrentPlan | null;
   currentTodoList?: AgentTodoListEntry[] | null;
@@ -28,7 +28,7 @@ interface FakeBackendState {
 function makeFakeBackend(initial: Partial<FakeBackendState> = {}) {
   const state: FakeBackendState = {
     messages: initial.messages ?? [],
-    isStarting: initial.isStarting ?? false,
+    canAcceptPrompt: initial.canAcceptPrompt ?? false,
     hasPendingPlanPermission: initial.hasPendingPlanPermission ?? false,
     currentPlan: initial.currentPlan ?? null,
     currentTodoList: initial.currentTodoList ?? null,
@@ -43,7 +43,7 @@ function makeFakeBackend(initial: Partial<FakeBackendState> = {}) {
       return () => listeners.delete(listener);
     },
     getMessages: () => state.messages,
-    isStarting: () => state.isStarting,
+    canAcceptPrompt: () => state.canAcceptPrompt,
     hasPendingPlanPermission: () => state.hasPendingPlanPermission,
     getCurrentPlan: () => state.currentPlan,
     getCurrentTodoList: () => state.currentTodoList ?? null,
@@ -63,11 +63,11 @@ const msg = (id: string): AgentChatMessage => ({ id }) as unknown as AgentChatMe
 
 describe("useAgentChatRuntimeState", () => {
   it("returns the backend's initial snapshot", () => {
-    const fake = makeFakeBackend({ messages: [msg("a")], isStarting: true });
+    const fake = makeFakeBackend({ messages: [msg("a")], canAcceptPrompt: true });
     const { result } = renderHook(() => useAgentChatRuntimeState(fake.backend));
 
     expect(result.current.messages).toEqual([msg("a")]);
-    expect(result.current.isStarting).toBe(true);
+    expect(result.current.canAcceptPrompt).toBe(true);
     expect(result.current.hasPendingPlanPermission).toBe(false);
     expect(result.current.currentPlan).toBeNull();
     expect(result.current.pendingToolPermissions).toEqual([]);
@@ -79,19 +79,19 @@ describe("useAgentChatRuntimeState", () => {
 
     act(() => {
       fake.state.messages = [msg("x"), msg("y")];
-      fake.state.isStarting = true;
+      fake.state.canAcceptPrompt = true;
       fake.state.hasPendingPlanPermission = true;
       fake.emit();
     });
 
     expect(result.current.messages).toHaveLength(2);
-    expect(result.current.isStarting).toBe(true);
+    expect(result.current.canAcceptPrompt).toBe(true);
     expect(result.current.hasPendingPlanPermission).toBe(true);
   });
 
   it("imperatively syncs to the new backend when the backend prop changes", () => {
     const first = makeFakeBackend({ messages: [msg("first")] });
-    const second = makeFakeBackend({ messages: [msg("second")], isStarting: true });
+    const second = makeFakeBackend({ messages: [msg("second")], canAcceptPrompt: true });
 
     const { result, rerender } = renderHook(({ backend }) => useAgentChatRuntimeState(backend), {
       initialProps: { backend: first.backend },
@@ -103,19 +103,19 @@ describe("useAgentChatRuntimeState", () => {
     // The lazy initializers only ran for `first`; switching backends must pull
     // the new snapshot imperatively rather than keep stale values.
     expect(result.current.messages).toEqual([msg("second")]);
-    expect(result.current.isStarting).toBe(true);
+    expect(result.current.canAcceptPrompt).toBe(true);
   });
 
   it("never exposes the previous runtime snapshot after the backend prop changes", () => {
-    const first = makeFakeBackend({ isStarting: false });
-    const second = makeFakeBackend({ isStarting: true });
+    const first = makeFakeBackend({ canAcceptPrompt: false });
+    const second = makeFakeBackend({ canAcceptPrompt: true });
     const snapshots: boolean[] = [];
 
     function Probe({ backend }: { backend: AgentChatBackend }) {
-      const { isStarting } = useAgentChatRuntimeState(backend);
+      const { canAcceptPrompt } = useAgentChatRuntimeState(backend);
       useEffect(() => {
-        snapshots.push(isStarting);
-      }, [isStarting]);
+        snapshots.push(canAcceptPrompt);
+      }, [canAcceptPrompt]);
       return null;
     }
 

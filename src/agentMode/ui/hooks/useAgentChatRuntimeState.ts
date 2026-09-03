@@ -17,7 +17,7 @@ import { useEffect, useRef, useState } from "react";
  */
 export interface AgentChatRuntimeState {
   messages: AgentChatMessage[];
-  isStarting: boolean;
+  canAcceptPrompt: boolean;
   hasPendingPlanPermission: boolean;
   currentPlan: CurrentPlan | null;
   currentTodoList: AgentTodoListEntry[] | null;
@@ -35,7 +35,7 @@ function readBackendRuntimeSnapshot(backend: AgentChatBackend): BackendRuntimeSn
     backend,
     state: {
       messages: backend.getMessages(),
-      isStarting: backend.isStarting(),
+      canAcceptPrompt: backend.canAcceptPrompt(),
       hasPendingPlanPermission: backend.hasPendingPlanPermission(),
       currentPlan: backend.getCurrentPlan(),
       currentTodoList: backend.getCurrentTodoList(),

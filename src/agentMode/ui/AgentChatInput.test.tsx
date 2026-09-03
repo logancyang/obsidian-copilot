@@ -121,7 +121,7 @@ function inputNode(
       app={makeApp()}
       mainAgentId={null}
       updateUserMessageHistory={jest.fn()}
-      isStarting={false}
+      canAcceptPrompt
       hasPendingPlanPermission={false}
       modelPickerOverride={undefined}
       modePickerOverride={undefined}
@@ -286,6 +286,34 @@ describe("AgentChatInput", () => {
 
       expect(backend.sendMessage).not.toHaveBeenCalled();
       expect(enqueuedItem(draft.setQueue as jest.Mock).queueReason).toBe("busy");
+    });
+
+    it("holds a queued message instead of draining it into a chat that cannot run it for https://github.com/Brevilabs/obsidian-copilot-private/issues/357", async () => {
+      const backend = makeBackend();
+      // A chat whose `session/new` rejected is no longer starting but can never
+      // reach a backend session, and `sendPrompt` accepts it, so an unguarded
+      // flush would post the message and lose it to a failed turn.
+      const draft = makeDraft({
+        queue: [{ id: "q1", text: "Publish this note", rawInput: "Publish this note" }],
+      });
+
+      renderInput(backend, draft, { canAcceptPrompt: false });
+      await waitFor(() => expect(screen.getByText("send")).toBeTruthy());
+
+      expect(backend.sendMessage).not.toHaveBeenCalled();
+      expect(draft.setQueue).not.toHaveBeenCalled();
+    });
+
+    it("drains the queued message once the chat can run it for https://github.com/Brevilabs/obsidian-copilot-private/issues/357", async () => {
+      const backend = makeBackend();
+      const draft = makeDraft({
+        queue: [{ id: "q1", text: "Publish this note", rawInput: "Publish this note" }],
+      });
+
+      renderInput(backend, draft, { canAcceptPrompt: true });
+
+      await waitFor(() => expect(backend.sendMessage).toHaveBeenCalledTimes(1));
+      expect((backend.sendMessage as jest.Mock).mock.calls[0][0]).toBe("Publish this note");
     });
 
     it("labels only context-held rows with the amber waiting prefix", () => {

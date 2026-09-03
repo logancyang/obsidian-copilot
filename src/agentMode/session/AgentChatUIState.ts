@@ -30,7 +30,7 @@ export class AgentChatUIState implements AgentChatBackend {
 
   constructor(private readonly session: AgentSession) {
     // Forward message, status, and model changes. The chat UI gates the
-    // send button on `isStarting()`, so it needs to re-render when status
+    // send button on `canAcceptPrompt()`, so it needs to re-render when status
     // transitions out of `"starting"`.
     this.session.subscribe({
       onMessagesChanged: () => this.notifyListeners(),
@@ -110,8 +110,12 @@ export class AgentChatUIState implements AgentChatBackend {
     return this.session.store.getDisplayMessages();
   }
 
-  isStarting(): boolean {
-    return this.session.getStatus() === "starting";
+  canAcceptPrompt(): boolean {
+    // `sendPrompt` rejects a starting, running, or closed session and accepts
+    // an errored one, which then fails the turn with no backend session. Only
+    // an idle session can actually run a prompt.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/357
+    return this.session.getStatus() === "idle";
   }
 
   getBackendState(): BackendState | null {
