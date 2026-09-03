@@ -1445,35 +1445,16 @@ export class AgentSessionManager {
 
   /**
    * Start a chat in the active scope that sends `prompt` as its next turn, for
-   * command-palette actions that hand work to the agent. An active chat with
-   * no messages yet takes the prompt itself so the action does not leave a
-   * blank tab behind; any other active chat keeps running untouched in its
-   * own tab. https://github.com/Brevilabs/obsidian-copilot-private/issues/357
+   * command-palette actions that hand work to the agent. Always its own chat:
+   * an existing chat can hold a queued send the flush would combine with this
+   * prompt into one turn, conflating two unrelated requests, and its emptiness
+   * is no guarantee it can still reach a backend.
+   * https://github.com/Brevilabs/obsidian-copilot-private/issues/357
    * @param prompt - The complete user prompt to send.
    */
   async createSessionWithPrompt(prompt: string): Promise<AgentSession> {
-    const handoff: ComposerHandoff = { text: prompt, submit: true };
-    const active = this.getActiveSession();
-    // Reuse only an empty chat that can still send. A startup failure leaves
-    // the session active, empty, and permanently unable to open a backend
-    // session, so reusing it would flush the prompt into a dead chat instead
-    // of the promised new one.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/357
-    const activeStatus = active?.getStatus();
-    if (
-      active &&
-      active.projectId === this.activeProjectId &&
-      (activeStatus === "idle" || activeStatus === "starting") &&
-      !active.hasUserVisibleMessages()
-    ) {
-      this.composerHandoffByChatInputId.set(active.chatInputId, handoff);
-      // This composer is already mounted; the shell re-reads handoffs on the
-      // re-render this notification triggers.
-      this.notify();
-      return active;
-    }
     const chatInputId = uuidv4();
-    this.composerHandoffByChatInputId.set(chatInputId, handoff);
+    this.composerHandoffByChatInputId.set(chatInputId, { text: prompt, submit: true });
     try {
       return await this.createSession(undefined, this.activeProjectId, undefined, chatInputId);
     } catch (error) {

@@ -385,12 +385,9 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   const setDraftQueue = draft.setQueue;
 
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/166
-  // The manager binds a handoff to a logical chat input before publishing its
-  // session. Consume it only once this input is live so the text cannot race
-  // into whichever composer was active before the session switch. No dependency
-  // list: a handoff can also be bound to the already-mounted empty chat, which
-  // the manager announces by re-rendering this shell, not by a new `chatInputId`.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/357
+  // The manager binds a handoff to the new chat input before publishing that
+  // session. Consume it only after this input is live so the text cannot race
+  // into whichever composer was active before the session switch.
   useEffect(() => {
     const handoff = manager.consumeComposerHandoff(chatInputId);
     if (handoff === undefined) return;
@@ -398,14 +395,16 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       setDraftInput(handoff.text);
       return;
     }
-    // A submitted handoff joins the composer queue so the existing flush sends
-    // it once the session is started and idle, showing a queued row until then
-    // and leaving any typed draft untouched.
+    // A command hands its request over already sent rather than as reviewable
+    // text. The composer queue is the existing path for that: its flush submits
+    // the request once this chat finishes starting, and shows a queued row
+    // meanwhile. The chat is new, so nothing of the user's is queued with it.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/357
     setDraftQueue((queue) => [
       ...queue,
       { id: uuidv4(), text: handoff.text, rawInput: handoff.text },
     ]);
-  });
+  }, [chatInputId, manager, setDraftInput, setDraftQueue]);
 
   // Whole chat area is the drop zone (bound to chatContainerRef), so files
   // dropped anywhere — not just on the composer — attach to the active draft.

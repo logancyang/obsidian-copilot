@@ -645,37 +645,33 @@ describe("AgentSessionManager", () => {
         expect(mgr.consumeComposerHandoff(session.chatInputId)).toBeUndefined();
       });
 
-      it("hands the prompt to the active chat when it has no messages instead of opening a blank tab beside it for https://github.com/Brevilabs/obsidian-copilot-private/issues/357", async () => {
-        const mgr = buildManager();
-        const landing = await mgr.createSession();
-        const listener = jest.fn();
-        mgr.subscribe(listener);
+      it.each([
+        // An empty chat can hold a send the user already queued into its
+        // composer, which the flush would combine with this prompt into one
+        // turn, and a startup failure leaves a chat empty but unable to reach
+        // a backend at all.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/357
+        ["still starting", "starting" as const],
+        ["idle", "idle" as const],
+        ["failed during startup", "error" as const],
+      ])(
+        "leaves an empty %s chat untouched and opens its own chat for https://github.com/Brevilabs/obsidian-copilot-private/issues/357",
+        async (_case, status) => {
+          const mgr = buildManager();
+          const existing = await mgr.createSession();
+          sessionTestHandles.get(existing.internalId)?.setStatus(status);
 
-        const session = await mgr.createSessionWithPrompt("Publish this note");
+          const session = await mgr.createSessionWithPrompt("Publish this note");
 
-        expect(session).toBe(landing);
-        expect(mgr.getSessions()).toEqual([landing]);
-        expect(listener).toHaveBeenCalled();
-        expect(mgr.consumeComposerHandoff(landing.chatInputId)).toEqual({
-          text: "Publish this note",
-          submit: true,
-        });
-      });
-
-      it("opens a new chat instead of reusing an empty chat whose startup failed for https://github.com/Brevilabs/obsidian-copilot-private/issues/357", async () => {
-        const mgr = buildManager();
-        const failed = await mgr.createSession();
-        sessionTestHandles.get(failed.internalId)?.setStatus("error");
-
-        const session = await mgr.createSessionWithPrompt("Publish this note");
-
-        expect(session).not.toBe(failed);
-        expect(mgr.consumeComposerHandoff(failed.chatInputId)).toBeUndefined();
-        expect(mgr.consumeComposerHandoff(session.chatInputId)).toEqual({
-          text: "Publish this note",
-          submit: true,
-        });
-      });
+          expect(session).not.toBe(existing);
+          expect(mgr.getSessions()).toEqual([existing, session]);
+          expect(mgr.consumeComposerHandoff(existing.chatInputId)).toBeUndefined();
+          expect(mgr.consumeComposerHandoff(session.chatInputId)).toEqual({
+            text: "Publish this note",
+            submit: true,
+          });
+        }
+      );
 
       it("drops the handoff and keeps the running chat active when session creation fails for https://github.com/Brevilabs/obsidian-copilot-private/issues/357", async () => {
         const mgr = buildManager();
