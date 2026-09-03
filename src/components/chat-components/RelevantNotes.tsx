@@ -389,6 +389,10 @@ export const RelevantNotes = memo(
     const settings = useSettingsValue();
     const { result, refresh } = useRelevantNotes(settings.enableMiyo, settings.miyoServerUrl);
     const relevantNotes = result.notes;
+    // The toolbar must name only a source the search contract accepts; showing
+    // an attachment name would imply that Miyo searched it.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
+    const activeFileName = activeFile?.extension === "md" ? activeFile.basename : undefined;
 
     const navigateToNote = (notePath: string) => {
       const file = app.vault.getAbstractFileByPath(notePath);
@@ -408,7 +412,7 @@ export const RelevantNotes = memo(
 
     return (
       <div className={cn("tw-flex tw-min-h-full tw-w-full tw-flex-1 tw-flex-col", className)}>
-        <RelevantNotesToolbar activeFileName={activeFile?.basename} />
+        <RelevantNotesToolbar activeFileName={activeFileName} />
         <div className="tw-relative tw-min-h-0 tw-flex-1">
           <div className="tw-absolute tw-inset-0 tw-overflow-y-auto tw-p-2">
             <RelevantNotesPane

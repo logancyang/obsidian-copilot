@@ -133,6 +133,7 @@ describe("RelevantNotes", () => {
 
       expect(await screen.findByText("No relevant notes found")).toBeTruthy();
       expect(screen.queryByText("Check your Miyo setup")).toBeNull();
+      expect(screen.queryByText("Attachment")).toBeNull();
       expect(mockFindRelevantNotes).not.toHaveBeenCalled();
     });
 

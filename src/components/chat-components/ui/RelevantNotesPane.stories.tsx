@@ -58,6 +58,10 @@ export default meta;
 
 export const ConnectedScoredResults: StoryObj<RelevantNotesPaneProps> = {};
 
+export const MatchedFilesUnavailable: StoryObj<RelevantNotesPaneProps> = {
+  args: { status: "matches", noteRows: [] },
+};
+
 export const NoActiveNote: StoryObj<RelevantNotesPaneProps> = {
   args: { status: "idle", noteRows: [] },
 };
