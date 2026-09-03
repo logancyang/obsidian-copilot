@@ -315,6 +315,59 @@ describe("main", () => {
         );
       });
 
+      it("runs a second request only after the first chat is revealed for https://github.com/Brevilabs/obsidian-copilot-private/issues/357", async () => {
+        const plugin = createPluginUnderTest([]);
+        let releaseFirstReveal: (() => void) | undefined;
+        const createSessionWithPrompt = jest
+          .fn()
+          .mockImplementation((prompt: string) => Promise.resolve({ internalId: prompt }));
+        Object.assign(plugin.agentSessionManager as object, {
+          createSessionWithPrompt,
+          setActiveSession: jest.fn(),
+        });
+        const activateAgentView = jest.spyOn(plugin, "activateAgentView").mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              releaseFirstReveal = () => resolve(null);
+            })
+        );
+
+        const first = plugin.newAgentChatWithPrompt("first");
+        const second = plugin.newAgentChatWithPrompt("second");
+        for (let turn = 0; turn < 20 && !releaseFirstReveal; turn += 1) {
+          await Promise.resolve();
+        }
+
+        // Only one composer mounts at a time, so the second chat must not be
+        // created while the first request is still being handed to the view.
+        expect(createSessionWithPrompt).toHaveBeenCalledTimes(1);
+        expect(createSessionWithPrompt).toHaveBeenCalledWith("first");
+
+        releaseFirstReveal?.();
+        activateAgentView.mockResolvedValue(null);
+        await Promise.all([first, second]);
+
+        expect(createSessionWithPrompt).toHaveBeenNthCalledWith(2, "second");
+      });
+
+      it("keeps delivering later requests after one fails for https://github.com/Brevilabs/obsidian-copilot-private/issues/357", async () => {
+        const plugin = createPluginUnderTest([]);
+        const createSessionWithPrompt = jest
+          .fn()
+          .mockRejectedValueOnce(new Error("create failed"))
+          .mockResolvedValue({ internalId: "session-2" });
+        Object.assign(plugin.agentSessionManager as object, {
+          createSessionWithPrompt,
+          setActiveSession: jest.fn(),
+        });
+        jest.spyOn(plugin, "activateAgentView").mockResolvedValue(null);
+
+        await plugin.newAgentChatWithPrompt("first");
+        await plugin.newAgentChatWithPrompt("second");
+
+        expect(createSessionWithPrompt).toHaveBeenNthCalledWith(2, "second");
+      });
+
       it("surfaces session creation failures without revealing Agent Chat or throwing for https://github.com/Brevilabs/obsidian-copilot-private/issues/357", async () => {
         const plugin = createPluginUnderTest([]);
         const failure = new Error("create failed");

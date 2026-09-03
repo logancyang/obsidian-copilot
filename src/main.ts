@@ -159,6 +159,8 @@ export default class CopilotPlugin extends Plugin {
   private PlanPreviewView?: typeof import("@/agentMode").PlanPreviewView;
   private planPreviewViewType?: typeof import("@/agentMode").PLAN_PREVIEW_VIEW_TYPE;
   private agentModelDiscoveryUnsubscriber?: () => void;
+  /** Serializes command-launched Agent Chat requests; see `newAgentChatWithPrompt`. */
+  private agentPromptDelivery?: Promise<void>;
   modelManagement!: ModelManagementApi;
   /**
    * Frozen path-only facade available to Agent Mode's Obsidian CLI bridge. The seeded skill
@@ -1200,6 +1202,19 @@ export default class CopilotPlugin extends Plugin {
    * @param prompt - The complete user prompt to send.
    */
   async newAgentChatWithPrompt(prompt: string): Promise<void> {
+    // Only one composer is mounted at a time, and a composer submits only the
+    // request bound to the chat it mounts. Two commands run together would
+    // create two chats but leave only the last one mounted, so the earlier
+    // request would wait for the user to open its tab. Run them one at a time
+    // to match that single-consumer shape. A failed run must not wedge the
+    // chain. https://github.com/Brevilabs/obsidian-copilot-private/issues/357
+    const previous = this.agentPromptDelivery ?? Promise.resolve();
+    const delivery = previous.then(() => this.deliverAgentChatPrompt(prompt));
+    this.agentPromptDelivery = delivery.catch(() => undefined);
+    return delivery;
+  }
+
+  private async deliverAgentChatPrompt(prompt: string): Promise<void> {
     const manager = this.requireAgentView();
     if (!manager) return;
     try {
