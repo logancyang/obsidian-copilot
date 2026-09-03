@@ -269,7 +269,7 @@ describe("RelevantNotes", () => {
       expect(await screen.findByText("This note isn't indexed in Miyo")).toBeTruthy();
       expect(
         screen.getByText(
-          "It may still be indexing or be excluded from Miyo. Update Miyo to see why."
+          "It may still be indexing or be excluded from Miyo. Update Miyo to the latest version to see why."
         )
       ).toBeTruthy();
       expect(screen.queryByText("Target")).toBeNull();

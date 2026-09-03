@@ -144,7 +144,7 @@ export function RelevantNotesPane({
           title="Miyo found no text in this note"
           description="The note may be empty or contain only content Miyo can't read."
         >
-          <Button variant="secondary" size="sm" onClick={actions.onRefresh}>
+          <Button variant="default" size="sm" onClick={actions.onRefresh}>
             Refresh
           </Button>
         </GuidancePanel>
@@ -157,7 +157,7 @@ export function RelevantNotesPane({
           title="Miyo is still indexing this note"
           description="Miyo hasn't finished processing this note. Try again shortly."
         >
-          <Button variant="secondary" size="sm" onClick={actions.onRefresh}>
+          <Button variant="default" size="sm" onClick={actions.onRefresh}>
             Refresh
           </Button>
         </GuidancePanel>
@@ -244,7 +244,7 @@ export function RelevantNotesPane({
         <GuidancePanel
           id="not-indexed"
           title="This note isn't indexed in Miyo"
-          description="It may still be indexing or be excluded from Miyo. Update Miyo to see why."
+          description="It may still be indexing or be excluded from Miyo. Update Miyo to the latest version to see why."
         >
           <Button variant="secondary" size="sm" onClick={actions.onRefresh}>
             Refresh

@@ -81,7 +81,7 @@ describe("RelevantNotesPane", () => {
       expect(screen.getByText("This note isn't indexed in Miyo")).toBeTruthy();
       expect(
         screen.getByText(
-          "It may still be indexing or be excluded from Miyo. Update Miyo to see why."
+          "It may still be indexing or be excluded from Miyo. Update Miyo to the latest version to see why."
         )
       ).toBeTruthy();
       expect(screen.queryByText("Related note")).toBeNull();
@@ -107,7 +107,7 @@ describe("RelevantNotesPane", () => {
       expect(screen.queryByRole("button", { name: "Open Miyo" })).toBeNull();
       expect(
         screen.getByText(
-          "It may still be indexing or be excluded from Miyo. Update Miyo to see why."
+          "It may still be indexing or be excluded from Miyo. Update Miyo to the latest version to see why."
         )
       ).toBeTruthy();
       expect(screen.queryByText("Related note")).toBeNull();

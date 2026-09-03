@@ -52,7 +52,7 @@ A successful search with zero results shows **No semantic matches yet** without 
 - **Miyo couldn't index this note** includes Miyo's error message. On a local desktop connection, **Open Miyo** opens this vault's folder under Sources.
 - **This note is excluded in Miyo** names the matching filter when Miyo provides it. On a local desktop connection, **Open folder settings in Miyo** opens this vault's folder under Sources.
 
-For a remote Miyo or mobile device, error and exclusion cards tell you to review the folder on the host machine. Copilot cannot open or change that machine's Miyo settings. Older Miyo builds show **This note isn't indexed in Miyo** and **Update Miyo to see why** because they cannot report the more specific reason. Their local desktop action still opens the vault's folder under Sources; remote and mobile connections offer **Review Miyo connection** in Copilot.
+For a remote Miyo or mobile device, error and exclusion cards tell you to review the folder on the host machine. Copilot cannot open or change that machine's Miyo settings. Older Miyo builds show **This note isn't indexed in Miyo** and **Update Miyo to the latest version to see why** because they cannot report the more specific reason. Their local desktop action still opens the vault's folder under Sources; remote and mobile connections offer **Review Miyo connection** in Copilot.
 
 Links and backlinks do not create rows in any of these empty states. Copilot's own inclusion and exclusion patterns do not filter Relevant Notes; Miyo's folder filters are the only scope there.
 
