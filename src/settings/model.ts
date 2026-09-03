@@ -66,13 +66,11 @@ export interface CopilotSettings {
   siliconflowApiKey: string;
   defaultChainType: ChainType;
   defaultModelKey: string;
-  embeddingModelKey: string;
   contextTurns: number;
   lastDismissedVersion: string | null;
   // DEPRECATED: Do not use this directly, migrated to file-based system prompts
   userSystemPrompt: string;
   openAIProxyBaseUrl: string;
-  openAIEmbeddingProxyBaseUrl: string;
   stream: boolean;
   /** Configurable root folder all Copilot sub-folders derive from (default: "copilot"). */
   copilotFolder: string;
@@ -106,10 +104,8 @@ export interface CopilotSettings {
   autosaveChat: boolean;
   autoAddActiveContentToContext: boolean;
   customPromptsFolder: string;
-  indexVaultToVectorStore: string;
   chatNoteContextPath: string;
   chatNoteContextTags: string[];
-  enableIndexSync: boolean;
   debug: boolean;
   maxSourceChunks: number;
   enableInlineCitations: boolean;
@@ -117,18 +113,13 @@ export interface CopilotSettings {
   qaInclusions: string;
   groqApiKey: string;
   activeModels: Array<CustomModel>;
-  activeEmbeddingModels: Array<CustomModel>;
   promptUsageTimestamps: Record<string, number>;
   promptSortStrategy: string;
   chatHistorySortStrategy: SortStrategy;
   /** Projects config root folder in vault (default: "copilot/projects"). */
   projectsFolder: string;
-  embeddingRequestsPerMin: number;
-  embeddingBatchSize: number;
   defaultOpenArea: DEFAULT_OPEN_AREA;
   defaultSendShortcut: SEND_SHORTCUT;
-  disableIndexOnMobile: boolean;
-  numPartitions: number;
   defaultConversationNoteName: string;
   // Any valid paid license (Lite and above). undefined means never checked.
   isPaidUser: boolean | undefined;
@@ -148,16 +139,13 @@ export interface CopilotSettings {
   passMarkdownImages: boolean;
   enableAutonomousAgent: boolean;
   enableCustomPromptTemplating: boolean;
-  /** Enable semantic search using Orama for meaning-based document retrieval */
-  enableSemanticSearchV3: boolean;
   /** Enable self-host mode (e.g., Miyo) - uses self-hosted services for search, LLMs, OCR, etc. */
   enableSelfHostMode: boolean;
   /** Enable Miyo-backed indexing and semantic search when self-host mode is active */
   enableMiyo: boolean;
   /**
-   * User-controlled install of the `miyo-search` agent skill (path B: agent tool +
-   * system-prompt steering). Independent of `enableSemanticSearchV3` (path A: the
-   * Copilot chat/QA vector retrieval), which stays owned by Miyo Connect/Disconnect.
+   * User-controlled install of the `miyo-search` agent skill. This agent-tool
+   * integration is independent of the Miyo backend used by Copilot search.
    */
   enableMiyoSearchSkill: boolean;
   /** When true, omit folder_name from Miyo search requests so all indexed content is searched */
@@ -856,9 +844,6 @@ export function resetSettings(): void {
       BUILTIN_CHAT_MODELS.map((model) => ({ ...model, enabled: true })),
       current.activeModels ?? []
     ),
-    // The client-side embedding pipeline is gone, but its persisted fields stay
-    // untouched until the dedicated settings migration removes them.
-    activeEmbeddingModels: current.activeEmbeddingModels ?? DEFAULT_SETTINGS.activeEmbeddingModels,
     providers: preservedProviders,
     configuredModels: preserveConfiguredModelsForProviders(
       current.configuredModels,
@@ -910,10 +895,6 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
     settingsToSanitize.userId = uuidv4();
   }
 
-  if (!settingsToSanitize.activeEmbeddingModels) {
-    settingsToSanitize.activeEmbeddingModels = DEFAULT_SETTINGS.activeEmbeddingModels;
-  }
-
   const sanitizedSettings: CopilotSettings = { ...settingsToSanitize };
   const sanitizedSettingsRecord = sanitizedSettings as unknown as Record<string, unknown>;
   delete sanitizedSettingsRecord.miyoRemoteVaultPath;
@@ -924,14 +905,13 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   // https://github.com/logancyang/obsidian-copilot/issues/2928
   delete sanitizedSettingsRecord.amazonBedrockApiKey;
   delete sanitizedSettingsRecord.amazonBedrockRegion;
-  // Azure OpenAI is no longer a chat or embedding provider, so a stored key and
-  // its routing fields would only address a service Copilot cannot reach.
+  // Azure OpenAI is no longer a chat provider, so a stored key and its routing
+  // fields would only address a service Copilot cannot reach.
   // https://github.com/logancyang/obsidian-copilot/issues/2932
   delete sanitizedSettingsRecord.azureOpenAIApiKey;
   delete sanitizedSettingsRecord.azureOpenAIApiInstanceName;
   delete sanitizedSettingsRecord.azureOpenAIApiDeploymentName;
   delete sanitizedSettingsRecord.azureOpenAIApiVersion;
-  delete sanitizedSettingsRecord.azureOpenAIApiEmbeddingDeploymentName;
   // Copilot no longer limits how long an answer may be, so a stored limit
   // would only cut off answers the model was willing to finish.
   // https://github.com/logancyang/obsidian-copilot-preview/issues/312
@@ -968,16 +948,6 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   sanitizedSettings.contextTurns = isNaN(contextTurns)
     ? DEFAULT_SETTINGS.contextTurns
     : contextTurns;
-
-  const embeddingRequestsPerMin = Number(settingsToSanitize.embeddingRequestsPerMin);
-  sanitizedSettings.embeddingRequestsPerMin = isNaN(embeddingRequestsPerMin)
-    ? DEFAULT_SETTINGS.embeddingRequestsPerMin
-    : embeddingRequestsPerMin;
-
-  const embeddingBatchSize = Number(settingsToSanitize.embeddingBatchSize);
-  sanitizedSettings.embeddingBatchSize = isNaN(embeddingBatchSize)
-    ? DEFAULT_SETTINGS.embeddingBatchSize
-    : embeddingBatchSize;
 
   // Sanitize lexicalSearchRamLimit (20-1000 MB range)
   const lexicalSearchRamLimit = Number(settingsToSanitize.lexicalSearchRamLimit);

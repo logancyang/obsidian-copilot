@@ -9,7 +9,6 @@ if (typeof window.structuredClone === "undefined") {
 function makeSettings(overrides: Partial<CopilotSettings> = {}): CopilotSettings {
   return {
     activeModels: [],
-    activeEmbeddingModels: [],
     openAIApiKey: "",
     ...overrides,
   } as unknown as CopilotSettings;
@@ -151,7 +150,6 @@ describe("settingsPersistence", () => {
           _keychainOnly: false,
           openAIApiKey: "enc_desk_legacy",
           activeModels: [{ name: "custom", provider: "openai", apiKey: "plaintext-disk-key" }],
-          activeEmbeddingModels: [],
         },
         saveData,
         backedUp

@@ -22,6 +22,7 @@ Symposium is now [OpenArtifacts](https://openartifacts.ai). Every new page your 
 ## ✨ Enhancements
 
 - **Quick Chat now has two clear modes.** Chat (free) answers from context you attach, while Copilot Plus can search your vault with Miyo when it is enabled or keyword search when it is disabled. The retired Vault QA mode now opens as Chat (free), and Free Chat and Copilot Plus remain separate experiences. (@zeroliu)
+- **Old Copilot index files are cleaned up automatically.** Copilot no longer keeps settings or files for its retired local embedding index. On upgrade, it removes only recognized index artifacts and leaves every other vault and Obsidian configuration file alone. (@zeroliu)
 - **Browse all Recent Chats in one place.** The searchable list now loads older chats as you scroll instead of opening a second **View all chats** window. ([#3040](https://github.com/logancyang/obsidian-copilot/issues/3040), [#3041](https://github.com/logancyang/obsidian-copilot/pull/3041), @logancyang)
 - **Questions and permission requests stay in view.** Agent Chat keeps actions above the composer even when you are reading earlier output, and concurrent Claude chats no longer show another session's request. ([#2948](https://github.com/logancyang/obsidian-copilot/issues/2948), [#3067](https://github.com/logancyang/obsidian-copilot/pull/3067), @brevilabs-agent-bot)
 

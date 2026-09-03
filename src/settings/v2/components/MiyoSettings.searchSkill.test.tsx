@@ -451,13 +451,12 @@ describe("Connect — two-phase commit rolls back on a failed health check", () 
     currentSettings = {
       ...DEFAULT_SETTINGS,
       enableMiyo: false,
-      enableSemanticSearchV3: false,
     };
   });
 
-  it("rolls back enableMiyo + enableSemanticSearchV3 when Miyo drops before the enable refresh", async () => {
+  it("rolls back Miyo without writing retired index settings when the enable refresh fails (https://github.com/Brevilabs/obsidian-copilot-private/issues/283)", async () => {
     // Reachable + registered, so the flow reaches enableMiyoBackend and writes
-    // both flags true — but the post-enable refresh reports NOT available.
+    // the Miyo flag true — but the post-enable refresh reports NOT available.
     mockReachable = true;
     mockRegistration = "registered";
     mockRefreshBackend = "unavailable";
@@ -465,12 +464,11 @@ describe("Connect — two-phase commit rolls back on a failed health check", () 
 
     fireEvent.click(await screen.findByText("Connect"));
 
-    // Both flags flip on, then revert once the health check comes back unavailable
+    // The flag flips on, then reverts once the health check comes back unavailable
     // — otherwise search routing would key off a stranded enableMiyo=true.
     await waitFor(() => expect(updateSetting).toHaveBeenCalledWith("enableMiyo", false));
     expect(updateSetting).toHaveBeenCalledWith("enableMiyo", true);
-    expect(updateSetting).toHaveBeenCalledWith("enableSemanticSearchV3", true);
-    expect(updateSetting).toHaveBeenCalledWith("enableSemanticSearchV3", false);
+    expect(updateSetting).toHaveBeenCalledTimes(2);
   });
 
   it("does NOT roll back when the enable refresh confirms available", async () => {
@@ -482,30 +480,8 @@ describe("Connect — two-phase commit rolls back on a failed health check", () 
     fireEvent.click(await screen.findByText("Connect"));
 
     await waitFor(() => expect(updateSetting).toHaveBeenCalledWith("enableMiyo", true));
-    // A successful connect must leave the flags on — no revert write.
+    // A successful connect must leave the flag on — no revert write.
     expect(updateSetting).not.toHaveBeenCalledWith("enableMiyo", false);
-    expect(updateSetting).not.toHaveBeenCalledWith("enableSemanticSearchV3", false);
-  });
-
-  it("preserves a user's pre-existing enableSemanticSearchV3 on rollback", async () => {
-    // The user already had semantic search on (for non-Miyo use). A failed Miyo
-    // connect must revert enableMiyo but MUST NOT clobber their semantic setting.
-    currentSettings = {
-      ...DEFAULT_SETTINGS,
-      enableMiyo: false,
-      enableSemanticSearchV3: true,
-    };
-    mockReachable = true;
-    mockRegistration = "registered";
-    mockRefreshBackend = "unavailable";
-    render(<MiyoSettings />);
-
-    fireEvent.click(await screen.findByText("Connect"));
-
-    await waitFor(() => expect(updateSetting).toHaveBeenCalledWith("enableMiyo", false));
-    // We never flipped enableSemanticSearchV3 (it was already true), so we must
-    // never write it false on rollback.
-    expect(updateSetting).not.toHaveBeenCalledWith("enableSemanticSearchV3", false);
   });
 
   it("rolls back an optimistic enable when the attempt is superseded mid-refresh, even if it comes back available", async () => {

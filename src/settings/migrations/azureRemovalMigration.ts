@@ -13,7 +13,6 @@
  *    the shared removal cascade, and deletes the legacy top-level API key.
  */
 
-import { DEFAULT_SETTINGS } from "@/constants";
 import type { ModelManagementApi } from "@/modelManagement";
 import type { CopilotSettings } from "@/settings/model";
 import {
@@ -48,6 +47,14 @@ const REMOVED_LEGACY_SECRET_FIELD = "azureOpenAIApiKey";
 /** What `planAzureRemoval` found: the rows to cascade and the patch to write. */
 export type AzureRemovalPlan = RetiredProviderRemovalPlan;
 
+interface LegacyAzureSettings extends CopilotSettings {
+  embeddingModelKey?: string;
+}
+
+interface LegacyAzurePatch extends Partial<CopilotSettings> {
+  embeddingModelKey?: string;
+}
+
 /**
  * Pure planner: what it takes to remove every Azure provider and everything
  * pointing at one, or `null` when the vault never configured Azure.
@@ -73,7 +80,8 @@ export function planAzureRemoval(settings: CopilotSettings): AzureRemovalPlan | 
     REMOVED_PROVIDER_TYPE,
     REMOVED_LEGACY_PROVIDERS
   );
-  const patch: Partial<CopilotSettings> = { ...sharedPlan?.patch };
+  const patch: LegacyAzurePatch = { ...sharedPlan?.patch };
+  const legacySettings = settings as LegacyAzureSettings;
 
   // An Azure embedding selection outlives the provider that served it, and
   // `EmbeddingManager.getEmbeddingsAPI` throws `No embedding model found for:
@@ -82,8 +90,8 @@ export function planAzureRemoval(settings: CopilotSettings): AzureRemovalPlan | 
   // that already has an OpenRouter key, and for one that does not it asks for a
   // key instead of naming a provider that no longer exists.
   // https://github.com/logancyang/obsidian-copilot/issues/2932
-  if (referencesRetiredProvider(settings.embeddingModelKey ?? "", REMOVED_LEGACY_PROVIDERS)) {
-    patch.embeddingModelKey = DEFAULT_SETTINGS.embeddingModelKey;
+  if (referencesRetiredProvider(legacySettings.embeddingModelKey ?? "", REMOVED_LEGACY_PROVIDERS)) {
+    patch.embeddingModelKey = "";
   }
 
   const providerIds = sharedPlan?.providerIds ?? [];

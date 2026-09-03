@@ -25,12 +25,10 @@ const EXTRA_SECRET_KEYS: readonly string[] = [];
 type ModelSecretField = (typeof MODEL_SECRET_FIELDS)[number];
 
 /**
- * Scope distinguishing chat models from embedding models in keychain IDs.
- * Reason: `activeModels` and `activeEmbeddingModels` can contain models with
- * the same `name|provider` identity but different API keys. Without scope,
- * they'd collide in the keychain namespace.
+ * Scope retained in keychain IDs so existing chat-model credentials keep their
+ * stable namespace after the embedding pipeline's removal.
  */
-type ModelScope = "chat" | "embedding";
+type ModelScope = "chat";
 
 /**
  * Check whether a settings key should be stored in the OS keychain.
@@ -412,13 +410,6 @@ export class KeychainService {
     hydrated.activeModels = modelResult.models;
     hadFailures = hadFailures || modelResult.hadFailures;
 
-    const embeddingResult = await this.hydrateModelSecrets(
-      "embedding",
-      hydrated.activeEmbeddingModels ?? []
-    );
-    hydrated.activeEmbeddingModels = embeddingResult.models;
-    hadFailures = hadFailures || embeddingResult.hadFailures;
-
     if (hadFailures) {
       logWarn("Keychain hydrate: some keychain reads failed — values left as-is.");
     }
@@ -463,25 +454,12 @@ export class KeychainService {
       prevSettings?.activeModels,
       clearedSecretIds
     );
-    this.collectModelSecrets(
-      "embedding",
-      settings.activeEmbeddingModels,
-      secretEntries,
-      prevSettings?.activeEmbeddingModels,
-      clearedSecretIds
-    );
-
     // Find deleted models to clean up
     const keychainIdsToDelete = [
       ...this.getDeletedModelKeysForScope(
         "chat",
         prevSettings?.activeModels,
         settings.activeModels
-      ),
-      ...this.getDeletedModelKeysForScope(
-        "embedding",
-        prevSettings?.activeEmbeddingModels,
-        settings.activeEmbeddingModels
       ),
       ...clearedSecretIds,
     ];

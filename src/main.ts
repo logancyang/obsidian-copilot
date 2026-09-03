@@ -263,7 +263,15 @@ export default class CopilotPlugin extends Plugin {
     // agent/model-discovery init below — so migrated BYOK providers are present
     // when OpenCode first enumerates models. Awaited for deterministic ordering;
     // it's a fast, one-time, no-op for already-migrated/fresh vaults.
-    await runSettingsMigrations(this.modelManagement);
+    await runSettingsMigrations(this.modelManagement, {
+      adapter: this.app.vault.adapter,
+      configDir: this.app.vault.configDir,
+      notifyFailure: (folder) => {
+        new Notice(
+          `Copilot couldn't remove old index files from ${folder}. Remove them manually if you want to reclaim the space.`
+        );
+      },
+    });
     const isLegacyUpgrade = getSettings().upgradedToV8FromLegacy;
     this.addSettingTab(new CopilotSettingTab(this.app, this));
 

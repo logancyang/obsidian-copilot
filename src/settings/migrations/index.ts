@@ -20,6 +20,10 @@ import { executeAzureRemoval } from "./azureRemovalMigration";
 import { executeBedrockRemoval } from "./bedrockRemovalMigration";
 import { executeByokMigration } from "./byokMigration";
 import { executeGitHubCopilotRemoval } from "./githubCopilotRemovalMigration";
+import {
+  cleanupLegacyIndexArtifacts,
+  type LegacyIndexCleanupContext,
+} from "./legacyIndexRemovalMigration";
 import { planOptionalCustomProviderAuthMigration } from "./optionalCustomProviderAuthMigration";
 import { planRequiresApiKeyBackfill } from "./requiresApiKeyMigration";
 import { CURRENT_SETTINGS_VERSION } from "./version";
@@ -29,8 +33,14 @@ export { CURRENT_SETTINGS_VERSION } from "./version";
 /**
  * Run pending one-time migrations and stamp the new version. No-op when
  * settings are already at/above the target (migrated vaults, fresh installs).
+ *
+ * @param api - Model-management API used by provider migrations.
+ * @param legacyIndexCleanup - Vault adapter boundary used by the v13 cleanup.
  */
-export async function runSettingsMigrations(api: ModelManagementApi): Promise<void> {
+export async function runSettingsMigrations(
+  api: ModelManagementApi,
+  legacyIndexCleanup: LegacyIndexCleanupContext
+): Promise<void> {
   const fromVersion = getSettings().settingsVersion ?? 0;
   if (fromVersion >= CURRENT_SETTINGS_VERSION) return;
 
@@ -123,6 +133,14 @@ export async function runSettingsMigrations(api: ModelManagementApi): Promise<vo
   // back when the stored key resolves to nothing.
   if (fromVersion < 12) {
     await executeAzureRemoval(api, getSettings());
+  }
+
+  // v13: delete only exact legacy index artifacts through the mobile-safe vault
+  // adapter. Settings fields are stripped at every persistence boundary so an
+  // older synced client cannot restore them after this one-time cleanup.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/283
+  if (fromVersion < 13) {
+    await cleanupLegacyIndexArtifacts(legacyIndexCleanup);
   }
 
   // Bump unconditionally after the migrations so a per-provider failure can't

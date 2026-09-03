@@ -505,8 +505,6 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
   },
 ];
 
-const EMPTY_EMBEDDING_MODELS = Object.freeze([]) as unknown as CustomModel[];
-
 export type Provider = ChatModelProviders;
 
 export type SettingKeyProviders = Exclude<
@@ -783,11 +781,9 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   siliconflowApiKey: "",
   defaultChainType: ChainType.LLM_CHAIN,
   defaultModelKey: ChatModels.OPENROUTER_GEMINI_2_5_FLASH + "|" + ChatModelProviders.OPENROUTERAI,
-  embeddingModelKey: "",
   contextTurns: 15,
   userSystemPrompt: "",
   openAIProxyBaseUrl: "",
-  openAIEmbeddingProxyBaseUrl: "",
   stream: true,
   copilotFolder: DEFAULT_COPILOT_FOLDER,
   // Every folder ever activated as the Copilot root (seeded with the legacy
@@ -804,22 +800,15 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   defaultOpenArea: DEFAULT_OPEN_AREA.VIEW,
   defaultSendShortcut: SEND_SHORTCUT.ENTER,
   customPromptsFolder: DEFAULT_CUSTOM_PROMPTS_FOLDER,
-  indexVaultToVectorStore: "ON MODE SWITCH",
   qaExclusions: DEFAULT_QA_EXCLUSIONS_SETTING,
   qaInclusions: "",
   chatNoteContextPath: "",
   chatNoteContextTags: [],
-  enableIndexSync: true,
   debug: false,
   maxSourceChunks: DEFAULT_MAX_SOURCE_CHUNKS,
   enableInlineCitations: true,
   groqApiKey: "",
   activeModels: BUILTIN_CHAT_MODELS,
-  activeEmbeddingModels: EMPTY_EMBEDDING_MODELS,
-  embeddingRequestsPerMin: 60,
-  embeddingBatchSize: 16,
-  disableIndexOnMobile: true,
-  numPartitions: 1,
   lexicalSearchRamLimit: 100, // Default 100 MB
   promptUsageTimestamps: {},
   promptSortStrategy: PromptSortStrategy.TIMESTAMP,
@@ -833,7 +822,6 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   passMarkdownImages: true,
   enableAutonomousAgent: true,
   enableCustomPromptTemplating: true,
-  enableSemanticSearchV3: false,
   enableSelfHostMode: false,
   enableMiyo: false,
   enableMiyoSearchSkill: false,

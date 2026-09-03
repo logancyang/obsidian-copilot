@@ -10,7 +10,6 @@ import {
 function makeSettings(overrides: Partial<CopilotSettings> = {}): CopilotSettings {
   return {
     activeModels: [],
-    activeEmbeddingModels: [],
     ...overrides,
   } as unknown as CopilotSettings;
 }
@@ -54,9 +53,9 @@ describe("settingsSecretTransforms", () => {
         expected: true,
       },
       {
-        name: "detects an embedding-model secret",
+        name: "detects a secret in a retired model list (https://github.com/Brevilabs/obsidian-copilot-private/issues/283)",
         rawData: {
-          activeEmbeddingModels: [{ name: "embed", provider: "openai", apiKey: "secret" }],
+          retiredModels: [{ name: "embed", provider: "openai", apiKey: "secret" }],
         },
         expected: true,
       },
@@ -64,7 +63,7 @@ describe("settingsSecretTransforms", () => {
         name: "ignores malformed model entries and non-secret fields",
         rawData: {
           activeModels: [null, "bad-entry", { name: "gpt-4", provider: "openai" }],
-          activeEmbeddingModels: [{ name: "embed", provider: "openai", apiKey: "" }],
+          retiredModels: [{ name: "embed", provider: "openai", apiKey: "" }],
         },
         expected: false,
       },
@@ -79,9 +78,6 @@ describe("settingsSecretTransforms", () => {
         openAIApiKey: "sk-123",
         defaultModelKey: "gpt-4|openai",
         activeModels: [{ name: "gpt-4", provider: "openai", apiKey: "chat-secret", enabled: true }],
-        activeEmbeddingModels: [
-          { name: "embed", provider: "openai", apiKey: "embed-secret", enabled: true },
-        ],
       });
 
       const result = stripKeychainFields(settings);
@@ -90,7 +86,6 @@ describe("settingsSecretTransforms", () => {
       expect(result.openAIApiKey).toBe("");
       expect(result.defaultModelKey).toBe("gpt-4|openai");
       expect(result.activeModels[0].apiKey).toBe("");
-      expect(result.activeEmbeddingModels[0].apiKey).toBe("");
       expect(settings.openAIApiKey).toBe("sk-123");
       expect(settings.activeModels[0].apiKey).toBe("chat-secret");
     });
@@ -101,7 +96,6 @@ describe("settingsSecretTransforms", () => {
 
       expect(record.openAIApiKey).toBe("");
       expect(record.activeModels).toBeUndefined();
-      expect(record.activeEmbeddingModels).toBeUndefined();
     });
   });
 

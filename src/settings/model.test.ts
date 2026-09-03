@@ -1160,7 +1160,6 @@ describe("model", () => {
         azureOpenAIApiInstanceName: "my-instance",
         azureOpenAIApiDeploymentName: "chat-deploy",
         azureOpenAIApiVersion: "2025-01-01-preview",
-        azureOpenAIApiEmbeddingDeploymentName: "embed-deploy",
       };
       settingsStore.set(settingsAtom, { ...DEFAULT_SETTINGS, ...vendorConfig });
 

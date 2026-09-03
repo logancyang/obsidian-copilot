@@ -80,11 +80,6 @@ jest.mock("@/services/settingsSecretTransforms", () => ({
         apiKey: "",
       }));
     }
-    if (Array.isArray(out.activeEmbeddingModels)) {
-      out.activeEmbeddingModels = (out.activeEmbeddingModels as Array<Record<string, unknown>>).map(
-        (m) => ({ ...m, apiKey: "" })
-      );
-    }
     return out;
   }),
   cleanupLegacyFields: jest.fn((settings: Record<string, unknown>) => ({ ...settings })),
@@ -100,7 +95,6 @@ import { KeychainService, isSecretKey } from "./keychainService";
 function makeSettings(overrides: Partial<CopilotSettings> = {}): CopilotSettings {
   return {
     activeModels: [],
-    activeEmbeddingModels: [],
     ...overrides,
   } as unknown as CopilotSettings;
 }
@@ -366,7 +360,6 @@ describe("keychainService", () => {
           openAIApiKey: "sk-current",
           googleApiKey: "",
           activeModels: [makeModel({ name: "kept", provider: "openai", apiKey: "chat-secret" })],
-          activeEmbeddingModels: [],
         });
 
         const prev = makeSettings({
@@ -375,9 +368,6 @@ describe("keychainService", () => {
           activeModels: [
             makeModel({ name: "kept", provider: "openai", apiKey: "chat-prev" }),
             makeModel({ name: "deleted", provider: "openai", apiKey: "del-secret" }),
-          ],
-          activeEmbeddingModels: [
-            makeModel({ name: "del-embed", provider: "openai", apiKey: "embed-secret" }),
           ],
         });
 
@@ -393,10 +383,6 @@ describe("keychainService", () => {
         expect(result.keychainIdsToDelete.some((id) => id.includes("model-api-key-chat"))).toBe(
           true
         );
-        expect(
-          result.keychainIdsToDelete.some((id) => id.includes("model-api-key-embedding"))
-        ).toBe(true);
-
         // Reason: persistSecrets must not mutate the input settings objects
         expect(current.openAIApiKey).toBe("sk-current");
         expect(current.activeModels[0].apiKey).toBe("chat-secret");
