@@ -11,7 +11,6 @@ import {
 import { logInfo, logWarn } from "@/logger";
 import { formatUsageCapError } from "@/utils/usageCapError";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
-import { Document } from "@langchain/core/documents";
 import { MemoryVariables } from "@langchain/core/memory";
 import { DateTime } from "luxon";
 import { App, MarkdownView, Notice, TFile, Vault, normalizePath, requestUrl } from "obsidian";
@@ -576,17 +575,6 @@ export function processVariableNameForNotePath(variableName: string): string {
   }
   // It's a path, so we just return it as is
   return variableName;
-}
-
-export function extractUniqueTitlesFromDocs(docs: Document[]): string[] {
-  const titlesSet = new Set<string>();
-  docs.forEach((doc) => {
-    if (doc.metadata?.title) {
-      titlesSet.add(doc.metadata.title as string);
-    }
-  });
-
-  return Array.from(titlesSet);
 }
 
 const YOUTUBE_URL_REGEX =

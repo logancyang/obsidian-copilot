@@ -1217,10 +1217,10 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
     sanitizedSettings.chatHistorySortStrategy = DEFAULT_SETTINGS.chatHistorySortStrategy;
   }
 
-  // Fall back when the persisted chain type isn't one this build offers. A vault
-  // last used with Quick Chat's Projects mode still holds "project" here, and
-  // chain construction would throw "Unsupported chain type" on it before the
-  // user could pick anything else.
+  // Fall back when a vault still holds a retired Quick Chat mode. Both Vault QA
+  // and Projects were persisted here, and chain construction would otherwise
+  // fail before the mode picker could render.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/286
   // https://github.com/logancyang/obsidian-copilot-preview/issues/310
   if (!Object.values(ChainType).includes(sanitizedSettings.defaultChainType)) {
     sanitizedSettings.defaultChainType = DEFAULT_SETTINGS.defaultChainType;

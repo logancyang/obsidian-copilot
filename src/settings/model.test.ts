@@ -786,6 +786,17 @@ describe("model", () => {
       expect(out.defaultChainType).toBe(DEFAULT_SETTINGS.defaultChainType);
     });
 
+    it("starts a vault last saved in Vault QA in Free Chat without changing its other settings (https://github.com/Brevilabs/obsidian-copilot-private/issues/286)", () => {
+      const out = sanitizeSettings({
+        ...DEFAULT_SETTINGS,
+        defaultChainType: "vault_qa",
+        contextTurns: 7,
+      } as unknown as CopilotSettings);
+
+      expect(out.defaultChainType).toBe(ChainType.LLM_CHAIN);
+      expect(out.contextTurns).toBe(7);
+    });
+
     it("keeps a defaultChainType the runner still supports", () => {
       const out = sanitizeSettings({
         ...DEFAULT_SETTINGS,

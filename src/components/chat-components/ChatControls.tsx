@@ -1,5 +1,6 @@
 import { useChainType } from "@/aiParams";
 import { ChainType } from "@/chainType";
+import { ChatModeSelector } from "@/components/chat-components/ChatModeSelector";
 import { Button } from "@/components/ui/button";
 import { DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { SettingSwitch } from "@/components/ui/setting-switch";
@@ -8,16 +9,7 @@ import { PLUS_UTM_MEDIUMS } from "@/constants";
 import { navigateToPlusPage, useIsPaidUser } from "@/plusUtils";
 import { updateSetting, useSettingsValue } from "@/settings/model";
 import { DropdownMenu, DropdownMenuTrigger } from "@radix-ui/react-dropdown-menu";
-import {
-  CheckCircle,
-  ChevronDown,
-  Download,
-  History,
-  MessageCirclePlus,
-  MoreHorizontal,
-  Sparkles,
-  SquareArrowOutUpRight,
-} from "lucide-react";
+import { CheckCircle, Download, History, MessageCirclePlus, MoreHorizontal } from "lucide-react";
 import React from "react";
 import {
   ChatHistoryItem,
@@ -58,44 +50,12 @@ export function ChatControls({
   return (
     <div className="tw-flex tw-w-full tw-items-center tw-justify-between tw-p-1">
       <div className="tw-flex-1">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost2" size="fit" className="tw-ml-1 tw-text-sm tw-text-muted">
-              {selectedChain === ChainType.LLM_CHAIN && "chat (free)"}
-              {selectedChain === ChainType.VAULT_QA_CHAIN && "vault QA (free)"}
-              {selectedChain === ChainType.COPILOT_PLUS_CHAIN && (
-                <div className="tw-flex tw-items-center tw-gap-1">
-                  <Sparkles className="tw-size-4" />
-                  copilot plus
-                </div>
-              )}
-              <ChevronDown className="tw-mt-0.5 tw-size-5" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start">
-            <DropdownMenuItem onSelect={() => handleModeChange(ChainType.LLM_CHAIN)}>
-              chat (free)
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => handleModeChange(ChainType.VAULT_QA_CHAIN)}>
-              vault QA (free)
-            </DropdownMenuItem>
-            {isPaidUser ? (
-              <DropdownMenuItem onSelect={() => handleModeChange(ChainType.COPILOT_PLUS_CHAIN)}>
-                <div className="tw-flex tw-items-center tw-gap-1">
-                  <Sparkles className="tw-size-4" />
-                  copilot plus
-                </div>
-              </DropdownMenuItem>
-            ) : (
-              <DropdownMenuItem
-                onSelect={() => navigateToPlusPage(PLUS_UTM_MEDIUMS.CHAT_MODE_SELECT)}
-              >
-                copilot plus
-                <SquareArrowOutUpRight className="tw-size-3" />
-              </DropdownMenuItem>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <ChatModeSelector
+          selectedChain={selectedChain}
+          isPaidUser={Boolean(isPaidUser)}
+          onModeChange={handleModeChange}
+          onPlusUpsell={() => navigateToPlusPage(PLUS_UTM_MEDIUMS.CHAT_MODE_SELECT)}
+        />
       </div>
       <div className="tw-flex tw-items-center tw-gap-1">
         <div className="tw-mr-2">

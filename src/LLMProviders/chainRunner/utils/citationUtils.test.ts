@@ -5,9 +5,7 @@ import {
   formatSourceCatalog,
   getCitationFormatReminder,
   getLocalSearchGuidance,
-  getQACitationInstructions,
   hasExistingCitations,
-  hasInlineCitations,
   normalizeCitations,
   processInlineCitations,
   sanitizeContentForCitations,
@@ -159,48 +157,6 @@ More content
     });
   });
 
-  describe("hasInlineCitations", () => {
-    it("should detect inline citations in body text", () => {
-      const responseWithInlineCitations = "This is a claim [^1] and another claim [^2].";
-      expect(hasInlineCitations(responseWithInlineCitations)).toBe(true);
-
-      const multipleCitations = "First claim [^1]. Second claim [^2]. Third claim [^3].";
-      expect(hasInlineCitations(multipleCitations)).toBe(true);
-    });
-
-    it("should detect inline citations with footnote definitions", () => {
-      const fullResponse = `This is a claim [^1] and another [^2].
-
-#### Sources
-[^1]: [[Doc One]]
-[^2]: [[Doc Two]]`;
-      expect(hasInlineCitations(fullResponse)).toBe(true);
-    });
-
-    it("should return false for responses without inline citations", () => {
-      const responseWithoutCitations = "Just regular content here";
-      expect(hasInlineCitations(responseWithoutCitations)).toBe(false);
-
-      const responseWithOnlyFootnoteDefinitions = `Content here
-
-[^1]: [[Document]]
-[^2]: [[Another]]`;
-      // This should still detect [^1] and [^2] in the footnote definitions
-      expect(hasInlineCitations(responseWithOnlyFootnoteDefinitions)).toBe(true);
-    });
-
-    it("should handle edge cases", () => {
-      expect(hasInlineCitations("")).toBe(false);
-      expect(hasInlineCitations(null)).toBe(false);
-      expect(hasInlineCitations(undefined)).toBe(false);
-    });
-
-    it("should NOT confuse markdown links with citations", () => {
-      const responseWithLinks = "Check [this link](url) and [[wikilink]] here";
-      expect(hasInlineCitations(responseWithLinks)).toBe(false);
-    });
-  });
-
   describe("getLocalSearchGuidance", () => {
     it("should format local search guidance with citation rules, image inclusion, and source catalog", () => {
       const sourceCatalog = ["- [[Doc 1]] (path1.md)", "- [[Doc 2]] (path2.md)"];
@@ -214,19 +170,6 @@ More content
       expect(result).toContain("Source Catalog (for reference only):");
       expect(result).toContain("- [[Doc 1]] (path1.md)");
       expect(result).toContain("- [[Doc 2]] (path2.md)");
-    });
-  });
-
-  describe("getQACitationInstructions", () => {
-    it("should format QA citation instructions with source catalog", () => {
-      const sourceCatalog = "- [[Doc 1]]\n- [[Doc 2]]";
-      const result = getQACitationInstructions(sourceCatalog);
-
-      expect(result).toContain("CITATION RULES:");
-      expect(result).toContain("START with [^1]");
-      expect(result).toContain("Source Catalog (for reference only):");
-      expect(result).toContain("- [[Doc 1]]");
-      expect(result).toContain("- [[Doc 2]]");
     });
   });
 

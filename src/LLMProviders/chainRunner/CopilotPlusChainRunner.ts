@@ -1205,7 +1205,7 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
     // Build guidance block with citation rules and source catalog
     const guidance = getLocalSearchGuidance(catalogLines, settings.enableInlineCitations).trim();
 
-    // Add RAG instruction (like VaultQA) to ensure model uses the context
+    // Add a RAG instruction so the model uses the retrieved context.
     const ragInstruction = "Answer the question based only on the following context:";
     const documentsSection = buildLocalSearchInnerContent(ragInstruction, formattedContent);
 

@@ -15,7 +15,6 @@ The chain runner system provides two distinct tool calling approaches:
 chainRunner/
 ├── BaseChainRunner.ts                 # Abstract base class with shared functionality
 ├── LLMChainRunner.ts                  # Basic LLM interaction (no tools)
-├── VaultQAChainRunner.ts              # Vault-only Q&A with retrieval
 ├── CopilotPlusChainRunner.ts          # Legacy tool calling system
 ├── AutonomousAgentChainRunner.ts   # Native tool calling with ReAct agent loop
 ├── index.ts                           # Main exports

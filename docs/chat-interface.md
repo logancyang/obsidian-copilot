@@ -14,6 +14,15 @@ Use the model picker below the message box. It shows only models enabled under *
 
 The **Default model** in that settings panel controls which model a new Quick Chat starts with. See [Models, Effort, and Permissions](models-and-parameters.md) to manage the list.
 
+## Choose a chat mode
+
+Use the mode picker at the bottom of Quick Chat to choose between two distinct experiences:
+
+- **Chat (free)** answers from the context you attach. It does not search your vault automatically.
+- **Copilot Plus** can use tools, including local search. When Miyo is enabled, local search is semantic; when Miyo is disabled, it uses keyword search. Copilot Plus requires an eligible license.
+
+Vault QA is no longer a separate mode. If it was your saved mode before upgrading, Quick Chat starts in **Chat (free)**. Choose **Copilot Plus** when you want automatic vault retrieval. See [Vault Search and Indexing](vault-search-and-indexing.md).
+
 ## Ask with context
 
 Quick Chat can include the active note, selected text, other notes, folders, and images; on desktop it can also include open Web Viewer tabs. The selected model must support images. Context appears above the message box, where you can review or remove it before sending.

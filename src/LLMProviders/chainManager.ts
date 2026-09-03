@@ -6,7 +6,6 @@ import {
   ChainRunner,
   CopilotPlusChainRunner,
   LLMChainRunner,
-  VaultQAChainRunner,
 } from "@/LLMProviders/chainRunner/index";
 import { logError, logInfo } from "@/logger";
 import { getSettings, subscribeToSettingsChange } from "@/settings/model";
@@ -153,8 +152,6 @@ export default class ChainManager {
     switch (chainType) {
       case ChainType.LLM_CHAIN:
         return new LLMChainRunner(this);
-      case ChainType.VAULT_QA_CHAIN:
-        return new VaultQAChainRunner(this);
       case ChainType.COPILOT_PLUS_CHAIN:
         // Use AutonomousAgentChainRunner if the setting is enabled
         if (settings.enableAutonomousAgent) {

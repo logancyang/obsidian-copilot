@@ -162,7 +162,6 @@ export const VARIABLE_NOTE_TAG = "variable_note";
 export const EMBEDDED_PDF_TAG = "embedded_pdf";
 export const EMBEDDED_NOTE_TAG = "embedded_note";
 export const DATAVIEW_BLOCK_TAG = "dataview_block";
-export const RETRIEVED_DOCUMENT_TAG = "retrieved_document";
 export const WEB_TAB_CONTEXT_TAG = "web_tab_context";
 export const ACTIVE_WEB_TAB_CONTEXT_TAG = "active_web_tab";
 export const YOUTUBE_VIDEO_CONTEXT_TAG = "youtube_video_context";
