@@ -63,8 +63,15 @@ async function searchRelatedNotesWithMiyo(
       MIYO_RELATED_SEARCH_TIMEOUT_MS,
       "Relevant Notes Miyo related search"
     );
+    // A successful HTTP status without Miyo's result collection does not prove
+    // a valid empty search. Keep recovery guidance visible for malformed peers.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
+    if (!Array.isArray(response.results)) {
+      logError("RelevantNotes(Miyo): related search response is missing its results array");
+      return { scoreByPath: new Map(), status: "unavailable" };
+    }
     const scoreByPath = new Map<string, number>();
-    const results = response.results || [];
+    const results = response.results;
 
     // Miyo owns relevance ranking and applies the result limit. Preserve its
     // order and keep the first result for each file instead of comparing or

@@ -217,7 +217,23 @@ describe("findRelevantNotes", () => {
       expect(mockGetFolder).not.toHaveBeenCalled();
     });
 
-    it("returns no graph-only rows when Miyo is disabled (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
+    it("reports unavailable when a successful Miyo response omits its results array (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
+      mockSearchRelated.mockResolvedValue({});
+
+      const result = await findRelevantNotes({
+        app: window.app,
+        filePath: "source.md",
+      });
+
+      expect(result).toEqual({ notes: [], status: "unavailable" });
+      expect(mockedLogError).toHaveBeenCalledWith(
+        "RelevantNotes(Miyo): related search response is missing its results array"
+      );
+      expect(mockedGetLinkedNotes).not.toHaveBeenCalled();
+      expect(mockedGetBacklinkedNotes).not.toHaveBeenCalled();
+    });
+
+    it("returns no link-only rows when Miyo is disabled (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
       mockedGetSettings.mockReturnValue({ enableMiyo: false } as CopilotSettings);
       mockedGetLinkedNotes.mockReturnValue([createMarkdownFile("linked-only.md")]);
 
