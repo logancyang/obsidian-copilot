@@ -12,6 +12,7 @@ import { findRelevantNotes, type RelevantNoteEntry } from "@/search/findRelevant
 import { onIndexChanged } from "@/search/indexSignal";
 import { openCopilotSettings } from "@/settings/openSettings";
 import { useSettingsValue } from "@/settings/model";
+import { sha256 } from "@/utils/hash";
 import { ArrowRight, FileInput, FileOutput, FileText, PlusCircle } from "lucide-react";
 import { Platform, TFile } from "obsidian";
 import React, { memo, useCallback, useEffect, useState } from "react";
@@ -41,7 +42,17 @@ type RelevantNotesViewResult =
   | typeof UNAVAILABLE_RELEVANT_NOTES_RESULT
   | Awaited<ReturnType<typeof findRelevantNotes>>;
 
-function useRelevantNotes(enableMiyo: boolean, miyoServerUrl: string) {
+interface SettledRelevantNotesRequest {
+  requestKey: string;
+  result: Awaited<ReturnType<typeof findRelevantNotes>> | typeof UNAVAILABLE_RELEVANT_NOTES_RESULT;
+}
+
+function useRelevantNotes(
+  enableMiyo: boolean,
+  miyoServerUrl: string,
+  miyoBackendAvailable: boolean,
+  miyoCredentialIdentity: string
+) {
   const app = useApp();
   const [result, setResult] = useState<RelevantNotesViewResult>(
     enableMiyo ? LOADING_RELEVANT_NOTES_RESULT : DISABLED_RELEVANT_NOTES_RESULT
@@ -59,7 +70,13 @@ function useRelevantNotes(enableMiyo: boolean, miyoServerUrl: string) {
   const requestStatus = !activeFilePath ? "idle" : enableMiyo ? "ready" : "disabled";
   const requestKey =
     requestStatus === "ready"
-      ? JSON.stringify([activeFilePath, miyoServerUrl, miyoBackendAvailable, signalTick])
+      ? JSON.stringify([
+          activeFilePath,
+          miyoServerUrl,
+          miyoBackendAvailable,
+          miyoCredentialIdentity,
+          signalTick,
+        ])
       : null;
 
   useEffect(() => onIndexChanged(refresh), [refresh]);
@@ -387,7 +404,17 @@ export const RelevantNotes = memo(
     const app = useApp();
     const activeFile = useActiveFile();
     const settings = useSettingsValue();
-    const { result, refresh } = useRelevantNotes(settings.enableMiyo, settings.miyoServerUrl);
+    const miyoBackendAvailable = useMiyoStatus().backend === "available";
+    // The request identity must change with credentials without retaining the
+    // credential itself in request state.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
+    const miyoCredentialIdentity = sha256(settings.plusLicenseKey);
+    const { result, refresh } = useRelevantNotes(
+      settings.enableMiyo,
+      settings.miyoServerUrl,
+      miyoBackendAvailable,
+      miyoCredentialIdentity
+    );
     const relevantNotes = result.notes;
     // The toolbar must name only a source the search contract accepts; showing
     // an attachment name would imply that Miyo searched it.

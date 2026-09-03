@@ -124,6 +124,9 @@ async function searchRelatedNotesWithMiyo(
       );
       return { scoreByPath: new Map(), status: "not-indexed" };
     } catch (folderError) {
+      // Without a successful folder probe, Copilot cannot distinguish an
+      // unindexed note from a broken Miyo setup, so recovery must stay generic.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
       logError(
         `RelevantNotes(Miyo): source has no indexed chunks and folder lookup failed for folder_name=${folderName}: ${(folderError as Error).message}`
       );
