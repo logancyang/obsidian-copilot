@@ -39,6 +39,10 @@ import {
   MiyoConnectModal,
 } from "@/settings/v2/components/MiyoConnectModal";
 import { MiyoStatusRow } from "@/settings/v2/components/MiyoStatusRow";
+import {
+  MiyoAvailabilityNotice,
+  MiyoConnectionControl,
+} from "@/settings/v2/components/ui/MiyoConnectionControl";
 import { err2String } from "@/utils";
 import { getVaultBase } from "@/utils/vaultPath";
 import { extractAppIgnoreSettings, getSystemExcludedFolders } from "@/search/searchUtils";
@@ -144,7 +148,12 @@ export const MiyoSettings: React.FC = () => {
   // Draft + blur commit so we persist once on blur, not on every keystroke.
   const [urlDraft, setUrlDraft] = useState(settings.miyoServerUrl || "");
   const [advancedOpen, setAdvancedOpen] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
+  // An enabled backend with no prior snapshot is about to run the mount check.
+  // Start in checking so the first paint cannot flash a false Unavailable state.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/356
+  const [refreshing, setRefreshing] = useState(
+    settings.enableMiyo && (status.backend === "unknown" || status.backend === "stale")
+  );
   // Reason: avoid setState after unmount when an in-flight refresh resolves late.
   const mountedRef = useRef(true);
   // Reason: the Connect flow is an Obsidian Modal (imperative), so hold the open
@@ -816,51 +825,15 @@ export const MiyoSettings: React.FC = () => {
             </span>
           }
           control={
-            // The pill keys on INTENT (`settings.enableMiyo`), not live health, so
-            // a stranded enable (Miyo enabled, then it went offline) is ALWAYS
-            // recoverable here — otherwise the only affordance would be "Connect"
-            // while search still routes to a dead backend with no way to turn it
-            // off. The rest-label reflects health: "Connected" when reachable,
-            // "Unavailable" (warning tone) when enabled-but-unreachable; both hover
-            // to "Disconnect". Connect shows only when Miyo isn't enabled.
-            settings.enableMiyo ? (
-              <button
-                type="button"
-                onClick={() => void handleDisconnect()}
-                disabled={refreshing}
-                title="Disconnect Miyo"
-                className={cn(
-                  "tw-group tw-inline-flex tw-shrink-0 tw-cursor-pointer tw-items-center tw-gap-1.5 tw-rounded-full !tw-border-none !tw-px-3 !tw-py-1 tw-text-smallest tw-font-semibold !tw-shadow-none tw-transition-colors",
-                  capabilitiesEnabled
-                    ? "!tw-bg-success tw-text-success hover:!tw-bg-error hover:tw-text-error"
-                    : "tw-text-warning !tw-bg-warning/20 hover:!tw-bg-error hover:tw-text-error"
-                )}
-              >
-                <span className="tw-size-1.5 tw-rounded-full tw-bg-current" />
-                {/* Both labels share one grid cell so the button width stays fixed at
-                    the wider label — otherwise the hover text-swap resizes the button
-                    out from under the cursor and flickers connect/disconnect. */}
-                <span className="tw-grid tw-text-center">
-                  <span className="tw-col-start-1 tw-row-start-1 group-hover:tw-invisible">
-                    {capabilitiesEnabled
-                      ? `Connected · ${connectedRemote ? "remote" : "local"}`
-                      : "Unavailable"}
-                  </span>
-                  <span className="tw-invisible tw-col-start-1 tw-row-start-1 group-hover:tw-visible">
-                    Disconnect
-                  </span>
-                </span>
-              </button>
-            ) : (
-              <Button
-                variant="default"
-                size="sm"
-                onClick={() => void handleConnect()}
-                disabled={refreshing}
-              >
-                {refreshing ? "Connecting…" : "Connect"}
-              </Button>
-            )
+            <MiyoConnectionControl
+              enabled={settings.enableMiyo}
+              status={status.backend}
+              checking={refreshing}
+              remote={connectedRemote}
+              onConnect={() => void handleConnect()}
+              onDisconnect={() => void handleDisconnect()}
+              onRetry={() => void refresh(true)}
+            />
           }
         />
 
@@ -919,12 +892,15 @@ export const MiyoSettings: React.FC = () => {
           unlimited, on your machine
         </div>
 
-        {!capabilitiesEnabled && (
-          <div className="tw-flex tw-items-center tw-gap-2 tw-rounded-lg tw-border tw-border-solid tw-px-3 tw-py-2.5 tw-text-xs tw-text-warning tw-bg-warning/10 tw-border-warning/30">
-            <TriangleAlert className="tw-size-4 tw-shrink-0" />
-            Connect to Miyo to configure these capabilities.
-          </div>
-        )}
+        {/* A probe-in-flight is neither connected nor unavailable. Reusing the
+            unavailable warning while the pill says Checking would give the user
+            contradictory guidance.
+            https://github.com/Brevilabs/obsidian-copilot-private/issues/356 */}
+        <MiyoAvailabilityNotice
+          enabled={settings.enableMiyo}
+          available={capabilitiesEnabled}
+          checking={refreshing}
+        />
 
         <div className="tw-overflow-hidden tw-rounded-xl tw-border tw-border-solid tw-border-border tw-bg-primary tw-shadow-sm">
           {/* The card is split by connection dependency. The outer `tw-divide-y`

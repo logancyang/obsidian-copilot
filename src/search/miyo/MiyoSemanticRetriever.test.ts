@@ -1,5 +1,6 @@
 import { type App, TFile } from "obsidian";
 import { getMiyoFolderName, hasUserQaPatterns, isMiyoScopeMismatch } from "@/miyo/miyoUtils";
+import { MiyoRequestError } from "@/miyo/MiyoClient";
 import { MiyoSemanticRetriever } from "@/search/miyo/MiyoSemanticRetriever";
 import { getSettings } from "@/settings/model";
 import { RETURN_ALL_LIMIT } from "@/search/v3/SearchCore";
@@ -28,6 +29,8 @@ jest.mock("@/miyo/miyoUtils", () => ({
   isMiyoScopeMismatch: jest.fn(() => false),
 }));
 jest.mock("@/miyo/MiyoClient", () => ({
+  MiyoRequestError:
+    jest.requireActual<typeof import("@/miyo/MiyoClient")>("@/miyo/MiyoClient").MiyoRequestError,
   MiyoClient: jest.fn().mockImplementation(() => ({
     resolveBaseUrl: mockResolveBaseUrl,
     search: mockSearch,
@@ -61,6 +64,24 @@ describe("MiyoSemanticRetriever", () => {
     });
     (getMiyoFolderName as jest.Mock).mockReturnValue("/vault");
     mockResolveBaseUrl.mockResolvedValue("http://miyo.local");
+  });
+
+  it("reports a failed Miyo request instead of returning an empty search result (https://github.com/Brevilabs/obsidian-copilot-private/issues/356)", async () => {
+    // A silent [] lets Quick Chat answer as though vault search succeeded with
+    // no matches, hiding that enabled Miyo never supplied context.
+    mockSearch.mockRejectedValue(new Error("connection refused"));
+
+    await expect(createRetriever().getRelevantDocuments("query")).rejects.toThrow(
+      "Miyo is unavailable. Open Miyo, then retry vault search."
+    );
+  });
+
+  it("reports an unregistered vault as actionable registration guidance (https://github.com/Brevilabs/obsidian-copilot-private/issues/356)", async () => {
+    mockSearch.mockRejectedValue(new MiyoRequestError(404, "folder not registered"));
+
+    await expect(createRetriever().getRelevantDocuments("query")).rejects.toThrow(
+      "This vault is not registered with Miyo. Register it in Miyo, then retry vault search."
+    );
   });
 
   it("deduplicates semantic chunks and does not perform explicit path reads", async () => {

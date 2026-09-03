@@ -455,9 +455,21 @@ const createLocalSearchTool = (app: App) =>
     func: async ({ timeRange: rawTimeRange, query, salientTerms, _preExpandedQuery }) => {
       // Validate time range to prevent LLM hallucinations (e.g., {startTime: 0, endTime: 0})
       const timeRange = validateTimeRange(rawTimeRange);
+      const settings = getSettings();
+      const miyoActive = RetrieverFactory.isMiyoActive();
+
+      // Miyo can stay enabled on mobile even though local discovery is unavailable.
+      // Preserve that user intent as an unavailable result instead of silently
+      // routing the same request to keyword search.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/356
+      if (settings.enableMiyo && !miyoActive) {
+        throw new Error(
+          "Miyo is unavailable. Configure a remote Miyo connection, then retry vault search."
+        );
+      }
 
       // Miyo handles search server-side — use separate path (no local lexical search)
-      if (RetrieverFactory.isMiyoActive()) {
+      if (miyoActive) {
         logInfo("localSearch: Using Miyo search path");
         return await performMiyoSearch({
           app,

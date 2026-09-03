@@ -3,7 +3,12 @@ import { Document } from "@langchain/core/documents";
 import { BaseRetriever } from "@langchain/core/retrievers";
 import { App } from "obsidian";
 import { logInfo, logWarn } from "@/logger";
-import { MiyoClient, MiyoSearchFilter, MiyoSearchResult } from "@/miyo/MiyoClient";
+import {
+  MiyoClient,
+  MiyoRequestError,
+  MiyoSearchFilter,
+  MiyoSearchResult,
+} from "@/miyo/MiyoClient";
 import {
   getMiyoCustomUrl,
   getMiyoFolderName,
@@ -175,7 +180,19 @@ export class MiyoSemanticRetriever extends BaseRetriever {
       return filteredResults.map((result) => this.toDocument(result, searchAll));
     } catch (error) {
       logWarn(`MiyoSemanticRetriever: search failed: ${error}`);
-      return [];
+      // An empty result means a healthy search found no matches. A failed Miyo
+      // request must remain distinguishable so Quick Chat can show the tool
+      // failure instead of answering as though it searched the vault.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/356
+      if (error instanceof MiyoRequestError && error.status === 404) {
+        throw new Error(
+          "This vault is not registered with Miyo. Register it in Miyo, then retry vault search.",
+          { cause: error }
+        );
+      }
+      throw new Error("Miyo is unavailable. Open Miyo, then retry vault search.", {
+        cause: error,
+      });
     }
   }
 
