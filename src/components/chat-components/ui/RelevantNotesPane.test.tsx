@@ -28,7 +28,7 @@ describe("RelevantNotesPane", () => {
       render(<RelevantNotesPane {...BASE_PROPS} status="loading" noteRows={[]} />);
 
       expect(screen.getByText("Finding relevant notes…")).toBeTruthy();
-      expect(screen.queryByText("Check your Miyo setup")).toBeNull();
+      expect(screen.queryByText("Miyo is not connected")).toBeNull();
       expect(screen.queryByText("No relevant notes found")).toBeNull();
     });
 
@@ -60,7 +60,7 @@ describe("RelevantNotesPane", () => {
       );
 
       expect(screen.queryByText("Related note")).toBeNull();
-      expect(screen.getByText("Check your Miyo setup")).toBeTruthy();
+      expect(screen.getByText("Miyo is not connected")).toBeTruthy();
       fireEvent.click(screen.getByRole("button", { name: "Open Miyo settings" }));
       expect(BASE_ACTIONS.onOpenMiyoSettings).toHaveBeenCalledTimes(1);
       expect(container.querySelector("[data-miyo-guidance]")?.className).toContain("tw-max-w-xs");

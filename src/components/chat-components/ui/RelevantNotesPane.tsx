@@ -112,8 +112,8 @@ export function RelevantNotesPane({
       guidancePanel = (
         <GuidancePanel
           id="unavailable"
-          title="Check your Miyo setup"
-          description="Check your connection and make sure this vault is registered and indexed."
+          title="Miyo is not connected"
+          description="Make sure Miyo is running and this vault is registered."
         >
           <Button variant="default" size="sm" onClick={actions.onOpenMiyoSettings}>
             Open Miyo settings

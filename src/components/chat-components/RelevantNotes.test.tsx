@@ -134,7 +134,7 @@ describe("RelevantNotes", () => {
       render(<RelevantNotes onAddToChat={jest.fn()} />);
 
       expect(await screen.findByText("No relevant notes found")).toBeTruthy();
-      expect(screen.queryByText("Check your Miyo setup")).toBeNull();
+      expect(screen.queryByText("Miyo is not connected")).toBeNull();
       expect(screen.queryByText("Attachment")).toBeNull();
       expect(mockFindRelevantNotes).not.toHaveBeenCalled();
     });
@@ -230,7 +230,7 @@ describe("RelevantNotes", () => {
         });
 
       const { rerender } = render(<RelevantNotes onAddToChat={jest.fn()} />);
-      expect(await screen.findByText("Check your Miyo setup")).toBeTruthy();
+      expect(await screen.findByText("Miyo is not connected")).toBeTruthy();
 
       act(() => indexChangedListener?.());
 
