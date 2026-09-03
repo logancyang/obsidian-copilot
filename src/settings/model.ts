@@ -12,12 +12,10 @@ import { type SortStrategy, isSortStrategy } from "@/utils/recentUsageManager";
 import {
   AGENT_MAX_ITERATIONS_LIMIT,
   BUILTIN_CHAT_MODELS,
-  BUILTIN_EMBEDDING_MODELS,
   DEFAULT_OPEN_AREA,
   DEFAULT_QA_EXCLUSIONS_SETTING,
   DEFAULT_SETTINGS,
   DEFAULT_SKILLS_FOLDER,
-  EmbeddingModelProviders,
   SEND_SHORTCUT,
 } from "@/constants";
 
@@ -510,24 +508,6 @@ export function normalizeRootFolders(input: readonly (string | undefined)[]): st
 }
 
 /**
- * Resolve a valid embedding model key for the current settings.
- *
- * @param settings - Current Copilot settings.
- * @returns A valid embedding model key.
- */
-function resolveEmbeddingModelKey(settings: CopilotSettings): string {
-  const activeEmbeddingModelKeys = new Set(
-    (settings.activeEmbeddingModels || []).map((model) => getModelKeyFromModel(model))
-  );
-
-  if (settings.embeddingModelKey && activeEmbeddingModelKeys.has(settings.embeddingModelKey)) {
-    return settings.embeddingModelKey;
-  }
-
-  return DEFAULT_SETTINGS.embeddingModelKey;
-}
-
-/**
  * Sets the settings in the atom. Accepts either a partial object or an
  * updater function `(prev) => partial`. Prefer the updater form for any
  * read-modify-write — it routes through jotai's atom-setter callback so the
@@ -539,9 +519,7 @@ export function setSettings(
 ) {
   settingsStore.set(settingsAtom, (prev) => {
     const partial = typeof settings === "function" ? settings(prev) : settings;
-    const merged = mergeAllActiveModelsWithCoreModels({ ...prev, ...partial });
-    merged.embeddingModelKey = resolveEmbeddingModelKey(merged);
-    return merged;
+    return mergeActiveChatModelsWithCoreModels({ ...prev, ...partial });
   });
 }
 
@@ -878,10 +856,9 @@ export function resetSettings(): void {
       BUILTIN_CHAT_MODELS.map((model) => ({ ...model, enabled: true })),
       current.activeModels ?? []
     ),
-    activeEmbeddingModels: preserveModelCredentials(
-      BUILTIN_EMBEDDING_MODELS.map((model) => ({ ...model, enabled: true })),
-      current.activeEmbeddingModels ?? []
-    ),
+    // The client-side embedding pipeline is gone, but its persisted fields stay
+    // untouched until the dedicated settings migration removes them.
+    activeEmbeddingModels: current.activeEmbeddingModels ?? DEFAULT_SETTINGS.activeEmbeddingModels,
     providers: preservedProviders,
     configuredModels: preserveConfiguredModelsForProviders(
       current.configuredModels,
@@ -934,10 +911,7 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   }
 
   if (!settingsToSanitize.activeEmbeddingModels) {
-    settingsToSanitize.activeEmbeddingModels = BUILTIN_EMBEDDING_MODELS.map((model) => ({
-      ...model,
-      enabled: true,
-    }));
+    settingsToSanitize.activeEmbeddingModels = DEFAULT_SETTINGS.activeEmbeddingModels;
   }
 
   const sanitizedSettings: CopilotSettings = { ...settingsToSanitize };
@@ -1738,11 +1712,8 @@ function sanitizeDeviceProfiles(raw: unknown): Record<string, DeviceAgentProfile
   return Object.keys(out).length > 0 ? out : undefined;
 }
 
-function mergeAllActiveModelsWithCoreModels(settings: CopilotSettings): CopilotSettings {
+function mergeActiveChatModelsWithCoreModels(settings: CopilotSettings): CopilotSettings {
   settings.activeModels = mergeActiveModels(settings.activeModels, BUILTIN_CHAT_MODELS);
-  settings.activeEmbeddingModels = filterUnsupportedEmbeddingModels(
-    mergeActiveModels(settings.activeEmbeddingModels, BUILTIN_EMBEDDING_MODELS)
-  );
   return settings;
 }
 
@@ -1787,17 +1758,4 @@ function mergeActiveModels(
   });
 
   return Array.from(modelMap.values());
-}
-
-/**
- * Remove embedding models that use unsupported providers.
- *
- * @param models - Embedding models to validate.
- * @returns Filtered list containing only supported providers.
- */
-function filterUnsupportedEmbeddingModels(models: CustomModel[]): CustomModel[] {
-  const supportedProviders = new Set(Object.values(EmbeddingModelProviders));
-  return models.filter((model) =>
-    supportedProviders.has(model.provider as EmbeddingModelProviders)
-  );
 }

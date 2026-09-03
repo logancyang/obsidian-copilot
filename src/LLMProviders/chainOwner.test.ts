@@ -1,5 +1,3 @@
-import { ChainType } from "@/chainType";
-import { VAULT_VECTOR_STORE_STRATEGY } from "@/constants";
 import type { ModelManagementApi } from "@/modelManagement";
 import type { App } from "obsidian";
 
@@ -11,11 +9,9 @@ jest.mock("./chainManager", () => ({
   })),
 }));
 
-const mockGetChainType = jest.fn<ChainType, []>();
 const mockSubscribeToModelKeyChange = jest.fn<() => void, [() => void]>();
 const mockSubscribeToChainTypeChange = jest.fn<() => void, [() => void]>();
 jest.mock("@/aiParams", () => ({
-  getChainType: (): ChainType => mockGetChainType(),
   subscribeToModelKeyChange: (cb: () => void): void => {
     mockSubscribeToModelKeyChange(cb);
   },
@@ -24,25 +20,11 @@ jest.mock("@/aiParams", () => ({
   },
 }));
 
-const mockGetSettings = jest.fn<Record<string, unknown>, []>();
-jest.mock("@/settings/model", () => ({
-  getSettings: (): Record<string, unknown> => mockGetSettings(),
-}));
-
 import ChainOwner from "./chainOwner";
 import ChainManager from "./chainManager";
 
 const APP = {} as App;
 const MODEL_MANAGEMENT = {} as ModelManagementApi;
-
-/** Settings slice the chain-type subscriber reads, with auto-index fully enabled. */
-function autoIndexSettings(overrides: Record<string, unknown> = {}) {
-  return {
-    enableSemanticSearchV3: true,
-    indexVaultToVectorStore: VAULT_VECTOR_STORE_STRATEGY.ON_MODE_SWITCH,
-    ...overrides,
-  };
-}
 
 /** Build a fresh owner and hand back the callbacks it registered. */
 function createOwner(): {
@@ -65,8 +47,6 @@ describe("chainOwner", () => {
       // Reason: the singleton outlives a test, so a stale instance would hand the
       // next case the previous one's subscriptions and chain manager.
       ChainOwner.instance = undefined as unknown as ChainOwner;
-      mockGetSettings.mockReturnValue(autoIndexSettings());
-      mockGetChainType.mockReturnValue(ChainType.COPILOT_PLUS_CHAIN);
     });
 
     describe("getInstance()", () => {
@@ -107,45 +87,12 @@ describe("chainOwner", () => {
     });
 
     describe("chain-type subscriber", () => {
-      it.each([
-        ["vault QA", ChainType.VAULT_QA_CHAIN],
-        ["Copilot Plus", ChainType.COPILOT_PLUS_CHAIN],
-      ])("re-indexes when switching to %s under an on-mode-switch strategy", (_label, chain) => {
-        mockGetChainType.mockReturnValue(chain);
+      it("rebuilds the chain without asking for a removed client-side index refresh", () => {
         const { onChainTypeChange } = createOwner();
 
         onChainTypeChange();
 
-        expect(mockCreateChainWithNewModel).toHaveBeenCalledWith({ refreshIndex: true });
-      });
-
-      it("skips the re-index for a chain that never reads the vector store", () => {
-        mockGetChainType.mockReturnValue(ChainType.LLM_CHAIN);
-        const { onChainTypeChange } = createOwner();
-
-        onChainTypeChange();
-
-        expect(mockCreateChainWithNewModel).toHaveBeenCalledWith({ refreshIndex: false });
-      });
-
-      it("skips the re-index when semantic search is off", () => {
-        mockGetSettings.mockReturnValue(autoIndexSettings({ enableSemanticSearchV3: false }));
-        const { onChainTypeChange } = createOwner();
-
-        onChainTypeChange();
-
-        expect(mockCreateChainWithNewModel).toHaveBeenCalledWith({ refreshIndex: false });
-      });
-
-      it("skips the re-index when the vault is not set to index on mode switch", () => {
-        mockGetSettings.mockReturnValue(
-          autoIndexSettings({ indexVaultToVectorStore: VAULT_VECTOR_STORE_STRATEGY.NEVER })
-        );
-        const { onChainTypeChange } = createOwner();
-
-        onChainTypeChange();
-
-        expect(mockCreateChainWithNewModel).toHaveBeenCalledWith({ refreshIndex: false });
+        expect(mockCreateChainWithNewModel).toHaveBeenCalledWith();
       });
     });
   });

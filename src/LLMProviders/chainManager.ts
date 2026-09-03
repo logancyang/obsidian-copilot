@@ -135,9 +135,6 @@ export default class ChainManager {
       // apply-Plus-key.
       if (this.chatModelManager.validateChatModel(this.chatModelManager.getChatModel())) {
         this.validateChainType(chainType);
-        if (options.refreshIndex) {
-          await this.refreshVaultIndex();
-        }
       } else {
         logError("createChainWithNewModel: skipping chain-type housekeeping — no chat model set.");
       }
@@ -167,17 +164,6 @@ export default class ChainManager {
       default:
         throw new Error(`Unsupported chain type: ${String(chainType)}`);
     }
-  }
-
-  /**
-   * Re-index the vault into the Orama vector store. No-op when legacy
-   * semantic search is disabled — v3 lexical search builds its index on
-   * demand and doesn't need a precomputed store.
-   */
-  private async refreshVaultIndex() {
-    if (!getSettings().enableSemanticSearchV3) return;
-    const VectorStoreManager = (await import("@/search/vectorStoreManager")).default;
-    await VectorStoreManager.getInstance().indexVaultToVectorStore(false);
   }
 
   async runChain(

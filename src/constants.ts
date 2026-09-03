@@ -506,135 +506,9 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
   },
 ];
 
-export enum EmbeddingModelProviders {
-  OPENAI = "openai",
-  OPENROUTERAI = "openrouterai",
-  COHEREAI = "cohereai",
-  GOOGLE = "google",
-  OLLAMA = "ollama",
-  LM_STUDIO = "lm-studio",
-  OPENAI_FORMAT = "3rd party (openai-format)",
-  COPILOT_PLUS = "copilot-plus",
-  COPILOT_PLUS_JINA = "copilot-plus-jina",
-  SILICONFLOW = "siliconflow",
-}
+const EMPTY_EMBEDDING_MODELS = Object.freeze([]) as unknown as CustomModel[];
 
-export enum EmbeddingModels {
-  OPENAI_EMBEDDING_SMALL = "text-embedding-3-small",
-  OPENAI_EMBEDDING_LARGE = "text-embedding-3-large",
-  COHEREAI_EMBED_MULTILINGUAL_LIGHT_V3_0 = "embed-multilingual-light-v3.0",
-  GOOGLE_ENG = "text-embedding-004",
-  GOOGLE_GEMINI_EMBEDDING = "gemini-embedding-001",
-  GOOGLE_GEMINI_EMBEDDING_2_PREVIEW = "gemini-embedding-2-preview",
-  COPILOT_PLUS_SMALL = "copilot-plus-small",
-  COPILOT_PLUS_LARGE = "copilot-plus-large",
-  COPILOT_PLUS_MULTILINGUAL = "copilot-plus-multilingual",
-  SILICONFLOW_QWEN3_EMBEDDING_0_6B = "Qwen/Qwen3-Embedding-0.6B",
-  OPENROUTER_OPENAI_EMBEDDING_SMALL = "openai/text-embedding-3-small",
-}
-
-export const BUILTIN_EMBEDDING_MODELS: CustomModel[] = [
-  {
-    name: EmbeddingModels.COPILOT_PLUS_SMALL,
-    provider: EmbeddingModelProviders.COPILOT_PLUS,
-    enabled: true,
-    isBuiltIn: true,
-    isEmbeddingModel: true,
-    core: true,
-    plusExclusive: true,
-  },
-  {
-    name: EmbeddingModels.COPILOT_PLUS_LARGE,
-    provider: EmbeddingModelProviders.COPILOT_PLUS_JINA,
-    enabled: true,
-    isBuiltIn: true,
-    isEmbeddingModel: true,
-    core: true,
-    plusExclusive: true,
-    believerExclusive: true,
-    dimensions: 1024,
-  },
-  {
-    name: EmbeddingModels.COPILOT_PLUS_MULTILINGUAL,
-    provider: EmbeddingModelProviders.COPILOT_PLUS_JINA,
-    enabled: true,
-    isBuiltIn: true,
-    isEmbeddingModel: true,
-    core: true,
-    plusExclusive: true,
-    dimensions: 512,
-  },
-  {
-    name: EmbeddingModels.OPENROUTER_OPENAI_EMBEDDING_SMALL,
-    provider: EmbeddingModelProviders.OPENROUTERAI,
-    enabled: true,
-    isBuiltIn: true,
-    isEmbeddingModel: true,
-    core: true,
-  },
-  {
-    name: EmbeddingModels.OPENAI_EMBEDDING_SMALL,
-    provider: EmbeddingModelProviders.OPENAI,
-    enabled: true,
-    isBuiltIn: true,
-    isEmbeddingModel: true,
-    core: true,
-  },
-  {
-    name: EmbeddingModels.OPENAI_EMBEDDING_LARGE,
-    provider: EmbeddingModelProviders.OPENAI,
-    enabled: true,
-    isBuiltIn: true,
-    isEmbeddingModel: true,
-  },
-  {
-    name: EmbeddingModels.COHEREAI_EMBED_MULTILINGUAL_LIGHT_V3_0,
-    provider: EmbeddingModelProviders.COHEREAI,
-    enabled: true,
-    isBuiltIn: true,
-    isEmbeddingModel: true,
-  },
-  {
-    name: EmbeddingModels.GOOGLE_ENG,
-    provider: EmbeddingModelProviders.GOOGLE,
-    enabled: true,
-    isBuiltIn: true,
-    isEmbeddingModel: true,
-  },
-  {
-    name: EmbeddingModels.GOOGLE_GEMINI_EMBEDDING,
-    provider: EmbeddingModelProviders.GOOGLE,
-    enabled: true,
-    isBuiltIn: true,
-    isEmbeddingModel: true,
-    core: true,
-  },
-  {
-    name: EmbeddingModels.GOOGLE_GEMINI_EMBEDDING_2_PREVIEW,
-    provider: EmbeddingModelProviders.GOOGLE,
-    enabled: true,
-    isBuiltIn: true,
-    isEmbeddingModel: true,
-    core: true,
-  },
-  {
-    name: EmbeddingModels.SILICONFLOW_QWEN3_EMBEDDING_0_6B,
-    provider: EmbeddingModelProviders.SILICONFLOW,
-    enabled: true,
-    isBuiltIn: true,
-    isEmbeddingModel: true,
-    core: true,
-    baseUrl: "https://api.siliconflow.com/v1",
-  },
-];
-
-// Embedding Models
-export const NOMIC_EMBED_TEXT = "nomic-embed-text";
-// export const DISTILBERT_NLI = 'sentence-transformers/distilbert-base-nli-mean-tokens';
-// export const INSTRUCTOR_XL = 'hkunlp/instructor-xl'; // Inference API is off for this
-// export const MPNET_V2 = 'sentence-transformers/all-mpnet-base-v2'; // Inference API returns 400
-
-export type Provider = ChatModelProviders | EmbeddingModelProviders;
+export type Provider = ChatModelProviders;
 
 export type SettingKeyProviders = Exclude<
   ChatModelProviders,
@@ -745,13 +619,7 @@ export const ProviderInfo: Record<Provider, ProviderMetadata> = {
     keyManagementURL: "https://platform.deepseek.com/api-keys",
     testModel: ChatModels.DEEPSEEK_CHAT,
   },
-  [EmbeddingModelProviders.COPILOT_PLUS]: {
-    label: "Copilot",
-    host: BREVILABS_MODELS_BASE_URL,
-    curlBaseURL: BREVILABS_MODELS_BASE_URL,
-    keyManagementURL: "",
-  },
-  [EmbeddingModelProviders.COPILOT_PLUS_JINA]: {
+  [ChatModelProviders.COPILOT_PLUS]: {
     label: "Copilot",
     host: BREVILABS_MODELS_BASE_URL,
     curlBaseURL: BREVILABS_MODELS_BASE_URL,
@@ -773,18 +641,6 @@ export const ProviderSettingsKeyMap: Record<SettingKeyProviders, keyof CopilotSe
   deepseek: "deepseekApiKey",
   siliconflow: "siliconflowApiKey",
 };
-
-export enum VAULT_VECTOR_STORE_STRATEGY {
-  NEVER = "NEVER",
-  ON_STARTUP = "ON STARTUP",
-  ON_MODE_SWITCH = "ON MODE SWITCH",
-}
-
-export const VAULT_VECTOR_STORE_STRATEGIES = [
-  VAULT_VECTOR_STORE_STRATEGY.NEVER,
-  VAULT_VECTOR_STORE_STRATEGY.ON_STARTUP,
-  VAULT_VECTOR_STORE_STRATEGY.ON_MODE_SWITCH,
-];
 
 export enum DEFAULT_OPEN_AREA {
   EDITOR = "editor",
@@ -928,8 +784,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   siliconflowApiKey: "",
   defaultChainType: ChainType.LLM_CHAIN,
   defaultModelKey: ChatModels.OPENROUTER_GEMINI_2_5_FLASH + "|" + ChatModelProviders.OPENROUTERAI,
-  embeddingModelKey:
-    EmbeddingModels.OPENROUTER_OPENAI_EMBEDDING_SMALL + "|" + EmbeddingModelProviders.OPENROUTERAI,
+  embeddingModelKey: "",
   contextTurns: 15,
   userSystemPrompt: "",
   openAIProxyBaseUrl: "",
@@ -950,7 +805,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   defaultOpenArea: DEFAULT_OPEN_AREA.VIEW,
   defaultSendShortcut: SEND_SHORTCUT.ENTER,
   customPromptsFolder: DEFAULT_CUSTOM_PROMPTS_FOLDER,
-  indexVaultToVectorStore: VAULT_VECTOR_STORE_STRATEGY.ON_MODE_SWITCH,
+  indexVaultToVectorStore: "ON MODE SWITCH",
   qaExclusions: DEFAULT_QA_EXCLUSIONS_SETTING,
   qaInclusions: "",
   chatNoteContextPath: "",
@@ -961,7 +816,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   enableInlineCitations: true,
   groqApiKey: "",
   activeModels: BUILTIN_CHAT_MODELS,
-  activeEmbeddingModels: BUILTIN_EMBEDDING_MODELS,
+  activeEmbeddingModels: EMPTY_EMBEDDING_MODELS,
   embeddingRequestsPerMin: 60,
   embeddingBatchSize: 16,
   disableIndexOnMobile: true,

@@ -7,8 +7,7 @@ import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { waitFor } from "@testing-library/react";
 import { Notice, TFile, type Command } from "obsidian";
 
-const mockResolveBaseUrl = jest.fn();
-const mockScanFolder = jest.fn();
+const mockRequestMiyoIndexRefresh = jest.fn();
 
 jest.mock("@/commands/CustomCommandChatModal", () => ({
   CustomCommandChatModal: jest.fn(),
@@ -22,7 +21,11 @@ jest.mock("@/settings/model", () => ({
 }));
 jest.mock("@/miyo/miyoUtils", () => ({
   getMiyoCustomUrl: jest.fn((settings: { miyoServerUrl?: string }) => settings.miyoServerUrl ?? ""),
-  getMiyoFolderName: jest.fn(() => "Test Vault"),
+}));
+jest.mock("@/miyo/miyoIndex", () => ({
+  requestMiyoIndexRefresh: async (app: unknown): Promise<void> => {
+    await mockRequestMiyoIndexRefresh(app);
+  },
 }));
 jest.mock("@/miyo/MiyoClient", () => {
   class MockMiyoRequestError extends Error {
@@ -35,10 +38,6 @@ jest.mock("@/miyo/MiyoClient", () => {
   }
   return {
     MiyoRequestError: MockMiyoRequestError,
-    MiyoClient: jest.fn().mockImplementation(() => ({
-      resolveBaseUrl: mockResolveBaseUrl,
-      scanFolder: mockScanFolder,
-    })),
   };
 });
 
@@ -55,8 +54,7 @@ describe("commands", () => {
         enableMiyo: false,
         miyoServerUrl: "",
       } as ReturnType<typeof getSettings>);
-      mockResolveBaseUrl.mockResolvedValue("http://127.0.0.1:8742");
-      mockScanFolder.mockResolvedValue({ status: "started" });
+      mockRequestMiyoIndexRefresh.mockResolvedValue(undefined);
     });
 
     it("registers the new Quick Chat command with a name distinct from Agent Chat", () => {
@@ -159,9 +157,7 @@ describe("commands", () => {
 
       indexCommands[0].callback?.();
 
-      await waitFor(() =>
-        expect(mockScanFolder).toHaveBeenCalledWith("http://127.0.0.1:8742", "Test Vault", false)
-      );
+      await waitFor(() => expect(mockRequestMiyoIndexRefresh).toHaveBeenCalledWith(plugin.app));
       expect(Notice).toHaveBeenCalledWith(
         "Miyo vault scan started. Open Miyo to check indexing progress."
       );
@@ -185,8 +181,7 @@ describe("commands", () => {
       await waitFor(() =>
         expect(Notice).toHaveBeenCalledWith("A remote Miyo connection is required on mobile.")
       );
-      expect(mockResolveBaseUrl).not.toHaveBeenCalled();
-      expect(mockScanFolder).not.toHaveBeenCalled();
+      expect(mockRequestMiyoIndexRefresh).not.toHaveBeenCalled();
     });
 
     it("refuses to scan after Miyo is disconnected while the palette entry survives (https://github.com/logancyang/obsidian-copilot/pull/3091#discussion_r3926747283)", async () => {
@@ -212,8 +207,7 @@ describe("commands", () => {
           "Miyo is disconnected. Connect it in Copilot settings, then retry."
         )
       );
-      expect(mockResolveBaseUrl).not.toHaveBeenCalled();
-      expect(mockScanFolder).not.toHaveBeenCalled();
+      expect(mockRequestMiyoIndexRefresh).not.toHaveBeenCalled();
     });
 
     it.each([
@@ -229,7 +223,7 @@ describe("commands", () => {
           enableMiyo: true,
           miyoServerUrl: "http://miyo.local",
         } as ReturnType<typeof getSettings>);
-        mockScanFolder.mockRejectedValue(error);
+        mockRequestMiyoIndexRefresh.mockRejectedValue(error);
         const commands: Command[] = [];
         const plugin = {
           addCommand: jest.fn((command: Command) => commands.push(command)),

@@ -150,9 +150,7 @@ function getToolDisplayName(toolName: string): string {
   // Special handling for localSearch to show the actual search type being used
   if (toolName === "localSearch") {
     const settings = getSettings();
-    return settings.enableSemanticSearchV3
-      ? "vault search (semantic)"
-      : "vault search (index-free)";
+    return settings.enableMiyo ? "vault search (Miyo)" : "vault search (index-free)";
   }
 
   const displayNameMap: Record<string, string> = {
@@ -165,8 +163,6 @@ function getToolDisplayName(toolName: string): string {
     startPomodoro: "pomodoro timer",
     pomodoroTool: "pomodoro timer",
     youtubeTranscription: "YouTube transcription",
-    indexVault: "vault indexing",
-    indexTool: "index",
     writeFile: "file editor",
     editFile: "file editor",
     obsidianDailyNote: "daily note (CLI)",
@@ -194,8 +190,6 @@ function getToolEmoji(toolName: string): string {
     getTimeInfoByEpoch: "🕰️",
     convertTimeBetweenTimezones: "🌍",
     youtubeTranscription: "📺",
-    indexVault: "📚",
-    indexTool: "📚",
     writeFile: "✏️",
     editFile: "🔄",
     readNote: "🔍",

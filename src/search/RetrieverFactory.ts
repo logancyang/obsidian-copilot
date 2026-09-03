@@ -3,7 +3,6 @@ import { getSearchBackend } from "@/miyo/miyoUtils";
 import { getSettings, CopilotSettings } from "@/settings/model";
 import { App } from "obsidian";
 import { MiyoSemanticRetriever } from "./miyo/MiyoSemanticRetriever";
-import { MergedSemanticRetriever } from "./v3/MergedSemanticRetriever";
 import { TieredLexicalRetriever } from "./v3/TieredLexicalRetriever";
 
 /**
@@ -72,7 +71,7 @@ function normalizeOptions(options: RetrieverOptions): NormalizedRetrieverOptions
 
 /**
  * Common interface for retrievers that can get relevant documents.
- * This is the shared interface for SelfHostRetriever, MergedSemanticRetriever, and TieredLexicalRetriever.
+ * This is the shared interface for MiyoSemanticRetriever and TieredLexicalRetriever.
  */
 export interface DocumentRetriever {
   getRelevantDocuments(query: string): Promise<import("@langchain/core/documents").Document[]>;
@@ -86,9 +85,8 @@ export interface DocumentRetriever {
  * - Any other components that need search
  *
  * Priority order:
- * 1. Miyo-backed semantic search (self-host mode + Miyo toggle)
- * 2. Semantic search / MergedSemanticRetriever (if enabled)
- * 3. Lexical search / TieredLexicalRetriever (default)
+ * 1. Miyo-backed semantic search (when Miyo is enabled)
+ * 2. Lexical search / TieredLexicalRetriever (default)
  */
 export class RetrieverFactory {
   /**
@@ -120,17 +118,9 @@ export class RetrieverFactory {
       };
     }
 
-    // Standard mode: check enableSemanticSearchV3 setting
-    if (currentSettings.enableSemanticSearchV3) {
-      const retriever = new MergedSemanticRetriever(app, normalizedOptions);
-      logInfo("RetrieverFactory: Using MergedSemanticRetriever (semantic search)");
-      return {
-        retriever,
-        type: "semantic",
-        reason: "Semantic search is enabled",
-      };
-    }
-
+    // A legacy semantic-search flag may remain in data.json until its settings
+    // migration, but it must not resurrect the removed client-side index.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/281
     // Default: Lexical search (TieredLexicalRetriever)
     const retriever = new TieredLexicalRetriever(app, normalizedOptions);
     logInfo("RetrieverFactory: Using TieredLexicalRetriever (lexical search)");
@@ -154,24 +144,6 @@ export class RetrieverFactory {
   }
 
   /**
-   * Create a retriever that forces semantic search regardless of settings.
-   * Useful when semantic understanding is specifically needed.
-   *
-   * @param app - Obsidian app instance
-   * @param options - Retriever configuration options
-   * @returns The semantic retriever
-   */
-  static createSemanticRetriever(
-    app: App,
-    options: RetrieverOptions
-  ): MergedSemanticRetriever | MiyoSemanticRetriever {
-    if (RetrieverFactory.shouldUseMiyo(getSettings())) {
-      return RetrieverFactory.createMiyoRetriever(app, options);
-    }
-    return new MergedSemanticRetriever(app, normalizeOptions(options));
-  }
-
-  /**
    * Get the current retriever type based on settings without creating an instance.
    * Useful for UI display or debugging.
    *
@@ -182,11 +154,6 @@ export class RetrieverFactory {
     const currentSettings = settings ? { ...getSettings(), ...settings } : getSettings();
 
     if (RetrieverFactory.shouldUseMiyo(currentSettings)) {
-      return "semantic";
-    }
-
-    // Standard mode
-    if (currentSettings.enableSemanticSearchV3) {
       return "semantic";
     }
 

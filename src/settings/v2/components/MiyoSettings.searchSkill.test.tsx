@@ -102,9 +102,9 @@ jest.mock("@/miyo/miyoResync", () => ({
   resyncMiyoFolder: (...a: unknown[]) => resyncMiyoFolder(...a),
   verifyMiyoScope: (...a: unknown[]) => verifyMiyoScope(...a),
 }));
-const notifyIndexChanged = jest.fn<void, []>();
-jest.mock("@/search/indexSignal", () => ({
-  notifyIndexChanged: () => notifyIndexChanged(),
+const notifyMiyoIndexChanged = jest.fn<void, []>();
+jest.mock("@/miyo/miyoIndex", () => ({
+  notifyMiyoIndexChanged: () => notifyMiyoIndexChanged(),
 }));
 // Capture the options the component passes to the modal so a test can invoke the
 // modal's callbacks (onRetry/onAddVault) directly — the Retry button has no
@@ -200,7 +200,7 @@ it("registers through the queue and refreshes Relevant Notes — https://github.
   await lastModalOptions?.onAddVault?.();
 
   expect(enqueuedSessions).toEqual([mockPluginInstance.miyoMutationSession]);
-  expect(notifyIndexChanged).toHaveBeenCalledTimes(1);
+  expect(notifyMiyoIndexChanged).toHaveBeenCalledTimes(1);
 });
 
 it("verifies scope with the plugin's session, not one this tab obtained itself", async () => {

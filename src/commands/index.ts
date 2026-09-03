@@ -20,8 +20,9 @@ import { ApplyCustomCommandModal } from "@/components/modals/ApplyCustomCommandM
 import { YoutubeTranscriptModal } from "@/components/modals/YoutubeTranscriptModal";
 import { checkIsPaidUser } from "@/plusUtils";
 import type CopilotPlugin from "@/main";
-import { MiyoClient, MiyoRequestError } from "@/miyo/MiyoClient";
-import { getMiyoCustomUrl, getMiyoFolderName } from "@/miyo/miyoUtils";
+import { MiyoRequestError } from "@/miyo/MiyoClient";
+import { requestMiyoIndexRefresh } from "@/miyo/miyoIndex";
+import { getMiyoCustomUrl } from "@/miyo/miyoUtils";
 import { getAllQAMarkdownContent } from "@/search/searchUtils";
 import { getSettings } from "@/settings/model";
 import { NoteSelectedTextContext, WebSelectedTextContext } from "@/types/message";
@@ -238,10 +239,8 @@ export function registerCommands(plugin: CopilotPlugin, publish: PublishFile) {
         new Notice("A remote Miyo connection is required on mobile.");
         return;
       }
-      const client = new MiyoClient({ plusLicenseKey: settings.plusLicenseKey });
       try {
-        const baseUrl = await client.resolveBaseUrl(customUrl);
-        await client.scanFolder(baseUrl, getMiyoFolderName(plugin.app), false);
+        await requestMiyoIndexRefresh(plugin.app);
         new Notice("Miyo vault scan started. Open Miyo to check indexing progress.");
       } catch (error) {
         logError("Failed to refresh the Miyo index:", error);

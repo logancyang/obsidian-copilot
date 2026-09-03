@@ -59,8 +59,8 @@ export type AzureRemovalPlan = RetiredProviderRemovalPlan;
  *
  * The embedding selection is the slice unique to Azure, and the one whose
  * absence would break a vault rather than degrade it. The embedding row itself
- * needs no removal: `filterUnsupportedEmbeddingModels` already drops any row
- * whose provider left `EmbeddingModelProviders`, on every settings write.
+ * needs no removal here because the client-side embedding settings remain inert
+ * until their dedicated migration removes them.
  *
  * Re-indexing is unavoidable and deliberate: embeddings from one model are not
  * comparable with another's, so there is nothing to preserve.

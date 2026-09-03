@@ -22,17 +22,16 @@ import { SelfHostSettings } from "./components/SelfHostSettings";
 // DESIGN NOTE (settings-v4, part 1): there is intentionally no "QA"/"Search"
 // tab here. The legacy QASettings panel was removed as orphan-component cleanup
 // (see designdocs/SETTINGS_REDESIGN_V4.md and SETTINGS_V4_PR_PLAN.md); the
-// underlying fields are NOT dropped and stay runtime-honored for existing
+// underlying fields are NOT dropped yet so existing data remains loadable:
 // vaults:
 //   - enableSemanticSearchV3 — the Miyo connect flow (MiyoSettings) drives it
 //     implicitly. Its old Advanced-tab switch is gone because the built-in
 //     semantic index is no longer a user-facing product surface.
 //   - qaInclusions/qaExclusions — still consumed (Miyo registration snapshot);
 //     their edit UI is deferred per issue #195 ("defer include/exclude").
-//   - embeddingModelKey / maxSourceChunks / enableInlineCitations / indexing
-//     limits — still read at runtime (embeddingManager, SearchTools,
-//     VaultQAChainRunner, CopilotPlusChainRunner) with their defaults; a
-//     UI is deferred to a later part of the #195 redesign.
+//   - maxSourceChunks / enableInlineCitations — still read by search and chat.
+//   - embeddingModelKey / activeEmbeddingModels / indexing limits — inert
+//     compatibility fields awaiting their dedicated settings migration.
 const LazySkillsSettings = React.lazy(() =>
   import("@/agentMode").then((module) => ({ default: module.SkillsSettings }))
 );
