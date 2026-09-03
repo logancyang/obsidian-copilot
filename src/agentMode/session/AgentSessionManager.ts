@@ -244,14 +244,13 @@ export interface AgentSessionManagerOptions {
   sessionIndex?: AgentSessionIndex;
 }
 
-/**
- * Text bound to a logical composer before its session is shown. A draft is
- * left in the composer for review; a submit is sent as the chat's next turn.
- */
-export interface ComposerHandoff {
-  text: string;
-  submit: boolean;
-}
+/** Content bound to a logical composer before its session is shown. */
+export type ComposerHandoff =
+  | { text: string; submit: false }
+  | {
+      buildText: () => string;
+      submit: true;
+    };
 
 /**
  * Plugin-scoped coordinator for Agent Mode. Owns one `AcpBackendProcess` per
@@ -1145,9 +1144,10 @@ export class AgentSessionManager {
   }
 
   /**
-   * Return the active `AgentSession` if one exists, otherwise create one.
-   * Used by the router to lazily seed the first session on chain switch.
-   * Subsequent `+` clicks should call `createSession()` directly.
+   * Return the active `AgentSession` if it can still reach its backend,
+   * otherwise create one. Used by the router to lazily seed the first session
+   * and by the boot-error Retry action. Subsequent `+` clicks should call
+   * `createSession()` directly.
    */
   async getOrCreateActiveSession(): Promise<AgentSession> {
     if (this.disposed) {
@@ -1158,6 +1158,15 @@ export class AgentSessionManager {
     // after `enterProject` the prior scope's session may still be pointed at by
     // `activeSessionId` until this seeds a fresh one for the new scope.
     if (active && active.projectId === this.activeProjectId && active.getStatus() !== "closed") {
+      // A startup failure leaves the composer queue attached to a session that
+      // never obtained a backend id. Retry must replace that runtime while
+      // retaining the logical input, or the publishing request stays held
+      // forever. https://github.com/Brevilabs/obsidian-copilot-private/issues/357
+      if (active.getStatus() === "error" && active.getBackendSessionId() === null) {
+        return this.replaceSessionInPlace(active.internalId, active.backendId, {
+          preserveChatInput: true,
+        });
+      }
       return active;
     }
     // Dedupe rapid auto-spawn callers (e.g. the router effect re-running
@@ -1449,9 +1458,9 @@ export class AgentSessionManager {
    * prompt into one turn, conflating two unrelated requests, and its emptiness
    * is no guarantee it can still reach a backend.
    * https://github.com/Brevilabs/obsidian-copilot-private/issues/357
-   * @param buildPrompt - Composes the complete user prompt. Called only once
-   *   the chat is about to be created, after any probe wait, so a note renamed
-   *   in the meantime is still addressed by its current path.
+   * @param buildPrompt - Composes the complete user prompt when the queued
+   *   turn can leave the composer, so a note renamed during startup is still
+   *   addressed by its current path.
    * @param projectId - The scope the command was invoked from. Callers that
    *   may wait before reaching this method capture it up front so a project
    *   switch in the meantime cannot move the request into another project's
@@ -1476,7 +1485,10 @@ export class AgentSessionManager {
       await this.preloadModels(backendId).catch(() => undefined);
     }
     const chatInputId = uuidv4();
-    this.composerHandoffByChatInputId.set(chatInputId, { text: buildPrompt(), submit: true });
+    // Keep the builder alive through backend startup. The composer resolves it
+    // only when the queued turn can flush, so a renamed note is addressed by
+    // its current path. https://github.com/Brevilabs/obsidian-copilot-private/issues/357
+    this.composerHandoffByChatInputId.set(chatInputId, { buildText: buildPrompt, submit: true });
     try {
       return await this.createSession(backendId, projectId, undefined, chatInputId);
     } catch (error) {

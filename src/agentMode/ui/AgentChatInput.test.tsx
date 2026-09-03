@@ -317,6 +317,28 @@ describe("AgentChatInput", () => {
       expect((backend.sendMessage as jest.Mock).mock.calls[0][0]).toBe("Publish this note");
     });
 
+    it("resolves command text when the queue flushes after a note rename for https://github.com/Brevilabs/obsidian-copilot-private/issues/357", async () => {
+      let notePath = "Notes/Before.md";
+      const backend = makeBackend();
+      const draft = makeDraft({
+        queue: [
+          {
+            id: "q1",
+            text: `Publish ${notePath}`,
+            rawInput: `Publish ${notePath}`,
+            buildText: () => `Publish ${notePath}`,
+          },
+        ],
+      });
+      const view = renderInput(backend, draft, { canAcceptPrompt: false });
+
+      notePath = "Notes/After.md";
+      view.rerender(inputNode(backend, draft, { canAcceptPrompt: true }));
+
+      await waitFor(() => expect(backend.sendMessage).toHaveBeenCalledTimes(1));
+      expect((backend.sendMessage as jest.Mock).mock.calls[0][0]).toBe("Publish Notes/After.md");
+    });
+
     it("does not send a queued message when the backend is already busy even if the rendered snapshot says idle (https://github.com/Brevilabs/obsidian-copilot-private/issues/357)", async () => {
       // A composer remounted by the first send's own message notification
       // renders from the pre-send snapshot: idle, queue still populated.

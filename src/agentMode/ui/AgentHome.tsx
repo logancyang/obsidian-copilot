@@ -400,9 +400,15 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     // the request once this chat finishes starting, and shows a queued row
     // meanwhile. The chat is new, so nothing of the user's is queued with it.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/357
+    const text = handoff.buildText();
     setDraftQueue((queue) => [
       ...queue,
-      { id: uuidv4(), text: handoff.text, rawInput: handoff.text },
+      {
+        id: uuidv4(),
+        text,
+        rawInput: text,
+        buildText: handoff.buildText,
+      },
     ]);
   }, [chatInputId, manager, setDraftInput, setDraftQueue]);
 

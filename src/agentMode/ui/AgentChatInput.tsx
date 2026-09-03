@@ -491,7 +491,16 @@ export const AgentChatInput = memo(function AgentChatInput({
     // disabled composer.
     if (disabled || loading || !canAcceptPrompt || holdForContext || queuedMessages.length === 0)
       return;
-    const combined = combineQueuedMessages(queuedMessages);
+    // Command handoffs keep mutable details, such as a TFile path, lazy until
+    // the turn can actually leave the queue. Ordinary user messages have no
+    // builder and remain enqueue-time snapshots.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/357
+    const resolvedMessages = queuedMessages.map((message) => {
+      if (!message.buildText) return message;
+      const text = message.buildText();
+      return { ...message, text, rawInput: text, buildText: undefined };
+    });
+    const combined = combineQueuedMessages(resolvedMessages);
     if (
       combined.promptContent?.some((content) => content.type === "image") &&
       unsupportedImageModelLabel

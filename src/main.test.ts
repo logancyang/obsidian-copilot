@@ -231,6 +231,34 @@ describe("main", () => {
       });
     });
 
+    describe("canUseAgentView()", () => {
+      beforeEach(() => {
+        jest.clearAllMocks();
+      });
+
+      it("allows agent-only commands on desktop when the session manager exists for https://github.com/Brevilabs/obsidian-copilot-private/issues/357", () => {
+        (isDesktopRuntime as jest.Mock).mockReturnValue(true);
+        const plugin = createPluginUnderTest([]);
+
+        expect(plugin.canUseAgentView()).toBe(true);
+      });
+
+      it("hides agent-only commands on mobile even if a session manager is present for https://github.com/Brevilabs/obsidian-copilot-private/issues/357", () => {
+        (isDesktopRuntime as jest.Mock).mockReturnValue(false);
+        const plugin = createPluginUnderTest([]);
+
+        expect(plugin.canUseAgentView()).toBe(false);
+      });
+
+      it("hides agent-only commands until the desktop session manager is initialized for https://github.com/Brevilabs/obsidian-copilot-private/issues/357", () => {
+        (isDesktopRuntime as jest.Mock).mockReturnValue(true);
+        const plugin = createPluginUnderTest([]);
+        Object.assign(plugin, { agentSessionManager: undefined });
+
+        expect(plugin.canUseAgentView()).toBe(false);
+      });
+    });
+
     describe("newAgentChatWithDraft()", () => {
       beforeEach(() => {
         jest.clearAllMocks();

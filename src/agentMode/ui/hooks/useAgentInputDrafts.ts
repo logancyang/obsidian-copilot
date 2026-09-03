@@ -9,6 +9,12 @@ export interface QueuedAgentMessage {
   id: string;
   text: string;
   rawInput: string;
+  /**
+   * Rebuild command-owned text when the queue drains. User-authored messages
+   * omit this because their input is intentionally snapshotted at enqueue time.
+   * https://github.com/Brevilabs/obsidian-copilot-private/issues/357
+   */
+  buildText?: () => string;
   context?: MessageContext;
   /**
    * Why the message entered the queue, snapshotted at enqueue time — an

@@ -174,12 +174,15 @@ function getSessionTestHandle(session: AgentSession): MockSessionTestHandle {
 function makeMockSession(overrides: {
   internalId: string;
   chatInputId?: string;
-  backendSessionId?: string;
+  backendSessionId?: string | null;
   backendId: string;
   projectId?: string;
   ready?: Promise<void>;
 }): AgentSession {
-  const sessionId = overrides.backendSessionId ?? `backend-${nextBackendSessionId++}`;
+  const sessionId =
+    overrides.backendSessionId === undefined
+      ? `backend-${nextBackendSessionId++}`
+      : overrides.backendSessionId;
   let status: "starting" | "idle" | "running" | "awaiting_permission" | "error" | "closed" = "idle";
   let needsAttention = false;
   let displayMessages: { message: string }[] = [];
@@ -376,6 +379,14 @@ function buildManager(
       >[2]["modelPreloader"],
     }
   );
+}
+
+/** Consume a submit handoff and resolve its command-owned text for assertions. */
+function consumeSubmitText(manager: AgentSessionManager, chatInputId: string): string {
+  const handoff = manager.consumeComposerHandoff(chatInputId);
+  expect(handoff?.submit).toBe(true);
+  if (!handoff?.submit) throw new Error("Expected a submit handoff");
+  return handoff.buildText();
 }
 
 beforeEach(() => {
@@ -638,10 +649,7 @@ describe("AgentSessionManager", () => {
         expect(session).not.toBe(running);
         expect(mgr.getSessions()).toEqual([running, session]);
         expect(mgr.getActiveSession()).toBe(session);
-        expect(mgr.consumeComposerHandoff(session.chatInputId)).toEqual({
-          text: "Publish this note",
-          submit: true,
-        });
+        expect(consumeSubmitText(mgr, session.chatInputId)).toBe("Publish this note");
         expect(mgr.consumeComposerHandoff(session.chatInputId)).toBeUndefined();
       });
 
@@ -666,10 +674,7 @@ describe("AgentSessionManager", () => {
           expect(session).not.toBe(existing);
           expect(mgr.getSessions()).toEqual([existing, session]);
           expect(mgr.consumeComposerHandoff(existing.chatInputId)).toBeUndefined();
-          expect(mgr.consumeComposerHandoff(session.chatInputId)).toEqual({
-            text: "Publish this note",
-            submit: true,
-          });
+          expect(consumeSubmitText(mgr, session.chatInputId)).toBe("Publish this note");
         }
       );
 
@@ -730,7 +735,7 @@ describe("AgentSessionManager", () => {
         }
       });
 
-      it("composes the prompt only once the chat is about to be created, after the probe for https://github.com/Brevilabs/obsidian-copilot-private/issues/357", async () => {
+      it("keeps prompt construction lazy through session creation for https://github.com/Brevilabs/obsidian-copilot-private/issues/357", async () => {
         let releaseProbe: (() => void) | undefined;
         const probe = new Promise<void>((resolve) => {
           releaseProbe = resolve;
@@ -746,10 +751,10 @@ describe("AgentSessionManager", () => {
         releaseProbe?.();
         const session = await pending;
 
-        expect(mgr.consumeComposerHandoff(session.chatInputId)).toEqual({
-          text: "Publish Notes/After.md",
-          submit: true,
-        });
+        notePath = "Notes/After session startup.md";
+        expect(consumeSubmitText(mgr, session.chatInputId)).toBe(
+          "Publish Notes/After session startup.md"
+        );
       });
 
       it("creates the chat in an explicitly supplied scope rather than the active one for https://github.com/Brevilabs/obsidian-copilot-private/issues/357", async () => {
@@ -783,10 +788,7 @@ describe("AgentSessionManager", () => {
         const session = await mgr.createSessionWithPrompt(() => "Publish this note");
 
         expect(preload).not.toHaveBeenCalled();
-        expect(mgr.consumeComposerHandoff(session.chatInputId)).toEqual({
-          text: "Publish this note",
-          submit: true,
-        });
+        expect(consumeSubmitText(mgr, session.chatInputId)).toBe("Publish this note");
       });
 
       it("drops the handoff and keeps the running chat active when session creation fails for https://github.com/Brevilabs/obsidian-copilot-private/issues/357", async () => {
@@ -1048,6 +1050,27 @@ describe("AgentSessionManager.getOrCreateActiveSession", () => {
     const again = await mgr.getOrCreateActiveSession();
     expect(again).toBe(a);
     expect(sessionCreateSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("replaces a startup-failed session while preserving its queued composer for https://github.com/Brevilabs/obsidian-copilot-private/issues/357", async () => {
+    const mgr = buildManager();
+    sessionCreateSpy.mockImplementationOnce((opts) =>
+      makeMockSession({
+        internalId: opts.internalId,
+        chatInputId: opts.chatInputId,
+        backendSessionId: null,
+        backendId: opts.backendId,
+        projectId: opts.projectId,
+      })
+    );
+    const failed = await mgr.createSession();
+    getSessionTestHandle(failed).setStatus("error");
+
+    const replacement = await mgr.getOrCreateActiveSession();
+
+    expect(replacement).not.toBe(failed);
+    expect(replacement.chatInputId).toBe(failed.chatInputId);
+    expect(mgr.getActiveSession()).toBe(replacement);
   });
 });
 
