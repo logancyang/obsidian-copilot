@@ -285,12 +285,13 @@ describe("main", () => {
         Object.assign(plugin.agentSessionManager as object, {
           createSessionWithPrompt,
           setActiveSession,
+          getActiveProjectId: () => "global",
         });
         const activateAgentView = jest.spyOn(plugin, "activateAgentView").mockResolvedValue(null);
 
         await plugin.newAgentChatWithPrompt("Publish this note");
 
-        expect(createSessionWithPrompt).toHaveBeenCalledWith("Publish this note");
+        expect(createSessionWithPrompt).toHaveBeenCalledWith("Publish this note", "global");
         expect(activateAgentView).toHaveBeenCalledTimes(1);
         expect(createSessionWithPrompt.mock.invocationCallOrder[0]).toBeLessThan(
           activateAgentView.mock.invocationCallOrder[0]
@@ -304,6 +305,7 @@ describe("main", () => {
         Object.assign(plugin.agentSessionManager as object, {
           createSessionWithPrompt,
           setActiveSession,
+          getActiveProjectId: () => "global",
         });
         const activateAgentView = jest.spyOn(plugin, "activateAgentView").mockResolvedValue(null);
 
@@ -324,6 +326,7 @@ describe("main", () => {
         Object.assign(plugin.agentSessionManager as object, {
           createSessionWithPrompt,
           setActiveSession: jest.fn(),
+          getActiveProjectId: () => "global",
         });
         const activateAgentView = jest.spyOn(plugin, "activateAgentView").mockImplementationOnce(
           () =>
@@ -341,13 +344,46 @@ describe("main", () => {
         // Only one composer mounts at a time, so the second chat must not be
         // created while the first request is still being handed to the view.
         expect(createSessionWithPrompt).toHaveBeenCalledTimes(1);
-        expect(createSessionWithPrompt).toHaveBeenCalledWith("first");
+        expect(createSessionWithPrompt).toHaveBeenCalledWith("first", "global");
 
         releaseFirstReveal?.();
         activateAgentView.mockResolvedValue(null);
         await Promise.all([first, second]);
 
-        expect(createSessionWithPrompt).toHaveBeenNthCalledWith(2, "second");
+        expect(createSessionWithPrompt).toHaveBeenNthCalledWith(2, "second", "global");
+      });
+
+      it("sends a queued request to the project it was invoked from even after the user switches projects for https://github.com/Brevilabs/obsidian-copilot-private/issues/357", async () => {
+        const plugin = createPluginUnderTest([]);
+        let releaseFirstReveal: (() => void) | undefined;
+        let activeProjectId = "project-a";
+        const createSessionWithPrompt = jest
+          .fn()
+          .mockImplementation((prompt: string) => Promise.resolve({ internalId: prompt }));
+        Object.assign(plugin.agentSessionManager as object, {
+          createSessionWithPrompt,
+          setActiveSession: jest.fn(),
+          getActiveProjectId: () => activeProjectId,
+        });
+        const activateAgentView = jest.spyOn(plugin, "activateAgentView").mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              releaseFirstReveal = () => resolve(null);
+            })
+        );
+
+        const first = plugin.newAgentChatWithPrompt("first");
+        const second = plugin.newAgentChatWithPrompt("second");
+        for (let turn = 0; turn < 20 && !releaseFirstReveal; turn += 1) {
+          await Promise.resolve();
+        }
+        // The user leaves project A while the second request is still queued.
+        activeProjectId = "project-b";
+        releaseFirstReveal?.();
+        activateAgentView.mockResolvedValue(null);
+        await Promise.all([first, second]);
+
+        expect(createSessionWithPrompt).toHaveBeenNthCalledWith(2, "second", "project-a");
       });
 
       it("keeps delivering later requests after one fails for https://github.com/Brevilabs/obsidian-copilot-private/issues/357", async () => {
@@ -359,13 +395,14 @@ describe("main", () => {
         Object.assign(plugin.agentSessionManager as object, {
           createSessionWithPrompt,
           setActiveSession: jest.fn(),
+          getActiveProjectId: () => "global",
         });
         jest.spyOn(plugin, "activateAgentView").mockResolvedValue(null);
 
         await plugin.newAgentChatWithPrompt("first");
         await plugin.newAgentChatWithPrompt("second");
 
-        expect(createSessionWithPrompt).toHaveBeenNthCalledWith(2, "second");
+        expect(createSessionWithPrompt).toHaveBeenNthCalledWith(2, "second", "global");
       });
 
       it("reveals the agent setup surface without throwing when creating the chat fails for https://github.com/Brevilabs/obsidian-copilot-private/issues/357", async () => {
@@ -373,6 +410,7 @@ describe("main", () => {
         const failure = new Error("create failed");
         Object.assign(plugin.agentSessionManager as object, {
           createSessionWithPrompt: jest.fn().mockRejectedValue(failure),
+          getActiveProjectId: () => "global",
         });
         const activateAgentView = jest.spyOn(plugin, "activateAgentView").mockResolvedValue(null);
 
@@ -392,6 +430,7 @@ describe("main", () => {
         const revealFailure = new Error("reveal failed");
         Object.assign(plugin.agentSessionManager as object, {
           createSessionWithPrompt: jest.fn().mockRejectedValue(new Error("create failed")),
+          getActiveProjectId: () => "global",
         });
         jest.spyOn(plugin, "activateAgentView").mockRejectedValue(revealFailure);
 

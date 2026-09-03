@@ -730,6 +730,30 @@ describe("AgentSessionManager", () => {
         }
       });
 
+      it("creates the chat in an explicitly supplied scope rather than the active one for https://github.com/Brevilabs/obsidian-copilot-private/issues/357", async () => {
+        const projectId = "project-invoked-from";
+        const recordSpy = jest
+          .spyOn(projectsState, "getCachedProjectRecordById")
+          .mockImplementation((id: string) =>
+            id === projectId
+              ? ({
+                  filePath: `Projects/${projectId}/project.md`,
+                  project: { id: projectId },
+                } as unknown as ReturnType<typeof projectsState.getCachedProjectRecordById>)
+              : undefined
+          );
+        try {
+          const mgr = buildManager();
+          await mgr.createSession(undefined, GLOBAL_SCOPE);
+
+          const session = await mgr.createSessionWithPrompt("Publish this note", projectId);
+
+          expect(session.projectId).toBe(projectId);
+        } finally {
+          recordSpy.mockRestore();
+        }
+      });
+
       it("creates the chat without re-probing a backend whose models already loaded for https://github.com/Brevilabs/obsidian-copilot-private/issues/357", async () => {
         const preload = jest.fn(async () => undefined);
         const mgr = buildManager({ preload });

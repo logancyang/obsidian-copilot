@@ -1202,6 +1202,13 @@ export default class CopilotPlugin extends Plugin {
    * @param prompt - The complete user prompt to send.
    */
   async newAgentChatWithPrompt(prompt: string): Promise<void> {
+    const manager = this.requireAgentView();
+    if (!manager) return;
+    // Capture the scope now. A request can wait behind an earlier one below,
+    // and a project switch in the meantime must not move it into another
+    // project's working directory and instructions.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/357
+    const projectId = manager.getActiveProjectId();
     // Only one composer is mounted at a time, and a composer submits only the
     // request bound to the chat it mounts. Two commands run together would
     // create two chats but leave only the last one mounted, so the earlier
@@ -1209,18 +1216,20 @@ export default class CopilotPlugin extends Plugin {
     // to match that single-consumer shape. A failed run must not wedge the
     // chain. https://github.com/Brevilabs/obsidian-copilot-private/issues/357
     const previous = this.agentPromptDelivery ?? Promise.resolve();
-    const delivery = previous.then(() => this.deliverAgentChatPrompt(prompt));
+    const delivery = previous.then(() => this.deliverAgentChatPrompt(manager, prompt, projectId));
     this.agentPromptDelivery = delivery.catch(() => undefined);
     return delivery;
   }
 
-  private async deliverAgentChatPrompt(prompt: string): Promise<void> {
-    const manager = this.requireAgentView();
-    if (!manager) return;
+  private async deliverAgentChatPrompt(
+    manager: AgentSessionManager,
+    prompt: string,
+    projectId: ReturnType<AgentSessionManager["getActiveProjectId"]>
+  ): Promise<void> {
     try {
       // Bind the prompt before mounting the Agent view so a first-time mount
       // cannot auto-create a blank session ahead of this one.
-      const session = await manager.createSessionWithPrompt(prompt);
+      const session = await manager.createSessionWithPrompt(prompt, projectId);
       // Creating the chat awaits a model probe and a backend spawn, and a scope
       // change or a second command can leave a different chat active by the
       // time this returns. The composer only submits the request bound to the

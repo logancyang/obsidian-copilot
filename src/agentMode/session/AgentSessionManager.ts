@@ -1450,16 +1450,19 @@ export class AgentSessionManager {
    * is no guarantee it can still reach a backend.
    * https://github.com/Brevilabs/obsidian-copilot-private/issues/357
    * @param prompt - The complete user prompt to send.
+   * @param projectId - The scope the command was invoked from. Callers that
+   *   may wait before reaching this method capture it up front so a project
+   *   switch in the meantime cannot move the request into another project's
+   *   working directory and instructions.
    */
-  async createSessionWithPrompt(prompt: string): Promise<AgentSession> {
+  async createSessionWithPrompt(
+    prompt: string,
+    projectId: ProjectScopeId = this.activeProjectId
+  ): Promise<AgentSession> {
     // Pin the backend before awaiting so the probe and the chat cannot land on
     // two different agents if the default changes in between.
-    const backendId = this.resolveBackendId();
-    // Pin the scope with it. The probe below can outlast the command, and a
-    // project switch while it runs would otherwise put the request in a chat
-    // carrying another project's working directory, instructions, and tabs.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/357
-    const projectId = this.activeProjectId;
+    const backendId = this.resolveBackendId();
     // A command can fire before this backend's model probe has settled. Its
     // `session/new` then reports a bare catalog, so the configured default
     // model is not among the models the chat can apply and the chat silently
