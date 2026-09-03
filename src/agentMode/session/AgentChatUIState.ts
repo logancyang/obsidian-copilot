@@ -111,11 +111,15 @@ export class AgentChatUIState implements AgentChatBackend {
   }
 
   canAcceptPrompt(): boolean {
-    // `sendPrompt` rejects a starting, running, or closed session and accepts
-    // an errored one, which then fails the turn with no backend session. Only
-    // an idle session can actually run a prompt.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/357
-    return this.session.getStatus() === "idle";
+    const status = this.session.getStatus();
+    if (status === "idle") return true;
+    // `getStatus` reports `"error"` for two different things. A turn that
+    // failed on a network, rate-limit, or auth error keeps its backend session
+    // and `sendPrompt` clears the flag on the next try, so that chat must stay
+    // usable. A startup failure never opened a backend session, and
+    // `sendPrompt` accepts it anyway, posting a message into a turn that cannot
+    // run. https://github.com/Brevilabs/obsidian-copilot-private/issues/357
+    return status === "error" && this.session.getBackendSessionId() !== null;
   }
 
   getBackendState(): BackendState | null {
