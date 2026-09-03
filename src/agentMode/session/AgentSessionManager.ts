@@ -1206,8 +1206,7 @@ export class AgentSessionManager {
     // an unknown id (corrupt persisted `activeBackend`, or a removed backend) to
     // opencode so auto-spawn degrades gracefully instead of throwing — the same
     // safety the removed Self-Host redirect used to provide as a side effect.
-    const requestedId = backendId ?? getSettings().agentMode?.activeBackend ?? "opencode";
-    const resolvedId = this.opts.resolveDescriptor(requestedId) ? requestedId : "opencode";
+    const resolvedId = this.resolveBackendId(backendId);
     // Read SYNCHRONOUSLY, before this method's first await, so the success path below can
     // tell whether any failure landed while this create was in flight.
     const errorSeqAtStart = this.lastErrorSeq;
@@ -1453,10 +1452,23 @@ export class AgentSessionManager {
    * @param prompt - The complete user prompt to send.
    */
   async createSessionWithPrompt(prompt: string): Promise<AgentSession> {
+    // Pin the backend before awaiting so the probe and the chat cannot land on
+    // two different agents if the default changes in between.
+    const backendId = this.resolveBackendId();
+    // A command can fire before this backend's model probe has settled. Its
+    // `session/new` then reports a bare catalog, so the configured default
+    // model is not among the models the chat can apply and the chat silently
+    // keeps the agent's own default instead. The chat surface gates its own
+    // auto-spawn on the same probe. This joins the in-flight probe rather than
+    // starting one, and a probe failure must not block the request.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/357
+    if (!this.isPreloadReady(backendId)) {
+      await this.preloadModels(backendId).catch(() => undefined);
+    }
     const chatInputId = uuidv4();
     this.composerHandoffByChatInputId.set(chatInputId, { text: prompt, submit: true });
     try {
-      return await this.createSession(undefined, this.activeProjectId, undefined, chatInputId);
+      return await this.createSession(backendId, this.activeProjectId, undefined, chatInputId);
     } catch (error) {
       this.composerHandoffByChatInputId.delete(chatInputId);
       throw error;
@@ -2372,6 +2384,18 @@ export class AgentSessionManager {
     logInfo(`[AgentMode] refreshing warm ${backendId} probe: ${reason}`);
     this.registerPreload(backendId, probe);
     return true;
+  }
+
+  /**
+   * The backend a new chat runs on: the explicit request, else the user's
+   * configured default, else opencode. An unknown id (corrupt persisted
+   * `activeBackend`, or a removed backend) coerces to opencode so a spawn
+   * degrades gracefully instead of throwing.
+   * @param backendId - An explicit backend, or undefined to use the default.
+   */
+  private resolveBackendId(backendId?: BackendId): BackendId {
+    const requestedId = backendId ?? getSettings().agentMode?.activeBackend ?? "opencode";
+    return this.opts.resolveDescriptor(requestedId) ? requestedId : "opencode";
   }
 
   /** Whether `backendId`'s descriptor reports its binary/runtime as installed. */

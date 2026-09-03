@@ -673,6 +673,40 @@ describe("AgentSessionManager", () => {
         }
       );
 
+      it("waits for an in-flight model probe before creating the chat for https://github.com/Brevilabs/obsidian-copilot-private/issues/357", async () => {
+        let releaseProbe: (() => void) | undefined;
+        const probe = new Promise<void>((resolve) => {
+          releaseProbe = resolve;
+        });
+        const preload = jest.fn(() => probe);
+        const mgr = buildManager({ preload });
+        mgr.registerPreload("opencode", probe);
+
+        const pending = mgr.createSessionWithPrompt("Publish this note");
+        await waitFor(() => expect(preload).toHaveBeenCalledWith("opencode"));
+
+        // Creating the chat first hands `session/new` a bare catalog, and the
+        // configured default model is then silently dropped for the agent's own.
+        expect(sessionCreateSpy).not.toHaveBeenCalled();
+        releaseProbe?.();
+        const session = await pending;
+
+        expect(mgr.getActiveSession()).toBe(session);
+      });
+
+      it("creates the chat without re-probing a backend whose models already loaded for https://github.com/Brevilabs/obsidian-copilot-private/issues/357", async () => {
+        const preload = jest.fn(async () => undefined);
+        const mgr = buildManager({ preload });
+
+        const session = await mgr.createSessionWithPrompt("Publish this note");
+
+        expect(preload).not.toHaveBeenCalled();
+        expect(mgr.consumeComposerHandoff(session.chatInputId)).toEqual({
+          text: "Publish this note",
+          submit: true,
+        });
+      });
+
       it("drops the handoff and keeps the running chat active when session creation fails for https://github.com/Brevilabs/obsidian-copilot-private/issues/357", async () => {
         const mgr = buildManager();
         const running = await mgr.createSession();
