@@ -501,9 +501,16 @@ export const AgentChatInput = memo(function AgentChatInput({
       );
       return;
     }
+    // The rendered `canAcceptPrompt` can be stale by the time this runs: a
+    // send appends the first message synchronously, which remounts the
+    // composer on the landing-to-conversation flip, and that mount's effect
+    // sees the pre-send snapshot with the queue still populated. Ask the
+    // backend directly so a queued message never goes out twice. https://github.com/Brevilabs/obsidian-copilot-private/issues/357
+    if (!backend.canAcceptPrompt()) return;
     setQueuedMessages([]);
     void runSend(combined);
   }, [
+    backend,
     disabled,
     loading,
     canAcceptPrompt,

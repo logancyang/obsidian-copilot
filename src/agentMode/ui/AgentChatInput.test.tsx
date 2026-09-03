@@ -246,10 +246,11 @@ describe("AgentChatInput", () => {
   });
 
   describe("queue reason", () => {
-    const makeBackend = () =>
+    const makeBackend = (canAcceptPrompt = true) =>
       ({
         sendMessage: jest.fn(() => ({ turn: Promise.resolve() })),
         cancel: jest.fn(),
+        canAcceptPrompt: jest.fn(() => canAcceptPrompt),
       }) as unknown as AgentChatBackend;
 
     /** Apply the functional updater handed to setQueue and return the enqueued item. */
@@ -314,6 +315,21 @@ describe("AgentChatInput", () => {
 
       await waitFor(() => expect(backend.sendMessage).toHaveBeenCalledTimes(1));
       expect((backend.sendMessage as jest.Mock).mock.calls[0][0]).toBe("Publish this note");
+    });
+
+    it("does not send a queued message when the backend is already busy even if the rendered snapshot says idle (https://github.com/Brevilabs/obsidian-copilot-private/issues/357)", async () => {
+      // A composer remounted by the first send's own message notification
+      // renders from the pre-send snapshot: idle, queue still populated.
+      const backend = makeBackend(false);
+      const draft = makeDraft({
+        queue: [{ id: "q1", text: "Publish this note", rawInput: "Publish this note" }],
+      });
+
+      renderInput(backend, draft, { canAcceptPrompt: true });
+      await waitFor(() => expect(backend.canAcceptPrompt).toHaveBeenCalled());
+
+      expect(backend.sendMessage).not.toHaveBeenCalled();
+      expect(draft.setQueue).not.toHaveBeenCalled();
     });
 
     it("labels only context-held rows with the amber waiting prefix", () => {

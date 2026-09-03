@@ -991,6 +991,16 @@ export class AgentSession {
     this.placeholderId = this.store.addMessage(placeholder);
     this.currentMessageIds = new Set();
     this.currentTurnHadRoutedToolActivity = false;
+    this.abortController = new AbortController();
+    // Clear any prior terminal error before the new turn starts so the
+    // derived status reflects the fresh `"running"` state. Both flips are
+    // recomputed together so listeners see one transition, and it lands
+    // BEFORE the message notification: a listener that re-renders the chat
+    // on new messages must already see the session as busy, or a composer
+    // mounted by that render can read an idle session with the same queued
+    // message still pending and send it a second time. https://github.com/Brevilabs/obsidian-copilot-private/issues/357
+    this.lastTurnError = false;
+    this.recomputeStatusIfChanged();
     this.notifyMessages();
 
     // Backends without a title summarizer (codex, Claude Code) have no usable
@@ -1003,13 +1013,6 @@ export class AgentSession {
     // Record the fan-out selection for this turn (empty = single-agent path).
     this.lastMentionedAgents =
       mentionedAgents && mentionedAgents.length > 0 ? mentionedAgents : EMPTY_BACKEND_IDS;
-
-    this.abortController = new AbortController();
-    // Clear any prior terminal error before the new turn starts so the
-    // derived status reflects the fresh `"running"` state. Both flips
-    // are recomputed together so listeners see one transition.
-    this.lastTurnError = false;
-    this.recomputeStatusIfChanged();
 
     const turn = this.runTurn(displayText, userMessageId, context, turnStartedAtMs, promptContent);
     return { userMessageId, turn };

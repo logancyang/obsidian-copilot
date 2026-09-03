@@ -480,6 +480,27 @@ describe("AgentSession session usage", () => {
     expect(session.getSessionUsage()?.usedTokens).toBe(42);
   });
 
+  it("reports the session as running before it announces the new messages of a turn (https://github.com/Brevilabs/obsidian-copilot-private/issues/357)", async () => {
+    const mock = makeMockBackend();
+    let resolvePrompt!: (value: { stopReason: "end_turn" }) => void;
+    mock.prompt.mockImplementation(() => new Promise((resolve) => (resolvePrompt = resolve)));
+    const session = makeSession(mock);
+    const statusesSeen: string[] = [];
+    session.subscribe({
+      onMessagesChanged: () => statusesSeen.push(session.getStatus()),
+      onStatusChanged: () => {},
+    });
+
+    const { turn } = session.sendPrompt("Publish this note");
+
+    // A chat surface that re-renders on the message notification must already
+    // see a busy session, or a composer it mounts can send the same queued
+    // message a second time.
+    expect(statusesSeen[0]).toBe("running");
+    resolvePrompt({ stopReason: "end_turn" });
+    await turn;
+  });
+
   it("keeps the last positive usage when a stopped turn reports zero (https://github.com/logancyang/obsidian-copilot/issues/2975)", async () => {
     const mock = makeMockBackend();
     let resolvePrompt!: (value: { stopReason: "cancelled" }) => void;
