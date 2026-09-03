@@ -313,6 +313,44 @@ describe("findRelevantNotes", () => {
       }
     );
 
+    it("keeps the original authorization identity for related search and its 404 folder probe after live settings change (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
+      const requestAuthorizationIdentities: Array<string | undefined> = [];
+      mockedGetSettings.mockReturnValue({
+        enableMiyo: true,
+        miyoServerUrl: "https://old-miyo.example",
+        plusLicenseKey: "old-license",
+        debug: false,
+      } as CopilotSettings);
+      mockedMiyoClient.mockImplementation((authSnapshot) => {
+        const clientAuthSnapshot = authSnapshot as { plusLicenseKey?: string };
+        return {
+          resolveBaseUrl: mockResolveBaseUrl,
+          searchRelated: async (...args: unknown[]) => {
+            requestAuthorizationIdentities.push(clientAuthSnapshot.plusLicenseKey);
+            mockedGetSettings.mockReturnValue({
+              enableMiyo: true,
+              miyoServerUrl: "https://new-miyo.example",
+              plusLicenseKey: "new-license",
+              debug: false,
+            } as CopilotSettings);
+            return mockSearchRelated(...args) as unknown;
+          },
+          getFolder: (...args: unknown[]) => {
+            requestAuthorizationIdentities.push(clientAuthSnapshot.plusLicenseKey);
+            return mockGetFolder(...args) as unknown;
+          },
+        };
+      });
+      mockSearchRelated.mockRejectedValue(new MiyoRequestError(404, ""));
+
+      const result = await findRelevantNotes({ app: window.app, filePath: "source.md" });
+
+      expect(result.status).toBe("not-indexed");
+      expect(mockedMiyoClient).toHaveBeenCalledWith({ plusLicenseKey: "old-license" });
+      expect(requestAuthorizationIdentities).toEqual(["old-license", "old-license"]);
+      expect(mockedGetSettings).toHaveBeenCalledTimes(1);
+    });
+
     it("returns no graph-only rows when an unindexed source cannot confirm folder registration (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
       mockSearchRelated.mockRejectedValue(
         new MiyoRequestError(404, "No indexed chunks found for file_path")

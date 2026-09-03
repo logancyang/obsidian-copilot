@@ -49,6 +49,14 @@ function useRelevantNotes(enableMiyo: boolean, miyoServerUrl: string) {
   const [signalTick, setSignalTick] = useState(0);
   const activeFile = useActiveFile();
   const refresh = useCallback(() => setSignalTick((tick) => tick + 1), []);
+  // Without an active note there is nothing to search, so setup state must not
+  // replace the pane's neutral empty state.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
+  const requestStatus = !activeFilePath ? "idle" : enableMiyo ? "ready" : "disabled";
+  const requestKey =
+    requestStatus === "ready"
+      ? JSON.stringify([activeFilePath, miyoServerUrl, miyoBackendAvailable, signalTick])
+      : null;
 
   useEffect(() => onIndexChanged(refresh), [refresh]);
 

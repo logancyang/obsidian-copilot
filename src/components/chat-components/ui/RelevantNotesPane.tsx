@@ -1,17 +1,18 @@
 import { Button } from "@/components/ui/button";
-import {
-  getRelevantNotesPresentation,
-  type RelevantNotesGuidance,
-  type RelevantNotesGuidanceAction,
-  type RelevantNotesGuidanceActionId,
-  type RelevantNotesIndexingReviewDestination,
-  type RelevantNotesPaneStatus,
-} from "@/components/chat-components/ui/relevantNotesPresentation";
-import { Download } from "lucide-react";
+import { Download, Loader2 } from "lucide-react";
 import React from "react";
 
+type RelevantNotesPaneStatus =
+  | "idle"
+  | "loading"
+  | "disabled"
+  | "unavailable"
+  | "matches"
+  | "no-matches"
+  | "not-indexed";
+
 interface RelevantNotesIndexingReviewAction {
-  destination: RelevantNotesIndexingReviewDestination;
+  destination: "miyo" | "settings";
   onSelect: (event: React.MouseEvent<HTMLButtonElement>) => void;
 }
 
@@ -28,61 +29,31 @@ export interface RelevantNotesPaneProps {
   actions: RelevantNotesPaneActions;
 }
 
-type GuidanceActionRenderer = (
-  action: RelevantNotesGuidanceAction,
-  actions: RelevantNotesPaneActions
-) => React.ReactNode;
-
 interface GuidancePanelProps {
-  guidance: RelevantNotesGuidance;
-  actions: RelevantNotesPaneActions;
+  id: "download" | "unavailable" | "no-matches" | "not-indexed";
+  title: string;
+  description: string;
+  children?: React.ReactNode;
 }
 
-const GUIDANCE_ACTION_RENDERERS: Record<RelevantNotesGuidanceActionId, GuidanceActionRenderer> = {
-  download: (action, actions) => (
-    <Button asChild variant="secondary" size="sm">
-      <a href={actions.miyoDownloadUrl} target="_blank" rel="noopener noreferrer">
-        <Download className="tw-size-3.5" />
-        {action.label}
-      </a>
-    </Button>
-  ),
-  "open-settings": (action, actions) => (
-    <Button variant="default" size="sm" onClick={actions.onOpenMiyoSettings}>
-      {action.label}
-    </Button>
-  ),
-  refresh: (action, actions) => (
-    <Button variant="secondary" size="sm" onClick={actions.onRefresh}>
-      {action.label}
-    </Button>
-  ),
-  "review-indexing": (action, actions) => (
-    <Button variant="default" size="sm" onClick={actions.reviewIndexing.onSelect}>
-      {action.label}
-    </Button>
-  ),
-};
-
-function GuidancePanel({ guidance, actions }: GuidancePanelProps): React.ReactElement {
+function GuidancePanel({
+  id,
+  title,
+  description,
+  children,
+}: GuidancePanelProps): React.ReactElement {
   return (
     <div className="tw-flex tw-w-full tw-justify-center">
       <div
-        data-miyo-guidance={guidance.id}
+        data-miyo-guidance={id}
         className="tw-flex tw-w-full tw-max-w-xs tw-flex-col tw-items-center tw-gap-3 tw-rounded-lg tw-border tw-border-solid tw-border-border tw-bg-secondary tw-p-5 tw-text-center"
       >
         <div className="tw-flex tw-flex-col tw-gap-1">
-          <span className="tw-text-sm tw-font-semibold tw-text-normal">{guidance.title}</span>
-          <span className="tw-text-xs tw-leading-normal tw-text-muted">{guidance.description}</span>
+          <span className="tw-text-sm tw-font-semibold tw-text-normal">{title}</span>
+          <span className="tw-text-xs tw-leading-normal tw-text-muted">{description}</span>
         </div>
-        {guidance.actions.length > 0 && (
-          <div className="tw-flex tw-flex-wrap tw-justify-center tw-gap-2">
-            {guidance.actions.map((action) => (
-              <React.Fragment key={action.id}>
-                {GUIDANCE_ACTION_RENDERERS[action.id](action, actions)}
-              </React.Fragment>
-            ))}
-          </div>
+        {children && (
+          <div className="tw-flex tw-flex-wrap tw-justify-center tw-gap-2">{children}</div>
         )}
       </div>
     </div>
@@ -94,28 +65,103 @@ function GuidancePanel({ guidance, actions }: GuidancePanelProps): React.ReactEl
  *
  * @param status - Current lifecycle or settled search status.
  * @param noteRows - Rendered note rows in result order.
- * @param actions - Runtime-owned destinations for presentation action IDs.
+ * @param actions - Runtime-owned destinations for pane actions.
  */
 export function RelevantNotesPane({
   status,
   noteRows,
   actions,
 }: RelevantNotesPaneProps): React.ReactElement {
-  const presentation = getRelevantNotesPresentation(
-    status,
-    noteRows.length > 0,
-    actions.reviewIndexing.destination
-  );
-
-  if (!presentation.showPane) {
-    return <></>;
+  // A pending request has not established an empty result or a setup failure.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
+  if (status === "loading") {
+    return (
+      <div className="tw-flex tw-h-full tw-items-center tw-justify-center tw-gap-2 tw-text-sm tw-text-normal">
+        <Loader2 className="tw-size-4 tw-animate-spin" />
+        Finding relevant notes…
+      </div>
+    );
   }
 
-  const guidancePanel = presentation.guidance ? (
-    <GuidancePanel guidance={presentation.guidance} actions={actions} />
-  ) : null;
+  // Status decides whether link and backlink rows are trustworthy enough to
+  // show and which recovery action fits the current Miyo state.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
+  let showRows = false;
+  let guidancePanel: React.ReactNode = null;
+  switch (status) {
+    case "disabled":
+      guidancePanel = (
+        <GuidancePanel
+          id="download"
+          title="Add semantic matches with Miyo"
+          description="Download Miyo, then connect it in Copilot settings to find related notes."
+        >
+          <Button asChild variant="secondary" size="sm">
+            <a href={actions.miyoDownloadUrl} target="_blank" rel="noopener noreferrer">
+              <Download className="tw-size-3.5" />
+              Download Miyo
+            </a>
+          </Button>
+          <Button variant="default" size="sm" onClick={actions.onOpenMiyoSettings}>
+            Set up in Copilot
+          </Button>
+        </GuidancePanel>
+      );
+      break;
+    case "unavailable":
+      guidancePanel = (
+        <GuidancePanel
+          id="unavailable"
+          title="Check your Miyo setup"
+          description="Check your connection and make sure this vault is registered and indexed."
+        >
+          <Button variant="default" size="sm" onClick={actions.onOpenMiyoSettings}>
+            Open Miyo settings
+          </Button>
+        </GuidancePanel>
+      );
+      break;
+    case "no-matches":
+      showRows = true;
+      guidancePanel = (
+        <GuidancePanel
+          id="no-matches"
+          title="No semantic matches yet"
+          description="Miyo is connected, but no related notes were found."
+        />
+      );
+      break;
+    case "not-indexed": {
+      showRows = true;
+      const reviewInMiyo = actions.reviewIndexing.destination === "miyo";
+      guidancePanel = (
+        <GuidancePanel
+          id="not-indexed"
+          title="This note isn't indexed in Miyo"
+          description={
+            reviewInMiyo
+              ? "It may still be indexing or be excluded from Miyo. Open Miyo to review this folder's indexing and exclusion settings."
+              : "It may still be indexing or be excluded from Miyo. Review the configured Miyo connection or server in Copilot."
+          }
+        >
+          <Button variant="secondary" size="sm" onClick={actions.onRefresh}>
+            Refresh
+          </Button>
+          <Button variant="default" size="sm" onClick={actions.reviewIndexing.onSelect}>
+            {reviewInMiyo ? "Open Miyo" : "Review Miyo connection"}
+          </Button>
+        </GuidancePanel>
+      );
+      break;
+    }
+    case "matches":
+      showRows = true;
+      break;
+    case "idle":
+      break;
+  }
 
-  if (presentation.layout === "empty") {
+  if (!showRows || noteRows.length === 0) {
     return (
       <div
         data-relevant-notes-empty-state
@@ -129,7 +175,7 @@ export function RelevantNotesPane({
   return (
     <div className="tw-flex tw-flex-col tw-gap-2">
       {guidancePanel}
-      {presentation.showRows && <div className="tw-flex tw-flex-col tw-gap-0.5">{noteRows}</div>}
+      <div className="tw-flex tw-flex-col tw-gap-0.5">{noteRows}</div>
     </div>
   );
 }

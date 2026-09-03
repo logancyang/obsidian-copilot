@@ -114,13 +114,14 @@ describe("RelevantNotes", () => {
       expect(mockOpenFile).toHaveBeenCalledWith(expect.objectContaining({ path: "Target.md" }));
     });
 
-    it("shows Miyo download guidance without searching when Miyo is disabled, even without an active note (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
+    it("shows the neutral empty state without searching when no note is active and Miyo is disabled (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
       mockSettings = { ...mockSettings, enableMiyo: false };
       mockUseActiveFile.mockReturnValue(null);
 
       render(<RelevantNotes onAddToChat={jest.fn()} />);
 
-      expect(await screen.findByText("Add semantic matches with Miyo")).toBeTruthy();
+      expect(await screen.findByText("No relevant notes found")).toBeTruthy();
+      expect(screen.queryByText("Add semantic matches with Miyo")).toBeNull();
       expect(screen.queryByText("Target")).toBeNull();
       expect(mockFindRelevantNotes).not.toHaveBeenCalled();
     });
