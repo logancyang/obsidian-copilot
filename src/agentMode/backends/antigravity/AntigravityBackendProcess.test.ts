@@ -98,6 +98,8 @@ describe("AntigravityBackendProcess", () => {
         "--model",
         "gemini-3.7-flash-high",
         "--dangerously-skip-permissions",
+        "--print-timeout",
+        "10m0s",
       ],
       expect.objectContaining({ cwd: "C:\\vault", windowsHide: true })
     );

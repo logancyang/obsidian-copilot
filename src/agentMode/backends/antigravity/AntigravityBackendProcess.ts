@@ -144,6 +144,8 @@ export class AntigravityBackendProcess implements BackendProcess {
       "--model",
       session.modelId,
       "--dangerously-skip-permissions",
+      "--print-timeout",
+      "10m0s",
     ];
     if (session.conversationId) args.push("--conversation", session.conversationId);
 
