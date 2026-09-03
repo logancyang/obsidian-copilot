@@ -277,54 +277,6 @@ export class OpenArtifactsPublisher {
   }
 
   /**
-   * Opens the state-aware confirmation flow for the exact file supplied by the caller.
-   *
-   * @param file The Markdown note selected by the invoking command or menu.
-   */
-  async open(file: TFile): Promise<void> {
-    if (this.disposed) {
-      return;
-    }
-    let docId: string | null = null;
-    let initialResult: OpenArtifactsFailureResult | OpenArtifactsPersistenceResult | undefined =
-      this.blockedPublishResults.get(file);
-    if (!initialResult) {
-      try {
-        docId = await getOpenArtifactsDocId(this.app, file);
-      } catch (error) {
-        if (
-          !(error instanceof OpenArtifactsFrontmatterParseError) &&
-          !(error instanceof OpenArtifactsPropertyConflictError)
-        ) {
-          throw error;
-        }
-        initialResult = operationFailure("publish", error);
-      }
-    }
-    if (this.disposed) {
-      return;
-    }
-    const openingResult = initialResult;
-    let modal: OpenArtifactsModalPort;
-    modal = this.createModal({
-      fileName: file.basename,
-      docId,
-      initialResult: openingResult,
-      onConfirm: openingResult
-        ? () => Promise.resolve(openingResult)
-        : (action, ownerDocument) => this.execute(file, docId, action, ownerDocument),
-      onClosed: () => this.modals.delete(modal),
-    });
-    this.modals.add(modal);
-    try {
-      modal.open();
-    } catch (error) {
-      this.modals.delete(modal);
-      throw error;
-    }
-  }
-
-  /**
    * Opens the existing host-owned management modal for a published source note.
    * The agent supplies only the source path; the user chooses Update or Delete in Obsidian.
    *

@@ -1205,7 +1205,14 @@ export default class CopilotPlugin extends Plugin {
     try {
       // Bind the prompt before mounting the Agent view so a first-time mount
       // cannot auto-create a blank session ahead of this one.
-      await manager.createSessionWithPrompt(prompt);
+      const session = await manager.createSessionWithPrompt(prompt);
+      // Creating the chat awaits a model probe and a backend spawn, and a scope
+      // change or a second command can leave a different chat active by the
+      // time this returns. The composer only submits the request bound to the
+      // chat it mounts, so without this the request would sit unsent until the
+      // user happened to click that tab.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/357
+      manager.setActiveSession(session.internalId);
       await this.activateAgentView();
     } catch (error) {
       logWarn("[CopilotPlugin] Failed to create agent session with prompt", error);

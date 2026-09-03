@@ -280,8 +280,12 @@ describe("main", () => {
 
       it("binds the prompt to a chat before revealing Agent Chat for https://github.com/Brevilabs/obsidian-copilot-private/issues/357", async () => {
         const plugin = createPluginUnderTest([]);
-        const createSessionWithPrompt = jest.fn().mockResolvedValue(undefined);
-        Object.assign(plugin.agentSessionManager as object, { createSessionWithPrompt });
+        const createSessionWithPrompt = jest.fn().mockResolvedValue({ internalId: "session-1" });
+        const setActiveSession = jest.fn();
+        Object.assign(plugin.agentSessionManager as object, {
+          createSessionWithPrompt,
+          setActiveSession,
+        });
         const activateAgentView = jest.spyOn(plugin, "activateAgentView").mockResolvedValue(null);
 
         await plugin.newAgentChatWithPrompt("Publish this note");
@@ -289,6 +293,24 @@ describe("main", () => {
         expect(createSessionWithPrompt).toHaveBeenCalledWith("Publish this note");
         expect(activateAgentView).toHaveBeenCalledTimes(1);
         expect(createSessionWithPrompt.mock.invocationCallOrder[0]).toBeLessThan(
+          activateAgentView.mock.invocationCallOrder[0]
+        );
+      });
+
+      it("reveals the chat that owns the request even when another became active during creation for https://github.com/Brevilabs/obsidian-copilot-private/issues/357", async () => {
+        const plugin = createPluginUnderTest([]);
+        const createSessionWithPrompt = jest.fn().mockResolvedValue({ internalId: "session-1" });
+        const setActiveSession = jest.fn();
+        Object.assign(plugin.agentSessionManager as object, {
+          createSessionWithPrompt,
+          setActiveSession,
+        });
+        const activateAgentView = jest.spyOn(plugin, "activateAgentView").mockResolvedValue(null);
+
+        await plugin.newAgentChatWithPrompt("Publish this note");
+
+        expect(setActiveSession).toHaveBeenCalledWith("session-1");
+        expect(setActiveSession.mock.invocationCallOrder[0]).toBeLessThan(
           activateAgentView.mock.invocationCallOrder[0]
         );
       });

@@ -245,6 +245,15 @@ export interface AgentSessionManagerOptions {
 }
 
 /**
+ * Text bound to a logical composer before its session is shown. A draft is
+ * left in the composer for review; a submit is sent as the chat's next turn.
+ */
+export interface ComposerHandoff {
+  text: string;
+  submit: boolean;
+}
+
+/**
  * Plugin-scoped coordinator for Agent Mode. Owns one `AcpBackendProcess` per
  * registered backend (lazy-spawned on first `createSession(backendId)`) and a
  * pool of `AgentSession`s, each tagged with the backend it was created on.
@@ -256,15 +265,6 @@ export interface AgentSessionManagerOptions {
  * never imports a specific backend class. The permission prompter is
  * injected so this file stays out of the UI layer.
  */
-/**
- * Text bound to a logical composer before its session is shown. A draft is
- * left in the composer for review; a submit is sent as the chat's next turn.
- */
-export interface ComposerHandoff {
-  text: string;
-  submit: boolean;
-}
-
 export class AgentSessionManager {
   private backends = new Map<BackendId, BackendProcess>();
   private starting = new Map<BackendId, Promise<BackendProcess>>();
