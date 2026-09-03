@@ -256,7 +256,7 @@ describe("findRelevantNotes", () => {
       expect(mockResolveBaseUrl).not.toHaveBeenCalled();
     });
 
-    it("reuses one frozen notes array for every empty result", async () => {
+    it("reuses one frozen notes array for every empty result (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
       const missingFileResult = await findRelevantNotes({
         app: window.app,
         filePath: "missing.md",
@@ -318,7 +318,7 @@ describe("findRelevantNotes", () => {
     });
 
     it.each(["", "Source file is not indexed"])(
-      "keeps links and reports not-indexed for 404 detail %p (https://github.com/logancyang/obsidian-copilot/pull/2992#discussion_r3919646861)",
+      "returns no rows and reports not-indexed for 404 detail %p (https://github.com/Brevilabs/obsidian-copilot-private/issues/280; https://github.com/logancyang/obsidian-copilot/pull/2992#discussion_r3919646861)",
       async (detail) => {
         mockSearchRelated.mockRejectedValue(new MiyoRequestError(404, detail));
         mockedGetLinkedNotes.mockReturnValue([createMarkdownFile("linked-only.md")]);

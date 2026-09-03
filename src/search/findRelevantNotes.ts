@@ -103,6 +103,7 @@ async function searchRelatedNotesWithMiyo(
     // Miyo defines every 404 from related search as a source with no indexed
     // chunks. The detail text is not part of that contract, so gating on it can
     // misreport a healthy registered folder as unavailable.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
     // https://github.com/logancyang/obsidian-copilot/pull/2992#discussion_r3919646861
     if (!(error instanceof MiyoRequestError) || error.status !== 404) {
       logError(

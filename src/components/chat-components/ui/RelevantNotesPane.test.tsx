@@ -24,7 +24,15 @@ describe("RelevantNotesPane", () => {
       jest.clearAllMocks();
     });
 
-    it("renders Miyo matches without setup guidance", () => {
+    it("shows neutral loading feedback while the Miyo request is pending (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", () => {
+      render(<RelevantNotesPane {...BASE_PROPS} status="loading" noteRows={[]} />);
+
+      expect(screen.getByText("Finding relevant notes…")).toBeTruthy();
+      expect(screen.queryByText("Check your Miyo setup")).toBeNull();
+      expect(screen.queryByText("No relevant notes found")).toBeNull();
+    });
+
+    it("renders Miyo matches without setup guidance (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", () => {
       render(<RelevantNotesPane {...BASE_PROPS} />);
 
       expect(screen.getByText("Related note")).toBeTruthy();
