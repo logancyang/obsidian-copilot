@@ -52,6 +52,7 @@ export function listMaterializeCandidates(
   const { inclusions, exclusions } = getMatchingPatterns({
     inclusions: contextSource?.inclusions,
     exclusions: contextSource?.exclusions,
+    isProject: true,
   });
   if (!inclusions) return EMPTY_FILES;
   return app.vault
@@ -85,6 +86,7 @@ export function listMaterializeContextFileSummary(
   const { inclusions, exclusions } = getMatchingPatterns({
     inclusions: contextSource?.inclusions,
     exclusions: contextSource?.exclusions,
+    isProject: true,
   });
   if (!inclusions) return EMPTY_SUMMARY;
 

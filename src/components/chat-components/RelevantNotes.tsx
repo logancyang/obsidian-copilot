@@ -57,7 +57,7 @@ function useRelevantNotes(
   miyoServerUrl: string,
   miyoBackendAvailable: boolean,
   miyoCredentialIdentity: string,
-  copilotScopeIdentity: string
+  qaScopeIdentity: string
 ) {
   const app = useApp();
   const [settledRequest, setSettledRequest] = useState<SettledRelevantNotesRequest | null>(null);
@@ -79,7 +79,7 @@ function useRelevantNotes(
           miyoServerUrl,
           miyoBackendAvailable,
           miyoCredentialIdentity,
-          copilotScopeIdentity,
+          qaScopeIdentity,
           signalTick,
         ])
       : null;
@@ -423,12 +423,14 @@ export const RelevantNotes = memo(
     // credential itself in request state.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
     const miyoCredentialIdentity = sha256(settings.plusLicenseKey);
-    // Miyo's results pass through Copilot's own scope, so a working-folder
-    // change must retire a settled result. A direct settings replacement — Reset
+    // Miyo's results pass through Copilot's local QA rules, so a rule change
+    // must retire a settled result. A direct settings replacement — Reset
     // Settings, a config import — emits no index signal, so the scope itself
     // has to be part of the request identity.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/284
-    const copilotScopeIdentity = JSON.stringify([
+    const qaScopeIdentity = JSON.stringify([
+      settings.qaInclusions,
+      settings.qaExclusions,
       settings.copilotFolder,
       settings.copilotRootHistory,
     ]);
@@ -437,7 +439,7 @@ export const RelevantNotes = memo(
       settings.miyoServerUrl,
       miyoBackendAvailable,
       miyoCredentialIdentity,
-      copilotScopeIdentity
+      qaScopeIdentity
     );
     const relevantNotes = result.notes;
     // The toolbar must name only a source the search contract accepts; showing

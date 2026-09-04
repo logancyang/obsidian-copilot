@@ -88,23 +88,23 @@ export class MiyoSemanticRetriever extends BaseRetriever {
   }
 
   /**
-   * Filter chunks by Copilot's own scope so Miyo results honor the same
-   * boundary as locally-indexed search.
+   * Filter chunks by Copilot's QA inclusion/exclusion rules so Miyo results
+   * honor the same scope as locally-indexed search.
    *
    * @param chunks - Deduplicated chunks from Miyo.
-   * @returns Chunks whose source path stays inside Copilot's scope.
+   * @returns Chunks whose source path passes the inclusion/exclusion rules.
    */
   private filterByCopilotPatterns(chunks: Document[]): Document[] {
-    const isAllowed = createCopilotPatternFilter();
+    const isAllowed = createCopilotPatternFilter(this.app);
     const allowed: Document[] = [];
     const excludedPaths: string[] = [];
     for (const chunk of chunks) {
       const path = chunk.metadata.path as string;
-      // Another vault's results (search-all) never go through Copilot's scope
-      // filter: the system-root exclusion is defined over THIS vault's
-      // namespace, and an external folder that merely shares a root's name
-      // (e.g. "copilot") must not be swallowed by it. Absent flag
-      // (fail-closed) means "ours" and gets filtered.
+      // Another vault's results (search-all) never go through Copilot's QA
+      // rules: those rules — including the system-root exclusion — are defined
+      // over THIS vault's namespace, and an external folder that merely shares
+      // a root's name (e.g. "copilot") must not be swallowed by them. Absent
+      // flag (fail-closed) means "ours" and gets filtered.
       if (chunk.metadata.fromCurrentVault === false) {
         allowed.push(chunk);
         continue;
@@ -119,7 +119,7 @@ export class MiyoSemanticRetriever extends BaseRetriever {
     if (getSettings().debug) {
       const uniqueExcluded = Array.from(new Set(excludedPaths));
       logInfo(
-        `MiyoSemanticRetriever: Copilot scope kept ${allowed.length}/${chunks.length} chunks` +
+        `MiyoSemanticRetriever: inclusion/exclusion rules kept ${allowed.length}/${chunks.length} chunks` +
           (uniqueExcluded.length > 0 ? `; excluded ${uniqueExcluded.join(", ")}` : "")
       );
     }

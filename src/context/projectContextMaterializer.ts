@@ -353,6 +353,7 @@ async function runMaterialize(
     const { inclusions, exclusions } = getMatchingPatterns({
       inclusions: contextSource.inclusions,
       exclusions: contextSource.exclusions,
+      isProject: true,
     });
     const folders = inclusions?.folderPatterns ?? [];
     const notes = inclusions?.notePatterns ?? [];

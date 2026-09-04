@@ -1,5 +1,5 @@
 import { App, TFile, TFolder } from "obsidian";
-import { shouldIndexFile } from "@/search/searchUtils";
+import { getMatchingPatterns, shouldIndexFile } from "@/search/searchUtils";
 import * as z from "zod";
 import { createLangChainTool } from "./createLangChainTool";
 
@@ -32,11 +32,13 @@ function buildFileTree(
   const subFolders: Record<string, FileTreeNode> = {};
 
   // Get exclusion patterns from settings
+  const { inclusions, exclusions } = getMatchingPatterns();
+
   // Separate files and folders
   for (const child of folder.children) {
     if (isTFile(child)) {
       // Only include file if it passes the pattern checks
-      if (shouldIndexFile(app, child, null, null)) {
+      if (shouldIndexFile(app, child, inclusions, exclusions)) {
         // Only add to files array if we're including files
         if (includeFiles) {
           files.push(child.name);

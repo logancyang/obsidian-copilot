@@ -441,6 +441,7 @@ function ContextManage({
     return getMatchingPatterns({
       inclusions: initialProject?.contextSource.inclusions,
       exclusions: initialProject?.contextSource.exclusions,
+      isProject: true,
     });
   }, [initialProject.contextSource]);
 
@@ -1233,6 +1234,7 @@ function ContextManage({
     const { inclusions, exclusions } = getMatchingPatterns({
       inclusions: currentInclude,
       exclusions: currentExclude,
+      isProject: true,
     });
 
     const newGroupList = createAndPopulateGroupList(appAllFiles, inclusions, exclusions);

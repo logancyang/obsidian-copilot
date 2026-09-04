@@ -1,6 +1,7 @@
 import { logInfo, logWarn } from "@/logger";
 import { getSettings } from "@/settings/model";
 import {
+  getMatchingPatterns,
   isInternalExcludedFile,
   isSystemExcludedPath,
   shouldIndexFile,
@@ -85,9 +86,11 @@ export class FilterRetriever {
       });
     }
 
+    const { inclusions, exclusions } = getMatchingPatterns();
+
     const dailyNoteQuery = dailyNoteTitles.join(", ");
     const dailyNoteFiles = extractNoteFiles(dailyNoteQuery, this.app.vault).filter((f) =>
-      shouldIndexFile(this.app, f, null, null)
+      shouldIndexFile(this.app, f, inclusions, exclusions)
     );
 
     const dailyNoteDocuments = await this.getTitleMatches(dailyNoteFiles);
@@ -99,7 +102,7 @@ export class FilterRetriever {
 
     const allFiles = this.app.vault
       .getMarkdownFiles()
-      .filter((f) => shouldIndexFile(this.app, f, null, null));
+      .filter((f) => shouldIndexFile(this.app, f, inclusions, exclusions));
     const timeFilteredDocuments: Document[] = [];
 
     const maxTimeFilteredDocs = this.options.returnAll
@@ -281,7 +284,10 @@ export class FilterRetriever {
       // A Copilot root is excluded unconditionally, so an explicit [[link]] must
       // not reach past it either: these documents are returned with
       // `includeInContext: true` and nothing downstream drops them, so a linked
-      // chat note would otherwise be handed to the model verbatim.
+      // chat note would otherwise be handed to the model verbatim. Deliberately
+      // NOT the full `shouldIndexFile` — that would also subject explicit links
+      // to the user's own qaInclusions/qaExclusions, which they have always been
+      // able to override by naming a file directly.
       if (isInternalExcludedFile(file) || isSystemExcludedPath(file.path)) {
         continue;
       }
@@ -323,6 +329,7 @@ export class FilterRetriever {
   private async getTagMatches(tagTerms: string[]): Promise<Document[]> {
     if (tagTerms.length === 0) return [];
 
+    const { inclusions, exclusions } = getMatchingPatterns();
     const allFiles = this.app.vault.getMarkdownFiles();
     const documents: Document[] = [];
     const limit = this.options.returnAll ? RETURN_ALL_LIMIT : this.options.maxK;
@@ -330,7 +337,10 @@ export class FilterRetriever {
     for (const file of allFiles) {
       if (documents.length >= limit) break;
 
-      if (!shouldIndexFile(this.app, file, null, null) || isInternalExcludedFile(file)) {
+      if (
+        !shouldIndexFile(this.app, file, inclusions, exclusions) ||
+        isInternalExcludedFile(file)
+      ) {
         continue;
       }
 

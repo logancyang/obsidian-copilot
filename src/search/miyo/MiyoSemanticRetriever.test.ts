@@ -1,4 +1,4 @@
-import { type App } from "obsidian";
+import { type App, TFile } from "obsidian";
 import { getMiyoFolderName } from "@/miyo/miyoUtils";
 import { MiyoRequestError } from "@/miyo/MiyoClient";
 import { MiyoSemanticRetriever } from "@/search/miyo/MiyoSemanticRetriever";
@@ -228,19 +228,20 @@ describe("MiyoSemanticRetriever", () => {
     ]);
   });
 
-  it("filters chunks by Copilot's working roots while ignoring persisted qa rules (https://github.com/Brevilabs/obsidian-copilot-private/issues/284)", async () => {
-    // A vault configured before the include/exclude UI was retired still stores
-    // qaExclusions. Those values are kept for the planned agent access control
-    // and must not remove results until then.
+  it("filters chunks by Copilot inclusion/exclusion rules", async () => {
     (getSettings as jest.Mock).mockReturnValue({
       miyoServerUrl: "http://miyo.local",
       debug: false,
       qaExclusions: "private",
-      copilotFolder: "copilot",
     });
 
+    const TFileConstructor = TFile as unknown as new (filePath: string) => TFile;
+    const filesByPath = new Map<string, TFile>([
+      ["notes/keep.md", new TFileConstructor("notes/keep.md")],
+      ["private/secret.md", new TFileConstructor("private/secret.md")],
+    ]);
     const app = {
-      vault: { getAbstractFileByPath: () => null },
+      vault: { getAbstractFileByPath: (path: string) => filesByPath.get(path) ?? null },
       metadataCache: {},
     } as unknown as App;
 
@@ -254,18 +255,11 @@ describe("MiyoSemanticRetriever", () => {
           chunk_text: "keep",
         },
         {
-          id: "private",
+          id: "secret",
           score: 0.85,
           path: "/vault/private/secret.md",
           chunk_index: 0,
           chunk_text: "secret",
-        },
-        {
-          id: "root",
-          score: 0.8,
-          path: "/vault/copilot/copilot-conversations/chat.md",
-          chunk_index: 0,
-          chunk_text: "chat",
         },
       ],
     });
@@ -273,10 +267,8 @@ describe("MiyoSemanticRetriever", () => {
     const retriever = new MiyoSemanticRetriever(app, { maxK: 10, salientTerms: [] });
     const documents = await retriever.getRelevantDocuments("query");
 
-    expect(documents.map((doc) => doc.metadata.path as string)).toEqual([
-      "notes/keep.md",
-      "private/secret.md",
-    ]);
+    expect(documents).toHaveLength(1);
+    expect(documents[0].metadata.path).toBe("notes/keep.md");
   });
 
   it("keeps search-all results from an external folder that shares a system root's name", async () => {

@@ -20,9 +20,11 @@ export interface PatternCategory {
 export async function getAllQAMarkdownContent(app: App): Promise<string> {
   let allContent = "";
 
-  const filteredFiles = app.vault
-    .getMarkdownFiles()
-    .filter((file) => shouldIndexFile(app, file, null, null));
+  const { inclusions, exclusions } = getMatchingPatterns();
+
+  const filteredFiles = app.vault.getMarkdownFiles().filter((file) => {
+    return shouldIndexFile(app, file, inclusions, exclusions);
+  });
 
   await Promise.all(filteredFiles.map((file) => app.vault.cachedRead(file))).then((contents) =>
     contents.map((c) => (allContent += c + " "))
@@ -57,22 +59,55 @@ export function getDecodedPatterns(value: string): string[] {
 }
 
 /**
- * Categorize a caller's own inclusion and exclusion rule strings.
- *
- * Only a caller that owns rules has any — a project's context source is the
- * one such caller today. The persisted `qaInclusions` and `qaExclusions` are
- * retained for the planned agent access control but no longer scope anything,
- * so there is no vault-wide rule set to fall back to.
- *
- * @param options - The caller's raw inclusion and exclusion strings.
- * @returns The categorized rules, each null when the caller has none.
+ * Get the exclusion patterns from the exclusion settings string.
+ * @returns An array of exclusion patterns.
  */
-export function getMatchingPatterns(options?: { inclusions?: string; exclusions?: string }): {
+function getExclusionPatterns(): string[] {
+  if (!getSettings().qaExclusions) {
+    return [];
+  }
+
+  return getDecodedPatterns(getSettings().qaExclusions);
+}
+
+/**
+ * Get the inclusion patterns from the inclusion settings string.
+ * @returns An array of inclusion patterns.
+ */
+function getInclusionPatterns(): string[] {
+  if (!getSettings().qaInclusions) {
+    return [];
+  }
+
+  return getDecodedPatterns(getSettings().qaInclusions);
+}
+
+/**
+ * Get the inclusion and exclusion patterns from the settings or provided values.
+ * NOTE: isProject is used to determine if the patterns should be used for a project, ignoring global inclusions and exclusions
+ * @param options - Optional parameters for inclusions and exclusions.
+ * @returns An object containing the inclusions and exclusions patterns strings.
+ */
+export function getMatchingPatterns(options?: {
+  inclusions?: string;
+  exclusions?: string;
+  isProject?: boolean;
+}): {
   inclusions: PatternCategory | null;
   exclusions: PatternCategory | null;
 } {
-  const inclusionPatterns = options?.inclusions ? getDecodedPatterns(options.inclusions) : [];
-  const exclusionPatterns = options?.exclusions ? getDecodedPatterns(options.exclusions) : [];
+  // For projects, don't fall back to global patterns
+  const inclusionPatterns = options?.inclusions
+    ? getDecodedPatterns(options.inclusions)
+    : options?.isProject
+      ? []
+      : getInclusionPatterns();
+
+  const exclusionPatterns = options?.exclusions
+    ? getDecodedPatterns(options.exclusions)
+    : options?.isProject
+      ? []
+      : getExclusionPatterns();
 
   return {
     inclusions: inclusionPatterns.length > 0 ? categorizePatterns(inclusionPatterns) : null,
@@ -97,12 +132,13 @@ export function getSystemExcludedFolders(settings: CopilotSettings): string[] {
 /**
  * Whether a vault-relative path falls under any live system-excluded Copilot root.
  *
- * Case-folded on case-insensitive filesystems. A stored root keeps whatever
- * spelling it was configured with — nothing reconciles it against the real
- * path, and an external sync, an OS-level case-only rename, or simply typing
- * `TeamAI` when the disk holds `teamai/` is enough to make them differ.
- * Comparing exact-case there fails OPEN, letting chats under a Copilot root
- * reach search and Miyo results. Folding is confined to these roots, and on a
+ * Case-folded on case-insensitive filesystems, unlike the user's own qa*
+ * patterns. A stored root keeps whatever spelling it was configured with —
+ * nothing reconciles it against the real path, and an external sync, an OS-level
+ * case-only rename, or simply typing `TeamAI` when the disk holds `teamai/` is
+ * enough to make them differ. Comparing exact-case there fails OPEN, letting
+ * chats under a Copilot root reach QA indexing and Miyo results. Folding is
+ * confined to these roots: `qaExclusions` is the user's own literal, and on a
  * case-sensitive volume `Notes/` and `notes/` really are two folders — so this
  * gates on the platform, accepting that a case-sensitive APFS volume may
  * over-exclude, which fails closed.
@@ -174,22 +210,52 @@ export function shouldIndexFile(
 }
 
 /**
- * Build a predicate deciding whether a vault-relative path is Copilot's to
- * return (resolved once for reuse). Copilot's own working roots and its
- * instruction files are the entire boundary; it decides from the raw path, so a
- * result naming a note this vault cannot resolve is still classified.
+ * Build a predicate deciding whether a vault-relative path passes Copilot's QA
+ * rules (resolved once for reuse). Path-only rules are applied before resolving
+ * a TFile; an unresolvable path is rejected when a remaining tag or property
+ * rule cannot be evaluated safely.
  *
+ * @param app - The Obsidian app instance.
  * @returns Predicate returning true when the path should be kept.
  */
-export function createCopilotPatternFilter(): (path: string) => boolean {
+export function createCopilotPatternFilter(app: App): (path: string) => boolean {
   const systemExcludedFolders = getSystemExcludedFolders(getSettings());
+  const { inclusions, exclusions } = getMatchingPatterns();
   return (path: string) => {
-    // Case-folded where the filesystem is — see isSystemExcludedPath.
+    // System root exclusion runs first on the raw path (no TFile), holding even
+    // in the no-user-pattern fast path below. Case-folded where the filesystem
+    // is — see isSystemExcludedPath.
     if (matchSystemRoots(path, systemExcludedFolders)) {
       return false;
     }
-    // The agent already receives AGENTS.md/CLAUDE.md/project.md as instructions.
-    return !isInternalExcludedPath(path);
+    // Instruction files (AGENTS.md/CLAUDE.md/project.md) are excluded on the raw
+    // path for the same reason: with no user patterns configured the TFile branch
+    // below never runs, and the agent already receives these files as instructions.
+    if (isInternalExcludedPath(path)) {
+      return false;
+    }
+    if (!inclusions && !exclusions) {
+      return true;
+    }
+    if (exclusions && matchPathOnlyPatterns(path, exclusions)) {
+      return false;
+    }
+    const file = app.vault.getAbstractFileByPath(path);
+    if (!(file instanceof TFile)) {
+      // Miyo can return a stale or remote path that the current vault cannot
+      // resolve. Folder, extension, and note-title rules still have enough path
+      // data to evaluate. Tags and properties do not, so fail closed instead of
+      // letting a possibly excluded current-vault result through.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/284
+      if (hasMetadataPatterns(exclusions)) {
+        return false;
+      }
+      if (!inclusions) {
+        return true;
+      }
+      return matchPathOnlyPatterns(path, inclusions);
+    }
+    return shouldIndexFile(app, file, inclusions, exclusions);
   };
 }
 
@@ -383,6 +449,30 @@ function matchFilePathWithFolders(filePath: string, folderPatterns: string[]): b
         normalizedFilePath[normalizedPattern.length] === "/")
     );
   });
+}
+
+/** Match the rule kinds that need only a path, without reading vault metadata. */
+function matchPathOnlyPatterns(filePath: string, patterns: PatternCategory): boolean {
+  const { extensionPatterns, folderPatterns, notePatterns } = patterns;
+  return (
+    matchFilePathWithExtensions(filePath, extensionPatterns ?? []) ||
+    matchFilePathWithFolders(filePath, folderPatterns ?? []) ||
+    matchFilePathWithNoteTitles(filePath, notePatterns ?? [])
+  );
+}
+
+/** Whether a rule set contains a tag or property check that needs a TFile. */
+function hasMetadataPatterns(patterns: PatternCategory | null): boolean {
+  return Boolean(patterns?.tagPatterns?.length || patterns?.propertyPatterns?.length);
+}
+
+/** Match note-title rules against a raw path using Obsidian's basename semantics. */
+function matchFilePathWithNoteTitles(filePath: string, noteTitles: string[]): boolean {
+  if (noteTitles.length === 0) return false;
+
+  const fileName = filePath.replace(/\\/g, "/").split("/").pop() ?? "";
+  const basename = fileName.replace(/\.[^./]+$/, "");
+  return noteTitles.some((title) => title.slice(2, -2) === basename);
 }
 
 /**

@@ -23,10 +23,9 @@ import { SelfHostSettings } from "./components/SelfHostSettings";
 // tab here. The legacy QASettings panel was removed as orphan-component cleanup
 // (see designdocs/SETTINGS_REDESIGN_V4.md and SETTINGS_V4_PR_PLAN.md); the
 // underlying fields are NOT dropped yet so existing data remains loadable:
-//   - qaInclusions/qaExclusions — persisted untouched but read by nothing. They
-//     are held for the planned agent access control; until that ships, no
-//     retrieval surface may consult them. Copilot's own working roots remain
-//     excluded independently (getSystemExcludedFolders).
+//   - qaInclusions/qaExclusions — still consumed as the query-time scope filter
+//     over search results; their edit UI is deferred per issue #195
+//     ("defer include/exclude").
 //   - maxSourceChunks / enableInlineCitations — still read by search and chat.
 //     compatibility fields awaiting their dedicated settings migration.
 const LazySkillsSettings = React.lazy(() =>
