@@ -203,6 +203,31 @@ describe("MiyoSettings", () => {
     expect(notifyMiyoIndexChanged).toHaveBeenCalledTimes(1);
   });
 
+  it("registers with the roots configured when the user confirms, not the ones open on the modal (https://github.com/Brevilabs/obsidian-copilot-private/issues/284)", async () => {
+    mockRegistration = "unregistered";
+    render(<MiyoSettings />);
+
+    fireEvent.click(await screen.findByText("Connect"));
+    await waitFor(() => expect(lastModalOptions?.onAddVault).toBeDefined());
+
+    // The modal keeps the callback it was created with, so a root change made
+    // while it is open never re-renders the settings tab. Registering from that
+    // stale closure would leave the new root indexed.
+    currentSettings = { ...currentSettings, copilotFolder: "team-ai" };
+
+    await act(async () => {
+      await lastModalOptions?.onAddVault?.();
+    });
+
+    expect(addFolderBodies).toEqual([
+      {
+        path: "/vault",
+        exclude_folders: ["copilot", "team-ai"],
+        allow_remote_read: true,
+      },
+    ]);
+  });
+
   it("does not register or enable from an expired plugin lifecycle (https://github.com/Brevilabs/obsidian-copilot-private/issues/284)", async () => {
     mockRegistration = "unregistered";
     expireLifecycleBeforeAddRequest = true;

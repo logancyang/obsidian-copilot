@@ -15,25 +15,14 @@ import {
   getVaultRelativeMiyoPath,
   isCurrentVaultMiyoPath,
 } from "@/miyo/miyoUtils";
-import {
-  createCopilotPatternFilter,
-  getDecodedPatterns,
-  getSystemExcludedFolders,
-} from "@/search/searchUtils";
-import { getSettings, type CopilotSettings } from "@/settings/model";
+import { createCopilotPatternFilter } from "@/search/searchUtils";
+import { getSettings } from "@/settings/model";
 
 /** Number of chunks to return when the caller does not request a specific limit. */
 const DEFAULT_FINAL_K = 20;
 
 /** Largest candidate pool exposed by Miyo's search endpoint. */
 const MIYO_SEARCH_CANDIDATE_LIMIT = 1000;
-
-function hasUserQaPatterns(settings: CopilotSettings): boolean {
-  const systemRoots = new Set(getSystemExcludedFolders(settings));
-  return [settings.qaInclusions, settings.qaExclusions]
-    .flatMap((value) => getDecodedPatterns(value || ""))
-    .some((pattern) => !systemRoots.has(pattern.replace(/\/+$/, "")));
-}
 
 type MiyoSemanticRetrieverOptions = {
   minSimilarityScore?: number;
@@ -149,33 +138,32 @@ export class MiyoSemanticRetriever extends BaseRetriever {
     const folderName = searchAll ? undefined : getMiyoFolderName(this.app);
     try {
       const baseUrl = await this.client.resolveBaseUrl(getMiyoCustomUrl(getSettings()));
-      // Fetch Miyo's full exposed candidate pool only when local rules can
-      // remove an unbounded prefix of ranked results. Otherwise a 2x margin
-      // covers chunk dedup without making return-all searches fetch 1,000
-      // chunks. Miyo does not expose pagination and clamps this endpoint at
-      // 1,000.
+      // Always fetch Miyo's full exposed candidate pool. Copilot no longer
+      // defines Miyo's exclusion scope beyond initial registration, so it
+      // cannot know whether a ranked prefix is content its local QA filter is
+      // about to drop — chat notes under a Copilot root alone can fill a
+      // narrower window. Miyo exposes no pagination and clamps this endpoint at
+      // 1,000, so a wider request is the only way to keep eligible matches
+      // reachable.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/284
-      const settings = getSettings();
-      // More than the permanent default root means this vault has used a custom
-      // root. Because Miyo receives roots only during initial registration,
-      // local filtering may need to remove candidates from a root chosen later.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/284
-      const limit =
-        hasUserQaPatterns(settings) || getSystemExcludedFolders(settings).length > 1
-          ? MIYO_SEARCH_CANDIDATE_LIMIT
-          : Math.min(this.finalK * 2, MIYO_SEARCH_CANDIDATE_LIMIT);
       const filters = this.buildSearchFilters();
       if (getSettings().debug) {
         logInfo("MiyoSemanticRetriever: search params:", {
           baseUrl,
-          limit,
+          limit: MIYO_SEARCH_CANDIDATE_LIMIT,
           finalK: this.finalK,
           minSimilarityScore: this.minSimilarityScore,
           returnAll: this.returnAll,
           filters,
         });
       }
-      const response = await this.client.search(baseUrl, folderName, query, limit, filters);
+      const response = await this.client.search(
+        baseUrl,
+        folderName,
+        query,
+        MIYO_SEARCH_CANDIDATE_LIMIT,
+        filters
+      );
 
       const rawResults = response.results || [];
       const filteredResults = rawResults.filter((result) => this.isScoreAboveThreshold(result));

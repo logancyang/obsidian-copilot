@@ -132,7 +132,7 @@ describe("findRelevantNotes", () => {
       expect(result.status).toBe("matches");
       expect(mockSearchRelated).toHaveBeenCalledWith("http://127.0.0.1:8742", "vault/source.md", {
         folderName: "vault",
-        limit: 20,
+        limit: 100,
       });
     });
 
@@ -202,7 +202,7 @@ describe("findRelevantNotes", () => {
       expect(result.status).toBe("matches");
     });
 
-    it("trusts Miyo to apply the requested result limit instead of capping or sorting again (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
+    it("keeps Miyo's ranking but caps the pane at its displayed maximum (https://github.com/Brevilabs/obsidian-copilot-private/issues/284)", async () => {
       mockSearchRelated.mockResolvedValue({
         results: Array.from({ length: 25 }, (_, index) => ({
           path: `vault/note-${index}.md`,
@@ -215,9 +215,35 @@ describe("findRelevantNotes", () => {
         filePath: "source.md",
       });
 
-      expect(result.notes).toHaveLength(25);
+      expect(result.notes).toHaveLength(20);
       expect(result.notes[0].note.path).toBe("note-0.md");
-      expect(result.notes[24].note.path).toBe("note-24.md");
+      expect(result.notes[19].note.path).toBe("note-19.md");
+    });
+
+    it("surfaces an eligible note ranked below a run of QA-excluded results (https://github.com/Brevilabs/obsidian-copilot-private/issues/284)", async () => {
+      // The wider candidate window exists for exactly this case: local QA rules
+      // run after Miyo's limit, so a request sized to the pane would settle on
+      // "no matches" while an allowed note waited just outside it.
+      mockedGetSettings.mockReturnValue({
+        enableMiyo: true,
+        miyoServerUrl: "",
+        debug: false,
+        qaExclusions: "private",
+      } as CopilotSettings);
+      mockSearchRelated.mockResolvedValue({
+        results: [
+          ...Array.from({ length: 20 }, (_, index) => ({
+            path: `vault/private/secret-${index}.md`,
+            score: 0.9 - index / 100,
+          })),
+          { path: "vault/alpha.md", score: 0.5 },
+        ],
+      });
+
+      const result = await findRelevantNotes({ app: window.app, filePath: "source.md" });
+
+      expect(result.notes.map((entry) => entry.note.path)).toEqual(["alpha.md"]);
+      expect(result.status).toBe("matches");
     });
 
     it("returns no rows for Miyo's no-match state regardless of links (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {

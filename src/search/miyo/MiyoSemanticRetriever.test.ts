@@ -131,13 +131,11 @@ describe("MiyoSemanticRetriever", () => {
     const retriever = createRetriever();
     const documents = await retriever.getRelevantDocuments("query with [[notes/a]] mention");
 
-    // With server-side system roots and no user QA rules, a 2x margin covers
-    // chunk dedup without returning Miyo's entire exposed candidate pool.
     expect(mockSearch).toHaveBeenCalledWith(
       "http://miyo.local",
       "/vault",
       "query with [[notes/a]] mention",
-      20,
+      1000,
       undefined
     );
     expect(mockGetDocumentsByPath).not.toHaveBeenCalled();
@@ -154,8 +152,6 @@ describe("MiyoSemanticRetriever", () => {
 
     const startTime = 1700000000000;
     const endTime = 1700600000000;
-    // Time-range queries can request a larger final result set, but returnAll
-    // alone does not require Miyo's entire exposed candidate pool.
     const retriever = createRetriever({
       timeRange: { startTime, endTime },
       returnAll: true,
@@ -167,46 +163,21 @@ describe("MiyoSemanticRetriever", () => {
       "http://miyo.local",
       "/vault",
       "show notes from this week",
-      20,
+      1000,
       [{ field: "mtime", gte: startTime, lte: endTime }]
     );
     expect(mockGetDocumentsByPath).not.toHaveBeenCalled();
   });
 
-  it("keeps a bounded candidate margin when returnAll is enabled without local QA rules (https://github.com/Brevilabs/obsidian-copilot-private/issues/284)", async () => {
+  it("requests Miyo's full candidate pool even with no local QA rules, because Copilot cannot know the server's exclusion scope (https://github.com/Brevilabs/obsidian-copilot-private/issues/284)", async () => {
     mockSearch.mockResolvedValue({ results: [] });
 
-    const retriever = createRetriever({
-      returnAll: true,
-      maxK: 5,
-    });
-
-    await retriever.getRelevantDocuments("list all notes about ai digests");
+    await createRetriever({ maxK: 5 }).getRelevantDocuments("list all notes about ai digests");
 
     expect(mockSearch).toHaveBeenCalledWith(
       "http://miyo.local",
       "/vault",
       "list all notes about ai digests",
-      10,
-      undefined
-    );
-  });
-
-  it("uses the full candidate pool after a custom Copilot root can differ from initial registration (https://github.com/Brevilabs/obsidian-copilot-private/issues/284)", async () => {
-    (getSettings as jest.Mock).mockReturnValue({
-      miyoServerUrl: "http://miyo.local",
-      debug: false,
-      copilotFolder: "team-ai",
-      copilotRootHistory: ["copilot", "team-ai"],
-    });
-    mockSearch.mockResolvedValue({ results: [] });
-
-    await createRetriever().getRelevantDocuments("query");
-
-    expect(mockSearch).toHaveBeenCalledWith(
-      "http://miyo.local",
-      "/vault",
-      "query",
       1000,
       undefined
     );
@@ -333,7 +304,13 @@ describe("MiyoSemanticRetriever", () => {
     const retriever = createRetriever();
     const documents = await retriever.getRelevantDocuments("query");
 
-    expect(mockSearch).toHaveBeenCalledWith("http://miyo.local", undefined, "query", 20, undefined);
+    expect(mockSearch).toHaveBeenCalledWith(
+      "http://miyo.local",
+      undefined,
+      "query",
+      1000,
+      undefined
+    );
     expect(documents).toHaveLength(1);
     expect(documents[0].metadata.path).toBe("copilot/notes/foo.md");
     expect(documents[0].metadata.fromCurrentVault).toBe(false);

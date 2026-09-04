@@ -23,7 +23,7 @@ import { useMiyoStatus } from "@/miyo/useMiyoStatus";
 import { notifyMiyoIndexChanged } from "@/miyo/miyoIndex";
 import { deriveSkillsFolder } from "@/settings/copilotFolder";
 import { extractAppIgnoreSettings, getSystemExcludedFolders } from "@/search/searchUtils";
-import { updateSetting, useSettingsValue } from "@/settings/model";
+import { getSettings, updateSetting, useSettingsValue } from "@/settings/model";
 import {
   type ConnectOutcome,
   type ConnectStep,
@@ -313,7 +313,14 @@ export const MiyoSettings: React.FC = () => {
   const registerVault = useCallback(async (): Promise<
     "added" | "manual" | "unreachable" | "error"
   > => {
-    const customUrl = getMiyoCustomUrl(settings);
+    // The addVault modal holds the callback it was created with, so this
+    // closure can predate an endpoint or Copilot-root change made while the
+    // modal was open. Registering from that stale snapshot would target the
+    // previous endpoint and exclude the previous roots, then enable an endpoint
+    // this vault was never registered with.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/284
+    const currentSettings = getSettings();
+    const customUrl = getMiyoCustomUrl(currentSettings);
     const vaultBase = getVaultBase(app);
     if (!vaultBase || !isLocalMiyoUrl(customUrl)) {
       return "manual";
@@ -332,7 +339,7 @@ export const MiyoSettings: React.FC = () => {
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/284
       const initialExclusions = [
         ...new Set(
-          [...getSystemExcludedFolders(settings), ...extractAppIgnoreSettings(app)]
+          [...getSystemExcludedFolders(currentSettings), ...extractAppIgnoreSettings(app)]
             .map((folder) => folder.replace(/\\/g, "/").replace(/\/+$/, ""))
             // A bare root or parent pointer can make Miyo exclude the entire
             // vault. Preserve other path text literally so an inert Obsidian
@@ -341,7 +348,7 @@ export const MiyoSettings: React.FC = () => {
             .filter((folder) => folder.length > 0 && folder !== "." && folder !== "..")
         ),
       ];
-      await new MiyoClient({ plusLicenseKey: settings.plusLicenseKey }).addFolder(
+      await new MiyoClient({ plusLicenseKey: currentSettings.plusLicenseKey }).addFolder(
         {
           path: vaultBase,
           exclude_folders: initialExclusions,
@@ -384,7 +391,7 @@ export const MiyoSettings: React.FC = () => {
     const available = await enableMiyoBackend(superseded);
     if (superseded()) return "unreachable";
     return available ? "added" : "unreachable";
-  }, [app, plugin, settings, enableMiyoBackend]);
+  }, [app, plugin, enableMiyoBackend]);
 
   // One connection attempt: probe reachability, then (if reachable) check whether
   // this vault is registered with Miyo. An unregistered vault is NOT auto-added —

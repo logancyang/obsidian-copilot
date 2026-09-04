@@ -650,7 +650,7 @@ export class MiyoClient {
     baseUrl: string,
     path: string,
     options: {
-      method: "GET" | "POST" | "PATCH" | "DELETE";
+      method: "GET" | "POST";
       body?: unknown;
       query?: Record<string, string | number | boolean | undefined>;
     }
