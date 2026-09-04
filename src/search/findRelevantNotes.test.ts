@@ -104,6 +104,7 @@ describe("findRelevantNotes", () => {
         "beta.md",
         "linked-only.md",
         "attachment.pdf",
+        "private/secret.md",
         ...Array.from({ length: 25 }, (_, index) => `note-${index}.md`),
       ];
       const filesByPath = new Map(paths.map((path) => [path, createMarkdownFile(path)]));
