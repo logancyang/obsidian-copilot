@@ -61,7 +61,7 @@ The scope is a retrieval preference, not a security boundary. Keep Miyo's regist
 
 ### Relevant Notes
 
-Miyo is the source of Relevant Notes results and similarity percentages; Copilot's legacy local embedding index no longer scores this pane. Copilot keeps Miyo's result order. Direct links and backlinks annotate notes returned by Miyo but never add their own rows. Relevant Notes does not apply Copilot's inclusion or exclusion patterns; the registered folder's Miyo scope determines which notes can appear.
+Miyo is the source of Relevant Notes results and similarity percentages; Copilot's legacy local embedding index no longer scores this pane. Copilot keeps Miyo's result order and applies its current working-folder history plus its inclusion and exclusion patterns. Direct links and backlinks annotate notes returned by Miyo but never add their own rows. The registered folder's Miyo scope is applied first and also affects which candidates Miyo can return.
 
 If Miyo is disabled, unavailable, or its vault registration cannot be confirmed, the pane does not fall back to link and backlink rows. Instead, it offers Miyo download or setup actions. **Open Miyo settings** returns directly to the existing connection flow under **Settings → Copilot → Miyo**, including when you use a remote endpoint or mobile device.
 
@@ -74,7 +74,7 @@ A successful search with zero results shows **No semantic matches yet** without 
 
 For a remote Miyo or mobile device, error and exclusion cards tell you to review the folder on the host machine. Copilot cannot open or change that machine's Miyo settings. Older Miyo builds show **This note isn't indexed in Miyo** and **Update Miyo to the latest version to see why** because they cannot report the more specific reason. Their local desktop action still opens the vault's folder under Sources; remote and mobile connections offer **Review Miyo connection** in Copilot.
 
-Links and backlinks do not create rows in any of these empty states. Copilot's own inclusion and exclusion patterns do not filter Relevant Notes; Miyo's folder filters are the only scope there.
+Links and backlinks do not create rows in any of these empty states. Copilot's working-folder history and inclusion and exclusion patterns filter Relevant Notes after Miyo returns candidates.
 
 ## Search conversations and process documents
 
@@ -103,7 +103,7 @@ Connector access is separate from Agent Chat search. Review the folders, remote 
 - **Relevant Notes has no semantic results:** Read the card for the active note's Miyo state. **No semantic matches yet** means Miyo found no related notes. The other cards distinguish an empty note, indexing work, an indexing error, and a Miyo folder filter. Older Miyo builds use the less specific **This note isn't indexed in Miyo** card. None of these states shows link-only or backlink-only rows.
 - **Agent Chat Miyo document processing fails:** install Miyo on this computer so its local CLI is available, or switch **Document Processor** to **Plus**. A remote Miyo search connection does not provide the local CLI Agent Chat needs.
 - **Quick Chat Miyo document processing fails:** confirm that the connected Miyo service can access the registered vault and document. When a remote server is configured, troubleshoot the document on that server.
-- **Miyo indexes folders you wanted skipped:** Copilot excludes its own current and historical working folders and Obsidian's ignored paths, then filters its results afterwards. Edit the registered folder's other include and exclude rules in the Miyo app.
+- **Miyo indexes folders you wanted skipped:** When Copilot first registers a vault, it supplies the current working-folder history and Obsidian ignored paths as initial Miyo exclusions. It does not overwrite an existing registration or later folder edits. Copilot still filters its integrated search results locally; edit the registered folder's server-side include and exclude rules in Miyo.
 - **Mobile:** a remote Miyo server can be configured on mobile, but Agent Chat and its Skills are desktop features. Use Quick Chat on mobile.
 
 ## Related

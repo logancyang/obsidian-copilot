@@ -154,8 +154,8 @@ describe("MiyoSemanticRetriever", () => {
 
     const startTime = 1700000000000;
     const endTime = 1700600000000;
-    // Time-range queries are issued with returnAll enabled by callers, so the
-    // retriever over-fetches Miyo's largest exposed candidate pool.
+    // Time-range queries can request a larger final result set, but returnAll
+    // alone does not require Miyo's entire exposed candidate pool.
     const retriever = createRetriever({
       timeRange: { startTime, endTime },
       returnAll: true,
@@ -167,13 +167,13 @@ describe("MiyoSemanticRetriever", () => {
       "http://miyo.local",
       "/vault",
       "show notes from this week",
-      1000,
+      20,
       [{ field: "mtime", gte: startTime, lte: endTime }]
     );
     expect(mockGetDocumentsByPath).not.toHaveBeenCalled();
   });
 
-  it("uses return-all limit when returnAll is enabled", async () => {
+  it("keeps a bounded candidate margin when returnAll is enabled without local QA rules (https://github.com/Brevilabs/obsidian-copilot-private/issues/284)", async () => {
     mockSearch.mockResolvedValue({ results: [] });
 
     const retriever = createRetriever({
@@ -187,6 +187,26 @@ describe("MiyoSemanticRetriever", () => {
       "http://miyo.local",
       "/vault",
       "list all notes about ai digests",
+      10,
+      undefined
+    );
+  });
+
+  it("uses the full candidate pool after a custom Copilot root can differ from initial registration (https://github.com/Brevilabs/obsidian-copilot-private/issues/284)", async () => {
+    (getSettings as jest.Mock).mockReturnValue({
+      miyoServerUrl: "http://miyo.local",
+      debug: false,
+      copilotFolder: "team-ai",
+      copilotRootHistory: ["copilot", "team-ai"],
+    });
+    mockSearch.mockResolvedValue({ results: [] });
+
+    await createRetriever().getRelevantDocuments("query");
+
+    expect(mockSearch).toHaveBeenCalledWith(
+      "http://miyo.local",
+      "/vault",
+      "query",
       1000,
       undefined
     );

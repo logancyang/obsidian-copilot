@@ -6,11 +6,11 @@ import { SettingSection } from "@/components/ui/setting-section";
 import { SettingSwitch } from "@/components/ui/setting-switch";
 import { MIYO_HOMEPAGE_URL } from "@/constants";
 import { useApp } from "@/context";
+import { usePlugin } from "@/contexts/PluginContext";
 import { cn } from "@/lib/utils";
 import { logWarn } from "@/logger";
 import { MiyoClient } from "@/miyo/MiyoClient";
 import { MiyoServiceDiscovery } from "@/miyo/MiyoServiceDiscovery";
-import { syncMiyoSystemExclusions } from "@/miyo/miyoSystemExclusions";
 import { type CapabilityStatus, refreshMiyoStatus } from "@/miyo/miyoStatusStore";
 import {
   getMiyoCustomUrl,
@@ -127,6 +127,7 @@ const CapabilityRow: React.FC<CapabilityRowProps> = ({
  */
 export const MiyoSettings: React.FC = () => {
   const app = useApp();
+  const plugin = usePlugin();
   const settings = useSettingsValue();
   const status = useMiyoStatus();
 
@@ -270,6 +271,10 @@ export const MiyoSettings: React.FC = () => {
   // `superseded` is the caller's generation guard. Returns post-enable availability.
   const enableMiyoBackend = useCallback(
     async (superseded: () => boolean) => {
+      // The caller's lifecycle can expire while its preceding network check is
+      // pending. Do not let an obsolete settings tree write into its successor.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/284
+      if (superseded()) return false;
       const txn = (enableTxnRef.current += 1);
       const prevEnableMiyo = settings.enableMiyo;
       updateSetting("enableMiyo", true);
@@ -314,7 +319,10 @@ export const MiyoSettings: React.FC = () => {
       return "manual";
     }
     const attempt = (connectAttemptRef.current += 1);
-    const superseded = () => connectAttemptRef.current !== attempt || !mountedRef.current;
+    const superseded = () =>
+      connectAttemptRef.current !== attempt ||
+      !mountedRef.current ||
+      !plugin.isPluginLifecycleActive();
     try {
       // Keep Copilot's own roots and Obsidian-ignored paths out of Miyo's ranked
       // candidate pool. They can contain enough chunks to exhaust the server's
@@ -322,12 +330,21 @@ export const MiyoSettings: React.FC = () => {
       // User-authored QA rules remain local; Miyo owns those folder rules
       // instead of receiving a snapshot Copilot cannot keep current.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/284
-      const created = await new MiyoClient({ plusLicenseKey: settings.plusLicenseKey }).addFolder(
+      const initialExclusions = [
+        ...new Set(
+          [...getSystemExcludedFolders(settings), ...extractAppIgnoreSettings(app)]
+            .map((folder) => folder.replace(/\\/g, "/").replace(/\/+$/, ""))
+            // A bare root or parent pointer can make Miyo exclude the entire
+            // vault. Preserve other path text literally so an inert Obsidian
+            // pattern such as "./notes" is not broadened into an exclusion.
+            // https://github.com/Brevilabs/obsidian-copilot-private/issues/284
+            .filter((folder) => folder.length > 0 && folder !== "." && folder !== "..")
+        ),
+      ];
+      await new MiyoClient({ plusLicenseKey: settings.plusLicenseKey }).addFolder(
         {
           path: vaultBase,
-          exclude_folders: [
-            ...new Set([...getSystemExcludedFolders(settings), ...extractAppIgnoreSettings(app)]),
-          ],
+          exclude_folders: initialExclusions,
           // Remote read (Relay) is enabled by default so a user who turns on
           // Miyo's Relay connector — itself an explicit, paid, signed-in opt-in
           // (ChatGPT/Claude linked once) — gets cloud access to this vault without
@@ -337,19 +354,25 @@ export const MiyoSettings: React.FC = () => {
           // vault kept out of Relay can flip allow_remote_read off per folder in Miyo.
           allow_remote_read: true,
         },
-        customUrl || undefined
+        customUrl || undefined,
+        () => {
+          // URL discovery and credential lookup are asynchronous. Re-check at
+          // the request boundary so a settings tree owned by an unloaded plugin
+          // cannot register its stale vault in the successor lifecycle.
+          // https://github.com/Brevilabs/obsidian-copilot-private/issues/284
+          if (superseded()) {
+            throw new Error("Miyo registration lifecycle expired");
+          }
+        }
       );
-      // A 409 means the folder already existed, so the POST could not add the
-      // system roots. Merge them without replacing Miyo-owned rules.
-      if (created === null) {
-        await syncMiyoSystemExclusions(app, settings);
-      }
+      if (superseded()) return "unreachable";
       // Registration can make semantic results available without changing the
       // endpoint or its healthy status. Retry any Relevant Notes request that
       // previously settled on setup guidance.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
       notifyMiyoIndexChanged();
     } catch (error) {
+      if (superseded()) return "unreachable";
       logWarn(`Miyo add-folder failed: ${err2String(error)}`);
       return "error";
     }
@@ -361,7 +384,7 @@ export const MiyoSettings: React.FC = () => {
     const available = await enableMiyoBackend(superseded);
     if (superseded()) return "unreachable";
     return available ? "added" : "unreachable";
-  }, [app, settings, enableMiyoBackend]);
+  }, [app, plugin, settings, enableMiyoBackend]);
 
   // One connection attempt: probe reachability, then (if reachable) check whether
   // this vault is registered with Miyo. An unregistered vault is NOT auto-added —
@@ -373,7 +396,10 @@ export const MiyoSettings: React.FC = () => {
   // newer attempt owns the outcome.
   const attemptConnection = useCallback(async (): Promise<ConnectOutcome | "superseded"> => {
     const attempt = (connectAttemptRef.current += 1);
-    const superseded = () => connectAttemptRef.current !== attempt || !mountedRef.current;
+    const superseded = () =>
+      connectAttemptRef.current !== attempt ||
+      !mountedRef.current ||
+      !plugin.isPluginLifecycleActive();
 
     const reachable = await probeReachable();
     if (superseded()) return "superseded";
@@ -389,16 +415,8 @@ export const MiyoSettings: React.FC = () => {
     // rather than silently registering the folder.
     if (registration === "unregistered") return "needs-add";
 
-    try {
-      await syncMiyoSystemExclusions(app, settings);
-    } catch (error) {
-      logWarn(`Miyo system-root exclusion sync failed: ${err2String(error)}`);
-      return "error";
-    }
-    if (superseded()) return "superseded";
-
-    // Registered → enable. The guard immediately above prevents a cancel or
-    // unmount during reconciliation from flipping enableMiyo on.
+    // Registered → enable. The lifecycle guard prevents a cancel, unmount, or
+    // plugin unload from flipping enableMiyo on.
     const available = await enableMiyoBackend(superseded);
     // A newer attempt may have started during the enable refresh — don't let this
     // stale result drive the UI (close the modal / bounce a step). enableMiyoBackend
@@ -407,7 +425,7 @@ export const MiyoSettings: React.FC = () => {
     // Miyo may have dropped between registration and this refresh; only claim
     // "connected" when the backend is actually available now.
     return available ? "connected" : "unreachable";
-  }, [app, settings, probeReachable, enableMiyoBackend]);
+  }, [app, plugin, settings, probeReachable, enableMiyoBackend]);
 
   // Wraps attemptConnection with the shared error affordance so both entry points
   // (Connect button, modal Retry) surface the same Notice on an indeterminate

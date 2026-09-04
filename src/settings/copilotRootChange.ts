@@ -1,5 +1,5 @@
 import { logWarn } from "@/logger";
-import { syncMiyoSystemExclusions } from "@/miyo/miyoSystemExclusions";
+import { notifyMiyoIndexChanged } from "@/miyo/miyoIndex";
 import { matchSystemRoots } from "@/search/searchUtils";
 import { getCopilotSaveData } from "@/settings/copilotSaveData";
 import {
@@ -226,14 +226,9 @@ export async function applyCopilotRootChange(app: App, newRoot: string): Promise
     setSettings((current) => buildRootPatch(current, folder));
   });
 
-  // Local filtering protects the data immediately. Reconcile Miyo in the
-  // background so the newly protected root also stops consuming its bounded
-  // ranked candidate pool; startup retries this if Miyo is currently offline.
+  // A root change immediately changes Relevant Notes eligibility. Invalidate
+  // settled results so excluded notes do not remain visible until some later
+  // index event or manual refresh.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/284
-  const updatedSettings = getSettings();
-  if (updatedSettings.enableMiyo) {
-    void syncMiyoSystemExclusions(app, updatedSettings).catch((error) => {
-      logWarn("Copilot root change: failed to sync Miyo system exclusions.", error);
-    });
-  }
+  notifyMiyoIndexChanged();
 }

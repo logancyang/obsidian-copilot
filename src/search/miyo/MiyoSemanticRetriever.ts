@@ -149,15 +149,19 @@ export class MiyoSemanticRetriever extends BaseRetriever {
     const folderName = searchAll ? undefined : getMiyoFolderName(this.app);
     try {
       const baseUrl = await this.client.resolveBaseUrl(getMiyoCustomUrl(getSettings()));
-      // User QA rules stay local, so fetch Miyo's full exposed candidate pool
-      // when they can remove results. System roots are excluded server-side;
-      // without other QA rules, a 2x margin covers chunk dedup without making
-      // every local or remote query return up to 1,000 chunks. Miyo does not
-      // expose pagination and clamps this endpoint at 1,000.
+      // Fetch Miyo's full exposed candidate pool only when local rules can
+      // remove an unbounded prefix of ranked results. Otherwise a 2x margin
+      // covers chunk dedup without making return-all searches fetch 1,000
+      // chunks. Miyo does not expose pagination and clamps this endpoint at
+      // 1,000.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/284
       const settings = getSettings();
+      // More than the permanent default root means this vault has used a custom
+      // root. Because Miyo receives roots only during initial registration,
+      // local filtering may need to remove candidates from a root chosen later.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/284
       const limit =
-        this.returnAll || hasUserQaPatterns(settings)
+        hasUserQaPatterns(settings) || getSystemExcludedFolders(settings).length > 1
           ? MIYO_SEARCH_CANDIDATE_LIMIT
           : Math.min(this.finalK * 2, MIYO_SEARCH_CANDIDATE_LIMIT);
       const filters = this.buildSearchFilters();

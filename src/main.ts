@@ -41,7 +41,6 @@ import {
   type ModelManagementApi,
 } from "@/modelManagement";
 import { KeychainService } from "@/services/keychainService";
-import { syncMiyoSystemExclusions } from "@/miyo/miyoSystemExclusions";
 import { backupLegacyCredentials } from "@/services/legacyCredentialBackup";
 import {
   persistSettings,
@@ -183,6 +182,12 @@ export default class CopilotPlugin extends Plugin {
   private webSelectionTracker?: WebSelectionTracker;
   private readonly chatHistoryLastAccessedAtManager = new RecentUsageManager<string>();
   private startupMigrationItems: StartupMigrationItem[] = [];
+  private pluginLifecycleActive = true;
+
+  /** Whether this plugin instance still owns lifecycle-sensitive mutations. */
+  public isPluginLifecycleActive(): boolean {
+    return this.pluginLifecycleActive;
+  }
 
   async onload(): Promise<void> {
     // Patch Node's `events.setMaxListeners` so the Claude Agent SDK's call with
@@ -248,16 +253,6 @@ export default class CopilotPlugin extends Plugin {
     // when OpenCode first enumerates models. Awaited for deterministic ordering;
     // it's a fast, one-time, no-op for already-migrated/fresh vaults.
     await runSettingsMigrations(this.modelManagement);
-    // A synced root history can advance while this device is offline. Retry the
-    // monotonic Miyo exclusion merge on every enabled load; it is a no-op when
-    // already current, and it never replaces Miyo-owned rules.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/284
-    const migratedSettings = getSettings();
-    if (migratedSettings.enableMiyo) {
-      void syncMiyoSystemExclusions(this.app, migratedSettings).catch((error) => {
-        logWarn("Failed to sync Miyo system exclusions during startup.", error);
-      });
-    }
     // Remnants of the retired index pipeline live on this device, not in the
     // synced settings, so they are gated by a device-local marker instead of
     // `settingsVersion`. Not awaited: nothing below reads its result.
@@ -644,6 +639,11 @@ export default class CopilotPlugin extends Plugin {
   }
 
   onunload(): void {
+    // A settings tree can briefly outlive this plugin instance. Revoke its
+    // mutation rights synchronously so an in-flight registration cannot write
+    // into the next lifecycle after its asynchronous setup finishes.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/284
+    this.pluginLifecycleActive = false;
     // Obsidian never awaits onunload, so the async tail of teardown is
     // fire-and-forget by nature; declaring onunload void makes that explicit.
     // teardown() is invoked synchronously, so everything above its first

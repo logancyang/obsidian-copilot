@@ -85,11 +85,6 @@ export interface MiyoAddFolderRequest {
   allow_remote_read?: boolean;
 }
 
-/** Folder fields Copilot may update without replacing the registration. */
-export interface MiyoUpdateFolderRequest {
-  exclude_folders: string[];
-}
-
 /**
  * Whether a vault folder is registered with Miyo, as a discriminated result
  * rather than a thrown error — so the connect flow can branch on it directly:
@@ -346,6 +341,7 @@ export class MiyoClient {
    *   immediately before the request goes out; throw from it to call the
    *   registration off. Exists because resolution and decryption are awaits, so
    *   a caller's earlier check can go stale before anything is sent.
+   *   https://github.com/Brevilabs/obsidian-copilot-private/issues/284
    * @returns The created folder record on 201, or `null` when already registered.
    */
   public async addFolder(
@@ -361,6 +357,7 @@ export class MiyoClient {
       const body = JSON.stringify(request);
       // Last point at which this registration can still be called off: once
       // `requestUrl` has it, Obsidian offers no way to abort.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/284
       beforeRequest?.();
       logInfo("Miyo request:", {
         method: "POST",
@@ -405,102 +402,10 @@ export class MiyoClient {
   }
 
   /**
-   * Fetch the Miyo folder entry for a registered folder name.
-   *
-   * @param baseUrl - Miyo base URL.
-   * @param folderName - Vault name registered in Miyo.
-   * @returns Folder entry.
-   */
-  public async getFolder(baseUrl: string, folderName: string): Promise<MiyoFolderEntry> {
-    return this.requestJson<MiyoFolderEntry>(baseUrl, "/v0/folder", {
-      method: "GET",
-      query: { path: folderName },
-    });
-  }
-
-  /**
-   * Update selected rules on an existing Miyo folder registration.
-   *
-   * @param baseUrl - Miyo base URL.
-   * @param folderName - Registered folder name.
-   * @param changes - Folder fields to replace.
-   * @returns Updated folder entry.
-   */
-  public async updateFolder(
-    baseUrl: string,
-    folderName: string,
-    changes: MiyoUpdateFolderRequest
-  ): Promise<MiyoFolderEntry> {
-    return this.requestJson<MiyoFolderEntry>(baseUrl, "/v0/folder", {
-      method: "PATCH",
-      body: { path: folderName, ...changes },
-    });
-  }
-
-  /**
-   * Remove a folder registration (`DELETE /v0/folder`), which also purges the
-   * folder's indexed documents (verified empirically: a post-delete global
-   * search returns no leftovers).
-   *
-   * 404 is a success: the caller's goal — no registration under that name —
-   * already holds (e.g. a prior resync deleted it but never got to re-add).
-   * The identifier is the record's canonical `path`, which is the folder NAME,
-   * not the absolute path (also verified against a live registration).
-   *
-   * @param folderName - Registered folder name (see getMiyoFolderName).
-   * @param overrideUrl - Explicit base URL (from settings) or empty for discovery.
-   * @param beforeRequest - Invoked once the URL and credentials are resolved and
-   *   immediately before the request goes out; throw from it to call the deletion
-   *   off. Exists because resolution and decryption are awaits, so a caller's
-   *   earlier check can go stale before anything is sent.
-   */
-  public async deleteFolder(
-    folderName: string,
-    overrideUrl?: string,
-    beforeRequest?: () => void
-  ): Promise<void> {
-    const baseUrl = await this.resolveBaseUrl(overrideUrl);
-    const headers = await this.buildHeaders();
-    const url = new URL("/v0/folder", baseUrl);
-    // Last point at which this deletion can still be called off: once
-    // `requestUrl` has it, Obsidian offers no way to abort.
-    beforeRequest?.();
-    logInfo("Miyo request:", {
-      method: "DELETE",
-      url: url.toString(),
-      hasBody: true,
-      hasAuthorizationHeader: Boolean(headers.Authorization),
-    });
-    const response = await requestUrl({
-      url: url.toString(),
-      method: "DELETE",
-      headers,
-      contentType: "application/json",
-      body: JSON.stringify({ path: folderName }),
-      throw: false,
-    });
-    if (response.status === 404) {
-      logInfo("Miyo folder already unregistered; delete is a no-op");
-      return;
-    }
-    if (response.status >= 400) {
-      const detail =
-        this.parseResponseJson<{ detail?: string }>(response.json, response.text)?.detail ||
-        response.text ||
-        "";
-      throw new Error(
-        detail
-          ? `Miyo delete-folder failed with status ${response.status}: ${detail}`
-          : `Miyo delete-folder failed with status ${response.status}`
-      );
-    }
-  }
-
-  /**
    * Determine whether a vault folder is registered with Miyo.
    *
-   * Unlike {@link getFolder} (which throws on any non-2xx), this reads the raw
-   * status so the connect flow can branch cleanly: 200 → registered, 404 →
+   * This reads the raw status so the connect flow can branch cleanly: 200 →
+   * registered, 404 →
    * unregistered, anything else → error. It resolves the base URL itself and
    * only inspects `response.status`, never the body — so a healthy-but-malformed
    * payload can't be misread as "unregistered".

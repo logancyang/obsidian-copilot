@@ -20,9 +20,6 @@ jest.mock("@/logger", () => ({
   logInfo: jest.fn(),
   logWarn: jest.fn(),
 }));
-jest.mock("@/miyo/miyoSystemExclusions", () => ({
-  syncMiyoSystemExclusions: jest.fn().mockResolvedValue(false),
-}));
 jest.mock("@/services/settingsPersistence", () => ({
   flushPersistence: jest.fn().mockResolvedValue(undefined),
   persistSettings: jest.fn(),
@@ -108,6 +105,15 @@ describe("main", () => {
         const plugin = createPluginUnderTest([]);
 
         expect(plugin.onunload()).toBeUndefined();
+      });
+
+      it("revokes lifecycle-sensitive mutations before returning (https://github.com/Brevilabs/obsidian-copilot-private/issues/284)", () => {
+        const plugin = createPluginUnderTest([]);
+        Object.assign(plugin, { pluginLifecycleActive: true });
+
+        plugin.onunload();
+
+        expect(plugin.isPluginLifecycleActive()).toBe(false);
       });
 
       it("flushes persistence synchronously, before returning to Obsidian", () => {
@@ -225,6 +231,15 @@ describe("main", () => {
 
         expect(mockSkillManagerDispose).not.toHaveBeenCalled();
         expect(logInfo).toHaveBeenCalledWith("Copilot plugin unloaded");
+      });
+    });
+
+    describe("isPluginLifecycleActive()", () => {
+      it("reports whether this plugin instance owns lifecycle-sensitive mutations", () => {
+        const plugin = createPluginUnderTest([]);
+        Object.assign(plugin, { pluginLifecycleActive: true });
+
+        expect(plugin.isPluginLifecycleActive()).toBe(true);
       });
     });
 
