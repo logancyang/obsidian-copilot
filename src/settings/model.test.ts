@@ -475,26 +475,6 @@ describe("sanitizeSettings - legacy Miyo settings cleanup", () => {
     expect("enableMiyoSearch" in sanitizedRecord).toBe(false);
   });
 
-  it("defaults a missing or malformed miyoSyncedExclusions to an empty receipt", () => {
-    const withoutReceipt = {
-      ...DEFAULT_SETTINGS,
-      miyoSyncedExclusions: undefined,
-    } as unknown as CopilotSettings;
-    expect(sanitizeSettings(withoutReceipt).miyoSyncedExclusions).toBe("");
-
-    const malformed = {
-      ...DEFAULT_SETTINGS,
-      miyoSyncedExclusions: 42,
-    } as unknown as CopilotSettings;
-    expect(sanitizeSettings(malformed).miyoSyncedExclusions).toBe("");
-
-    const preserved = {
-      ...DEFAULT_SETTINGS,
-      miyoSyncedExclusions: '{"device":"d","roots":[]}',
-    };
-    expect(sanitizeSettings(preserved).miyoSyncedExclusions).toBe('{"device":"d","roots":[]}');
-  });
-
   it("assigns a userId while stripping obsolete Miyo keys", () => {
     const legacySettings = {
       ...DEFAULT_SETTINGS,

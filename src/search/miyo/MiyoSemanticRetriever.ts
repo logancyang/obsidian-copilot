@@ -13,9 +13,7 @@ import {
   getMiyoCustomUrl,
   getMiyoFolderName,
   getVaultRelativeMiyoPath,
-  hasUserQaPatterns,
   isCurrentVaultMiyoPath,
-  isMiyoScopeMismatch,
 } from "@/miyo/miyoUtils";
 import { createCopilotPatternFilter } from "@/search/searchUtils";
 import { getSettings } from "@/settings/model";
@@ -138,23 +136,11 @@ export class MiyoSemanticRetriever extends BaseRetriever {
     const folderName = searchAll ? undefined : getMiyoFolderName(this.app);
     try {
       const baseUrl = await this.client.resolveBaseUrl(getMiyoCustomUrl(getSettings()));
-      // Over-fetch candidates only when the local filter can actually drop
-      // results: user-authored qa patterns (the server never sees tag/note
-      // patterns, and edited patterns lag its registration snapshot), or a
-      // stale Miyo scope (the server may return system-root content the filter
-      // must remove). With a synced scope and no user patterns, the server
-      // already omits everything the filter would drop, so a small 2× margin —
-      // covering post-fetch chunk dedup, which Miyo does not guarantee against —
-      // replaces the former always-RETURN_ALL_LIMIT fetch. The margin is
-      // best-effort by design: finalK is an upper bound, not a fill guarantee
-      // (the similarity threshold already returns fewer), and a retry-on-
-      // shortfall second request would add tail latency for a duplicate
-      // density no real payload has shown.
-      const settings = getSettings();
-      const limit =
-        this.returnAll || hasUserQaPatterns(settings) || isMiyoScopeMismatch(this.app, settings)
-          ? RETURN_ALL_LIMIT
-          : Math.min(this.finalK * 2, RETURN_ALL_LIMIT);
+      // Always over-fetch. Copilot registers the vault root with Miyo without
+      // narrowing it, so every result the local QA filter drops
+      // (filterByCopilotPatterns) is one the server still returned; fetching
+      // only finalK would let a filtered page come back short.
+      const limit = RETURN_ALL_LIMIT;
       const filters = this.buildSearchFilters();
       if (getSettings().debug) {
         logInfo("MiyoSemanticRetriever: search params:", {

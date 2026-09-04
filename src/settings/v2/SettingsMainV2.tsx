@@ -26,8 +26,9 @@ import { SelfHostSettings } from "./components/SelfHostSettings";
 // vaults:
 //     implicitly. Its old Advanced-tab switch is gone because the built-in
 //     semantic index is no longer a user-facing product surface.
-//   - qaInclusions/qaExclusions — still consumed (Miyo registration snapshot);
-//     their edit UI is deferred per issue #195 ("defer include/exclude").
+//   - qaInclusions/qaExclusions — still consumed as the query-time scope filter
+//     over search results; their edit UI is deferred per issue #195
+//     ("defer include/exclude").
 //   - maxSourceChunks / enableInlineCitations — still read by search and chat.
 //     compatibility fields awaiting their dedicated settings migration.
 const LazySkillsSettings = React.lazy(() =>

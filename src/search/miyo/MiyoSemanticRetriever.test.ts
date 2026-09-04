@@ -1,5 +1,5 @@
 import { type App, TFile } from "obsidian";
-import { getMiyoFolderName, hasUserQaPatterns, isMiyoScopeMismatch } from "@/miyo/miyoUtils";
+import { getMiyoFolderName } from "@/miyo/miyoUtils";
 import { MiyoRequestError } from "@/miyo/MiyoClient";
 import { MiyoSemanticRetriever } from "@/search/miyo/MiyoSemanticRetriever";
 import { getSettings } from "@/settings/model";
@@ -23,10 +23,6 @@ jest.mock("@/miyo/miyoUtils", () => ({
   // Mirrors the real ownership rule against the mocked "/vault" folder name.
   isCurrentVaultMiyoPath: jest.fn((_: unknown, path: string) => path.startsWith("/vault/")),
   getMiyoCustomUrl: jest.fn().mockReturnValue(""),
-  // Default: synced scope, no user patterns — the narrow-limit branch. Tests
-  // that exercise the over-fetch branches flip these explicitly.
-  hasUserQaPatterns: jest.fn(() => false),
-  isMiyoScopeMismatch: jest.fn(() => false),
 }));
 jest.mock("@/miyo/MiyoClient", () => ({
   MiyoRequestError:
@@ -136,14 +132,13 @@ describe("MiyoSemanticRetriever", () => {
     const retriever = createRetriever();
     const documents = await retriever.getRelevantDocuments("query with [[notes/a]] mention");
 
-    // Synced scope + no user patterns: the server already omits everything the
-    // local filter would drop, so the request narrows to finalK×2 (dedup
-    // margin) instead of the full RETURN_ALL_LIMIT pool.
+    // Miyo indexes the whole registered vault, so the local filter is the only
+    // thing narrowing results and the request always takes the full pool.
     expect(mockSearch).toHaveBeenCalledWith(
       "http://miyo.local",
       "/vault",
       "query with [[notes/a]] mention",
-      20,
+      RETURN_ALL_LIMIT,
       undefined
     );
     expect(mockGetDocumentsByPath).not.toHaveBeenCalled();
@@ -201,7 +196,6 @@ describe("MiyoSemanticRetriever", () => {
   it("over-fetches but caps returned chunks to the requested limit when a filter is active", async () => {
     // A user-authored inclusion/exclusion pattern can drop results, so the
     // retriever over-fetches candidates to still fill the requested cap.
-    (hasUserQaPatterns as jest.Mock).mockReturnValue(true);
     (getSettings as jest.Mock).mockReturnValue({
       miyoServerUrl: "http://miyo.local",
       debug: false,
@@ -242,25 +236,6 @@ describe("MiyoSemanticRetriever", () => {
       "notes/0.md",
       "notes/1.md",
     ]);
-  });
-
-  it("over-fetches while the Miyo scope is stale", async () => {
-    // A stale server-side scope can return system-root content the local filter
-    // must drop, so the retriever keeps the expanded pool until the resync
-    // receipt is current again.
-    (isMiyoScopeMismatch as jest.Mock).mockReturnValue(true);
-    mockSearch.mockResolvedValue({ results: [] });
-
-    const retriever = createRetriever({ maxK: 3 });
-    await retriever.getRelevantDocuments("query");
-
-    expect(mockSearch).toHaveBeenCalledWith(
-      "http://miyo.local",
-      "/vault",
-      "query",
-      RETURN_ALL_LIMIT,
-      undefined
-    );
   });
 
   it("filters chunks by Copilot inclusion/exclusion rules", async () => {
@@ -317,11 +292,6 @@ describe("MiyoSemanticRetriever", () => {
       miyoSearchAll: true,
       copilotFolder: "copilot",
     });
-    // clearAllMocks does not reset mockReturnValue implementations pinned by
-    // earlier tests; re-pin the narrow-limit branch explicitly.
-    (hasUserQaPatterns as jest.Mock).mockReturnValue(false);
-    (isMiyoScopeMismatch as jest.Mock).mockReturnValue(false);
-
     mockSearch.mockResolvedValue({
       results: [
         {
@@ -344,7 +314,13 @@ describe("MiyoSemanticRetriever", () => {
     const retriever = createRetriever();
     const documents = await retriever.getRelevantDocuments("query");
 
-    expect(mockSearch).toHaveBeenCalledWith("http://miyo.local", undefined, "query", 20, undefined);
+    expect(mockSearch).toHaveBeenCalledWith(
+      "http://miyo.local",
+      undefined,
+      "query",
+      RETURN_ALL_LIMIT,
+      undefined
+    );
     expect(documents).toHaveLength(1);
     expect(documents[0].metadata.path).toBe("copilot/notes/foo.md");
     expect(documents[0].metadata.fromCurrentVault).toBe(false);

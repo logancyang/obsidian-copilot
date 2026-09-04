@@ -20,10 +20,6 @@ jest.mock("@/logger", () => ({
   logInfo: jest.fn(),
   logWarn: jest.fn(),
 }));
-jest.mock("@/miyo/miyoResync", () => ({
-  resetMiyoMutations: jest.fn(),
-  startMiyoMutationSession: jest.fn(),
-}));
 jest.mock("@/services/settingsPersistence", () => ({
   flushPersistence: jest.fn().mockResolvedValue(undefined),
   persistSettings: jest.fn(),
@@ -54,7 +50,6 @@ jest.mock("@/agentMode", () => ({
 import CopilotPlugin from "@/main";
 import { logError, logInfo, logWarn } from "@/logger";
 import { logFileManager } from "@/logFileManager";
-import { resetMiyoMutations } from "@/miyo/miyoResync";
 import { flushPersistence } from "@/services/settingsPersistence";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { disposeNotificationSound } from "@/utils/notificationSound";
@@ -112,7 +107,7 @@ describe("main", () => {
         expect(plugin.onunload()).toBeUndefined();
       });
 
-      it("ends the Miyo mutation lifecycle synchronously, before returning to Obsidian", () => {
+      it("flushes persistence synchronously, before returning to Obsidian", () => {
         const calls: string[] = [];
         const plugin = createPluginUnderTest(calls);
 
@@ -120,7 +115,6 @@ describe("main", () => {
 
         // Everything above teardown()'s first `await` must run before the next
         // `onload()` can start, which is what makes the vault boundary real.
-        expect(resetMiyoMutations).toHaveBeenCalledTimes(1);
         expect(flushPersistence).toHaveBeenCalledTimes(1);
         expect(calls).toEqual([]);
       });
