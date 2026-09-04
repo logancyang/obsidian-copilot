@@ -32,6 +32,7 @@ import {
 } from "@/constants";
 import { ChatManager } from "@/core/ChatManager";
 import { MessageRepository } from "@/core/MessageRepository";
+import { initializeI18n } from "@/i18n";
 import { logError, logInfo, logWarn } from "@/logger";
 import { logFileManager } from "@/logFileManager";
 import {
@@ -190,6 +191,7 @@ export default class CopilotPlugin extends Plugin {
   }
 
   async onload(): Promise<void> {
+    initializeI18n();
     // Patch Node's `events.setMaxListeners` so the Claude Agent SDK's call with
     // a web-realm AbortSignal stops throwing in Electron's renderer. No-ops on
     // mobile (no node:events / no SDK). Must run before any Agent Mode session;

@@ -2,6 +2,10 @@ import type { EditorView } from "@codemirror/view";
 import { type TFile } from "obsidian";
 
 declare module "obsidian" {
+  // `getLanguage` is public since Obsidian 1.8.7 and guaranteed by this
+  // plugin's minimum app version. The pinned development types predate it.
+  export function getLanguage(): string;
+
   interface MetadataCache {
     // Note that this API is considered internal and may work differently in the
     // future.
