@@ -23,7 +23,7 @@ let mockSettings: {
   enableMiyo: boolean;
   miyoServerUrl: string;
   plusLicenseKey: string;
-  qaExclusions?: string;
+  copilotFolder?: string;
 } = {
   enableMiyo: true,
   miyoServerUrl: "",
@@ -262,15 +262,15 @@ describe("RelevantNotes", () => {
       expect(mockFindRelevantNotes).toHaveBeenCalledTimes(2);
     });
 
-    it("retires a settled result when the local QA scope changes without an index signal (https://github.com/Brevilabs/obsidian-copilot-private/issues/284)", async () => {
-      // Reset Settings and config import replace the QA rules directly, so no
-      // index signal arrives; without the scope in the request identity the
-      // pane would keep showing rows the new rules exclude.
+    it("retires a settled result when the Copilot root changes without an index signal (https://github.com/Brevilabs/obsidian-copilot-private/issues/284)", async () => {
+      // A config import or Reset Settings replaces the working folder directly,
+      // so no index signal arrives; without the scope in the request identity
+      // the pane would keep showing rows under the newly protected root.
       mockFindRelevantNotes
         .mockResolvedValueOnce({
           notes: [
             {
-              note: { path: "Private.md", title: "Private" },
+              note: { path: "team-ai/chat.md", title: "Chat" },
               metadata: { score: 0.9, hasOutgoingLinks: false, hasBacklinks: false },
             },
           ],
@@ -279,12 +279,12 @@ describe("RelevantNotes", () => {
         .mockResolvedValueOnce({ notes: [], status: "no-matches" });
 
       const { rerender } = render(<RelevantNotes onAddToChat={jest.fn()} />);
-      expect(await screen.findByText("Private")).toBeTruthy();
+      expect(await screen.findByText("Chat")).toBeTruthy();
 
-      mockSettings = { ...mockSettings, qaExclusions: "Private.md" };
+      mockSettings = { ...mockSettings, copilotFolder: "team-ai" };
       rerender(<RelevantNotes onAddToChat={jest.fn()} />);
 
-      await waitFor(() => expect(screen.queryByText("Private")).toBeNull());
+      await waitFor(() => expect(screen.queryByText("Chat")).toBeNull());
       expect(mockFindRelevantNotes).toHaveBeenCalledTimes(2);
     });
 

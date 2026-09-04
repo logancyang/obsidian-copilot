@@ -565,22 +565,30 @@ describe("searchUtils", () => {
     });
   });
 
-  describe("getMatchingPatterns", () => {
-    it("should return null inclusions and exclusions when no patterns are set", () => {
-      // No need to set mock return value as it's set in beforeEach
+  describe("getMatchingPatterns()", () => {
+    it("returns null rule sets for a caller that supplies none", () => {
       const { inclusions, exclusions } = getMatchingPatterns();
       expect(inclusions).toBeNull();
       expect(exclusions).toBeNull();
     });
 
-    it("should return categorized inclusion patterns", () => {
-      // Mock settings with inclusions
+    it("ignores persisted qaInclusions and qaExclusions, which no longer scope anything (https://github.com/Brevilabs/obsidian-copilot-private/issues/284)", () => {
       (settingsModel.getSettings as jest.Mock).mockReturnValue({
-        qaInclusions: "notes,*.pdf,%23important,%5B%5BNote%201%5D%5D",
-        qaExclusions: "",
+        qaInclusions: "notes,%23important",
+        qaExclusions: "private,%23draft",
       });
 
       const { inclusions, exclusions } = getMatchingPatterns();
+      expect(inclusions).toBeNull();
+      expect(exclusions).toBeNull();
+    });
+
+    it("categorizes the caller's own inclusion and exclusion rules", () => {
+      const { inclusions, exclusions } = getMatchingPatterns({
+        inclusions: "notes,*.pdf,%23important,%5B%5BNote%201%5D%5D",
+        exclusions: "private,%23draft,*.tmp",
+      });
+
       expect(inclusions).toEqual({
         folderPatterns: ["notes"],
         extensionPatterns: ["*.pdf"],
@@ -588,46 +596,10 @@ describe("searchUtils", () => {
         notePatterns: ["[[Note 1]]"],
         propertyPatterns: [],
       });
-      expect(exclusions).toBeNull();
-    });
-
-    it("should return categorized exclusion patterns", () => {
-      // Mock settings with exclusions
-      (settingsModel.getSettings as jest.Mock).mockReturnValue({
-        qaInclusions: "",
-        qaExclusions: "private,%23draft,*.tmp",
-      });
-
-      const { inclusions, exclusions } = getMatchingPatterns();
-      expect(inclusions).toBeNull();
       expect(exclusions).toEqual({
         folderPatterns: ["private"],
         tagPatterns: ["#draft"],
         extensionPatterns: ["*.tmp"],
-        notePatterns: [],
-        propertyPatterns: [],
-      });
-    });
-
-    it("should handle both inclusions and exclusions", () => {
-      // Mock settings with both inclusions and exclusions
-      (settingsModel.getSettings as jest.Mock).mockReturnValue({
-        qaInclusions: "notes,%23important",
-        qaExclusions: "private,%23draft",
-      });
-
-      const { inclusions, exclusions } = getMatchingPatterns();
-      expect(inclusions).toEqual({
-        folderPatterns: ["notes"],
-        tagPatterns: ["#important"],
-        extensionPatterns: [],
-        notePatterns: [],
-        propertyPatterns: [],
-      });
-      expect(exclusions).toEqual({
-        folderPatterns: ["private"],
-        tagPatterns: ["#draft"],
-        extensionPatterns: [],
         notePatterns: [],
         propertyPatterns: [],
       });
@@ -703,7 +675,7 @@ describe("searchUtils", () => {
         copilotFolder: "ai",
         copilotRootHistory: ["copilot", "ai"],
       });
-      const filter = createCopilotPatternFilter(window.app);
+      const filter = createCopilotPatternFilter();
       // System roots dropped on the raw path — no TFile resolution required.
       expect(filter("ai/memory/note.md")).toBe(false);
       expect(filter("copilot/copilot-conversations/chat.md")).toBe(false);
@@ -721,7 +693,7 @@ describe("searchUtils", () => {
         copilotFolder: "copilot",
         copilotRootHistory: ["copilot"],
       });
-      const filter = createCopilotPatternFilter(window.app);
+      const filter = createCopilotPatternFilter();
       expect(filter("AGENTS.md")).toBe(false);
       expect(filter("CLAUDE.md")).toBe(false);
       expect(filter("copilot/projects/Research/AGENTS.md")).toBe(false);
@@ -735,48 +707,30 @@ describe("searchUtils", () => {
         copilotFolder: "copilot",
         copilotRootHistory: ["copilot"],
       });
-      const filter = createCopilotPatternFilter(window.app);
+      const filter = createCopilotPatternFilter();
       // Segment boundary: "mycopilot/" is not the "copilot" root.
       expect(filter("mycopilot/note.md")).toBe(true);
     });
 
-    it("applies path-only QA rules when a current-vault path is unresolved (https://github.com/Brevilabs/obsidian-copilot-private/issues/284)", () => {
+    it("ignores persisted qaInclusions and qaExclusions, which no longer scope retrieval (https://github.com/Brevilabs/obsidian-copilot-private/issues/284)", () => {
+      // Vaults configured before the edit UI was retired still carry these
+      // values. They are kept for the planned agent access control, so nothing
+      // may read them until then.
       (settingsModel.getSettings as jest.Mock).mockReturnValue({
-        qaInclusions: "notes,[[Pinned]]",
-        qaExclusions: "private,*.tmp,[[Secret]]",
+        qaInclusions: "notes,[[Pinned]],#published",
+        qaExclusions: "private,*.tmp,[[Secret]],[private:true]",
         copilotFolder: "copilot",
         copilotRootHistory: ["copilot"],
       });
-      mockGetAbstractFileByPath.mockReturnValue(null);
 
-      const filter = createCopilotPatternFilter(window.app);
+      const filter = createCopilotPatternFilter();
 
-      expect(filter("notes/idea.md")).toBe(true);
-      expect(filter("archive/Pinned.md")).toBe(true);
-      expect(filter("private/idea.md")).toBe(false);
-      expect(filter("notes/draft.tmp")).toBe(false);
-      expect(filter("notes/Secret.md")).toBe(false);
-      expect(filter("archive/other.md")).toBe(false);
-    });
-
-    it("fails closed when unresolved paths require metadata QA rules (https://github.com/Brevilabs/obsidian-copilot-private/issues/284)", () => {
-      mockGetAbstractFileByPath.mockReturnValue(null);
-
-      (settingsModel.getSettings as jest.Mock).mockReturnValue({
-        qaInclusions: "#published",
-        qaExclusions: "",
-        copilotFolder: "copilot",
-        copilotRootHistory: ["copilot"],
-      });
-      expect(createCopilotPatternFilter(window.app)("notes/unknown.md")).toBe(false);
-
-      (settingsModel.getSettings as jest.Mock).mockReturnValue({
-        qaInclusions: "",
-        qaExclusions: "[private:true]",
-        copilotFolder: "copilot",
-        copilotRootHistory: ["copilot"],
-      });
-      expect(createCopilotPatternFilter(window.app)("notes/unknown.md")).toBe(false);
+      expect(filter("private/idea.md")).toBe(true);
+      expect(filter("notes/draft.tmp")).toBe(true);
+      expect(filter("notes/Secret.md")).toBe(true);
+      expect(filter("archive/other.md")).toBe(true);
+      // No rule needs vault metadata now, so no path is resolved to a TFile.
+      expect(mockGetAbstractFileByPath).not.toHaveBeenCalled();
     });
 
     it("excludes differently-cased instruction files where the filesystem is case-insensitive", () => {
@@ -789,7 +743,7 @@ describe("searchUtils", () => {
         copilotFolder: "copilot",
         copilotRootHistory: ["copilot"],
       });
-      const filter = createCopilotPatternFilter(window.app);
+      const filter = createCopilotPatternFilter();
       expect(filter("agents.md")).toBe(false);
       expect(filter("Claude.md")).toBe(false);
       expect(filter("Copilot/Projects/Research/agents.md")).toBe(false);
@@ -807,7 +761,7 @@ describe("searchUtils", () => {
         copilotRootHistory: ["copilot"],
       });
 
-      expect(createCopilotPatternFilter(window.app)("Copilot/note.md")).toBe(false);
+      expect(createCopilotPatternFilter()("Copilot/note.md")).toBe(false);
     });
 
     it("keeps a differently-cased folder where the filesystem is case-sensitive", () => {
@@ -824,7 +778,7 @@ describe("searchUtils", () => {
           copilotRootHistory: ["copilot"],
         });
 
-        expect(createCopilotPatternFilter(window.app)("Copilot/note.md")).toBe(true);
+        expect(createCopilotPatternFilter()("Copilot/note.md")).toBe(true);
       } finally {
         Object.assign(platform, restore);
       }

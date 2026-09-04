@@ -1,5 +1,5 @@
 import { logInfo } from "@/logger";
-import { getMatchingPatterns, shouldIndexFile } from "@/search/searchUtils";
+import { shouldIndexFile } from "@/search/searchUtils";
 import { App, TFile } from "obsidian";
 
 /**
@@ -28,13 +28,9 @@ export class GrepScanner {
    */
   async batchCachedReadGrep(queries: string[], limit: number): Promise<string[]> {
     // Get inclusion/exclusion patterns from settings
-    const { inclusions, exclusions } = getMatchingPatterns();
-
     // Filter files based on inclusion/exclusion patterns
     const allFiles = this.app.vault.getMarkdownFiles();
-    const files = allFiles.filter((file) =>
-      shouldIndexFile(this.app, file, inclusions, exclusions)
-    );
+    const files = allFiles.filter((file) => shouldIndexFile(this.app, file, null, null));
     const batchSize = GrepScanner.CONFIG.BATCH_SIZE;
 
     // Normalize queries for case-insensitive search, filtering out terms too short for meaningful grep

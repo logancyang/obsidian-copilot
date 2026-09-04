@@ -179,7 +179,6 @@ function changeAffectsProject(change: PendingChange, record: ProjectFileRecord):
   const { inclusions, exclusions } = getMatchingPatterns({
     inclusions: record.project.contextSource?.inclusions,
     exclusions: record.project.contextSource?.exclusions,
-    isProject: true,
   });
   // A project with no inclusions materializes nothing, so nothing can dirty it.
   if (!inclusions) return false;

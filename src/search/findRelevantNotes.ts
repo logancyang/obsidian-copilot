@@ -79,7 +79,7 @@ async function searchRelatedNotesWithMiyo(
     }
     const scoreByPath = new Map<string, number>();
     const results = response.results;
-    const isAllowed = createCopilotPatternFilter(app);
+    const isAllowed = createCopilotPatternFilter();
 
     // Miyo owns relevance ranking and applies the result limit. Preserve its
     // order and keep the first result for each file instead of comparing or
@@ -94,8 +94,8 @@ async function searchRelatedNotesWithMiyo(
       }
       const relativePath = getVaultRelativeMiyoPath(app, result.path);
       // Related Notes is another Miyo retrieval surface, so it must enforce the
-      // same local QA boundary as chat retrieval. Otherwise a note excluded in
-      // Copilot can still appear in the pane when Miyo returns it.
+      // same local scope boundary as chat retrieval. Otherwise a note under a
+      // Copilot root can still appear in the pane when Miyo returns it.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/284
       if (relativePath !== filePath && !scoreByPath.has(relativePath) && isAllowed(relativePath)) {
         scoreByPath.set(relativePath, result.score);

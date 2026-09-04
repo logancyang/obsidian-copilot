@@ -94,7 +94,6 @@ async function persistInclusions(
   const project = record.project;
   const { inclusions: existing } = getMatchingPatterns({
     inclusions: project.contextSource?.inclusions,
-    isProject: true,
   });
   const folderPatterns = new Set(existing?.folderPatterns ?? []);
   const notePatterns = new Set(existing?.notePatterns ?? []);
