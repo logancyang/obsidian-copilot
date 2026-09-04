@@ -189,6 +189,33 @@ describe("commands", () => {
       expect(mockScanFolder).not.toHaveBeenCalled();
     });
 
+    it("refuses to scan after Miyo is disconnected while the palette entry survives (https://github.com/logancyang/obsidian-copilot/pull/3091#discussion_r3926747283)", async () => {
+      jest.mocked(getSettings).mockReturnValue({
+        enableMiyo: true,
+        miyoServerUrl: "http://miyo.local",
+      } as ReturnType<typeof getSettings>);
+      const commands: Command[] = [];
+      const plugin = {
+        addCommand: jest.fn((command: Command) => commands.push(command)),
+        app: { workspace: { getActiveFile: jest.fn(() => null) } },
+      } as unknown as CopilotPlugin;
+
+      registerCommands(plugin, jest.fn());
+      jest.mocked(getSettings).mockReturnValue({
+        enableMiyo: false,
+        miyoServerUrl: "http://miyo.local",
+      } as ReturnType<typeof getSettings>);
+      commands.find(({ id }) => id === COMMAND_IDS.REFRESH_MIYO_INDEX)?.callback?.();
+
+      await waitFor(() =>
+        expect(Notice).toHaveBeenCalledWith(
+          "Miyo is disconnected. Connect it in Copilot settings, then retry."
+        )
+      );
+      expect(mockResolveBaseUrl).not.toHaveBeenCalled();
+      expect(mockScanFolder).not.toHaveBeenCalled();
+    });
+
     it.each([
       [new Error("connection refused"), "Miyo is unavailable. Open Miyo, then retry the refresh."],
       [

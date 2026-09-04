@@ -222,6 +222,14 @@ export function registerCommands(plugin: CopilotPlugin, publish: PublishFile) {
   if (getSettings().enableMiyo) {
     addCommand(plugin, COMMAND_IDS.REFRESH_MIYO_INDEX, async () => {
       const settings = getSettings();
+      // Commands register once per load, so a Disconnect performed afterwards
+      // leaves this entry in the palette. Re-read the intent before touching
+      // the endpoint so a disconnected Miyo is never scanned.
+      // https://github.com/logancyang/obsidian-copilot/pull/3091#discussion_r3926747283
+      if (!settings.enableMiyo) {
+        new Notice("Miyo is disconnected. Connect it in Copilot settings, then retry.");
+        return;
+      }
       const customUrl = getMiyoCustomUrl(settings);
       // Mobile cannot discover a service on localhost, so this state needs a
       // concrete recovery action instead of the generic unavailable message.
