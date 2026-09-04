@@ -48,10 +48,8 @@ describe("RetrieverFactory", () => {
         });
       });
 
-      it("uses lexical search even when a legacy semantic flag remains https://github.com/Brevilabs/obsidian-copilot-private/issues/281", async () => {
-        const result = await RetrieverFactory.createRetriever(app, options, {
-          enableSemanticSearchV3: true,
-        });
+      it("uses lexical search when Miyo is not the active backend", async () => {
+        const result = await RetrieverFactory.createRetriever(app, options);
 
         expect(result).toEqual({
           retriever: lexicalRetriever,
@@ -83,7 +81,7 @@ describe("RetrieverFactory", () => {
         jest.mocked(getSearchBackend).mockReturnValueOnce("miyo").mockReturnValueOnce("keyword");
 
         expect(RetrieverFactory.getRetrieverType()).toBe("semantic");
-        expect(RetrieverFactory.getRetrieverType({ enableSemanticSearchV3: true })).toBe("lexical");
+        expect(RetrieverFactory.getRetrieverType()).toBe("lexical");
       });
     });
 

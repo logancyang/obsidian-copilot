@@ -79,8 +79,15 @@ function configuredModel(configuredModelId: string, providerId: string): Configu
   };
 }
 
-function settingsWith(overrides: Partial<CopilotSettings> = {}): CopilotSettings {
+function settingsWith(
+  overrides: Partial<CopilotSettings> & Record<string, unknown> = {}
+): CopilotSettings {
   return { ...DEFAULT_SETTINGS, ...overrides };
+}
+
+function embeddingSelection(plan: ReturnType<typeof planAzureRemoval>): string | undefined {
+  return (plan?.patch as Partial<CopilotSettings> & { embeddingModelKey?: string })
+    .embeddingModelKey;
 }
 
 beforeEach(() => {
@@ -118,14 +125,14 @@ describe("azureRemovalMigration", () => {
       const plan = planAzureRemoval(
         settingsWith({ embeddingModelKey: "azure-openai|azure openai" })
       );
-      expect(plan?.patch.embeddingModelKey).toBe(DEFAULT_SETTINGS.embeddingModelKey);
+      expect(embeddingSelection(plan)).toBe("");
     });
 
     it("repoints the pre-rename `azure_openai` embedding selection too (https://github.com/logancyang/obsidian-copilot/issues/2932)", () => {
       const plan = planAzureRemoval(
         settingsWith({ embeddingModelKey: "azure-openai|azure_openai" })
       );
-      expect(plan?.patch.embeddingModelKey).toBe(DEFAULT_SETTINGS.embeddingModelKey);
+      expect(embeddingSelection(plan)).toBe("");
     });
 
     it("acts on an embedding selection even when no Azure provider row exists (https://github.com/logancyang/obsidian-copilot/issues/2932)", () => {
@@ -135,7 +142,7 @@ describe("azureRemovalMigration", () => {
         settingsWith({ providers: {}, embeddingModelKey: "azure-openai|azure openai" })
       );
       expect(plan).not.toBeNull();
-      expect(plan?.patch.embeddingModelKey).toBe(DEFAULT_SETTINGS.embeddingModelKey);
+      expect(embeddingSelection(plan)).toBe("");
     });
 
     it("leaves an embedding selection on another provider alone", () => {
@@ -145,7 +152,7 @@ describe("azureRemovalMigration", () => {
           embeddingModelKey: "text-embedding-3-small|openai",
         })
       );
-      expect(plan?.patch.embeddingModelKey).toBeUndefined();
+      expect(embeddingSelection(plan)).toBeUndefined();
     });
 
     it("removes a legacy Azure chat model and the selection naming it (https://github.com/logancyang/obsidian-copilot/issues/2932)", () => {
@@ -196,7 +203,7 @@ describe("azureRemovalMigration", () => {
         settingsWith({ embeddingModelKey: "azure-openai|azure openai" })
       );
       expect(mockSetSettings).toHaveBeenCalledWith(
-        expect.objectContaining({ embeddingModelKey: DEFAULT_SETTINGS.embeddingModelKey })
+        expect.objectContaining({ embeddingModelKey: "" })
       );
     });
 

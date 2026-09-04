@@ -29,6 +29,8 @@ export { CURRENT_SETTINGS_VERSION } from "./version";
 /**
  * Run pending one-time migrations and stamp the new version. No-op when
  * settings are already at/above the target (migrated vaults, fresh installs).
+ *
+ * @param api - Model-management API used by provider migrations.
  */
 export async function runSettingsMigrations(api: ModelManagementApi): Promise<void> {
   const fromVersion = getSettings().settingsVersion ?? 0;

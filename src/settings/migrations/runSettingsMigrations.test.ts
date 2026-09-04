@@ -36,7 +36,7 @@ const mockGetSettings = getSettings as jest.MockedFunction<typeof getSettings>;
 const mockSetSettings = setSettings as jest.MockedFunction<typeof setSettings>;
 
 function settings(
-  overrides: Partial<CopilotSettings>,
+  overrides: Partial<CopilotSettings> & Record<string, unknown>,
   models: CustomModel[] = []
 ): CopilotSettings {
   return { ...DEFAULT_SETTINGS, activeModels: models, ...overrides };
@@ -434,7 +434,7 @@ describe("runSettingsMigrations()", () => {
     await runSettingsMigrations(api);
 
     expect(mockSetSettings).toHaveBeenCalledWith(
-      expect.objectContaining({ embeddingModelKey: DEFAULT_SETTINGS.embeddingModelKey })
+      expect.objectContaining({ embeddingModelKey: "" })
     );
   });
 

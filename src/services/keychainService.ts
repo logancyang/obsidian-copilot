@@ -25,12 +25,10 @@ const EXTRA_SECRET_KEYS: readonly string[] = [];
 type ModelSecretField = (typeof MODEL_SECRET_FIELDS)[number];
 
 /**
- * Scope distinguishing chat models from embedding models in keychain IDs.
- * Reason: `activeModels` and `activeEmbeddingModels` can contain models with
- * the same `name|provider` identity but different API keys. Without scope,
- * they'd collide in the keychain namespace.
+ * Scope retained in keychain IDs so existing chat-model credentials keep their
+ * stable namespace after the embedding pipeline's removal.
  */
-type ModelScope = "chat" | "embedding";
+type ModelScope = "chat";
 
 /**
  * Check whether a settings key should be stored in the OS keychain.
@@ -412,13 +410,6 @@ export class KeychainService {
     hydrated.activeModels = modelResult.models;
     hadFailures = hadFailures || modelResult.hadFailures;
 
-    const embeddingResult = await this.hydrateModelSecrets(
-      "embedding",
-      hydrated.activeEmbeddingModels ?? []
-    );
-    hydrated.activeEmbeddingModels = embeddingResult.models;
-    hadFailures = hadFailures || embeddingResult.hadFailures;
-
     if (hadFailures) {
       logWarn("Keychain hydrate: some keychain reads failed — values left as-is.");
     }
@@ -463,14 +454,6 @@ export class KeychainService {
       prevSettings?.activeModels,
       clearedSecretIds
     );
-    this.collectModelSecrets(
-      "embedding",
-      settings.activeEmbeddingModels,
-      secretEntries,
-      prevSettings?.activeEmbeddingModels,
-      clearedSecretIds
-    );
-
     // Find deleted models to clean up
     const keychainIdsToDelete = [
       ...this.getDeletedModelKeysForScope(
@@ -478,15 +461,39 @@ export class KeychainService {
         prevSettings?.activeModels,
         settings.activeModels
       ),
-      ...this.getDeletedModelKeysForScope(
-        "embedding",
-        prevSettings?.activeEmbeddingModels,
-        settings.activeEmbeddingModels
-      ),
       ...clearedSecretIds,
     ];
 
     return { secretEntries, keychainIdsToDelete };
+  }
+
+  // ---------------------------------------------------------------------------
+  // removeRetiredEmbeddingSecrets — drop credentials the embedding pipeline owned
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Delete this vault's embedding-scoped model credentials.
+   *
+   * The retired `activeEmbeddingModels` rows are stripped from settings on
+   * load, so no later save can name those identities to tombstone them. Their
+   * keychain entries carry the embedding scope in their ID, which stays
+   * enumerable after the rows are gone.
+   * https://github.com/logancyang/obsidian-copilot/pull/3094#discussion_r3926692782
+   */
+  removeRetiredEmbeddingSecrets(): void {
+    // Older Obsidian builds cannot enumerate entries. Nothing else can identify
+    // them once the rows are stripped, so leave them rather than guessing.
+    if (typeof this.storage.listSecrets !== "function") return;
+
+    const retiredPrefix = `copilot-v${this.vaultId}-model-api-key-embedding-`;
+    for (const id of this.storage.listSecrets()) {
+      if (!id.startsWith(retiredPrefix)) continue;
+      try {
+        this.removeSecret(id);
+      } catch (error) {
+        logWarn(`Keychain: failed to remove retired embedding secret ${id}`, error);
+      }
+    }
   }
 
   // ---------------------------------------------------------------------------

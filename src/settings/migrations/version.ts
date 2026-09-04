@@ -23,5 +23,8 @@
  *         Amazon Bedrock chat provider.
  *   12  → the same for the removed Azure OpenAI provider, plus repointing an
  *         embedding selection that named it.
+ *   13  → drop the retired index settings. The device-local artifact and
+ *          credential cleanup is gated separately, in
+ *          `legacyIndexRemovalMigration`, because this version is synced.
  */
-export const CURRENT_SETTINGS_VERSION = 12;
+export const CURRENT_SETTINGS_VERSION = 13;

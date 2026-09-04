@@ -31,9 +31,6 @@ export function getMiyoCustomUrl(settings: CopilotSettings): string {
  * Miyo is free: there is no self-host license / validation gate here anymore
  * (Layer C — "open Miyo"). On desktop, enabling Miyo is all it takes.
  *
- * The legacy `enableSemanticSearchV3` setting does not participate in runtime
- * routing; it remains persisted only until the settings cleanup migration.
- *
  * @param settings - Current Copilot settings.
  */
 export function shouldUseMiyo(settings: CopilotSettings): boolean {

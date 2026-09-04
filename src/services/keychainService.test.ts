@@ -80,11 +80,6 @@ jest.mock("@/services/settingsSecretTransforms", () => ({
         apiKey: "",
       }));
     }
-    if (Array.isArray(out.activeEmbeddingModels)) {
-      out.activeEmbeddingModels = (out.activeEmbeddingModels as Array<Record<string, unknown>>).map(
-        (m) => ({ ...m, apiKey: "" })
-      );
-    }
     return out;
   }),
   cleanupLegacyFields: jest.fn((settings: Record<string, unknown>) => ({ ...settings })),
@@ -100,7 +95,6 @@ import { KeychainService, isSecretKey } from "./keychainService";
 function makeSettings(overrides: Partial<CopilotSettings> = {}): CopilotSettings {
   return {
     activeModels: [],
-    activeEmbeddingModels: [],
     ...overrides,
   } as unknown as CopilotSettings;
 }
@@ -366,7 +360,6 @@ describe("keychainService", () => {
           openAIApiKey: "sk-current",
           googleApiKey: "",
           activeModels: [makeModel({ name: "kept", provider: "openai", apiKey: "chat-secret" })],
-          activeEmbeddingModels: [],
         });
 
         const prev = makeSettings({
@@ -375,9 +368,6 @@ describe("keychainService", () => {
           activeModels: [
             makeModel({ name: "kept", provider: "openai", apiKey: "chat-prev" }),
             makeModel({ name: "deleted", provider: "openai", apiKey: "del-secret" }),
-          ],
-          activeEmbeddingModels: [
-            makeModel({ name: "del-embed", provider: "openai", apiKey: "embed-secret" }),
           ],
         });
 
@@ -393,10 +383,6 @@ describe("keychainService", () => {
         expect(result.keychainIdsToDelete.some((id) => id.includes("model-api-key-chat"))).toBe(
           true
         );
-        expect(
-          result.keychainIdsToDelete.some((id) => id.includes("model-api-key-embedding"))
-        ).toBe(true);
-
         // Reason: persistSecrets must not mutate the input settings objects
         expect(current.openAIApiKey).toBe("sk-current");
         expect(current.activeModels[0].apiKey).toBe("chat-secret");
@@ -547,6 +533,35 @@ describe("keychainService", () => {
     // ---------------------------------------------------------------------------
     // clearAllVaultSecrets — partial-failure surface area
     // ---------------------------------------------------------------------------
+
+    describe("removeRetiredEmbeddingSecrets()", () => {
+      it("deletes only this vault's embedding-scoped model credentials (https://github.com/logancyang/obsidian-copilot/pull/3094#discussion_r3926692782)", () => {
+        const secretStorage = makeSecretStorage();
+        const service = KeychainService.getInstance(makeApp({ secretStorage }));
+        const vaultId = service.getVaultId();
+        const retired = `copilot-v${vaultId}-model-api-key-embedding-text-embedding-3-small`;
+        secretStorage.listSecrets.mockReturnValue([
+          retired,
+          `copilot-v${vaultId}-model-api-key-chat-gpt-4o`,
+          `copilot-v${vaultId}-open-a-i-api-key`,
+          "copilot-vother000-model-api-key-embedding-text-embedding-3-small",
+        ]);
+
+        service.removeRetiredEmbeddingSecrets();
+
+        expect(secretStorage.deleteSecret).toHaveBeenCalledTimes(1);
+        expect(secretStorage.deleteSecret).toHaveBeenCalledWith(retired);
+      });
+
+      it("leaves entries alone when the build cannot enumerate them", () => {
+        const secretStorage = makeSecretStorage();
+        (secretStorage as unknown as { listSecrets: unknown }).listSecrets = undefined;
+        const service = KeychainService.getInstance(makeApp({ secretStorage }));
+
+        expect(() => service.removeRetiredEmbeddingSecrets()).not.toThrow();
+        expect(secretStorage.deleteSecret).not.toHaveBeenCalled();
+      });
+    });
 
     describe("clearAllVaultSecrets()", () => {
       it("clears what it can, then throws aggregating the count of failed entries", () => {

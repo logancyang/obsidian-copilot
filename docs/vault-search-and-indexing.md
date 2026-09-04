@@ -8,6 +8,8 @@ Miyo is a local-first knowledge service built for more than one plugin. It can s
 
 Semantic search from Copilot V3 has moved to Miyo. Connect Miyo and enable its semantic-search Skill for a more powerful local-first path. Copilot no longer exposes controls for its old in-plugin index.
 
+When you upgrade, Copilot removes its retired index settings and recognized index files. It deletes only files that match Copilot's exact legacy index naming scheme. Other files in your vault and Obsidian configuration folder are left alone. If cleanup fails, Copilot names the folder so you can remove the old index files manually.
+
 ## How Agent Chat searches
 
 Agent Chat can combine three kinds of search:

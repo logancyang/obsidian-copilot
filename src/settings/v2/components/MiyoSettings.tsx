@@ -367,21 +367,13 @@ export const MiyoSettings: React.FC = () => {
     }
   }, [settings, beginBusy, endBusy]);
 
-  // Enable Miyo, then refresh the store so the pill flips to Connected. This is
-  // the write the legacy Miyo toggle owned; the redesign moved the affordance
-  // here but the enable action still has to persist the flag.
-  //
-  // Keep writing the legacy `enableSemanticSearchV3` field alongside `enableMiyo`
-  // until the settings migration removes the old semantic-index fields. Runtime
-  // search routing now depends on `enableMiyo` alone.
+  // Enable Miyo, then refresh the store so the pill flips to Connected.
   //
   // Two-phase commit: enabling persists `enableMiyo`, but search routing keys off
   // that persisted flag alone (shouldUseMiyo), so a flag left `true` after a
   // failed health check would route retrieval to a dead Miyo — silent empty
   // results with no self-heal until the next manual reconnect. So we roll back
-  // exactly the fields this call flipped — always `enableMiyo`, and
-  // `enableSemanticSearchV3` only if WE turned it on (a user who had it on for
-  // non-Miyo semantic search keeps it) — whenever this call must not commit:
+  // `enableMiyo` whenever this call must not commit:
   //   - the post-enable refresh reports NOT available (dead Miyo), OR
   //   - a newer attempt / cancel / unmount superseded this one mid-refresh.
   //
@@ -399,22 +391,15 @@ export const MiyoSettings: React.FC = () => {
     async (superseded: () => boolean) => {
       const txn = (enableTxnRef.current += 1);
       const prevEnableMiyo = settings.enableMiyo;
-      const flippedSemantic = !settings.enableSemanticSearchV3;
       updateSetting("enableMiyo", true);
-      if (flippedSemantic) {
-        updateSetting("enableSemanticSearchV3", true);
-      }
       const available = await refresh(true);
       const stillOwner = enableTxnRef.current === txn;
       if (stillOwner && (!available || superseded())) {
         updateSetting("enableMiyo", prevEnableMiyo);
-        if (flippedSemantic) {
-          updateSetting("enableSemanticSearchV3", false);
-        }
       }
       return available;
     },
-    [settings.enableMiyo, settings.enableSemanticSearchV3, refresh]
+    [settings.enableMiyo, refresh]
   );
 
   // Register this vault with Miyo when it isn't known yet, so Connect adds it for
@@ -663,20 +648,16 @@ export const MiyoSettings: React.FC = () => {
     // "connected": pill flips via the store; "error": Notice already surfaced.
   }, [handleEvaluate, openConnectModal]);
 
-  // Disconnect: turn Miyo off — the symmetric undo of enableMiyoBackend. Keep
-  // clearing the legacy semantic flag until the settings migration removes it.
-  // The store's subscription invalidates the snapshot; refresh(true) then
-  // reflects the disconnected state.
+  // Disconnect: turn Miyo off — the symmetric undo of enableMiyoBackend. The
+  // store's subscription invalidates the snapshot; refresh(true) then reflects
+  // the disconnected state.
   const handleDisconnect = useCallback(async () => {
     // Invalidate any in-flight connect attempt so a late-resolving probe can't
     // re-enable Miyo right after the user turned it off.
     connectAttemptRef.current += 1;
     updateSetting("enableMiyo", false);
-    if (settings.enableSemanticSearchV3) {
-      updateSetting("enableSemanticSearchV3", false);
-    }
     await refresh(true);
-  }, [settings.enableSemanticSearchV3, refresh]);
+  }, [refresh]);
 
   // Install / remove the `miyo-search` agent skill (path B) — independent of the
   // Miyo connection (path A) above. We AWAIT the disk op and read its real

@@ -61,6 +61,10 @@ import {
 } from "@/services/webViewerService/webViewerServiceSingleton";
 import { WebSelectionTracker } from "@/services/webViewerService/webViewerServiceSelection";
 import { runSettingsMigrations } from "@/settings/migrations";
+import {
+  cleanupLegacyIndexArtifacts,
+  LEGACY_INDEX_CLEANUP_STORAGE_KEY,
+} from "@/settings/migrations/legacyIndexRemovalMigration";
 import { CopilotSettingTab } from "@/settings/SettingsPage";
 import {
   type CopilotSettings,
@@ -264,6 +268,23 @@ export default class CopilotPlugin extends Plugin {
     // when OpenCode first enumerates models. Awaited for deterministic ordering;
     // it's a fast, one-time, no-op for already-migrated/fresh vaults.
     await runSettingsMigrations(this.modelManagement);
+    // Remnants of the retired index pipeline live on this device, not in the
+    // synced settings, so they are gated by a device-local marker instead of
+    // `settingsVersion`. Not awaited: nothing below reads its result.
+    // https://github.com/logancyang/obsidian-copilot/pull/3094#discussion_r3926692787
+    void cleanupLegacyIndexArtifacts({
+      adapter: this.app.vault.adapter,
+      configDir: this.app.vault.configDir,
+      hasRun: () => this.app.loadLocalStorage(LEGACY_INDEX_CLEANUP_STORAGE_KEY) === "done",
+      markRun: () => this.app.saveLocalStorage(LEGACY_INDEX_CLEANUP_STORAGE_KEY, "done"),
+      removeRetiredEmbeddingSecrets: () =>
+        KeychainService.getInstance().removeRetiredEmbeddingSecrets(),
+      notifyFailure: (folder) => {
+        new Notice(
+          `Copilot couldn't remove old index files from ${folder}. Remove them manually if you want to reclaim the space.`
+        );
+      },
+    });
     const isLegacyUpgrade = getSettings().upgradedToV8FromLegacy;
     this.addSettingTab(new CopilotSettingTab(this.app, this));
 
