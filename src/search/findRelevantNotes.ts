@@ -19,16 +19,6 @@ import { withTimeout } from "@/utils";
 import { App, TFile } from "obsidian";
 
 const MAX_RESULTS = 20;
-/**
- * Miyo ranks chunks, not notes, and Copilot's QA filter runs after Miyo has
- * already applied the request limit. Asking for only {@link MAX_RESULTS} lets a
- * handful of excluded or duplicated chunks consume the whole window, so the
- * pane can settle on "no matches" while eligible notes sit just below it. Ask
- * for a wider ranked window and keep the first {@link MAX_RESULTS} notes that
- * survive the filter.
- * https://github.com/Brevilabs/obsidian-copilot-private/issues/284
- */
-const RELATED_CANDIDATE_LIMIT = MAX_RESULTS * 5;
 const MIYO_RELATED_SEARCH_TIMEOUT_MS = 8000;
 const MIYO_FILE_STATUS_TIMEOUT_MS = 8000;
 
@@ -71,7 +61,7 @@ async function searchRelatedNotesWithMiyo(
       () =>
         miyoClient.searchRelated(baseUrl, miyoFilePath, {
           folderName,
-          limit: RELATED_CANDIDATE_LIMIT,
+          limit: MAX_RESULTS,
         }),
       MIYO_RELATED_SEARCH_TIMEOUT_MS,
       "Relevant Notes Miyo related search"
@@ -91,15 +81,11 @@ async function searchRelatedNotesWithMiyo(
     const results = response.results;
     const isAllowed = createCopilotPatternFilter(app);
 
-    // Miyo owns relevance ranking. Preserve its order and keep the first result
-    // for each file instead of comparing or sorting embedding scores again in
-    // Copilot. Copilot owns the displayed count because it fetches a wider
-    // candidate window than it shows.
+    // Miyo owns relevance ranking and applies the result limit. Preserve its
+    // order and keep the first result for each file instead of comparing or
+    // sorting embedding scores again in Copilot.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
     for (const result of results) {
-      if (scoreByPath.size >= MAX_RESULTS) {
-        break;
-      }
       // Custom and older Miyo endpoints may return malformed scores. Only a
       // finite score can establish relevance or reserve a path's first result.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
