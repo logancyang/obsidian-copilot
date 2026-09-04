@@ -62,6 +62,12 @@ if [[ -n "$(git -C "$WORKTREE_ROOT" status --porcelain --untracked-files=normal 
   BUILD_STATE="dirty"
 fi
 
+# The plugin type check covers dev/gallery, and the gallery's generated story
+# index is untracked build output. Regenerate it first so a story renamed or
+# deleted on this branch cannot fail the plugin build with a dangling import.
+echo "==> Regenerating gallery story index"
+npm run gallery:stories
+
 echo "==> Building plugin"
 npm run build
 
