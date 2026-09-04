@@ -18,11 +18,19 @@ export interface RelevantNoteRow {
   note: RelevantNoteEntry;
   /** True while the note is still mounted only to play its removal. */
   exiting: boolean;
+  /** True while the note should play its arrival. */
+  entering: boolean;
 }
 
 interface TransitionState {
+  sourceKey: string | undefined;
   notes: readonly RelevantNoteEntry[];
   rows: readonly RelevantNoteRow[];
+}
+
+/** Render a list outright, with no row held back and no arrival to play. */
+function replaceRows(notes: readonly RelevantNoteEntry[]): readonly RelevantNoteRow[] {
+  return notes.map((note) => ({ note, exiting: false, entering: false }));
 }
 
 /**
@@ -34,14 +42,22 @@ function mergeRows(
   previousRows: readonly RelevantNoteRow[],
   notes: readonly RelevantNoteEntry[]
 ): readonly RelevantNoteRow[] {
+  const previousByPath = new Map(previousRows.map((row) => [row.note.note.path, row]));
   const nextPaths = new Set(notes.map((note) => note.note.path));
-  const rows: RelevantNoteRow[] = notes.map((note) => ({ note, exiting: false }));
+  const rows: RelevantNoteRow[] = notes.map((note) => ({
+    note,
+    exiting: false,
+    // A row already on screen must keep whatever it was mounted with: turning
+    // its arrival on now would replay the animation on a row that never left.
+    entering: previousByPath.get(note.note.path)?.entering ?? true,
+  }));
 
   previousRows.forEach((previousRow, previousIndex) => {
     if (nextPaths.has(previousRow.note.note.path)) return;
     rows.splice(Math.min(previousIndex, rows.length), 0, {
       note: previousRow.note,
       exiting: true,
+      entering: previousRow.entering,
     });
   });
 
@@ -55,35 +71,46 @@ function mergeRows(
  * A live re-rank replaces the whole list at once, which reads as a flicker
  * unless the rows that moved, arrived, and left are each shown doing so. This
  * hook holds departing rows mounted long enough to fade and slides surviving
- * rows from their previous position to their new one. With motion off it just
- * mirrors the results, so nothing lingers and nothing moves.
+ * rows from their previous position to their new one. Results the reader has
+ * not seen yet, such as the list for a note they just opened, appear at once.
+ * With motion off it just mirrors the results, so nothing lingers and nothing
+ * moves.
  *
  * @param notes - Relevant notes in the order they should render.
+ * @param sourceKey - Identity of the note the results describe, or undefined
+ *   when no note is open.
  * @param animated - False when the reader has asked for reduced motion.
  * @returns The rows to render and the ref callback each row must register with.
  */
 export function useRelevantNoteRowTransitions(
   notes: readonly RelevantNoteEntry[],
+  sourceKey: string | undefined,
   animated: boolean
 ): {
   rows: readonly RelevantNoteRow[];
   registerRow: (path: string) => (node: HTMLElement | null) => void;
 } {
   const [state, setState] = useState<TransitionState>(() => ({
+    sourceKey,
     notes,
-    rows: notes.map((note) => ({ note, exiting: false })),
+    rows: replaceRows(notes),
   }));
 
   // Deriving during render keeps surviving rows mounted across a re-rank. An
   // effect would unmount a departing row before it could be held back, and
   // re-mounting it would replay its entry animation instead of its removal.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/362
-  if (state.notes !== notes) {
+  if (state.notes !== notes || state.sourceKey !== sourceKey) {
+    // Only a ranking that shifts under a list the reader is already looking at
+    // is worth animating. Opening another note replaces every row at once, and
+    // a list filling from empty is the pane loading rather than re-ranking; in
+    // both the motion would read as noise over content the reader has not seen.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/362
+    const reranking = animated && state.sourceKey === sourceKey && state.rows.length > 0;
     setState({
+      sourceKey,
       notes,
-      rows: animated
-        ? mergeRows(state.rows, notes)
-        : notes.map((note) => ({ note, exiting: false })),
+      rows: reranking ? mergeRows(state.rows, notes) : replaceRows(notes),
     });
   }
 
@@ -92,7 +119,7 @@ export function useRelevantNoteRowTransitions(
     if (!hasExitingRows) return;
     const timer = window.setTimeout(() => {
       setState((current) => ({
-        notes: current.notes,
+        ...current,
         rows: current.rows.filter((row) => !row.exiting),
       }));
     }, ROW_EXIT_MS);

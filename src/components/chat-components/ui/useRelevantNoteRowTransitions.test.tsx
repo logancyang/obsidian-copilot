@@ -16,6 +16,18 @@ function paths(rows: readonly { note: RelevantNoteEntry; exiting: boolean }[]): 
   return rows.map((row) => `${row.note.note.path}${row.exiting ? ":exiting" : ""}`);
 }
 
+function entering(rows: readonly { note: RelevantNoteEntry; entering: boolean }[]): string[] {
+  return rows.filter((row) => row.entering).map((row) => row.note.note.path);
+}
+
+function renderTransitions(initialProps: { notes: RelevantNoteEntry[]; sourceKey: string }) {
+  return renderHook(
+    ({ notes, sourceKey }: { notes: RelevantNoteEntry[]; sourceKey: string }) =>
+      useRelevantNoteRowTransitions(notes, sourceKey, true),
+    { initialProps }
+  );
+}
+
 describe("useRelevantNoteRowTransitions", () => {
   describe("useRelevantNoteRowTransitions()", () => {
     beforeEach(() => {
@@ -28,7 +40,7 @@ describe("useRelevantNoteRowTransitions", () => {
 
     it("mirrors the results it is given on first render", () => {
       const { result } = renderHook(() =>
-        useRelevantNoteRowTransitions([entry("a.md"), entry("b.md")], true)
+        useRelevantNoteRowTransitions([entry("a.md"), entry("b.md")], "Source.md", true)
       );
 
       expect(paths(result.current.rows)).toEqual(["a.md", "b.md"]);
@@ -36,7 +48,8 @@ describe("useRelevantNoteRowTransitions", () => {
 
     it("reorders rows to match a new ranking", () => {
       const { result, rerender } = renderHook(
-        ({ notes }: { notes: RelevantNoteEntry[] }) => useRelevantNoteRowTransitions(notes, true),
+        ({ notes }: { notes: RelevantNoteEntry[] }) =>
+          useRelevantNoteRowTransitions(notes, "Source.md", true),
         { initialProps: { notes: [entry("a.md", 0.9), entry("b.md", 0.4)] } }
       );
 
@@ -47,7 +60,8 @@ describe("useRelevantNoteRowTransitions", () => {
 
     it("holds a departed note in its previous slot so its removal can be seen (https://github.com/Brevilabs/obsidian-copilot-private/issues/362)", () => {
       const { result, rerender } = renderHook(
-        ({ notes }: { notes: RelevantNoteEntry[] }) => useRelevantNoteRowTransitions(notes, true),
+        ({ notes }: { notes: RelevantNoteEntry[] }) =>
+          useRelevantNoteRowTransitions(notes, "Source.md", true),
         { initialProps: { notes: [entry("a.md"), entry("b.md"), entry("c.md")] } }
       );
 
@@ -58,7 +72,8 @@ describe("useRelevantNoteRowTransitions", () => {
 
     it("drops a departed note once its removal has played", () => {
       const { result, rerender } = renderHook(
-        ({ notes }: { notes: RelevantNoteEntry[] }) => useRelevantNoteRowTransitions(notes, true),
+        ({ notes }: { notes: RelevantNoteEntry[] }) =>
+          useRelevantNoteRowTransitions(notes, "Source.md", true),
         { initialProps: { notes: [entry("a.md"), entry("b.md")] } }
       );
       rerender({ notes: [entry("a.md")] });
@@ -72,7 +87,8 @@ describe("useRelevantNoteRowTransitions", () => {
 
     it("removes a departed note immediately when the reader has asked for reduced motion (https://github.com/Brevilabs/obsidian-copilot-private/issues/362)", () => {
       const { result, rerender } = renderHook(
-        ({ notes }: { notes: RelevantNoteEntry[] }) => useRelevantNoteRowTransitions(notes, false),
+        ({ notes }: { notes: RelevantNoteEntry[] }) =>
+          useRelevantNoteRowTransitions(notes, "Source.md", false),
         { initialProps: { notes: [entry("a.md"), entry("b.md")] } }
       );
 
@@ -83,7 +99,8 @@ describe("useRelevantNoteRowTransitions", () => {
 
     it("shows a note that returns before its removal finished as present again", () => {
       const { result, rerender } = renderHook(
-        ({ notes }: { notes: RelevantNoteEntry[] }) => useRelevantNoteRowTransitions(notes, true),
+        ({ notes }: { notes: RelevantNoteEntry[] }) =>
+          useRelevantNoteRowTransitions(notes, "Source.md", true),
         { initialProps: { notes: [entry("a.md"), entry("b.md")] } }
       );
       rerender({ notes: [entry("a.md")] });
@@ -91,6 +108,49 @@ describe("useRelevantNoteRowTransitions", () => {
       rerender({ notes: [entry("a.md"), entry("b.md")] });
 
       expect(paths(result.current.rows)).toEqual(["a.md", "b.md"]);
+    });
+
+    it("shows the results for a note the reader just opened at once (https://github.com/Brevilabs/obsidian-copilot-private/issues/362)", () => {
+      const { result, rerender } = renderTransitions({
+        notes: [entry("a.md"), entry("b.md")],
+        sourceKey: "Source.md",
+      });
+
+      rerender({ notes: [entry("c.md")], sourceKey: "Other.md" });
+
+      expect(paths(result.current.rows)).toEqual(["c.md"]);
+      expect(entering(result.current.rows)).toEqual([]);
+    });
+
+    it("shows a list filling from empty at once rather than as an arrival (https://github.com/Brevilabs/obsidian-copilot-private/issues/362)", () => {
+      const { result, rerender } = renderTransitions({ notes: [], sourceKey: "Source.md" });
+
+      rerender({ notes: [entry("a.md")], sourceKey: "Source.md" });
+
+      expect(entering(result.current.rows)).toEqual([]);
+    });
+
+    it("plays an arrival only for a note joining a list already on screen", () => {
+      const { result, rerender } = renderTransitions({
+        notes: [entry("a.md")],
+        sourceKey: "Source.md",
+      });
+
+      rerender({ notes: [entry("a.md"), entry("b.md")], sourceKey: "Source.md" });
+
+      expect(entering(result.current.rows)).toEqual(["b.md"]);
+    });
+
+    it("does not replay the arrival of a row that stays on screen through a re-rank", () => {
+      const { result, rerender } = renderTransitions({
+        notes: [entry("a.md")],
+        sourceKey: "Source.md",
+      });
+      rerender({ notes: [entry("a.md"), entry("b.md")], sourceKey: "Source.md" });
+
+      rerender({ notes: [entry("b.md"), entry("a.md")], sourceKey: "Source.md" });
+
+      expect(entering(result.current.rows)).toEqual(["b.md"]);
     });
 
     it("slides a row that changed rank from its previous position", () => {
@@ -108,7 +168,8 @@ describe("useRelevantNoteRowTransitions", () => {
         }) as unknown as HTMLElement;
 
       const { result, rerender } = renderHook(
-        ({ notes }: { notes: RelevantNoteEntry[] }) => useRelevantNoteRowTransitions(notes, true),
+        ({ notes }: { notes: RelevantNoteEntry[] }) =>
+          useRelevantNoteRowTransitions(notes, "Source.md", true),
         { initialProps: { notes: [entry("a.md"), entry("b.md")] } }
       );
       result.current.registerRow("a.md")(nodeFor("a.md"));
@@ -138,7 +199,8 @@ describe("useRelevantNoteRowTransitions", () => {
       } as unknown as HTMLElement;
 
       const { result, rerender } = renderHook(
-        ({ notes }: { notes: RelevantNoteEntry[] }) => useRelevantNoteRowTransitions(notes, false),
+        ({ notes }: { notes: RelevantNoteEntry[] }) =>
+          useRelevantNoteRowTransitions(notes, "Source.md", false),
         { initialProps: { notes: [entry("a.md"), entry("b.md")] } }
       );
       result.current.registerRow("a.md")(node);

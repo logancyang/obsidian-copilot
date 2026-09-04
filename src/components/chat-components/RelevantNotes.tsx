@@ -353,6 +353,7 @@ function RelevantNoteHoverCard({
 function RelevantNoteRow({
   note,
   exiting,
+  entering,
   animated,
   rowRef,
   onAddToChat,
@@ -361,6 +362,8 @@ function RelevantNoteRow({
   note: RelevantNoteEntry;
   /** True while the note is mounted only to play its removal. */
   exiting: boolean;
+  /** True while the note should play its arrival. */
+  entering: boolean;
   /** False when the reader has asked for reduced motion. */
   animated: boolean;
   rowRef: (node: HTMLElement | null) => void;
@@ -385,7 +388,7 @@ function RelevantNoteRow({
           // A note that arrives or drops out mid-sentence is easy to miss if it
           // simply appears or vanishes between two frames.
           // https://github.com/Brevilabs/obsidian-copilot-private/issues/362
-          animated && "tw-duration-200 tw-animate-in tw-fade-in-0 tw-slide-in-from-top-1",
+          entering && "tw-duration-200 tw-animate-in tw-fade-in-0 tw-slide-in-from-top-1",
           exiting && "tw-pointer-events-none tw-opacity-0",
           exiting && animated && "tw-transition-opacity tw-duration-200"
         )}
@@ -486,13 +489,18 @@ export const RelevantNotes = memo(
     // an attachment name would imply that Miyo searched it.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
     const activeFileName = activeFile?.extension === "md" ? activeFile.basename : undefined;
+    const activeFilePath = activeFile?.extension === "md" ? activeFile.path : undefined;
     const animated = !useReducedMotion();
-    const { rows, registerRow } = useRelevantNoteRowTransitions(result.notes, animated);
+    const { rows, registerRow } = useRelevantNoteRowTransitions(
+      result.notes,
+      activeFilePath,
+      animated
+    );
 
     useLiveRelevantNotesRefresh({
       app,
       enabled: settings.enableMiyo && settings.relevantNotesLiveUpdate,
-      filePath: activeFile?.extension === "md" ? activeFile.path : undefined,
+      filePath: activeFilePath,
       onRefresh: liveRefresh,
     });
 
@@ -548,6 +556,7 @@ export const RelevantNotes = memo(
                   key={row.note.note.path}
                   note={row.note}
                   exiting={row.exiting}
+                  entering={row.entering}
                   animated={animated}
                   rowRef={registerRow(row.note.note.path)}
                   onAddToChat={() => addToChat(row.note.note.title)}
