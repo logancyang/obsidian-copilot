@@ -1,6 +1,5 @@
 // DEPRECATED: v3 semantic indexing uses MemoryIndexManager (JSONL snapshots). This file remains only
 // for legacy Orama-based flows and should not be referenced by new code.
-import { updateIndexingProgressState } from "@/aiParams";
 import { CustomError } from "@/error";
 import { logError, logInfo, logWarn } from "@/logger";
 import EmbeddingsManager from "@/LLMProviders/embeddingManager";
@@ -199,27 +198,6 @@ export default class VectorStoreManager {
   public async getDocumentsByPath(notePath: string): Promise<SemanticIndexDocument[]> {
     await this.waitForInitialization();
     return this.indexBackend.getDocumentsByPath(notePath);
-  }
-
-  /**
-   * Pauses the current indexing operation via atom state.
-   */
-  public pauseIndexing(): void {
-    updateIndexingProgressState({ isPaused: true });
-  }
-
-  /**
-   * Resumes the current indexing operation via atom state.
-   */
-  public resumeIndexing(): void {
-    updateIndexingProgressState({ isPaused: false });
-  }
-
-  /**
-   * Cancels the current indexing operation.
-   */
-  public async cancelIndexing(): Promise<void> {
-    await this.indexOps.cancelIndexing();
   }
 
   /**

@@ -1,30 +1,23 @@
 import { useChainType } from "@/aiParams";
 import { ChainType } from "@/chainType";
-import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { Button } from "@/components/ui/button";
 import { DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { SettingSwitch } from "@/components/ui/setting-switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { PLUS_UTM_MEDIUMS } from "@/constants";
-import { logError } from "@/logger";
-import { getSearchBackend } from "@/miyo/miyoUtils";
 import { navigateToPlusPage, useIsPaidUser } from "@/plusUtils";
 import { updateSetting, useSettingsValue } from "@/settings/model";
-import { useApp } from "@/context";
 import { DropdownMenu, DropdownMenuTrigger } from "@radix-ui/react-dropdown-menu";
 import {
-  AlertTriangle,
   CheckCircle,
   ChevronDown,
   Download,
   History,
   MessageCirclePlus,
   MoreHorizontal,
-  RefreshCw,
   Sparkles,
   SquareArrowOutUpRight,
 } from "lucide-react";
-import { Notice } from "obsidian";
 import React from "react";
 import {
   ChatHistoryItem,
@@ -32,58 +25,6 @@ import {
 } from "@/components/chat-components/ChatHistoryPopover";
 import { TokenCounter } from "./TokenCounter";
 import { ChatSettingsPopover } from "@/components/chat-components/ChatSettingsPopover";
-
-async function refreshVaultIndex() {
-  try {
-    const { getSettings } = await import("@/settings/model");
-    const settings = getSettings();
-
-    if (settings.enableSemanticSearchV3) {
-      // Use VectorStoreManager for semantic search indexing
-      const VectorStoreManager = (await import("@/search/vectorStoreManager")).default;
-      const count = await VectorStoreManager.getInstance().indexVaultToVectorStore(false, {
-        userInitiated: true,
-      });
-      if (getSearchBackend(settings) === "miyo") {
-        new Notice("Miyo folder index refresh started. Open the Miyo app to check details.");
-      } else {
-        new Notice(`Semantic search index refreshed with ${count} documents.`);
-      }
-    } else {
-      // V3 search builds indexes on demand
-      new Notice("Lexical search builds indexes on demand. No manual indexing required.");
-    }
-  } catch (error) {
-    logError("Error refreshing vault index:", error);
-    new Notice("Failed to refresh vault index. Check console for details.");
-  }
-}
-
-async function forceReindexVault() {
-  try {
-    const { getSettings } = await import("@/settings/model");
-    const settings = getSettings();
-
-    if (settings.enableSemanticSearchV3) {
-      // Use VectorStoreManager for semantic search indexing
-      const VectorStoreManager = (await import("@/search/vectorStoreManager")).default;
-      const count = await VectorStoreManager.getInstance().indexVaultToVectorStore(true, {
-        userInitiated: true,
-      });
-      if (getSearchBackend(settings) === "miyo") {
-        new Notice("Miyo folder index refresh started. Open the Miyo app to check details.");
-      } else {
-        new Notice(`Semantic search index rebuilt with ${count} documents.`);
-      }
-    } else {
-      // V3 search builds indexes on demand
-      new Notice("Lexical search builds indexes on demand. No manual indexing required.");
-    }
-  } catch (error) {
-    logError("Error force reindexing vault:", error);
-    new Notice("Failed to force reindex vault. Check console for details.");
-  }
-}
 
 interface ChatControlsProps {
   onNewChat: () => void;
@@ -108,7 +49,6 @@ export function ChatControls({
   onOpenSourceFile,
   latestTokenCount,
 }: ChatControlsProps) {
-  const app = useApp();
   const settings = useSettingsValue();
   const [selectedChain, setSelectedChain] = useChainType();
   const isPaidUser = useIsPaidUser();
@@ -221,28 +161,6 @@ export function ChatControls({
                 Auto-accept Edits
               </div>
               <SettingSwitch checked={settings.autoAcceptEdits} />
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              className="tw-flex tw-items-center tw-gap-2"
-              onSelect={() => void refreshVaultIndex()}
-            >
-              <RefreshCw className="tw-size-4" />
-              Refresh Vault Index
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              className="tw-flex tw-items-center tw-gap-2"
-              onSelect={() => {
-                const modal = new ConfirmModal(
-                  app,
-                  () => forceReindexVault(),
-                  "This will delete and rebuild your entire vault index from scratch. This operation cannot be undone. Are you sure you want to proceed?",
-                  "Force Reindex Vault"
-                );
-                modal.open();
-              }}
-            >
-              <AlertTriangle className="tw-size-4" />
-              Force Reindex Vault
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

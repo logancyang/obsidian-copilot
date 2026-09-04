@@ -25,19 +25,14 @@ import { SelfHostSettings } from "./components/SelfHostSettings";
 // underlying fields are NOT dropped and stay runtime-honored for existing
 // vaults:
 //   - enableSemanticSearchV3 — the Miyo connect flow (MiyoSettings) drives it
-//     implicitly. The Advanced tab surfaces it as "Legacy vault index"
-//     (LegacyVaultIndexSetting), the off switch a vault not using Miyo needs to
-//     stop indexing; it reads as the legacy index because that is all the flag
-//     still controls once Miyo owns semantic search.
+//     implicitly. Its old Advanced-tab switch is gone because the built-in
+//     semantic index is no longer a user-facing product surface.
 //   - qaInclusions/qaExclusions — still consumed (Miyo registration snapshot);
 //     their edit UI is deferred per issue #195 ("defer include/exclude").
 //   - embeddingModelKey / maxSourceChunks / enableInlineCitations / indexing
 //     limits — still read at runtime (embeddingManager, SearchTools,
 //     VaultQAChainRunner, CopilotPlusChainRunner) with their defaults; a
 //     UI is deferred to a later part of the #195 redesign.
-// The relabeled "Keyword (built-in) vs Miyo (semantic search)" engine toggle
-// and honest embedding-caveat copy land in a follow-up PR, not here. If a review
-// flags the missing QA/search UI again, point them at this note.
 const LazySkillsSettings = React.lazy(() =>
   import("@/agentMode").then((module) => ({ default: module.SkillsSettings }))
 );

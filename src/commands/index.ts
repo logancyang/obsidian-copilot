@@ -16,17 +16,16 @@ import {
   appendIncludeNoteContextPlaceholders,
 } from "@/commands/quickCommandPrompts";
 import { CustomCommandChatModal } from "@/commands/CustomCommandChatModal";
-import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { ApplyCustomCommandModal } from "@/components/modals/ApplyCustomCommandModal";
 import { YoutubeTranscriptModal } from "@/components/modals/YoutubeTranscriptModal";
 import { checkIsPaidUser } from "@/plusUtils";
-// Debug modals removed with search v3
 import type CopilotPlugin from "@/main";
-import { getSearchBackend } from "@/miyo/miyoUtils";
+import { MiyoClient, MiyoRequestError } from "@/miyo/MiyoClient";
+import { getMiyoCustomUrl, getMiyoFolderName } from "@/miyo/miyoUtils";
 import { getAllQAMarkdownContent } from "@/search/searchUtils";
+import { getSettings } from "@/settings/model";
 import { NoteSelectedTextContext, WebSelectedTextContext } from "@/types/message";
-import { ensureFolderExists, isSourceModeOn } from "@/utils";
-import { getEffectiveCopilotFolder } from "@/settings/copilotFolder";
+import { isSourceModeOn } from "@/utils";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { Editor, MarkdownView, Notice, TFile } from "obsidian";
 import { v4 as uuidv4 } from "uuid";
@@ -217,294 +216,46 @@ export function registerCommands(plugin: CopilotPlugin, publish: PublishFile) {
     return true;
   });
 
-  addCommand(plugin, COMMAND_IDS.CLEAR_LOCAL_COPILOT_INDEX, async () => {
-    const { getSettings } = await import("@/settings/model");
-    const settings = getSettings();
-    const isMiyoEnabled = getSearchBackend(settings) === "miyo";
-    if (isMiyoEnabled) {
-      new Notice(
-        "Miyo folders are managed in Miyo. Remove the folder there if you want to clear it."
-      );
-      return;
-    }
-    const clearMessage =
-      "This will permanently delete all document indexes in Copilot. This action cannot be undone.\n\nAre you sure you want to proceed?";
-    const confirmed = await new Promise<boolean>((resolve) => {
-      new ConfirmModal(
-        plugin.app,
-        () => resolve(true),
-        clearMessage,
-        "Clear Semantic Index",
-        "Clear Index",
-        "Cancel",
-        () => resolve(false)
-      ).open();
-    });
-    if (!confirmed) return;
-    try {
-      const VectorStoreManager = (await import("@/search/vectorStoreManager")).default;
-      await VectorStoreManager.getInstance().clearIndex();
-      new Notice("Cleared local Copilot semantic index.");
-    } catch (err) {
-      logError("Error clearing semantic index:", err);
-      new Notice("Failed to clear semantic index.");
-    }
-  });
-
-  addCommand(plugin, COMMAND_IDS.GARBAGE_COLLECT_COPILOT_INDEX, async () => {
-    try {
-      const { getSettings } = await import("@/settings/model");
-      if (getSearchBackend(getSettings()) === "miyo") {
-        new Notice(
-          "Miyo manages file cleanup automatically. Run Index (refresh) vault to trigger a scan if needed."
-        );
+  // The palette reflects connection intent at plugin load. Reachability is
+  // checked when the command runs so a stopped or remote Miyo fails visibly.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/282
+  if (getSettings().enableMiyo) {
+    addCommand(plugin, COMMAND_IDS.REFRESH_MIYO_INDEX, async () => {
+      const settings = getSettings();
+      // Commands register once per load, so a Disconnect performed afterwards
+      // leaves this entry in the palette. Re-read the intent before touching
+      // the endpoint so a disconnected Miyo is never scanned.
+      // https://github.com/logancyang/obsidian-copilot/pull/3091#discussion_r3926747283
+      if (!settings.enableMiyo) {
+        new Notice("Miyo is disconnected. Connect it in Copilot settings, then retry.");
         return;
       }
-      const VectorStoreManager = (await import("@/search/vectorStoreManager")).default;
-      const removedCount = await VectorStoreManager.getInstance().garbageCollectVectorStore();
-      new Notice(`Garbage collection completed. Removed ${removedCount} stale documents.`);
-    } catch (err) {
-      logError("Error during garbage collection:", err);
-      new Notice("Failed to garbage collect semantic index.");
-    }
-  });
-
-  // Removed legacy build-only command; use refresh and force reindex commands instead
-
-  addCommand(plugin, COMMAND_IDS.INDEX_VAULT_TO_COPILOT_INDEX, async () => {
-    try {
-      const { getSettings } = await import("@/settings/model");
-      const settings = getSettings();
-
-      if (settings.enableSemanticSearchV3) {
-        // Use VectorStoreManager for semantic search indexing
-        const VectorStoreManager = (await import("@/search/vectorStoreManager")).default;
-        const count = await VectorStoreManager.getInstance().indexVaultToVectorStore(false, {
-          userInitiated: true,
-        });
-        if (getSearchBackend(settings) === "miyo") {
-          new Notice("Miyo folder index refresh started. Open the Miyo app to check details.");
-        } else {
-          new Notice(`Semantic search index refreshed with ${count} documents.`);
-        }
-      } else {
-        // V3 search builds indexes on demand
-        new Notice("Lexical search builds indexes on demand. No manual indexing required.");
+      const customUrl = getMiyoCustomUrl(settings);
+      // Mobile cannot discover a service on localhost, so this state needs a
+      // concrete recovery action instead of the generic unavailable message.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/282
+      if (!isDesktopRuntime() && !customUrl) {
+        new Notice("A remote Miyo connection is required on mobile.");
+        return;
       }
-    } catch (err) {
-      logError("Error building index:", err);
-      new Notice("An error occurred while building the index.");
-    }
-  });
-
-  addCommand(plugin, COMMAND_IDS.FORCE_REINDEX_VAULT_TO_COPILOT_INDEX, async () => {
-    const confirmed = await new Promise<boolean>((resolve) => {
-      new ConfirmModal(
-        plugin.app,
-        () => resolve(true),
-        "This will delete and rebuild your entire vault index from scratch. This operation cannot be undone. Are you sure you want to proceed?",
-        "Force Reindex Vault",
-        "Continue",
-        "Cancel",
-        () => resolve(false)
-      ).open();
+      const client = new MiyoClient({ plusLicenseKey: settings.plusLicenseKey });
+      try {
+        const baseUrl = await client.resolveBaseUrl(customUrl);
+        await client.scanFolder(baseUrl, getMiyoFolderName(plugin.app), false);
+        new Notice("Miyo vault scan started. Open Miyo to check indexing progress.");
+      } catch (error) {
+        logError("Failed to refresh the Miyo index:", error);
+        if (error instanceof MiyoRequestError && error.status === 404) {
+          new Notice("This vault is not registered with Miyo. Register it in Miyo, then retry.");
+          return;
+        }
+        new Notice("Miyo is unavailable. Open Miyo, then retry the refresh.");
+      }
     });
-    if (!confirmed) return;
-    try {
-      const { getSettings } = await import("@/settings/model");
-      const settings = getSettings();
-
-      if (settings.enableSemanticSearchV3) {
-        // Use VectorStoreManager for semantic search indexing
-        const VectorStoreManager = (await import("@/search/vectorStoreManager")).default;
-        const count = await VectorStoreManager.getInstance().indexVaultToVectorStore(true, {
-          userInitiated: true,
-        });
-        if (getSearchBackend(settings) === "miyo") {
-          new Notice("Miyo folder index refresh started. Open the Miyo app to check details.");
-        } else {
-          new Notice(`Semantic search index rebuilt with ${count} documents.`);
-        }
-      } else {
-        // V3 search builds indexes on demand
-        new Notice("Lexical search builds indexes on demand. No manual indexing required.");
-      }
-    } catch (err) {
-      logError("Error rebuilding index:", err);
-      new Notice("An error occurred while rebuilding the index.");
-    }
-  });
+  }
 
   addCommand(plugin, COMMAND_IDS.LOAD_COPILOT_CHAT_CONVERSATION, async () => {
     await plugin.loadCopilotChatHistory();
-  });
-
-  addCommand(plugin, COMMAND_IDS.LIST_INDEXED_FILES, async () => {
-    try {
-      const VectorStoreManager = (await import("@/search/vectorStoreManager")).default;
-      const indexedPaths = await VectorStoreManager.getInstance().getIndexedFiles();
-
-      // Get all markdown files from vault
-      const { getMatchingPatterns, shouldIndexFile } = await import("@/search/searchUtils");
-      const { inclusions, exclusions } = getMatchingPatterns();
-      const allMarkdownFiles = plugin.app.vault.getMarkdownFiles();
-      const emptyFiles = new Set<string>();
-      const unindexedFiles = new Set<string>();
-      const excludedFiles = new Set<string>();
-
-      const indexedFiles = new Set<string>(indexedPaths);
-
-      // Categorize files
-      for (const file of allMarkdownFiles) {
-        // Check if file should be indexed based on settings
-        if (!shouldIndexFile(plugin.app, file, inclusions, exclusions)) {
-          excludedFiles.add(file.path);
-          continue;
-        }
-
-        const content = await plugin.app.vault.cachedRead(file);
-        if (!content || content.trim().length === 0) {
-          emptyFiles.add(file.path);
-        } else if (!indexedFiles.has(file.path)) {
-          unindexedFiles.add(file.path);
-        }
-      }
-
-      // Create content for the file
-      const content = [
-        "# Copilot Files Status",
-        `- Indexed files: ${indexedFiles.size}`,
-        `- Unindexed files: ${unindexedFiles.size}`,
-        `- Empty files: ${emptyFiles.size}`,
-        `- Excluded files: ${excludedFiles.size}`,
-        "",
-        "## Indexed Files",
-        ...(indexedFiles.size > 0
-          ? Array.from(indexedFiles)
-              .sort()
-              .map((file) => `- [[${file}]]`)
-          : ["No indexed files found."]),
-        "",
-        "## Unindexed Files",
-        ...(unindexedFiles.size > 0
-          ? Array.from(unindexedFiles)
-              .sort()
-              .map((file) => `- [[${file}]]`)
-          : ["No unindexed files found."]),
-        "",
-        "## Empty Files",
-        ...(emptyFiles.size > 0
-          ? Array.from(emptyFiles)
-              .sort()
-              .map((file) => `- [[${file}]]`)
-          : ["No empty files found."]),
-        "",
-        "## Excluded Files (based on settings)",
-        ...(excludedFiles.size > 0
-          ? Array.from(excludedFiles)
-              .sort()
-              .map((file) => `- [[${file}]]`)
-          : ["No excluded files."]),
-      ].join("\n");
-
-      // Create or update the file in the vault
-      const fileName = `Copilot-Indexed-Files-${new Date().toLocaleDateString().replace(/\//g, "-")}.md`;
-      const folderPath = getEffectiveCopilotFolder();
-      const filePath = `${folderPath}/${fileName}`;
-
-      // Ensure destination folder exists (supports mobile and nested)
-      await ensureFolderExists(plugin.app.vault, folderPath);
-
-      const existingFile = plugin.app.vault.getAbstractFileByPath(filePath);
-      if (existingFile instanceof TFile) {
-        await plugin.app.vault.modify(existingFile, content);
-      } else {
-        await plugin.app.vault.create(filePath, content);
-      }
-
-      // Open the file
-      const file = plugin.app.vault.getAbstractFileByPath(filePath);
-      if (file instanceof TFile) {
-        await plugin.app.workspace.getLeaf().openFile(file);
-        new Notice(`Listed ${indexedFiles.size} indexed files`);
-      }
-    } catch (error) {
-      logError("Error listing indexed files:", error);
-      new Notice("Failed to list indexed files.");
-    }
-  });
-
-  addCommand(plugin, COMMAND_IDS.INSPECT_COPILOT_INDEX_BY_NOTE_PATHS, async () => {
-    try {
-      const activeFile = plugin.app.workspace.getActiveFile();
-      if (!activeFile) {
-        new Notice("No active file. Please open a note first.");
-        return;
-      }
-
-      const VectorStoreManager = (await import("@/search/vectorStoreManager")).default;
-      const { DBOperations } = await import("@/search/dbOperations");
-      const db = await VectorStoreManager.getInstance().getDb();
-      const hits = await DBOperations.getDocsByPath(db, activeFile.path);
-
-      if (!hits || hits.length === 0) {
-        new Notice(`No embedding data found for: ${activeFile.path}`);
-        return;
-      }
-
-      // Map hits to chunks (getDocsByPath returns {document, score} format)
-      const chunks: Record<string, unknown>[] = hits.map(
-        (hit) => hit.document as unknown as Record<string, unknown>
-      );
-      const content = [
-        `# Embedding Debug: ${activeFile.basename}`,
-        "",
-        `**Path:** ${activeFile.path}`,
-        `**Chunks:** ${chunks.length}`,
-        `**Embedding Model:** ${(chunks[0]?.embeddingModel as string | undefined) || "unknown"}`,
-        "",
-        ...chunks.flatMap((chunk: Record<string, unknown>, index: number) => {
-          const embedding = (chunk.embedding as number[] | undefined) || [];
-          const preview = embedding
-            .slice(0, 10)
-            .map((v: number) => v.toFixed(6))
-            .join(", ");
-          return [
-            `## Chunk ${index + 1}`,
-            `- **ID:** ${chunk.id as string}`,
-            `- **Content Preview:** "${((chunk.content as string | undefined) || "").substring(0, 200)}..."`,
-            `- **Vector Length:** ${embedding.length}`,
-            `- **Vector Preview:** [${preview}${embedding.length > 10 ? ", ..." : ""}]`,
-            `- **Tags:** ${((chunk.tags as string[] | undefined) || []).join(", ") || "none"}`,
-            `- **Characters:** ${(chunk.nchars as number | undefined) || 0}`,
-            "",
-          ];
-        }),
-      ].join("\n");
-
-      // Create the debug file
-      const fileName = `Copilot-Embedding-Debug-${activeFile.basename.replace(/[\\/:*?"<>|]/g, "_")}.md`;
-      const folderPath = getEffectiveCopilotFolder();
-      const filePath = `${folderPath}/${fileName}`;
-
-      await ensureFolderExists(plugin.app.vault, folderPath);
-
-      const existingFile = plugin.app.vault.getAbstractFileByPath(filePath);
-      if (existingFile instanceof TFile) {
-        await plugin.app.vault.modify(existingFile, content);
-      } else {
-        await plugin.app.vault.create(filePath, content);
-      }
-
-      const file = plugin.app.vault.getAbstractFileByPath(filePath);
-      if (file instanceof TFile) {
-        await plugin.app.workspace.getLeaf().openFile(file);
-        new Notice(`Embedding debug info for ${chunks.length} chunk(s)`);
-      }
-    } catch (error) {
-      logError("Error inspecting embeddings:", error);
-      new Notice("Failed to inspect embeddings. Is the index loaded?");
-    }
   });
 
   // Add clear Copilot cache command

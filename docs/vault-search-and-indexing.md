@@ -6,7 +6,7 @@ Miyo is a local-first knowledge service built for more than one plugin. It can s
 
 ## What moved from Copilot V3
 
-Semantic search from Copilot V3 has moved to Miyo. Connect Miyo and enable its semantic-search Skill for a more powerful local-first path; you do not need to rebuild or tune Copilot's retiring in-plugin index for Agent Chat.
+Semantic search from Copilot V3 has moved to Miyo. Connect Miyo and enable its semantic-search Skill for a more powerful local-first path. Copilot no longer exposes controls for its old in-plugin index.
 
 ## How Agent Chat searches
 
@@ -34,7 +34,7 @@ The remote option changes the privacy boundary: indexing and search requests go 
 
 Copilot checks Miyo when a feature needs it and when you open the Miyo settings tab. It does not poll in the background or show an availability notice at startup. If a check is running, Settings shows **Checking…** instead of reusing an older **Connected** result.
 
-This table is the shared availability contract for the Miyo-only migration across Copilot. Free Chat never searches the vault automatically. "Quick Chat" below refers to Copilot Plus retrieval and its Miyo document processor. The refresh-command column describes the target after the legacy index controls are removed.
+This table is the shared availability contract for the Miyo-only migration across Copilot. Free Chat never searches the vault automatically. "Quick Chat" below refers to Copilot Plus retrieval and its Miyo document processor.
 
 | Runtime state                               | Settings → Miyo                                                                                      | Relevant Notes                                                                                          | Quick Chat retrieval                                                              | Agent Chat `miyo-search`                                                                  | PDF and EPUB processing                                                                                      | Miyo refresh command                               | Startup notice | Recovery                                               |
 | ------------------------------------------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | -------------------------------------------------- | -------------- | ------------------------------------------------------ |
@@ -97,7 +97,7 @@ Connector access is separate from Agent Chat search. Review the folders, remote 
 - **Unavailable:** open Miyo, return to **Settings → Copilot → Miyo**, and retry. Check the remote server address if you configured one.
 - **Register this vault:** register the folder in Miyo, then connect again.
 - **Semantic search is missing:** confirm the connection is healthy and turn on **Semantic search**. Copilot installs the shared Miyo skill for opencode, Claude, and Codex.
-- **New notes are missing:** ask Miyo to refresh the registered folder. Indexing progress is shown in Miyo.
+- **New notes are missing:** run **Refresh Miyo index** from the command palette. Indexing progress is shown in Miyo.
 - **Relevant Notes has no semantic results:** Read the card for the active note's Miyo state. **No semantic matches yet** means Miyo found no related notes. The other cards distinguish an empty note, indexing work, an indexing error, and a Miyo folder filter. Older Miyo builds use the less specific **This note isn't indexed in Miyo** card. None of these states shows link-only or backlink-only rows.
 - **Agent Chat Miyo document processing fails:** install Miyo on this computer so its local CLI is available, or switch **Document Processor** to **Plus**. A remote Miyo search connection does not provide the local CLI Agent Chat needs.
 - **Quick Chat Miyo document processing fails:** confirm that the connected Miyo service can access the registered vault and document. When a remote server is configured, troubleshoot the document on that server.

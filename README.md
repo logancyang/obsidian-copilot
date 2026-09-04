@@ -143,7 +143,7 @@ Copilot is a product of Brevilabs LLC and is not affiliated with Obsidian. Visit
 - Hosted models and cloud-backed features require network access.
 - **Privacy and data handling:**
   - **Free use:** Messages and note context go to the LLM provider, local endpoint, or CLI agent you configure. Brevilabs does not receive them unless you invoke a Brevilabs-hosted feature.
-  - **Paid hosted services:** Brevilabs's backend and its vetted enterprise model providers process the full request. A Copilot-hosted embedding model receives the note text being indexed. Hosted features also receive the inputs they need, such as search queries, URLs, and files used by Quick Chat tools or Agent project context. The privacy policy says request content is processed transiently, not retained, and not used for training.
+  - **Paid hosted services:** Brevilabs's backend and its vetted enterprise model providers process the full request. Hosted features receive the inputs they need, such as search queries, URLs, and files used by Quick Chat tools or Agent project context. The privacy policy says request content is processed transiently, not retained, and not used for training.
   - **User ID:** Hosted feature requests include a randomly generated UUID for service delivery, license abuse prevention, and rate limiting. It is not used for tracking, profiling, or analytics.
 - See the [privacy policy](https://www.obsidiancopilot.com/en/privacy) for full terms.
 - The Copilot plugin frontend is fully open source. The backend services that support hosted features are closed source and proprietary.

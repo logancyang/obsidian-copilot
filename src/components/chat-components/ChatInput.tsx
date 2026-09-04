@@ -138,7 +138,6 @@ export interface ChatInputProps {
   };
   selectedTextContexts?: SelectedTextContext[];
   onRemoveSelectedText?: (id: string) => void;
-  showIndexingCard?: () => void;
 
   /**
    * Render slot for the toggle row that sits next to the send button.
@@ -242,7 +241,6 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
     modePickerOverride,
     selectedTextContexts,
     onRemoveSelectedText,
-    showIndexingCard,
     toolControls,
     onToolPillsChange,
     onTagSelected,
@@ -788,7 +786,6 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
               contextFolders={contextFolders}
               contextWebTabs={mergedContextWebTabs}
               selectedTextContexts={selectedTextContexts}
-              showIndexingCard={showIndexingCard}
               onAddToContext={handleAddToContext}
               onRemoveFromContext={handleRemoveFromContext}
               hideAddContextButton={isAgentMode}

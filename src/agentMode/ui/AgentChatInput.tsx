@@ -601,9 +601,6 @@ export const AgentChatInput = memo(function AgentChatInput({
           agentBrands={agentBrands}
           cloudAgentIds={getCloudAgentIds()}
           onMentionedAgentsChange={handleMentionedAgentsChange}
-          // showIndexingCard is deliberately NOT passed: the vault-indexing
-          // chip is not an Agent Mode surface, and omitting it keeps
-          // ChatContextMenu's `&& showIndexingCard` render guard effective.
           // No placeholder swap while context is loading, on purpose: loads
           // often clear in ~hundreds of ms, so any transient placeholder (text
           // or color) flickers in and out and reads as a glitch. The status
