@@ -52,7 +52,7 @@ async function searchRelatedNotesWithMiyo(
 
   try {
     // Obsidian's requestUrl can stay pending after a connection is accepted.
-    // Bound the primary request so graph rows and unavailable guidance return.
+    // Bound the primary request so unavailable guidance can replace loading.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
     const response = await withTimeout(
       () =>
@@ -189,7 +189,7 @@ export interface RelevantNoteEntry {
     title: string;
   };
   metadata: {
-    score: number | undefined;
+    score: number;
     hasOutgoingLinks: boolean;
     hasBacklinks: boolean;
   };
@@ -208,8 +208,8 @@ export interface FindRelevantNotesOptions {
 }
 
 /**
- * Finds relevant notes for a file using Miyo's semantic order followed by
- * link-derived candidates.
+ * Finds relevant notes for a file using Miyo's semantic order and annotates
+ * those results with Obsidian link relationships.
  *
  * @param app - The Obsidian app instance.
  * @param filePath - The file path to find relevant notes for.
@@ -232,7 +232,7 @@ export async function findRelevantNotes({
   }
 
   // Disabled and runtime-unavailable Miyo require different recovery guidance,
-  // even though neither state can return graph-only fallback rows.
+  // even though neither state can return link-only fallback rows.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
   if (!settings.enableMiyo) {
     return { notes: EMPTY_RELEVANT_NOTES, status: "disabled" };
@@ -242,22 +242,19 @@ export async function findRelevantNotes({
   }
 
   const { scoreByPath, status } = await searchRelatedNotesWithMiyo(app, filePath, settings);
-  // A graph-only fallback makes Relevant Notes look partially functional when
-  // its Miyo-backed index is unavailable. Build graph candidates only after
-  // Miyo establishes a healthy ready or not-indexed state.
+  // Every result row must come from Miyo. Showing link-only rows for any empty
+  // search state makes Relevant Notes look partially functional without the
+  // index that defines relevance.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
-  if (status === "unavailable") {
+  if (status !== "matches") {
     return { notes: EMPTY_RELEVANT_NOTES, status };
   }
   const noteLinks = getNoteLinks(app, file);
 
-  // Miyo's ordered files come first. Link-only notes append without changing
-  // semantic rank and render without a score.
+  // Preserve Miyo's response order; links only annotate those candidates.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
-  const candidatePaths = new Set<string>([...scoreByPath.keys(), ...noteLinks.keys()]);
-  candidatePaths.delete(filePath);
-  const notes = Array.from(candidatePaths)
-    .map((path) => {
+  const notes = Array.from(scoreByPath.entries())
+    .map(([path, score]) => {
       const file = app.vault.getAbstractFileByPath(path);
       if (!(file instanceof TFile) || file.extension !== "md") {
         return null;
@@ -268,7 +265,7 @@ export async function findRelevantNotes({
           title: file.basename,
         },
         metadata: {
-          score: scoreByPath.get(path),
+          score,
           hasOutgoingLinks: noteLinks.get(path)?.links ?? false,
           hasBacklinks: noteLinks.get(path)?.backlinks ?? false,
         },

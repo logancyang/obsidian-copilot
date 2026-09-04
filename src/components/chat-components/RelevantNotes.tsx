@@ -8,6 +8,7 @@ import { useNoteDrag } from "@/hooks/useNoteDrag";
 import { cn } from "@/lib/utils";
 import { logError, logWarn } from "@/logger";
 import { isLocalMiyoUrl, MIYO_DEEPLINK_URL } from "@/miyo/miyoUtils";
+import { useMiyoStatus } from "@/miyo/useMiyoStatus";
 import { findRelevantNotes, type RelevantNoteEntry } from "@/search/findRelevantNotes";
 import { onIndexChanged } from "@/search/indexSignal";
 import { openCopilotSettings } from "@/settings/openSettings";
@@ -54,9 +55,7 @@ function useRelevantNotes(
   miyoCredentialIdentity: string
 ) {
   const app = useApp();
-  const [result, setResult] = useState<RelevantNotesViewResult>(
-    enableMiyo ? LOADING_RELEVANT_NOTES_RESULT : DISABLED_RELEVANT_NOTES_RESULT
-  );
+  const [settledRequest, setSettledRequest] = useState<SettledRelevantNotesRequest | null>(null);
   const [signalTick, setSignalTick] = useState(0);
   const activeFile = useActiveFile();
   // Non-Markdown leaves do not provide a note Miyo can relate, so they share
@@ -85,11 +84,11 @@ function useRelevantNotes(
     let cancelled = false;
 
     async function fetchNotes() {
-      // Disabled Miyo always owns the pane state and must not start a search,
-      // even when there is no active Markdown note.
+      // Leaving a ready request must discard its settled result. Reopening the
+      // same note or re-enabling Miyo then starts a fresh request.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
-      if (!enableMiyo) {
-        setResult(DISABLED_RELEVANT_NOTES_RESULT);
+      if (requestStatus !== "ready" || requestKey === null || !activeFilePath) {
+        setSettledRequest(null);
         return;
       }
 
@@ -98,15 +97,15 @@ function useRelevantNotes(
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
       setSettledRequest(null);
       try {
-        const notes = await findRelevantNotes({ app, filePath: activeFile.path });
+        const result = await findRelevantNotes({ app, filePath: activeFilePath });
         // A settings or active-note change can supersede an in-flight Miyo
         // request. Its older result must not replace the newer pane state.
         // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
-        if (!cancelled) setResult(notes);
+        if (!cancelled) setSettledRequest({ requestKey, result });
       } catch (error) {
         if (!cancelled) {
           logWarn("Failed to fetch relevant notes", error);
-          setResult(UNAVAILABLE_RELEVANT_NOTES_RESULT);
+          setSettledRequest({ requestKey, result: UNAVAILABLE_RELEVANT_NOTES_RESULT });
         }
       }
     }
@@ -115,7 +114,16 @@ function useRelevantNotes(
     return () => {
       cancelled = true;
     };
-  }, [app, activeFile?.path, requestKey]);
+  }, [app, activeFilePath, requestKey, requestStatus]);
+
+  const result: RelevantNotesViewResult =
+    requestStatus === "disabled"
+      ? DISABLED_RELEVANT_NOTES_RESULT
+      : requestStatus === "idle"
+        ? IDLE_RELEVANT_NOTES_RESULT
+        : settledRequest?.requestKey === requestKey
+          ? settledRequest.result
+          : LOADING_RELEVANT_NOTES_RESULT;
 
   return { result, refresh };
 }

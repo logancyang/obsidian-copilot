@@ -66,16 +66,16 @@ describe("RelevantNotesPane", () => {
       expect(container.querySelector("[data-miyo-guidance]")?.className).toContain("tw-max-w-xs");
     });
 
-    it("shows a no-matches card without setup actions beside link rows (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", () => {
+    it("shows a centered no-matches card without result rows or setup actions (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", () => {
       const { container } = render(<RelevantNotesPane {...BASE_PROPS} status="no-matches" />);
 
       expect(screen.getByText("No semantic matches yet")).toBeTruthy();
-      expect(screen.getByText("Related note")).toBeTruthy();
+      expect(screen.queryByText("Related note")).toBeNull();
       expect(screen.queryByRole("button", { name: "Open Miyo settings" })).toBeNull();
       expect(container.querySelector("[data-miyo-guidance]")?.className).toContain("tw-max-w-xs");
     });
 
-    it("shows local indexing guidance and delegates its generic actions (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", () => {
+    it("shows local indexing guidance without result rows and delegates its actions (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", () => {
       const { container } = render(<RelevantNotesPane {...BASE_PROPS} status="not-indexed" />);
 
       expect(screen.getByText("This note isn't indexed in Miyo")).toBeTruthy();
@@ -84,7 +84,7 @@ describe("RelevantNotesPane", () => {
           "It may still be indexing or be excluded from Miyo. Open Miyo to review this folder's indexing and exclusion settings."
         )
       ).toBeTruthy();
-      expect(screen.getByText("Related note")).toBeTruthy();
+      expect(screen.queryByText("Related note")).toBeNull();
       fireEvent.click(screen.getByRole("button", { name: "Open Miyo" }));
       expect(BASE_ACTIONS.reviewIndexing.onSelect).toHaveBeenCalledTimes(1);
       fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
@@ -110,6 +110,7 @@ describe("RelevantNotesPane", () => {
           "It may still be indexing or be excluded from Miyo. Review the configured Miyo connection or server in Copilot."
         )
       ).toBeTruthy();
+      expect(screen.queryByText("Related note")).toBeNull();
       fireEvent.click(screen.getByRole("button", { name: "Review Miyo connection" }));
       expect(BASE_ACTIONS.reviewIndexing.onSelect).toHaveBeenCalledTimes(1);
     });
@@ -118,14 +119,6 @@ describe("RelevantNotesPane", () => {
       render(<RelevantNotesPane {...BASE_PROPS} status="idle" noteRows={[]} />);
 
       expect(screen.getByText("No relevant notes found")).toBeTruthy();
-    });
-
-    it("renders nothing while a Miyo request is loading (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", () => {
-      const { container } = render(
-        <RelevantNotesPane {...BASE_PROPS} status="loading" noteRows={[]} />
-      );
-
-      expect(container.firstChild).toBeNull();
     });
   });
 });

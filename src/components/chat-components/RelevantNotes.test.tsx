@@ -154,16 +154,7 @@ describe("RelevantNotes", () => {
 
     it("shows an informational no-matches state without setup actions when registered Miyo is ready (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
       mockFindRelevantNotes.mockResolvedValue({
-        notes: [
-          {
-            note: { path: "Target.md", title: "Target" },
-            metadata: {
-              score: undefined,
-              hasOutgoingLinks: false,
-              hasBacklinks: true,
-            },
-          },
-        ],
+        notes: [],
         status: "no-matches",
       });
 
@@ -232,25 +223,42 @@ describe("RelevantNotes", () => {
       const { rerender } = render(<RelevantNotes onAddToChat={jest.fn()} />);
       expect(await screen.findByText("Miyo is not connected")).toBeTruthy();
 
-      act(() => indexChangedListener?.());
+      mockMiyoBackend = "available";
+      rerender(<RelevantNotes onAddToChat={jest.fn()} />);
 
-      expect(await screen.findByText("No semantic matches yet")).toBeTruthy();
-      expect(screen.getByText("Target")).toBeTruthy();
-      expect(screen.queryByRole("button", { name: "Open Miyo settings" })).toBeNull();
+      expect(await screen.findByText("Target")).toBeTruthy();
+      expect(mockFindRelevantNotes).toHaveBeenCalledTimes(2);
     });
 
-    it("shows an informational not-indexed state beside links without claiming a setup problem (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
-      mockFindRelevantNotes.mockResolvedValue({
-        notes: [
-          {
-            note: { path: "Target.md", title: "Target" },
-            metadata: {
-              score: undefined,
-              hasOutgoingLinks: true,
-              hasBacklinks: false,
+    it("refetches after Miyo registration or resync signals an index change (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
+      mockFindRelevantNotes
+        .mockResolvedValueOnce({ notes: [], status: "not-indexed" })
+        .mockResolvedValueOnce({
+          notes: [
+            {
+              note: { path: "Target.md", title: "Target" },
+              metadata: {
+                score: 0.9,
+                hasOutgoingLinks: false,
+                hasBacklinks: false,
+              },
             },
-          },
-        ],
+          ],
+          status: "matches",
+        });
+
+      render(<RelevantNotes onAddToChat={jest.fn()} />);
+      expect(await screen.findByText("This note isn't indexed in Miyo")).toBeTruthy();
+
+      act(() => indexChangedListener?.());
+
+      expect(await screen.findByText("Target")).toBeTruthy();
+      expect(mockFindRelevantNotes).toHaveBeenCalledTimes(2);
+    });
+
+    it("shows an informational not-indexed state without result rows or a setup claim (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
+      mockFindRelevantNotes.mockResolvedValue({
+        notes: [],
         status: "not-indexed",
       });
 
@@ -263,7 +271,7 @@ describe("RelevantNotes", () => {
           "It may still be indexing or be excluded from Miyo. Open Miyo to review this folder's indexing and exclusion settings."
         )
       ).toBeTruthy();
-      expect(screen.getByText("Target")).toBeTruthy();
+      expect(screen.queryByText("Target")).toBeNull();
       fireEvent.click(screen.getByRole("button", { name: "Open Miyo" }));
       expect(openSpy).toHaveBeenCalledWith("miyo://", "_blank");
       openSpy.mockRestore();
@@ -318,8 +326,9 @@ describe("RelevantNotes", () => {
       mockFindRelevantNotes.mockReturnValue(new Promise(() => undefined));
 
       const { container } = render(<RelevantNotes onAddToChat={jest.fn()} />);
-      await waitFor(() => expect(mockFindRelevantNotes).toHaveBeenCalledTimes(1));
+      expect(await screen.findByText("Finding relevant notes…")).toBeTruthy();
 
+      expect(mockFindRelevantNotes).toHaveBeenCalledTimes(1);
       expect(container.querySelector("[data-miyo-guidance]")).toBeNull();
       expect(screen.queryByText("No relevant notes found")).toBeNull();
     });

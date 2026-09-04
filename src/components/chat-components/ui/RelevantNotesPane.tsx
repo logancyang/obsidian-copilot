@@ -83,10 +83,9 @@ export function RelevantNotesPane({
     );
   }
 
-  // Status decides whether link and backlink rows are trustworthy enough to
-  // show and which recovery action fits the current Miyo state.
+  // Only a successful Miyo match can produce result rows. Other states render
+  // their recovery guidance even if a stale caller supplies rows.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
-  let showRows = false;
   let guidancePanel: React.ReactNode = null;
   switch (status) {
     case "disabled":
@@ -122,7 +121,6 @@ export function RelevantNotesPane({
       );
       break;
     case "no-matches":
-      showRows = true;
       guidancePanel = (
         <GuidancePanel
           id="no-matches"
@@ -132,7 +130,6 @@ export function RelevantNotesPane({
       );
       break;
     case "not-indexed": {
-      showRows = true;
       const reviewInMiyo = actions.reviewIndexing.destination === "miyo";
       guidancePanel = (
         <GuidancePanel
@@ -155,13 +152,11 @@ export function RelevantNotesPane({
       break;
     }
     case "matches":
-      showRows = true;
-      break;
     case "idle":
       break;
   }
 
-  if (!showRows || noteRows.length === 0) {
+  if (status !== "matches" || noteRows.length === 0) {
     return (
       <div
         data-relevant-notes-empty-state
@@ -172,10 +167,5 @@ export function RelevantNotesPane({
     );
   }
 
-  return (
-    <div className="tw-flex tw-flex-col tw-gap-2">
-      {guidancePanel}
-      <div className="tw-flex tw-flex-col tw-gap-0.5">{noteRows}</div>
-    </div>
-  );
+  return <div className="tw-flex tw-flex-col tw-gap-0.5">{noteRows}</div>;
 }

@@ -162,7 +162,10 @@ describe("findRelevantNotes", () => {
           { path: "vault/beta.md", score: 0.58 },
         ],
       });
-      mockedGetLinkedNotes.mockReturnValue([createMarkdownFile("linked-only.md")]);
+      mockedGetLinkedNotes.mockReturnValue([
+        createMarkdownFile("alpha.md"),
+        createMarkdownFile("linked-only.md"),
+      ]);
       mockedGetBacklinkedNotes.mockReturnValue([createMarkdownFile("beta.md")]);
 
       const result = await findRelevantNotes({
@@ -170,13 +173,9 @@ describe("findRelevantNotes", () => {
         filePath: "source.md",
       });
 
-      expect(result.notes.map((entry) => entry.note.path)).toEqual([
-        "alpha.md",
-        "beta.md",
-        "linked-only.md",
-      ]);
+      expect(result.notes.map((entry) => entry.note.path)).toEqual(["alpha.md", "beta.md"]);
+      expect(result.notes[0].metadata.hasOutgoingLinks).toBe(true);
       expect(result.notes[1].metadata.hasBacklinks).toBe(true);
-      expect(result.notes[2].metadata.score).toBeUndefined();
     });
 
     it("trusts Miyo to apply the requested result limit instead of capping or sorting again (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
@@ -197,7 +196,7 @@ describe("findRelevantNotes", () => {
       expect(result.notes[24].note.path).toBe("note-24.md");
     });
 
-    it("returns Miyo's no-match state while retaining link-only rows (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
+    it("returns no rows for Miyo's no-match state regardless of links (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
       mockedGetLinkedNotes.mockReturnValue([createMarkdownFile("linked-only.md")]);
 
       const result = await findRelevantNotes({
@@ -205,16 +204,10 @@ describe("findRelevantNotes", () => {
         filePath: "source.md",
       });
 
-      expect(result).toMatchObject({
-        status: "no-matches",
-        notes: [
-          {
-            note: { path: "linked-only.md" },
-            metadata: { score: undefined, hasOutgoingLinks: true, hasBacklinks: false },
-          },
-        ],
-      });
+      expect(result).toEqual({ status: "no-matches", notes: [] });
       expect(mockGetFolder).not.toHaveBeenCalled();
+      expect(mockedGetLinkedNotes).not.toHaveBeenCalled();
+      expect(mockedGetBacklinkedNotes).not.toHaveBeenCalled();
     });
 
     it("reports unavailable when a successful Miyo response omits its results array (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
@@ -248,7 +241,7 @@ describe("findRelevantNotes", () => {
       expect(mockedGetBacklinkedNotes).not.toHaveBeenCalled();
     });
 
-    it("returns no graph-only rows when enabled Miyo cannot run (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
+    it("returns no link-only rows when enabled Miyo cannot run (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
       mockedShouldUseMiyo.mockReturnValue(false);
       mockedGetLinkedNotes.mockReturnValue([createMarkdownFile("linked-only.md")]);
 
@@ -344,11 +337,11 @@ describe("findRelevantNotes", () => {
           filePath: "source.md",
         });
 
-        expect(result.notes).toHaveLength(1);
-        expect(result.notes[0].note.path).toBe("linked-only.md");
-        expect(result.notes[0].metadata.score).toBeUndefined();
+        expect(result.notes).toEqual([]);
         expect(result.status).toBe("not-indexed");
         expect(mockGetFolder).toHaveBeenCalledWith("http://127.0.0.1:8742", "vault");
+        expect(mockedGetLinkedNotes).not.toHaveBeenCalled();
+        expect(mockedGetBacklinkedNotes).not.toHaveBeenCalled();
         expect(mockedLogError).not.toHaveBeenCalled();
       }
     );
@@ -391,7 +384,7 @@ describe("findRelevantNotes", () => {
       expect(mockedGetSettings).toHaveBeenCalledTimes(1);
     });
 
-    it("returns no graph-only rows when an unindexed source cannot confirm folder registration (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
+    it("returns no link-only rows when an unindexed source cannot confirm folder registration (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
       mockSearchRelated.mockRejectedValue(
         new MiyoRequestError(404, "No indexed chunks found for file_path")
       );
@@ -431,7 +424,7 @@ describe("findRelevantNotes", () => {
       }
     });
 
-    it("returns no graph-only rows when the primary search times out (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
+    it("returns no link-only rows when the primary search times out (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
       jest.useFakeTimers();
       try {
         mockSearchRelated.mockReturnValue(new Promise(() => undefined));

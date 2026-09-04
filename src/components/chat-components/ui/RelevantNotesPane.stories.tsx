@@ -6,11 +6,7 @@ import type { Meta, StoryObj } from "@/lib/story";
 import { FileInput, FileOutput } from "lucide-react";
 import React from "react";
 
-interface NoteRowsProps {
-  scored: boolean;
-}
-
-function NoteRows({ scored }: NoteRowsProps): React.ReactNode[] {
+function NoteRows(): React.ReactNode[] {
   return [
     { title: "Design principles", score: 0.86, outgoing: true, backlink: false },
     { title: "Product research", score: 0.72, outgoing: false, backlink: true },
@@ -24,18 +20,16 @@ function NoteRows({ scored }: NoteRowsProps): React.ReactNode[] {
       </span>
       {note.outgoing && <FileOutput className="tw-size-3 tw-text-faint" />}
       {note.backlink && <FileInput className="tw-size-3 tw-text-faint" />}
-      {scored && (
-        <span className="tw-text-xs tw-font-medium tw-tabular-nums tw-text-muted">
-          {Math.round(note.score * 100)}%
-        </span>
-      )}
+      <span className="tw-text-xs tw-font-medium tw-tabular-nums tw-text-muted">
+        {Math.round(note.score * 100)}%
+      </span>
     </div>
   ));
 }
 
 const baseArgs: RelevantNotesPaneProps = {
   status: "matches",
-  noteRows: NoteRows({ scored: true }),
+  noteRows: NoteRows(),
   actions: {
     miyoDownloadUrl: "https://www.miyo.md/",
     onOpenMiyoSettings: () => undefined,
@@ -67,7 +61,7 @@ export const NoActiveNote: StoryObj<RelevantNotesPaneProps> = {
 };
 
 export const Loading: StoryObj<RelevantNotesPaneProps> = {
-  args: { isPending: true, noteCount: 0, noteRows: null },
+  args: { status: "loading", noteRows: [] },
 };
 
 export const NoMiyoEmptyGuidance: StoryObj<RelevantNotesPaneProps> = {
@@ -82,18 +76,14 @@ export const EmptyNoSemanticMatches: StoryObj<RelevantNotesPaneProps> = {
   args: { status: "no-matches", noteRows: [] },
 };
 
-export const LinksOnlyNoSemanticMatches: StoryObj<RelevantNotesPaneProps> = {
-  args: { status: "no-matches", noteRows: NoteRows({ scored: false }) },
+export const NotIndexedGuidance: StoryObj<RelevantNotesPaneProps> = {
+  args: { status: "not-indexed", noteRows: [] },
 };
 
-export const LinksOnlyNotIndexedGuidance: StoryObj<RelevantNotesPaneProps> = {
-  args: { status: "not-indexed", noteRows: NoteRows({ scored: false }) },
-};
-
-export const LinksOnlyNotIndexedRemoteGuidance: StoryObj<RelevantNotesPaneProps> = {
+export const NotIndexedRemoteGuidance: StoryObj<RelevantNotesPaneProps> = {
   args: {
     status: "not-indexed",
-    noteRows: NoteRows({ scored: false }),
+    noteRows: [],
     actions: {
       ...baseArgs.actions,
       reviewIndexing: { ...baseArgs.actions.reviewIndexing, destination: "settings" },
