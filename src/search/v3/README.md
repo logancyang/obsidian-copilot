@@ -1,7 +1,7 @@
 # Search v3: Chunk-Based Retrieval (Current Implementation)
 
 This document reflects the runtime behavior in the current codebase.
-Search v3 is the lexical retrieval core used by `TieredLexicalRetriever`, with optional semantic fusion via `MergedSemanticRetriever`.
+Search v3 is the local lexical retrieval core used by `TieredLexicalRetriever`. Miyo is the only semantic search backend.
 
 ## High-Level Topology
 
@@ -15,8 +15,7 @@ graph TD
     FR --> FR3[Time-range docs - daily notes + mtime]
 
     B -->|default| C[TieredLexicalRetriever]
-    B -->|semantic enabled| D[MergedSemanticRetriever]
-    B -->|self-host valid| E[SelfHostRetriever]
+    B -->|Miyo enabled| D[MiyoSemanticRetriever]
 
     C --> F[SearchCore]
     F --> G[QueryExpander]
@@ -28,13 +27,7 @@ graph TD
     Q --> R[Lexical note/chunk ranks]
     R --> L[LangChain Documents]
 
-    D --> C
-    D --> M[HybridRetriever]
-    R --> N[Lexical docs]
-    M --> O[Semantic docs]
-    N --> P[Merge + dedupe + blend]
-    O --> P
-    P --> L
+    D --> L
 
     FR1 --> MR[mergeFilterAndSearchResults]
     FR2 --> MR
@@ -48,7 +41,7 @@ graph TD
 ```
 
 `FilterRetriever` runs at the `SearchTools` orchestration layer, parallel to the main search retriever.
-Its results bypass ALL downstream retriever processing (MergedSemanticRetriever top-K, score normalization, etc.).
+Its results bypass downstream retriever processing such as top-K slicing and score normalization.
 When `timeRange` is set, only FilterRetriever runs (no main retriever), preserving the time-range short-circuit behavior.
 
 ## Doc Title/Tag Guarantee (In-Depth)
@@ -75,14 +68,14 @@ Guaranteed title/tag docs are emitted with:
 - `metadata.score = 1.0` and `metadata.rerank_score = 1.0`
 - `metadata.source = "title-match"` or `"tag-match"`
 
-Since `FilterRetriever` runs at the orchestration layer (not inside a retriever), these docs **cannot** be lost to downstream top-K slicing in `MergedSemanticRetriever` or score normalization.
+Since `FilterRetriever` runs at the orchestration layer (not inside a retriever), these docs **cannot** be lost to downstream top-K slicing or score normalization.
 
 ### 3. Merge and dedup at orchestration layer
 
 `SearchTools.performLexicalSearch()` performs:
 
 1. `FilterRetriever.getRelevantDocuments()` — always runs
-2. Main retriever (if no timeRange) — `RetrieverFactory` selects lexical/semantic/self-host
+2. Main retriever (if no timeRange) — `RetrieverFactory` selects Miyo or lexical
 3. `mergeFilterAndSearchResults(filterDocs, searchDocs)`:
    - Search docs from notes already covered by filter docs are dropped
    - Filter docs are never removed
@@ -110,9 +103,8 @@ Then in `CopilotPlusChainRunner.prepareLocalSearchResult()`:
 ### 1. Entry point and retriever selection
 
 - `RetrieverFactory` priority order:
-  1. Self-host mode (`SelfHostRetriever`) if valid and backend available
-  2. Semantic mode (`MergedSemanticRetriever`) if `enableSemanticSearchV3` is true
-  3. Lexical mode (`TieredLexicalRetriever`) otherwise
+  1. Miyo semantic search (`MiyoSemanticRetriever`) when Miyo is enabled
+  2. Lexical mode (`TieredLexicalRetriever`) otherwise
 - `localSearch` forces lexical mode when:
   - a valid `timeRange` is present, or
   - any salient term starts with `#` (tag-focused query)
@@ -255,25 +247,6 @@ When `timeRange` is provided, `SearchTools.performLexicalSearch()` runs only `Fi
 
 The main retriever is **not** created when timeRange is set. This path does not use query expansion/BM25 ranking.
 
-## Semantic Mode (`MergedSemanticRetriever`)
-
-When semantic search is enabled (and not forced lexical by tag/time), the system uses `MergedSemanticRetriever`.
-
-Current behavior:
-
-- runs lexical (`TieredLexicalRetriever`) and semantic (`HybridRetriever`) in parallel
-- dedupes on chunk/path-like stable key
-- lexical result wins on key collision
-- blends scores by source with current weights:
-  - lexical weight: `1.0`
-  - semantic weight: `1.0`
-- applies extra lexical tag-match boost:
-  - `TAG_MATCH_BOOST = 1.1`
-- writes blended score to `metadata.score` and `metadata.rerank_score`
-- returns top `maxK` (or `RETURN_ALL_LIMIT` in return-all mode)
-
-**Important**: `FilterRetriever` runs at the orchestration layer, so filter results are **not** subject to `MergedSemanticRetriever`'s top-K slicing.
-
 ## Limits and Defaults
 
 ### SearchCore limits
@@ -354,6 +327,6 @@ interface ExpandedQuery {
 
 - Older docs referenced 90/10 weighted query-expansion scoring. Current code does not do that.
 - Older docs referenced an `<expanded>` term section. Current parser uses `<salient>` and `<queries>` only.
-- Semantic fusion is implemented and active via `MergedSemanticRetriever` when enabled; it is not design-only.
+- Miyo retrieval is independent of the local Search v3 index and embedding pipeline.
 - `FilterRetriever` is a standalone class at `src/search/v3/FilterRetriever.ts`, not a LangChain `BaseRetriever` subclass.
 - `mergeFilterAndSearchResults` in `src/search/v3/mergeResults.ts` handles the dedup logic between filter and search results.

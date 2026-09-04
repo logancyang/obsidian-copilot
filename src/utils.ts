@@ -6,7 +6,6 @@ import { ChainType } from "@/chainType";
 import {
   ALLOWED_NOTE_CONTEXT_EXTENSIONS,
   ModelCapability,
-  NOMIC_EMBED_TEXT,
   TEXT_READABLE_EXTENSIONS,
 } from "@/constants";
 import { logInfo, logWarn } from "@/logger";
@@ -434,24 +433,6 @@ export function isAllowedFileForChainContext(file: TFile | null, chainType: Chai
 
   // Plus chains support all other file types (PDF, EPUB, PPT, DOCX, etc.)
   return isPlusChain(chainType);
-}
-
-export function areEmbeddingModelsSame(
-  model1: string | undefined,
-  model2: string | undefined
-): boolean {
-  if (!model1 || !model2) return false;
-  // TODO: Hacks to handle different embedding model names for the same model. Need better handling.
-  if (model1.includes(NOMIC_EMBED_TEXT) && model2.includes(NOMIC_EMBED_TEXT)) {
-    return true;
-  }
-  if (
-    (model1 === "small" && model2 === "cohereai") ||
-    (model1 === "cohereai" && model2 === "small")
-  ) {
-    return true;
-  }
-  return model1 === model2;
 }
 
 export interface ChatHistoryEntry {

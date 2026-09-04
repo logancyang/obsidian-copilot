@@ -47,8 +47,8 @@ jest.mock("@/search/findRelevantNotes", () => ({
   findRelevantNotes: jest.fn(),
 }));
 
-jest.mock("@/search/indexSignal", () => ({
-  onIndexChanged: (listener: () => void) => {
+jest.mock("@/miyo/miyoIndex", () => ({
+  onMiyoIndexChanged: (listener: () => void) => {
     indexChangedListener = listener;
     return () => {
       if (indexChangedListener === listener) indexChangedListener = null;

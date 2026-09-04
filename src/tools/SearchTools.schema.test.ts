@@ -12,7 +12,7 @@ jest.mock("@/search/RetrieverFactory", () => ({
   },
 }));
 
-import { createLocalSearchTool, indexTool, webSearchTool } from "@/tools/SearchTools";
+import { createLocalSearchTool, webSearchTool } from "@/tools/SearchTools";
 
 describe("SearchTools", () => {
   describe("createLocalSearchTool()", () => {
@@ -130,19 +130,6 @@ describe("SearchTools", () => {
           chatHistory: [{ role: "user" }],
         }).success
       ).toBe(false);
-    });
-  });
-
-  describe("indexTool schema", () => {
-    const schema = indexTool.schema;
-
-    it("accepts the empty arguments object used to invoke the parameterless tool", () => {
-      expect(schema.safeParse({}).success).toBe(true);
-    });
-
-    it("rejects non-object inputs", () => {
-      expect(schema.safeParse(undefined).success).toBe(false);
-      expect(schema.safeParse("index").success).toBe(false);
     });
   });
 });

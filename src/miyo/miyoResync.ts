@@ -10,7 +10,7 @@ import {
   parseMiyoSyncReceipt,
   type MiyoSyncReceipt,
 } from "@/miyo/miyoUtils";
-import { notifyIndexChanged } from "@/search/indexSignal";
+import { notifyMiyoIndexChanged } from "@/miyo/miyoIndex";
 import { extractAppIgnoreSettings, getSystemExcludedFolders } from "@/search/searchUtils";
 import { type CopilotSettings, getSettings, updateSetting } from "@/settings/model";
 import { err2String } from "@/utils";
@@ -429,7 +429,7 @@ export function resyncMiyoFolder(
         outcome === "resynced-grants-reset" ||
         outcome === "resynced-scan-failed"
       ) {
-        notifyIndexChanged();
+        notifyMiyoIndexChanged();
       }
       return outcome;
     })

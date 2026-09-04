@@ -1,7 +1,4 @@
-import { getChainType, subscribeToChainTypeChange, subscribeToModelKeyChange } from "@/aiParams";
-import { ChainType } from "@/chainType";
-import { VAULT_VECTOR_STORE_STRATEGY } from "@/constants";
-import { getSettings } from "@/settings/model";
+import { subscribeToChainTypeChange, subscribeToModelKeyChange } from "@/aiParams";
 import { App } from "obsidian";
 import ChainManager from "./chainManager";
 import type { ModelManagementApi } from "@/modelManagement";
@@ -24,16 +21,7 @@ export default class ChainOwner {
     });
 
     subscribeToChainTypeChange(() => {
-      const settings = getSettings();
-      const shouldAutoIndex =
-        settings.enableSemanticSearchV3 &&
-        (settings.indexVaultToVectorStore as VAULT_VECTOR_STORE_STRATEGY) ===
-          VAULT_VECTOR_STORE_STRATEGY.ON_MODE_SWITCH &&
-        (getChainType() === ChainType.VAULT_QA_CHAIN ||
-          getChainType() === ChainType.COPILOT_PLUS_CHAIN);
-      void this.getCurrentChainManager().createChainWithNewModel({
-        refreshIndex: shouldAutoIndex,
-      });
+      void this.getCurrentChainManager().createChainWithNewModel();
     });
   }
 

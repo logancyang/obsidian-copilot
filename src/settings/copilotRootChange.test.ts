@@ -9,12 +9,6 @@ import { getSettings, settingsAtom, settingsStore, type CopilotSettings } from "
 import type { App } from "obsidian";
 import * as obsidian from "obsidian";
 
-const garbageCollectVectorStore = jest.fn<Promise<number>, []>();
-jest.mock("@/search/vectorStoreManager", () => ({
-  __esModule: true,
-  default: { getInstance: () => ({ garbageCollectVectorStore }) },
-}));
-
 // Persistence transaction surface. The transaction runner executes its task
 // inline so the persist→activate ordering under test is preserved; the durable
 // write and suppression are captured so tests can assert order and simulate a
@@ -51,7 +45,6 @@ function seedSettings(partial: Partial<CopilotSettings>): void {
 describe("copilotRootChange", () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    garbageCollectVectorStore.mockResolvedValue(0);
     persistSettingsWithinTransaction.mockResolvedValue(undefined);
     saveData.mockResolvedValue(undefined);
     settingsStore.set(settingsAtom, { ...DEFAULT_SETTINGS });
@@ -229,38 +222,22 @@ describe("copilotRootChange", () => {
 
       expect(getSettings().copilotFolder).toBe("ai"); // change completed
       expect(getSettings().userSystemPromptsFolder).toBe("edit-A"); // edit kept in memory
-      expect(garbageCollectVectorStore).toHaveBeenCalledTimes(1); // follow-ups ran
     });
 
-    it("keeps the old root and skips GC when the durable save fails", async () => {
+    it("keeps the old root when the durable save fails", async () => {
       seedSettings({ copilotFolder: "copilot", copilotRootHistory: ["copilot"] });
       persistSettingsWithinTransaction.mockRejectedValueOnce(new Error("disk full"));
 
       await expect(applyCopilotRootChange(app, "ai")).rejects.toThrow("disk full");
 
-      // Save failed before activation, so the in-memory root is untouched and no
-      // GC ran — the session keeps writing under the protected old root.
+      // Save failed before activation, so the in-memory root is untouched and
+      // the session keeps writing under the protected old root.
       expect(getSettings().copilotFolder).toBe("copilot");
       expect(getSettings().copilotRootHistory).toEqual(["copilot"]);
       expect(suppressNextPersistOnce).not.toHaveBeenCalled();
-      expect(garbageCollectVectorStore).not.toHaveBeenCalled();
     });
 
-    it("triggers a best-effort garbage-collection pass after activating", async () => {
-      seedSettings({ copilotFolder: "copilot" });
-      await applyCopilotRootChange(app, "ai");
-      expect(garbageCollectVectorStore).toHaveBeenCalledTimes(1);
-    });
-
-    it("still activates the new root when garbage collection fails", async () => {
-      seedSettings({ copilotFolder: "copilot" });
-      garbageCollectVectorStore.mockRejectedValueOnce(new Error("index offline"));
-
-      await expect(applyCopilotRootChange(app, "ai")).resolves.toBeUndefined();
-      expect(getSettings().copilotFolder).toBe("ai");
-    });
-
-    it("does not activate an invalid root or run garbage collection", async () => {
+    it("does not activate an invalid root", async () => {
       seedSettings({ copilotFolder: "copilot", copilotRootHistory: ["copilot"] });
 
       await applyCopilotRootChange(app, "../escape");
@@ -268,7 +245,6 @@ describe("copilotRootChange", () => {
       expect(getSettings().copilotFolder).toBe("copilot");
       expect(getSettings().copilotRootHistory).toEqual(["copilot"]);
       expect(persistSettingsWithinTransaction).not.toHaveBeenCalled();
-      expect(garbageCollectVectorStore).not.toHaveBeenCalled();
     });
   });
 });

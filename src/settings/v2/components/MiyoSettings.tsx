@@ -31,7 +31,7 @@ import {
   shouldSurfaceMiyoResync,
 } from "@/miyo/miyoUtils";
 import { useMiyoStatus } from "@/miyo/useMiyoStatus";
-import { notifyIndexChanged } from "@/search/indexSignal";
+import { notifyMiyoIndexChanged } from "@/miyo/miyoIndex";
 import { deriveSkillsFolder } from "@/settings/copilotFolder";
 import { getSettings, updateSetting, useSettingsValue } from "@/settings/model";
 import {
@@ -371,12 +371,9 @@ export const MiyoSettings: React.FC = () => {
   // the write the legacy Miyo toggle owned; the redesign moved the affordance
   // here but the enable action still has to persist the flag.
   //
-  // `enableSemanticSearchV3` is written alongside `enableMiyo` to hold the
-  // invariant the rest of the code relies on: VectorStoreManager only initializes
-  // the Miyo index backend when semantic search is on (vectorStoreManager.ts
-  // refreshBackend). We deliberately do NOT trigger a Copilot vector reindex —
-  // Miyo indexes through its own backend (MiyoIndexBackend), not the local vector
-  // store, so rebuilding it would burn work Miyo never reads.
+  // Keep writing the legacy `enableSemanticSearchV3` field alongside `enableMiyo`
+  // until the settings migration removes the old semantic-index fields. Runtime
+  // search routing now depends on `enableMiyo` alone.
   //
   // Two-phase commit: enabling persists `enableMiyo`, but search routing keys off
   // that persisted flag alone (shouldUseMiyo), so a flag left `true` after a
@@ -544,7 +541,7 @@ export const MiyoSettings: React.FC = () => {
       // endpoint or its healthy status. Retry any Relevant Notes request that
       // previously settled on setup guidance.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
-      notifyIndexChanged();
+      notifyMiyoIndexChanged();
     } catch (error) {
       logWarn(`Miyo add-folder failed: ${err2String(error)}`);
       return "error";
@@ -666,11 +663,10 @@ export const MiyoSettings: React.FC = () => {
     // "connected": pill flips via the store; "error": Notice already surfaced.
   }, [handleEvaluate, openConnectModal]);
 
-  // Disconnect: turn Miyo off — the symmetric undo of enableMiyoBackend. We clear
-  // enableSemanticSearchV3 alongside enableMiyo so search returns to keyword
-  // rather than silently falling back to the local Orama vector store (which
-  // would otherwise begin indexing the vault). The store's settings subscription
-  // invalidates the snapshot; refresh(true) then reflects the disconnected state.
+  // Disconnect: turn Miyo off — the symmetric undo of enableMiyoBackend. Keep
+  // clearing the legacy semantic flag until the settings migration removes it.
+  // The store's subscription invalidates the snapshot; refresh(true) then
+  // reflects the disconnected state.
   const handleDisconnect = useCallback(async () => {
     // Invalidate any in-flight connect attempt so a late-resolving probe can't
     // re-enable Miyo right after the user turned it off.

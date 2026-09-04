@@ -1,10 +1,5 @@
 import type { CustomModel } from "@/aiParams";
-import {
-  ChatModelProviders,
-  EmbeddingModelProviders,
-  ProviderInfo,
-  ProviderSettingsKeyMap,
-} from "@/constants";
+import { ChatModelProviders, ProviderInfo, ProviderSettingsKeyMap } from "@/constants";
 import type { Provider, SettingKeyProviders } from "@/constants";
 import type { CopilotSettings } from "@/settings/model";
 
@@ -29,8 +24,7 @@ const PROVIDERS_WITHOUT_API_KEYS: ReadonlySet<Provider> = new Set([
   ChatModelProviders.OPENAI_FORMAT,
   ChatModelProviders.OLLAMA,
   ChatModelProviders.LM_STUDIO,
-  EmbeddingModelProviders.COPILOT_PLUS,
-  EmbeddingModelProviders.COPILOT_PLUS_JINA,
+  ChatModelProviders.COPILOT_PLUS,
 ]);
 
 export function getProviderLabel(provider: string, model?: CustomModel): string {

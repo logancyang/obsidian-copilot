@@ -60,7 +60,6 @@ import {
   startActiveWebTabTracking,
 } from "@/services/webViewerService/webViewerServiceSingleton";
 import { WebSelectionTracker } from "@/services/webViewerService/webViewerServiceSelection";
-import VectorStoreManager from "@/search/vectorStoreManager";
 import { runSettingsMigrations } from "@/settings/migrations";
 import { CopilotSettingTab } from "@/settings/SettingsPage";
 import {
@@ -146,7 +145,6 @@ export default class CopilotPlugin extends Plugin {
   chainOwner: ChainOwner;
   brevilabsClient: BrevilabsClient;
   userMessageHistory: string[] = [];
-  vectorStoreManager: VectorStoreManager;
   fileParserManager: FileParserManager;
   customCommandRegister: CustomCommandRegister;
   systemPromptRegister: SystemPromptRegister;
@@ -354,9 +352,6 @@ export default class CopilotPlugin extends Plugin {
         this.agentSessionManager
       );
     }
-
-    // Always construct VectorStoreManager; it internally no-ops when semantic search is disabled
-    this.vectorStoreManager = VectorStoreManager.getInstance(this.app);
 
     // Initialize VaultDataManager for centralized vault data (notes, folders, tags)
     // Note: VaultDataManager tracks ALL data; hooks filter based on parameters

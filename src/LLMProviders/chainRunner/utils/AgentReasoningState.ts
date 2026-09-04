@@ -248,8 +248,6 @@ export function summarizeToolResult(
       if (command === "base:query") return "Queried base data";
       return "Listed bases";
     }
-    case "indexVault":
-      return "Indexed vault";
     case "updateMemory":
       return "Updated memory";
     case "writeFile":
@@ -418,8 +416,6 @@ export function summarizeToolCall(
       if (command === "base:query") return "Querying base data";
       return "Listing bases";
     }
-    case "indexVault":
-      return "Indexing vault";
     case "updateMemory":
       return "Saving to memory";
     case "writeFile": {

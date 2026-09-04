@@ -113,28 +113,6 @@ export const EMPTY_PROCESSING_SOURCES: readonly AgentInFlightSource[] = Object.f
  *  materialize step; read by AgentContextStatusIcon / AgentChatInput to show progress + gate send. */
 export const agentProjectContextLoadAtom = atom<Record<string, AgentProjectContextLoadState>>({});
 
-interface IndexingProgressState {
-  isActive: boolean;
-  isPaused: boolean;
-  isCancelled: boolean;
-  indexedCount: number;
-  totalFiles: number;
-  errors: readonly string[];
-  completionStatus: "none" | "success" | "cancelled" | "error";
-}
-
-const EMPTY_INDEXING_ERRORS: readonly string[] = Object.freeze([]);
-const DEFAULT_INDEXING_PROGRESS_STATE: Readonly<IndexingProgressState> = Object.freeze({
-  isActive: false,
-  isPaused: false,
-  isCancelled: false,
-  indexedCount: 0,
-  totalFiles: 0,
-  errors: EMPTY_INDEXING_ERRORS,
-  completionStatus: "none",
-});
-let indexingProgressState: Readonly<IndexingProgressState> = DEFAULT_INDEXING_PROGRESS_STATE;
-
 const selectedTextContextsAtom = atom<SelectedTextContext[]>([]);
 
 export interface ProjectConfig {
@@ -187,7 +165,6 @@ export interface SetChainOptions {
   chatModel?: BaseChatModel;
   noteFile?: TFile;
   abortController?: AbortController;
-  refreshIndex?: boolean;
 }
 
 export interface CustomModel {
@@ -290,96 +267,4 @@ export function useSelectedTextContexts() {
   return useAtom(selectedTextContextsAtom, {
     store: settingsStore,
   });
-}
-
-/**
- * Gets the internal progress state used by the legacy indexing runtime.
- */
-export function getIndexingProgressState(): Readonly<IndexingProgressState> {
-  return indexingProgressState;
-}
-
-/**
- * Replaces the internal progress state used by the legacy indexing runtime.
- */
-export function setIndexingProgressState(state: IndexingProgressState) {
-  indexingProgressState = state;
-}
-
-/**
- * Updates specific fields in the indexing progress state.
- */
-export function updateIndexingProgressState(partial: Partial<IndexingProgressState>) {
-  indexingProgressState = {
-    ...indexingProgressState,
-    ...partial,
-  };
-}
-
-// --- Throttled indexing count updater ---
-// Limits atom writes to at most once per 500ms during indexing to avoid
-// cascading React re-renders from frequent Jotai atom updates.
-let _lastUpdateTime = 0;
-let _pendingCount = 0;
-let _throttleTimer: number | null = null;
-const THROTTLE_INTERVAL_MS = 500;
-
-/**
- * Resets the indexing progress state to the default (idle) state.
- * Use when indexing completes with nothing to do (e.g. index already up to date).
- */
-export function resetIndexingProgressState() {
-  // Cancel any pending throttled indexing count write so a stale timer from a
-  // previous run cannot corrupt the freshly-reset state.
-  if (_throttleTimer !== null) {
-    window.clearTimeout(_throttleTimer);
-    _throttleTimer = null;
-  }
-  _lastUpdateTime = 0;
-  _pendingCount = 0;
-
-  indexingProgressState = DEFAULT_INDEXING_PROGRESS_STATE;
-}
-
-/**
- * Throttled version of updateIndexingProgressState for indexedCount.
- * Limits atom writes to once per 500ms to reduce React re-renders.
- */
-export function throttledUpdateIndexingCount(indexedCount: number): void {
-  _pendingCount = indexedCount;
-  const now = Date.now();
-
-  if (now - _lastUpdateTime >= THROTTLE_INTERVAL_MS) {
-    // Enough time has passed — write immediately
-    _lastUpdateTime = now;
-    if (_throttleTimer !== null) {
-      window.clearTimeout(_throttleTimer);
-      _throttleTimer = null;
-    }
-    updateIndexingProgressState({ indexedCount: _pendingCount });
-  } else if (_throttleTimer === null) {
-    // Schedule a trailing write
-    _throttleTimer = window.setTimeout(
-      () => {
-        _lastUpdateTime = Date.now();
-        _throttleTimer = null;
-        updateIndexingProgressState({ indexedCount: _pendingCount });
-      },
-      THROTTLE_INTERVAL_MS - (now - _lastUpdateTime)
-    );
-  }
-}
-
-/**
- * Forces an immediate write of the pending indexedCount.
- * Call at indexing completion to ensure the final count is displayed.
- */
-export function flushIndexingCount(): void {
-  if (_throttleTimer !== null) {
-    window.clearTimeout(_throttleTimer);
-    _throttleTimer = null;
-  }
-  updateIndexingProgressState({ indexedCount: _pendingCount });
-  _lastUpdateTime = 0;
-  _pendingCount = 0;
 }

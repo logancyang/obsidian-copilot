@@ -1,12 +1,6 @@
 import { setModelKey } from "@/aiParams";
 import { CopilotPlusExpiredModal } from "@/components/modals/CopilotPlusExpiredModal";
-import {
-  ChatModelProviders,
-  ChatModels,
-  EmbeddingModelProviders,
-  PLUS_UTM_MEDIUMS,
-  PlusUtmMedium,
-} from "@/constants";
+import { ChatModelProviders, ChatModels, PLUS_UTM_MEDIUMS, PlusUtmMedium } from "@/constants";
 import { EntitlementFeature, verifyEntitlement } from "@/entitlement";
 import { BrevilabsClient, LicenseCheckContext } from "@/LLMProviders/brevilabsClient";
 import { logError, logInfo, logWarn } from "@/logger";
@@ -51,9 +45,7 @@ export function isPlusModel(modelKey: string): boolean {
   if (configuredModel) {
     return settings.providers[configuredModel.providerId]?.origin.kind === "copilot-plus";
   }
-  return (
-    (modelKey.split("|")[1] as EmbeddingModelProviders) === EmbeddingModelProviders.COPILOT_PLUS
-  );
+  return modelKey.split("|")[1] === String(ChatModelProviders.COPILOT_PLUS);
 }
 
 /**

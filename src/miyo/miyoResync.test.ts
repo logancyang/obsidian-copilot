@@ -9,9 +9,9 @@ jest.mock("@/miyo/miyoStatusStore", () => ({
 }));
 jest.mock("@/utils/deviceId", () => ({ getDeviceId: jest.fn(() => "device-A") }));
 
-const notifyIndexChanged = jest.fn<void, []>();
-jest.mock("@/search/indexSignal", () => ({
-  notifyIndexChanged: () => notifyIndexChanged(),
+const notifyMiyoIndexChanged = jest.fn<void, []>();
+jest.mock("@/miyo/miyoIndex", () => ({
+  notifyMiyoIndexChanged: () => notifyMiyoIndexChanged(),
 }));
 
 // Controllable Miyo client; the class type is erased (type-only imports).
@@ -187,7 +187,7 @@ describe("miyoResync", () => {
 
       await expect(resyncMiyoFolder(app, session)).resolves.toBe("verified");
 
-      expect(notifyIndexChanged).toHaveBeenCalledTimes(1);
+      expect(notifyMiyoIndexChanged).toHaveBeenCalledTimes(1);
     });
 
     it("does not notify index subscribers when reconciliation fails — https://github.com/Brevilabs/obsidian-copilot-private/issues/280", async () => {
@@ -196,7 +196,7 @@ describe("miyoResync", () => {
 
       await expect(resyncMiyoFolder(app, session)).resolves.toBe("failed");
 
-      expect(notifyIndexChanged).not.toHaveBeenCalled();
+      expect(notifyMiyoIndexChanged).not.toHaveBeenCalled();
     });
 
     it("verifies without rebuilding when the record already covers the scope", async () => {

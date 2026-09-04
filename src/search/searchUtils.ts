@@ -1,14 +1,11 @@
 import { COPILOT_FOLDER_ROOT } from "@/constants";
-import { CustomError } from "@/error";
 import { AGENTS_FILE_NAME, CLAUDE_FILE_NAME } from "@/instructions/agentsFile";
 import { PROJECT_CONFIG_FILE_NAME } from "@/projects/constants";
-import EmbeddingsManager from "@/LLMProviders/embeddingManager";
-import { logError, logInfo, logWarn } from "@/logger";
+import { logWarn } from "@/logger";
 import { getSettings, normalizeRootFolders, type CopilotSettings } from "@/settings/model";
 import { getEffectiveProjectsFolder } from "@/settings/copilotFolder";
 import { logFileManager } from "@/logFileManager";
 import { getPropertyValuesFromNote, getTagsFromNote, noteHasProperty, stripHash } from "@/utils";
-import { Embeddings } from "@langchain/core/embeddings";
 import { hasCaseInsensitiveFilesystem } from "@/utils/vaultAdapterUtils";
 import { App, TFile } from "obsidian";
 
@@ -18,30 +15,6 @@ export interface PatternCategory {
   folderPatterns?: string[];
   notePatterns?: string[];
   propertyPatterns?: string[];
-}
-
-export async function getVectorLength(embeddingInstance: Embeddings | undefined): Promise<number> {
-  if (!embeddingInstance) {
-    throw new CustomError("Embedding instance not found.");
-  }
-  try {
-    const sampleText = "Sample text for embedding";
-    const sampleEmbedding = await embeddingInstance.embedQuery(sampleText);
-
-    if (!sampleEmbedding || sampleEmbedding.length === 0) {
-      throw new CustomError("Failed to get valid embedding vector length");
-    }
-
-    logInfo(
-      `Detected vector length: ${sampleEmbedding.length} for model: ${EmbeddingsManager.getModelName(embeddingInstance)}`
-    );
-    return sampleEmbedding.length;
-  } catch (error) {
-    logError("Error getting vector length:", error);
-    throw new CustomError(
-      "Failed to determine embedding vector length. Please check your Copilot settings to make sure you have a working embedding model."
-    );
-  }
 }
 
 export async function getAllQAMarkdownContent(app: App): Promise<string> {

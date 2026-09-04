@@ -10,7 +10,7 @@ import { logError, logWarn } from "@/logger";
 import { getMiyoFolderName, isLocalMiyoUrl, MIYO_DEEPLINK_URL } from "@/miyo/miyoUtils";
 import { useMiyoStatus } from "@/miyo/useMiyoStatus";
 import { findRelevantNotes, type RelevantNoteEntry } from "@/search/findRelevantNotes";
-import { onIndexChanged } from "@/search/indexSignal";
+import { onMiyoIndexChanged } from "@/miyo/miyoIndex";
 import { openCopilotSettings } from "@/settings/openSettings";
 import { useSettingsValue } from "@/settings/model";
 import { sha256 } from "@/utils/hash";
@@ -82,7 +82,7 @@ function useRelevantNotes(
         ])
       : null;
 
-  useEffect(() => onIndexChanged(refresh), [refresh]);
+  useEffect(() => onMiyoIndexChanged(refresh), [refresh]);
 
   useEffect(() => {
     let cancelled = false;

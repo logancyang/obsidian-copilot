@@ -1,4 +1,4 @@
-import { logInfo, logWarn } from "@/logger";
+import { logWarn } from "@/logger";
 import { matchSystemRoots } from "@/search/searchUtils";
 import { getCopilotSaveData } from "@/settings/copilotSaveData";
 import {
@@ -224,16 +224,4 @@ export async function applyCopilotRootChange(app: App, newRoot: string): Promise
     suppressNextPersistOnce();
     setSettings((current) => buildRootPatch(current, folder));
   });
-
-  // Best-effort: drop index docs that the old/new root now excludes. GC is
-  // idempotent and the next full index re-runs it, so failures are logged and
-  // swallowed rather than retried. Dynamically imported to keep the search
-  // stack out of the settings bundle's eager graph.
-  try {
-    const { default: VectorStoreManager } = await import("@/search/vectorStoreManager");
-    const removed = await VectorStoreManager.getInstance().garbageCollectVectorStore();
-    logInfo(`Copilot root change: garbage collection removed ${removed} stale index docs.`);
-  } catch (error) {
-    logWarn("Copilot root change: garbage collection failed (will retry on next index).", error);
-  }
 }
