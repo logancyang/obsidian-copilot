@@ -1,5 +1,4 @@
 import { logWarn } from "@/logger";
-import { notifyMiyoIndexChanged } from "@/miyo/miyoIndex";
 import { matchSystemRoots } from "@/search/searchUtils";
 import { getCopilotSaveData } from "@/settings/copilotSaveData";
 import {
@@ -225,10 +224,4 @@ export async function applyCopilotRootChange(app: App, newRoot: string): Promise
     suppressNextPersistOnce();
     setSettings((current) => buildRootPatch(current, folder));
   });
-
-  // A root change immediately changes Relevant Notes eligibility. Invalidate
-  // settled results so excluded notes do not remain visible until some later
-  // index event or manual refresh.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/284
-  notifyMiyoIndexChanged();
 }

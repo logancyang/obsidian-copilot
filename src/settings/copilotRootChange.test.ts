@@ -9,11 +9,6 @@ import { getSettings, settingsAtom, settingsStore, type CopilotSettings } from "
 import type { App } from "obsidian";
 import * as obsidian from "obsidian";
 
-const notifyMiyoIndexChanged = jest.fn<void, []>();
-jest.mock("@/miyo/miyoIndex", () => ({
-  notifyMiyoIndexChanged: () => notifyMiyoIndexChanged(),
-}));
-
 // Persistence transaction surface. The transaction runner executes its task
 // inline so the persist→activate ordering under test is preserved; the durable
 // write and suppression are captured so tests can assert order and simulate a
@@ -143,7 +138,7 @@ describe("copilotRootChange", () => {
   });
 
   describe("applyCopilotRootChange()", () => {
-    it("commits the new root and invalidates settled Relevant Notes (https://github.com/Brevilabs/obsidian-copilot-private/issues/284)", async () => {
+    it("commits the new root and appends it to the root history", async () => {
       seedSettings({
         enableMiyo: true,
         copilotFolder: "ai",
@@ -156,16 +151,6 @@ describe("copilotRootChange", () => {
       expect(after.copilotFolder).toBe("team-ai");
       // Old + new + legacy roots all survive in the append-only history.
       expect(new Set(after.copilotRootHistory)).toEqual(new Set(["copilot", "ai", "team-ai"]));
-      expect(notifyMiyoIndexChanged).toHaveBeenCalledTimes(1);
-    });
-
-    it("invalidates settled Relevant Notes even while Miyo is disabled (https://github.com/Brevilabs/obsidian-copilot-private/issues/284)", async () => {
-      seedSettings({ enableMiyo: false });
-
-      await applyCopilotRootChange(app, "team-ai");
-
-      expect(getSettings().copilotFolder).toBe("team-ai");
-      expect(notifyMiyoIndexChanged).toHaveBeenCalledTimes(1);
     });
 
     it("durably persists the new root before activating it in memory", async () => {

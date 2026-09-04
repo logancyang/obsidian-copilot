@@ -262,32 +262,6 @@ describe("RelevantNotes", () => {
       expect(mockFindRelevantNotes).toHaveBeenCalledTimes(2);
     });
 
-    it("retires a settled result when the local QA scope changes without an index signal (https://github.com/Brevilabs/obsidian-copilot-private/issues/284)", async () => {
-      // Reset Settings and config import replace the QA rules directly, so no
-      // index signal arrives; without the scope in the request identity the
-      // pane would keep showing rows the new rules exclude.
-      mockFindRelevantNotes
-        .mockResolvedValueOnce({
-          notes: [
-            {
-              note: { path: "Private.md", title: "Private" },
-              metadata: { score: 0.9, hasOutgoingLinks: false, hasBacklinks: false },
-            },
-          ],
-          status: "matches",
-        })
-        .mockResolvedValueOnce({ notes: [], status: "no-matches" });
-
-      const { rerender } = render(<RelevantNotes onAddToChat={jest.fn()} />);
-      expect(await screen.findByText("Private")).toBeTruthy();
-
-      mockSettings = { ...mockSettings, qaExclusions: "Private.md" };
-      rerender(<RelevantNotes onAddToChat={jest.fn()} />);
-
-      await waitFor(() => expect(screen.queryByText("Private")).toBeNull());
-      expect(mockFindRelevantNotes).toHaveBeenCalledTimes(2);
-    });
-
     it("shows an informational not-indexed state without result rows or a setup claim (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
       mockFindRelevantNotes.mockResolvedValue({
         notes: [],

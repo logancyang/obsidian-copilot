@@ -61,7 +61,7 @@ The scope is a retrieval preference, not a security boundary. Keep Miyo's regist
 
 ### Relevant Notes
 
-Miyo is the source of Relevant Notes results and similarity percentages; Copilot's legacy local embedding index no longer scores this pane. Copilot keeps Miyo's result order and applies its current working-folder history plus its inclusion and exclusion patterns. Direct links and backlinks annotate notes returned by Miyo but never add their own rows. The registered folder's Miyo scope is applied first and also affects which candidates Miyo can return.
+Miyo is the source of Relevant Notes results and similarity percentages; Copilot's legacy local embedding index no longer scores this pane. Copilot keeps Miyo's result order. Direct links and backlinks annotate notes returned by Miyo but never add their own rows. Relevant Notes does not apply Copilot's inclusion or exclusion patterns; the registered folder's Miyo scope determines which notes can appear.
 
 If Miyo is disabled, unavailable, or its vault registration cannot be confirmed, the pane does not fall back to link and backlink rows. Instead, it offers Miyo download or setup actions. **Open Miyo settings** returns directly to the existing connection flow under **Settings → Copilot → Miyo**, including when you use a remote endpoint or mobile device.
 
@@ -74,7 +74,7 @@ A successful search with zero results shows **No semantic matches yet** without 
 
 For a remote Miyo or mobile device, error and exclusion cards tell you to review the folder on the host machine. Copilot cannot open or change that machine's Miyo settings. Older Miyo builds show **This note isn't indexed in Miyo** and **Update Miyo to the latest version to see why** because they cannot report the more specific reason. Their local desktop action still opens the vault's folder under Sources; remote and mobile connections offer **Review Miyo connection** in Copilot.
 
-Links and backlinks do not create rows in any of these empty states. Copilot's working-folder history and inclusion and exclusion patterns filter Relevant Notes after Miyo returns candidates.
+Links and backlinks do not create rows in any of these empty states. Copilot's own inclusion and exclusion patterns do not filter Relevant Notes; Miyo's folder filters are the only scope there.
 
 ## Search conversations and process documents
 

@@ -183,7 +183,7 @@ describe("findRelevantNotes", () => {
       expect(result.notes[1].metadata.hasBacklinks).toBe(true);
     });
 
-    it("filters Miyo results through Copilot QA rules (https://github.com/Brevilabs/obsidian-copilot-private/issues/284)", async () => {
+    it("keeps notes that Copilot's QA exclusions cover, since those rules only scope chat retrieval (https://github.com/Brevilabs/obsidian-copilot-private/issues/284)", async () => {
       mockedGetSettings.mockReturnValue({
         enableMiyo: true,
         miyoServerUrl: "",
@@ -199,7 +199,10 @@ describe("findRelevantNotes", () => {
 
       const result = await findRelevantNotes({ app: window.app, filePath: "source.md" });
 
-      expect(result.notes.map((entry) => entry.note.path)).toEqual(["alpha.md"]);
+      expect(result.notes.map((entry) => entry.note.path)).toEqual([
+        "private/secret.md",
+        "alpha.md",
+      ]);
       expect(result.status).toBe("matches");
     });
 
