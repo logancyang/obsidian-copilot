@@ -19,7 +19,12 @@ const mockApp = {
     getLeaf: mockGetLeaf,
   },
 };
-let mockSettings = {
+let mockSettings: {
+  enableMiyo: boolean;
+  miyoServerUrl: string;
+  plusLicenseKey: string;
+  qaExclusions?: string;
+} = {
   enableMiyo: true,
   miyoServerUrl: "",
   plusLicenseKey: "old-license",

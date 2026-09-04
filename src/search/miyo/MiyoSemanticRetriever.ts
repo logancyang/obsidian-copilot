@@ -13,16 +13,16 @@ import {
   getMiyoCustomUrl,
   getMiyoFolderName,
   getVaultRelativeMiyoPath,
-  hasUserQaPatterns,
   isCurrentVaultMiyoPath,
-  isMiyoScopeMismatch,
 } from "@/miyo/miyoUtils";
 import { createCopilotPatternFilter } from "@/search/searchUtils";
 import { getSettings } from "@/settings/model";
-import { RETURN_ALL_LIMIT } from "@/search/v3/SearchCore";
 
 /** Number of chunks to return when the caller does not request a specific limit. */
 const DEFAULT_FINAL_K = 20;
+
+/** Largest candidate pool exposed by Miyo's search endpoint. */
+const MIYO_SEARCH_CANDIDATE_LIMIT = 1000;
 
 type MiyoSemanticRetrieverOptions = {
   minSimilarityScore?: number;
@@ -138,35 +138,32 @@ export class MiyoSemanticRetriever extends BaseRetriever {
     const folderName = searchAll ? undefined : getMiyoFolderName(this.app);
     try {
       const baseUrl = await this.client.resolveBaseUrl(getMiyoCustomUrl(getSettings()));
-      // Over-fetch candidates only when the local filter can actually drop
-      // results: user-authored qa patterns (the server never sees tag/note
-      // patterns, and edited patterns lag its registration snapshot), or a
-      // stale Miyo scope (the server may return system-root content the filter
-      // must remove). With a synced scope and no user patterns, the server
-      // already omits everything the filter would drop, so a small 2× margin —
-      // covering post-fetch chunk dedup, which Miyo does not guarantee against —
-      // replaces the former always-RETURN_ALL_LIMIT fetch. The margin is
-      // best-effort by design: finalK is an upper bound, not a fill guarantee
-      // (the similarity threshold already returns fewer), and a retry-on-
-      // shortfall second request would add tail latency for a duplicate
-      // density no real payload has shown.
-      const settings = getSettings();
-      const limit =
-        this.returnAll || hasUserQaPatterns(settings) || isMiyoScopeMismatch(this.app, settings)
-          ? RETURN_ALL_LIMIT
-          : Math.min(this.finalK * 2, RETURN_ALL_LIMIT);
+      // Always fetch Miyo's full exposed candidate pool. Copilot no longer
+      // defines Miyo's exclusion scope beyond initial registration, so it
+      // cannot know whether a ranked prefix is content its local QA filter is
+      // about to drop — chat notes under a Copilot root alone can fill a
+      // narrower window. Miyo exposes no pagination and clamps this endpoint at
+      // 1,000, so a wider request is the only way to keep eligible matches
+      // reachable.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/284
       const filters = this.buildSearchFilters();
       if (getSettings().debug) {
         logInfo("MiyoSemanticRetriever: search params:", {
           baseUrl,
-          limit,
+          limit: MIYO_SEARCH_CANDIDATE_LIMIT,
           finalK: this.finalK,
           minSimilarityScore: this.minSimilarityScore,
           returnAll: this.returnAll,
           filters,
         });
       }
-      const response = await this.client.search(baseUrl, folderName, query, limit, filters);
+      const response = await this.client.search(
+        baseUrl,
+        folderName,
+        query,
+        MIYO_SEARCH_CANDIDATE_LIMIT,
+        filters
+      );
 
       const rawResults = response.results || [];
       const filteredResults = rawResults.filter((result) => this.isScoreAboveThreshold(result));

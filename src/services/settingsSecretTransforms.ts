@@ -169,6 +169,10 @@ export function cleanupLegacyFields(settings: CopilotSettings): CopilotSettings 
   delete out.githubCopilotAccessToken;
   delete out.githubCopilotToken;
   delete out.githubCopilotTokenExpiresAt;
+  // Copilot no longer uses receipt-backed delete/re-register rebuilds for Miyo
+  // folder exclusions, so the receipt has no reader. Strip it on every load/save
+  // so a sync from a device still running an older build cannot reintroduce it.
+  delete out.miyoSyncedExclusions;
   // Copilot no longer manages MCP servers. Remove the retired nested config on
   // every load/save so headers and environment values cannot remain in data.json.
   if (out.agentMode && typeof out.agentMode === "object" && !Array.isArray(out.agentMode)) {

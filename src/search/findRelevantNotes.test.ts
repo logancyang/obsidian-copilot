@@ -16,7 +16,11 @@ jest.mock("@/noteUtils", () => ({
   getBacklinkedNotes: jest.fn(),
 }));
 
-jest.mock("@/settings/model", () => ({ getSettings: jest.fn() }));
+jest.mock("@/settings/model", () => ({
+  getSettings: jest.fn(),
+  normalizeRootFolders:
+    jest.requireActual<typeof import("@/settings/model")>("@/settings/model").normalizeRootFolders,
+}));
 
 const mockResolveBaseUrl = jest.fn();
 const mockSearchRelated = jest.fn();
@@ -100,6 +104,7 @@ describe("findRelevantNotes", () => {
         "beta.md",
         "linked-only.md",
         "attachment.pdf",
+        "private/secret.md",
         ...Array.from({ length: 25 }, (_, index) => `note-${index}.md`),
       ];
       const filesByPath = new Map(paths.map((path) => [path, createMarkdownFile(path)]));
@@ -176,6 +181,29 @@ describe("findRelevantNotes", () => {
       expect(result.notes.map((entry) => entry.note.path)).toEqual(["alpha.md", "beta.md"]);
       expect(result.notes[0].metadata.hasOutgoingLinks).toBe(true);
       expect(result.notes[1].metadata.hasBacklinks).toBe(true);
+    });
+
+    it("keeps notes that Copilot's QA exclusions cover, since those rules only scope chat retrieval (https://github.com/Brevilabs/obsidian-copilot-private/issues/284)", async () => {
+      mockedGetSettings.mockReturnValue({
+        enableMiyo: true,
+        miyoServerUrl: "",
+        debug: false,
+        qaExclusions: "private",
+      } as CopilotSettings);
+      mockSearchRelated.mockResolvedValue({
+        results: [
+          { path: "vault/private/secret.md", score: 0.9 },
+          { path: "vault/alpha.md", score: 0.8 },
+        ],
+      });
+
+      const result = await findRelevantNotes({ app: window.app, filePath: "source.md" });
+
+      expect(result.notes.map((entry) => entry.note.path)).toEqual([
+        "private/secret.md",
+        "alpha.md",
+      ]);
+      expect(result.status).toBe("matches");
     });
 
     it("trusts Miyo to apply the requested result limit instead of capping or sorting again (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {

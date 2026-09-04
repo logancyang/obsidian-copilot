@@ -86,7 +86,6 @@ Open **Settings → Copilot → Miyo**.
 - **Miyo isn't running:** open Miyo, then choose **Retry** beside **Disconnect**.
 - **Register this vault with Miyo:** choose **Register & connect** on the same computer. For a remote connection or mobile device, register the vault in Miyo first, then retry.
 - **Chat sources are not set up:** this belongs to the separate **Search chat** row and does not block Agent Chat vault search. Configure chat sources only if you want ChatGPT or Claude history search.
-- If excluded folders no longer match the Copilot folder, choose **Resync Miyo**. For a remote connection, remove and re-add the vault in Miyo.
 
 Connection alone does not enable Agent Chat search. Under **Powered by Miyo**, turn on **Semantic search**. Copilot installs `miyo-search` for opencode, Claude, and Codex. If Copilot reports a same-name collision, rename or remove the existing Skill and try again.
 

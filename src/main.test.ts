@@ -20,10 +20,6 @@ jest.mock("@/logger", () => ({
   logInfo: jest.fn(),
   logWarn: jest.fn(),
 }));
-jest.mock("@/miyo/miyoResync", () => ({
-  resetMiyoMutations: jest.fn(),
-  startMiyoMutationSession: jest.fn(),
-}));
 jest.mock("@/services/settingsPersistence", () => ({
   flushPersistence: jest.fn().mockResolvedValue(undefined),
   persistSettings: jest.fn(),
@@ -54,7 +50,6 @@ jest.mock("@/agentMode", () => ({
 import CopilotPlugin from "@/main";
 import { logError, logInfo, logWarn } from "@/logger";
 import { logFileManager } from "@/logFileManager";
-import { resetMiyoMutations } from "@/miyo/miyoResync";
 import { flushPersistence } from "@/services/settingsPersistence";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { disposeNotificationSound } from "@/utils/notificationSound";
@@ -112,7 +107,16 @@ describe("main", () => {
         expect(plugin.onunload()).toBeUndefined();
       });
 
-      it("ends the Miyo mutation lifecycle synchronously, before returning to Obsidian", () => {
+      it("revokes lifecycle-sensitive mutations before returning (https://github.com/Brevilabs/obsidian-copilot-private/issues/284)", () => {
+        const plugin = createPluginUnderTest([]);
+        Object.assign(plugin, { pluginLifecycleActive: true });
+
+        plugin.onunload();
+
+        expect(plugin.isPluginLifecycleActive()).toBe(false);
+      });
+
+      it("flushes persistence synchronously, before returning to Obsidian", () => {
         const calls: string[] = [];
         const plugin = createPluginUnderTest(calls);
 
@@ -120,7 +124,6 @@ describe("main", () => {
 
         // Everything above teardown()'s first `await` must run before the next
         // `onload()` can start, which is what makes the vault boundary real.
-        expect(resetMiyoMutations).toHaveBeenCalledTimes(1);
         expect(flushPersistence).toHaveBeenCalledTimes(1);
         expect(calls).toEqual([]);
       });
@@ -228,6 +231,15 @@ describe("main", () => {
 
         expect(mockSkillManagerDispose).not.toHaveBeenCalled();
         expect(logInfo).toHaveBeenCalledWith("Copilot plugin unloaded");
+      });
+    });
+
+    describe("isPluginLifecycleActive()", () => {
+      it("reports whether this plugin instance owns lifecycle-sensitive mutations", () => {
+        const plugin = createPluginUnderTest([]);
+        Object.assign(plugin, { pluginLifecycleActive: true });
+
+        expect(plugin.isPluginLifecycleActive()).toBe(true);
       });
     });
 

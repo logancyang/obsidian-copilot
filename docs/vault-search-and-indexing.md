@@ -103,7 +103,7 @@ Connector access is separate from Agent Chat search. Review the folders, remote 
 - **Relevant Notes has no semantic results:** Read the card for the active note's Miyo state. **No semantic matches yet** means Miyo found no related notes. The other cards distinguish an empty note, indexing work, an indexing error, and a Miyo folder filter. Older Miyo builds use the less specific **This note isn't indexed in Miyo** card. None of these states shows link-only or backlink-only rows.
 - **Agent Chat Miyo document processing fails:** install Miyo on this computer so its local CLI is available, or switch **Document Processor** to **Plus**. A remote Miyo search connection does not provide the local CLI Agent Chat needs.
 - **Quick Chat Miyo document processing fails:** confirm that the connected Miyo service can access the registered vault and document. When a remote server is configured, troubleshoot the document on that server.
-- **Copilot asks for a resync:** use **Resync Miyo** so Miyo excludes Copilot's own working folder and conversation files.
+- **Miyo indexes folders you wanted skipped:** When Copilot first registers a vault, it supplies the current working-folder history and Obsidian ignored paths as initial Miyo exclusions. It does not overwrite an existing registration or later folder edits. Copilot still filters its integrated search results locally; edit the registered folder's server-side include and exclude rules in Miyo.
 - **Mobile:** a remote Miyo server can be configured on mobile, but Agent Chat and its Skills are desktop features. Use Quick Chat on mobile.
 
 ## Related

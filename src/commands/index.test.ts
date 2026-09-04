@@ -154,6 +154,7 @@ describe("commands", () => {
         name: "Refresh Miyo index",
         icon: "refresh-cw",
       });
+      expect(COMMAND_IDS.REFRESH_MIYO_INDEX).toBe("index-vault-to-copilot-index");
 
       indexCommands[0].callback?.();
 

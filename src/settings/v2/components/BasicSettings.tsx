@@ -8,10 +8,7 @@ import { SettingDisclosure } from "@/components/ui/setting-disclosure";
 import { SettingSection } from "@/components/ui/setting-section";
 import { DEFAULT_OPEN_AREA, SEND_SHORTCUT } from "@/constants";
 import { useApp } from "@/context";
-import { usePlugin } from "@/contexts/PluginContext";
 import { cn } from "@/lib/utils";
-import { verifyMiyoScope } from "@/miyo/miyoResync";
-import { shouldSurfaceMiyoResync } from "@/miyo/miyoUtils";
 import { openAgentsFile, writeAgentsFile } from "@/instructions/agentsFile";
 import { useAgentsFileDraft } from "@/instructions/useAgentsFileDraft";
 import { logError } from "@/logger";
@@ -22,12 +19,7 @@ import {
   copilotRootContainsNotes,
   findCopilotRootFileConflict,
 } from "@/settings/copilotRootChange";
-import {
-  getSettings,
-  updateSetting,
-  useSettingsValue,
-  validateCopilotFolder,
-} from "@/settings/model";
+import { updateSetting, useSettingsValue, validateCopilotFolder } from "@/settings/model";
 import { DesktopOnlySettingsPanel } from "@/settings/v2/components/DesktopOnlySettingsPanel";
 import { CopilotFolderChangeNotice } from "@/settings/v2/components/CopilotFolderChangeNotice";
 import { LegacyChatPromptsNotice } from "@/settings/v2/components/LegacyChatPromptsNotice";
@@ -66,10 +58,6 @@ const AgentsSection: React.FC = () => {
 export const BasicSettings: React.FC = () => {
   const app = useApp();
   const settings = useSettingsValue();
-  // From the plugin, not captured here: this tab mounts the first time the user
-  // selects it, so a tab first opened after a reload would vouch for the
-  // incoming lifecycle while still holding the outgoing vault's `app`.
-  const { miyoMutationSession } = usePlugin();
   const [isChecking, setIsChecking] = useState(false);
   const [templateOpen, setTemplateOpen] = useState(false);
   const [conversationNoteName, setConversationNoteName] = useState(
@@ -160,31 +148,6 @@ export const BasicSettings: React.FC = () => {
       app,
       () => {
         void applyCopilotRootChange(app, folder)
-          .then(() => {
-            // The root moved, so Miyo's server-side exclusions no longer match.
-            // Surface it and stop there: changing a local folder setting must
-            // not mutate a remote registration on its own, and the Miyo tab's
-            // banner carries the explicit Resync. Reads fresh settings — the
-            // React `settings` closure predates the root change.
-            const fresh = getSettings();
-            const notice = () =>
-              new Notice("Miyo search needs a resync — open the Miyo settings tab.", 6000);
-            if (shouldSurfaceMiyoResync(app, fresh)) {
-              notice();
-            } else if (fresh.miyoSyncedExclusions === "") {
-              // No local evidence — but a registration made before receipts
-              // existed leaves none, and neither does one whose receipt a
-              // Reset Settings wiped. Such a vault is still indexed, and its
-              // Relay can read the new root, while nothing local would ever
-              // report it: the startup notice is gated on the same empty
-              // receipt. Only asking the server can tell that apart from
-              // "never used Miyo". Read-only — it never mutates the
-              // registration; a covering record just self-heals the receipt.
-              void verifyMiyoScope(app, miyoMutationSession).then((scope) => {
-                if (scope === "stale") notice();
-              });
-            }
-          })
           .then(() => ensureCopilotSubfolders(app.vault, { copilotFolder: folder }))
           .then(() => new Notice(`Copilot folder changed to "${folder}".`, 4000))
           .catch(() => new Notice("Failed to change the Copilot folder. Check the logs.", 5000));

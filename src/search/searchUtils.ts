@@ -211,9 +211,9 @@ export function shouldIndexFile(
 
 /**
  * Build a predicate deciding whether a vault-relative path passes Copilot's QA
- * rules (resolved once for reuse). Unresolvable paths are kept, but the system
- * root exclusion is applied to the raw path first, so a former root's content is
- * dropped even with no user QA patterns configured.
+ * rules (resolved once for reuse). Path-only rules are applied before resolving
+ * a TFile; an unresolvable path is rejected when a remaining tag or property
+ * rule cannot be evaluated safely.
  *
  * @param app - The Obsidian app instance.
  * @returns Predicate returning true when the path should be kept.
@@ -237,9 +237,23 @@ export function createCopilotPatternFilter(app: App): (path: string) => boolean 
     if (!inclusions && !exclusions) {
       return true;
     }
+    if (exclusions && matchPathOnlyPatterns(path, exclusions)) {
+      return false;
+    }
     const file = app.vault.getAbstractFileByPath(path);
     if (!(file instanceof TFile)) {
-      return true;
+      // Miyo can return a stale or remote path that the current vault cannot
+      // resolve. Folder, extension, and note-title rules still have enough path
+      // data to evaluate. Tags and properties do not, so fail closed instead of
+      // letting a possibly excluded current-vault result through.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/284
+      if (hasMetadataPatterns(exclusions)) {
+        return false;
+      }
+      if (!inclusions) {
+        return true;
+      }
+      return matchPathOnlyPatterns(path, inclusions);
     }
     return shouldIndexFile(app, file, inclusions, exclusions);
   };
@@ -435,6 +449,30 @@ function matchFilePathWithFolders(filePath: string, folderPatterns: string[]): b
         normalizedFilePath[normalizedPattern.length] === "/")
     );
   });
+}
+
+/** Match the rule kinds that need only a path, without reading vault metadata. */
+function matchPathOnlyPatterns(filePath: string, patterns: PatternCategory): boolean {
+  const { extensionPatterns, folderPatterns, notePatterns } = patterns;
+  return (
+    matchFilePathWithExtensions(filePath, extensionPatterns ?? []) ||
+    matchFilePathWithFolders(filePath, folderPatterns ?? []) ||
+    matchFilePathWithNoteTitles(filePath, notePatterns ?? [])
+  );
+}
+
+/** Whether a rule set contains a tag or property check that needs a TFile. */
+function hasMetadataPatterns(patterns: PatternCategory | null): boolean {
+  return Boolean(patterns?.tagPatterns?.length || patterns?.propertyPatterns?.length);
+}
+
+/** Match note-title rules against a raw path using Obsidian's basename semantics. */
+function matchFilePathWithNoteTitles(filePath: string, noteTitles: string[]): boolean {
+  if (noteTitles.length === 0) return false;
+
+  const fileName = filePath.replace(/\\/g, "/").split("/").pop() ?? "";
+  const basename = fileName.replace(/\.[^./]+$/, "");
+  return noteTitles.some((title) => title.slice(2, -2) === basename);
 }
 
 /**

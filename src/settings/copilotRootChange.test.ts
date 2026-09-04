@@ -138,8 +138,12 @@ describe("copilotRootChange", () => {
   });
 
   describe("applyCopilotRootChange()", () => {
-    it("commits the new root and its protection history in one settings snapshot", async () => {
-      seedSettings({ copilotFolder: "ai", copilotRootHistory: ["copilot", "ai"] });
+    it("commits the new root and appends it to the root history", async () => {
+      seedSettings({
+        enableMiyo: true,
+        copilotFolder: "ai",
+        copilotRootHistory: ["copilot", "ai"],
+      });
 
       await applyCopilotRootChange(app, "team-ai");
 

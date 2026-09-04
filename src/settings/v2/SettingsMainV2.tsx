@@ -23,11 +23,9 @@ import { SelfHostSettings } from "./components/SelfHostSettings";
 // tab here. The legacy QASettings panel was removed as orphan-component cleanup
 // (see designdocs/SETTINGS_REDESIGN_V4.md and SETTINGS_V4_PR_PLAN.md); the
 // underlying fields are NOT dropped yet so existing data remains loadable:
-// vaults:
-//     implicitly. Its old Advanced-tab switch is gone because the built-in
-//     semantic index is no longer a user-facing product surface.
-//   - qaInclusions/qaExclusions — still consumed (Miyo registration snapshot);
-//     their edit UI is deferred per issue #195 ("defer include/exclude").
+//   - qaInclusions/qaExclusions — still consumed as the query-time scope filter
+//     over search results; their edit UI is deferred per issue #195
+//     ("defer include/exclude").
 //   - maxSourceChunks / enableInlineCitations — still read by search and chat.
 //     compatibility fields awaiting their dedicated settings migration.
 const LazySkillsSettings = React.lazy(() =>

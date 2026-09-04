@@ -74,8 +74,6 @@ import {
   subscribeToSettingsChange,
   updateSetting,
 } from "@/settings/model";
-import { didMiyoSyncedRootsChange, shouldSurfaceMiyoResync } from "@/miyo/miyoUtils";
-import { type MiyoMutationSession, resetMiyoMutations } from "@/miyo/miyoResync";
 import { ensureCopilotSubfolders, getEffectiveConversationsFolder } from "@/settings/copilotFolder";
 import { buildUpgradeRelocationEntries } from "@/settings/upgradeNotice";
 import { dehydrateDeviceProfile, hydrateDeviceProfile } from "@/settings/deviceProfiles";
@@ -169,18 +167,6 @@ export default class CopilotPlugin extends Plugin {
   [OPENARTIFACTS_AGENT_BRIDGE_PROPERTY]?: Readonly<OpenArtifactsAgentBridge>;
   /** Provider-credential-free channel available to the managed Agent Chat search skill. */
   selfHostWebSearchAgentBridge?: Readonly<SelfHostWebSearchAgentBridge>;
-  // Proof of THIS lifecycle for anything that enqueues a Miyo folder mutation.
-  // Assigned in `onload` right after the queue reset, and read by the settings
-  // UI rather than captured there: settings tabs mount lazily (`TabContent`
-  // renders nothing until selected), so a tab first opened after a reload would
-  // capture the incoming lifecycle while still holding the outgoing vault's
-  // `app`. The plugin instance is one-per-lifecycle by construction, so it is
-  // the honest place for this.
-  //
-  // Assign it exactly once and never recompute it per read: the Miyo tab uses it
-  // as an effect dependency, so a getter that captured on every access would
-  // hand React a new object each render and spin that effect forever.
-  miyoMutationSession!: MiyoMutationSession;
   private ribbonIconEl?: HTMLElement;
   userMemoryManager: UserMemoryManager;
   quickAskController: QuickAskController;
@@ -196,6 +182,12 @@ export default class CopilotPlugin extends Plugin {
   private webSelectionTracker?: WebSelectionTracker;
   private readonly chatHistoryLastAccessedAtManager = new RecentUsageManager<string>();
   private startupMigrationItems: StartupMigrationItem[] = [];
+  private pluginLifecycleActive = true;
+
+  /** Whether this plugin instance still owns lifecycle-sensitive mutations. */
+  public isPluginLifecycleActive(): boolean {
+    return this.pluginLifecycleActive;
+  }
 
   async onload(): Promise<void> {
     // Patch Node's `events.setMaxListeners` so the Claude Agent SDK's call with
@@ -213,13 +205,6 @@ export default class CopilotPlugin extends Plugin {
     // AFTER the next onload has already initialized — and would then null
     // out the new instance, breaking saves until another full reload.
     resetPersistenceState();
-    // Also reset here, not only in `onunload`: a crash or a hard kill never runs
-    // unload at all, and the module would then start this lifecycle holding the
-    // previous one's queue. Bumping twice is harmless — no task exists yet.
-    // The reset hands back this lifecycle's session; producers read it off the
-    // plugin rather than obtaining one themselves, which is what keeps a stale
-    // settings tree from vouching for the lifecycle it outlived.
-    this.miyoMutationSession = resetMiyoMutations();
     KeychainService.resetInstance();
     KeychainService.getInstance(this.app);
     await this.loadSettings();
@@ -606,29 +591,7 @@ export default class CopilotPlugin extends Plugin {
     await runStartupMigrationSummary({
       initialItems: this.startupMigrationItems,
       tasks: [projectTask, commandsTask, promptsTask, relocationTask],
-      afterTasks: () => {
-        const startupSettings = getSettings();
-        if (
-          !didMiyoSyncedRootsChange(startupSettings) ||
-          !shouldSurfaceMiyoResync(this.app, startupSettings)
-        ) {
-          return [license];
-        }
-        if (!isLegacyUpgrade) {
-          new Notice("Miyo search needs a resync — open the Miyo settings tab.", 8000);
-          return [license];
-        }
-        return [
-          license,
-          {
-            id: "miyo",
-            title: "Miyo search",
-            status: "action-required",
-            summary: "Miyo search needs a resync after the Copilot folder update.",
-            details: ["Open the Miyo settings tab to resync."],
-          },
-        ];
-      },
+      afterTasks: () => [license],
       present: (items) => {
         new ConfirmModal(
           this.app,
@@ -676,6 +639,11 @@ export default class CopilotPlugin extends Plugin {
   }
 
   onunload(): void {
+    // A settings tree can briefly outlive this plugin instance. Revoke its
+    // mutation rights synchronously so an in-flight registration cannot write
+    // into the next lifecycle after its asynchronous setup finishes.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/284
+    this.pluginLifecycleActive = false;
     // Obsidian never awaits onunload, so the async tail of teardown is
     // fire-and-forget by nature; declaring onunload void makes that explicit.
     // teardown() is invoked synchronously, so everything above its first
@@ -691,15 +659,6 @@ export default class CopilotPlugin extends Plugin {
   }
 
   private async teardown(): Promise<void> {
-    // End the Miyo mutation lifecycle HERE, as the first statement: everything
-    // above the first `await` runs before the next `onload()` can possibly
-    // start, so this carries none of the late-continuation risk that keeps
-    // `resetPersistenceState()` at load time. Doing it at unload is what makes
-    // the boundary real — waiting for the next load would leave a task from
-    // this vault free to write settings and issue DELETE/POST during an unload
-    // that is never followed by a re-enable, or while another vault is opening.
-    resetMiyoMutations();
-
     // Best-effort flush of pending keychain/data.json writes.
     // Reason: Obsidian does not await teardown, but awaiting here keeps the
     // remaining steps ordered after the flush, consistent with the log flush
