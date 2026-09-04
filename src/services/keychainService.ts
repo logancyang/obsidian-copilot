@@ -468,6 +468,35 @@ export class KeychainService {
   }
 
   // ---------------------------------------------------------------------------
+  // removeRetiredEmbeddingSecrets — drop credentials the embedding pipeline owned
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Delete this vault's embedding-scoped model credentials.
+   *
+   * The retired `activeEmbeddingModels` rows are stripped from settings on
+   * load, so no later save can name those identities to tombstone them. Their
+   * keychain entries carry the embedding scope in their ID, which stays
+   * enumerable after the rows are gone.
+   * https://github.com/logancyang/obsidian-copilot/pull/3094#discussion_r3926692782
+   */
+  removeRetiredEmbeddingSecrets(): void {
+    // Older Obsidian builds cannot enumerate entries. Nothing else can identify
+    // them once the rows are stripped, so leave them rather than guessing.
+    if (typeof this.storage.listSecrets !== "function") return;
+
+    const retiredPrefix = `copilot-v${this.vaultId}-model-api-key-embedding-`;
+    for (const id of this.storage.listSecrets()) {
+      if (!id.startsWith(retiredPrefix)) continue;
+      try {
+        this.removeSecret(id);
+      } catch (error) {
+        logWarn(`Keychain: failed to remove retired embedding secret ${id}`, error);
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // clearAllVaultSecrets — wipe all keychain entries for this vault
   // ---------------------------------------------------------------------------
 

@@ -1,10 +1,17 @@
 /**
- * One-time migration (settings v13): retire the client-side index settings and
- * delete only Copilot's known index artifacts.
+ * Device-local cleanup for the retired client-side index pipeline: delete only
+ * Copilot's known index artifacts and the credentials the removed embedding
+ * models owned.
  * https://github.com/Brevilabs/obsidian-copilot-private/issues/283
  */
 
 import { logWarn } from "@/logger";
+
+/**
+ * Device-local marker key recording that this device finished the cleanup.
+ * Lives in Obsidian's vault-scoped local storage, which never syncs.
+ */
+export const LEGACY_INDEX_CLEANUP_STORAGE_KEY = "obsidian-copilot:legacy-index-cleanup:v1";
 
 const LEGACY_INDEX_DIRECTORY = ".copilot-index";
 const LEGACY_INDEX_ARTIFACT_PATTERNS = [
@@ -18,13 +25,18 @@ export interface LegacyIndexCleanupAdapter {
   exists(path: string): Promise<boolean>;
   list(path: string): Promise<{ files: string[]; folders: string[] }>;
   remove(path: string): Promise<void>;
-  rmdir(path: string, recursive: boolean): Promise<void>;
 }
 
 /** Dependencies for the one-time legacy index cleanup. */
 export interface LegacyIndexCleanupContext {
   adapter: LegacyIndexCleanupAdapter;
   configDir: string;
+  /** True once this device has completed the cleanup. */
+  hasRun(): boolean;
+  /** Record that this device completed the cleanup. */
+  markRun(): void;
+  /** Drop keychain entries the removed embedding models owned. */
+  removeRetiredEmbeddingSecrets(): void;
   notifyFailure(folder: string): void;
 }
 
@@ -39,13 +51,14 @@ function isDirectLegacyArtifact(folder: string, path: string): boolean {
   );
 }
 
-async function cleanupFolder(
-  context: LegacyIndexCleanupContext,
-  folder: string,
-  removeWhenEmpty: boolean
-): Promise<void> {
+/**
+ * Delete the allowlisted artifacts directly inside one folder.
+ *
+ * @returns True when every recognized artifact was removed.
+ */
+async function cleanupFolder(context: LegacyIndexCleanupContext, folder: string): Promise<boolean> {
   try {
-    if (!(await context.adapter.exists(folder))) return;
+    if (!(await context.adapter.exists(folder))) return true;
 
     const listing = await context.adapter.list(folder);
     let failed = false;
@@ -55,48 +68,57 @@ async function cleanupFolder(
         await context.adapter.remove(path);
       } catch (error) {
         failed = true;
-        logWarn(`[settings-migration] failed to remove legacy index artifact in ${folder}`, error);
-      }
-    }
-
-    if (removeWhenEmpty && !failed) {
-      const remaining = await context.adapter.list(folder);
-      if (remaining.files.length === 0 && remaining.folders.length === 0) {
-        // Obsidian's adapter requires recursive directory removal even for an
-        // empty directory. This call is restricted to the dedicated legacy
-        // root after a second empty check; the config directory never reaches it.
-        // https://github.com/Brevilabs/obsidian-copilot-private/issues/283
-        await context.adapter.rmdir(folder, true);
+        logWarn(
+          `[legacy-index-cleanup] failed to remove legacy index artifact in ${folder}`,
+          error
+        );
       }
     }
 
     if (failed) context.notifyFailure(folder);
+    return !failed;
   } catch (error) {
-    logWarn(`[settings-migration] failed to clean legacy index folder ${folder}`, error);
+    logWarn(`[legacy-index-cleanup] failed to clean legacy index folder ${folder}`, error);
     context.notifyFailure(folder);
+    return false;
   }
 }
 
 /**
- * Delete allowlisted index artifacts directly inside the former index folders.
+ * Remove this device's remnants of the retired index pipeline: allowlisted
+ * artifacts directly inside the former index folders, plus the keychain entries
+ * the removed embedding models owned.
  *
- * The vault config directory is never removed. The root `.copilot-index`
- * directory is removed non-recursively only after a second listing proves it
- * empty.
+ * Gated by a device-local marker rather than the settings version, because
+ * `settingsVersion` syncs: a second device would otherwise arrive already
+ * stamped and never clean its own files or credentials.
+ * https://github.com/logancyang/obsidian-copilot/pull/3094#discussion_r3926692787
  *
- * @param context - Vault adapter, active config directory, and failure notifier.
+ * Emptied directories are left in place. Obsidian's adapter can only remove a
+ * directory recursively, and an emptiness check cannot be atomic with that
+ * removal, so a file another writer restores in between would be deleted
+ * despite the allowlist promise.
+ * https://github.com/logancyang/obsidian-copilot/pull/3094#discussion_r3926692778
+ *
+ * @param context - Vault adapter, active config directory, device-local marker,
+ *   credential cleanup, and failure notifier.
  */
 export async function cleanupLegacyIndexArtifacts(
   context: LegacyIndexCleanupContext
 ): Promise<void> {
+  if (context.hasRun()) return;
+
   const configDir = context.configDir.replace(/\/+$/, "");
-  const rootIndexIsConfigDir = configDir === LEGACY_INDEX_DIRECTORY;
-  // A vault may use a custom config-directory name. If it happens to equal the
-  // legacy index directory, it still receives the stronger config-dir promise:
-  // delete allowlisted files directly inside it, but never remove the folder.
+  let cleaned = await cleanupFolder(context, LEGACY_INDEX_DIRECTORY);
+  // A vault may use a custom config-directory name. Cleaning it twice would
+  // double-report the same failure, so only visit a distinct directory.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/283
-  await cleanupFolder(context, LEGACY_INDEX_DIRECTORY, !rootIndexIsConfigDir);
-  if (!rootIndexIsConfigDir) {
-    await cleanupFolder(context, configDir, false);
+  if (configDir !== LEGACY_INDEX_DIRECTORY) {
+    cleaned = (await cleanupFolder(context, configDir)) && cleaned;
   }
+
+  context.removeRetiredEmbeddingSecrets();
+
+  // A failed pass stays unmarked so the next launch retries it.
+  if (cleaned) context.markRun();
 }

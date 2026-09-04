@@ -1,13 +1,13 @@
 import {
   cleanupLegacyIndexArtifacts,
   type LegacyIndexCleanupAdapter,
+  type LegacyIndexCleanupContext,
 } from "./legacyIndexRemovalMigration";
 
 const HASH = "0123456789abcdef0123456789abcdef";
 
 interface MemoryAdapter extends LegacyIndexCleanupAdapter {
   remove: jest.MockedFunction<LegacyIndexCleanupAdapter["remove"]>;
-  rmdir: jest.MockedFunction<LegacyIndexCleanupAdapter["rmdir"]>;
 }
 
 function makeAdapter(
@@ -25,9 +25,6 @@ function makeAdapter(
       listing.files = listing.files.filter((file) => file !== path);
     }
   });
-  const rmdir = jest.fn(async (path: string, _recursive: boolean) => {
-    directories.delete(path);
-  });
 
   return {
     exists: async (path) => directories.has(path),
@@ -37,13 +34,37 @@ function makeAdapter(
       return { files: [...listing.files], folders: [...listing.folders] };
     },
     remove,
-    rmdir,
+  };
+}
+
+/**
+ * Build a cleanup context with an in-memory device-local marker.
+ *
+ * @param adapter - Vault adapter under test.
+ * @param overrides - Context fields the individual test controls.
+ */
+function makeContext(
+  adapter: LegacyIndexCleanupAdapter,
+  overrides: Partial<LegacyIndexCleanupContext> = {}
+): LegacyIndexCleanupContext & { marker: { done: boolean } } {
+  const marker = { done: false };
+  return {
+    adapter,
+    configDir: ".vault-config",
+    hasRun: () => marker.done,
+    markRun: () => {
+      marker.done = true;
+    },
+    removeRetiredEmbeddingSecrets: jest.fn(),
+    notifyFailure: jest.fn(),
+    marker,
+    ...overrides,
   };
 }
 
 describe("legacyIndexRemovalMigration", () => {
   describe("cleanupLegacyIndexArtifacts()", () => {
-    it("deletes exact artifacts in both folders and removes only an empty root index folder (https://github.com/Brevilabs/obsidian-copilot-private/issues/283)", async () => {
+    it("deletes exact artifacts in both folders and leaves the emptied directory in place (https://github.com/logancyang/obsidian-copilot/pull/3094#discussion_r3926692778)", async () => {
       const adapter = makeAdapter({
         ".copilot-index": {
           files: [
@@ -56,20 +77,18 @@ describe("legacyIndexRemovalMigration", () => {
           files: [`.vault-config/copilot-index-${HASH}.json`, ".vault-config/workspace.json"],
         },
       });
+      const context = makeContext(adapter);
 
-      await cleanupLegacyIndexArtifacts({
-        adapter,
-        configDir: ".vault-config",
-        notifyFailure: jest.fn(),
-      });
+      await cleanupLegacyIndexArtifacts(context);
 
       expect(adapter.remove).toHaveBeenCalledTimes(4);
       expect(adapter.remove).not.toHaveBeenCalledWith(".vault-config/workspace.json");
-      expect(adapter.rmdir).toHaveBeenCalledWith(".copilot-index", true);
-      expect(adapter.rmdir).not.toHaveBeenCalledWith(".vault-config", expect.anything());
+      expect(await adapter.exists(".copilot-index")).toBe(true);
+      expect(context.removeRetiredEmbeddingSecrets).toHaveBeenCalledTimes(1);
+      expect(context.marker.done).toBe(true);
     });
 
-    it("keeps user files, malformed names, nested paths, and a nonempty root folder (https://github.com/Brevilabs/obsidian-copilot-private/issues/283)", async () => {
+    it("keeps user files, malformed names, and nested paths (https://github.com/Brevilabs/obsidian-copilot-private/issues/283)", async () => {
       const adapter = makeAdapter({
         ".copilot-index": {
           files: [
@@ -82,45 +101,47 @@ describe("legacyIndexRemovalMigration", () => {
         ".vault-config": { files: [] },
       });
 
-      await cleanupLegacyIndexArtifacts({
-        adapter,
-        configDir: ".vault-config",
-        notifyFailure: jest.fn(),
-      });
+      await cleanupLegacyIndexArtifacts(makeContext(adapter));
 
       expect(adapter.remove).not.toHaveBeenCalled();
-      expect(adapter.rmdir).not.toHaveBeenCalled();
     });
 
-    it("never removes the folder when the vault config directory uses the legacy folder name (https://github.com/Brevilabs/obsidian-copilot-private/issues/283)", async () => {
+    it("visits the shared directory once when the vault config directory uses the legacy folder name (https://github.com/Brevilabs/obsidian-copilot-private/issues/283)", async () => {
       const adapter = makeAdapter({
         ".copilot-index": { files: [`.copilot-index/copilot-index-${HASH}.json`] },
       });
 
-      await cleanupLegacyIndexArtifacts({
-        adapter,
-        configDir: ".copilot-index",
-        notifyFailure: jest.fn(),
-      });
+      await cleanupLegacyIndexArtifacts(makeContext(adapter, { configDir: ".copilot-index" }));
 
+      expect(adapter.remove).toHaveBeenCalledTimes(1);
       expect(adapter.remove).toHaveBeenCalledWith(`.copilot-index/copilot-index-${HASH}.json`);
-      expect(adapter.rmdir).not.toHaveBeenCalled();
     });
 
-    it("reports a failed folder without blocking cleanup of the other folder (https://github.com/Brevilabs/obsidian-copilot-private/issues/283)", async () => {
+    it("reports a failed folder, cleans the other folder, and retries on the next launch (https://github.com/Brevilabs/obsidian-copilot-private/issues/283)", async () => {
       const adapter = makeAdapter({
         ".copilot-index": { files: [`.copilot-index/copilot-index-${HASH}.json`] },
         ".vault-config": { files: [`.vault-config/copilot-index-${HASH}.json`] },
       });
       adapter.remove.mockRejectedValueOnce(new Error("locked"));
-      const notifyFailure = jest.fn();
+      const context = makeContext(adapter);
 
-      await expect(
-        cleanupLegacyIndexArtifacts({ adapter, configDir: ".vault-config", notifyFailure })
-      ).resolves.toBeUndefined();
+      await expect(cleanupLegacyIndexArtifacts(context)).resolves.toBeUndefined();
 
-      expect(notifyFailure).toHaveBeenCalledWith(".copilot-index");
+      expect(context.notifyFailure).toHaveBeenCalledWith(".copilot-index");
       expect(adapter.remove).toHaveBeenCalledWith(`.vault-config/copilot-index-${HASH}.json`);
+      expect(context.marker.done).toBe(false);
+    });
+
+    it("skips a device that already recorded the cleanup (https://github.com/logancyang/obsidian-copilot/pull/3094#discussion_r3926692787)", async () => {
+      const adapter = makeAdapter({
+        ".copilot-index": { files: [`.copilot-index/copilot-index-${HASH}.json`] },
+      });
+      const context = makeContext(adapter, { hasRun: () => true });
+
+      await cleanupLegacyIndexArtifacts(context);
+
+      expect(adapter.remove).not.toHaveBeenCalled();
+      expect(context.removeRetiredEmbeddingSecrets).not.toHaveBeenCalled();
     });
   });
 });

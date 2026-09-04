@@ -10,10 +10,7 @@ import type { ModelManagementApi, ProviderType } from "@/modelManagement";
 import { getSettings, setSettings, type CopilotSettings } from "@/settings/model";
 import { Platform } from "obsidian";
 
-import {
-  CURRENT_SETTINGS_VERSION,
-  runSettingsMigrations as runSettingsMigrationsWithCleanup,
-} from "./index";
+import { CURRENT_SETTINGS_VERSION, runSettingsMigrations } from "./index";
 
 jest.mock("@/logger", () => ({
   logInfo: jest.fn(),
@@ -37,24 +34,6 @@ jest.mock("@/settings/model", () => {
 
 const mockGetSettings = getSettings as jest.MockedFunction<typeof getSettings>;
 const mockSetSettings = setSettings as jest.MockedFunction<typeof setSettings>;
-
-const noLegacyIndexCleanup = {
-  adapter: {
-    exists: async () => false,
-    list: async () => ({ files: [], folders: [] }),
-    remove: async () => undefined,
-    rmdir: async () => undefined,
-  },
-  configDir: ".vault-config",
-  notifyFailure: jest.fn(),
-};
-
-function runSettingsMigrations(
-  api: ModelManagementApi,
-  cleanup = noLegacyIndexCleanup
-): Promise<void> {
-  return runSettingsMigrationsWithCleanup(api, cleanup);
-}
 
 function settings(
   overrides: Partial<CopilotSettings> & Record<string, unknown>,
@@ -457,27 +436,6 @@ describe("runSettingsMigrations()", () => {
     expect(mockSetSettings).toHaveBeenCalledWith(
       expect.objectContaining({ embeddingModelKey: "" })
     );
-  });
-
-  it("v13: cleans both legacy index locations for a v12 vault (https://github.com/Brevilabs/obsidian-copilot-private/issues/283)", async () => {
-    mockGetSettings.mockReturnValue(settings({ settingsVersion: 12 }));
-    const { api } = makeApi();
-    const adapter = {
-      exists: jest.fn(async () => false),
-      list: jest.fn(),
-      remove: jest.fn(),
-      rmdir: jest.fn(),
-    };
-
-    await runSettingsMigrations(api, {
-      adapter,
-      configDir: ".vault-config",
-      notifyFailure: jest.fn(),
-    });
-
-    expect(adapter.exists).toHaveBeenNthCalledWith(1, ".copilot-index");
-    expect(adapter.exists).toHaveBeenNthCalledWith(2, ".vault-config");
-    expect(mockSetSettings).toHaveBeenCalledWith({ settingsVersion: CURRENT_SETTINGS_VERSION });
   });
 
   it("v11: leaves a saved Bedrock provider alone for a vault already at the current version", async () => {

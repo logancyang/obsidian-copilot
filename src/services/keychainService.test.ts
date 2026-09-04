@@ -534,6 +534,35 @@ describe("keychainService", () => {
     // clearAllVaultSecrets — partial-failure surface area
     // ---------------------------------------------------------------------------
 
+    describe("removeRetiredEmbeddingSecrets()", () => {
+      it("deletes only this vault's embedding-scoped model credentials (https://github.com/logancyang/obsidian-copilot/pull/3094#discussion_r3926692782)", () => {
+        const secretStorage = makeSecretStorage();
+        const service = KeychainService.getInstance(makeApp({ secretStorage }));
+        const vaultId = service.getVaultId();
+        const retired = `copilot-v${vaultId}-model-api-key-embedding-text-embedding-3-small`;
+        secretStorage.listSecrets.mockReturnValue([
+          retired,
+          `copilot-v${vaultId}-model-api-key-chat-gpt-4o`,
+          `copilot-v${vaultId}-open-a-i-api-key`,
+          "copilot-vother000-model-api-key-embedding-text-embedding-3-small",
+        ]);
+
+        service.removeRetiredEmbeddingSecrets();
+
+        expect(secretStorage.deleteSecret).toHaveBeenCalledTimes(1);
+        expect(secretStorage.deleteSecret).toHaveBeenCalledWith(retired);
+      });
+
+      it("leaves entries alone when the build cannot enumerate them", () => {
+        const secretStorage = makeSecretStorage();
+        (secretStorage as unknown as { listSecrets: unknown }).listSecrets = undefined;
+        const service = KeychainService.getInstance(makeApp({ secretStorage }));
+
+        expect(() => service.removeRetiredEmbeddingSecrets()).not.toThrow();
+        expect(secretStorage.deleteSecret).not.toHaveBeenCalled();
+      });
+    });
+
     describe("clearAllVaultSecrets()", () => {
       it("clears what it can, then throws aggregating the count of failed entries", () => {
         const secretStorage = makeSecretStorage();
