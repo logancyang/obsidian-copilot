@@ -1,5 +1,10 @@
 import { logError, logInfo } from "@/logger";
-import { MiyoClient, MiyoRequestError } from "@/miyo/MiyoClient";
+import {
+  MiyoClient,
+  MiyoRequestError,
+  type MiyoFileStatusReason,
+  type MiyoRelatedSearchResponse,
+} from "@/miyo/MiyoClient";
 import {
   getMiyoCustomUrl,
   getMiyoFilePath,
@@ -14,7 +19,7 @@ import { App, TFile } from "obsidian";
 
 const MAX_RESULTS = 20;
 const MIYO_RELATED_SEARCH_TIMEOUT_MS = 8000;
-const MIYO_FOLDER_LOOKUP_TIMEOUT_MS = 8000;
+const MIYO_FILE_STATUS_TIMEOUT_MS = 8000;
 
 /**
  * Fetch Miyo's ordered related-note results.
@@ -50,11 +55,8 @@ async function searchRelatedNotesWithMiyo(
     return { scoreByPath: new Map(), status: "unavailable" };
   }
 
-  try {
-    // Obsidian's requestUrl can stay pending after a connection is accepted.
-    // Bound the primary request so unavailable guidance can replace loading.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
-    const response = await withTimeout(
+  const requestRelated = () =>
+    withTimeout(
       () =>
         miyoClient.searchRelated(baseUrl, miyoFilePath, {
           folderName,
@@ -63,6 +65,10 @@ async function searchRelatedNotesWithMiyo(
       MIYO_RELATED_SEARCH_TIMEOUT_MS,
       "Relevant Notes Miyo related search"
     );
+
+  const classifyRelatedResponse = (
+    response: MiyoRelatedSearchResponse
+  ): RelatedNotesSearchResult => {
     // A successful HTTP status without Miyo's result collection does not prove
     // a valid empty search. Keep recovery guidance visible for malformed peers.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
@@ -106,6 +112,13 @@ async function searchRelatedNotesWithMiyo(
       scoreByPath,
       status: scoreByPath.size > 0 ? "matches" : "no-matches",
     };
+  };
+
+  try {
+    // Obsidian's requestUrl can stay pending after a connection is accepted.
+    // Bound the primary request so unavailable guidance can replace loading.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
+    return classifyRelatedResponse(await requestRelated());
   } catch (error) {
     // Miyo defines every 404 from related search as a source with no indexed
     // chunks. The detail text is not part of that contract, so gating on it can
@@ -122,21 +135,72 @@ async function searchRelatedNotesWithMiyo(
     }
 
     try {
-      // A registered folder proves setup is healthy, but Miyo cannot tell
-      // whether this particular path is still indexing or excluded.
+      // A search miss does not distinguish indexing, filter, parse, and absent-file
+      // states. Ask Miyo for the source classification using its public path.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
-      await withTimeout(
-        () => miyoClient.getFolder(baseUrl, folderName),
-        MIYO_FOLDER_LOOKUP_TIMEOUT_MS,
-        "Relevant Notes Miyo folder lookup"
+      const fileStatus = await withTimeout(
+        () => miyoClient.fileStatus(baseUrl, miyoFilePath),
+        MIYO_FILE_STATUS_TIMEOUT_MS,
+        "Relevant Notes Miyo file status"
       );
-      return { scoreByPath: new Map(), status: "not-indexed" };
-    } catch (folderError) {
-      // Without a successful folder probe, Copilot cannot distinguish an
-      // unindexed note from a broken Miyo setup, so recovery must stay generic.
+      switch (fileStatus.status) {
+        case "indexed": {
+          if (fileStatus.total_chunks === 0) {
+            return { scoreByPath: new Map(), status: "no-text" };
+          }
+          try {
+            // Indexing can finish between the first 404 and this status response.
+            // Retry once so newly available semantic matches are not hidden.
+            // https://github.com/logancyang/obsidian-copilot/pull/3088#discussion_r3921456717
+            return classifyRelatedResponse(await requestRelated());
+          } catch (retryError) {
+            logError(
+              `RelevantNotes(Miyo): searchRelated retry failed for file_path=${miyoFilePath} folder_name=${folderName}: ${(retryError as Error).message}`
+            );
+            return { scoreByPath: new Map(), status: "unavailable" };
+          }
+        }
+        case "pending":
+        case "not_scanned":
+        case "missing":
+          return { scoreByPath: new Map(), status: "indexing" };
+        case "error":
+          return {
+            scoreByPath: new Map(),
+            status: "index-error",
+            details: { errorMessage: fileStatus.error_message ?? undefined },
+          };
+        case "excluded":
+          return {
+            scoreByPath: new Map(),
+            status: "excluded",
+            details: {
+              exclusionReason: fileStatus.reason,
+              exclusionRule: fileStatus.rule,
+            },
+          };
+        default:
+          // Unknown classifications must not expose graph-only rows as if Miyo
+          // had confirmed a healthy state.
+          // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
+          logError(
+            `RelevantNotes(Miyo): unknown file status for file_path=${filePath} folder_name=${folderName}: ${String(fileStatus.status)}`
+          );
+          return { scoreByPath: new Map(), status: "unavailable" };
+      }
+    } catch (statusError) {
+      // Old Miyo builds use this exact structured response for unknown routes.
+      // Other 501s are real failures and must not be misreported as compatibility.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
+      if (
+        statusError instanceof MiyoRequestError &&
+        statusError.status === 501 &&
+        statusError.errorCode === "not_implemented"
+      ) {
+        return { scoreByPath: new Map(), status: "not-indexed" };
+      }
       logError(
-        `RelevantNotes(Miyo): source has no indexed chunks and folder lookup failed for folder_name=${folderName}: ${(folderError as Error).message}`
+        `RelevantNotes(Miyo): source has no indexed chunks and file status failed for file_path=${filePath} folder_name=${folderName}: ${(statusError as Error).message}`
       );
       return { scoreByPath: new Map(), status: "unavailable" };
     }
@@ -147,12 +211,23 @@ export type RelevantNotesSearchStatus =
   | "disabled"
   | "matches"
   | "no-matches"
+  | "no-text"
+  | "indexing"
+  | "index-error"
+  | "excluded"
   | "not-indexed"
   | "unavailable";
+
+export interface RelevantNotesStatusDetails {
+  errorMessage?: string;
+  exclusionReason?: MiyoFileStatusReason;
+  exclusionRule?: string;
+}
 
 interface RelatedNotesSearchResult {
   scoreByPath: Map<string, number>;
   status: RelevantNotesSearchStatus;
+  details?: RelevantNotesStatusDetails;
 }
 
 /**
@@ -198,6 +273,7 @@ export interface RelevantNoteEntry {
 export interface RelevantNotesResult {
   notes: readonly RelevantNoteEntry[];
   status: RelevantNotesSearchStatus;
+  details?: RelevantNotesStatusDetails;
 }
 
 const EMPTY_RELEVANT_NOTES: readonly RelevantNoteEntry[] = Object.freeze([]);
@@ -241,13 +317,17 @@ export async function findRelevantNotes({
     return { notes: EMPTY_RELEVANT_NOTES, status: "unavailable" };
   }
 
-  const { scoreByPath, status } = await searchRelatedNotesWithMiyo(app, filePath, settings);
+  const { scoreByPath, status, details } = await searchRelatedNotesWithMiyo(
+    app,
+    filePath,
+    settings
+  );
   // Every result row must come from Miyo. Showing link-only rows for any empty
   // search state makes Relevant Notes look partially functional without the
   // index that defines relevance.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
   if (status !== "matches") {
-    return { notes: EMPTY_RELEVANT_NOTES, status };
+    return { notes: EMPTY_RELEVANT_NOTES, status, details };
   }
   const noteLinks = getNoteLinks(app, file);
 
@@ -272,5 +352,5 @@ export async function findRelevantNotes({
       };
     })
     .filter((entry) => entry !== null);
-  return { notes: notes.length === 0 ? EMPTY_RELEVANT_NOTES : notes, status };
+  return { notes: notes.length === 0 ? EMPTY_RELEVANT_NOTES : notes, status, details };
 }

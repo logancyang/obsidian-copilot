@@ -1,15 +1,12 @@
 import { Button } from "@/components/ui/button";
+import type {
+  RelevantNotesSearchStatus,
+  RelevantNotesStatusDetails,
+} from "@/search/findRelevantNotes";
 import { Download, Loader2 } from "lucide-react";
 import React from "react";
 
-type RelevantNotesPaneStatus =
-  | "idle"
-  | "loading"
-  | "disabled"
-  | "unavailable"
-  | "matches"
-  | "no-matches"
-  | "not-indexed";
+type RelevantNotesPaneStatus = RelevantNotesSearchStatus | "idle" | "loading";
 
 interface RelevantNotesIndexingReviewAction {
   destination: "miyo" | "settings";
@@ -25,12 +22,21 @@ export interface RelevantNotesPaneActions {
 
 export interface RelevantNotesPaneProps {
   status: RelevantNotesPaneStatus;
+  details?: RelevantNotesStatusDetails;
   noteRows: readonly React.ReactNode[];
   actions: RelevantNotesPaneActions;
 }
 
 interface GuidancePanelProps {
-  id: "download" | "unavailable" | "no-matches" | "not-indexed";
+  id:
+    | "download"
+    | "unavailable"
+    | "no-matches"
+    | "no-text"
+    | "indexing"
+    | "index-error"
+    | "excluded"
+    | "not-indexed";
   title: string;
   description: string;
   children?: React.ReactNode;
@@ -64,11 +70,13 @@ function GuidancePanel({
  * Render Relevant Notes states without plugin or Obsidian runtime access.
  *
  * @param status - Current lifecycle or settled search status.
+ * @param details - Optional Miyo error or exclusion details for the active note.
  * @param noteRows - Rendered note rows in result order.
  * @param actions - Runtime-owned destinations for pane actions.
  */
 export function RelevantNotesPane({
   status,
+  details,
   noteRows,
   actions,
 }: RelevantNotesPaneProps): React.ReactElement {
@@ -129,17 +137,114 @@ export function RelevantNotesPane({
         />
       );
       break;
+    case "no-text":
+      guidancePanel = (
+        <GuidancePanel
+          id="no-text"
+          title="Miyo found no text in this note"
+          description="The note may be empty or contain only content Miyo can't read."
+        >
+          <Button variant="default" size="sm" onClick={actions.onRefresh}>
+            Refresh
+          </Button>
+        </GuidancePanel>
+      );
+      break;
+    case "indexing":
+      guidancePanel = (
+        <GuidancePanel
+          id="indexing"
+          title="Miyo is still indexing this note"
+          description="Miyo hasn't finished processing this note. Try again shortly."
+        >
+          <Button variant="default" size="sm" onClick={actions.onRefresh}>
+            Refresh
+          </Button>
+        </GuidancePanel>
+      );
+      break;
+    case "index-error": {
+      const reviewInMiyo = actions.reviewIndexing.destination === "miyo";
+      const errorMessage =
+        details?.errorMessage?.trim() || "Miyo reported an error while processing this note.";
+      guidancePanel = (
+        <GuidancePanel
+          id="index-error"
+          title="Miyo couldn't index this note"
+          description={
+            reviewInMiyo
+              ? errorMessage
+              : `${errorMessage} Review the folder in Miyo on the host machine.`
+          }
+        >
+          {reviewInMiyo && (
+            <Button variant="default" size="sm" onClick={actions.reviewIndexing.onSelect}>
+              Open Miyo
+            </Button>
+          )}
+        </GuidancePanel>
+      );
+      break;
+    }
+    case "excluded": {
+      const reviewInMiyo = actions.reviewIndexing.destination === "miyo";
+      let reason: string;
+      switch (details?.exclusionReason) {
+        case "exclude_folder":
+          reason = details.exclusionRule
+            ? `Excluded by folder ${details.exclusionRule}.`
+            : "Excluded by a folder filter.";
+          break;
+        case "exclude_pattern":
+          reason = details.exclusionRule
+            ? `Excluded by pattern ${details.exclusionRule}.`
+            : "Excluded by a pattern filter.";
+          break;
+        case "include_folder":
+          reason = details.exclusionRule
+            ? `Not included by folder ${details.exclusionRule}.`
+            : "Not included by the folder filters.";
+          break;
+        case "include_pattern":
+          reason = details.exclusionRule
+            ? `Not included by pattern ${details.exclusionRule}.`
+            : "Not included by the pattern filters.";
+          break;
+        case "extension":
+          reason = "This file type isn't included in Miyo's folder settings.";
+          break;
+        case "hidden":
+          reason = "Miyo excludes hidden files.";
+          break;
+        default:
+          reason = "Miyo's folder filters exclude this note.";
+      }
+      guidancePanel = (
+        <GuidancePanel
+          id="excluded"
+          title="This note is excluded in Miyo"
+          description={
+            reviewInMiyo
+              ? reason
+              : `${reason} Adjust this folder's filters in Miyo on the host machine.`
+          }
+        >
+          {reviewInMiyo && (
+            <Button variant="default" size="sm" onClick={actions.reviewIndexing.onSelect}>
+              Open folder settings in Miyo
+            </Button>
+          )}
+        </GuidancePanel>
+      );
+      break;
+    }
     case "not-indexed": {
       const reviewInMiyo = actions.reviewIndexing.destination === "miyo";
       guidancePanel = (
         <GuidancePanel
           id="not-indexed"
           title="This note isn't indexed in Miyo"
-          description={
-            reviewInMiyo
-              ? "It may still be indexing or be excluded from Miyo. Open Miyo to review this folder's indexing and exclusion settings."
-              : "It may still be indexing or be excluded from Miyo. Review the configured Miyo connection or server in Copilot."
-          }
+          description="It may still be indexing or be excluded from Miyo. Update Miyo to the latest version to see why."
         >
           <Button variant="secondary" size="sm" onClick={actions.onRefresh}>
             Refresh

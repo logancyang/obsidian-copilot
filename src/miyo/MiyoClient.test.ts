@@ -52,6 +52,11 @@ describe("MiyoClient", () => {
       it("preserves the Miyo status and detail without changing the request message (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", () => {
         const error = new MiyoRequestError(404, "folder not registered");
         const errorWithoutDetail = new MiyoRequestError(503, "");
+        const unsupportedEndpoint = new MiyoRequestError(
+          501,
+          '{"error":"not_implemented"}',
+          "not_implemented"
+        );
 
         expect(error).toBeInstanceOf(Error);
         expect(error).toMatchObject({
@@ -61,6 +66,7 @@ describe("MiyoClient", () => {
           message: "Miyo request failed with status 404: folder not registered",
         });
         expect(errorWithoutDetail.message).toBe("Miyo request failed with status 503");
+        expect(unsupportedEndpoint.errorCode).toBe("not_implemented");
       });
     });
   });
@@ -192,6 +198,53 @@ describe("MiyoClient", () => {
       status: 404,
       detail: "folder not registered",
       message: "Miyo request failed with status 404: folder not registered",
+    });
+  });
+
+  describe("fileStatus()", () => {
+    it("gets one file status using Miyo's encoded public path (https://github.com/Brevilabs/miyo/issues/543)", async () => {
+      mockedRequestUrl.mockResolvedValue({
+        status: 200,
+        json: {
+          status: "excluded",
+          reason: "exclude_pattern",
+          rule: "daily notes/**",
+        },
+        text: "",
+      } as RequestUrlResponse);
+
+      const result = await new MiyoClient().fileStatus(
+        "http://127.0.0.1:8742",
+        "Work Vault/daily notes/Today.md"
+      );
+
+      expect(result).toEqual({
+        status: "excluded",
+        reason: "exclude_pattern",
+        rule: "daily notes/**",
+      });
+      expect(mockedRequestUrl).toHaveBeenCalledWith(
+        expect.objectContaining({
+          url: "http://127.0.0.1:8742/v0/folder/file-status?file_path=Work+Vault%2Fdaily+notes%2FToday.md",
+          method: "GET",
+          throw: false,
+        })
+      );
+    });
+
+    it("preserves the old-build error code as structured data (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
+      mockedRequestUrl.mockResolvedValue({
+        status: 501,
+        json: { error: "not_implemented" },
+        text: '{"error":"not_implemented"}',
+      } as RequestUrlResponse);
+
+      await expect(
+        new MiyoClient().fileStatus("http://127.0.0.1:8742", "vault/source.md")
+      ).rejects.toMatchObject({
+        status: 501,
+        errorCode: "not_implemented",
+      });
     });
   });
 

@@ -7,7 +7,7 @@ import { useActiveFile } from "@/hooks/useActiveFile";
 import { useNoteDrag } from "@/hooks/useNoteDrag";
 import { cn } from "@/lib/utils";
 import { logError, logWarn } from "@/logger";
-import { isLocalMiyoUrl, MIYO_DEEPLINK_URL } from "@/miyo/miyoUtils";
+import { getMiyoFolderName, isLocalMiyoUrl, MIYO_DEEPLINK_URL } from "@/miyo/miyoUtils";
 import { useMiyoStatus } from "@/miyo/useMiyoStatus";
 import { findRelevantNotes, type RelevantNoteEntry } from "@/search/findRelevantNotes";
 import { onIndexChanged } from "@/search/indexSignal";
@@ -22,18 +22,22 @@ const EMPTY_RELEVANT_NOTES: readonly RelevantNoteEntry[] = Object.freeze([]);
 const IDLE_RELEVANT_NOTES_RESULT = Object.freeze({
   notes: EMPTY_RELEVANT_NOTES,
   status: "idle" as const,
+  details: undefined,
 });
 const DISABLED_RELEVANT_NOTES_RESULT = Object.freeze({
   notes: EMPTY_RELEVANT_NOTES,
   status: "disabled" as const,
+  details: undefined,
 });
 const LOADING_RELEVANT_NOTES_RESULT = Object.freeze({
   notes: EMPTY_RELEVANT_NOTES,
   status: "loading" as const,
+  details: undefined,
 });
 const UNAVAILABLE_RELEVANT_NOTES_RESULT = Object.freeze({
   notes: EMPTY_RELEVANT_NOTES,
   status: "unavailable" as const,
+  details: undefined,
 });
 
 type RelevantNotesViewResult =
@@ -444,6 +448,9 @@ export const RelevantNotes = memo(
     // or by an explicit remote endpoint, so those runtimes stay in Copilot.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
     const canOpenMiyoApp = !Platform.isMobile && isLocalMiyoUrl(settings.miyoServerUrl);
+    const miyoFolderUrl = `${MIYO_DEEPLINK_URL}open?tab=sources&folder=${encodeURIComponent(
+      getMiyoFolderName(app)
+    )}`;
 
     return (
       <div className={cn("tw-flex tw-min-h-full tw-w-full tw-flex-1 tw-flex-col", className)}>
@@ -452,6 +459,7 @@ export const RelevantNotes = memo(
           <div className="tw-absolute tw-inset-0 tw-overflow-y-auto tw-p-2">
             <RelevantNotesPane
               status={result.status}
+              details={result.details}
               noteRows={relevantNotes.map((note) => (
                 <RelevantNoteRow
                   key={note.note.path}
@@ -469,7 +477,7 @@ export const RelevantNotes = memo(
                   destination: canOpenMiyoApp ? "miyo" : "settings",
                   onSelect: (event) => {
                     if (canOpenMiyoApp) {
-                      event.currentTarget.win.open(MIYO_DEEPLINK_URL, "_blank");
+                      event.currentTarget.win.open(miyoFolderUrl, "_blank");
                     } else {
                       openCopilotSettings(app, event.currentTarget.win, "miyo");
                     }

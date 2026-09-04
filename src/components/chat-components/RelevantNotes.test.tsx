@@ -13,6 +13,7 @@ const mockApp = {
   vault: {
     getAbstractFileByPath: jest.fn(),
     cachedRead: jest.fn().mockResolvedValue(""),
+    getName: jest.fn(() => "Work Vault"),
   },
   workspace: {
     getLeaf: mockGetLeaf,
@@ -268,12 +269,12 @@ describe("RelevantNotes", () => {
       expect(await screen.findByText("This note isn't indexed in Miyo")).toBeTruthy();
       expect(
         screen.getByText(
-          "It may still be indexing or be excluded from Miyo. Open Miyo to review this folder's indexing and exclusion settings."
+          "It may still be indexing or be excluded from Miyo. Update Miyo to the latest version to see why."
         )
       ).toBeTruthy();
       expect(screen.queryByText("Target")).toBeNull();
       fireEvent.click(screen.getByRole("button", { name: "Open Miyo" }));
-      expect(openSpy).toHaveBeenCalledWith("miyo://", "_blank");
+      expect(openSpy).toHaveBeenCalledWith("miyo://open?tab=sources&folder=Work%20Vault", "_blank");
       openSpy.mockRestore();
     });
 

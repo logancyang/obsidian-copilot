@@ -45,7 +45,16 @@ Miyo is the source of Relevant Notes results and similarity percentages; Copilot
 
 If Miyo is disabled, unavailable, or its vault registration cannot be confirmed, the pane does not fall back to link and backlink rows. Instead, it offers Miyo download or setup actions. **Open Miyo settings** returns directly to the existing connection flow under **Settings → Copilot → Miyo**, including when you use a remote endpoint or mobile device.
 
-A successful search with zero results shows **No semantic matches yet** without treating the empty result as a setup failure. When Miyo reports that the active path has no indexed chunks but the vault is registered, the pane instead shows **This note isn't indexed in Miyo**. Miyo uses that response for both a note that is still indexing and a path excluded from Miyo, so Copilot does not claim to know which one applies. On a local desktop connection, **Open Miyo** opens the Miyo app so you can review the folder's indexing and exclusion settings; after indexing finishes, return to Copilot and select **Refresh** to check the note again. Mobile and remote connections instead offer **Review Miyo connection**, which opens Copilot's Miyo tab to review the configured server without implying that Copilot can change Miyo's exclusions. Neither state shows link-only or backlink-only rows.
+A successful search with zero results shows **No semantic matches yet** without treating the empty result as a setup failure. If the active note has no indexed chunks, Copilot asks Miyo for that file's current state:
+
+- **Miyo found no text in this note** means Miyo processed the file but found no searchable text.
+- **Miyo is still indexing this note** covers files that are pending, not scanned yet, or not yet visible to Miyo. Select **Refresh** to check again.
+- **Miyo couldn't index this note** includes Miyo's error message. On a local desktop connection, **Open Miyo** opens this vault's folder under Sources.
+- **This note is excluded in Miyo** names the matching filter when Miyo provides it. On a local desktop connection, **Open folder settings in Miyo** opens this vault's folder under Sources.
+
+For a remote Miyo or mobile device, error and exclusion cards tell you to review the folder on the host machine. Copilot cannot open or change that machine's Miyo settings. Older Miyo builds show **This note isn't indexed in Miyo** and **Update Miyo to the latest version to see why** because they cannot report the more specific reason. Their local desktop action still opens the vault's folder under Sources; remote and mobile connections offer **Review Miyo connection** in Copilot.
+
+Links and backlinks do not create rows in any of these empty states. Copilot's own inclusion and exclusion patterns do not filter Relevant Notes; Miyo's folder filters are the only scope there.
 
 ## Search conversations and process documents
 
@@ -71,7 +80,7 @@ Connector access is separate from Agent Chat search. Review the folders, remote 
 - **Register this vault:** register the folder in Miyo, then connect again.
 - **Semantic search is missing:** confirm the connection is healthy and turn on **Semantic search**. Copilot installs the shared Miyo skill for opencode, Claude, and Codex.
 - **New notes are missing:** ask Miyo to refresh the registered folder. Indexing progress is shown in Miyo.
-- **Relevant Notes has no semantic results:** **No semantic matches yet** means Miyo answered successfully but found no related notes. **This note isn't indexed in Miyo** means the note may still be indexing or may be excluded from Miyo. Neither state shows link-only or backlink-only rows.
+- **Relevant Notes has no semantic results:** Read the card for the active note's Miyo state. **No semantic matches yet** means Miyo found no related notes. The other cards distinguish an empty note, indexing work, an indexing error, and a Miyo folder filter. Older Miyo builds use the less specific **This note isn't indexed in Miyo** card. None of these states shows link-only or backlink-only rows.
 - **Agent Chat Miyo document processing fails:** install Miyo on this computer so its local CLI is available, or switch **Document Processor** to **Plus**. A remote Miyo search connection does not provide the local CLI Agent Chat needs.
 - **Quick Chat Miyo document processing fails:** confirm that the connected Miyo service can access the registered vault and document. When a remote server is configured, troubleshoot the document on that server.
 - **Copilot asks for a resync:** use **Resync Miyo** so Miyo excludes Copilot's own working folder and conversation files.
