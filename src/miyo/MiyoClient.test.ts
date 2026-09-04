@@ -538,6 +538,32 @@ describe("MiyoClient", () => {
     });
   });
 
+  describe("updateFolder()", () => {
+    it("PATCHes selected folder rules without replacing the registration (https://github.com/Brevilabs/obsidian-copilot-private/issues/284)", async () => {
+      mockedRequestUrl.mockResolvedValue({
+        status: 200,
+        json: { path: "my-vault", exclude_folders: ["private", "copilot"] },
+        text: "",
+      } as RequestUrlResponse);
+
+      const result = await new MiyoClient().updateFolder("http://127.0.0.1:8742", "my-vault", {
+        exclude_folders: ["private", "copilot"],
+      });
+
+      expect(result.exclude_folders).toEqual(["private", "copilot"]);
+      expect(mockedRequestUrl).toHaveBeenCalledWith(
+        expect.objectContaining({
+          url: "http://127.0.0.1:8742/v0/folder",
+          method: "PATCH",
+          body: JSON.stringify({
+            path: "my-vault",
+            exclude_folders: ["private", "copilot"],
+          }),
+        })
+      );
+    });
+  });
+
   describe("fetchHealth()", () => {
     it("resolves null once the probe timeout elapses when the request never responds", async () => {
       jest.useFakeTimers();

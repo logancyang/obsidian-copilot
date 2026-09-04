@@ -655,7 +655,10 @@ export const COMMAND_IDS = {
   COUNT_WORD_AND_TOKENS_SELECTION: "count-word-and-tokens-selection",
   COUNT_TOTAL_VAULT_TOKENS: "count-total-vault-tokens",
   DEBUG_WORD_COMPLETION: "debug-word-completion",
-  REFRESH_MIYO_INDEX: "refresh-miyo-index",
+  // Obsidian persists command ids in hotkey bindings and external integrations.
+  // The Miyo replacement keeps the legacy refresh id so upgrades retain them.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/282
+  REFRESH_MIYO_INDEX: "index-vault-to-copilot-index",
   LOAD_COPILOT_CHAT_CONVERSATION: "load-copilot-chat-conversation",
   NEW_CHAT: "new-chat",
   NEW_AGENT_CHAT: "new-agent-chat",

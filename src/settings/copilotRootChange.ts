@@ -1,4 +1,5 @@
 import { logWarn } from "@/logger";
+import { syncMiyoSystemExclusions } from "@/miyo/miyoSystemExclusions";
 import { matchSystemRoots } from "@/search/searchUtils";
 import { getCopilotSaveData } from "@/settings/copilotSaveData";
 import {
@@ -224,4 +225,15 @@ export async function applyCopilotRootChange(app: App, newRoot: string): Promise
     suppressNextPersistOnce();
     setSettings((current) => buildRootPatch(current, folder));
   });
+
+  // Local filtering protects the data immediately. Reconcile Miyo in the
+  // background so the newly protected root also stops consuming its bounded
+  // ranked candidate pool; startup retries this if Miyo is currently offline.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/284
+  const updatedSettings = getSettings();
+  if (updatedSettings.enableMiyo) {
+    void syncMiyoSystemExclusions(app, updatedSettings).catch((error) => {
+      logWarn("Copilot root change: failed to sync Miyo system exclusions.", error);
+    });
+  }
 }

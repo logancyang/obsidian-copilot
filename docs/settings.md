@@ -124,7 +124,7 @@ Quick Ask uses a Quick Chat model. It inherits the Quick Chat choice until you s
 | **Send Shortcut**           | **Enter**        | Chooses **Enter** or **Shift + Enter** to send. If the shortcut does not work, check **Obsidian → Hotkeys** for a conflict.                                                                           |
 | **Copilot folder location** | `copilot`        | Sets the root for conversations, custom prompts, system prompts, skills, and projects. Press Enter or select **Apply** to validate and confirm the change. The folder button reveals the active root. |
 
-Changing the Copilot folder does not move existing files. The old root remains treated as Copilot data, and a new root that already contains notes becomes excluded from Copilot search. Move files yourself after the change. Copilot applies the new root to its own search results immediately. Miyo keeps indexing whatever its registered folder covers, so adjust that folder's scope in the Miyo app if you want Miyo and any enabled Relay clients to stop reading the old root.
+Changing the Copilot folder does not move existing files. The old root remains treated as Copilot data, and a new root that already contains notes becomes excluded from Copilot search. Move files yourself after the change. Copilot applies the new root to its own search results immediately. Adjust the registered folder's scope in the Miyo app if you want Miyo and any enabled Relay clients to skip other content.
 
 ### Custom instructions
 
@@ -190,7 +190,7 @@ Miyo supplies Copilot's current semantic search and selected chat-history search
 | **Connector · Relay → Set up in Miyo** | Status detected from Miyo | Opens Miyo's Connector setup. Connector can let cloud ChatGPT or Claude clients read and write registered local files. This is a separate, explicit Miyo Relay setup and privacy boundary.                                                                                              |
 | **Remote Miyo server (advanced)**      | Blank                     | Expand the disclosure and enter a server URL. Blank uses local discovery. The value saves on blur and is used by both Copilot's Miyo connection and the Connector row.                                                                                                                  |
 
-Copilot registers the vault root and does not narrow what Miyo indexes; it applies its own inclusion and exclusion rules to Miyo results at query time instead. Miyo's index and any enabled Relay client therefore see everything under the registered folder, including Copilot's own conversations. Set per-folder include and exclude rules in the Miyo app when you need Miyo itself to skip content.
+Copilot keeps its current and historical working folders and Obsidian's ignored paths out of Miyo's index, then applies user-authored inclusion and exclusion rules to its own Miyo results at query time. Other per-folder include and exclude rules belong in the Miyo app and also determine what any enabled Relay client can read.
 
 If Miyo is reachable but the vault is not registered, the connection dialog offers **Register & connect** for a local Miyo. With a remote server or mobile setup, select **Open Miyo**, add the vault there, then **Retry**. Register only folders you intend Miyo and any enabled Relay clients to access.
 

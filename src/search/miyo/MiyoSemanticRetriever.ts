@@ -15,12 +15,25 @@ import {
   getVaultRelativeMiyoPath,
   isCurrentVaultMiyoPath,
 } from "@/miyo/miyoUtils";
-import { createCopilotPatternFilter } from "@/search/searchUtils";
-import { getSettings } from "@/settings/model";
-import { RETURN_ALL_LIMIT } from "@/search/v3/SearchCore";
+import {
+  createCopilotPatternFilter,
+  getDecodedPatterns,
+  getSystemExcludedFolders,
+} from "@/search/searchUtils";
+import { getSettings, type CopilotSettings } from "@/settings/model";
 
 /** Number of chunks to return when the caller does not request a specific limit. */
 const DEFAULT_FINAL_K = 20;
+
+/** Largest candidate pool exposed by Miyo's search endpoint. */
+const MIYO_SEARCH_CANDIDATE_LIMIT = 1000;
+
+function hasUserQaPatterns(settings: CopilotSettings): boolean {
+  const systemRoots = new Set(getSystemExcludedFolders(settings));
+  return [settings.qaInclusions, settings.qaExclusions]
+    .flatMap((value) => getDecodedPatterns(value || ""))
+    .some((pattern) => !systemRoots.has(pattern.replace(/\/+$/, "")));
+}
 
 type MiyoSemanticRetrieverOptions = {
   minSimilarityScore?: number;
@@ -136,11 +149,17 @@ export class MiyoSemanticRetriever extends BaseRetriever {
     const folderName = searchAll ? undefined : getMiyoFolderName(this.app);
     try {
       const baseUrl = await this.client.resolveBaseUrl(getMiyoCustomUrl(getSettings()));
-      // Always over-fetch. Copilot registers the vault root with Miyo without
-      // narrowing it, so every result the local QA filter drops
-      // (filterByCopilotPatterns) is one the server still returned; fetching
-      // only finalK would let a filtered page come back short.
-      const limit = RETURN_ALL_LIMIT;
+      // User QA rules stay local, so fetch Miyo's full exposed candidate pool
+      // when they can remove results. System roots are excluded server-side;
+      // without other QA rules, a 2x margin covers chunk dedup without making
+      // every local or remote query return up to 1,000 chunks. Miyo does not
+      // expose pagination and clamps this endpoint at 1,000.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/284
+      const settings = getSettings();
+      const limit =
+        this.returnAll || hasUserQaPatterns(settings)
+          ? MIYO_SEARCH_CANDIDATE_LIMIT
+          : Math.min(this.finalK * 2, MIYO_SEARCH_CANDIDATE_LIMIT);
       const filters = this.buildSearchFilters();
       if (getSettings().debug) {
         logInfo("MiyoSemanticRetriever: search params:", {

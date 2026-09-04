@@ -67,6 +67,10 @@ let mockRegistration: "registered" | "unregistered" | "error" = "registered";
 // Bodies the register flow submitted, so a test can assert exactly which scope
 // fields reach Miyo.
 const addFolderBodies: unknown[] = [];
+const syncMiyoSystemExclusions = jest.fn<Promise<boolean>, unknown[]>().mockResolvedValue(false);
+jest.mock("@/miyo/miyoSystemExclusions", () => ({
+  syncMiyoSystemExclusions: (...args: unknown[]) => syncMiyoSystemExclusions(...args),
+}));
 jest.mock("@/miyo/MiyoClient", () => ({
   MiyoClient: class {
     isBackendAvailable = async () => mockReachable;
@@ -115,7 +119,12 @@ jest.mock("@/settings/v2/components/MiyoConnectModal", () => ({
 // Stable identity, matching production: useApp() reads a context value, so the
 // app reference does not change between renders. A fresh object per call would
 // re-fire every app-keyed effect on each render.
-const mockAppInstance = {};
+let mockIgnoreFilters: string[] = [];
+const mockAppInstance = {
+  vault: {
+    getConfig: (key: string) => (key === "userIgnoreFilters" ? mockIgnoreFilters : undefined),
+  },
+};
 jest.mock("@/context", () => ({
   // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook; name must match the export
   useApp: () => mockAppInstance,
@@ -157,10 +166,13 @@ beforeEach(() => {
   mockRegistration = "registered";
   lastModalOptions = null;
   addFolderBodies.length = 0;
+  mockIgnoreFilters = [];
+  syncMiyoSystemExclusions.mockResolvedValue(false);
 });
 
-it("registers the vault root without folder filters and refreshes Relevant Notes — https://github.com/Brevilabs/obsidian-copilot-private/issues/280", async () => {
+it("registers the vault with system roots and Obsidian ignores, but no user QA rules — https://github.com/Brevilabs/obsidian-copilot-private/issues/284", async () => {
   mockRegistration = "unregistered";
+  mockIgnoreFilters = ["private/"];
   render(<MiyoSettings />);
 
   fireEvent.click(await screen.findByText("Connect"));
@@ -169,9 +181,15 @@ it("registers the vault root without folder filters and refreshes Relevant Notes
 
   await lastModalOptions?.onAddVault?.();
 
-  // Miyo decides its own indexing scope per folder; Copilot submits the root and
-  // the Relay grant only, and narrows results locally at query time.
-  expect(addFolderBodies).toEqual([{ path: "/vault", allow_remote_read: true }]);
+  // Copilot's roots and Obsidian's own ignored paths are always excluded so
+  // they cannot consume Miyo's bounded result pool. User QA rules stay local.
+  expect(addFolderBodies).toEqual([
+    {
+      path: "/vault",
+      exclude_folders: ["copilot", "private"],
+      allow_remote_read: true,
+    },
+  ]);
   expect(notifyMiyoIndexChanged).toHaveBeenCalledTimes(1);
 });
 
@@ -411,6 +429,18 @@ describe("Connect — two-phase commit rolls back on a failed health check", () 
       ...DEFAULT_SETTINGS,
       enableMiyo: false,
     };
+  });
+
+  it("reconciles system roots before enabling an existing registration (https://github.com/Brevilabs/obsidian-copilot-private/issues/284)", async () => {
+    mockReachable = true;
+    mockRegistration = "registered";
+    mockRefreshBackend = "available";
+    render(<MiyoSettings />);
+
+    fireEvent.click(await screen.findByText("Connect"));
+
+    await waitFor(() => expect(syncMiyoSystemExclusions).toHaveBeenCalledTimes(1));
+    expect(updateSetting).toHaveBeenCalledWith("enableMiyo", true);
   });
 
   it("rolls back Miyo without writing retired index settings when the enable refresh fails (https://github.com/Brevilabs/obsidian-copilot-private/issues/283)", async () => {

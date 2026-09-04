@@ -58,6 +58,7 @@ export interface MiyoIndexedFilesResponse {
  */
 export interface MiyoFolderEntry {
   path: string;
+  exclude_folders?: string[];
   include_patterns?: string[];
   exclude_patterns?: string[];
   recursive?: boolean;
@@ -82,6 +83,11 @@ export interface MiyoAddFolderRequest {
   exclude_patterns?: string[];
   allow_writes?: boolean;
   allow_remote_read?: boolean;
+}
+
+/** Folder fields Copilot may update without replacing the registration. */
+export interface MiyoUpdateFolderRequest {
+  exclude_folders: string[];
 }
 
 /**
@@ -413,6 +419,25 @@ export class MiyoClient {
   }
 
   /**
+   * Update selected rules on an existing Miyo folder registration.
+   *
+   * @param baseUrl - Miyo base URL.
+   * @param folderName - Registered folder name.
+   * @param changes - Folder fields to replace.
+   * @returns Updated folder entry.
+   */
+  public async updateFolder(
+    baseUrl: string,
+    folderName: string,
+    changes: MiyoUpdateFolderRequest
+  ): Promise<MiyoFolderEntry> {
+    return this.requestJson<MiyoFolderEntry>(baseUrl, "/v0/folder", {
+      method: "PATCH",
+      body: { path: folderName, ...changes },
+    });
+  }
+
+  /**
    * Remove a folder registration (`DELETE /v0/folder`), which also purges the
    * folder's indexed documents (verified empirically: a post-delete global
    * search returns no leftovers).
@@ -720,7 +745,7 @@ export class MiyoClient {
     baseUrl: string,
     path: string,
     options: {
-      method: "GET" | "POST" | "DELETE";
+      method: "GET" | "POST" | "PATCH" | "DELETE";
       body?: unknown;
       query?: Record<string, string | number | boolean | undefined>;
     }

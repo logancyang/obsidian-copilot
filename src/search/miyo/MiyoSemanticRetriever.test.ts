@@ -3,7 +3,6 @@ import { getMiyoFolderName } from "@/miyo/miyoUtils";
 import { MiyoRequestError } from "@/miyo/MiyoClient";
 import { MiyoSemanticRetriever } from "@/search/miyo/MiyoSemanticRetriever";
 import { getSettings } from "@/settings/model";
-import { RETURN_ALL_LIMIT } from "@/search/v3/SearchCore";
 
 const mockResolveBaseUrl = jest.fn();
 const mockSearch = jest.fn();
@@ -132,13 +131,13 @@ describe("MiyoSemanticRetriever", () => {
     const retriever = createRetriever();
     const documents = await retriever.getRelevantDocuments("query with [[notes/a]] mention");
 
-    // Miyo indexes the whole registered vault, so the local filter is the only
-    // thing narrowing results and the request always takes the full pool.
+    // With server-side system roots and no user QA rules, a 2x margin covers
+    // chunk dedup without returning Miyo's entire exposed candidate pool.
     expect(mockSearch).toHaveBeenCalledWith(
       "http://miyo.local",
       "/vault",
       "query with [[notes/a]] mention",
-      RETURN_ALL_LIMIT,
+      20,
       undefined
     );
     expect(mockGetDocumentsByPath).not.toHaveBeenCalled();
@@ -156,7 +155,7 @@ describe("MiyoSemanticRetriever", () => {
     const startTime = 1700000000000;
     const endTime = 1700600000000;
     // Time-range queries are issued with returnAll enabled by callers, so the
-    // retriever over-fetches the full candidate pool.
+    // retriever over-fetches Miyo's largest exposed candidate pool.
     const retriever = createRetriever({
       timeRange: { startTime, endTime },
       returnAll: true,
@@ -168,7 +167,7 @@ describe("MiyoSemanticRetriever", () => {
       "http://miyo.local",
       "/vault",
       "show notes from this week",
-      RETURN_ALL_LIMIT,
+      1000,
       [{ field: "mtime", gte: startTime, lte: endTime }]
     );
     expect(mockGetDocumentsByPath).not.toHaveBeenCalled();
@@ -188,7 +187,7 @@ describe("MiyoSemanticRetriever", () => {
       "http://miyo.local",
       "/vault",
       "list all notes about ai digests",
-      RETURN_ALL_LIMIT,
+      1000,
       undefined
     );
   });
@@ -223,12 +222,12 @@ describe("MiyoSemanticRetriever", () => {
     });
     const documents = await retriever.getRelevantDocuments("query");
 
-    // Over-fetches the full candidate pool but returns only the top maxK.
+    // Over-fetches Miyo's largest exposed candidate pool but returns only maxK.
     expect(mockSearch).toHaveBeenCalledWith(
       "http://miyo.local",
       "/vault",
       "query",
-      RETURN_ALL_LIMIT,
+      1000,
       undefined
     );
     expect(documents).toHaveLength(2);
@@ -314,13 +313,7 @@ describe("MiyoSemanticRetriever", () => {
     const retriever = createRetriever();
     const documents = await retriever.getRelevantDocuments("query");
 
-    expect(mockSearch).toHaveBeenCalledWith(
-      "http://miyo.local",
-      undefined,
-      "query",
-      RETURN_ALL_LIMIT,
-      undefined
-    );
+    expect(mockSearch).toHaveBeenCalledWith("http://miyo.local", undefined, "query", 20, undefined);
     expect(documents).toHaveLength(1);
     expect(documents[0].metadata.path).toBe("copilot/notes/foo.md");
     expect(documents[0].metadata.fromCurrentVault).toBe(false);

@@ -9,6 +9,11 @@ import { getSettings, settingsAtom, settingsStore, type CopilotSettings } from "
 import type { App } from "obsidian";
 import * as obsidian from "obsidian";
 
+const syncMiyoSystemExclusions = jest.fn<Promise<boolean>, unknown[]>().mockResolvedValue(false);
+jest.mock("@/miyo/miyoSystemExclusions", () => ({
+  syncMiyoSystemExclusions: (...args: unknown[]) => syncMiyoSystemExclusions(...args),
+}));
+
 // Persistence transaction surface. The transaction runner executes its task
 // inline so the persist→activate ordering under test is preserved; the durable
 // write and suppression are captured so tests can assert order and simulate a
@@ -138,8 +143,12 @@ describe("copilotRootChange", () => {
   });
 
   describe("applyCopilotRootChange()", () => {
-    it("commits the new root and its protection history in one settings snapshot", async () => {
-      seedSettings({ copilotFolder: "ai", copilotRootHistory: ["copilot", "ai"] });
+    it("commits the new root and queues its Miyo exclusion in one settings snapshot (https://github.com/Brevilabs/obsidian-copilot-private/issues/284)", async () => {
+      seedSettings({
+        enableMiyo: true,
+        copilotFolder: "ai",
+        copilotRootHistory: ["copilot", "ai"],
+      });
 
       await applyCopilotRootChange(app, "team-ai");
 
@@ -147,6 +156,16 @@ describe("copilotRootChange", () => {
       expect(after.copilotFolder).toBe("team-ai");
       // Old + new + legacy roots all survive in the append-only history.
       expect(new Set(after.copilotRootHistory)).toEqual(new Set(["copilot", "ai", "team-ai"]));
+      expect(syncMiyoSystemExclusions).toHaveBeenCalledWith(app, after);
+    });
+
+    it("keeps a root change local while Miyo is disabled (https://github.com/Brevilabs/obsidian-copilot-private/issues/284)", async () => {
+      seedSettings({ enableMiyo: false });
+
+      await applyCopilotRootChange(app, "team-ai");
+
+      expect(getSettings().copilotFolder).toBe("team-ai");
+      expect(syncMiyoSystemExclusions).not.toHaveBeenCalled();
     });
 
     it("durably persists the new root before activating it in memory", async () => {

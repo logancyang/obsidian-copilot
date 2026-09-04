@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { logWarn } from "@/logger";
 import { MiyoClient } from "@/miyo/MiyoClient";
 import { MiyoServiceDiscovery } from "@/miyo/MiyoServiceDiscovery";
+import { syncMiyoSystemExclusions } from "@/miyo/miyoSystemExclusions";
 import { type CapabilityStatus, refreshMiyoStatus } from "@/miyo/miyoStatusStore";
 import {
   getMiyoCustomUrl,
@@ -21,6 +22,7 @@ import {
 import { useMiyoStatus } from "@/miyo/useMiyoStatus";
 import { notifyMiyoIndexChanged } from "@/miyo/miyoIndex";
 import { deriveSkillsFolder } from "@/settings/copilotFolder";
+import { extractAppIgnoreSettings, getSystemExcludedFolders } from "@/search/searchUtils";
 import { updateSetting, useSettingsValue } from "@/settings/model";
 import {
   type ConnectOutcome,
@@ -314,17 +316,18 @@ export const MiyoSettings: React.FC = () => {
     const attempt = (connectAttemptRef.current += 1);
     const superseded = () => connectAttemptRef.current !== attempt || !mountedRef.current;
     try {
-      // Copilot registers the vault root and nothing narrower. Miyo indexes the
-      // whole folder; MiyoSemanticRetriever applies Copilot's live QA scope to
-      // every result at query time (createCopilotPatternFilter, which also
-      // enforces the system root exclusions), so Copilot's own search never
-      // surfaces content the user excluded. Obsidian's "Excluded files" are not
-      // re-applied there, and Miyo's own index and Relay see everything under
-      // the vault: narrowing what Miyo indexes is done in the Miyo app, per
-      // folder, where it can be changed after registration.
-      await new MiyoClient({ plusLicenseKey: settings.plusLicenseKey }).addFolder(
+      // Keep Copilot's own roots and Obsidian-ignored paths out of Miyo's ranked
+      // candidate pool. They can contain enough chunks to exhaust the server's
+      // bounded result window before Copilot applies its local QA filter.
+      // User-authored QA rules remain local; Miyo owns those folder rules
+      // instead of receiving a snapshot Copilot cannot keep current.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/284
+      const created = await new MiyoClient({ plusLicenseKey: settings.plusLicenseKey }).addFolder(
         {
           path: vaultBase,
+          exclude_folders: [
+            ...new Set([...getSystemExcludedFolders(settings), ...extractAppIgnoreSettings(app)]),
+          ],
           // Remote read (Relay) is enabled by default so a user who turns on
           // Miyo's Relay connector — itself an explicit, paid, signed-in opt-in
           // (ChatGPT/Claude linked once) — gets cloud access to this vault without
@@ -336,6 +339,11 @@ export const MiyoSettings: React.FC = () => {
         },
         customUrl || undefined
       );
+      // A 409 means the folder already existed, so the POST could not add the
+      // system roots. Merge them without replacing Miyo-owned rules.
+      if (created === null) {
+        await syncMiyoSystemExclusions(app, settings);
+      }
       // Registration can make semantic results available without changing the
       // endpoint or its healthy status. Retry any Relevant Notes request that
       // previously settled on setup guidance.
@@ -381,9 +389,16 @@ export const MiyoSettings: React.FC = () => {
     // rather than silently registering the folder.
     if (registration === "unregistered") return "needs-add";
 
-    // Registered → enable. Re-check the guard right before the settings write so a
-    // cancel/unmount that landed during the check can't flip enableMiyo on.
+    try {
+      await syncMiyoSystemExclusions(app, settings);
+    } catch (error) {
+      logWarn(`Miyo system-root exclusion sync failed: ${err2String(error)}`);
+      return "error";
+    }
     if (superseded()) return "superseded";
+
+    // Registered → enable. The guard immediately above prevents a cancel or
+    // unmount during reconciliation from flipping enableMiyo on.
     const available = await enableMiyoBackend(superseded);
     // A newer attempt may have started during the enable refresh — don't let this
     // stale result drive the UI (close the modal / bounce a step). enableMiyoBackend

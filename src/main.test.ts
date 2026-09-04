@@ -20,6 +20,9 @@ jest.mock("@/logger", () => ({
   logInfo: jest.fn(),
   logWarn: jest.fn(),
 }));
+jest.mock("@/miyo/miyoSystemExclusions", () => ({
+  syncMiyoSystemExclusions: jest.fn().mockResolvedValue(false),
+}));
 jest.mock("@/services/settingsPersistence", () => ({
   flushPersistence: jest.fn().mockResolvedValue(undefined),
   persistSettings: jest.fn(),
