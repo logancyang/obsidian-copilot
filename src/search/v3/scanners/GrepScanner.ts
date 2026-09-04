@@ -1,6 +1,6 @@
 import { logInfo } from "@/logger";
 import { shouldIndexFile } from "@/search/searchUtils";
-import { App, TFile } from "obsidian";
+import { App } from "obsidian";
 
 /**
  * Fast substring search using Obsidian's cachedRead for initial seeding
@@ -27,8 +27,6 @@ export class GrepScanner {
    * @returns Array of file paths that contain any of the query strings
    */
   async batchCachedReadGrep(queries: string[], limit: number): Promise<string[]> {
-    // Get inclusion/exclusion patterns from settings
-    // Filter files based on inclusion/exclusion patterns
     const allFiles = this.app.vault.getMarkdownFiles();
     const files = allFiles.filter((file) => shouldIndexFile(this.app, file, null, null));
     const batchSize = GrepScanner.CONFIG.BATCH_SIZE;
@@ -144,41 +142,5 @@ export class GrepScanner {
       return false;
     }
     return true;
-  }
-
-  /**
-   * Check if a file contains any of the queries (in content or path)
-   * @param file - The file to check
-   * @param queries - Array of queries to search for
-   * @returns True if file contains any query
-   */
-  async fileContainsAny(file: TFile, queries: string[]): Promise<boolean> {
-    try {
-      // Check path first (faster than reading content)
-      const pathLower = file.path.toLowerCase();
-
-      // Count how many query terms match the path
-      // This helps find files in folders like "Piano Lessons" when searching for "piano"
-      let pathMatchCount = 0;
-      for (const query of queries) {
-        if (pathLower.includes(query.toLowerCase())) {
-          pathMatchCount++;
-        }
-      }
-
-      // If any query term matches the path, include this file
-      // This ensures "Piano Lessons/Lesson 2.md" is found when searching for "piano"
-      if (pathMatchCount > 0) {
-        return true;
-      }
-
-      // Then check file content
-      const content = await this.app.vault.cachedRead(file);
-      const contentLower = content.toLowerCase();
-
-      return queries.some((query) => contentLower.includes(query.toLowerCase()));
-    } catch {
-      return false;
-    }
   }
 }
