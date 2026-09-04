@@ -47,7 +47,8 @@ with that provider.
 
 1. Open **Settings → Copilot → BYOK**.
 2. Click **Add a provider**.
-3. Choose a provider, **Ollama**, **LM Studio**, or **Add a custom provider**.
+3. Choose a provider, **Ollama**, **LM Studio**, **llmman**, or **Add a custom
+   provider**.
 4. Enter the **API key** and **Base URL** when required.
 5. Select or enter at least one model, optionally click **Test**, then click
    **Save**.
@@ -70,13 +71,14 @@ is left out of the opencode list, but may still work in Quick Chat.
 
 ### Local and Custom Endpoints
 
-Inside **BYOK → Add a provider**, choose **Ollama** or **LM Studio** from the
-**Self Host** group to use their local OpenAI-compatible servers. This does not
-require a Self-Host license. Their API key is optional, and Copilot fills in the
-usual local URL:
+Inside **BYOK → Add a provider**, choose **Ollama**, **LM Studio**, or
+**llmman** from the **Self Host** group to use their local OpenAI-compatible
+servers. This does not require a Self-Host license. Their API key is optional,
+and Copilot fills in the usual local URL:
 
 - Ollama: `http://localhost:11434/v1`
 - LM Studio: `http://localhost:1234/v1`
+- [llmman](https://github.com/llmmanorg/llmman): `http://localhost:17434/v1`
 
 Start the local server before testing the provider. For another compatible
 service or proxy, choose **Add a custom provider** and enter its base URL and
