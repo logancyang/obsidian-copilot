@@ -6,7 +6,6 @@ import {
   ChainRunner,
   CopilotPlusChainRunner,
   LLMChainRunner,
-  VaultQAChainRunner,
 } from "@/LLMProviders/chainRunner/index";
 import { logError, logInfo } from "@/logger";
 import { getSettings, subscribeToSettingsChange } from "@/settings/model";
@@ -20,19 +19,12 @@ import {
   HumanMessagePromptTemplate,
   MessagesPlaceholder,
 } from "@langchain/core/prompts";
-import { Document } from "@langchain/core/documents";
 import { App } from "obsidian";
 import ChatModelManager from "./chatModelManager";
 import MemoryManager from "./memoryManager";
 import { UserMemoryManager } from "@/memory/UserMemoryManager";
 
 export default class ChainManager {
-  private retrievedDocuments: Document[] = [];
-
-  public getRetrievedDocuments(): Document[] {
-    return this.retrievedDocuments;
-  }
-
   public app: App;
   public chatModelManager: ChatModelManager;
   public memoryManager: MemoryManager;
@@ -87,10 +79,6 @@ export default class ChainManager {
         "Chat model is not initialized properly, check your API key in Copilot setting and make sure you have API access.";
       throw new MissingModelKeyError(errorMsg);
     }
-  }
-
-  public storeRetrieverDocuments(documents: Document[]) {
-    this.retrievedDocuments = documents;
   }
 
   /**
@@ -153,8 +141,6 @@ export default class ChainManager {
     switch (chainType) {
       case ChainType.LLM_CHAIN:
         return new LLMChainRunner(this);
-      case ChainType.VAULT_QA_CHAIN:
-        return new VaultQAChainRunner(this);
       case ChainType.COPILOT_PLUS_CHAIN:
         // Use AutonomousAgentChainRunner if the setting is enabled
         if (settings.enableAutonomousAgent) {

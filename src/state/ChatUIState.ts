@@ -10,7 +10,7 @@ export type ChatMessageContent = NonNullable<ChatMessage["content"]>;
 
 /**
  * Public surface used by `<Chat />`, `useChatManager`, and CopilotView for
- * legacy chains (LLM_CHAIN, VAULT_QA_CHAIN, COPILOT_PLUS_CHAIN).
+ * Quick Chat chains (LLM_CHAIN and COPILOT_PLUS_CHAIN).
  * Single implementation: `ChatManagerChatUIState`. Agent Mode uses the
  * narrower `AgentChatBackend` (in `src/LLMProviders/agentMode/`) instead and
  * never flows through this type.
