@@ -115,6 +115,13 @@ if [[ "$(node -p "require('$FIXTURE_ROOT/manifest.json').version")" != "4.0.0-pr
   exit 1
 fi
 
+STORIES_LINE="$(grep -n -m1 '^npm run gallery:stories$' "$DEPLOY_CALL_LOG" | cut -d: -f1)"
+BUILD_LINE="$(grep -n -m1 '^npm run build$' "$DEPLOY_CALL_LOG" | cut -d: -f1)"
+if [[ -z "$STORIES_LINE" || -z "$BUILD_LINE" || "$BUILD_LINE" -le "$STORIES_LINE" ]]; then
+  echo "built the plugin before regenerating the gallery story index" >&2
+  exit 1
+fi
+
 printf 'dirty\n' >>"$FIXTURE_ROOT/source.txt"
 printf 'dirty bundle\n' >"$FIXTURE_ROOT/main.js"
 run_deploy
