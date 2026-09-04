@@ -22,7 +22,7 @@ import {
   readFrontmatterViaAdapter,
 } from "@/utils/vaultAdapterUtils";
 import { joinPosix } from "@/utils/pathUtils";
-import { App, Notice, TFile } from "obsidian";
+import { App, MarkdownView, Notice, TFile } from "obsidian";
 import { MessageRepository } from "./MessageRepository";
 
 const SAFE_FILENAME_BYTE_LIMIT = 100;
@@ -49,6 +49,29 @@ export class ChatPersistenceManager {
     private messageRepo: MessageRepository,
     private chainManager?: ChainManager
   ) {}
+
+  private async writeCachedChatFile(file: TFile, content: string): Promise<void> {
+    const openViews = this.app.workspace
+      .getLeavesOfType("markdown")
+      .map((leaf) => leaf.view)
+      .filter(
+        (view): view is MarkdownView =>
+          view instanceof MarkdownView && view.file?.path === file.path
+      );
+
+    if (openViews.length > 0) {
+      // An open editor can later persist its stale buffer over a direct vault write. Synchronize
+      // every view, then await one save to avoid racing duplicate writes before this operation
+      // resolves. https://github.com/logancyang/obsidian-copilot/issues/2886
+      for (const view of openViews) {
+        view.editor.setValue(content);
+      }
+      await openViews[0].save();
+      return;
+    }
+
+    await this.app.vault.modify(file, content);
+  }
 
   /**
    * Save current chat history to a markdown file
@@ -115,7 +138,7 @@ export class ChatPersistenceManager {
 
       if (existingFile && existingFileIsReal) {
         // If the file exists in the vault cache, update via vault API
-        await this.app.vault.modify(existingFile, noteContent);
+        await this.writeCachedChatFile(existingFile, noteContent);
         logInfo(`[ChatPersistenceManager] Updated existing chat file: ${existingFile.path}`);
       } else if (
         !isInVaultCache(this.app, preferredFileName) &&
@@ -154,7 +177,7 @@ export class ChatPersistenceManager {
                 existingTopic,
                 conflictLastAccessedAt
               );
-              await this.app.vault.modify(conflictFile, updatedContent);
+              await this.writeCachedChatFile(conflictFile, updatedContent);
               targetFile = conflictFile;
               new Notice("Existing chat note found - updating it now.");
               logInfo(
@@ -198,7 +221,7 @@ export class ChatPersistenceManager {
                     conflictTopic,
                     conflictLastAccessedAt
                   );
-                  await this.app.vault.modify(conflictFile, updatedContent);
+                  await this.writeCachedChatFile(conflictFile, updatedContent);
                   targetFile = conflictFile;
                   new Notice("Existing chat note found - updating it now.");
                   logInfo(
