@@ -1,73 +1,111 @@
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
-import {
-  RelevantNotesPane,
-  type RelevantNotesGuidance,
-} from "@/components/chat-components/ui/RelevantNotesPane";
+import { RelevantNotesPane } from "@/components/chat-components/ui/RelevantNotesPane";
 import { MIYO_HOMEPAGE_URL } from "@/constants";
 import { useApp } from "@/context";
 import { useActiveFile } from "@/hooks/useActiveFile";
 import { useNoteDrag } from "@/hooks/useNoteDrag";
 import { cn } from "@/lib/utils";
 import { logError, logWarn } from "@/logger";
+import { isLocalMiyoUrl, MIYO_DEEPLINK_URL } from "@/miyo/miyoUtils";
 import { useMiyoStatus } from "@/miyo/useMiyoStatus";
 import { findRelevantNotes, type RelevantNoteEntry } from "@/search/findRelevantNotes";
 import { onIndexChanged } from "@/search/indexSignal";
-import { getMatchingPatterns, shouldIndexFile } from "@/search/searchUtils";
 import { openCopilotSettings } from "@/settings/openSettings";
 import { useSettingsValue } from "@/settings/model";
-import { ArrowRight, EyeOff, FileInput, FileOutput, FileText, PlusCircle } from "lucide-react";
-import { TFile } from "obsidian";
-import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { sha256 } from "@/utils/hash";
+import { ArrowRight, FileInput, FileOutput, FileText, PlusCircle } from "lucide-react";
+import { Platform, TFile } from "obsidian";
+import React, { memo, useCallback, useEffect, useState } from "react";
 
 const EMPTY_RELEVANT_NOTES: readonly RelevantNoteEntry[] = Object.freeze([]);
-
-interface RelevantNotesRequestResult {
-  requestKey: string | null;
-  notes: readonly RelevantNoteEntry[];
-}
-
-const EMPTY_RELEVANT_NOTES_RESULT: RelevantNotesRequestResult = Object.freeze({
-  requestKey: null,
+const IDLE_RELEVANT_NOTES_RESULT = Object.freeze({
   notes: EMPTY_RELEVANT_NOTES,
+  status: "idle" as const,
 });
+const DISABLED_RELEVANT_NOTES_RESULT = Object.freeze({
+  notes: EMPTY_RELEVANT_NOTES,
+  status: "disabled" as const,
+});
+const LOADING_RELEVANT_NOTES_RESULT = Object.freeze({
+  notes: EMPTY_RELEVANT_NOTES,
+  status: "loading" as const,
+});
+const UNAVAILABLE_RELEVANT_NOTES_RESULT = Object.freeze({
+  notes: EMPTY_RELEVANT_NOTES,
+  status: "unavailable" as const,
+});
+
+type RelevantNotesViewResult =
+  | typeof IDLE_RELEVANT_NOTES_RESULT
+  | typeof DISABLED_RELEVANT_NOTES_RESULT
+  | typeof LOADING_RELEVANT_NOTES_RESULT
+  | typeof UNAVAILABLE_RELEVANT_NOTES_RESULT
+  | Awaited<ReturnType<typeof findRelevantNotes>>;
+
+interface SettledRelevantNotesRequest {
+  requestKey: string;
+  result: Awaited<ReturnType<typeof findRelevantNotes>> | typeof UNAVAILABLE_RELEVANT_NOTES_RESULT;
+}
 
 function useRelevantNotes(
   enableMiyo: boolean,
   miyoServerUrl: string,
-  miyoBackendAvailable: boolean
+  miyoBackendAvailable: boolean,
+  miyoCredentialIdentity: string
 ) {
   const app = useApp();
-  const [result, setResult] = useState<RelevantNotesRequestResult>(EMPTY_RELEVANT_NOTES_RESULT);
+  const [settledRequest, setSettledRequest] = useState<SettledRelevantNotesRequest | null>(null);
   const [signalTick, setSignalTick] = useState(0);
   const activeFile = useActiveFile();
-  const requestKey = activeFile?.path
-    ? JSON.stringify([activeFile.path, enableMiyo, miyoServerUrl, miyoBackendAvailable, signalTick])
-    : null;
+  // Non-Markdown leaves do not provide a note Miyo can relate, so they share
+  // the neutral no-source state instead of showing setup guidance.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
+  const activeFilePath = activeFile?.extension === "md" ? activeFile.path : undefined;
+  const refresh = useCallback(() => setSignalTick((tick) => tick + 1), []);
+  // Without an active note there is nothing to search, so setup state must not
+  // replace the pane's neutral empty state.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
+  const requestStatus = !activeFilePath ? "idle" : enableMiyo ? "ready" : "disabled";
+  const requestKey =
+    requestStatus === "ready"
+      ? JSON.stringify([
+          activeFilePath,
+          miyoServerUrl,
+          miyoBackendAvailable,
+          miyoCredentialIdentity,
+          signalTick,
+        ])
+      : null;
 
-  useEffect(() => onIndexChanged(() => setSignalTick((t) => t + 1)), []);
+  useEffect(() => onIndexChanged(refresh), [refresh]);
 
   useEffect(() => {
     let cancelled = false;
 
     async function fetchNotes() {
-      // Leaving the source-note state must also forget its settled request. If
-      // the same note reopens later, it needs a fresh loading and result cycle.
+      // Leaving a ready request must discard its settled result. Reopening the
+      // same note or re-enabling Miyo then starts a fresh request.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
-      if (!activeFile?.path || requestKey === null) {
-        setResult(EMPTY_RELEVANT_NOTES_RESULT);
+      if (requestStatus !== "ready" || requestKey === null || !activeFilePath) {
+        setSettledRequest(null);
         return;
       }
+
+      // A request key can recur after visiting another note. Clear its earlier
+      // result so the repeated request cannot render stale rows while loading.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
+      setSettledRequest(null);
       try {
-        const notes = await findRelevantNotes({ app, filePath: activeFile.path });
+        const result = await findRelevantNotes({ app, filePath: activeFilePath });
         // A settings or active-note change can supersede an in-flight Miyo
         // request. Its older result must not replace the newer pane state.
         // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
-        if (!cancelled) setResult({ requestKey, notes });
+        if (!cancelled) setSettledRequest({ requestKey, result });
       } catch (error) {
         if (!cancelled) {
           logWarn("Failed to fetch relevant notes", error);
-          setResult({ requestKey, notes: EMPTY_RELEVANT_NOTES });
+          setSettledRequest({ requestKey, result: UNAVAILABLE_RELEVANT_NOTES_RESULT });
         }
       }
     }
@@ -76,15 +114,18 @@ function useRelevantNotes(
     return () => {
       cancelled = true;
     };
-  }, [app, activeFile?.path, requestKey]);
+  }, [app, activeFilePath, requestKey, requestStatus]);
 
-  // Results from a previous source or Miyo state must not describe the current
-  // request. Treat the exact current request as pending until it settles.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
-  return {
-    isPending: enableMiyo && requestKey !== null && result.requestKey !== requestKey,
-    relevantNotes: result.requestKey === requestKey ? result.notes : EMPTY_RELEVANT_NOTES,
-  };
+  const result: RelevantNotesViewResult =
+    requestStatus === "disabled"
+      ? DISABLED_RELEVANT_NOTES_RESULT
+      : requestStatus === "idle"
+        ? IDLE_RELEVANT_NOTES_RESULT
+        : settledRequest?.requestKey === requestKey
+          ? settledRequest.result
+          : LOADING_RELEVANT_NOTES_RESULT;
+
+  return { result, refresh };
 }
 
 /** Map a 0–1 similarity score directly to the meter fill width (70% → 70%). */
@@ -145,7 +186,7 @@ function RelevantNoteHoverCard({
   const app = useApp();
   const [open, setOpen] = useState(false);
   const [fileContent, setFileContent] = useState<string | null>(null);
-  const similarity = note.metadata.similarityScore;
+  const similarity = note.metadata.score;
 
   const loadContent = useCallback(async () => {
     if (fileContent) return; // Don't reload once cached
@@ -263,7 +304,7 @@ function RelevantNoteRow({
 }) {
   const app = useApp();
   const handleDragStart = useNoteDrag();
-  const similarity = note.metadata.similarityScore;
+  const similarity = note.metadata.score;
 
   return (
     <RelevantNoteHoverCard
@@ -372,24 +413,22 @@ export const RelevantNotes = memo(
     const activeFile = useActiveFile();
     const settings = useSettingsValue();
     const miyoBackendAvailable = useMiyoStatus().backend === "available";
-    const { isPending, relevantNotes } = useRelevantNotes(
+    // The request identity must change with credentials without retaining the
+    // credential itself in request state.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
+    const miyoCredentialIdentity = sha256(settings.plusLicenseKey);
+    const { result, refresh } = useRelevantNotes(
       settings.enableMiyo,
       settings.miyoServerUrl,
-      miyoBackendAvailable
+      miyoBackendAvailable,
+      miyoCredentialIdentity
     );
+    const relevantNotes = result.notes;
+    // The toolbar must name only a source the search contract accepts; showing
+    // an attachment name would imply that Miyo searched it.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
+    const activeFileName = activeFile?.extension === "md" ? activeFile.basename : undefined;
 
-    // The active note itself is excluded from the index (by the QA
-    // inclusion/exclusion settings or an internal exclusion), so no relevant
-    // notes can ever be computed for it — surface that instead of a build
-    // prompt or a bare "none found".
-    const isActiveFileExcluded = useMemo(() => {
-      if (!activeFile) return false;
-      const { inclusions, exclusions } = getMatchingPatterns({
-        inclusions: settings.qaInclusions,
-        exclusions: settings.qaExclusions,
-      });
-      return !shouldIndexFile(app, activeFile, inclusions, exclusions);
-    }, [app, activeFile, settings.qaInclusions, settings.qaExclusions]);
     const navigateToNote = (notePath: string) => {
       const file = app.vault.getAbstractFileByPath(notePath);
       if (file instanceof TFile) {
@@ -401,65 +440,45 @@ export const RelevantNotes = memo(
       onAddToChat(`[[${prompt}]]`);
     };
 
-    // Links only annotate Miyo matches, so a settled empty search has no result
-    // rows to show. Without a source note or a settled request, there is no
-    // evidence of a setup or indexing problem.
+    // A local-app deeplink cannot configure the remote server used on mobile
+    // or by an explicit remote endpoint, so those runtimes stay in Copilot.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
-    const guidance: RelevantNotesGuidance =
-      !activeFile || isPending || relevantNotes.length > 0
-        ? null
-        : settings.enableMiyo
-          ? "setup"
-          : "download";
+    const canOpenMiyoApp = !Platform.isMobile && isLocalMiyoUrl(settings.miyoServerUrl);
 
     return (
       <div className={cn("tw-flex tw-min-h-full tw-w-full tw-flex-1 tw-flex-col", className)}>
-        {isActiveFileExcluded ? (
-          <div
-            data-relevant-notes-empty-state
-            className="tw-flex tw-flex-1 tw-flex-col tw-items-center tw-justify-center tw-px-6"
-          >
-            <div className="tw-flex tw-w-full tw-max-w-xs tw-flex-col tw-items-center tw-gap-6 tw-text-center">
-              <div className="tw-flex tw-size-16 tw-items-center tw-justify-center tw-rounded-xl tw-border tw-border-solid tw-border-border tw-bg-secondary">
-                <EyeOff className="tw-size-7 tw-text-muted" />
-              </div>
-              <div className="tw-flex tw-flex-col tw-gap-1.5">
-                <span className="tw-text-lg tw-font-semibold tw-text-normal">
-                  This note is excluded
-                </span>
-                <span className="tw-text-sm tw-text-muted">
-                  It falls outside your semantic index settings, so related notes can&apos;t be
-                  shown here. Adjust inclusions or exclusions in Copilot settings to include it.
-                </span>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <>
-            <RelevantNotesToolbar activeFileName={activeFile?.basename} />
-            <div className="tw-relative tw-min-h-0 tw-flex-1">
-              <div className="tw-absolute tw-inset-0 tw-overflow-y-auto tw-p-2">
-                <RelevantNotesPane
-                  guidance={guidance}
-                  isPending={isPending}
-                  noteCount={relevantNotes.length}
-                  noteRows={relevantNotes.map((note) => (
-                    <RelevantNoteRow
-                      key={note.note.path}
-                      note={note}
-                      onAddToChat={() => addToChat(note.note.title)}
-                      onNavigateToNote={() => navigateToNote(note.note.path)}
-                    />
-                  ))}
-                  miyoDownloadUrl={MIYO_HOMEPAGE_URL}
-                  onOpenMiyoSettings={(event) =>
-                    openCopilotSettings(app, event.currentTarget.win, "miyo")
-                  }
+        <RelevantNotesToolbar activeFileName={activeFileName} />
+        <div className="tw-relative tw-min-h-0 tw-flex-1">
+          <div className="tw-absolute tw-inset-0 tw-overflow-y-auto tw-p-2">
+            <RelevantNotesPane
+              status={result.status}
+              noteRows={relevantNotes.map((note) => (
+                <RelevantNoteRow
+                  key={note.note.path}
+                  note={note}
+                  onAddToChat={() => addToChat(note.note.title)}
+                  onNavigateToNote={() => navigateToNote(note.note.path)}
                 />
-              </div>
-            </div>
-          </>
-        )}
+              ))}
+              actions={{
+                miyoDownloadUrl: MIYO_HOMEPAGE_URL,
+                onOpenMiyoSettings: (event) =>
+                  openCopilotSettings(app, event.currentTarget.win, "miyo"),
+                onRefresh: refresh,
+                reviewIndexing: {
+                  destination: canOpenMiyoApp ? "miyo" : "settings",
+                  onSelect: (event) => {
+                    if (canOpenMiyoApp) {
+                      event.currentTarget.win.open(MIYO_DEEPLINK_URL, "_blank");
+                    } else {
+                      openCopilotSettings(app, event.currentTarget.win, "miyo");
+                    }
+                  },
+                },
+              }}
+            />
+          </div>
+        </div>
       </div>
     );
   }

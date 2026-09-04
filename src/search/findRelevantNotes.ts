@@ -1,5 +1,5 @@
 import { logError, logInfo } from "@/logger";
-import { MiyoClient } from "@/miyo/MiyoClient";
+import { MiyoClient, MiyoRequestError } from "@/miyo/MiyoClient";
 import {
   getMiyoCustomUrl,
   getMiyoFilePath,
@@ -8,65 +8,85 @@ import {
   shouldUseMiyo,
 } from "@/miyo/miyoUtils";
 import { getBacklinkedNotes, getLinkedNotes } from "@/noteUtils";
-import { createCopilotPatternFilter } from "@/search/searchUtils";
-import { getSettings } from "@/settings/model";
+import { getSettings, type CopilotSettings } from "@/settings/model";
+import { withTimeout } from "@/utils";
 import { App, TFile } from "obsidian";
 
-const MAX_K = 20;
+const MAX_RESULTS = 20;
+const MIYO_RELATED_SEARCH_TIMEOUT_MS = 8000;
+const MIYO_FOLDER_LOOKUP_TIMEOUT_MS = 8000;
 
 /**
- * Normalize a score map to the top K entries, ordered by score descending.
- *
- * @param scoreMap - Map of path to score.
- * @returns Capped map containing at most MAX_K entries.
- */
-function capToTopK(scoreMap: Map<string, number>): Map<string, number> {
-  if (scoreMap.size <= MAX_K) {
-    return scoreMap;
-  }
-
-  const topK = Array.from(scoreMap.entries())
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, MAX_K);
-
-  return new Map(topK);
-}
-
-/**
- * Calculate similarity scores using Miyo's related-note endpoint.
+ * Fetch Miyo's ordered related-note results.
  *
  * @param app - The Obsidian app instance.
  * @param filePath - Source note path.
- * @returns Map of note paths to max similarity score.
+ * @param settings - Current Miyo connection and logging settings.
+ * @returns Miyo scores in response order and the state established by the request.
  */
-async function calculateSimilarityScoreFromMiyo(
+async function searchRelatedNotesWithMiyo(
   app: App,
-  filePath: string
-): Promise<Map<string, number>> {
-  const settings = getSettings();
-  const miyoClient = new MiyoClient();
+  filePath: string,
+  settings: CopilotSettings
+): Promise<RelatedNotesSearchResult> {
+  // Related search can trigger a follow-up folder request after settings have
+  // changed. Both requests must keep the credential paired with this endpoint.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
+  const miyoClient = new MiyoClient({ plusLicenseKey: settings.plusLicenseKey });
   const folderName = getMiyoFolderName(app);
   const miyoFilePath = getMiyoFilePath(app, filePath);
+  let baseUrl: string;
   try {
-    const baseUrl = await miyoClient.resolveBaseUrl(getMiyoCustomUrl(settings));
-    const response = await miyoClient.searchRelated(baseUrl, miyoFilePath, {
-      folderName,
-      limit: MAX_K,
-    });
-    const similarityScoreMap = new Map<string, number>();
-    const results = response.results || [];
+    baseUrl = await withTimeout(
+      () => miyoClient.resolveBaseUrl(getMiyoCustomUrl(settings)),
+      MIYO_RELATED_SEARCH_TIMEOUT_MS,
+      "Relevant Notes Miyo endpoint resolution"
+    );
+  } catch (error) {
+    // An unresolved endpoint cannot produce a trustworthy result. Settle as
+    // unavailable so the pane offers recovery instead of loading indefinitely.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
+    logError(`RelevantNotes(Miyo): could not resolve Miyo: ${(error as Error).message}`);
+    return { scoreByPath: new Map(), status: "unavailable" };
+  }
 
+  try {
+    // Obsidian's requestUrl can stay pending after a connection is accepted.
+    // Bound the primary request so unavailable guidance can replace loading.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
+    const response = await withTimeout(
+      () =>
+        miyoClient.searchRelated(baseUrl, miyoFilePath, {
+          folderName,
+          limit: MAX_RESULTS,
+        }),
+      MIYO_RELATED_SEARCH_TIMEOUT_MS,
+      "Relevant Notes Miyo related search"
+    );
+    // A successful HTTP status without Miyo's result collection does not prove
+    // a valid empty search. Keep recovery guidance visible for malformed peers.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
+    if (!Array.isArray(response.results)) {
+      logError("RelevantNotes(Miyo): related search response is missing its results array");
+      return { scoreByPath: new Map(), status: "unavailable" };
+    }
+    const scoreByPath = new Map<string, number>();
+    const results = response.results;
+
+    // Miyo owns relevance ranking and applies the result limit. Preserve its
+    // order and keep the first result for each file instead of comparing or
+    // sorting embedding scores again in Copilot.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
     for (const result of results) {
+      // Custom and older Miyo endpoints may return malformed scores. Only a
+      // finite score can establish relevance or reserve a path's first result.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
+      if (typeof result.score !== "number" || !Number.isFinite(result.score)) {
+        continue;
+      }
       const relativePath = getVaultRelativeMiyoPath(app, result.path);
-      if (relativePath === filePath) {
-        continue;
-      }
-      if (typeof result.score !== "number" || Number.isNaN(result.score)) {
-        continue;
-      }
-      const existing = similarityScoreMap.get(relativePath);
-      if (existing === undefined || result.score > existing) {
-        similarityScoreMap.set(relativePath, result.score);
+      if (relativePath !== filePath && !scoreByPath.has(relativePath)) {
+        scoreByPath.set(relativePath, result.score);
       }
     }
 
@@ -77,20 +97,62 @@ async function calculateSimilarityScoreFromMiyo(
         : undefined;
       logInfo(
         `RelevantNotes(Miyo): file_path=${miyoFilePath} folder_name=${folderName} ` +
-          `received ${results.length} chunks, collected ${similarityScoreMap.size} note scores ` +
+          `received ${results.length} results, collected ${scoreByPath.size} notes ` +
           `(sample response.path=${sampleResponsePath ?? "n/a"} → stripped=${sampleStripped ?? "n/a"})`
       );
     }
 
-    return capToTopK(similarityScoreMap);
+    return {
+      scoreByPath,
+      status: scoreByPath.size > 0 ? "matches" : "no-matches",
+    };
   } catch (error) {
-    logError(
-      `RelevantNotes(Miyo): searchRelated failed for file_path=${miyoFilePath} folder_name=${folderName}: ${
-        (error as Error).message
-      }`
-    );
-    throw error;
+    // Miyo defines every 404 from related search as a source with no indexed
+    // chunks. The detail text is not part of that contract, so gating on it can
+    // misreport a healthy registered folder as unavailable.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
+    // https://github.com/logancyang/obsidian-copilot/pull/2992#discussion_r3919646861
+    if (!(error instanceof MiyoRequestError) || error.status !== 404) {
+      logError(
+        `RelevantNotes(Miyo): searchRelated failed for file_path=${miyoFilePath} folder_name=${folderName}: ${
+          (error as Error).message
+        }`
+      );
+      return { scoreByPath: new Map(), status: "unavailable" };
+    }
+
+    try {
+      // A registered folder proves setup is healthy, but Miyo cannot tell
+      // whether this particular path is still indexing or excluded.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
+      await withTimeout(
+        () => miyoClient.getFolder(baseUrl, folderName),
+        MIYO_FOLDER_LOOKUP_TIMEOUT_MS,
+        "Relevant Notes Miyo folder lookup"
+      );
+      return { scoreByPath: new Map(), status: "not-indexed" };
+    } catch (folderError) {
+      // Without a successful folder probe, Copilot cannot distinguish an
+      // unindexed note from a broken Miyo setup, so recovery must stay generic.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
+      logError(
+        `RelevantNotes(Miyo): source has no indexed chunks and folder lookup failed for folder_name=${folderName}: ${(folderError as Error).message}`
+      );
+      return { scoreByPath: new Map(), status: "unavailable" };
+    }
   }
+}
+
+export type RelevantNotesSearchStatus =
+  | "disabled"
+  | "matches"
+  | "no-matches"
+  | "not-indexed"
+  | "unavailable";
+
+interface RelatedNotesSearchResult {
+  scoreByPath: Map<string, number>;
+  status: RelevantNotesSearchStatus;
 }
 
 /**
@@ -121,65 +183,78 @@ function getNoteLinks(app: App, file: TFile) {
   return resultMap;
 }
 
-export type RelevantNoteEntry = {
+export interface RelevantNoteEntry {
   note: {
     path: string;
     title: string;
   };
   metadata: {
     score: number;
-    similarityScore: number;
     hasOutgoingLinks: boolean;
     hasBacklinks: boolean;
   };
-};
+}
+
+export interface RelevantNotesResult {
+  notes: readonly RelevantNoteEntry[];
+  status: RelevantNotesSearchStatus;
+}
+
+const EMPTY_RELEVANT_NOTES: readonly RelevantNoteEntry[] = Object.freeze([]);
+
+export interface FindRelevantNotesOptions {
+  app: App;
+  filePath: string;
+}
 
 /**
- * Finds relevant notes for a file while enforcing Copilot's live search scope
- * across semantic and link-derived candidates.
+ * Finds relevant notes for a file using Miyo's semantic order and annotates
+ * those results with Obsidian link relationships.
  *
  * @param app - The Obsidian app instance.
  * @param filePath - The file path to find relevant notes for.
- * @returns Relevant-note hits allowed by the current inclusion/exclusion rules.
- *   Empty when no allowed notes are found or Miyo cannot run in the current environment.
- * @throws When the Miyo related-note request cannot complete.
+ * @returns Relevant-note hits and the settled Miyo search status.
  */
 export async function findRelevantNotes({
   app,
   filePath,
-}: {
-  app: App;
-  filePath: string;
-}): Promise<RelevantNoteEntry[]> {
+}: FindRelevantNotesOptions): Promise<RelevantNotesResult> {
+  const settings = getSettings();
   const file = app.vault.getAbstractFileByPath(filePath);
-  if (!(file instanceof TFile)) {
-    return [];
-  }
-
-  // Relevant Notes has no non-Miyo scoring path. Avoid querying Miyo when the
-  // user disabled it or the current platform cannot reach it, such as mobile
-  // without a configured remote endpoint.
+  // Vault churn can remove or replace the source after the UI captures its
+  // path. Never query Miyo or derive rows without a Markdown source.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
-  if (!shouldUseMiyo(getSettings())) {
-    return [];
+  if (!(file instanceof TFile) || file.extension !== "md") {
+    return {
+      notes: EMPTY_RELEVANT_NOTES,
+      status: settings.enableMiyo ? "unavailable" : "disabled",
+    };
   }
 
-  const similarityScoreMap = await calculateSimilarityScoreFromMiyo(app, filePath);
-  if (similarityScoreMap.size === 0) {
-    return [];
+  // Disabled and runtime-unavailable Miyo require different recovery guidance,
+  // even though neither state can return link-only fallback rows.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
+  if (!settings.enableMiyo) {
+    return { notes: EMPTY_RELEVANT_NOTES, status: "disabled" };
+  }
+  if (!shouldUseMiyo(settings)) {
+    return { notes: EMPTY_RELEVANT_NOTES, status: "unavailable" };
   }
 
+  const { scoreByPath, status } = await searchRelatedNotesWithMiyo(app, filePath, settings);
+  // Every result row must come from Miyo. Showing link-only rows for any empty
+  // search state makes Relevant Notes look partially functional without the
+  // index that defines relevance.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
+  if (status !== "matches") {
+    return { notes: EMPTY_RELEVANT_NOTES, status };
+  }
   const noteLinks = getNoteLinks(app, file);
 
-  // Links describe Miyo results but cannot make an otherwise unindexed note
-  // relevant, so every displayed row retains a semantic basis.
+  // Preserve Miyo's response order; links only annotate those candidates.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
-  const isAllowed = createCopilotPatternFilter(app);
-  const sortedMatches = Array.from(similarityScoreMap.entries())
-    .filter(([path]) => isAllowed(path))
-    .sort(([, aScore], [, bScore]) => bScore - aScore);
-  return sortedMatches
-    .map(([path, similarityScore]) => {
+  const notes = Array.from(scoreByPath.entries())
+    .map(([path, score]) => {
       const file = app.vault.getAbstractFileByPath(path);
       if (!(file instanceof TFile) || file.extension !== "md") {
         return null;
@@ -190,12 +265,12 @@ export async function findRelevantNotes({
           title: file.basename,
         },
         metadata: {
-          score: similarityScore,
-          similarityScore,
+          score,
           hasOutgoingLinks: noteLinks.get(path)?.links ?? false,
           hasBacklinks: noteLinks.get(path)?.backlinks ?? false,
         },
       };
     })
     .filter((entry) => entry !== null);
+  return { notes: notes.length === 0 ? EMPTY_RELEVANT_NOTES : notes, status };
 }

@@ -1,5 +1,5 @@
 import { logInfo } from "@/logger";
-import { MiyoClient } from "@/miyo/MiyoClient";
+import { MiyoClient, MiyoRequestError } from "@/miyo/MiyoClient";
 import { MiyoServiceDiscovery } from "@/miyo/MiyoServiceDiscovery";
 import { getSettings } from "@/settings/model";
 import { requestUrl, type RequestUrlResponse } from "obsidian";
@@ -44,6 +44,24 @@ describe("MiyoClient", () => {
     mockResolveBaseUrl.mockResolvedValue("http://127.0.0.1:8742");
     mockedGetInstance.mockReturnValue({
       resolveBaseUrl: mockResolveBaseUrl,
+    });
+  });
+
+  describe("MiyoRequestError", () => {
+    describe("constructor()", () => {
+      it("preserves the Miyo status and detail without changing the request message (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", () => {
+        const error = new MiyoRequestError(404, "folder not registered");
+        const errorWithoutDetail = new MiyoRequestError(503, "");
+
+        expect(error).toBeInstanceOf(Error);
+        expect(error).toMatchObject({
+          name: "MiyoRequestError",
+          status: 404,
+          detail: "folder not registered",
+          message: "Miyo request failed with status 404: folder not registered",
+        });
+        expect(errorWithoutDetail.message).toBe("Miyo request failed with status 503");
+      });
     });
   });
 
@@ -160,7 +178,7 @@ describe("MiyoClient", () => {
     );
   });
 
-  it("throws detailed errors when a request fails", async () => {
+  it("throws a structured request error with the response status and detail (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
     mockedRequestUrl.mockResolvedValue({
       status: 404,
       text: "not found",
@@ -169,9 +187,12 @@ describe("MiyoClient", () => {
 
     const client = new MiyoClient();
 
-    await expect(client.getFolder("http://127.0.0.1:8742", "/vault")).rejects.toThrow(
-      "Miyo request failed with status 404: folder not registered"
-    );
+    await expect(client.getFolder("http://127.0.0.1:8742", "/vault")).rejects.toMatchObject({
+      name: "MiyoRequestError",
+      status: 404,
+      detail: "folder not registered",
+      message: "Miyo request failed with status 404: folder not registered",
+    });
   });
 
   describe("checkFolderRegistration", () => {
