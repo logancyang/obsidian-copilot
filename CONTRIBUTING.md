@@ -156,16 +156,16 @@ The most basic ones are model changes and mode changes.
 - Test chat memory: Tell the model your name, and in a turn or two ask "what's my name" to ensure chat memory is working.
 - Use `[[note title]]` in chat and see if the model can access the content.
 
-### Vault QA / Plus mode (with a small test vault)
+### Vault search / Plus mode (with a small test vault)
 
-- Use the "Refresh index" button and see if it properly starts indexing. If it says "index is up-to-date", use "Clear Copilot index" and start indexing again (or equivalently, use "force re-index" command).
-- Check if there's any error or warning during indexing in the console, and if the exclusions and inclusions are shown correctly in the notice banner. Click pause and resume.
-- After indexing is successful, ask a specific question where the answer is in your docs. For example, two of my docs are a biography of a person named "Mike", I ask "who is mike" and it should be able to answer using the two docs.
-  - In Plus mode make sure you trigger this query with `@vault` or cmd/ctrl + shift + enter. And then check "Show Sources" button for the expected docs.
-- To debug any failed QA query, we need to understand if it failed at 1. indexing 2. retrieval 3. generation.
-  - First use "list all indexed files" command to check if the docs are indexed correctly.
-  - Then check the console log for "retrieved chunks" from the hybrid retriever. Debug logs go to `console.debug`, so tick "Verbose" in the console's level filter to see them; the same lines are also in the rolling log file.
-  - If correctly retrieved, it means the Chat Model is too weak to process the context effectively. Use a stronger Chat Model
+- With Miyo connected, run the "Refresh Miyo index" command and confirm the notice reports that a scan started. Stop Miyo and run it again: the notice should say Miyo is unavailable rather than reporting success.
+- Ask a specific question whose answer is in your notes. For example, if two notes are a biography of a person named "Mike", ask "who is mike" and the answer should draw on both.
+  - Trigger the query with `@vault` or cmd/ctrl + shift + enter, then check the "Show Sources" button for the expected notes.
+- To debug a failed query, work out whether it failed at 1. indexing 2. retrieval 3. generation.
+  - First confirm in Miyo that the folder is registered and the notes are indexed.
+  - Then check the console log for the retrieved chunks. Debug logs go to `console.debug`, so tick "Verbose" in the console's level filter to see them; the same lines are also in the rolling log file.
+  - If the right chunks were retrieved, the Chat Model is too weak to process the context effectively. Use a stronger Chat Model.
+- Disconnect Miyo and repeat the query. Local search should fall back to keyword search instead of failing.
 
 ### Plus mode
 
