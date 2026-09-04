@@ -144,26 +144,26 @@ See [`AGENTS.md` examples](agents-md-examples.md) and [Projects](projects.md) fo
 
 ## BYOK
 
-Bring Your Own Key connects Copilot directly to a model provider, compatible gateway, Ollama, LM Studio, or another OpenAI-compatible endpoint. No Copilot license is required. Cloud-provider billing and data handling belong to that provider.
+Bring Your Own Key connects Copilot directly to a model provider, compatible gateway, Ollama, LM Studio, llmman, or another OpenAI-compatible endpoint. No Copilot license is required. Cloud-provider billing and data handling belong to that provider.
 
 ### Add a provider
 
 1. Select **Add a provider**.
-2. Search or choose from **Recommended** providers, **Self Host** templates for Ollama and LM Studio, the dynamic **More providers** catalog, or **Add a custom provider**.
+2. Search or choose from **Recommended** providers, **Self Host** templates for Ollama, LM Studio, and llmman, the dynamic **More providers** catalog, or **Add a custom provider**.
 3. Complete the configuration and select at least one model.
 4. Select **Save**. New chat models are enabled for Quick Chat and opencode automatically; curate each list later under **Basic → Agents**.
 
 The configuration dialog contains:
 
-| Control                     | Default                                           | What it does                                                                                                                                                                                                                                     |
-| --------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Display name**            | Provider name                                     | Changes the label shown throughout Copilot.                                                                                                                                                                                                      |
-| **API key**                 | Blank; required or optional according to provider | **Test** verifies the current key and refreshes model discovery. In edit mode, **Clear** stages key removal until you select **Save**. Required-key providers cannot be saved without a key. Keys are stored in this device's Obsidian Keychain. |
-| **Base URL**                | Provider's standard endpoint when known           | Overrides where Copilot sends requests. A custom OpenAI-compatible provider must have a Base URL. Ollama defaults to `http://localhost:11434/v1`; LM Studio defaults to `http://localhost:1234/v1`.                                              |
-| **Enable CORS**             | Off                                               | Compatibility option for Quick Chat endpoints that reject browser-style requests. When enabled, responses arrive only after completion instead of streaming token by token. It does not change opencode routing.                                 |
-| **Model ID → Add**          | Blank                                             | Adds an exact model ID manually. Use this when an endpoint cannot list models. A typed ID can be removed from the candidate list with its remove button.                                                                                         |
-| **Search available models** | Blank                                             | Filters discovered, previously configured, and manually added models. Check each model you want to save. Model rows can show context size, release date, and capabilities when known.                                                            |
-| **Save / Cancel**           | Save disabled until the setup is usable           | Save requires at least one model, a required key when applicable, and a routable custom endpoint. A conclusive invalid-key result blocks saving; a temporary network failure does not prevent an offline setup from being saved.                 |
+| Control                     | Default                                           | What it does                                                                                                                                                                                                                                        |
+| --------------------------- | ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Display name**            | Provider name                                     | Changes the label shown throughout Copilot.                                                                                                                                                                                                         |
+| **API key**                 | Blank; required or optional according to provider | **Test** verifies the current key and refreshes model discovery. In edit mode, **Clear** stages key removal until you select **Save**. Required-key providers cannot be saved without a key. Keys are stored in this device's Obsidian Keychain.    |
+| **Base URL**                | Provider's standard endpoint when known           | Overrides where Copilot sends requests. A custom OpenAI-compatible provider must have a Base URL. Ollama defaults to `http://localhost:11434/v1`; LM Studio defaults to `http://localhost:1234/v1`; llmman defaults to `http://localhost:17434/v1`. |
+| **Enable CORS**             | Off                                               | Compatibility option for Quick Chat endpoints that reject browser-style requests. When enabled, responses arrive only after completion instead of streaming token by token. It does not change opencode routing.                                    |
+| **Model ID → Add**          | Blank                                             | Adds an exact model ID manually. Use this when an endpoint cannot list models. A typed ID can be removed from the candidate list with its remove button.                                                                                            |
+| **Search available models** | Blank                                             | Filters discovered, previously configured, and manually added models. Check each model you want to save. Model rows can show context size, release date, and capabilities when known.                                                               |
+| **Save / Cancel**           | Save disabled until the setup is usable           | Save requires at least one model, a required key when applicable, and a routable custom endpoint. A conclusive invalid-key result blocks saving; a temporary network failure does not prevent an offline setup from being saved.                    |
 
 ### Manage providers and models
 
