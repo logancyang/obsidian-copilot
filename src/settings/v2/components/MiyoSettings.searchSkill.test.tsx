@@ -38,7 +38,7 @@ jest.mock("@/settings/model", () => ({
 // `mockMiyoBackend` to "unavailable" to assert the skill toggle stays operable while
 // the connection-gated rows dim, or to "stale" (aged snapshot) which must still
 // read as connected.
-let mockMiyoBackend: "available" | "unavailable" | "stale" = "available";
+let mockMiyoBackend: "available" | "unavailable" | "unknown" | "stale" = "available";
 jest.mock("@/miyo/useMiyoStatus", () => ({
   // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook; name must match the export
   useMiyoStatus: () => ({
@@ -161,6 +161,7 @@ jest.mock("obsidian", () => ({
 }));
 
 import { MiyoSettings } from "./MiyoSettings";
+import { refreshMiyoStatus } from "@/miyo/miyoStatusStore";
 
 const toggle = () => screen.getByLabelText("Enable Miyo semantic search skill");
 
@@ -380,8 +381,8 @@ it("keeps the skill toggle operable while the status snapshot is stale", async (
   await waitFor(() => expect(removeMiyoSearchSkill).toHaveBeenCalledTimes(1));
 });
 
-describe("stranded-enable recovery — Disconnect stays available when Miyo goes offline", () => {
-  it("shows Disconnect (not Connect) when enableMiyo=true but Miyo is unavailable", () => {
+describe("connection status and recovery", () => {
+  it("shows Retry and Disconnect when enabled Miyo is unavailable (https://github.com/Brevilabs/obsidian-copilot-private/issues/356)", async () => {
     // Regression: the pill used to key on live health, so a stranded enableMiyo
     // (Miyo enabled, then it went offline) showed only "Connect" — while search
     // still routed to the dead backend with no way to turn it off. The pill now
@@ -390,20 +391,56 @@ describe("stranded-enable recovery — Disconnect stays available when Miyo goes
     currentSettings = { ...DEFAULT_SETTINGS, enableMiyo: true };
     render(<MiyoSettings />);
 
-    // "Unavailable" rest-label + hover "Disconnect"; no "Connect" button.
-    expect(screen.getByTitle("Disconnect Miyo")).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "Retry" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Disconnect" })).toBeTruthy();
     expect(screen.queryByText("Connect")).toBeNull();
     expect(screen.getByText("Unavailable")).toBeTruthy();
+    expect(
+      screen.getByText("Miyo is unavailable. Open it, then retry the connection above.")
+    ).toBeTruthy();
   });
 
-  it("shows Connect when Miyo is not enabled", async () => {
+  it("shows Connect when Miyo is not enabled (https://github.com/Brevilabs/obsidian-copilot-private/issues/356)", async () => {
     mockMiyoBackend = "unavailable";
     currentSettings = { ...DEFAULT_SETTINGS, enableMiyo: false };
     render(<MiyoSettings />);
 
     // Wait out the mount refresh so the button settles from "Connecting…" to "Connect".
     expect(await screen.findByText("Connect")).toBeTruthy();
-    expect(screen.queryByTitle("Disconnect Miyo")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Disconnect" })).toBeNull();
+  });
+
+  it("shows checking without unavailable guidance while a stale snapshot is rechecked (https://github.com/Brevilabs/obsidian-copilot-private/issues/356)", async () => {
+    const gate = deferred<{ backend: string }>();
+    mockRefreshGate = gate.promise;
+    mockMiyoBackend = "stale";
+    currentSettings = { ...DEFAULT_SETTINGS, enableMiyo: true };
+    render(<MiyoSettings />);
+
+    expect(screen.getByRole("status").textContent).toContain("Checking…");
+    expect(screen.queryByText(/Connected ·/)).toBeNull();
+    expect(
+      screen.queryByText("Miyo is unavailable. Open it, then retry the connection above.")
+    ).toBeNull();
+
+    mockMiyoBackend = "available";
+    gate.resolve({ backend: "available" });
+    await waitFor(() => expect(screen.getByRole("status").textContent).toContain("Connected ·"));
+  });
+
+  it("forces a status refresh without toggling enableMiyo when Retry succeeds (https://github.com/Brevilabs/obsidian-copilot-private/issues/356)", async () => {
+    mockMiyoBackend = "unavailable";
+    mockRefreshBackend = "available";
+    currentSettings = { ...DEFAULT_SETTINGS, enableMiyo: true };
+    render(<MiyoSettings />);
+    await waitFor(() => expect(refreshMiyoStatus).toHaveBeenCalledWith({ force: false }));
+    jest.mocked(refreshMiyoStatus).mockClear();
+    updateSetting.mockClear();
+
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+
+    await waitFor(() => expect(refreshMiyoStatus).toHaveBeenCalledWith({ force: true }));
+    expect(updateSetting).not.toHaveBeenCalledWith("enableMiyo", expect.anything());
   });
 });
 

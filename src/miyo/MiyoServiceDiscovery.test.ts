@@ -232,6 +232,34 @@ describe("MiyoServiceDiscovery", () => {
     expect(modules.readFile).toHaveBeenCalledTimes(2);
   });
 
+  it("re-reads the service file after invalidateLocalDiscovery so a restarted Miyo is found on its new port (https://github.com/Brevilabs/obsidian-copilot-private/issues/356)", async () => {
+    const { nodeRequire, modules } = createMockNodeRequire(
+      "linux",
+      "/home/test",
+      { host: "127.0.0.1", port: 8742, pid: 999 },
+      {
+        readFileByPath: {
+          "/home/test/.config/Miyo/service.json": [
+            JSON.stringify({ host: "127.0.0.1", port: 8742, pid: 999 }),
+            JSON.stringify({ host: "127.0.0.1", port: 9100, pid: 1000 }),
+          ],
+        },
+      }
+    );
+    (window as { require?: NodeRequireShape }).require = nodeRequire;
+
+    const discovery = MiyoServiceDiscovery.getInstance();
+    const firstBaseUrl = await discovery.resolveBaseUrl();
+    const cachedBaseUrl = await discovery.resolveBaseUrl();
+    discovery.invalidateLocalDiscovery();
+    const rediscoveredBaseUrl = await discovery.resolveBaseUrl();
+
+    expect(firstBaseUrl).toBe("http://127.0.0.1:8742");
+    expect(cachedBaseUrl).toBe("http://127.0.0.1:8742");
+    expect(rediscoveredBaseUrl).toBe("http://127.0.0.1:9100");
+    expect(modules.readFile).toHaveBeenCalledTimes(2);
+  });
+
   it("checks Roaming path on Windows when Local path is missing", async () => {
     const missingFileError = Object.assign(new Error("not found"), { code: "ENOENT" });
     const { nodeRequire, modules } = createMockNodeRequire(

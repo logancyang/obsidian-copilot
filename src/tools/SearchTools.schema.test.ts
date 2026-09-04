@@ -1,9 +1,36 @@
-import { createLocalSearchTool, indexTool, webSearchTool } from "@/tools/SearchTools";
 import type { App } from "obsidian";
+
+const mockGetSettings = jest.fn<Record<string, unknown>, []>();
+const mockIsMiyoActive = jest.fn<boolean, []>();
+
+jest.mock("@/settings/model", () => ({
+  getSettings: () => mockGetSettings(),
+}));
+jest.mock("@/search/RetrieverFactory", () => ({
+  RetrieverFactory: {
+    isMiyoActive: () => mockIsMiyoActive(),
+  },
+}));
+
+import { createLocalSearchTool, indexTool, webSearchTool } from "@/tools/SearchTools";
 
 describe("SearchTools", () => {
   describe("createLocalSearchTool()", () => {
     const schema = createLocalSearchTool({} as App).schema;
+
+    it("reports unavailable instead of using keyword search when enabled Miyo cannot run on mobile (https://github.com/Brevilabs/obsidian-copilot-private/issues/356)", async () => {
+      mockGetSettings.mockReturnValue({ enableMiyo: true });
+      mockIsMiyoActive.mockReturnValue(false);
+      const tool = createLocalSearchTool({} as App);
+      const invoke = tool.invoke.bind(tool) as (input: {
+        query: string;
+        salientTerms: string[];
+      }) => Promise<string>;
+
+      await expect(invoke({ query: "vault notes", salientTerms: [] })).rejects.toThrow(
+        "Miyo is unavailable. Configure a remote Miyo connection, then retry vault search."
+      );
+    });
 
     it("accepts epoch time ranges and pre-expanded query data", () => {
       const result = schema.safeParse({
