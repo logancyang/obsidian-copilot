@@ -134,6 +134,8 @@ export class MiyoSemanticRetriever extends BaseRetriever {
    * @returns Array of Miyo search documents.
    */
   private async searchMiyo(query: string): Promise<Document[]> {
+    const searchAll = getSettings().miyoSearchAll;
+    const folderName = searchAll ? undefined : getMiyoFolderName(this.app);
     try {
       const baseUrl = await this.client.resolveBaseUrl(getMiyoCustomUrl(getSettings()));
       // Over-fetch candidates only when the local filter can actually drop
@@ -164,8 +166,6 @@ export class MiyoSemanticRetriever extends BaseRetriever {
           filters,
         });
       }
-      const searchAll = settings.miyoSearchAll;
-      const folderName = searchAll ? undefined : getMiyoFolderName(this.app);
       const response = await this.client.search(baseUrl, folderName, query, limit, filters);
 
       const rawResults = response.results || [];
@@ -184,7 +184,11 @@ export class MiyoSemanticRetriever extends BaseRetriever {
       // request must remain distinguishable so Quick Chat can show the tool
       // failure instead of answering as though it searched the vault.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/356
-      if (error instanceof MiyoRequestError && error.status === 404) {
+      // Only a folder-scoped request proves anything about this vault. An
+      // unrestricted search omits the folder, so its 404 describes the route,
+      // not the registration, and must not send the user to register again.
+      // https://github.com/logancyang/obsidian-copilot/pull/3090#discussion_r3926715956
+      if (folderName !== undefined && error instanceof MiyoRequestError && error.status === 404) {
         throw new Error(
           "This vault is not registered with Miyo. Register it in Miyo, then retry vault search.",
           { cause: error }

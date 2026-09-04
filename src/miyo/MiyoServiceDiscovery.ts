@@ -79,6 +79,18 @@ export class MiyoServiceDiscovery {
   }
 
   /**
+   * Forget the discovered local endpoint so the next resolve re-reads Miyo's
+   * service file. A locally discovered Miyo that restarts on a different port
+   * is otherwise unreachable until the plugin reloads, because the cached URL
+   * survives every retry. Configured remote URLs are never cached, so they are
+   * unaffected.
+   * https://github.com/Brevilabs/obsidian-copilot-private/issues/356
+   */
+  public invalidateLocalDiscovery(): void {
+    this.cachedBaseUrl = null;
+  }
+
+  /**
    * Normalize a base URL by trimming whitespace and trailing slashes.
    *
    * @param url - Raw base URL.

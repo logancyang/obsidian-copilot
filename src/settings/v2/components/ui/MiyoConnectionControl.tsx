@@ -28,6 +28,10 @@ export const MiyoAvailabilityNotice: React.FC<MiyoAvailabilityNoticeProps> = ({
   available,
   checking,
 }) => {
+  // A probe in flight is neither connected nor unavailable. Showing the
+  // unavailable warning while the control reads "Checking…" would give the user
+  // two contradictory verdicts about the same endpoint.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/356
   if (available || checking) return null;
 
   return (

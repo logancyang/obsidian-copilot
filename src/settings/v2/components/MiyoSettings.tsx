@@ -11,6 +11,7 @@ import { usePlugin } from "@/contexts/PluginContext";
 import { cn } from "@/lib/utils";
 import { logWarn } from "@/logger";
 import { MiyoClient } from "@/miyo/MiyoClient";
+import { MiyoServiceDiscovery } from "@/miyo/MiyoServiceDiscovery";
 import { type CapabilityStatus, refreshMiyoStatus } from "@/miyo/miyoStatusStore";
 import {
   assertCurrentLifecycle,
@@ -233,6 +234,15 @@ export const MiyoSettings: React.FC = () => {
     },
     [beginBusy, endBusy]
   );
+
+  // Explicit recovery after an unavailable verdict. A locally discovered Miyo
+  // that restarted on a different port keeps failing every retry while the
+  // discovery cache holds the dead endpoint, so drop it before probing again.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/356
+  const handleRetry = useCallback(async () => {
+    MiyoServiceDiscovery.getInstance().invalidateLocalDiscovery();
+    await refresh(true);
+  }, [refresh]);
 
   // Refresh on mount so an already-running Miyo shows Connected without a click.
   // TTL-gated inside the store, so re-mounting the tab won't spam health checks.
@@ -832,7 +842,7 @@ export const MiyoSettings: React.FC = () => {
               remote={connectedRemote}
               onConnect={() => void handleConnect()}
               onDisconnect={() => void handleDisconnect()}
-              onRetry={() => void refresh(true)}
+              onRetry={() => void handleRetry()}
             />
           }
         />
@@ -892,10 +902,6 @@ export const MiyoSettings: React.FC = () => {
           unlimited, on your machine
         </div>
 
-        {/* A probe-in-flight is neither connected nor unavailable. Reusing the
-            unavailable warning while the pill says Checking would give the user
-            contradictory guidance.
-            https://github.com/Brevilabs/obsidian-copilot-private/issues/356 */}
         <MiyoAvailabilityNotice
           enabled={settings.enableMiyo}
           available={capabilitiesEnabled}

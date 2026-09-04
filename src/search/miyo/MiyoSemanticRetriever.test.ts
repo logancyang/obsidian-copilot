@@ -84,6 +84,21 @@ describe("MiyoSemanticRetriever", () => {
     );
   });
 
+  it("keeps registration guidance out of unrestricted-scope failures (https://github.com/logancyang/obsidian-copilot/pull/3090#discussion_r3926715956)", async () => {
+    // An unrestricted search omits the folder, so its 404 says nothing about
+    // whether this vault is registered.
+    (getSettings as jest.Mock).mockReturnValue({
+      miyoServerUrl: "http://miyo.local",
+      debug: false,
+      miyoSearchAll: true,
+    });
+    mockSearch.mockRejectedValue(new MiyoRequestError(404, "not found"));
+
+    await expect(createRetriever().getRelevantDocuments("query")).rejects.toThrow(
+      "Miyo is unavailable. Open Miyo, then retry vault search."
+    );
+  });
+
   it("deduplicates semantic chunks and does not perform explicit path reads", async () => {
     mockSearch.mockResolvedValue({
       results: [

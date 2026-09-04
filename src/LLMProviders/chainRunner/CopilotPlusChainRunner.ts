@@ -24,7 +24,7 @@ import { ToolRegistry } from "@/tools/ToolRegistry";
 import { initializeBuiltinTools } from "@/tools/builtinTools";
 import { createLocalSearchTool, webSearchTool } from "@/tools/SearchTools";
 import { createUpdateMemoryTool } from "@/tools/memoryTools";
-import { extractChatHistory } from "@/utils";
+import { err2String, extractChatHistory } from "@/utils";
 import { ChatMessage, ResponseMetadata } from "@/types/message";
 import { getApiErrorMessage, getMessageRole, withSuppressedTokenWarnings } from "@/utils";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
@@ -1019,7 +1019,25 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
       } else if (toolCall.tool.name === "getFileTree") {
         updateLoadingMessage?.(LOADING_MESSAGES.READING_FILE_TREE);
       }
-      const output = await ToolManager.callTool(toolCall.tool, toolCall.args);
+      let output: unknown;
+      try {
+        output = await ToolManager.callTool(toolCall.tool, toolCall.args);
+      } catch (error) {
+        // localSearch reports an unusable backend (Miyo stopped, vault not
+        // registered) by throwing. Quick Chat must render that as a failed
+        // search the model can explain, not abort the turn with a generic
+        // generation error.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/356
+        if (toolCall.tool.name !== "localSearch") {
+          throw error;
+        }
+        const failure = this.processLocalSearchResult({
+          result: err2String(error),
+          success: false,
+        });
+        toolOutputs.push({ tool: toolCall.tool.name, output: failure.formattedForLLM });
+        continue;
+      }
 
       // Process localSearch results immediately
       if (toolCall.tool.name === "localSearch") {
@@ -1219,7 +1237,10 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
     let formattedForDisplay: string;
 
     if (!toolResult.success) {
-      formattedForLLM = "<localSearch>\nSearch failed.\n</localSearch>";
+      // The reason is the only recovery instruction the model can relay, so it
+      // travels with the failure instead of staying in the display-only string.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/356
+      formattedForLLM = `<localSearch>\nSearch failed: ${toolResult.result}\n</localSearch>`;
       formattedForDisplay = `Search failed: ${toolResult.result}`;
       return { formattedForLLM, formattedForDisplay, sources };
     }
