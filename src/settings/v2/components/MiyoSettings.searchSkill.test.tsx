@@ -102,6 +102,10 @@ jest.mock("@/miyo/miyoResync", () => ({
   resyncMiyoFolder: (...a: unknown[]) => resyncMiyoFolder(...a),
   verifyMiyoScope: (...a: unknown[]) => verifyMiyoScope(...a),
 }));
+const notifyIndexChanged = jest.fn<void, []>();
+jest.mock("@/search/indexSignal", () => ({
+  notifyIndexChanged: () => notifyIndexChanged(),
+}));
 // Capture the options the component passes to the modal so a test can invoke the
 // modal's callbacks (onRetry/onAddVault) directly — the Retry button has no
 // busy-guard, which is the real path that fires concurrent enable attempts.
@@ -181,7 +185,7 @@ beforeEach(() => {
   enqueuedSessions.length = 0;
 });
 
-it("registers through the queue with the plugin's session", async () => {
+it("registers through the queue and refreshes Relevant Notes — https://github.com/Brevilabs/obsidian-copilot-private/issues/280", async () => {
   // The Connect modal is a standalone Obsidian Modal that outlives onunload, so
   // its Add-this-vault callback is the producer most able to act for a closed
   // lifecycle. It must hand the queue the plugin's session, not a fresh one.
@@ -195,6 +199,7 @@ it("registers through the queue with the plugin's session", async () => {
   await lastModalOptions?.onAddVault?.();
 
   expect(enqueuedSessions).toEqual([mockPluginInstance.miyoMutationSession]);
+  expect(notifyIndexChanged).toHaveBeenCalledTimes(1);
 });
 
 it("verifies scope with the plugin's session, not one this tab obtained itself", async () => {

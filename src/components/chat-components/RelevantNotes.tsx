@@ -1,90 +1,90 @@
-import { useIndexingProgress } from "@/aiParams";
-import { SemanticSearchToggleModal } from "@/components/modals/SemanticSearchToggleModal";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
-import { Progress } from "@/components/ui/progress";
+import {
+  RelevantNotesPane,
+  type RelevantNotesGuidance,
+} from "@/components/chat-components/ui/RelevantNotesPane";
+import { MIYO_HOMEPAGE_URL } from "@/constants";
 import { useApp } from "@/context";
 import { useActiveFile } from "@/hooks/useActiveFile";
 import { useNoteDrag } from "@/hooks/useNoteDrag";
 import { cn } from "@/lib/utils";
 import { logError, logWarn } from "@/logger";
-import { getSearchBackend } from "@/miyo/miyoUtils";
-import { findRelevantNotes, RelevantNoteEntry } from "@/search/findRelevantNotes";
+import { useMiyoStatus } from "@/miyo/useMiyoStatus";
+import { findRelevantNotes, type RelevantNoteEntry } from "@/search/findRelevantNotes";
 import { onIndexChanged } from "@/search/indexSignal";
 import { getMatchingPatterns, shouldIndexFile } from "@/search/searchUtils";
+import { openCopilotSettings } from "@/settings/openSettings";
 import { useSettingsValue } from "@/settings/model";
-import {
-  ArrowRight,
-  EyeOff,
-  FileInput,
-  FileOutput,
-  FileText,
-  GitFork,
-  Loader2,
-  PlusCircle,
-  RefreshCw,
-} from "lucide-react";
+import { ArrowRight, EyeOff, FileInput, FileOutput, FileText, PlusCircle } from "lucide-react";
 import { TFile } from "obsidian";
 import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
 
-function useRelevantNotes(refresher: number) {
+const EMPTY_RELEVANT_NOTES: readonly RelevantNoteEntry[] = Object.freeze([]);
+
+interface RelevantNotesRequestResult {
+  requestKey: string | null;
+  notes: readonly RelevantNoteEntry[];
+}
+
+const EMPTY_RELEVANT_NOTES_RESULT: RelevantNotesRequestResult = Object.freeze({
+  requestKey: null,
+  notes: EMPTY_RELEVANT_NOTES,
+});
+
+function useRelevantNotes(
+  enableMiyo: boolean,
+  miyoServerUrl: string,
+  miyoBackendAvailable: boolean
+) {
   const app = useApp();
-  const [relevantNotes, setRelevantNotes] = useState<RelevantNoteEntry[]>([]);
+  const [result, setResult] = useState<RelevantNotesRequestResult>(EMPTY_RELEVANT_NOTES_RESULT);
   const [signalTick, setSignalTick] = useState(0);
   const activeFile = useActiveFile();
+  const requestKey = activeFile?.path
+    ? JSON.stringify([activeFile.path, enableMiyo, miyoServerUrl, miyoBackendAvailable, signalTick])
+    : null;
 
   useEffect(() => onIndexChanged(() => setSignalTick((t) => t + 1)), []);
 
   useEffect(() => {
+    let cancelled = false;
+
     async function fetchNotes() {
-      if (!activeFile?.path) return;
+      // Leaving the source-note state must also forget its settled request. If
+      // the same note reopens later, it needs a fresh loading and result cycle.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
+      if (!activeFile?.path || requestKey === null) {
+        setResult(EMPTY_RELEVANT_NOTES_RESULT);
+        return;
+      }
       try {
         const notes = await findRelevantNotes({ app, filePath: activeFile.path });
-        setRelevantNotes(notes);
+        // A settings or active-note change can supersede an in-flight Miyo
+        // request. Its older result must not replace the newer pane state.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
+        if (!cancelled) setResult({ requestKey, notes });
       } catch (error) {
-        logWarn("Failed to fetch relevant notes", error);
-        setRelevantNotes([]);
+        if (!cancelled) {
+          logWarn("Failed to fetch relevant notes", error);
+          setResult({ requestKey, notes: EMPTY_RELEVANT_NOTES });
+        }
       }
     }
 
     void fetchNotes();
-  }, [app, activeFile?.path, refresher, signalTick]);
+    return () => {
+      cancelled = true;
+    };
+  }, [app, activeFile?.path, requestKey]);
 
-  return relevantNotes;
-}
-
-function useHasIndex(notePath: string, refresher: number) {
-  const [hasIndex, setHasIndex] = useState(true);
-  const [signalTick, setSignalTick] = useState(0);
-
-  useEffect(() => onIndexChanged(() => setSignalTick((t) => t + 1)), []);
-
-  useEffect(() => {
-    if (!notePath) return;
-
-    async function fetchHasIndex() {
-      try {
-        const VectorStoreManager = (await import("@/search/vectorStoreManager")).default;
-        const { getSettings } = await import("@/settings/model");
-        const settings = getSettings();
-        const useMiyo = getSearchBackend(settings) === "miyo";
-
-        if (useMiyo) {
-          const isEmpty = await VectorStoreManager.getInstance().isIndexEmpty();
-          setHasIndex(!isEmpty);
-          return;
-        }
-
-        const has = await VectorStoreManager.getInstance().hasIndex(notePath);
-        setHasIndex(has);
-      } catch {
-        setHasIndex(false);
-      }
-    }
-
-    void fetchHasIndex();
-  }, [notePath, refresher, signalTick]);
-  return hasIndex;
+  // Results from a previous source or Miyo state must not describe the current
+  // request. Treat the exact current request as pending until it settles.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
+  return {
+    isPending: enableMiyo && requestKey !== null && result.requestKey !== requestKey,
+    relevantNotes: result.requestKey === requestKey ? result.notes : EMPTY_RELEVANT_NOTES,
+  };
 }
 
 /** Map a 0–1 similarity score directly to the meter fill width (70% → 70%). */
@@ -202,15 +202,13 @@ function RelevantNoteHoverCard({
           </p>
         )}
 
-        {similarity != null && (
-          <div className="tw-flex tw-items-center tw-gap-2">
-            <span className="tw-shrink-0 tw-text-xs tw-text-faint">Similarity</span>
-            <RelevanceMeter score={similarity} className="tw-h-1 tw-flex-1" />
-            <span className="tw-shrink-0 tw-text-xs tw-font-medium tw-tabular-nums tw-text-normal">
-              {(similarity * 100).toFixed(1)}%
-            </span>
-          </div>
-        )}
+        <div className="tw-flex tw-items-center tw-gap-2">
+          <span className="tw-shrink-0 tw-text-xs tw-text-faint">Similarity</span>
+          <RelevanceMeter score={similarity} className="tw-h-1 tw-flex-1" />
+          <span className="tw-shrink-0 tw-text-xs tw-font-medium tw-tabular-nums tw-text-normal">
+            {(similarity * 100).toFixed(1)}%
+          </span>
+        </div>
 
         {(note.metadata.hasOutgoingLinks || note.metadata.hasBacklinks) && (
           <div className="tw-flex tw-items-center tw-gap-4 tw-text-xs tw-text-faint">
@@ -305,11 +303,9 @@ function RelevantNoteRow({
             {note.metadata.hasBacklinks && (
               <LinkBadge icon={<FileInput className="tw-size-3" />} label="Backlink" />
             )}
-            {similarity != null && (
-              <span className="tw-text-xs tw-font-medium tw-tabular-nums tw-text-muted">
-                {Math.round(similarity * 100)}%
-              </span>
-            )}
+            <span className="tw-text-xs tw-font-medium tw-tabular-nums tw-text-muted">
+              {Math.round(similarity * 100)}%
+            </span>
           </div>
 
           <div className="tw-hidden tw-shrink-0 tw-items-center tw-gap-0.5 group-hover:tw-flex">
@@ -340,21 +336,13 @@ function RelevantNoteRow({
           </div>
         </div>
 
-        {similarity != null && <RelevanceMeter score={similarity} className="tw-mt-1.5" />}
+        <RelevanceMeter score={similarity} className="tw-mt-1.5" />
       </div>
     </RelevantNoteHoverCard>
   );
 }
 
-function RelevantNotesToolbar({
-  activeFileName,
-  isBuilding,
-  onBuild,
-}: {
-  activeFileName: string | undefined;
-  isBuilding: boolean;
-  onBuild: () => void;
-}) {
+function RelevantNotesToolbar({ activeFileName }: { activeFileName: string | undefined }) {
   return (
     <div className="tw-flex tw-flex-none tw-items-center tw-gap-2 tw-border-0 tw-border-b tw-border-solid tw-border-border tw-px-3 tw-py-2">
       <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-1.5 tw-text-xs tw-text-faint">
@@ -368,32 +356,6 @@ function RelevantNotesToolbar({
           <span className="tw-text-muted">—</span>
         )}
       </div>
-      <Button
-        variant="secondary"
-        size="sm"
-        disabled={isBuilding}
-        onClick={onBuild}
-        className="tw-ml-auto tw-shrink-0 tw-gap-1.5"
-      >
-        <RefreshCw className={cn("tw-size-3.5", isBuilding && "tw-animate-spin")} />
-        {isBuilding ? "Building…" : "Build index"}
-      </Button>
-    </div>
-  );
-}
-
-function BuildOverlay({ indexedCount, totalFiles }: { indexedCount: number; totalFiles: number }) {
-  const progress = totalFiles > 0 ? Math.round((indexedCount / totalFiles) * 100) : 0;
-  return (
-    <div className="tw-absolute tw-inset-0 tw-flex tw-flex-col tw-items-center tw-justify-center tw-gap-4 tw-px-10 tw-text-center tw-backdrop-blur-sm tw-bg-primary/90">
-      <Loader2 className="tw-size-6 tw-animate-spin tw-text-accent" />
-      <span className="tw-text-sm tw-font-semibold tw-text-normal">Indexing your vault</span>
-      <Progress value={progress} className="tw-h-1 tw-w-48" />
-      {totalFiles > 0 && (
-        <span className="tw-text-xs tw-tabular-nums tw-text-faint">
-          {indexedCount} / {totalFiles} notes embedded
-        </span>
-      )}
     </div>
   );
 }
@@ -407,12 +369,14 @@ interface RelevantNotesProps {
 export const RelevantNotes = memo(
   ({ className, onAddToChat }: RelevantNotesProps): React.ReactElement => {
     const app = useApp();
-    const [refresher, setRefresher] = useState(0);
-    const relevantNotes = useRelevantNotes(refresher);
     const activeFile = useActiveFile();
-    const hasIndex = useHasIndex(activeFile?.path ?? "", refresher);
-    const [indexingState] = useIndexingProgress();
     const settings = useSettingsValue();
+    const miyoBackendAvailable = useMiyoStatus().backend === "available";
+    const { isPending, relevantNotes } = useRelevantNotes(
+      settings.enableMiyo,
+      settings.miyoServerUrl,
+      miyoBackendAvailable
+    );
 
     // The active note itself is excluded from the index (by the QA
     // inclusion/exclusion settings or an internal exclusion), so no relevant
@@ -437,37 +401,20 @@ export const RelevantNotes = memo(
       onAddToChat(`[[${prompt}]]`);
     };
 
-    const handleBuildIndex = async () => {
-      const { getSettings, updateSetting } = await import("@/settings/model");
-      const settings = getSettings();
-
-      if (!settings.enableSemanticSearchV3) {
-        // Semantic search is off — show confirmation modal (same as settings page)
-        new SemanticSearchToggleModal(
-          app,
-          async () => {
-            updateSetting("enableSemanticSearchV3", true);
-            const VectorStoreManager = (await import("@/search/vectorStoreManager")).default;
-            await VectorStoreManager.getInstance().indexVaultToVectorStore(false, {
-              userInitiated: true,
-            });
-            setRefresher(refresher + 1);
-          },
-          true // enabling
-        ).open();
-      } else {
-        // Semantic search is on but index missing — build it
-        const VectorStoreManager = (await import("@/search/vectorStoreManager")).default;
-        await VectorStoreManager.getInstance().indexVaultToVectorStore(false, {
-          userInitiated: true,
-        });
-        setRefresher(refresher + 1);
-      }
-    };
+    // Links only annotate Miyo matches, so a settled empty search has no result
+    // rows to show. Without a source note or a settled request, there is no
+    // evidence of a setup or indexing problem.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
+    const guidance: RelevantNotesGuidance =
+      !activeFile || isPending || relevantNotes.length > 0
+        ? null
+        : settings.enableMiyo
+          ? "setup"
+          : "download";
 
     return (
       <div className={cn("tw-flex tw-min-h-full tw-w-full tw-flex-1 tw-flex-col", className)}>
-        {isActiveFileExcluded && (
+        {isActiveFileExcluded ? (
           <div
             data-relevant-notes-empty-state
             className="tw-flex tw-flex-1 tw-flex-col tw-items-center tw-justify-center tw-px-6"
@@ -487,71 +434,29 @@ export const RelevantNotes = memo(
               </div>
             </div>
           </div>
-        )}
-
-        {!isActiveFileExcluded && !hasIndex && (
-          <div
-            data-relevant-notes-empty-state
-            className="tw-flex tw-flex-1 tw-flex-col tw-items-center tw-justify-center tw-px-6"
-          >
-            <div className="tw-flex tw-w-full tw-max-w-xs tw-flex-col tw-items-center tw-gap-6 tw-text-center">
-              <div className="tw-flex tw-size-16 tw-items-center tw-justify-center tw-rounded-xl tw-border tw-border-solid tw-border-border tw-bg-secondary">
-                <GitFork className="tw-size-7 tw-text-accent" />
-              </div>
-              <div className="tw-flex tw-flex-col tw-gap-1.5">
-                <span className="tw-text-lg tw-font-semibold tw-text-normal">
-                  No semantic index yet
-                </span>
-                <span className="tw-text-sm tw-text-muted">
-                  {"Build it once to surface notes related to whatever you're writing."}
-                </span>
-              </div>
-              <div className="tw-flex tw-w-full tw-flex-col tw-items-center tw-gap-3">
-                <Button
-                  variant="default"
-                  onClick={() => void handleBuildIndex()}
-                  className="tw-h-11 tw-w-full tw-gap-2 tw-rounded-lg"
-                >
-                  <GitFork className="tw-size-4" />
-                  Build index
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {!isActiveFileExcluded && hasIndex && (
+        ) : (
           <>
-            <RelevantNotesToolbar
-              activeFileName={activeFile?.basename}
-              isBuilding={indexingState.isActive}
-              onBuild={() => void handleBuildIndex()}
-            />
+            <RelevantNotesToolbar activeFileName={activeFile?.basename} />
             <div className="tw-relative tw-min-h-0 tw-flex-1">
               <div className="tw-absolute tw-inset-0 tw-overflow-y-auto tw-p-2">
-                {relevantNotes.length === 0 ? (
-                  <div className="tw-flex tw-h-full tw-items-center tw-justify-center tw-px-4 tw-text-center">
-                    <span className="tw-text-sm tw-text-muted">No relevant notes found</span>
-                  </div>
-                ) : (
-                  <div className="tw-flex tw-flex-col tw-gap-0.5">
-                    {relevantNotes.map((note) => (
-                      <RelevantNoteRow
-                        key={note.note.path}
-                        note={note}
-                        onAddToChat={() => addToChat(note.note.title)}
-                        onNavigateToNote={() => navigateToNote(note.note.path)}
-                      />
-                    ))}
-                  </div>
-                )}
-              </div>
-              {indexingState.isActive && (
-                <BuildOverlay
-                  indexedCount={indexingState.indexedCount}
-                  totalFiles={indexingState.totalFiles}
+                <RelevantNotesPane
+                  guidance={guidance}
+                  isPending={isPending}
+                  noteCount={relevantNotes.length}
+                  noteRows={relevantNotes.map((note) => (
+                    <RelevantNoteRow
+                      key={note.note.path}
+                      note={note}
+                      onAddToChat={() => addToChat(note.note.title)}
+                      onNavigateToNote={() => navigateToNote(note.note.path)}
+                    />
+                  ))}
+                  miyoDownloadUrl={MIYO_HOMEPAGE_URL}
+                  onOpenMiyoSettings={(event) =>
+                    openCopilotSettings(app, event.currentTarget.win, "miyo")
+                  }
                 />
-              )}
+              </div>
             </div>
           </>
         )}

@@ -1,55 +1,18 @@
-import { logError, logInfo, logWarn } from "@/logger";
+import { logError, logInfo } from "@/logger";
 import { MiyoClient } from "@/miyo/MiyoClient";
 import {
   getMiyoCustomUrl,
   getMiyoFilePath,
   getMiyoFolderName,
   getVaultRelativeMiyoPath,
-  getSearchBackend,
+  shouldUseMiyo,
 } from "@/miyo/miyoUtils";
 import { getBacklinkedNotes, getLinkedNotes } from "@/noteUtils";
-import { DBOperations, type CopilotOrama } from "@/search/dbOperations";
-import type { SemanticIndexDocument } from "@/search/indexBackend/SemanticIndexBackend";
 import { createCopilotPatternFilter } from "@/search/searchUtils";
-import VectorStoreManager from "@/search/vectorStoreManager";
 import { getSettings } from "@/settings/model";
-import { Result } from "@orama/orama";
 import { App, TFile } from "obsidian";
 
 const MAX_K = 20;
-
-/**
- * Determine whether Miyo-backed relevant-note scoring should be used.
- *
- * @returns True when Miyo mode and self-host access validation are active.
- */
-function shouldUseMiyoForRelevantNotes(): boolean {
-  return getSearchBackend(getSettings()) === "miyo";
-}
-
-/**
- * Gets the highest score hits for each note and removes the current file path
- * from the results.
- * @param hits - The hits to get the highest score for.
- * @param currentFilePath - The current file path.
- * @returns A map of the highest score hits for each note.
- */
-function getHighestScoreHits(hits: Result<{ path: string }>[], currentFilePath: string) {
-  const hitMap = new Map<string, number>();
-  for (const hit of hits) {
-    const path = hit.document.path;
-    const matchingScore = hitMap.get(path);
-    if (matchingScore) {
-      if (hit.score > matchingScore) {
-        hitMap.set(path, hit.score);
-      }
-    } else {
-      hitMap.set(path, hit.score);
-    }
-  }
-  hitMap.delete(currentFilePath);
-  return hitMap;
-}
 
 /**
  * Normalize a score map to the top K entries, ordered by score descending.
@@ -67,55 +30,6 @@ function capToTopK(scoreMap: Map<string, number>): Map<string, number> {
     .slice(0, MAX_K);
 
   return new Map(topK);
-}
-
-/**
- * Return true when a semantic document has a usable embedding vector.
- *
- * @param doc - Semantic document candidate.
- * @returns True when embedding data exists and is non-empty.
- */
-function hasUsableEmbedding(doc: SemanticIndexDocument): boolean {
-  return Array.isArray(doc.embedding) && doc.embedding.length > 0;
-}
-
-/**
- * Return true when the source note has non-empty chunk content.
- *
- * @param docs - Source note semantic chunks.
- * @returns True when at least one chunk has content.
- */
-function hasSourceChunkContent(docs: SemanticIndexDocument[]): boolean {
-  return docs.some((doc) => doc.content.trim().length > 0);
-}
-
-/**
- * Calculate similarity scores using the legacy Orama vector path.
- *
- * @param db - The Orama database.
- * @param filePath - The file path to calculate similarity scores for.
- * @param currentNoteEmbeddings - Embedding vectors of the source note.
- * @returns A map of note paths to their highest similarity scores.
- */
-async function calculateSimilarityScoreFromOrama({
-  db,
-  filePath,
-  currentNoteEmbeddings,
-}: {
-  db: CopilotOrama;
-  filePath: string;
-  currentNoteEmbeddings: number[][];
-}): Promise<Map<string, number>> {
-  const searchPromises = currentNoteEmbeddings.map((embedding) =>
-    DBOperations.getDocsByEmbedding(db, embedding, {
-      limit: MAX_K,
-      similarity: 0,
-    })
-  );
-  const searchResults = await Promise.all(searchPromises);
-  const allHits = searchResults.flat();
-  const aggregatedHits = getHighestScoreHits(allHits, filePath);
-  return capToTopK(aggregatedHits);
 }
 
 /**
@@ -175,50 +89,8 @@ async function calculateSimilarityScoreFromMiyo(
         (error as Error).message
       }`
     );
-    return new Map();
+    throw error;
   }
-}
-
-/**
- * Calculate similarity scores by selecting the best available backend strategy.
- *
- * @param app - The Obsidian app instance.
- * @param filePath - Source note path.
- * @returns Map of note paths to max similarity score.
- */
-async function calculateSimilarityScore(app: App, filePath: string): Promise<Map<string, number>> {
-  if (shouldUseMiyoForRelevantNotes()) {
-    return calculateSimilarityScoreFromMiyo(app, filePath);
-  }
-
-  const currentNoteDocs = await VectorStoreManager.getInstance().getDocumentsByPath(filePath);
-  if (currentNoteDocs.length === 0) {
-    return new Map();
-  }
-
-  const currentNoteEmbeddings = currentNoteDocs
-    .filter((doc) => hasUsableEmbedding(doc))
-    .map((doc) => doc.embedding);
-
-  if (currentNoteEmbeddings.length > 0) {
-    try {
-      const db = await VectorStoreManager.getInstance().getDb();
-      return calculateSimilarityScoreFromOrama({
-        db,
-        filePath,
-        currentNoteEmbeddings,
-      });
-    } catch (error) {
-      logWarn("RelevantNotes(Orama): failed to compute similarity scores", error);
-      return new Map();
-    }
-  }
-
-  if (!hasSourceChunkContent(currentNoteDocs)) {
-    return new Map();
-  }
-
-  return calculateSimilarityScoreFromMiyo(app, filePath);
 }
 
 /**
@@ -256,7 +128,7 @@ export type RelevantNoteEntry = {
   };
   metadata: {
     score: number;
-    similarityScore: number | undefined;
+    similarityScore: number;
     hasOutgoingLinks: boolean;
     hasBacklinks: boolean;
   };
@@ -269,7 +141,8 @@ export type RelevantNoteEntry = {
  * @param app - The Obsidian app instance.
  * @param filePath - The file path to find relevant notes for.
  * @returns Relevant-note hits allowed by the current inclusion/exclusion rules.
- *   Empty when no allowed notes are found or the index does not exist.
+ *   Empty when no allowed notes are found or Miyo cannot run in the current environment.
+ * @throws When the Miyo related-note request cannot complete.
  */
 export async function findRelevantNotes({
   app,
@@ -283,39 +156,41 @@ export async function findRelevantNotes({
     return [];
   }
 
-  const similarityScoreMap = await calculateSimilarityScore(app, filePath);
+  // Relevant Notes has no non-Miyo scoring path. Avoid querying Miyo when the
+  // user disabled it or the current platform cannot reach it, such as mobile
+  // without a configured remote endpoint.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
+  if (!shouldUseMiyo(getSettings())) {
+    return [];
+  }
+
+  const similarityScoreMap = await calculateSimilarityScoreFromMiyo(app, filePath);
+  if (similarityScoreMap.size === 0) {
+    return [];
+  }
+
   const noteLinks = getNoteLinks(app, file);
 
-  // Rank purely by semantic similarity so the displayed percentages stay
-  // monotonic down the list. Linked/backlinked notes still appear, but a link
-  // never boosts ranking: link-only notes have no similarity score and sort to
-  // the bottom (they render without a meter in the UI).
-  const candidatePaths = new Set<string>([...similarityScoreMap.keys(), ...noteLinks.keys()]);
-  candidatePaths.delete(filePath);
-  const sortedPaths = Array.from(candidatePaths)
-    .filter(createCopilotPatternFilter(app))
-    .sort((aPath, bPath) => {
-      const aScore = similarityScoreMap.get(aPath);
-      const bScore = similarityScoreMap.get(bPath);
-      if (aScore == null && bScore == null) return 0;
-      if (aScore == null) return 1;
-      if (bScore == null) return -1;
-      return bScore - aScore;
-    });
-  return sortedPaths
-    .map((path) => {
+  // Links describe Miyo results but cannot make an otherwise unindexed note
+  // relevant, so every displayed row retains a semantic basis.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
+  const isAllowed = createCopilotPatternFilter(app);
+  const sortedMatches = Array.from(similarityScoreMap.entries())
+    .filter(([path]) => isAllowed(path))
+    .sort(([, aScore], [, bScore]) => bScore - aScore);
+  return sortedMatches
+    .map(([path, similarityScore]) => {
       const file = app.vault.getAbstractFileByPath(path);
       if (!(file instanceof TFile) || file.extension !== "md") {
         return null;
       }
-      const similarityScore = similarityScoreMap.get(path);
       return {
         note: {
           path,
           title: file.basename,
         },
         metadata: {
-          score: similarityScore ?? 0,
+          score: similarityScore,
           similarityScore,
           hasOutgoingLinks: noteLinks.get(path)?.links ?? false,
           hasBacklinks: noteLinks.get(path)?.backlinks ?? false,

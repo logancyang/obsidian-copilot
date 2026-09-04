@@ -10,6 +10,7 @@ import {
   parseMiyoSyncReceipt,
   type MiyoSyncReceipt,
 } from "@/miyo/miyoUtils";
+import { notifyIndexChanged } from "@/search/indexSignal";
 import { extractAppIgnoreSettings, getSystemExcludedFolders } from "@/search/searchUtils";
 import { type CopilotSettings, getSettings, updateSetting } from "@/settings/model";
 import { err2String } from "@/utils";
@@ -416,15 +417,29 @@ export function resyncMiyoFolder(
   app: App,
   session: MiyoMutationSession
 ): Promise<MiyoResyncOutcome> {
-  return enqueueMiyoFolderMutation((lifecycle) => runResync(app, lifecycle), session).catch(
-    (error) => {
+  return enqueueMiyoFolderMutation((lifecycle) => runResync(app, lifecycle), session)
+    .then((outcome) => {
+      // A successful reconciliation is a retry boundary for Relevant Notes.
+      // Miyo stays available while its folder index changes, so reachability
+      // alone cannot tell subscribers to discard a settled setup result.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
+      if (
+        outcome === "verified" ||
+        outcome === "resynced" ||
+        outcome === "resynced-grants-reset" ||
+        outcome === "resynced-scan-failed"
+      ) {
+        notifyIndexChanged();
+      }
+      return outcome;
+    })
+    .catch((error) => {
       // Preserves the never-throws contract: the only rejection the queue itself
       // raises is an expired lifecycle, which for a caller in the current one
       // reads the same as any other unfinished mutation.
       logWarn(`Miyo resync abandoned: ${err2String(error)}`);
       return "failed";
-    }
-  );
+    });
 }
 
 /** Result of a read-only scope verification against the live Miyo record. */

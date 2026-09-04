@@ -39,6 +39,12 @@ Use **Search scope** in the Miyo settings tab:
 
 The scope is a retrieval preference, not a security boundary. Keep Miyo's registered folders intentional, especially when you use an unrestricted scope or connect to a shared remote server.
 
+### Relevant Notes
+
+Miyo is the source of Relevant Notes results and similarity percentages; Copilot's legacy local embedding index no longer scores this pane. Direct-link and backlink indicators can annotate notes returned by Miyo, but links alone do not add notes to the results.
+
+If Miyo is not connected, its related-note search is unavailable, or it returns no match for the active note, the pane does not fall back to link and backlink rows. Instead, it offers Miyo download or setup actions. Use **Open Miyo settings** to return directly to the existing connection flow under **Settings → Copilot → Miyo**, including when you use a remote endpoint or mobile device.
+
 ## Search conversations and process documents
 
 Miyo can also index supported ChatGPT and Claude chat histories. Configure those sources in Miyo, then use the **Search chat** row in Copilot to see their status and open Miyo's management screen. Chat-history search is separate from vault search.
