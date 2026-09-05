@@ -125,7 +125,10 @@ describe("descriptor", () => {
 
     it("routes the backend-neutral managed action to the Codex manager", async () => {
       const manager = getCodexBinaryManager();
-      const install = jest.spyOn(manager, "install").mockResolvedValue(undefined);
+      const install = jest
+        .spyOn(manager, "install")
+        .mockResolvedValue({ version: "1.10.0", path: "/managed/codex-acp" });
+      const cancel = jest.spyOn(manager, "cancelCurrentOperation");
       const listener = jest.fn();
       const subscribe = jest.spyOn(manager, "subscribeRuntimeState");
       try {
@@ -139,9 +142,12 @@ describe("descriptor", () => {
         await CodexBackendDescriptor.managedInstall?.run({} as CopilotPlugin);
         expect(subscribe).toHaveBeenCalledWith(listener);
         expect(install).toHaveBeenCalledTimes(1);
+        CodexBackendDescriptor.managedInstall?.cancel?.({} as CopilotPlugin);
+        expect(cancel).toHaveBeenCalledTimes(1);
         unsubscribe?.();
       } finally {
         install.mockRestore();
+        cancel.mockRestore();
         subscribe.mockRestore();
       }
     });

@@ -1,30 +1,54 @@
 import {
-  createManagedInstallRuntime,
+  ManagedBinaryManager,
+  type BinarySettings,
+  type InstalledBinary,
+  type ManagedBinaryInstallOptions,
+} from "@/agentMode/backends/shared/ManagedBinaryManager";
+import {
+  ManagedInstallAbortError,
   promoteManagedVersion,
-  type ManagedInstallRuntimeState,
 } from "@/agentMode/backends/shared/managedInstall";
 import type { ManagedInstallActionState } from "@/agentMode/session/types";
 import { copilotAppDataDir } from "@/utils/appPaths";
 import { augmentPathForDetection } from "@/utils/binaryPath";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 import { detectBinary } from "@/utils/detectBinary";
-import { updateAgentModeBackendFields } from "@/settings/model";
+import { getSettings, updateAgentModeBackendFields } from "@/settings/model";
 import { buildCodexAcpInvocation, resolveSupportedCodexAcpPackage } from "./codexVersion";
 import { CODEX_ACP_PINNED_VERSION } from "./cliSetup";
 
 const PACKAGE = "@agentclientprotocol/codex-acp";
 const TIMEOUT_MS = 5 * 60_000;
+const EMPTY_BINARY_SETTINGS: BinarySettings = Object.freeze({});
 
 type CodexInstallProgress = { label: string; percent: number };
 
-export class CodexBinaryManager {
-  private readonly runtime = createManagedInstallRuntime<CodexInstallProgress>("Codex adapter");
-  readonly subscribeRuntimeState = (onChange: () => void): (() => void) =>
-    this.runtime.subscribe(onChange);
-  readonly getRuntimeState = (): ManagedInstallRuntimeState<CodexInstallProgress> =>
-    this.runtime.getSnapshot();
+/** Owns the Codex ACP package installation; shared lifecycle operations never modify user-owned packages. */
+export class CodexBinaryManager extends ManagedBinaryManager<CodexInstallProgress> {
+  constructor() {
+    super("Codex adapter");
+  }
+
+  protected readBinarySettings(): BinarySettings {
+    const settings = getSettings().agentMode.backends?.codex;
+    // Existing custom selections predate source metadata and still belong to the user.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
+    if (settings?.binaryPath && !settings.binarySource)
+      return { ...settings, binarySource: "custom" };
+    return settings ?? EMPTY_BINARY_SETTINGS;
+  }
+
+  protected updateBinarySettings(settings: BinarySettings): void {
+    updateAgentModeBackendFields("codex", settings);
+  }
+
+  protected async validateCustomBinary(binaryPath: string): Promise<InstalledBinary> {
+    const supported = resolveSupportedCodexAcpPackage(binaryPath);
+    return { version: supported.version, path: supported.entryPath };
+  }
+
   readonly getActionState = (): ManagedInstallActionState => {
-    const state = this.runtime.getSnapshot();
+    const state = this.getRuntimeState();
     if (state.kind === "installing") {
       return {
         kind: "running",
@@ -42,43 +66,50 @@ export class CodexBinaryManager {
     }
     return path().join(copilotAppDataDir(home), "codex");
   }
-  async install(): Promise<void> {
-    return this.runtime.run({ kind: "installing", progress: null }, async (signal) => {
-      const dataDir = this.getDataDir();
-      const versionDir = path().join(dataDir, CODEX_ACP_PINNED_VERSION);
-      const stageDir = path().join(dataDir, `.tmp-${CODEX_ACP_PINNED_VERSION}-${Date.now()}`);
-      await fs().promises.mkdir(stageDir, { recursive: true });
-      try {
-        this.runtime.publishProgress({ label: "Installing the Codex adapter…", percent: 30 });
-        await installPackage(stageDir, signal);
-        this.runtime.publishProgress({ label: "Verifying the Codex adapter…", percent: 85 });
-        const stagedEntry = entryPath(stageDir);
-        // Exact-version guard: https://github.com/Brevilabs/obsidian-copilot-private/issues/368
-        const staged = resolveSupportedCodexAcpPackage(stagedEntry);
-        if (staged.version !== CODEX_ACP_PINNED_VERSION) {
-          throw new Error(
-            `npm installed ${PACKAGE} ${staged.version}; expected ${CODEX_ACP_PINNED_VERSION}.`
-          );
-        }
-        await verifyLauncher(stagedEntry, signal);
-        await fs().promises.writeFile(
-          path().join(stageDir, "install-manifest.json"),
-          JSON.stringify({ version: CODEX_ACP_PINNED_VERSION })
+  protected async installPipeline({
+    signal,
+    onProgress,
+  }: ManagedBinaryInstallOptions<CodexInstallProgress> & {
+    signal: AbortSignal;
+  }): Promise<InstalledBinary> {
+    const dataDir = this.getDataDir();
+    const versionDir = path().join(dataDir, CODEX_ACP_PINNED_VERSION);
+    const stageDir = path().join(dataDir, `.tmp-${CODEX_ACP_PINNED_VERSION}-${Date.now()}`);
+    await fs().promises.mkdir(stageDir, { recursive: true });
+    try {
+      onProgress?.({ label: "Installing the Codex adapter…", percent: 30 });
+      await installPackage(stageDir, signal);
+      onProgress?.({ label: "Verifying the Codex adapter…", percent: 85 });
+      const stagedEntry = entryPath(stageDir);
+      // Exact-version guard: https://github.com/Brevilabs/obsidian-copilot-private/issues/368
+      const staged = resolveSupportedCodexAcpPackage(stagedEntry);
+      if (staged.version !== CODEX_ACP_PINNED_VERSION) {
+        throw new Error(
+          `npm installed ${PACKAGE} ${staged.version}; expected ${CODEX_ACP_PINNED_VERSION}.`
         );
-        await promoteManagedVersion(stageDir, versionDir, "Codex adapter");
-        const finalEntry = entryPath(versionDir);
-        updateAgentModeBackendFields("codex", {
-          binaryPath: finalEntry,
-          binaryVersion: CODEX_ACP_PINNED_VERSION,
-          binarySource: "managed",
-        });
-        this.runtime.publishProgress({ label: "Codex adapter ready.", percent: 100 });
-      } finally {
-        await fs()
-          .promises.rm(stageDir, { recursive: true, force: true })
-          .catch(() => {});
       }
-    });
+      await verifyLauncher(stagedEntry, signal);
+      await fs().promises.writeFile(
+        path().join(stageDir, "install-manifest.json"),
+        JSON.stringify({ version: CODEX_ACP_PINNED_VERSION })
+      );
+      // Cancellation during verification must not replace the working installation.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
+      if (signal.aborted) throw new ManagedInstallAbortError();
+      await promoteManagedVersion(stageDir, versionDir, "Codex adapter");
+      const finalEntry = entryPath(versionDir);
+      updateAgentModeBackendFields("codex", {
+        binaryPath: finalEntry,
+        binaryVersion: CODEX_ACP_PINNED_VERSION,
+        binarySource: "managed",
+      });
+      onProgress?.({ label: "Codex adapter ready.", percent: 100 });
+      return { version: CODEX_ACP_PINNED_VERSION, path: finalEntry };
+    } finally {
+      await fs()
+        .promises.rm(stageDir, { recursive: true, force: true })
+        .catch(() => {});
+    }
   }
 }
 

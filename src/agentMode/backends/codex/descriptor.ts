@@ -209,7 +209,10 @@ export const CodexBackendDescriptor: BackendDescriptor = {
   managedInstall: {
     getState: () => codexBinaryManager.getActionState(),
     subscribe: (_plugin, onChange) => codexBinaryManager.subscribeRuntimeState(onChange),
-    run: () => codexBinaryManager.install(),
+    run: async () => {
+      await codexBinaryManager.install();
+    },
+    cancel: () => codexBinaryManager.cancelCurrentOperation(),
   },
 
   async applySelection(session: AgentSession, selection: ModelSelection): Promise<void> {
