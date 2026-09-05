@@ -602,6 +602,11 @@ metadata:
 
 # Publish Markdown to OpenArtifacts
 
+Use Copilot's wrapper below for every publish, update, or withdrawal. Do not read
+OpenArtifacts config files, look for credentials, or ask the user to copy a token.
+Publishing the same source note again updates its existing document. If an update
+reports that the document was not found, stop and report it; do not create a replacement.
+
 ## 1. Prepare the page
 
 Read one existing Markdown source note. For delete, remove, or withdraw requests,
@@ -633,6 +638,16 @@ dialog and inspect the rendered HTML before confirming Publish or Update. A pros
 summary or HTML source is not a rendered preview. Do not publish before the user
 has reviewed the page and explicitly confirmed in the existing dialog. Do not
 create a new modal or render HTML inside a modal.
+
+The Obsidian CLI communicates with the running desktop app through local IPC.
+If your execution tool uses a sandbox, request its normal permission to run this
+wrapper outside the sandbox from the outset (for Codex, use
+\`sandbox_permissions="require_escalated"\`). Keep the same command and arguments;
+this only opens the existing human review. Do not disable the agent's sandbox
+settings or bypass a denied permission. If permission is unavailable, report that
+limitation and offer the regular publish command. "Unable to find Obsidian" inside
+a sandbox does not establish that the app is closed; do not tell the user to
+reopen it on that evidence alone.
 
 Run the wrapper next to this SKILL.md. On macOS or Linux:
 
@@ -716,7 +731,12 @@ else
   CODE="(()=>{const decode=(value)=>new TextDecoder().decode(Uint8Array.from(atob(value),(char)=>char.charCodeAt(0)));const bridge=app.plugins.plugins.copilot?.${OPENARTIFACTS_AGENT_BRIDGE_PROPERTY};if(!bridge)throw new Error('Copilot OpenArtifacts host is unavailable.');return bridge.reviewAgentPublish(decode('$SOURCE_B64'),decode('$HTML_B64')).then(JSON.stringify);})()"
 fi
 
-CLI_OUTPUT=$("$OBSIDIAN_CLI" "vault=$VAULT_NAME" eval "code=$CODE") || exit $?
+CLI_OUTPUT=$("$OBSIDIAN_CLI" "vault=$VAULT_NAME" eval "code=$CODE" 2>&1)
+CLI_STATUS=$?
+if [ "$CLI_STATUS" -ne 0 ]; then
+  printf '%s\\n' "$CLI_OUTPUT" >&2
+  exit "$CLI_STATUS"
+fi
 CLI_RESULT=$(printf '%s\\n' "$CLI_OUTPUT" | sed -n '/^=> {/p' | sed -n '$p')
 case "$CLI_RESULT" in
   "=> {"*)
@@ -725,6 +745,7 @@ case "$CLI_RESULT" in
     exit 0
     ;;
   *)
+    [ -z "$CLI_OUTPUT" ] || printf '%s\\n' "$CLI_OUTPUT" >&2
     printf '%s\\n' "Copilot could not complete the OpenArtifacts review." >&2
     exit 1
     ;;
@@ -768,10 +789,15 @@ try {
     $CODE = "(()=>{const decode=(value)=>new TextDecoder().decode(Uint8Array.from(atob(value),(char)=>char.charCodeAt(0)));const bridge=app.plugins.plugins.copilot?.${OPENARTIFACTS_AGENT_BRIDGE_PROPERTY};if(!bridge)throw new Error('Copilot OpenArtifacts host is unavailable.');return bridge.reviewAgentPublish(decode('$SOURCE_B64'),decode('$HTML_B64')).then(JSON.stringify);})()"
   }
 
-  $CLI_OUTPUT = & $OBSIDIAN_CLI "vault=$VAULT_NAME" 'eval' "code=$CODE"
-  if ($LASTEXITCODE -ne 0) { throw 'Copilot could not complete the OpenArtifacts review.' }
+  $CLI_OUTPUT = @(& $OBSIDIAN_CLI "vault=$VAULT_NAME" 'eval' "code=$CODE" 2>&1)
+  $CLI_STATUS = $LASTEXITCODE
+  if ($CLI_STATUS -ne 0) {
+    [Console]::Error.WriteLine(($CLI_OUTPUT -join [Environment]::NewLine))
+    throw 'Copilot could not complete the OpenArtifacts review.'
+  }
   $CLI_RESULT = [string](@($CLI_OUTPUT | Where-Object { ([string]$_).StartsWith('=> {') })[-1])
   if (-not $CLI_RESULT.StartsWith('=> {')) {
+    [Console]::Error.WriteLine(($CLI_OUTPUT -join [Environment]::NewLine))
     throw 'Copilot could not complete the OpenArtifacts review.'
   }
   $OUTCOME = $CLI_RESULT.Substring(3)

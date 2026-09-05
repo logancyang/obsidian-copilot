@@ -85,7 +85,8 @@ const URL_ATTRIBUTES = new Set([
 ]);
 
 const UNSAFE_REVIEW_ATTRIBUTES = new Set(["contenteditable", "ping", "srcdoc", "srcset"]);
-const UNSAFE_REVIEW_CSS = /@import|url\s*\(|https?:|\/\/|\\|expression\s*\(|behavior\s*:/i;
+const UNSAFE_REVIEW_CSS =
+  /@import|url\s*\(|https?:|\/\/|image(?:-set)?\s*\(|expression\s*\(|behavior\s*:/i;
 const CSS_COMMENT = /\/\*[\s\S]*?\*\//g;
 const LOCAL_FRAGMENT_URL = /url\s*\(\s*(["']?)#[^\s)"']+\1\s*\)/gi;
 
@@ -192,7 +193,7 @@ export function validateOpenArtifactsReviewHtml(html: string): void {
         continue;
       }
       if (
-        (name === "style" || attribute.value.toLowerCase().includes("url(")) &&
+        (name === "style" || /url\s*\(/i.test(decodeReviewCss(attribute.value))) &&
         hasUnsafeReviewCss(attribute.value)
       ) {
         issues.add(
@@ -211,8 +212,25 @@ export function validateOpenArtifactsReviewHtml(html: string): void {
   }
 }
 
+function decodeReviewCss(css: string): string {
+  // Decode CSS escapes before checking constructs, so glyph escapes are allowed
+  // without admitting escaped url(), @import, or expression() spellings.
+  return css
+    .replace(CSS_COMMENT, "")
+    .replace(
+      /\\(?:([0-9a-f]{1,6})[ \t\r\n\f]?|([\s\S]))/gi,
+      (_match, hex: string | undefined, character: string | undefined) => {
+        if (!hex) return /[\r\n\f]/.test(character ?? "") ? "" : (character ?? "");
+        const point = parseInt(hex, 16);
+        return String.fromCodePoint(
+          point === 0 || point > 0x10ffff || (point >= 0xd800 && point <= 0xdfff) ? 0xfffd : point
+        );
+      }
+    );
+}
+
 function hasUnsafeReviewCss(css: string): boolean {
-  const staticCss = css.replace(CSS_COMMENT, "").replace(LOCAL_FRAGMENT_URL, "");
+  const staticCss = decodeReviewCss(css).replace(LOCAL_FRAGMENT_URL, "");
   return UNSAFE_REVIEW_CSS.test(staticCss);
 }
 

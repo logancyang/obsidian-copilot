@@ -253,6 +253,9 @@ describe("builtinSkills", () => {
         `$${OPENARTIFACTS_WORKSPACE_ROOT_ENV}/${OPENARTIFACTS_AGENT_HANDOFF_DIR}/`
       );
       expect(skill!.skillMd).toContain("Themes are optional");
+      expect(skill!.skillMd).toContain('sandbox_permissions="require_escalated"');
+      expect(skill!.skillMd).toContain("Do not disable the agent's sandbox");
+      expect(skill!.skillMd).toContain("does not establish that the app is closed");
       expect(skill!.skillMd).toContain("Check each path independently");
       expect(skill!.skillMd).toMatch(/a missing theme must never block\s+publishing/);
       expect(skill!.skillMd).toContain("themes/<name>.md");
@@ -308,7 +311,7 @@ describe("builtinSkills", () => {
       const ps1 = scriptOf("openartifacts-publish", ".ps1");
       expect(ps1).toContain("Set-Location -LiteralPath $WORKSPACE_ROOT");
       expect(ps1).toContain("$VAULT_NAME = Split-Path -Leaf (Get-Location).Path");
-      expect(ps1).toContain("$CLI_OUTPUT = & $OBSIDIAN_CLI \"vault=$VAULT_NAME\" 'eval'");
+      expect(ps1).toContain("$CLI_OUTPUT = @(& $OBSIDIAN_CLI \"vault=$VAULT_NAME\" 'eval'");
       expect(ps1).toContain("Where-Object { ([string]$_).StartsWith('=> {') }");
       expect(ps1).not.toContain("finally {");
       expect(ps1).not.toContain("Remove-Item");
