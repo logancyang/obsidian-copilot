@@ -674,7 +674,7 @@ describe("findRelevantNotes", () => {
       ).toBe(true);
     });
 
-    it("separates results whose scores moved", () => {
+    it("separates results whose scores moved (https://github.com/Brevilabs/obsidian-copilot-private/issues/362)", () => {
       expect(
         isSameRelevantNotesResult(
           { notes: [note("a.md", 0.7)], status: "matches" },
@@ -683,7 +683,7 @@ describe("findRelevantNotes", () => {
       ).toBe(false);
     });
 
-    it("separates results whose ranking order changed", () => {
+    it("separates results whose ranking order changed (https://github.com/Brevilabs/obsidian-copilot-private/issues/362)", () => {
       expect(
         isSameRelevantNotesResult(
           { notes: [note("a.md", 0.7), note("b.md", 0.4)], status: "matches" },
@@ -692,7 +692,7 @@ describe("findRelevantNotes", () => {
       ).toBe(false);
     });
 
-    it("separates results whose link annotations changed", () => {
+    it("separates results whose link annotations changed (https://github.com/Brevilabs/obsidian-copilot-private/issues/362)", () => {
       const linked: RelevantNoteEntry = {
         note: { path: "a.md", title: "a" },
         metadata: { score: 0.7, hasOutgoingLinks: true, hasBacklinks: false },
@@ -705,7 +705,7 @@ describe("findRelevantNotes", () => {
       ).toBe(false);
     });
 
-    it("separates results that settled on different statuses", () => {
+    it("separates results that settled on different statuses (https://github.com/Brevilabs/obsidian-copilot-private/issues/362)", () => {
       expect(
         isSameRelevantNotesResult(
           { notes: [], status: "no-matches" },
@@ -714,7 +714,7 @@ describe("findRelevantNotes", () => {
       ).toBe(false);
     });
 
-    it("separates results that differ only in their status details", () => {
+    it("separates results that differ only in their status details (https://github.com/Brevilabs/obsidian-copilot-private/issues/362)", () => {
       expect(
         isSameRelevantNotesResult(
           { notes: [], status: "excluded", details: { exclusionRule: "**/journal/**" } },
@@ -723,7 +723,7 @@ describe("findRelevantNotes", () => {
       ).toBe(false);
     });
 
-    it("separates a result that gained a note from the one before it", () => {
+    it("separates a result that gained a note from the one before it (https://github.com/Brevilabs/obsidian-copilot-private/issues/362)", () => {
       expect(
         isSameRelevantNotesResult(
           { notes: [note("a.md", 0.7)], status: "matches" },

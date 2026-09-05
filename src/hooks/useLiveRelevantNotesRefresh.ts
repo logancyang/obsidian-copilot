@@ -33,7 +33,8 @@ interface UseLiveRelevantNotesRefreshOptions {
  * Polling is gated on Obsidian actually writing the note: with no write there
  * are no new embeddings to fetch, so an untouched note costs nothing. Each
  * write opens a window during which the note is re-queried, because Miyo
- * re-embeds a few seconds after the file lands on disk.
+ * re-embeds a few seconds after the file lands on disk, and switching live
+ * update on opens the same window so writes made while it was off are caught.
  * https://github.com/Brevilabs/obsidian-copilot-private/issues/362
  *
  * @param options - Runtime access, the enablement flag, the note being related,
@@ -49,8 +50,13 @@ export function useLiveRelevantNotesRefresh({
   // resubscribing to vault events on each render would drop pending state.
   const onRefreshRef = useRef(onRefresh);
   onRefreshRef.current = onRefresh;
+  // Only the switch turning on opens a window; the effect also re-runs when the
+  // reader opens another note, which the pane already queries on its own.
+  const wasEnabledRef = useRef(enabled);
 
   useEffect(() => {
+    const justEnabled = enabled && !wasEnabledRef.current;
+    wasEnabledRef.current = enabled;
     if (!enabled || !filePath) return;
 
     let deadline = 0;
@@ -73,11 +79,24 @@ export function useLiveRelevantNotesRefresh({
       }, LIVE_REFRESH_INTERVAL_MS);
     };
 
-    const eventRef = app.vault.on("modify", (file) => {
-      if (!(file instanceof TFile) || file.path !== filePath) return;
+    const openWindow = () => {
       deadline = Date.now() + LIVE_REFRESH_WINDOW_MS;
       startPolling();
+    };
+
+    const eventRef = app.vault.on("modify", (file) => {
+      if (!(file instanceof TFile) || file.path !== filePath) return;
+      openWindow();
     });
+
+    // Writes made while live update was off left the pane behind, and Miyo
+    // re-embeds seconds after each of them, so switching it on asks again at
+    // once and then keeps asking for as long as a write would.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/362
+    if (justEnabled) {
+      onRefreshRef.current();
+      openWindow();
+    }
 
     return () => {
       app.vault.offref(eventRef);

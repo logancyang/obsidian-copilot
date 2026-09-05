@@ -78,7 +78,7 @@ Links and backlinks do not create rows in any of these empty states. Copilot's o
 
 #### Live update
 
-The **Live** switch at the top right of the pane keeps Relevant Notes in step with the note you are writing. While it is on, the list re-ranks itself a few seconds after each change lands: notes that become more relevant rise and their relevance bar grows, newly relevant notes fade in, and notes that no longer relate fade out. Turning it off freezes the pane until you open another note or reconnect Miyo, and turning it back on brings it up to date at once. The switch is on by default and your choice is remembered.
+The **Live** switch at the top right of the pane keeps Relevant Notes in step with the note you are writing. While it is on, the list re-ranks itself a few seconds after each change lands: notes that become more relevant rise and their relevance bar grows, newly relevant notes fade in, and notes that no longer relate fade out. Turning it off freezes the pane until you open another note or reconnect Miyo, and turning it back on catches it up on whatever you wrote while it was off. The switch is on by default and your choice is remembered.
 
 Updates follow what Miyo has indexed rather than the text on screen, so they arrive a few seconds behind your typing. A note you are not editing costs nothing, and a change that does not move the ranking leaves the list alone. If your system is set to reduce motion, the list still updates but nothing animates.
 

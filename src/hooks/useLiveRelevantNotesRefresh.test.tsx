@@ -265,6 +265,51 @@ describe("useLiveRelevantNotesRefresh", () => {
       expect(second).toHaveBeenCalledTimes(1);
     });
 
+    it("asks again and keeps asking when live update is switched on (https://github.com/Brevilabs/obsidian-copilot-private/issues/362)", () => {
+      const harness = createVaultHarness();
+      const onRefresh = jest.fn();
+      const { rerender } = renderHook(
+        ({ enabled }: { enabled: boolean }) =>
+          useLiveRelevantNotesRefresh({
+            app: harness.app,
+            enabled,
+            filePath: "notes/draft.md",
+            onRefresh,
+          }),
+        { initialProps: { enabled: false } }
+      );
+
+      rerender({ enabled: true });
+      expect(onRefresh).toHaveBeenCalledTimes(1);
+      act(() => {
+        jest.advanceTimersByTime(LIVE_REFRESH_INTERVAL_MS * 2);
+      });
+
+      expect(onRefresh).toHaveBeenCalledTimes(3);
+    });
+
+    it("issues no query when the note it is already following changes", () => {
+      const harness = createVaultHarness();
+      const onRefresh = jest.fn();
+      const { rerender } = renderHook(
+        ({ filePath }: { filePath: string }) =>
+          useLiveRelevantNotesRefresh({
+            app: harness.app,
+            enabled: true,
+            filePath,
+            onRefresh,
+          }),
+        { initialProps: { filePath: "notes/draft.md" } }
+      );
+
+      rerender({ filePath: "notes/other.md" });
+      act(() => {
+        jest.advanceTimersByTime(LIVE_REFRESH_WINDOW_MS);
+      });
+
+      expect(onRefresh).not.toHaveBeenCalled();
+    });
+
     it("stops polling and unsubscribes when the pane closes", () => {
       const harness = createVaultHarness();
       const onRefresh = jest.fn();
