@@ -1,6 +1,6 @@
 import type ChainManager from "@/LLMProviders/chainManager";
 import { ChatMessage } from "@/types/message";
-import { App, Notice, TFile } from "obsidian";
+import { App, MarkdownView, Notice, TFile, type WorkspaceLeaf } from "obsidian";
 import type { MessageRepository } from "./MessageRepository";
 import { ChatPersistenceManager } from "./ChatPersistenceManager";
 import { mockTFile } from "@/__tests__/mockObsidian";
@@ -20,6 +20,7 @@ const asInternal = (pm: ChatPersistenceManager): PMInternal => pm as unknown as 
 
 // Mock the imports
 jest.mock("obsidian", () => ({
+  MarkdownView: class MarkdownView {},
   Notice: jest.fn(),
   TFile: jest.fn(),
   TFolder: jest.fn(),
@@ -96,6 +97,7 @@ jest.mock("@/utils", () => ({
 }));
 
 type MockApp = {
+  workspace: { getLeavesOfType: jest.Mock };
   vault: {
     getAbstractFileByPath: jest.Mock;
     createFolder: jest.Mock;
@@ -128,6 +130,9 @@ describe("ChatPersistenceManager", () => {
 
     // Setup mock app
     mockApp = {
+      workspace: {
+        getLeavesOfType: jest.fn().mockReturnValue([]),
+      },
       vault: {
         getAbstractFileByPath: jest.fn().mockReturnValue(null), // Default: file not found
         createFolder: jest.fn(),
@@ -351,6 +356,75 @@ Nature's quiet song`);
   });
 
   describe("saveChat", () => {
+    it("keeps every open editor synchronized so a stale save cannot erase the renewed chat (https://github.com/logancyang/obsidian-copilot/issues/2886)", async () => {
+      const messages: ChatMessage[] = [
+        {
+          id: "1",
+          message: "Renewed chat turn",
+          sender: USER_SENDER,
+          timestamp: {
+            epoch: 1695513480000,
+            display: "2024/09/23 22:18:00",
+            fileName: "2024_09_23_221800",
+          },
+          isVisible: true,
+        },
+      ];
+      const existingFile = mockTFile({
+        path: "test-folder/Renewed_chat_turn@20240923_221800.md",
+      });
+      const otherFile = mockTFile({ path: "notes/other.md" });
+      let firstEditorBuffer = "stale chat";
+      let secondEditorBuffer = "stale chat";
+      let persistedContent = "stale chat";
+      const firstView = new MarkdownView({} as WorkspaceLeaf);
+      const secondView = new MarkdownView({} as WorkspaceLeaf);
+      const otherView = new MarkdownView({} as WorkspaceLeaf);
+      Object.assign(firstView, {
+        file: existingFile,
+        editor: { setValue: jest.fn((content: string) => (firstEditorBuffer = content)) },
+        save: jest.fn(async () => {
+          persistedContent = firstEditorBuffer;
+        }),
+      });
+      Object.assign(secondView, {
+        file: existingFile,
+        editor: { setValue: jest.fn((content: string) => (secondEditorBuffer = content)) },
+        save: jest.fn(),
+      });
+      Object.assign(otherView, {
+        file: otherFile,
+        editor: { setValue: jest.fn() },
+        save: jest.fn(),
+      });
+
+      jest.spyOn(persistenceManager, "getChatHistoryFiles").mockResolvedValue([existingFile]);
+      mockMessageRepo.getDisplayMessages.mockReturnValue(messages);
+      mockApp.metadataCache.getFileCache.mockReturnValue({
+        frontmatter: { epoch: 1695513480000 },
+      });
+      mockApp.vault.getAbstractFileByPath.mockReturnValue(existingFile);
+      mockApp.workspace.getLeavesOfType.mockReturnValue([
+        { view: firstView },
+        { view: otherView },
+        { view: secondView },
+      ]);
+
+      await persistenceManager.saveChat("gpt-4");
+
+      expect(firstEditorBuffer).toContain("**user**: Renewed chat turn");
+      expect(secondEditorBuffer).toBe(firstEditorBuffer);
+      expect(otherView.editor.setValue).not.toHaveBeenCalled();
+      expect(firstView.save).toHaveBeenCalledTimes(1);
+      expect(secondView.save).not.toHaveBeenCalled();
+      expect(mockApp.vault.modify).not.toHaveBeenCalled();
+
+      mockApp.vault.read.mockImplementation(async () => persistedContent);
+      const reloadedMessages = await persistenceManager.loadChat(existingFile);
+      expect(reloadedMessages).toHaveLength(1);
+      expect(reloadedMessages[0].message).toBe("Renewed chat turn");
+    });
+
     it("should save chat to a markdown file", async () => {
       const messages: ChatMessage[] = [
         {
@@ -820,7 +894,7 @@ Nature's quiet song`);
       );
     });
 
-    it("should update existing file when epoch is stored as a string", async () => {
+    it("falls back to the vault for a string-epoch chat with no open editor (https://github.com/logancyang/obsidian-copilot/issues/2886)", async () => {
       const messages: ChatMessage[] = [
         {
           id: "1",
