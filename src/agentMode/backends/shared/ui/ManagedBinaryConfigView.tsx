@@ -53,7 +53,7 @@ export interface ManagedBinaryConfigActions {
   detectCustomPath: () => Promise<string | null>;
 }
 
-export interface ManagedBinaryConfigViewProps {
+export interface ManagedBinaryConfigProps {
   /** Readiness of the configured binary; drives the header badge and the warning strip. */
   state: InstallState;
   /**
@@ -71,13 +71,16 @@ export interface ManagedBinaryConfigViewProps {
   upgradeRun: ManagedBinaryRunState;
   actions: ManagedBinaryConfigActions;
   onClose: () => void;
+  searchedDirs?: () => string[];
+}
+
+export interface ManagedBinaryConfigViewProps extends ManagedBinaryConfigProps {
   title: string;
   binaryName: string;
   managedDescription: React.ReactNode;
   customDescription: React.ReactNode;
   customPathPlaceholder: string;
   customPathNotFoundHint: string;
-  searchedDirs?: () => string[];
   upgradeLabel: string;
   children?: React.ReactNode;
 }
