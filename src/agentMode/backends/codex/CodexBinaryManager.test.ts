@@ -76,6 +76,50 @@ describe("CodexBinaryManager", () => {
     });
 
     describe("install()", () => {
+      it.each(["success", "failure", "custom", "external"])(
+        "https://github.com/Brevilabs/obsidian-copilot-private/issues/368 cleans up only a replaced managed version after %s",
+        async (outcome) => {
+          const manager = new CodexBinaryManager();
+          const previousDir = path.join(
+            outcome === "external" ? tempDir : manager.getDataDir(),
+            "1.9.0"
+          );
+          const previousEntry = writeAdapter(previousDir, "1.9.0");
+          setSettings((current) => ({
+            agentMode: {
+              ...current.agentMode,
+              backends: {
+                ...current.agentMode.backends,
+                codex: {
+                  binaryPath: previousEntry,
+                  binaryVersion: "1.9.0",
+                  binarySource: outcome === "custom" ? "custom" : "managed",
+                },
+              },
+            },
+          }));
+          mockedExecFile.mockImplementation((command, args, _options, callback) => {
+            const cb = callback as (error: Error | null, stdout: string, stderr: string) => void;
+            if (outcome === "failure") cb(new Error("download failed"), "", "");
+            else if (command === "/usr/bin/npm") {
+              writeAdapter(args?.[args.indexOf("--prefix") + 1] as string);
+              cb(null, "", "");
+            } else cb(null, CODEX_ACP_PINNED_VERSION, "");
+            return {} as childProcess.ChildProcess;
+          });
+          if (outcome === "failure") {
+            await expect(manager.install()).rejects.toThrow("download failed");
+            expect(getSettings().agentMode.backends?.codex?.binaryPath).toBe(previousEntry);
+          } else {
+            await manager.install();
+            expect(getSettings().agentMode.backends?.codex?.binaryVersion).toBe(
+              CODEX_ACP_PINNED_VERSION
+            );
+          }
+          expect(fs.existsSync(previousEntry)).toBe(outcome !== "success");
+        }
+      );
+
       it("installs the exact package into the OS-local version directory and publishes shared state", async () => {
         mockedExecFile.mockImplementation((command, args, _options, callback) => {
           const cb = callback as (error: Error | null, stdout: string, stderr: string) => void;
@@ -153,11 +197,13 @@ describe("CodexBinaryManager", () => {
         expect(manager.getActionState()).toMatchObject({ kind: "error" });
       });
 
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/368 launches a cmd-only Windows npm through adjacent node.exe", async () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/368 launches a globally upgraded Windows npm using independently detected Node", async () => {
         setPlatform("win32");
+        mockedDetectBinary.mockResolvedValue("C:\\Program Files\\nodejs\\node.exe");
         mockedExecFile.mockImplementation((command, args, _options, callback) => {
           const cb = callback as (error: Error | null, stdout: string, stderr: string) => void;
-          if (command === "where") cb(null, "C:\\Tools\\nodejs\\npm.cmd\r\n", "");
+          if (command === "where")
+            cb(null, "C:\\Users\\test\\AppData\\Roaming\\npm\\npm.cmd\r\n", "");
           else cb(new Error("stop after npm launch"), "", "");
           return {} as childProcess.ChildProcess;
         });
@@ -165,10 +211,25 @@ describe("CodexBinaryManager", () => {
 
         await expect(manager.install()).rejects.toThrow("stop after npm launch");
         expect(mockedExecFile.mock.calls[0]?.slice(0, 2)).toEqual(["where", ["npm"]]);
-        expect(mockedExecFile.mock.calls[1]?.[0]).toBe("C:\\Tools\\nodejs\\node.exe");
+        expect(mockedExecFile.mock.calls[1]?.[0]).toBe("C:\\Program Files\\nodejs\\node.exe");
         expect(mockedExecFile.mock.calls[1]?.[1]?.[0]).toBe(
-          "C:\\Tools\\nodejs\\node_modules\\npm\\bin\\npm-cli.js"
+          "C:\\Users\\test\\AppData\\Roaming\\npm\\node_modules\\npm\\bin\\npm-cli.js"
         );
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/368 explains missing Node when a Windows npm shim is found", async () => {
+        setPlatform("win32");
+        mockedDetectBinary.mockResolvedValue(null);
+        mockedExecFile.mockImplementation((_command, _args, _options, callback) => {
+          (callback as (error: Error | null, stdout: string, stderr: string) => void)(
+            null,
+            "C:\\npm\\npm.cmd",
+            ""
+          );
+          return {} as childProcess.ChildProcess;
+        });
+        await expect(new CodexBinaryManager().install()).rejects.toThrow("Node.js was not found");
+        expect(mockedExecFile).toHaveBeenCalledTimes(1);
       });
 
       it("explains how to recover when Windows cannot find npm", async () => {
@@ -185,6 +246,21 @@ describe("CodexBinaryManager", () => {
         await expect(new CodexBinaryManager().install()).rejects.toThrow(
           "npm was not found. Install Node.js, restart Obsidian, then retry."
         );
+      });
+    });
+
+    describe("getActionState()", () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/368 disables competing actions during path validation and hides unrelated failures", () => {
+        const manager = new CodexBinaryManager();
+        const state = jest.spyOn(manager, "getRuntimeState");
+        for (const kind of ["busy", "detecting"] as const) {
+          state.mockReturnValue({ kind });
+          expect(manager.getActionState()).toEqual({ kind: "running", label: "Configuring…" });
+        }
+        state.mockReturnValue({ kind: "error", message: "bad path", operation: "configure" });
+        expect(manager.getActionState()).toEqual({ kind: "idle" });
+        expect(manager.getActionState()).toBe(manager.getActionState());
+        state.mockRestore();
       });
     });
 

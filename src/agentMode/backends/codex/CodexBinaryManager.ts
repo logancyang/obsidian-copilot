@@ -17,6 +17,9 @@ import { getSettings, updateAgentModeBackendFields } from "@/settings/model";
 import { buildCodexAcpInvocation, resolveSupportedCodexAcpPackage } from "./codexVersion";
 import { CODEX_ACP_PINNED_VERSION } from "./cliSetup";
 
+import { logWarn } from "@/logger";
+
+const IDLE_ACTION_STATE = Object.freeze({ kind: "idle" as const });
 const PACKAGE = "@agentclientprotocol/codex-acp";
 const TIMEOUT_MS = 5 * 60_000;
 const EMPTY_BINARY_SETTINGS: BinarySettings = Object.freeze({});
@@ -56,8 +59,15 @@ export class CodexBinaryManager extends ManagedBinaryManager<CodexInstallProgres
         percent: state.progress?.percent ?? 0,
       };
     }
-    if (state.kind === "error") return state;
-    return { kind: "idle" };
+    // Path validation holds the same lock; other windows must not start a competing update.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
+    if (state.kind === "busy" || state.kind === "detecting")
+      return { kind: "running", label: "Configuring…" };
+    // Retry installs only, never a failed custom-path selection.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
+    if (state.kind === "error" && state.operation === "install")
+      return { kind: "error", message: state.message };
+    return IDLE_ACTION_STATE;
   };
   getDataDir(): string {
     const home = requireNodeModule<typeof import("node:os")>("os").homedir();
@@ -72,6 +82,7 @@ export class CodexBinaryManager extends ManagedBinaryManager<CodexInstallProgres
   }: ManagedBinaryInstallOptions<CodexInstallProgress> & {
     signal: AbortSignal;
   }): Promise<InstalledBinary> {
+    const previous = this.readBinarySettings();
     const dataDir = this.getDataDir();
     const versionDir = path().join(dataDir, CODEX_ACP_PINNED_VERSION);
     const stageDir = path().join(dataDir, `.tmp-${CODEX_ACP_PINNED_VERSION}-${Date.now()}`);
@@ -89,10 +100,6 @@ export class CodexBinaryManager extends ManagedBinaryManager<CodexInstallProgres
         );
       }
       await verifyLauncher(stagedEntry, signal);
-      await fs().promises.writeFile(
-        path().join(stageDir, "install-manifest.json"),
-        JSON.stringify({ version: CODEX_ACP_PINNED_VERSION })
-      );
       // Cancellation during verification must not replace the working installation.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
       if (signal.aborted) throw new ManagedInstallAbortError();
@@ -103,6 +110,27 @@ export class CodexBinaryManager extends ManagedBinaryManager<CodexInstallProgres
         binaryVersion: CODEX_ACP_PINNED_VERSION,
         binarySource: "managed",
       });
+      // Reclaim only the previously selected managed version after its replacement is selected.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
+      if (
+        previous.binarySource === "managed" &&
+        previous.binaryVersion &&
+        previous.binaryVersion !== CODEX_ACP_PINNED_VERSION
+      ) {
+        const previousDir = path().join(dataDir, previous.binaryVersion);
+        // Only a recorded entry owned by this manager is eligible for removal.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
+        if (
+          path().dirname(previousDir) === dataDir &&
+          previous.binaryPath === entryPath(previousDir)
+        ) {
+          await fs()
+            .promises.rm(previousDir, { recursive: true, force: true })
+            .catch((error) =>
+              logWarn(`[AgentMode] Could not remove previous Codex adapter: ${error}`)
+            );
+        }
+      }
       onProgress?.({ label: "Codex adapter ready.", percent: 100 });
       return { version: CODEX_ACP_PINNED_VERSION, path: finalEntry };
     } finally {
@@ -129,7 +157,11 @@ async function installPackage(prefix: string, signal: AbortSignal): Promise<void
   const npmPaths = windows ? path().win32 : path();
   const npmDir = npmPaths.dirname(npm);
   const npmShim = windows && /\.cmd$/i.test(npm);
-  const command = npmShim ? npmPaths.join(npmDir, "node.exe") : npm;
+  // Global npm upgrades can put npm.cmd in a different directory from Node.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
+  const command = npmShim ? await detectBinary("node") : npm;
+  if (!command)
+    throw new Error("Node.js was not found. Install Node.js, restart Obsidian, then retry.");
   const commandArgs = npmShim
     ? [npmPaths.join(npmDir, "node_modules", "npm", "bin", "npm-cli.js")]
     : [];
