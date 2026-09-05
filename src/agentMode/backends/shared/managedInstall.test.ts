@@ -32,6 +32,18 @@ describe("managedInstall", () => {
       expect(fs.readdirSync(root)).toEqual(["1.0.0"]);
     });
 
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/368 restores the prior installation when staged promotion fails", async () => {
+      const stage = path.join(root, "missing-stage");
+      const version = path.join(root, "1.0.0");
+      fs.mkdirSync(version);
+      fs.writeFileSync(path.join(version, "old"), "previous runtime");
+
+      await expect(promoteManagedVersion(stage, version, "Codex")).rejects.toThrow();
+
+      expect(fs.readFileSync(path.join(version, "old"), "utf8")).toBe("previous runtime");
+      expect(fs.readdirSync(root)).toEqual(["1.0.0"]);
+    });
+
     it("promotes into an absent version directory", async () => {
       const stage = path.join(root, "stage");
       const version = path.join(root, "1.0.0");

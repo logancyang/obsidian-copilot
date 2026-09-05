@@ -414,7 +414,7 @@ export class OpencodeBinaryManager extends ManagedBinaryManager<ProgressEvent, I
    * download → extract → atomic rename → persist settings. Idempotent when
    * an existing install matches the pinned manifest.
    *
-   * Private and lock-free on purpose: {@link install} and
+   * Protected and lock-free: {@link install} and
    * {@link upgradeManaged} are the entry points that own an operation, and
    * upgrade calls this directly so it does not re-enter the lock it already
    * holds — or settle the run to idle before it has removed the old version.
