@@ -13,7 +13,7 @@ Copilot for Obsidian is an AI-powered assistant plugin that integrates various L
 - `npm run lint` / `npm run lint:fix` — ESLint check / autofix.
 - `npm run format` / `npm run format:check` — Prettier write / check.
 - **Before PR: always run `npm run format && npm run lint`.**
-- `npm run test` — unit tests. `npm run test:integration` — integration (needs API keys). Single test: `npm test -- -t "test name"`.
+- `npm run test` — unit tests. Single test: `npm test -- -t "test name"`.
 - `npm run test:vault` — macOS-only build-and-deploy into `$COPILOT_TEST_VAULT_PATH`; see [`TESTING_GUIDE.md`](./designdocs/agents/TESTING_GUIDE.md).
 
 ## Core principles (apply to every change)

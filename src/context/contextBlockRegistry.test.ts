@@ -1,11 +1,8 @@
 import {
-  getBlockType,
   getSourceType,
   isRecoverable,
-  getNeverCompactTags,
   extractSourceFromBlock,
   extractContentFromBlock,
-  detectBlockTag,
   CONTEXT_BLOCK_TYPES,
 } from "./contextBlockRegistry";
 
@@ -20,19 +17,6 @@ describe("contextBlockRegistry", () => {
       expect(tags).toContain("twitter_content");
       expect(tags).toContain("selected_text");
       expect(tags).toContain("localSearch");
-    });
-  });
-
-  describe("getBlockType", () => {
-    it("should return block type for known tags", () => {
-      const noteContext = getBlockType("note_context");
-      expect(noteContext).toBeDefined();
-      expect(noteContext?.sourceType).toBe("note");
-      expect(noteContext?.recoverable).toBe(true);
-    });
-
-    it("should return undefined for unknown tags", () => {
-      expect(getBlockType("unknown_tag")).toBeUndefined();
     });
   });
 
@@ -73,15 +57,6 @@ describe("contextBlockRegistry", () => {
 
     it("should return false for unknown types", () => {
       expect(isRecoverable("unknown_type")).toBe(false);
-    });
-  });
-
-  describe("getNeverCompactTags", () => {
-    it("should return set of non-recoverable tags", () => {
-      const tags = getNeverCompactTags();
-      expect(tags.has("selected_text")).toBe(true);
-      expect(tags.has("web_selected_text")).toBe(true);
-      expect(tags.has("note_context")).toBe(false);
     });
   });
 
@@ -137,18 +112,6 @@ describe("contextBlockRegistry", () => {
     it("should return whole block if no content tags", () => {
       const xml = "<note>Plain text</note>";
       expect(extractContentFromBlock(xml)).toBe(xml);
-    });
-  });
-
-  describe("detectBlockTag", () => {
-    it("should detect tag from block start", () => {
-      expect(detectBlockTag("<note_context>...</note_context>")).toBe("note_context");
-      expect(detectBlockTag('<url_content attr="value">...</url_content>')).toBe("url_content");
-    });
-
-    it("should return null for invalid blocks", () => {
-      expect(detectBlockTag("not xml")).toBeNull();
-      expect(detectBlockTag("")).toBeNull();
     });
   });
 

@@ -32,19 +32,13 @@ describe("SearchTools", () => {
       );
     });
 
-    it("accepts epoch time ranges and pre-expanded query data", () => {
+    it("accepts epoch time ranges", () => {
       const result = schema.safeParse({
         query: "meetings last week",
         salientTerms: ["meetings"],
         timeRange: {
           startTime: 1234567890000,
           endTime: 1234567900000,
-        },
-        _preExpandedQuery: {
-          originalQuery: "meetings last week",
-          salientTerms: ["meetings"],
-          expandedQueries: ["recent meetings"],
-          recallTerms: ["meetings", "recent meetings"],
         },
       });
 
@@ -72,7 +66,7 @@ describe("SearchTools", () => {
       expect(schema.safeParse({ query: "test query" }).success).toBe(false);
     });
 
-    it("rejects legacy TimeInfo objects and incomplete pre-expanded query data", () => {
+    it("rejects legacy TimeInfo objects", () => {
       expect(
         schema.safeParse({
           query: "meetings last week",
@@ -80,18 +74,6 @@ describe("SearchTools", () => {
           timeRange: {
             startTime: { epoch: 1234567890000 },
             endTime: { epoch: 1234567900000 },
-          },
-        }).success
-      ).toBe(false);
-
-      expect(
-        schema.safeParse({
-          query: "meetings last week",
-          salientTerms: ["meetings"],
-          _preExpandedQuery: {
-            originalQuery: "meetings last week",
-            salientTerms: ["meetings"],
-            expandedQueries: ["recent meetings"],
           },
         }).success
       ).toBe(false);

@@ -1,4 +1,7 @@
-# Search v3: Chunk-Based Retrieval (Current Implementation)
+# Search v3: Chunk-Based Retrieval (Deprecated)
+
+Deprecated: Vault Search v3 is awaiting removal. Its runtime code remains for
+existing callers, but its dedicated tests are retired. Miyo remains supported.
 
 This document reflects the runtime behavior in the current codebase.
 Search v3 is the local lexical retrieval core used by `TieredLexicalRetriever`. Miyo is the only semantic search backend.
