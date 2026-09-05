@@ -1,36 +1,29 @@
 # Testing Guide
 
-How to test the Copilot plugin across three layers — unit, integration, and
-end-to-end. Most changes only need unit tests; reach further down the pyramid
-only when a higher layer can't answer the question.
+How to test the Copilot plugin with unit and end-to-end tests. Most changes only
+need unit tests; use end-to-end tests when unit tests can't answer the question.
 
 ## Test pyramid
 
-| Layer       | Command                             | When to use                                                                                                                                                           |
-| ----------- | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Unit        | `npm run test`                      | Pure logic. Fast. Mocks the Obsidian API. Default for any code change that doesn't touch Obsidian itself.                                                             |
-| Integration | `npm run test:integration`          | LLM-provider HTTP calls. Requires API keys in `.env.test`.                                                                                                            |
-| E2E         | `obsidian` CLI against a real vault | Anything that needs the live React tree, the real Obsidian DOM, or actual settings persistence — UI regressions, settings round-trips, plugin lifecycle, perf checks. |
+| Layer | Command                             | When to use                                                                                                                                                           |
+| ----- | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Unit  | `npm run test`                      | Pure logic. Fast. Mocks the Obsidian API. Default for any code change that doesn't touch Obsidian itself.                                                             |
+| E2E   | `obsidian` CLI against a real vault | Anything that needs the live React tree, the real Obsidian DOM, or actual settings persistence — UI regressions, settings round-trips, plugin lifecycle, perf checks. |
 
 ## Unit tests
 
-- Jest with TypeScript support. `npm run test` runs the unit suite (excludes
-  integration tests); run a single test with `npm test -- -t "test name"`.
+- Jest with TypeScript support. `npm run test` runs the unit suite; run a
+  single test with `npm test -- -t "test name"`.
 - Mock the Obsidian API for plugin testing.
 - Test files live adjacent to the implementation (`.test.ts`).
 - Use `@testing-library/react` for component testing.
 - For how to structure code so it's unit-testable — dependency injection, pure
   leaf modules, the litmus test — see [`STYLE_GUIDE.md`](./STYLE_GUIDE.md).
 
-## Integration tests
-
-`npm run test:integration` exercises real LLM-provider HTTP calls and requires
-API keys in `.env.test`.
-
 ## End-to-end testing (Obsidian CLI)
 
 E2E via the CLI is the slowest and most fragile layer — reach for it only when
-the unit/integration layers can't answer the question.
+unit tests can't answer the question.
 
 A field guide for coding agents driving the Copilot plugin through the Obsidian
 desktop CLI. Everything here was validated against Obsidian `1.12.7` with the

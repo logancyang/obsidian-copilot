@@ -8,12 +8,7 @@ const sourceFiles = ["src/**/*.{ts,tsx}", "dev/gallery/**/*.{ts,tsx}"];
 export default [
   ...baseConfig,
   {
-    ignores: [
-      "**/*.test.{js,jsx,ts,tsx}",
-      "**/__mocks__/**",
-      "src/integration_tests/**",
-      "dev/gallery/esbuild.config.mjs",
-    ],
+    ignores: ["**/*.test.{js,jsx,ts,tsx}", "**/__mocks__/**", "dev/gallery/esbuild.config.mjs"],
   },
   {
     files: sourceFiles,

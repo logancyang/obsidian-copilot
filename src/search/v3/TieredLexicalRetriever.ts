@@ -26,6 +26,8 @@ async function safeGetChatModel(): Promise<BaseChatModel | null> {
 }
 
 /**
+ * Deprecated: Vault Search v3 is awaiting removal; retained for existing callers.
+ *
  * Tiered Lexical Retriever that implements multi-stage note retrieval:
  * 1. Grep scan for initial candidates
  * 2. Graph expansion to find related notes

@@ -121,22 +121,6 @@ Commits to `master` must be signed and verified by GitHub. The easiest path is S
 
 If you already use GPG, set `gpg.format openpgp` instead and register the GPG public key at https://github.com/settings/gpg/new. Commits merged via the GitHub web UI are auto-signed by GitHub and don't need this setup.
 
-## Prompt Testing
-
-If you are making prompt changes, make sure to run the integration tests using the following steps:
-
-First creating a `.env.test` file in the root directory with your Gemini API keys
-
-```
-GEMINI_API_KEY=your_api_key_here
-```
-
-Then run the integration tests:
-
-```
-npm run test:integration
-```
-
 ## Manual Testing Checklist
 
 This is a list of items to manually test after any non-trivial code change. Test the items relevant to your code change. If not sure, randomly choose items below.
