@@ -2661,6 +2661,49 @@ export class AgentSessionManager {
     return this.activeSessionId ? (this.sessions.get(this.activeSessionId) ?? null) : null;
   }
 
+  /**
+   * Return the Quick Chat configured model corresponding to the active Agent
+   * Chat model, or `null` when the active model cannot run through Quick Chat.
+   * Editor commands use this as a snapshot when they open; they do not follow
+   * later Agent Chat model changes.
+   *
+   * @returns The unique Chat-enabled configured model matching the active
+   *   Agent Chat wire id, or `null` when no safe match exists.
+   */
+  getActiveChatConfiguredModelId(): string | null {
+    const session = this.getActiveSession();
+    const selection =
+      session?.getState()?.model?.current ?? session?.getPendingModelSelection() ?? null;
+    const baseModelId = selection?.baseModelId;
+    // Without a live Agent Chat model or startup seed there is no selection to inherit.
+    if (!session || !baseModelId) return null;
+
+    const descriptor = this.opts.resolveDescriptor(session.backendId);
+    // Agent-native backends have no in-process Chat equivalent.
+    if (!descriptor?.getWireBaseId) return null;
+
+    const settings = getSettings();
+    const chatEnabledIds = new Set(settings.backends.chat?.enabledModels ?? []);
+    let matchingModelId: string | null = null;
+
+    for (const model of settings.configuredModels) {
+      const provider = settings.providers[model.providerId];
+      // Agent-owned rows cannot execute through the in-process Chat backend.
+      if (!provider || provider.origin.kind === "agent") continue;
+      if (descriptor.getWireBaseId(model.configuredModelId, settings) !== baseModelId) continue;
+      if (matchingModelId !== null) {
+        // The Agent wire id has no provider identity, so an ambiguous match
+        // could route the command through the wrong credentials or endpoint.
+        return null;
+      }
+      matchingModelId = model.configuredModelId;
+    }
+
+    // Native Agent models and unavailable Chat models retain the legacy
+    // Quick Chat selection at the command surface.
+    return matchingModelId && chatEnabledIds.has(matchingModelId) ? matchingModelId : null;
+  }
+
   getActiveChatUIState(): AgentChatUIState | null {
     return this.activeSessionId ? (this.chatUIStates.get(this.activeSessionId) ?? null) : null;
   }

@@ -2374,7 +2374,7 @@ describe("AgentSession.create (via start)", () => {
     await session.ready;
   });
 
-  it("stays starting until the backend applies the desired model", async () => {
+  it("keeps the seeded model available during startup until the backend applies it", async () => {
     const mock = makeMockBackend();
     const backendState: BackendState = {
       model: {
@@ -2413,10 +2413,15 @@ describe("AgentSession.create (via start)", () => {
     });
 
     expect(session.getState()).toBeNull();
+    expect(session.getPendingModelSelection()).toEqual({
+      baseModelId: "big-pickle",
+      effort: null,
+    });
 
     resolveNewSession!({ sessionId: "acp-1", state: backendState });
     await waitFor(() => {
       expect(session.getState()?.model?.current.baseModelId).toBe("big-pickle");
+      expect(session.getPendingModelSelection()).toBeNull();
       expect(mock.setSessionModel).toHaveBeenCalledWith({
         sessionId: "acp-1",
         modelId: "big-pickle",
@@ -2438,6 +2443,43 @@ describe("AgentSession.create (via start)", () => {
     await session.ready;
     expect(session.getState()?.model?.current.baseModelId).toBe("big-pickle");
     expect(session.getStatus()).toBe("idle");
+  });
+
+  it("clears a seeded model when startup fails or the session is disposed", async () => {
+    const failedMock = makeMockBackend();
+    failedMock.newSession.mockRejectedValueOnce(new Error("startup failed"));
+    const failedSession = AgentSession.start({
+      backend: failedMock.asBackend,
+      cwd: "/vault",
+      internalId: "failed-session",
+      backendId: "opencode",
+      defaultModelSelection: { baseModelId: "big-pickle", effort: "high" },
+    });
+
+    expect(failedSession.getPendingModelSelection()).toEqual({
+      baseModelId: "big-pickle",
+      effort: "high",
+    });
+    await failedSession.ready.catch(() => undefined);
+    expect(failedSession.getPendingModelSelection()).toBeNull();
+
+    const disposedMock = makeMockBackend();
+    let resolveNewSession: (() => void) | null = null;
+    disposedMock.newSession.mockImplementationOnce(
+      () => new Promise<void>((resolve) => (resolveNewSession = resolve))
+    );
+    const disposedSession = AgentSession.start({
+      backend: disposedMock.asBackend,
+      cwd: "/vault",
+      internalId: "disposed-session",
+      backendId: "opencode",
+      defaultModelSelection: { baseModelId: "big-pickle", effort: null },
+    });
+
+    expect(disposedSession.getPendingModelSelection()).not.toBeNull();
+    await disposedSession.dispose();
+    expect(disposedSession.getPendingModelSelection()).toBeNull();
+    resolveNewSession!();
   });
 
   it("applies a seeded effort via setConfigOption without a redundant setModel", async () => {

@@ -18,6 +18,7 @@ import {
   getSettings as mockedGetSettings,
   setSettings as mockedSetSettings,
 } from "@/settings/model";
+import type { CopilotSettings } from "@/settings/model";
 import * as projectsState from "@/projects/state";
 import {
   ensureProjectContextMaterialized,
@@ -340,7 +341,49 @@ function buildDescriptor(): BackendDescriptor {
     subscribeInstallState: jest.fn(),
     openInstallUI: jest.fn(),
     createBackendProcess: jest.fn(() => makeMockBackendProcess()),
+    getWireBaseId: jest.fn(
+      (configuredModelId: string, settings: CopilotSettings) =>
+        settings.configuredModels.find((model) => model.configuredModelId === configuredModelId)
+          ?.info.id ?? null
+    ),
   } as unknown as BackendDescriptor;
+}
+
+function makeChatModelSettings(
+  models: {
+    configuredModelId: string;
+    providerId?: string;
+    modelId: string;
+    origin?: "byok" | "agent";
+  }[],
+  enabledModels = models.map((model) => model.configuredModelId)
+): CopilotSettings {
+  const configuredModels = models.map(
+    ({ configuredModelId, providerId = "provider", modelId }) => ({
+      configuredModelId,
+      providerId,
+      info: { id: modelId, displayName: modelId },
+      configuredAt: 0,
+    })
+  );
+  const providers: Record<string, unknown> = {};
+  for (const { providerId = "provider", origin = "byok" } of models) {
+    providers[providerId] = {
+      providerId,
+      providerType: "anthropic",
+      displayName: providerId,
+      origin:
+        origin === "agent"
+          ? { kind: "agent", agentType: "opencode" }
+          : { kind: "byok", catalogProviderId: "anthropic" },
+      addedAt: 0,
+    };
+  }
+  return {
+    configuredModels,
+    providers,
+    backends: { chat: { enabledModels } },
+  } as unknown as CopilotSettings;
 }
 
 function modelCatalog(baseModelId: string): BackendModelCatalog {
@@ -395,6 +438,14 @@ beforeEach(() => {
   // subscriptions linger; clear them so emitSettingsChange only reaches
   // the manager built in the current test.
   settingsChangeCallbacks.clear();
+  (mockedGetSettings as jest.Mock).mockImplementation(() => ({
+    agentMode: {
+      activeBackend: "opencode",
+      backends: {},
+      notificationSound: mockNotificationSound,
+      notificationSoundId: "piano",
+    },
+  }));
 });
 
 describe("AgentSessionManager", () => {
@@ -623,6 +674,157 @@ describe("AgentSessionManager", () => {
         }
       });
     });
+  });
+});
+
+describe("AgentSessionManager.getActiveChatConfiguredModelId", () => {
+  function activeSession(backendId: string, baseModelId: string): AgentSession {
+    return {
+      backendId,
+      getState: () =>
+        ({ model: { current: { baseModelId, effort: null } } }) as unknown as BackendState,
+    } as unknown as AgentSession;
+  }
+
+  it("maps the active Agent Chat model to its enabled Quick Chat configured model", () => {
+    const mgr = buildManager();
+    jest
+      .spyOn(mgr, "getActiveSession")
+      .mockReturnValue(activeSession("opencode", "anthropic/sonnet"));
+    (mockedGetSettings as jest.Mock).mockReturnValue(
+      makeChatModelSettings([{ configuredModelId: "chat-model", modelId: "anthropic/sonnet" }])
+    );
+
+    expect(mgr.getActiveChatConfiguredModelId()).toBe("chat-model");
+  });
+
+  it("returns null without an active session or model state", () => {
+    const mgr = buildManager();
+    expect(mgr.getActiveChatConfiguredModelId()).toBeNull();
+
+    jest.spyOn(mgr, "getActiveSession").mockReturnValue({
+      backendId: "opencode",
+      getState: () => null,
+      getPendingModelSelection: () => null,
+    } as unknown as AgentSession);
+    expect(mgr.getActiveChatConfiguredModelId()).toBeNull();
+  });
+
+  it("uses the seeded Agent Chat model while the active session is starting", () => {
+    const mgr = buildManager();
+    jest.spyOn(mgr, "getActiveSession").mockReturnValue({
+      backendId: "opencode",
+      getState: () => null,
+      getPendingModelSelection: () => ({ baseModelId: "anthropic/new", effort: "high" }),
+    } as unknown as AgentSession);
+    (mockedGetSettings as jest.Mock).mockReturnValue(
+      makeChatModelSettings([{ configuredModelId: "chat-model", modelId: "anthropic/new" }])
+    );
+
+    expect(mgr.getActiveChatConfiguredModelId()).toBe("chat-model");
+  });
+
+  it("returns null for an Agent-native backend model with no Chat mapping", () => {
+    const mgr = buildManager();
+    jest
+      .spyOn(mgr, "getActiveSession")
+      .mockReturnValue(activeSession("claude", "claude-sonnet-4-5"));
+    (mockedGetSettings as jest.Mock).mockReturnValue(
+      makeChatModelSettings([{ configuredModelId: "chat-model", modelId: "claude-sonnet-4-5" }])
+    );
+
+    expect(mgr.getActiveChatConfiguredModelId()).toBeNull();
+  });
+
+  it("returns null when no matching model is enabled for Quick Chat", () => {
+    const mgr = buildManager();
+    jest
+      .spyOn(mgr, "getActiveSession")
+      .mockReturnValue(activeSession("opencode", "anthropic/sonnet"));
+    (mockedGetSettings as jest.Mock).mockReturnValue(
+      makeChatModelSettings(
+        [
+          { configuredModelId: "chat-model", modelId: "anthropic/sonnet" },
+          { configuredModelId: "other-model", modelId: "anthropic/other" },
+        ],
+        ["other-model"]
+      )
+    );
+
+    expect(mgr.getActiveChatConfiguredModelId()).toBeNull();
+  });
+
+  it("fails closed when multiple enabled non-agent models map to the same Agent model", () => {
+    const mgr = buildManager();
+    jest
+      .spyOn(mgr, "getActiveSession")
+      .mockReturnValue(activeSession("opencode", "anthropic/sonnet"));
+    (mockedGetSettings as jest.Mock).mockReturnValue(
+      makeChatModelSettings([
+        {
+          configuredModelId: "first-model",
+          providerId: "first-provider",
+          modelId: "anthropic/sonnet",
+        },
+        {
+          configuredModelId: "second-model",
+          providerId: "second-provider",
+          modelId: "anthropic/sonnet",
+        },
+      ])
+    );
+
+    expect(mgr.getActiveChatConfiguredModelId()).toBeNull();
+  });
+
+  it("fails closed when a disabled non-agent model shares the Agent model with an enabled one", () => {
+    const mgr = buildManager();
+    jest
+      .spyOn(mgr, "getActiveSession")
+      .mockReturnValue(activeSession("opencode", "anthropic/sonnet"));
+    (mockedGetSettings as jest.Mock).mockReturnValue(
+      makeChatModelSettings(
+        [
+          {
+            configuredModelId: "enabled-model",
+            providerId: "enabled-provider",
+            modelId: "anthropic/sonnet",
+          },
+          {
+            configuredModelId: "disabled-model",
+            providerId: "disabled-provider",
+            modelId: "anthropic/sonnet",
+          },
+        ],
+        ["enabled-model"]
+      )
+    );
+
+    expect(mgr.getActiveChatConfiguredModelId()).toBeNull();
+  });
+
+  it("ignores an agent-owned duplicate and returns the runnable Chat model", () => {
+    const mgr = buildManager();
+    jest
+      .spyOn(mgr, "getActiveSession")
+      .mockReturnValue(activeSession("opencode", "anthropic/sonnet"));
+    (mockedGetSettings as jest.Mock).mockReturnValue(
+      makeChatModelSettings([
+        {
+          configuredModelId: "agent-model",
+          providerId: "agent-provider",
+          modelId: "anthropic/sonnet",
+          origin: "agent",
+        },
+        {
+          configuredModelId: "chat-model",
+          providerId: "chat-provider",
+          modelId: "anthropic/sonnet",
+        },
+      ])
+    );
+
+    expect(mgr.getActiveChatConfiguredModelId()).toBe("chat-model");
   });
 });
 
