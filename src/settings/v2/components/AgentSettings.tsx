@@ -4,6 +4,7 @@ import {
   backendNeedsSelfHostWarning,
   InstallBadge,
   useBackendInstallState,
+  useManagedInstallActionState,
   type BackendDescriptor,
 } from "@/agentMode";
 import { Button } from "@/components/ui/button";
@@ -229,7 +230,18 @@ const BackendPanel: React.FC<{
   const manager = plugin.agentSessionManager;
 
   const installState = useBackendInstallState(descriptor, plugin);
+  const managedInstall = useManagedInstallActionState(descriptor, plugin);
   const resolvedPath = descriptor.getResolvedBinaryPath?.(settings) ?? null;
+  const canUpdate = installState.kind === "incompatible" && descriptor.managedInstall !== undefined;
+  const updating = managedInstall.kind === "running";
+  const updateFailed = managedInstall.kind === "error";
+
+  const runManagedInstall = React.useCallback(() => {
+    if (!descriptor.managedInstall || updating) return;
+    descriptor.managedInstall
+      .run(plugin)
+      .catch((error) => logError(`[AgentMode] ${descriptor.id} update failed`, error));
+  }, [descriptor, plugin, updating]);
 
   // Probe when ready but uncached — the load-time preload may have skipped this
   // backend (binary installed after plugin start).
@@ -295,12 +307,27 @@ const BackendPanel: React.FC<{
                   </span>
                 )}
                 {(installState.kind === "incompatible" || installState.kind === "error") && (
-                  <span className="tw-text-xs tw-text-error">{installState.message}</span>
+                  <span className="tw-text-xs tw-text-error">
+                    {canUpdate && updating
+                      ? `${managedInstall.label} ${managedInstall.percent}%`
+                      : canUpdate && updateFailed
+                        ? managedInstall.message
+                        : installState.message}
+                  </span>
                 )}
               </div>
             </div>
             {InlineInstall ? (
               <InlineInstall plugin={plugin} />
+            ) : canUpdate ? (
+              <Button
+                className="tw-shrink-0"
+                size="default"
+                disabled={updating}
+                onClick={runManagedInstall}
+              >
+                {updating ? "Updating…" : updateFailed ? "Retry" : "Update"}
+              </Button>
             ) : (
               <Button
                 className="tw-shrink-0"
