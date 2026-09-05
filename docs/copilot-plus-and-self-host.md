@@ -73,14 +73,14 @@ After the included Plus period ends, the lifetime Self-Host and Miyo benefits re
 
 The label in the model picker tells you which service handles the conversation:
 
-| Model source                | How access works                                               | Who processes the prompt                                        |
-| --------------------------- | -------------------------------------------------------------- | --------------------------------------------------------------- |
-| **Copilot-hosted**          | Lite, Plus, or included Supporter access                       | Brevilabs and the enterprise model provider used for that model |
-| **Cloud BYOK**              | Your API key under BYOK                                        | The provider and endpoint you configured                        |
-| **Local BYOK**              | Ollama, LM Studio, or another local OpenAI-compatible endpoint | Your local endpoint                                             |
-| **opencode-reported model** | Authentication managed by opencode                             | The provider behind that opencode model                         |
-| **Claude**                  | Claude Code login or environment                               | Anthropic under your Claude account                             |
-| **Codex**                   | Codex CLI login through `codex-acp`                            | OpenAI under your Codex or ChatGPT account                      |
+| Model source                | How access works                                                       | Who processes the prompt                                        |
+| --------------------------- | ---------------------------------------------------------------------- | --------------------------------------------------------------- |
+| **Copilot-hosted**          | Lite, Plus, or included Supporter access                               | Brevilabs and the enterprise model provider used for that model |
+| **Cloud BYOK**              | Your API key under BYOK                                                | The provider and endpoint you configured                        |
+| **Local BYOK**              | Ollama, LM Studio, llmman, or another local OpenAI-compatible endpoint | Your local endpoint                                             |
+| **opencode-reported model** | Authentication managed by opencode                                     | The provider behind that opencode model                         |
+| **Claude**                  | Claude Code login or environment                                       | Anthropic under your Claude account                             |
+| **Codex**                   | Codex CLI login through `codex-acp`                                    | OpenAI under your Codex or ChatGPT account                      |
 
 A Claude or ChatGPT subscription is not an API key. Use the Claude or Codex Agent Chat setup for those subscriptions. Use BYOK only when you have API access or an OpenAI-compatible endpoint.
 

@@ -3,7 +3,7 @@
  * wizard alongside catalog-derived definitions.
  *
  * Covers providers `models.dev` does not list — local runners
- * (Ollama, LM Studio) and the
+ * (Ollama, LM Studio, llmman) and the
  * catch-all custom OpenAI-compatible endpoint. None carry a model list;
  * available ids come from `/models` fetched at dialog open or from the
  * user typing them in manually.
@@ -32,6 +32,16 @@ export const LOCAL_PROVIDER_DEFINITIONS: readonly ProviderDefinition[] = [
     defaultBaseUrl: "http://localhost:1234/v1",
     requiresApiKey: false,
     modelInputHint: "e.g. lmstudio-community/Qwen2.5-7B-Instruct-GGUF",
+  },
+  {
+    // llmman (https://github.com/llmmanorg/llmman) serves the Ollama and OpenAI
+    // APIs on port 17434; like Ollama, Copilot talks to its `/v1` routes.
+    id: "llmman",
+    displayName: "llmman",
+    providerType: "openai-compatible",
+    defaultBaseUrl: "http://localhost:17434/v1",
+    requiresApiKey: false,
+    modelInputHint: "e.g. gemma4, hf.co/unsloth/Qwen3.5-0.8B-GGUF",
   },
 ];
 
