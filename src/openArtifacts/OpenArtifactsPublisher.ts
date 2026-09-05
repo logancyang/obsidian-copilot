@@ -19,9 +19,8 @@ import {
 } from "@/openArtifacts/openArtifactsFrontmatter";
 import {
   buildOpenArtifactsDocument,
-  createOpenArtifactsReviewDocument,
+  createOpenArtifactsDocument,
   OpenArtifactsDocumentTooLargeError,
-  OpenArtifactsDocumentUnsafeError,
 } from "@/openArtifacts/openArtifactsDocument";
 import {
   appendOpenArtifactsLedgerEntry,
@@ -179,10 +178,7 @@ function operationFailure(action: OpenArtifactsAction, error: unknown): OpenArti
       retryable: false,
     };
   }
-  if (
-    error instanceof OpenArtifactsDocumentTooLargeError ||
-    error instanceof OpenArtifactsDocumentUnsafeError
-  ) {
+  if (error instanceof OpenArtifactsDocumentTooLargeError) {
     return {
       kind: "failure",
       action,
@@ -408,7 +404,7 @@ export class OpenArtifactsPublisher {
       let document: OpenArtifactsDocument;
       let docId: string | null = null;
       try {
-        document = createOpenArtifactsReviewDocument(sourceFile.basename, handoff.html);
+        document = createOpenArtifactsDocument(sourceFile.basename, handoff.html);
         docId = await getOpenArtifactsDocId(this.app, sourceFile);
       } catch (error) {
         const action: OpenArtifactsAction = docId ? "update" : "publish";

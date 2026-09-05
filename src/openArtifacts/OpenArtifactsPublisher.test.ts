@@ -1231,24 +1231,19 @@ describe("OpenArtifactsPublisher", () => {
         expect(harness.client.publish).not.toHaveBeenCalled();
       });
 
-      it("rejects active HTML before opening review", async () => {
+      it("reviews and publishes arbitrary HTML unchanged only after confirmation", async () => {
         const harness = createHarness();
-        harness.readStagedHtml.mockResolvedValueOnce(
-          '<!doctype html><meta http-equiv="refresh" content="0;url=https://attacker.example">'
-        );
-
-        const outcome = await harness.publisher.reviewAgentPublish(
-          harness.file.path,
-          ".openartifacts/handoffs/redirect.html"
-        );
-
-        expect(outcome).toEqual({
-          status: "failed",
-          message: "OpenArtifacts HTML is not publishable: remove the automatic redirect.",
-        });
-        expect(harness.openModal).not.toHaveBeenCalled();
+        const html = String.raw`<!doctype html><link rel="stylesheet" href="https://example.com/style.css"><style>p::before{content:"\00b7"}</style><script>document.body.textContent="Rendered"</script><iframe src="https://example.com"></iframe><form><input></form>`;
+        const review = await startAgentReview(harness, html);
         expect(harness.client.publish).not.toHaveBeenCalled();
-        expect(harness.client.update).not.toHaveBeenCalled();
+        expect(review.options.review?.payload.html).toBe(html);
+        await review.options.onConfirm("publish", activeDocument);
+        expect(harness.client.publish).toHaveBeenCalledWith(
+          expect.objectContaining({ html }),
+          "decrypted-license"
+        );
+        review.options.onClosed?.();
+        await expect(review.outcome).resolves.toMatchObject({ status: "published" });
       });
 
       it("fails before review when identity is malformed", async () => {

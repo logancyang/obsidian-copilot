@@ -3,10 +3,6 @@ import {
   OPENARTIFACTS_MAX_HTML_BYTES,
   OPENARTIFACTS_VAULT_FOLDER,
 } from "@/openArtifacts/constants";
-import {
-  OpenArtifactsDocumentUnsafeError,
-  validateOpenArtifactsReviewHtml,
-} from "@/openArtifacts/openArtifactsDocument";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 
 /** Signals that a filesystem-backed agent handoff cannot be consumed safely. */
@@ -25,18 +21,6 @@ const UNSAFE_FILE_MESSAGE =
 const CLEANUP_FAILED_MESSAGE = "Copilot could not remove the staged OpenArtifacts HTML.";
 const PREVIEW_FOLDER_PREFIX = "copilot-openartifacts-preview-";
 const PREVIEW_FILE_NAME = "preview.html";
-const PREVIEW_CONTENT_SECURITY_DIRECTIVES = [
-  "default-src 'none'",
-  "base-uri 'none'",
-  "connect-src 'none'",
-  "font-src data:",
-  "form-action 'none'",
-  "img-src data:",
-  "media-src data:",
-  "object-src 'none'",
-  "style-src 'unsafe-inline'",
-];
-
 /** Owns the temporary browser preview created from one consumed agent handoff. */
 export interface OpenArtifactsAgentHandoff {
   readonly html: string;
@@ -106,45 +90,19 @@ function escapeHtmlAttribute(value: string): string {
     .replaceAll(">", "&gt;");
 }
 
-function createContentSecurityPolicy(
-  frameSource: "'none'" | "'self'",
-  scriptSource: "'none'" | "'unsafe-inline'"
-): string {
-  return [
-    ...PREVIEW_CONTENT_SECURITY_DIRECTIVES,
-    `frame-src ${frameSource}`,
-    `script-src ${scriptSource}`,
-  ].join("; ");
-}
-
 function createBrowserPreview(html: string): string {
-  const shellPolicy = createContentSecurityPolicy("'self'", "'unsafe-inline'");
-  const contentPolicy = createContentSecurityPolicy("'none'", "'none'");
-  const sandboxedContent = `<meta http-equiv="Content-Security-Policy" content="${escapeHtmlAttribute(contentPolicy)}">${html}`;
+  // The opaque-origin sandbox isolates page scripts from the local review shell.
+  // Do not filter the page or its resources: the published HTML remains unchanged.
   return `<!doctype html>
 <html>
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="${escapeHtmlAttribute(shellPolicy)}">
 <meta name="referrer" content="no-referrer">
 <title>OpenArtifacts local preview</title>
 <style>html,body,iframe{border:0;height:100%;margin:0;padding:0;width:100%}body{overflow:hidden}iframe{display:block}</style>
 </head>
 <body>
-<iframe title="OpenArtifacts HTML preview" sandbox="allow-same-origin" referrerpolicy="no-referrer" srcdoc="${escapeHtmlAttribute(sandboxedContent)}"></iframe>
-<script>
-const frame=document.querySelector("iframe");
-const block=(event)=>event.preventDefault();
-const seal=()=>{
-  const previewDocument=frame.contentDocument;
-  if(!previewDocument)return;
-  for(const eventName of ["auxclick","click","contextmenu","dragstart","submit"]){
-    previewDocument.addEventListener(eventName,block,true);
-  }
-};
-frame.addEventListener("load",seal);
-seal();
-</script>
+<iframe title="OpenArtifacts HTML preview" sandbox="allow-scripts" referrerpolicy="no-referrer" srcdoc="${escapeHtmlAttribute(html)}"></iframe>
 </body>
 </html>
 `;
@@ -226,17 +184,6 @@ export async function consumeOpenArtifactsAgentHandoff(
     await removeHandoff(stagedPath);
     if (error instanceof OpenArtifactsAgentHandoffError) throw error;
     throw new OpenArtifactsAgentHandoffError(UNSAFE_FILE_MESSAGE);
-  }
-
-  try {
-    validateOpenArtifactsReviewHtml(html);
-  } catch (error) {
-    if (error instanceof OpenArtifactsDocumentUnsafeError) {
-      throw new OpenArtifactsAgentHandoffError(
-        `${error.message} Edit this staged file and retry once: ${stagedHtmlPath}`
-      );
-    }
-    throw error;
   }
 
   await removeHandoff(stagedPath);

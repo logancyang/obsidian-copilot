@@ -614,10 +614,10 @@ skip HTML generation and run the wrapper below with only the source-note path;
 the user alone chooses Update or Delete in the existing management dialog.
 Never tell the user to delete the page at its public URL.
 
-For publishing or updating, create a complete, self-contained HTML page. Preserve
-the note's content; never render the raw frontmatter block. Render Mermaid and
-Obsidian Bases as static HTML or SVG, embed images, and include no scripts, frames,
-forms, handlers, redirects, or external assets. Use system fonts and inline CSS.
+For publishing or updating, prepare the requested HTML page from the note. Preserve
+its content; treat frontmatter as metadata rather than page content. Like the npm
+CLI, Copilot publishes the HTML unchanged: CSS, scripts, frames, forms, and external
+resources are allowed. Do not strip content to satisfy Copilot-specific HTML rules.
 The UTF-8 HTML must not exceed \`${OPENARTIFACTS_MAX_HTML_BYTES}\` bytes.
 
 Themes are optional. Use a theme the user requests, otherwise choose a readable
@@ -674,11 +674,9 @@ file and cleans up its temporary preview when review closes.
   previous confirmation never applies to changed HTML.
 - \`published\` or \`updated\`: return the host-provided public URL verbatim.
 - \`deleted\`: report that the host withdrew the page.
-- \`failed\`: report the exact error. If it names specific HTML issues and says to
-  edit the staged file, address every listed issue in that same file and retry
-  exactly once. Otherwise stop and offer the existing "Publish file to
-  OpenArtifacts" command. Never invent a cause, repeatedly strip styling, bypass
-  the review, or claim that opening a review means publishing succeeded.
+- \`failed\`: report the exact error and offer the existing "Publish file to
+  OpenArtifacts" command. Do not blindly retry, invent a cause, strip styling,
+  bypass the review, or claim that opening a review means publishing succeeded.
 `,
   files: [
     { path: `themes/${OPENARTIFACTS_DEFAULT_THEME}.md`, content: RESEARCH_MEMO_THEME },

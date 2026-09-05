@@ -33,26 +33,13 @@ describe("openArtifactsAgentHandoff", () => {
       expect(handoff.previewUrl).toBe(pathToFileURL(handoff.previewPath).href);
       const browserPreview = await readFile(handoff.previewPath, "utf8");
       const parsedPreview = new DOMParser().parseFromString(browserPreview, "text/html");
-      const policy = parsedPreview.querySelector('meta[http-equiv="Content-Security-Policy"]');
       const frame = parsedPreview.querySelector("iframe");
-      expect(policy?.getAttribute("content")).toContain("default-src 'none'");
-      expect(policy?.getAttribute("content")).toContain("connect-src 'none'");
-      expect(policy?.getAttribute("content")).toContain("script-src 'unsafe-inline'");
-      expect(policy?.getAttribute("content")).toContain("frame-src 'self'");
-      expect(frame?.getAttribute("sandbox")).toBe("allow-same-origin");
+      expect(frame?.getAttribute("sandbox")).toBe("allow-scripts");
       expect(frame?.getAttribute("referrerpolicy")).toBe("no-referrer");
-      const srcdoc = frame?.getAttribute("srcdoc") ?? "";
-      const parsedContent = new DOMParser().parseFromString(srcdoc, "text/html");
-      const contentPolicy = parsedContent.querySelector(
-        'meta[http-equiv="Content-Security-Policy"]'
-      );
-      expect(contentPolicy?.getAttribute("content")).toContain("frame-src 'none'");
-      expect(contentPolicy?.getAttribute("content")).toContain("script-src 'none'");
-      expect(srcdoc.endsWith(html)).toBe(true);
+      expect(frame?.getAttribute("srcdoc")).toBe(html);
       expect(parsedPreview.querySelectorAll("iframe")).toHaveLength(1);
-      expect(parsedPreview.querySelector("script")?.textContent).toContain(
-        '["auxclick","click","contextmenu","dragstart","submit"]'
-      );
+      expect(parsedPreview.querySelector("script")).toBeNull();
+      expect(parsedPreview.querySelector('meta[http-equiv="Content-Security-Policy"]')).toBeNull();
       await expect(handoff.isPreviewCurrent()).resolves.toBe(true);
       await expect(readFile(absolutePath)).rejects.toMatchObject({ code: "ENOENT" });
 
@@ -74,19 +61,17 @@ describe("openArtifactsAgentHandoff", () => {
       await expect(readFile(absolutePath)).rejects.toMatchObject({ code: "ENOENT" });
     });
 
-    it("preserves rejected HTML for one targeted correction", async () => {
+    it("accepts scripts, external resources, and CSS escapes without changing the page", async () => {
       const absolutePath = path.join(vaultRoot, ...STAGED_PATH.split("/"));
-      const rejected = '<!doctype html><script></script><img src="https://example.com/pixel">';
-      await writeFile(absolutePath, rejected, "utf8");
-
-      await expect(consumeOpenArtifactsAgentHandoff(vaultRoot, STAGED_PATH)).rejects.toThrow(
-        `remove unsupported <script>; embed or remove "src" on <img>. Edit this staged file and retry once: ${STAGED_PATH}`
-      );
-      await expect(readFile(absolutePath, "utf8")).resolves.toBe(rejected);
-
-      await writeFile(absolutePath, "<!doctype html><p>Corrected</p>", "utf8");
+      const html = String.raw`<!doctype html><link rel="stylesheet" href="https://example.com/style.css"><style>p::before{content:"\00b7"}</style><script>document.body.dataset.ready="yes"</script><iframe src="https://example.com"></iframe><form action="https://example.com"><input></form><img src="https://example.com/image.png">`;
+      await writeFile(absolutePath, html, "utf8");
       const handoff = await consumeOpenArtifactsAgentHandoff(vaultRoot, STAGED_PATH);
-      await expect(readFile(absolutePath)).rejects.toMatchObject({ code: "ENOENT" });
+      expect(handoff.html).toBe(html);
+      const preview = new DOMParser().parseFromString(
+        await readFile(handoff.previewPath, "utf8"),
+        "text/html"
+      );
+      expect(preview.querySelector("iframe")?.getAttribute("srcdoc")).toBe(html);
       await handoff.cleanup();
     });
 

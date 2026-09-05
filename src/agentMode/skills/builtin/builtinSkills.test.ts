@@ -244,10 +244,7 @@ describe("builtinSkills", () => {
       ]);
       expect(skill!.skillMd).toContain("Read one existing Markdown source note");
       expect(skill!.skillMd).toContain("the user alone chooses Update or Delete");
-      expect(skill!.skillMd).toContain("never render the raw frontmatter block");
       expect(skill!.skillMd).toContain("Never tell the user to delete the page at its public URL");
-      expect(skill!.skillMd).toContain("static HTML or SVG");
-      expect(skill!.skillMd).toContain("handlers, redirects, or external assets");
       expect(skill!.skillMd).toContain(`\`${OPENARTIFACTS_MAX_HTML_BYTES}\` bytes`);
       expect(skill!.skillMd).toContain(
         `$${OPENARTIFACTS_WORKSPACE_ROOT_ENV}/${OPENARTIFACTS_AGENT_HANDOFF_DIR}/`
@@ -267,10 +264,11 @@ describe("builtinSkills", () => {
       expect(skill!.skillMd).toContain("never choose an action or document id");
       expect(skill!.skillMd).toContain("create a new complete artifact");
       expect(skill!.skillMd).toContain("previous confirmation never applies");
-      expect(skill!.skillMd).toContain("address every listed issue");
-      expect(skill!.skillMd).toMatch(/retry\s+exactly once/);
-      expect(skill!.skillMd).toContain("Never invent a cause");
       expect(skill!.skillMd).toContain("report the exact error");
+      expect(skill!.skillMd).toContain("Copilot publishes the HTML unchanged");
+      expect(skill!.skillMd).toContain("resources are allowed");
+      expect(skill!.skillMd).not.toContain("self-contained");
+      expect(skill!.skillMd).not.toContain("include no scripts");
       expect(skill!.skillMd).toContain("`deleted`");
       expect(skill!.skillMd).not.toContain("OPENARTIFACTS_TOKEN");
       expect(skill!.skillMd).not.toContain(PLUS_ENV.licenseKey);
