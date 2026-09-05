@@ -31,6 +31,7 @@ export { default as CopilotAgentView } from "./ui/CopilotAgentView";
 export {
   useActiveBackendDescriptor,
   useBackendInstallState,
+  useManagedInstallActionState,
   useSessionBackendDescriptor,
 } from "./ui/useBackendDescriptor";
 export { useAgentModelPicker } from "./ui/useAgentModelPicker";
@@ -38,7 +39,14 @@ export type { AgentModelPickerOverride } from "./ui/useAgentModelPicker";
 export { useAgentModePicker } from "./ui/useAgentModePicker";
 export type { AgentModePickerOverride } from "./ui/useAgentModePicker";
 export type { AgentSessionManager } from "./session/AgentSessionManager";
-export type { AgentBrand, BackendDescriptor, BackendId, InstallState } from "./session/types";
+export type {
+  AgentBrand,
+  BackendDescriptor,
+  BackendId,
+  InstallState,
+  ManagedInstallAction,
+  ManagedInstallActionState,
+} from "./session/types";
 export { partitionOpencodeOnlyWireIds } from "./backends/opencode/opencodeProbePartition";
 export {
   mapProviderToOpencodeId,

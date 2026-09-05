@@ -2,6 +2,7 @@ import { AgentStatusCard } from "@/agentMode/ui/AgentStatusCard";
 import { useBackendAuthState } from "@/agentMode/session/useBackendAuthState";
 import {
   useBackendInstallState,
+  useManagedInstallActionState,
   useSessionBackendDescriptor,
 } from "@/agentMode/ui/useBackendDescriptor";
 import { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
@@ -28,8 +29,8 @@ interface Props {
 export const AgentModeStatus: React.FC<Props> = ({ manager, plugin, onInstallClick }) => {
   const descriptor = useSessionBackendDescriptor(manager);
   const installState = useBackendInstallState(descriptor, plugin);
+  const managedInstall = useManagedInstallActionState(descriptor, plugin);
   const auth = useBackendAuthState(descriptor);
-  const [upgrading, setUpgrading] = React.useState(false);
 
   // Re-render on manager notify so `lastError` flips are picked up.
   const [, setTick] = React.useState(0);
@@ -39,18 +40,17 @@ export const AgentModeStatus: React.FC<Props> = ({ manager, plugin, onInstallCli
   }, [manager]);
 
   const handleUpgrade = React.useCallback(() => {
-    if (!descriptor.upgrade || upgrading) return;
-    setUpgrading(true);
+    const action = descriptor.managedInstall;
+    if (!action || managedInstall.kind === "running") return;
     new Notice(`Upgrading ${descriptor.displayName}…`);
-    descriptor
-      .upgrade(plugin)
+    action
+      .run(plugin)
       .then(() => new Notice(`${descriptor.displayName} upgraded.`))
       .catch((e) => {
         logError("[AgentMode] upgrade failed", e);
         new Notice(`Failed to upgrade ${descriptor.displayName}. See console for details.`);
-      })
-      .finally(() => setUpgrading(false));
-  }, [descriptor, plugin, upgrading]);
+      });
+  }, [descriptor, plugin, managedInstall.kind]);
 
   if (installState.kind === "absent") {
     return (
@@ -66,16 +66,26 @@ export const AgentModeStatus: React.FC<Props> = ({ manager, plugin, onInstallCli
   }
 
   if (installState.kind === "incompatible") {
-    const canUpgrade = descriptor.upgrade !== undefined;
+    const canUpgrade = descriptor.managedInstall !== undefined;
+    const upgrading = managedInstall.kind === "running";
+    const failed = managedInstall.kind === "error";
     return (
       <AgentStatusCard
-        tone="warning"
-        message={installState.message}
+        tone={failed ? "error" : "warning"}
+        message={
+          upgrading
+            ? `${managedInstall.label} ${managedInstall.percent}%`
+            : failed
+              ? managedInstall.message
+              : installState.message
+        }
         action={{
           label: canUpgrade
             ? upgrading
               ? "Upgrading…"
-              : "Upgrade"
+              : failed
+                ? "Retry"
+                : "Update"
             : `Configure ${descriptor.displayName}`,
           disabled: canUpgrade && upgrading,
           onClick: canUpgrade ? handleUpgrade : () => descriptor.openInstallUI(plugin),
