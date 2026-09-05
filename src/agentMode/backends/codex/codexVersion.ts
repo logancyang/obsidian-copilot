@@ -16,6 +16,11 @@ export interface CodexAcpInvocation {
   env: NodeJS.ProcessEnv;
 }
 
+export interface CodexAcpPackage {
+  entryPath: string;
+  version: string;
+}
+
 export interface CodexAcpPackageFs {
   realpathSync(path: string): string;
   readFileSync(path: string, encoding: "utf8"): string;
@@ -45,11 +50,11 @@ function unsupportedAdapter(message?: string): Error {
  * @param platform - Platform whose path rules should resolve the package layout.
  * @param packageFs - Filesystem operations used to inspect package metadata.
  */
-export function resolveSupportedCodexAcpEntry(
+export function resolveSupportedCodexAcpPackage(
   adapterPath: string,
   platform: NodeJS.Platform = process.platform,
   packageFs: CodexAcpPackageFs = defaultPackageFs()
-): string {
+): CodexAcpPackage {
   let entryPath: string;
   try {
     entryPath = packageFs.realpathSync(adapterPath);
@@ -99,7 +104,16 @@ export function resolveSupportedCodexAcpEntry(
       `${CURRENT_PACKAGE_NAME} ${version} is not supported. Install ${CODEX_ACP_MIN_VERSION} or newer, then run Auto-detect again.`
     );
   }
-  return entryPath;
+  return { entryPath, version };
+}
+
+/** Resolve only the package entry for callers that do not need version metadata. */
+export function resolveSupportedCodexAcpEntry(
+  adapterPath: string,
+  platform: NodeJS.Platform = process.platform,
+  packageFs: CodexAcpPackageFs = defaultPackageFs()
+): string {
+  return resolveSupportedCodexAcpPackage(adapterPath, platform, packageFs).entryPath;
 }
 
 export function isSupportedCodexAcpPath(adapterPath: string | undefined): boolean {
