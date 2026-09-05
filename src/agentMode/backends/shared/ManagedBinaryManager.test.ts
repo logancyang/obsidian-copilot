@@ -78,7 +78,7 @@ describe("ManagedBinaryManager", () => {
       });
     });
     describe("install()", () => {
-      it("publishes backend progress, returns the installation, and ignores progress after completion", async () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/368 publishes backend progress, returns the installation, and ignores progress after completion", async () => {
         const progress = jest.fn();
         const snapshots: unknown[] = [];
         manager.subscribeRuntimeState(() => snapshots.push(manager.getRuntimeState()));
@@ -200,7 +200,11 @@ describe("ManagedBinaryManager", () => {
         expect(manager.settings.binaryPath).toBeUndefined();
         expect(fs.existsSync(customPath)).toBe(true);
       });
-      it.each(["missing", "directory", "not-executable"])(
+      it.each([
+        "missing",
+        "directory",
+        ...(process.platform === "win32" ? [] : ["not-executable"]),
+      ])(
         "https://github.com/Brevilabs/obsidian-copilot-private/issues/368 rejects a %s path without replacing the current selection",
         async (kind) => {
           const candidate = path.join(tempDir, kind);

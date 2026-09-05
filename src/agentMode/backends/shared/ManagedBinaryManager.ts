@@ -64,6 +64,8 @@ export abstract class ManagedBinaryManager<
   }
 
   protected publishProgress(progress: TProgress): void {
+    // Late progress must not return a completed installation to the running state.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
     if (!this.operation) return;
     this.publishState({ kind: "installing", progress });
   }
