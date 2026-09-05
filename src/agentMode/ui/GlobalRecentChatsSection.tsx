@@ -12,26 +12,12 @@ import { isNativeChatId } from "@/utils/nativeChatId";
 import { formatCompactRelativeTime } from "@/utils/formatRelativeTime";
 import { sortByStrategy, type SortStrategy } from "@/utils/recentUsageManager";
 import { ArrowUpRight, Check, Edit2, LoaderCircle, MessageCircle, Trash2, X } from "lucide-react";
-import React, {
-  memo,
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { useIncrementalPaging } from "@/hooks/useIncrementalPaging";
 import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
 
 /** Stable noop for rows that aren't being renamed (they never invoke onSaveEdit). */
 const NOOP_SAVE = (): void => {};
-
-/**
- * Bound the initial DOM work while keeping the complete history searchable.
- * Saved chat history is unbounded, so mounting every row can slow Agent Home.
- * https://github.com/logancyang/obsidian-copilot/issues/3040
- */
-const PAGE_SIZE = 50;
 
 /**
  * Which landing this section renders under. `global` is the original Agent Home
@@ -369,8 +355,6 @@ export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState("");
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
-  const [displayCount, setDisplayCount] = useState(PAGE_SIZE);
-  const observerRef = useRef<IntersectionObserver | null>(null);
 
   // Refresh once when the section first mounts so opening Recent Chats does
   // not rely on a stale history snapshot.
@@ -384,39 +368,12 @@ export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
     if (!q) return sortedItems;
     return sortedItems.filter((item) => item.title.toLowerCase().includes(q));
   }, [sortedItems, query]);
+  const { displayCount, sentinelRef } = useIncrementalPaging(filteredItems.length, query);
   const visibleItems = useMemo(
     () => filteredItems.slice(0, displayCount),
     [displayCount, filteredItems]
   );
 
-  // A new query starts from one bounded page before paint. Search still runs
-  // against filteredItems, so older matches remain discoverable by scrolling.
-  // https://github.com/logancyang/obsidian-copilot/issues/3040
-  useLayoutEffect(() => {
-    setDisplayCount(PAGE_SIZE);
-  }, [query]);
-
-  const sentinelRef = useCallback(
-    (node: HTMLDivElement | null) => {
-      observerRef.current?.disconnect();
-      observerRef.current = null;
-      if (!node) return;
-
-      const IntersectionObserverConstructor =
-        node.ownerDocument.defaultView?.IntersectionObserver ?? IntersectionObserver;
-
-      const observer = new IntersectionObserverConstructor(
-        (entries) => {
-          if (!entries[0]?.isIntersecting) return;
-          setDisplayCount((current) => Math.min(current + PAGE_SIZE, filteredItems.length));
-        },
-        { threshold: 0.1 }
-      );
-      observer.observe(node);
-      observerRef.current = observer;
-    },
-    [filteredItems.length]
-  );
   const handleStartEdit = useCallback((id: string, title: string) => {
     setConfirmDeleteId(null);
     setEditingId(id);

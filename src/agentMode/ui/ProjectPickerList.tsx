@@ -7,17 +7,17 @@ import { AgentProjectRowActions } from "@/agentMode/ui/AgentProjectRowActions";
 import { ProjectConfig } from "@/aiParams";
 import { SearchBar } from "@/components/ui/SearchBar";
 import { ProjectFolderIcon } from "@/components/ui/ProjectFolderIcon";
+import { useIncrementalPaging } from "@/hooks/useIncrementalPaging";
 import { useRecentUsageManagerRevision } from "@/hooks/useRecentUsageManagerRevision";
 import { cn } from "@/lib/utils";
 import { filterProjects } from "@/utils/projectUtils";
 import { RecentUsageManager, sortByStrategy, type SortStrategy } from "@/utils/recentUsageManager";
 import { App } from "obsidian";
-import React, { memo, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import React, { memo, useMemo, useState } from "react";
 
 // Reason: the landing surfaces a fixed most-recently-used order with no switcher
 // and never writes the strategy back to settings.
 const LANDING_SORT_STRATEGY: SortStrategy = "recent";
-const PAGE_SIZE = 50;
 
 interface ProjectPickerListProps {
   /** Full project list (already reactive from useProjects upstream). */
@@ -130,44 +130,16 @@ export const ProjectPickerList = memo(
   }: ProjectPickerListProps): React.ReactElement => {
     const [searchQuery, setSearchQuery] = useState("");
 
-    const [displayCount, setDisplayCount] = useState(PAGE_SIZE);
-    const observerRef = useRef<IntersectionObserver | null>(null);
     const sortedProjects = useSortedProjects(projects, projectUsageTimestampsManager);
     const filteredProjects = useMemo(
       () => filterProjects(sortedProjects, searchQuery),
       [sortedProjects, searchQuery]
     );
-    const visibleProjects = filteredProjects.slice(0, displayCount);
-
-    // Search covers every project while each new query starts with bounded rows.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/372
-    useLayoutEffect(() => {
-      setDisplayCount(PAGE_SIZE);
-    }, [searchQuery]);
-
-    const sentinelRef = useCallback(
-      (node: HTMLDivElement | null) => {
-        observerRef.current?.disconnect();
-        observerRef.current = null;
-        // Disconnect when filtering removes the sentinel or the list unmounts.
-        // https://github.com/Brevilabs/obsidian-copilot-private/issues/372
-        if (!node) return;
-        const IntersectionObserverConstructor =
-          node.ownerDocument.defaultView?.IntersectionObserver ?? IntersectionObserver;
-        const observer = new IntersectionObserverConstructor(
-          (entries) => {
-            // Mount another bounded page only when scrolling reaches the end.
-            // https://github.com/Brevilabs/obsidian-copilot-private/issues/372
-            if (!entries[0]?.isIntersecting) return;
-            setDisplayCount((current) => Math.min(current + PAGE_SIZE, filteredProjects.length));
-          },
-          { threshold: 0.1 }
-        );
-        observer.observe(node);
-        observerRef.current = observer;
-      },
-      [filteredProjects.length]
+    const { displayCount, sentinelRef } = useIncrementalPaging(
+      filteredProjects.length,
+      searchQuery
     );
+    const visibleProjects = filteredProjects.slice(0, displayCount);
 
     return (
       // h-full fills the shelf panel's fixed floor (AgentHomeShelf) so the

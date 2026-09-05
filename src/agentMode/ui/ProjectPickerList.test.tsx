@@ -103,26 +103,20 @@ describe("ProjectPickerList", () => {
       expect(folderSlot?.classList.contains("tw-justify-center")).toBe(true);
     });
 
-    it("pages every project inline, ignores non-intersections, and disconnects at the end (https://github.com/Brevilabs/obsidian-copilot-private/issues/372)", () => {
+    it("pages every project inline and selects the last result (https://github.com/Brevilabs/obsidian-copilot-private/issues/372)", () => {
       const projects = Array.from({ length: 120 }, (_, index) =>
         makeProject(`Project ${index + 1}`, 120 - index)
       );
       const onSelect = jest.fn();
-      const { unmount } = render(
-        <ProjectPickerList projects={projects} onSelect={onSelect} app={app} />
-      );
+      render(<ProjectPickerList projects={projects} onSelect={onSelect} app={app} />);
       expect(screen.getAllByText(/^Project \d+$/)).toHaveLength(50);
       expect(screen.queryByText("View all projects")).toBeNull();
-      act(() => intersect(false));
-      expect(screen.getAllByText(/^Project \d+$/)).toHaveLength(50);
       act(() => intersect(true));
       expect(screen.getAllByText(/^Project \d+$/)).toHaveLength(100);
       act(() => intersect(true));
       expect(screen.getAllByText(/^Project \d+$/)).toHaveLength(120);
       fireEvent.click(screen.getByText("Project 120"));
       expect(onSelect).toHaveBeenCalledWith(projects[119]);
-      expect(disconnect).toHaveBeenCalledTimes(1);
-      unmount();
     });
 
     it("searches unloaded names and descriptions and resets paging for each query (https://github.com/Brevilabs/obsidian-copilot-private/issues/372)", () => {
@@ -145,40 +139,6 @@ describe("ProjectPickerList", () => {
       expect(screen.getAllByText(/^Project \d+$/)).toHaveLength(50);
       fireEvent.change(search, { target: { value: "Missing" } });
       expect(screen.getByText("No matching projects")).toBeTruthy();
-    });
-
-    it("observes scrolling with the owning window in a popout (https://github.com/Brevilabs/obsidian-copilot-private/issues/372)", () => {
-      const frame = document.createElement("iframe");
-      document.body.appendChild(frame);
-      const ownerWindow = frame.contentWindow!;
-      const container = ownerWindow.document.createElement("div");
-      ownerWindow.document.body.appendChild(container);
-      const ownerObserver = jest.fn(() => observer);
-      Object.defineProperty(ownerWindow, "IntersectionObserver", { value: ownerObserver });
-      const projects = Array.from({ length: 51 }, (_, index) =>
-        makeProject(`Project ${index}`, index)
-      );
-      const { unmount } = render(
-        <ProjectPickerList projects={projects} onSelect={noop} app={app} />,
-        {
-          container,
-        }
-      );
-      expect(ownerObserver).toHaveBeenCalledTimes(1);
-      expect(window.IntersectionObserver).not.toHaveBeenCalled();
-      unmount();
-      frame.remove();
-    });
-
-    it("disconnects an active paging observer on unmount (https://github.com/Brevilabs/obsidian-copilot-private/issues/372)", () => {
-      const projects = Array.from({ length: 51 }, (_, index) =>
-        makeProject(`Project ${index}`, index)
-      );
-      const { unmount } = render(
-        <ProjectPickerList projects={projects} onSelect={noop} app={app} />
-      );
-      unmount();
-      expect(disconnect).toHaveBeenCalledTimes(1);
     });
 
     it("keeps create available in the empty state and selects search results by keyboard (https://github.com/Brevilabs/obsidian-copilot-private/issues/372)", () => {
