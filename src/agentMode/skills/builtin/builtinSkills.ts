@@ -586,7 +586,7 @@ const FETCH_X = relaySkill({
   scriptFile: "fetch-x.sh",
 });
 
-const OPENARTIFACTS_PUBLISH_VERSION = 1;
+const OPENARTIFACTS_PUBLISH_VERSION = 2;
 const OPENARTIFACTS_PUBLISH: BuiltinSkill = {
   name: "openartifacts-publish",
   legacyName: "symposium-publish",
@@ -602,73 +602,68 @@ metadata:
 
 # Publish Markdown to OpenArtifacts
 
-Require one existing Markdown source file. When the user asks to delete, remove, or
-withdraw its current OpenArtifacts page, do not generate HTML. Run the host wrapper with
-only the vault-relative source-note path. Obsidian reads the note's current identity
-and opens its existing management modal; the user alone chooses Update or Delete.
+## 1. Prepare the page
+
+Read one existing Markdown source note. For delete, remove, or withdraw requests,
+skip HTML generation and run the wrapper below with only the source-note path;
+the user alone chooses Update or Delete in the existing management dialog.
 Never tell the user to delete the page at its public URL.
 
-For publishing or updating, finish a complete, self-contained,
-passive HTML document before asking Obsidian to review it. Render source-specific
-content such as Mermaid and Obsidian Bases into static HTML or SVG, embed images,
-and include no scripts, frames, forms, handlers, redirects, or external assets. Treat
-YAML frontmatter as note metadata: never render the raw frontmatter block as page
-content. The exact UTF-8 HTML must not exceed \`${OPENARTIFACTS_MAX_HTML_BYTES}\` bytes.
+For publishing or updating, create a complete, self-contained HTML page. Preserve
+the note's content; never render the raw frontmatter block. Render Mermaid and
+Obsidian Bases as static HTML or SVG, embed images, and include no scripts, frames,
+forms, handlers, redirects, or external assets. Use system fonts and inline CSS.
+The UTF-8 HTML must not exceed \`${OPENARTIFACTS_MAX_HTML_BYTES}\` bytes.
 
-Style the page from a theme file rather than improvising. Resolve the theme name in
-this order: \`OPENARTIFACTS_THEME\` from the environment when set, then a theme the
-user named in chat, then \`${OPENARTIFACTS_DEFAULT_THEME}\`. Read
-\`$${OPENARTIFACTS_WORKSPACE_ROOT_ENV}/${OPENARTIFACTS_THEMES_DIR}/<name>.md\` when the
-user has authored that theme, otherwise \`themes/<name>.md\` next to this file. Follow
-it exactly: tokens, type, scale, layout, components, and its theme-handling CSS, all
-inlined. If neither file exists, still publish with restrained defaults (system fonts,
-one accent, a readable measure, light and dark handled) and tell the user which theme
-was not found.
+Themes are optional. Use a theme the user requests, otherwise choose a readable
+layout suited to the note. If using a named theme, check
+\`$${OPENARTIFACTS_WORKSPACE_ROOT_ENV}/${OPENARTIFACTS_THEMES_DIR}/<name>.md\`, then
+\`themes/<name>.md\` next to this skill. Check each path independently. If neither
+exists, use restrained defaults and continue; a missing theme must never block
+publishing. The bundled \`${OPENARTIFACTS_DEFAULT_THEME}\` is an optional example.
 
-Write those final bytes to a new unique \`.html\` file under
-\`$${OPENARTIFACTS_WORKSPACE_ROOT_ENV}/${OPENARTIFACTS_AGENT_HANDOFF_DIR}/\`, creating that
-directory first when it does not exist. Do not show a prose substitute or ask
-for confirmation in chat. Instead run the host wrapper with exactly two
-vault-relative paths: the source note and the staged HTML.
+Write the final HTML to a new unique \`.html\` file under
+\`$${OPENARTIFACTS_WORKSPACE_ROOT_ENV}/${OPENARTIFACTS_AGENT_HANDOFF_DIR}/\`, creating
+the directory if needed. Pass vault-relative paths to the wrapper.
 
-On macOS or Linux:
+## 2. Present the rendered page for review
+
+Tell the user to open the browser preview linked in Copilot's existing review
+dialog and inspect the rendered HTML before confirming Publish or Update. A prose
+summary or HTML source is not a rendered preview. Do not publish before the user
+has reviewed the page and explicitly confirmed in the existing dialog. Do not
+create a new modal or render HTML inside a modal.
+
+Run the wrapper next to this SKILL.md. On macOS or Linux:
 
 \`\`\`bash
 sh "/absolute/path/to/this/skill/directory/openartifacts-publish.sh" "Notes/source.md" "${OPENARTIFACTS_AGENT_HANDOFF_DIR}/unique.html"
 \`\`\`
 
-For withdrawal, omit the staged-HTML argument:
-
-\`\`\`bash
-sh "/absolute/path/to/this/skill/directory/openartifacts-publish.sh" "Notes/source.md"
-\`\`\`
-
-On Windows, use the \`.cmd\` wrapper (prefix it with \`&\` in PowerShell):
+On Windows, use the \`.cmd\` wrapper (prefix with \`&\` in PowerShell):
 
 \`\`\`powershell
 & "/absolute/path/to/this/skill/directory/openartifacts-publish.cmd" "Notes/source.md" "${OPENARTIFACTS_AGENT_HANDOFF_DIR}/unique.html"
 \`\`\`
 
-Omit the staged-HTML argument on Windows for withdrawal as well.
+For withdrawal, omit the HTML argument on either platform. The wrapper waits for
+the user's decision. The host owns the browser preview, confirmation, note
+identity, and publishing; never choose an action or document id, simulate clicks,
+or publish directly through the npm CLI or HTTP. The host consumes the staged
+file and cleans up its temporary preview when review closes.
 
-With only the source path, the wrapper blocks while Obsidian shows its host-owned
-Update/Delete management modal. With a staged HTML path, it blocks while Obsidian
-consumes the artifact and shows its source, title, and a link to a sandboxed
-local-browser rendering of the exact captured page. Obsidian rejects active or
-externally loaded content, prevents navigation from the browser preview, removes the
-original artifact, removes its temporary browser preview after review, and alone reads
-the current note identity to choose whether confirmation publishes or updates; never
-choose an action or document id.
+## 3. Report the result
 
-- \`cancelled\`: stop. No request was sent.
-- \`regenerate\`: create a new complete artifact and run the wrapper again. The
-  previous confirmation never applies to regenerated bytes.
+- \`cancelled\`: stop; nothing was published.
+- \`regenerate\`: create a new complete artifact and repeat review. The
+  previous confirmation never applies to changed HTML.
 - \`published\` or \`updated\`: return the host-provided public URL verbatim.
-- \`deleted\`: report that the host withdrew the page and removed its note identity.
-- \`failed\`: if the host says to edit the staged file, address every listed issue in
-  that same file and retry exactly once. Otherwise, or if that retry fails, stop and
-  report the exact host message. Never invent a cause, change unrelated styling, create
-  another filename, bypass the review, or publish directly.
+- \`deleted\`: report that the host withdrew the page.
+- \`failed\`: report the exact error. If it names specific HTML issues and says to
+  edit the staged file, address every listed issue in that same file and retry
+  exactly once. Otherwise stop and offer the existing "Publish file to
+  OpenArtifacts" command. Never invent a cause, repeatedly strip styling, bypass
+  the review, or claim that opening a review means publishing succeeded.
 `,
   files: [
     { path: `themes/${OPENARTIFACTS_DEFAULT_THEME}.md`, content: RESEARCH_MEMO_THEME },

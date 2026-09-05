@@ -234,7 +234,7 @@ describe("builtinSkills", () => {
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/337 hands OpenArtifacts HTML through the stable host wire without exposing publication controls", () => {
       const skill = BUILTIN_SKILLS.find((item) => item.name === "openartifacts-publish");
       expect(skill).toBeDefined();
-      expect(skill!.version).toBe(1);
+      expect(skill!.version).toBe(2);
       expect(skill!.legacyName).toBe("symposium-publish");
       expect(skill!.files.map((file) => file.path)).toEqual([
         "themes/research-memo.md",
@@ -242,35 +242,32 @@ describe("builtinSkills", () => {
         "openartifacts-publish.cmd",
         "openartifacts-publish.ps1",
       ]);
-      expect(skill!.skillMd).toContain("Require one existing Markdown source file");
-      expect(skill!.skillMd).toContain("delete, remove, or");
+      expect(skill!.skillMd).toContain("Read one existing Markdown source note");
       expect(skill!.skillMd).toContain("the user alone chooses Update or Delete");
       expect(skill!.skillMd).toContain("never render the raw frontmatter block");
       expect(skill!.skillMd).toContain("Never tell the user to delete the page at its public URL");
-      expect(skill!.skillMd).toMatch(/static HTML or\s+SVG/);
+      expect(skill!.skillMd).toContain("static HTML or SVG");
       expect(skill!.skillMd).toContain("handlers, redirects, or external assets");
       expect(skill!.skillMd).toContain(`\`${OPENARTIFACTS_MAX_HTML_BYTES}\` bytes`);
       expect(skill!.skillMd).toContain(
         `$${OPENARTIFACTS_WORKSPACE_ROOT_ENV}/${OPENARTIFACTS_AGENT_HANDOFF_DIR}/`
       );
+      expect(skill!.skillMd).toContain("Themes are optional");
+      expect(skill!.skillMd).toContain("Check each path independently");
+      expect(skill!.skillMd).toMatch(/a missing theme must never block\s+publishing/);
       expect(skill!.skillMd).toContain("themes/<name>.md");
-      expect(skill!.skillMd).toContain("then `research-memo`");
-      expect(skill!.files.map((file) => file.path)).toContain("themes/research-memo.md");
-      expect(skill!.skillMd).not.toContain("Symposium");
-      expect(skill!.skillMd).toContain(OPENARTIFACTS_AGENT_HANDOFF_DIR);
-      expect(skill!.skillMd).toMatch(/sandboxed\s+local-browser rendering/);
-      expect(skill!.skillMd).toMatch(/rejects active or\s+externally loaded content/);
-      expect(skill!.skillMd).toMatch(/prevents navigation from the\s+browser preview/);
-      expect(skill!.skillMd).toMatch(/never\s+choose an action or document id/);
+      expect(skill!.skillMd).toContain("browser preview linked in Copilot's existing review");
+      expect(skill!.skillMd).toMatch(
+        /Do not publish before the user\s+has reviewed the page and explicitly confirmed/
+      );
+      expect(skill!.skillMd).toContain("create a new modal or render HTML inside a modal");
+      expect(skill!.skillMd).toContain("never choose an action or document id");
       expect(skill!.skillMd).toContain("create a new complete artifact");
       expect(skill!.skillMd).toContain("previous confirmation never applies");
-      expect(skill!.skillMd).toMatch(/removes the\s+original artifact/);
-      expect(skill!.skillMd).toContain("removes its temporary browser preview");
-      expect(skill!.skillMd).toContain("bypass the review");
       expect(skill!.skillMd).toContain("address every listed issue");
-      expect(skill!.skillMd).toContain("retry exactly once");
+      expect(skill!.skillMd).toMatch(/retry\s+exactly once/);
       expect(skill!.skillMd).toContain("Never invent a cause");
-      expect(skill!.skillMd).toMatch(/create\s+another filename/);
+      expect(skill!.skillMd).toContain("report the exact error");
       expect(skill!.skillMd).toContain("`deleted`");
       expect(skill!.skillMd).not.toContain("OPENARTIFACTS_TOKEN");
       expect(skill!.skillMd).not.toContain(PLUS_ENV.licenseKey);
