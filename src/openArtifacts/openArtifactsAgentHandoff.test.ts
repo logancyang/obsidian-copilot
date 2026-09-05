@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readlink, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -41,7 +41,7 @@ describe("openArtifactsAgentHandoff", () => {
       expect(parsedPreview.querySelector("script")).toBeNull();
       expect(parsedPreview.querySelector('meta[http-equiv="Content-Security-Policy"]')).toBeNull();
       await expect(handoff.isPreviewCurrent()).resolves.toBe(true);
-      await expect(readFile(absolutePath)).rejects.toMatchObject({ code: "ENOENT" });
+      await expect(readFile(absolutePath)).resolves.toBeDefined();
 
       await rm(handoff.previewPath);
       await writeFile(handoff.previewPath, "changed bytes", "utf8");
@@ -51,14 +51,36 @@ describe("openArtifactsAgentHandoff", () => {
       await expect(readFile(handoff.previewPath)).rejects.toMatchObject({ code: "ENOENT" });
     });
 
-    it("rejects invalid UTF-8 and still removes the artifact", async () => {
+    it("reopens the same HTML after the first preview is closed", async () => {
+      const absolutePath = path.join(vaultRoot, ...STAGED_PATH.split("/"));
+      const html = "<!doctype html><p>Review me again</p>";
+      await writeFile(absolutePath, html, "utf8");
+      const first = await consumeOpenArtifactsAgentHandoff(vaultRoot, STAGED_PATH);
+      await first.cleanup();
+      await expect(readFile(first.previewPath)).rejects.toMatchObject({ code: "ENOENT" });
+      await expect(readFile(absolutePath, "utf8")).resolves.toBe(html);
+      const second = await consumeOpenArtifactsAgentHandoff(vaultRoot, STAGED_PATH);
+      expect(second.html).toBe(html);
+      expect(second.previewPath).not.toBe(first.previewPath);
+      await expect(second.isPreviewCurrent()).resolves.toBe(true);
+      await second.cleanup();
+      await expect(readFile(absolutePath, "utf8")).resolves.toBe(html);
+    });
+
+    it("reports a missing file with the path and a regeneration instruction", async () => {
+      await expect(consumeOpenArtifactsAgentHandoff(vaultRoot, STAGED_PATH)).rejects.toThrow(
+        `The staged HTML file was not found: ${STAGED_PATH}. Regenerate the HTML before reopening review.`
+      );
+    });
+
+    it("rejects invalid UTF-8 without deleting the artifact", async () => {
       const absolutePath = path.join(vaultRoot, ...STAGED_PATH.split("/"));
       await writeFile(absolutePath, Uint8Array.from([0xff, 0xfe, 0x3c, 0x00]));
 
       await expect(consumeOpenArtifactsAgentHandoff(vaultRoot, STAGED_PATH)).rejects.toThrow(
         "Staged OpenArtifacts HTML must be valid UTF-8."
       );
-      await expect(readFile(absolutePath)).rejects.toMatchObject({ code: "ENOENT" });
+      await expect(readFile(absolutePath)).resolves.toBeDefined();
     });
 
     it("accepts scripts, external resources, and CSS escapes without changing the page", async () => {
@@ -75,17 +97,17 @@ describe("openArtifactsAgentHandoff", () => {
       await handoff.cleanup();
     });
 
-    it("rejects an oversized artifact before reading and still removes it", async () => {
+    it("rejects an oversized artifact before reading without deleting it", async () => {
       const absolutePath = path.join(vaultRoot, ...STAGED_PATH.split("/"));
       await writeFile(absolutePath, new Uint8Array(OPENARTIFACTS_MAX_HTML_BYTES + 1).fill(0x61));
 
       await expect(consumeOpenArtifactsAgentHandoff(vaultRoot, STAGED_PATH)).rejects.toThrow(
         `OpenArtifacts HTML is ${OPENARTIFACTS_MAX_HTML_BYTES + 1} bytes; the limit is ${OPENARTIFACTS_MAX_HTML_BYTES} bytes.`
       );
-      await expect(readFile(absolutePath)).rejects.toMatchObject({ code: "ENOENT" });
+      await expect(readFile(absolutePath)).resolves.toBeDefined();
     });
 
-    it("rejects and removes a linked handoff without changing its target", async () => {
+    it("rejects a linked handoff without changing its target", async () => {
       const externalPath = path.join(vaultRoot, "external.html");
       const stagedPath = path.join(vaultRoot, ...STAGED_PATH.split("/"));
       await writeFile(externalPath, "external bytes", "utf8");
@@ -94,7 +116,7 @@ describe("openArtifactsAgentHandoff", () => {
       await expect(consumeOpenArtifactsAgentHandoff(vaultRoot, STAGED_PATH)).rejects.toThrow(
         "one ordinary .html file inside the vault handoff folder"
       );
-      await expect(readFile(stagedPath)).rejects.toMatchObject({ code: "ENOENT" });
+      await expect(readlink(stagedPath)).resolves.toBe(externalPath);
       await expect(readFile(externalPath, "utf8")).resolves.toBe("external bytes");
     });
 

@@ -234,7 +234,7 @@ describe("builtinSkills", () => {
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/337 hands OpenArtifacts HTML through the stable host wire without exposing publication controls", () => {
       const skill = BUILTIN_SKILLS.find((item) => item.name === "openartifacts-publish");
       expect(skill).toBeDefined();
-      expect(skill!.version).toBe(2);
+      expect(skill!.version).toBe(3);
       expect(skill!.legacyName).toBe("symposium-publish");
       expect(skill!.files.map((file) => file.path)).toEqual([
         "themes/research-memo.md",
@@ -267,6 +267,7 @@ describe("builtinSkills", () => {
       expect(skill!.skillMd).toContain("report the exact error");
       expect(skill!.skillMd).toContain("Copilot publishes the HTML unchanged");
       expect(skill!.skillMd).toContain("resources are allowed");
+      expect(skill!.skillMd).toContain("run the wrapper with the same HTML path");
       expect(skill!.skillMd).not.toContain("self-contained");
       expect(skill!.skillMd).not.toContain("include no scripts");
       expect(skill!.skillMd).toContain("`deleted`");

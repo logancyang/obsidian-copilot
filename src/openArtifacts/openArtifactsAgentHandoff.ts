@@ -5,7 +5,7 @@ import {
 } from "@/openArtifacts/constants";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 
-/** Signals that a filesystem-backed agent handoff cannot be consumed safely. */
+/** Signals that a filesystem-backed agent handoff cannot be read safely. */
 class OpenArtifactsAgentHandoffError extends Error {
   constructor(message: string) {
     super(message);
@@ -18,10 +18,9 @@ const UNSAFE_ROOT_MESSAGE =
   "The OpenArtifacts handoff folder must be an ordinary directory inside the current vault.";
 const UNSAFE_FILE_MESSAGE =
   "Staged OpenArtifacts HTML must be one ordinary .html file inside the vault handoff folder.";
-const CLEANUP_FAILED_MESSAGE = "Copilot could not remove the staged OpenArtifacts HTML.";
 const PREVIEW_FOLDER_PREFIX = "copilot-openartifacts-preview-";
 const PREVIEW_FILE_NAME = "preview.html";
-/** Owns the temporary browser preview created from one consumed agent handoff. */
+/** Owns the temporary browser preview created from one captured agent handoff. */
 export interface OpenArtifactsAgentHandoff {
   readonly html: string;
   readonly previewPath: string;
@@ -68,17 +67,6 @@ function decodeUtf8(bytes: Uint8Array): string {
     return new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);
   } catch {
     throw new OpenArtifactsAgentHandoffError("Staged OpenArtifacts HTML must be valid UTF-8.");
-  }
-}
-
-async function removeHandoff(stagedPath: string): Promise<void> {
-  const { unlink } = requireNodeModule<typeof import("node:fs/promises")>("fs/promises");
-  try {
-    await unlink(stagedPath);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
-      throw new OpenArtifactsAgentHandoffError(CLEANUP_FAILED_MESSAGE);
-    }
   }
 }
 
@@ -145,7 +133,7 @@ async function createLocalPreview(html: string): Promise<OpenArtifactsAgentHando
 }
 
 /**
- * Consumes one bounded handoff before review and exposes the captured bytes through a
+ * Reads one bounded handoff without deleting it and exposes the captured bytes through a
  * temporary local file whose lifecycle stays independent of agent-controlled storage.
  *
  * @param vaultRootAbs The absolute desktop vault root that owns the handoff.
@@ -181,11 +169,14 @@ export async function consumeOpenArtifactsAgentHandoff(
     }
     html = decodeUtf8(Uint8Array.from(bytes));
   } catch (error) {
-    await removeHandoff(stagedPath);
     if (error instanceof OpenArtifactsAgentHandoffError) throw error;
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      throw new OpenArtifactsAgentHandoffError(
+        `The staged HTML file was not found: ${stagedHtmlPath}. Regenerate the HTML before reopening review.`
+      );
+    }
     throw new OpenArtifactsAgentHandoffError(UNSAFE_FILE_MESSAGE);
   }
 
-  await removeHandoff(stagedPath);
   return createLocalPreview(html);
 }

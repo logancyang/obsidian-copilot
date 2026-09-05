@@ -586,7 +586,7 @@ const FETCH_X = relaySkill({
   scriptFile: "fetch-x.sh",
 });
 
-const OPENARTIFACTS_PUBLISH_VERSION = 2;
+const OPENARTIFACTS_PUBLISH_VERSION = 3;
 const OPENARTIFACTS_PUBLISH: BuiltinSkill = {
   name: "openartifacts-publish",
   legacyName: "symposium-publish",
@@ -664,8 +664,9 @@ On Windows, use the \`.cmd\` wrapper (prefix with \`&\` in PowerShell):
 For withdrawal, omit the HTML argument on either platform. The wrapper waits for
 the user's decision. The host owns the browser preview, confirmation, note
 identity, and publishing; never choose an action or document id, simulate clicks,
-or publish directly through the npm CLI or HTTP. The host consumes the staged
-file and cleans up its temporary preview when review closes.
+or publish directly through the npm CLI or HTTP. The host preserves the staged
+HTML and cleans up only its temporary browser preview when review closes. If the
+user asks to reopen a cancelled review, run the wrapper with the same HTML path.
 
 ## 3. Report the result
 
