@@ -1,6 +1,6 @@
 import {
   ManagedBinaryConfigView,
-  type ManagedBinaryConfigViewProps,
+  type ManagedBinaryConfigProps,
 } from "@/agentMode/backends/shared/ui/ManagedBinaryConfigView";
 import React from "react";
 
@@ -11,18 +11,7 @@ export type {
   ManagedBinaryConfigActions as OpencodeConfigActions,
 } from "@/agentMode/backends/shared/ui/ManagedBinaryConfigView";
 
-export type OpencodeConfigViewProps = Pick<
-  ManagedBinaryConfigViewProps,
-  | "state"
-  | "source"
-  | "onSourceChange"
-  | "activeSource"
-  | "managed"
-  | "customPath"
-  | "upgradeRun"
-  | "actions"
-  | "onClose"
->;
+export type OpencodeConfigViewProps = ManagedBinaryConfigProps;
 
 export const OpencodeConfigView: React.FC<OpencodeConfigViewProps> = (props) => (
   <ManagedBinaryConfigView
