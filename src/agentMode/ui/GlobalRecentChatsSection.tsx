@@ -510,7 +510,7 @@ export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
               : "No recent chats"}
         </div>
       ) : (
-        <AgentHomePreviewList hasMoreItems={false}>
+        <AgentHomePreviewList>
           <div className="tw-flex tw-flex-col tw-divide-y tw-divide-border">
             {visibleItems.map((item) => (
               <RecentChatRow

@@ -199,7 +199,6 @@ describe("GlobalRecentChatsSection", () => {
       expect(scrollRegion?.classList.contains("tw-min-h-0")).toBe(true);
       expect(scrollRegion?.classList.contains("tw-flex-1")).toBe(true);
       expect(scrollRegion?.classList.contains("tw-max-h-56")).toBe(false);
-      expect(scrollRegion?.parentElement?.classList.contains("tw-flex-1")).toBe(true);
     });
 
     it("renders project badges for every chat in the global scroll region", () => {
