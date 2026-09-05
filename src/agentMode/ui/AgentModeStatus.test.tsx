@@ -13,12 +13,15 @@ let installState: ReturnType<BackendDescriptor["getInstallState"]> = {
   source: "custom",
 };
 let authState: BackendAuthUiState;
+let managedInstallState: ReturnType<NonNullable<BackendDescriptor["managedInstall"]>["getState"]>;
 
 jest.mock("@/agentMode/ui/useBackendDescriptor", () => ({
   // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks real hook exports
   useSessionBackendDescriptor: () => descriptor,
   // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks real hook exports
   useBackendInstallState: () => installState,
+  // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks real hook exports
+  useManagedInstallActionState: () => managedInstallState,
 }));
 
 jest.mock("@/agentMode/session/useBackendAuthState", () => ({
@@ -46,6 +49,7 @@ describe("AgentModeStatus", () => {
         url: null,
         signIn: jest.fn(),
       };
+      managedInstallState = { kind: "idle" };
       jest.clearAllMocks();
     });
 
@@ -123,14 +127,23 @@ describe("AgentModeStatus", () => {
         minVersion: "2.1.206",
         message: "Claude must be upgraded.",
       };
-      const upgrade = jest.fn(() => new Promise<void>(() => undefined));
-      descriptor = { ...descriptor, upgrade };
+      const run = jest.fn(() => new Promise<void>(() => undefined));
+      descriptor = {
+        ...descriptor,
+        managedInstall: {
+          getState: jest.fn(() => managedInstallState),
+          subscribe: jest.fn(() => () => {}),
+          run,
+        },
+      };
       const plugin = { app: {} } as unknown as CopilotPlugin;
 
-      render(<AgentModeStatus plugin={plugin} onInstallClick={jest.fn()} />);
+      const { rerender } = render(<AgentModeStatus plugin={plugin} onInstallClick={jest.fn()} />);
 
       fireEvent.click(screen.getByRole("button", { name: "Upgrade" }));
-      expect(upgrade).toHaveBeenCalledWith(plugin);
+      expect(run).toHaveBeenCalledWith(plugin);
+      managedInstallState = { kind: "running", label: "Downloading…", percent: 50 };
+      rerender(<AgentModeStatus plugin={plugin} onInstallClick={jest.fn()} />);
       expect(screen.getByRole("button", { name: "Upgrading…" }).hasAttribute("disabled")).toBe(
         true
       );
