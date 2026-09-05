@@ -278,6 +278,36 @@ export interface RelevantNotesResult {
 
 const EMPTY_RELEVANT_NOTES: readonly RelevantNoteEntry[] = Object.freeze([]);
 
+/**
+ * Report whether two settled results would render identically.
+ *
+ * Live re-queries repeat while a note is being written, and most of them
+ * reproduce the previous ranking. Callers use this to leave the rendered rows
+ * alone in that case rather than replaying their animations.
+ * https://github.com/Brevilabs/obsidian-copilot-private/issues/362
+ *
+ * @param a - Previously settled result.
+ * @param b - Newly settled result.
+ */
+export function isSameRelevantNotesResult(a: RelevantNotesResult, b: RelevantNotesResult): boolean {
+  if (a === b) return true;
+  if (a.status !== b.status) return false;
+  if (a.details?.errorMessage !== b.details?.errorMessage) return false;
+  if (a.details?.exclusionReason !== b.details?.exclusionReason) return false;
+  if (a.details?.exclusionRule !== b.details?.exclusionRule) return false;
+  if (a.notes.length !== b.notes.length) return false;
+  return a.notes.every((note, index) => {
+    const other = b.notes[index];
+    return (
+      note.note.path === other.note.path &&
+      note.note.title === other.note.title &&
+      note.metadata.score === other.metadata.score &&
+      note.metadata.hasOutgoingLinks === other.metadata.hasOutgoingLinks &&
+      note.metadata.hasBacklinks === other.metadata.hasBacklinks
+    );
+  });
+}
+
 export interface FindRelevantNotesOptions {
   app: App;
   filePath: string;

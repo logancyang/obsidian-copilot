@@ -720,6 +720,24 @@ describe("model", () => {
       expect(sanitized.selfHostSearchProvider).toBe("firecrawl");
     });
 
+    it("turns live Relevant Notes updates on for settings written before the field existed (https://github.com/Brevilabs/obsidian-copilot-private/issues/362)", () => {
+      const withoutField = { ...DEFAULT_SETTINGS } as unknown as Record<string, unknown>;
+      delete withoutField.relevantNotesLiveUpdate;
+
+      const sanitized = sanitizeSettings(withoutField as unknown as CopilotSettings);
+
+      expect(sanitized.relevantNotesLiveUpdate).toBe(true);
+    });
+
+    it("preserves a persisted choice to switch live Relevant Notes updates off (https://github.com/Brevilabs/obsidian-copilot-private/issues/362)", () => {
+      const sanitized = sanitizeSettings({
+        ...DEFAULT_SETTINGS,
+        relevantNotesLiveUpdate: false,
+      });
+
+      expect(sanitized.relevantNotesLiveUpdate).toBe(false);
+    });
+
     it("drops a persisted global output cap so it cannot truncate answers again (https://github.com/logancyang/obsidian-copilot-preview/issues/312)", () => {
       const withRetiredCap = {
         ...DEFAULT_SETTINGS,

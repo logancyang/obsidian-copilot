@@ -76,6 +76,12 @@ For a remote Miyo or mobile device, error and exclusion cards tell you to review
 
 Links and backlinks do not create rows in any of these empty states. Copilot's own inclusion and exclusion patterns do not filter Relevant Notes; Miyo's folder filters are the only scope there.
 
+#### Live update
+
+The **Live** switch at the top right of the pane keeps Relevant Notes in step with the note you are writing. While it is on, the list re-ranks itself a few seconds after each change lands: notes that become more relevant rise and their relevance bar grows, newly relevant notes fade in, and notes that no longer relate fade out. Turning it off freezes the pane until you open another note or reconnect Miyo, and turning it back on catches it up on whatever you wrote while it was off. The switch is on by default and your choice is remembered.
+
+Updates follow what Miyo has indexed rather than the text on screen, so they arrive a few seconds behind your typing. A note you are not editing costs nothing, and a change that does not move the ranking leaves the list alone. If your system is set to reduce motion, the list still updates but nothing animates.
+
 ## Search conversations and process documents
 
 Miyo can also index supported ChatGPT and Claude chat histories. Configure those sources in Miyo, then use the **Search chat** row in Copilot to see their status and open Miyo's management screen. Chat-history search is separate from vault search.

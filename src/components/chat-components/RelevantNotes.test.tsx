@@ -1,6 +1,7 @@
 /* eslint-disable @eslint-react/hooks-extra/no-unnecessary-use-prefix -- Mock exports must preserve production hook names. */
 import { RelevantNotes } from "@/components/chat-components/RelevantNotes";
 import { useActiveFile } from "@/hooks/useActiveFile";
+import { LIVE_REFRESH_INTERVAL_MS } from "@/hooks/useLiveRelevantNotesRefresh";
 import { findRelevantNotes } from "@/search/findRelevantNotes";
 import { openCopilotSettings } from "@/settings/openSettings";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -9,25 +10,30 @@ import React from "react";
 
 const mockOpenFile = jest.fn().mockResolvedValue(undefined);
 const mockGetLeaf = jest.fn(() => ({ openFile: mockOpenFile }));
+let vaultModifyHandlers: ((file: unknown) => void)[] = [];
 const mockApp = {
   vault: {
     getAbstractFileByPath: jest.fn(),
     cachedRead: jest.fn().mockResolvedValue(""),
     getName: jest.fn(() => "Work Vault"),
+    on: jest.fn((event: string, handler: (file: unknown) => void) => {
+      if (event === "modify") vaultModifyHandlers.push(handler);
+      return { handler };
+    }),
+    offref: jest.fn((ref: { handler: (file: unknown) => void }) => {
+      vaultModifyHandlers = vaultModifyHandlers.filter((handler) => handler !== ref.handler);
+    }),
   },
   workspace: {
     getLeaf: mockGetLeaf,
   },
 };
-let mockSettings: {
-  enableMiyo: boolean;
-  miyoServerUrl: string;
-  plusLicenseKey: string;
-  qaExclusions?: string;
-} = {
+const mockUpdateSetting = jest.fn();
+let mockSettings = {
   enableMiyo: true,
   miyoServerUrl: "",
   plusLicenseKey: "old-license",
+  relevantNotesLiveUpdate: true,
 };
 let mockMiyoBackend = "unknown";
 let indexChangedListener: (() => void) | null = null;
@@ -49,6 +55,7 @@ jest.mock("@/miyo/useMiyoStatus", () => ({
 }));
 
 jest.mock("@/search/findRelevantNotes", () => ({
+  ...jest.requireActual<typeof import("@/search/findRelevantNotes")>("@/search/findRelevantNotes"),
   findRelevantNotes: jest.fn(),
 }));
 
@@ -63,6 +70,9 @@ jest.mock("@/miyo/miyoIndex", () => ({
 
 jest.mock("@/settings/model", () => ({
   useSettingsValue: () => mockSettings,
+  updateSetting: (...args: unknown[]) => {
+    mockUpdateSetting(...args);
+  },
 }));
 
 jest.mock("@/settings/openSettings", () => ({ openCopilotSettings: jest.fn() }));
@@ -83,9 +93,11 @@ describe("RelevantNotes", () => {
       enableMiyo: true,
       miyoServerUrl: "",
       plusLicenseKey: "old-license",
+      relevantNotesLiveUpdate: true,
     };
     mockMiyoBackend = "unknown";
     indexChangedListener = null;
+    vaultModifyHandlers = [];
     const sourceFile = makeMarkdownFile("Source.md");
     const targetFile = makeMarkdownFile("Target.md");
     mockUseActiveFile.mockReturnValue(sourceFile);
@@ -480,6 +492,232 @@ describe("RelevantNotes", () => {
       });
 
       expect(screen.getByText("Current")).toBeTruthy();
+    });
+
+    it("keeps the settled rows on screen while a live re-query runs (https://github.com/Brevilabs/obsidian-copilot-private/issues/362)", async () => {
+      jest.useFakeTimers();
+      try {
+        render(<RelevantNotes onAddToChat={jest.fn()} />);
+        await act(async () => {});
+        expect(screen.getByText("Target")).toBeTruthy();
+        let releaseLiveQuery: (() => void) | null = null;
+        mockFindRelevantNotes.mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              releaseLiveQuery = () =>
+                resolve({
+                  notes: [
+                    {
+                      note: { path: "Target.md", title: "Target" },
+                      metadata: { score: 0.9, hasOutgoingLinks: false, hasBacklinks: false },
+                    },
+                  ],
+                  status: "matches",
+                });
+            })
+        );
+
+        act(() => {
+          vaultModifyHandlers.forEach((handler) => handler(makeMarkdownFile("Source.md")));
+        });
+        act(() => {
+          jest.advanceTimersByTime(LIVE_REFRESH_INTERVAL_MS);
+        });
+
+        expect(screen.queryByText("Finding relevant notes…")).toBeNull();
+        expect(screen.getByText("Target")).toBeTruthy();
+        await act(async () => releaseLiveQuery?.());
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it("re-ranks the rows when a live re-query returns a new order (https://github.com/Brevilabs/obsidian-copilot-private/issues/362)", async () => {
+      jest.useFakeTimers();
+      try {
+        render(<RelevantNotes onAddToChat={jest.fn()} />);
+        await act(async () => {});
+        mockFindRelevantNotes.mockResolvedValue({
+          notes: [
+            {
+              note: { path: "Source Two.md", title: "Source Two" },
+              metadata: { score: 0.95, hasOutgoingLinks: false, hasBacklinks: false },
+            },
+            {
+              note: { path: "Target.md", title: "Target" },
+              metadata: { score: 0.2, hasOutgoingLinks: false, hasBacklinks: false },
+            },
+          ],
+          status: "matches",
+        });
+
+        act(() => {
+          vaultModifyHandlers.forEach((handler) => handler(makeMarkdownFile("Source.md")));
+        });
+        await act(async () => {
+          jest.advanceTimersByTime(LIVE_REFRESH_INTERVAL_MS);
+        });
+
+        expect(screen.getByText("Source Two")).toBeTruthy();
+        expect(screen.getByText("95%")).toBeTruthy();
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it("never re-queries while live update is switched off (https://github.com/Brevilabs/obsidian-copilot-private/issues/362)", async () => {
+      jest.useFakeTimers();
+      mockSettings = { ...mockSettings, relevantNotesLiveUpdate: false };
+      try {
+        render(<RelevantNotes onAddToChat={jest.fn()} />);
+        await act(async () => {});
+        mockFindRelevantNotes.mockClear();
+
+        act(() => {
+          vaultModifyHandlers.forEach((handler) => handler(makeMarkdownFile("Source.md")));
+          jest.advanceTimersByTime(LIVE_REFRESH_INTERVAL_MS * 4);
+        });
+
+        expect(vaultModifyHandlers).toHaveLength(0);
+        expect(mockFindRelevantNotes).not.toHaveBeenCalled();
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it("persists the live update choice so it survives a reload (https://github.com/Brevilabs/obsidian-copilot-private/issues/362)", async () => {
+      render(<RelevantNotes onAddToChat={jest.fn()} />);
+      await act(async () => {});
+
+      fireEvent.click(screen.getByRole("switch"));
+
+      expect(mockUpdateSetting).toHaveBeenCalledWith("relevantNotesLiveUpdate", false);
+    });
+
+    it("catches the pane up on writes made while live update was off (https://github.com/Brevilabs/obsidian-copilot-private/issues/362)", async () => {
+      mockSettings = { ...mockSettings, relevantNotesLiveUpdate: false };
+      const { rerender } = render(<RelevantNotes onAddToChat={jest.fn()} />);
+      await act(async () => {});
+      mockFindRelevantNotes.mockClear();
+
+      fireEvent.click(screen.getByRole("switch"));
+      expect(mockUpdateSetting).toHaveBeenCalledWith("relevantNotesLiveUpdate", true);
+      mockSettings = { ...mockSettings, relevantNotesLiveUpdate: true };
+      rerender(<RelevantNotes onAddToChat={jest.fn()} />);
+      await act(async () => {});
+
+      expect(mockFindRelevantNotes).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not re-query when live update is switched off (https://github.com/Brevilabs/obsidian-copilot-private/issues/362)", async () => {
+      const { rerender } = render(<RelevantNotes onAddToChat={jest.fn()} />);
+      await act(async () => {});
+      mockFindRelevantNotes.mockClear();
+
+      fireEvent.click(screen.getByRole("switch"));
+      expect(mockUpdateSetting).toHaveBeenCalledWith("relevantNotesLiveUpdate", false);
+      mockSettings = { ...mockSettings, relevantNotesLiveUpdate: false };
+      rerender(<RelevantNotes onAddToChat={jest.fn()} />);
+      await act(async () => {});
+
+      expect(mockFindRelevantNotes).not.toHaveBeenCalled();
+    });
+
+    it("keeps the ranking the reader froze when live update goes off mid-query (https://github.com/Brevilabs/obsidian-copilot-private/issues/362)", async () => {
+      jest.useFakeTimers();
+      try {
+        const { rerender } = render(<RelevantNotes onAddToChat={jest.fn()} />);
+        await act(async () => {});
+        expect(screen.getByText("Target")).toBeTruthy();
+        let releaseLiveQuery: (() => void) | null = null;
+        mockFindRelevantNotes.mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              releaseLiveQuery = () =>
+                resolve({
+                  notes: [
+                    {
+                      note: { path: "Late.md", title: "Late" },
+                      metadata: { score: 0.9, hasOutgoingLinks: false, hasBacklinks: false },
+                    },
+                  ],
+                  status: "matches",
+                });
+            })
+        );
+        act(() => {
+          vaultModifyHandlers.forEach((handler) => handler(makeMarkdownFile("Source.md")));
+        });
+        act(() => {
+          jest.advanceTimersByTime(LIVE_REFRESH_INTERVAL_MS);
+        });
+
+        mockSettings = { ...mockSettings, relevantNotesLiveUpdate: false };
+        rerender(<RelevantNotes onAddToChat={jest.fn()} />);
+        await act(async () => releaseLiveQuery?.());
+
+        expect(screen.queryByText("Late")).toBeNull();
+        expect(screen.getByText("Target")).toBeTruthy();
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it("starts no second live search while the previous one is still open (https://github.com/Brevilabs/obsidian-copilot-private/issues/362)", async () => {
+      jest.useFakeTimers();
+      try {
+        render(<RelevantNotes onAddToChat={jest.fn()} />);
+        await act(async () => {});
+        mockFindRelevantNotes.mockClear();
+        mockFindRelevantNotes.mockReturnValue(new Promise(() => undefined));
+
+        act(() => {
+          vaultModifyHandlers.forEach((handler) => handler(makeMarkdownFile("Source.md")));
+        });
+        act(() => {
+          jest.advanceTimersByTime(LIVE_REFRESH_INTERVAL_MS);
+        });
+        act(() => {
+          jest.advanceTimersByTime(LIVE_REFRESH_INTERVAL_MS);
+        });
+        act(() => {
+          jest.advanceTimersByTime(LIVE_REFRESH_INTERVAL_MS);
+        });
+
+        expect(mockFindRelevantNotes).toHaveBeenCalledTimes(1);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it("offers no live update and follows no writes where Miyo cannot run (https://github.com/Brevilabs/obsidian-copilot-private/issues/362)", async () => {
+      (Platform as { isMobile: boolean }).isMobile = true;
+      mockSettings = { ...mockSettings, miyoServerUrl: "" };
+      jest.useFakeTimers();
+      try {
+        render(<RelevantNotes onAddToChat={jest.fn()} />);
+        await act(async () => {});
+        mockFindRelevantNotes.mockClear();
+
+        act(() => {
+          jest.advanceTimersByTime(LIVE_REFRESH_INTERVAL_MS * 4);
+        });
+
+        expect(screen.queryByRole("switch")).toBeNull();
+        expect(vaultModifyHandlers).toHaveLength(0);
+        expect(mockFindRelevantNotes).not.toHaveBeenCalled();
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it("offers no live update control while Miyo is disabled (https://github.com/Brevilabs/obsidian-copilot-private/issues/362)", async () => {
+      mockSettings = { ...mockSettings, enableMiyo: false };
+
+      render(<RelevantNotes onAddToChat={jest.fn()} />);
+      await act(async () => {});
+
+      expect(screen.queryByRole("switch")).toBeNull();
     });
   });
 });

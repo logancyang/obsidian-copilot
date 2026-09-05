@@ -1,22 +1,32 @@
-import { Button } from "@/components/ui/button";
-import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
+import { RelevantNoteRow } from "@/components/chat-components/ui/RelevantNoteRow";
 import { RelevantNotesPane } from "@/components/chat-components/ui/RelevantNotesPane";
+import { RelevantNotesToolbar } from "@/components/chat-components/ui/RelevantNotesToolbar";
+import { useRelevantNoteRowTransitions } from "@/components/chat-components/ui/useRelevantNoteRowTransitions";
 import { MIYO_HOMEPAGE_URL } from "@/constants";
 import { useApp } from "@/context";
 import { useActiveFile } from "@/hooks/useActiveFile";
-import { useNoteDrag } from "@/hooks/useNoteDrag";
+import { useLiveRelevantNotesRefresh } from "@/hooks/useLiveRelevantNotesRefresh";
+import { useReducedMotion } from "@/hooks/useReducedMotion";
 import { cn } from "@/lib/utils";
 import { logError, logWarn } from "@/logger";
-import { getMiyoFolderName, isLocalMiyoUrl, MIYO_DEEPLINK_URL } from "@/miyo/miyoUtils";
+import {
+  getMiyoFolderName,
+  isLocalMiyoUrl,
+  MIYO_DEEPLINK_URL,
+  shouldUseMiyo,
+} from "@/miyo/miyoUtils";
 import { useMiyoStatus } from "@/miyo/useMiyoStatus";
-import { findRelevantNotes, type RelevantNoteEntry } from "@/search/findRelevantNotes";
+import {
+  findRelevantNotes,
+  isSameRelevantNotesResult,
+  type RelevantNoteEntry,
+} from "@/search/findRelevantNotes";
 import { onMiyoIndexChanged } from "@/miyo/miyoIndex";
 import { openCopilotSettings } from "@/settings/openSettings";
-import { useSettingsValue } from "@/settings/model";
+import { updateSetting, useSettingsValue } from "@/settings/model";
 import { sha256 } from "@/utils/hash";
-import { ArrowRight, FileInput, FileOutput, FileText, PlusCircle } from "lucide-react";
 import { Platform, TFile } from "obsidian";
-import React, { memo, useCallback, useEffect, useState } from "react";
+import React, { memo, useCallback, useEffect, useRef, useState } from "react";
 
 const EMPTY_RELEVANT_NOTES: readonly RelevantNoteEntry[] = Object.freeze([]);
 const IDLE_RELEVANT_NOTES_RESULT = Object.freeze({
@@ -52,21 +62,80 @@ interface SettledRelevantNotesRequest {
   result: Awaited<ReturnType<typeof findRelevantNotes>> | typeof UNAVAILABLE_RELEVANT_NOTES_RESULT;
 }
 
-function useRelevantNotes(
-  enableMiyo: boolean,
-  miyoServerUrl: string,
-  miyoBackendAvailable: boolean,
-  miyoCredentialIdentity: string
-) {
+/**
+ * Keep the settled request untouched when a live re-query reproduces it.
+ *
+ * Returning the same object leaves React's state unchanged, so an unchanged
+ * ranking cannot restart the row animations while the user is still typing.
+ */
+function nextSettledRequest(
+  settled: SettledRelevantNotesRequest | null,
+  requestKey: string,
+  result: SettledRelevantNotesRequest["result"]
+): SettledRelevantNotesRequest {
+  return settled?.requestKey === requestKey && isSameRelevantNotesResult(settled.result, result)
+    ? settled
+    : { requestKey, result };
+}
+
+/**
+ * The re-query the pane is currently running or about to run.
+ *
+ * `restart` enters the request key, so bumping it drops the settled rows and
+ * shows the loading state. A live re-query asks the same question again while
+ * the reader watches, so it keeps `restart` and only replaces the object: the
+ * rows stay on screen instead of blanking on every keystroke pause.
+ * https://github.com/Brevilabs/obsidian-copilot-private/issues/362
+ */
+interface RelevantNotesRequery {
+  restart: number;
+  live: boolean;
+}
+
+const INITIAL_REQUERY: RelevantNotesRequery = Object.freeze({ restart: 0, live: false });
+
+interface UseRelevantNotesOptions {
+  enableMiyo: boolean;
+  miyoServerUrl: string;
+  miyoBackendAvailable: boolean;
+  miyoCredentialIdentity: string;
+  /** Whether the reader has live update switched on for the pane. */
+  liveUpdateEnabled: boolean;
+}
+
+function useRelevantNotes({
+  enableMiyo,
+  miyoServerUrl,
+  miyoBackendAvailable,
+  miyoCredentialIdentity,
+  liveUpdateEnabled,
+}: UseRelevantNotesOptions) {
   const app = useApp();
   const [settledRequest, setSettledRequest] = useState<SettledRelevantNotesRequest | null>(null);
-  const [signalTick, setSignalTick] = useState(0);
+  const [requery, setRequery] = useState<RelevantNotesRequery>(INITIAL_REQUERY);
   const activeFile = useActiveFile();
+  // Switching live update off must freeze a re-query that is already open, and
+  // the effect below closes over the value it started with.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/362
+  const liveUpdateEnabledRef = useRef(liveUpdateEnabled);
+  liveUpdateEnabledRef.current = liveUpdateEnabled;
+  const searchOpenRef = useRef(false);
   // Non-Markdown leaves do not provide a note Miyo can relate, so they share
   // the neutral no-source state instead of showing setup guidance.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
   const activeFilePath = activeFile?.extension === "md" ? activeFile.path : undefined;
-  const refresh = useCallback(() => setSignalTick((tick) => tick + 1), []);
+  const refresh = useCallback(
+    () => setRequery((current) => ({ restart: current.restart + 1, live: false })),
+    []
+  );
+  const liveRefresh = useCallback(() => {
+    // Miyo can take longer to answer than the live interval when it is remote
+    // or busy. Starting a second search for the same question would leave both
+    // in flight and throw one answer away, so the tick is skipped instead.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/362
+    if (searchOpenRef.current) return;
+    setRequery((current) => ({ ...current, live: true }));
+  }, []);
   // Without an active note there is nothing to search, so setup state must not
   // replace the pane's neutral empty state.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
@@ -78,7 +147,7 @@ function useRelevantNotes(
           miyoServerUrl,
           miyoBackendAvailable,
           miyoCredentialIdentity,
-          signalTick,
+          requery.restart,
         ])
       : null;
 
@@ -98,19 +167,38 @@ function useRelevantNotes(
 
       // A request key can recur after visiting another note. Clear its earlier
       // result so the repeated request cannot render stale rows while loading.
+      // A result already settled under this key belongs to a live re-query and
+      // is kept, because dropping it would blank the pane while the user types.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
-      setSettledRequest(null);
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/362
+      setSettledRequest((settled) => (settled?.requestKey === requestKey ? settled : null));
+      // Switching live update off freezes the ranking the reader is looking at,
+      // so a live re-query that was still open when they switched it off must
+      // not re-rank it on arrival.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/362
+      const frozen = (settled: SettledRelevantNotesRequest | null) =>
+        requery.live && !liveUpdateEnabledRef.current && settled?.requestKey === requestKey;
+      searchOpenRef.current = true;
       try {
         const result = await findRelevantNotes({ app, filePath: activeFilePath });
         // A settings or active-note change can supersede an in-flight Miyo
         // request. Its older result must not replace the newer pane state.
         // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
-        if (!cancelled) setSettledRequest({ requestKey, result });
+        if (!cancelled)
+          setSettledRequest((settled) =>
+            frozen(settled) ? settled : nextSettledRequest(settled, requestKey, result)
+          );
       } catch (error) {
         if (!cancelled) {
           logWarn("Failed to fetch relevant notes", error);
-          setSettledRequest({ requestKey, result: UNAVAILABLE_RELEVANT_NOTES_RESULT });
+          setSettledRequest((settled) =>
+            frozen(settled)
+              ? settled
+              : nextSettledRequest(settled, requestKey, UNAVAILABLE_RELEVANT_NOTES_RESULT)
+          );
         }
+      } finally {
+        searchOpenRef.current = false;
       }
     }
 
@@ -118,7 +206,7 @@ function useRelevantNotes(
     return () => {
       cancelled = true;
     };
-  }, [app, activeFilePath, requestKey, requestStatus]);
+  }, [app, activeFilePath, requestKey, requestStatus, requery]);
 
   const result: RelevantNotesViewResult =
     requestStatus === "disabled"
@@ -129,280 +217,7 @@ function useRelevantNotes(
           ? settledRequest.result
           : LOADING_RELEVANT_NOTES_RESULT;
 
-  return { result, refresh };
-}
-
-/** Map a 0–1 similarity score directly to the meter fill width (70% → 70%). */
-function meterWidth(score: number): string {
-  return `${Math.max(0, Math.min(100, score * 100))}%`;
-}
-
-/** Color-grade the meter: stronger matches lean fully into the theme accent. */
-function meterColor(score: number): string {
-  const pct = score * 100;
-  const k = Math.max(0, Math.min(1, (pct - 30) / 45));
-  return `color-mix(in srgb, var(--interactive-accent) ${Math.round(40 + 60 * k)}%, var(--text-faint))`;
-}
-
-function RelevanceMeter({ score, className }: { score: number; className?: string }) {
-  return (
-    <div
-      className={cn(
-        "tw-h-[3px] tw-w-full tw-overflow-hidden tw-rounded-full tw-bg-modifier-hover",
-        className
-      )}
-    >
-      <div
-        className={cn("copilot-relevance-meter-fill tw-h-full tw-rounded-full")}
-        style={
-          {
-            "--relevance-meter-fill": meterWidth(score),
-            "--relevance-meter-color": meterColor(score),
-          } as React.CSSProperties
-        }
-      />
-    </div>
-  );
-}
-
-function LinkBadge({ icon, label }: { icon: React.ReactNode; label: string }) {
-  return (
-    <span
-      title={label}
-      className="tw-flex tw-items-center tw-justify-center tw-rounded-sm tw-bg-modifier-hover tw-p-1 tw-text-faint"
-    >
-      {icon}
-    </span>
-  );
-}
-
-function RelevantNoteHoverCard({
-  note,
-  onAddToChat,
-  onNavigateToNote,
-  children,
-}: {
-  note: RelevantNoteEntry;
-  onAddToChat: () => void;
-  onNavigateToNote: () => void;
-  children: React.ReactNode;
-}) {
-  const app = useApp();
-  const [open, setOpen] = useState(false);
-  const [fileContent, setFileContent] = useState<string | null>(null);
-  const similarity = note.metadata.score;
-
-  const loadContent = useCallback(async () => {
-    if (fileContent) return; // Don't reload once cached
-    const file = app.vault.getAbstractFileByPath(note.note.path);
-    if (file instanceof TFile) {
-      const content = await app.vault.cachedRead(file);
-
-      // Remove YAML frontmatter if it exists
-      let cleanContent = content;
-      if (content.startsWith("---")) {
-        const endOfFrontmatter = content.indexOf("---", 3);
-        if (endOfFrontmatter !== -1) {
-          cleanContent = content.slice(endOfFrontmatter + 3).trim();
-        }
-      }
-
-      setFileContent(cleanContent);
-    }
-  }, [app, fileContent, note.note.path]);
-
-  useEffect(() => {
-    if (open) {
-      void loadContent();
-    }
-  }, [open, loadContent]);
-
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverAnchor asChild>
-        <div onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
-          {children}
-        </div>
-      </PopoverAnchor>
-      <PopoverContent
-        side="left"
-        align="start"
-        sideOffset={0}
-        onMouseEnter={() => setOpen(true)}
-        onMouseLeave={() => setOpen(false)}
-        onOpenAutoFocus={(e) => e.preventDefault()}
-        className="tw-flex tw-w-fit tw-min-w-72 tw-max-w-96 tw-flex-col tw-gap-3 tw-overflow-hidden tw-p-3"
-      >
-        <div className="tw-flex tw-flex-col tw-gap-1">
-          <span className="tw-text-sm tw-font-semibold tw-text-normal">{note.note.title}</span>
-          <span className="tw-flex tw-items-center tw-gap-1.5 tw-text-xs tw-text-faint">
-            <FileText className="tw-size-3.5 tw-shrink-0" />
-            <span className="tw-truncate">{note.note.path}</span>
-          </span>
-        </div>
-
-        {fileContent && (
-          <p className="tw-m-0 tw-max-h-64 tw-overflow-y-auto tw-whitespace-pre-line tw-text-xs tw-leading-normal tw-text-muted">
-            {fileContent}
-          </p>
-        )}
-
-        <div className="tw-flex tw-items-center tw-gap-2">
-          <span className="tw-shrink-0 tw-text-xs tw-text-faint">Similarity</span>
-          <RelevanceMeter score={similarity} className="tw-h-1 tw-flex-1" />
-          <span className="tw-shrink-0 tw-text-xs tw-font-medium tw-tabular-nums tw-text-normal">
-            {(similarity * 100).toFixed(1)}%
-          </span>
-        </div>
-
-        {(note.metadata.hasOutgoingLinks || note.metadata.hasBacklinks) && (
-          <div className="tw-flex tw-items-center tw-gap-4 tw-text-xs tw-text-faint">
-            {note.metadata.hasOutgoingLinks && (
-              <span className="tw-flex tw-items-center tw-gap-1">
-                <FileOutput className="tw-size-3.5" />
-                Outgoing links
-              </span>
-            )}
-            {note.metadata.hasBacklinks && (
-              <span className="tw-flex tw-items-center tw-gap-1">
-                <FileInput className="tw-size-3.5" />
-                Backlinks
-              </span>
-            )}
-          </div>
-        )}
-
-        <div className="tw-flex tw-gap-2">
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={onAddToChat}
-            className="tw-flex-1 tw-gap-1.5"
-          >
-            <PlusCircle className="tw-size-4" />
-            Add to Chat
-          </Button>
-          <Button
-            variant="default"
-            size="sm"
-            onClick={onNavigateToNote}
-            className="tw-flex-1 tw-gap-1.5"
-          >
-            Open note
-            <ArrowRight className="tw-size-4" />
-          </Button>
-        </div>
-      </PopoverContent>
-    </Popover>
-  );
-}
-
-function RelevantNoteRow({
-  note,
-  onAddToChat,
-  onNavigateToNote,
-}: {
-  note: RelevantNoteEntry;
-  onAddToChat: () => void;
-  onNavigateToNote: () => void;
-}) {
-  const app = useApp();
-  const handleDragStart = useNoteDrag();
-  const similarity = note.metadata.score;
-
-  return (
-    <RelevantNoteHoverCard
-      note={note}
-      onAddToChat={onAddToChat}
-      onNavigateToNote={onNavigateToNote}
-    >
-      <div className="tw-group tw-rounded-md tw-px-2.5 tw-py-1.5 tw-transition-colors hover:tw-bg-modifier-hover">
-        <div className="tw-flex tw-min-h-6 tw-items-center tw-gap-2">
-          <a
-            draggable
-            onDragStart={(e) => {
-              const file = app.vault.getAbstractFileByPath(note.note.path);
-              if (file instanceof TFile) {
-                handleDragStart(e, file);
-              }
-            }}
-            onClick={(e) => {
-              e.preventDefault();
-              onNavigateToNote();
-            }}
-            onAuxClick={(e) => {
-              if (e.button === 1) {
-                e.preventDefault();
-                onNavigateToNote();
-              }
-            }}
-            className="tw-min-w-0 tw-flex-1 tw-cursor-pointer tw-truncate tw-text-sm tw-font-medium tw-text-normal !tw-no-underline"
-          >
-            {note.note.title}
-          </a>
-
-          <div className="tw-flex tw-shrink-0 tw-items-center tw-gap-1.5 group-hover:tw-hidden">
-            {note.metadata.hasOutgoingLinks && (
-              <LinkBadge icon={<FileOutput className="tw-size-3" />} label="Outgoing link" />
-            )}
-            {note.metadata.hasBacklinks && (
-              <LinkBadge icon={<FileInput className="tw-size-3" />} label="Backlink" />
-            )}
-            <span className="tw-text-xs tw-font-medium tw-tabular-nums tw-text-muted">
-              {Math.round(similarity * 100)}%
-            </span>
-          </div>
-
-          <div className="tw-hidden tw-shrink-0 tw-items-center tw-gap-0.5 group-hover:tw-flex">
-            <Button
-              variant="ghost2"
-              size="icon"
-              title="Add to Chat"
-              className="tw-size-6 tw-p-0"
-              onClick={(e) => {
-                e.stopPropagation();
-                onAddToChat();
-              }}
-            >
-              <PlusCircle className="tw-size-4" />
-            </Button>
-            <Button
-              variant="ghost2"
-              size="icon"
-              title="Open note"
-              className="tw-size-6 tw-p-0"
-              onClick={(e) => {
-                e.stopPropagation();
-                onNavigateToNote();
-              }}
-            >
-              <ArrowRight className="tw-size-4" />
-            </Button>
-          </div>
-        </div>
-
-        <RelevanceMeter score={similarity} className="tw-mt-1.5" />
-      </div>
-    </RelevantNoteHoverCard>
-  );
-}
-
-function RelevantNotesToolbar({ activeFileName }: { activeFileName: string | undefined }) {
-  return (
-    <div className="tw-flex tw-flex-none tw-items-center tw-gap-2 tw-border-0 tw-border-b tw-border-solid tw-border-border tw-px-3 tw-py-2">
-      <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-1.5 tw-text-xs tw-text-faint">
-        <span className="tw-shrink-0">Relevant to</span>
-        {activeFileName ? (
-          <span className="tw-flex tw-min-w-0 tw-items-center tw-gap-1 tw-text-muted">
-            <FileText className="tw-size-3.5 tw-shrink-0" />
-            <span className="tw-truncate tw-font-medium tw-text-normal">{activeFileName}</span>
-          </span>
-        ) : (
-          <span className="tw-text-muted">—</span>
-        )}
-      </div>
-    </div>
-  );
+  return { result, refresh, liveRefresh };
 }
 
 interface RelevantNotesProps {
@@ -421,17 +236,36 @@ export const RelevantNotes = memo(
     // credential itself in request state.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
     const miyoCredentialIdentity = sha256(settings.plusLicenseKey);
-    const { result, refresh } = useRelevantNotes(
-      settings.enableMiyo,
-      settings.miyoServerUrl,
+    // Mobile without a remote server cannot reach Miyo at all, so following its
+    // index there would only poll a backend every search is refused by.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/362
+    const canFollowMiyoIndex = shouldUseMiyo(settings);
+    const liveUpdateEnabled = canFollowMiyoIndex && settings.relevantNotesLiveUpdate;
+    const { result, refresh, liveRefresh } = useRelevantNotes({
+      enableMiyo: settings.enableMiyo,
+      miyoServerUrl: settings.miyoServerUrl,
       miyoBackendAvailable,
-      miyoCredentialIdentity
-    );
-    const relevantNotes = result.notes;
+      miyoCredentialIdentity,
+      liveUpdateEnabled,
+    });
     // The toolbar must name only a source the search contract accepts; showing
     // an attachment name would imply that Miyo searched it.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
     const activeFileName = activeFile?.extension === "md" ? activeFile.basename : undefined;
+    const activeFilePath = activeFile?.extension === "md" ? activeFile.path : undefined;
+    const animated = !useReducedMotion();
+    const { rows, registerRow } = useRelevantNoteRowTransitions(
+      result.notes,
+      activeFilePath,
+      animated
+    );
+
+    useLiveRelevantNotesRefresh({
+      app,
+      enabled: liveUpdateEnabled,
+      filePath: activeFilePath,
+      onRefresh: liveRefresh,
+    });
 
     const navigateToNote = (notePath: string) => {
       const file = app.vault.getAbstractFileByPath(notePath);
@@ -454,18 +288,35 @@ export const RelevantNotes = memo(
 
     return (
       <div className={cn("tw-flex tw-min-h-full tw-w-full tw-flex-1 tw-flex-col", className)}>
-        <RelevantNotesToolbar activeFileName={activeFileName} />
+        <RelevantNotesToolbar
+          activeFileName={activeFileName}
+          // Live update follows the Miyo index, so the control is meaningless
+          // while the pane is showing Miyo setup guidance instead of results.
+          // https://github.com/Brevilabs/obsidian-copilot-private/issues/362
+          liveUpdate={
+            canFollowMiyoIndex
+              ? {
+                  enabled: settings.relevantNotesLiveUpdate,
+                  onChange: (enabled) => updateSetting("relevantNotesLiveUpdate", enabled),
+                }
+              : undefined
+          }
+        />
         <div className="tw-relative tw-min-h-0 tw-flex-1">
           <div className="tw-absolute tw-inset-0 tw-overflow-y-auto tw-p-2">
             <RelevantNotesPane
               status={result.status}
               details={result.details}
-              noteRows={relevantNotes.map((note) => (
+              noteRows={rows.map((row) => (
                 <RelevantNoteRow
-                  key={note.note.path}
-                  note={note}
-                  onAddToChat={() => addToChat(note.note.title)}
-                  onNavigateToNote={() => navigateToNote(note.note.path)}
+                  key={row.note.note.path}
+                  note={row.note}
+                  exiting={row.exiting}
+                  entering={row.entering}
+                  animated={animated}
+                  rowRef={registerRow(row.note.note.path)}
+                  onAddToChat={() => addToChat(row.note.note.title)}
+                  onNavigateToNote={() => navigateToNote(row.note.note.path)}
                 />
               ))}
               actions={{
