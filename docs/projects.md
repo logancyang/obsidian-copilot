@@ -4,6 +4,8 @@ Projects are focused workspaces inside Agent Chat. Each Project keeps its own in
 
 A Project works with opencode, Claude, or Codex. It uses the agent, model, effort, and permission setting selected for the current chat. It does not lock you to a separate model.
 
+On the Agent Chat home screen, open **Projects** to browse your most recently used Projects. Scroll the list to see more, or use **Search projects** to find a Project by name or description. Search includes every Project, even those you have not scrolled to yet.
+
 ## Create a Project
 
 1. Open **Agent Chat** from the ribbon or command palette.

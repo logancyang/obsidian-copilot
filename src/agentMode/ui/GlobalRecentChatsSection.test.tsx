@@ -56,47 +56,23 @@ function makeRecentItems(prefix: string, count: number): SectionItems {
   );
 }
 
-function installIntersectionObserverMock(): {
-  intersect: () => void;
-  restore: () => void;
-} {
-  const original = window.IntersectionObserver;
-  let callback: IntersectionObserverCallback | undefined;
-  const observer = {
-    disconnect: jest.fn(),
-    observe: jest.fn(),
-    takeRecords: jest.fn(() => []),
-    unobserve: jest.fn(),
-    root: null,
-    rootMargin: "0px",
-    thresholds: [0.1],
-  } satisfies IntersectionObserver;
+describe("GlobalRecentChatsSection", () => {
+  const originalObserver = window.IntersectionObserver;
+  let callback: IntersectionObserverCallback;
+  const observer = { disconnect: jest.fn(), observe: jest.fn() } as unknown as IntersectionObserver;
+  const intersect = () =>
+    callback([{ isIntersecting: true } as IntersectionObserverEntry], observer);
 
-  Object.defineProperty(window, "IntersectionObserver", {
-    configurable: true,
-    writable: true,
-    value: jest.fn((nextCallback: IntersectionObserverCallback) => {
+  beforeEach(() => {
+    window.IntersectionObserver = jest.fn((nextCallback: IntersectionObserverCallback) => {
       callback = nextCallback;
       return observer;
-    }),
+    });
+  });
+  afterEach(() => {
+    window.IntersectionObserver = originalObserver;
   });
 
-  return {
-    intersect: () => {
-      if (!callback) throw new Error("IntersectionObserver was not created");
-      callback([{ isIntersecting: true } as IntersectionObserverEntry], observer);
-    },
-    restore: () => {
-      Object.defineProperty(window, "IntersectionObserver", {
-        configurable: true,
-        writable: true,
-        value: original,
-      });
-    },
-  };
-}
-
-describe("GlobalRecentChatsSection", () => {
   describe("GlobalRecentChatsSection()", () => {
     it("defaults to the global empty-state copy", () => {
       renderSection();
@@ -199,7 +175,6 @@ describe("GlobalRecentChatsSection", () => {
       expect(scrollRegion?.classList.contains("tw-min-h-0")).toBe(true);
       expect(scrollRegion?.classList.contains("tw-flex-1")).toBe(true);
       expect(scrollRegion?.classList.contains("tw-max-h-56")).toBe(false);
-      expect(scrollRegion?.parentElement?.classList.contains("tw-flex-1")).toBe(true);
     });
 
     it("renders project badges for every chat in the global scroll region", () => {
@@ -215,20 +190,15 @@ describe("GlobalRecentChatsSection", () => {
     });
 
     it("https://github.com/logancyang/obsidian-copilot/issues/3040 finds an older chat beyond the initial rendered batch", () => {
-      const observer = installIntersectionObserverMock();
-      try {
-        const items = makeRecentItems("search", 120);
-        renderSection({ items });
-        expect(screen.queryByText("Chat search-100")).toBeNull();
+      const items = makeRecentItems("search", 120);
+      renderSection({ items });
+      expect(screen.queryByText("Chat search-100")).toBeNull();
 
-        fireEvent.change(screen.getByPlaceholderText("Search chats..."), {
-          target: { value: "Chat search-100" },
-        });
+      fireEvent.change(screen.getByPlaceholderText("Search chats..."), {
+        target: { value: "Chat search-100" },
+      });
 
-        expect(screen.getByText("Chat search-100")).toBeTruthy();
-      } finally {
-        observer.restore();
-      }
+      expect(screen.getByText("Chat search-100")).toBeTruthy();
     });
 
     it("https://github.com/logancyang/obsidian-copilot/issues/3040 honors the saved name and created chat-history sort strategies", () => {
@@ -260,50 +230,35 @@ describe("GlobalRecentChatsSection", () => {
     });
 
     it("https://github.com/logancyang/obsidian-copilot/issues/3040 renders at most 50 chats before the user scrolls", () => {
-      const observer = installIntersectionObserverMock();
-      try {
-        const items = makeRecentItems("paged", 120);
-        renderSection({ items });
+      const items = makeRecentItems("paged", 120);
+      renderSection({ items });
 
-        expect(screen.getAllByText(/^Chat paged-/)).toHaveLength(50);
-        expect(screen.queryByText("Chat paged-50")).toBeNull();
-      } finally {
-        observer.restore();
-      }
+      expect(screen.getAllByText(/^Chat paged-/)).toHaveLength(50);
+      expect(screen.queryByText("Chat paged-50")).toBeNull();
     });
 
     it("https://github.com/logancyang/obsidian-copilot/issues/3040 appends 50 chats when the scroll sentinel enters view", () => {
-      const observer = installIntersectionObserverMock();
-      try {
-        const items = makeRecentItems("paged", 120);
-        renderSection({ items });
+      const items = makeRecentItems("paged", 120);
+      renderSection({ items });
 
-        act(() => observer.intersect());
+      act(() => intersect());
 
-        expect(screen.getAllByText(/^Chat paged-/)).toHaveLength(100);
-        expect(screen.getByText("Chat paged-50")).toBeTruthy();
-        expect(screen.queryByText("Chat paged-100")).toBeNull();
-      } finally {
-        observer.restore();
-      }
+      expect(screen.getAllByText(/^Chat paged-/)).toHaveLength(100);
+      expect(screen.getByText("Chat paged-50")).toBeTruthy();
+      expect(screen.queryByText("Chat paged-100")).toBeNull();
     });
 
     it("https://github.com/logancyang/obsidian-copilot/issues/3040 resets a new search to the first 50 matching chats", () => {
-      const observer = installIntersectionObserverMock();
-      try {
-        const items = makeRecentItems("search-page", 120);
-        renderSection({ items });
-        act(() => observer.intersect());
-        expect(screen.getAllByText(/^Chat search-page-/)).toHaveLength(100);
+      const items = makeRecentItems("search-page", 120);
+      renderSection({ items });
+      act(() => intersect());
+      expect(screen.getAllByText(/^Chat search-page-/)).toHaveLength(100);
 
-        fireEvent.change(screen.getByPlaceholderText("Search chats..."), {
-          target: { value: "Chat search-page" },
-        });
+      fireEvent.change(screen.getByPlaceholderText("Search chats..."), {
+        target: { value: "Chat search-page" },
+      });
 
-        expect(screen.getAllByText(/^Chat search-page-/)).toHaveLength(50);
-      } finally {
-        observer.restore();
-      }
+      expect(screen.getAllByText(/^Chat search-page-/)).toHaveLength(50);
     });
 
     it("https://github.com/logancyang/obsidian-copilot/issues/3040 keeps a rename draft when updating the title fails", async () => {

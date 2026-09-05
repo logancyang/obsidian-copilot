@@ -93,7 +93,26 @@ export const Default: StoryObj<ProjectPickerListProps> = {
   render: () => <ProjectPickerDemo projects={projects} />,
 };
 
-/** Overflow keeps the Projects View-all footer pinned to the bottom. */
+/** Projects scroll within the shelf while search and creation stay available. */
 export const Overflow: StoryObj<ProjectPickerListProps> = {
   render: () => <ProjectPickerDemo projects={overflowProjects} />,
+};
+
+/** Multiple pages exercise scrolling and search beyond the initial fifty rows. */
+export const LongList: StoryObj<ProjectPickerListProps> = {
+  render: () => (
+    <ProjectPickerDemo
+      projects={Array.from({ length: 120 }, (_, index) => ({
+        ...overflowProjects[0],
+        id: `project-${index + 1}`,
+        name: `Project ${index + 1}`,
+        description: index === 119 ? "Searchable archive" : "",
+        UsageTimestamps: now - index * 60_000,
+      }))}
+    />
+  ),
+};
+
+export const Empty: StoryObj<ProjectPickerListProps> = {
+  render: () => <ProjectPickerDemo projects={[]} />,
 };
