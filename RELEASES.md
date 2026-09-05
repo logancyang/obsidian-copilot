@@ -2,15 +2,13 @@
 
 # v4.0.6 - Find connections as you write
 
-[![Weekend plans beside Relevant Notes with Live enabled and Hong Kong notes ranked first](https://github.com/user-attachments/assets/485f464d-8c84-4a87-8cae-16c28d510a03)](https://github.com/user-attachments/assets/eff26bdc-74cb-46fa-a25f-b30139fc9850)
+![Relevant Notes updates as the Weekend plans note is edited](https://github.com/user-attachments/assets/eff26bdc-74cb-46fa-a25f-b30139fc9850)
 
 As your note takes shape, Copilot can bring related ideas back into view. With **Live** on, Relevant Notes updates a few seconds after your edits are saved. Miyo, the app that makes your notes searchable by meaning, now handles indexing in place of the old index inside Obsidian. When related notes are missing, Copilot shows whether Miyo is disconnected or, with the latest Miyo, why the current note is not ready for search. ([#3097](https://github.com/logancyang/obsidian-copilot/pull/3097), [#3092](https://github.com/logancyang/obsidian-copilot/pull/3092), [#3088](https://github.com/logancyang/obsidian-copilot/pull/3088), @zeroliu)
 
 ## Live Relevant Notes
 
 - **Relevant Notes follows your edits.** The new **Live** switch is on by default, so related notes move up or down as your writing changes; turn it off to keep the list steady. ([#3097](https://github.com/logancyang/obsidian-copilot/pull/3097), @zeroliu)
-
-Watch the notes update as the draft changes (https://github.com/user-attachments/assets/eff26bdc-74cb-46fa-a25f-b30139fc9850).
 
 ## Know why a note is missing
 
