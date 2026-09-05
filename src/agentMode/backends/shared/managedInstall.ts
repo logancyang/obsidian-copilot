@@ -9,19 +9,6 @@ export type ManagedInstallRuntimeState<TProgress> =
   | { kind: "busy" }
   | { kind: "error"; message: string };
 
-export interface ManagedInstallRuntime<TProgress> {
-  subscribe(onChange: () => void): () => void;
-  getSnapshot(): ManagedInstallRuntimeState<TProgress>;
-  run<T>(
-    running: ManagedInstallRuntimeState<TProgress>,
-    body: (signal: AbortSignal) => Promise<T>
-  ): Promise<T>;
-  publishProgress(progress: TProgress): void;
-  forgetSettledError(): void;
-  isBusy(): boolean;
-  cancel(): void;
-}
-
 /** Reports a competing process-local operation without changing the active run. */
 export class ManagedInstallOperationInFlightError extends Error {
   constructor(displayName: string) {
@@ -36,75 +23,6 @@ export class ManagedInstallAbortError extends Error {
     super("Aborted");
     this.name = "AbortError";
   }
-}
-
-export function createManagedInstallRuntime<TProgress>(
-  displayName: string
-): ManagedInstallRuntime<TProgress> {
-  let operation: { controller: AbortController } | null = null;
-  let state: ManagedInstallRuntimeState<TProgress> = { kind: "idle" };
-  const subscribers = new Set<() => void>();
-
-  const publish = (next: ManagedInstallRuntimeState<TProgress>): void => {
-    state = next;
-    subscribers.forEach((notify) => notify());
-  };
-
-  return {
-    subscribe(onChange) {
-      subscribers.add(onChange);
-      return () => subscribers.delete(onChange);
-    },
-
-    getSnapshot: () => state,
-
-    async run<T>(
-      running: ManagedInstallRuntimeState<TProgress>,
-      body: (signal: AbortSignal) => Promise<T>
-    ): Promise<T> {
-      // Reject a competing writer while every surface observes the active run.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
-      if (operation) throw new ManagedInstallOperationInFlightError(displayName);
-      const controller = new AbortController();
-      operation = { controller };
-      publish(running);
-      try {
-        const result = await body(controller.signal);
-        operation = null;
-        publish({ kind: "idle" });
-        return result;
-      } catch (error) {
-        operation = null;
-        if (
-          error instanceof ManagedInstallAbortError ||
-          (error as Error | undefined)?.name === "AbortError"
-        ) {
-          // Cancellation should not leave subscribed surfaces asking for Retry.
-          // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
-          publish({ kind: "idle" });
-        } else {
-          publish({
-            kind: "error",
-            message: error instanceof Error ? error.message : String(error),
-          });
-        }
-        throw error;
-      }
-    },
-
-    publishProgress(progress) {
-      if (!operation) return;
-      publish({ kind: "installing", progress });
-    },
-
-    forgetSettledError() {
-      if (operation || state.kind !== "error") return;
-      publish({ kind: "idle" });
-    },
-
-    isBusy: () => operation !== null,
-    cancel: () => operation?.controller.abort(),
-  };
 }
 
 export async function promoteManagedVersion(
