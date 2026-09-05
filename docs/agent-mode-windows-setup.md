@@ -35,24 +35,17 @@ Copilot uses Claude Code's credentials. Do not add an Anthropic API key to this 
 
 ## 3. Connect Codex
 
-The Codex backend needs `@agentclientprotocol/codex-acp` 0.0.45 or newer. The package includes a compatible Codex CLI; the older `@zed-industries/codex-acp` adapter is not supported.
+The Codex backend uses `@agentclientprotocol/codex-acp`. The package includes a compatible Codex CLI; the older `@zed-industries/codex-acp` adapter is not supported.
 
 1. Open **Settings → Copilot → Basic → Agents → Codex** and select **Configure**.
-2. Copy the **Install it** command from the dialog and run it in PowerShell. The first command removes the unsupported Zed npm package because both packages create the same global `codex-acp` command; the second installs the supported adapter.
+2. Under **Managed by Copilot**, choose **Download & install**. Copilot uses the npm that came with Node.js to install its pinned adapter in Copilot's local data directory; it does not change global npm packages.
+3. Sign in through the installed adapter:
 
 ```powershell
-npm uninstall -g @zed-industries/codex-acp; npm install -g @agentclientprotocol/codex-acp
+npx -y @agentclientprotocol/codex-acp@1.10.0 cli login
 ```
 
-3. Return to **Configure Codex** and select **Auto-detect** under **codex-acp adapter**.
-4. If detection fails, enter the expanded absolute path to the package entry, such as `C:\Users\<your-user-name>\AppData\Roaming\npm\node_modules\@agentclientprotocol\codex-acp\dist\index.js`, and select **Apply**. Replace `<your-user-name>` with your Windows user folder; the path field does not expand `%APPDATA%`.
-5. Sign in through the installed adapter:
-
-```powershell
-codex-acp cli login
-```
-
-Configure the package's `dist\index.js`, not `codex.exe`, `codex-acp.cmd`, or a legacy `codex-acp.exe`. Copilot launches the JavaScript entry point with the Node.js installation that provided npm and uses the bundled Codex CLI's login. If Node was installed while Obsidian was open, restart Obsidian before Auto-detect. Leave **Environment variables** empty unless you intentionally need an override.
+To use an adapter you installed yourself, choose **My own binary** and configure its `dist\index.js`, not `codex.exe`, `codex-acp.cmd`, or a legacy `codex-acp.exe`. Copilot never updates a custom binary. If Node was installed while Obsidian was open, restart Obsidian before installing or using Auto-detect. Leave **Environment variables** empty unless you intentionally need an override.
 
 ## Share Skills across agents
 

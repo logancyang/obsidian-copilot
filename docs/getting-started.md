@@ -39,18 +39,11 @@ Claude uses the account held by the Claude Code CLI. You do not paste that accou
 
 Copilot connects to Codex through the `codex-acp` adapter, which includes a compatible Codex CLI:
 
-1. Open **Basic → Agents → Codex → Configure** and run the displayed install command:
+1. Open **Basic → Agents → Codex → Configure** and choose **Download & install** under **Managed by Copilot**. Copilot installs the adapter version tested with that plugin release without changing global npm packages.
+2. Run the exact-version `npx … cli login` command shown in the dialog if Codex is not already signed in. It works without a global adapter installation.
+3. To use your own adapter instead, choose **My own binary**, then use **Auto-detect** or enter its path. Copilot never updates a custom binary.
 
-   ```text
-   npm uninstall -g @zed-industries/codex-acp; npm install -g @agentclientprotocol/codex-acp
-   ```
-
-   Removing the unsupported Zed package first prevents its global `codex-acp` command from blocking installation.
-
-2. Run `codex-acp cli login` if Codex is not already signed in.
-3. Use **Auto-detect**. On Windows, manual setup points to the installed package's `dist\index.js`; on macOS and Linux, it points to the `codex-acp` launcher.
-
-Copilot requires `@agentclientprotocol/codex-acp` 0.0.45 or newer. The older `@zed-industries/codex-acp` package is not supported. Codex uses the login stored by the bundled Codex CLI; there is no Codex key to paste into Copilot.
+When a Copilot release requires a newer managed adapter, **Agent Chat** and **Settings** show **Update**. Both use the same operation and keep progress, errors, and **Retry** in sync. The older `@zed-industries/codex-acp` package is not supported. Codex uses the login stored by the bundled Codex CLI; there is no Codex key to paste into Copilot.
 
 ## Start Your First Agent Chat
 

@@ -45,10 +45,10 @@ Already pay for Claude or ChatGPT, or already have model API access? You can bri
 
 1. [Install Copilot](https://obsidian.md/plugins?id=copilot) from Obsidian Community Plugins.
 2. Open **Settings → Copilot → Basic → Agents**.
-3. Select **Download opencode**, or connect Claude Code or Codex with **Auto-detect**. Codex requires the `codex-acp` adapter first.
+3. Select **Download opencode**, connect Claude Code with **Auto-detect**, or let Copilot install its tested Codex adapter.
 4. Select the **Agent** ribbon icon, or run **Open Copilot Agent Chat Window**.
 
-The [Getting Started guide](./docs/getting-started.md) covers each setup path, including the Codex adapter commands and manual adapter paths.
+The [Getting Started guide](./docs/getting-started.md) covers each setup path, including managed and custom Codex adapters.
 
 ## Built around your vault
 
