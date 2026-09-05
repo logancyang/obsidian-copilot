@@ -96,6 +96,9 @@ export abstract class ManagedBinaryManager<
         this.publishState({ kind: "idle" });
       } else {
         this.publishState({
+          // A failed path selection must not offer an install Retry in other windows.
+          // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
+          operation: running.kind === "installing" ? "install" : "configure",
           kind: "error",
           message: error instanceof Error ? error.message : String(error),
         });

@@ -29,10 +29,9 @@ jest.mock("@/logger", () => ({
 describe("descriptor", () => {
   describe("OpencodeBackendDescriptor", () => {
     describe("managedInstall", () => {
-      it("maps the manager's shared progress for backend-neutral UI", async () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/368 maps shared progress without adding a fabricated percentage", async () => {
         const manager = getOpencodeBinaryManager(vaultPlugin(os.tmpdir()));
         const subscribe = jest.spyOn(manager, "subscribeRuntimeState");
-        const cancel = jest.spyOn(manager, "cancelCurrentOperation");
         const getState = jest
           .spyOn(manager, "getRuntimeState")
           .mockReturnValue({ kind: "installing", progress: null });
@@ -41,17 +40,47 @@ describe("descriptor", () => {
         expect(OpencodeBackendDescriptor.managedInstall?.getState(plugin)).toEqual({
           kind: "running",
           label: "Starting…",
-          percent: 0,
         });
         const listener = jest.fn();
         OpencodeBackendDescriptor.managedInstall?.subscribe(plugin, listener);
         expect(subscribe).toHaveBeenCalledWith(listener);
-        OpencodeBackendDescriptor.managedInstall?.cancel?.(plugin);
-        expect(cancel).toHaveBeenCalledTimes(1);
 
+        for (const kind of ["busy", "detecting"] as const) {
+          getState.mockReturnValue({ kind });
+          expect(OpencodeBackendDescriptor.managedInstall?.getState(plugin)).toEqual({
+            kind: "running",
+            label: "Configuring…",
+          });
+        }
+        getState.mockReturnValue({
+          kind: "error",
+          message: "invalid path",
+          operation: "configure",
+        });
+        expect(OpencodeBackendDescriptor.managedInstall?.getState(plugin)).toEqual({
+          kind: "idle",
+        });
+        getState.mockReturnValue({
+          kind: "error",
+          message: "download failed",
+          operation: "install",
+        });
+        expect(OpencodeBackendDescriptor.managedInstall?.getState(plugin)).toEqual({
+          kind: "error",
+          message: "download failed",
+        });
+        for (const total of [100, undefined]) {
+          getState.mockReturnValue({
+            kind: "installing",
+            progress: { phase: "download", received: 42, total, assetName: "agent.zip" },
+          });
+          const state = OpencodeBackendDescriptor.managedInstall?.getState(plugin);
+          expect(state?.kind).toBe("running");
+          if (state?.kind === "running")
+            expect(state.label.match(/%/g)?.length ?? 0).toBe(total ? 1 : 0);
+        }
         getState.mockRestore();
         subscribe.mockRestore();
-        cancel.mockRestore();
       });
 
       it("keeps custom and managed upgrades on their existing manager paths", async () => {

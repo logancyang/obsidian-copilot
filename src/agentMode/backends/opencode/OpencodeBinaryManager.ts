@@ -575,7 +575,7 @@ export class OpencodeBinaryManager extends ManagedBinaryManager<ProgressEvent, I
    * are untouched. Throws with a readable message on failure.
    */
   async upgradeCustomBinary(): Promise<{ version: string; path: string }> {
-    return this.runExclusive({ kind: "busy" }, async () => {
+    return this.runExclusive({ kind: "installing", progress: null }, async () => {
       const s = readOpencodeSettings();
       if (s.binarySource !== "custom" || !s.binaryPath) {
         throw new Error("No custom opencode binary is configured to upgrade.");

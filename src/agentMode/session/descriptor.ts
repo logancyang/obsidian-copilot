@@ -34,7 +34,7 @@ export type InstallState =
 
 export type ManagedInstallActionState =
   | { kind: "idle" }
-  | { kind: "running"; label: string; percent: number }
+  | { kind: "running"; label: string; percent?: number }
   | { kind: "error"; message: string };
 
 /** Backend-owned install lifecycle shared by Agent Chat and Settings. */
@@ -42,7 +42,6 @@ export interface ManagedInstallAction {
   getState(plugin: CopilotPlugin): ManagedInstallActionState;
   subscribe(plugin: CopilotPlugin, onChange: () => void): () => void;
   run(plugin: CopilotPlugin): Promise<void>;
-  cancel?(plugin: CopilotPlugin): void;
 }
 
 /** Sign-in state for backends that authenticate via a CLI / external account. */

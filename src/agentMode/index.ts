@@ -474,3 +474,5 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
   }
   return manager;
 }
+
+export { AgentBackendHeader } from "./backends/shared/ui/AgentBackendHeader";

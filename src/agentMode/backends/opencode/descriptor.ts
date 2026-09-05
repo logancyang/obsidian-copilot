@@ -37,7 +37,7 @@ import type {
 import type { BackendDescriptor, BackendProcess, InstallState } from "@/agentMode/session/types";
 import { EFFORT_LEVELS_ASCENDING } from "@/agentMode/session/types";
 import { findModelEntry } from "@/agentMode/session/translateBackendState";
-import { phaseLabel, phaseProgress } from "./installProgress";
+import { phaseLabel } from "./installProgress";
 import type { ManagedInstallActionState } from "@/agentMode/session/types";
 
 /** Config option id OpenCode uses to switch the active agent at runtime. */
@@ -119,13 +119,15 @@ function managedInstallActionState(manager: OpencodeBinaryManager): ManagedInsta
     return {
       kind: "running",
       label: phaseLabel(state.progress),
-      percent: phaseProgress(state.progress) ?? 0,
     };
   }
+  // Keep competing setup actions disabled, but only retry failed installs or upgrades.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
   if (state.kind === "detecting" || state.kind === "busy") {
-    return { kind: "running", label: "Upgrading…", percent: 0 };
+    return { kind: "running", label: "Configuring…" };
   }
-  if (state.kind === "error") return state;
+  if (state.kind === "error" && state.operation === "install")
+    return { kind: "error", message: state.message };
   return IDLE_MANAGED_INSTALL_ACTION;
 }
 
@@ -212,10 +214,6 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
       } else {
         await manager.upgradeManaged();
       }
-    },
-
-    cancel(plugin: CopilotPlugin): void {
-      getOpencodeBinaryManager(plugin).cancelCurrentOperation();
     },
   },
 

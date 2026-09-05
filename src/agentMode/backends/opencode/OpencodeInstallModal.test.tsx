@@ -249,7 +249,7 @@ describe("OpencodeInstallModal", () => {
       await act(async () => {
         installDeferred().reject(new Error("tar exited with 1"));
       });
-      publish({ kind: "error", message: "tar exited with 1" });
+      publish({ kind: "error", operation: "install", message: "tar exited with 1" });
 
       expect(screen.getByText("tar exited with 1")).toBeTruthy();
       expect(screen.getByRole("button", { name: "Download & install" })).toBeTruthy();

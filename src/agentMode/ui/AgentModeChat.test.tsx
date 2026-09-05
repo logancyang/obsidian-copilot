@@ -9,6 +9,7 @@ import React from "react";
 
 // Readiness of the backend the pane would run, swapped per test. Declared with
 // the `mock` prefix so Jest allows the mock factory below to close over it.
+let mockManagedInstall: object | undefined;
 let mockInstallState: InstallState = { kind: "ready", source: "custom" };
 
 // Stub the descriptor hooks so the effect's `preloadReady`/install gates are
@@ -17,7 +18,11 @@ let mockInstallState: InstallState = { kind: "ready", source: "custom" };
 // expected here.
 /* eslint-disable @eslint-react/hooks-extra/no-unnecessary-use-prefix */
 jest.mock("@/agentMode/ui/useBackendDescriptor", () => ({
-  useSessionBackendDescriptor: () => ({ id: "claude", openInstallUI: jest.fn() }),
+  useSessionBackendDescriptor: () => ({
+    id: "claude",
+    managedInstall: mockManagedInstall,
+    openInstallUI: jest.fn(),
+  }),
   useBackendInstallState: () => mockInstallState,
 }));
 /* eslint-enable @eslint-react/hooks-extra/no-unnecessary-use-prefix */
@@ -90,7 +95,24 @@ function renderFallback(installState: InstallState, lastError: string | null, st
 
 describe("AgentModeChat", () => {
   afterEach(() => {
+    mockManagedInstall = undefined;
     mockInstallState = { kind: "ready", source: "custom" };
+  });
+
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/368 keeps a cold-start managed upgrade on the shared status card", () => {
+    mockManagedInstall = {};
+    renderFallback(
+      {
+        kind: "incompatible",
+        source: "managed",
+        currentVersion: "1",
+        minVersion: "2",
+        message: "Update required",
+      },
+      null
+    );
+    expect(screen.getByTestId("status-card")).toBeTruthy();
+    expect(screen.queryByTestId("select-panel")).toBeNull();
   });
 
   describe("auto-spawn guard (scope-aware)", () => {
