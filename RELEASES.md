@@ -1,5 +1,37 @@
 # Release Notes
 
+# v4.0.6 - Note indexing with Miyo and Relevant Note upgrade
+
+![Relevant Notes in Obsidian, with a separate Powered by Miyo logo below the screenshot](https://github.com/user-attachments/assets/d3086fac-635a-46c5-b12b-bb4b4d4a1830)
+
+Copilot’s note search gets an upgrade with Miyo. **Live** updates in Relevant Notes bring related notes into view as you write, so you can build on ideas from across your vault without stopping to search. ([#3097](https://github.com/logancyang/obsidian-copilot/pull/3097), [#3092](https://github.com/logancyang/obsidian-copilot/pull/3092), [#2991](https://github.com/logancyang/obsidian-copilot/pull/2991), @zeroliu)
+
+[Check out a live demo for the Live updates in Relevant Notes.](https://github.com/user-attachments/assets/eff26bdc-74cb-46fa-a25f-b30139fc9850).
+
+## Enhancements
+
+- **See why a note is missing.** Relevant Notes tells you when Miyo is disconnected and explains why a note is not available for search. ([#2992](https://github.com/logancyang/obsidian-copilot/pull/2992), [#3088](https://github.com/logancyang/obsidian-copilot/pull/3088), @zeroliu)
+
+- **A smaller plugin download.** Copilot 4.0.6 saves about **140 KB** compared with 4.0.5. The retired indexing system is gone, and Copilot cleans up recognized old index files automatically, preserving your notes. ([#3091](https://github.com/logancyang/obsidian-copilot/pull/3091), [#3092](https://github.com/logancyang/obsidian-copilot/pull/3092), [#3094](https://github.com/logancyang/obsidian-copilot/pull/3094), @zeroliu)
+
+## Fixes
+
+- **New opencode chats use your chosen default model.** A leftover thinking-effort setting no longer makes a new chat fall back to a different model. ([#3098](https://github.com/logancyang/obsidian-copilot/pull/3098), @logancyang)
+- **Codex setup uses its bundled login tool.** The setup instructions now use `codex-acp cli login`, fixing the login path for users who installed the adapter without a separate Codex CLI. ([#3081](https://github.com/logancyang/obsidian-copilot/pull/3081), @zeroliu)
+- **Chat prompts respect reduced motion.** When your system requests less animation, the empty composer shows a steady hint instead of rotating suggestions. ([#3079](https://github.com/logancyang/obsidian-copilot/pull/3079), @zeroliu)
+
+## Breaking Changes
+
+- **Keep the folder rules you set in Miyo.** Miyo becomes the source of truth that decides which notes to embed. When adding a new vault, review its folder rules there, since Copilot's old search exclusions are no longer copied into new Miyo connections. ([#3100](https://github.com/logancyang/obsidian-copilot/pull/3100), @zeroliu)
+- **Vault QA has been retired.** Quick chat now only include the free chat and copilot plus mode. ([#3093](https://github.com/logancyang/obsidian-copilot/pull/3093), @zeroliu). We are actively working on a new quick chat mode to level up the experience in the upcoming releases.
+
+## 🧰 Troubleshoot
+
+- If models are missing, navigate to Copilot settings -> Models tab and click "Refresh Built-in Models".
+- Please report any issue you see in the member channel!
+
+---
+
 # v4.0.5 - See what's new in Copilot without leaving Obsidian
 
 ![Copilot's update notice and the release notes dialog inside Obsidian](https://github.com/user-attachments/assets/20bb1f1f-ff8a-47d6-90d2-6eec3a43cfbc)
