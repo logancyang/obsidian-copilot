@@ -1,8 +1,11 @@
 import type { PermissionOption } from "@/agentMode/session/types";
+import type CopilotPlugin from "@/main";
+import { getSettings, setSettings, type CopilotSettings } from "@/settings/model";
 import { detectBinary } from "@/utils/detectBinary";
 import { resolveCodexAcpBinary } from "./codexBinaryResolver";
-import { CodexBackendDescriptor, detectCodexAcpPath } from "./descriptor";
-import { isSupportedCodexAcpPath } from "./codexVersion";
+import { CODEX_ACP_PINNED_VERSION } from "./cliSetup";
+import { CodexBackendDescriptor, detectCodexAcpPath, getCodexBinaryManager } from "./descriptor";
+import { isSupportedCodexAcpPath, resolveSupportedCodexAcpPackage } from "./codexVersion";
 
 jest.mock("@/utils/detectBinary", () => ({ detectBinary: jest.fn() }));
 jest.mock("./codexBinaryResolver", () => ({
@@ -12,11 +15,19 @@ jest.mock("./codexBinaryResolver", () => ({
 jest.mock("./codexVersion", () => ({
   ...jest.requireActual("./codexVersion"),
   isSupportedCodexAcpPath: jest.fn(),
+  resolveSupportedCodexAcpPackage: jest.fn(),
 }));
 
 const mockedDetectBinary = jest.mocked(detectBinary);
 const mockedResolveCodexAcpBinary = jest.mocked(resolveCodexAcpBinary);
 const mockedIsSupportedCodexAcpPath = jest.mocked(isSupportedCodexAcpPath);
+const mockedResolveSupportedPackage = jest.mocked(resolveSupportedCodexAcpPackage);
+
+function settingsWithCodex(codex: Record<string, unknown>): CopilotSettings {
+  return {
+    agentMode: { backends: { codex } },
+  } as unknown as CopilotSettings;
+}
 
 describe("descriptor", () => {
   describe("detectCodexAcpPath()", () => {
@@ -52,6 +63,89 @@ describe("descriptor", () => {
   });
 
   describe("CodexBackendDescriptor", () => {
+    it.each([
+      ["legacy path", {}, "1.9.0", { kind: "ready", source: "custom" }],
+      [
+        "managed mismatch",
+        { binarySource: "managed", binaryVersion: "1.9.0" },
+        "1.9.0",
+        { kind: "incompatible", source: "managed" },
+      ],
+      [
+        "custom mismatch",
+        { binarySource: "custom", binaryVersion: "1.9.0" },
+        "1.9.0",
+        { kind: "ready", source: "custom" },
+      ],
+      [
+        "managed pin",
+        { binarySource: "managed", binaryVersion: CODEX_ACP_PINNED_VERSION },
+        CODEX_ACP_PINNED_VERSION,
+        { kind: "ready", source: "managed" },
+      ],
+    ])("classifies a supported %s by ownership", (_label, fields, actualVersion, expected) => {
+      mockedResolveSupportedPackage.mockReturnValue({
+        entryPath: "/codex/index.js",
+        version: actualVersion,
+      });
+
+      expect(
+        CodexBackendDescriptor.getInstallState(
+          settingsWithCodex({ binaryPath: "/codex/index.js", ...fields })
+        )
+      ).toMatchObject(expected);
+    });
+
+    it.each(["binaryPath", "binaryVersion", "binarySource"] as const)(
+      "publishes install-state changes when %s changes",
+      (field) => {
+        const original = getSettings().agentMode;
+        const listener = jest.fn();
+        const unsubscribe = CodexBackendDescriptor.subscribeInstallState(
+          {} as CopilotPlugin,
+          listener
+        );
+        try {
+          setSettings((current) => ({
+            agentMode: {
+              ...current.agentMode,
+              backends: {
+                ...current.agentMode.backends,
+                codex: { ...current.agentMode.backends?.codex, [field]: "changed" },
+              },
+            },
+          }));
+          expect(listener).toHaveBeenCalledTimes(1);
+        } finally {
+          unsubscribe();
+          setSettings({ agentMode: original });
+        }
+      }
+    );
+
+    it("routes the backend-neutral managed action to the Codex manager", async () => {
+      const manager = getCodexBinaryManager();
+      const install = jest.spyOn(manager, "install").mockResolvedValue(undefined);
+      const listener = jest.fn();
+      const subscribe = jest.spyOn(manager, "subscribeRuntimeState");
+      try {
+        expect(CodexBackendDescriptor.managedInstall?.getState({} as CopilotPlugin)).toEqual({
+          kind: "idle",
+        });
+        const unsubscribe = CodexBackendDescriptor.managedInstall?.subscribe(
+          {} as CopilotPlugin,
+          listener
+        );
+        await CodexBackendDescriptor.managedInstall?.run({} as CopilotPlugin);
+        expect(subscribe).toHaveBeenCalledWith(listener);
+        expect(install).toHaveBeenCalledTimes(1);
+        unsubscribe?.();
+      } finally {
+        install.mockRestore();
+        subscribe.mockRestore();
+      }
+    });
+
     describe("presentPermissionOption()", () => {
       it.each([
         ["opaque-exec-decision", "acceptWithExecpolicyAmendment"],

@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import React from "react";
 import { CodexConfigView, type CodexConfigViewProps } from "./CodexConfigView";
-import { CODEX_AUTH_COMMAND, CODEX_INSTALL_COMMAND } from "@/agentMode/backends/codex/cliSetup";
+import { CODEX_AUTH_COMMAND } from "@/agentMode/backends/codex/cliSetup";
 
 const DEFAULT_PROMPT = process.platform === "win32" ? "PS> " : "$ ";
 
@@ -15,6 +15,8 @@ const renderView = (overrides: Partial<CodexConfigViewProps> = {}): void => {
   render(
     <CodexConfigView
       state={{ kind: "absent" }}
+      installRun={{ kind: "idle" }}
+      onInstall={jest.fn()}
       binaryPath=""
       onSavePath={jest.fn().mockResolvedValue(null)}
       onClearPath={jest.fn()}
@@ -32,16 +34,16 @@ describe("CodexConfigView", () => {
       renderView({ binaryPath: "/usr/local/bin/codex-acp" });
 
       const input = screen.getByDisplayValue("/usr/local/bin/codex-acp");
-      const steps = screen.getByText("Don't have it yet?");
+      const steps = screen.getByText("Adapter setup");
       expect(input.compareDocumentPosition(steps) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
 
-    it("numbers installing and signing in as the two steps of the fallback block", () => {
+    it("offers the managed adapter before the adapter-owned sign-in", () => {
       renderView();
 
-      expect(screen.getByText("Install it")).toBeTruthy();
+      expect(screen.getByText("Managed by Copilot")).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Download & install" })).toBeTruthy();
       expect(screen.getByText("Sign in")).toBeTruthy();
-      expect(screen.getByText(commandBlock(CODEX_INSTALL_COMMAND))).toBeTruthy();
       expect(screen.getByText(commandBlock(CODEX_AUTH_COMMAND))).toBeTruthy();
     });
 
@@ -59,6 +61,50 @@ describe("CodexConfigView", () => {
 
       expect(screen.queryByRole("alert")).toBeNull();
       expect(screen.getByText("Ready")).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Switch to managed" })).toBeTruthy();
+    });
+
+    it("offers a managed adapter reinstall when the pinned version is already ready", () => {
+      renderView({ state: { kind: "ready", source: "managed" } });
+
+      expect(screen.getByRole("button", { name: "Reinstall" })).toBeTruthy();
+    });
+
+    it("shares progress and Retry for the managed operation", () => {
+      const onInstall = jest.fn();
+      const { rerender } = render(
+        <CodexConfigView
+          state={{ kind: "absent" }}
+          installRun={{ kind: "running", label: "Installing…", percent: 30 }}
+          onInstall={onInstall}
+          binaryPath=""
+          onSavePath={jest.fn().mockResolvedValue(null)}
+          onClearPath={jest.fn()}
+          detect={jest.fn().mockResolvedValue(null)}
+          searchedDirs={() => []}
+          onClose={jest.fn()}
+        />
+      );
+
+      expect(screen.getByRole("button", { name: "Installing… 30%" }).hasAttribute("disabled")).toBe(
+        true
+      );
+      rerender(
+        <CodexConfigView
+          state={{ kind: "absent" }}
+          installRun={{ kind: "error", message: "npm unavailable" }}
+          onInstall={onInstall}
+          binaryPath=""
+          onSavePath={jest.fn().mockResolvedValue(null)}
+          onClearPath={jest.fn()}
+          detect={jest.fn().mockResolvedValue(null)}
+          searchedDirs={() => []}
+          onClose={jest.fn()}
+        />
+      );
+      screen.getByRole("button", { name: "Retry" }).click();
+      expect(screen.getByText("npm unavailable")).toBeTruthy();
+      expect(onInstall).toHaveBeenCalledTimes(1);
     });
   });
 });

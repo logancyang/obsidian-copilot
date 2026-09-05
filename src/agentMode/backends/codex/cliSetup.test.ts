@@ -1,4 +1,4 @@
-import { CODEX_AUTH_COMMAND, CODEX_INSTALL_COMMAND, codexBinaryPathPlaceholder } from "./cliSetup";
+import { CODEX_AUTH_COMMAND, codexBinaryPathPlaceholder } from "./cliSetup";
 
 describe("cliSetup", () => {
   describe("codexBinaryPathPlaceholder()", () => {
@@ -10,13 +10,7 @@ describe("cliSetup", () => {
     });
   });
 
-  it("removes the conflicting Zed package before installing the supported adapter", () => {
-    expect(CODEX_INSTALL_COMMAND).toBe(
-      "npm uninstall -g @zed-industries/codex-acp; npm install -g @agentclientprotocol/codex-acp"
-    );
-  });
-
   it("signs in through the adapter's bundled Codex CLI", () => {
-    expect(CODEX_AUTH_COMMAND).toBe("codex-acp cli login");
+    expect(CODEX_AUTH_COMMAND).toBe("npx -y @agentclientprotocol/codex-acp@1.10.0 cli login");
   });
 });

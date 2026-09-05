@@ -6,6 +6,7 @@ import {
   buildCodexAcpInvocation,
   CODEX_ACP_MIN_VERSION,
   isSupportedCodexAcpPath,
+  resolveSupportedCodexAcpPackage,
   resolveSupportedCodexAcpEntry,
   type CodexAcpPackageFs,
 } from "./codexVersion";
@@ -43,6 +44,14 @@ function installedAdapterPath(packageMetadata: unknown): string {
 
 describe("codexVersion", () => {
   describe("resolveSupportedCodexAcpEntry()", () => {
+    it("returns the validated package version for managed-install reconciliation", () => {
+      const packageFileSystem = packageFs(UNIX_ENTRY, metadata("1.10.0"));
+
+      expect(
+        resolveSupportedCodexAcpPackage("/usr/local/bin/codex-acp", "darwin", packageFileSystem)
+      ).toEqual({ entryPath: UNIX_ENTRY, version: "1.10.0" });
+    });
+
     it("https://github.com/logancyang/obsidian-copilot/issues/2967 accepts the earliest adapter with bundled CLI authentication", () => {
       const packageFileSystem = packageFs(UNIX_ENTRY, metadata(CODEX_ACP_MIN_VERSION));
 

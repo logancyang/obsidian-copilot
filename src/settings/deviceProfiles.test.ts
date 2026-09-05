@@ -30,7 +30,12 @@ describe("dehydrateDeviceProfile", () => {
       makeAgentMode({
         claudeCli: { path: "/a/claude" },
         backends: {
-          codex: { binaryPath: "/a/codex", envOverrides: { FOO: "1" } },
+          codex: {
+            binaryPath: "/a/codex",
+            binaryVersion: "1.10.0",
+            binarySource: "managed",
+            envOverrides: { FOO: "1" },
+          },
           opencode: {
             binaryPath: "/a/opencode",
             binaryVersion: "1.2.3",
@@ -51,7 +56,12 @@ describe("dehydrateDeviceProfile", () => {
     // Moved into this device's segment.
     expect(out.agentMode.deviceProfiles?.[DEVICE_A]).toEqual({
       claudeCliPath: "/a/claude",
-      codex: { binaryPath: "/a/codex", envOverrides: { FOO: "1" } },
+      codex: {
+        binaryPath: "/a/codex",
+        binaryVersion: "1.10.0",
+        binarySource: "managed",
+        envOverrides: { FOO: "1" },
+      },
       opencode: {
         binaryPath: "/a/opencode",
         binaryVersion: "1.2.3",
@@ -152,6 +162,30 @@ describe("hydrateDeviceProfile", () => {
     expect(out.agentMode.backends.codex?.binaryPath).toBe("/a/codex");
   });
 
+  it("keeps a Codex managed install's ownership and version on the same device", () => {
+    const settings = makeSettings(
+      makeAgentMode({
+        deviceProfiles: {
+          [DEVICE_A]: {
+            codex: {
+              binaryPath: "/a/codex",
+              binaryVersion: "1.10.0",
+              binarySource: "managed",
+            },
+          },
+        },
+      })
+    );
+
+    const out = hydrateDeviceProfile(settings, DEVICE_A);
+
+    expect(out.agentMode.backends.codex).toMatchObject({
+      binaryPath: "/a/codex",
+      binaryVersion: "1.10.0",
+      binarySource: "managed",
+    });
+  });
+
   it("drops stale device-specific flat fields, taking device fields only from the profile", () => {
     // A synced data.json may carry another device's opencode binaryVersion/
     // binarySource as flat values. Hydrate ignores them and takes device fields
@@ -242,5 +276,19 @@ describe("sanitizeSettings round-trips deviceProfiles", () => {
     expect(profiles[DEVICE_A]?.codex?.envOverrides).toEqual({ GOOD: "1" });
     expect(profiles[DEVICE_B]).toBeUndefined();
     expect(profiles[""]).toBeUndefined();
+  });
+
+  it("marks every unannotated Codex path as custom ownership (https://github.com/Brevilabs/obsidian-copilot-private/issues/368)", () => {
+    const out = sanitizeSettings({
+      agentMode: {
+        backends: { codex: { binaryPath: "/flat/codex" } },
+        deviceProfiles: {
+          [DEVICE_A]: { codex: { binaryPath: "/profile/codex" } },
+        },
+      },
+    } as unknown as CopilotSettings);
+
+    expect(out.agentMode.backends.codex?.binarySource).toBe("custom");
+    expect(out.agentMode.deviceProfiles?.[DEVICE_A]?.codex?.binarySource).toBe("custom");
   });
 });

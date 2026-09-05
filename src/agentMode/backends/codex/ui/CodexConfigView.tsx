@@ -1,19 +1,21 @@
 import {
   CODEX_AUTH_COMMAND,
   CODEX_BINARY_NAME,
-  CODEX_INSTALL_COMMAND,
   codexBinaryPathPlaceholder,
 } from "@/agentMode/backends/codex/cliSetup";
 import { CODEX_ACP_MIN_VERSION } from "@/agentMode/backends/codex/codexVersion";
 import { BinaryPathSetting } from "@/agentMode/backends/shared/BinaryPathSetting";
 import { ConfigDialogShell, ConfigSection } from "@/agentMode/backends/shared/ui/ConfigDialogShell";
 import { CommandBlock, SetupStep } from "@/agentMode/backends/shared/ui/SetupSteps";
-import type { InstallState } from "@/agentMode/session/types";
+import type { InstallState, ManagedInstallActionState } from "@/agentMode/session/types";
+import { Button } from "@/components/ui/button";
 import React from "react";
 
 export interface CodexConfigViewProps {
   /** Readiness of the configured adapter; drives the header badge and the warning strip. */
   state: InstallState;
+  installRun: ManagedInstallActionState;
+  onInstall: () => void;
   /** Persisted path to the ACP adapter; empty when none is configured. */
   binaryPath: string;
   /** Validate and persist a user-supplied path. Resolves to an error message, or null on success. */
@@ -44,18 +46,20 @@ export const CodexConfigView: React.FC<CodexConfigViewProps> = ({
   detect,
   searchedDirs,
   onClose,
+  installRun,
+  onInstall,
 }) => (
   <ConfigDialogShell title="Configure Codex" state={state} onClose={onClose}>
-    <ConfigSection title="codex-acp adapter">
+    <ConfigSection title="My own binary">
       <p className="tw-my-0 tw-text-sm tw-text-muted">
         Copilot supports <code>@agentclientprotocol/codex-acp</code> {CODEX_ACP_MIN_VERSION} or
-        newer. Auto-detect checks its usual npm install locations and your PATH.
+        newer. You manage its updates; Auto-detect checks the usual npm locations and your PATH.
       </p>
       <BinaryPathSetting
         binaryName={CODEX_BINARY_NAME}
         placeholder={codexBinaryPathPlaceholder(process.platform)}
         initialPath={binaryPath}
-        notFoundHint={`A supported ${CODEX_BINARY_NAME} adapter was not found. Run the install command below, then click Auto-detect again.`}
+        notFoundHint={`A supported ${CODEX_BINARY_NAME} adapter was not found. Use Managed by Copilot below, or paste your own path.`}
         onSave={onSavePath}
         onClear={onClearPath}
         persistOnAutoDetect
@@ -64,12 +68,28 @@ export const CodexConfigView: React.FC<CodexConfigViewProps> = ({
       />
     </ConfigSection>
 
-    <ConfigSection title="Don't have it yet?">
-      {/* The section's own gap sets the rhythm inside a step, so the steps need a
-          wider one to read as two items rather than one run of controls. */}
+    <ConfigSection title="Adapter setup">
       <div className="tw-flex tw-flex-col tw-gap-4">
-        <SetupStep index={1} title="Install it">
-          <CommandBlock command={CODEX_INSTALL_COMMAND} />
+        <SetupStep index={1} title="Managed by Copilot">
+          <p className="tw-my-0 tw-text-sm tw-text-muted">
+            Install the adapter tested for this Copilot release.
+          </p>
+          {installRun.kind === "error" && (
+            <p className="tw-my-0 tw-text-sm tw-text-error">{installRun.message}</p>
+          )}
+          <Button disabled={installRun.kind === "running"} onClick={onInstall}>
+            {installRun.kind === "running"
+              ? `${installRun.label} ${installRun.percent}%`
+              : installRun.kind === "error"
+                ? "Retry"
+                : state.kind === "ready"
+                  ? state.source === "managed"
+                    ? "Reinstall"
+                    : "Switch to managed"
+                  : state.kind === "incompatible"
+                    ? "Update"
+                    : "Download & install"}
+          </Button>
         </SetupStep>
         <SetupStep index={2} title="Sign in">
           <CommandBlock command={CODEX_AUTH_COMMAND} />

@@ -140,13 +140,20 @@ describe("AgentModeStatus", () => {
 
       const { rerender } = render(<AgentModeStatus plugin={plugin} onInstallClick={jest.fn()} />);
 
-      fireEvent.click(screen.getByRole("button", { name: "Upgrade" }));
+      fireEvent.click(screen.getByRole("button", { name: "Update" }));
       expect(run).toHaveBeenCalledWith(plugin);
       managedInstallState = { kind: "running", label: "Downloading…", percent: 50 };
       rerender(<AgentModeStatus plugin={plugin} onInstallClick={jest.fn()} />);
       expect(screen.getByRole("button", { name: "Upgrading…" }).hasAttribute("disabled")).toBe(
         true
       );
+      expect(screen.getByText("Downloading… 50%")).toBeTruthy();
+
+      managedInstallState = { kind: "error", message: "npm unavailable" };
+      rerender(<AgentModeStatus plugin={plugin} onInstallClick={jest.fn()} />);
+      expect(screen.getByText("npm unavailable")).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+      expect(run).toHaveBeenCalledTimes(2);
     });
 
     it("preserves the sign-in action and linked browser fallback", () => {

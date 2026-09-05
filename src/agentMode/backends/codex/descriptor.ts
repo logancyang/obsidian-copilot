@@ -22,9 +22,11 @@ import type {
 } from "@/agentMode/session/types";
 import type { BackendDescriptor, BackendProcess, InstallState } from "@/agentMode/session/types";
 import { codexAcpSearchDirs, resolveCodexAcpBinary } from "./codexBinaryResolver";
+import { CodexBinaryManager } from "./CodexBinaryManager";
+import { CODEX_ACP_PINNED_VERSION } from "./cliSetup";
 import { CODEX_BINARY_NAME } from "./cliSetup";
 import { buildCodexModeMapping } from "./codexModeMapping";
-import { isSupportedCodexAcpPath } from "./codexVersion";
+import { isSupportedCodexAcpPath, resolveSupportedCodexAcpPackage } from "./codexVersion";
 
 /**
  * Vocabulary mirrors codex-acp's advertised efforts. `minimal` is included
@@ -32,6 +34,11 @@ import { isSupportedCodexAcpPath } from "./codexVersion";
  * codex-acp doesn't currently advertise it.
  */
 const KNOWN_CODEX_EFFORTS = new Set(["minimal", "low", "medium", "high", "xhigh"]);
+const codexBinaryManager = new CodexBinaryManager();
+
+export function getCodexBinaryManager(): CodexBinaryManager {
+  return codexBinaryManager;
+}
 
 export function updateCodexFields(partial: Partial<CodexBackendSettings>): void {
   updateAgentModeBackendFields("codex", partial);
@@ -156,9 +163,24 @@ export const CodexBackendDescriptor: BackendDescriptor = {
   },
 
   getInstallState(settings: CopilotSettings): InstallState {
-    return isSupportedCodexAcpPath(settings.agentMode?.backends?.codex?.binaryPath)
-      ? { kind: "ready", source: "custom" }
-      : { kind: "absent" };
+    const configured = settings.agentMode?.backends?.codex;
+    if (!configured?.binaryPath) return { kind: "absent" };
+    try {
+      const installed = resolveSupportedCodexAcpPackage(configured.binaryPath);
+      const source = configured.binarySource ?? "custom";
+      if (source === "managed" && installed.version !== CODEX_ACP_PINNED_VERSION) {
+        return {
+          kind: "incompatible",
+          source,
+          currentVersion: installed.version,
+          minVersion: CODEX_ACP_PINNED_VERSION,
+          message: `Codex adapter ${installed.version} does not match this Copilot release (${CODEX_ACP_PINNED_VERSION}).`,
+        };
+      }
+      return { kind: "ready", source };
+    } catch {
+      return { kind: "absent" };
+    }
   },
 
   getResolvedBinaryPath(settings: CopilotSettings): string | null {
@@ -168,7 +190,12 @@ export const CodexBackendDescriptor: BackendDescriptor = {
   subscribeInstallState(_plugin: CopilotPlugin, cb: () => void): () => void {
     return subscribeToSettingsChange((prev, next) => {
       if (
-        prev.agentMode?.backends?.codex?.binaryPath !== next.agentMode?.backends?.codex?.binaryPath
+        prev.agentMode?.backends?.codex?.binaryPath !==
+          next.agentMode?.backends?.codex?.binaryPath ||
+        prev.agentMode?.backends?.codex?.binaryVersion !==
+          next.agentMode?.backends?.codex?.binaryVersion ||
+        prev.agentMode?.backends?.codex?.binarySource !==
+          next.agentMode?.backends?.codex?.binarySource
       ) {
         cb();
       }
@@ -177,6 +204,12 @@ export const CodexBackendDescriptor: BackendDescriptor = {
 
   openInstallUI(plugin: CopilotPlugin): void {
     new CodexInstallModal(plugin.app).open();
+  },
+
+  managedInstall: {
+    getState: () => codexBinaryManager.getActionState(),
+    subscribe: (_plugin, onChange) => codexBinaryManager.subscribeRuntimeState(onChange),
+    run: () => codexBinaryManager.install(),
   },
 
   async applySelection(session: AgentSession, selection: ModelSelection): Promise<void> {

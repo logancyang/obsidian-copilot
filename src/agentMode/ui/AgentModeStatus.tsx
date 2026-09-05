@@ -68,15 +68,24 @@ export const AgentModeStatus: React.FC<Props> = ({ manager, plugin, onInstallCli
   if (installState.kind === "incompatible") {
     const canUpgrade = descriptor.managedInstall !== undefined;
     const upgrading = managedInstall.kind === "running";
+    const failed = managedInstall.kind === "error";
     return (
       <AgentStatusCard
-        tone="warning"
-        message={installState.message}
+        tone={failed ? "error" : "warning"}
+        message={
+          upgrading
+            ? `${managedInstall.label} ${managedInstall.percent}%`
+            : failed
+              ? managedInstall.message
+              : installState.message
+        }
         action={{
           label: canUpgrade
             ? upgrading
               ? "Upgrading…"
-              : "Upgrade"
+              : failed
+                ? "Retry"
+                : "Update"
             : `Configure ${descriptor.displayName}`,
           disabled: canUpgrade && upgrading,
           onClick: canUpgrade ? handleUpgrade : () => descriptor.openInstallUI(plugin),
