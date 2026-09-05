@@ -123,6 +123,9 @@ const mockGetCachedModelCatalog = jest.fn();
 const mockPreloadModels = jest.fn();
 
 jest.mock("@/agentMode", () => ({
+  AgentBackendHeader: jest.requireActual<
+    typeof import("@/agentMode/backends/shared/ui/AgentBackendHeader")
+  >("@/agentMode/backends/shared/ui/AgentBackendHeader").AgentBackendHeader,
   backendDisplayOrder: () => DESCRIPTORS,
   backendNeedsSelfHostWarning: (
     descriptor: { selfHostable?: boolean },
@@ -381,7 +384,7 @@ describe("AgentSettings", () => {
     fireEvent.click(screen.getByRole("button", { name: "Update" }));
     expect(runManagedInstall).toHaveBeenCalledTimes(1);
 
-    managedInstallStates.codex = { kind: "running", label: "Installing…", percent: 30 };
+    managedInstallStates.codex = { kind: "running", label: "Installing… 30%" };
     view.rerender(<AgentSettings />);
     expect(screen.getByText("Installing… 30%")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Updating…" }).hasAttribute("disabled")).toBe(true);

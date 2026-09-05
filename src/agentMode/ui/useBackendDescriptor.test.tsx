@@ -225,8 +225,8 @@ describe("useBackendDescriptor", () => {
         useManagedInstallActionState(fake.backend, plugin)
       );
 
-      act(() => fake.emit({ kind: "running", label: "Downloading…", percent: 42 }));
-      expect(result.current).toEqual({ kind: "running", label: "Downloading…", percent: 42 });
+      act(() => fake.emit({ kind: "running", label: "Downloading… 42%" }));
+      expect(result.current).toEqual({ kind: "running", label: "Downloading… 42%" });
 
       unmount();
       expect(fake.unsubscribed()).toBe(true);

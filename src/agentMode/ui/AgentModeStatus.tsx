@@ -73,11 +73,7 @@ export const AgentModeStatus: React.FC<Props> = ({ manager, plugin, onInstallCli
       <AgentStatusCard
         tone={failed ? "error" : "warning"}
         message={
-          upgrading
-            ? `${managedInstall.label} ${managedInstall.percent}%`
-            : failed
-              ? managedInstall.message
-              : installState.message
+          upgrading ? managedInstall.label : failed ? managedInstall.message : installState.message
         }
         action={{
           label: canUpgrade

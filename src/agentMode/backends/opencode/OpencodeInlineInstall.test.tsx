@@ -108,7 +108,7 @@ describe("OpencodeInlineInstall", () => {
     it("surfaces the failure reason and offers a retry when an operation fails", () => {
       render(<OpencodeAbsentInstallActions plugin={plugin} />);
 
-      fake.publish({ kind: "error", message: "GitHub API rate-limited" });
+      fake.publish({ kind: "error", operation: "install", message: "GitHub API rate-limited" });
 
       expect(screen.getByText("GitHub API rate-limited")).not.toBeNull();
       expect(screen.getByRole("button", { name: "Try again" })).not.toBeNull();
@@ -116,7 +116,7 @@ describe("OpencodeInlineInstall", () => {
 
     it("runs a fresh install when the user retries after a failure", async () => {
       render(<OpencodeAbsentInstallActions plugin={plugin} />);
-      fake.publish({ kind: "error", message: "network down" });
+      fake.publish({ kind: "error", operation: "install", message: "network down" });
 
       fireEvent.click(screen.getByRole("button", { name: "Try again" }));
 
@@ -138,7 +138,11 @@ describe("OpencodeInlineInstall", () => {
     // while the button that message depends on had vanished from the row.
     it("reveals Configure and retires the adopt action when no opencode is found", async () => {
       fake.adoptExistingBinary.mockImplementation(() => {
-        fake.publish({ kind: "error", message: new OpencodeNotFoundError().message });
+        fake.publish({
+          kind: "error",
+          operation: "install",
+          message: new OpencodeNotFoundError().message,
+        });
         return Promise.reject(new OpencodeNotFoundError());
       });
       render(<OpencodeAbsentInstallActions plugin={plugin} />);
@@ -175,7 +179,7 @@ describe("OpencodeInlineInstall", () => {
 
     it("opens the Configure dialog from the failure state so a custom path stays reachable", () => {
       render(<OpencodeAbsentInstallActions plugin={plugin} />);
-      fake.publish({ kind: "error", message: "nothing found" });
+      fake.publish({ kind: "error", operation: "install", message: "nothing found" });
 
       fireEvent.click(screen.getByRole("button", { name: "Configure" }));
 
@@ -222,7 +226,7 @@ describe("OpencodeInlineInstall", () => {
     });
 
     it("shows a failure that settled before it mounted", () => {
-      fake.publish({ kind: "error", message: "Network unreachable" });
+      fake.publish({ kind: "error", operation: "install", message: "Network unreachable" });
 
       render(<OpencodeAbsentInstallActions plugin={plugin} />);
 

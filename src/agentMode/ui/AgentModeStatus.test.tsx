@@ -142,7 +142,7 @@ describe("AgentModeStatus", () => {
 
       fireEvent.click(screen.getByRole("button", { name: "Update" }));
       expect(run).toHaveBeenCalledWith(plugin);
-      managedInstallState = { kind: "running", label: "Downloading…", percent: 50 };
+      managedInstallState = { kind: "running", label: "Downloading… 50%" };
       rerender(<AgentModeStatus plugin={plugin} onInstallClick={jest.fn()} />);
       expect(screen.getByRole("button", { name: "Upgrading…" }).hasAttribute("disabled")).toBe(
         true

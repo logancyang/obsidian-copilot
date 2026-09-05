@@ -140,7 +140,11 @@ describe("ManagedBinaryManager", () => {
       it("clears a prior failure so a reopened lifecycle starts idle", async () => {
         manager.pipeline.mockRejectedValueOnce(new Error("failed"));
         await expect(manager.install()).rejects.toThrow("failed");
-        expect(manager.getRuntimeState()).toEqual({ kind: "error", message: "failed" });
+        expect(manager.getRuntimeState()).toEqual({
+          kind: "error",
+          message: "failed",
+          operation: "install",
+        });
         manager.forgetSettledError();
         expect(manager.getRuntimeState()).toEqual({ kind: "idle" });
       });
@@ -220,13 +224,18 @@ describe("ManagedBinaryManager", () => {
           expect(manager.validate).not.toHaveBeenCalled();
         }
       );
-      it("keeps the configured binary when backend version validation fails", async () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/368 keeps the configured binary and identifies a path-validation failure", async () => {
         manager.settings = { binaryPath: "/previous" };
         manager.validate.mockRejectedValueOnce(new Error("unsupported version"));
         await expect(manager.setCustomBinaryPath(customPath)).rejects.toThrow(
           "unsupported version"
         );
         expect(manager.settings.binaryPath).toBe("/previous");
+        expect(manager.getRuntimeState()).toEqual({
+          kind: "error",
+          message: "unsupported version",
+          operation: "configure",
+        });
       });
     });
   });
