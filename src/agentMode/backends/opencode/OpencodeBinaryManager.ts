@@ -5,12 +5,18 @@ import { logError, logInfo, logWarn } from "@/logger";
 import type CopilotPlugin from "@/main";
 import { getSettings, setSettings, type OpencodeBackendSettings } from "@/settings/model";
 import { FileSystemAdapter, requestUrl } from "obsidian";
-import { renameWithRetry } from "@/agentMode/skills/renameWithRetry";
 import { copilotAppDataDir } from "@/utils/appPaths";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 import { detectOpencodeCliPath } from "./opencodeCliDetector";
 import { expectedBinaryName, resolveOpencodeTarget } from "./platformResolver";
 import type { InstallState as BackendInstallState } from "@/agentMode/session/types";
+import {
+  createManagedInstallRuntime,
+  ManagedInstallAbortError,
+  ManagedInstallOperationInFlightError,
+  promoteManagedVersion,
+  type ManagedInstallRuntimeState,
+} from "@/agentMode/backends/shared/managedInstall";
 
 type IncomingMessage = import("node:http").IncomingMessage;
 type Dirent = import("node:fs").Dirent;
@@ -75,17 +81,12 @@ export type InstallState =
  * `busy` covers the operations with nothing to show but the fact that they are
  * running; `installing` is separate because it carries download progress.
  */
-export type RuntimeState =
-  | { kind: "idle" }
-  | { kind: "detecting" }
-  | { kind: "installing"; progress: ProgressEvent | null }
-  | { kind: "busy" }
-  | { kind: "error"; message: string };
+export type RuntimeState = ManagedInstallRuntimeState<ProgressEvent>;
 
 /** Thrown when a second binary-path operation is started while one is running. */
-export class OperationInFlightError extends Error {
+export class OperationInFlightError extends ManagedInstallOperationInFlightError {
   constructor() {
-    super("An opencode setup operation is already running.");
+    super("opencode");
     this.name = "OperationInFlightError";
   }
 }
@@ -107,8 +108,6 @@ export class OpencodeNotFoundError extends Error {
   }
 }
 
-const describeOperationError = (e: unknown): string => (e instanceof Error ? e.message : String(e));
-
 interface GithubAsset {
   name: string;
   size: number;
@@ -126,9 +125,9 @@ interface InstallManifest {
   installedAt: string;
 }
 
-export class AbortError extends Error {
+export class AbortError extends ManagedInstallAbortError {
   constructor() {
-    super("Aborted");
+    super();
     this.name = "AbortError";
   }
 }
@@ -329,9 +328,7 @@ export class OpencodeBinaryManager {
    * instantly off the existing manifest.
    * If a future review flags the lifecycle boundary, point them at this note.
    */
-  private operation: { controller: AbortController } | null = null;
-  private runtimeState: RuntimeState = { kind: "idle" };
-  private readonly runtimeSubscribers = new Set<() => void>();
+  private readonly runtime = createManagedInstallRuntime<ProgressEvent>("opencode");
 
   /**
    * Subscribe to {@link getRuntimeState}. Bound once so React's
@@ -339,22 +336,14 @@ export class OpencodeBinaryManager {
    * every render.
    */
   readonly subscribeRuntimeState = (onChange: () => void): (() => void) => {
-    this.runtimeSubscribers.add(onChange);
-    return () => {
-      this.runtimeSubscribers.delete(onChange);
-    };
+    return this.runtime.subscribe(onChange);
   };
 
   /**
    * Current runtime state. The returned object is replaced, never mutated, so
    * `useSyncExternalStore` can compare snapshots by identity.
    */
-  readonly getRuntimeState = (): RuntimeState => this.runtimeState;
-
-  private setRuntimeState(next: RuntimeState): void {
-    this.runtimeState = next;
-    this.runtimeSubscribers.forEach((notify) => notify());
-  }
+  readonly getRuntimeState = (): RuntimeState => this.runtime.getSnapshot();
 
   /**
    * Drop a failure left over from a previous plugin lifecycle, so a new one
@@ -367,13 +356,12 @@ export class OpencodeBinaryManager {
    * not even be the one now open.
    */
   forgetSettledError(): void {
-    if (this.operation || this.runtimeState.kind !== "error") return;
-    this.setRuntimeState({ kind: "idle" });
+    this.runtime.forgetSettledError();
   }
 
   /** Whether a binary-path operation is running, from any entry point. */
   isBusy(): boolean {
-    return this.operation !== null;
+    return this.runtime.isBusy();
   }
 
   /**
@@ -381,7 +369,7 @@ export class OpencodeBinaryManager {
    * otherwise — only the managed install is interruptible.
    */
   cancelCurrentOperation(): void {
-    this.operation?.controller.abort();
+    this.runtime.cancel();
   }
 
   /**
@@ -401,25 +389,13 @@ export class OpencodeBinaryManager {
     running: RuntimeState,
     body: (signal: AbortSignal) => Promise<T>
   ): Promise<T> {
-    if (this.operation) throw new OperationInFlightError();
-    const controller = new AbortController();
-    this.operation = { controller };
-    this.setRuntimeState(running);
     try {
-      const result = await body(controller.signal);
-      this.operation = null;
-      this.setRuntimeState({ kind: "idle" });
-      return result;
-    } catch (e) {
-      this.operation = null;
-      // A cancellation is the user's own doing, so it returns to idle rather
-      // than reporting a failure they would have to dismiss.
-      if (e instanceof AbortError || (e as Error | undefined)?.name === "AbortError") {
-        this.setRuntimeState({ kind: "idle" });
-      } else {
-        this.setRuntimeState({ kind: "error", message: describeOperationError(e) });
+      return await this.runtime.run(running, body);
+    } catch (error) {
+      if (error instanceof ManagedInstallOperationInFlightError) {
+        throw new OperationInFlightError();
       }
-      throw e;
+      throw error;
     }
   }
 
@@ -498,7 +474,7 @@ export class OpencodeBinaryManager {
         ...opts,
         signal,
         onProgress: (e) => {
-          this.setRuntimeState({ kind: "installing", progress: e });
+          this.runtime.publishProgress(e);
           opts.onProgress?.(e);
         },
       });
@@ -604,30 +580,7 @@ export class OpencodeBinaryManager {
         JSON.stringify(manifest, null, 2)
       );
 
-      // Rename-aside-then-rename: move any existing versionDir out of the way,
-      // promote the staged dir into place, and only then delete the old one.
-      // If the second rename fails, we restore the original so the user keeps
-      // a working install instead of a half-deleted one.
-      let asideDir: string | null = null;
-      if (await fileExists(versionDir)) {
-        asideDir = `${versionDir}.old-${randomBytes(4).toString("hex")}`;
-        await renameWithRetry(versionDir, asideDir);
-      }
-      try {
-        await renameWithRetry(stageDir, versionDir);
-      } catch (e) {
-        if (asideDir) {
-          await renameWithRetry(asideDir, versionDir).catch((restoreErr) =>
-            logError("[AgentMode] failed to restore previous opencode install", restoreErr)
-          );
-        }
-        throw e;
-      }
-      if (asideDir) {
-        await removeDir(asideDir).catch((rmErr) =>
-          logWarn(`[AgentMode] failed to remove ${asideDir}: ${rmErr}`)
-        );
-      }
+      await promoteManagedVersion(stageDir, versionDir, "opencode");
 
       // Smoke-test the installed binary. Catches corrupt extracts and
       // platform/libc mismatches before the user hits them at ACP boot —
@@ -669,7 +622,7 @@ export class OpencodeBinaryManager {
         signal,
         version: OPENCODE_PINNED_VERSION,
         onProgress: (e) => {
-          this.setRuntimeState({ kind: "installing", progress: e });
+          this.runtime.publishProgress(e);
           opts.onProgress?.(e);
         },
       });

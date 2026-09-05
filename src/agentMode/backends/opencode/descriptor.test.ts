@@ -13,7 +13,7 @@ import type {
   ModelEntry,
   ModelState,
 } from "@/agentMode/session/types";
-import type { CopilotSettings } from "@/settings/model";
+import { getSettings, setSettings, type CopilotSettings } from "@/settings/model";
 
 jest.mock("@/settings/model", () => ({
   ...jest.requireActual("@/settings/model"),
@@ -28,6 +28,73 @@ jest.mock("@/logger", () => ({
 
 describe("descriptor", () => {
   describe("OpencodeBackendDescriptor", () => {
+    describe("managedInstall", () => {
+      it("maps the manager's shared progress for backend-neutral UI", async () => {
+        const manager = getOpencodeBinaryManager(vaultPlugin(os.tmpdir()));
+        const subscribe = jest.spyOn(manager, "subscribeRuntimeState");
+        const cancel = jest.spyOn(manager, "cancelCurrentOperation");
+        const getState = jest
+          .spyOn(manager, "getRuntimeState")
+          .mockReturnValue({ kind: "installing", progress: null });
+        const plugin = vaultPlugin(os.tmpdir());
+
+        expect(OpencodeBackendDescriptor.managedInstall?.getState(plugin)).toEqual({
+          kind: "running",
+          label: "Starting…",
+          percent: 0,
+        });
+        const listener = jest.fn();
+        OpencodeBackendDescriptor.managedInstall?.subscribe(plugin, listener);
+        expect(subscribe).toHaveBeenCalledWith(listener);
+        OpencodeBackendDescriptor.managedInstall?.cancel?.(plugin);
+        expect(cancel).toHaveBeenCalledTimes(1);
+
+        getState.mockRestore();
+        subscribe.mockRestore();
+        cancel.mockRestore();
+      });
+
+      it("keeps custom and managed upgrades on their existing manager paths", async () => {
+        const manager = getOpencodeBinaryManager(vaultPlugin(os.tmpdir()));
+        const upgradeCustom = jest.spyOn(manager, "upgradeCustomBinary").mockResolvedValue({
+          version: "1.0.0",
+          path: process.execPath,
+        });
+        const upgradeManaged = jest.spyOn(manager, "upgradeManaged").mockResolvedValue({
+          version: "1.0.0",
+          path: process.execPath,
+        });
+        const original = getSettings().agentMode;
+
+        try {
+          for (const source of ["custom", "managed"] as const) {
+            setSettings((current) => ({
+              agentMode: {
+                ...current.agentMode,
+                backends: {
+                  ...current.agentMode.backends,
+                  opencode: {
+                    ...current.agentMode.backends?.opencode,
+                    binaryPath: process.execPath,
+                    binaryVersion: "1.0.0",
+                    binarySource: source,
+                  },
+                },
+              },
+            }));
+            await OpencodeBackendDescriptor.managedInstall?.run(vaultPlugin(os.tmpdir()));
+          }
+
+          expect(upgradeCustom).toHaveBeenCalledTimes(1);
+          expect(upgradeManaged).toHaveBeenCalledTimes(1);
+        } finally {
+          setSettings({ agentMode: original });
+          upgradeCustom.mockRestore();
+          upgradeManaged.mockRestore();
+        }
+      });
+    });
+
     describe("wire.decode()", () => {
       const decode = OpencodeBackendDescriptor.wire.decode;
 
