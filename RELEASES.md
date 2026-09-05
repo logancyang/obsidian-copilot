@@ -1,12 +1,12 @@
 # Release Notes
 
-# v4.0.6 - Find connections as you write
+# v4.0.6 - Note indexing with Miyo
 
-![Weekend plans beside Relevant Notes with Live enabled and Hong Kong notes ranked first](https://github.com/user-attachments/assets/485f464d-8c84-4a87-8cae-16c28d510a03)
+![Relevant Notes in Obsidian, with a separate Powered by Miyo logo below the screenshot](https://github.com/user-attachments/assets/d3086fac-635a-46c5-b12b-bb4b4d4a1830)
 
-As your note takes shape, Copilot can bring related ideas back into view. With **Live** on, Relevant Notes updates a few seconds after your edits are saved. Miyo, the app that makes your notes searchable by meaning, now handles indexing in place of the old index inside Obsidian. When related notes are missing, Copilot shows whether Miyo is disconnected or, with the latest Miyo, why the current note is not ready for search. ([#3097](https://github.com/logancyang/obsidian-copilot/pull/3097), [#3092](https://github.com/logancyang/obsidian-copilot/pull/3092), [#3088](https://github.com/logancyang/obsidian-copilot/pull/3088), @zeroliu)
+Miyo now handles indexing for Copilot, replacing the old index inside Obsidian and making your notes searchable by meaning. Relevant Notes gains **Live** updates a few seconds after your edits are saved. When notes are missing, Copilot shows whether Miyo is disconnected or, with the latest Miyo, why the current note is not ready for search. ([#3097](https://github.com/logancyang/obsidian-copilot/pull/3097), [#3092](https://github.com/logancyang/obsidian-copilot/pull/3092), [#3088](https://github.com/logancyang/obsidian-copilot/pull/3088), @zeroliu)
 
-## Live Relevant Notes
+## Live updates in Relevant Notes
 
 - **Relevant Notes follows your edits.** The new **Live** switch is on by default, so related notes move up or down as your writing changes; turn it off to keep the list steady. ([#3097](https://github.com/logancyang/obsidian-copilot/pull/3097), @zeroliu)
 
