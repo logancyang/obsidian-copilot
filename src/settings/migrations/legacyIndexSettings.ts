@@ -1,4 +1,6 @@
 /**
+ * Deprecated: Vault QA and its local index are unsupported; cleanup awaits removal.
+ *
  * Settings that existed only for the removed embedding and index runtime.
  * https://github.com/Brevilabs/obsidian-copilot-private/issues/283
  */

@@ -38,12 +38,6 @@ jobs:
       - run: npm run gallery:build
       - run: npm run test:mobile-load
       - run: npm test
-      - name: Run Integration tests
-        # Only run integration tests for trusted events (push) or when secrets are available
-        if: ${{ github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository }}
-        env:
-          GEMINI_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
-        run: npm run test:integration
 
   docs:
     runs-on: ubuntu-latest

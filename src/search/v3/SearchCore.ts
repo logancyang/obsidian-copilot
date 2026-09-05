@@ -26,6 +26,8 @@ export interface RetrieveResult {
 }
 
 /**
+ * Deprecated: Vault Search v3 is awaiting removal; retained for existing callers.
+ *
  * Core search engine that orchestrates the multi-stage retrieval pipeline
  * Updated to support unified chunking architecture
  */

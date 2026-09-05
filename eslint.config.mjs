@@ -300,7 +300,7 @@ export default [
   // Tests may import Node directly because they execute under Jest, not Obsidian.
   {
     files: ["src/**/*.{ts,tsx}"],
-    ignores: ["src/**/*.test.{ts,tsx}", "src/**/__mocks__/**", "src/integration_tests/**"],
+    ignores: ["src/**/*.test.{ts,tsx}", "src/**/__mocks__/**"],
     plugins: { copilot: copilotLintPlugin },
     rules: {
       "copilot/no-direct-node-imports": "error",
@@ -353,7 +353,7 @@ export default [
   // Test output is intentionally written to the console. Keep the production
   // import restrictions without applying the logging boundary to test files.
   {
-    files: ["src/**/*.test.{js,jsx,ts,tsx}", "src/integration_tests/**"],
+    files: ["src/**/*.test.{js,jsx,ts,tsx}"],
     rules: {
       "no-restricted-syntax": ["error", ...restrictedSourceImports],
     },
@@ -469,15 +469,6 @@ export default [
     files: ["**/*.test.{ts,tsx}"],
     rules: {
       "@typescript-eslint/no-unsafe-assignment": "error",
-    },
-  },
-
-  // Integration tests bootstrap jsdom fetch via `node-fetch` polyfill —
-  // allow the otherwise-banned import here only.
-  {
-    files: ["src/integration_tests/**"],
-    rules: {
-      "no-restricted-imports": "off",
     },
   },
 
