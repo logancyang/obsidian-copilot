@@ -43,6 +43,10 @@ Claude models and billing come from your Claude Code account. Models added under
 
 ### Codex
 
+A Copilot-managed Codex installation uses a native bundle containing the adapter and Codex runtime. It does not need Node.js or npm. Copilot checks the bundle version and packaging revision to offer updates. A failed download or verification keeps the previous installation selected.
+
+You can also keep your own adapter installation. Copilot does not update or remove these custom installations.
+
 The Codex backend needs `@agentclientprotocol/codex-acp` 0.0.45 or newer. The package includes a compatible Codex CLI:
 
 1. Open **Basic → Agents → Codex → Configure**.

@@ -367,8 +367,10 @@ export interface ClaudeBackendSettings {
 
 /** Settings slice owned by the Codex backend. */
 export interface CodexBackendSettings {
-  /** Path to the user-provided `codex-acp` binary. */
+  binaryVersion?: string;
+  /** Path to the configured `codex-acp` package entry. */
   binaryPath?: string;
+  binarySource?: "managed" | "custom";
   /** Sticky model preference — `{ baseModelId, effort }`. Unset = use the agent's default. */
   defaultModel?: ModelSelection | null;
   /** Sticky permission-mode preference (default/plan/auto). Unset = the agent's natural starting mode. */
@@ -420,6 +422,8 @@ export interface DeviceAgentProfile {
   claudeCliPath?: string;
   codex?: {
     binaryPath?: string;
+    binaryVersion?: string;
+    binarySource?: "managed" | "custom";
     envOverrides?: Record<string, string>;
   };
   opencode?: {
@@ -1589,8 +1593,18 @@ function sanitizeClaudeBackendSettings(raw: unknown): ClaudeBackendSettings {
 function sanitizeCodexBackendSettings(raw: unknown): CodexBackendSettings {
   if (!raw || typeof raw !== "object") return {};
   const r = raw as Record<string, unknown>;
+  const binaryPath = nonEmptyString(r.binaryPath);
+  const rawSource = r.binarySource;
   return {
-    binaryPath: nonEmptyString(r.binaryPath),
+    binaryPath,
+    binaryVersion: binaryPath ? nonEmptyString(r.binaryVersion) : undefined,
+    // Never take ownership of an existing or cross-device path.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
+    binarySource: binaryPath
+      ? rawSource === "managed" || rawSource === "custom"
+        ? rawSource
+        : "custom"
+      : undefined,
     defaultModel: sanitizeDefaultModel(r.defaultModel),
     defaultMode: sanitizeDefaultMode(r.defaultMode),
     envOverrides: sanitizeEnvOverrides(r.envOverrides),
@@ -1635,6 +1649,12 @@ function sanitizeDeviceAgentProfile(raw: unknown): DeviceAgentProfile | undefine
     const codex: NonNullable<DeviceAgentProfile["codex"]> = {};
     const binaryPath = nonEmptyString(codexRaw.binaryPath);
     if (binaryPath) codex.binaryPath = binaryPath;
+    const binaryVersion = binaryPath ? nonEmptyString(codexRaw.binaryVersion) : undefined;
+    if (binaryVersion) codex.binaryVersion = binaryVersion;
+    const rawSource = codexRaw.binarySource;
+    if (binaryPath) {
+      codex.binarySource = rawSource === "managed" || rawSource === "custom" ? rawSource : "custom";
+    }
     const envOverrides = sanitizeEnvOverrides(codexRaw.envOverrides);
     if (envOverrides) codex.envOverrides = envOverrides;
     if (Object.keys(codex).length > 0) out.codex = codex;

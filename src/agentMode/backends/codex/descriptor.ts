@@ -22,9 +22,11 @@ import type {
 } from "@/agentMode/session/types";
 import type { BackendDescriptor, BackendProcess, InstallState } from "@/agentMode/session/types";
 import { codexAcpSearchDirs, resolveCodexAcpBinary } from "./codexBinaryResolver";
+import { CodexBinaryManager } from "./CodexBinaryManager";
+import { CODEX_BUNDLE_VERSION } from "./codexArchive";
 import { CODEX_BINARY_NAME } from "./cliSetup";
 import { buildCodexModeMapping } from "./codexModeMapping";
-import { isSupportedCodexAcpPath } from "./codexVersion";
+import { isSupportedCodexAcpPath, resolveSupportedCodexAcpPackage } from "./codexVersion";
 
 /**
  * Vocabulary mirrors codex-acp's advertised efforts. `minimal` is included
@@ -32,6 +34,11 @@ import { isSupportedCodexAcpPath } from "./codexVersion";
  * codex-acp doesn't currently advertise it.
  */
 const KNOWN_CODEX_EFFORTS = new Set(["minimal", "low", "medium", "high", "xhigh"]);
+const codexBinaryManager = new CodexBinaryManager();
+
+export function getCodexBinaryManager(): CodexBinaryManager {
+  return codexBinaryManager;
+}
 
 export function updateCodexFields(partial: Partial<CodexBackendSettings>): void {
   updateAgentModeBackendFields("codex", partial);
@@ -156,9 +163,26 @@ export const CodexBackendDescriptor: BackendDescriptor = {
   },
 
   getInstallState(settings: CopilotSettings): InstallState {
-    return isSupportedCodexAcpPath(settings.agentMode?.backends?.codex?.binaryPath)
-      ? { kind: "ready", source: "custom" }
-      : { kind: "absent" };
+    const configured = settings.agentMode?.backends?.codex;
+    if (!configured?.binaryPath) return { kind: "absent" };
+    try {
+      const installed = resolveSupportedCodexAcpPackage(configured.binaryPath);
+      const source = configured.binarySource ?? "custom";
+      // A supported older bundle stays selectable for the managed Update action.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
+      if (source === "managed" && installed.version !== CODEX_BUNDLE_VERSION) {
+        return {
+          kind: "incompatible",
+          source,
+          currentVersion: installed.version,
+          minVersion: CODEX_BUNDLE_VERSION,
+          message: `Codex adapter ${installed.version} does not match this Copilot release (${CODEX_BUNDLE_VERSION}).`,
+        };
+      }
+      return { kind: "ready", source };
+    } catch {
+      return { kind: "absent" };
+    }
   },
 
   getResolvedBinaryPath(settings: CopilotSettings): string | null {
@@ -168,7 +192,12 @@ export const CodexBackendDescriptor: BackendDescriptor = {
   subscribeInstallState(_plugin: CopilotPlugin, cb: () => void): () => void {
     return subscribeToSettingsChange((prev, next) => {
       if (
-        prev.agentMode?.backends?.codex?.binaryPath !== next.agentMode?.backends?.codex?.binaryPath
+        prev.agentMode?.backends?.codex?.binaryPath !==
+          next.agentMode?.backends?.codex?.binaryPath ||
+        prev.agentMode?.backends?.codex?.binaryVersion !==
+          next.agentMode?.backends?.codex?.binaryVersion ||
+        prev.agentMode?.backends?.codex?.binarySource !==
+          next.agentMode?.backends?.codex?.binarySource
       ) {
         cb();
       }
@@ -177,6 +206,20 @@ export const CodexBackendDescriptor: BackendDescriptor = {
 
   openInstallUI(plugin: CopilotPlugin): void {
     new CodexInstallModal(plugin.app).open();
+  },
+
+  async onPluginLoad(): Promise<void> {
+    // A new vault or plugin lifecycle must not inherit a previous installation failure.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
+    codexBinaryManager.forgetSettledError();
+  },
+
+  managedInstall: {
+    getState: () => codexBinaryManager.getActionState(),
+    subscribe: (_plugin, onChange) => codexBinaryManager.subscribeRuntimeState(onChange),
+    run: async () => {
+      await codexBinaryManager.install();
+    },
   },
 
   async applySelection(session: AgentSession, selection: ModelSelection): Promise<void> {
