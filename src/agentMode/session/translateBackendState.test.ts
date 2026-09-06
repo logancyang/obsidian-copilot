@@ -347,6 +347,63 @@ describe("translateBackendState", () => {
         const state = translateBackendState({ models, modes: null, configOptions: null }, desc);
         expect(findModelEntry(state.model, "gpt-x")?.name).toBe("GPT-x");
       });
+
+      it("prefers the base-model blurb from a model config option over a per-effort one", () => {
+        // codex publishes both channels: `models` carries a per-effort blurb on
+        // every variant, the config option carries the base model's own.
+        const models: RawModelState = {
+          currentModelId: "oai/sol/low",
+          availableModels: [
+            {
+              modelId: "oai/sol/low",
+              name: "Sol (low)",
+              description: "Frontier model. Lighter reasoning",
+            },
+            {
+              modelId: "oai/sol/max",
+              name: "Sol (max)",
+              description: "Frontier model. Maximum reasoning",
+            },
+          ],
+        };
+        const configOptions: BackendConfigOption[] = [
+          {
+            id: "model",
+            type: "select",
+            category: "model",
+            name: "Model",
+            currentValue: "oai/sol",
+            options: [{ value: "oai/sol", name: "Sol", description: "Frontier model." }],
+          },
+        ];
+        const state = translateBackendState(
+          { models, modes: null, configOptions },
+          suffixDescriptor({ showModelDescriptions: true })
+        );
+        expect(findModelEntry(state.model, "oai/sol")?.description).toBe("Frontier model.");
+      });
+
+      it("keeps the reported blurb for a model the config option doesn't list", () => {
+        const models: RawModelState = {
+          currentModelId: "m",
+          availableModels: [{ modelId: "m", name: "M", description: "reported blurb" }],
+        };
+        const configOptions: BackendConfigOption[] = [
+          {
+            id: "model",
+            type: "select",
+            category: "model",
+            name: "Model",
+            currentValue: "other",
+            options: [{ value: "other", name: "Other", description: "other blurb" }],
+          },
+        ];
+        const state = translateBackendState(
+          { models, modes: null, configOptions },
+          descriptor({ showModelDescriptions: true })
+        );
+        expect(findModelEntry(state.model, "m")?.description).toBe("reported blurb");
+      });
     });
 
     describe("suffix-style backends", () => {

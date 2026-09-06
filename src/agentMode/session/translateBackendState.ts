@@ -78,6 +78,14 @@ function translateModel(
   const fromConfig = inputs.models ? null : configModel;
   const modelState = inputs.models ?? fromConfig?.state ?? null;
   if (!modelState) return null;
+  // Dedicated catalogs describe effort variants; the model option describes
+  // the whole model. https://github.com/Brevilabs/obsidian-copilot-private/issues/219
+  const baseDescriptions = new Map<string, string>();
+  if (inputs.models && configModel) {
+    for (const model of configModel.state.availableModels) {
+      if (model.description) baseDescriptions.set(model.modelId, model.description);
+    }
+  }
   const effortFromConfig = fromConfig ? effortConfigOption(inputs.configOptions) : null;
   const apply: ModelApplySpec = fromConfig
     ? {
@@ -140,7 +148,9 @@ function translateModel(
     ),
     // Only backends that opt in surface their per-model blurb; others (opencode)
     // would just add noisy/duplicative lines, so the field is dropped here.
-    description: descriptor.showModelDescriptions ? g.description : undefined,
+    description: descriptor.showModelDescriptions
+      ? (baseDescriptions.get(g.baseModelId) ?? g.description)
+      : undefined,
     provider: g.provider,
     effortOptions: deriveEffortOptions(g, descriptor),
   }));
