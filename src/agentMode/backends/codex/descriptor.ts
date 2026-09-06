@@ -3,6 +3,7 @@ import type CopilotPlugin from "@/main";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 import { detectBinary } from "@/utils/detectBinary";
 import {
+  getSettings,
   subscribeToSettingsChange,
   updateAgentModeBackendFields,
   type CodexBackendSettings,
@@ -23,7 +24,7 @@ import type {
 } from "@/agentMode/session/types";
 import type { BackendDescriptor, BackendProcess, InstallState } from "@/agentMode/session/types";
 import { codexAcpSearchDirs, resolveCodexAcpBinary } from "./codexBinaryResolver";
-import { CodexBinaryManager } from "./CodexBinaryManager";
+import { codexBinaryManager, type CodexBinaryManager } from "./CodexBinaryManager";
 import { CODEX_BUNDLE_VERSION } from "./codexArchive";
 import { CODEX_BINARY_NAME } from "./cliSetup";
 import { buildCodexModeMapping } from "./codexModeMapping";
@@ -35,7 +36,6 @@ import { isSupportedCodexAcpPath, resolveSupportedCodexAcpPackage } from "./code
  * codex-acp doesn't currently advertise it.
  */
 const KNOWN_CODEX_EFFORTS = new Set(["minimal", "low", "medium", "high", "xhigh"]);
-const codexBinaryManager = new CodexBinaryManager();
 
 export function getCodexBinaryManager(): CodexBinaryManager {
   return codexBinaryManager;
@@ -233,7 +233,29 @@ export const CodexBackendDescriptor: BackendDescriptor = {
     // symlink. The per-agent toggle drives whether the symlink exists; no
     // deny synthesis is needed because Codex does not cross-discover from
     // `.claude/skills/` or `.opencode/skills/`.
-    return simpleBinaryBackendProcess(args, new CodexBackend(args.clientVersion));
+    const backend = simpleBinaryBackendProcess(args, new CodexBackend(args.clientVersion));
+    const start = backend.start!.bind(backend);
+    let release: (() => void) | undefined;
+    backend.onExit(() => {
+      release?.();
+      release = undefined;
+    });
+    backend.start = async () => {
+      // Reserve before asynchronous spawn preparation so cleanup cannot remove the selected files.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/380
+      const binaryPath = getSettings().agentMode.backends?.codex?.binaryPath;
+      if (binaryPath && !release) release = codexBinaryManager.reserveBinary(binaryPath);
+      try {
+        await start();
+      } catch (error) {
+        if (!backend.isRunning()) {
+          release?.();
+          release = undefined;
+        }
+        throw error;
+      }
+    };
+    return backend;
   },
 
   SettingsPanel: CodexSettingsPanel,
