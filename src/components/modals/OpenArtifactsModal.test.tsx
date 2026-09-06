@@ -202,6 +202,19 @@ describe("OpenArtifactsModal", () => {
         expect(screen.queryByRole("alert")).toBeNull();
       });
 
+      it("https://github.com/logancyang/obsidian-copilot/issues/3121 allows explicit manual review acknowledgment after automatic opening fails", async () => {
+        jest.mocked(openWithSystemDefault).mockResolvedValue(false);
+        const onConfirm = createConfirmMock();
+        renderModal(onConfirm, null, undefined, undefined, REVIEW);
+        await act(async () => {});
+        expect(screen.getByText(REVIEW.previewPath)).toBeTruthy();
+        await clickButton("Yes, publish");
+        expect(onConfirm).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByRole("checkbox", { name: "I reviewed the preview" }));
+        await clickButton("Yes, publish");
+        expect(onConfirm).toHaveBeenCalledTimes(1);
+      });
+
       it("returns regeneration without reusing the current confirmation", () => {
         const onConfirm = createConfirmMock();
         const onRegenerate = jest.fn();

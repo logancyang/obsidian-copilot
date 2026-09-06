@@ -53,6 +53,7 @@ interface Harness {
   readStagedHtml: jest.Mock;
   recordLedger: jest.Mock<Promise<void>, [OpenArtifactsLedgerEntry]>;
   removePreview: jest.Mock;
+  discardStaged: jest.Mock;
 }
 
 function createHarness(frontmatter: Record<string, unknown> = {}): Harness {
@@ -65,6 +66,7 @@ function createHarness(frontmatter: Record<string, unknown> = {}): Harness {
   );
   const readStagedHtml = jest.fn().mockResolvedValue(DOCUMENT.html);
   const previewIsCurrent = jest.fn().mockResolvedValue(true);
+  const discardStaged = jest.fn().mockResolvedValue(undefined);
   const removePreview = jest.fn().mockResolvedValue(undefined);
   const consumeAgentHandoff = jest.fn(
     async (stagedHtmlPath: string): Promise<OpenArtifactsAgentHandoff> => {
@@ -77,6 +79,7 @@ function createHarness(frontmatter: Record<string, unknown> = {}): Harness {
         previewUrl: `file://${previewPath}`,
         isPreviewCurrent: previewIsCurrent,
         cleanup: removePreview,
+        discard: discardStaged,
       };
     }
   );
@@ -140,6 +143,7 @@ function createHarness(frontmatter: Record<string, unknown> = {}): Harness {
     readStagedHtml,
     recordLedger,
     removePreview,
+    discardStaged,
   };
 }
 
@@ -977,6 +981,7 @@ describe("OpenArtifactsPublisher", () => {
         options.onClosed?.();
 
         await expect(outcome).resolves.toEqual({ status: "cancelled" });
+        expect(harness.discardStaged).not.toHaveBeenCalled();
         expect(harness.removePreview).toHaveBeenCalledTimes(1);
         expect(harness.client.publish).not.toHaveBeenCalled();
         expect(harness.client.update).not.toHaveBeenCalled();
@@ -997,6 +1002,7 @@ describe("OpenArtifactsPublisher", () => {
         first.options.onClosed?.();
 
         await expect(first.outcome).resolves.toEqual({ status: "regenerate" });
+        expect(harness.discardStaged).toHaveBeenCalledTimes(1);
         expect(harness.removePreview).toHaveBeenCalledTimes(1);
         expect(harness.client.publish).not.toHaveBeenCalled();
 
@@ -1013,6 +1019,7 @@ describe("OpenArtifactsPublisher", () => {
           url: RECEIPT.url,
         });
         expect(harness.removePreview).toHaveBeenCalledTimes(2);
+        expect(harness.discardStaged).toHaveBeenCalledTimes(2);
         second.options.onClosed?.();
         expect(harness.client.publish).toHaveBeenCalledTimes(1);
         expect(harness.client.publish).toHaveBeenCalledWith(
@@ -1049,7 +1056,17 @@ describe("OpenArtifactsPublisher", () => {
         );
         expect(harness.client.publish).not.toHaveBeenCalled();
         expect(harness.frontmatter.symposium).toBe(DOC_URL);
+        expect(harness.discardStaged).toHaveBeenCalledTimes(1);
         expect(harness.previewIsCurrent).toHaveBeenCalledTimes(1);
+      });
+
+      it("https://github.com/logancyang/obsidian-copilot/issues/3121 preserves the successful receipt when staged cleanup fails", async () => {
+        const harness = createHarness();
+        harness.discardStaged.mockRejectedValue(new Error("permission denied"));
+        const review = await startAgentReview(harness);
+        await review.options.onConfirm("publish", activeDocument);
+        await expect(review.outcome).resolves.toEqual({ status: "published", url: RECEIPT.url });
+        expect(harness.removePreview).toHaveBeenCalledTimes(1);
       });
 
       it("rejects confirmation when the local browser preview no longer matches", async () => {
@@ -1074,6 +1091,7 @@ describe("OpenArtifactsPublisher", () => {
         });
         expect(harness.previewIsCurrent).toHaveBeenCalledTimes(1);
         expect(harness.removePreview).toHaveBeenCalledTimes(1);
+        expect(harness.discardStaged).not.toHaveBeenCalled();
         expect(harness.client.publish).not.toHaveBeenCalled();
         expect(harness.client.update).not.toHaveBeenCalled();
       });

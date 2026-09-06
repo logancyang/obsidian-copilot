@@ -12,10 +12,16 @@ const STAGED_PATH = ".openartifacts/handoffs/review.html";
 function renderPreviewShell(html: string): { shell: Document; content: Document } {
   const shell = new DOMParser().parseFromString(html, "text/html");
   const frame = shell.querySelector("iframe")!;
-  const content = new DOMParser().parseFromString(frame.getAttribute("srcdoc")!, "text/html");
-  Object.defineProperty(frame, "contentDocument", { value: content });
+  let content = new DOMParser().parseFromString("<body></body>", "text/html");
+  Object.defineProperty(frame, "contentDocument", { get: () => content });
   runInNewContext(shell.querySelector("script")!.textContent!, { document: shell });
   frame.dispatchEvent(new Event("load"));
+  expect(content.body.childNodes).toHaveLength(0);
+  content = new DOMParser().parseFromString(frame.getAttribute("srcdoc")!, "text/html");
+  frame.dispatchEvent(new Event("load"));
+  const childCount = content.body.childNodes.length;
+  frame.dispatchEvent(new Event("load"));
+  expect(content.body.childNodes).toHaveLength(childCount);
   return { shell, content };
 }
 
@@ -50,6 +56,11 @@ describe("openArtifactsAgentHandoff", () => {
       expect(content.body.innerHTML).toContain('<p data-label="A &amp; B">Résumé</p>');
       expect(parsedPreview.querySelectorAll("iframe")).toHaveLength(1);
       expect(frame?.getAttribute("srcdoc")).toContain("script-src 'none'");
+      for (const document of [parsedPreview, content]) {
+        expect(document.querySelector('meta[name="viewport"]')?.getAttribute("content")).toBe(
+          "width=device-width, initial-scale=1"
+        );
+      }
       expect(
         parsedPreview
           .querySelector('meta[http-equiv="Content-Security-Policy"]')
@@ -77,8 +88,10 @@ describe("openArtifactsAgentHandoff", () => {
       expect(
         content.querySelectorAll("[href], [action], [formaction], set, template, noscript")
       ).toHaveLength(0);
-      expect(content.querySelectorAll("meta")).toHaveLength(1);
-      const policy = content.querySelector("meta")!.getAttribute("content");
+      expect(content.querySelectorAll("meta")).toHaveLength(3);
+      const policy = content
+        .querySelector('meta[http-equiv="Content-Security-Policy"]')!
+        .getAttribute("content");
       for (const directive of [
         "default-src 'none'",
         "script-src 'none'",
@@ -115,6 +128,25 @@ describe("openArtifactsAgentHandoff", () => {
       await expect(second.isPreviewCurrent()).resolves.toBe(true);
       await second.cleanup();
       await expect(readFile(absolutePath, "utf8")).resolves.toBe(html);
+    });
+
+    it("https://github.com/logancyang/obsidian-copilot/issues/3121 discards only the captured artifact and preserves modified or replaced files", async () => {
+      const stagedPath = path.join(vaultRoot, ...STAGED_PATH.split("/"));
+      await writeFile(stagedPath, "<p>original</p>");
+      const first = await consumeOpenArtifactsAgentHandoff(vaultRoot, STAGED_PATH);
+      await first.discard();
+      await expect(readFile(stagedPath)).rejects.toMatchObject({ code: "ENOENT" });
+      await first.discard();
+      await first.cleanup();
+      for (const replace of [false, true]) {
+        await writeFile(stagedPath, "<p>original</p>");
+        const handoff = await consumeOpenArtifactsAgentHandoff(vaultRoot, STAGED_PATH);
+        if (replace) await rm(stagedPath);
+        await writeFile(stagedPath, "<p>new artifact</p>");
+        await handoff.discard();
+        await expect(readFile(stagedPath, "utf8")).resolves.toBe("<p>new artifact</p>");
+        await handoff.cleanup();
+      }
     });
 
     it("reports a missing file with the path and a regeneration instruction", async () => {

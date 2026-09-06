@@ -418,7 +418,22 @@ export class OpenArtifactsPublisher {
         previewPath: handoff.previewPath,
         previewUrl: handoff.previewUrl,
       });
-      return await this.openAgentReview(sourceFile, docId, review, handoff.isPreviewCurrent);
+      const outcome = await this.openAgentReview(
+        sourceFile,
+        docId,
+        review,
+        handoff.isPreviewCurrent
+      );
+      // Cancel/failure retains the source for retry; completed or explicitly discarded reviews do not.
+      // https://github.com/logancyang/obsidian-copilot/issues/3121
+      if (["published", "updated", "regenerate"].includes(outcome.status)) {
+        try {
+          await handoff.discard();
+        } catch (error) {
+          logWarn("Could not remove the completed OpenArtifacts staged HTML.", error);
+        }
+      }
+      return outcome;
     } finally {
       try {
         await handoff.cleanup();

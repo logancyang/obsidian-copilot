@@ -58,7 +58,7 @@ export const AgentReview: StoryObj<OpenArtifactsModalContentProps> = {
   },
 };
 
-/** Failed browser opening leaves approval disabled and offers the same preview link. */
+/** Failed opening supports retry or explicit acknowledgment after manually opening the preview. */
 export const PreviewFailed: StoryObj<OpenArtifactsModalContentProps> = {
   args: { ...AgentReview.args, openPreview: async () => false },
 };
