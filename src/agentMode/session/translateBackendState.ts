@@ -74,7 +74,8 @@ function translateModel(
   // Newer opencode (≥ 1.15.13) dropped that field and advertises its catalog
   // only through a generic `category:"model"` select config option, switched
   // via `session/set_config_option` instead of `session/set_model`.
-  const fromConfig = inputs.models ? null : modelStateFromConfigOption(inputs.configOptions);
+  const configModel = modelStateFromConfigOption(inputs.configOptions);
+  const fromConfig = inputs.models ? null : configModel;
   const modelState = inputs.models ?? fromConfig?.state ?? null;
   if (!modelState) return null;
   const effortFromConfig = fromConfig ? effortConfigOption(inputs.configOptions) : null;
@@ -84,7 +85,12 @@ function translateModel(
         configId: fromConfig.configId,
         ...(effortFromConfig ? { effortConfigId: effortFromConfig.id } : {}),
       }
-    : { kind: "setModel" };
+    : {
+        kind: "setModel",
+        // A dual-channel backend can choose effort for a model-only selection.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/219
+        ...(configModel ? { modelConfigId: configModel.configId } : {}),
+      };
 
   // Group advertised wire ids by baseModelId, preserving first-seen order.
   type Group = {
@@ -228,9 +234,10 @@ function deriveEffortOptions(
   group: { variants: { effort: string | null; wireId: string }[]; baseModelId: string },
   descriptor: BackendDescriptor
 ): EffortOption[] {
-  // Suffix-style: ≥2 variants for the same base means we have an effort
-  // dimension encoded in the wire id.
-  if (group.variants.length >= 2) {
+  // Even a single encoded effort must survive normalization or reapplying the
+  // current selection sends an invalid bare ID.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/219
+  if (group.variants.some((variant) => variant.effort !== null)) {
     const options: EffortOption[] = [];
     const hasBare = group.variants.some((v) => v.effort === null);
     if (hasBare) options.push({ value: null, label: "default" });
@@ -426,7 +433,7 @@ export function modelStateSignature(state: BackendState | null): string {
   const apply =
     m.apply.kind === "setConfigOption"
       ? `setConfigOption:${m.apply.configId}:${m.apply.effortConfigId ?? ""}`
-      : m.apply.kind;
+      : `${m.apply.kind}${m.apply.modelConfigId ? `:${m.apply.modelConfigId}` : ""}`;
   return [
     m.current.baseModelId,
     m.current.effort ?? "",

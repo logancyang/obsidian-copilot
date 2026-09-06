@@ -603,7 +603,7 @@ export class AcpBackendProcess implements BackendProcess {
     );
     const wire = this.sessionWireState.get(params.sessionId);
     if (wire) {
-      wire.configOptions = resp.configOptions;
+      this.updateConfigOptions(wire, resp.configOptions);
     }
     // A config option can be the model itself (opencode ≥ 1.15.13), so the session's
     // gated view of the caps may just have changed with it.
@@ -792,6 +792,18 @@ export class AcpBackendProcess implements BackendProcess {
     return ids;
   }
 
+  private updateConfigOptions(wire: SessionWireState, options: SessionConfigOption[]): void {
+    wire.configOptions = options;
+    if (!wire.models) return;
+    // A model-only config switch returns the chosen effort here, not through
+    // currentModelId. Keep the dedicated catalog while updating its selection.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/219
+    const selection = acpStateToBackendState(null, null, options, this.descriptor).model?.current;
+    if (selection) {
+      wire.models = { ...wire.models, currentModelId: this.descriptor.wire.encode(selection) };
+    }
+  }
+
   private computeState(sessionId: AcpSessionId): BackendState {
     const wire = this.sessionWireState.get(sessionIdFromAcp(sessionId)) ?? {
       models: null,
@@ -829,7 +841,7 @@ export class AcpBackendProcess implements BackendProcess {
         const seed = wire.modes ?? { availableModes: [], currentModeId: "" };
         wire.modes = { ...seed, currentModeId: u.currentModeId };
       } else if (u.sessionUpdate === "config_option_update") {
-        wire.configOptions = u.configOptions;
+        this.updateConfigOptions(wire, u.configOptions);
       }
     }
     // Record a live occupancy source so the prompt-result fallback stays quiet.

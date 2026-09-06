@@ -73,6 +73,7 @@ Each agent has its own model list. The models shown in one agent do not automati
 - Use the controls beside the composer to change the model or effort for the current chat.
 - Before the first message, choosing a model from another installed agent switches the empty chat to that agent. Once a conversation has started, it stays with its agent.
 - **Effort** appears only when the selected agent and model support it. Higher effort can improve difficult reasoning but may take longer and use more of your account allowance.
+- For Codex, **Agent default** leaves the effort choice to the adapter. If an older adapter cannot switch models without an explicit effort, choose an effort or update the adapter. Copilot does not guess an effort. A multi-agent answer reports a setup error if its saved model-only selection cannot be applied.
 
 The permission picker shows only choices supported by the current agent:
 

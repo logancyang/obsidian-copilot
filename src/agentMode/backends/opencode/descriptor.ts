@@ -23,7 +23,6 @@ import { opencodeEnabledModelEntries, opencodeWireBaseIdFor } from "./opencodeMo
 import { OpencodeSettingsPanel } from "./OpencodeSettingsPanel";
 import { mapNodeArch, mapNodePlatform } from "./platformResolver";
 import { cacheRoot } from "@/context/conversionsLocation";
-import type { AgentSession } from "@/agentMode/session/AgentSession";
 import { simpleBinaryBackendProcess } from "@/agentMode/backends/shared/simpleBinaryBackend";
 import type {
   EffortOption,
@@ -34,7 +33,12 @@ import type {
   ModelWireCodec,
   SessionId,
 } from "@/agentMode/session/types";
-import type { BackendDescriptor, BackendProcess, InstallState } from "@/agentMode/session/types";
+import type {
+  BackendDescriptor,
+  BackendProcess,
+  InstallState,
+  ModelSelectionSession,
+} from "@/agentMode/session/types";
 import { EFFORT_LEVELS_ASCENDING } from "@/agentMode/session/types";
 import { findModelEntry } from "@/agentMode/session/translateBackendState";
 
@@ -183,7 +187,11 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
     }
   },
 
-  async applySelection(session: AgentSession, selection: ModelSelection, context): Promise<void> {
+  async applySelection(
+    session: ModelSelectionSession,
+    selection: ModelSelection,
+    context
+  ): Promise<void> {
     const apply = session.getState()?.model?.apply;
     // A config-option catalog takes bare model ids only. Effort travels through
     // its own option when the model publishes one and is dropped otherwise; a
