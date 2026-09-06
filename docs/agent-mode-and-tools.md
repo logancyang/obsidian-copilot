@@ -43,19 +43,15 @@ Claude models and billing come from your Claude Code account. Models added under
 
 ### Codex
 
-A Copilot-managed Codex installation uses a native bundle containing the adapter and Codex runtime. It does not need Node.js or npm. Copilot checks the bundle version and packaging revision to offer updates. A failed download or verification keeps the previous installation selected.
-
-You can also keep your own adapter installation. Copilot does not update or remove these custom installations.
-
-The Codex backend needs `@agentclientprotocol/codex-acp` 0.0.45 or newer. The package includes a compatible Codex CLI:
+The Codex backend uses `@agentclientprotocol/codex-acp`, which includes a compatible Codex CLI:
 
 1. Open **Basic → Agents → Codex → Configure**.
-2. Run the adapter installation command shown in the dialog. It removes the conflicting Zed npm package before installing the supported adapter.
-3. Run `codex-acp cli login`.
-4. Select **Auto-detect**, or enter the absolute path to the `codex-acp` launcher on macOS/Linux or its `dist\index.js` entry point on Windows, and select **Apply**.
+2. Choose **Download & install** under **Managed by Copilot**. Copilot downloads Codex and its runtime, verifies the download, and keeps your current installation until the replacement is ready. You do not need Node.js or npm.
+3. Click **Sign in**, finish authentication in your browser, and return to Obsidian. If the browser does not open, click **Open sign-in page**. You can cancel or retry sign-in. Existing credentials are reused when you use the same Codex profile.
+4. If you prefer your own adapter, use **My own binary** to Auto-detect it or enter its absolute path. You remain responsible for updates to that binary.
 5. Enable the models you want and choose a default.
 
-The older `@zed-industries/codex-acp` package is not supported. Copilot uses the login stored by the bundled Codex CLI. Models added under **BYOK** do not join the Codex model list.
+When the plugin's managed version changes, Agent Chat and Settings show the same **Update** action and shared progress or **Retry** state. The older `@zed-industries/codex-acp` package is not supported. Copilot uses the login stored by the bundled Codex CLI. Models added under **BYOK** do not join the Codex model list.
 
 For Windows-specific installation help, see [Windows setup for Agent Chat](agent-mode-windows-setup.md).
 

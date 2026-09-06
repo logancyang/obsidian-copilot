@@ -1,4 +1,5 @@
 import type { PermissionOption } from "@/agentMode/session/types";
+import { codexAuth } from "./codexAuth";
 import type CopilotPlugin from "@/main";
 import { getSettings, setSettings, type CopilotSettings } from "@/settings/model";
 import { detectBinary } from "@/utils/detectBinary";
@@ -63,6 +64,9 @@ describe("descriptor", () => {
   });
 
   describe("CodexBackendDescriptor", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 exposes the configured Codex browser sign-in capability", () => {
+      expect(CodexBackendDescriptor.auth).toBe(codexAuth);
+    });
     describe("getInstallState()", () => {
       it.each([
         ["legacy path", {}, "1.9.0", { kind: "ready", source: "custom" }],

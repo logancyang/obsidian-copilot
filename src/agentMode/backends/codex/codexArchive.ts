@@ -2,9 +2,13 @@ import { Unzip, UnzipInflate } from "fflate";
 import { requestUrl } from "obsidian";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 import { ManagedInstallAbortError } from "@/agentMode/backends/shared/managedInstall";
-import { CODEX_ACP_PINNED_VERSION, CODEX_PACKAGING_REVISION } from "./cliSetup";
+import {
+  CODEX_ACP_PINNED_VERSION,
+  CODEX_PACKAGING_REVISION,
+  CODEX_BUNDLE_VERSION,
+} from "./cliSetup";
 
-export const CODEX_BUNDLE_VERSION = `${CODEX_ACP_PINNED_VERSION}-r${CODEX_PACKAGING_REVISION}`;
+export { CODEX_BUNDLE_VERSION } from "./cliSetup";
 const RELEASE = `https://github.com/Brevilabs/codex-acp-binary/releases/download/v${CODEX_BUNDLE_VERSION}`;
 
 /** Downloads and verifies the pinned full bundle into an unselected staging directory.

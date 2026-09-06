@@ -35,24 +35,12 @@ Copilot uses Claude Code's credentials. Do not add an Anthropic API key to this 
 
 ## 3. Connect Codex
 
-The Codex backend needs `@agentclientprotocol/codex-acp` 0.0.45 or newer. The package includes a compatible Codex CLI; the older `@zed-industries/codex-acp` adapter is not supported.
+The Codex backend uses `@agentclientprotocol/codex-acp`. The package includes a compatible Codex CLI; the older `@zed-industries/codex-acp` adapter is not supported.
 
 1. Open **Settings → Copilot → Basic → Agents → Codex** and select **Configure**.
-2. Copy the **Install it** command from the dialog and run it in PowerShell. The first command removes the unsupported Zed npm package because both packages create the same global `codex-acp` command; the second installs the supported adapter.
-
-```powershell
-npm uninstall -g @zed-industries/codex-acp; npm install -g @agentclientprotocol/codex-acp
-```
-
-3. Return to **Configure Codex** and select **Auto-detect** under **codex-acp adapter**.
-4. If detection fails, enter the expanded absolute path to the package entry, such as `C:\Users\<your-user-name>\AppData\Roaming\npm\node_modules\@agentclientprotocol\codex-acp\dist\index.js`, and select **Apply**. Replace `<your-user-name>` with your Windows user folder; the path field does not expand `%APPDATA%`.
-5. Sign in through the installed adapter:
-
-```powershell
-codex-acp cli login
-```
-
-Configure the package's `dist\index.js`, not `codex.exe`, `codex-acp.cmd`, or a legacy `codex-acp.exe`. Copilot launches the JavaScript entry point with the Node.js installation that provided npm and uses the bundled Codex CLI's login. If Node was installed while Obsidian was open, restart Obsidian before Auto-detect. Leave **Environment variables** empty unless you intentionally need an override.
+2. Under **Managed by Copilot**, choose **Download & install**. Copilot downloads a verified native adapter and its Codex runtime. You do not need Node.js or npm.
+3. Click **Sign in** and complete authentication in your browser. If the browser does not open, click **Open sign-in page**. Return to Obsidian to see the signed-in status.
+4. To use your own supported adapter, choose **My own binary** and Auto-detect it or enter its path. Copilot keeps your binary and credentials when you uninstall managed downloads.
 
 ## Share Skills across agents
 

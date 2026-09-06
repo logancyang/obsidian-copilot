@@ -1,3 +1,4 @@
+import { codexAuth } from "./codexAuth";
 import type CopilotPlugin from "@/main";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 import { detectBinary } from "@/utils/detectBinary";
@@ -111,6 +112,7 @@ const codexWire: ModelWireCodec = {
  */
 export const CodexBackendDescriptor: BackendDescriptor = {
   id: "codex",
+  auth: codexAuth,
   displayName: "Codex",
   Icon: CodexLogo,
   // Cloud agent — flagged with a cloud-egress warning while Self-Host Mode is on.

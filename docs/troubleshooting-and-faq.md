@@ -25,9 +25,9 @@ Copilot uses your Claude Code login; there is no API key to paste here.
 Copilot connects through `codex-acp`, not the `codex` executable alone.
 
 1. Open **Basic → Agents → Codex → Configure**.
-2. Run the install command shown in the dialog. It removes the conflicting `@zed-industries/codex-acp` package before installing the supported adapter. Copilot requires version 0.0.45 or newer.
-3. Choose **Auto-detect**. For manual setup, enter the absolute path to `codex-acp` on macOS/Linux or `%APPDATA%\npm\node_modules\@agentclientprotocol\codex-acp\dist\index.js` on Windows, then choose **Apply**.
-4. Run `codex-acp cli login` in a terminal if Codex is not authenticated.
+2. Choose **Download & install** under **Managed by Copilot**. If this first installation fails, read the error in Configure, fix the reported problem, then choose **Download & install** again. Failed updates of an already-managed adapter show the same error and **Retry** action in Settings and Agent Chat.
+3. For an adapter you manage yourself, choose **My own binary**, then **Auto-detect** or enter the absolute path to `codex-acp` on macOS/Linux or its `dist\index.js` on Windows. Copilot does not update custom binaries.
+4. Click **Sign in** and finish authentication in your browser. If it does not open, click **Open sign-in page**. Cancel or retry if needed. Managed Codex includes its runtime; Node.js and npm are not required.
 
 See [Getting Started](getting-started.md) for the complete setup flow and [Windows setup for Agent Chat](agent-mode-windows-setup.md) for Windows-specific commands.
 
