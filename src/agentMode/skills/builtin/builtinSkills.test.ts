@@ -234,7 +234,7 @@ describe("builtinSkills", () => {
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/337 hands OpenArtifacts HTML through the stable host wire without exposing publication controls", () => {
       const skill = BUILTIN_SKILLS.find((item) => item.name === "openartifacts-publish");
       expect(skill).toBeDefined();
-      expect(skill!.version).toBe(3);
+      expect(skill!.version).toBe(4);
       expect(skill!.legacyName).toBe("symposium-publish");
       expect(skill!.files.map((file) => file.path)).toEqual([
         "themes/research-memo.md",
@@ -256,17 +256,17 @@ describe("builtinSkills", () => {
       expect(skill!.skillMd).toContain("Check each path independently");
       expect(skill!.skillMd).toMatch(/a missing theme must never block\s+publishing/);
       expect(skill!.skillMd).toContain("themes/<name>.md");
-      expect(skill!.skillMd).toContain("browser preview linked in Copilot's existing review");
-      expect(skill!.skillMd).toMatch(
-        /Do not publish before the user\s+has reviewed the page and explicitly confirmed/
-      );
+      expect(skill!.skillMd).toContain("Shared publishing rules");
+      expect(skill!.skillMd).toContain("once at the start of this publishing task");
+      expect(skill!.skillMd).toContain('"Standalone CLI" section');
+      expect(skill!.skillMd).toContain("Do not run Node, npm, or npx");
+      expect(skill!.skillMd).toContain("Shared from Copilot");
+      expect(skill!.skillMd).toContain("confirmation disabled until browser opening succeeds");
       expect(skill!.skillMd).toContain("create a new modal or render HTML inside a modal");
       expect(skill!.skillMd).toContain("never choose an action or document id");
       expect(skill!.skillMd).toContain("create a new complete artifact");
       expect(skill!.skillMd).toContain("previous confirmation never applies");
       expect(skill!.skillMd).toContain("report the exact error");
-      expect(skill!.skillMd).toContain("Copilot publishes the HTML unchanged");
-      expect(skill!.skillMd).toContain("resources are allowed");
       expect(skill!.skillMd).toContain("run the wrapper with the same HTML path");
       expect(skill!.skillMd).not.toContain("self-contained");
       expect(skill!.skillMd).not.toContain("include no scripts");

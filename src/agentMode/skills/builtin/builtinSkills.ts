@@ -586,7 +586,7 @@ const FETCH_X = relaySkill({
   scriptFile: "fetch-x.sh",
 });
 
-const OPENARTIFACTS_PUBLISH_VERSION = 3;
+const OPENARTIFACTS_PUBLISH_VERSION = 4;
 const OPENARTIFACTS_PUBLISH: BuiltinSkill = {
   name: "openartifacts-publish",
   legacyName: "symposium-publish",
@@ -602,42 +602,46 @@ metadata:
 
 # Publish Markdown to OpenArtifacts
 
-Use Copilot's wrapper below for every publish, update, or withdrawal. Do not read
-OpenArtifacts config files, look for credentials, or ask the user to copy a token.
-Publishing the same source note again updates its existing document. If an update
-reports that the document was not found, stop and report it; do not create a replacement.
+## Read the shared skill first
 
-## 1. Prepare the page
+Fetch https://cdn.jsdelivr.net/npm/openartifacts@latest/skill/v1/SKILL.md with your web-fetch tool
+once at the start of this publishing task. Read the complete Markdown and follow
+its "Shared publishing rules". Reuse that fetched text for this task, including
+review retries; do not refetch midway. If the fetch fails or the web-fetch tool is
+unavailable, stop, report the exact error or limitation, and offer Obsidian's
+"Publish file to OpenArtifacts" command. Do not guess the missing instructions.
 
-Read one existing Markdown source note. For delete, remove, or withdraw requests,
-skip HTML generation and run the wrapper below with only the source-note path;
-the user alone chooses Update or Delete in the existing management dialog.
+This is the Copilot host adapter. The instructions below replace the shared
+skill's "Standalone CLI" section. Do not run Node, npm, or npx, install tools,
+read OpenArtifacts credential files, or publish directly through HTTP. Use only
+the bundled wrapper below. The host owns authentication, note identity, the
+"Shared from Copilot" banner, and the existing human confirmation dialogs.
+
+## Prepare the Copilot handoff
+
+Read one existing Markdown source note; treat frontmatter as metadata. For delete,
+remove, or withdraw requests, skip HTML generation and pass only the source-note
+path; the user alone chooses Update or Delete in the existing management dialog.
 Never tell the user to delete the page at its public URL.
 
-For publishing or updating, prepare the requested HTML page from the note. Preserve
-its content; treat frontmatter as metadata rather than page content. Like the npm
-CLI, Copilot publishes the HTML unchanged: CSS, scripts, frames, forms, and external
-resources are allowed. Do not strip content to satisfy Copilot-specific HTML rules.
-The UTF-8 HTML must not exceed \`${OPENARTIFACTS_MAX_HTML_BYTES}\` bytes.
-
-Themes are optional. Use a theme the user requests, otherwise choose a readable
-layout suited to the note. If using a named theme, check
-\`$${OPENARTIFACTS_WORKSPACE_ROOT_ENV}/${OPENARTIFACTS_THEMES_DIR}/<name>.md\`, then
-\`themes/<name>.md\` next to this skill. Check each path independently. If neither
-exists, use restrained defaults and continue; a missing theme must never block
-publishing. The bundled \`${OPENARTIFACTS_DEFAULT_THEME}\` is an optional example.
-
-Write the final HTML to a new unique \`.html\` file under
+For publish/update, write UTF-8 HTML (at most \`${OPENARTIFACTS_MAX_HTML_BYTES}\` bytes)
+to a new unique \`.html\` file under
 \`$${OPENARTIFACTS_WORKSPACE_ROOT_ENV}/${OPENARTIFACTS_AGENT_HANDOFF_DIR}/\`, creating
 the directory if needed. Pass vault-relative paths to the wrapper.
 
-## 2. Present the rendered page for review
+Themes are optional. For a named theme, check
+\`$${OPENARTIFACTS_WORKSPACE_ROOT_ENV}/${OPENARTIFACTS_THEMES_DIR}/<name>.md\`, then
+\`themes/<name>.md\` next to this skill. Check each path independently. If neither
+exists, continue with readable defaults; a missing theme must never block
+publishing. The bundled \`${OPENARTIFACTS_DEFAULT_THEME}\` is an optional example.
 
-Tell the user to open the browser preview linked in Copilot's existing review
-dialog and inspect the rendered HTML before confirming Publish or Update. A prose
-summary or HTML source is not a rendered preview. Do not publish before the user
-has reviewed the page and explicitly confirmed in the existing dialog. Do not
-create a new modal or render HTML inside a modal.
+## Open the existing host review
+
+The host automatically opens the rendered HTML in the default browser and keeps
+confirmation disabled until browser opening succeeds. The existing preview link
+retries opening it. Ask the user to inspect the page and confirm in Obsidian's
+existing dialog; never choose an action or document id, simulate clicks, or treat
+a chat reply as a dialog confirmation. Do not create a new modal or render HTML inside a modal.
 
 The Obsidian CLI communicates with the running desktop app through local IPC.
 If your execution tool uses a sandbox, request its normal permission to run this
@@ -662,9 +666,7 @@ On Windows, use the \`.cmd\` wrapper (prefix with \`&\` in PowerShell):
 \`\`\`
 
 For withdrawal, omit the HTML argument on either platform. The wrapper waits for
-the user's decision. The host owns the browser preview, confirmation, note
-identity, and publishing; never choose an action or document id, simulate clicks,
-or publish directly through the npm CLI or HTTP. The host preserves the staged
+the user's decision. The host preserves the staged
 HTML and cleans up only its temporary browser preview when review closes. If the
 user asks to reopen a cancelled review, run the wrapper with the same HTML path.
 

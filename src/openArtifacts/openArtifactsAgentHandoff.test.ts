@@ -1,3 +1,4 @@
+import { runInNewContext } from "node:vm";
 import { mkdir, mkdtemp, readFile, readlink, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
@@ -7,6 +8,16 @@ import { consumeOpenArtifactsAgentHandoff } from "@/openArtifacts/openArtifactsA
 import { OPENARTIFACTS_MAX_HTML_BYTES } from "@/openArtifacts/constants";
 
 const STAGED_PATH = ".openartifacts/handoffs/review.html";
+
+function renderPreviewShell(html: string): { shell: Document; content: Document } {
+  const shell = new DOMParser().parseFromString(html, "text/html");
+  const frame = shell.querySelector("iframe")!;
+  const content = new DOMParser().parseFromString(frame.getAttribute("srcdoc")!, "text/html");
+  Object.defineProperty(frame, "contentDocument", { value: content });
+  runInNewContext(shell.querySelector("script")!.textContent!, { document: shell });
+  frame.dispatchEvent(new Event("load"));
+  return { shell, content };
+}
 
 describe("openArtifactsAgentHandoff", () => {
   let vaultRoot: string;
@@ -32,14 +43,18 @@ describe("openArtifactsAgentHandoff", () => {
       expect(handoff.html).toBe(html);
       expect(handoff.previewUrl).toBe(pathToFileURL(handoff.previewPath).href);
       const browserPreview = await readFile(handoff.previewPath, "utf8");
-      const parsedPreview = new DOMParser().parseFromString(browserPreview, "text/html");
+      const { shell: parsedPreview, content } = renderPreviewShell(browserPreview);
       const frame = parsedPreview.querySelector("iframe");
-      expect(frame?.getAttribute("sandbox")).toBe("allow-scripts");
+      expect(frame?.getAttribute("sandbox")).toBe("allow-same-origin");
       expect(frame?.getAttribute("referrerpolicy")).toBe("no-referrer");
-      expect(frame?.getAttribute("srcdoc")).toBe(html);
+      expect(content.body.innerHTML).toContain('<p data-label="A &amp; B">Résumé</p>');
       expect(parsedPreview.querySelectorAll("iframe")).toHaveLength(1);
-      expect(parsedPreview.querySelector("script")).toBeNull();
-      expect(parsedPreview.querySelector('meta[http-equiv="Content-Security-Policy"]')).toBeNull();
+      expect(frame?.getAttribute("srcdoc")).toContain("script-src 'none'");
+      expect(
+        parsedPreview
+          .querySelector('meta[http-equiv="Content-Security-Policy"]')
+          ?.getAttribute("content")
+      ).toContain("connect-src 'none'");
       await expect(handoff.isPreviewCurrent()).resolves.toBe(true);
       await expect(readFile(absolutePath)).resolves.toBeDefined();
 
@@ -49,6 +64,41 @@ describe("openArtifactsAgentHandoff", () => {
 
       await handoff.cleanup();
       await expect(readFile(handoff.previewPath)).rejects.toMatchObject({ code: "ENOENT" });
+    });
+
+    it("https://github.com/logancyang/obsidian-copilot/issues/3121 isolates active content and navigation only in the preview while preserving uploaded HTML", async () => {
+      const html = `<noscript><a href="https://example.com">No script</a></noscript><meta http-equiv="refresh" content="0;url=https://example.com"><script>window.exfiltrate()</script><a href="https://example.com">Link</a><svg><a xlink:href="https://example.com"><set attributeName="href" to="https://example.com" /></a></svg><template shadowrootmode="open"><a href="https://example.com">Hidden</a></template><form action="https://example.com"><button formaction="https://example.com">Go</button></form><style>@import "https://example.com/style.css";</style>`;
+      await writeFile(path.join(vaultRoot, ...STAGED_PATH.split("/")), html);
+      const handoff = await consumeOpenArtifactsAgentHandoff(vaultRoot, STAGED_PATH);
+      expect(handoff.html).toBe(html);
+      const { shell, content } = renderPreviewShell(await readFile(handoff.previewPath, "utf8"));
+      expect(shell.querySelectorAll("script")).toHaveLength(1);
+      expect(shell.querySelector("iframe")!.getAttribute("sandbox")).toBe("allow-same-origin");
+      expect(
+        content.querySelectorAll("[href], [action], [formaction], set, template, noscript")
+      ).toHaveLength(0);
+      expect(content.querySelectorAll("meta")).toHaveLength(1);
+      const policy = content.querySelector("meta")!.getAttribute("content");
+      for (const directive of [
+        "default-src 'none'",
+        "script-src 'none'",
+        "connect-src 'none'",
+        "frame-src 'none'",
+        "form-action 'none'",
+      ])
+        expect(policy).toContain(directive);
+      await handoff.cleanup();
+    });
+
+    it("https://github.com/logancyang/obsidian-copilot/issues/3121 adopts sanitized nodes without reparsing malformed MathML into a navigable link", async () => {
+      const html =
+        '<math><mtext><table><mglyph><style><!--</style><img title="--><a href=https://example.invalid/leak>leak</a>">';
+      await writeFile(path.join(vaultRoot, ...STAGED_PATH.split("/")), html);
+      const handoff = await consumeOpenArtifactsAgentHandoff(vaultRoot, STAGED_PATH);
+      const { content } = renderPreviewShell(await readFile(handoff.previewPath, "utf8"));
+      expect(content.querySelectorAll("a[href], meta[http-equiv=refresh]")).toHaveLength(0);
+      expect(handoff.html).toBe(html);
+      await handoff.cleanup();
     });
 
     it("reopens the same HTML after the first preview is closed", async () => {
@@ -89,11 +139,9 @@ describe("openArtifactsAgentHandoff", () => {
       await writeFile(absolutePath, html, "utf8");
       const handoff = await consumeOpenArtifactsAgentHandoff(vaultRoot, STAGED_PATH);
       expect(handoff.html).toBe(html);
-      const preview = new DOMParser().parseFromString(
-        await readFile(handoff.previewPath, "utf8"),
-        "text/html"
-      );
-      expect(preview.querySelector("iframe")?.getAttribute("srcdoc")).toBe(html);
+      const { content } = renderPreviewShell(await readFile(handoff.previewPath, "utf8"));
+      expect(content.body.innerHTML).toContain('content:"\\00b7"');
+      expect(content.querySelector("script")).toBeNull();
       await handoff.cleanup();
     });
 

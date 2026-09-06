@@ -142,3 +142,9 @@ On Windows, creating the folder links may require **Developer Mode** or administ
 - [Instructions for Agent Chat and Quick Chat](system-prompts.md)
 - [Copilot Commands and Quick Ask](custom-commands.md)
 - [Copilot Plans, Privacy, and Self-Hosting](copilot-plus-and-self-host.md)
+
+### Publishing from Agent Chat
+
+Copilot reads OpenArtifacts' shared publishing instructions online when a publishing task starts. This requires internet access and an available web-fetch tool, but no separate Node.js or npm installation. If the instructions cannot be fetched, the agent reports the problem; you can still use **Publish file to OpenArtifacts**.
+
+For an agent-prepared page, Copilot opens a local preview in your default browser. Review it, then return to the existing Obsidian dialog to approve publishing. If the browser cannot open, use the preview link to retry. Local previews disable scripts, external resources, and navigation. Styles or classes attached only to the outer HTML/body tags are not preserved in the static preview; use stylesheets within the page and styled content elements for a representative preview. The published HTML is preserved. The published page keeps the Copilot attribution banner. Cancelling preserves the prepared file so the agent can reopen review.

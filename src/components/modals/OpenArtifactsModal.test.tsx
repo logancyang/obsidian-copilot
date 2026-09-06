@@ -104,6 +104,9 @@ function expectButtonsInSameRow(...names: string[]): void {
 }
 
 describe("OpenArtifactsModal", () => {
+  beforeEach(() => {
+    jest.mocked(openWithSystemDefault).mockResolvedValue(true);
+  });
   afterEach(() => {
     for (const modal of mountedModals.splice(0)) {
       act(() => {
@@ -144,7 +147,7 @@ describe("OpenArtifactsModal", () => {
         expect(publishModal.contentEl.childElementCount).toBeGreaterThan(0);
       });
 
-      it("links to the sandboxed local preview in the default browser and cancels without confirming", () => {
+      it("https://github.com/logancyang/obsidian-copilot/issues/3121 automatically presents the preview before enabling approval and cancels without confirming", async () => {
         const onConfirm = createConfirmMock();
         const modal = renderModal(onConfirm, null, undefined, undefined, REVIEW, jest.fn());
         const baseClose = (modal as unknown as { baseClose: jest.Mock }).baseClose;
@@ -155,15 +158,22 @@ describe("OpenArtifactsModal", () => {
         expect(screen.getByText(`${REVIEW.payload.byteLength} bytes`)).toBeTruthy();
         expect(screen.getByText(REVIEW.digest)).toBeTruthy();
         expect(screen.queryByTitle("OpenArtifacts HTML preview")).toBeNull();
-        expect(
-          screen.getByText(/open a sandboxed local preview of these exact html bytes/i)
-        ).toBeTruthy();
+        expect(screen.getByText(/review the rendered page in your default browser/i)).toBeTruthy();
         const previewLink = screen.getByRole("link", { name: "Open local HTML preview" });
         expect(previewLink.getAttribute("href")).toBe(REVIEW.previewUrl);
         expect(previewLink.getAttribute("title")).toBe(REVIEW.previewPath);
         expect(previewLink.getAttribute("target")).toBe("_blank");
         expect(previewLink.getAttribute("rel")).toBe("noopener noreferrer");
-        fireEvent.click(previewLink);
+        expect(
+          screen.getByRole<HTMLButtonElement>("button", { name: "Yes, publish" }).disabled
+        ).toBe(true);
+        await act(async () => {});
+        expect(
+          screen.getByRole<HTMLButtonElement>("button", { name: "Yes, publish" }).disabled
+        ).toBe(false);
+        await act(async () => {
+          fireEvent.click(previewLink);
+        });
         expect(openWithSystemDefault).toHaveBeenCalledWith(REVIEW.previewPath);
         expectButtonsInSameRow("Ask agent to regenerate", "No, cancel", "Yes, publish");
 
@@ -171,6 +181,25 @@ describe("OpenArtifactsModal", () => {
 
         expect(baseClose).toHaveBeenCalledTimes(1);
         expect(onConfirm).not.toHaveBeenCalled();
+      });
+
+      it("https://github.com/logancyang/obsidian-copilot/issues/3121 keeps confirmation disabled after browser failure until the existing link opens successfully", async () => {
+        jest.mocked(openWithSystemDefault).mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+        const onConfirm = createConfirmMock();
+        renderModal(onConfirm, null, undefined, undefined, REVIEW);
+        await act(async () => {});
+        expect(screen.getByRole("alert").textContent).toContain(
+          "Could not open the browser preview"
+        );
+        await clickButton("Yes, publish");
+        expect(onConfirm).not.toHaveBeenCalled();
+        await act(async () => {
+          fireEvent.click(screen.getByRole("link", { name: "Open local HTML preview" }));
+        });
+        expect(
+          screen.getByRole<HTMLButtonElement>("button", { name: "Yes, publish" }).disabled
+        ).toBe(false);
+        expect(screen.queryByRole("alert")).toBeNull();
       });
 
       it("returns regeneration without reusing the current confirmation", () => {
@@ -197,6 +226,7 @@ describe("OpenArtifactsModal", () => {
           retryable: true,
         });
         renderModal(onConfirm, DOC_ID, undefined, undefined, REVIEW, jest.fn());
+        await act(async () => {});
 
         await clickButton("Yes, update");
 

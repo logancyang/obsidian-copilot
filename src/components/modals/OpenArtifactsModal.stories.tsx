@@ -11,6 +11,7 @@ const meta = {
     fileName: "Architecture",
     docId: null,
     onClose: () => undefined,
+    openPreview: async () => true,
     onConfirm: async (action) => ({
       kind: "failure",
       action,
@@ -55,4 +56,9 @@ export const AgentReview: StoryObj<OpenArtifactsModalContentProps> = {
     },
     onRegenerate: () => undefined,
   },
+};
+
+/** Failed browser opening leaves approval disabled and offers the same preview link. */
+export const PreviewFailed: StoryObj<OpenArtifactsModalContentProps> = {
+  args: { ...AgentReview.args, openPreview: async () => false },
 };
