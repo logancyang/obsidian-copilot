@@ -48,6 +48,8 @@ describe("AgentModeStatus", () => {
         signingIn: false,
         url: null,
         signIn: jest.fn(),
+        cancelSignIn: jest.fn(),
+        failed: false,
       };
       managedInstallState = { kind: "idle" };
       jest.clearAllMocks();
@@ -163,6 +165,8 @@ describe("AgentModeStatus", () => {
         signingIn: false,
         url: null,
         signIn: jest.fn(),
+        cancelSignIn: jest.fn(),
+        failed: false,
       };
       const plugin = { app: {} } as unknown as CopilotPlugin;
       const { rerender } = render(<AgentModeStatus plugin={plugin} onInstallClick={jest.fn()} />);

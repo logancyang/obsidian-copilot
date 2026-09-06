@@ -53,6 +53,8 @@ export interface BackendAuthStatus {
 
 /** Progress callbacks for an interactive sign-in flow. */
 export interface BackendSignInHandlers {
+  /** Cancellation belongs to the surface that starts browser sign-in. */
+  signal?: AbortSignal;
   /** The OAuth URL to surface as a clickable browser-open fallback. */
   onUrl?: (url: string) => void;
   /** Per-line progress from the sign-in subprocess. */

@@ -12,8 +12,6 @@ interface CommandBlockProps {
   command: string;
   /** Override the platform-derived prompt when rendering another platform's command. */
   shell?: CommandShell;
-  /** Extra control rendered after Copy, for an in-app equivalent of the command. */
-  action?: React.ReactNode;
 }
 
 /**
@@ -22,7 +20,7 @@ interface CommandBlockProps {
  * it. Confirmation lives in the button's own label instead of a notice, so the
  * feedback stays where the user is looking.
  */
-export const CommandBlock: React.FC<CommandBlockProps> = ({ command, shell, action }) => {
+export const CommandBlock: React.FC<CommandBlockProps> = ({ command, shell }) => {
   const [copied, setCopied] = React.useState(false);
   const timerRef = React.useRef<number | null>(null);
   const prompt =
@@ -58,7 +56,6 @@ export const CommandBlock: React.FC<CommandBlockProps> = ({ command, shell, acti
         <Button variant="ghost" size="sm" onClick={copy}>
           {copied ? "Copied" : "Copy"}
         </Button>
-        {action}
       </div>
     </div>
   );

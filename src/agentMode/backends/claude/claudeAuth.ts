@@ -9,17 +9,18 @@
  * listener, and persisting credentials to the OS keychain. We never read or
  * write the token ourselves; we only invoke the CLI and re-read its status.
  */
-import { logInfo, logWarn } from "@/logger";
+import { logWarn } from "@/logger";
 import { err2String } from "@/utils";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 
-type Readable = import("node:stream").Readable;
+import {
+  signInWithCli,
+  type SignInHandlers,
+  type CliSignInController,
+} from "@/agentMode/backends/shared/cliSignIn";
 
 /** `claude auth status` is a quick local read; cap it so a wedged CLI can't hang the UI. */
 const STATUS_TIMEOUT_MS = 10_000;
-
-/** First http(s) URL on a line — the OAuth page the CLI prints as a browser fallback. */
-const URL_PATTERN = /\bhttps?:\/\/[^\s'"]+/;
 
 export interface ClaudeAuthStatus {
   loggedIn: boolean;
@@ -88,92 +89,26 @@ export async function getClaudeAuthStatus(
   }
 }
 
-export interface SignInHandlers {
-  /** Called once with the OAuth URL the CLI prints (browser-open fallback). */
-  onUrl?: (url: string) => void;
-  /** Called per stdout/stderr line for progress display. */
-  onLine?: (line: string) => void;
-}
+export type {
+  SignInHandlers,
+  CliSignInController as ClaudeSignInController,
+} from "@/agentMode/backends/shared/cliSignIn";
 
-export interface ClaudeSignInController {
-  /** Resolves with the post-login status once the CLI exits. Never rejects. */
-  done: Promise<ClaudeAuthStatus>;
-  /** Terminate the login subprocess (SIGTERM) — for teardown. */
-  cancel: () => void;
-}
-
-/**
- * Run `claude auth login`. The CLI opens the system browser itself and runs a
- * loopback callback listener; we stream its output (so callers can show the
- * printed URL as a clickable fallback) and, on exit, re-read `auth status` as
- * the source of truth. stdin is closed so a CLI build that would otherwise wait
- * for a pasted code fails fast instead of hanging.
+/** Runs Claude's browser sign-in and reads its authoritative status afterward.
+ * @param claudePath - Resolved CLI used by Claude sessions.
+ * @param env - Session environment, including profile overrides.
+ * @param handlers - Browser fallback and cancellation callbacks.
  */
 export function signInToClaude(
   claudePath: string,
   env: NodeJS.ProcessEnv,
   handlers: SignInHandlers = {}
-): ClaudeSignInController {
-  const { spawn } = requireNodeModule<typeof import("node:child_process")>("child_process");
-  logInfo("[AgentMode] spawning claude auth login");
-  const child = spawn(claudePath, ["auth", "login", "--claudeai"], {
+): CliSignInController {
+  return signInWithCli(
+    claudePath,
+    ["auth", "login", "--claudeai"],
     env,
-    stdio: ["ignore", "pipe", "pipe"],
-    windowsHide: true,
-  });
-
-  let urlSeen = false;
-  const handleLine = (line: string): void => {
-    handlers.onLine?.(line);
-    if (urlSeen) return;
-    const match = URL_PATTERN.exec(line);
-    if (match) {
-      urlSeen = true;
-      handlers.onUrl?.(match[0]);
-    }
-  };
-  attachLineReader(child.stdout, handleLine);
-  attachLineReader(child.stderr, handleLine);
-
-  const done = new Promise<ClaudeAuthStatus>((resolve) => {
-    child.on("error", (err) => {
-      logWarn("[AgentMode] claude auth login spawn error", err2String(err));
-      resolve({ loggedIn: false });
-    });
-    child.on("close", () => {
-      void getClaudeAuthStatus(claudePath, env).then(resolve, () => resolve({ loggedIn: false }));
-    });
-  });
-
-  return {
-    done,
-    cancel: () => {
-      try {
-        child.kill("SIGTERM");
-      } catch (e) {
-        logWarn("[AgentMode] claude auth login kill failed", err2String(e));
-      }
-    },
-  };
-}
-
-/** Emit complete (newline-delimited) lines from a piped child stream. */
-function attachLineReader(stream: Readable | null, onLine: (line: string) => void): void {
-  if (!stream) return;
-  stream.setEncoding("utf8");
-  let buffer = "";
-  stream.on("data", (chunk: string) => {
-    buffer += chunk;
-    let idx = buffer.indexOf("\n");
-    while (idx >= 0) {
-      const line = buffer.slice(0, idx).replace(/\r$/, "");
-      buffer = buffer.slice(idx + 1);
-      if (line.length > 0) onLine(line);
-      idx = buffer.indexOf("\n");
-    }
-  });
-  stream.on("end", () => {
-    const rest = buffer.trim();
-    if (rest.length > 0) onLine(rest);
-  });
+    () => getClaudeAuthStatus(claudePath, env),
+    handlers
+  );
 }
