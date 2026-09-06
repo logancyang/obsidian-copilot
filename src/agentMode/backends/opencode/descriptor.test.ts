@@ -38,77 +38,42 @@ describe("descriptor", () => {
         });
       });
 
-      it("parses 3-segment ids as variants when the suffix is a known effort", () => {
-        expect(decode("anthropic/claude-sonnet-4-5/medium")).toEqual({
-          selection: { baseModelId: "anthropic/claude-sonnet-4-5", effort: "medium" },
-          provider: "anthropic",
-        });
-        expect(decode("openai/gpt-5/minimal")).toEqual({
-          selection: { baseModelId: "openai/gpt-5", effort: "minimal" },
-          provider: "openai",
-        });
-      });
-
-      it("recognizes opencode's full effort vocabulary (none/minimal/low/medium/high/xhigh/max)", () => {
-        // Opencode advertises Anthropic models with `/max` and `/xhigh` and
-        // OpenRouter reasoning models with `/none`. Each must collapse onto
-        // its bare base.
-        for (const effort of ["none", "minimal", "low", "medium", "high", "xhigh", "max"]) {
-          expect(decode(`anthropic/claude-opus-4-7/${effort}`)).toEqual({
-            selection: { baseModelId: "anthropic/claude-opus-4-7", effort },
-            provider: "anthropic",
-          });
-        }
-      });
-
-      it("returns no-effort representation for 3-segment ids whose suffix isn't a known effort", () => {
-        // OpenRouter-style 3-segment ids without an effort suffix — the
-        // trailing segment is part of the model name. The whole id is the
-        // baseModelId; provider is still attributed from the leading segment.
-        expect(decode("openrouter/anthropic/claude-sonnet-4-5")).toEqual({
-          selection: { baseModelId: "openrouter/anthropic/claude-sonnet-4-5", effort: null },
-          provider: "openrouterai",
-        });
+      it("keeps an umbrella provider's id whole, attributing only the leading segment", () => {
+        // `claude-3.5-haiku` and `gpt-5` are part of the model name, not an effort.
+        // opencode reports effort as a separate `thought_level` config option, so no
+        // trailing segment is ever peeled off.
         expect(decode("openrouter/anthropic/claude-3.5-haiku")).toEqual({
           selection: { baseModelId: "openrouter/anthropic/claude-3.5-haiku", effort: null },
           provider: "openrouterai",
         });
-      });
-
-      it("parses 4-segment umbrella ids as variants when the last segment is a known effort", () => {
-        // OpenRouter wraps native ids under `openrouter/`, so its variants
-        // are 4-segment: `openrouter/<sub>/<model>/<effort>`. Without this
-        // case the picker would render seven duplicate rows per OpenRouter
-        // reasoning model.
-        expect(decode("openrouter/anthropic/claude-sonnet-4.5/high")).toEqual({
-          selection: { baseModelId: "openrouter/anthropic/claude-sonnet-4.5", effort: "high" },
+        expect(decode("openrouter/openai/gpt-5")).toEqual({
+          selection: { baseModelId: "openrouter/openai/gpt-5", effort: null },
           provider: "openrouterai",
         });
-        expect(decode("openrouter/anthropic/claude-sonnet-4.5/none")).toEqual({
-          selection: { baseModelId: "openrouter/anthropic/claude-sonnet-4.5", effort: "none" },
-          provider: "openrouterai",
-        });
-        expect(decode("openrouter/openai/gpt-5/xhigh")).toEqual({
-          selection: { baseModelId: "openrouter/openai/gpt-5", effort: "xhigh" },
-          provider: "openrouterai",
-        });
-        // OpenRouter route variants like `:exacto` live inside the model
-        // segment — the effort suffix still attaches at the trailing slash.
-        expect(decode("openrouter/openai/gpt-oss-120b:exacto/none")).toEqual({
-          selection: { baseModelId: "openrouter/openai/gpt-oss-120b:exacto", effort: "none" },
+        // OpenRouter route variants like `:exacto` live inside the model segment.
+        expect(decode("openrouter/openai/gpt-oss-120b:exacto")).toEqual({
+          selection: { baseModelId: "openrouter/openai/gpt-oss-120b:exacto", effort: null },
           provider: "openrouterai",
         });
       });
 
-      it("returns no-effort representation for unparseable shapes (1 segment or unknown trailing segment)", () => {
-        // 1-segment ids have no provider segment to attribute.
+      it("keeps a trailing segment that reads like an effort, since effort never rides the id", () => {
+        // A model literally named `.../high` would once have been mis-split into a
+        // base model plus an effort. The vocabulary that made that possible is gone.
+        expect(decode("anthropic/claude-sonnet-4-5/high")).toEqual({
+          selection: { baseModelId: "anthropic/claude-sonnet-4-5/high", effort: null },
+          provider: "anthropic",
+        });
+      });
+
+      it("attributes no provider to a single-segment id", () => {
         expect(decode("just-a-name")).toEqual({
           selection: { baseModelId: "just-a-name", effort: null },
           provider: null,
         });
-        // 4+ segment ids whose trailing segment isn't a known effort fall
-        // through to a no-effort representation. The leading segment still
-        // attributes a provider when it maps.
+      });
+
+      it("attributes a provider only when the leading segment maps to a Copilot one", () => {
         expect(decode("anthropic/foo/bar/baz")).toEqual({
           selection: { baseModelId: "anthropic/foo/bar/baz", effort: null },
           provider: "anthropic",
@@ -129,27 +94,22 @@ describe("descriptor", () => {
         );
       });
 
-      it("appends the variant when effort is set", () => {
+      it("drops effort, which opencode carries in its own config option rather than the id", () => {
         expect(encode({ baseModelId: "anthropic/claude-sonnet-4-5", effort: "high" })).toBe(
-          "anthropic/claude-sonnet-4-5/high"
+          "anthropic/claude-sonnet-4-5"
         );
       });
 
       it("round-trips via wire.decode", () => {
         const ids = [
           "anthropic/claude-sonnet-4-5",
-          "anthropic/claude-sonnet-4-5/low",
-          "openai/gpt-5/high",
-          "anthropic/claude-opus-4-7/max",
           "openrouter/anthropic/claude-sonnet-4.5",
-          "openrouter/anthropic/claude-sonnet-4.5/none",
-          "openrouter/anthropic/claude-sonnet-4.5/high",
+          "openrouter/openai/gpt-oss-120b:exacto",
           // Catalog-less BYOK (openai-compatible) — provider id is the synthetic
           // copilot providerId, and the model id may itself contain slashes
           // (LM Studio repo-prefixed ids like `lmstudio-community/Qwen-…-GGUF`).
-          // The trailing segment isn't a known effort, so decode treats the
-          // whole string as `baseModelId` with `effort: null` — and encode
-          // reproduces it verbatim.
+          // decode treats the whole string as `baseModelId`, and encode reproduces
+          // it verbatim.
           "lmstudio-byok-id/lmstudio-community/Qwen2.5-7B-Instruct-GGUF",
           "ollama-byok-id/llama3.2",
         ];
