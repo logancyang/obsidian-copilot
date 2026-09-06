@@ -51,6 +51,8 @@ The Codex backend uses `@agentclientprotocol/codex-acp`, which includes a compat
 4. If you prefer your own adapter, use **My own binary** to Auto-detect it or enter its absolute path. You remain responsible for updates to that binary.
 5. Enable the models you want and choose a default.
 
+Managed installation is an explicit choice. Updating or reinstalling a managed native bundle keeps the same Codex profile and leaves global or custom software in place. Older downloads and interrupted staging folders remain until you uninstall, since another vault may still use them. Close Codex sessions, sign-in, and installation operations in **all Obsidian vaults** before uninstalling. Copilot blocks removal for active Codex users in the current vault; it cannot detect users in other vaults. Uninstall keeps your Codex profile and selected custom executable.
+
 When the plugin's managed version changes, Agent Chat and Settings show the same **Update** action and shared progress or **Retry** state. The older `@zed-industries/codex-acp` package is not supported. Copilot uses the login stored by the bundled Codex CLI. Models added under **BYOK** do not join the Codex model list.
 
 For Windows-specific installation help, see [Windows setup for Agent Chat](agent-mode-windows-setup.md).

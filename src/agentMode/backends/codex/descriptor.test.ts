@@ -1,3 +1,4 @@
+import { simpleBinaryBackendProcess } from "@/agentMode/backends/shared/simpleBinaryBackend";
 import type { PermissionOption } from "@/agentMode/session/types";
 import { codexAuth } from "./codexAuth";
 import type CopilotPlugin from "@/main";
@@ -8,6 +9,9 @@ import { CODEX_BUNDLE_VERSION } from "./codexArchive";
 import { CodexBackendDescriptor, detectCodexAcpPath, getCodexBinaryManager } from "./descriptor";
 import { isSupportedCodexAcpPath, resolveSupportedCodexAcpPackage } from "./codexVersion";
 
+jest.mock("@/agentMode/backends/shared/simpleBinaryBackend", () => ({
+  simpleBinaryBackendProcess: jest.fn(),
+}));
 jest.mock("@/utils/detectBinary", () => ({ detectBinary: jest.fn() }));
 jest.mock("./codexBinaryResolver", () => ({
   codexAcpSearchDirs: jest.fn(),
@@ -107,6 +111,57 @@ describe("descriptor", () => {
               settingsWithCodex({ binaryPath: "/codex/index.js", ...fields })
             )
           ).toMatchObject(expected);
+        }
+      );
+    });
+    describe("createBackendProcess()", () => {
+      it.each(["exit", "failed start", "failed live start"])(
+        "https://github.com/Brevilabs/obsidian-copilot-private/issues/380 holds the binary reservation through %s until no child can use it",
+        async (end) => {
+          const original = getSettings().agentMode;
+          const release = jest.fn();
+          const reserve = jest
+            .spyOn(getCodexBinaryManager(), "reserveBinary")
+            .mockReturnValue(release);
+          const start = jest.fn().mockResolvedValue(undefined);
+          let exit!: () => void;
+          const backend = {
+            start,
+            isRunning: () => end === "failed live start",
+            onExit: (cb: () => void) => {
+              exit = cb;
+              return () => {};
+            },
+          };
+          jest
+            .mocked(simpleBinaryBackendProcess)
+            .mockReturnValue(backend as unknown as ReturnType<typeof simpleBinaryBackendProcess>);
+          setSettings((cur) => ({
+            agentMode: {
+              ...cur.agentMode,
+              backends: { ...cur.agentMode.backends, codex: { binaryPath: "/owned/codex-acp" } },
+            },
+          }));
+          try {
+            const process = CodexBackendDescriptor.createBackendProcess(
+              {} as Parameters<typeof CodexBackendDescriptor.createBackendProcess>[0]
+            );
+            start.mockImplementationOnce(async () => {
+              expect(reserve).toHaveBeenCalledWith("/owned/codex-acp");
+              expect(release).not.toHaveBeenCalled();
+              if (end !== "exit") throw new Error("launch failed");
+            });
+            if (end !== "exit") await expect(process.start!()).rejects.toThrow("launch failed");
+            else await process.start!();
+            if (end === "failed start") expect(release).toHaveBeenCalledTimes(1);
+            else expect(release).not.toHaveBeenCalled();
+            exit();
+            exit();
+            expect(release).toHaveBeenCalledTimes(1);
+          } finally {
+            reserve.mockRestore();
+            setSettings({ agentMode: original });
+          }
         }
       );
     });
