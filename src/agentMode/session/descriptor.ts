@@ -32,6 +32,18 @@ export type InstallState =
     }
   | { kind: "error"; message: string };
 
+export type ManagedInstallActionState =
+  | { kind: "idle" }
+  | { kind: "running"; label: string; percent?: number }
+  | { kind: "error"; message: string };
+
+/** Backend-owned install lifecycle shared by Agent Chat and Settings. */
+export interface ManagedInstallAction {
+  getState(plugin: CopilotPlugin): ManagedInstallActionState;
+  subscribe(plugin: CopilotPlugin, onChange: () => void): () => void;
+  run(plugin: CopilotPlugin): Promise<void>;
+}
+
 /** Sign-in state for backends that authenticate via a CLI / external account. */
 export interface BackendAuthStatus {
   signedIn: boolean;
@@ -226,14 +238,8 @@ export interface BackendDescriptor {
    */
   AbsentInstallActions?: React.ComponentType<{ plugin: CopilotPlugin }>;
 
-  /**
-   * Optional: upgrade the installed binary in place (managed reinstall, or the
-   * CLI's own `upgrade`). Resolves when done. Changing the persisted version
-   * restarts the backend via the `subscribeInstallState` subscription, so the
-   * next session boots on the new binary. Throws with a readable message on
-   * failure; callers surface progress/errors.
-   */
-  upgrade?(plugin: CopilotPlugin): Promise<void>;
+  /** User-triggered install/update lifecycle for Copilot-managed binaries. */
+  managedInstall?: ManagedInstallAction;
 
   /**
    * Optional: sign-in capability for backends gated on an external account

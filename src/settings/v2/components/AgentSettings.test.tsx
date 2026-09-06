@@ -69,6 +69,8 @@ const installStates: Record<string, { kind: string; [key: string]: unknown }> = 
   claude: { kind: "ready", source: "custom" },
   codex: { kind: "ready", source: "custom" },
 };
+const managedInstallStates: Record<string, { kind: string; [key: string]: unknown }> = {};
+const runManagedInstall = jest.fn().mockResolvedValue(undefined);
 
 /** Binary path each backend reports as resolved; absent means "not installed". */
 let resolvedPaths: Record<string, string | null> = {};
@@ -99,6 +101,15 @@ function makeDescriptor(id: string, displayName: string, selfHostable = false) {
     // Only a backend the plugin can install itself ships inline actions; the
     // panel's absent-state branch keys off that.
     ...(id === "opencode" ? { AbsentInstallActions: OpencodeAbsentInstallActions } : {}),
+    ...(id === "codex"
+      ? {
+          managedInstall: {
+            getState: () => managedInstallStates.codex ?? { kind: "idle" },
+            subscribe: () => () => {},
+            run: runManagedInstall,
+          },
+        }
+      : {}),
   };
 }
 
@@ -112,6 +123,9 @@ const mockGetCachedModelCatalog = jest.fn();
 const mockPreloadModels = jest.fn();
 
 jest.mock("@/agentMode", () => ({
+  AgentBackendHeader: jest.requireActual<
+    typeof import("@/agentMode/backends/shared/ui/AgentBackendHeader")
+  >("@/agentMode/backends/shared/ui/AgentBackendHeader").AgentBackendHeader,
   backendDisplayOrder: () => DESCRIPTORS,
   backendNeedsSelfHostWarning: (
     descriptor: { selfHostable?: boolean },
@@ -129,6 +143,9 @@ jest.mock("@/agentMode", () => ({
     const read = () => descriptor.getInstallState();
     return React.useSyncExternalStore(subscribe, read, read);
   },
+  // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook export
+  useManagedInstallActionState: (descriptor: { id: string }) =>
+    managedInstallStates[descriptor.id] ?? { kind: "idle" },
   AgentDefaultModelSetting: ({ descriptor }: { descriptor: { id: string } }) => (
     <div data-testid={`default-model-${descriptor.id}`}>default model</div>
   ),
@@ -173,6 +190,8 @@ describe("AgentSettings", () => {
     installStates.opencode = { kind: "ready", source: "managed" };
     installStates.claude = { kind: "ready", source: "custom" };
     installStates.codex = { kind: "ready", source: "custom" };
+    delete managedInstallStates.codex;
+    runManagedInstall.mockReset().mockResolvedValue(undefined);
     mockGetCachedModelCatalog.mockReset().mockReturnValue({ availableModels: [] });
     mockPreloadModels.mockReset().mockResolvedValue(undefined);
     resolvedPaths = {};
@@ -350,5 +369,30 @@ describe("AgentSettings", () => {
     expect(screen.getByText(MANAGED_BINARY_PATH)).not.toBeNull();
     expect(screen.getByRole("button", { name: "Configure" })).not.toBeNull();
     expect(screen.queryByRole("button", { name: "Download opencode" })).toBeNull();
+  });
+
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/368 shares managed update progress and Retry in settings", () => {
+    installStates.codex = {
+      kind: "incompatible",
+      source: "managed",
+      currentVersion: "1.9.0",
+      minVersion: "1.10.0",
+      message: "Codex adapter 1.9.0 does not match this Copilot release (1.10.0).",
+    };
+    const view = render(<AgentSettings />);
+    fireEvent.click(screen.getByRole("tab", { name: "Codex" }));
+    fireEvent.click(screen.getByRole("button", { name: "Update" }));
+    expect(runManagedInstall).toHaveBeenCalledTimes(1);
+
+    managedInstallStates.codex = { kind: "running", label: "Installing… 30%" };
+    view.rerender(<AgentSettings />);
+    expect(screen.getByText("Installing… 30%")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Updating…" }).hasAttribute("disabled")).toBe(true);
+
+    managedInstallStates.codex = { kind: "error", message: "npm unavailable" };
+    view.rerender(<AgentSettings />);
+    expect(screen.getByText("npm unavailable")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(runManagedInstall).toHaveBeenCalledTimes(2);
   });
 });
