@@ -33,6 +33,10 @@ export interface ManagedBinaryInfo {
   /** Display-formatted install root. */
   destination: string;
   run: ManagedBinaryRunState;
+  /** Whether this operation supports cancellation. Defaults to true. */
+  canCancel?: boolean;
+  /** Retained managed files may exist while a custom binary is active. */
+  hasDownloads?: boolean;
 }
 
 /** Every side effect the dialog can trigger, supplied by the container so the view stays pure. */
@@ -115,11 +119,15 @@ const ManagedBinaryInstall: React.FC<ManagedBinaryInstallProps> = ({
       <div className="tw-flex tw-flex-col tw-gap-2">
         <p className="tw-my-0 tw-text-sm">{run.label}</p>
         <Progress value={run.percent} />
-        <div className="tw-flex tw-justify-end">
-          <Button variant="ghost" size="default" onClick={actions.cancelInstall}>
-            Cancel
-          </Button>
-        </div>
+        {/* Configuration operations hold the lock but cannot safely be interrupted.
+            https://github.com/Brevilabs/obsidian-copilot-private/issues/379 */}
+        {managed.canCancel !== false && (
+          <div className="tw-flex tw-justify-end">
+            <Button variant="ghost" size="default" onClick={actions.cancelInstall}>
+              Cancel
+            </Button>
+          </div>
+        )}
       </div>
     );
   }
@@ -144,20 +152,18 @@ const ManagedBinaryInstall: React.FC<ManagedBinaryInstallProps> = ({
         </pre>
       )}
       <div className="tw-flex tw-justify-end tw-gap-2">
-        {/* Only an active managed installation offers destructive removal.
-            https://github.com/Brevilabs/obsidian-copilot-private/issues/368 */}
-        {installed ? (
-          <>
-            <Button variant="secondary" size="default" onClick={actions.install}>
-              Reinstall
-            </Button>
-            <Button variant="destructive" size="default" onClick={actions.uninstall}>
-              Uninstall
-            </Button>
-          </>
-        ) : (
-          <Button variant="default" size="default" onClick={actions.install}>
-            Download &amp; install
+        <Button
+          variant={installed ? "secondary" : "default"}
+          size="default"
+          onClick={actions.install}
+        >
+          {installed ? "Reinstall" : "Download & install"}
+        </Button>
+        {/* Switching to a custom binary must not hide removal of retained downloads.
+            https://github.com/Brevilabs/obsidian-copilot-private/issues/379 */}
+        {(managed.hasDownloads ?? installed) && (
+          <Button variant="destructive" size="default" onClick={actions.uninstall}>
+            Uninstall
           </Button>
         )}
       </div>

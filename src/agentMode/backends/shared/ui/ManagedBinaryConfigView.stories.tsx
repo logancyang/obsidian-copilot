@@ -132,3 +132,23 @@ export const UpgradeError: StoryObj<ManagedBinaryConfigViewProps> = {
     upgradeRun: { kind: "error", message: "Download failed. Check your connection and try again." },
   },
 };
+
+export const ConfigurationRunning: StoryObj<ManagedBinaryConfigViewProps> = {
+  render: InteractiveConfigView,
+  args: {
+    managed: {
+      ...MANAGED,
+      canCancel: false,
+      run: { kind: "running", label: "Configuring…", percent: 0 },
+    },
+  },
+};
+
+export const RetainedManagedDownloads: StoryObj<ManagedBinaryConfigViewProps> = {
+  render: InteractiveConfigView,
+  args: {
+    activeSource: "custom",
+    state: { kind: "ready", source: "custom" },
+    managed: { ...MANAGED, hasDownloads: true },
+  },
+};

@@ -112,6 +112,32 @@ describe("ManagedBinaryConfigView", () => {
       expect(screen.queryByText(IN_USE_CUSTOM)).toBeNull();
     });
 
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 keeps noncancellable configuration progress visible without Cancel", () => {
+      renderView({
+        managed: {
+          ...MANAGED,
+          canCancel: false,
+          run: { kind: "running", label: "Configuring…", percent: 0 },
+        },
+      });
+      expect(screen.getByText("Configuring…")).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
+      expect(screen.getByRole<HTMLButtonElement>("radio", { name: "My own binary" }).disabled).toBe(
+        true
+      );
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 removes retained downloads without replacing a custom selection", () => {
+      const { actions } = renderView({
+        activeSource: "custom",
+        managed: { ...MANAGED, hasDownloads: true },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Uninstall" }));
+      expect(actions.uninstall).toHaveBeenCalledTimes(1);
+      expect(actions.install).not.toHaveBeenCalled();
+      expect(screen.getByRole("button", { name: "Download & install" })).toBeTruthy();
+    });
+
     it("omits the in-use note when the viewed source is the active one (https://github.com/Brevilabs/obsidian-copilot-private/issues/368)", () => {
       renderView({ source: "managed", activeSource: "managed" });
 
