@@ -19,6 +19,10 @@ import type { ModelInfo, ProviderType } from "@/modelManagement/types/catalog";
 import type { ConfiguredModel } from "@/modelManagement/types/persisted";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+// Empty filtered pools stay stable across endpoint and catalog refreshes.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/386
+const EMPTY_CANDIDATES: readonly ModelInfo[] = Object.freeze([]);
+
 export interface UseModelCandidatePoolArgs {
   mode: "new" | "edit";
   /** Edit mode only — the provider whose saved key the fetch falls back to. */
@@ -125,7 +129,7 @@ export function useModelCandidatePool({
     }
     for (const id of fetchedIds) push(id);
     for (const id of manualIds) push(id);
-    return out;
+    return out.length === 0 ? EMPTY_CANDIDATES : out;
   }, [existingModels, fetchedIds, manualIds, resolveModelInfo, removedExistingIds]);
 
   // Custom-added ids — drives both the X-button visibility and the
