@@ -51,6 +51,8 @@ export abstract class ManagedBinaryManager<
 
   /** Clears a completed failure when a new plugin lifecycle adopts this manager. */
   forgetSettledError(): void {
+    // A reopened lifecycle must adopt an active run instead of clearing its progress.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
     if (this.operation || this.runtimeState.kind !== "error") return;
     this.publishState({ kind: "idle" });
   }

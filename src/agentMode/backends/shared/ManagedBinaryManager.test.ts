@@ -137,7 +137,21 @@ describe("ManagedBinaryManager", () => {
       });
     });
     describe("forgetSettledError()", () => {
-      it("clears a prior failure so a reopened lifecycle starts idle", async () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/368 preserves idle and running snapshots when a lifecycle reopens", async () => {
+        const idle = manager.getRuntimeState();
+        manager.forgetSettledError();
+        expect(manager.getRuntimeState()).toBe(idle);
+        let finish!: (value: InstalledBinary) => void;
+        manager.pipeline.mockImplementationOnce(() => new Promise((resolve) => (finish = resolve)));
+        const installing = manager.install();
+        const running = manager.getRuntimeState();
+        manager.forgetSettledError();
+        expect(manager.getRuntimeState()).toBe(running);
+        expect(manager.isBusy()).toBe(true);
+        finish({ version: "1.2.3", path: "/managed/binary" });
+        await installing;
+      });
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/368 clears a prior failure so a reopened lifecycle starts idle", async () => {
         manager.pipeline.mockRejectedValueOnce(new Error("failed"));
         await expect(manager.install()).rejects.toThrow("failed");
         expect(manager.getRuntimeState()).toEqual({ kind: "error", message: "failed" });
