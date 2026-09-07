@@ -42,7 +42,7 @@ function omitKeys<T extends object>(obj: T, keys: readonly string[]): T {
 }
 
 /** Device-specific field names per backend slice, removed on save / set on load. */
-const CODEX_DEVICE_KEYS = ["binaryPath", "envOverrides"] as const;
+const CODEX_DEVICE_KEYS = ["binaryPath", "binaryVersion", "binarySource", "envOverrides"] as const;
 const CLAUDE_DEVICE_KEYS = ["envOverrides"] as const;
 const OPENCODE_DEVICE_KEYS = [
   "binaryPath",
@@ -63,6 +63,10 @@ function buildProfileFromFlat(agentMode: AgentMode): DeviceAgentProfile {
   if (codexSrc) {
     const codex: NonNullable<DeviceAgentProfile["codex"]> = {};
     if (codexSrc.binaryPath) codex.binaryPath = codexSrc.binaryPath;
+    if (codexSrc.binaryVersion) codex.binaryVersion = codexSrc.binaryVersion;
+    if (codexSrc.binaryPath && codexSrc.binarySource) {
+      codex.binarySource = codexSrc.binarySource;
+    }
     if (codexSrc.envOverrides) codex.envOverrides = codexSrc.envOverrides;
     if (hasOwnKeys(codex)) profile.codex = codex;
   }

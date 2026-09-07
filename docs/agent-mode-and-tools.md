@@ -43,6 +43,8 @@ Claude models and billing come from your Claude Code account. Models added under
 
 ### Codex
 
+A Copilot-managed Codex installation uses a native bundle containing the adapter and Codex runtime. It does not need Node.js or npm. Copilot checks the bundle version to offer updates. A failed download or verification keeps the previous installation selected.
+
 Managed Codex downloads are pinned to `codex-acp` **1.10.0** in this Copilot release. Copilot uses the system `tar -xf` command to unpack the runtime on all supported desktop platforms:
 
 | Platform | Download format | Extraction                                                         |
@@ -52,6 +54,8 @@ Managed Codex downloads are pinned to `codex-acp` **1.10.0** in this Copilot rel
 | Windows  | `.zip`          | Built-in `tar.exe`, which uses bsdtar and supports ZIP extraction. |
 
 The archive format and extraction command are separate: bsdtar can unpack ZIP files, while GNU tar does not support ZIP. See [bsdtar's supported formats](https://github.com/libarchive/libarchive/blob/master/tar/bsdtar.1) and [Windows tar documentation](https://learn.microsoft.com/en-us/windows/tar/). Windows includes `tar.exe` starting with Windows 10 version 1803. If installation reports that `tar` is missing, install it and retry; on macOS or Windows, use bsdtar so ZIP extraction works.
+
+You can also keep your own adapter installation. Copilot does not update or remove these custom installations.
 
 For an existing or manually installed `@agentclientprotocol/codex-acp` adapter, **0.0.45 is the minimum supported version**, not the managed download version. Both numbers refer to the ACP adapter version; the bundled Codex CLI has its own version. The manual setup steps are:
 
