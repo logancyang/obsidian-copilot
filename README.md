@@ -1,0 +1,1 @@
+Retained screenshot evidence for issue 381 / Relevant Notes footer. Do not merge this branch. Base: 5a5992012377c85ac221653c0c44b0f87e62d982. Feature: 0a0c903f4767b6c97a52554b75a3cc490a35195e. Images captured in the disposable Obsidian test vault; overflow example uses the component gallery.
