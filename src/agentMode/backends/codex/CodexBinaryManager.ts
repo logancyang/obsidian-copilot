@@ -19,6 +19,7 @@ import { installCodexArchive, CODEX_BUNDLE_VERSION } from "./codexArchive";
 
 const IDLE_ACTION_STATE = Object.freeze({ kind: "idle" as const });
 const TIMEOUT_MS = 5 * 60_000;
+const INVENTORY_FILE = ".copilot-install-inventory.json";
 const EMPTY_BINARY_SETTINGS: BinarySettings = Object.freeze({});
 const EMPTY_DIRS: string[] = [];
 Object.freeze(EMPTY_DIRS);
@@ -84,18 +85,15 @@ export class CodexBinaryManager extends ManagedBinaryManager<CodexInstallProgres
       .map((entry) => path().join(dataDir, entry.name))
       .filter(
         (dir) =>
-          !protectedPaths.some((value) => containsPath(dir, value) || containsPath(value, dir))
+          !protectedPaths.some((value) => containsPath(dir, value) || containsPath(value, dir)) &&
+          hasUnchangedInventory(dir)
       );
   }
 
   async uninstall(): Promise<void> {
     // Running adapters can load their bundled runtime after startup, including on Unix.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/380
-    if (
-      this.reclaimableDirs().some((dir) =>
-        [...this.users.keys()].some((key) => containsPath(dir, key))
-      )
-    ) {
+    if ([...this.users.keys()].some((key) => containsPath(this.getDataDir(), key))) {
       throw new Error("Close Codex sessions and sign-in before uninstalling the managed adapter.");
     }
     await super.uninstall();
@@ -173,6 +171,11 @@ export class CodexBinaryManager extends ManagedBinaryManager<CodexInstallProgres
       // Cancellation during verification must not replace the working installation.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
       if (signal.aborted) throw new ManagedInstallAbortError();
+      await fs().promises.writeFile(
+        path().join(stageDir, INVENTORY_FILE),
+        directoryInventory(stageDir),
+        { flag: "wx" }
+      );
       await promoteManagedVersion(stageDir, versionDir, "Codex adapter");
       const finalEntry = entryPath(versionDir);
       updateAgentModeBackendFields("codex", {
@@ -188,6 +191,40 @@ export class CodexBinaryManager extends ManagedBinaryManager<CodexInstallProgres
         .catch(() => {});
     }
   }
+}
+
+// Other vaults can place profiles or custom files inside this shared download root.
+// Only reclaim a directory whose entries and file metadata still match its extraction.
+// Missing inventories and changed contents remain user-owned or ambiguous.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/380
+function hasUnchangedInventory(directory: string): boolean {
+  try {
+    return (
+      fs().readFileSync(path().join(directory, INVENTORY_FILE), "utf8") ===
+      directoryInventory(directory)
+    );
+  } catch {
+    return false;
+  }
+}
+
+function directoryInventory(directory: string, root = directory): string {
+  return JSON.stringify(
+    fs()
+      .readdirSync(directory)
+      .filter((name) => directory !== root || name !== INVENTORY_FILE)
+      .sort()
+      .map((name) => {
+        const fullPath = path().join(directory, name);
+        const stat = fs().lstatSync(fullPath);
+        return [
+          name,
+          stat.isDirectory()
+            ? directoryInventory(fullPath, root)
+            : [stat.size, stat.mtimeMs, stat.ctimeMs],
+        ];
+      })
+  );
 }
 
 function entryPath(versionDir: string): string {

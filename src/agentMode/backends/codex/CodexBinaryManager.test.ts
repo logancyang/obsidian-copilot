@@ -44,6 +44,11 @@ function writeNativeBundle(root: string): string {
   fs.mkdirSync(root, { recursive: true });
   const entry = path.join(root, "codex-acp");
   fs.writeFileSync(entry, "native");
+  const stat = fs.statSync(entry);
+  fs.writeFileSync(
+    path.join(root, ".copilot-install-inventory.json"),
+    JSON.stringify([["codex-acp", [stat.size, stat.mtimeMs, stat.ctimeMs]]])
+  );
   return entry;
 }
 
@@ -388,6 +393,58 @@ describe("CodexBinaryManager", () => {
       });
     });
     describe("uninstall()", () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/380 reclaims a verified nested bundle after promotion even when verification updates file metadata", async () => {
+        const manager = new CodexBinaryManager();
+        jest.mocked(installCodexArchive).mockImplementationOnce(async (stage) => {
+          fs.writeFileSync(path.join(stage, "codex-acp"), "native");
+          fs.mkdirSync(path.join(stage, "runtime"));
+          fs.writeFileSync(path.join(stage, "runtime", "engine"), "bundled runtime");
+        });
+        mockedExecFile.mockImplementation((command, _args, _options, callback) => {
+          fs.appendFileSync(command, "verified");
+          (callback as (error: Error | null, stdout: string, stderr: string) => void)(
+            null,
+            `${CODEX_ACP_PINNED_VERSION} Codex CLI`,
+            ""
+          );
+          return {} as childProcess.ChildProcess;
+        });
+        const installed = await manager.install();
+        expect(fs.existsSync(path.join(path.dirname(installed.path), "runtime", "engine"))).toBe(
+          true
+        );
+        await manager.uninstall();
+        expect(fs.existsSync(path.dirname(installed.path))).toBe(false);
+      });
+      it.each(["nested profile", "custom executable", "rewritten package"])(
+        "https://github.com/Brevilabs/obsidian-copilot-private/issues/380 preserves another vault's %s without consulting that vault's settings",
+        async (kind) => {
+          const vaultA = new CodexBinaryManager();
+          const installed = await vaultA.install();
+          const root = path.dirname(installed.path);
+          const userFile =
+            kind === "rewritten package" ? installed.path : path.join(root, kind, "user-file");
+          fs.mkdirSync(path.dirname(userFile), { recursive: true });
+          fs.writeFileSync(userFile, "other vault's private contents");
+          setSettings((current) => ({
+            agentMode: {
+              ...current.agentMode,
+              backends: { ...current.agentMode.backends, codex: {} },
+            },
+          }));
+          await vaultA.uninstall();
+          expect(fs.readFileSync(userFile, "utf8")).toBe("other vault's private contents");
+          expect(fs.existsSync(installed.path)).toBe(true);
+        }
+      );
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/380 retains interrupted stages without an ownership inventory", async () => {
+        const manager = new CodexBinaryManager();
+        const stage = path.join(manager.getDataDir(), `.tmp-${PREVIOUS_DIR}`);
+        fs.mkdirSync(stage, { recursive: true });
+        fs.writeFileSync(path.join(stage, "partial-download"), "incomplete");
+        await manager.uninstall();
+        expect(fs.existsSync(path.join(stage, "partial-download"))).toBe(true);
+      });
       it.each(["custom", "profile"])(
         "https://github.com/Brevilabs/obsidian-copilot-private/issues/380 preserves a selected %s symlink inside a managed version that points outside storage",
         async (selection) => {

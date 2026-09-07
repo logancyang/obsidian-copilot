@@ -1,4 +1,4 @@
-import { resetSettings, setSettings } from "@/settings/model";
+import { getSettings, resetSettings, setSettings } from "@/settings/model";
 import {
   setDefaultSystemPromptTitle,
   setDisableBuiltinSystemPrompt,
@@ -66,6 +66,44 @@ jest.mock("@/agentMode/skills", () => {
 describe("CodexBackend", () => {
   describe("CodexBackend", () => {
     describe("buildSpawnDescriptor()", () => {
+      it.each([
+        ["default", "file"],
+        ["default", "keyring"],
+        ["custom", "file"],
+        ["custom", "keyring"],
+      ])(
+        "https://github.com/Brevilabs/obsidian-copilot-private/issues/380 preserves the %s profile and %s credential store for native and user-owned npm adapters",
+        async (profile, store) => {
+          const original = getSettings().agentMode;
+          const originalHome = process.env.CODEX_HOME;
+          delete process.env.CODEX_HOME;
+          const envOverrides: Record<string, string> = {
+            CODEX_CONFIG: JSON.stringify({ cli_auth_credentials_store: store }),
+          };
+          if (profile === "custom") envOverrides.CODEX_HOME = "/fixture profile";
+          try {
+            for (const binaryPath of ["/npm/codex-acp/dist/index.js", "/managed/codex-acp"]) {
+              setSettings((current) => ({
+                agentMode: {
+                  ...current.agentMode,
+                  backends: { ...current.agentMode.backends, codex: { binaryPath, envOverrides } },
+                },
+              }));
+              jest.mocked(resolveSupportedCodexAcpEntry).mockImplementationOnce((entry) => entry);
+              const invocation = await new CodexBackend().buildSpawnDescriptor({
+                vaultBasePath: "/fixture vault",
+              });
+              const env = invocation.env;
+              expect(env.CODEX_HOME).toBe(profile === "custom" ? "/fixture profile" : undefined);
+              expect(JSON.parse(env.CODEX_CONFIG!).cli_auth_credentials_store).toBe(store);
+            }
+          } finally {
+            setSettings({ agentMode: original });
+            if (originalHome === undefined) delete process.env.CODEX_HOME;
+            else process.env.CODEX_HOME = originalHome;
+          }
+        }
+      );
       beforeEach(() => {
         jest
           .mocked(resolveSupportedCodexAcpEntry)

@@ -26,8 +26,7 @@ async function invocation(settings: CopilotSettings) {
 async function readStatus(call: Awaited<ReturnType<typeof invocation>>): Promise<boolean> {
   // Environment-authenticated sessions need no browser login or persisted credentials.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
-  if (call.env.CODEX_API_KEY?.trim() || call.env.OPENAI_API_KEY?.trim())
-    return true;
+  if (call.env.CODEX_API_KEY?.trim() || call.env.OPENAI_API_KEY?.trim()) return true;
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), 10_000);
   let loggedIn = false;
@@ -101,6 +100,7 @@ export const codexAuth: BackendAuth = {
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/380
     const binaryPath = settings.agentMode?.backends?.codex?.binaryPath;
     const release = binaryPath ? codexBinaryManager.reserveBinary(binaryPath) : undefined;
+    let statusProbe: Promise<boolean> | undefined;
     try {
       const call = await invocation(settings);
       const result = await signInWithCli(
@@ -109,7 +109,7 @@ export const codexAuth: BackendAuth = {
         call.env,
         // The login already holds its reservation; a concurrent reinstall must not block this final probe.
         // https://github.com/Brevilabs/obsidian-copilot-private/issues/380
-        async () => ({ loggedIn: await readStatus(call) }),
+        async () => ({ loggedIn: await (statusProbe = readStatus(call)) }),
         {
           ...handlers,
           // Codex prints its localhost callback server before the actual OpenAI authorization URL.
@@ -119,6 +119,9 @@ export const codexAuth: BackendAuth = {
       ).done;
       return { signedIn: result.loggedIn };
     } finally {
+      // Cancellation can finish login after its child exits while its status child still runs.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/380
+      await statusProbe?.catch(() => undefined);
       release?.();
     }
   },
