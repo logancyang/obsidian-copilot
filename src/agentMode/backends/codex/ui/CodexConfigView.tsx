@@ -35,6 +35,8 @@ export const CodexConfigView: React.FC<CodexConfigViewProps> = (props) => (
     upgradeLabel="Update"
   >
     <ConfigSection title="Sign in">
+      {/* Sign-in needs a usable adapter; starting earlier would fail to launch it.
+          https://github.com/Brevilabs/obsidian-copilot-private/issues/379 */}
       {props.state.kind === "ready" ? (
         <SignInAction {...props.auth} />
       ) : (

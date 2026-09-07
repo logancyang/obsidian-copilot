@@ -144,3 +144,24 @@ export const InstallingWithCustomSelected: StoryObj<CodexConfigViewProps> = {
     },
   },
 };
+
+export const ConfigurationRunning: StoryObj<CodexConfigViewProps> = {
+  render: InteractiveConfigView,
+  args: {
+    managed: { ...MANAGED, canCancel: false, run: { kind: "running", label: "Configuring…" } },
+  },
+};
+
+export const RetainedManagedDownloads: StoryObj<CodexConfigViewProps> = {
+  render: InteractiveConfigView,
+  args: {
+    activeSource: "custom",
+    state: { kind: "ready", source: "custom" },
+    managed: { ...MANAGED, hasDownloads: true },
+  },
+};
+
+export const ManagedDestinationUnavailable: StoryObj<CodexConfigViewProps> = {
+  render: InteractiveConfigView,
+  args: { managed: { ...MANAGED, destination: "Unavailable" } },
+};

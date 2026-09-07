@@ -14,7 +14,7 @@ import {
   settingsStore,
   type CodexBackendSettings,
 } from "@/settings/model";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { App, Notice } from "obsidian";
 import React from "react";
 
@@ -38,6 +38,7 @@ jest.mock("@/components/modals/ConfirmModal", () => ({
 }));
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/368";
+const SETUP_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/379";
 
 function setCodexSettings(codex: CodexBackendSettings = {}): void {
   jest
@@ -58,7 +59,7 @@ function makeManager() {
   const runtimeRunning = { kind: "installing", progress: null };
   const listeners = new Set<() => void>();
   const manager = {
-    getDataDir: () => "/home/user/.obsidian-copilot/codex",
+    getDataDir: jest.fn(() => "/home/user/.obsidian-copilot/codex"),
     getRuntimeState: () => (state.kind === "running" ? runtimeRunning : state),
     getActionState: () => state,
     subscribeRuntimeState: (listener: () => void) => {
@@ -73,13 +74,16 @@ function makeManager() {
   };
   return {
     manager,
-    render: () =>
-      render(
+    render: async () => {
+      const view = render(
         <CodexConfigContainer
           manager={manager as unknown as CodexBinaryManager}
           onClose={jest.fn()}
         />
-      ),
+      );
+      await act(async () => undefined);
+      return view;
+    },
     publish: (next: ManagedInstallActionState) =>
       act(() => {
         state = next;
@@ -106,9 +110,54 @@ describe("CodexInstallModal", () => {
   });
 
   describe("CodexConfigContainer()", () => {
+    it(`keeps noncancellable configuration visible without Cancel for ${SETUP_ISSUE}`, async () => {
+      const fixture = makeManager();
+      jest
+        .spyOn(fixture.manager, "getRuntimeState")
+        .mockReturnValue({ kind: "busy", progress: null });
+      jest
+        .spyOn(fixture.manager, "getActionState")
+        .mockReturnValue({ kind: "running", label: "Configuring…" });
+      await fixture.render();
+      expect(screen.getByText("Configuring…")).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
+    });
+
+    it(`removes retained downloads without replacing the selected custom adapter for ${SETUP_ISSUE}`, async () => {
+      setCodexSettings({ binaryPath: "/my/codex-acp", binarySource: "custom" });
+      const fixture = makeManager();
+      await fixture.render();
+      fireEvent.click(screen.getByRole("radio", { name: "Managed by Copilot" }));
+      await waitFor(() => expect(screen.getByRole("button", { name: "Uninstall" })).toBeTruthy());
+      await act(async () => fireEvent.click(screen.getByRole("button", { name: "Uninstall" })));
+      fixture.manager.downloadsSize.mockResolvedValue(0);
+      await act(async () => mockOnConfirm());
+      fixture.publish({ kind: "running", label: "Removing" });
+      fixture.publish({ kind: "idle" });
+      await waitFor(() => expect(screen.queryByRole("button", { name: "Uninstall" })).toBeNull());
+      expect(fixture.manager.uninstall).toHaveBeenCalledTimes(1);
+      expect(fixture.manager.install).not.toHaveBeenCalled();
+      expect(getSettings().agentMode.backends?.codex?.binaryPath).toBe("/my/codex-acp");
+    });
+
+    it(`keeps custom setup usable when the managed home directory is invalid for ${SETUP_ISSUE}`, async () => {
+      const fixture = makeManager();
+      fixture.manager.getDataDir.mockImplementation(() => {
+        throw new Error("Invalid home directory");
+      });
+      fixture.manager.downloadsSize.mockRejectedValue(new Error("Invalid home directory"));
+      await fixture.render();
+      expect(screen.getByText("Unavailable")).toBeTruthy();
+      fireEvent.click(screen.getByRole("radio", { name: "My own binary" }));
+      fireEvent.change(screen.getByRole("textbox"), { target: { value: "/my/codex-acp" } });
+      await act(async () => fireEvent.click(screen.getByRole("button", { name: "Apply" })));
+      expect(fixture.manager.setCustomBinaryPath).toHaveBeenCalledWith("/my/codex-acp");
+      expect(Notice).toHaveBeenCalledWith("Codex adapter path saved.");
+    });
+
     it(`defaults new setups to managed and starts the manager's install for ${ISSUE}`, async () => {
       const fixture = makeManager();
-      fixture.render();
+      await fixture.render();
       expect(screen.queryByRole("textbox")).toBeNull();
       await act(async () =>
         fireEvent.click(screen.getByRole("button", { name: "Download & install" }))
@@ -116,10 +165,10 @@ describe("CodexInstallModal", () => {
       expect(fixture.manager.install).toHaveBeenCalledTimes(1);
     });
 
-    it(`opens existing unannotated paths on custom and preserves them while browsing tabs for ${ISSUE}`, () => {
+    it(`opens existing unannotated paths on custom and preserves them while browsing tabs for ${ISSUE}`, async () => {
       setCodexSettings({ binaryPath: "/my/codex-acp" });
       const fixture = makeManager();
-      fixture.render();
+      await fixture.render();
       expect(screen.getByRole<HTMLInputElement>("textbox").value).toBe("/my/codex-acp");
       fireEvent.click(screen.getByRole("radio", { name: "Managed by Copilot" }));
       expect(screen.queryByRole("textbox")).toBeNull();
@@ -129,10 +178,10 @@ describe("CodexInstallModal", () => {
       expect(fixture.manager.setCustomBinaryPath).not.toHaveBeenCalled();
     });
 
-    it(`offers a first install when a persisted managed adapter is missing for ${ISSUE}`, () => {
+    it(`offers a first install when a persisted managed adapter is missing for ${ISSUE}`, async () => {
       setCodexSettings({ binaryPath: "/missing/codex-acp", binarySource: "managed" });
       jest.mocked(CodexBackendDescriptor.getInstallState).mockReturnValue({ kind: "absent" });
-      makeManager().render();
+      await makeManager().render();
       expect(screen.getByRole("button", { name: "Download & install" })).toBeTruthy();
       expect(screen.queryByRole("button", { name: "Reinstall" })).toBeNull();
     });
@@ -140,7 +189,7 @@ describe("CodexInstallModal", () => {
     it(`saves and clears custom paths through the shared manager for ${ISSUE}`, async () => {
       setCodexSettings({ binaryPath: "/my/codex-acp", binarySource: "custom" });
       const fixture = makeManager();
-      fixture.render();
+      await fixture.render();
       fireEvent.change(screen.getByRole("textbox"), { target: { value: "/new/codex-acp" } });
       await act(async () => fireEvent.click(screen.getByRole("button", { name: "Apply" })));
       expect(fixture.manager.setCustomBinaryPath).toHaveBeenCalledWith("/new/codex-acp");
@@ -153,7 +202,7 @@ describe("CodexInstallModal", () => {
       setCodexSettings({ binaryPath: "/my/codex-acp", binarySource: "custom" });
       const fixture = makeManager();
       fixture.manager.setCustomBinaryPath.mockRejectedValue(new Error("invalid adapter"));
-      fixture.render();
+      await fixture.render();
       fireEvent.change(screen.getByRole("textbox"), { target: { value: "/bad/codex-acp" } });
       await act(async () => fireEvent.click(screen.getByRole("button", { name: "Apply" })));
       expect(screen.getByText("invalid adapter")).toBeTruthy();
@@ -162,14 +211,14 @@ describe("CodexInstallModal", () => {
       expect(Notice).toHaveBeenCalledWith("Couldn't clear the custom path: invalid adapter");
     });
 
-    it(`reopens an active managed install with progress and Cancel while a custom adapter remains selected for ${ISSUE}`, () => {
+    it(`reopens an active managed install with progress and Cancel while a custom adapter remains selected for ${ISSUE}`, async () => {
       setCodexSettings({ binaryPath: "/my/codex-acp", binarySource: "custom" });
       const fixture = makeManager();
-      const view = fixture.render();
+      const view = await fixture.render();
       fixture.publish({ kind: "running", label: "Installing package", percent: 30 });
       expect(screen.getByText("Installing package")).toBeTruthy();
       view.unmount();
-      fixture.render();
+      await fixture.render();
       expect(screen.queryByRole("textbox")).toBeNull();
       expect(screen.getByText("Installing package")).toBeTruthy();
       fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
@@ -177,9 +226,9 @@ describe("CodexInstallModal", () => {
       expect(getSettings().agentMode.backends?.codex?.binaryPath).toBe("/my/codex-acp");
     });
 
-    it(`subscribes to installs started elsewhere and only cancels explicitly for ${ISSUE}`, () => {
+    it(`subscribes to installs started elsewhere and only cancels explicitly for ${ISSUE}`, async () => {
       const fixture = makeManager();
-      const { unmount } = fixture.render();
+      const { unmount } = await fixture.render();
       fixture.publish({ kind: "running", label: "Installing package", percent: 30 });
       expect(screen.getByRole("progressbar")).toBeTruthy();
       expect(screen.getByText("Installing package")).toBeTruthy();
@@ -198,7 +247,7 @@ describe("CodexInstallModal", () => {
       async (error, logged, noticed) => {
         const fixture = makeManager();
         fixture.manager.install.mockRejectedValue(error);
-        fixture.render();
+        await fixture.render();
         await act(async () =>
           fireEvent.click(screen.getByRole("button", { name: "Download & install" }))
         );
@@ -217,7 +266,7 @@ describe("CodexInstallModal", () => {
         minVersion: "1.10.0-r1",
       });
       const fixture = makeManager();
-      fixture.render();
+      await fixture.render();
       await act(async () => fireEvent.click(screen.getByRole("button", { name: "Update" })));
       expect(fixture.manager.install).toHaveBeenCalledTimes(1);
     });
@@ -225,7 +274,7 @@ describe("CodexInstallModal", () => {
     it(`requires the size-annotated uninstall confirmation before removing managed copies for ${ISSUE}`, async () => {
       setCodexSettings({ binaryPath: "/managed/codex-acp", binarySource: "managed" });
       const fixture = makeManager();
-      fixture.render();
+      await fixture.render();
       await act(async () => fireEvent.click(screen.getByRole("button", { name: "Uninstall" })));
       expect(mockConfirm).toHaveBeenCalledWith(expect.stringContaining("2.0 KB"));
       expect(fixture.manager.uninstall).not.toHaveBeenCalled();
@@ -237,7 +286,7 @@ describe("CodexInstallModal", () => {
       setCodexSettings({ binaryPath: "/managed/codex-acp", binarySource: "managed" });
       const fixture = makeManager();
       fixture.manager.uninstall.mockRejectedValue(new Error("permission denied"));
-      fixture.render();
+      await fixture.render();
       await act(async () => fireEvent.click(screen.getByRole("button", { name: "Uninstall" })));
       await act(async () => mockOnConfirm());
       expect(Notice).toHaveBeenCalledWith(
@@ -249,7 +298,7 @@ describe("CodexInstallModal", () => {
       setCodexSettings({ binaryPath: "/managed/codex-acp", binarySource: "managed" });
       const fixture = makeManager();
       fixture.manager.downloadsSize.mockRejectedValue(new Error("unreadable directory"));
-      fixture.render();
+      await fixture.render();
       await act(async () => fireEvent.click(screen.getByRole("button", { name: "Uninstall" })));
       expect(mockConfirm).not.toHaveBeenCalled();
       expect(Notice).toHaveBeenCalledWith("Couldn't inspect Codex downloads: unreadable directory");

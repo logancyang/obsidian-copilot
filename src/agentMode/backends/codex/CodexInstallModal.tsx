@@ -54,6 +54,29 @@ export const CodexConfigContainer: React.FC<CodexConfigContainerProps> = ({ mana
     manager.getRuntimeState
   );
   const run = manager.getActionState();
+  const [hasDownloads, setHasDownloads] = React.useState(false);
+  React.useEffect(() => {
+    let current = true;
+    // Ignore obsolete download scans so completed operations control retained-file removal.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
+    void manager
+      .downloadsSize()
+      .then((bytes) => {
+        if (current) setHasDownloads(bytes > 0);
+      })
+      .catch(() => {});
+    return () => {
+      current = false;
+    };
+  }, [manager, runtime.kind]);
+  let destination = "Unavailable";
+  // An invalid managed destination must not prevent configuring a user-owned adapter.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
+  try {
+    destination = formatBinaryPathForDisplay(manager.getDataDir());
+  } catch {
+    /* Managed actions report their own error. */
+  }
 
   const install = (): void => {
     manager.install().catch((error: unknown) => {
@@ -128,7 +151,11 @@ export const CodexConfigContainer: React.FC<CodexConfigContainerProps> = ({ mana
       managed={{
         platform: `${process.platform}-${process.arch}`,
         version: CODEX_BUNDLE_VERSION,
-        destination: formatBinaryPathForDisplay(manager.getDataDir()),
+        destination,
+        // Retained files stay removable; only installs honor cancellation.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
+        hasDownloads: hasDownloads || activeSource === "managed",
+        canCancel: runtime.kind === "installing",
         run,
       }}
       customPath={configuredSource === "custom" ? binaryPath : ""}

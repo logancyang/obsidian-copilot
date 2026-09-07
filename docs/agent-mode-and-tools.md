@@ -67,6 +67,8 @@ For an existing or manually installed `@agentclientprotocol/codex-acp` adapter, 
 
 You can also choose **Sign in to Codex** on the Agent Chat status card. For terminal login, run your configured adapter with `cli login` using the same `CODEX_HOME` as Copilot.
 
+Switching to your own Codex binary keeps prior managed downloads. Open **Managed by Copilot → Uninstall** to remove those downloads without changing your custom selection. Cancel is available during downloads; configuration changes finish before another action can start.
+
 When the plugin's managed version changes, Agent Chat and Settings show the same **Update** action and shared progress or **Retry** state. The older `@zed-industries/codex-acp` package is not supported. Copilot uses the login stored by the bundled Codex CLI. Models added under **BYOK** do not join the Codex model list.
 
 For Windows-specific installation help, see [Windows setup for Agent Chat](agent-mode-windows-setup.md).
