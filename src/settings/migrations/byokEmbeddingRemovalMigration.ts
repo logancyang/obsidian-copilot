@@ -68,6 +68,8 @@ export function planByokEmbeddingRemoval(
     settings.configuredModels.some(
       (model) => removedIds.has(model.configuredModelId) && matchesWire(model)
     ) &&
+    // Keep a shared default: clearing it would discard a still-valid retained model selection.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/386
     !configuredModels.some(matchesWire)
   ) {
     patch.agentMode = {
