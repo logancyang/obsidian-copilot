@@ -9,7 +9,6 @@
 import type {
   CancelNotification,
   ContentBlock,
-  ModelInfo as AcpModelInfo,
   PermissionOption as AcpPermissionOption,
   Plan as AcpPlan,
   RequestPermissionRequest,
@@ -129,18 +128,6 @@ function configOptionFromAcp(opt: SessionConfigOption): BackendConfigOption {
 export function configOptionToAcp(opt: BackendConfigOption): SessionConfigOption {
   // SDK's SessionConfigOption shape mirrors our neutral shape; cast through.
   return opt as unknown as SessionConfigOption;
-}
-
-export function modelInfoFromAcp(model: AcpModelInfo): {
-  modelId: string;
-  name: string;
-  description?: string;
-} {
-  return {
-    modelId: model.modelId,
-    name: model.name,
-    description: model.description ?? undefined,
-  };
 }
 
 export function acpStateToBackendState(
