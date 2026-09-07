@@ -13,9 +13,8 @@ export default meta;
 
 export const Supported: StoryObj<AgentDefaultEffortSettingProps> = {
   args: {
-    value: null,
+    value: "low",
     options: [
-      { value: null, label: "Agent default" },
       { value: "low", label: "Low" },
       { value: "medium", label: "Medium" },
       { value: "high", label: "High" },
@@ -32,24 +31,4 @@ export const Unsupported: StoryObj<AgentDefaultEffortSettingProps> = {
     disabledLabel: "Not supported",
     onChange: () => undefined,
   },
-};
-
-export const EffortRequired: StoryObj<AgentDefaultEffortSettingProps> = {
-  args: {
-    value: null,
-    options: [
-      { value: "low", label: "Low" },
-      { value: "high", label: "High" },
-    ],
-    disabledLabel: "Effort options unavailable",
-    onChange: () => undefined,
-  },
-};
-
-export const ExplicitEffort: StoryObj<AgentDefaultEffortSettingProps> = {
-  args: { ...EffortRequired.args, value: "high" },
-};
-
-export const CatalogUnavailable: StoryObj<AgentDefaultEffortSettingProps> = {
-  args: { ...Unsupported.args, disabledLabel: "Effort options unavailable" },
 };

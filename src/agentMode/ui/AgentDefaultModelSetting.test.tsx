@@ -1,7 +1,7 @@
 import { AgentDefaultModelSetting } from "@/agentMode/ui/AgentDefaultModelSetting";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import type { BackendDescriptor, EnabledModelEntry } from "@/agentMode/session/types";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
 
 jest.mock("@/logger", () => ({ logInfo: jest.fn(), logWarn: jest.fn(), logError: jest.fn() }));
@@ -52,74 +52,7 @@ function getSettingSelect(title: string): HTMLSelectElement {
 }
 
 describe("AgentDefaultModelSetting", () => {
-  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/219 saves an explicit-effort backend only after the user chooses both model and effort", async () => {
-    const persist = jest.fn().mockResolvedValue(undefined);
-    const descriptor = { ...makeDescriptor(), requiresExplicitEffort: true };
-    const manager = makeManager({
-      defaultSelection: { baseModelId: "opus", effort: "high" },
-      effortByModel: {
-        sonnet: [
-          { value: "low", label: "Low" },
-          { value: "high", label: "High" },
-        ],
-      },
-      persist,
-    });
-    render(<AgentDefaultModelSetting descriptor={descriptor} manager={manager} />);
-    fireEvent.change(getSettingSelect("Default model"), { target: { value: "sonnet" } });
-    expect(persist).not.toHaveBeenCalled();
-    expect(getSettingSelect("Default model").value).toBe("sonnet");
-    expect(getSettingSelect("Default effort").value).toBe("");
-    expect(screen.getByText("Choose an effort to save this model.")).not.toBeNull();
-    expect(Array.from(getSettingSelect("Default effort").options).map((o) => o.text)).toEqual([
-      "Choose effort",
-      "Low",
-      "High",
-    ]);
-    fireEvent.change(getSettingSelect("Default effort"), { target: { value: "high" } });
-    await waitFor(() =>
-      expect(persist).toHaveBeenCalledWith("opencode", { baseModelId: "sonnet", effort: "high" })
-    );
-  });
-
-  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/219 lets the user clear an unfinished explicit-effort choice", () => {
-    const persist = jest.fn().mockResolvedValue(undefined);
-    const manager = makeManager({ persist });
-    render(
-      <AgentDefaultModelSetting
-        descriptor={{ ...makeDescriptor(), requiresExplicitEffort: true }}
-        manager={manager}
-      />
-    );
-    fireEvent.change(getSettingSelect("Default model"), { target: { value: "sonnet" } });
-    expect(getSettingSelect("Default effort").disabled).toBe(true);
-    expect(screen.getByDisplayValue("Effort options unavailable")).not.toBeNull();
-    expect(persist).not.toHaveBeenCalled();
-    fireEvent.change(getSettingSelect("Default model"), { target: { value: "__agent_default__" } });
-    expect(persist).toHaveBeenCalledWith("opencode", null);
-  });
-
-  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/219 lets a saved model without effort be repaired explicitly", async () => {
-    const persist = jest.fn().mockResolvedValue(undefined);
-    const manager = makeManager({
-      defaultSelection: { baseModelId: "opus", effort: null },
-      effortByModel: { opus: [{ value: "high", label: "High" }] },
-      persist,
-    });
-    render(
-      <AgentDefaultModelSetting
-        descriptor={{ ...makeDescriptor(), requiresExplicitEffort: true }}
-        manager={manager}
-      />
-    );
-    expect(getSettingSelect("Default effort").value).toBe("");
-    fireEvent.change(getSettingSelect("Default effort"), { target: { value: "high" } });
-    await waitFor(() =>
-      expect(persist).toHaveBeenCalledWith("opencode", { baseModelId: "opus", effort: "high" })
-    );
-  });
-
-  it("persists a model-only change with agent-default effort, not the first option", () => {
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/219 saves the lowest supported effort when the previous effort is unavailable", () => {
     const persist = jest.fn().mockResolvedValue(undefined);
     const manager = makeManager({
       defaultSelection: { baseModelId: "opus", effort: "high" },
@@ -138,11 +71,8 @@ describe("AgentDefaultModelSetting", () => {
     render(<AgentDefaultModelSetting descriptor={makeDescriptor()} manager={manager} />);
 
     const modelSelect = screen.getByDisplayValue("Opus");
-    // Switching the model alone carries no effort choice, so effort resets to
-    // the agent default (null) rather than silently adopting the new model's
-    // first concrete effort or carrying over the stale "high".
     fireEvent.change(modelSelect, { target: { value: "sonnet" } });
-    expect(persist).toHaveBeenCalledWith("opencode", { baseModelId: "sonnet", effort: null });
+    expect(persist).toHaveBeenCalledWith("opencode", { baseModelId: "sonnet", effort: "medium" });
   });
 
   it("resets effort to null when the new model has no effort options", () => {
@@ -239,14 +169,12 @@ describe("AgentDefaultModelSetting", () => {
     expect(persist).toHaveBeenCalledWith("opencode", null);
   });
 
-  it("shows 'Agent default' effort for a null-effort default over a concrete-only catalog", () => {
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/219 keeps a supported effort when changing the default model", () => {
     const persist = jest.fn().mockResolvedValue(undefined);
     const manager = makeManager({
-      // Stored model with effort explicitly unset (agent default).
-      defaultSelection: { baseModelId: "opus", effort: null },
-      // Catalog enumerates only concrete values, no null/unset option.
+      defaultSelection: { baseModelId: "opus", effort: "high" },
       effortByModel: {
-        opus: [
+        sonnet: [
           { value: "low", label: "Low" },
           { value: "high", label: "High" },
         ],
@@ -254,12 +182,7 @@ describe("AgentDefaultModelSetting", () => {
       persist,
     });
     render(<AgentDefaultModelSetting descriptor={makeDescriptor()} manager={manager} />);
-
-    // The effort select reflects the unset state, not the first concrete option.
-    const effortSelect = screen.getByDisplayValue("Agent default");
-    expect(effortSelect).not.toBeNull();
-    // Picking a concrete effort persists it against the same model.
-    fireEvent.change(effortSelect, { target: { value: "high" } });
-    expect(persist).toHaveBeenCalledWith("opencode", { baseModelId: "opus", effort: "high" });
+    fireEvent.change(getSettingSelect("Default model"), { target: { value: "sonnet" } });
+    expect(persist).toHaveBeenCalledWith("opencode", { baseModelId: "sonnet", effort: "high" });
   });
 });

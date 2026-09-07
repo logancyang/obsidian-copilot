@@ -576,13 +576,6 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
     const session = this.sessions.get(params.sessionId);
     if (!session) throw new Error(`Unknown session ${params.sessionId}`);
     session.model = params.modelId;
-    if (this.cachedModels && session.effort) {
-      const info = this.cachedModels.find((m) => m.value === params.modelId);
-      const levels = info?.supportedEffortLevels ?? [];
-      if (!levels.includes(session.effort)) {
-        session.effort = levels[0];
-      }
-    }
     if (session.active) {
       try {
         await session.active.setModel(params.modelId);
@@ -907,6 +900,9 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
     };
     const modelInfo = seedModel ? catalog.find((m) => m.value === seedModel) : undefined;
     const effortOpt = synthesizeEffortConfigOption(modelInfo, session?.effort);
+    // The picker and the next SDK query must use the same resolved effort.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/219
+    if (session && modelInfo) session.effort = effortOpt?.currentValue as EffortLevel | undefined;
     const configOptions: BackendConfigOption[] | null = effortOpt ? [effortOpt] : null;
     return translateBackendState({ models, modes, configOptions }, this.opts.descriptor);
   }

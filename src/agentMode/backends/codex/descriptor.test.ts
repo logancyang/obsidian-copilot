@@ -155,7 +155,7 @@ describe("descriptor", () => {
     describe("applySelection()", () => {
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/219 sends the bracketed wire id for the chosen effort", async () => {
         const applyModelWireId = jest.fn();
-        const session = { applyModelWireId } as unknown as AgentSession;
+        const session = { applyModelWireId, getState: () => null } as unknown as AgentSession;
 
         await CodexBackendDescriptor.applySelection(session, {
           baseModelId: "gpt-5.6-sol",
@@ -165,9 +165,9 @@ describe("descriptor", () => {
         expect(applyModelWireId).toHaveBeenCalledWith("gpt-5.6-sol[max]");
       });
 
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/219 rejects a model without explicit effort before sending a switch", async () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/219 preserves the missing-catalog error when no effort can be resolved", async () => {
         const applyModelWireId = jest.fn();
-        const session = { applyModelWireId } as unknown as AgentSession;
+        const session = { applyModelWireId, getState: () => null } as unknown as AgentSession;
         await expect(
           CodexBackendDescriptor.applySelection(session, {
             baseModelId: "gpt-5.6-sol",
@@ -176,6 +176,25 @@ describe("descriptor", () => {
         ).rejects.toThrow("Choose an explicit effort");
         expect(applyModelWireId).not.toHaveBeenCalled();
       });
+
+      it.each([null, "removed", "high"])(
+        "https://github.com/Brevilabs/obsidian-copilot-private/issues/219 resolves saved effort %p against the live model catalog",
+        async (effort) => {
+          const state = translateBackendState(
+            { models: ADVERTISED_CATALOG, modes: null, configOptions: null },
+            CodexBackendDescriptor
+          );
+          const applyModelWireId = jest.fn();
+          const session = { applyModelWireId, getState: () => state } as unknown as AgentSession;
+          await CodexBackendDescriptor.applySelection(session, {
+            baseModelId: "gpt-5.6-sol",
+            effort,
+          });
+          expect(applyModelWireId).toHaveBeenCalledWith(
+            `gpt-5.6-sol[${effort === "high" ? "high" : "low"}]`
+          );
+        }
+      );
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/219 retains and applies the only advertised effort", async () => {
         const state = translateBackendState(

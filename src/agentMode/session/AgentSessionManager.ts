@@ -1,3 +1,5 @@
+import type { BackendState } from "@/agentMode/session/types";
+import { resolveEffort } from "@/lib/model-effort";
 import { logError, logInfo, logWarn } from "@/logger";
 import type CopilotPlugin from "@/main";
 import { AgentChatUIState } from "@/agentMode/session/AgentChatUIState";
@@ -472,7 +474,9 @@ export class AgentSessionManager {
         if (session.getStatus() === "closed") return;
         const target = this.getDefaultSelection(backendId);
         if (!target) return;
-        return descriptor.applySelection(session, target);
+        return descriptor
+          .applySelection(session, target)
+          .then(() => this.repairDefaultEffort(backendId, session.getState()));
       })
       .catch((e) => logWarn(`[AgentMode] re-applying default model for ${backendId} failed`, e))
       .finally(() => {
@@ -504,6 +508,7 @@ export class AgentSessionManager {
       // An absent preference leaves the fan-out sub-session on the model its
       // own session/new reports; catalog ordering carries no default meaning.
       getDefaultSelection: (backendId) => this.getDefaultSelection(backendId),
+      onSelectionApplied: (backendId, state) => this.repairDefaultEffort(backendId, state),
       getDisplayName: (backendId) => this.resolveDescriptor(backendId).displayName,
       // DESIGN NOTE: fan-out sub-sessions intentionally run at the vault root,
       // not the originating session's project folder, and aren't handed the
@@ -1396,6 +1401,7 @@ export class AgentSessionManager {
             );
           }
         }
+        this.repairDefaultEffort(resolvedId, session.getState());
         // Only clear when nothing failed while this session was starting — a concurrent
         // create's failure must stay on the status surface.
         if (this.lastErrorSeq === errorSeqAtStart) {
@@ -2111,6 +2117,25 @@ export class AgentSessionManager {
     return backends?.[backendId]?.defaultModel ?? null;
   }
 
+  private repairDefaultEffort(backendId: BackendId, state: BackendState | null): void {
+    const saved = this.getDefaultSelection(backendId);
+    const model = state?.model;
+    if (!saved || model?.current.baseModelId !== saved.baseModelId) return;
+    const options = model.availableModels.find(
+      (entry) => entry.baseModelId === saved.baseModelId
+    )?.effortOptions;
+    const effort = resolveEffort(saved.effort, options);
+    // Repair the durable preference as well as the session so future chats do
+    // not repeatedly request a removed effort. Read the current saved value to
+    // preserve valid settings edits made during startup.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/219
+    if (effort !== saved.effort && effort === model.current.effort) {
+      void this.persistDefaultSelection(backendId, { ...saved, effort }).catch((err) =>
+        logWarn("Failed to save repaired agent effort", err)
+      );
+    }
+  }
+
   /** Persist a sticky model preference for `backendId`. Pass `null` to clear. */
   async persistDefaultSelection(
     backendId: BackendId,
@@ -2165,6 +2190,7 @@ export class AgentSessionManager {
       effort: patch.effort !== undefined ? patch.effort : current.effort,
     };
     await descriptor.applySelection(session, resolved);
+    this.repairDefaultEffort(session.backendId, session.getState());
   }
 
   /**

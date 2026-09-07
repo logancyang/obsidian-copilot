@@ -1,9 +1,11 @@
+import { resolveEffort } from "@/lib/model-effort";
 import { logWarn } from "@/logger";
 import { err2String } from "@/utils";
 import type {
   BackendDescriptor,
   BackendId,
   BackendProcess,
+  BackendState,
   ModelApplySpec,
   ModelSelection,
   PromptContent,
@@ -34,6 +36,8 @@ export interface FanoutHost {
   ): Promise<{ proc: BackendProcess; descriptor: BackendDescriptor }>;
   /** The user's previously-configured default model selection for `backendId`. */
   getDefaultSelection(backendId: BackendId): ModelSelection | null;
+  /** Persist a repaired default after the backend confirms the applied selection. */
+  onSelectionApplied?(backendId: BackendId, state: BackendState): void;
   /** Display label for `backendId`, used to label each agent's answer; falls back to the id. */
   getDisplayName(backendId: BackendId): string;
   /** Absolute vault working directory shared by all sub-sessions. */
@@ -277,10 +281,9 @@ export class FanoutOrchestrator {
         // round-trips concurrently. The model channel comes from the sub-session's
         // own `BackendState.model.apply` spec, so config-option backends (opencode
         // ≥ 1.15.13) route through the same RPC the visible session would.
-        const modelApply = opened.state.model?.apply ?? null;
         await Promise.all([
           this.applyReadOnlyMode(proc, descriptor, sessionId),
-          this.applyDefaultModel(proc, descriptor, backendId, sessionId, modelApply),
+          this.applyDefaultModel(proc, descriptor, backendId, sessionId, opened.state),
         ]);
 
         // If the race already won during setup, do NOT dispatch: the slot is
@@ -498,26 +501,46 @@ export class FanoutOrchestrator {
     descriptor: BackendDescriptor,
     backendId: BackendId,
     sessionId: SessionId,
-    modelApply: ModelApplySpec | null
+    state: BackendState
   ): Promise<void> {
-    const selection = this.host.getDefaultSelection(backendId);
-    if (!selection) return;
+    const requested = this.host.getDefaultSelection(backendId) ?? state.model?.current;
+    if (!requested) return;
+    const modelApply = state.model?.apply;
+    const selection = {
+      ...requested,
+      effort: resolveEffort(
+        requested.effort,
+        state.model?.availableModels.find((model) => model.baseModelId === requested.baseModelId)
+          ?.effortOptions
+      ),
+    };
     try {
       if (modelApply?.kind === "setConfigOption") {
-        await this.applyConfigOptionModel(proc, descriptor, sessionId, selection, modelApply);
+        const updated = await this.applyConfigOptionModel(
+          proc,
+          descriptor,
+          sessionId,
+          requested,
+          modelApply
+        );
+        this.host.onSelectionApplied?.(backendId, updated);
         return;
       }
-      await proc.setSessionModel({ sessionId, modelId: descriptor.wire.encode(selection) });
+      let updated = await proc.setSessionModel({
+        sessionId,
+        modelId: descriptor.wire.encode(selection),
+      });
       if (selection.effort !== null) {
         const effortConfig = descriptor.wire.effortConfigFor?.(selection.baseModelId);
         if (effortConfig) {
-          await proc.setSessionConfigOption({
+          updated = await proc.setSessionConfigOption({
             sessionId,
             configId: effortConfig.id,
             value: selection.effort,
           });
         }
       }
+      this.host.onSelectionApplied?.(backendId, updated);
     } catch (e) {
       logWarn(`[AgentMode] fan-out default model failed for ${backendId}`, e);
     }
@@ -535,7 +558,7 @@ export class FanoutOrchestrator {
     sessionId: SessionId,
     selection: ModelSelection,
     modelApply: Extract<ModelApplySpec, { kind: "setConfigOption" }>
-  ): Promise<void> {
+  ): Promise<BackendState> {
     const bareWire = descriptor.wire.encode({
       baseModelId: selection.baseModelId,
       effort: null,
@@ -545,17 +568,21 @@ export class FanoutOrchestrator {
       configId: modelApply.configId,
       value: bareWire,
     });
-    if (selection.effort === null) return;
+    const effort = resolveEffort(
+      selection.effort,
+      refreshed.model?.availableModels.find((model) => model.baseModelId === selection.baseModelId)
+        ?.effortOptions
+    );
     const refreshedApply = refreshed.model?.apply;
     const effortConfigId =
       refreshedApply?.kind === "setConfigOption"
         ? refreshedApply.effortConfigId
         : modelApply.effortConfigId;
-    if (!effortConfigId) return;
-    await proc.setSessionConfigOption({
+    if (!effortConfigId || effort === null) return refreshed;
+    return proc.setSessionConfigOption({
       sessionId,
       configId: effortConfigId,
-      value: selection.effort,
+      value: effort,
     });
   }
 }

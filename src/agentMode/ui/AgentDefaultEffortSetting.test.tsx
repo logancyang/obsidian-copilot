@@ -19,16 +19,6 @@ function renderSetting(props?: Partial<AgentDefaultEffortSettingProps>) {
 }
 
 describe("AgentDefaultEffortSetting", () => {
-  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/219 shows a disabled placeholder until an explicit effort is selected", () => {
-    const { onChange } = renderSetting({ options: [{ value: "high", label: "High" }] });
-    const select = screen.getByRole<HTMLSelectElement>("combobox");
-    expect(select.value).toBe("");
-    expect(select.options[0].disabled).toBe(true);
-    expect(screen.getByText("Choose an effort to save this model.")).not.toBeNull();
-    fireEvent.change(select, { target: { value: "high" } });
-    expect(onChange).toHaveBeenCalledWith("high");
-  });
-
   it("renders an unsupported effort state as a disabled select", () => {
     renderSetting();
 

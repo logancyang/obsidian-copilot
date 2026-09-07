@@ -1986,6 +1986,69 @@ describe("AgentSessionManager default-model settings subscription", () => {
     };
   }
 
+  it.each([
+    { effort: null, confirmed: "low", expected: "low" },
+    { effort: "removed", confirmed: "low", expected: "low" },
+    { effort: "high", confirmed: "high", expected: undefined },
+    { effort: "removed", confirmed: "high", expected: undefined },
+  ])(
+    "https://github.com/Brevilabs/obsidian-copilot-private/issues/219 repairs saved $effort only when the fallback is confirmed ($confirmed)",
+    async ({ effort, confirmed, expected }) => {
+      const settings = {
+        agentMode: {
+          activeBackend: "opencode",
+          backends: { opencode: { defaultModel: { baseModelId: "opus", effort } } },
+        },
+      };
+      (mockedGetSettings as jest.Mock).mockReturnValue(settings);
+      (mockedSetSettings as jest.Mock).mockClear();
+      const resolved = confirmed;
+      sessionCreateSpy.mockImplementationOnce((opts) => {
+        const session = makeMockSession({ internalId: opts.internalId, backendId: opts.backendId });
+        jest.spyOn(session, "getState").mockReturnValue({
+          model: {
+            current: { baseModelId: "opus", effort: resolved },
+            apply: { kind: "setModel" },
+            availableModels: [
+              {
+                baseModelId: "opus",
+                name: "Opus",
+                provider: null,
+                effortOptions: [
+                  { value: "high", label: "High" },
+                  { value: "low", label: "Low" },
+                ],
+              },
+            ],
+          },
+          mode: null,
+        });
+        return session;
+      });
+      const descriptor = makeApplySelectionDescriptor(jest.fn());
+      const mgr = new AgentSessionManager(
+        buildApp(),
+        buildPlugin() as unknown as ConstructorParameters<typeof AgentSessionManager>[1],
+        {
+          permissionPrompter: jest.fn(),
+          resolveDescriptor: () => descriptor,
+          modelPreloader: makeStubPreloader() as unknown as ConstructorParameters<
+            typeof AgentSessionManager
+          >[2]["modelPreloader"],
+        }
+      );
+      await mgr.createSession();
+      await flushApplyChain();
+      expect(readPersistedDefault(mockedSetSettings as jest.Mock, "opencode")).toEqual(
+        expected === undefined ? undefined : { baseModelId: "opus", effort: expected }
+      );
+      (mockedGetSettings as jest.Mock).mockReturnValue({
+        agentMode: { activeBackend: "opencode", backends: {} },
+      });
+      await mgr.shutdown();
+    }
+  );
+
   it("re-applies a changed default to a live session on that backend", async () => {
     const applySelectionMock = jest.fn(async () => {});
     const descriptor = makeApplySelectionDescriptor(applySelectionMock);

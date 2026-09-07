@@ -264,7 +264,7 @@ describe("translateBackendState", () => {
         ]);
       });
 
-      it("orders suffix-style variants ascending and keeps the bare default first", () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/219 orders concrete variants ascending without an agent-default choice", () => {
         const models: RawModelState = {
           currentModelId: "p/m",
           availableModels: [
@@ -278,7 +278,6 @@ describe("translateBackendState", () => {
           suffixDescriptor()
         );
         expect(findModelEntry(state.model, "p/m")?.effortOptions).toEqual([
-          { value: null, label: "default" },
           { value: "none", label: "none" },
           { value: "high", label: "high" },
         ]);
@@ -368,7 +367,7 @@ describe("translateBackendState", () => {
         const entry = state.model!.availableModels[0];
         expect(entry.baseModelId).toBe("openai/gpt-5");
         expect(entry.provider).toBe("openai");
-        expect(entry.effortOptions.map((o) => o.value)).toEqual([null, "low", "medium"]);
+        expect(entry.effortOptions.map((o) => o.value)).toEqual(["low", "medium"]);
         expect(state.model!.current.baseModelId).toBe(entry.baseModelId);
         expect(state.model!.current.effort).toBe("low");
       });
@@ -423,7 +422,7 @@ describe("translateBackendState", () => {
         const entries = state.model!.availableModels;
         const gpt = entries.find((e) => e.baseModelId === "openai/gpt-5")!;
         const sonnet = entries.find((e) => e.baseModelId === "anthropic/sonnet")!;
-        expect(gpt.effortOptions.map((o) => o.value)).toEqual([null, "medium"]);
+        expect(gpt.effortOptions.map((o) => o.value)).toEqual(["medium"]);
         expect(sonnet.effortOptions).toEqual([]);
       });
 

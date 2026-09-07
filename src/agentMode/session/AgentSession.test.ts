@@ -1,3 +1,4 @@
+import { resolveEffort } from "@/lib/model-effort";
 import { AI_SENDER, USER_SENDER } from "@/constants";
 import { ClaudeBackendDescriptor } from "@/agentMode/backends/claude/descriptor";
 import { waitFor } from "@testing-library/react";
@@ -2615,12 +2616,7 @@ describe("AgentSession.create (via start)", () => {
     });
   });
 
-  it("resets effort to native when seeding null effort over a stale concrete effort", async () => {
-    // Regression: a config-option opencode process baked `model/high`, the user
-    // cleared the default effort to agent default, and a fresh session reports
-    // the same base but the stale "high". applySelection skips the model write
-    // (base matches) and returns for null effort, so the chat would stay on
-    // "high". The bare model option must be re-written to reset effort.
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/219 applies the lowest effort when a saved preference omits effort", async () => {
     const mock = makeMockBackend();
     const entry = {
       baseModelId: "openai/gpt-5",
@@ -2650,21 +2646,18 @@ describe("AgentSession.create (via start)", () => {
       cwd: "/vault",
       internalId: "internal-1",
       backendId: "opencode",
-      // Cleared effort → agent default (null), same model as the stale report.
+      // Legacy unset effort must resolve to a concrete supported level.
       defaultModelSelection: { baseModelId: "openai/gpt-5", effort: null },
       getDescriptor: () => makeConfigOptionDescriptor(),
     });
     await session.ready;
 
-    // The bare model is re-written to reset effort; no effort value is sent.
     expect(mock.setSessionConfigOption).toHaveBeenCalledWith({
       sessionId: "acp-1",
-      configId: "model",
-      value: "openai/gpt-5",
+      configId: "thought_level",
+      value: "low",
     });
-    expect(mock.setSessionConfigOption).not.toHaveBeenCalledWith(
-      expect.objectContaining({ configId: "thought_level" })
-    );
+    expect(session.getState()?.model?.current.effort).toBe("low");
   });
 });
 
@@ -2720,11 +2713,18 @@ function makeConfigOptionDescriptor(): BackendDescriptor {
             wire.encode({ baseModelId: selection.baseModelId, effort: null })
           );
         }
-        if (selection.effort !== null) {
+        const effort = resolveEffort(
+          selection.effort,
+          session
+            .getState()
+            ?.model?.availableModels.find((model) => model.baseModelId === selection.baseModelId)
+            ?.effortOptions
+        );
+        if (effort !== null) {
           const refreshed = session.getState()?.model?.apply;
           const effortConfigId =
             refreshed?.kind === "setConfigOption" ? refreshed.effortConfigId : undefined;
-          if (effortConfigId) await session.setConfigOption(effortConfigId, selection.effort);
+          if (effortConfigId) await session.setConfigOption(effortConfigId, effort);
         }
         return;
       }

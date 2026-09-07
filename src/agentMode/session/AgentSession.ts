@@ -512,13 +512,12 @@ export class AgentSession {
       // Gate `ready` on the model confirmation round-trip so `sendPrompt`
       // can't fire on the probe's model before the user's persisted
       // selection is applied to the backend.
-      if (opts.defaultModelSelection && originalState) {
-        this.ready = this.confirmSeededSelection(opts.defaultModelSelection, originalState).finally(
-          () => {
-            this.startupSettled = true;
-            this.recomputeStatusIfChanged();
-          }
-        );
+      const selection = opts.defaultModelSelection ?? originalState?.model?.current;
+      if (selection && originalState) {
+        this.ready = this.confirmSeededSelection(selection, originalState).finally(() => {
+          this.startupSettled = true;
+          this.recomputeStatusIfChanged();
+        });
       } else {
         this.startupSettled = true;
         this.ready = Promise.resolve();
@@ -592,9 +591,8 @@ export class AgentSession {
       this.recomputeStatusIfChanged();
       this.notifyModelChanged();
 
-      if (defaultModelSelection) {
-        await this.confirmSeededSelection(defaultModelSelection, resp.state);
-      }
+      const selection = defaultModelSelection ?? resp.state.model?.current;
+      if (selection) await this.confirmSeededSelection(selection, resp.state);
       this.startupSettled = true;
       this.recomputeStatusIfChanged();
     } catch (err) {
@@ -678,25 +676,6 @@ export class AgentSession {
     const descriptor = this.getDescriptor?.();
     if (!descriptor) return;
     try {
-      // A saved selection may no longer satisfy the backend's addressing rules.
-      // Keep startup usable by reverting the seed when encoding rejects it.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/219
-      const encoded = descriptor.wire.encode(selection);
-      const originalEncoded = originalState.model
-        ? descriptor.wire.encode(originalState.model.current)
-        : null;
-      const originalEffort = originalState.model?.current.effort ?? null;
-      if (encoded === originalEncoded && selection.effort === originalEffort) return;
-      const configOptionBacked = originalState.model?.apply?.kind === "setConfigOption";
-      // Clearing effort to the agent default on a config-option backend whose
-      // process baked a concrete effort: the base already matches, so
-      // `applySelection` skips the model write and returns for null effort,
-      // leaving the session on the stale concrete effort. Re-write the bare
-      // model option to reset effort to the model's native default first.
-      if (configOptionBacked && selection.effort === null && originalEffort !== null) {
-        await this.applyModelWireId(descriptor.wire.encode(selection));
-        return;
-      }
       await descriptor.applySelection(this, selection, {
         backendReportedCurrent: originalState.model?.current ?? null,
       });

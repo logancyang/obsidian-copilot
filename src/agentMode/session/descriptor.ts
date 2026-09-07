@@ -277,8 +277,6 @@ export interface BackendDescriptor {
    * by the application layer.
    */
   readonly wire: ModelWireCodec;
-  /** Whether a saved model selection must include an explicit effort. */
-  readonly requiresExplicitEffort?: boolean;
 
   /**
    * Optional: normalize a backend-reported model display name before it
@@ -317,10 +315,8 @@ export interface BackendDescriptor {
    * backends: codex, opencode) or via a separate `setConfigOption` call
    * (descriptor-style: Claude SDK).
    *
-   * `effort: null` means "default" — descriptor-style backends typically
-   * no-op the effort dispatch on null (no "clear to default" config call
-   * exists); suffix-style backends encode the null and re-emit the bare
-   * model id.
+   * Resolve missing or invalid effort to the lowest supported level. Models
+   * without an effort control omit effort; null is not a selectable default.
    *
    * Implementations are expected to swallow `MethodUnsupportedError` from
    * the underlying `session.setConfigOption` call (the backend may simply

@@ -1,3 +1,4 @@
+import { resolveEffort } from "@/lib/model-effort";
 import { OpencodeInstallModal } from "@/agentMode/backends/opencode/OpencodeInstallModal";
 import { OpencodeAbsentInstallActions } from "@/agentMode/backends/opencode/OpencodeInlineInstall";
 import OpencodeLogo from "@/agentMode/backends/opencode/logo.svg";
@@ -201,24 +202,21 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
           opencodeWire.encode({ baseModelId: selection.baseModelId, effort: null })
         );
       }
-      if (selection.effort !== null) {
-        const refreshed = session.getState()?.model;
-        const refreshedApply = refreshed?.apply;
-        const effortConfigId =
-          refreshedApply?.kind === "setConfigOption" ? refreshedApply.effortConfigId : undefined;
-        // Only write a level the now-active model actually offers. A saved default can
-        // name a level the model has since stopped publishing, and the failed write
-        // takes the whole seeded selection down with it — the session reverts to the
-        // model it had before, not just to the default effort.
-        // https://github.com/logancyang/obsidian-copilot/issues/2917
-        const offered = findModelEntry(refreshed, selection.baseModelId)?.effortOptions;
-        if (effortConfigId && offered?.some((option) => option.value === selection.effort)) {
-          await session.setConfigOption(effortConfigId, selection.effort);
-        }
-      }
+      const refreshed = session.getState()?.model;
+      const refreshedApply = refreshed?.apply;
+      const effortConfigId =
+        refreshedApply?.kind === "setConfigOption" ? refreshedApply.effortConfigId : undefined;
+      const effort = resolveEffort(
+        selection.effort,
+        findModelEntry(refreshed, selection.baseModelId)?.effortOptions
+      );
+      if (effortConfigId && effort !== null) await session.setConfigOption(effortConfigId, effort);
       return;
     }
-    await session.applyModelWireId(opencodeWire.encode(selection));
+    const options = findModelEntry(session.getState()?.model, selection.baseModelId)?.effortOptions;
+    await session.applyModelWireId(
+      opencodeWire.encode({ ...selection, effort: resolveEffort(selection.effort, options) })
+    );
   },
 
   async prefetchEffortCatalog({

@@ -1,7 +1,8 @@
+import { resolveEffort } from "@/lib/model-effort";
 import { SettingItem } from "@/components/ui/setting-item";
 import { logError } from "@/logger";
 import { useSettingsValue } from "@/settings/model";
-import React, { useState, useSyncExternalStore } from "react";
+import React, { useSyncExternalStore } from "react";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import type { BackendDescriptor, EnabledModelEntry } from "@/agentMode/session/types";
 import { AgentDefaultEffortSetting } from "@/agentMode/ui/AgentDefaultEffortSetting";
@@ -43,7 +44,6 @@ export const AgentDefaultModelSetting: React.FC<Props> = ({ descriptor, manager 
     () => manager.getModelCacheSignature(descriptor.id)
   );
 
-  const [pendingModelId, setPendingModelId] = useState<string | null>(null);
   const settings = useSettingsValue();
   const enabled = descriptor.getEnabledModelEntries?.(settings) ?? null;
 
@@ -51,8 +51,7 @@ export const AgentDefaultModelSetting: React.FC<Props> = ({ descriptor, manager 
   // and fan-out (see `AgentSessionManager.createSession`). Represent that
   // explicitly with a sentinel rather than showing a real model as "selected"
   // (which would also let an effort-only change silently persist that model).
-  const saved = manager.getDefaultSelection(descriptor.id);
-  const current = pendingModelId === null ? saved : { baseModelId: pendingModelId, effort: null };
+  const current = manager.getDefaultSelection(descriptor.id);
   const hasExplicitDefault = current !== null;
 
   // Hide the control only when there's nothing to manage: no enabled models
@@ -69,41 +68,22 @@ export const AgentDefaultModelSetting: React.FC<Props> = ({ descriptor, manager 
   const rawEffortOptions = hasExplicitDefault
     ? resolveEffortOptions(manager, descriptor.id, selectedBaseId)
     : EMPTY_EFFORT_OPTIONS;
-  // A stored `effort: null` means "let the agent choose". Some catalogs (e.g.
-  // Claude's low/medium/high) only enumerate concrete values, so without an
-  // explicit unset option the select would render the first concrete effort as
-  // selected while the runtime still treats null as the agent default. Prepend
-  // an "Agent default" option (the null-valued convention) when the catalog
-  // doesn't already carry one.
-  const effortOptions =
-    !descriptor.requiresExplicitEffort &&
-    rawEffortOptions.length > 0 &&
-    !rawEffortOptions.some((o) => o.value === null)
-      ? [{ value: null, label: AGENT_DEFAULT_LABEL }, ...rawEffortOptions]
-      : rawEffortOptions;
+  const effortOptions = rawEffortOptions;
   const onModelChange = (baseModelId: string): void => {
     if (baseModelId === AGENT_DEFAULT_VALUE) {
-      setPendingModelId(null);
       manager
         .persistDefaultSelection(descriptor.id, null)
         .catch((e) => logError(`[AgentMode] clear default model for ${descriptor.id} failed`, e));
       return;
     }
-    // Codex cannot apply a bare model. Wait for an explicit effort before
-    // persisting a default that new chats and fan-out will try to apply.
+    // Keep a valid effort across model changes, otherwise select the lowest offered.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/219
-    if (descriptor.requiresExplicitEffort) {
-      setPendingModelId(baseModelId);
-      return;
-    }
-    // A model-only change carries no effort choice, so persist the agent
-    // default (null) rather than auto-selecting the new model's first concrete
-    // effort — that would silently run new chats and fan-out at an effort the
-    // user never picked. The user can then pick a concrete effort explicitly.
-    // Persisting null also drops any stale effort from the previous model
-    // (opencode's effort is model-specific).
+    const effort = resolveEffort(
+      current?.effort,
+      resolveEffortOptions(manager, descriptor.id, baseModelId)
+    );
     manager
-      .persistDefaultSelection(descriptor.id, { baseModelId, effort: null })
+      .persistDefaultSelection(descriptor.id, { baseModelId, effort })
       .catch((e) => logError(`[AgentMode] persist default model for ${descriptor.id} failed`, e));
   };
 
@@ -111,7 +91,6 @@ export const AgentDefaultModelSetting: React.FC<Props> = ({ descriptor, manager 
     if (!hasExplicitDefault) return;
     manager
       .persistDefaultSelection(descriptor.id, { baseModelId: selectedBaseId, effort })
-      .then(() => setPendingModelId(null))
       .catch((e) => logError(`[AgentMode] persist default effort for ${descriptor.id} failed`, e));
   };
 
@@ -145,13 +124,7 @@ export const AgentDefaultModelSetting: React.FC<Props> = ({ descriptor, manager 
       <AgentDefaultEffortSetting
         value={current?.effort ?? null}
         options={effortOptions}
-        disabledLabel={
-          hasExplicitDefault
-            ? descriptor.requiresExplicitEffort
-              ? "Effort options unavailable"
-              : EFFORT_NOT_SUPPORTED_LABEL
-            : AGENT_DEFAULT_LABEL
-        }
+        disabledLabel={hasExplicitDefault ? EFFORT_NOT_SUPPORTED_LABEL : AGENT_DEFAULT_LABEL}
         onChange={onEffortChange}
       />
     </>

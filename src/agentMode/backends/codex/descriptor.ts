@@ -1,3 +1,4 @@
+import { resolveEffort } from "@/lib/model-effort";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
 import type CopilotPlugin from "@/main";
 import { requireNodeModule } from "@/utils/desktopRuntime";
@@ -102,7 +103,6 @@ export const CodexBackendDescriptor: BackendDescriptor = {
   // context envelope), so the session derives the tab title client-side instead.
   summarizesSessionTitle: false,
   wire: codexWire,
-  requiresExplicitEffort: true,
   showModelDescriptions: true,
 
   getEnabledModelEntries(settings: CopilotSettings): EnabledModelEntry[] {
@@ -163,7 +163,14 @@ export const CodexBackendDescriptor: BackendDescriptor = {
   },
 
   async applySelection(session: AgentSession, selection: ModelSelection): Promise<void> {
-    await session.applyModelWireId(codexWire.encode(selection));
+    const options = session
+      .getState()
+      ?.model?.availableModels.find(
+        (model) => model.baseModelId === selection.baseModelId
+      )?.effortOptions;
+    await session.applyModelWireId(
+      codexWire.encode({ ...selection, effort: resolveEffort(selection.effort, options) })
+    );
   },
 
   createBackendProcess(args): BackendProcess {
