@@ -20,9 +20,8 @@ Codex now shows one entry per model, with a separate choice of the reasoning eff
 
 ## Enhancements
 
-- **Update your managed agents from Copilot.** Settings and Agent Chat share update progress and Retry, so you can start an update in one place and follow it in the other. ([#3116](https://github.com/logancyang/obsidian-copilot/pull/3116), @zeroliu)
 - **Browse all your projects in one place.** Search project names and descriptions inline, then keep scrolling to reach older projects. ([#3119](https://github.com/logancyang/obsidian-copilot/pull/3119), @logancyang)
-- **The Relevant Notes pane is always within reach.** The permanent **Open in separate pane** footer stays visible, even if you dismissed the old hint. ([#3130](https://github.com/logancyang/obsidian-copilot/pull/3130), @brevilabs-agent-bot[bot])
+- **Keep relevant notes visible while you chat.** The **Open in Separate Pane** button in Relevant Notes opens them in their own view, so you can keep them visible while chatting with the agent. ([#3130](https://github.com/logancyang/obsidian-copilot/pull/3130), @brevilabs-agent-bot[bot])
 
 ## Fixes
 
