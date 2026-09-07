@@ -103,6 +103,19 @@ describe("byokEmbeddingRemovalMigration", () => {
       expect(JSON.stringify(before)).toBe(snapshot);
       expect(planByokEmbeddingRemoval({ ...before, ...patch })).toBeNull();
     });
+    it("retains an orphan row without treating it as a routable default collision (https://github.com/Brevilabs/obsidian-copilot-private/issues/386)", () => {
+      const before = fixture();
+      const orphan = {
+        ...before.configuredModels[4],
+        configuredModelId: "orphan",
+        providerId: "missing",
+        info: { id: "openai/text-embedding-3-small", displayName: "Orphan" },
+      };
+      before.configuredModels.push(orphan);
+      const patch = planByokEmbeddingRemoval(before)!;
+      expect(patch.configuredModels).toContain(orphan);
+      expect(patch.agentMode?.backends?.opencode?.defaultModel).toBeNull();
+    });
     it("preserves a wire default shared with a surviving agent inventory (https://github.com/Brevilabs/obsidian-copilot-private/issues/386)", () => {
       const before = fixture();
       before.configuredModels[4] = {
