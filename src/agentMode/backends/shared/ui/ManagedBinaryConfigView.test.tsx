@@ -71,7 +71,7 @@ const renderView = (
 
 describe("ManagedBinaryConfigView", () => {
   describe("ManagedBinaryConfigView()", () => {
-    it("offers the two binary sources as one mutually exclusive choice", () => {
+    it("offers the two binary sources as one mutually exclusive choice (https://github.com/Brevilabs/obsidian-copilot-private/issues/368)", () => {
       renderView();
 
       const group = screen.getByRole("radiogroup", { name: "opencode binary source" });
@@ -81,7 +81,7 @@ describe("ManagedBinaryConfigView", () => {
       expect(options.map((o) => o.getAttribute("aria-checked"))).toEqual(["true", "false"]);
     });
 
-    it("reports a source switch upward without persisting or destroying anything", () => {
+    it("reports a source switch upward without persisting or destroying anything (https://github.com/Brevilabs/obsidian-copilot-private/issues/368)", () => {
       const { actions, onSourceChange } = renderView({
         state: { kind: "ready", source: "custom" },
         activeSource: "custom",
@@ -98,35 +98,35 @@ describe("ManagedBinaryConfigView", () => {
       expect(actions.upgrade).not.toHaveBeenCalled();
     });
 
-    it("names the active source only when it differs from the source being viewed", () => {
+    it("names the active source only when it differs from the source being viewed (https://github.com/Brevilabs/obsidian-copilot-private/issues/368)", () => {
       renderView({ source: "managed", activeSource: "custom" });
 
       expect(screen.getByText(IN_USE_CUSTOM)).toBeTruthy();
       expect(screen.queryByText(IN_USE_MANAGED)).toBeNull();
     });
 
-    it("names the managed binary when the custom path is being viewed instead", () => {
+    it("names the managed binary when the custom path is being viewed instead (https://github.com/Brevilabs/obsidian-copilot-private/issues/368)", () => {
       renderView({ source: "custom", activeSource: "managed" });
 
       expect(screen.getByText(IN_USE_MANAGED)).toBeTruthy();
       expect(screen.queryByText(IN_USE_CUSTOM)).toBeNull();
     });
 
-    it("omits the in-use note when the viewed source is the active one", () => {
+    it("omits the in-use note when the viewed source is the active one (https://github.com/Brevilabs/obsidian-copilot-private/issues/368)", () => {
       renderView({ source: "managed", activeSource: "managed" });
 
       expect(screen.queryByText(IN_USE_CUSTOM)).toBeNull();
       expect(screen.queryByText(IN_USE_MANAGED)).toBeNull();
     });
 
-    it("omits the in-use note when nothing is installed yet", () => {
+    it("omits the in-use note when nothing is installed yet (https://github.com/Brevilabs/obsidian-copilot-private/issues/368)", () => {
       renderView({ source: "custom", activeSource: null });
 
       expect(screen.queryByText(IN_USE_MANAGED)).toBeNull();
       expect(screen.queryByText(IN_USE_CUSTOM)).toBeNull();
     });
 
-    it("shows the download target and a single install action when nothing is managed yet", () => {
+    it("shows the download target and a single install action when nothing is managed yet (https://github.com/Brevilabs/obsidian-copilot-private/issues/368)", () => {
       const { actions } = renderView();
 
       expect(screen.getByText("darwin-arm64")).toBeTruthy();
@@ -138,7 +138,7 @@ describe("ManagedBinaryConfigView", () => {
       expect(actions.install).toHaveBeenCalledTimes(1);
     });
 
-    it("swaps the install action for Reinstall and Uninstall once the managed copy is in use", () => {
+    it("swaps the install action for Reinstall and Uninstall once the managed copy is in use (https://github.com/Brevilabs/obsidian-copilot-private/issues/368)", () => {
       const { actions } = renderView({
         state: { kind: "ready", source: "managed" },
         activeSource: "managed",
@@ -152,7 +152,7 @@ describe("ManagedBinaryConfigView", () => {
       expect(actions.uninstall).toHaveBeenCalledTimes(1);
     });
 
-    it("replaces the managed controls with progress and a Cancel while an install runs", () => {
+    it("replaces the managed controls with progress and a Cancel while an install runs (https://github.com/Brevilabs/obsidian-copilot-private/issues/368)", () => {
       const { actions } = renderView({
         managed: {
           ...MANAGED,
@@ -168,7 +168,7 @@ describe("ManagedBinaryConfigView", () => {
       expect(actions.cancelInstall).toHaveBeenCalledTimes(1);
     });
 
-    it("keeps the source choice disabled while a managed install is running", () => {
+    it("keeps the source choice disabled while a managed install is running (https://github.com/Brevilabs/obsidian-copilot-private/issues/368)", () => {
       const { onSourceChange } = renderView({
         managed: {
           ...MANAGED,
@@ -185,14 +185,14 @@ describe("ManagedBinaryConfigView", () => {
       expect(screen.getByRole("button", { name: "Cancel" })).toBeTruthy();
     });
 
-    it("surfaces a failed install without hiding the retry", () => {
+    it("surfaces a failed install without hiding the retry (https://github.com/Brevilabs/obsidian-copilot-private/issues/368)", () => {
       renderView({ managed: { ...MANAGED, run: { kind: "error", message: "tar exited with 1" } } });
 
       expect(screen.getByText("tar exited with 1")).toBeTruthy();
       expect(screen.getByRole("button", { name: "Download & install" })).toBeTruthy();
     });
 
-    it("renders the path field with Auto-detect and Apply when no custom path is set", async () => {
+    it("renders the path field with Auto-detect and Apply when no custom path is set (https://github.com/Brevilabs/obsidian-copilot-private/issues/368)", async () => {
       const { actions } = renderView({ source: "custom" });
 
       const input = screen.getByPlaceholderText<HTMLInputElement>("/absolute/path/to/opencode");
@@ -211,7 +211,7 @@ describe("ManagedBinaryConfigView", () => {
       expect(actions.detectCustomPath).toHaveBeenCalledTimes(1);
     });
 
-    it("offers Clear instead of Apply once a custom path is applied", async () => {
+    it("offers Clear instead of Apply once a custom path is applied (https://github.com/Brevilabs/obsidian-copilot-private/issues/368)", async () => {
       const { actions } = renderView({
         source: "custom",
         state: { kind: "ready", source: "custom" },
@@ -230,7 +230,7 @@ describe("ManagedBinaryConfigView", () => {
       expect(actions.clearCustomPath).toHaveBeenCalledTimes(1);
     });
 
-    it("surfaces the outdated message with an in-dialog upgrade for the managed binary", () => {
+    it("surfaces the outdated message with an in-dialog upgrade for the managed binary (https://github.com/Brevilabs/obsidian-copilot-private/issues/368)", () => {
       const { actions } = renderView({ state: OUTDATED, activeSource: "managed" });
 
       expect(screen.getByRole("alert").textContent).toContain("is not supported");
@@ -238,13 +238,13 @@ describe("ManagedBinaryConfigView", () => {
       expect(actions.upgrade).toHaveBeenCalledTimes(1);
     });
 
-    it("labels the upgrade as the custom binary's own command when that is the active source", () => {
+    it("labels the upgrade as the custom binary's own command when that is the active source (https://github.com/Brevilabs/obsidian-copilot-private/issues/368)", () => {
       renderView({ state: { ...OUTDATED, source: "custom" }, activeSource: "custom" });
 
       expect(screen.getByRole("button", { name: "Run opencode upgrade" })).toBeTruthy();
     });
 
-    it("replaces the upgrade button with its progress while the upgrade runs", () => {
+    it("replaces the upgrade button with its progress while the upgrade runs (https://github.com/Brevilabs/obsidian-copilot-private/issues/368)", () => {
       renderView({
         state: OUTDATED,
         activeSource: "managed",
@@ -255,7 +255,7 @@ describe("ManagedBinaryConfigView", () => {
       expect(screen.queryByRole("button", { name: "Upgrade to latest" })).toBeNull();
     });
 
-    it("keeps the upgrade button beside the reason it failed", () => {
+    it("keeps the upgrade button beside the reason it failed (https://github.com/Brevilabs/obsidian-copilot-private/issues/368)", () => {
       renderView({
         state: OUTDATED,
         activeSource: "managed",
@@ -266,7 +266,7 @@ describe("ManagedBinaryConfigView", () => {
       expect(screen.getByRole("button", { name: "Upgrade to latest" })).toBeTruthy();
     });
 
-    it("shows no warning strip while the install state is healthy", () => {
+    it("shows no warning strip while the install state is healthy (https://github.com/Brevilabs/obsidian-copilot-private/issues/368)", () => {
       renderView({ state: { kind: "ready", source: "managed" }, activeSource: "managed" });
 
       expect(screen.queryByRole("alert")).toBeNull();

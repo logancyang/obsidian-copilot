@@ -108,6 +108,8 @@ const ManagedBinaryInstall: React.FC<ManagedBinaryInstallProps> = ({
 }) => {
   const { run } = managed;
 
+  // Keep cancellation available while the shared installer owns the operation.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
   if (run.kind === "running") {
     return (
       <div className="tw-flex tw-flex-col tw-gap-2">
@@ -134,12 +136,16 @@ const ManagedBinaryInstall: React.FC<ManagedBinaryInstallProps> = ({
         <dt className="tw-text-muted">Destination</dt>
         <dd className="tw-break-all tw-font-mono tw-text-xs">{managed.destination}</dd>
       </dl>
+      {/* Failed downloads must leave their explanation beside the retry action.
+          https://github.com/Brevilabs/obsidian-copilot-private/issues/368 */}
       {run.kind === "error" && (
         <pre className="tw-my-0 tw-max-h-32 tw-overflow-auto tw-whitespace-pre-wrap tw-rounded tw-bg-secondary tw-p-2 tw-text-xs tw-text-error">
           {run.message}
         </pre>
       )}
       <div className="tw-flex tw-justify-end tw-gap-2">
+        {/* Only an active managed installation offers destructive removal.
+            https://github.com/Brevilabs/obsidian-copilot-private/issues/368 */}
         {installed ? (
           <>
             <Button variant="secondary" size="default" onClick={actions.install}>
@@ -189,6 +195,8 @@ export const ManagedBinaryConfigView: React.FC<ManagedBinaryConfigViewProps> = (
     warning={
       <ConfigWarningStrip
         state={state}
+        // Keep update progress and failures attached to the shared warning.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
         action={
           upgradeRun.kind === "running" ? (
             <>
@@ -219,8 +227,12 @@ export const ManagedBinaryConfigView: React.FC<ManagedBinaryConfigViewProps> = (
         options={SOURCE_OPTIONS}
         value={source}
         onChange={onSourceChange}
+        // Prevent path edits from competing with the running install.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
         disabled={managed.run.kind === "running"}
       />
+      {/* Switching setup paths must not change ownership until an action succeeds.
+          https://github.com/Brevilabs/obsidian-copilot-private/issues/368 */}
       {source === "managed" ? (
         <>
           <p className="tw-my-0 tw-text-sm tw-text-muted">{managedDescription}</p>
