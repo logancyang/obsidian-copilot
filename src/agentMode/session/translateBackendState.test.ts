@@ -347,7 +347,7 @@ describe("translateBackendState", () => {
         expect(findModelEntry(state.model, "gpt-x")?.name).toBe("GPT-x");
       });
 
-      it("prefers the base-model blurb from a model config option over a per-effort one", () => {
+      it("prefers the base-model blurb from a model config option over a per-effort one (https://github.com/Brevilabs/obsidian-copilot-private/issues/219)", () => {
         // codex publishes both channels: `models` carries a per-effort blurb on
         // every variant, the config option carries the base model's own.
         const models: RawModelState = {
@@ -382,7 +382,34 @@ describe("translateBackendState", () => {
         expect(findModelEntry(state.model, "oai/sol")?.description).toBe("Frontier model.");
       });
 
-      it("keeps the reported blurb for a model the config option doesn't list", () => {
+      it.each([true, false])(
+        "respects description visibility (%s) for a current model missing from the catalog (https://github.com/Brevilabs/obsidian-copilot-private/issues/219)",
+        (showModelDescriptions) => {
+          const models: RawModelState = {
+            currentModelId: "oai/sol/max",
+            availableModels: [],
+          };
+          const configOptions: BackendConfigOption[] = [
+            {
+              id: "model",
+              type: "select",
+              category: "model",
+              name: "Model",
+              currentValue: "oai/sol",
+              options: [{ value: "oai/sol", name: "Sol", description: "Frontier model." }],
+            },
+          ];
+          const state = translateBackendState(
+            { models, modes: null, configOptions },
+            suffixDescriptor({ showModelDescriptions })
+          );
+          const entry = findModelEntry(state.model, "oai/sol");
+          expect(entry).toBeDefined();
+          expect(entry?.description).toBe(showModelDescriptions ? "Frontier model." : undefined);
+        }
+      );
+
+      it("keeps the reported blurb for a model the config option doesn't list (https://github.com/Brevilabs/obsidian-copilot-private/issues/219)", () => {
         const models: RawModelState = {
           currentModelId: "m",
           availableModels: [{ modelId: "m", name: "M", description: "reported blurb" }],

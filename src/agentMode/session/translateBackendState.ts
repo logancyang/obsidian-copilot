@@ -74,7 +74,8 @@ function translateModel(
   // Newer opencode (≥ 1.15.13) dropped that field and advertises its catalog
   // only through a generic `category:"model"` select config option, switched
   // via `session/set_config_option` instead of `session/set_model`.
-  const fromConfig = inputs.models ? null : modelStateFromConfigOption(inputs.configOptions);
+  const configModel = modelStateFromConfigOption(inputs.configOptions);
+  const fromConfig = inputs.models ? null : configModel;
   const modelState = inputs.models ?? fromConfig?.state ?? null;
   if (!modelState) return null;
   // Dedicated catalogs describe effort variants; the model option describes
@@ -163,6 +164,11 @@ function translateModel(
     currentEntry = {
       baseModelId: currentBaseId,
       name: normalizeName(currentBaseId, descriptor),
+      // A stale catalog must not hide the active model's available description.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/219
+      description: descriptor.showModelDescriptions
+        ? baseDescriptions.get(currentBaseId)
+        : undefined,
       provider: decodedCurrent.provider,
       effortOptions: synthEffortOptions,
     };

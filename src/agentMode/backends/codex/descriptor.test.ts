@@ -18,7 +18,11 @@ const mockedResolveCodexAcpBinary = jest.mocked(resolveCodexAcpBinary);
 const mockedIsSupportedCodexAcpPath = jest.mocked(isSupportedCodexAcpPath);
 import type { AgentSession } from "@/agentMode/session/AgentSession";
 import { translateBackendState } from "@/agentMode/session/translateBackendState";
-import type { BackendConfigOption, PermissionOption, RawModelState } from "@/agentMode/session/types";
+import type {
+  BackendConfigOption,
+  PermissionOption,
+  RawModelState,
+} from "@/agentMode/session/types";
 
 /**
  * Transcribed from a live `codex-acp@1.1.10` `session/new` reply: one entry per
@@ -161,14 +165,13 @@ describe("descriptor", () => {
         expect(efforts("gpt-5.5")).toEqual(["low", "medium", "high", "xhigh"]);
       });
 
-      it("describes a collapsed row with the base model's blurb, not the first variant's", () => {
+      it("describes a collapsed row with the base model's blurb, not the first variant's (https://github.com/Brevilabs/obsidian-copilot-private/issues/219)", () => {
         const state = translateBackendState(
           { models: ADVERTISED_CATALOG, modes: null, configOptions: ADVERTISED_CONFIG_OPTIONS },
           CodexBackendDescriptor
         );
 
-        // Without the config option the row would inherit `[low]`'s blurb —
-        // "Fast responses with lighter reasoning" on a row spanning low→ultra.
+        // The base description must not imply low effort for every variant.
         expect(
           state.model?.availableModels.find((e) => e.baseModelId === "gpt-5.6-sol")?.description
         ).toBe("Latest frontier agentic coding model.");
