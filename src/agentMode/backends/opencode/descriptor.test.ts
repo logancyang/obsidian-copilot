@@ -1,3 +1,4 @@
+import { FanoutOrchestrator } from "@/agentMode/session/fanout/FanoutOrchestrator";
 import { getOpencodeBinaryManager, OpencodeBackendDescriptor } from "./descriptor";
 import { legacyVaultDataDir } from "./OpencodeBinaryManager";
 import * as fs from "node:fs";
@@ -132,6 +133,63 @@ describe("descriptor", () => {
           provider: null,
         });
         expect(OpencodeBackendDescriptor.wire.encode(decoded.selection)).toBe(wireId);
+      });
+    });
+
+    describe("wire.normalizeSelection()", () => {
+      it("restores a saved literal model in standalone fan-out before sending the prompt (https://github.com/Brevilabs/obsidian-copilot-private/issues/219)", async () => {
+        const state: BackendState = {
+          mode: null,
+          model: {
+            current: { baseModelId: "opencode/default", effort: null },
+            availableModels: [
+              {
+                baseModelId: "anthropic/vendor/high",
+                name: "Vendor",
+                provider: null,
+                effortOptions: [],
+              },
+            ],
+            apply: { kind: "setConfigOption", configId: "model", effortConfigId: "thought_level" },
+          },
+        };
+        const setSessionConfigOption = jest.fn(async () => state);
+        const prompt = jest.fn(async () => ({ stopReason: "end_turn" }));
+        const proc = {
+          newSession: async () => ({ sessionId: "fanout-literal", state }),
+          registerSessionHandler: () => () => {},
+          setSessionConfigOption,
+          prompt,
+          closeSession: async () => {},
+        } as unknown as BackendProcess;
+        const orchestrator = new FanoutOrchestrator({
+          ensureBackendForFanout: async () => ({ proc, descriptor: OpencodeBackendDescriptor }),
+          getDefaultSelection: () => ({ baseModelId: "anthropic/vendor", effort: "high" }),
+          getDisplayName: () => "OpenCode",
+          getCwd: () => "/vault",
+          registerReadOnlySession: () => () => {},
+          excludeSubSessionFromHistory: () => {},
+        });
+        await orchestrator.run({
+          agents: ["opencode"],
+          mainAgent: "opencode",
+          prompt: [],
+          originalPromptText: "test",
+          signal: new AbortController().signal,
+          onChange: () => {},
+        });
+        expect(setSessionConfigOption).toHaveBeenCalledWith({
+          sessionId: "fanout-literal",
+          configId: "model",
+          value: "anthropic/vendor/high",
+        });
+        expect(setSessionConfigOption).not.toHaveBeenCalledWith(
+          expect.objectContaining({ configId: "thought_level" })
+        );
+        expect(prompt).toHaveBeenCalled();
+        expect(setSessionConfigOption.mock.invocationCallOrder[0]).toBeLessThan(
+          prompt.mock.invocationCallOrder[0]
+        );
       });
     });
 

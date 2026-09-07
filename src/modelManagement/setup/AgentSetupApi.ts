@@ -54,6 +54,8 @@ export interface RegisterAgentProviderInput {
 }
 
 export interface SyncAgentModelsInput {
+  /** Catalog-confirmed current ID to historical ID mappings, used to retain curated rows. */
+  legacyModelIds?: ReadonlyMap<string, string>;
   agentType: AgentType;
   wireModelIds: readonly string[];
   /** See `RegisterAgentProviderInput.fallbackDisplayNames`. */
@@ -206,7 +208,7 @@ export class AgentSetupApi {
         input.agentType,
         provider.providerId,
         infos,
-        { autoEnrollModelIds: ENROLL_NONE }
+        { autoEnrollModelIds: ENROLL_NONE, legacyModelIds: input.legacyModelIds }
       );
       return {
         added: added.map((a) => a.configuredModelId),
@@ -223,7 +225,13 @@ export class AgentSetupApi {
     for (const provider of providers) {
       const ownedWireIds: string[] = [];
       for (const wireId of wireIdSet) {
-        if (this.#models.getByWireId(provider.providerId, wireId)) {
+        const legacyId = input.legacyModelIds?.get(wireId);
+        // A renamed model still belongs to its original agent provider.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/219
+        if (
+          this.#models.getByWireId(provider.providerId, wireId) ||
+          (legacyId && this.#models.getByWireId(provider.providerId, legacyId))
+        ) {
           ownedWireIds.push(wireId);
         }
       }
@@ -240,7 +248,7 @@ export class AgentSetupApi {
         input.agentType,
         provider.providerId,
         infos,
-        { autoEnrollModelIds: ENROLL_NONE }
+        { autoEnrollModelIds: ENROLL_NONE, legacyModelIds: input.legacyModelIds }
       );
       for (const a of added) addedAll.push(a.configuredModelId);
       for (const r of removed) removedAll.push(r.configuredModelId);
@@ -417,7 +425,7 @@ export class AgentSetupApi {
     agentType: AgentType,
     providerId: string,
     infos: readonly ModelInfo[],
-    opts: { autoEnrollModelIds?: readonly string[] }
+    opts: { autoEnrollModelIds?: readonly string[]; legacyModelIds?: ReadonlyMap<string, string> }
   ): Promise<{
     added: Array<{ wireId: string; configuredModelId: string }>;
     removed: Array<{ wireId: string; configuredModelId: string }>;
@@ -427,15 +435,35 @@ export class AgentSetupApi {
     const desiredWireIds = new Set(infos.map((info) => info.id));
     const autoEnrollFilter = opts.autoEnrollModelIds ? new Set(opts.autoEnrollModelIds) : null;
 
+    const migratedIds = new Set<string>();
+    const enabledIds = opts.legacyModelIds
+      ? new Set(this.#backends.get(agentType).enabledModels)
+      : null;
     const added: Array<{ wireId: string; configuredModelId: string }> = [];
     for (const info of infos) {
-      const current = existingByWireId.get(info.id);
+      const legacyId = opts.legacyModelIds?.get(info.id);
+      const legacy =
+        legacyId && !desiredWireIds.has(legacyId) ? existingByWireId.get(legacyId) : undefined;
+      // A historical grouped row can represent several literal IDs. Keep its
+      // identity for one and retain its toggle for the others through normal
+      // enrollment. A real catalog base is never treated as a legacy alias.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/219
+      const current =
+        existingByWireId.get(info.id) ??
+        (legacy && !migratedIds.has(legacy.configuredModelId) ? legacy : undefined);
+      const inheritEnabled = legacy && enabledIds?.has(legacy.configuredModelId);
+      if (current && legacy) {
+        if (current === legacy) migratedIds.add(legacy.configuredModelId);
+        if (inheritEnabled && current !== legacy) {
+          await this.#backends.enableModel(agentType, current.configuredModelId);
+        }
+      }
       if (!current) {
         const configuredModelId = await this.#models.add({ providerId, info });
         // Enroll into this agent's backend only — agent models never leak into
         // chat or another agent's picker. A wire id outside `autoEnrollFilter`
         // (when set) ships available-but-off.
-        if (!autoEnrollFilter || autoEnrollFilter.has(info.id)) {
+        if (!autoEnrollFilter || autoEnrollFilter.has(info.id) || inheritEnabled) {
           await this.#backends.enableModel(agentType, configuredModelId);
         }
         added.push({ wireId: info.id, configuredModelId });
@@ -444,18 +472,19 @@ export class AgentSetupApi {
       // Refresh display strings in place when they drifted, without touching the
       // configuredModelId (so `BackendConfig.enabledModels` refs don't churn).
       if (
+        current.info.id !== info.id ||
         current.info.displayName !== info.displayName ||
         current.info.description !== info.description
       ) {
         await this.#models.update(current.configuredModelId, {
-          info: { displayName: info.displayName, description: info.description },
+          info: { id: info.id, displayName: info.displayName, description: info.description },
         });
       }
     }
 
     const removed: Array<{ wireId: string; configuredModelId: string }> = [];
     for (const model of existing) {
-      if (desiredWireIds.has(model.info.id)) continue;
+      if (desiredWireIds.has(model.info.id) || migratedIds.has(model.configuredModelId)) continue;
       await this.#coordinator.removeConfiguredModel(model.configuredModelId);
       removed.push({ wireId: model.info.id, configuredModelId: model.configuredModelId });
     }

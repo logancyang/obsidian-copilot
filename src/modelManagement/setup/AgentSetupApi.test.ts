@@ -131,6 +131,10 @@ class FakeBackendConfigRegistry {
     }
   });
 
+  get(backend: BackendType) {
+    return { enabledModels: this.enabledFor(backend) };
+  }
+
   enabledFor(backend: BackendType): string[] {
     return this.enabled.get(backend) ?? [];
   }
@@ -575,6 +579,102 @@ describe("AgentSetupApi", () => {
     // ---------------------------------------------------------------------------
 
     describe("syncAgentModels()", () => {
+      it("retains legacy model ownership across multiple agent providers (https://github.com/Brevilabs/obsidian-copilot-private/issues/219)", async () => {
+        const h = makeHarness([CLAUDE_CATALOG, GOOGLE_CATALOG]);
+        const first = await h.api.registerAgentProvider({
+          agentType: "opencode",
+          providerType: "anthropic",
+          displayName: "Anthropic",
+          wireModelIds: ["anthropic/vendor"],
+        });
+        const second = await h.api.registerAgentProvider({
+          agentType: "opencode",
+          providerType: "google",
+          displayName: "Google",
+          wireModelIds: ["google/vendor"],
+        });
+        await h.api.syncAgentModels({
+          agentType: "opencode",
+          wireModelIds: ["anthropic/vendor/high", "google/vendor/low"],
+          legacyModelIds: new Map([
+            ["anthropic/vendor/high", "anthropic/vendor"],
+            ["google/vendor/low", "google/vendor"],
+          ]),
+        });
+        expect(h.models.get(first.configuredModelIds[0])?.info.id).toBe("anthropic/vendor/high");
+        expect(h.models.get(second.configuredModelIds[0])?.info.id).toBe("google/vendor/low");
+        expect(h.backends.enabledFor("opencode")).toEqual([
+          ...first.configuredModelIds,
+          ...second.configuredModelIds,
+        ]);
+      });
+
+      it("transfers an enabled legacy reference to an already-discovered literal row without duplicating it (https://github.com/Brevilabs/obsidian-copilot-private/issues/219)", async () => {
+        const h = makeHarness();
+        const registered = await h.api.registerAgentProvider({
+          agentType: "opencode",
+          providerType: "anthropic",
+          displayName: "OpenCode",
+          wireModelIds: ["anthropic/vendor", "anthropic/vendor/high"],
+          autoEnrollModelIds: ["anthropic/vendor"],
+        });
+        await h.api.syncAgentModels({
+          agentType: "opencode",
+          wireModelIds: ["anthropic/vendor/high"],
+          legacyModelIds: new Map([["anthropic/vendor/high", "anthropic/vendor"]]),
+        });
+        expect(
+          h.models.listByProvider(registered.providerId).map((row) => row.configuredModelId)
+        ).toEqual([registered.configuredModelIds[1]]);
+        expect(h.backends.enabledFor("opencode")).toEqual([registered.configuredModelIds[1]]);
+      });
+
+      it.each([true, false])(
+        "retains a grouped model's enabled=%s state and configured ID across literal suffix expansion (https://github.com/Brevilabs/obsidian-copilot-private/issues/219)",
+        async (enabled) => {
+          const h = makeHarness();
+          const registered = await h.api.registerAgentProvider({
+            agentType: "opencode",
+            providerType: "anthropic",
+            displayName: "OpenCode",
+            wireModelIds: ["anthropic/vendor"],
+            autoEnrollModelIds: enabled ? ["anthropic/vendor"] : [],
+          });
+          const oldId = registered.configuredModelIds[0];
+          const wireModelIds = ["anthropic/vendor/high", "anthropic/vendor/low"];
+          await h.api.syncAgentModels({
+            agentType: "opencode",
+            wireModelIds,
+            legacyModelIds: new Map(wireModelIds.map((id) => [id, "anthropic/vendor"])),
+          });
+          const rows = h.models.listByProvider(registered.providerId);
+          expect(rows.map((row) => row.info.id)).toEqual(wireModelIds);
+          expect(rows[0].configuredModelId).toBe(oldId);
+          expect(h.backends.enabledFor("opencode")).toEqual(
+            enabled ? rows.map((row) => row.configuredModelId) : []
+          );
+          await h.api.syncAgentModels({ agentType: "opencode", wireModelIds });
+          expect(h.models.listByProvider(registered.providerId)).toEqual(rows);
+        }
+      );
+
+      it("keeps a real base's identity when literal suffix models coexist (https://github.com/Brevilabs/obsidian-copilot-private/issues/219)", async () => {
+        const h = makeHarness();
+        const registered = await h.api.registerAgentProvider({
+          agentType: "opencode",
+          providerType: "anthropic",
+          displayName: "OpenCode",
+          wireModelIds: ["anthropic/vendor"],
+        });
+        await h.api.syncAgentModels({
+          agentType: "opencode",
+          wireModelIds: ["anthropic/vendor", "anthropic/vendor/high"],
+          legacyModelIds: new Map([["anthropic/vendor/high", "anthropic/vendor"]]),
+        });
+        expect(h.models.get(registered.configuredModelIds[0])?.info.id).toBe("anthropic/vendor");
+        expect(h.backends.enabledFor("opencode")).toEqual(registered.configuredModelIds);
+      });
+
       it("no-ops when no agent provider exists for the agentType", async () => {
         const h = makeHarness();
         const result = await h.api.syncAgentModels({

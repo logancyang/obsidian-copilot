@@ -15,11 +15,13 @@
  * derived from the wire-id prefix.
  */
 
+import { getSettings, updateAgentModeBackendFields } from "@/settings/model";
 import { logError, logInfo } from "@/logger";
 import type CopilotPlugin from "@/main";
 import type { AgentType, ModelManagementApi, Provider, ProviderType } from "@/modelManagement";
 import {
   listBackendDescriptors,
+  legacyOpencodeModelIds,
   mapProviderToOpencodeId,
   partitionOpencodeOnlyWireIds,
   type AgentSessionManager,
@@ -66,6 +68,16 @@ export function wireAgentModelDiscovery(
     const catalog = manager.getCachedModelCatalog(descriptor.id);
     const reported = reportedModels(catalog);
     if (reported === null) return; // No catalog yet — the probe hasn't settled.
+    const saved = getSettings().agentMode?.backends?.opencode?.defaultModel;
+    // Repair the durable preference before asynchronous enrollment or fan-out can
+    // consume a catalog whose literal model IDs no longer match it.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/219
+    if (descriptor.id === "opencode" && saved && catalog?.availableModels) {
+      const normalized = descriptor.wire.normalizeSelection?.(saved, catalog.availableModels);
+      if (normalized && normalized !== saved) {
+        updateAgentModeBackendFields("opencode", { defaultModel: normalized });
+      }
+    }
 
     // Include the display strings in the signature so a CLI upgrade that
     // renames a model (or rewrites its blurb) re-syncs the persisted info.
@@ -163,6 +175,8 @@ async function enrollBackend(
     await api.setup.agent.syncAgentModels({
       agentType,
       wireModelIds,
+      legacyModelIds:
+        descriptor.id === "opencode" ? legacyOpencodeModelIds(wireModelIds) : undefined,
       fallbackDisplayNames,
       fallbackDescriptions,
     });

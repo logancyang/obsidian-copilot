@@ -248,7 +248,7 @@ export interface ModelState {
  * For descriptor-style backends (Claude SDK), effort lives outside the
  * wire id and `effortConfigFor` exposes the `BackendConfigOption`
  * dispatched via `setSessionConfigOption`. For suffix-style backends
- * (codex, opencode), effort is encoded into the wire id and
+ * (codex), effort is encoded into the wire id and
  * `effortConfigFor` is omitted.
  */
 export interface ModelWireCodec {
@@ -258,6 +258,16 @@ export interface ModelWireCodec {
    * is the bare `baseModelId`).
    */
   encode(selection: ModelSelection): string;
+
+  /**
+   * Restore a persisted selection whose wire representation changed.
+   * @param selection - Saved preference, possibly captured before discovery completed.
+   * @param availableModels - Current catalog that proves a legacy ID's replacement.
+   */
+  normalizeSelection?(
+    selection: ModelSelection,
+    availableModels: readonly ModelEntry[]
+  ): ModelSelection;
 
   /**
    * Decode a wire-form id into a normalized selection plus the Copilot

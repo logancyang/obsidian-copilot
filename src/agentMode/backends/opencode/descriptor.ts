@@ -20,6 +20,7 @@ import {
   toOpencodeInstallState,
 } from "./OpencodeBinaryManager";
 import { opencodeEnabledModelEntries, opencodeWireBaseIdFor } from "./opencodeModelResolve";
+import { normalizeOpencodeSelection } from "./opencodeModelMigration";
 import { OpencodeSettingsPanel } from "./OpencodeSettingsPanel";
 import { mapNodeArch, mapNodePlatform } from "./platformResolver";
 import { cacheRoot } from "@/context/conversionsLocation";
@@ -61,6 +62,7 @@ let managerRef: OpencodeBinaryManager | null = null;
  * whole — no trailing segment is an effort, and none is guessed.
  */
 const opencodeWire: ModelWireCodec = {
+  normalizeSelection: normalizeOpencodeSelection,
   encode: (selection: ModelSelection) => selection.baseModelId,
   decode: (wireId: string) => {
     if (!wireId) return { selection: { baseModelId: wireId, effort: null }, provider: null };
@@ -169,16 +171,7 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
 
   async applySelection(session: AgentSession, selection: ModelSelection, context): Promise<void> {
     const model = session.getState()?.model;
-    // Native discovery could persist a literal trailing segment as effort. Restore
-    // that model only when the catalog rules out the saved base, so a real effort
-    // preference cannot redirect the user to a different model.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/219
-    if (selection.effort && !findModelEntry(model ?? null, selection.baseModelId)) {
-      const literalId = `${selection.baseModelId}/${selection.effort}`;
-      if (findModelEntry(model ?? null, literalId)) {
-        selection = { baseModelId: literalId, effort: null };
-      }
-    }
+    if (model) selection = normalizeOpencodeSelection(selection, model.availableModels);
     const apply = model?.apply;
     // A config-option catalog takes bare model ids only. Effort travels through
     // its own option when the model publishes one and is dropped otherwise; a

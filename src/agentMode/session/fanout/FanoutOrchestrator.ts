@@ -6,6 +6,7 @@ import type {
   BackendProcess,
   ModelApplySpec,
   ModelSelection,
+  ModelState,
   PromptContent,
   SessionEvent,
   SessionId,
@@ -277,10 +278,9 @@ export class FanoutOrchestrator {
         // round-trips concurrently. The model channel comes from the sub-session's
         // own `BackendState.model.apply` spec, so config-option backends (opencode
         // ≥ 1.15.13) route through the same RPC the visible session would.
-        const modelApply = opened.state.model?.apply ?? null;
         await Promise.all([
           this.applyReadOnlyMode(proc, descriptor, sessionId),
-          this.applyDefaultModel(proc, descriptor, backendId, sessionId, modelApply),
+          this.applyDefaultModel(proc, descriptor, backendId, sessionId, opened.state.model),
         ]);
 
         // If the race already won during setup, do NOT dispatch: the slot is
@@ -498,10 +498,16 @@ export class FanoutOrchestrator {
     descriptor: BackendDescriptor,
     backendId: BackendId,
     sessionId: SessionId,
-    modelApply: ModelApplySpec | null
+    modelState: ModelState | null
   ): Promise<void> {
-    const selection = this.host.getDefaultSelection(backendId);
+    let selection = this.host.getDefaultSelection(backendId);
     if (!selection) return;
+    // Fan-out may start before discovery has rewritten a saved model ID.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/219
+    if (modelState && descriptor.wire.normalizeSelection) {
+      selection = descriptor.wire.normalizeSelection(selection, modelState.availableModels);
+    }
+    const modelApply = modelState?.apply;
     try {
       if (modelApply?.kind === "setConfigOption") {
         await this.applyConfigOptionModel(proc, descriptor, sessionId, selection, modelApply);

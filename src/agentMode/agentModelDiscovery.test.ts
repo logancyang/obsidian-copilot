@@ -1,3 +1,5 @@
+import { getSettings, updateAgentModeBackendFields, type CopilotSettings } from "@/settings/model";
+import { normalizeOpencodeSelection } from "@/agentMode/backends/opencode/opencodeModelMigration";
 /**
  * Tests for the M3 probe-settle discovery orchestrator.
  *
@@ -23,6 +25,11 @@ import { waitFor } from "@testing-library/react";
 
 let mockDescriptors: BackendDescriptor[] = [];
 
+jest.mock("@/settings/model", () => ({
+  getSettings: jest.fn(() => ({ agentMode: {} })),
+  updateAgentModeBackendFields: jest.fn(),
+}));
+
 jest.mock("@/logger", () => ({
   logInfo: jest.fn(),
   logWarn: jest.fn(),
@@ -31,6 +38,8 @@ jest.mock("@/logger", () => ({
 
 jest.mock("@/agentMode", () => ({
   listBackendDescriptors: () => mockDescriptors,
+  legacyOpencodeModelIds: jest.requireActual("@/agentMode/backends/opencode/opencodeModelMigration")
+    .legacyOpencodeModelIds,
   // Real-equivalent pure helpers.
   partitionOpencodeOnlyWireIds: (reported: string[], managed: Set<string>) =>
     reported.filter((w) => !managed.has(w.split("/")[0])),
@@ -181,6 +190,8 @@ async function waitForDiscoveryLog(message: string): Promise<void> {
 beforeEach(() => {
   mockDescriptors = [];
   mockedLogInfo.mockClear();
+  jest.mocked(getSettings).mockReturnValue({ agentMode: {} } as CopilotSettings);
+  jest.mocked(updateAgentModeBackendFields).mockClear();
 });
 
 // ---------------------------------------------------------------------------
@@ -189,6 +200,50 @@ beforeEach(() => {
 
 describe("agentModelDiscovery", () => {
   describe("wireAgentModelDiscovery()", () => {
+    it("repairs the saved default synchronously and passes legacy aliases before discovery can remove curated rows (https://github.com/Brevilabs/obsidian-copilot-private/issues/219)", async () => {
+      jest.mocked(getSettings).mockReturnValue({
+        agentMode: {
+          backends: {
+            opencode: {
+              defaultModel: { baseModelId: "anthropic/vendor", effort: "low" },
+            },
+          },
+        },
+      } as CopilotSettings);
+      mockDescriptors = [
+        makeDescriptor({
+          id: "opencode",
+          wire: { ...identityWire, normalizeSelection: normalizeOpencodeSelection },
+        }),
+      ];
+      const m = makeManagerFake();
+      const a = makeApiFake();
+      a.agentProviders.push({
+        providerId: "opencode-provider",
+        origin: { kind: "agent", agentType: "opencode" },
+      });
+      m.setCatalog(
+        "opencode",
+        catalogWithModels(["anthropic/vendor/high", "anthropic/vendor/low"])
+      );
+      const unsubscribe = wireAgentModelDiscovery(makePlugin(a.api), m.manager);
+      expect(updateAgentModeBackendFields).toHaveBeenCalledWith("opencode", {
+        defaultModel: { baseModelId: "anthropic/vendor/low", effort: null },
+      });
+      expect(a.syncAgentModels).not.toHaveBeenCalled();
+      await waitFor(() =>
+        expect(a.syncAgentModels).toHaveBeenCalledWith(
+          expect.objectContaining({
+            legacyModelIds: new Map([
+              ["anthropic/vendor/high", "anthropic/vendor"],
+              ["anthropic/vendor/low", "anthropic/vendor"],
+            ]),
+          })
+        )
+      );
+      unsubscribe();
+    });
+
     it("first enrollment registers a provider and enrolls reported models", async () => {
       mockDescriptors = [makeDescriptor({ id: "codex" })];
       const m = makeManagerFake();

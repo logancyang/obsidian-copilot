@@ -466,3 +466,5 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
   }
   return manager;
 }
+
+export { legacyOpencodeModelIds } from "./backends/opencode/opencodeModelMigration";
