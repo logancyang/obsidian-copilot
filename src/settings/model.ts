@@ -441,7 +441,7 @@ export const settingsAtom = atom<CopilotSettings>(DEFAULT_SETTINGS);
  * Frozen empty fallbacks for the model-management persisted slices.
  */
 const EMPTY_PROVIDERS = Object.freeze({}) as unknown as Record<string, Provider>;
-const EMPTY_CONFIGURED_MODELS = Object.freeze([]) as unknown as ConfiguredModel[];
+export const EMPTY_CONFIGURED_MODELS = Object.freeze([]) as unknown as ConfiguredModel[];
 const EMPTY_BACKENDS = Object.freeze({}) as unknown as Partial<Record<BackendType, BackendConfig>>;
 
 /** Frozen fallback for an empty {@link CopilotSettings.copilotRootHistory}. */

@@ -66,7 +66,7 @@ interface LegacyProviderMapping {
  * are skipped. The top-level API-key field is derived from
  * `ProviderSettingsKeyMap`, not duplicated here.
  */
-const LEGACY_PROVIDER_MAP: Partial<Record<string, LegacyProviderMapping>> = {
+export const LEGACY_PROVIDER_MAP: Partial<Record<string, LegacyProviderMapping>> = {
   [ChatModelProviders.ANTHROPIC]: {
     providerType: "anthropic",
     catalogProviderId: "anthropic",

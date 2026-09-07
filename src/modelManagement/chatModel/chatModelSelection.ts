@@ -20,8 +20,11 @@ const DISPLAY_NAME_TO_LEGACY_PROVIDER: Record<string, ChatModelProviders> = {
  * Legacy selections used `wireModelId|ChatModelProviders`; keep them resolvable
  * during migration. A model may have been persisted under different provider
  * spellings depending on how it was selected, so enumerate every plausible form.
+ * @param entry - Saved provider and configured-model rows whose legacy aliases are needed.
  */
-function getLegacyChatModelKeys(entry: ResolvedChatBackendEntry): readonly string[] {
+export function getLegacyChatModelKeys(
+  entry: Pick<ResolvedChatBackendEntry, "provider" | "configuredModel">
+): readonly string[] {
   const providers = new Set<ChatModelProviders>([
     mapProviderTypeToChatModelProvider(entry.provider),
   ]);

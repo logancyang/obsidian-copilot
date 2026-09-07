@@ -5,7 +5,7 @@ export const BYOK_EMBEDDING_ERROR =
   "Embedding models aren’t supported in BYOK. Choose a chat model.";
 
 /** Recognize embeddings from metadata or the existing provider-ID heuristic. */
-export function isEmbeddingModel(info: ModelInfo): boolean {
+export function isEmbeddingModel(info: Pick<ModelInfo, "id" | "isEmbedding">): boolean {
   // Explicit false metadata must not admit an embedding-named model into chat.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/386
   return info.isEmbedding === true || looksLikeEmbeddingModel(info.id);

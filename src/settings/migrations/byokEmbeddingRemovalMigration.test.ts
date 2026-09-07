@@ -1,6 +1,6 @@
-import { DEFAULT_SETTINGS } from "@/constants";
+import { ChatModelProviders, DEFAULT_SETTINGS } from "@/constants";
 import type { ConfiguredModel, Provider } from "@/modelManagement";
-import type { CopilotSettings } from "@/settings/model";
+import { EMPTY_CONFIGURED_MODELS, type CopilotSettings } from "@/settings/model";
 import { planByokEmbeddingRemoval } from "./byokEmbeddingRemovalMigration";
 
 function fixture(): CopilotSettings {
@@ -82,6 +82,44 @@ function fixture(): CopilotSettings {
 
 describe("byokEmbeddingRemovalMigration", () => {
   describe("planByokEmbeddingRemoval()", () => {
+    it("reuses canonical frozen empty lists without freezing inputs (https://github.com/Brevilabs/obsidian-copilot-private/issues/386)", () => {
+      const before = fixture();
+      before.configuredModels = [before.configuredModels[1]];
+      before.backends = { chat: { enabledModels: ["embed"] } };
+      before.activeModels = [{ name: "embed", provider: ChatModelProviders.OPENAI, enabled: true }];
+      const first = planByokEmbeddingRemoval(before)!;
+      const second = planByokEmbeddingRemoval(before)!;
+      expect(first.configuredModels).toBe(EMPTY_CONFIGURED_MODELS);
+      expect(second.configuredModels).toBe(first.configuredModels);
+      expect(second.activeModels).toBe(first.activeModels);
+      expect(second.backends?.chat?.enabledModels).toBe(first.backends?.chat?.enabledModels);
+      expect(Object.isFrozen(first.activeModels)).toBe(true);
+      expect(Object.isFrozen(first.backends?.chat?.enabledModels)).toBe(true);
+      expect(Object.isFrozen(before.configuredModels)).toBe(false);
+      expect(Object.isFrozen(before.activeModels)).toBe(false);
+      expect(planByokEmbeddingRemoval({ ...before, ...first })).toBeNull();
+      expect(planByokEmbeddingRemoval({ ...before, backends: {} })).not.toHaveProperty("backends");
+      expect(
+        planByokEmbeddingRemoval({ ...before, configuredModels: [], backends: {} })
+      ).not.toHaveProperty("configuredModels");
+    });
+    it("preserves surviving legacy and configured aliases when embeddings are removed (https://github.com/Brevilabs/obsidian-copilot-private/issues/386)", () => {
+      const before = fixture();
+      before.providers.agent = { ...before.providers.agent, providerType: "anthropic" };
+      before.activeModels = [
+        { name: "opaque", provider: ChatModelProviders.OPENAI, enabled: true },
+        { name: "embed", provider: ChatModelProviders.ANTHROPIC, enabled: true },
+        { name: "embed", provider: ChatModelProviders.COPILOT_PLUS, enabled: true },
+        { name: "embed", provider: "toString", enabled: true },
+      ];
+      before.defaultModelKey = `opaque|${ChatModelProviders.OPENAI}`;
+      before.quickCommandModelKey = `embed|${ChatModelProviders.ANTHROPIC}`;
+      const patch = planByokEmbeddingRemoval(before)!;
+      expect(patch).not.toHaveProperty("defaultModelKey");
+      expect(patch).not.toHaveProperty("quickCommandModelKey");
+      expect(patch.activeModels).toEqual([before.activeModels[0], ...before.activeModels.slice(2)]);
+    });
+
     it("removes only BYOK embeddings and references in one patch without touching credentials (https://github.com/Brevilabs/obsidian-copilot-private/issues/386)", () => {
       const before = fixture();
       const snapshot = JSON.stringify(before);
