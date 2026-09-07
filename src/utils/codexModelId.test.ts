@@ -19,6 +19,13 @@ describe("codexModelId", () => {
       });
     });
 
+    it.each(["gpt[[high]", "gpt[low][high]", "gpt]name[high]"])(
+      "https://github.com/Brevilabs/obsidian-copilot-private/issues/219 preserves malformed bracketed ID %s",
+      (wireId) => {
+        expect(parseCodexModelId(wireId)).toEqual({ baseModelId: wireId, effort: null });
+      }
+    );
+
     it.each([
       ["gpt-5.6-sol", "a bare model id"],
       ["", "an empty id"],

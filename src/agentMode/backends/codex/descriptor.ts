@@ -102,6 +102,7 @@ export const CodexBackendDescriptor: BackendDescriptor = {
   // context envelope), so the session derives the tab title client-side instead.
   summarizesSessionTitle: false,
   wire: codexWire,
+  configModelSelectionAuthoritative: true,
   showModelDescriptions: true,
 
   getEnabledModelEntries(settings: CopilotSettings): EnabledModelEntry[] {

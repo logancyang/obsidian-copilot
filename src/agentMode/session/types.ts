@@ -141,8 +141,8 @@ export interface ModelEntry {
   provider: string | null;
   /**
    * Effort options for this model. Empty array when the model has no
-   * effort dimension (e.g. Claude Haiku, or a suffix-style base with only
-   * one variant). `value: null` entries denote the bare/"Default" variant.
+   * effort dimension (e.g. Claude Haiku). A sole non-null effort is retained
+   * so the model remains addressable. `value: null` denotes the bare/"Default" variant.
    */
   effortOptions: EffortOption[];
 }

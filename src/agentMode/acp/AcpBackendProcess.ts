@@ -794,10 +794,10 @@ export class AcpBackendProcess implements BackendProcess {
 
   private updateConfigOptions(wire: SessionWireState, options: SessionConfigOption[]): void {
     wire.configOptions = options;
-    if (!wire.models) return;
-    // A model-only config switch returns the chosen effort here, not through
-    // currentModelId. Keep the dedicated catalog while updating its selection.
+    // Some backends return stale model config values after unrelated changes.
+    // Only opt-in backends use config updates to supersede the dedicated selection.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/219
+    if (!wire.models || !this.descriptor.configModelSelectionAuthoritative) return;
     const selection = acpStateToBackendState(null, null, options, this.descriptor).model?.current;
     if (selection) {
       wire.models = { ...wire.models, currentModelId: this.descriptor.wire.encode(selection) };

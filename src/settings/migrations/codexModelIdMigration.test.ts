@@ -49,6 +49,27 @@ const SOL_VARIANTS = ["low", "medium", "high", "xhigh", "max", "ultra"].map((eff
 
 describe("codexModelIdMigration", () => {
   describe("planCodexModelIdCollapse()", () => {
+    it.each(["gpt[[high]", "gpt[low][high]", "gpt]name[high]"])(
+      "https://github.com/Brevilabs/obsidian-copilot-private/issues/219 preserves malformed configured and default model ID %s while migrating valid rows",
+      (wireId) => {
+        const malformed = model("cm-malformed", wireId, "Custom (high)");
+        const defaultModel = { baseModelId: wireId, effort: null };
+        const plan = planCodexModelIdCollapse(
+          settings({
+            configuredModels: [...SOL_VARIANTS, malformed],
+            backends: { codex: { enabledModels: ["cm-sol-high", "cm-malformed"] } },
+            agentMode: {
+              ...DEFAULT_SETTINGS.agentMode,
+              backends: { codex: { defaultModel } },
+            },
+          })
+        );
+        expect(plan?.configuredModels).toContainEqual(malformed);
+        expect(plan?.enabledModels).toEqual(["cm-sol-low", "cm-malformed"]);
+        expect(plan).not.toHaveProperty("defaultModel");
+      }
+    );
+
     it("folds every effort variant of a base model onto one row", () => {
       const plan = planCodexModelIdCollapse(settings({ configuredModels: SOL_VARIANTS }));
 

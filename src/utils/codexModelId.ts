@@ -20,9 +20,11 @@ export interface CodexModelId {
 /**
  * Anchored to the final bracket group and forbidding nested brackets, so only a
  * genuine trailing `[effort]` is peeled off. A model id that has no brackets —
- * or whose brackets aren't trailing — is returned whole.
+ * or whose brackets aren't trailing — is returned whole. Malformed persisted
+ * IDs must survive migration intact.
+ * https://github.com/Brevilabs/obsidian-copilot-private/issues/219
  */
-const CODEX_WIRE_ID = /^(.+)\[([^[\]]+)\]$/;
+const CODEX_WIRE_ID = /^([^[\]]+)\[([^[\]]+)\]$/;
 
 /** Split a codex wire id (`gpt-5.6-sol[ultra]`) into its base model and effort. */
 export function parseCodexModelId(wireId: string): CodexModelId {

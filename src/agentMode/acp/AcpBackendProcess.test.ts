@@ -112,10 +112,16 @@ function getVaultClient(backend: AcpBackendProcess): VaultClient {
 
 describe("AcpBackendProcess", () => {
   describe("setSessionConfigOption()", () => {
-    it.each([false, true])(
-      "https://github.com/Brevilabs/obsidian-copilot-private/issues/219 refreshes the dedicated catalog's selected model and effort from config updates, notification=%s",
-      async (notification) => {
+    it.each([
+      [false, true],
+      [true, true],
+      [false, false],
+      [true, false],
+    ])(
+      "https://github.com/Brevilabs/obsidian-copilot-private/issues/219 honors backend selection authority on config updates, notification=%s, config authoritative=%s",
+      async (notification, configModelSelectionAuthoritative) => {
         const descriptor = buildStubDescriptor({
+          configModelSelectionAuthoritative,
           wire: {
             encode: (selection) => formatCodexModelId(selection.baseModelId, selection.effort),
             decode: (wireId) => ({ selection: parseCodexModelId(wireId), provider: null }),
@@ -160,6 +166,7 @@ describe("AcpBackendProcess", () => {
         await backend.newSession({ cwd: "/vault" });
         const handler = jest.fn();
         backend.registerSessionHandler("test-session", handler);
+        const expectedModel = configModelSelectionAuthoritative ? "new" : "old";
         if (notification) {
           await getVaultClient(backend).sessionUpdate({
             sessionId: "test-session",
@@ -169,16 +176,16 @@ describe("AcpBackendProcess", () => {
             ([event]) => event.update.sessionUpdate === "state_changed"
           );
           expect(changed?.[0].update.state.model.current).toEqual({
-            baseModelId: "new",
+            baseModelId: expectedModel,
             effort: "high",
           });
         } else {
           const state = await backend.setSessionConfigOption({
             sessionId: "test-session",
-            configId: "model",
-            value: "new",
+            configId: configModelSelectionAuthoritative ? "model" : "effort",
+            value: configModelSelectionAuthoritative ? "new" : "high",
           });
-          expect(state.model?.current).toEqual({ baseModelId: "new", effort: "high" });
+          expect(state.model?.current).toEqual({ baseModelId: expectedModel, effort: "high" });
           expect(state.model?.availableModels.map((model) => model.baseModelId)).toEqual([
             "old",
             "new",
