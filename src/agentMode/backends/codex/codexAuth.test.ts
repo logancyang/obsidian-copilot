@@ -1,12 +1,12 @@
 import { detectBinary } from "@/utils/detectBinary";
-jest.mock("@/utils/detectBinary", () => ({ detectBinary: jest.fn() }));
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
 import { codexAuth } from "./codexAuth";
 import { getSettings } from "@/settings/model";
-import { signInWithCli } from "@/agentMode/backends/shared/cliSignIn";
-const mockExec = jest.fn();
+
+jest.mock("@/utils/detectBinary", () => ({ detectBinary: jest.fn() }));
 const mockSpawn = jest.fn();
+const mockExec = jest.fn();
 jest.mock("./codexVersion", () => ({
   resolveSupportedCodexAcpEntry: (path: string) => path,
   buildCodexAcpInvocation: (command: string, args: string[], env: object) => ({
@@ -15,108 +15,205 @@ jest.mock("./codexVersion", () => ({
     env,
   }),
 }));
-jest.mock("@/agentMode/backends/shared/cliSignIn", () => ({ signInWithCli: jest.fn() }));
 jest.mock("@/utils/desktopRuntime", () => ({
   requireNodeModule: (id: string) =>
     id === "child_process"
       ? { execFile: mockExec, spawn: mockSpawn }
-      : id === "util"
-        ? { promisify: () => mockExec }
-        : jest.requireActual(`node:${id}`),
+      : jest.requireActual(`node:${id}`),
 }));
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/379";
-describe("codexAuth", () => {
-  const settings = {
-    ...getSettings(),
-    agentMode: {
-      ...getSettings().agentMode,
-      backends: {
-        codex: { binaryPath: "/bundle/codex-acp", envOverrides: { CODEX_HOME: "/my profile" } },
+const settings = {
+  ...getSettings(),
+  agentMode: {
+    ...getSettings().agentMode,
+    backends: {
+      codex: {
+        binaryPath: "/bundle/codex-acp",
+        envOverrides: { CODEX_HOME: "/my profile", OPENAI_API_KEY: "", CODEX_API_KEY: "" },
       },
     },
-  };
-  beforeEach(() => mockExec.mockReset());
+  },
+};
+const configured = (config: object) => ({
+  ...settings,
+  agentMode: {
+    ...settings.agentMode,
+    backends: { codex: { ...settings.agentMode.backends.codex, ...config } },
+  },
+});
+const child = () =>
+  Object.assign(new EventEmitter(), {
+    pid: 987654,
+    stdout: new PassThrough(),
+    stderr: new PassThrough(),
+  });
+
+describe("codexAuth", () => {
+  beforeEach(() => {
+    mockSpawn.mockReset().mockImplementation(() => {
+      const process = child();
+      queueMicrotask(() => {
+        process.stderr.write("Logged in using ChatGPT\n");
+        process.emit("close", 0);
+      });
+      return process;
+    });
+  });
+  afterEach(() => {
+    jest.restoreAllMocks();
+    jest.useRealTimers();
+  });
+  describe("getProbeKey()", () => {
+    it(`preserves managed login identity across same-version UUID replacements: ${ISSUE}`, () => {
+      const original = configured({
+        binaryPath: "/managed/uuid-a/codex-acp",
+        binarySource: "managed",
+        binaryVersion: "1.10.0-r1",
+      });
+      const replacement = configured({
+        binaryPath: "/managed/uuid-b/codex-acp",
+        binarySource: "managed",
+        binaryVersion: "1.10.0-r1",
+      });
+      expect(codexAuth.getProbeKey!(original)).toBe(codexAuth.getProbeKey!(replacement));
+    });
+    it.each([
+      { binaryPath: "" },
+      { binaryPath: "/custom/other" },
+      { envOverrides: { CODEX_HOME: "/other profile" } },
+      { envOverrides: { CODEX_HOME: "/my profile", OPENAI_API_KEY: "fixture-key" } },
+    ])(`invalidates changed account inputs without exposing them %j: ${ISSUE}`, (config) => {
+      const key = codexAuth.getProbeKey!(configured(config));
+      expect(key).not.toBe(codexAuth.getProbeKey!(settings));
+      expect(key).toMatch(/^[a-f0-9]{64}$/);
+    });
+    it(`ignores environment property ordering: ${ISSUE}`, () => {
+      expect(
+        codexAuth.getProbeKey!(
+          configured({ envOverrides: { CODEX_HOME: "/p", MODEL_PROVIDER: "test" } })
+        )
+      ).toBe(
+        codexAuth.getProbeKey!(
+          configured({ envOverrides: { MODEL_PROVIDER: "test", CODEX_HOME: "/p" } })
+        )
+      );
+    });
+  });
   describe("getStatus()", () => {
     it.each(["/bundle/codex-acp.exe", "C:/npm/codex-acp/dist/index.js"])(
-      `only discovers Node for a user-owned Windows npm entry %s: ${ISSUE}`,
+      `only discovers Node for a Windows npm entry %s: ${ISSUE}`,
       async (binaryPath) => {
         const platform = Object.getOwnPropertyDescriptor(process, "platform")!;
         Object.defineProperty(process, "platform", { value: "win32" });
         jest.mocked(detectBinary).mockClear().mockResolvedValue("C:/node.exe");
-        mockExec.mockResolvedValue({ stdout: "", stderr: "Logged in using ChatGPT" });
         try {
-          await codexAuth.getStatus({
-            ...settings,
-            agentMode: { ...settings.agentMode, backends: { codex: { binaryPath } } },
-          });
+          await codexAuth.getStatus(configured({ binaryPath }));
           expect(detectBinary).toHaveBeenCalledTimes(binaryPath.endsWith(".js") ? 1 : 0);
         } finally {
           Object.defineProperty(process, "platform", platform);
         }
       }
     );
-
-    it.each(["Logged in using ChatGPT", "Logged in using an API key - sk-secret"])(
-      `reads %s from authoritative CLI status without exposing credentials: ${ISSUE}`,
-      async (stderr) => {
-        mockExec.mockResolvedValue({ stdout: "", stderr });
+    it.each(["Logged in using ChatGPT", "Logged in using an API key - fixture-secret"])(
+      `reads CLI status without exposing credentials %s: ${ISSUE}`,
+      async (line) => {
+        mockSpawn.mockImplementation(() => {
+          const process = child();
+          queueMicrotask(() => {
+            process.stderr.write(line + "\n");
+            process.emit("close", 0);
+          });
+          return process;
+        });
         await expect(codexAuth.getStatus(settings)).resolves.toEqual({ signedIn: true });
-        expect(mockExec).toHaveBeenCalledWith(
+        expect(mockSpawn).toHaveBeenCalledWith(
           "/bundle/codex-acp",
           ["cli", "login", "status"],
           expect.objectContaining({
             env: expect.objectContaining({ CODEX_HOME: "/my profile" }),
-            windowsHide: true,
+            detached: process.platform !== "win32",
           })
         );
       }
     );
-    it.each(["failure", "unknown"])(`treats %s status as signed out: ${ISSUE}`, async (fault) => {
-      if (fault === "failure") mockExec.mockRejectedValue(new Error("timeout"));
-      else mockExec.mockResolvedValue({ stdout: "", stderr: "" });
+    it.each(["OPENAI_API_KEY", "CODEX_API_KEY"])(
+      `recognizes environment authentication %s: ${ISSUE}`,
+      async (key) => {
+        await expect(
+          codexAuth.getStatus(configured({ envOverrides: { [key]: "fixture-key" } }))
+        ).resolves.toEqual({ signedIn: true });
+        expect(mockSpawn).not.toHaveBeenCalled();
+      }
+    );
+    it.each(["OPENAI_API_KEY", "CODEX_API_KEY"])(
+      `recognizes inherited environment authentication %s: ${ISSUE}`,
+      async (key) => {
+        jest.replaceProperty(process, "env", { [key]: "fixture-key" });
+        await expect(codexAuth.getStatus(configured({ envOverrides: {} }))).resolves.toEqual({
+          signedIn: true,
+        });
+        expect(mockSpawn).not.toHaveBeenCalled();
+      }
+    );
+    it(`treats failed status startup as signed out: ${ISSUE}`, async () => {
+      mockSpawn.mockImplementation(() => {
+        throw new Error("failed");
+      });
       await expect(codexAuth.getStatus(settings)).resolves.toEqual({ signedIn: false });
     });
+    it.each(["darwin", "win32"] as const)(
+      `stops the owned process tree before settling a timed-out status probe on %s: ${ISSUE}`,
+      async (host) => {
+        jest.useFakeTimers();
+        const platform = Object.getOwnPropertyDescriptor(process, "platform")!;
+        Object.defineProperty(process, "platform", { value: host });
+        const processChild = child();
+        mockSpawn.mockReturnValue(processChild);
+        const kill = jest.spyOn(process, "kill").mockImplementation(() => {
+          queueMicrotask(() => processChild.emit("close", 1));
+          return true;
+        });
+        mockExec.mockReset().mockImplementation((_command, _args, _options, callback) => {
+          callback(null);
+          queueMicrotask(() => processChild.emit("close", 1));
+        });
+        try {
+          const pending = codexAuth.getStatus(settings);
+          await jest.advanceTimersByTimeAsync(10_000);
+          await expect(pending).resolves.toEqual({ signedIn: false });
+          if (host === "win32")
+            expect(mockExec).toHaveBeenCalledWith(
+              "taskkill",
+              ["/PID", String(processChild.pid), "/T", "/F"],
+              { windowsHide: true },
+              expect.any(Function)
+            );
+          else expect(kill).toHaveBeenCalledWith(-processChild.pid, "SIGTERM");
+        } finally {
+          Object.defineProperty(process, "platform", platform);
+        }
+      }
+    );
   });
   describe("signIn()", () => {
-    it(`selects OpenAI authorization after the printed localhost server URL: ${ISSUE}`, async () => {
+    it(`selects the OpenAI authorization URL and verifies status with the same profile: ${ISSUE}`, async () => {
       const onUrl = jest.fn();
-      const child = Object.assign(new EventEmitter(), {
-        stdout: new PassThrough(),
-        stderr: new PassThrough(),
+      mockSpawn.mockImplementation((_command, args) => {
+        const process = child();
+        queueMicrotask(() => {
+          process.stderr.write(
+            args.includes("status")
+              ? "Logged in using ChatGPT\n"
+              : "Starting on http://localhost:1455\nhttps://auth.openai.com/oauth/authorize?client_id=test\n"
+          );
+          process.emit("close", 0);
+        });
+        return process;
       });
-      mockSpawn.mockReturnValue(child);
-      mockExec.mockResolvedValue({ stdout: "", stderr: "Not logged in" });
-      const realSignIn = jest.requireActual<typeof import("@/agentMode/backends/shared/cliSignIn")>(
-        "@/agentMode/backends/shared/cliSignIn"
-      ).signInWithCli;
-      jest.mocked(signInWithCli).mockImplementation((...args) => {
-        const controller = realSignIn(...args);
-        child.stderr.write(
-          "Starting local login server on http://localhost:1455.\nIf your browser did not open, navigate to this URL to authenticate:\n\nhttps://auth.openai.com/oauth/authorize?response_type=code&client_id=test&redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback\n"
-        );
-        child.emit("close", 0);
-        return controller;
-      });
-      await codexAuth.signIn(settings, { onUrl });
-      expect(onUrl).toHaveBeenCalledWith(
-        "https://auth.openai.com/oauth/authorize?response_type=code&client_id=test&redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback"
-      );
+      await expect(codexAuth.signIn(settings, { onUrl })).resolves.toEqual({ signedIn: true });
       expect(onUrl).toHaveBeenCalledTimes(1);
-    });
-    it(`uses Claude's login lifecycle with the runtime profile and post-login status: ${ISSUE}`, async () => {
-      mockExec.mockResolvedValue({ stdout: "", stderr: "Logged in using ChatGPT" });
-      jest.mocked(signInWithCli).mockImplementation((_path, _args, _env, status) => ({
-        done: status(),
-        cancel: jest.fn(),
-      }));
-      await expect(codexAuth.signIn(settings)).resolves.toEqual({ signedIn: true });
-      expect(signInWithCli).toHaveBeenCalledWith(
-        "/bundle/codex-acp",
-        ["cli", "login"],
-        expect.objectContaining({ CODEX_HOME: "/my profile" }),
-        expect.any(Function),
-        expect.objectContaining({ acceptUrl: expect.any(Function) })
-      );
+      expect(onUrl).toHaveBeenCalledWith("https://auth.openai.com/oauth/authorize?client_id=test");
+      expect(mockSpawn).toHaveBeenCalledTimes(2);
     });
   });
 });

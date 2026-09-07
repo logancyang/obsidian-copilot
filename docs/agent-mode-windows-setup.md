@@ -52,6 +52,8 @@ npm uninstall -g @zed-industries/codex-acp; npm install -g @agentclientprotocol/
 codex-acp cli login
 ```
 
+You can also choose **Sign in to Codex** on the Agent Chat status card to open browser login. For terminal login, use the same `CODEX_HOME` as Copilot.
+
 Configure the package's `dist\index.js`, not `codex.exe`, `codex-acp.cmd`, or a legacy `codex-acp.exe`. Copilot launches the JavaScript entry point with the Node.js installation that provided npm and uses the bundled Codex CLI's login. If Node was installed while Obsidian was open, restart Obsidian before Auto-detect. Leave **Environment variables** empty unless you intentionally need an override.
 
 ## Share Skills across agents

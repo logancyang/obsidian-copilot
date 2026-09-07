@@ -19,6 +19,38 @@ const makeDescriptor = (): BackendDescriptor =>
 
 describe("useBackendAuthState", () => {
   describe("useBackendAuthState()", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 re-probes backend profile changes even without a caller key", async () => {
+      const descriptor = makeDescriptor();
+      let profile = "first";
+      descriptor.auth!.getProbeKey = () => profile;
+      const hook = renderHook(() => useBackendAuthState(descriptor));
+      await waitFor(() => expect(descriptor.auth!.getStatus).toHaveBeenCalledTimes(1));
+      profile = "second";
+      hook.rerender();
+      await waitFor(() => expect(descriptor.auth!.getStatus).toHaveBeenCalledTimes(2));
+    });
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 keeps canonical backend identity when legacy caller paths change", async () => {
+      const descriptor = makeDescriptor();
+      descriptor.auth!.getProbeKey = () => "same-profile";
+      let finish!: (status: { signedIn: boolean }) => void;
+      let signal!: AbortSignal;
+      jest.mocked(descriptor.auth!.signIn).mockImplementation((_settings, handlers) => {
+        signal = handlers!.signal!;
+        return new Promise((resolve) => {
+          finish = resolve;
+        });
+      });
+      const hook = renderHook(({ path }) => useBackendAuthState(descriptor, path), {
+        initialProps: { path: "uuid-a" },
+      });
+      await waitFor(() => expect(descriptor.auth!.getStatus).toHaveBeenCalledTimes(1));
+      act(() => hook.result.current.signIn());
+      hook.rerender({ path: "uuid-b" });
+      expect(signal.aborted).toBe(false);
+      expect(descriptor.auth!.getStatus).toHaveBeenCalledTimes(1);
+      await act(async () => finish({ signedIn: true }));
+    });
+
     it("publishes completed sign-in status to every consumer of the same backend auth", async () => {
       const descriptor = makeDescriptor();
       let completeOlderProbe!: (status: { signedIn: boolean }) => void;
