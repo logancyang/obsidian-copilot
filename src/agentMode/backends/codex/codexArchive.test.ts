@@ -40,6 +40,7 @@ describe("codexArchive", () => {
       };
       jest
         .mocked(requestUrl)
+        .mockReset()
         .mockImplementation(() => Promise.resolve({ json: manifest }) as never);
       mockGet.mockReset().mockImplementation((_url, _options, callback) => {
         const response = Readable.from([Buffer.from(bytes)]);
@@ -48,7 +49,10 @@ describe("codexArchive", () => {
         return Object.assign(new EventEmitter(), { setTimeout: jest.fn(), destroy: jest.fn() });
       });
     });
-    afterEach(() => fs.rmSync(stage, { recursive: true, force: true }));
+    afterEach(() => {
+      jest.restoreAllMocks();
+      fs.rmSync(stage, { recursive: true, force: true });
+    });
     (process.env.CODEX_BUNDLE_TEST_ARCHIVE ? it : it.skip)(
       `extracts and launches the locally built full archive with no external runtime: ${ISSUE}`,
       async () => {
@@ -65,7 +69,8 @@ describe("codexArchive", () => {
           jest.requireActual<typeof import("node:child_process")>("node:child_process");
         const home = path.join(stage, "isolated-home");
         fs.mkdirSync(home);
-        const output = execFileSync(path.join(stage, "codex-acp"), ["cli", "--help"], {
+        const executable = process.platform === "win32" ? "codex-acp.exe" : "codex-acp";
+        const output = execFileSync(path.join(stage, executable), ["cli", "--help"], {
           env: { HOME: home, CODEX_HOME: home, PATH: "" },
           encoding: "utf8",
           timeout: 20_000,
@@ -81,6 +86,23 @@ describe("codexArchive", () => {
       expect(requestUrl).toHaveBeenCalledWith(
         `https://github.com/Brevilabs/codex-acp-binary/releases/download/v${CODEX_BUNDLE_VERSION}/${stem}.json`
       );
+    });
+    it(`completes short filesystem writes without truncating extracted executables: ${ISSUE}`, async () => {
+      const nodeFs = jest.requireActual<typeof import("node:fs")>("node:fs");
+      const write = nodeFs.writeSync;
+      const shortWrite = jest
+        .spyOn(nodeFs, "writeSync")
+        .mockImplementation(((
+          fd: number,
+          data: Uint8Array,
+          offset: number = 0,
+          length: number = data.length - offset,
+          position: number | null = null
+        ) => write(fd, data, offset, Math.min(length, 2), position)) as typeof nodeFs.writeSync);
+      await installCodexArchive(stage, new AbortController().signal);
+      expect(shortWrite).toHaveBeenCalled();
+      expect(fs.readFileSync(path.join(stage, "codex-acp"), "utf8")).toBe("native");
+      expect(fs.readFileSync(path.join(stage, "codex-runtime/codex"), "utf8")).toBe("runtime");
     });
     it.each(["checksum", "size", "pin", "extracted size"])(
       `rejects a %s mismatch without extracting an executable: ${ISSUE}`,
@@ -110,6 +132,7 @@ describe("codexArchive", () => {
       const controller = new AbortController();
       controller.abort();
       await expect(installCodexArchive(stage, controller.signal)).rejects.toThrow("Aborted");
+      expect(requestUrl).not.toHaveBeenCalled();
       expect(mockGet).not.toHaveBeenCalled();
     });
   });

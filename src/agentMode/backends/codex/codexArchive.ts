@@ -22,6 +22,9 @@ export async function installCodexArchive(stage: string, signal: AbortSignal): P
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
   if (!/^(darwin|linux|win32)-(arm64|x64)$/.test(target))
     throw new Error(`Codex does not support ${target}.`);
+  // A cancelled setup must not wait on the manifest request, which cannot be aborted.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
+  if (signal.aborted) throw new ManagedInstallAbortError();
   const stem = `codex-acp-v${CODEX_BUNDLE_VERSION}-${target}`;
   const manifest = (await requestUrl(`${RELEASE}/${stem}.json`)).json as {
     archive: string;
@@ -125,7 +128,9 @@ export async function installCodexArchive(stage: string, signal: AbortSignal): P
       if (error) throw error;
       extracted += data.length;
       if (extracted > manifest.extractedBytes) throw new Error("Codex extracted size mismatch.");
-      fs.writeSync(fd, data);
+      // Complete short filesystem writes before accepting the extracted byte count.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
+      fs.writeFileSync(fd, data);
       if (final) {
         fs.closeSync(fd);
         openFiles.delete(fd);

@@ -76,10 +76,18 @@ export function resolveSupportedCodexAcpPackage(
             "utf8"
           )
         );
+      const parsedVersion =
+        typeof provenance.acpVersion === "string"
+          ? SEMVER_PATTERN.exec(provenance.acpVersion)
+          : null;
+      const versionOrder = parsedVersion
+        ? compareSemver(parsedVersion[0], CODEX_ACP_MIN_VERSION)
+        : -1;
+      // The minimum stable release guarantees bundled CLI authentication; its prereleases do not.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
       if (
-        typeof provenance.acpVersion === "string" &&
-        SEMVER_PATTERN.test(provenance.acpVersion) &&
-        compareSemver(provenance.acpVersion, CODEX_ACP_MIN_VERSION) >= 0 &&
+        parsedVersion &&
+        (versionOrder > 0 || (versionOrder === 0 && parsedVersion[4] === undefined)) &&
         Number.isSafeInteger(provenance.packagingRevision) &&
         provenance.packagingRevision! > 0 &&
         provenance.target === `${platform}-${process.arch}`
