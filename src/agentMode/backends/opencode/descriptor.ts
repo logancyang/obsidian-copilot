@@ -168,7 +168,18 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
   },
 
   async applySelection(session: AgentSession, selection: ModelSelection, context): Promise<void> {
-    const apply = session.getState()?.model?.apply;
+    const model = session.getState()?.model;
+    // Native discovery could persist a literal trailing segment as effort. Restore
+    // that model only when the catalog rules out the saved base, so a real effort
+    // preference cannot redirect the user to a different model.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/219
+    if (selection.effort && !findModelEntry(model ?? null, selection.baseModelId)) {
+      const literalId = `${selection.baseModelId}/${selection.effort}`;
+      if (findModelEntry(model ?? null, literalId)) {
+        selection = { baseModelId: literalId, effort: null };
+      }
+    }
+    const apply = model?.apply;
     // A config-option catalog takes bare model ids only. Effort travels through
     // its own option when the model publishes one and is dropped otherwise; a
     // saved level the model does not offer must never become a `/<effort>`

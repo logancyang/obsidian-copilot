@@ -4,7 +4,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { FileSystemAdapter } from "obsidian";
-import type { AgentSession } from "@/agentMode/session/AgentSession";
+import { AgentSession } from "@/agentMode/session/AgentSession";
 import type {
   BackendProcess,
   BackendState,
@@ -179,6 +179,75 @@ describe("descriptor", () => {
           setConfigOption,
         };
       }
+
+      it("restores a saved split model during session startup before ready settles (https://github.com/Brevilabs/obsidian-copilot-private/issues/219)", async () => {
+        const initialState: BackendState = {
+          model: {
+            current: { baseModelId: "opencode/default", effort: null },
+            availableModels: [entryOffering("anthropic/vendor/high", [])],
+            apply: { kind: "setConfigOption", configId: "model" },
+          },
+          mode: null,
+        };
+        const setSessionConfigOption = jest.fn(async () => ({
+          ...initialState,
+          model: {
+            ...initialState.model!,
+            current: { baseModelId: "anthropic/vendor/high", effort: null },
+          },
+        }));
+        const session = new AgentSession({
+          backend: {
+            registerSessionHandler: () => () => {},
+            setSessionConfigOption,
+          } as unknown as BackendProcess,
+          internalId: "restore-saved-model",
+          backendId: "opencode",
+          backendSessionId: "restored-session",
+          initialState,
+          defaultModelSelection: { baseModelId: "anthropic/vendor", effort: "high" },
+          getDescriptor: () => OpencodeBackendDescriptor,
+        });
+        await session.ready;
+        expect(setSessionConfigOption).toHaveBeenCalledWith({
+          sessionId: "restored-session",
+          configId: "model",
+          value: "anthropic/vendor/high",
+        });
+        expect(session.getState()?.model?.current).toEqual({
+          baseModelId: "anthropic/vendor/high",
+          effort: null,
+        });
+      });
+
+      it.each([
+        { catalog: ["anthropic/vendor/high"], effort: "high", expected: "anthropic/vendor/high" },
+        {
+          catalog: ["anthropic/vendor", "anthropic/vendor/high"],
+          effort: "high",
+          expected: "anthropic/vendor",
+        },
+        { catalog: ["anthropic/other"], effort: "high", expected: "anthropic/vendor" },
+        { catalog: ["anthropic/vendor/high"], effort: null, expected: "anthropic/vendor" },
+      ])(
+        "restores a split saved model only when the catalog identifies it: $catalog / $effort (https://github.com/Brevilabs/obsidian-copilot-private/issues/219)",
+        async ({ catalog, effort, expected }) => {
+          const { session, applyModelWireId, setConfigOption } = makeSession({
+            model: {
+              current: { baseModelId: "opencode/default", effort: null },
+              availableModels: catalog.map((id) => entryOffering(id, [])),
+              apply: { kind: "setConfigOption", configId: "model" },
+            },
+            mode: null,
+          });
+          await OpencodeBackendDescriptor.applySelection(session, {
+            baseModelId: "anthropic/vendor",
+            effort,
+          });
+          expect(applyModelWireId).toHaveBeenCalledWith(expected);
+          expect(setConfigOption).not.toHaveBeenCalled();
+        }
+      );
 
       it("routes config-option-backed effort through the thought-level option", async () => {
         const { session, applyModelWireId, setConfigOption } = makeSession({
