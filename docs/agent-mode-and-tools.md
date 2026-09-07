@@ -45,7 +45,7 @@ Claude models and billing come from your Claude Code account. Models added under
 
 ### Codex
 
-A Copilot-managed Codex installation uses a native bundle containing the adapter and Codex runtime. It does not need Node.js or npm. Copilot checks the bundle version to offer updates. A failed download or verification keeps the previous installation selected.
+The Codex backend uses `@agentclientprotocol/codex-acp`, which includes a compatible Codex CLI:
 
 Managed Codex downloads are pinned to `codex-acp` **1.10.0** in this Copilot release. Copilot uses the system `tar -xf` command to unpack the runtime on all supported desktop platforms:
 
@@ -57,17 +57,17 @@ Managed Codex downloads are pinned to `codex-acp` **1.10.0** in this Copilot rel
 
 The archive format and extraction command are separate: bsdtar can unpack ZIP files, while GNU tar does not support ZIP. See [bsdtar's supported formats](https://github.com/libarchive/libarchive/blob/master/tar/bsdtar.1) and [Windows tar documentation](https://learn.microsoft.com/en-us/windows/tar/). Windows includes `tar.exe` starting with Windows 10 version 1803. If installation reports that `tar` is missing, install it and retry; on macOS or Windows, use bsdtar so ZIP extraction works.
 
-You can also keep your own adapter installation. Copilot does not update or remove these custom installations.
-
-For an existing or manually installed `@agentclientprotocol/codex-acp` adapter, **0.0.45 is the minimum supported version**, not the managed download version. Both numbers refer to the ACP adapter version; the bundled Codex CLI has its own version. The manual setup steps are:
+For an existing or manually installed `@agentclientprotocol/codex-acp` adapter, **0.0.45 is the minimum supported version**, not the managed download version. Both numbers refer to the ACP adapter version; the bundled Codex CLI has its own version.
 
 1. Open **Basic → Agents → Codex → Configure**.
-2. Run the adapter installation command shown in the dialog. It removes the conflicting Zed npm package before installing the supported adapter.
-3. Choose **Sign in to Codex** on the Agent Chat status card and complete browser login. As a fallback, run `codex-acp cli login` in a terminal using the same `CODEX_HOME`.
-4. Select **Auto-detect**, or enter the absolute path to the `codex-acp` launcher on macOS/Linux or its `dist\index.js` entry point on Windows, and select **Apply**.
+2. Choose **Download & install** under **Managed by Copilot**. Copilot downloads Codex and its runtime, verifies the download, and keeps your current installation until the replacement is ready. You do not need Node.js or npm.
+3. Click **Sign in**, finish authentication in your browser, and return to Obsidian. If the browser does not open, click **Open sign-in page**. You can cancel or retry sign-in. Existing credentials are reused when you use the same Codex profile.
+4. If you prefer your own adapter, use **My own binary** to Auto-detect it or enter its absolute path. You remain responsible for updates to that binary.
 5. Enable the models you want and choose a default.
 
-The older `@zed-industries/codex-acp` package is not supported. Copilot uses the login stored by the bundled Codex CLI. Models added under **BYOK** do not join the Codex model list.
+You can also choose **Sign in to Codex** on the Agent Chat status card. For terminal login, run your configured adapter with `cli login` using the same `CODEX_HOME` as Copilot.
+
+When the plugin's managed version changes, Agent Chat and Settings show the same **Update** action and shared progress or **Retry** state. The older `@zed-industries/codex-acp` package is not supported. Copilot uses the login stored by the bundled Codex CLI. Models added under **BYOK** do not join the Codex model list.
 
 For Windows-specific installation help, see [Windows setup for Agent Chat](agent-mode-windows-setup.md).
 

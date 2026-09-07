@@ -91,17 +91,23 @@ The Claude settings card also includes:
 
 #### Codex
 
-Codex uses the `codex-acp` adapter and the login held by the Codex CLI. It does not use an OpenAI API key from the BYOK tab. Managed downloads are pinned to adapter version **1.10.0** in this Copilot release. The **0.0.45** requirement below is the minimum supported version for an existing or manually installed adapter. See [Codex installation details](agent-mode-and-tools.md#codex).
+Codex uses the `codex-acp` adapter and the login held by the Codex CLI. It does not use an OpenAI API key from the BYOK tab. Managed downloads are pinned to adapter version **1.10.0** in this Copilot release. **0.0.45** is the minimum supported version for an existing or manually installed adapter. See [Codex installation details](agent-mode-and-tools.md#codex).
 
 Select **Configure** to open these controls:
 
-| Control                                             | Default                                  | What it does                                                                                                                                                      |
-| --------------------------------------------------- | ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **codex-acp adapter**                               | Blank until detected or applied          | **Auto-detect** finds `@agentclientprotocol/codex-acp` 0.0.45 or newer. **Apply** validates the package and version before saving its path. **Clear** forgets it. |
-| **Install it**                                      | Not applicable                           | Shows the platform-specific `codex-acp` installation command.                                                                                                     |
-| **Sign in**                                         | Not applicable                           | Use **Sign in to Codex** on the Agent Chat status card to open browser login. If needed, run `codex-acp cli login` in a terminal using the same `CODEX_HOME`. There is no key field here.                      |
-| **Default model / Default effort / model switches** | Agent defaults; models reported by Codex | Curates the models available to Codex Agent Chat. Billing and limits belong to the OpenAI or ChatGPT account used by the CLI.                                     |
-| **Environment variables**                           | No rows                                  | Passes values such as `CODEX_HOME` or `OPENAI_BASE_URL` to the adapter.                                                                                           |
+| Control                                             | Default                                  | What it does                                                                                                                                                                                                                                                        |
+| --------------------------------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **My own binary**                                   | Blank until detected or applied          | **Auto-detect** finds a supported `@agentclientprotocol/codex-acp`. **Apply** validates its package and version before saving its path. Copilot does not update it.                                                                                                 |
+| **Managed by Copilot**                              | Selected for a new setup                 | Shows the platform, pinned adapter version, and destination. Use **Download & install**, **Reinstall**, or **Uninstall** to manage Copilot's downloaded copies. Installs show progress and an explicit **Cancel** button. No Node.js or npm installation is needed. |
+| **Sign in**                                         | Not applicable                           | Starts browser sign-in and shows the verified login status. **Open sign-in page** is available if the browser does not open; you can cancel or retry. There is no key field here.                                                                                   |
+| **Default model / Default effort / model switches** | Agent defaults; models reported by Codex | Curates the models available to Codex Agent Chat. Billing and limits belong to the OpenAI or ChatGPT account used by the CLI.                                                                                                                                       |
+| **Environment variables**                           | No rows                                  | Passes values such as `CODEX_HOME` or `OPENAI_BASE_URL` to the adapter.                                                                                                                                                                                             |
+
+You can also choose **Sign in to Codex** on the Agent Chat status card. For terminal login, run your configured adapter with `cli login` using the same `CODEX_HOME` as Copilot.
+
+The Configure dialog uses the same **Managed by Copilot** and **My own binary** tabs as opencode. Switching tabs only changes the controls shown; installing or applying a path changes the active source. **Uninstall** asks for confirmation and keeps your own binary and Codex login.
+
+If a Copilot update pins a different managed adapter, the Codex row shows **Update**. Its progress, failure message, and **Retry** action are shared with the alert in Agent Chat. A custom binary remains usable and is never changed automatically.
 
 See [Agent Chat](agent-mode-and-tools.md) for setup, permissions, projects, multi-agent answers, and normal use.
 
