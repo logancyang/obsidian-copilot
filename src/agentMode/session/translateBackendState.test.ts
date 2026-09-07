@@ -133,7 +133,7 @@ describe("translateBackendState", () => {
         );
         // `models` wins → setModel channel, catalog from `models` not the option.
         expect(state.model?.current.baseModelId).toBe("omlx/gemma-4-e4b-it-8bit");
-        expect(state.model?.apply).toEqual({ kind: "setModel" });
+        expect(state.model?.apply).toEqual({ kind: "setModel", modelConfigId: "model" });
       });
 
       it("does not treat a category:'mode' select as the model catalog", () => {
@@ -853,6 +853,21 @@ describe("translateBackendState", () => {
   });
 
   describe("modelStateSignature()", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/219 changes when the advertised model-only selection option changes", () => {
+      const model: NonNullable<BackendState["model"]> = {
+        current: { baseModelId: "example", effort: "high" },
+        availableModels: [],
+        apply: { kind: "setModel" },
+      };
+      const signatures = [undefined, "model", "model-choice"].map((modelConfigId) =>
+        modelStateSignature({
+          model: { ...model, apply: { kind: "setModel", modelConfigId } },
+          mode: null,
+        })
+      );
+      expect(new Set(signatures).size).toBe(3);
+    });
+
     it("returns empty string when model is null", () => {
       expect(modelStateSignature(null)).toBe("");
       expect(modelStateSignature({ model: null, mode: null })).toBe("");

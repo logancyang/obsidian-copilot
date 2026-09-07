@@ -1,3 +1,5 @@
+import type { SessionConfigOption } from "@agentclientprotocol/sdk";
+import { formatCodexModelId, parseCodexModelId } from "@/utils/codexModelId";
 import { FileSystemAdapter, App } from "obsidian";
 import type { BackendDescriptor, PermissionOption } from "@/agentMode/session/types";
 import { AcpBackendProcess } from "./AcpBackendProcess";
@@ -14,6 +16,7 @@ jest.mock("@/logger", () => ({
 // test set the `initialize` response (to advertise capabilities) and capture
 // the `newSession` request. `mock`-prefixed names satisfy ts-jest's jest.mock
 // hoisting rules.
+let mockConfigOptions: SessionConfigOption[] = [];
 let mockInitializeResult: unknown = { protocolVersion: 1 };
 const mockNewSession = jest.fn(async (..._args: unknown[]) => ({ sessionId: "test-session" }));
 const mockResumeSession = jest.fn(async (..._args: unknown[]) => ({}));
@@ -40,6 +43,7 @@ jest.mock("@agentclientprotocol/sdk", () => {
     prompt = jest.fn(async () => ({ stopReason: "end_turn" }));
     cancel = jest.fn(async () => undefined);
     unstable_setSessionModel = jest.fn(async () => ({}));
+    setSessionConfigOption = jest.fn(async () => ({ configOptions: mockConfigOptions }));
   }
   return {
     RequestError,
@@ -107,6 +111,84 @@ function getVaultClient(backend: AcpBackendProcess): VaultClient {
 }
 
 describe("AcpBackendProcess", () => {
+  describe("setSessionConfigOption()", () => {
+    it.each([false, true])(
+      "https://github.com/Brevilabs/obsidian-copilot-private/issues/219 refreshes the dedicated catalog's selected model and effort from config updates, notification=%s",
+      async (notification) => {
+        const descriptor = buildStubDescriptor({
+          wire: {
+            encode: (selection) => formatCodexModelId(selection.baseModelId, selection.effort),
+            decode: (wireId) => ({ selection: parseCodexModelId(wireId), provider: null }),
+          },
+        });
+        mockNewSession.mockImplementation(async () => ({
+          sessionId: "test-session",
+          models: {
+            currentModelId: "old[high]",
+            availableModels: ["old[high]", "new[low]", "new[high]"].map((modelId) => ({
+              modelId,
+              name: modelId,
+            })),
+          },
+        }));
+        mockConfigOptions = [
+          {
+            id: "model",
+            category: "model",
+            type: "select",
+            name: "Model",
+            currentValue: "new",
+            options: [
+              { value: "old", name: "Old" },
+              { value: "new", name: "New" },
+            ],
+          },
+          {
+            id: "effort",
+            category: "thought_level",
+            type: "select",
+            name: "Effort",
+            currentValue: "high",
+            options: [
+              { value: "low", name: "Low" },
+              { value: "high", name: "High" },
+            ],
+          },
+        ];
+        const backend = new AcpBackendProcess(buildApp(), buildStubBackend(), "1.0.0", descriptor);
+        await backend.start();
+        await backend.newSession({ cwd: "/vault" });
+        const handler = jest.fn();
+        backend.registerSessionHandler("test-session", handler);
+        if (notification) {
+          await getVaultClient(backend).sessionUpdate({
+            sessionId: "test-session",
+            update: { sessionUpdate: "config_option_update", configOptions: mockConfigOptions },
+          });
+          const changed = handler.mock.calls.find(
+            ([event]) => event.update.sessionUpdate === "state_changed"
+          );
+          expect(changed?.[0].update.state.model.current).toEqual({
+            baseModelId: "new",
+            effort: "high",
+          });
+        } else {
+          const state = await backend.setSessionConfigOption({
+            sessionId: "test-session",
+            configId: "model",
+            value: "new",
+          });
+          expect(state.model?.current).toEqual({ baseModelId: "new", effort: "high" });
+          expect(state.model?.availableModels.map((model) => model.baseModelId)).toEqual([
+            "old",
+            "new",
+          ]);
+        }
+        await backend.shutdown();
+      }
+    );
+  });
+
   beforeEach(() => {
     exitListeners.clear();
     mockProcessIsRunning = true;

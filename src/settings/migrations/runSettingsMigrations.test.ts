@@ -471,4 +471,55 @@ describe("runSettingsMigrations()", () => {
     );
     expect(flagWrite).toBeUndefined();
   });
+
+  it.each([8, 9, 10, 11, 12, 13])(
+    "https://github.com/Brevilabs/obsidian-copilot-private/issues/219 v14: collapses a v%s vault's per-effort codex rows and preserves its enabled set",
+    async (version) => {
+      mockGetSettings.mockReturnValue(codexVaultAt(version));
+      const { api } = makeApi();
+
+      await runSettingsMigrations(api);
+
+      const write = mockSetSettings.mock.calls.find(
+        (call) => typeof call[0] === "object" && "configuredModels" in call[0]
+      )?.[0] as Partial<CopilotSettings>;
+      expect(write.configuredModels?.map((m) => m.info.id)).toEqual(["gpt-5.6-sol"]);
+      expect(write.backends?.codex?.enabledModels).toEqual(["cm-low"]);
+    }
+  );
+
+  it("v14: leaves a vault already at the current version alone", async () => {
+    mockGetSettings.mockReturnValue(codexVaultAt(CURRENT_SETTINGS_VERSION));
+    const { api } = makeApi();
+
+    await runSettingsMigrations(api);
+
+    const write = mockSetSettings.mock.calls.find(
+      (call) => typeof call[0] === "object" && "configuredModels" in call[0]
+    );
+    expect(write).toBeUndefined();
+  });
 });
+
+/** A vault whose codex catalog was enrolled one row per (model × effort) pair. */
+function codexVaultAt(settingsVersion: number): CopilotSettings {
+  return settings({
+    settingsVersion,
+    providers: {
+      "prov-codex": {
+        providerId: "prov-codex",
+        providerType: "openai-compatible",
+        displayName: "Codex",
+        origin: { kind: "agent", agentType: "codex" },
+        addedAt: 0,
+      },
+    },
+    configuredModels: ["low", "high"].map((effort) => ({
+      configuredModelId: `cm-${effort}`,
+      providerId: "prov-codex",
+      info: { id: `gpt-5.6-sol[${effort}]`, displayName: `GPT-5.6-Sol (${effort})` },
+      configuredAt: 0,
+    })),
+    backends: { codex: { enabledModels: ["cm-high"] } },
+  });
+}

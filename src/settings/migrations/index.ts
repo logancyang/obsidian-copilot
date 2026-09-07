@@ -14,11 +14,17 @@ import { DEFAULT_COPILOT_FOLDER } from "@/constants";
 import { logInfo } from "@/logger";
 import { seedDocProcessorBackend } from "@/miyo/miyoUtils";
 import type { ModelManagementApi } from "@/modelManagement";
-import { getSettings, normalizeRootFolders, setSettings } from "@/settings/model";
+import {
+  getSettings,
+  normalizeRootFolders,
+  setSettings,
+  updateAgentModeBackendFields,
+} from "@/settings/model";
 
 import { executeAzureRemoval } from "./azureRemovalMigration";
 import { executeBedrockRemoval } from "./bedrockRemovalMigration";
 import { executeByokMigration } from "./byokMigration";
+import { planCodexModelIdCollapse } from "./codexModelIdMigration";
 import { executeGitHubCopilotRemoval } from "./githubCopilotRemovalMigration";
 import { planOptionalCustomProviderAuthMigration } from "./optionalCustomProviderAuthMigration";
 import { planRequiresApiKeyBackfill } from "./requiresApiKeyMigration";
@@ -125,6 +131,28 @@ export async function runSettingsMigrations(api: ModelManagementApi): Promise<vo
   // back when the stored key resolves to nothing.
   if (fromVersion < 12) {
     await executeAzureRemoval(api, getSettings());
+  }
+
+  // v14: fold Codex's per-effort configured models (`gpt-5.6-sol[low]` …
+  // `[ultra]`) into one row per base model. Must run before agent/model
+  // discovery: once the codex codec reads the real `<base>[<effort>]` format,
+  // the first probe reports base ids and would otherwise prune every bracketed
+  // row the user's enabled set points at.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/219
+  if (fromVersion < 14) {
+    const collapse = planCodexModelIdCollapse(getSettings());
+    if (collapse) {
+      setSettings({
+        configuredModels: collapse.configuredModels,
+        backends: {
+          ...getSettings().backends,
+          codex: { enabledModels: collapse.enabledModels },
+        },
+      });
+      if (collapse.defaultModel) {
+        updateAgentModeBackendFields("codex", { defaultModel: collapse.defaultModel });
+      }
+    }
   }
 
   // Bump unconditionally after the migrations so a per-provider failure can't
