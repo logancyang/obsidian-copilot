@@ -12,6 +12,7 @@ import { ProjectInfoPopover } from "@/agentMode/ui/ProjectInfoPopover";
 import { AgentTabStrip } from "@/agentMode/ui/AgentTabStrip";
 import { AgentWelcomeCard } from "@/agentMode/ui/AgentWelcomeCard";
 import { AgentHomeReleaseUpdate } from "@/components/release-update/AgentHomeReleaseUpdate";
+import { RelevantNotes } from "@/components/chat-components/RelevantNotes";
 import { CopilotBrandIcon } from "@/components/ui/CopilotBrandIcon";
 import { AgentHomeShelf, type AgentHomeShelfSection } from "@/agentMode/ui/AgentHomeShelf";
 import { GlobalRecentChatsSection } from "@/agentMode/ui/GlobalRecentChatsSection";
@@ -586,10 +587,12 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
               icon: <FileSearch className="tw-size-4" />,
               title: "Relevant Notes",
               renderBody: () => (
-                <RelevantNotesShelfPanel
-                  onPopOut={() => void plugin.activateRelevantNotesView()}
-                  onAddToChat={(text) => void plugin.insertTextIntoActiveChat(text)}
-                />
+                <RelevantNotesShelfPanel onPopOut={() => void plugin.activateRelevantNotesView()}>
+                  <RelevantNotes
+                    className={cn("[&>[data-relevant-notes-empty-state]]:tw-py-6")}
+                    onAddToChat={(text) => void plugin.insertTextIntoActiveChat(text)}
+                  />
+                </RelevantNotesShelfPanel>
               ),
             },
           ]),

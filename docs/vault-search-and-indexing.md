@@ -61,6 +61,8 @@ The scope is a retrieval preference, not a security boundary. Keep Miyo's regist
 
 ### Relevant Notes
 
+In Agent Chat, select the **Relevant Notes** tab, then **Open in separate pane** at the bottom to keep the notes alongside your conversation. This button stays available below the results, including while notes are loading or the list is empty. Closing the separate pane brings the Relevant Notes tab back to chat.
+
 Miyo is the source of Relevant Notes results and similarity percentages; Copilot's legacy local embedding index no longer scores this pane. Copilot keeps Miyo's result order. Direct links and backlinks annotate notes returned by Miyo but never add their own rows. Relevant Notes does not apply Copilot's inclusion or exclusion patterns; the registered folder's Miyo scope determines which notes can appear.
 
 If Miyo is disabled, unavailable, or its vault registration cannot be confirmed, the pane does not fall back to link and backlink rows. Instead, it offers Miyo download or setup actions. **Open Miyo settings** returns directly to the existing connection flow under **Settings → Copilot → Miyo**, including when you use a remote endpoint or mobile device.

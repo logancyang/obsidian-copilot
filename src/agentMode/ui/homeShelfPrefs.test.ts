@@ -1,9 +1,4 @@
-import {
-  dismissPopOutHint,
-  getHomeShelfTab,
-  isPopOutHintDismissed,
-  setHomeShelfTab,
-} from "@/agentMode/ui/homeShelfPrefs";
+import { getHomeShelfTab, setHomeShelfTab } from "@/agentMode/ui/homeShelfPrefs";
 import { logWarn } from "@/logger";
 import type { App } from "obsidian";
 
@@ -85,44 +80,6 @@ describe("homeShelfPrefs", () => {
       expect(() => setHomeShelfTab(createThrowingApp(), "shelf-key", "projects")).not.toThrow();
       expect(mockLogWarn).toHaveBeenCalledWith(
         "Failed to persist home shelf tab",
-        expect.any(Error)
-      );
-    });
-  });
-
-  describe("isPopOutHintDismissed()", () => {
-    it("defaults to false when no dismissal has been stored", () => {
-      const { app } = createFakeApp();
-
-      expect(isPopOutHintDismissed(app)).toBe(false);
-    });
-
-    it("ignores the cosmetic legacy dismissal instead of extending raw storage migration (https://github.com/logancyang/obsidian-copilot-preview/issues/298)", () => {
-      window.localStorage.setItem("copilot:relevant-notes-popout-hint-dismissed:v1", "true");
-      const { app, store } = createFakeApp();
-
-      expect(isPopOutHintDismissed(app)).toBe(false);
-      expect(store.size).toBe(0);
-    });
-
-    it("returns false when storage cannot be read", () => {
-      expect(isPopOutHintDismissed(createThrowingApp())).toBe(false);
-    });
-  });
-
-  describe("dismissPopOutHint()", () => {
-    it("persists the dismissed state so a later read returns true", () => {
-      const { app } = createFakeApp();
-
-      dismissPopOutHint(app);
-
-      expect(isPopOutHintDismissed(app)).toBe(true);
-    });
-
-    it("does not throw when storage cannot be written", () => {
-      expect(() => dismissPopOutHint(createThrowingApp())).not.toThrow();
-      expect(mockLogWarn).toHaveBeenCalledWith(
-        "Failed to persist pop-out hint dismissal",
         expect.any(Error)
       );
     });
