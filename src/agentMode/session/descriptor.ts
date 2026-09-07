@@ -277,8 +277,8 @@ export interface BackendDescriptor {
    * by the application layer.
    */
   readonly wire: ModelWireCodec;
-  /** Whether config updates carry the authoritative model selection even with a dedicated catalog. */
-  readonly configModelSelectionAuthoritative?: boolean;
+  /** Whether a saved model selection must include an explicit effort. */
+  readonly requiresExplicitEffort?: boolean;
 
   /**
    * Optional: normalize a backend-reported model display name before it

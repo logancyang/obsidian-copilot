@@ -74,8 +74,7 @@ function translateModel(
   // Newer opencode (≥ 1.15.13) dropped that field and advertises its catalog
   // only through a generic `category:"model"` select config option, switched
   // via `session/set_config_option` instead of `session/set_model`.
-  const configModel = modelStateFromConfigOption(inputs.configOptions);
-  const fromConfig = inputs.models ? null : configModel;
+  const fromConfig = inputs.models ? null : modelStateFromConfigOption(inputs.configOptions);
   const modelState = inputs.models ?? fromConfig?.state ?? null;
   if (!modelState) return null;
   const effortFromConfig = fromConfig ? effortConfigOption(inputs.configOptions) : null;
@@ -85,12 +84,7 @@ function translateModel(
         configId: fromConfig.configId,
         ...(effortFromConfig ? { effortConfigId: effortFromConfig.id } : {}),
       }
-    : {
-        kind: "setModel",
-        // A dual-channel backend can choose effort for a model-only selection.
-        // https://github.com/Brevilabs/obsidian-copilot-private/issues/219
-        ...(configModel ? { modelConfigId: configModel.configId } : {}),
-      };
+    : { kind: "setModel" };
 
   // Group advertised wire ids by baseModelId, preserving first-seen order.
   type Group = {
@@ -430,12 +424,10 @@ function stripEffortSuffix(name: string, variants: { effort: string | null }[]):
 export function modelStateSignature(state: BackendState | null): string {
   const m = state?.model;
   if (!m) return "";
-  // Model-only config availability changes selection routing even for the same model.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/219
   const apply =
     m.apply.kind === "setConfigOption"
       ? `setConfigOption:${m.apply.configId}:${m.apply.effortConfigId ?? ""}`
-      : `${m.apply.kind}${m.apply.modelConfigId ? `:${m.apply.modelConfigId}` : ""}`;
+      : m.apply.kind;
   return [
     m.current.baseModelId,
     m.current.effort ?? "",

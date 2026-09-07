@@ -102,7 +102,7 @@ export const CodexBackendDescriptor: BackendDescriptor = {
   // context envelope), so the session derives the tab title client-side instead.
   summarizesSessionTitle: false,
   wire: codexWire,
-  configModelSelectionAuthoritative: true,
+  requiresExplicitEffort: true,
   showModelDescriptions: true,
 
   getEnabledModelEntries(settings: CopilotSettings): EnabledModelEntry[] {
@@ -162,28 +162,8 @@ export const CodexBackendDescriptor: BackendDescriptor = {
     new CodexInstallModal(plugin.app).open();
   },
 
-  async applySelection(session: AgentSession, selection: ModelSelection, context): Promise<void> {
-    // Explicit effort must travel in the model ID or the adapter rejects the switch.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/219
-    if (selection.effort !== null) {
-      await session.applyModelWireId(codexWire.encode(selection));
-      return;
-    }
-    // Model-only selection must let Codex choose effort; the first catalog entry
-    // is not its default. https://github.com/Brevilabs/obsidian-copilot-private/issues/219
-    const model = session.getState()?.model;
-    if (model?.apply.kind === "setModel" && model.apply.modelConfigId) {
-      await session.setConfigOption(model.apply.modelConfigId, selection.baseModelId);
-      return;
-    }
-    // Older supported adapters require [effort] and expose no model-only option.
-    // Keep an already-active model's effort; never guess one for a different model.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/219
-    const current = context ? context.backendReportedCurrent : model?.current;
-    if (current?.baseModelId === selection.baseModelId) return;
-    throw new Error(
-      "This Codex adapter cannot choose effort for a model-only switch. Choose an explicit effort or update the Codex adapter."
-    );
+  async applySelection(session: AgentSession, selection: ModelSelection): Promise<void> {
+    await session.applyModelWireId(codexWire.encode(selection));
   },
 
   createBackendProcess(args): BackendProcess {

@@ -2790,6 +2790,28 @@ describe("AgentSession warm-adoption ready gating", () => {
     expect(session.getStatus()).toBe("idle");
   });
 
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/219 keeps a session usable when a saved selection cannot be encoded", async () => {
+    const mock = makeMockBackend();
+    const descriptor = makeWireOnlyDescriptor();
+    descriptor.wire.encode = () => {
+      throw new Error("Choose an explicit effort");
+    };
+    const initialState = emptyState();
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "probe-1",
+      internalId: "internal-1",
+      backendId: "codex",
+      initialState,
+      defaultModelSelection: { baseModelId: "saved-model", effort: null },
+      getDescriptor: () => descriptor,
+    });
+    await session.ready;
+    expect(session.getStatus()).toBe("idle");
+    expect(session.getState()).toBe(initialState);
+    expect(mock.setSessionModel).not.toHaveBeenCalled();
+  });
+
   it("ready resolves immediately when no default selection is supplied", async () => {
     const mock = makeMockBackend();
     const session = new AgentSession({

@@ -18,46 +18,7 @@ const mockedResolveCodexAcpBinary = jest.mocked(resolveCodexAcpBinary);
 const mockedIsSupportedCodexAcpPath = jest.mocked(isSupportedCodexAcpPath);
 import type { AgentSession } from "@/agentMode/session/AgentSession";
 import { translateBackendState } from "@/agentMode/session/translateBackendState";
-import type {
-  BackendState,
-  EffortOption,
-  PermissionOption,
-  RawModelState,
-} from "@/agentMode/session/types";
-
-/**
- * A session stub exposing only what `applySelection` reads (`getState`) and
- * calls (`applyModelWireId`), so the effort-snapping contract is asserted
- * against the wire id that actually reaches the agent.
- */
-function sessionWith(effortOptions: EffortOption[] | null): {
-  session: AgentSession;
-  applyModelWireId: jest.Mock;
-} {
-  const applyModelWireId = jest.fn(async () => undefined);
-  const state: BackendState | null =
-    effortOptions === null
-      ? null
-      : {
-          model: {
-            current: { baseModelId: "gpt-5.6-sol", effort: "high" },
-            availableModels: [
-              { baseModelId: "gpt-5.6-sol", name: "GPT-5.6-Sol", provider: null, effortOptions },
-            ],
-            apply: { kind: "setModel" },
-          },
-          mode: null,
-        };
-  return {
-    session: { applyModelWireId, getState: () => state } as unknown as AgentSession,
-    applyModelWireId,
-  };
-}
-
-const SOL_EFFORTS: EffortOption[] = ["low", "medium", "high", "xhigh", "max", "ultra"].map((v) => ({
-  value: v,
-  label: v,
-}));
+import type { PermissionOption, RawModelState } from "@/agentMode/session/types";
 
 /**
  * Transcribed from a live `codex-acp@1.1.10` `session/new` reply: one entry per
@@ -193,7 +154,8 @@ describe("descriptor", () => {
 
     describe("applySelection()", () => {
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/219 sends the bracketed wire id for the chosen effort", async () => {
-        const { session, applyModelWireId } = sessionWith(SOL_EFFORTS);
+        const applyModelWireId = jest.fn();
+        const session = { applyModelWireId } as unknown as AgentSession;
 
         await CodexBackendDescriptor.applySelection(session, {
           baseModelId: "gpt-5.6-sol",
@@ -203,75 +165,9 @@ describe("descriptor", () => {
         expect(applyModelWireId).toHaveBeenCalledWith("gpt-5.6-sol[max]");
       });
 
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/219 lets the adapter choose effort through its advertised model option", async () => {
-        const state = translateBackendState(
-          {
-            models: ADVERTISED_CATALOG,
-            modes: null,
-            configOptions: [
-              {
-                id: "model-choice",
-                type: "select",
-                category: "model",
-                name: "Model",
-                currentValue: "gpt-5.6-sol",
-                options: [{ value: "gpt-5.6-sol", name: "Sol" }],
-              },
-            ],
-          },
-          CodexBackendDescriptor
-        );
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/219 rejects a model without explicit effort before sending a switch", async () => {
         const applyModelWireId = jest.fn();
-        const setConfigOption = jest.fn();
-        const session = {
-          getState: () => state,
-          applyModelWireId,
-          setConfigOption,
-        } as unknown as AgentSession;
-
-        await CodexBackendDescriptor.applySelection(session, {
-          baseModelId: "gpt-5.6-sol",
-          effort: null,
-        });
-
-        expect(setConfigOption).toHaveBeenCalledWith("model-choice", "gpt-5.6-sol");
-        expect(applyModelWireId).not.toHaveBeenCalled();
-      });
-
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/219 preserves the reported effort when an older adapter already has the requested model", async () => {
-        const { session, applyModelWireId } = sessionWith(SOL_EFFORTS);
-        await CodexBackendDescriptor.applySelection(session, {
-          baseModelId: "gpt-5.6-sol",
-          effort: null,
-        });
-        expect(applyModelWireId).not.toHaveBeenCalled();
-        expect(session.getState()?.model?.current.effort).toBe("high");
-      });
-
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/219 rejects a model-only switch on an older adapter without choosing an arbitrary effort", async () => {
-        const { session, applyModelWireId } = sessionWith(SOL_EFFORTS);
-        await expect(
-          CodexBackendDescriptor.applySelection(session, { baseModelId: "gpt-5.5", effort: null })
-        ).rejects.toThrow("Choose an explicit effort");
-        expect(applyModelWireId).not.toHaveBeenCalled();
-      });
-
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/219 checks the backend report rather than an optimistic startup seed", async () => {
-        const { session, applyModelWireId } = sessionWith(SOL_EFFORTS);
-        await expect(
-          CodexBackendDescriptor.applySelection(
-            session,
-            { baseModelId: "gpt-5.6-sol", effort: null },
-            {
-              backendReportedCurrent: { baseModelId: "gpt-5.5", effort: "high" },
-            }
-          )
-        ).rejects.toThrow("Choose an explicit effort");
-        expect(applyModelWireId).not.toHaveBeenCalled();
-      });
-
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/219 never sends a bare model ID while the catalog is unavailable", async () => {
-        const { session, applyModelWireId } = sessionWith(null);
+        const session = { applyModelWireId } as unknown as AgentSession;
         await expect(
           CodexBackendDescriptor.applySelection(session, {
             baseModelId: "gpt-5.6-sol",

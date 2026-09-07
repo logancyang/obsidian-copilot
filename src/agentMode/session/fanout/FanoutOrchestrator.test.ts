@@ -193,47 +193,6 @@ describe("createFanoutTurn", () => {
 });
 
 describe("FanoutOrchestrator.run", () => {
-  it.each([true, false])(
-    "https://github.com/Brevilabs/obsidian-copilot-private/issues/219 applies model-only defaults using the backend-authorized channel, config authoritative=%s",
-    async (configModelSelectionAuthoritative) => {
-      const { host, procs } = makeHost({ codex: { sessionId: "s-codex" } });
-      const descriptor = { ...descriptorFor("codex"), configModelSelectionAuthoritative };
-      host.ensureBackendForFanout = async () => ({ proc: procs.get("codex")!.proc, descriptor });
-      host.getDefaultSelection = () => ({ baseModelId: "selected-model", effort: null });
-      const { proc } = procs.get("codex")!;
-      (proc.newSession as jest.Mock).mockResolvedValue({
-        sessionId: "s-codex",
-        state: {
-          model: {
-            current: { baseModelId: "native-model", effort: "high" },
-            availableModels: [],
-            apply: { kind: "setModel", modelConfigId: "model" },
-          },
-          mode: null,
-        },
-      });
-      (proc.prompt as jest.Mock).mockResolvedValue({ stopReason: "end_turn" });
-
-      await new FanoutOrchestrator(host).run(runInput(["codex"]));
-
-      if (configModelSelectionAuthoritative) {
-        expect(proc.setSessionConfigOption).toHaveBeenCalledWith({
-          sessionId: "s-codex",
-          configId: "model",
-          value: "selected-model",
-        });
-        expect(proc.setSessionModel).not.toHaveBeenCalled();
-      } else {
-        expect(proc.setSessionModel).toHaveBeenCalledWith({
-          sessionId: "s-codex",
-          modelId: "selected-model/default",
-        });
-        expect(proc.setSessionConfigOption).not.toHaveBeenCalled();
-      }
-      expect(proc.prompt).toHaveBeenCalled();
-    }
-  );
-
   it("streams each agent's answer into its own slot and marks them done", async () => {
     const { host, procs, readOnlyRegistered, readOnlyUnregistered, excludedFromHistory } = makeHost(
       {

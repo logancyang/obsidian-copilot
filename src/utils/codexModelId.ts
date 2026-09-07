@@ -35,12 +35,15 @@ export function parseCodexModelId(wireId: string): CodexModelId {
 }
 
 /**
- * Build the addressed model/effort pair; null effort preserves a model-only value
- * for config selection instead of guessing a level the backend might not support.
+ * Build the addressed model/effort pair. Missing effort is rejected before an
+ * unsupported bare model ID reaches Codex.
  * https://github.com/Brevilabs/obsidian-copilot-private/issues/219
  * @param baseModelId Model ID before any effort suffix.
- * @param effort Backend-advertised effort, or null for model-only selection.
+ * @param effort The explicitly selected backend-advertised effort.
  */
 export function formatCodexModelId(baseModelId: string, effort: string | null): string {
-  return effort ? `${baseModelId}[${effort}]` : baseModelId;
+  // Codex rejects model-only switches; the user must choose an advertised effort.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/219
+  if (!effort) throw new Error("Choose an explicit effort for the Codex model.");
+  return `${baseModelId}[${effort}]`;
 }

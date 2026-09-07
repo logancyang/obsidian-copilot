@@ -22,6 +22,9 @@ export function AgentDefaultEffortSetting({
   onChange,
 }: AgentDefaultEffortSettingProps) {
   const supported = options.length > 0;
+  // A concrete-only catalog must not select its first effort before the user chooses.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/219
+  const requiresChoice = supported && !options.some((option) => option.value === null);
   const selectOptions = supported
     ? options.map((option) => ({ label: option.label, value: option.value ?? "" }))
     : [{ label: disabledLabel, value: "" }];
@@ -30,6 +33,10 @@ export function AgentDefaultEffortSetting({
     <SettingItem
       type="select"
       title="Default effort"
+      placeholder={requiresChoice ? "Choose effort" : undefined}
+      description={
+        requiresChoice && value === null ? "Choose an effort to save this model." : undefined
+      }
       value={supported ? (value ?? "") : ""}
       onChange={(nextValue) => onChange(nextValue === "" ? null : nextValue)}
       options={selectOptions}

@@ -677,14 +677,17 @@ export class AgentSession {
   ): Promise<void> {
     const descriptor = this.getDescriptor?.();
     if (!descriptor) return;
-    const encoded = descriptor.wire.encode(selection);
-    const originalEncoded = originalState.model
-      ? descriptor.wire.encode(originalState.model.current)
-      : null;
-    const originalEffort = originalState.model?.current.effort ?? null;
-    if (encoded === originalEncoded && selection.effort === originalEffort) return;
-    const configOptionBacked = originalState.model?.apply?.kind === "setConfigOption";
     try {
+      // A saved selection may no longer satisfy the backend's addressing rules.
+      // Keep startup usable by reverting the seed when encoding rejects it.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/219
+      const encoded = descriptor.wire.encode(selection);
+      const originalEncoded = originalState.model
+        ? descriptor.wire.encode(originalState.model.current)
+        : null;
+      const originalEffort = originalState.model?.current.effort ?? null;
+      if (encoded === originalEncoded && selection.effort === originalEffort) return;
+      const configOptionBacked = originalState.model?.apply?.kind === "setConfigOption";
       // Clearing effort to the agent default on a config-option backend whose
       // process baked a concrete effort: the base already matches, so
       // `applySelection` skips the model write and returns for null effort,
@@ -698,7 +701,10 @@ export class AgentSession {
         backendReportedCurrent: originalState.model?.current ?? null,
       });
     } catch (e) {
-      logWarn(`[AgentMode] could not apply seeded selection ${encoded}; reverting seed`, e);
+      logWarn(
+        `[AgentMode] could not apply seeded selection ${selection.baseModelId}; reverting seed`,
+        e
+      );
       this.currentState = originalState;
       this.notifyModelChanged();
     }

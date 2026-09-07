@@ -48,9 +48,14 @@ describe("codexModelId", () => {
       expect(formatCodexModelId("gpt-5.6-sol", "ultra")).toBe("gpt-5.6-sol[ultra]");
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/219 emits the bare base model when no effort is selected", () => {
-      expect(formatCodexModelId("gpt-5.6-sol", null)).toBe("gpt-5.6-sol");
-    });
+    it.each([null, ""])(
+      "https://github.com/Brevilabs/obsidian-copilot-private/issues/219 rejects missing effort %p before sending an unsupported model ID",
+      (effort) => {
+        expect(() => formatCodexModelId("gpt-5.6-sol", effort)).toThrow(
+          "Choose an explicit effort"
+        );
+      }
+    );
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/219 round-trips every advertised wire id", () => {
       for (const wireId of ["gpt-5.6-sol[low]", "gpt-5.5[xhigh]", "gpt-5.4-mini[medium]"]) {

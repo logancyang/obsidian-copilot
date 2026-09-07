@@ -33,3 +33,23 @@ export const Unsupported: StoryObj<AgentDefaultEffortSettingProps> = {
     onChange: () => undefined,
   },
 };
+
+export const EffortRequired: StoryObj<AgentDefaultEffortSettingProps> = {
+  args: {
+    value: null,
+    options: [
+      { value: "low", label: "Low" },
+      { value: "high", label: "High" },
+    ],
+    disabledLabel: "Effort options unavailable",
+    onChange: () => undefined,
+  },
+};
+
+export const ExplicitEffort: StoryObj<AgentDefaultEffortSettingProps> = {
+  args: { ...EffortRequired.args, value: "high" },
+};
+
+export const CatalogUnavailable: StoryObj<AgentDefaultEffortSettingProps> = {
+  args: { ...Unsupported.args, disabledLabel: "Effort options unavailable" },
+};
