@@ -1,3 +1,4 @@
+import { waitFor } from "@testing-library/react";
 jest.mock("obsidian", () => ({
   // pickMatchingAsset is pure; FileSystemAdapter and requestUrl are
   // referenced by the manager class but not by these tests.
@@ -475,6 +476,42 @@ describe("OpencodeBinaryManager.upgradeCustomBinary", () => {
   afterEach(async () => {
     await fs.promises.rm(tmpDir, { recursive: true, force: true });
   });
+
+  it.each(["upgrade", "--version"])(
+    "https://github.com/Brevilabs/obsidian-copilot-private/issues/368 cancels during %s without publishing settings or Retry",
+    async (phase) => {
+      if (process.platform === "win32") return;
+      const file = path.join(tmpDir, "opencode");
+      const marker = path.join(tmpDir, "started");
+      await fs.promises.writeFile(
+        file,
+        `#!${process.execPath}
+if (process.argv[2] === ${JSON.stringify(phase)}) {
+  require("fs").writeFileSync(${JSON.stringify(marker)}, String(process.pid));
+  setTimeout(() => process.stdout.write("99.0.0"), ${phase === "upgrade" ? 30000 : 250});
+}
+`
+      );
+      await fs.promises.chmod(file, 0o755);
+      const initial = { binaryPath: file, binaryVersion: "1.0.0", binarySource: "custom" as const };
+      settingsMock.__reset(initial);
+      const manager = new OpencodeBinaryManager(fakePlugin);
+      const operation = manager.upgradeCustomBinary();
+      const rejected = expect(operation).rejects.toMatchObject({ name: "AbortError" });
+      try {
+        await waitFor(() => expect(fs.existsSync(marker)).toBe(true));
+        const pid = Number(await fs.promises.readFile(marker, "utf8"));
+        manager.cancelCurrentOperation();
+        await rejected;
+        await waitFor(() => expect(() => process.kill(pid, 0)).toThrow());
+        expect(settingsMock.__get()).toEqual(initial);
+        expect(manager.getRuntimeState()).toEqual({ kind: "idle" });
+      } finally {
+        manager.cancelCurrentOperation();
+        await operation.catch(() => undefined);
+      }
+    }
+  );
 
   it("rejects when opencode upgrade exits successfully but leaves an outdated binary", async () => {
     if (process.platform === "win32") return;

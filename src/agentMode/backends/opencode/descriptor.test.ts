@@ -28,10 +28,9 @@ jest.mock("@/logger", () => ({
 
 describe("descriptor", () => {
   describe("OpencodeBackendDescriptor", () => {
-    describe("managedInstall", () => {
+    describe("managedInstall.getState()", () => {
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/368 maps shared progress without adding a fabricated percentage", async () => {
         const manager = getOpencodeBinaryManager(vaultPlugin(os.tmpdir()));
-        const subscribe = jest.spyOn(manager, "subscribeRuntimeState");
         const getState = jest
           .spyOn(manager, "getRuntimeState")
           .mockReturnValue({ kind: "installing", progress: null });
@@ -41,9 +40,6 @@ describe("descriptor", () => {
           kind: "running",
           label: "Starting…",
         });
-        const listener = jest.fn();
-        OpencodeBackendDescriptor.managedInstall?.subscribe(plugin, listener);
-        expect(subscribe).toHaveBeenCalledWith(listener);
 
         for (const kind of ["busy", "detecting"] as const) {
           getState.mockReturnValue({ kind });
@@ -80,9 +76,23 @@ describe("descriptor", () => {
             expect(state.label.match(/%/g)?.length ?? 0).toBe(total ? 1 : 0);
         }
         getState.mockRestore();
+      });
+    });
+
+    describe("managedInstall.subscribe()", () => {
+      it("subscribes to shared operation changes and returns cleanup", () => {
+        const plugin = vaultPlugin(os.tmpdir());
+        const manager = getOpencodeBinaryManager(plugin);
+        const cleanup = jest.fn();
+        const subscribe = jest.spyOn(manager, "subscribeRuntimeState").mockReturnValue(cleanup);
+        const listener = jest.fn();
+        expect(OpencodeBackendDescriptor.managedInstall?.subscribe(plugin, listener)).toBe(cleanup);
+        expect(subscribe).toHaveBeenCalledWith(listener);
         subscribe.mockRestore();
       });
+    });
 
+    describe("managedInstall.run()", () => {
       it("keeps custom and managed upgrades on their existing manager paths", async () => {
         const manager = getOpencodeBinaryManager(vaultPlugin(os.tmpdir()));
         const upgradeCustom = jest.spyOn(manager, "upgradeCustomBinary").mockResolvedValue({

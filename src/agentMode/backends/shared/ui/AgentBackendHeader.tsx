@@ -32,6 +32,8 @@ export function AgentBackendHeader({
   onUpdate,
   onConfigure,
 }: AgentBackendHeaderProps) {
+  // Shared progress prevents duplicate updates; shared errors keep Retry available across surfaces.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
   const updating = managedInstall.kind === "running";
   const updateFailed = managedInstall.kind === "error";
   return (
