@@ -252,20 +252,28 @@ describe("FanoutOrchestrator", () => {
 
         expect(result.answers.codex).toMatchObject({ status: "done", text: "Successful answer" });
         expect(result.summary.status).toBe("done");
-        expect(result.summary.error).toContain(
-          "Choose an explicit effort for the Codex model."
-        );
+        expect(result.summary.error).toContain("Choose an explicit effort for the Codex model.");
         expect(result.summary.complete).not.toBe(true);
         expect(proc.prompt).toHaveBeenCalledTimes(1);
       });
 
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/219 clears stale OpenCode effort before both answer and summary prompts", async () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/219 applies and reports the lowest OpenCode effort before both answer and summary prompts", async () => {
         const { host, procs } = makeHost({ opencode: { sessionId: "s-opencode" } });
         const proc = procs.get("opencode")!.proc;
         const state: BackendState = {
           model: {
             current: { baseModelId: "provider/model", effort: "high" },
-            availableModels: [],
+            availableModels: [
+              {
+                baseModelId: "provider/model",
+                name: "Model",
+                provider: "provider",
+                effortOptions: [
+                  { value: "high", label: "High" },
+                  { value: "low", label: "Low" },
+                ],
+              },
+            ],
             apply: { kind: "setConfigOption", configId: "model", effortConfigId: "effort" },
           },
           mode: null,
@@ -273,7 +281,12 @@ describe("FanoutOrchestrator", () => {
         host.ensureBackendForFanout = async () => ({ proc, descriptor: OpencodeBackendDescriptor });
         host.getDefaultSelection = () => ({ baseModelId: "provider/model", effort: null });
         jest.mocked(proc.newSession).mockResolvedValue({ sessionId: "s-opencode", state });
-        jest.mocked(proc.setSessionConfigOption).mockResolvedValue(state);
+        const confirmed = {
+          ...state,
+          model: { ...state.model!, current: { baseModelId: "provider/model", effort: "low" } },
+        };
+        host.onSelectionApplied = jest.fn();
+        jest.mocked(proc.setSessionConfigOption).mockResolvedValue(confirmed);
         jest.mocked(proc.prompt).mockImplementation(async () => {
           procs.get("opencode")!.emit(textChunk("s-opencode", "answer"));
           return { stopReason: "end_turn" };
@@ -282,9 +295,10 @@ describe("FanoutOrchestrator", () => {
         await new FanoutOrchestrator(host).run(runInput(["opencode"]));
 
         expect(jest.mocked(proc.setSessionConfigOption).mock.calls).toEqual([
-          [{ sessionId: "s-opencode", configId: "model", value: "provider/model" }],
-          [{ sessionId: "s-opencode", configId: "model", value: "provider/model" }],
+          [{ sessionId: "s-opencode", configId: "effort", value: "low" }],
+          [{ sessionId: "s-opencode", configId: "effort", value: "low" }],
         ]);
+        expect(host.onSelectionApplied).toHaveBeenCalledWith("opencode", confirmed);
         expect(proc.prompt).toHaveBeenCalledTimes(2);
         expect(proc.setSessionModel).not.toHaveBeenCalled();
       });
@@ -297,7 +311,17 @@ describe("FanoutOrchestrator", () => {
           const initial: BackendState = {
             model: {
               current: { baseModelId: "provider/old", effort: null },
-              availableModels: [],
+              availableModels: [
+                {
+                  baseModelId: "provider/model",
+                  name: "Model",
+                  provider: "provider",
+                  effortOptions: [
+                    { value: "high", label: "High" },
+                    { value: "low", label: "Low" },
+                  ],
+                },
+              ],
               apply: { kind: "setConfigOption", configId: "model", effortConfigId: "old-effort" },
             },
             mode: null,

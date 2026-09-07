@@ -221,12 +221,12 @@ describe("descriptor", () => {
       }
 
       it.each(["high", null])(
-        "https://github.com/Brevilabs/obsidian-copilot-private/issues/219 resets the same model only when its effort is stale: %s",
+        "https://github.com/Brevilabs/obsidian-copilot-private/issues/219 resolves missing effort on the active model without resetting it: %s",
         async (effort) => {
           const { session, applyModelWireId, setConfigOption } = makeSession({
             model: {
               current: { baseModelId: "openai/gpt-5", effort },
-              availableModels: [],
+              availableModels: [entryOffering("openai/gpt-5", ["high", "low"])],
               apply: { kind: "setConfigOption", configId: "model", effortConfigId: "effort" },
             },
             mode: null,
@@ -235,8 +235,8 @@ describe("descriptor", () => {
             baseModelId: "openai/gpt-5",
             effort: null,
           });
-          expect(applyModelWireId).toHaveBeenCalledTimes(effort === null ? 0 : 1);
-          expect(setConfigOption).not.toHaveBeenCalled();
+          expect(applyModelWireId).not.toHaveBeenCalled();
+          expect(setConfigOption).toHaveBeenCalledWith("effort", "low");
         }
       );
 
