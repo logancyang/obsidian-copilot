@@ -1,4 +1,3 @@
-import { resolveEffort } from "@/lib/model-effort";
 import { logWarn } from "@/logger";
 import { err2String } from "@/utils";
 import type {
@@ -6,7 +5,6 @@ import type {
   BackendId,
   BackendProcess,
   BackendState,
-  ModelApplySpec,
   ModelSelection,
   PromptContent,
   SessionEvent,
@@ -277,10 +275,7 @@ export class FanoutOrchestrator {
           if (text !== null) onText(text);
         });
 
-        // Sandbox mode and model selection mutate disjoint fields, so run both
-        // round-trips concurrently. The model channel comes from the sub-session's
-        // own `BackendState.model.apply` spec, so config-option backends (opencode
-        // ≥ 1.15.13) route through the same RPC the visible session would.
+        // Sandbox mode and model selection mutate disjoint fields.
         await Promise.all([
           this.applyReadOnlyMode(proc, descriptor, sessionId),
           this.applyDefaultModel(proc, descriptor, backendId, sessionId, opened.state),
@@ -478,23 +473,8 @@ export class FanoutOrchestrator {
   }
 
   /**
-   * Switch the sub-session onto the user's configured default model AND effort.
-   * Best-effort — a missing default or unsupported switch leaves the backend's own.
-   *
-   * The orchestrator holds only a raw `(proc, sessionId)` pair, so it mirrors
-   * `AgentSession.applyModelWireId` + `descriptor.applySelection` generically off
-   * the sub-session's own `BackendState.model.apply` spec (`modelApply`):
-   *
-   *   - `setModel` spec (claude, codex, opencode ≤ 1.15.12): model via
-   *     `setSessionModel`. Effort rides the wire id (codex) or applies via a
-   *     second `setSessionConfigOption` using `wire.effortConfigFor` (Claude SDK,
-   *     where `wire.encode` drops effort) — without it, the default effort runs.
-   *
-   *   - `setConfigOption` spec (opencode ≥ 1.15.13, `session/set_model` gone): the
-   *     MODEL is set via `setSessionConfigOption` (`setSessionModel` would hit the
-   *     unsupported RPC). Effort is a sibling option only surfaced for the ACTIVE
-   *     model, so we activate the bare model first, then apply effort against the
-   *     refreshed `effortConfigId` (mirroring opencode's `applySelection`).
+   * Apply the saved model through the same backend policy as visible chats.
+   * State is local to this ephemeral session and refreshed after each write.
    */
   private async applyDefaultModel(
     proc: BackendProcess,
@@ -503,86 +483,30 @@ export class FanoutOrchestrator {
     sessionId: SessionId,
     state: BackendState
   ): Promise<void> {
-    const requested = this.host.getDefaultSelection(backendId) ?? state.model?.current;
-    if (!requested) return;
-    const modelApply = state.model?.apply;
-    const selection = {
-      ...requested,
-      effort: resolveEffort(
-        requested.effort,
-        state.model?.availableModels.find((model) => model.baseModelId === requested.baseModelId)
-          ?.effortOptions
-      ),
-    };
-    try {
-      if (modelApply?.kind === "setConfigOption") {
-        const updated = await this.applyConfigOptionModel(
-          proc,
-          descriptor,
-          sessionId,
-          requested,
-          modelApply
-        );
-        this.host.onSelectionApplied?.(backendId, updated);
-        return;
-      }
-      let updated = await proc.setSessionModel({
-        sessionId,
-        modelId: descriptor.wire.encode(selection),
-      });
-      if (selection.effort !== null) {
-        const effortConfig = descriptor.wire.effortConfigFor?.(selection.baseModelId);
-        if (effortConfig) {
-          updated = await proc.setSessionConfigOption({
-            sessionId,
-            configId: effortConfig.id,
-            value: selection.effort,
-          });
-        }
-      }
-      this.host.onSelectionApplied?.(backendId, updated);
-    } catch (e) {
-      logWarn(`[AgentMode] fan-out default model failed for ${backendId}`, e);
-    }
-  }
-
-  /**
-   * Apply model + effort for the config-option channel (opencode ≥ 1.15.13),
-   * mirroring opencode's `descriptor.applySelection`. The bare model is set first
-   * (effort dropped) so the backend surfaces the model-specific effort option;
-   * effort is then applied against the returned state's `effortConfigId`.
-   */
-  private async applyConfigOptionModel(
-    proc: BackendProcess,
-    descriptor: BackendDescriptor,
-    sessionId: SessionId,
-    selection: ModelSelection,
-    modelApply: Extract<ModelApplySpec, { kind: "setConfigOption" }>
-  ): Promise<BackendState> {
-    const bareWire = descriptor.wire.encode({
-      baseModelId: selection.baseModelId,
-      effort: null,
-    });
-    const refreshed = await proc.setSessionConfigOption({
-      sessionId,
-      configId: modelApply.configId,
-      value: bareWire,
-    });
-    const effort = resolveEffort(
-      selection.effort,
-      refreshed.model?.availableModels.find((model) => model.baseModelId === selection.baseModelId)
-        ?.effortOptions
+    const selection = this.host.getDefaultSelection(backendId) ?? state.model?.current;
+    if (!selection) return;
+    // Duplicating codec/config dispatch here bypasses backend default-effort
+    // handling. https://github.com/Brevilabs/obsidian-copilot-private/issues/219
+    await descriptor.applySelection(
+      {
+        getState: () => state,
+        applyModelWireId: async (modelId) => {
+          const apply = state.model?.apply;
+          state =
+            apply?.kind === "setConfigOption"
+              ? await proc.setSessionConfigOption({
+                  sessionId,
+                  configId: apply.configId,
+                  value: modelId,
+                })
+              : await proc.setSessionModel({ sessionId, modelId });
+        },
+        setConfigOption: async (configId, value) => {
+          state = await proc.setSessionConfigOption({ sessionId, configId, value });
+        },
+      },
+      selection
     );
-    const refreshedApply = refreshed.model?.apply;
-    const effortConfigId =
-      refreshedApply?.kind === "setConfigOption"
-        ? refreshedApply.effortConfigId
-        : modelApply.effortConfigId;
-    if (!effortConfigId || effort === null) return refreshed;
-    return proc.setSessionConfigOption({
-      sessionId,
-      configId: effortConfigId,
-      value: effort,
-    });
+    this.host.onSelectionApplied?.(backendId, state);
   }
 }

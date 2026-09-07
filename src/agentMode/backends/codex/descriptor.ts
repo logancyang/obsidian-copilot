@@ -1,5 +1,4 @@
 import { resolveEffort } from "@/lib/model-effort";
-import type { AgentSession } from "@/agentMode/session/AgentSession";
 import type CopilotPlugin from "@/main";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 import { detectBinary } from "@/utils/detectBinary";
@@ -21,7 +20,12 @@ import type {
   ModelWireCodec,
   PermissionOption,
 } from "@/agentMode/session/types";
-import type { BackendDescriptor, BackendProcess, InstallState } from "@/agentMode/session/types";
+import type {
+  BackendDescriptor,
+  BackendProcess,
+  InstallState,
+  ModelSelectionSession,
+} from "@/agentMode/session/types";
 import { formatCodexModelId, parseCodexModelId } from "@/utils/codexModelId";
 import { codexAcpSearchDirs, resolveCodexAcpBinary } from "./codexBinaryResolver";
 import { CODEX_BINARY_NAME } from "./cliSetup";
@@ -162,7 +166,7 @@ export const CodexBackendDescriptor: BackendDescriptor = {
     new CodexInstallModal(plugin.app).open();
   },
 
-  async applySelection(session: AgentSession, selection: ModelSelection): Promise<void> {
+  async applySelection(session: ModelSelectionSession, selection: ModelSelection): Promise<void> {
     const options = session
       .getState()
       ?.model?.availableModels.find(
