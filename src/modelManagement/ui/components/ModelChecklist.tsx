@@ -92,6 +92,8 @@ export const ModelChecklist: React.FC<ModelChecklistProps> = ({
   const handleManualAdd = (): void => {
     const id = manualId.trim();
     if (!id) return;
+    // Keep rejected embedding IDs editable so users can correct the model choice.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/386
     if (onAddId(id) === false) return;
     setManualId("");
   };
