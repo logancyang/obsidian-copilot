@@ -78,7 +78,7 @@ export class CodexBinaryManager extends ManagedBinaryManager<CodexInstallProgres
       .filter(
         (entry) =>
           entry.isDirectory() &&
-          /^(?:\.tmp-)?\d+\.\d+\.\d+-r\d+-[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(
+          /^(?:\.tmp-)?\d+\.\d+\.\d+-r\d+(?:-[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12})?$/.test(
             entry.name
           )
       )
@@ -150,11 +150,8 @@ export class CodexBinaryManager extends ManagedBinaryManager<CodexInstallProgres
     signal: AbortSignal;
   }): Promise<InstalledBinary> {
     const dataDir = this.getDataDir();
-    // Vaults share downloads but not process-local reservations. Every install gets a
-    // fresh directory so promotion never moves another vault's running adapter.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/380
     const suffix = requireNodeModule<typeof import("node:crypto")>("crypto").randomUUID();
-    const versionDir = path().join(dataDir, `${CODEX_BUNDLE_VERSION}-${suffix}`);
+    const versionDir = path().join(dataDir, CODEX_BUNDLE_VERSION);
     const stageDir = path().join(dataDir, `.tmp-${CODEX_BUNDLE_VERSION}-${suffix}`);
     await fs().promises.mkdir(stageDir, { recursive: true });
     try {

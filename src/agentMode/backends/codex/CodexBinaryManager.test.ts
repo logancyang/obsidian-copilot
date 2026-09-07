@@ -170,23 +170,19 @@ describe("CodexBinaryManager", () => {
           const persisted = JSON.parse(JSON.stringify(getSettings().agentMode));
           setSettings({ agentMode: persisted });
           expect(new CodexBinaryManager().getActionState()).toEqual({ kind: "idle" });
-          // Another vault can still use the previous directory, even after this vault restarts.
           expect(fs.existsSync(previous)).toBe(true);
           expect(fs.existsSync(stage)).toBe(true);
         }
       );
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/380 preserves an active old revision and installs the same revision into a fresh directory", async () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/380 replaces the same revision without accumulating installation directories", async () => {
         const manager = new CodexBinaryManager();
         const first = await manager.install();
-        const release = manager.reserveBinary(first.path);
+        fs.writeFileSync(first.path, "previous executable");
         const second = await manager.install();
-        expect(second.path).not.toBe(first.path);
-        expect(fs.readFileSync(first.path, "utf8")).toBe("native");
-        expect(fs.existsSync(second.path)).toBe(true);
-        await expect(manager.uninstall()).rejects.toThrow("Close Codex sessions");
-        release();
+        expect(second.path).toBe(first.path);
+        expect(fs.readFileSync(second.path, "utf8")).toBe("native");
+        expect(fs.readdirSync(manager.getDataDir())).toEqual([CODEX_BUNDLE_VERSION]);
         await manager.uninstall();
-        expect(fs.existsSync(first.path)).toBe(false);
         expect(fs.existsSync(second.path)).toBe(false);
       });
       it.each(["extraction", "runtime", "cancel"])(
@@ -248,9 +244,7 @@ describe("CodexBinaryManager", () => {
         expect(getSettings().agentMode.backends?.codex).toMatchObject({
           binarySource: "managed",
           binaryVersion: CODEX_BUNDLE_VERSION,
-          binaryPath: expect.stringContaining(
-            path.join(manager.getDataDir(), `${CODEX_BUNDLE_VERSION}-`)
-          ),
+          binaryPath: path.join(manager.getDataDir(), CODEX_BUNDLE_VERSION, "codex-acp"),
         });
         expect(mockedDetectBinary).not.toHaveBeenCalled();
         expect(listener).toHaveBeenCalled();
@@ -476,16 +470,10 @@ describe("CodexBinaryManager", () => {
           expect(getSettings().agentMode.backends?.codex).toMatchObject(before!);
         }
       );
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/380 removes only native UUID versions and stages while preserving unrecognized folders", async () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/380 removes recorded native versions and stages while preserving unrecognized folders", async () => {
         const manager = new CodexBinaryManager();
-        const preserved = [
-          "1.10.0",
-          "1.10.0-r1",
-          ".tmp-1.10.0-12345",
-          `${PREVIOUS_DIR}.old-abcd`,
-          "user-files",
-        ];
-        const removed = [PREVIOUS_DIR, `.tmp-${PREVIOUS_DIR}`];
+        const preserved = ["1.10.0", ".tmp-1.10.0-12345", `${PREVIOUS_DIR}.old-abcd`, "user-files"];
+        const removed = [CODEX_BUNDLE_VERSION, PREVIOUS_DIR, `.tmp-${PREVIOUS_DIR}`];
         for (const name of [...preserved, ...removed])
           writeNativeBundle(path.join(manager.getDataDir(), name));
         await manager.uninstall();
