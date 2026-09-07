@@ -9,6 +9,7 @@
  * effort token unambiguous, so Copilot never enumerates effort levels —
  * whatever the CLI puts between the brackets is the effort, and a release that
  * introduces a new level (`max`, `ultra`, …) needs no plugin change.
+ * https://github.com/Brevilabs/obsidian-copilot-private/issues/219
  */
 
 /** A codex wire id split into its parts; `effort` is null for an unbracketed id. */
@@ -33,7 +34,13 @@ export function parseCodexModelId(wireId: string): CodexModelId {
   return { baseModelId: match[1], effort: match[2] };
 }
 
-/** Build the wire id codex addresses a (model, effort) pair by. */
+/**
+ * Build the addressed model/effort pair; null effort preserves a model-only value
+ * for config selection instead of guessing a level the backend might not support.
+ * https://github.com/Brevilabs/obsidian-copilot-private/issues/219
+ * @param baseModelId Model ID before any effort suffix.
+ * @param effort Backend-advertised effort, or null for model-only selection.
+ */
 export function formatCodexModelId(baseModelId: string, effort: string | null): string {
   return effort ? `${baseModelId}[${effort}]` : baseModelId;
 }

@@ -96,7 +96,7 @@ describe("codexModelIdMigration", () => {
       expect(plan?.enabledModels).toEqual(["cm-sol-low"]);
     });
 
-    it("preserves the enabled set across two base models", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/219 preserves the enabled set across two base models", () => {
       const terra = ["low", "high"].map((effort) =>
         model(`cm-terra-${effort}`, `gpt-5.6-terra[${effort}]`, `GPT-5.6-Terra (${effort})`)
       );
@@ -114,7 +114,7 @@ describe("codexModelIdMigration", () => {
       expect(plan?.enabledModels).toEqual(["cm-sol-low", "cm-terra-low"]);
     });
 
-    it("leaves a base model disabled when none of its variants was enabled", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/219 leaves a base model disabled when none of its variants was enabled", () => {
       const plan = planCodexModelIdCollapse(
         settings({
           configuredModels: SOL_VARIANTS,
@@ -125,7 +125,7 @@ describe("codexModelIdMigration", () => {
       expect(plan?.enabledModels).toEqual([]);
     });
 
-    it("passes through an enabled id that matches no configured row", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/219 passes through an enabled id that matches no configured row", () => {
       const plan = planCodexModelIdCollapse(
         settings({
           configuredModels: SOL_VARIANTS,
@@ -138,7 +138,7 @@ describe("codexModelIdMigration", () => {
       expect(plan?.enabledModels).toEqual(["cm-sol-low", "cm-vanished"]);
     });
 
-    it("moves the bracketed effort out of the sticky default's base model id", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/219 moves the bracketed effort out of the sticky default's base model id", () => {
       const plan = planCodexModelIdCollapse(
         settings({
           configuredModels: SOL_VARIANTS,
@@ -154,7 +154,7 @@ describe("codexModelIdMigration", () => {
       expect(plan?.defaultModel).toEqual({ baseModelId: "gpt-5.6-sol", effort: "xhigh" });
     });
 
-    it("leaves models owned by another agent's provider untouched", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/219 leaves models owned by another agent's provider untouched", () => {
       const opencodeModel = model("cm-oc", "openai/gpt-5", "GPT-5", OPENCODE_PROVIDER_ID);
       const plan = planCodexModelIdCollapse(
         settings({ configuredModels: [...SOL_VARIANTS, opencodeModel] })
@@ -163,7 +163,7 @@ describe("codexModelIdMigration", () => {
       expect(plan?.configuredModels).toContainEqual(opencodeModel);
     });
 
-    it("plans no change for a vault whose codex rows are already base models", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/219 plans no change for a vault whose codex rows are already base models", () => {
       expect(
         planCodexModelIdCollapse(
           settings({
@@ -222,11 +222,11 @@ describe("codexModelIdMigration", () => {
       expect(Object.isFrozen(first.enabledModels)).toBe(true);
     });
 
-    it("plans no change for a vault that has never set codex up", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/219 plans no change for a vault that has never set codex up", () => {
       expect(planCodexModelIdCollapse(settings({ configuredModels: [] }))).toBeNull();
     });
 
-    it("is idempotent — replanning against its own output plans nothing", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/219 is idempotent — replanning against its own output plans nothing", () => {
       const first = planCodexModelIdCollapse(
         settings({
           configuredModels: SOL_VARIANTS,
@@ -244,7 +244,7 @@ describe("codexModelIdMigration", () => {
       ).toBeNull();
     });
 
-    it("keeps a display name whose parenthesized suffix isn't the row's effort", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/219 keeps a display name whose parenthesized suffix isn't the row's effort", () => {
       const plan = planCodexModelIdCollapse(
         settings({
           configuredModels: [model("cm", "gpt-5.6-luna[high]", "GPT-5.6-Luna (preview)")],

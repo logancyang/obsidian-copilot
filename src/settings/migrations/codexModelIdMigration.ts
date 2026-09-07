@@ -55,6 +55,8 @@ export function planCodexModelIdCollapse(
   let rowsChanged = false;
 
   for (const model of previousModels) {
+    // Migration must not rewrite another backend's model IDs or enable references.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/219
     if (!codexProviderIds.has(model.providerId)) {
       configuredModels.push(model);
       continue;
@@ -70,6 +72,8 @@ export function planCodexModelIdCollapse(
       rowsChanged = true;
       continue;
     }
+    // Already-normalized IDs and labels must survive repeated startup unchanged.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/219
     const kept: ConfiguredModel =
       effort === null
         ? model
@@ -87,7 +91,8 @@ export function planCodexModelIdCollapse(
     configuredModels.push(kept);
   }
 
-  // A base model stays enabled when any of its effort variants was.
+  // Keep each model enabled once, including unresolved IDs whose rows may return.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/219
   const previousEnabled = settings.backends?.codex?.enabledModels ?? EMPTY_ENABLED_MODELS;
   const enabledModels: string[] = [];
   const alreadyEnabled = new Set<string>();
@@ -103,6 +108,7 @@ export function planCodexModelIdCollapse(
 
   // The sticky default holds a whole wire id in `baseModelId` (effort never
   // decoded, so it is null); the bracketed level is the one actually applied.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/219
   const previousDefault = settings.agentMode?.backends?.codex?.defaultModel;
   const parsedDefault = previousDefault ? parseCodexModelId(previousDefault.baseModelId) : null;
   const defaultModel =
@@ -110,6 +116,8 @@ export function planCodexModelIdCollapse(
       ? { baseModelId: parsedDefault.baseModelId, effort: parsedDefault.effort }
       : undefined;
 
+  // Avoid a settings write when an already-migrated or non-Codex vault is loaded.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/219
   if (!rowsChanged && !enabledChanged && !defaultModel) return null;
   // Default-only migration must not invalidate subscribers to unchanged slices.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/219
@@ -123,7 +131,8 @@ export function planCodexModelIdCollapse(
 /**
  * Drop the `(low)` codex appends to a per-effort model's display name, so the
  * surviving row reads as the base model until the next probe refreshes it.
- * Left alone when the parenthesized token isn't the effort this row carried.
+ * Preserve custom labels and avoid blank names when no base label precedes effort.
+ * https://github.com/Brevilabs/obsidian-copilot-private/issues/219
  */
 function stripEffortLabel(displayName: string, effort: string): string {
   const match = /^(.*?)\s*\(([^()]+)\)\s*$/.exec(displayName);

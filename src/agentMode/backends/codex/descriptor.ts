@@ -163,6 +163,8 @@ export const CodexBackendDescriptor: BackendDescriptor = {
   },
 
   async applySelection(session: AgentSession, selection: ModelSelection, context): Promise<void> {
+    // Explicit effort must travel in the model ID or the adapter rejects the switch.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/219
     if (selection.effort !== null) {
       await session.applyModelWireId(codexWire.encode(selection));
       return;

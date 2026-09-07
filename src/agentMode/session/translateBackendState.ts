@@ -430,6 +430,8 @@ function stripEffortSuffix(name: string, variants: { effort: string | null }[]):
 export function modelStateSignature(state: BackendState | null): string {
   const m = state?.model;
   if (!m) return "";
+  // Model-only config availability changes selection routing even for the same model.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/219
   const apply =
     m.apply.kind === "setConfigOption"
       ? `setConfigOption:${m.apply.configId}:${m.apply.effortConfigId ?? ""}`

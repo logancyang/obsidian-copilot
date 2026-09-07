@@ -120,34 +120,40 @@ describe("descriptor", () => {
         ["gpt-5.6-sol[max]", "gpt-5.6-sol", "max"],
         ["gpt-5.6-sol[ultra]", "gpt-5.6-sol", "ultra"],
         ["gpt-5.3-codex-spark[xhigh]", "gpt-5.3-codex-spark", "xhigh"],
-      ])("decodes %s into its base model and effort", (wireId, baseModelId, effort) => {
-        expect(CodexBackendDescriptor.wire.decode(wireId)).toEqual({
-          selection: { baseModelId, effort },
-          provider: null,
-        });
-      });
+      ])(
+        "https://github.com/Brevilabs/obsidian-copilot-private/issues/219 decodes %s into its base model and effort",
+        (wireId, baseModelId, effort) => {
+          expect(CodexBackendDescriptor.wire.decode(wireId)).toEqual({
+            selection: { baseModelId, effort },
+            provider: null,
+          });
+        }
+      );
 
-      it("decodes an effort level the plugin has never seen, so a new CLI release needs no change", () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/219 decodes an effort level the plugin has never seen, so a new CLI release needs no change", () => {
         expect(CodexBackendDescriptor.wire.decode("gpt-6[hyper]").selection).toEqual({
           baseModelId: "gpt-6",
           effort: "hyper",
         });
       });
 
-      it.each(["gpt-5.6-sol", ""])("reports %p as an effortless base model", (wireId) => {
-        expect(CodexBackendDescriptor.wire.decode(wireId)).toEqual({
-          selection: { baseModelId: wireId, effort: null },
-          provider: null,
-        });
-      });
+      it.each(["gpt-5.6-sol", ""])(
+        "https://github.com/Brevilabs/obsidian-copilot-private/issues/219 reports %p as an effortless base model",
+        (wireId) => {
+          expect(CodexBackendDescriptor.wire.decode(wireId)).toEqual({
+            selection: { baseModelId: wireId, effort: null },
+            provider: null,
+          });
+        }
+      );
 
-      it("encodes a selection back into the bracketed form codex accepts", () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/219 encodes a selection back into the bracketed form codex accepts", () => {
         expect(
           CodexBackendDescriptor.wire.encode({ baseModelId: "gpt-5.6-sol", effort: "ultra" })
         ).toBe("gpt-5.6-sol[ultra]");
       });
 
-      it("collapses the advertised cross-product into one entry per base model", () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/219 collapses the advertised cross-product into one entry per base model", () => {
         const state = translateBackendState(
           { models: ADVERTISED_CATALOG, modes: null, configOptions: null },
           CodexBackendDescriptor
@@ -159,7 +165,7 @@ describe("descriptor", () => {
         ]);
       });
 
-      it("offers each base model only the effort levels the CLI advertises for it", () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/219 offers each base model only the effort levels the CLI advertises for it", () => {
         const state = translateBackendState(
           { models: ADVERTISED_CATALOG, modes: null, configOptions: null },
           CodexBackendDescriptor
@@ -175,7 +181,7 @@ describe("descriptor", () => {
         expect(efforts("gpt-5.5")).toEqual(["low", "medium", "high", "xhigh"]);
       });
 
-      it("reports the agent's active model and effort as the current selection", () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/219 reports the agent's active model and effort as the current selection", () => {
         const state = translateBackendState(
           { models: ADVERTISED_CATALOG, modes: null, configOptions: null },
           CodexBackendDescriptor
@@ -186,7 +192,7 @@ describe("descriptor", () => {
     });
 
     describe("applySelection()", () => {
-      it("sends the bracketed wire id for the chosen effort", async () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/219 sends the bracketed wire id for the chosen effort", async () => {
         const { session, applyModelWireId } = sessionWith(SOL_EFFORTS);
 
         await CodexBackendDescriptor.applySelection(session, {

@@ -507,10 +507,11 @@ export class FanoutOrchestrator {
         await this.applyConfigOptionModel(proc, descriptor, sessionId, selection, modelApply);
         return;
       }
-      // Let the backend choose effort for a model-only default; suffix-addressed
-      // models reject a bare ID and would otherwise answer with the wrong model.
+      // Only opt-in backends accept model-only config selection; other dual-channel
+      // backends still require their dedicated model RPC to change models.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/219
       if (
+        descriptor.configModelSelectionAuthoritative &&
         selection.effort === null &&
         modelApply?.kind === "setModel" &&
         modelApply.modelConfigId

@@ -488,7 +488,7 @@ describe("runSettingsMigrations()", () => {
     }
   );
 
-  it("v14: leaves a vault already at the current version alone", async () => {
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/219 v14: leaves a vault already at the current version alone", async () => {
     mockGetSettings.mockReturnValue(codexVaultAt(CURRENT_SETTINGS_VERSION));
     const { api } = makeApi();
 
