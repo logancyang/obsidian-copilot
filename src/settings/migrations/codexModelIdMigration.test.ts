@@ -70,7 +70,7 @@ describe("codexModelIdMigration", () => {
       }
     );
 
-    it("folds every effort variant of a base model onto one row", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/219 folds every effort variant of a base model onto one row", () => {
       const plan = planCodexModelIdCollapse(settings({ configuredModels: SOL_VARIANTS }));
 
       expect(plan?.configuredModels).toEqual([
@@ -83,7 +83,7 @@ describe("codexModelIdMigration", () => {
       ]);
     });
 
-    it("keeps a base model enabled when any of its effort variants was", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/219 keeps a base model enabled when any of its effort variants was", () => {
       const plan = planCodexModelIdCollapse(
         settings({
           configuredModels: SOL_VARIANTS,
@@ -176,6 +176,50 @@ describe("codexModelIdMigration", () => {
           })
         )
       ).toBeNull();
+    });
+
+    it.each([
+      { configuredModels: [] },
+      { configuredModels: [model("cm-sol", "gpt-5.6-sol", "GPT-5.6-Sol")] },
+    ])(
+      "https://github.com/Brevilabs/obsidian-copilot-private/issues/219 reuses unchanged slices when only the saved default needs migration: %j",
+      ({ configuredModels }) => {
+        const enabledModels: string[] = [];
+        const plan = planCodexModelIdCollapse(
+          settings({
+            configuredModels,
+            backends: { codex: { enabledModels } },
+            agentMode: {
+              ...DEFAULT_SETTINGS.agentMode,
+              backends: {
+                codex: { defaultModel: { baseModelId: "gpt-5.6-sol[high]", effort: null } },
+              },
+            },
+          })
+        );
+        expect(plan?.configuredModels).toBe(configuredModels);
+        expect(plan?.enabledModels).toBe(enabledModels);
+        expect(plan?.defaultModel).toEqual({ baseModelId: "gpt-5.6-sol", effort: "high" });
+      }
+    );
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/219 uses stable frozen empty slices when persisted collections are absent", () => {
+      const input = settings({
+        configuredModels: undefined,
+        backends: {},
+        agentMode: {
+          ...DEFAULT_SETTINGS.agentMode,
+          backends: { codex: { defaultModel: { baseModelId: "gpt-5.6-sol[high]", effort: null } } },
+        },
+      });
+      const first = planCodexModelIdCollapse(input)!;
+      const second = planCodexModelIdCollapse(input)!;
+      expect(first.configuredModels).toEqual([]);
+      expect(first.enabledModels).toEqual([]);
+      expect(second.configuredModels).toBe(first.configuredModels);
+      expect(second.enabledModels).toBe(first.enabledModels);
+      expect(Object.isFrozen(first.configuredModels)).toBe(true);
+      expect(Object.isFrozen(first.enabledModels)).toBe(true);
     });
 
     it("plans no change for a vault that has never set codex up", () => {

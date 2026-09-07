@@ -18,6 +18,9 @@ import type { ConfiguredModel } from "@/modelManagement";
 import type { CopilotSettings } from "@/settings/model";
 import { parseCodexModelId } from "@/utils/codexModelId";
 
+const EMPTY_CONFIGURED_MODELS = Object.freeze([]) as unknown as ConfiguredModel[];
+const EMPTY_ENABLED_MODELS = Object.freeze([]) as unknown as string[];
+
 /** The settings slices the collapse rewrites. Only present fields need writing. */
 export interface CodexModelIdCollapsePlan {
   /** Replacement `configuredModels`, per-effort codex rows folded into one per base model. */
@@ -43,6 +46,7 @@ export function planCodexModelIdCollapse(
       .map((p) => p.providerId)
   );
 
+  const previousModels = settings.configuredModels ?? EMPTY_CONFIGURED_MODELS;
   const configuredModels: ConfiguredModel[] = [];
   /** Surviving row per `(provider, base model)`, so repeat variants fold onto the first. */
   const survivorByBaseModel = new Map<string, ConfiguredModel>();
@@ -50,7 +54,7 @@ export function planCodexModelIdCollapse(
   const survivorByModelId = new Map<string, string>();
   let rowsChanged = false;
 
-  for (const model of settings.configuredModels ?? []) {
+  for (const model of previousModels) {
     if (!codexProviderIds.has(model.providerId)) {
       configuredModels.push(model);
       continue;
@@ -59,8 +63,9 @@ export function planCodexModelIdCollapse(
     const key = `${model.providerId}\u0000${baseModelId}`;
     const survivor = survivorByBaseModel.get(key);
     if (survivor) {
-      // A later variant of a base model already kept — drop the row and point
-      // any reference to it at the survivor.
+      // Discovery keeps one row per base model; preserve enable references from
+      // duplicate effort rows so the user's enabled model does not disappear.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/219
       survivorByModelId.set(model.configuredModelId, survivor.configuredModelId);
       rowsChanged = true;
       continue;
@@ -83,7 +88,7 @@ export function planCodexModelIdCollapse(
   }
 
   // A base model stays enabled when any of its effort variants was.
-  const previousEnabled = settings.backends?.codex?.enabledModels ?? [];
+  const previousEnabled = settings.backends?.codex?.enabledModels ?? EMPTY_ENABLED_MODELS;
   const enabledModels: string[] = [];
   const alreadyEnabled = new Set<string>();
   for (const configuredModelId of previousEnabled) {
@@ -106,7 +111,13 @@ export function planCodexModelIdCollapse(
       : undefined;
 
   if (!rowsChanged && !enabledChanged && !defaultModel) return null;
-  return { configuredModels, enabledModels, ...(defaultModel ? { defaultModel } : {}) };
+  // Default-only migration must not invalidate subscribers to unchanged slices.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/219
+  return {
+    configuredModels: rowsChanged ? configuredModels : previousModels,
+    enabledModels: enabledChanged ? enabledModels : previousEnabled,
+    ...(defaultModel ? { defaultModel } : {}),
+  };
 }
 
 /**

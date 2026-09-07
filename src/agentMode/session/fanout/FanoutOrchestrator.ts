@@ -507,6 +507,21 @@ export class FanoutOrchestrator {
         await this.applyConfigOptionModel(proc, descriptor, sessionId, selection, modelApply);
         return;
       }
+      // Let the backend choose effort for a model-only default; suffix-addressed
+      // models reject a bare ID and would otherwise answer with the wrong model.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/219
+      if (
+        selection.effort === null &&
+        modelApply?.kind === "setModel" &&
+        modelApply.modelConfigId
+      ) {
+        await proc.setSessionConfigOption({
+          sessionId,
+          configId: modelApply.modelConfigId,
+          value: selection.baseModelId,
+        });
+        return;
+      }
       await proc.setSessionModel({ sessionId, modelId: descriptor.wire.encode(selection) });
       if (selection.effort !== null) {
         const effortConfig = descriptor.wire.effortConfigFor?.(selection.baseModelId);

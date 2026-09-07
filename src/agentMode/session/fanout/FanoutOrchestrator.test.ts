@@ -193,6 +193,34 @@ describe("createFanoutTurn", () => {
 });
 
 describe("FanoutOrchestrator.run", () => {
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/219 applies a model-only default through the advertised config channel", async () => {
+    const { host, procs } = makeHost({ codex: { sessionId: "s-codex" } });
+    host.getDefaultSelection = () => ({ baseModelId: "selected-model", effort: null });
+    const { proc } = procs.get("codex")!;
+    (proc.newSession as jest.Mock).mockResolvedValue({
+      sessionId: "s-codex",
+      state: {
+        model: {
+          current: { baseModelId: "native-model", effort: "high" },
+          availableModels: [],
+          apply: { kind: "setModel", modelConfigId: "model" },
+        },
+        mode: null,
+      },
+    });
+    (proc.prompt as jest.Mock).mockResolvedValue({ stopReason: "end_turn" });
+
+    await new FanoutOrchestrator(host).run(runInput(["codex"]));
+
+    expect(proc.setSessionConfigOption).toHaveBeenCalledWith({
+      sessionId: "s-codex",
+      configId: "model",
+      value: "selected-model",
+    });
+    expect(proc.setSessionModel).not.toHaveBeenCalled();
+    expect(proc.prompt).toHaveBeenCalled();
+  });
+
   it("streams each agent's answer into its own slot and marks them done", async () => {
     const { host, procs, readOnlyRegistered, readOnlyUnregistered, excludedFromHistory } = makeHost(
       {
