@@ -2,12 +2,17 @@ import { act, renderHook } from "@testing-library/react";
 import { backendRegistry, getActiveBackendDescriptor } from "@/agentMode/backends/registry";
 import type { BackendId } from "@/agentMode/session/types";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
-import type { BackendDescriptor, InstallState } from "@/agentMode/session/types";
+import type {
+  BackendDescriptor,
+  InstallState,
+  ManagedInstallActionState,
+} from "@/agentMode/session/types";
 import type CopilotPlugin from "@/main";
 import type { CopilotSettings } from "@/settings/model";
 import {
   useBackendInstallState,
   useBackendInstallStates,
+  useManagedInstallActionState,
   useSessionBackendDescriptor,
 } from "./useBackendDescriptor";
 
@@ -76,6 +81,30 @@ function makeInstallDescriptor(initial: InstallState, id: BackendId = "claude") 
   return {
     backend,
     emit: (next: InstallState) => {
+      state = next;
+      for (const listener of listeners) listener();
+    },
+    unsubscribed: () => listeners.size === 0,
+  };
+}
+
+function makeManagedInstallDescriptor() {
+  let state: ManagedInstallActionState = { kind: "idle" };
+  const listeners = new Set<() => void>();
+  const backend = {
+    id: "opencode",
+    managedInstall: {
+      getState: () => ({ ...state }),
+      subscribe: (_plugin: CopilotPlugin, listener: () => void) => {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+      run: jest.fn(),
+    },
+  } as unknown as BackendDescriptor;
+  return {
+    backend,
+    emit: (next: ManagedInstallActionState) => {
       state = next;
       for (const listener of listeners) listener();
     },
@@ -172,6 +201,34 @@ describe("useBackendDescriptor", () => {
 
       unmount();
 
+      expect(fake.unsubscribed()).toBe(true);
+    });
+  });
+
+  describe("useManagedInstallActionState()", () => {
+    it("returns one stable idle state when the backend has no managed action", () => {
+      const plugin = {} as CopilotPlugin;
+      const backend = descriptor("claude");
+      const { result, rerender } = renderHook(() => useManagedInstallActionState(backend, plugin));
+      const first = result.current;
+
+      rerender();
+
+      expect(result.current).toBe(first);
+      expect(result.current).toEqual({ kind: "idle" });
+    });
+
+    it("tracks the shared action progress and unsubscribes on unmount", () => {
+      const fake = makeManagedInstallDescriptor();
+      const plugin = {} as CopilotPlugin;
+      const { result, unmount } = renderHook(() =>
+        useManagedInstallActionState(fake.backend, plugin)
+      );
+
+      act(() => fake.emit({ kind: "running", label: "Downloading… 42%" }));
+      expect(result.current).toEqual({ kind: "running", label: "Downloading… 42%" });
+
+      unmount();
       expect(fake.unsubscribed()).toBe(true);
     });
   });

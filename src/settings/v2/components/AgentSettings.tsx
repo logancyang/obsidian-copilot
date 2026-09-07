@@ -1,13 +1,12 @@
 import {
+  AgentBackendHeader,
   AgentDefaultModelSetting,
   backendDisplayOrder,
   backendNeedsSelfHostWarning,
-  InstallBadge,
   useBackendInstallState,
+  useManagedInstallActionState,
   type BackendDescriptor,
 } from "@/agentMode";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { SettingItem } from "@/components/ui/setting-item";
 import { playNotificationSound } from "@/utils/notificationSound";
 import {
@@ -16,7 +15,6 @@ import {
 } from "@/utils/notificationSoundCatalog";
 import { SettingSection } from "@/components/ui/setting-section";
 import { TabContent, TabItem, type TabItem as TabItemType } from "@/components/ui/setting-tabs";
-import { TruncatedText } from "@/components/TruncatedText";
 import { usePlugin } from "@/contexts/PluginContext";
 import { useChatBackendModelOptions } from "@/hooks/useChatBackendModelOptions";
 import { logError } from "@/logger";
@@ -229,7 +227,17 @@ const BackendPanel: React.FC<{
   const manager = plugin.agentSessionManager;
 
   const installState = useBackendInstallState(descriptor, plugin);
+  const managedInstall = useManagedInstallActionState(descriptor, plugin);
   const resolvedPath = descriptor.getResolvedBinaryPath?.(settings) ?? null;
+  const canUpdate = installState.kind === "incompatible" && descriptor.managedInstall !== undefined;
+  const updating = managedInstall.kind === "running";
+
+  const runManagedInstall = React.useCallback(() => {
+    if (!descriptor.managedInstall || updating) return;
+    descriptor.managedInstall
+      .run(plugin)
+      .catch((error) => logError(`[AgentMode] ${descriptor.id} update failed`, error));
+  }, [descriptor, plugin, updating]);
 
   // Probe when ready but uncached — the load-time preload may have skipped this
   // backend (binary installed after plugin start).
@@ -242,7 +250,6 @@ const BackendPanel: React.FC<{
       .catch((e) => logError(`[AgentMode] preload ${descriptor.id} failed`, e));
   }, [manager, descriptor.id, installState.kind]);
 
-  const Icon = descriptor.Icon;
   const showCloudWarning = backendNeedsSelfHostWarning(descriptor, settings);
   // Only a backend the plugin can install itself offers inline actions, and
   // that is also the only kind whose models run on the user's own keys — so the
@@ -270,54 +277,17 @@ const BackendPanel: React.FC<{
           come from `SettingItem` / `EnvOverridesSetting` already do. The cloud
           warning stays outside: it qualifies the whole backend, not one row. */}
       <SettingSection>
-        <div className="tw-flex tw-flex-col tw-gap-2 tw-py-4">
-          <div className="tw-flex tw-items-center tw-justify-between tw-gap-2">
-            <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-2">
-              <Icon className="tw-size-4 tw-shrink-0" />
-              <div className="tw-flex tw-min-w-0 tw-flex-col">
-                <div className="tw-flex tw-items-center tw-gap-2">
-                  <span className="tw-text-base tw-font-semibold">{descriptor.displayName}</span>
-                  <InstallBadge state={installState} />
-                  {InlineInstall && (
-                    <Badge variant="accent" className="tw-font-normal">
-                      Recommended
-                    </Badge>
-                  )}
-                </div>
-                {resolvedPath && (
-                  <TruncatedText className="tw-max-w-[90%] tw-font-mono tw-text-xs tw-text-muted">
-                    {formatBinaryPathForDisplay(resolvedPath)}
-                  </TruncatedText>
-                )}
-                {InlineInstall && (
-                  <span className="tw-text-xs tw-text-muted">
-                    Not installed — one download away.
-                  </span>
-                )}
-                {(installState.kind === "incompatible" || installState.kind === "error") && (
-                  <span className="tw-text-xs tw-text-error">{installState.message}</span>
-                )}
-              </div>
-            </div>
-            {InlineInstall ? (
-              <InlineInstall plugin={plugin} />
-            ) : (
-              <Button
-                className="tw-shrink-0"
-                size="default"
-                variant={installState.kind === "ready" ? "secondary" : "default"}
-                onClick={() => descriptor.openInstallUI(plugin)}
-              >
-                Configure
-              </Button>
-            )}
-          </div>
-          {InlineInstall && (
-            <div className="tw-text-xs tw-text-muted">
-              Works with Copilot Plus or your own API keys — add providers on the BYOK tab.
-            </div>
-          )}
-        </div>
+        <AgentBackendHeader
+          displayName={descriptor.displayName}
+          Icon={descriptor.Icon}
+          installState={installState}
+          managedInstall={managedInstall}
+          canUpdate={canUpdate}
+          resolvedPath={resolvedPath ? formatBinaryPathForDisplay(resolvedPath) : null}
+          inlineInstall={InlineInstall ? <InlineInstall plugin={plugin} /> : undefined}
+          onUpdate={runManagedInstall}
+          onConfigure={() => descriptor.openInstallUI(plugin)}
+        />
 
         {installState.kind === "ready" && manager && (
           <AgentDefaultModelSetting descriptor={descriptor} manager={manager} />

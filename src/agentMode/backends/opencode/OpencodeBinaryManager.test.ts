@@ -672,6 +672,7 @@ describe("OpencodeBinaryManager.runtimeState", () => {
     // Durable rather than announced: whichever surface mounts next renders it.
     expect(mgr.getRuntimeState()).toEqual({
       kind: "error",
+      operation: "configure",
       message: expect.stringContaining("No file at"),
     });
   });
@@ -718,6 +719,7 @@ describe("OpencodeBinaryManager.runtimeState", () => {
     // while an error is showing.
     expect(mgr.getRuntimeState()).toEqual({
       kind: "error",
+      operation: "configure",
       message: expect.stringContaining("Couldn't find opencode"),
     });
     expect(mgr.isBusy()).toBe(false);
