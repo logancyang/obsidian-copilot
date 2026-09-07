@@ -51,7 +51,6 @@ describe("useBackendAuthState", () => {
       act(() => void configDialog.result.current.signIn());
       const signInHandlers = (descriptor.auth!.signIn as jest.Mock).mock.calls[0][1];
       act(() => void signInHandlers.onUrl("https://example.com/sign-in"));
-      configDialog.unmount();
       const lateConsumer = renderHook(() => useBackendAuthState(descriptor, "late-consumer"));
       expect(lateConsumer.result.current.signingIn).toBe(true);
       expect(lateConsumer.result.current.url).toBe("https://example.com/sign-in");
@@ -75,6 +74,28 @@ describe("useBackendAuthState", () => {
         label: "zero@example.com",
       });
       expect(descriptor.auth!.getStatus).toHaveBeenCalledTimes(2);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 cancels on dialog teardown and ignores a late login result", async () => {
+      const descriptor = makeDescriptor();
+      let finish!: (status: { signedIn: boolean }) => void;
+      descriptor.auth!.signIn = jest.fn(
+        () =>
+          new Promise((resolve) => {
+            finish = resolve;
+          })
+      );
+      const hook = renderHook(() => useBackendAuthState(descriptor));
+      await waitFor(() => expect(hook.result.current.status?.signedIn).toBe(false));
+      act(() => hook.result.current.signIn());
+      const handlers = (descriptor.auth!.signIn as jest.Mock).mock.calls[0][1];
+      hook.unmount();
+      expect(handlers.signal.aborted).toBe(true);
+      await act(async () => {
+        finish({ signedIn: true });
+      });
+      const observer = renderHook(() => useBackendAuthState(descriptor));
+      await waitFor(() => expect(observer.result.current.status?.signedIn).toBe(false));
     });
 
     it("re-probes when the caller's auth-relevant key changes", async () => {

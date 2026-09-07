@@ -131,6 +131,22 @@ describe("ClaudeConfigView", () => {
       expect(screen.queryByRole("button", { name: "Sign in" })).toBeNull();
     });
 
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 keeps cancellation and Retry outside the copyable command so narrow dialogs can wrap", () => {
+      const onCancel = jest.fn();
+      const onSignIn = jest.fn();
+      renderView({
+        state: { kind: "ready", source: "custom" },
+        auth: { status: { signedIn: false }, onSignIn, signingIn: true, url: null, onCancel },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Cancel sign-in" }));
+      expect(onCancel).toHaveBeenCalledTimes(1);
+      expect(
+        screen
+          .getByText(commandBlock(CLAUDE_AUTH_COMMAND))
+          .parentElement?.contains(screen.getByRole("button", { name: "Cancel sign-in" }))
+      ).toBe(false);
+    });
+
     it("hides the in-app sign-in action while auth status is still loading", () => {
       renderView({
         state: { kind: "ready", source: "custom" },

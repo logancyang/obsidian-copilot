@@ -66,6 +66,8 @@ const ClaudeConfigContainer: React.FC<{
         onSignIn: auth.signIn,
         signingIn: auth.signingIn,
         url: auth.url,
+        onCancel: auth.cancelSignIn,
+        failed: auth.failed,
       }}
       onClose={onClose}
     />

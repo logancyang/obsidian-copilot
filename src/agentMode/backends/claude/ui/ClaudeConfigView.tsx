@@ -7,21 +7,12 @@ import {
   ConfigWarningStrip,
 } from "@/agentMode/backends/shared/ui/ConfigDialogShell";
 import { CommandBlock, SetupStep } from "@/agentMode/backends/shared/ui/SetupSteps";
-import type { BackendAuthStatus, InstallState } from "@/agentMode/session/types";
-import { Button } from "@/components/ui/button";
+import type { InstallState } from "@/agentMode/session/types";
+import { SignInAction, type SignInActionProps } from "@/agentMode/backends/shared/ui/SignInAction";
 import React from "react";
 
 /** In-app equivalent of the sign-in command, for backends that can run it themselves. */
-export interface ClaudeAuthProps {
-  /** Latest probed sign-in state; the action stays hidden until signed out is confirmed. */
-  status: BackendAuthStatus | null;
-  /** Start the CLI's interactive sign-in. */
-  onSignIn: () => void;
-  /** True while a sign-in is running, so the button can't be fired twice. */
-  signingIn: boolean;
-  /** Browser fallback printed by the CLI when it cannot open OAuth itself. */
-  url: string | null;
-}
+export type ClaudeAuthProps = SignInActionProps;
 
 export interface ClaudeConfigViewProps {
   /** Readiness of the resolved CLI; drives the header badge and the warning strip. */
@@ -101,29 +92,10 @@ export const ClaudeConfigView: React.FC<ClaudeConfigViewProps> = ({
           <CommandBlock command={CLAUDE_INSTALL_COMMAND} />
         </SetupStep>
         <SetupStep index={2} title="Sign in">
-          <CommandBlock
-            command={CLAUDE_AUTH_COMMAND}
-            action={
-              state.kind === "ready" && auth.status?.signedIn === false ? (
-                auth.signingIn && auth.url ? (
-                  <Button asChild variant="secondary" size="sm">
-                    <a href={auth.url} target="_blank" rel="noopener noreferrer">
-                      Open sign-in page
-                    </a>
-                  </Button>
-                ) : (
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={auth.onSignIn}
-                    disabled={auth.signingIn}
-                  >
-                    {auth.signingIn ? "Signing in…" : "Sign in"}
-                  </Button>
-                )
-              ) : undefined
-            }
-          />
+          <CommandBlock command={CLAUDE_AUTH_COMMAND} />
+          {/* Cancellation and Retry copy must wrap independently of the copyable command.
+              https://github.com/Brevilabs/obsidian-copilot-private/issues/379 */}
+          {state.kind === "ready" && auth.status?.signedIn === false && <SignInAction {...auth} />}
           <p className="tw-my-0 tw-text-sm tw-text-muted">
             Copilot inherits whatever credentials the Claude Code CLI holds — there is no key to
             paste here.
