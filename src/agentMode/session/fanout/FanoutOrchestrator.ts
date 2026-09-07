@@ -209,7 +209,9 @@ export class FanoutOrchestrator {
       // the continuity replay must not prefer.
       if (outcome === "done") turn.summary.complete = true;
     } catch (err) {
-      // Errored/timed out mid-stream: partial text, NOT complete.
+      // Keep setup failures actionable even when only the summary session fails.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/219
+      turn.summary.error = err2String(err);
       logWarn(`[AgentMode] fan-out summary failed`, err);
     } finally {
       turn.summary.status = "done";

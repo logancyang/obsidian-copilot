@@ -220,6 +220,26 @@ describe("descriptor", () => {
         };
       }
 
+      it.each(["high", null])(
+        "https://github.com/Brevilabs/obsidian-copilot-private/issues/219 resets the same model only when its effort is stale: %s",
+        async (effort) => {
+          const { session, applyModelWireId, setConfigOption } = makeSession({
+            model: {
+              current: { baseModelId: "openai/gpt-5", effort },
+              availableModels: [],
+              apply: { kind: "setConfigOption", configId: "model", effortConfigId: "effort" },
+            },
+            mode: null,
+          });
+          await OpencodeBackendDescriptor.applySelection(session, {
+            baseModelId: "openai/gpt-5",
+            effort: null,
+          });
+          expect(applyModelWireId).toHaveBeenCalledTimes(effort === null ? 0 : 1);
+          expect(setConfigOption).not.toHaveBeenCalled();
+        }
+      );
+
       it("routes config-option-backed effort through the thought-level option", async () => {
         const { session, applyModelWireId, setConfigOption } = makeSession({
           model: {

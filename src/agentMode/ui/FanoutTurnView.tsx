@@ -129,6 +129,19 @@ interface FanoutTurnBodyProps {
  */
 const FanoutTurnBody: React.FC<FanoutTurnBodyProps> = ({ turn, value, app }) => {
   if (value === FANOUT_SUMMARY_OPTION) {
+    // Partial summary text must not hide an actionable setup or stream failure.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/219
+    if (turn.summary.error) {
+      return (
+        <FanoutTerminalState app={app} partialText={turn.summary.text}>
+          <FanoutStatusLine
+            icon={<AlertTriangle className="tw-size-4 tw-text-error" />}
+            text={turn.summary.error}
+            tone="error"
+          />
+        </FanoutTerminalState>
+      );
+    }
     if (turn.summary.text) {
       return <FanoutSlotBody text={turn.summary.text} app={app} />;
     }

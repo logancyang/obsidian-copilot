@@ -235,6 +235,60 @@ describe("FanoutOrchestrator", () => {
         expect(proc.setSessionModel).not.toHaveBeenCalled();
       });
 
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/219 exposes a summary-only model selection failure while preserving successful answers", async () => {
+        const { host, procs } = makeHost({ codex: { sessionId: "s-codex" } });
+        const proc = procs.get("codex")!.proc;
+        host.ensureBackendForFanout = async () => ({ proc, descriptor: CodexBackendDescriptor });
+        host.getDefaultSelection = jest
+          .fn()
+          .mockReturnValueOnce({ baseModelId: "example", effort: "high" })
+          .mockReturnValue({ baseModelId: "example", effort: null });
+        jest.mocked(proc.prompt).mockImplementation(async () => {
+          procs.get("codex")!.emit(textChunk("s-codex", "Successful answer"));
+          return { stopReason: "end_turn" };
+        });
+
+        const result = await new FanoutOrchestrator(host).run(runInput(["codex"]));
+
+        expect(result.answers.codex).toMatchObject({ status: "done", text: "Successful answer" });
+        expect(result.summary.status).toBe("done");
+        expect(result.summary.error).toContain(
+          "Choose an explicit effort for the Codex model."
+        );
+        expect(result.summary.complete).not.toBe(true);
+        expect(proc.prompt).toHaveBeenCalledTimes(1);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/219 clears stale OpenCode effort before both answer and summary prompts", async () => {
+        const { host, procs } = makeHost({ opencode: { sessionId: "s-opencode" } });
+        const proc = procs.get("opencode")!.proc;
+        const state: BackendState = {
+          model: {
+            current: { baseModelId: "provider/model", effort: "high" },
+            availableModels: [],
+            apply: { kind: "setConfigOption", configId: "model", effortConfigId: "effort" },
+          },
+          mode: null,
+        };
+        host.ensureBackendForFanout = async () => ({ proc, descriptor: OpencodeBackendDescriptor });
+        host.getDefaultSelection = () => ({ baseModelId: "provider/model", effort: null });
+        jest.mocked(proc.newSession).mockResolvedValue({ sessionId: "s-opencode", state });
+        jest.mocked(proc.setSessionConfigOption).mockResolvedValue(state);
+        jest.mocked(proc.prompt).mockImplementation(async () => {
+          procs.get("opencode")!.emit(textChunk("s-opencode", "answer"));
+          return { stopReason: "end_turn" };
+        });
+
+        await new FanoutOrchestrator(host).run(runInput(["opencode"]));
+
+        expect(jest.mocked(proc.setSessionConfigOption).mock.calls).toEqual([
+          [{ sessionId: "s-opencode", configId: "model", value: "provider/model" }],
+          [{ sessionId: "s-opencode", configId: "model", value: "provider/model" }],
+        ]);
+        expect(proc.prompt).toHaveBeenCalledTimes(2);
+        expect(proc.setSessionModel).not.toHaveBeenCalled();
+      });
+
       it.each([true, false])(
         "https://github.com/Brevilabs/obsidian-copilot-private/issues/219 uses OpenCode's refreshed effort capability after selecting the model, offered=%s",
         async (offered) => {

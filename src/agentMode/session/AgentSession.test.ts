@@ -1,4 +1,5 @@
 import { resolveEffort } from "@/lib/model-effort";
+import { OpencodeBackendDescriptor } from "@/agentMode/backends/opencode/descriptor";
 import { AI_SENDER, USER_SENDER } from "@/constants";
 import { ClaudeBackendDescriptor } from "@/agentMode/backends/claude/descriptor";
 import { waitFor } from "@testing-library/react";
@@ -2648,7 +2649,7 @@ describe("AgentSession.create (via start)", () => {
       backendId: "opencode",
       // Legacy unset effort must resolve to a concrete supported level.
       defaultModelSelection: { baseModelId: "openai/gpt-5", effort: null },
-      getDescriptor: () => makeConfigOptionDescriptor(),
+      getDescriptor: () => OpencodeBackendDescriptor,
     });
     await session.ready;
 

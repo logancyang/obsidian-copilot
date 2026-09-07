@@ -94,6 +94,8 @@ export type FanoutSummaryStatus = "pending" | "streaming" | "done";
 export interface FanoutSummary {
   status: FanoutSummaryStatus;
   text: string;
+  /** Live failure detail; excluded from serialized answers and continuity prompts. */
+  error?: string;
   /**
    * True once the summary finished SUCCESSFULLY (not cancel/error/timeout).
    * `status` alone can't say — it is forced to `done` on every exit so the UI
