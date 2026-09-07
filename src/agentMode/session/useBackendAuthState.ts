@@ -20,6 +20,7 @@ const EMPTY_AUTH_SNAPSHOT = Object.freeze<BackendAuthSnapshot>({
 const authSnapshots = new WeakMap<BackendAuth, BackendAuthSnapshot>();
 const authSubscribers = new WeakMap<BackendAuth, Set<() => void>>();
 const authControllers = new WeakMap<BackendAuth, AbortController>();
+const authSignIns = new WeakMap<BackendAuth, Promise<void>>();
 const authProbeGenerations = new WeakMap<BackendAuth, number>();
 
 const getAuthSnapshot = (auth: BackendAuth): BackendAuthSnapshot =>
@@ -110,7 +111,9 @@ export function useBackendAuthState(
   const cancelSignIn = React.useCallback(() => {
     if (auth) authControllers.get(auth)?.abort();
   }, [auth]);
-  React.useEffect(() => () => loginController.current?.abort(), []);
+  // Backend replacement must stop the login owned by this surface.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
+  React.useEffect(() => () => loginController.current?.abort(), [auth]);
   const previousProbeKey = React.useRef(probeKey);
   const subscribe = React.useCallback(
     (subscriber: () => void) => (auth ? subscribeAuthState(auth, subscriber) : () => undefined),
@@ -127,12 +130,16 @@ export function useBackendAuthState(
     if (previousProbeKey.current !== probeKey) {
       previousProbeKey.current = probeKey;
       authControllers.get(auth)?.abort();
-      updateAuthSnapshot(auth, { signingIn: false, url: null });
-    }
-    if (getAuthSnapshot(auth).signingIn) return;
+      // Clear the old profile's status and failure, while retaining the busy state until
+      // its process stops. Additional mounts keep the cached status during refresh.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
+      updateAuthSnapshot(auth, { status: null, failed: false, url: null });
+    } else if (getAuthSnapshot(auth).signingIn) return;
     const generation = beginAuthProbe(auth);
-    updateAuthSnapshot(auth, { status: null });
-    void auth.getStatus(settingsRef.current).then(
+    void (async () => {
+      await authSignIns.get(auth);
+      return auth.getStatus(settingsRef.current);
+    })().then(
       (s) => publishAuthProbeStatus(auth, s, generation),
       (e) => {
         logError("[AgentMode] auth status probe failed", e);
@@ -149,7 +156,7 @@ export function useBackendAuthState(
     authControllers.set(auth, controller);
     updateAuthSnapshot(auth, { signingIn: true, url: null, failed: false });
     new Notice(`Opening your browser to sign in to ${descriptor.displayName}…`);
-    auth
+    const pending = auth
       .signIn(settingsRef.current, {
         signal: controller.signal,
         onUrl: (url) => {
@@ -175,9 +182,10 @@ export function useBackendAuthState(
         new Notice(`Sign-in to ${descriptor.displayName} failed. Please try again.`);
       })
       .finally(() => {
-        if (authProbeGenerations.get(auth) === generation)
+        if (authControllers.get(auth) === controller)
           updateAuthSnapshot(auth, { signingIn: false, url: null });
       });
+    authSignIns.set(auth, pending);
   }, [auth, descriptor.displayName]);
 
   return { ...snapshot, signIn, cancelSignIn };
