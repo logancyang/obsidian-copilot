@@ -848,15 +848,6 @@ export function omit<T extends object, K extends keyof T>(obj: T, keys: K[]): Om
   return result;
 }
 
-export function findCustomModel(modelKey: string, activeModels: CustomModel[]): CustomModel {
-  const [modelName, provider] = modelKey.split("|");
-  const model = activeModels.find((m) => m.name === modelName && m.provider === provider);
-  if (!model) {
-    throw new Error(`No model configuration found for: ${modelKey}`);
-  }
-  return model;
-}
-
 // Capabilities can be undefined when a model's vision support is simply unknown;
 // callers that hard-block on missing vision must treat undefined as "unknown", not "no".
 export function modelSupportsVision(model: CustomModel): boolean {
