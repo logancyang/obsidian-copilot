@@ -3,7 +3,6 @@
  * https://github.com/Brevilabs/obsidian-copilot-private/issues/283
  */
 const LEGACY_INDEX_SETTING_FIELDS = [
-  "enableSemanticSearchV3",
   "embeddingModelKey",
   "activeEmbeddingModels",
   "embeddingRequestsPerMin",

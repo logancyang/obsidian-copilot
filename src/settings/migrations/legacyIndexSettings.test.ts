@@ -5,9 +5,9 @@ import { stripLegacyIndexSettings } from "./legacyIndexSettings";
 describe("legacyIndexSettings", () => {
   describe("stripLegacyIndexSettings()", () => {
     it.each([
-      { name: "index enabled", enableSemanticSearchV3: true, activeEmbeddingModels: [{}] },
-      { name: "index disabled", enableSemanticSearchV3: false, activeEmbeddingModels: [] },
-      { name: "no embedding rows", enableSemanticSearchV3: true },
+      { name: "embedding rows", activeEmbeddingModels: [{}] },
+      { name: "empty embedding rows", activeEmbeddingModels: [] },
+      { name: "no embedding rows" },
     ])(
       "removes retired fields from a vault with $name (https://github.com/Brevilabs/obsidian-copilot-private/issues/283)",
       ({ name: _name, ...legacyFields }) => {
