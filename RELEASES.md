@@ -16,7 +16,7 @@ Open Codex's **Configure** dialog and choose **Managed by Copilot** to download 
 
 Codex now shows one entry per model, with a separate choice of the reasoning efforts your adapter supports. Pick GPT-6 Astra when it's available to your account, choose an effort, and get to work; your saved enabled models and default selection carry forward when you upgrade. ([#2766](https://github.com/logancyang/obsidian-copilot/pull/2766), [#2767](https://github.com/logancyang/obsidian-copilot/pull/2767), @zeroliu)
 
-![Codex model picker with GPT-6 Astra selected and a separate reasoning-effort slider](https://github.com/user-attachments/assets/9dcf1653-e26e-44a4-b2e7-73852d63831d)
+![Codex model picker with GPT-6 Astra selected and a separate reasoning-effort slider](https://github.com/user-attachments/assets/359b323b-a07e-4b81-ae25-e083ff434b70)
 
 ## Enhancements
 
