@@ -5,7 +5,7 @@
  * or Obsidian APIs are touched.
  */
 
-import { getSettings, resetSettings } from "@/settings/model";
+import { getSettings, resetSettings, setSettings } from "@/settings/model";
 
 import type { ModelInfo } from "@/modelManagement/types/catalog";
 
@@ -194,5 +194,55 @@ describe("ConfiguredModelRegistry", () => {
     expect(getSettings().configuredModels.find((m) => m.configuredModelId === id)).toBeDefined();
     await registry.remove(id);
     expect(getSettings().configuredModels.find((m) => m.configuredModelId === id)).toBeUndefined();
+  });
+  describe("BYOK write validation", () => {
+    beforeEach(() =>
+      setSettings({
+        providers: {
+          byok: {
+            providerId: "byok",
+            providerType: "openai-compatible",
+            displayName: "BYOK",
+            origin: { kind: "byok" },
+            addedAt: 0,
+          },
+          plus: {
+            providerId: "plus",
+            providerType: "openai-compatible",
+            displayName: "Plus",
+            origin: { kind: "copilot-plus" },
+            addedAt: 0,
+          },
+        },
+        configuredModels: [],
+      })
+    );
+    it("add rejects embeddings only for BYOK (https://github.com/Brevilabs/obsidian-copilot-private/issues/386)", async () => {
+      const embedding = { id: "embed", displayName: "Embed", isEmbedding: false };
+      const before = getSettings();
+      await expect(registry.add({ providerId: "byok", info: embedding })).rejects.toThrow(
+        "Embedding models aren’t supported"
+      );
+      expect(getSettings()).toBe(before);
+      await expect(registry.add({ providerId: "plus", info: embedding })).resolves.toEqual(
+        expect.any(String)
+      );
+    });
+    it("bulkSet rejects a mixed replacement without losing existing models (https://github.com/Brevilabs/obsidian-copilot-private/issues/386)", async () => {
+      await registry.add({ providerId: "byok", info: info("chat") });
+      const before = getSettings();
+      await expect(
+        registry.bulkSet("byok", [info("new-chat"), { ...info("opaque"), isEmbedding: true }])
+      ).rejects.toThrow("Embedding models aren’t supported");
+      expect(getSettings()).toBe(before);
+    });
+    it("update cannot turn a saved BYOK model into an embedding (https://github.com/Brevilabs/obsidian-copilot-private/issues/386)", async () => {
+      const id = await registry.add({ providerId: "byok", info: info("chat") });
+      const before = getSettings();
+      await expect(registry.update(id, { info: { isEmbedding: true } })).rejects.toThrow(
+        "Embedding models aren’t supported"
+      );
+      expect(getSettings()).toBe(before);
+    });
   });
 });

@@ -26,12 +26,6 @@ const RICH: ModelInfo = {
 
 const PLAIN: ModelInfo = { id: "gpt-5", displayName: "gpt-5" };
 
-const EMBED: ModelInfo = {
-  id: "nomic-embed-text",
-  displayName: "nomic-embed-text",
-  isEmbedding: true,
-};
-
 describe("ModelChecklist", () => {
   it("renders the empty state with a manual-add hint when there are no models", () => {
     renderList();
@@ -44,9 +38,17 @@ describe("ModelChecklist", () => {
     expect(screen.getByTestId("model-row-gpt-5")).toBeTruthy();
   });
 
-  it("shows an Embedding badge for embedding models", () => {
-    renderList({ availableModels: [EMBED] });
-    expect(screen.getByText("Embedding")).toBeTruthy();
+  it("announces an unsupported manual entry and retains its text (https://github.com/Brevilabs/obsidian-copilot-private/issues/386)", () => {
+    const props = renderList({
+      onAddId: jest.fn(() => false),
+      manualError: "Embedding models aren’t supported in BYOK. Choose a chat model.",
+    });
+    const input = screen.getByTestId<HTMLInputElement>("model-checklist-manual-input");
+    fireEvent.change(input, { target: { value: "nomic-embed-text" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    expect(props.onAddId).toHaveBeenCalledWith("nomic-embed-text");
+    expect(input.value).toBe("nomic-embed-text");
+    expect(screen.getByRole("alert").textContent).toContain("Embedding models aren’t supported");
   });
 
   it("badges only the no-vision exception: nothing for vision or unknown, an eye-off for known text-only", () => {

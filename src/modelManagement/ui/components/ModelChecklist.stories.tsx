@@ -27,7 +27,14 @@ export const DiscoveredModels: StoryObj<ModelChecklistProps> = {
   args: {
     availableModels: [
       { id: "qwen/qwen3.8-27b", displayName: "Qwen 3.8 27B" },
-      { id: "text-embedding-3-small", displayName: "Text Embedding 3 Small", isEmbedding: true },
+      { id: "gpt-5", displayName: "GPT-5" },
     ],
+  },
+};
+
+export const UnsupportedEmbedding: StoryObj<ModelChecklistProps> = {
+  args: {
+    onAddId: () => false,
+    manualError: "Embedding models aren’t supported in BYOK. Choose a chat model.",
   },
 };

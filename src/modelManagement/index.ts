@@ -39,6 +39,7 @@ export {
   providerNeedsResolvedApiKey,
   providerRequiresApiKey,
 } from "./providers/providerRequiresApiKey";
+export { assertByokChatModels, isEmbeddingModel } from "./models/byokModelPolicy";
 export { ConfiguredModelRegistry } from "./models/ConfiguredModelRegistry";
 export { BackendConfigRegistry } from "./backends/BackendConfigRegistry";
 export { ChatModelFactory } from "./chatModel/ChatModelFactory";

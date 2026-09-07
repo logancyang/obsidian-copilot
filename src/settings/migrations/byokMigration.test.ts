@@ -16,6 +16,7 @@ import type { ModelManagementApi, Provider, SetupProviderInput } from "@/modelMa
 import type { CopilotSettings } from "@/settings/model";
 
 import { executeByokMigration, planByokMigration } from "./byokMigration";
+import { assertByokChatModels } from "@/modelManagement";
 
 jest.mock("@/logger", () => ({
   logInfo: jest.fn(),
@@ -353,6 +354,39 @@ describe("executeByokMigration", () => {
       ...overrides,
     };
   }
+
+  it("migrates valid chat models in an old mixed provider with a false embedding flag (https://github.com/Brevilabs/obsidian-copilot-private/issues/386)", async () => {
+    const { api, setupProvider } = makeApi();
+    setupProvider.mockImplementationOnce(async (input) => {
+      assertByokChatModels(input.models);
+      return { providerId: "migrated", configuredModelIds: input.models.map((model) => model.id) };
+    });
+    await executeByokMigration(
+      api,
+      settingsWith(
+        [
+          model({ name: "gpt-4o", provider: ChatModelProviders.OPENAI }),
+          model({
+            name: "text-embedding-3-small",
+            provider: ChatModelProviders.OPENAI,
+            isEmbeddingModel: false,
+          }),
+        ],
+        { settingsVersion: 3, openAIApiKey: "keep-key" }
+      )
+    );
+    expect(setupProvider).toHaveBeenCalledTimes(1);
+    expect(setupProvider).toHaveBeenCalledWith(
+      expect.objectContaining({
+        apiKey: "keep-key",
+        models: [expect.objectContaining({ id: "gpt-4o" })],
+      })
+    );
+    await expect(setupProvider.mock.results[0].value).resolves.toEqual({
+      providerId: "migrated",
+      configuredModelIds: ["gpt-4o"],
+    });
+  });
 
   it("creates one provider per planned descriptor", async () => {
     const { api, setupProvider } = makeApi();

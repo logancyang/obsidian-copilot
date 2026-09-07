@@ -18,7 +18,7 @@
  */
 
 import { logError } from "@/logger";
-import { looksLikeEmbeddingModel } from "@/modelManagement/catalog/catalogTransform";
+import { assertByokChatModels } from "@/modelManagement/models/byokModelPolicy";
 import type { ModelInfo, ProviderType } from "@/modelManagement/types/catalog";
 import type { BackendType } from "@/modelManagement/types/persisted";
 import type { BackendConfigRegistry } from "@/modelManagement/backends/BackendConfigRegistry";
@@ -97,7 +97,7 @@ export class ByokSetupApi {
    * Unified BYOK setup. Creates the Provider (with `origin.kind = "byok"`
    * and an optional `catalogProviderId` link), stores the API key,
    * creates `ConfiguredModel` rows from the supplied `models`
-   * snapshots, and enrolls non-embedding models into
+   * snapshots, and enrolls chat models into
    * `autoEnrollIn ?? BYOK_DEFAULT_AUTO_ENROLL`. Replaces the
    * catalog / template split — the caller pre-enriches `ModelInfo`s.
    *
@@ -106,6 +106,7 @@ export class ByokSetupApi {
    * provider doesn't surface in `byokProvidersAtom`.
    */
   async setupProvider(input: SetupProviderInput): Promise<ByokSetupResult> {
+    assertByokChatModels(input.models);
     const providerId = await this.#providers.add({
       providerType: input.providerType,
       displayName: input.displayName,
@@ -128,12 +129,10 @@ export class ByokSetupApi {
 
       const configuredModelIds = await this.#models.bulkSet(providerId, input.models);
 
-      // `models` carries no duplicate `info.id` (selection is a set), so
-      // `bulkSet` returns ids 1:1 in input order — `configuredModelIds[i]`
-      // pairs with `models[i]`. Embeddings aren't chat models, so we keep
-      // them out of the chat/agent backends.
-      const newChatIds = configuredModelIds.filter((_, i) => !input.models[i]?.isEmbedding);
-      await this.#enrollInBackends(input.autoEnrollIn ?? BYOK_DEFAULT_AUTO_ENROLL, newChatIds);
+      await this.#enrollInBackends(
+        input.autoEnrollIn ?? BYOK_DEFAULT_AUTO_ENROLL,
+        configuredModelIds
+      );
 
       return { providerId, configuredModelIds };
     } catch (err) {
@@ -151,10 +150,9 @@ export class ByokSetupApi {
    * the resulting `configuredModelId`s in input order.
    */
   async addModels(input: AddModelsInput): Promise<string[]> {
+    assertByokChatModels(input.models);
     const resultIds: string[] = [];
-    // Track only freshly-added non-embedding ids so we don't re-enroll
-    // already-configured models and don't enroll embeddings into chat
-    // backends (mirrors `setupProvider`).
+    // Preserve user curation: enroll only newly configured models.
     const newChatIds: string[] = [];
     for (const info of input.models) {
       const existing = this.#models.getByWireId(input.providerId, info.id);
@@ -164,13 +162,7 @@ export class ByokSetupApi {
       }
       const configuredModelId = await this.#models.add({ providerId: input.providerId, info });
       resultIds.push(configuredModelId);
-      // The caller may pass bare `ModelInfo` (id + displayName) for
-      // hand-typed self-hosted models; fall back to the id heuristic
-      // when `isEmbedding` is unset.
-      const isEmbedding = info.isEmbedding ?? looksLikeEmbeddingModel(info.id);
-      if (!isEmbedding) {
-        newChatIds.push(configuredModelId);
-      }
+      newChatIds.push(configuredModelId);
     }
     await this.#enrollInBackends(input.autoEnrollIn ?? BYOK_DEFAULT_AUTO_ENROLL, newChatIds);
     return resultIds;

@@ -19,6 +19,7 @@
  */
 
 import { v4 as uuidv4 } from "uuid";
+import { assertByokChatModels } from "./byokModelPolicy";
 
 import { getSettings, setSettings } from "@/settings/model";
 import { frozenOr, sliceMemoByKey } from "@/utils/sliceCache";
@@ -80,6 +81,7 @@ export class ConfiguredModelRegistry {
   /** Mints `configuredModelId`, stamps `configuredAt`. Throws if the
    *  `(providerId, info.id)` pair already exists. */
   async add(input: Omit<ConfiguredModel, "configuredModelId" | "configuredAt">): Promise<string> {
+    this.#validateModels(input.providerId, [input.info]);
     const existing = getSettings().configuredModels;
     if (existing.some((m) => m.providerId === input.providerId && m.info.id === input.info.id)) {
       throw new Error(
@@ -116,6 +118,7 @@ export class ConfiguredModelRegistry {
       ...existing,
       info: { ...existing.info, ...patch.info },
     };
+    this.#validateModels(existing.providerId, [next.info]);
     setSettings((cur) => ({
       configuredModels: cur.configuredModels.map((m) =>
         m.configuredModelId === configuredModelId ? next : m
@@ -140,6 +143,7 @@ export class ConfiguredModelRegistry {
    * resulting `configuredModelId`s in input order.
    */
   async bulkSet(providerId: string, infos: readonly ModelInfo[]): Promise<string[]> {
+    this.#validateModels(providerId, infos);
     const current = getSettings().configuredModels;
     const existingForProvider = new Map<string, ConfiguredModel>();
     for (const m of current) {
@@ -189,6 +193,14 @@ export class ConfiguredModelRegistry {
       ],
     }));
     return resultIds;
+  }
+
+  #validateModels(providerId: string, models: readonly ModelInfo[]): void {
+    // Other origins own their inventories, including non-chat models.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/386
+    if (getSettings().providers[providerId]?.origin.kind === "byok") {
+      assertByokChatModels(models);
+    }
   }
 
   /** Used by `ModelManagementCoordinator.removeProvider` to drop all

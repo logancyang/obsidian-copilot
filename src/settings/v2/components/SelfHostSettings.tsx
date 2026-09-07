@@ -63,7 +63,7 @@ export const SelfHostSettings: React.FC = () => {
           title="Enable Self-Host Mode"
           description={
             <span className="tw-inline-flex tw-items-center tw-gap-1.5">
-              Route LLMs, embeddings and document understanding through your own endpoints.
+              Route chat models and document understanding through your own endpoints.
               <HelpTooltip content="Believer / Supporter only. Use your own infrastructure for full control and offline use. Stays available offline until your entitlement expires." />
             </span>
           }
@@ -131,7 +131,7 @@ export const SelfHostSettings: React.FC = () => {
         <SettingSection label="Self-hosted models">
           <SettingItem
             type="custom"
-            title="LLM & embedding models"
+            title="Chat models"
             description={
               <span>Add local / self-hosted models as an OpenAI-compatible endpoint in BYOK.</span>
             }
