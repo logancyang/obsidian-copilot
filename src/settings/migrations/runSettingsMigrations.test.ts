@@ -471,4 +471,36 @@ describe("runSettingsMigrations()", () => {
     );
     expect(flagWrite).toBeUndefined();
   });
+
+  it("removes BYOK embeddings and refs together when upgrading from v13 (https://github.com/Brevilabs/obsidian-copilot-private/issues/386)", async () => {
+    mockGetSettings.mockReturnValue(
+      settings({
+        settingsVersion: 13,
+        providers: {
+          p: {
+            providerId: "p",
+            displayName: "BYOK",
+            providerType: "openai-compatible",
+            origin: { kind: "byok" },
+            addedAt: 0,
+          },
+        },
+        configuredModels: [
+          {
+            configuredModelId: "e",
+            providerId: "p",
+            info: { id: "embed", displayName: "Embed" },
+            configuredAt: 0,
+          },
+        ],
+        backends: { chat: { enabledModels: ["e"] } },
+      })
+    );
+    await runSettingsMigrations(makeApi().api);
+    expect(mockSetSettings).toHaveBeenCalledTimes(2);
+    expect(mockSetSettings).toHaveBeenCalledWith(
+      expect.objectContaining({ configuredModels: [], backends: { chat: { enabledModels: [] } } })
+    );
+    expect(mockSetSettings).toHaveBeenCalledWith({ settingsVersion: CURRENT_SETTINGS_VERSION });
+  });
 });

@@ -29,6 +29,7 @@ import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { useApp } from "@/context";
 import { logError } from "@/logger";
+import { assertByokChatModels } from "@/modelManagement/models/byokModelPolicy";
 import type { ModelManagementApi } from "@/modelManagement/createModelManagement";
 import { BYOK_DEFAULT_AUTO_ENROLL } from "@/modelManagement/setup/ByokSetupApi";
 import { providerRequiresApiKey } from "@/modelManagement/providers/providerRequiresApiKey";
@@ -552,6 +553,8 @@ const ConfigureProviderBody: React.FC<ConfigureProviderBodyProps> = ({
             modelInputHint={modelInputHint}
             fetching={pool.fetching}
             fetchError={pool.fetchError}
+            manualError={pool.manualError}
+            onManualInputChange={pool.clearManualError}
           />
         </div>
       </div>
@@ -645,6 +648,7 @@ async function saveProviderEdit({
   selectedInfos,
   api,
 }: SaveEditArgs): Promise<void> {
+  assertByokChatModels(selectedInfos);
   // Touch the keychain only when the key actually changed — re-writing an
   // unchanged key would emit and trigger a spurious opencode restart. A key
   // cleared to empty drops the keychain entry (only reachable for keyless
@@ -669,11 +673,10 @@ async function saveProviderEdit({
     await api.backendConfigRegistry.removeRefs(deselectedIds);
   }
 
-  // Auto-enroll only the truly new (and non-embedding) ids so we preserve
+  // Auto-enroll only the truly new ids so we preserve
   // the user's curated enrollments on previously-saved models.
   for (let i = 0; i < selectedInfos.length; i++) {
     if (prevWireIds.has(selectedInfos[i].id)) continue;
-    if (selectedInfos[i].isEmbedding) continue;
     for (const backend of BYOK_DEFAULT_AUTO_ENROLL) {
       await api.backendConfigRegistry.enableModel(backend, ids[i]);
     }

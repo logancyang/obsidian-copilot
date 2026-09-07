@@ -23,6 +23,7 @@ import { executeGitHubCopilotRemoval } from "./githubCopilotRemovalMigration";
 import { planOptionalCustomProviderAuthMigration } from "./optionalCustomProviderAuthMigration";
 import { planRequiresApiKeyBackfill } from "./requiresApiKeyMigration";
 import { CURRENT_SETTINGS_VERSION } from "./version";
+import { planByokEmbeddingRemoval } from "./byokEmbeddingRemovalMigration";
 
 export { CURRENT_SETTINGS_VERSION } from "./version";
 
@@ -125,6 +126,13 @@ export async function runSettingsMigrations(api: ModelManagementApi): Promise<vo
   // back when the stored key resolves to nothing.
   if (fromVersion < 12) {
     await executeAzureRemoval(api, getSettings());
+  }
+
+  // Remove rows and all affected selections atomically before backend discovery.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/386
+  if (fromVersion < 14) {
+    const patch = planByokEmbeddingRemoval(getSettings());
+    if (patch) setSettings(patch);
   }
 
   // Bump unconditionally after the migrations so a per-provider failure can't

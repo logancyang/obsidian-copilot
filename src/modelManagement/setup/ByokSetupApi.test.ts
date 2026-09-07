@@ -5,7 +5,7 @@
  * same fake `app.secretStorage` shim used in `ProviderRegistry.test.ts`.
  */
 
-import { resetSettings, setSettings } from "@/settings/model";
+import { getSettings, resetSettings, setSettings } from "@/settings/model";
 import { KeychainService } from "@/services/keychainService";
 
 import { BackendConfigRegistry } from "@/modelManagement/backends/BackendConfigRegistry";
@@ -102,26 +102,23 @@ describe("ByokSetupApi.addModels", () => {
     }
   });
 
-  // `addModels` receives bare `ModelInfo` (id + displayName) from the
-  // hand-typed flow; without the id heuristic it would enroll embedding
-  // models into chat backends where they fail at inference.
-  it("does not enroll embedding-named ids into chat-shaped backends", async () => {
+  it("rejects a mixed add batch before writing any model (https://github.com/Brevilabs/obsidian-copilot-private/issues/386)", async () => {
     const { providerId } = await api.setupProvider({
       providerType: "openai-compatible",
       displayName: "Ollama",
-      baseUrl: "http://localhost:11434/v1",
-      models: [{ id: "llama3.2", displayName: "llama3.2" }],
+      models: [{ id: "llama", displayName: "Llama" }],
     });
-
-    const ids = await api.addModels({
-      providerId,
-      models: [{ id: "nomic-embed-text", displayName: "nomic-embed-text" }],
-    });
-    const embedId = ids[0];
-
-    for (const backend of BYOK_DEFAULT_AUTO_ENROLL) {
-      expect(backends.get(backend).enabledModels).not.toContain(embedId);
-    }
+    const before = getSettings();
+    await expect(
+      api.addModels({
+        providerId,
+        models: [
+          { id: "new-chat", displayName: "Chat" },
+          { id: "nomic-embed-text", displayName: "Embedding", isEmbedding: false },
+        ],
+      })
+    ).rejects.toThrow("Embedding models aren’t supported");
+    expect(getSettings()).toBe(before);
   });
 });
 
@@ -206,23 +203,22 @@ describe("ByokSetupApi.setupProvider", () => {
     expect(providers.get(result.providerId)?.enableCors).toBe(true);
   });
 
-  it("respects the caller's `isEmbedding` flag when deciding auto-enrollment", async () => {
-    const result = await api.setupProvider({
-      providerType: "openai-compatible",
-      displayName: "Ollama",
-      baseUrl: "http://localhost:11434/v1",
-      models: [
-        { id: "llama3.2", displayName: "llama3.2" },
-        // Explicitly tagged as embedding by the caller (catalog said so).
-        { id: "nomic-embed-text", displayName: "nomic-embed-text", isEmbedding: true },
-      ],
-    });
-    const [chatId, embedId] = result.configuredModelIds;
-    for (const backend of BYOK_DEFAULT_AUTO_ENROLL) {
-      const enabled = backends.get(backend).enabledModels;
-      expect(enabled).toContain(chatId);
-      expect(enabled).not.toContain(embedId);
-    }
+  it("rejects mixed setup before creating a provider or storing a key (https://github.com/Brevilabs/obsidian-copilot-private/issues/386)", async () => {
+    const before = getSettings();
+    const keySpy = jest.spyOn(providers, "setApiKey");
+    await expect(
+      api.setupProvider({
+        providerType: "openai-compatible",
+        displayName: "Ollama",
+        apiKey: "test-key",
+        models: [
+          { id: "chat", displayName: "Chat" },
+          { id: "opaque", displayName: "Embedding", isEmbedding: true },
+        ],
+      })
+    ).rejects.toThrow("Embedding models aren’t supported");
+    expect(getSettings()).toBe(before);
+    expect(keySpy).not.toHaveBeenCalled();
   });
 
   it("rolls back the provider row when setApiKey throws", async () => {

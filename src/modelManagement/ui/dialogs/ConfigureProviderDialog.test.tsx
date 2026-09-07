@@ -293,7 +293,7 @@ describe("ConfigureProviderForm (new mode)", () => {
     render(
       <ConfigureProviderForm state={{ mode: "new", source: ollamaSource }} onClose={onClose} />
     );
-    manualAddId("nomic-embed-text");
+    manualAddId("my-chat-model");
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(mockSetupProvider).toHaveBeenCalled());
     expect(mockSetupProvider).toHaveBeenCalledWith(
@@ -302,14 +302,30 @@ describe("ConfigureProviderForm (new mode)", () => {
         providerType: "openai-compatible",
         models: [
           expect.objectContaining({
-            id: "nomic-embed-text",
-            displayName: "nomic-embed-text",
-            // Embedding heuristic kicks in for the embed-named id.
-            isEmbedding: true,
+            id: "my-chat-model",
+            displayName: "my-chat-model",
           }),
         ],
       })
     );
+  });
+
+  it("rejects a manual embedding without saving credentials or rows (https://github.com/Brevilabs/obsidian-copilot-private/issues/386)", () => {
+    render(
+      <ConfigureProviderForm state={{ mode: "new", source: ollamaSource }} onClose={jest.fn()} />
+    );
+    manualAddId("nomic-embed-text");
+    expect(screen.getByRole("alert").textContent).toBe(
+      "Embedding models aren’t supported in BYOK. Choose a chat model."
+    );
+    expect(screen.queryByTestId("model-row-nomic-embed-text")).toBeNull();
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Save" }).disabled).toBe(true);
+    expect(mockSetupProvider).not.toHaveBeenCalled();
+    expect(mockSetApiKey).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByTestId("model-checklist-manual-input"), {
+      target: { value: "chat-model" },
+    });
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 
   it("saves an explicit Quick Chat CORS choice for a new provider (https://github.com/logancyang/obsidian-copilot-preview/issues/313)", async () => {
@@ -485,19 +501,19 @@ describe("ConfigureProviderForm (edit mode)", () => {
     await waitFor(() => expect(onClose).toHaveBeenCalled());
   });
 
-  it("auto-enrolls only newly-added chat models — skips embeddings, never re-enables existing", async () => {
+  it("excludes discovered embeddings and only enrolls new chat models (https://github.com/Brevilabs/obsidian-copilot-private/issues/386)", async () => {
     mockGetProvider.mockReturnValue(anthropicCatalogMetadata);
     mockListProviderModels.mockResolvedValue({
       ok: true,
       modelIds: ["claude-haiku", "voyage-embed"],
     });
-    mockBulkSet.mockResolvedValue(["cm1", "cm2", "cm-haiku", "cm-embed"]);
+    mockBulkSet.mockResolvedValue(["cm1", "cm2", "cm-haiku"]);
     const onClose = jest.fn();
     render(<ConfigureProviderForm state={{ mode: "edit", providerId: "p1" }} onClose={onClose} />);
     // Wait for the fetched rows to appear, then check them.
     await waitFor(() => expect(screen.getByTestId("model-row-claude-haiku")).toBeTruthy());
     fireEvent.click(rowCheckbox("claude-haiku"));
-    fireEvent.click(rowCheckbox("voyage-embed"));
+    expect(screen.queryByTestId("model-row-voyage-embed")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(onClose).toHaveBeenCalled());
     for (const backend of ["chat", "opencode"]) {
@@ -506,6 +522,28 @@ describe("ConfigureProviderForm (edit mode)", () => {
     expect(mockEnableModel).not.toHaveBeenCalledWith(expect.anything(), "cm-embed");
     expect(mockEnableModel).not.toHaveBeenCalledWith(expect.anything(), "cm1");
     expect(mockEnableModel).not.toHaveBeenCalledWith(expect.anything(), "cm2");
+  });
+
+  it("does not serialize a saved selection reclassified as an embedding (https://github.com/Brevilabs/obsidian-copilot-private/issues/386)", async () => {
+    mockGetProvider.mockReturnValue({
+      ...anthropicCatalogMetadata,
+      models: {
+        ...anthropicCatalogMetadata.models,
+        "claude-opus": { id: "claude-opus", displayName: "Old model", isEmbedding: true },
+      },
+    });
+    render(
+      <ConfigureProviderForm state={{ mode: "edit", providerId: "p1" }} onClose={jest.fn()} />
+    );
+    await screen.findByTestId("model-row-claude-sonnet");
+    expect(screen.queryByTestId("model-row-claude-opus")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(mockBulkSet).toHaveBeenCalledWith("p1", [
+        expect.objectContaining({ id: "claude-sonnet" }),
+      ])
+    );
+    expect(mockRemoveRefs).toHaveBeenCalledWith(["cm2"]);
   });
 
   it("Mount fetch uses the saved key (catalog-less edit row)", async () => {

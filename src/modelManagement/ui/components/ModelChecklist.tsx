@@ -8,10 +8,9 @@
  *   - existing configured models (edit mode)
  *
  * Each id is rendered with whatever `ModelInfo` metadata is available
- * — context window, release date, embedding badge — or id-only when
+ * — context window and release date — or id-only when
  * the catalog has nothing to add. Selection lives in the parent.
  */
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { FormField } from "@/components/ui/form-field";
@@ -37,7 +36,10 @@ export interface ModelChecklistProps {
   selected: ReadonlySet<string>;
   onToggle: (id: string, next: boolean) => void;
   /** Manual-add input — always visible above endpoint discovery. */
-  onAddId: (id: string) => void;
+  onAddId: (id: string) => boolean | void;
+  /** Unsupported manual model entry. */
+  manualError?: string | null;
+  onManualInputChange?: () => void;
   /** Remove an id from the candidate pool. The X button only renders
    *  for ids the parent marked as custom-added (see `customIds`);
    *  discovered ids (catalog or live-fetched) would just reappear and
@@ -63,6 +65,8 @@ export const ModelChecklist: React.FC<ModelChecklistProps> = ({
   selected,
   onToggle,
   onAddId,
+  manualError,
+  onManualInputChange,
   onRemoveId,
   query,
   onQueryChange,
@@ -88,7 +92,9 @@ export const ModelChecklist: React.FC<ModelChecklistProps> = ({
   const handleManualAdd = (): void => {
     const id = manualId.trim();
     if (!id) return;
-    onAddId(id);
+    // Keep rejected embedding IDs editable so users can correct the model choice.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/386
+    if (onAddId(id) === false) return;
     setManualId("");
   };
 
@@ -101,7 +107,10 @@ export const ModelChecklist: React.FC<ModelChecklistProps> = ({
           <Input
             className="tw-flex-1"
             value={manualId}
-            onChange={(e) => setManualId(e.target.value)}
+            onChange={(e) => {
+              setManualId(e.target.value);
+              onManualInputChange?.();
+            }}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
                 e.preventDefault();
@@ -116,6 +125,12 @@ export const ModelChecklist: React.FC<ModelChecklistProps> = ({
           </Button>
         </div>
       </FormField>
+
+      {manualError && (
+        <div role="alert" className="tw-text-xs tw-text-error">
+          {manualError}
+        </div>
+      )}
 
       <SearchBar value={query} onChange={onQueryChange} placeholder="Search available models…" />
 
@@ -169,11 +184,6 @@ export const ModelChecklist: React.FC<ModelChecklistProps> = ({
                 />
                 <span className="tw-flex tw-min-w-0 tw-items-center tw-gap-2">
                   <span className="tw-truncate tw-text-normal">{model.displayName}</span>
-                  {model.isEmbedding && (
-                    <Badge variant="secondary" className="tw-shrink-0 tw-text-ui-smaller">
-                      Embedding
-                    </Badge>
-                  )}
                   {hasCapabilityIcons(capabilities) && (
                     <span className="tw-flex tw-shrink-0 tw-items-center tw-gap-0.5">
                       <ModelCapabilityIcons capabilities={capabilities} iconSize={14} />

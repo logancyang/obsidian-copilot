@@ -12,11 +12,16 @@
  * endpoint, or manual entry. Catalog hits only enrich row labels/limits.
  */
 import { looksLikeEmbeddingModel } from "@/modelManagement/catalog/catalogTransform";
+import { BYOK_EMBEDDING_ERROR, isEmbeddingModel } from "@/modelManagement/models/byokModelPolicy";
 import type { ModelManagementApi } from "@/modelManagement/createModelManagement";
 import { listProviderModels } from "@/modelManagement/providers/adapters/listProviderModels";
 import type { ModelInfo, ProviderType } from "@/modelManagement/types/catalog";
 import type { ConfiguredModel } from "@/modelManagement/types/persisted";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+// Empty filtered pools stay stable across endpoint and catalog refreshes.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/386
+const EMPTY_CANDIDATES: readonly ModelInfo[] = Object.freeze([]);
 
 export interface UseModelCandidatePoolArgs {
   mode: "new" | "edit";
@@ -48,7 +53,9 @@ export interface ModelCandidatePool {
   resolveModelInfo: (id: string) => ModelInfo;
   buildSelectedModelInfos: () => ModelInfo[];
   toggle: (wireId: string, next: boolean) => void;
-  addId: (id: string) => void;
+  addId: (id: string) => boolean;
+  manualError: string | null;
+  clearManualError: () => void;
   removeId: (id: string) => void;
   /** Re-run the live model fetch (e.g. after a successful credential test). */
   fetchModels: () => Promise<void>;
@@ -67,7 +74,7 @@ export function useModelCandidatePool({
   providerHydrated,
   api,
 }: UseModelCandidatePoolArgs): ModelCandidatePool {
-  const [selectedWireIds, setSelectedWireIds] = useState<Set<string>>(() =>
+  const [selectedIds, setSelectedWireIds] = useState<Set<string>>(() =>
     mode === "edit" ? new Set(existingModels.map((m) => m.info.id)) : new Set()
   );
   const [fetchedIds, setFetchedIds] = useState<string[]>([]);
@@ -75,6 +82,7 @@ export function useModelCandidatePool({
   const [removedExistingIds, setRemovedExistingIds] = useState<Set<string>>(() => new Set());
   const [fetching, setFetching] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
+  const [manualError, setManualError] = useState<string | null>(null);
 
   const existingByWireId = useMemo(
     () => new Map(existingModels.map((m) => [m.info.id, m.info])),
@@ -95,6 +103,13 @@ export function useModelCandidatePool({
     [catalogMetadata, existingByWireId]
   );
 
+  // Catalog hydration can classify an already-selected row as unsupported.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/386
+  const selectedWireIds = useMemo(
+    () => new Set([...selectedIds].filter((id) => !isEmbeddingModel(resolveModelInfo(id)))),
+    [selectedIds, resolveModelInfo]
+  );
+
   // Candidate pool — existing (edit) ∪ fetched ∪ manual, with insertion
   // order preserved so the user sees rows in the order they appeared.
   const availableModels = useMemo<readonly ModelInfo[]>(() => {
@@ -103,7 +118,10 @@ export function useModelCandidatePool({
     const push = (id: string): void => {
       if (seen.has(id)) return;
       seen.add(id);
-      out.push(resolveModelInfo(id));
+      const info = resolveModelInfo(id);
+      // Unsupported rows must not appear as selectable chat models.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/386
+      if (!isEmbeddingModel(info)) out.push(info);
     };
     for (const m of existingModels) {
       if (removedExistingIds.has(m.info.id)) continue;
@@ -111,7 +129,7 @@ export function useModelCandidatePool({
     }
     for (const id of fetchedIds) push(id);
     for (const id of manualIds) push(id);
-    return out;
+    return out.length === 0 ? EMPTY_CANDIDATES : out;
   }, [existingModels, fetchedIds, manualIds, resolveModelInfo, removedExistingIds]);
 
   // Custom-added ids — drives both the X-button visibility and the
@@ -207,17 +225,29 @@ export function useModelCandidatePool({
     });
   }, []);
 
-  const addId = useCallback((id: string): void => {
-    // Manual add: append to the manual pool (skipping if already present)
-    // and auto-check, since the user explicitly typed it.
-    setManualIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
-    setSelectedWireIds((prev) => {
-      if (prev.has(id)) return prev;
-      const ns = new Set(prev);
-      ns.add(id);
-      return ns;
-    });
-  }, []);
+  const addId = useCallback(
+    (id: string): boolean => {
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/386
+      if (isEmbeddingModel(resolveModelInfo(id))) {
+        setManualError(BYOK_EMBEDDING_ERROR);
+        return false;
+      }
+      setManualError(null);
+      // Manual add: append to the manual pool (skipping if already present)
+      // and auto-check, since the user explicitly typed it.
+      setManualIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
+      setSelectedWireIds((prev) => {
+        if (prev.has(id)) return prev;
+        const ns = new Set(prev);
+        ns.add(id);
+        return ns;
+      });
+      return true;
+    },
+    [resolveModelInfo]
+  );
+
+  const clearManualError = useCallback(() => setManualError(null), []);
 
   const removeId = useCallback(
     (id: string): void => {
@@ -250,12 +280,14 @@ export function useModelCandidatePool({
   // what the user saw. Capabilities ride along on each `ModelInfo` (its
   // `modalities` / `reasoning`); there's no separate overlay.
   const buildSelectedModelInfos = useCallback(
-    (): ModelInfo[] => [...selectedWireIds].map((id) => resolveModelInfo(id)),
+    (): ModelInfo[] => [...selectedWireIds].map(resolveModelInfo),
     [selectedWireIds, resolveModelInfo]
   );
 
   return {
     availableModels,
+    manualError,
+    clearManualError,
     customIds,
     selectedWireIds,
     removedExistingIds,

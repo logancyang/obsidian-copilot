@@ -2,7 +2,11 @@ import { ChatModelProviders } from "@/constants";
 import type { ConfiguredModel, Provider } from "@/modelManagement/types/persisted";
 import type { EnabledBackendEntry } from "@/modelManagement/types/runtime";
 
-import { findChatBackendEntry, resolveChatModelSelectionId } from "./chatModelSelection";
+import {
+  findChatBackendEntry,
+  getLegacyChatModelKeys,
+  resolveChatModelSelectionId,
+} from "./chatModelSelection";
 
 function provider(id: string, overrides: Partial<Provider> = {}): Provider {
   return {
@@ -31,6 +35,21 @@ function entry(
 }
 
 describe("chatModelSelection", () => {
+  describe("getLegacyChatModelKeys()", () => {
+    it("enumerates legacy local-provider aliases from saved rows (https://github.com/Brevilabs/obsidian-copilot-private/issues/386)", () => {
+      const target = entry(
+        "local",
+        "chat",
+        provider("local", {
+          displayName: "Ollama",
+          origin: { kind: "byok" },
+        })
+      );
+      expect(getLegacyChatModelKeys(target)).toContain(`chat|${ChatModelProviders.OLLAMA}`);
+      expect(getLegacyChatModelKeys(target)).not.toContain("local");
+    });
+  });
+
   it("resolves configured-model ids", () => {
     const p = provider("p1");
     const entries = [entry("a", "gpt-4o", p), entry("b", "gpt-5", p)];

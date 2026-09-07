@@ -66,7 +66,7 @@ interface LegacyProviderMapping {
  * are skipped. The top-level API-key field is derived from
  * `ProviderSettingsKeyMap`, not duplicated here.
  */
-const LEGACY_PROVIDER_MAP: Partial<Record<string, LegacyProviderMapping>> = {
+export const LEGACY_PROVIDER_MAP: Partial<Record<string, LegacyProviderMapping>> = {
   [ChatModelProviders.ANTHROPIC]: {
     providerType: "anthropic",
     catalogProviderId: "anthropic",
@@ -183,7 +183,9 @@ function resolveCandidate(model: CustomModel, settings: CopilotSettings): Resolv
   const mapping = LEGACY_PROVIDER_MAP[model.provider];
   if (!mapping) return null; // unknown / copilot-plus / retired provider
   if (!model.enabled) return null; // disabled models skipped per scope
-  if (model.isEmbeddingModel ?? EMBEDDING_ID.test(model.name)) return null; // embeddings skipped
+  // Exclude embeddings before setup so one rejected model cannot drop a valid provider batch.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/386
+  if (model.isEmbeddingModel === true || EMBEDDING_ID.test(model.name)) return null;
 
   const keyField = ProviderSettingsKeyMap[model.provider as SettingKeyProviders];
   const rawKey = keyField ? settings[keyField] : undefined;

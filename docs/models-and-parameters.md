@@ -44,6 +44,8 @@ New BYOK chat models start enabled for both Quick Chat and opencode. You can
 turn either copy off without affecting the other. Models newly reported by an
 agent may also appear switched off until you enable them.
 
+BYOK supports chat models only. Recognized embedding models are excluded from model choices, including manual entries. Upgrading removes previously saved BYOK embedding models and their selections while preserving provider connections, chat models, and their keys. Use Miyo for semantic search.
+
 ## Choose a model while chatting
 
 In **Agent Chat**, the model picker is grouped by agent. Before the first message in
