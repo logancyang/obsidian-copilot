@@ -1,7 +1,7 @@
-import { opencodeWireBaseIdFor } from "@/agentMode";
 import {
   isChatModelSelectionForEntry,
   isEmbeddingModel,
+  opencodeWireBaseId,
   type ResolvedChatBackendEntry,
 } from "@/modelManagement";
 import type { CopilotSettings } from "@/settings/model";
@@ -69,10 +69,10 @@ export function planByokEmbeddingRemoval(
   if (
     defaultWireId &&
     removed.some(
-      (model) => opencodeWireBaseIdFor(model.configuredModelId, settings) === defaultWireId
+      (model) => opencodeWireBaseId(settings.providers[model.providerId], model) === defaultWireId
     ) &&
     !configuredModels.some(
-      (model) => opencodeWireBaseIdFor(model.configuredModelId, settings) === defaultWireId
+      (model) => opencodeWireBaseId(settings.providers[model.providerId], model) === defaultWireId
     )
   ) {
     patch.agentMode = {

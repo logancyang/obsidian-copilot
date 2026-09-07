@@ -39,6 +39,11 @@ export {
   providerNeedsResolvedApiKey,
   providerRequiresApiKey,
 } from "./providers/providerRequiresApiKey";
+export {
+  mapProviderToOpencodeId,
+  opencodeWireBaseId,
+  COPILOT_PLUS_OPENCODE_PROVIDER_ID,
+} from "./models/opencodeModelId";
 export { assertByokChatModels, isEmbeddingModel } from "./models/byokModelPolicy";
 export { ConfiguredModelRegistry } from "./models/ConfiguredModelRegistry";
 export { BackendConfigRegistry } from "./backends/BackendConfigRegistry";

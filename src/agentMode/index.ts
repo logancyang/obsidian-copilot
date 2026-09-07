@@ -42,7 +42,6 @@ export type { AgentBrand, BackendDescriptor, BackendId, InstallState } from "./s
 export { partitionOpencodeOnlyWireIds } from "./backends/opencode/opencodeProbePartition";
 export {
   mapProviderToOpencodeId,
-  opencodeWireBaseIdFor,
   isOpencodeZenWireId,
 } from "./backends/opencode/opencodeModelResolve";
 export type { OpencodeProviderMapping } from "./backends/opencode/opencodeModelResolve";
