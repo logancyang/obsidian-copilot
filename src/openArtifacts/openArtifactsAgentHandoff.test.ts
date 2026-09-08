@@ -149,7 +149,7 @@ describe("openArtifactsAgentHandoff", () => {
       }
     });
 
-    it("reports a missing file with the path and a regeneration instruction", async () => {
+    it("https://github.com/logancyang/obsidian-copilot/issues/3121 reports a missing file with the path and a regeneration instruction", async () => {
       await expect(consumeOpenArtifactsAgentHandoff(vaultRoot, STAGED_PATH)).rejects.toThrow(
         `The staged HTML file was not found: ${STAGED_PATH}. Regenerate the HTML before reopening review.`
       );

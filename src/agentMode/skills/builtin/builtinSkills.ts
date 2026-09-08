@@ -1,3 +1,4 @@
+import { OPENARTIFACTS_SHARED_RULES } from "@/agentMode/skills/builtin/openArtifactsSharedRules";
 import type { BackendId } from "@/agentMode/session/types";
 import {
   OPENARTIFACTS_AGENT_BRIDGE_PROPERTY,
@@ -586,7 +587,7 @@ const FETCH_X = relaySkill({
   scriptFile: "fetch-x.sh",
 });
 
-const OPENARTIFACTS_PUBLISH_VERSION = 4;
+const OPENARTIFACTS_PUBLISH_VERSION = 5;
 const OPENARTIFACTS_PUBLISH: BuiltinSkill = {
   name: "openartifacts-publish",
   legacyName: "symposium-publish",
@@ -602,14 +603,11 @@ metadata:
 
 # Publish Markdown to OpenArtifacts
 
-## Read the shared skill first
+## Read the bundled rules first
 
-Fetch https://cdn.jsdelivr.net/npm/openartifacts@latest/skill/v1/SKILL.md with your web-fetch tool
-once at the start of this publishing task. Read the complete Markdown and follow
-its "Shared publishing rules". Reuse that fetched text for this task, including
-review retries; do not refetch midway. If the fetch fails or the web-fetch tool is
-unavailable, stop, report the exact error or limitation, and offer Obsidian's
-"Publish file to OpenArtifacts" command. Do not guess the missing instructions.
+Read \`shared-publishing-rules.md\` next to this skill and follow it for this task.
+These rules ship with Copilot as a pinned snapshot of the OpenArtifacts shared skill.
+Do not fetch publishing instructions from the internet.
 
 This is the Copilot host adapter. The instructions below replace the shared
 skill's "Standalone CLI" section. Do not run Node, npm, or npx, install tools,
@@ -638,8 +636,9 @@ publishing. The bundled \`${OPENARTIFACTS_DEFAULT_THEME}\` is an optional exampl
 ## Open the existing host review
 
 The host automatically opens the rendered HTML in the default browser and keeps
-confirmation disabled until browser opening succeeds. The existing preview link
-retries opening it. Ask the user to inspect the page and confirm in Obsidian's
+confirmation disabled until preview opening succeeds or the user explicitly
+acknowledges manually reviewing the preview after an opening failure. The existing
+preview link retries opening it. Ask the user to inspect the page and confirm in Obsidian's
 existing dialog; never choose an action or document id, simulate clicks, or treat
 a chat reply as a dialog confirmation. Do not create a new modal or render HTML inside a modal.
 
@@ -666,8 +665,9 @@ On Windows, use the \`.cmd\` wrapper (prefix with \`&\` in PowerShell):
 \`\`\`
 
 For withdrawal, omit the HTML argument on either platform. The wrapper waits for
-the user's decision. The host preserves the staged
-HTML and cleans up only its temporary browser preview when review closes. If the
+the user's decision. The host preserves staged HTML on cancellation or failure and removes it after
+confirmed success or explicit regeneration. It cleans up its temporary browser
+preview when review closes. If the
 user asks to reopen a cancelled review, run the wrapper with the same HTML path.
 
 ## 3. Report the result
@@ -682,6 +682,7 @@ user asks to reopen a cancelled review, run the wrapper with the same HTML path.
   bypass the review, or claim that opening a review means publishing succeeded.
 `,
   files: [
+    { path: "shared-publishing-rules.md", content: OPENARTIFACTS_SHARED_RULES },
     { path: `themes/${OPENARTIFACTS_DEFAULT_THEME}.md`, content: RESEARCH_MEMO_THEME },
     {
       path: "openartifacts-publish.sh",
@@ -734,6 +735,8 @@ fi
 
 CLI_OUTPUT=$("$OBSIDIAN_CLI" "vault=$VAULT_NAME" eval "code=$CODE" 2>&1)
 CLI_STATUS=$?
+# https://github.com/logancyang/obsidian-copilot/issues/3120: preserve host errors
+# so a failed review reports its actual cause instead of looking like a closed app.
 if [ "$CLI_STATUS" -ne 0 ]; then
   printf '%s\\n' "$CLI_OUTPUT" >&2
   exit "$CLI_STATUS"

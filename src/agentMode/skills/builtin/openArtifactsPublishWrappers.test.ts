@@ -70,18 +70,21 @@ describe("openArtifactsPublishWrappers", () => {
     expect(result.stdout.trim()).toBe('{"status":"cancelled"}');
   });
 
-  it.each([0, 1])("preserves stdout and stderr when review fails with exit %s", (status) => {
-    const result = run(
-      "The CLI is unable to find Obsidian.",
-      "Local IPC connection denied.",
-      status
-    );
-    expect(result.error).toBeUndefined();
-    expect(result.status).not.toBe(0);
-    expect(result.stderr).toContain("The CLI is unable to find Obsidian.");
-    expect(result.stderr).toContain("Local IPC connection denied.");
-    expect(result.stdout).not.toContain('"status":"published"');
-  });
+  it.each([0, 1])(
+    "https://github.com/logancyang/obsidian-copilot/issues/3120 preserves stdout and stderr when review fails with exit %s",
+    (status) => {
+      const result = run(
+        "The CLI is unable to find Obsidian.",
+        "Local IPC connection denied.",
+        status
+      );
+      expect(result.error).toBeUndefined();
+      expect(result.status).not.toBe(0);
+      expect(result.stderr).toContain("The CLI is unable to find Obsidian.");
+      expect(result.stderr).toContain("Local IPC connection denied.");
+      expect(result.stdout).not.toContain('"status":"published"');
+    }
+  );
 
   it("does not fabricate an outcome when the CLI returns no output", () => {
     const result = run("");

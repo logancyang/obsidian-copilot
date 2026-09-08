@@ -231,12 +231,24 @@ describe("builtinSkills", () => {
       expect(ps1).toContain("@{ pdf = $PDF; user_id = $USER_ID }");
     });
 
+    it("https://github.com/logancyang/obsidian-copilot/issues/3121 bundles shared safety rules without standalone publishing commands", () => {
+      const skill = BUILTIN_SKILLS.find((item) => item.name === "openartifacts-publish")!;
+      const rules = skill.files.find((file) => file.path === "shared-publishing-rules.md")!.content;
+      expect(rules).toContain("must block page scripts, network requests, and navigation");
+      expect(rules).toContain("Never open the unrestricted source HTML as a fallback");
+      expect(rules).toContain("Never simulate the user's confirmation");
+      expect(rules).not.toContain("## Standalone CLI");
+      expect(rules).not.toContain("npx --yes");
+      expect(skill.skillMd).toContain("Do not fetch publishing instructions from the internet");
+    });
+
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/337 hands OpenArtifacts HTML through the stable host wire without exposing publication controls", () => {
       const skill = BUILTIN_SKILLS.find((item) => item.name === "openartifacts-publish");
       expect(skill).toBeDefined();
-      expect(skill!.version).toBe(4);
+      expect(skill!.version).toBe(5);
       expect(skill!.legacyName).toBe("symposium-publish");
       expect(skill!.files.map((file) => file.path)).toEqual([
+        "shared-publishing-rules.md",
         "themes/research-memo.md",
         "openartifacts-publish.sh",
         "openartifacts-publish.cmd",
@@ -256,12 +268,12 @@ describe("builtinSkills", () => {
       expect(skill!.skillMd).toContain("Check each path independently");
       expect(skill!.skillMd).toMatch(/a missing theme must never block\s+publishing/);
       expect(skill!.skillMd).toContain("themes/<name>.md");
-      expect(skill!.skillMd).toContain("Shared publishing rules");
-      expect(skill!.skillMd).toContain("once at the start of this publishing task");
+      expect(skill!.skillMd).toContain("shared-publishing-rules.md");
+      expect(skill!.skillMd).not.toContain("cdn.jsdelivr.net");
       expect(skill!.skillMd).toContain('"Standalone CLI" section');
       expect(skill!.skillMd).toContain("Do not run Node, npm, or npx");
       expect(skill!.skillMd).toContain("Shared from Copilot");
-      expect(skill!.skillMd).toContain("confirmation disabled until browser opening succeeds");
+      expect(skill!.skillMd).toContain("acknowledges manually reviewing the preview");
       expect(skill!.skillMd).toContain("create a new modal or render HTML inside a modal");
       expect(skill!.skillMd).toContain("never choose an action or document id");
       expect(skill!.skillMd).toContain("create a new complete artifact");

@@ -206,6 +206,8 @@ export async function consumeOpenArtifactsAgentHandoff(
     html = decodeUtf8(Uint8Array.from(bytes));
   } catch (error) {
     if (error instanceof OpenArtifactsAgentHandoffError) throw error;
+    // A cancelled review may outlive its staged file; identify the missing input for regeneration.
+    // https://github.com/logancyang/obsidian-copilot/issues/3121
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       throw new OpenArtifactsAgentHandoffError(
         `The staged HTML file was not found: ${stagedHtmlPath}. Regenerate the HTML before reopening review.`
