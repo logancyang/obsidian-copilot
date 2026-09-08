@@ -1,3 +1,4 @@
+import { FULL_BLEED_MODAL_CLASS } from "@/components/modals/ReactModal";
 import {
   ClaudeConfigView,
   type ClaudeConfigViewProps,
@@ -32,7 +33,9 @@ const meta = {
     },
     onClose: () => undefined,
   },
-  parameters: { gallery: { host: "modal", layout: "padded" } },
+  parameters: {
+    gallery: { host: "modal", layout: "fullscreen", modalClass: FULL_BLEED_MODAL_CLASS },
+  },
 } satisfies Meta<ClaudeConfigViewProps>;
 export default meta;
 
@@ -114,5 +117,12 @@ export const SignInRetry: StoryObj<ClaudeConfigViewProps> = {
       url: null,
       failed: true,
     },
+  },
+};
+
+export const CheckingSignIn: StoryObj<ClaudeConfigViewProps> = {
+  args: {
+    state: { kind: "ready", source: "custom" },
+    auth: { status: null, onSignIn: () => undefined, signingIn: false, url: null },
   },
 };

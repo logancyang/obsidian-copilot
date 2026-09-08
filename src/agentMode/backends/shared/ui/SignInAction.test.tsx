@@ -32,7 +32,7 @@ describe("SignInAction", () => {
           failed
         />
       );
-      fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+      fireEvent.click(screen.getByRole("button", { name: "Try again" }));
       expect(onSignIn).toHaveBeenCalled();
       rerender(
         <SignInAction

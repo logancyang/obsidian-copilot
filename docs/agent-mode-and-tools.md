@@ -36,8 +36,10 @@ The Claude backend runs through Claude Code on your computer:
 
 1. Open **Basic → Agents → Claude → Configure**.
 2. Select **Auto-detect**, or enter the absolute path to the `claude` executable.
-3. Select **Sign in** if Claude Code is not already authenticated.
+3. Select **Sign in** if Claude Code is not already authenticated, then finish in your browser. If the page does not open, select **Open sign-in page**. You can cancel and try again.
 4. Enable the models you want and choose a default.
+
+Claude Code stores the credentials on your computer. Copilot checks its sign-in status when the login finishes. To run the login command yourself, expand **Sign in using a terminal instead**.
 
 Claude models and billing come from your Claude Code account. Models added under **BYOK** do not join the Claude model list.
 

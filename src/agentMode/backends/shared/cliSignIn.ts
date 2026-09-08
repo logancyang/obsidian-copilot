@@ -53,14 +53,18 @@ export function signInWithCli(
     if (settled || cancelled) return;
     cancelled = true;
     // The ACP CLI proxy does not forward signals. Stop its owned tree before allowing Retry.
-    // Never signal a reaped PID, including while its final status probe is still pending.
+    // A POSIX process group can outlive its leader while descendants retain the pipes.
+    // Once those pipes close, cancellation must not signal a potentially reused identifier.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
-    if (!child?.pid || exited) {
+    if (!child?.pid || closed) {
       finish({ loggedIn: false });
       return;
     }
     try {
       if (process.platform === "win32") {
+        // taskkill addresses a PID, not a group. After exit, await pipe closure instead
+        // of targeting a PID that Windows may have reassigned.
+        if (exited) return;
         treeStopped = false;
         execFile(
           "taskkill",
@@ -102,6 +106,8 @@ export function signInWithCli(
     if (settled || cancelled) return;
     handlers.onLine?.(line);
     const match = /\bhttps?:\/\/[^\s'"]+/.exec(line);
+    // Diagnostic links must not consume the fallback before the authorization URL arrives.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
     if (!urlSeen && match && (!handlers.acceptUrl || handlers.acceptUrl(match[0]))) {
       urlSeen = true;
       handlers.onUrl?.(match[0]);

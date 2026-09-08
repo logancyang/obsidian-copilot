@@ -84,7 +84,7 @@ export const ClaudeConfigView: React.FC<ClaudeConfigViewProps> = ({
       />
     </ConfigSection>
 
-    <ConfigSection title="Don't have it yet?">
+    <ConfigSection title="Set up Claude Code">
       {/* The section's own gap sets the rhythm inside a step, so the steps need a
           wider one to read as two items rather than one run of controls. */}
       <div className="tw-flex tw-flex-col tw-gap-4">
@@ -92,14 +92,20 @@ export const ClaudeConfigView: React.FC<ClaudeConfigViewProps> = ({
           <CommandBlock command={CLAUDE_INSTALL_COMMAND} />
         </SetupStep>
         <SetupStep index={2} title="Sign in">
-          <CommandBlock command={CLAUDE_AUTH_COMMAND} />
-          {/* Cancellation and Retry copy must wrap independently of the copyable command.
-              https://github.com/Brevilabs/obsidian-copilot-private/issues/379 */}
-          {state.kind === "ready" && auth.status?.signedIn === false && <SignInAction {...auth} />}
           <p className="tw-my-0 tw-text-sm tw-text-muted">
-            Copilot inherits whatever credentials the Claude Code CLI holds — there is no key to
-            paste here.
+            Sign in with your Claude account in your browser. Claude Code saves your credentials on
+            this machine for Copilot to use.
           </p>
+          {/* Keep account status and browser actions visible throughout sign-in so a successful
+              login does not leave users staring at another login command.
+              https://github.com/Brevilabs/obsidian-copilot-private/issues/379 */}
+          {state.kind === "ready" && <SignInAction {...auth} />}
+          <details className="tw-text-sm tw-text-muted">
+            <summary className="tw-cursor-pointer">Sign in using a terminal instead</summary>
+            <div className="tw-mt-2">
+              <CommandBlock command={CLAUDE_AUTH_COMMAND} />
+            </div>
+          </details>
         </SetupStep>
       </div>
     </ConfigSection>

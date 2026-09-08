@@ -47,6 +47,34 @@ describe("cliSignIn", () => {
         expect.objectContaining({ env: { CODEX_HOME: "/profile" }, windowsHide: true })
       );
     });
+    it(`rejects diagnostic URLs and offers the later authorization URL: ${ISSUE}`, async () => {
+      const onUrl = jest.fn();
+      const login = signInWithCli("/adapter", [], {}, async () => ({ loggedIn: true }), {
+        onUrl,
+        acceptUrl: (url) => new URL(url).hostname === "auth.openai.com",
+      });
+      child.stdout.write("Help: https://example.com/help\n");
+      expect(onUrl).not.toHaveBeenCalled();
+      child.stderr.write("Open https://auth.openai.com/authorize\n");
+      expect(onUrl).toHaveBeenCalledTimes(1);
+      expect(onUrl).toHaveBeenCalledWith("https://auth.openai.com/authorize");
+      child.emit("close", 0);
+      await login.done;
+    });
+    it(`stops descendants after proxy exit and waits for their pipes to close: ${ISSUE}`, async () => {
+      const read = jest.fn();
+      const login = signInWithCli("/adapter", [], {}, read);
+      const done = jest.fn();
+      void login.done.then(done);
+      child.emit("exit", 0);
+      login.cancel();
+      await Promise.resolve();
+      expect(process.kill).toHaveBeenCalledWith(-12345, "SIGTERM");
+      expect(done).not.toHaveBeenCalled();
+      child.emit("close", 0);
+      await expect(login.done).resolves.toEqual({ loggedIn: false });
+      expect(read).not.toHaveBeenCalled();
+    });
     it.each(["cancel", "abort"])(
       `terminates login on %s and ignores stale success: ${ISSUE}`,
       async (action) => {
@@ -78,6 +106,25 @@ describe("cliSignIn", () => {
       await expect(login.done).resolves.toEqual({ loggedIn: false });
       resolveStatus({ loggedIn: true });
       expect(process.kill).not.toHaveBeenCalled();
+    });
+    it(`waits for descendant pipes without targeting a reaped Windows PID: ${ISSUE}`, async () => {
+      const originalPlatform = process.platform;
+      Object.defineProperty(process, "platform", { configurable: true, value: "win32" });
+      mockExec.mockReset();
+      try {
+        const login = signInWithCli("adapter.exe", [], {}, jest.fn());
+        const done = jest.fn();
+        void login.done.then(done);
+        child.emit("exit", 0);
+        login.cancel();
+        await Promise.resolve();
+        expect(done).not.toHaveBeenCalled();
+        expect(mockExec).not.toHaveBeenCalled();
+        child.emit("close", 0);
+        await expect(login.done).resolves.toEqual({ loggedIn: false });
+      } finally {
+        Object.defineProperty(process, "platform", { configurable: true, value: originalPlatform });
+      }
     });
     it(`waits for scoped Windows tree termination before Retry: ${ISSUE}`, async () => {
       const originalPlatform = process.platform;
@@ -121,13 +168,17 @@ describe("cliSignIn", () => {
         const runtimeScript =
           'require("net").createServer().listen(0,"127.0.0.1",function(){console.log("READY " + this.address().port)});';
         const proxyScript = `require("child_process").spawn(process.execPath,["-e",${JSON.stringify(runtimeScript)}],{stdio:["ignore","inherit","inherit"]});setInterval(()=>{},1000);`;
-        for (const action of ["cancel", "abort"]) {
+        for (const action of ["cancel", "abort", "proxy-exit"]) {
           let ready!: (port: number) => void;
           const portReady = new Promise<number>((resolve) => {
             ready = resolve;
           });
           const abort = new AbortController();
-          const login = signInWithCli(process.execPath, ["-e", proxyScript], {}, jest.fn(), {
+          const script =
+            action === "proxy-exit"
+              ? proxyScript.replace("setInterval(()=>{},1000);", "process.exit(0);")
+              : proxyScript;
+          const login = signInWithCli(process.execPath, ["-e", script], {}, jest.fn(), {
             signal: abort.signal,
             onLine: (line) => {
               if (line.startsWith("READY ")) ready(Number(line.slice(6)));
@@ -137,7 +188,10 @@ describe("cliSignIn", () => {
             .value as import("node:child_process").ChildProcess;
           try {
             const port = await portReady;
-            if (action === "cancel") login.cancel();
+            if (action === "proxy-exit" && proxy.exitCode === null) {
+              await new Promise<void>((resolve) => proxy.once("exit", () => resolve()));
+            }
+            if (action === "cancel" || action === "proxy-exit") login.cancel();
             else abort.abort();
             await expect(login.done).resolves.toEqual({ loggedIn: false });
             await new Promise<void>((resolve, reject) => {
@@ -150,8 +204,13 @@ describe("cliSignIn", () => {
             });
             expect(proxy.exitCode !== null || proxy.signalCode !== null).toBe(true);
           } finally {
-            if (proxy.exitCode === null && proxy.signalCode === null && proxy.pid)
-              process.kill(-proxy.pid, "SIGKILL");
+            if (proxy.pid) {
+              try {
+                process.kill(-proxy.pid, "SIGKILL");
+              } catch {
+                /* Already stopped. */
+              }
+            }
           }
         }
       },
