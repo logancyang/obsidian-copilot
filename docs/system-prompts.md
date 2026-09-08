@@ -9,8 +9,6 @@ Agent Chat and Quick Chat use different instruction systems:
 
 Changing one does not change the other.
 
-You can request nested lists and your preferred bullet markers in either instruction system. Copilot's built-in prompts do not restrict list indentation or bullet markers.
-
 ## Choose the right instruction tool
 
 | Use                          | Best for                                                      |
