@@ -96,9 +96,10 @@ function createBrowserPreview(html: string): string {
 <meta http-equiv="Content-Security-Policy" content="${escapeHtmlAttribute(`${policy}; frame-src 'self'; script-src 'unsafe-inline'`)}">
 <meta name="referrer" content="no-referrer">
 <title>OpenArtifacts local preview</title>
-<style>html,body,iframe{border:0;height:100%;margin:0;padding:0;width:100%}body{overflow:hidden}iframe{display:block}</style>
+<style>html,body{height:100%;margin:0}body{display:flex;flex-direction:column;font:14px system-ui,sans-serif;background:#fff;color:#222}p{flex:none;margin:0;padding:12px 16px;border-bottom:1px solid #ccc}iframe{display:block;flex:1;min-height:0;width:100%;border:0}</style>
 </head>
 <body>
+<p role="note">Static preview: scripts, embedded frames, external resources, and navigation are disabled here. The published page keeps the original HTML and may behave differently.</p>
 <iframe title="OpenArtifacts HTML preview" sandbox="allow-same-origin" referrerpolicy="no-referrer"></iframe>
 <script>
 // Inert full-document parsing preserves root styling without executing note scripts.

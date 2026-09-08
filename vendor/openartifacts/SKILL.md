@@ -1,6 +1,10 @@
 ---
 name: openartifacts
 description: Publish, update, list, fetch, or unshare OpenArtifacts documents with rendered review before publication.
+metadata:
+  hermes:
+    category: productivity
+    tags: [publishing, markdown, artifacts]
 ---
 
 # OpenArtifacts
@@ -56,7 +60,6 @@ Use `openartifacts` when installed, otherwise `npx --yes openartifacts@latest`.
 - List machine tokens: `openartifacts tokens`
 - Revoke one: `openartifacts revoke <tokenId>`
 - Sign in again after an `unauthorized` response: `openartifacts login`
-
 
 Run `openartifacts preview <file> > <separate-review.html>`. Never overwrite the
 source. The command runs without authentication and prints the reviewed HTML's

@@ -83,6 +83,9 @@ describe("openArtifactsAgentHandoff", () => {
       const handoff = await consumeOpenArtifactsAgentHandoff(vaultRoot, STAGED_PATH);
       expect(handoff.html).toBe(html);
       const { shell, content } = renderPreviewShell(await readFile(handoff.previewPath, "utf8"));
+      expect(shell.querySelector("[role=note]")?.textContent).toContain(
+        "The published page keeps the original HTML and may behave differently."
+      );
       expect(shell.querySelectorAll("script")).toHaveLength(1);
       expect(shell.querySelector("iframe")!.getAttribute("sandbox")).toBe("allow-same-origin");
       expect(
