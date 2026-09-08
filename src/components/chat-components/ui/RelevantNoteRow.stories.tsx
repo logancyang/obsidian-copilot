@@ -36,7 +36,9 @@ const nextAction = "Review the evidence";
 Longer notes stay inside the preview. Scroll to continue reading without losing the note actions.
 `;
 
-function MarkdownHoverPreview(props: RelevantNoteRowProps): React.ReactElement {
+function MarkdownHoverPreview(
+  props: RelevantNoteRowProps & { content?: string }
+): React.ReactElement {
   const app = useApp();
   const previewApp = useMemo<App>(() => {
     const file: unknown = Object.create(TFile.prototype);
@@ -54,10 +56,12 @@ function MarkdownHoverPreview(props: RelevantNoteRowProps): React.ReactElement {
         getAbstractFileByPath: (path: string) =>
           path === file.path ? file : app.vault.getAbstractFileByPath(path),
         cachedRead: (requested: TFile) =>
-          requested === file ? Promise.resolve(PREVIEW_MARKDOWN) : app.vault.cachedRead(requested),
+          requested === file
+            ? Promise.resolve(props.content ?? PREVIEW_MARKDOWN)
+            : app.vault.cachedRead(requested),
       }),
     });
-  }, [app, props.note.note.path, props.note.note.title]);
+  }, [app, props.content, props.note.note.path, props.note.note.title]);
 
   return (
     <AppContext.Provider value={previewApp}>
@@ -167,4 +171,22 @@ export const ReducedMotion: StoryObj<RelevantNoteRowProps> = {
 
 export const LiveReranking: StoryObj<RelevantNoteRowProps> = {
   render: LiveRerank,
+};
+
+export const LongPreview: StoryObj<RelevantNoteRowProps> = {
+  render: (props) => (
+    <MarkdownHoverPreview {...baseArgs} {...props} content={PREVIEW_MARKDOWN.repeat(100)} />
+  ),
+};
+
+export const MediaPreview: StoryObj<RelevantNoteRowProps> = {
+  render: (props) => (
+    <MarkdownHoverPreview
+      {...baseArgs}
+      {...props}
+      content={
+        "# Imported note\n\n![Remote image](https://example.invalid/image.png)\n\n![[Embedded note]]"
+      }
+    />
+  ),
 };

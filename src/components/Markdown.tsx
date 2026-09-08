@@ -33,6 +33,7 @@ export function Markdown({
     let cancelled = false;
     component.load();
     target.classList.add("markdown-rendered");
+    target.classList.remove("tw-whitespace-pre-wrap");
     target.replaceChildren();
     void renderMarkdown(app, text, target, sourcePath, component)
       .then(() => {
@@ -46,6 +47,9 @@ export function Markdown({
         // https://github.com/Brevilabs/obsidian-copilot-private/issues/317
         if (cancelled) return;
         logWarn("[Markdown] render failed", error);
+        // Failed previews must preserve the note's line breaks.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/391
+        target.classList.add("tw-whitespace-pre-wrap");
         target.textContent = text;
       });
 

@@ -64,6 +64,33 @@ describe("Markdown", () => {
       expect(await screen.findByText("Release notes remain readable")).not.toBeNull();
     });
 
+    it("preserves fallback line breaks and clears fallback styling after recovery (https://github.com/Brevilabs/obsidian-copilot-private/issues/391)", async () => {
+      jest.mocked(renderMarkdown).mockRejectedValueOnce(new Error("postprocessor failed"));
+      const app = new App();
+      const view = render(
+        <AppContext.Provider value={app}>
+          <Markdown sourcePath="Note.md" text={"First line\nSecond line"} />
+        </AppContext.Provider>
+      );
+      await waitFor(() =>
+        expect(view.container.firstElementChild?.textContent).toBe("First line\nSecond line")
+      );
+      expect(view.container.firstElementChild?.classList.contains("tw-whitespace-pre-wrap")).toBe(
+        true
+      );
+      jest.mocked(renderMarkdown).mockResolvedValueOnce(undefined);
+      view.rerender(
+        <AppContext.Provider value={app}>
+          <Markdown sourcePath="Note.md" text="Recovered" />
+        </AppContext.Provider>
+      );
+      await waitFor(() =>
+        expect(view.container.firstElementChild?.classList.contains("tw-whitespace-pre-wrap")).toBe(
+          false
+        )
+      );
+    });
+
     it(`does not let an obsolete failed render replace newer content for ${ISSUE_URL}`, async () => {
       let rejectFirstRender: ((error: Error) => void) | undefined;
       jest

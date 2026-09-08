@@ -1,6 +1,7 @@
 /* eslint-disable @eslint-react/hooks-extra/no-unnecessary-use-prefix -- Mock exports must preserve production hook names. */
 import { RelevantNoteRow } from "@/components/chat-components/ui/RelevantNoteRow";
 import type { RelevantNoteEntry } from "@/search/findRelevantNotes";
+import { PREVIEW_RENDER_LIMIT } from "@/utils/truncateForPreview";
 import { renderMarkdown } from "@/utils/renderMarkdown";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { TFile } from "obsidian";
@@ -49,6 +50,11 @@ function renderRow(props: Partial<React.ComponentProps<typeof RelevantNoteRow>> 
 
 describe("RelevantNoteRow", () => {
   describe("RelevantNoteRow()", () => {
+    beforeEach(() => {
+      jest.clearAllMocks();
+      mockApp.vault.getAbstractFileByPath.mockReturnValue(null);
+    });
+
     it("renders the hover preview as Markdown with links relative to the previewed note", async () => {
       const file: unknown = Object.create(TFile.prototype);
       if (!(file instanceof TFile)) throw new Error("Expected a TFile fixture");
@@ -68,6 +74,8 @@ describe("RelevantNoteRow", () => {
       renderRow();
       fireEvent.mouseEnter(screen.getByText("Design principles"));
 
+      fireEvent.click(await screen.findByRole("button", { name: "Show formatted preview" }));
+
       const heading = await screen.findByRole("heading", { name: "Readable preview" });
       expect(heading.closest(".markdown-rendered")).not.toBeNull();
       expect(renderMarkdown).toHaveBeenCalledWith(
@@ -77,6 +85,64 @@ describe("RelevantNoteRow", () => {
         file.path,
         expect.anything()
       );
+    });
+
+    it("requires a fresh explicit action to render media on each hover (https://github.com/Brevilabs/obsidian-copilot-private/issues/391)", async () => {
+      const file: unknown = Object.assign(Object.create(TFile.prototype), {
+        path: "Design principles.md",
+      });
+      if (!(file instanceof TFile)) throw new Error("Expected a TFile fixture");
+      mockApp.vault.getAbstractFileByPath.mockReturnValue(file);
+      const content =
+        '![pixel](https://tracker.example/id)\n<img src="https://tracker.example/html">\n![[Embedded note]]';
+      mockApp.vault.cachedRead.mockResolvedValue(content);
+      jest.mocked(renderMarkdown).mockResolvedValue(undefined);
+      renderRow();
+      const title = screen.getByText("Design principles");
+      fireEvent.mouseEnter(title);
+      const button = await screen.findByRole("button", { name: "Show formatted preview" });
+      expect(renderMarkdown).not.toHaveBeenCalled();
+      expect(document.querySelector("img, iframe, video, audio")).toBeNull();
+      fireEvent.click(button);
+      expect(renderMarkdown).toHaveBeenCalledTimes(1);
+      expect(renderMarkdown).toHaveBeenCalledWith(
+        mockApp,
+        content,
+        expect.any(HTMLElement),
+        file.path,
+        expect.anything()
+      );
+      fireEvent.mouseLeave(title);
+      fireEvent.mouseEnter(title);
+      expect(await screen.findByRole("button", { name: "Show formatted preview" })).toBeTruthy();
+      expect(renderMarkdown).toHaveBeenCalledTimes(1);
+    });
+
+    it("caps large previews and keeps the full note action available (https://github.com/Brevilabs/obsidian-copilot-private/issues/391)", async () => {
+      const file: unknown = Object.assign(Object.create(TFile.prototype), {
+        path: "Design principles.md",
+      });
+      if (!(file instanceof TFile)) throw new Error("Expected a TFile fixture");
+      mockApp.vault.getAbstractFileByPath.mockReturnValue(file);
+      mockApp.vault.cachedRead.mockResolvedValue("x".repeat(PREVIEW_RENDER_LIMIT + 100));
+      jest.mocked(renderMarkdown).mockResolvedValue(undefined);
+      const onNavigateToNote = jest.fn();
+      renderRow({ onNavigateToNote });
+      fireEvent.mouseEnter(screen.getByText("Design principles"));
+      expect(
+        await screen.findByText("Preview shortened. Open note to read the full content.")
+      ).toBeTruthy();
+      expect(screen.getByText("x".repeat(PREVIEW_RENDER_LIMIT))).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: "Show formatted preview" }));
+      expect(renderMarkdown).toHaveBeenCalledWith(
+        mockApp,
+        "x".repeat(PREVIEW_RENDER_LIMIT),
+        expect.any(HTMLElement),
+        file.path,
+        expect.anything()
+      );
+      fireEvent.click(screen.getByText("Open note"));
+      expect(onNavigateToNote).toHaveBeenCalledTimes(1);
     });
 
     it("names the note and states how strongly it matches", () => {

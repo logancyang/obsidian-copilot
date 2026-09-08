@@ -4,6 +4,7 @@ import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover"
 import { useApp } from "@/context";
 import { useNoteDrag } from "@/hooks/useNoteDrag";
 import { cn } from "@/lib/utils";
+import { truncateForPreview } from "@/utils/truncateForPreview";
 import { type RelevantNoteEntry } from "@/search/findRelevantNotes";
 import { ArrowRight, FileInput, FileOutput, FileText, PlusCircle } from "lucide-react";
 import { TFile } from "obsidian";
@@ -84,6 +85,8 @@ function RelevantNoteHoverCard({
   const app = useApp();
   const [open, setOpen] = useState(false);
   const [fileContent, setFileContent] = useState<string | null>(null);
+  const [formatted, setFormatted] = useState(false);
+  const preview = truncateForPreview(fileContent ?? "");
   const similarity = note.metadata.score;
 
   const loadContent = useCallback(async () => {
@@ -111,10 +114,20 @@ function RelevantNoteHoverCard({
     }
   }, [open, loadContent]);
 
+  const handleOpenChange = (nextOpen: boolean) => {
+    setOpen(nextOpen);
+    // Consent to render media lasts only while this preview stays open.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/391
+    if (!nextOpen) setFormatted(false);
+  };
+
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverAnchor asChild>
-        <div onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
+        <div
+          onMouseEnter={() => handleOpenChange(true)}
+          onMouseLeave={() => handleOpenChange(false)}
+        >
           {children}
         </div>
       </PopoverAnchor>
@@ -122,8 +135,8 @@ function RelevantNoteHoverCard({
         side="left"
         align="start"
         sideOffset={0}
-        onMouseEnter={() => setOpen(true)}
-        onMouseLeave={() => setOpen(false)}
+        onMouseEnter={() => handleOpenChange(true)}
+        onMouseLeave={() => handleOpenChange(false)}
         onOpenAutoFocus={(e) => e.preventDefault()}
         className="tw-flex tw-w-fit tw-min-w-72 tw-max-w-96 tw-flex-col tw-gap-3 tw-overflow-hidden tw-p-3"
       >
@@ -136,11 +149,37 @@ function RelevantNoteHoverCard({
         </div>
 
         {fileContent && (
-          <Markdown
-            text={fileContent}
-            sourcePath={note.note.path}
-            className="tw-m-0 tw-max-h-64 tw-overflow-y-auto tw-text-xs tw-leading-normal tw-text-muted"
-          />
+          <>
+            {/* Hover must not load media from untrusted notes, including nested embeds.
+                Rendering requires an explicit action each time the card opens.
+                https://github.com/Brevilabs/obsidian-copilot-private/issues/391 */}
+            {formatted ? (
+              <Markdown
+                text={preview.text}
+                sourcePath={note.note.path}
+                className="tw-m-0 tw-max-h-64 tw-overflow-y-auto tw-text-xs tw-leading-normal tw-text-muted"
+              />
+            ) : (
+              <>
+                <div className="tw-max-h-64 tw-overflow-y-auto tw-whitespace-pre-wrap tw-break-words tw-text-xs tw-leading-normal tw-text-muted">
+                  {preview.text}
+                </div>
+                <div className="tw-flex tw-flex-col tw-gap-1">
+                  <Button variant="secondary" size="sm" onClick={() => setFormatted(true)}>
+                    Show formatted preview
+                  </Button>
+                  <span className="tw-text-xs tw-text-faint">May load external media.</span>
+                </div>
+              </>
+            )}
+            {/* Large notes must not freeze the UI just to show a preview.
+                https://github.com/Brevilabs/obsidian-copilot-private/issues/391 */}
+            {preview.truncated && (
+              <span className="tw-text-xs tw-text-faint">
+                Preview shortened. Open note to read the full content.
+              </span>
+            )}
+          </>
         )}
 
         <div className="tw-flex tw-items-center tw-gap-2">

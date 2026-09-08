@@ -61,7 +61,7 @@ The scope is a retrieval preference, not a security boundary. Keep Miyo's regist
 
 ### Relevant Notes
 
-Hover over a relevant note to read its Markdown preview, with formatted headings, lists, code, and links. The preview hides note properties and scrolls for longer notes.
+Hover over a relevant note to read a text preview without loading external media. Select **Show formatted preview** to render headings, lists, code, and links; this may load external media. Each time you reopen the preview, it starts as text. The preview hides note properties, scrolls, and shortens very long notes. Select **Open note** to read the full content.
 
 In Agent Chat, select the **Relevant Notes** tab, then **Open in separate pane** at the bottom to keep the notes alongside your conversation. This button stays available below the results, including while notes are loading or the list is empty. Closing the separate pane brings the Relevant Notes tab back to chat.
 
