@@ -1,18 +1,24 @@
 /* eslint-disable @eslint-react/hooks-extra/no-unnecessary-use-prefix -- Mock exports must preserve production hook names. */
 import { RelevantNoteRow } from "@/components/chat-components/ui/RelevantNoteRow";
 import type { RelevantNoteEntry } from "@/search/findRelevantNotes";
+import { renderMarkdown } from "@/utils/renderMarkdown";
 import { fireEvent, render, screen } from "@testing-library/react";
+import { TFile } from "obsidian";
 import React from "react";
 
 const mockApp = {
   vault: {
-    getAbstractFileByPath: jest.fn(() => null),
+    getAbstractFileByPath: jest.fn<TFile | null, [string]>(() => null),
     cachedRead: jest.fn().mockResolvedValue(""),
   },
 };
 
 jest.mock("@/context", () => ({
   useApp: () => mockApp,
+}));
+
+jest.mock("@/utils/renderMarkdown", () => ({
+  renderMarkdown: jest.fn(),
 }));
 
 jest.mock("@/hooks/useNoteDrag", () => ({
@@ -43,6 +49,36 @@ function renderRow(props: Partial<React.ComponentProps<typeof RelevantNoteRow>> 
 
 describe("RelevantNoteRow", () => {
   describe("RelevantNoteRow()", () => {
+    it("renders the hover preview as Markdown with links relative to the previewed note", async () => {
+      const file: unknown = Object.create(TFile.prototype);
+      if (!(file instanceof TFile)) throw new Error("Expected a TFile fixture");
+      Object.assign(file, {
+        path: "Design principles.md",
+      });
+      mockApp.vault.getAbstractFileByPath.mockReturnValueOnce(file);
+      mockApp.vault.cachedRead.mockResolvedValueOnce(
+        "---\ntags: [design]\n---\n# Readable preview\n\n**Key idea**"
+      );
+      jest.mocked(renderMarkdown).mockImplementationOnce(async (_app, _text, target) => {
+        const heading = target.doc.createElement("h1");
+        heading.textContent = "Readable preview";
+        target.appendChild(heading);
+      });
+
+      renderRow();
+      fireEvent.mouseEnter(screen.getByText("Design principles"));
+
+      const heading = await screen.findByRole("heading", { name: "Readable preview" });
+      expect(heading.closest(".markdown-rendered")).not.toBeNull();
+      expect(renderMarkdown).toHaveBeenCalledWith(
+        mockApp,
+        "# Readable preview\n\n**Key idea**",
+        expect.any(HTMLElement),
+        file.path,
+        expect.anything()
+      );
+    });
+
     it("names the note and states how strongly it matches", () => {
       renderRow();
 
