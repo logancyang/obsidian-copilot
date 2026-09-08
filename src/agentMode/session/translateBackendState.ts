@@ -16,7 +16,7 @@ import type {
   ModelSelection,
   ModelState,
 } from "@/agentMode/session/types";
-import { EFFORT_LEVELS_ASCENDING } from "@/agentMode/session/types";
+import { sortEffortOptions } from "@/lib/model-effort";
 
 const CANONICAL_ORDER: CopilotMode[] = ["default", "plan", "auto"];
 const CANONICAL_LABELS: Record<CopilotMode, string> = {
@@ -74,9 +74,18 @@ function translateModel(
   // Newer opencode (≥ 1.15.13) dropped that field and advertises its catalog
   // only through a generic `category:"model"` select config option, switched
   // via `session/set_config_option` instead of `session/set_model`.
-  const fromConfig = inputs.models ? null : modelStateFromConfigOption(inputs.configOptions);
+  const configModel = modelStateFromConfigOption(inputs.configOptions);
+  const fromConfig = inputs.models ? null : configModel;
   const modelState = inputs.models ?? fromConfig?.state ?? null;
   if (!modelState) return null;
+  // Dedicated catalogs describe effort variants; the model option describes
+  // the whole model. https://github.com/Brevilabs/obsidian-copilot-private/issues/219
+  const baseDescriptions = new Map<string, string>();
+  if (inputs.models && configModel) {
+    for (const model of configModel.state.availableModels) {
+      if (model.description) baseDescriptions.set(model.modelId, model.description);
+    }
+  }
   const effortFromConfig = fromConfig ? effortConfigOption(inputs.configOptions) : null;
   const apply: ModelApplySpec = fromConfig
     ? {
@@ -134,7 +143,9 @@ function translateModel(
     ),
     // Only backends that opt in surface their per-model blurb; others (opencode)
     // would just add noisy/duplicative lines, so the field is dropped here.
-    description: descriptor.showModelDescriptions ? g.description : undefined,
+    description: descriptor.showModelDescriptions
+      ? (baseDescriptions.get(g.baseModelId) ?? g.description)
+      : undefined,
     provider: g.provider,
     effortOptions: deriveEffortOptions(g, descriptor),
   }));
@@ -153,6 +164,11 @@ function translateModel(
     currentEntry = {
       baseModelId: currentBaseId,
       name: normalizeName(currentBaseId, descriptor),
+      // A stale catalog must not hide the active model's available description.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/219
+      description: descriptor.showModelDescriptions
+        ? baseDescriptions.get(currentBaseId)
+        : undefined,
       provider: decodedCurrent.provider,
       effortOptions: synthEffortOptions,
     };
@@ -228,12 +244,11 @@ function deriveEffortOptions(
   group: { variants: { effort: string | null; wireId: string }[]; baseModelId: string },
   descriptor: BackendDescriptor
 ): EffortOption[] {
-  // Suffix-style: ≥2 variants for the same base means we have an effort
-  // dimension encoded in the wire id.
-  if (group.variants.length >= 2) {
+  // Even a single encoded effort must survive normalization or reapplying the
+  // current selection sends an invalid bare ID.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/219
+  if (group.variants.some((variant) => variant.effort !== null)) {
     const options: EffortOption[] = [];
-    const hasBare = group.variants.some((v) => v.effort === null);
-    if (hasBare) options.push({ value: null, label: "default" });
     for (const v of group.variants) {
       if (v.effort === null) continue;
       options.push({ value: v.effort, label: v.effort.toLowerCase() });
@@ -264,32 +279,6 @@ function optionsFromConfigOption(opt: BackendConfigOption | null): EffortOption[
 }
 
 /**
- * Rank of one effort level, least thinking first. The bare/"default" variant leads, and a
- * level outside the canonical vocabulary trails every ranked one.
- */
-function effortRank(value: string | null): number {
-  if (value === null) return -1;
-  const rank = EFFORT_LEVELS_ASCENDING.indexOf(value);
-  return rank === -1 ? Number.MAX_SAFE_INTEGER : rank;
-}
-
-/**
- * Order a reported effort menu least-thinking-first.
- *
- * The order an agent reports is its own business, and at least one ranks a declared
- * variant set by rules of its own — opencode hands back `high` before `none` for a
- * Copilot Plus model, which would draw a slider that turns thinking *off* as the user
- * drags it up, and only for the models that publish an off switch.
- * https://github.com/logancyang/obsidian-copilot/issues/2917
- *
- * Levels we cannot rank keep the agent's relative order at the end, since its ordering is
- * the only signal left for them; the sort is stable, so that fallback holds.
- */
-function sortEffortOptions(options: EffortOption[]): EffortOption[] {
-  return [...options].sort((a, b) => effortRank(a.value) - effortRank(b.value));
-}
-
-/**
  * Resolve `current.effort` for the active selection. For suffix-style
  * (effort encoded in wire id), the decoded value wins. For descriptor-
  * style, prefer the live `currentValue` from `inputs.configOptions`
@@ -317,9 +306,7 @@ function resolveCurrentEffort(
       candidate = liveValue ?? (spec.currentValue != null ? String(spec.currentValue) : null);
     }
   }
-  if (candidate === null) {
-    return currentEntry.effortOptions.some((o) => o.value === null) ? null : null;
-  }
+  if (candidate === null) return null;
   if (currentEntry.effortOptions.some((o) => o.value === candidate)) return candidate;
   return null;
 }

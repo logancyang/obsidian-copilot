@@ -844,7 +844,7 @@ describe("ClaudeSdkBackendProcess", () => {
       expect(resp.state.model?.current.baseModelId).toBe("claude-fake-pro");
     });
 
-    it("seeds session.model so prompt() sends options.model", async () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/219 sends the initialized model and lowest effort on the first prompt", async () => {
       queryMock.mockImplementation(() => makeQuery([resultMessage()]));
       const proc = new ClaudeSdkBackendProcess({
         pathToClaudeCodeExecutable: "/usr/local/bin/claude",
@@ -860,8 +860,9 @@ describe("ClaudeSdkBackendProcess", () => {
 
       const promptCalls = getPromptQueryCalls();
       expect(promptCalls).toHaveLength(1);
-      const call = promptCalls[0][0] as { options: { model?: string } };
+      const call = promptCalls[0][0] as { options: { model?: string; effort?: string } };
       expect(call.options.model).toBe("claude-fake-pro");
+      expect(call.options.effort).toBe("low");
     });
 
     it("setSessionConfigOption('effort', …) clamps + persists the level on the session", async () => {

@@ -220,6 +220,49 @@ describe("claude descriptor", () => {
       };
     }
 
+    it.each([null, "removed", "high"])(
+      "https://github.com/Brevilabs/obsidian-copilot-private/issues/219 applies a concrete effort for preference %p",
+      async (effort) => {
+        const spy = jest.spyOn(ClaudeBackendDescriptor.wire, "effortConfigFor").mockReturnValue({
+          id: "effort",
+          type: "select",
+          name: "Effort",
+          currentValue: "high",
+          options: [
+            { value: "low", name: "Low" },
+            { value: "high", name: "High" },
+          ],
+        });
+        const setConfigOption = jest.fn();
+        const session = {
+          getState: () => ({
+            model: {
+              current: { baseModelId: "sonnet", effort: "high" },
+              availableModels: [
+                {
+                  baseModelId: "sonnet",
+                  effortOptions: [
+                    { value: "high", label: "High" },
+                    { value: "low", label: "Low" },
+                  ],
+                },
+              ],
+            },
+          }),
+          setConfigOption,
+        } as unknown as AgentSession;
+        try {
+          await ClaudeBackendDescriptor.applySelection(session, { baseModelId: "sonnet", effort });
+          expect(setConfigOption).toHaveBeenCalledWith(
+            "effort",
+            effort === "high" ? "high" : "low"
+          );
+        } finally {
+          spy.mockRestore();
+        }
+      }
+    );
+
     it("uses backend-confirmed startup state when the session is optimistically seeded", async () => {
       const { session, applyModelWireId } = makeSession("sonnet");
 

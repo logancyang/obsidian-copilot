@@ -73,6 +73,7 @@ Each agent has its own model list. The models shown in one agent do not automati
 - Use the controls beside the composer to change the model or effort for the current chat.
 - Before the first message, choosing a model from another installed agent switches the empty chat to that agent. Once a conversation has started, it stays with its agent.
 - **Effort** appears only when the selected agent and model support it. Higher effort can improve difficult reasoning but may take longer and use more of your account allowance.
+- Models with effort controls always use a concrete effort. A supported saved effort is kept; otherwise Copilot chooses the lowest supported effort and updates the saved default. Models without effort controls omit effort. **Agent default** clears the saved model preference; the new session shows the agent's model and its resolved effort.
 
 The permission picker shows only choices supported by the current agent:
 
@@ -116,7 +117,7 @@ Each answer appears in its own tab, with **Summary** first. If one answerer fail
 
 Multi-agent answers are designed for read-only research, not edits. Copilot denies explicit vault edit, delete, and move tools, along with tools it cannot classify. Retrieval Skills can still run their own scripts under the agent's permissions, so multi-agent answers are not a security sandbox. Use only trusted Skills, and use a regular single-agent turn when you want files changed.
 
-The default model and effort saved for each mentioned agent are used for its answer. If an agent is not installed or ready, configure it before adding it to the prompt.
+The default model and effort saved for each mentioned agent are used for its answer. If the summary fails, its tab shows the error and any partial summary; the individual answers remain available. If an agent is not installed or ready, configure it before adding it to the prompt.
 
 ## Skills across agents
 

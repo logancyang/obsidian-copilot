@@ -1,3 +1,4 @@
+import { resolveEffort } from "@/lib/model-effort";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import * as SliderPrimitive from "@radix-ui/react-slider";
@@ -83,12 +84,10 @@ export function ModelEffortPicker({ override, className }: ModelEffortPickerProp
       setHighlightKey(initial);
       setDraftModelKey(initial);
       const initialOpts = initial ? (effortOptionsByModelKey[initial] ?? []) : [];
-      const initialEffort =
-        initial === value && activeEffortValue !== null
-          ? activeEffortValue
-          : initialOpts.length > 0
-            ? (initialOpts[0]?.value ?? null)
-            : null;
+      const initialEffort = resolveEffort(
+        initial === value ? activeEffortValue : null,
+        initialOpts
+      );
       setDraftEffort(initialEffort);
       initialRef.current = { model: value, effort: activeEffortValue };
       /* eslint-enable @eslint-react/hooks-extra/no-direct-set-state-in-use-effect -- resume checking after draft initialization */
@@ -120,17 +119,7 @@ export function ModelEffortPicker({ override, className }: ModelEffortPickerProp
       setDraftModelKey(key);
       setHighlightKey(key);
       const rowOpts = effortOptionsByModelKey[key] ?? [];
-      if (rowOpts.length === 0) {
-        setDraftEffort(null);
-        return;
-      }
-      const stillValid = rowOpts.some((o) => o.value === draftEffort);
-      if (stillValid) return;
-      setDraftEffort(
-        key === value && activeEffortValue !== null
-          ? activeEffortValue
-          : (rowOpts[0]?.value ?? null)
-      );
+      setDraftEffort(resolveEffort(key === value ? activeEffortValue : draftEffort, rowOpts));
     },
     [effortOptionsByModelKey, draftEffort, value, activeEffortValue]
   );

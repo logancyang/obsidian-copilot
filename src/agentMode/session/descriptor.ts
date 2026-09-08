@@ -7,6 +7,7 @@ import type {
   BackendConfigOption,
   BackendId,
   BackendProcess,
+  BackendState,
   EffortOption,
   EnabledModelEntry,
   ModelSelection,
@@ -17,6 +18,16 @@ import type {
   RawModeState,
   SessionId,
 } from "./types";
+
+/**
+ * The model-selection operations shared by visible chats and ephemeral fan-out
+ * sessions. Backend descriptors own selection policy; callers own state storage.
+ */
+export interface ModelSelectionSession {
+  getState(): BackendState | null;
+  applyModelWireId(wireId: string): Promise<void>;
+  setConfigOption(configId: string, value: string): Promise<void>;
+}
 
 /** UI-facing install/setup state for a backend. */
 export type InstallState =
@@ -310,22 +321,18 @@ export interface BackendDescriptor {
   readonly showModelDescriptions?: boolean;
 
   /**
-   * Apply a (baseModelId, effort) selection to a live session. The descriptor
-   * decides whether effort travels in the wire model id (suffix-style
-   * backends: codex, opencode) or via a separate `setConfigOption` call
-   * (descriptor-style: Claude SDK).
+   * Apply a model and resolved effort using this backend's protocol.
+   * Used by visible chats and ephemeral fan-out sessions alike.
    *
-   * `effort: null` means "default" — descriptor-style backends typically
-   * no-op the effort dispatch on null (no "clear to default" config call
-   * exists); suffix-style backends encode the null and re-emit the bare
-   * model id.
+   * Resolve missing or invalid effort to the lowest supported level. Models
+   * without an effort control omit effort; null is not a selectable default.
    *
    * Implementations are expected to swallow `MethodUnsupportedError` from
    * the underlying `session.setConfigOption` call (the backend may simply
    * lack the capability) and propagate everything else.
    */
   applySelection(
-    session: AgentSession,
+    session: ModelSelectionSession,
     selection: ModelSelection,
     context?: ApplySelectionContext
   ): Promise<void>;

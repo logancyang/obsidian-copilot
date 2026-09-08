@@ -125,6 +125,16 @@ describe("RelevantNotes", () => {
   });
 
   describe("RelevantNotes()", () => {
+    it("attributes the shared relevant notes Download link to its Copilot surface", async () => {
+      mockSettings = { ...mockSettings, enableMiyo: false };
+      mockFindRelevantNotes.mockResolvedValue({ notes: [], status: "disabled" });
+      render(<RelevantNotes onAddToChat={jest.fn()} />);
+
+      expect(
+        (await screen.findByRole("link", { name: "Download Miyo" })).getAttribute("href")
+      ).toBe("https://www.miyo.md/?utm_source=obsidian_copilot&utm_medium=relevant_notes");
+    });
+
     it("opens a result in a new leaf", async () => {
       render(<RelevantNotes onAddToChat={jest.fn()} />);
 
