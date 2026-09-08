@@ -2,6 +2,8 @@ import type { BackendDescriptor } from "@/agentMode/session/types";
 import { useBackendAuthState } from "@/agentMode/session/useBackendAuthState";
 import { act, renderHook, waitFor } from "@testing-library/react";
 
+jest.mock("@/logger", () => ({ logError: jest.fn() }));
+
 jest.mock("@/settings/model", () => ({
   // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook export
   useSettingsValue: () => ({}),
@@ -260,6 +262,108 @@ describe("useBackendAuthState", () => {
       await act(async () => {
         finish({ signedIn: true });
       });
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 shares sign-out state and excludes concurrent account changes", async () => {
+      const descriptor = makeDescriptor();
+      descriptor.auth!.getStatus = jest.fn().mockResolvedValue({ signedIn: true });
+      let finish!: (status: { signedIn: boolean }) => void;
+      descriptor.auth!.signOut = jest.fn(
+        () =>
+          new Promise((resolve) => {
+            finish = resolve;
+          })
+      );
+      const owner = renderHook(() => useBackendAuthState(descriptor));
+      const observer = renderHook(() => useBackendAuthState(descriptor));
+      await waitFor(() => expect(owner.result.current.status?.signedIn).toBe(true));
+      act(() => owner.result.current.signOut());
+      expect(observer.result.current.signingOut).toBe(true);
+      act(() => {
+        observer.result.current.signIn();
+        observer.result.current.signOut();
+      });
+      expect(descriptor.auth!.signIn).not.toHaveBeenCalled();
+      expect(descriptor.auth!.signOut).toHaveBeenCalledTimes(1);
+      const late = renderHook(() => useBackendAuthState(descriptor));
+      expect(late.result.current.signingOut).toBe(true);
+      await act(async () => finish({ signedIn: false }));
+      for (const hook of [owner, observer, late]) {
+        expect(hook.result.current.status?.signedIn).toBe(false);
+        expect(hook.result.current.signingOut).toBe(false);
+        expect(hook.result.current.failed).toBe(false);
+      }
+    });
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 does not let an older probe undo sign-out", async () => {
+      const descriptor = makeDescriptor();
+      let finish!: (status: { signedIn: boolean }) => void;
+      descriptor.auth!.getStatus = jest.fn(
+        () =>
+          new Promise((resolve) => {
+            finish = resolve;
+          })
+      );
+      descriptor.auth!.signOut = jest.fn().mockResolvedValue({ signedIn: false });
+      const hook = renderHook(() => useBackendAuthState(descriptor));
+      await waitFor(() => expect(descriptor.auth!.getStatus).toHaveBeenCalled());
+      await act(async () => hook.result.current.signOut());
+      await act(async () => finish({ signedIn: true }));
+      expect(hook.result.current.status?.signedIn).toBe(false);
+    });
+    it.each(["reject", "still signed in"])(
+      "https://github.com/Brevilabs/obsidian-copilot-private/issues/379 retains the account and permits retry after sign-out failure: %s",
+      async (failure) => {
+        const descriptor = makeDescriptor();
+        descriptor.auth!.getStatus = jest.fn().mockResolvedValue({ signedIn: true });
+        descriptor.auth!.signOut =
+          failure === "reject"
+            ? jest.fn().mockRejectedValue(new Error("failed"))
+            : jest.fn().mockResolvedValue({ signedIn: true });
+        const hook = renderHook(() => useBackendAuthState(descriptor));
+        await waitFor(() => expect(hook.result.current.status?.signedIn).toBe(true));
+        await act(async () => hook.result.current.signOut());
+        expect(hook.result.current.status?.signedIn).toBe(true);
+        expect(hook.result.current.signingOut).toBe(false);
+        expect(hook.result.current.failed).toBe(true);
+        jest.mocked(descriptor.auth!.signOut).mockResolvedValue({ signedIn: false });
+        await act(async () => hook.result.current.signOut());
+        expect(hook.result.current.status?.signedIn).toBe(false);
+        expect(hook.result.current.failed).toBe(false);
+      }
+    );
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 waits for cancelled sign-out before probing the replacement profile", async () => {
+      const descriptor = makeDescriptor();
+      descriptor.auth!.getStatus = jest.fn().mockResolvedValue({ signedIn: true });
+      let finish!: (status: { signedIn: boolean }) => void;
+      descriptor.auth!.signOut = jest.fn(
+        () =>
+          new Promise((resolve) => {
+            finish = resolve;
+          })
+      );
+      const hook = renderHook(({ profile }) => useBackendAuthState(descriptor, profile), {
+        initialProps: { profile: "first" },
+      });
+      await waitFor(() => expect(hook.result.current.status?.signedIn).toBe(true));
+      act(() => hook.result.current.signOut());
+      const options = jest.mocked(descriptor.auth!.signOut).mock.calls[0][1]!;
+      hook.rerender({ profile: "second" });
+      expect(options.signal!.aborted).toBe(true);
+      expect(hook.result.current.status).toBeNull();
+      expect(hook.result.current.signingOut).toBe(true);
+      expect(descriptor.auth!.getStatus).toHaveBeenCalledTimes(1);
+      await act(async () => finish({ signedIn: false }));
+      expect(descriptor.auth!.getStatus).toHaveBeenCalledTimes(2);
+      expect(hook.result.current.status?.signedIn).toBe(true);
+      expect(hook.result.current.signingOut).toBe(false);
+    });
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 leaves auth unchanged when sign-out is unsupported", async () => {
+      const descriptor = makeDescriptor();
+      const hook = renderHook(() => useBackendAuthState(descriptor));
+      await waitFor(() => expect(hook.result.current.status?.signedIn).toBe(false));
+      act(() => hook.result.current.signOut());
+      expect(hook.result.current.signingOut).toBe(false);
+      expect(hook.result.current.failed).toBe(false);
     });
 
     it("re-probes when the caller's auth-relevant key changes", async () => {

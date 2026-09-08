@@ -1,3 +1,6 @@
+import { signOutFromClaude } from "./claudeAuth";
+jest.mock("./claudeAuth", () => ({ signOutFromClaude: jest.fn() }));
+
 import type { AgentSession } from "@/agentMode/session/AgentSession";
 import type { BackendState, InstallState } from "@/agentMode/session/types";
 import { resetSettings, setSettings, type CopilotSettings } from "@/settings/model";
@@ -65,6 +68,80 @@ describe("claude descriptor", () => {
     jest.resetAllMocks();
   });
 
+  describe("ClaudeBackendDescriptor.auth.getProbeKey()", () => {
+    afterEach(() => jest.restoreAllMocks());
+    it.each(["CLAUDE_CONFIG_DIR", "XDG_CONFIG_HOME", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"])(
+      "https://github.com/Brevilabs/obsidian-copilot-private/issues/379 invalidates authentication when effective %s changes without exposing secrets",
+      (variable) => {
+        mockResolveClaudeBinary.mockReturnValue("/cli");
+        const original = ClaudeBackendDescriptor.auth.getProbeKey!(settingsWithClaudeRuntime({}));
+        const changed = ClaudeBackendDescriptor.auth.getProbeKey!(
+          settingsWithClaudeRuntime({ envOverrides: { [variable]: "private-fixture-value" } })
+        );
+        expect(changed).not.toBe(original);
+        expect(changed).toMatch(/^[a-f0-9]{64}$/);
+        expect(changed).not.toContain("private-fixture-value");
+      }
+    );
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 invalidates a newly resolved CLI", () => {
+      mockResolveClaudeBinary.mockReturnValueOnce("/first/cli").mockReturnValueOnce("/second/cli");
+      const settings = settingsWithClaudeRuntime({});
+      expect(ClaudeBackendDescriptor.auth.getProbeKey!(settings)).not.toBe(
+        ClaudeBackendDescriptor.auth.getProbeKey!(settings)
+      );
+    });
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 preserves identity when override order or provenance changes without changing the effective profile", () => {
+      mockResolveClaudeBinary.mockReturnValue("/cli");
+      jest.replaceProperty(process, "env", {
+        CLAUDE_CONFIG_DIR: "/profile",
+        ANTHROPIC_API_KEY: "private-fixture-key",
+      });
+      const inherited = ClaudeBackendDescriptor.auth.getProbeKey!(settingsWithClaudeRuntime({}));
+      const overridden = ClaudeBackendDescriptor.auth.getProbeKey!(
+        settingsWithClaudeRuntime({
+          envOverrides: { ANTHROPIC_API_KEY: "private-fixture-key", CLAUDE_CONFIG_DIR: "/profile" },
+        })
+      );
+      expect(inherited).toBe(overridden);
+    });
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 invalidates an inherited credential change", () => {
+      mockResolveClaudeBinary.mockReturnValue("/cli");
+      jest.replaceProperty(process, "env", { ANTHROPIC_API_KEY: "first-fixture" });
+      const original = ClaudeBackendDescriptor.auth.getProbeKey!(settingsWithClaudeRuntime({}));
+      jest.replaceProperty(process, "env", { ANTHROPIC_API_KEY: "second-fixture" });
+      expect(ClaudeBackendDescriptor.auth.getProbeKey!(settingsWithClaudeRuntime({}))).not.toBe(
+        original
+      );
+    });
+  });
+
+  describe("ClaudeBackendDescriptor.auth.signOut()", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 signs out using the session CLI and profile and preserves the resulting account label", async () => {
+      mockResolveClaudeBinary.mockReturnValue("/custom/claude");
+      jest
+        .mocked(signOutFromClaude)
+        .mockResolvedValue({ loggedIn: true, label: "zero@example.com (max)" });
+      const options = { signal: new AbortController().signal };
+      await expect(
+        ClaudeBackendDescriptor.auth.signOut!(
+          settingsWithClaudeRuntime({ envOverrides: { CLAUDE_CONFIG_DIR: "/custom profile" } }),
+          options
+        )
+      ).resolves.toEqual({ signedIn: true, label: "zero@example.com (max)" });
+      expect(signOutFromClaude).toHaveBeenCalledWith(
+        "/custom/claude",
+        expect.objectContaining({ CLAUDE_CONFIG_DIR: "/custom profile" }),
+        options
+      );
+    });
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 does not claim credentials were removed when the CLI is missing", async () => {
+      mockResolveClaudeBinary.mockReturnValue(null);
+      await expect(
+        ClaudeBackendDescriptor.auth.signOut!(settingsWithClaudeRuntime({}))
+      ).rejects.toThrow("Install Claude Code before signing out");
+      expect(signOutFromClaude).not.toHaveBeenCalled();
+    });
+  });
   describe("ClaudeBackendDescriptor.createBackendProcess()", () => {
     afterEach(() => {
       resetSettings();

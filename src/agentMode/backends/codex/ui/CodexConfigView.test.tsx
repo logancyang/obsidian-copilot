@@ -28,7 +28,15 @@ const renderView = (overrides: Partial<CodexConfigViewProps> = {}) => {
   const actions = makeActions();
   const onSourceChange = jest.fn();
   const props: CodexConfigViewProps = {
-    auth: { status: { signedIn: false }, onSignIn: () => undefined, signingIn: false, url: null },
+    auth: {
+      terminalCommand: "codex-acp cli login",
+      onSignOut: () => undefined,
+      signingOut: false,
+      status: { signedIn: false },
+      onSignIn: () => undefined,
+      signingIn: false,
+      url: null,
+    },
     state: { kind: "absent" },
     source: "managed",
     onSourceChange,
@@ -65,11 +73,19 @@ describe("CodexConfigView", () => {
       const onSignIn = jest.fn();
       renderView({
         state: { kind: "ready", source: "managed" },
-        auth: { status: { signedIn: false }, onSignIn, signingIn: false, url: null },
+        auth: {
+          terminalCommand: "codex-acp cli login",
+          onSignOut: () => undefined,
+          signingOut: false,
+          status: { signedIn: false },
+          onSignIn,
+          signingIn: false,
+          url: null,
+        },
       });
       fireEvent.click(screen.getByRole("button", { name: "Sign in with your browser" }));
       expect(onSignIn).toHaveBeenCalled();
-      expect(screen.queryByText(/cli login/)).toBeNull();
+      expect(screen.getByText("Sign in using a terminal instead")).toBeTruthy();
     });
 
     it("shows an authentication warning without browser instructions until an adapter is ready: https://github.com/Brevilabs/obsidian-copilot-private/issues/379", () => {
@@ -87,10 +103,53 @@ describe("CodexConfigView", () => {
       renderView({
         source: "custom",
         state: { kind: "ready", source: "custom" },
-        auth: { status: { signedIn: false }, signingIn: false, url: null, onSignIn },
+        auth: {
+          terminalCommand: "codex-acp cli login",
+          onSignOut: () => undefined,
+          signingOut: false,
+          status: { signedIn: false },
+          signingIn: false,
+          url: null,
+          onSignIn,
+        },
       });
       fireEvent.click(screen.getByRole("button", { name: "Sign in with your browser" }));
       expect(onSignIn).toHaveBeenCalledTimes(1);
+    });
+
+    it("shows profile status beside Authentication and offers sign-out for https://github.com/Brevilabs/obsidian-copilot-private/issues/379", () => {
+      const onSignOut = jest.fn();
+      const { props, rerender } = renderView({
+        state: { kind: "ready", source: "managed" },
+        auth: {
+          status: { signedIn: true, label: "ChatGPT" },
+          signingIn: false,
+          url: null,
+          onSignIn: jest.fn(),
+          terminalCommand: "codex-acp cli login",
+          onSignOut,
+          signingOut: false,
+        },
+      });
+      expect(
+        screen.getByRole("heading", { name: "Authentication" }).parentElement?.textContent
+      ).toBe("AuthenticationSigned in");
+      expect(screen.queryByText("Signed in.")).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Sign out" }));
+      expect(onSignOut).toHaveBeenCalledTimes(1);
+      rerender(<CodexConfigView {...props} auth={{ ...props.auth, signingOut: true }} />);
+      expect(screen.getByRole<HTMLButtonElement>("button", { name: "Signing out…" }).disabled).toBe(
+        true
+      );
+      rerender(<CodexConfigView {...props} auth={{ ...props.auth, failed: true }} />);
+      expect(screen.getByText("Sign-out didn't complete. Try again.")).toBeTruthy();
+      rerender(
+        <CodexConfigView {...props} auth={{ ...props.auth, status: { signedIn: false } }} />
+      );
+      expect(
+        screen.getByRole("heading", { name: "Authentication" }).parentElement?.textContent
+      ).toBe("AuthenticationNot signed in");
+      expect(screen.getByRole("button", { name: "Sign in with your browser" })).toBeTruthy();
     });
 
     it(`offers reinstall and uninstall for the active managed copy: ${ISSUE}`, () => {

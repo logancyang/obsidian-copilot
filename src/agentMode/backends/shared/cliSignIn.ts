@@ -128,6 +128,37 @@ export function signInWithCli(
   return { done, cancel };
 }
 
+/** Runs logout using the same process ownership as login and verifies the resulting account state.
+ * @param command - Configured CLI or adapter executable.
+ * @param args - Backend-specific logout arguments.
+ * @param env - Session environment selecting the credential profile.
+ * @param readStatus - Authoritative account check after the process closes.
+ * @param options - Cancellation owned by the initiating surface.
+ */
+export async function signOutWithCli(
+  command: string,
+  args: string[],
+  env: NodeJS.ProcessEnv,
+  readStatus: () => Promise<CliAuthStatus>,
+  options?: { signal?: AbortSignal }
+): Promise<CliAuthStatus> {
+  let status: CliAuthStatus | undefined;
+  await signInWithCli(
+    command,
+    args,
+    env,
+    async () => {
+      status = await readStatus();
+      return status;
+    },
+    options
+  ).done;
+  // Login's signed-out failure result cannot prove that logout removed any credentials.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
+  if (!status || options?.signal?.aborted) throw new Error("Sign-out did not complete.");
+  return status;
+}
+
 /** Emit complete (newline-delimited) lines from a piped child stream. */
 function attachLineReader(stream: Readable | null, onLine: (line: string) => void): void {
   if (!stream) return;

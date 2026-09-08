@@ -1,4 +1,4 @@
-import { CLAUDE_AUTH_COMMAND, CLAUDE_INSTALL_COMMAND } from "@/agentMode/backends/claude/cliSetup";
+import { CLAUDE_INSTALL_COMMAND } from "@/agentMode/backends/claude/cliSetup";
 import { claudeUpdateDetail } from "@/agentMode/backends/claude/claudeUpdateDetail";
 import { BinaryPathSetting } from "@/agentMode/backends/shared/BinaryPathSetting";
 import {
@@ -6,13 +6,16 @@ import {
   ConfigSection,
   ConfigWarningStrip,
 } from "@/agentMode/backends/shared/ui/ConfigDialogShell";
-import { CommandBlock, SetupStep } from "@/agentMode/backends/shared/ui/SetupSteps";
+import { CommandBlock } from "@/agentMode/backends/shared/ui/SetupSteps";
 import type { InstallState } from "@/agentMode/session/types";
-import { SignInAction, type SignInActionProps } from "@/agentMode/backends/shared/ui/SignInAction";
+import {
+  AuthenticationSection,
+  type AuthenticationState,
+} from "@/agentMode/backends/shared/ui/AuthenticationSection";
 import React from "react";
 
 /** In-app equivalent of the sign-in command, for backends that can run it themselves. */
-export type ClaudeAuthProps = SignInActionProps;
+export type ClaudeAuthProps = AuthenticationState;
 
 export interface ClaudeConfigViewProps {
   /** Readiness of the resolved CLI; drives the header badge and the warning strip. */
@@ -39,8 +42,8 @@ const PATH_PLACEHOLDER =
 
 /**
  * Configure dialog body for the Claude backend. Leads with the one field that
- * makes the agent work — where the `claude` CLI is — and demotes installing and
- * signing in to a numbered block for the users who still need them. There is no
+ * makes the agent work, where the `claude` CLI is, followed by installation
+ * instructions and shared account controls. There is no
  * managed install: an unsupported auto-detected version is fixed by re-running
  * the install command, while a custom-path install must be updated in place or
  * cleared. Neither case offers an in-dialog upgrade.
@@ -84,30 +87,13 @@ export const ClaudeConfigView: React.FC<ClaudeConfigViewProps> = ({
       />
     </ConfigSection>
 
-    <ConfigSection title="Set up Claude Code">
-      {/* The section's own gap sets the rhythm inside a step, so the steps need a
-          wider one to read as two items rather than one run of controls. */}
-      <div className="tw-flex tw-flex-col tw-gap-4">
-        <SetupStep index={1} title="Install it">
-          <CommandBlock command={CLAUDE_INSTALL_COMMAND} />
-        </SetupStep>
-        <SetupStep index={2} title="Sign in">
-          <p className="tw-my-0 tw-text-sm tw-text-muted">
-            Sign in with your Claude account in your browser. Claude Code saves your credentials on
-            this machine for Copilot to use.
-          </p>
-          {/* Keep account status and browser actions visible throughout sign-in so a successful
-              login does not leave users staring at another login command.
-              https://github.com/Brevilabs/obsidian-copilot-private/issues/379 */}
-          {state.kind === "ready" && <SignInAction {...auth} />}
-          <details className="tw-text-sm tw-text-muted">
-            <summary className="tw-cursor-pointer">Sign in using a terminal instead</summary>
-            <div className="tw-mt-2">
-              <CommandBlock command={CLAUDE_AUTH_COMMAND} />
-            </div>
-          </details>
-        </SetupStep>
-      </div>
+    <ConfigSection title="Install Claude Code">
+      <CommandBlock command={CLAUDE_INSTALL_COMMAND} />
     </ConfigSection>
+    <AuthenticationSection
+      ready={state.kind === "ready"}
+      unavailableMessage="Set up a supported Claude CLI above to enable sign-in."
+      auth={auth}
+    />
   </ConfigDialogShell>
 );

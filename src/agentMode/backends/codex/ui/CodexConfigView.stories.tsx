@@ -48,6 +48,13 @@ const InteractiveConfigView: React.FC<Partial<CodexConfigViewProps>> = (props) =
       {...(props as CodexConfigViewProps)}
       source={source}
       onSourceChange={setSource}
+      auth={{
+        ...props.auth!,
+        terminalCommand:
+          props.activeSource === "custom"
+            ? "'/usr/local/bin/codex-acp' cli login"
+            : `'/Users/example/.obsidian-copilot/codex/${CODEX_BUNDLE_VERSION}/codex-acp' cli login`,
+      }}
     />
   );
 };
@@ -56,7 +63,15 @@ const meta = {
   title: "Agent Mode/Codex Config View",
   component: CodexConfigView,
   args: {
-    auth: { status: { signedIn: false }, onSignIn: () => undefined, signingIn: false, url: null },
+    auth: {
+      terminalCommand: "codex-acp cli login",
+      onSignOut: () => undefined,
+      signingOut: false,
+      status: { signedIn: false },
+      onSignIn: () => undefined,
+      signingIn: false,
+      url: null,
+    },
     state: { kind: "absent" },
     source: "managed",
     onSourceChange: () => undefined,
@@ -307,5 +322,21 @@ export const FailedDownloadWithCustomActive: StoryObj<CodexConfigViewProps> = {
         message: "Archive download failed. Check your connection, then retry.",
       },
     },
+  },
+};
+
+export const ManagedSigningOut: StoryObj<CodexConfigViewProps> = {
+  render: InteractiveConfigView,
+  args: {
+    ...ManagedSignedIn.args,
+    auth: { ...meta.args.auth, status: { signedIn: true }, signingOut: true },
+  },
+};
+
+export const ManagedSignOutFailed: StoryObj<CodexConfigViewProps> = {
+  render: InteractiveConfigView,
+  args: {
+    ...ManagedSignedIn.args,
+    auth: { ...meta.args.auth, status: { signedIn: true }, failed: true },
   },
 };

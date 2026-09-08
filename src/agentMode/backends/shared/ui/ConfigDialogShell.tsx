@@ -99,12 +99,18 @@ export const ConfigWarningStrip: React.FC<ConfigWarningStripProps> = ({
  * renders a subtle header above the body; a hairline divider separates each
  * section from the content above it.
  */
-export const ConfigSection: React.FC<{ title?: string; children: React.ReactNode }> = ({
-  title,
-  children,
-}) => (
+export const ConfigSection: React.FC<{
+  title?: string;
+  badge?: React.ReactNode;
+  children: React.ReactNode;
+}> = ({ title, badge, children }) => (
   <div className="copilot-divider-t tw-flex tw-flex-col tw-gap-2 tw-p-4">
-    {title && <h4 className="tw-m-0 tw-text-sm tw-font-semibold">{title}</h4>}
+    {title && (
+      <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-2">
+        <h4 className="tw-m-0 tw-text-sm tw-font-semibold">{title}</h4>
+        {badge}
+      </div>
+    )}
     {children}
   </div>
 );

@@ -46,6 +46,8 @@ describe("AgentModeStatus", () => {
       authState = {
         status: null,
         signingIn: false,
+        signingOut: false,
+        signOut: jest.fn(),
         url: null,
         signIn: jest.fn(),
         cancelSignIn: jest.fn(),
@@ -163,6 +165,8 @@ describe("AgentModeStatus", () => {
       authState = {
         status: { signedIn: false },
         signingIn: false,
+        signingOut: false,
+        signOut: jest.fn(),
         url: null,
         signIn: jest.fn(),
         cancelSignIn: jest.fn(),

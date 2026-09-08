@@ -1,6 +1,6 @@
 import { useBackendAuthState } from "@/agentMode/session/useBackendAuthState";
 import type { CodexBinaryManager } from "@/agentMode/backends/codex/CodexBinaryManager";
-import { CODEX_BUNDLE_VERSION } from "@/agentMode/backends/codex/cliSetup";
+import { CODEX_BUNDLE_VERSION, codexSignInCommand } from "@/agentMode/backends/codex/cliSetup";
 import {
   CodexConfigView,
   type CodexBinarySource,
@@ -144,7 +144,13 @@ export const CodexConfigContainer: React.FC<CodexConfigContainerProps> = ({ mana
   return (
     <CodexConfigView
       state={state}
-      auth={{ ...auth, onSignIn: auth.signIn, onCancel: auth.cancelSignIn }}
+      auth={{
+        ...auth,
+        onSignIn: auth.signIn,
+        onCancel: auth.cancelSignIn,
+        onSignOut: auth.signOut,
+        terminalCommand: codexSignInCommand(binaryPath, codex?.envOverrides, process.platform),
+      }}
       // Keep progress and Cancel visible when a managed install starts in another window.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
       source={runtime.kind === "installing" ? "managed" : source}

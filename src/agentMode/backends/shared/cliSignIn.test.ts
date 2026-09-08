@@ -1,4 +1,4 @@
-import { signInWithCli } from "./cliSignIn";
+import { signInWithCli, signOutWithCli } from "./cliSignIn";
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
 const mockSpawn = jest.fn();
@@ -11,6 +11,55 @@ jest.mock("@/utils/desktopRuntime", () => ({
 }));
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/379";
 describe("cliSignIn", () => {
+  describe("signOutWithCli()", () => {
+    afterEach(() => jest.restoreAllMocks());
+    it(`preserves the post-logout status and account label: ${ISSUE}`, async () => {
+      const child = Object.assign(new EventEmitter(), {
+        stdout: new PassThrough(),
+        stderr: new PassThrough(),
+      });
+      mockSpawn.mockReset().mockReturnValue(child);
+      const status = { loggedIn: true, label: "zero@example.com" };
+      const read = jest.fn().mockResolvedValue(status);
+      const result = signOutWithCli("/cli", ["logout"], { PROFILE: "/profile" }, read);
+      child.emit("close", 1);
+      await expect(result).resolves.toEqual(status);
+      expect(read).toHaveBeenCalledTimes(1);
+    });
+    it(`rejects failed startup instead of claiming logout succeeded: ${ISSUE}`, async () => {
+      mockSpawn.mockReset().mockImplementation(() => {
+        throw new Error("missing");
+      });
+      const read = jest.fn();
+      await expect(signOutWithCli("/cli", ["logout"], {}, read)).rejects.toThrow(
+        "Sign-out did not complete"
+      );
+      expect(read).not.toHaveBeenCalled();
+    });
+    it(`rejects cancellation while the post-logout probe is pending: ${ISSUE}`, async () => {
+      const child = Object.assign(new EventEmitter(), {
+        stdout: new PassThrough(),
+        stderr: new PassThrough(),
+      });
+      mockSpawn.mockReset().mockReturnValue(child);
+      let finish!: (status: { loggedIn: boolean }) => void;
+      const controller = new AbortController();
+      const result = signOutWithCli(
+        "/cli",
+        ["logout"],
+        {},
+        () =>
+          new Promise((resolve) => {
+            finish = resolve;
+          }),
+        { signal: controller.signal }
+      );
+      child.emit("close", 0);
+      controller.abort();
+      finish({ loggedIn: false });
+      await expect(result).rejects.toThrow("Sign-out did not complete");
+    });
+  });
   describe("signInWithCli()", () => {
     let child: EventEmitter & {
       stdout: PassThrough;

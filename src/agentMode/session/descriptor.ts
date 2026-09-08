@@ -95,6 +95,11 @@ export interface BackendAuth {
   getStatus(settings: CopilotSettings): Promise<BackendAuthStatus>;
   /** Run the interactive sign-in flow; resolves with the post-login state. */
   signIn(settings: CopilotSettings, handlers?: BackendSignInHandlers): Promise<BackendAuthStatus>;
+  /** Sign out of the configured profile and return its resulting authentication state. */
+  signOut?(
+    settings: CopilotSettings,
+    options?: { signal?: AbortSignal }
+  ): Promise<BackendAuthStatus>;
 }
 
 /**

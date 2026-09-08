@@ -195,6 +195,93 @@ describe("codexAuth", () => {
       }
     );
   });
+  describe("signOut()", () => {
+    it(`logs out and checks the configured adapter profile: ${ISSUE}`, async () => {
+      mockSpawn.mockImplementation(() => {
+        const process = child();
+        queueMicrotask(() => {
+          process.stderr.write("Not logged in\n");
+          process.emit("close", 0);
+        });
+        return process;
+      });
+      await expect(codexAuth.signOut!(settings)).resolves.toEqual({ signedIn: false });
+      expect(mockSpawn).toHaveBeenCalledTimes(2);
+      expect(mockSpawn).toHaveBeenNthCalledWith(
+        1,
+        "/bundle/codex-acp",
+        ["cli", "logout"],
+        expect.objectContaining({ env: expect.objectContaining({ CODEX_HOME: "/my profile" }) })
+      );
+      expect(mockSpawn).toHaveBeenNthCalledWith(
+        2,
+        "/bundle/codex-acp",
+        ["cli", "login", "status"],
+        expect.objectContaining({ env: expect.objectContaining({ CODEX_HOME: "/my profile" }) })
+      );
+    });
+    it.each(["startup failure", "unrecognized output"])(
+      `rejects unverifiable status after logout exits successfully: %s ${ISSUE}`,
+      async (failure) => {
+        mockSpawn.mockImplementation((_command, args) => {
+          if (args.includes("status") && failure === "startup failure")
+            throw new Error("missing status CLI");
+          const process = child();
+          queueMicrotask(() => process.emit("close", 0));
+          return process;
+        });
+        await expect(codexAuth.signOut!(settings)).rejects.toThrow("Sign-out did not complete");
+        expect(mockSpawn).toHaveBeenCalledTimes(2);
+      }
+    );
+    it(`rejects a timed-out status probe after successful logout: ${ISSUE}`, async () => {
+      jest.useFakeTimers();
+      const logout = child();
+      const probe = child();
+      mockSpawn.mockReturnValueOnce(logout).mockReturnValueOnce(probe);
+      jest.spyOn(process, "kill").mockImplementation(() => {
+        queueMicrotask(() => probe.emit("close", 1));
+        return true;
+      });
+      mockExec.mockImplementation((_command, _args, _options, callback) => {
+        callback(null);
+        queueMicrotask(() => probe.emit("close", 1));
+      });
+      const pending = expect(codexAuth.signOut!(settings)).rejects.toThrow(
+        "Sign-out did not complete"
+      );
+      await Promise.resolve();
+      logout.emit("close", 0);
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(mockSpawn).toHaveBeenCalledTimes(2);
+      await jest.advanceTimersByTimeAsync(10_000);
+      await pending;
+    });
+    it(`preserves authenticated status when logout does not remove the account: ${ISSUE}`, async () => {
+      await expect(codexAuth.signOut!(settings)).resolves.toEqual({ signedIn: true });
+    });
+    it(`does not claim environment credentials were removed by CLI logout: ${ISSUE}`, async () => {
+      await expect(
+        codexAuth.signOut!(configured({ envOverrides: { OPENAI_API_KEY: "fixture-key" } }))
+      ).resolves.toEqual({ signedIn: true });
+      expect(mockSpawn).toHaveBeenCalledTimes(1);
+    });
+    it(`reports failed process startup without claiming successful sign-out: ${ISSUE}`, async () => {
+      mockSpawn.mockImplementation(() => {
+        throw new Error("failed");
+      });
+      await expect(codexAuth.signOut!(settings)).rejects.toThrow("Sign-out did not complete");
+    });
+    it(`never starts a cancelled sign-out: ${ISSUE}`, async () => {
+      const controller = new AbortController();
+      controller.abort();
+      await expect(codexAuth.signOut!(settings, { signal: controller.signal })).rejects.toThrow(
+        "Sign-out did not complete"
+      );
+      expect(mockSpawn).not.toHaveBeenCalled();
+    });
+  });
   describe("signIn()", () => {
     it(`selects the OpenAI authorization URL and verifies status with the same profile: ${ISSUE}`, async () => {
       const onUrl = jest.fn();

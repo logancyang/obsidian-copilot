@@ -1,7 +1,7 @@
 import type { BackendAuth } from "@/agentMode/session/types";
 import { buildSimpleSpawnDescriptor } from "@/agentMode/backends/shared/simpleBinaryBackend";
 import { sanitizeBuiltinSkillEnvOverrides } from "@/agentMode/backends/shared/builtinSkillEnv";
-import { signInWithCli } from "@/agentMode/backends/shared/cliSignIn";
+import { signInWithCli, signOutWithCli } from "@/agentMode/backends/shared/cliSignIn";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 import { detectBinary } from "@/utils/detectBinary";
 import { buildCodexAcpInvocation, resolveSupportedCodexAcpEntry } from "./codexVersion";
@@ -20,6 +20,44 @@ async function invocation(settings: CopilotSettings) {
   const node =
     process.platform === "win32" && entry.endsWith(".js") ? await detectBinary("node") : undefined;
   return buildCodexAcpInvocation(entry, [], descriptor.env, process.platform, node ?? undefined);
+}
+
+async function readCodexAuthStatus(settings: CopilotSettings) {
+  const call = await invocation(settings);
+  // Environment-authenticated sessions need no browser login or persisted credentials.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
+  if (call.env.CODEX_API_KEY?.trim() || call.env.OPENAI_API_KEY?.trim()) return { signedIn: true };
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 10_000);
+  let loggedIn: boolean | undefined;
+  let completed = false;
+  try {
+    // Status probes need the same process-tree cleanup as login. Never expose API key suffixes.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
+    await signInWithCli(
+      call.command,
+      [...call.args, "cli", "login", "status"],
+      call.env,
+      async () => {
+        completed = true;
+        return { loggedIn: loggedIn === true };
+      },
+      {
+        signal: controller.signal,
+        onLine: (line) => {
+          if (/^Logged in (?:using|with)\b/.test(line)) loggedIn = true;
+          else if (/^Not logged in\b/.test(line)) loggedIn = false;
+        },
+      }
+    ).done;
+    // A failed or unrecognized probe cannot confirm that logout removed the account.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
+    if (!completed || controller.signal.aborted || loggedIn === undefined)
+      throw new Error("Unable to verify Codex authentication status.");
+    return { signedIn: loggedIn };
+  } finally {
+    window.clearTimeout(timeout);
+  }
 }
 
 /** Uses the same configured adapter and profile as Codex sessions, without reading credentials. */
@@ -53,37 +91,21 @@ export const codexAuth: BackendAuth = {
   },
   async getStatus(settings) {
     try {
-      const call = await invocation(settings);
-      // Environment-authenticated sessions need no browser login or persisted credentials.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
-      if (call.env.CODEX_API_KEY?.trim() || call.env.OPENAI_API_KEY?.trim())
-        return { signedIn: true };
-      const controller = new AbortController();
-      const timeout = window.setTimeout(() => controller.abort(), 10_000);
-      let loggedIn = false;
-      try {
-        // The ACP proxy does not forward signals; status probes need the same tree cleanup as login.
-        // Never expose the API key suffix printed by login status.
-        // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
-        const result = await signInWithCli(
-          call.command,
-          [...call.args, "cli", "login", "status"],
-          call.env,
-          async () => ({ loggedIn }),
-          {
-            signal: controller.signal,
-            onLine: (line) => {
-              loggedIn ||= /^Logged in (?:using|with)\b/.test(line);
-            },
-          }
-        ).done;
-        return { signedIn: result.loggedIn };
-      } finally {
-        window.clearTimeout(timeout);
-      }
+      return await readCodexAuthStatus(settings);
     } catch {
       return { signedIn: false };
     }
+  },
+  async signOut(settings, options) {
+    const call = await invocation(settings);
+    const status = await signOutWithCli(
+      call.command,
+      [...call.args, "cli", "logout"],
+      call.env,
+      async () => ({ loggedIn: (await readCodexAuthStatus(settings)).signedIn }),
+      options
+    );
+    return { signedIn: status.loggedIn };
   },
   async signIn(settings, handlers) {
     const call = await invocation(settings);
