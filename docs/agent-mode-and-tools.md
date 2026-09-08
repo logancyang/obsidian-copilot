@@ -174,6 +174,8 @@ The rules stay fixed for that Copilot version; publishing a new `openartifacts` 
 
 Copilot bundles the shared rules, not the complete npm CLI. Its publishing commands, authentication, document identity, browser preview, and confirmation dialog are implemented by Copilot. The built-in Skill has its own revision number for refreshing installed copies; that number is separate from both the Copilot release version and the OpenArtifacts npm version.
 
+Copilot also includes **research-memo** as an optional theme; it is not supplied by the OpenArtifacts npm package. For a named theme, the Skill checks `.openartifacts/themes/<name>.md` in your vault, then `themes/<name>.md` alongside the installed Skill. If neither exists, the agent is instructed to continue with readable defaults. A missing theme must not block publishing.
+
 For an agent-prepared page, Copilot opens a local preview in your default browser. Review the rendered page, then return to the existing Obsidian dialog, check **I reviewed the preview**, and confirm publishing. Opening the file never enables approval by itself. If automatic opening fails, retry the preview link or open the displayed preview file in your browser. Local previews disable scripts, external resources, and navigation. The published HTML is preserved. The published page keeps the Copilot attribution banner. Cancellation or failure preserves the prepared file so the agent can reopen review. Successful publication or an explicit regeneration request removes the unchanged staged artifact.
 
 ### Upgrading an agent
