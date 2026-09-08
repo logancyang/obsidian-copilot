@@ -1,3 +1,4 @@
+import { Markdown } from "@/components/Markdown";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
 import { useApp } from "@/context";
@@ -135,9 +136,11 @@ function RelevantNoteHoverCard({
         </div>
 
         {fileContent && (
-          <p className="tw-m-0 tw-max-h-64 tw-overflow-y-auto tw-whitespace-pre-line tw-text-xs tw-leading-normal tw-text-muted">
-            {fileContent}
-          </p>
+          <Markdown
+            text={fileContent}
+            sourcePath={note.note.path}
+            className="tw-m-0 tw-max-h-64 tw-overflow-y-auto tw-text-xs tw-leading-normal tw-text-muted"
+          />
         )}
 
         <div className="tw-flex tw-items-center tw-gap-2">
