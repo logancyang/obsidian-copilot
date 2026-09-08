@@ -44,7 +44,7 @@ describe("ClaudeConfigView", () => {
       renderView({ binaryPath: "/usr/local/bin/claude", hasBinaryPathOverride: true });
 
       const input = screen.getByDisplayValue("/usr/local/bin/claude");
-      const steps = screen.getByText("Don't have it yet?");
+      const steps = screen.getByText("Set up Claude Code");
       expect(input.compareDocumentPosition(steps) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
 
@@ -117,7 +117,7 @@ describe("ClaudeConfigView", () => {
       expect(screen.queryByRole("button", { name: "Signing in…" })).toBeNull();
     });
 
-    it("hides the in-app sign-in action when the backend is authenticated", () => {
+    it("shows the signed-in account for https://github.com/Brevilabs/obsidian-copilot-private/issues/379", () => {
       renderView({
         state: { kind: "ready", source: "custom" },
         auth: {
@@ -128,14 +128,34 @@ describe("ClaudeConfigView", () => {
         },
       });
 
+      expect(screen.getByText("Signed in as zero@example.com.")).toBeTruthy();
       expect(screen.queryByRole("button", { name: "Sign in" })).toBeNull();
     });
 
-    it("hides the in-app sign-in action while auth status is still loading", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 keeps cancellation and Retry outside the copyable command so narrow dialogs can wrap", () => {
+      const onCancel = jest.fn();
+      const onSignIn = jest.fn();
+      renderView({
+        state: { kind: "ready", source: "custom" },
+        auth: { status: { signedIn: false }, onSignIn, signingIn: true, url: null, onCancel },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Cancel sign-in" }));
+      expect(onCancel).toHaveBeenCalledTimes(1);
+      expect(
+        screen
+          .getByText(commandBlock(CLAUDE_AUTH_COMMAND))
+          .parentElement?.contains(screen.getByRole("button", { name: "Cancel sign-in" }))
+      ).toBe(false);
+    });
+
+    it("shows checking progress for https://github.com/Brevilabs/obsidian-copilot-private/issues/379", () => {
       renderView({
         state: { kind: "ready", source: "custom" },
         auth: { status: null, onSignIn: jest.fn(), signingIn: false, url: null },
       });
+      expect(
+        screen.getByRole<HTMLButtonElement>("button", { name: "Checking sign-in…" }).disabled
+      ).toBe(true);
 
       expect(screen.queryByRole("button", { name: "Sign in" })).toBeNull();
     });

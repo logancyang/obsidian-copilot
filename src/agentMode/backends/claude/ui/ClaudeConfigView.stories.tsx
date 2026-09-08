@@ -1,3 +1,4 @@
+import { FULL_BLEED_MODAL_CLASS } from "@/components/modals/ReactModal";
 import {
   ClaudeConfigView,
   type ClaudeConfigViewProps,
@@ -32,7 +33,9 @@ const meta = {
     },
     onClose: () => undefined,
   },
-  parameters: { gallery: { host: "modal", layout: "padded" } },
+  parameters: {
+    gallery: { host: "modal", layout: "fullscreen", modalClass: FULL_BLEED_MODAL_CLASS },
+  },
 } satisfies Meta<ClaudeConfigViewProps>;
 export default meta;
 
@@ -71,6 +74,7 @@ export const SigningIn: StoryObj<ClaudeConfigViewProps> = {
       status: { signedIn: false },
       onSignIn: () => undefined,
       signingIn: true,
+      onCancel: () => undefined,
       url: null,
     },
   },
@@ -86,6 +90,7 @@ export const OAuthFallback: StoryObj<ClaudeConfigViewProps> = {
       status: { signedIn: false },
       onSignIn: () => undefined,
       signingIn: true,
+      onCancel: () => undefined,
       url: "https://claude.ai/oauth/authorize?code=example",
     },
   },
@@ -98,5 +103,26 @@ export const LongPath: StoryObj<ClaudeConfigViewProps> = {
     binaryPath:
       "/Users/zero/Library/Application Support/fnm/node-versions/v22.11.0/installation/bin/claude",
     hasBinaryPathOverride: true,
+  },
+};
+
+export const SignInRetry: StoryObj<ClaudeConfigViewProps> = {
+  args: {
+    state: { kind: "ready", source: "custom" },
+    binaryPath: "/Users/zero/.local/bin/claude",
+    auth: {
+      status: { signedIn: false },
+      onSignIn: () => undefined,
+      signingIn: false,
+      url: null,
+      failed: true,
+    },
+  },
+};
+
+export const CheckingSignIn: StoryObj<ClaudeConfigViewProps> = {
+  args: {
+    state: { kind: "ready", source: "custom" },
+    auth: { status: null, onSignIn: () => undefined, signingIn: false, url: null },
   },
 };
