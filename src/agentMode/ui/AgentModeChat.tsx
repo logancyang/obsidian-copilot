@@ -125,7 +125,9 @@ export const AgentModeChat: React.FC<Props> = ({
     !manager.getIsStarting() &&
     manager.getLastError() === null &&
     (installState.kind === "absent" ||
-      installState.kind === "incompatible" ||
+      // Cold-start upgrades need the same progress and Retry card as active sessions.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
+      (installState.kind === "incompatible" && !descriptor.managedInstall) ||
       installState.kind === "error");
 
   if (isColdStart) {

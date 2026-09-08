@@ -58,7 +58,7 @@ export const AgentStatusCard: React.FC<AgentStatusCardProps> = ({
       ("href" in action ? (
         <Button
           asChild
-          className="tw-h-auto tw-min-h-6 tw-max-w-full tw-whitespace-normal tw-break-words tw-py-1"
+          className="tw-h-auto tw-min-h-6 tw-max-w-full tw-whitespace-normal tw-break-words tw-border tw-border-solid tw-border-border tw-py-1"
           variant="secondary"
           size="sm"
         >
@@ -68,7 +68,7 @@ export const AgentStatusCard: React.FC<AgentStatusCardProps> = ({
         </Button>
       ) : (
         <Button
-          className="tw-h-auto tw-min-h-6 tw-max-w-full tw-whitespace-normal tw-break-words tw-py-1 disabled:tw-opacity-100"
+          className="tw-h-auto tw-min-h-6 tw-max-w-full tw-whitespace-normal tw-break-words tw-border tw-border-solid tw-border-border tw-py-1 disabled:tw-opacity-100"
           variant={tone === "error" ? "ghost" : "secondary"}
           size="sm"
           disabled={action.disabled}

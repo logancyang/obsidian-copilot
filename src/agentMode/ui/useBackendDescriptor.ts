@@ -4,12 +4,20 @@ import {
   listBackendDescriptors,
 } from "@/agentMode/backends/registry";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
-import type { BackendDescriptor, BackendId, InstallState } from "@/agentMode/session/types";
+import type {
+  BackendDescriptor,
+  BackendId,
+  InstallState,
+  ManagedInstallActionState,
+} from "@/agentMode/session/types";
 import { useSettingsValue } from "@/settings/model";
 import React from "react";
 import type CopilotPlugin from "@/main";
 
 const EMPTY_BACKEND_INSTALL_STATES = Object.freeze({}) as Record<BackendId, InstallState>;
+const IDLE_MANAGED_INSTALL_ACTION_STATE = Object.freeze({
+  kind: "idle" as const,
+}) satisfies ManagedInstallActionState;
 
 function installStateSignature(state: InstallState): string {
   switch (state.kind) {
@@ -26,6 +34,17 @@ function installStateSignature(state: InstallState): string {
         state.minVersion,
         state.message,
       ]);
+    case "error":
+      return JSON.stringify([state.kind, state.message]);
+  }
+}
+
+function managedInstallActionStateSignature(state: ManagedInstallActionState): string {
+  switch (state.kind) {
+    case "idle":
+      return "idle";
+    case "running":
+      return JSON.stringify([state.kind, state.label, state.percent]);
     case "error":
       return JSON.stringify([state.kind, state.message]);
   }
@@ -91,6 +110,30 @@ export function useBackendInstallState(
     void signature;
     return descriptor.getInstallState(settings);
   }, [descriptor, settings, signature]);
+}
+
+/** Observe the descriptor's shared managed-install operation, or a stable idle state. */
+export function useManagedInstallActionState(
+  descriptor: BackendDescriptor,
+  plugin: CopilotPlugin
+): ManagedInstallActionState {
+  const action = descriptor.managedInstall;
+  const subscribe = React.useCallback(
+    (listener: () => void) => action?.subscribe(plugin, listener) ?? (() => {}),
+    [action, plugin]
+  );
+  const getSnapshot = React.useCallback(
+    () =>
+      managedInstallActionStateSignature(
+        action?.getState(plugin) ?? IDLE_MANAGED_INSTALL_ACTION_STATE
+      ),
+    [action, plugin]
+  );
+  const signature = React.useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+  return React.useMemo(() => {
+    void signature;
+    return action?.getState(plugin) ?? IDLE_MANAGED_INSTALL_ACTION_STATE;
+  }, [action, plugin, signature]);
 }
 
 /**

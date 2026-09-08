@@ -43,6 +43,18 @@ export type InstallState =
     }
   | { kind: "error"; message: string };
 
+export type ManagedInstallActionState =
+  | { kind: "idle" }
+  | { kind: "running"; label: string; percent?: number }
+  | { kind: "error"; message: string };
+
+/** Backend-owned install lifecycle shared by Agent Chat and Settings. */
+export interface ManagedInstallAction {
+  getState(plugin: CopilotPlugin): ManagedInstallActionState;
+  subscribe(plugin: CopilotPlugin, onChange: () => void): () => void;
+  run(plugin: CopilotPlugin): Promise<void>;
+}
+
 /** Sign-in state for backends that authenticate via a CLI / external account. */
 export interface BackendAuthStatus {
   signedIn: boolean;
@@ -52,6 +64,8 @@ export interface BackendAuthStatus {
 
 /** Progress callbacks for an interactive sign-in flow. */
 export interface BackendSignInHandlers {
+  /** Cancellation belongs to the surface that starts browser sign-in. */
+  signal?: AbortSignal;
   /** The OAuth URL to surface as a clickable browser-open fallback. */
   onUrl?: (url: string) => void;
   /** Per-line progress from the sign-in subprocess. */
@@ -73,10 +87,19 @@ export interface ApplySelectionContext {
  * surface a "Sign in" CTA without knowing the backend's auth mechanism.
  */
 export interface BackendAuth {
+  /** Stable opaque identity for the configured account/profile; never expose credentials.
+   * @param settings - Current settings that select the backend and its authentication environment.
+   */
+  getProbeKey?(settings: CopilotSettings): string;
   /** Probe current sign-in state (may spawn the CLI). */
   getStatus(settings: CopilotSettings): Promise<BackendAuthStatus>;
   /** Run the interactive sign-in flow; resolves with the post-login state. */
   signIn(settings: CopilotSettings, handlers?: BackendSignInHandlers): Promise<BackendAuthStatus>;
+  /** Sign out of the configured profile and return its resulting authentication state. */
+  signOut?(
+    settings: CopilotSettings,
+    options?: { signal?: AbortSignal }
+  ): Promise<BackendAuthStatus>;
 }
 
 /**
@@ -237,14 +260,8 @@ export interface BackendDescriptor {
    */
   AbsentInstallActions?: React.ComponentType<{ plugin: CopilotPlugin }>;
 
-  /**
-   * Optional: upgrade the installed binary in place (managed reinstall, or the
-   * CLI's own `upgrade`). Resolves when done. Changing the persisted version
-   * restarts the backend via the `subscribeInstallState` subscription, so the
-   * next session boots on the new binary. Throws with a readable message on
-   * failure; callers surface progress/errors.
-   */
-  upgrade?(plugin: CopilotPlugin): Promise<void>;
+  /** User-triggered install/update lifecycle for Copilot-managed binaries. */
+  managedInstall?: ManagedInstallAction;
 
   /**
    * Optional: sign-in capability for backends gated on an external account

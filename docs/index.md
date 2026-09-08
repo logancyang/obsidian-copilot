@@ -5,10 +5,10 @@ Copilot V4 starts with **Agent Chat**, where opencode, Claude Code, or Codex can
 ## Start here
 
 1. Install Copilot from Obsidian's Community Plugins.
-2. Open **Settings → Copilot → Basic → Agents**. Follow [Getting Started with Copilot V4](getting-started.md) to download managed opencode, auto-detect Claude Code, or connect Codex through `codex-acp`.
+2. Open **Settings → Copilot → Basic → Agents**. Follow [Getting Started with Copilot V4](getting-started.md) to download managed opencode or Codex, or auto-detect Claude Code.
 3. Run **Open Copilot Agent Chat Window**. A ready default agent opens automatically; if **Select your agent** appears, choose an **Installed** agent and select **Start chat**.
 
-For most people, opencode is the best starting point because Copilot can install and manage it for you. Claude Code and Codex use their existing command-line accounts. Windows users can also follow [Windows setup for Agent Chat](agent-mode-windows-setup.md).
+For most people, opencode is the best starting point. Copilot can install and manage both opencode and the Codex adapter; Claude Code and Codex use their existing command-line accounts. Windows users can also follow [Windows setup for Agent Chat](agent-mode-windows-setup.md).
 
 ## Agent Chat
 

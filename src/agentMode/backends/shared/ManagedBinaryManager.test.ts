@@ -154,7 +154,11 @@ describe("ManagedBinaryManager", () => {
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/368 clears a prior failure so a reopened lifecycle starts idle", async () => {
         manager.pipeline.mockRejectedValueOnce(new Error("failed"));
         await expect(manager.install()).rejects.toThrow("failed");
-        expect(manager.getRuntimeState()).toEqual({ kind: "error", message: "failed" });
+        expect(manager.getRuntimeState()).toEqual({
+          kind: "error",
+          message: "failed",
+          operation: "install",
+        });
         manager.forgetSettledError();
         expect(manager.getRuntimeState()).toEqual({ kind: "idle" });
       });
@@ -190,7 +194,11 @@ describe("ManagedBinaryManager", () => {
       });
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/368 preserves the selected custom binary while reclaiming downloads", async () => {
         fs.mkdirSync(manager.getDataDir(), { recursive: true });
-        await manager.setCustomBinaryPath(customPath);
+        manager.settings = {
+          binaryPath: customPath,
+          binarySource: "custom",
+          binaryVersion: "1.2.3",
+        };
         const selected = manager.settings;
         await manager.uninstall();
         expect(fs.existsSync(manager.getDataDir())).toBe(false);
@@ -199,14 +207,97 @@ describe("ManagedBinaryManager", () => {
       });
     });
     describe("setCustomBinaryPath()", () => {
-      it("validates a custom executable and persists the backend-reported version", async () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 validates and selects a custom executable before removing managed downloads", async () => {
+        fs.mkdirSync(manager.getDataDir(), { recursive: true });
+        manager.validate.mockImplementationOnce(async (binaryPath) => {
+          expect(fs.existsSync(manager.getDataDir())).toBe(true);
+          return { version: "1.2.3", path: binaryPath };
+        });
         await manager.setCustomBinaryPath(customPath);
+        expect(fs.existsSync(manager.getDataDir())).toBe(false);
+        expect(fs.existsSync(customPath)).toBe(true);
         expect(manager.validate).toHaveBeenCalledWith(customPath);
         expect(manager.settings).toEqual({
           binaryPath: customPath,
           binaryVersion: "1.2.3",
           binarySource: "custom",
         });
+      });
+      it.each(["direct", "symlink", "symlink-directory"])(
+        "https://github.com/Brevilabs/obsidian-copilot-private/issues/379 preserves a selected %s path into the managed installation",
+        async (kind) => {
+          fs.mkdirSync(manager.getDataDir(), { recursive: true });
+          const managedPath = path.join(manager.getDataDir(), "binary");
+          fs.writeFileSync(managedPath, "binary", { mode: 0o755 });
+          let selected = managedPath;
+          if (kind === "symlink") {
+            selected = path.join(tempDir, "alias");
+            fs.symlinkSync(managedPath, selected);
+          }
+          if (kind === "symlink-directory") {
+            const alias = path.join(tempDir, "alias");
+            fs.symlinkSync(manager.getDataDir(), alias, "dir");
+            selected = path.join(alias, "binary");
+          }
+          await manager.setCustomBinaryPath(selected);
+          await manager.uninstall();
+          expect(fs.existsSync(selected)).toBe(true);
+          expect(manager.settings.binaryPath).toBe(selected);
+        }
+      );
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 preserves a custom symlink stored inside the managed directory", async () => {
+        fs.mkdirSync(manager.getDataDir(), { recursive: true });
+        const linked = path.join(manager.getDataDir(), "alias");
+        fs.symlinkSync(customPath, linked);
+        await manager.setCustomBinaryPath(linked);
+        expect(fs.existsSync(linked)).toBe(true);
+        expect(fs.existsSync(customPath)).toBe(true);
+      });
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 removes downloads when the custom directory only shares their name prefix", async () => {
+        fs.mkdirSync(manager.getDataDir(), { recursive: true });
+        const external = `${manager.getDataDir()}-custom`;
+        fs.mkdirSync(external);
+        const selected = path.join(external, "binary");
+        fs.writeFileSync(selected, "binary", { mode: 0o755 });
+        await manager.setCustomBinaryPath(selected);
+        expect(fs.existsSync(manager.getDataDir())).toBe(false);
+        expect(fs.existsSync(selected)).toBe(true);
+      });
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 preserves downloads when filesystem permissions prevent resolving the selected executable", async () => {
+        fs.mkdirSync(manager.getDataDir(), { recursive: true });
+        const resolve = jest
+          .spyOn(fs.promises, "realpath")
+          .mockRejectedValueOnce(Object.assign(new Error("permission denied"), { code: "EACCES" }));
+        try {
+          await expect(manager.setCustomBinaryPath(customPath)).rejects.toThrow(
+            "permission denied"
+          );
+          expect(fs.existsSync(manager.getDataDir())).toBe(true);
+          expect(manager.settings.binaryPath).toBe(customPath);
+        } finally {
+          resolve.mockRestore();
+        }
+      });
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 keeps the selected executable and reports failed download cleanup", async () => {
+        fs.mkdirSync(manager.getDataDir(), { recursive: true });
+        const remove = jest
+          .spyOn(fs.promises, "rm")
+          .mockRejectedValueOnce(new Error("permission denied"));
+        try {
+          await expect(manager.setCustomBinaryPath(customPath)).rejects.toThrow(
+            "Your own binary is now in use, but Copilot could not remove its managed downloads: permission denied"
+          );
+          expect(manager.settings.binaryPath).toBe(customPath);
+          expect(manager.settings.binarySource).toBe("custom");
+          expect(fs.existsSync(customPath)).toBe(true);
+          expect(fs.existsSync(manager.getDataDir())).toBe(true);
+          expect(manager.getRuntimeState()).toMatchObject({
+            kind: "error",
+            operation: "configure",
+          });
+        } finally {
+          remove.mockRestore();
+        }
       });
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/368 clears a selection without deleting its files", async () => {
         await manager.setCustomBinaryPath(customPath);
@@ -234,13 +325,20 @@ describe("ManagedBinaryManager", () => {
           expect(manager.validate).not.toHaveBeenCalled();
         }
       );
-      it("keeps the configured binary when backend version validation fails", async () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/368 keeps the configured binary and identifies a path-validation failure", async () => {
         manager.settings = { binaryPath: "/previous" };
+        fs.mkdirSync(manager.getDataDir(), { recursive: true });
         manager.validate.mockRejectedValueOnce(new Error("unsupported version"));
         await expect(manager.setCustomBinaryPath(customPath)).rejects.toThrow(
           "unsupported version"
         );
         expect(manager.settings.binaryPath).toBe("/previous");
+        expect(fs.existsSync(manager.getDataDir())).toBe(true);
+        expect(manager.getRuntimeState()).toEqual({
+          kind: "error",
+          message: "unsupported version",
+          operation: "configure",
+        });
       });
     });
   });

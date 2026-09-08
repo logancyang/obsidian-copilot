@@ -98,6 +98,9 @@ export abstract class ManagedBinaryManager<
         this.publishState({ kind: "idle" });
       } else {
         this.publishState({
+          // A failed path selection must not offer an install Retry in other windows.
+          // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
+          operation: running.kind === "installing" ? "install" : "configure",
           kind: "error",
           message: error instanceof Error ? error.message : String(error),
         });
@@ -144,10 +147,7 @@ export abstract class ManagedBinaryManager<
   /** Removes managed downloads and preserves a user-selected custom installation. */
   async uninstall(): Promise<void> {
     return this.runExclusive({ kind: "busy" }, async () => {
-      const fs = requireNodeModule<typeof import("node:fs")>("fs");
-      await Promise.all(
-        this.reclaimableDirs().map((dir) => fs.promises.rm(dir, { recursive: true, force: true }))
-      );
+      await this.removeManagedDownloads();
       // Custom executables belong to the user; removing downloads must not disconnect them.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
       if (this.readBinarySettings().binarySource !== "custom") this.clearBinarySettings();
@@ -155,7 +155,7 @@ export abstract class ManagedBinaryManager<
   }
 
   /**
-   * Validates and selects a custom executable without removing managed downloads.
+   * Validates and selects a custom executable, then removes unused managed downloads.
    * @param binaryPath - Executable to select, or null to clear the configured selection.
    */
   async setCustomBinaryPath(binaryPath: string | null): Promise<void> {
@@ -179,6 +179,48 @@ export abstract class ManagedBinaryManager<
       binaryVersion: installed.version,
       binarySource: "custom",
     });
+    try {
+      await this.removeManagedDownloads();
+    } catch (error) {
+      // Keep the validated selection usable even when reclaiming disk space fails.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
+      throw new Error(
+        `Your own binary is now in use, but Copilot could not remove its managed downloads: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  }
+
+  private async removeManagedDownloads(): Promise<void> {
+    const fs = requireNodeModule<typeof import("node:fs")>("fs");
+    const path = requireNodeModule<typeof import("node:path")>("path");
+    const settings = this.readBinarySettings();
+    const customPath = settings.binarySource === "custom" ? settings.binaryPath : undefined;
+    for (const dir of this.reclaimableDirs()) {
+      if (customPath) {
+        // A managed executable selected as custom (including through a symlink) must
+        // remain usable; its containing download cannot be reclaimed.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
+        const [realDir, realCustomPath] = await Promise.all([
+          realPathOrMissing(dir),
+          realPathOrMissing(customPath),
+        ]);
+        const relativePaths = [
+          path.relative(dir, customPath),
+          path.relative(realDir, realCustomPath),
+        ];
+        if (
+          relativePaths.some(
+            (relative) =>
+              relative === "" ||
+              (!path.isAbsolute(relative) &&
+                relative !== ".." &&
+                !relative.startsWith(`..${path.sep}`))
+          )
+        )
+          continue;
+      }
+      await fs.promises.rm(dir, { recursive: true, force: true });
+    }
   }
 
   protected clearBinarySettings(): void {
@@ -211,4 +253,16 @@ async function dirSize(dir: string): Promise<number> {
     }
   }
   return total;
+}
+
+async function realPathOrMissing(filePath: string): Promise<string> {
+  const fs = requireNodeModule<typeof import("node:fs")>("fs");
+  try {
+    return await fs.promises.realpath(filePath);
+  } catch (error) {
+    // Missing downloads and stale custom paths are normal during uninstall.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return filePath;
+    throw error;
+  }
 }

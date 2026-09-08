@@ -9,17 +9,19 @@
  * listener, and persisting credentials to the OS keychain. We never read or
  * write the token ourselves; we only invoke the CLI and re-read its status.
  */
-import { logInfo, logWarn } from "@/logger";
+import { logWarn } from "@/logger";
 import { err2String } from "@/utils";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 
-type Readable = import("node:stream").Readable;
+import {
+  signInWithCli,
+  signOutWithCli,
+  type SignInHandlers,
+  type CliSignInController,
+} from "@/agentMode/backends/shared/cliSignIn";
 
 /** `claude auth status` is a quick local read; cap it so a wedged CLI can't hang the UI. */
 const STATUS_TIMEOUT_MS = 10_000;
-
-/** First http(s) URL on a line — the OAuth page the CLI prints as a browser fallback. */
-const URL_PATTERN = /\bhttps?:\/\/[^\s'"]+/;
 
 export interface ClaudeAuthStatus {
   loggedIn: boolean;
@@ -42,13 +44,20 @@ interface ClaudeAuthStatusJson {
  * non-`loggedIn` payload resolves to signed-out.
  */
 export function parseClaudeAuthStatusOutput(stdout: string): ClaudeAuthStatus {
-  let parsed: ClaudeAuthStatusJson;
   try {
-    parsed = JSON.parse(stdout) as ClaudeAuthStatusJson;
+    return parseVerifiedClaudeAuthStatus(stdout);
   } catch {
     return { loggedIn: false };
   }
-  if (parsed.loggedIn !== true) return { loggedIn: false };
+}
+
+function parseVerifiedClaudeAuthStatus(stdout: string): ClaudeAuthStatus {
+  const parsed = JSON.parse(stdout) as ClaudeAuthStatusJson | null;
+  // Malformed output cannot establish that credentials were removed during logout.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
+  if (typeof parsed?.loggedIn !== "boolean")
+    throw new Error("Unable to verify Claude authentication status.");
+  if (!parsed.loggedIn) return { loggedIn: false };
   return { loggedIn: true, label: buildAccountLabel(parsed) };
 }
 
@@ -69,111 +78,77 @@ export async function getClaudeAuthStatus(
   claudePath: string,
   env: NodeJS.ProcessEnv
 ): Promise<ClaudeAuthStatus> {
-  const { execFile } = requireNodeModule<typeof import("node:child_process")>("child_process");
-  const { promisify } = requireNodeModule<typeof import("node:util")>("util");
-  const execFileAsync = promisify(execFile);
   try {
-    const { stdout } = await execFileAsync(claudePath, ["auth", "status", "--json"], {
-      timeout: STATUS_TIMEOUT_MS,
-      env,
-    });
-    return parseClaudeAuthStatusOutput(stdout);
+    return await readClaudeAuthStatus(claudePath, env);
   } catch (e) {
-    const stdout = (e as { stdout?: unknown }).stdout;
-    if (typeof stdout === "string" && stdout.trim().length > 0) {
-      return parseClaudeAuthStatusOutput(stdout);
-    }
     logWarn("[AgentMode] claude auth status failed", err2String(e));
     return { loggedIn: false };
   }
 }
 
-export interface SignInHandlers {
-  /** Called once with the OAuth URL the CLI prints (browser-open fallback). */
-  onUrl?: (url: string) => void;
-  /** Called per stdout/stderr line for progress display. */
-  onLine?: (line: string) => void;
+async function readClaudeAuthStatus(
+  claudePath: string,
+  env: NodeJS.ProcessEnv
+): Promise<ClaudeAuthStatus> {
+  const { execFile } = requireNodeModule<typeof import("node:child_process")>("child_process");
+  const { promisify } = requireNodeModule<typeof import("node:util")>("util");
+  const execFileAsync = promisify(execFile);
+  let stdout: string;
+  try {
+    ({ stdout } = await execFileAsync(claudePath, ["auth", "status", "--json"], {
+      timeout: STATUS_TIMEOUT_MS,
+      env,
+    }));
+  } catch (e) {
+    const error = e as { stdout?: unknown; killed?: boolean };
+    // Some CLI versions report a signed-out status with a nonzero exit; a timed-out
+    // process or missing JSON still cannot verify that logout removed credentials.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
+    if (error.killed || typeof error.stdout !== "string") throw e;
+    stdout = error.stdout;
+  }
+  return parseVerifiedClaudeAuthStatus(stdout);
 }
 
-export interface ClaudeSignInController {
-  /** Resolves with the post-login status once the CLI exits. Never rejects. */
-  done: Promise<ClaudeAuthStatus>;
-  /** Terminate the login subprocess (SIGTERM) — for teardown. */
-  cancel: () => void;
-}
+export type {
+  SignInHandlers,
+  CliSignInController as ClaudeSignInController,
+} from "@/agentMode/backends/shared/cliSignIn";
 
-/**
- * Run `claude auth login`. The CLI opens the system browser itself and runs a
- * loopback callback listener; we stream its output (so callers can show the
- * printed URL as a clickable fallback) and, on exit, re-read `auth status` as
- * the source of truth. stdin is closed so a CLI build that would otherwise wait
- * for a pasted code fails fast instead of hanging.
+/** Runs Claude's browser sign-in and reads its authoritative status afterward.
+ * @param claudePath - Resolved CLI used by Claude sessions.
+ * @param env - Session environment, including profile overrides.
+ * @param handlers - Browser fallback and cancellation callbacks.
  */
 export function signInToClaude(
   claudePath: string,
   env: NodeJS.ProcessEnv,
   handlers: SignInHandlers = {}
-): ClaudeSignInController {
-  const { spawn } = requireNodeModule<typeof import("node:child_process")>("child_process");
-  logInfo("[AgentMode] spawning claude auth login");
-  const child = spawn(claudePath, ["auth", "login", "--claudeai"], {
+): CliSignInController {
+  return signInWithCli(
+    claudePath,
+    ["auth", "login", "--claudeai"],
     env,
-    stdio: ["ignore", "pipe", "pipe"],
-    windowsHide: true,
-  });
-
-  let urlSeen = false;
-  const handleLine = (line: string): void => {
-    handlers.onLine?.(line);
-    if (urlSeen) return;
-    const match = URL_PATTERN.exec(line);
-    if (match) {
-      urlSeen = true;
-      handlers.onUrl?.(match[0]);
-    }
-  };
-  attachLineReader(child.stdout, handleLine);
-  attachLineReader(child.stderr, handleLine);
-
-  const done = new Promise<ClaudeAuthStatus>((resolve) => {
-    child.on("error", (err) => {
-      logWarn("[AgentMode] claude auth login spawn error", err2String(err));
-      resolve({ loggedIn: false });
-    });
-    child.on("close", () => {
-      void getClaudeAuthStatus(claudePath, env).then(resolve, () => resolve({ loggedIn: false }));
-    });
-  });
-
-  return {
-    done,
-    cancel: () => {
-      try {
-        child.kill("SIGTERM");
-      } catch (e) {
-        logWarn("[AgentMode] claude auth login kill failed", err2String(e));
-      }
-    },
-  };
+    () => getClaudeAuthStatus(claudePath, env),
+    handlers
+  );
 }
 
-/** Emit complete (newline-delimited) lines from a piped child stream. */
-function attachLineReader(stream: Readable | null, onLine: (line: string) => void): void {
-  if (!stream) return;
-  stream.setEncoding("utf8");
-  let buffer = "";
-  stream.on("data", (chunk: string) => {
-    buffer += chunk;
-    let idx = buffer.indexOf("\n");
-    while (idx >= 0) {
-      const line = buffer.slice(0, idx).replace(/\r$/, "");
-      buffer = buffer.slice(idx + 1);
-      if (line.length > 0) onLine(line);
-      idx = buffer.indexOf("\n");
-    }
-  });
-  stream.on("end", () => {
-    const rest = buffer.trim();
-    if (rest.length > 0) onLine(rest);
-  });
+/** Signs out the configured Claude profile and reads its resulting status.
+ * @param claudePath - Resolved CLI used by Claude sessions.
+ * @param env - Session environment, including profile overrides.
+ * @param options - Cancellation owned by the initiating surface.
+ */
+export function signOutFromClaude(
+  claudePath: string,
+  env: NodeJS.ProcessEnv,
+  options?: { signal?: AbortSignal }
+): Promise<ClaudeAuthStatus> {
+  return signOutWithCli(
+    claudePath,
+    ["auth", "logout"],
+    env,
+    () => readClaudeAuthStatus(claudePath, env),
+    options
+  );
 }

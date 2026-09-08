@@ -4,11 +4,12 @@ import {
   ConfigSection,
   ConfigWarningStrip,
 } from "@/agentMode/backends/shared/ui/ConfigDialogShell";
-import type { InstallState } from "@/agentMode/session/types";
+import type { BackendAuthStatus, InstallState } from "@/agentMode/session/types";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { SegmentedControl, type SegmentedControlOption } from "@/components/ui/segmented-control";
 import { cn } from "@/lib/utils";
+import { Info } from "lucide-react";
 import React from "react";
 
 /** Which of the two setup paths a binary came from. Mirrors the persisted `binarySource`. */
@@ -21,7 +22,7 @@ export type ManagedBinarySource = "managed" | "custom";
  */
 export type ManagedBinaryRunState =
   | { kind: "idle" }
-  | { kind: "running"; label: string; percent: number }
+  | { kind: "running"; label: string; percent?: number }
   | { kind: "error"; message: string };
 
 /** What the managed download would install here, plus any install in flight. */
@@ -60,6 +61,8 @@ export interface ManagedBinaryConfigActions {
 export interface ManagedBinaryConfigProps {
   /** Readiness of the configured binary; drives the header badge and the warning strip. */
   state: InstallState;
+  /** Account status for auth-capable agents; null while probing. */
+  authStatus?: BackendAuthStatus | null;
   /**
    * The setup path currently being viewed. Local view state: switching it shows
    * the other path's controls and persists nothing.
@@ -142,7 +145,7 @@ const ManagedBinaryInstall: React.FC<ManagedBinaryInstallProps> = ({
         <dt className="tw-text-muted">Version</dt>
         <dd className="tw-font-mono">v{managed.version} (pinned)</dd>
         <dt className="tw-text-muted">Destination</dt>
-        <dd className="tw-break-all tw-font-mono tw-text-xs">{managed.destination}</dd>
+        <dd className="tw-break-all tw-font-mono">{managed.destination}</dd>
       </dl>
       {/* Failed downloads must leave their explanation beside the retry action.
           https://github.com/Brevilabs/obsidian-copilot-private/issues/368 */}
@@ -151,13 +154,19 @@ const ManagedBinaryInstall: React.FC<ManagedBinaryInstallProps> = ({
           {run.message}
         </pre>
       )}
-      <div className="tw-flex tw-justify-end tw-gap-2">
+      <div className="tw-flex tw-flex-wrap tw-justify-end tw-gap-2">
         <Button
           variant={installed ? "secondary" : "default"}
           size="default"
           onClick={actions.install}
         >
-          {installed ? "Reinstall" : "Download & install"}
+          {/* Retained downloads are not a first install; switching still runs installation.
+              https://github.com/Brevilabs/obsidian-copilot-private/issues/379 */}
+          {installed
+            ? "Reinstall"
+            : managed.hasDownloads
+              ? "Reinstall & use managed"
+              : "Download & install"}
         </Button>
         {/* Switching to a custom binary must not hide removal of retained downloads.
             https://github.com/Brevilabs/obsidian-copilot-private/issues/379 */}
@@ -177,6 +186,7 @@ const ManagedBinaryInstall: React.FC<ManagedBinaryInstallProps> = ({
  */
 export const ManagedBinaryConfigView: React.FC<ManagedBinaryConfigViewProps> = ({
   state,
+  authStatus,
   source,
   onSourceChange,
   activeSource,
@@ -198,6 +208,7 @@ export const ManagedBinaryConfigView: React.FC<ManagedBinaryConfigViewProps> = (
   <ConfigDialogShell
     title={title}
     state={state}
+    authStatus={authStatus}
     warning={
       <ConfigWarningStrip
         state={state}
@@ -237,16 +248,31 @@ export const ManagedBinaryConfigView: React.FC<ManagedBinaryConfigViewProps> = (
         // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
         disabled={managed.run.kind === "running"}
       />
-      {/* Switching setup paths must not change ownership until an action succeeds.
+      {/* Browsing another setup option must identify the binary still in use until a switch succeeds.
           https://github.com/Brevilabs/obsidian-copilot-private/issues/368 */}
+      {activeSource !== null && activeSource !== source ? (
+        <div
+          role="status"
+          className="tw-flex tw-items-start tw-gap-2 tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-secondary tw-p-3 tw-text-sm"
+        >
+          <Info aria-hidden className="tw-mt-0.5 tw-size-4 tw-shrink-0 tw-text-accent" />
+          <p className="tw-my-0 tw-text-normal">
+            {/* Custom selection leaves managed downloads on disk until explicitly removed.
+                https://github.com/Brevilabs/obsidian-copilot-private/issues/379 */}
+            {activeSource === "custom"
+              ? managed.hasDownloads
+                ? "Your own binary is currently in use. Copilot's managed downloads are still on this computer. Reinstall to switch to Managed by Copilot, or uninstall to free up space."
+                : "Your own binary is currently in use. Download and install the managed copy to switch to Managed by Copilot."
+              : "The Copilot-managed binary is currently in use. Apply your own binary path below to switch to it."}
+          </p>
+        </div>
+      ) : (
+        <p className="tw-my-0 tw-text-sm tw-text-muted">
+          {source === "managed" ? managedDescription : customDescription}
+        </p>
+      )}
       {source === "managed" ? (
         <>
-          <p className="tw-my-0 tw-text-sm tw-text-muted">{managedDescription}</p>
-          {activeSource === "custom" && (
-            <p className="tw-my-0 tw-text-sm tw-text-muted">
-              Your own binary is in use right now — download the managed copy to switch to it.
-            </p>
-          )}
           <ManagedBinaryInstall
             managed={managed}
             installed={activeSource === "managed"}
@@ -255,12 +281,6 @@ export const ManagedBinaryConfigView: React.FC<ManagedBinaryConfigViewProps> = (
         </>
       ) : (
         <>
-          <p className="tw-my-0 tw-text-sm tw-text-muted">{customDescription}</p>
-          {activeSource === "managed" && (
-            <p className="tw-my-0 tw-text-sm tw-text-muted">
-              The managed binary is in use right now — apply a path here to switch to it.
-            </p>
-          )}
           <BinaryPathSetting
             binaryName={binaryName}
             placeholder={customPathPlaceholder}

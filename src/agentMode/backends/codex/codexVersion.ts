@@ -16,6 +16,11 @@ export interface CodexAcpInvocation {
   env: NodeJS.ProcessEnv;
 }
 
+export interface CodexAcpPackage {
+  entryPath: string;
+  version: string;
+}
+
 export interface CodexAcpPackageFs {
   realpathSync(path: string): string;
   readFileSync(path: string, encoding: "utf8"): string;
@@ -37,19 +42,19 @@ function unsupportedAdapter(message?: string): Error {
 }
 
 /**
- * Resolves and validates the configured adapter's npm package entry point.
+ * Resolves a supported native bundle or a supported npm package entry point.
  * The older Zed adapter shares the `codex-acp` binary name but advertises
  * incompatible mode ids, so package identity is part of the support contract.
  * https://github.com/logancyang/obsidian-copilot/issues/2916
- * @param adapterPath - Configured npm launcher or package entry point.
+ * @param adapterPath - Configured native executable, npm launcher, or package entry point.
  * @param platform - Platform whose path rules should resolve the package layout.
  * @param packageFs - Filesystem operations used to inspect package metadata.
  */
-export function resolveSupportedCodexAcpEntry(
+export function resolveSupportedCodexAcpPackage(
   adapterPath: string,
   platform: NodeJS.Platform = process.platform,
   packageFs: CodexAcpPackageFs = defaultPackageFs()
-): string {
+): CodexAcpPackage {
   let entryPath: string;
   try {
     entryPath = packageFs.realpathSync(adapterPath);
@@ -59,6 +64,49 @@ export function resolveSupportedCodexAcpEntry(
 
   const path = requireNodeModule<typeof import("node:path")>("path");
   const pathImpl = platform === "win32" ? path.win32 : path.posix;
+  // Retain native bundle revisions so older managed installs can offer Update.
+  // User-owned npm selections retain their package contract.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
+  if (pathImpl.basename(entryPath) === (platform === "win32" ? "codex-acp.exe" : "codex-acp")) {
+    try {
+      const provenance: { acpVersion?: string; packagingRevision?: number; target?: string } =
+        JSON.parse(
+          packageFs.readFileSync(
+            pathImpl.join(pathImpl.dirname(entryPath), "provenance.json"),
+            "utf8"
+          )
+        );
+      const parsedVersion =
+        typeof provenance.acpVersion === "string"
+          ? SEMVER_PATTERN.exec(provenance.acpVersion)
+          : null;
+      const versionOrder = parsedVersion
+        ? compareSemver(parsedVersion[0], CODEX_ACP_MIN_VERSION)
+        : -1;
+      // The minimum stable release guarantees bundled CLI authentication; its prereleases do not.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
+      if (
+        parsedVersion &&
+        (versionOrder > 0 || (versionOrder === 0 && parsedVersion[4] === undefined)) &&
+        (provenance.packagingRevision === undefined ||
+          (Number.isSafeInteger(provenance.packagingRevision) &&
+            provenance.packagingRevision > 0)) &&
+        provenance.target === `${platform}-${process.arch}`
+      ) {
+        // Published bundles use ACP versions; retain revision identities for older installations.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
+        return {
+          entryPath,
+          version:
+            provenance.packagingRevision === undefined
+              ? provenance.acpVersion!
+              : `${provenance.acpVersion}-r${provenance.packagingRevision}`,
+        };
+      }
+    } catch {
+      throw unsupportedAdapter();
+    }
+  }
   const packageRoot = pathImpl.dirname(pathImpl.dirname(entryPath));
   const relativeEntry = pathImpl.relative(packageRoot, entryPath).replaceAll("\\", "/");
   if (relativeEntry !== CURRENT_PACKAGE_ENTRY) throw unsupportedAdapter();
@@ -99,7 +147,16 @@ export function resolveSupportedCodexAcpEntry(
       `${CURRENT_PACKAGE_NAME} ${version} is not supported. Install ${CODEX_ACP_MIN_VERSION} or newer, then run Auto-detect again.`
     );
   }
-  return entryPath;
+  return { entryPath, version };
+}
+
+/** Resolve only the package entry for callers that do not need version metadata. */
+export function resolveSupportedCodexAcpEntry(
+  adapterPath: string,
+  platform: NodeJS.Platform = process.platform,
+  packageFs: CodexAcpPackageFs = defaultPackageFs()
+): string {
+  return resolveSupportedCodexAcpPackage(adapterPath, platform, packageFs).entryPath;
 }
 
 export function isSupportedCodexAcpPath(adapterPath: string | undefined): boolean {
@@ -113,9 +170,9 @@ export function isSupportedCodexAcpPath(adapterPath: string | undefined): boolea
 }
 
 /**
- * Launches the supported npm entry point directly on Unix and through the
+ * Launches native bundles directly and supported npm entries through the
  * installed Node runtime on Windows, avoiding unspawnable npm command shims.
- * @param entryPath - Validated JavaScript entry point for the supported package.
+ * @param entryPath - Validated native executable or npm JavaScript entry point.
  * @param args - Arguments to pass to the adapter.
  * @param env - Environment inherited by the adapter process.
  * @param platform - Platform whose launcher rules should apply.
@@ -128,7 +185,7 @@ export function buildCodexAcpInvocation(
   platform: NodeJS.Platform = process.platform,
   nodePath?: string
 ): CodexAcpInvocation {
-  if (platform === "win32") {
+  if (platform === "win32" && entryPath.endsWith(".js")) {
     // Windows cannot spawn npm command shims on the ACP no-shell process path,
     // so the package entry must run through the Node installation that owns it.
     // https://github.com/logancyang/obsidian-copilot/issues/2916

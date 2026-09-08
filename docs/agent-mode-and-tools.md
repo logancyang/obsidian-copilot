@@ -36,22 +36,42 @@ The Claude backend runs through Claude Code on your computer:
 
 1. Open **Basic → Agents → Claude → Configure**.
 2. Select **Auto-detect**, or enter the absolute path to the `claude` executable.
-3. Select **Sign in** if Claude Code is not already authenticated.
+3. Select **Sign in** if Claude Code is not already authenticated, then finish in your browser. If the page does not open, select **Open sign-in page**. You can cancel and try again.
 4. Enable the models you want and choose a default.
+
+Claude Code stores the credentials on your computer. Copilot checks its sign-in status when the login finishes. To run the login command yourself, use **Sign in using a terminal instead**.
 
 Claude models and billing come from your Claude Code account. Models added under **BYOK** do not join the Claude model list.
 
 ### Codex
 
-The Codex backend needs `@agentclientprotocol/codex-acp` 0.0.45 or newer. The package includes a compatible Codex CLI:
+The Codex backend uses `@agentclientprotocol/codex-acp`, which includes a compatible Codex CLI:
+
+Managed Codex downloads are pinned to `codex-acp` **1.10.0** in this Copilot release. Copilot uses the system `tar -xf` command to unpack the runtime on all supported desktop platforms:
+
+| Platform | Download format | Extraction                                                         |
+| -------- | --------------- | ------------------------------------------------------------------ |
+| Linux    | `.tar.gz`       | System `tar`, compatible with GNU tar.                             |
+| macOS    | `.zip`          | Built-in `tar`, which uses bsdtar and supports ZIP extraction.     |
+| Windows  | `.zip`          | Built-in `tar.exe`, which uses bsdtar and supports ZIP extraction. |
+
+The archive format and extraction command are separate: bsdtar can unpack ZIP files, while GNU tar does not support ZIP. See [bsdtar's supported formats](https://github.com/libarchive/libarchive/blob/master/tar/bsdtar.1) and [Windows tar documentation](https://learn.microsoft.com/en-us/windows/tar/). Windows includes `tar.exe` starting with Windows 10 version 1803. If installation reports that `tar` is missing, install it and retry; on macOS or Windows, use bsdtar so ZIP extraction works.
+
+For an existing or manually installed `@agentclientprotocol/codex-acp` adapter, **0.0.45 is the minimum supported version**, not the managed download version. Both numbers refer to the ACP adapter version; the bundled Codex CLI has its own version.
 
 1. Open **Basic → Agents → Codex → Configure**.
-2. Run the adapter installation command shown in the dialog. It removes the conflicting Zed npm package before installing the supported adapter.
-3. Run `codex-acp cli login`.
-4. Select **Auto-detect**, or enter the absolute path to the `codex-acp` launcher on macOS/Linux or its `dist\index.js` entry point on Windows, and select **Apply**.
+2. Choose **Download & install** under **Managed by Copilot**. Copilot downloads Codex and its runtime, verifies the download, and keeps your current installation until the replacement is ready. You do not need Node.js or npm.
+3. Click **Sign in**, finish authentication in your browser, and return to Obsidian. If the browser does not open, click **Open sign-in page**. You can cancel or retry sign-in. Existing credentials are reused when you use the same Codex profile.
+4. If you prefer your own adapter, use **My own binary** to Auto-detect it or enter its absolute path. You remain responsible for upgrades to that binary.
 5. Enable the models you want and choose a default.
 
-The older `@zed-industries/codex-acp` package is not supported. Copilot uses the login stored by the bundled Codex CLI. Models added under **BYOK** do not join the Codex model list.
+The **Authentication** section shows your signed-in ChatGPT email and plan when Codex provides them. Select **Sign out** beside the account to switch accounts. API-key authentication and accounts without an email show the signed-in badge without an email. An installed agent shows **Sign in required** until it is authenticated.
+
+You can also choose **Sign in** on the Agent Chat status card. For terminal login, run your configured adapter with `cli login` using the same `CODEX_HOME` as Copilot.
+
+Switching to your own Codex binary removes unused managed downloads. Your custom binary and account credentials remain on your computer. Cancel is available during downloads; configuration changes finish before another action can start.
+
+When the plugin's managed version changes, Agent Chat and Settings show the same **Upgrade** action and shared progress or **Retry** state. The older `@zed-industries/codex-acp` package is not supported. Copilot uses the login stored by the bundled Codex CLI. Models added under **BYOK** do not join the Codex model list.
 
 For Windows-specific installation help, see [Windows setup for Agent Chat](agent-mode-windows-setup.md).
 
@@ -149,3 +169,7 @@ On Windows, creating the folder links may require **Developer Mode** or administ
 Copilot bundles OpenArtifacts' shared publishing rules with the plugin. Publishing tasks read the local copy and need no web-fetch tool or separate Node.js/npm installation. Network access is needed only for authentication and publication.
 
 For an agent-prepared page, Copilot opens a local preview in your default browser. Review it, then return to the existing Obsidian dialog to approve publishing. If automatic opening fails, retry the preview link or open the displayed preview file in your browser and check **I reviewed the preview** before confirming. Local previews disable scripts, external resources, and navigation. The published HTML is preserved. The published page keeps the Copilot attribution banner. Cancellation or failure preserves the prepared file so the agent can reopen review. Successful publication or an explicit regeneration request removes the unchanged staged artifact.
+
+### Upgrading an agent
+
+When an installed agent needs a supported version, Basic → Agents and Agent Chat offer **Upgrade** if Copilot can upgrade that installation. Both show the same progress, including upgrades started in Configure. If an upgrade fails, use **Retry**. A failed custom-path selection is reported in Configure and does not turn the upgrade action into a path-validation retry.

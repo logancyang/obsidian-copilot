@@ -6,6 +6,7 @@ import {
   buildCodexAcpInvocation,
   CODEX_ACP_MIN_VERSION,
   isSupportedCodexAcpPath,
+  resolveSupportedCodexAcpPackage,
   resolveSupportedCodexAcpEntry,
   type CodexAcpPackageFs,
 } from "./codexVersion";
@@ -42,6 +43,78 @@ function installedAdapterPath(packageMetadata: unknown): string {
 }
 
 describe("codexVersion", () => {
+  describe("resolveSupportedCodexAcpPackage()", () => {
+    it("returns the validated version of a user-owned npm package", () => {
+      const packageFileSystem = packageFs(UNIX_ENTRY, metadata("1.10.0"));
+
+      expect(
+        resolveSupportedCodexAcpPackage("/usr/local/bin/codex-acp", "darwin", packageFileSystem)
+      ).toEqual({ entryPath: UNIX_ENTRY, version: "1.10.0" });
+    });
+    it.each(["darwin", "linux", "win32"] as const)(
+      "https://github.com/Brevilabs/obsidian-copilot-private/issues/379 resolves a pinned native bundle on %s",
+      (platform) => {
+        const entry = platform === "win32" ? "C:\\bundle\\codex-acp.exe" : "/bundle/codex-acp";
+        const nativeFs = packageFs(entry, {
+          acpVersion: "1.10.0",
+          target: `${platform}-${process.arch}`,
+        });
+        expect(resolveSupportedCodexAcpPackage(entry, platform, nativeFs)).toEqual({
+          entryPath: entry,
+          version: "1.10.0",
+        });
+      }
+    );
+    it.each([
+      ["1.9.0", 1],
+      ["0.0.45", 1],
+      ["0.0.45+build.1", 1],
+      ["0.0.46-beta.1", 1],
+      ["1.10.0", 2],
+    ])(
+      "https://github.com/Brevilabs/obsidian-copilot-private/issues/379 retains native bundle identity %s revision %s for managed updates",
+      (acpVersion, packagingRevision) => {
+        const entry = "/bundle/codex-acp";
+        expect(
+          resolveSupportedCodexAcpPackage(
+            entry,
+            "darwin",
+            packageFs(entry, {
+              acpVersion,
+              packagingRevision,
+              target: `darwin-${process.arch}`,
+            })
+          )
+        ).toEqual({ entryPath: entry, version: `${acpVersion}-r${packagingRevision}` });
+      }
+    );
+    it.each([
+      { acpVersion: "garbage" },
+      { acpVersion: "0.0.45-beta.1" },
+      { acpVersion: "0.0.44" },
+      { packagingRevision: 0 },
+      { packagingRevision: 1.5 },
+      { packagingRevision: "1" },
+      { target: "wrong-platform" },
+    ])(
+      "https://github.com/Brevilabs/obsidian-copilot-private/issues/379 rejects malformed or unsupported native provenance %j",
+      (override) => {
+        const entry = "/bundle/codex-acp";
+        expect(() =>
+          resolveSupportedCodexAcpPackage(
+            entry,
+            "darwin",
+            packageFs(entry, {
+              acpVersion: "1.10.0",
+              packagingRevision: 1,
+              target: `darwin-${process.arch}`,
+              ...override,
+            })
+          )
+        ).toThrow("not supported");
+      }
+    );
+  });
   describe("resolveSupportedCodexAcpEntry()", () => {
     it("https://github.com/logancyang/obsidian-copilot/issues/2967 accepts the earliest adapter with bundled CLI authentication", () => {
       const packageFileSystem = packageFs(UNIX_ENTRY, metadata(CODEX_ACP_MIN_VERSION));
@@ -149,6 +222,17 @@ describe("codexVersion", () => {
   });
 
   describe("buildCodexAcpInvocation()", () => {
+    it.each(["darwin", "linux", "win32"] as const)(
+      "https://github.com/Brevilabs/obsidian-copilot-private/issues/379 launches native bundles directly on %s",
+      (platform) => {
+        const entry = platform === "win32" ? "C:\\bundle\\codex-acp.exe" : "/bundle/codex-acp";
+        expect(buildCodexAcpInvocation(entry, ["cli", "login"], {}, platform)).toEqual({
+          command: entry,
+          args: ["cli", "login"],
+          env: {},
+        });
+      }
+    );
     it("runs the validated package entry directly on Unix", () => {
       expect(buildCodexAcpInvocation(UNIX_ENTRY, [], { PATH: "/usr/bin" })).toEqual({
         command: UNIX_ENTRY,

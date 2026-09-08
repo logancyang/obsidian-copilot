@@ -1,3 +1,4 @@
+import { FULL_BLEED_MODAL_CLASS } from "@/components/modals/ReactModal";
 import {
   ManagedBinaryConfigView,
   type ManagedBinarySource,
@@ -62,7 +63,9 @@ const meta = {
     actions: ACTIONS,
     onClose: () => undefined,
   },
-  parameters: { gallery: { host: "modal", layout: "padded" } },
+  parameters: {
+    gallery: { host: "modal", layout: "fullscreen", modalClass: FULL_BLEED_MODAL_CLASS },
+  },
 } satisfies Meta<ManagedBinaryConfigViewProps>;
 export default meta;
 
@@ -112,7 +115,7 @@ export const Incompatible: StoryObj<ManagedBinaryConfigViewProps> = {
       source: "managed",
       currentVersion: "1.0.0",
       minVersion: MANAGED.version,
-      message: "The installed agent is not supported. Update to the version tested with Copilot.",
+      message: "The installed agent is not supported. Upgrade to the version tested with Copilot.",
     },
   },
 };
@@ -144,11 +147,32 @@ export const ConfigurationRunning: StoryObj<ManagedBinaryConfigViewProps> = {
   },
 };
 
+/** A custom binary is active; retained downloads can be reinstalled or removed. */
 export const RetainedManagedDownloads: StoryObj<ManagedBinaryConfigViewProps> = {
   render: InteractiveConfigView,
   args: {
     activeSource: "custom",
     state: { kind: "ready", source: "custom" },
     managed: { ...MANAGED, hasDownloads: true },
+  },
+};
+
+export const CustomActiveViewingManaged: StoryObj<ManagedBinaryConfigViewProps> = {
+  render: InteractiveConfigView,
+  args: { source: "managed", activeSource: "custom", state: { kind: "ready", source: "custom" } },
+};
+
+export const ManagedActiveViewingCustom: StoryObj<ManagedBinaryConfigViewProps> = {
+  render: InteractiveConfigView,
+  args: { source: "custom", activeSource: "managed", state: { kind: "ready", source: "managed" } },
+};
+
+export const LongDestination: StoryObj<ManagedBinaryConfigViewProps> = {
+  render: InteractiveConfigView,
+  args: {
+    managed: {
+      ...MANAGED,
+      destination: "/Users/example/Library/Application Support/obsidian-copilot/agent",
+    },
   },
 };

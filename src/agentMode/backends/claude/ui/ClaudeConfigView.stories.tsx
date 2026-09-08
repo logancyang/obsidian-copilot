@@ -1,3 +1,4 @@
+import { FULL_BLEED_MODAL_CLASS } from "@/components/modals/ReactModal";
 import {
   ClaudeConfigView,
   type ClaudeConfigViewProps,
@@ -25,6 +26,9 @@ const meta = {
     detect: () => Promise.resolve(null),
     searchedDirs: () => [],
     auth: {
+      terminalCommand: "claude auth login --claudeai",
+      onSignOut: () => undefined,
+      signingOut: false,
       status: { signedIn: false },
       onSignIn: () => undefined,
       signingIn: false,
@@ -32,7 +36,9 @@ const meta = {
     },
     onClose: () => undefined,
   },
-  parameters: { gallery: { host: "modal", layout: "padded" } },
+  parameters: {
+    gallery: { host: "modal", layout: "fullscreen", modalClass: FULL_BLEED_MODAL_CLASS },
+  },
 } satisfies Meta<ClaudeConfigViewProps>;
 export default meta;
 
@@ -44,6 +50,9 @@ export const Ready: StoryObj<ClaudeConfigViewProps> = {
     state: { kind: "ready", source: "managed" },
     binaryPath: "/Users/zero/.local/bin/claude",
     auth: {
+      terminalCommand: "claude auth login --claudeai",
+      onSignOut: () => undefined,
+      signingOut: false,
       status: { signedIn: true, label: "zero@example.com" },
       onSignIn: () => undefined,
       signingIn: false,
@@ -68,9 +77,13 @@ export const SigningIn: StoryObj<ClaudeConfigViewProps> = {
     binaryPath: "/Users/zero/.local/bin/claude",
     hasBinaryPathOverride: true,
     auth: {
+      terminalCommand: "claude auth login --claudeai",
+      onSignOut: () => undefined,
+      signingOut: false,
       status: { signedIn: false },
       onSignIn: () => undefined,
       signingIn: true,
+      onCancel: () => undefined,
       url: null,
     },
   },
@@ -83,9 +96,13 @@ export const OAuthFallback: StoryObj<ClaudeConfigViewProps> = {
     binaryPath: "/Users/zero/.local/bin/claude",
     hasBinaryPathOverride: true,
     auth: {
+      terminalCommand: "claude auth login --claudeai",
+      onSignOut: () => undefined,
+      signingOut: false,
       status: { signedIn: false },
       onSignIn: () => undefined,
       signingIn: true,
+      onCancel: () => undefined,
       url: "https://claude.ai/oauth/authorize?code=example",
     },
   },
@@ -98,5 +115,58 @@ export const LongPath: StoryObj<ClaudeConfigViewProps> = {
     binaryPath:
       "/Users/zero/Library/Application Support/fnm/node-versions/v22.11.0/installation/bin/claude",
     hasBinaryPathOverride: true,
+  },
+};
+
+export const SignInRetry: StoryObj<ClaudeConfigViewProps> = {
+  args: {
+    state: { kind: "ready", source: "custom" },
+    binaryPath: "/Users/zero/.local/bin/claude",
+    auth: {
+      terminalCommand: "claude auth login --claudeai",
+      onSignOut: () => undefined,
+      signingOut: false,
+      status: { signedIn: false },
+      onSignIn: () => undefined,
+      signingIn: false,
+      url: null,
+      failed: true,
+    },
+  },
+};
+
+export const CheckingSignIn: StoryObj<ClaudeConfigViewProps> = {
+  args: {
+    state: { kind: "ready", source: "custom" },
+    auth: {
+      terminalCommand: "claude auth login --claudeai",
+      onSignOut: () => undefined,
+      signingOut: false,
+      status: null,
+      onSignIn: () => undefined,
+      signingIn: false,
+      url: null,
+    },
+  },
+};
+
+export const SigningOut: StoryObj<ClaudeConfigViewProps> = {
+  args: {
+    ...Ready.args,
+    auth: {
+      ...meta.args.auth,
+      status: { signedIn: true, label: "zero@example.com" },
+      signingOut: true,
+    },
+  },
+};
+export const SignOutFailed: StoryObj<ClaudeConfigViewProps> = {
+  args: {
+    ...Ready.args,
+    auth: {
+      ...meta.args.auth,
+      status: { signedIn: true, label: "zero@example.com" },
+      failed: true,
+    },
   },
 };

@@ -1,3 +1,5 @@
+import type { BackendAuthStatus } from "@/agentMode/session/types";
+const mockAuthStatuses: Record<string, BackendAuthStatus | null> = {};
 import { OpencodeAbsentInstallActions } from "@/agentMode/backends/opencode/OpencodeInlineInstall";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import React from "react";
@@ -69,6 +71,8 @@ const installStates: Record<string, { kind: string; [key: string]: unknown }> = 
   claude: { kind: "ready", source: "custom" },
   codex: { kind: "ready", source: "custom" },
 };
+const managedInstallStates: Record<string, { kind: string; [key: string]: unknown }> = {};
+const runManagedInstall = jest.fn().mockResolvedValue(undefined);
 
 /** Binary path each backend reports as resolved; absent means "not installed". */
 let resolvedPaths: Record<string, string | null> = {};
@@ -91,6 +95,7 @@ function makeDescriptor(id: string, displayName: string, selfHostable = false) {
     id,
     displayName,
     selfHostable,
+    auth: id === "opencode" ? undefined : {},
     Icon,
     getInstallState: () => installStates[id],
     getResolvedBinaryPath: () => resolvedPaths[id] ?? null,
@@ -99,6 +104,15 @@ function makeDescriptor(id: string, displayName: string, selfHostable = false) {
     // Only a backend the plugin can install itself ships inline actions; the
     // panel's absent-state branch keys off that.
     ...(id === "opencode" ? { AbsentInstallActions: OpencodeAbsentInstallActions } : {}),
+    ...(id === "codex"
+      ? {
+          managedInstall: {
+            getState: () => managedInstallStates.codex ?? { kind: "idle" },
+            subscribe: () => () => {},
+            run: runManagedInstall,
+          },
+        }
+      : {}),
   };
 }
 
@@ -112,6 +126,13 @@ const mockGetCachedModelCatalog = jest.fn();
 const mockPreloadModels = jest.fn();
 
 jest.mock("@/agentMode", () => ({
+  // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the actual hook export
+  useBackendAuthState: (descriptor: { id: string }) => ({
+    status: mockAuthStatuses[descriptor.id],
+  }),
+  AgentBackendHeader: jest.requireActual<
+    typeof import("@/agentMode/backends/shared/ui/AgentBackendHeader")
+  >("@/agentMode/backends/shared/ui/AgentBackendHeader").AgentBackendHeader,
   backendDisplayOrder: () => DESCRIPTORS,
   backendNeedsSelfHostWarning: (
     descriptor: { selfHostable?: boolean },
@@ -129,6 +150,9 @@ jest.mock("@/agentMode", () => ({
     const read = () => descriptor.getInstallState();
     return React.useSyncExternalStore(subscribe, read, read);
   },
+  // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook export
+  useManagedInstallActionState: (descriptor: { id: string }) =>
+    managedInstallStates[descriptor.id] ?? { kind: "idle" },
   AgentDefaultModelSetting: ({ descriptor }: { descriptor: { id: string } }) => (
     <div data-testid={`default-model-${descriptor.id}`}>default model</div>
   ),
@@ -158,6 +182,8 @@ jest.mock("./ConfiguredModelEnableList", () => ({
 describe("AgentSettings", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockAuthStatuses.claude = { signedIn: true };
+    mockAuthStatuses.codex = { signedIn: true };
     install.mockResolvedValue({ version: "1.2.3", path: MANAGED_BINARY_PATH });
     mockSettings = {
       agentMode: {
@@ -173,10 +199,30 @@ describe("AgentSettings", () => {
     installStates.opencode = { kind: "ready", source: "managed" };
     installStates.claude = { kind: "ready", source: "custom" };
     installStates.codex = { kind: "ready", source: "custom" };
+    delete managedInstallStates.codex;
+    runManagedInstall.mockReset().mockResolvedValue(undefined);
     mockGetCachedModelCatalog.mockReset().mockReturnValue({ availableModels: [] });
     mockPreloadModels.mockReset().mockResolvedValue(undefined);
     resolvedPaths = {};
   });
+
+  it.each(["claude", "codex"])(
+    "https://github.com/Brevilabs/obsidian-copilot-private/issues/379 reflects %s account readiness in the settings header",
+    (id) => {
+      mockSettings.agentMode.activeBackend = id;
+      mockAuthStatuses[id] = { signedIn: false };
+      const view = render(<AgentSettings />);
+      fireEvent.click(screen.getByRole("tab", { name: id === "claude" ? "Claude" : "Codex" }));
+      expect(screen.getByText("Sign in required")).toBeTruthy();
+      expect(screen.queryByText("Ready")).toBeNull();
+      mockAuthStatuses[id] = null;
+      view.rerender(<AgentSettings />);
+      expect(screen.getByText("Checking sign-in…")).toBeTruthy();
+      mockAuthStatuses[id] = { signedIn: true };
+      view.rerender(<AgentSettings />);
+      expect(screen.getByText("Ready")).toBeTruthy();
+    }
+  );
 
   it("skips model preload when the shared catalog is already available", async () => {
     render(<AgentSettings />);
@@ -350,5 +396,30 @@ describe("AgentSettings", () => {
     expect(screen.getByText(MANAGED_BINARY_PATH)).not.toBeNull();
     expect(screen.getByRole("button", { name: "Configure" })).not.toBeNull();
     expect(screen.queryByRole("button", { name: "Download opencode" })).toBeNull();
+  });
+
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/368 shares managed update progress and Retry in settings", () => {
+    installStates.codex = {
+      kind: "incompatible",
+      source: "managed",
+      currentVersion: "1.9.0",
+      minVersion: "1.10.0",
+      message: "Codex adapter 1.9.0 does not match this Copilot release (1.10.0).",
+    };
+    const view = render(<AgentSettings />);
+    fireEvent.click(screen.getByRole("tab", { name: "Codex" }));
+    fireEvent.click(screen.getByRole("button", { name: "Upgrade" }));
+    expect(runManagedInstall).toHaveBeenCalledTimes(1);
+
+    managedInstallStates.codex = { kind: "running", label: "Installing… 30%" };
+    view.rerender(<AgentSettings />);
+    expect(screen.getByText("Installing… 30%")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Upgrading…" }).hasAttribute("disabled")).toBe(true);
+
+    managedInstallStates.codex = { kind: "error", message: "npm unavailable" };
+    view.rerender(<AgentSettings />);
+    expect(screen.getByText("npm unavailable")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(runManagedInstall).toHaveBeenCalledTimes(2);
   });
 });

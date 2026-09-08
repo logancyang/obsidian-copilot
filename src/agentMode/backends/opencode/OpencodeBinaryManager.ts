@@ -1,3 +1,4 @@
+import { extractArchive } from "@/agentMode/backends/shared/extractArchive";
 import {
   ManagedBinaryManager,
   type BinarySettings,
@@ -35,7 +36,7 @@ function nodePath(): typeof import("node:path") {
 async function execFileAsync(
   file: string,
   args: string[],
-  options: Pick<import("node:child_process").ExecFileOptions, "timeout" | "windowsHide">
+  options: Pick<import("node:child_process").ExecFileOptions, "timeout" | "windowsHide" | "signal">
 ): Promise<{ stdout: string | Buffer }> {
   const { execFile } = requireNodeModule<typeof import("node:child_process")>("child_process");
   const { promisify } = requireNodeModule<typeof import("node:util")>("util");
@@ -575,7 +576,7 @@ export class OpencodeBinaryManager extends ManagedBinaryManager<ProgressEvent, I
    * are untouched. Throws with a readable message on failure.
    */
   async upgradeCustomBinary(): Promise<{ version: string; path: string }> {
-    return this.runExclusive({ kind: "busy" }, async () => {
+    return this.runExclusive({ kind: "installing", progress: null }, async (signal) => {
       const s = readOpencodeSettings();
       if (s.binarySource !== "custom" || !s.binaryPath) {
         throw new Error("No custom opencode binary is configured to upgrade.");
@@ -583,14 +584,21 @@ export class OpencodeBinaryManager extends ManagedBinaryManager<ProgressEvent, I
       const binaryPath = s.binaryPath;
       try {
         await execFileAsync(binaryPath, ["upgrade"], {
+          // Configure exposes Cancel for this shared operation; stop the process as well.
+          // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
+          signal,
           timeout: UPGRADE_BINARY_TIMEOUT_MS,
           windowsHide: true,
         });
       } catch (e) {
+        this.throwIfAborted(signal);
         const err = e as NodeJS.ErrnoException;
         throw new Error(`\`${binaryPath} upgrade\` failed: ${err.message ?? String(err)}`);
       }
       const { stdout } = await verifyOpencodeBinary(binaryPath);
+      // Cancellation during validation must not publish an updated configuration.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
+      this.throwIfAborted(signal);
       const version = parseVersionFromStdout(stdout);
       if (!version) {
         throw new Error(`${binaryPath} --version didn't report a version after upgrade.`);
@@ -841,46 +849,6 @@ async function downloadToFile(
       resolve();
     });
     res.pipe(out);
-  });
-}
-
-/**
- * Extract `archivePath` into `destDir` by shelling out to the system `tar`
- * (bsdtar on Windows 10 1803+). Distinguishes "tar not found" from
- * non-zero exits so the user gets actionable error text.
- *
- * Path-traversal note: both GNU tar and bsdtar strip leading `/` and refuse
- * to follow `..` outside the extraction root by default, so a malicious
- * archive cannot escape `destDir`. We rely on that default rather than
- * re-implementing extraction in JS.
- */
-async function extractArchive(archivePath: string, destDir: string): Promise<void> {
-  const { spawn } = requireNodeModule<typeof import("node:child_process")>("child_process");
-  // Cross-platform: macOS and Linux ship `tar`; Windows 10 1803+ ships `tar.exe`
-  // built in (`bsdtar`), which handles .zip / .tar.gz / .tar.xz transparently.
-  await new Promise<void>((resolve, reject) => {
-    const proc = spawn("tar", ["-xf", archivePath, "-C", destDir], {
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    let stderr = "";
-    proc.stderr.on("data", (d: Uint8Array) => {
-      stderr += Buffer.from(d).toString();
-    });
-    proc.on("error", (e: NodeJS.ErrnoException) => {
-      if (e.code === "ENOENT") {
-        reject(
-          new Error(
-            "`tar` was not found on PATH. macOS/Linux ship it by default; on Windows you need 10 1803+ (which ships `tar.exe`/bsdtar) or to install bsdtar manually."
-          )
-        );
-      } else {
-        reject(new Error(`Failed to launch tar: ${e instanceof Error ? e.message : String(e)}`));
-      }
-    });
-    proc.on("close", (code) => {
-      if (code === 0) resolve();
-      else reject(new Error(`tar exited with code ${code}: ${stderr.slice(0, 500)}`));
-    });
   });
 }
 
