@@ -33,6 +33,14 @@ export const ConcreteEffort = {
     },
   },
 } satisfies StoryObj<Props>;
+export const HighEffort: StoryObj<Props> = {
+  args: {
+    override: {
+      ...ConcreteEffort.args.override,
+      effort: { ...ConcreteEffort.args.override.effort, value: "high" },
+    },
+  },
+};
 export const NoEffortControl: StoryObj<Props> = {
   args: {
     override: {
