@@ -91,7 +91,7 @@ The Claude settings card also includes:
 
 #### Codex
 
-Codex uses the `codex-acp` adapter and the login held by the Codex CLI. It does not use an OpenAI API key from the BYOK tab.
+Codex uses the `codex-acp` adapter and the login held by the Codex CLI. It does not use an OpenAI API key from the BYOK tab. Managed downloads are pinned to adapter version **1.10.0** in this Copilot release. The **0.0.45** requirement below is the minimum supported version for an existing or manually installed adapter. See [Codex installation details](agent-mode-and-tools.md#codex).
 
 Select **Configure** to open these controls:
 

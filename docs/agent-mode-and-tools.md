@@ -43,9 +43,17 @@ Claude models and billing come from your Claude Code account. Models added under
 
 ### Codex
 
-Managed Codex downloads use the system `tar` command to unpack the runtime, as OpenCode does. If installation reports that `tar` is missing, install it and retry. Windows includes `tar.exe` starting with Windows 10 version 1803.
+Managed Codex downloads are pinned to `codex-acp` **1.10.0** in this Copilot release. Copilot uses the system `tar -xf` command to unpack the runtime on all supported desktop platforms:
 
-The Codex backend needs `@agentclientprotocol/codex-acp` 0.0.45 or newer. The package includes a compatible Codex CLI:
+| Platform | Download format | Extraction                                                         |
+| -------- | --------------- | ------------------------------------------------------------------ |
+| Linux    | `.tar.gz`       | System `tar`, compatible with GNU tar.                             |
+| macOS    | `.zip`          | Built-in `tar`, which uses bsdtar and supports ZIP extraction.     |
+| Windows  | `.zip`          | Built-in `tar.exe`, which uses bsdtar and supports ZIP extraction. |
+
+The archive format and extraction command are separate: bsdtar can unpack ZIP files, while GNU tar does not support ZIP. See [bsdtar's supported formats](https://github.com/libarchive/libarchive/blob/master/tar/bsdtar.1) and [Windows tar documentation](https://learn.microsoft.com/en-us/windows/tar/). Windows includes `tar.exe` starting with Windows 10 version 1803. If installation reports that `tar` is missing, install it and retry; on macOS or Windows, use bsdtar so ZIP extraction works.
+
+For an existing or manually installed `@agentclientprotocol/codex-acp` adapter, **0.0.45 is the minimum supported version**, not the managed download version. Both numbers refer to the ACP adapter version; the bundled Codex CLI has its own version. The manual setup steps are:
 
 1. Open **Basic → Agents → Codex → Configure**.
 2. Run the adapter installation command shown in the dialog. It removes the conflicting Zed npm package before installing the supported adapter.
