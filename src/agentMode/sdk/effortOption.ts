@@ -1,3 +1,4 @@
+import { resolveEffort } from "@/lib/model-effort";
 import type { BackendConfigOption } from "@/agentMode/session/types";
 import {
   query,
@@ -23,7 +24,10 @@ export function synthesizeEffortConfigOption(
 ): BackendConfigOption | null {
   const levels = modelInfo?.supportsEffort ? (modelInfo.supportedEffortLevels ?? []) : [];
   if (levels.length === 0) return null;
-  const value = currentEffort && levels.includes(currentEffort) ? currentEffort : levels[0];
+  const value = resolveEffort(
+    currentEffort,
+    levels.map((value) => ({ value, label: value }))
+  )!;
   return {
     id: "effort",
     type: "select",

@@ -13,9 +13,8 @@ export default meta;
 
 export const Supported: StoryObj<AgentDefaultEffortSettingProps> = {
   args: {
-    value: null,
+    value: "low",
     options: [
-      { value: null, label: "Agent default" },
       { value: "low", label: "Low" },
       { value: "medium", label: "Medium" },
       { value: "high", label: "High" },

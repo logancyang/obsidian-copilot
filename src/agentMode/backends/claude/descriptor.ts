@@ -1,3 +1,4 @@
+import { resolveEffort } from "@/lib/model-effort";
 import { logWarn } from "@/logger";
 import type CopilotPlugin from "@/main";
 import { requireNodeModule } from "@/utils/desktopRuntime";
@@ -310,11 +311,17 @@ export const ClaudeBackendDescriptor: ClaudeDescriptor = {
     if (currentBase !== selection.baseModelId) {
       await session.applyModelWireId(claudeWire.encode(selection));
     }
-    if (selection.effort === null) return;
     const cfgOpt = claudeWire.effortConfigFor?.(selection.baseModelId);
     if (!cfgOpt) return;
+    const options = session
+      .getState()
+      ?.model?.availableModels.find(
+        (model) => model.baseModelId === selection.baseModelId
+      )?.effortOptions;
+    const effort = resolveEffort(selection.effort, options);
+    if (effort === null) return;
     try {
-      await session.setConfigOption(cfgOpt.id, selection.effort);
+      await session.setConfigOption(cfgOpt.id, effort);
     } catch (e) {
       if (!(e instanceof MethodUnsupportedError)) throw e;
     }
@@ -421,18 +428,18 @@ async function replayPersistedEffort(
   session: AgentSession,
   persistedEffort: string | undefined
 ): Promise<void> {
-  if (!persistedEffort) return;
   const tryApply = async (): Promise<boolean> => {
     const state = session.getState();
     const current = state?.model?.current;
     if (!current) return false;
-    if (current.effort === persistedEffort) return true;
     const entry = state?.model?.availableModels.find((e) => e.baseModelId === current.baseModelId);
-    if (!entry?.effortOptions.some((o) => o.value === persistedEffort)) return true;
+    if (!entry) return false;
+    const effort = resolveEffort(persistedEffort ?? current.effort, entry.effortOptions);
+    if (effort === null || current.effort === effort) return true;
     const cfgOpt = ClaudeBackendDescriptor.wire.effortConfigFor?.(current.baseModelId);
     if (!cfgOpt) return true;
     try {
-      await session.setConfigOption(cfgOpt.id, persistedEffort);
+      await session.setConfigOption(cfgOpt.id, effort);
     } catch (e) {
       if (e instanceof MethodUnsupportedError) return true;
       logWarn(`[AgentMode] could not apply default effort ${persistedEffort}`, e);

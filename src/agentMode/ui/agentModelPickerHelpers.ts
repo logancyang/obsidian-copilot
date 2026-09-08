@@ -1,3 +1,4 @@
+import { sortEffortOptions } from "@/lib/model-effort";
 import { Notice } from "obsidian";
 import { logError } from "@/logger";
 import type { ModelCapability } from "@/constants";
@@ -573,8 +574,10 @@ export function resolveEffortOptions(
   const models = manager.getCachedModelCatalog(backendId)?.availableModels ?? null;
   const found = models?.find((m) => m.baseModelId === baseModelId);
   const reported = found?.effortOptions ?? [];
-  if (reported.length > 0) return reported;
-  return manager.getEffortCatalog(backendId)?.[baseModelId] ?? EMPTY_EFFORT_OPTIONS;
+  if (reported.length > 0) return sortEffortOptions(reported);
+  return sortEffortOptions(
+    manager.getEffortCatalog(backendId)?.[baseModelId] ?? EMPTY_EFFORT_OPTIONS
+  );
 }
 
 /**

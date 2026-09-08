@@ -297,7 +297,7 @@ describe("descriptor", () => {
         expect(setConfigOption).not.toHaveBeenCalled();
       });
 
-      it("leaves the model on its native effort when the saved level is no longer offered (https://github.com/logancyang/obsidian-copilot/issues/2917)", async () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/219 applies the lowest effort when the saved level is no longer offered (https://github.com/logancyang/obsidian-copilot/issues/2917)", async () => {
         const { session, applyModelWireId, setConfigOption } = makeSession({
           model: {
             current: { baseModelId: "anthropic/claude-sonnet", effort: null },
@@ -313,7 +313,7 @@ describe("descriptor", () => {
         });
 
         expect(applyModelWireId).toHaveBeenCalledWith("openai/gpt-5");
-        expect(setConfigOption).not.toHaveBeenCalled();
+        expect(setConfigOption).toHaveBeenCalledWith("effort", "low");
       });
     });
 

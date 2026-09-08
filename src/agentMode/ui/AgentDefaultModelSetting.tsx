@@ -1,3 +1,4 @@
+import { resolveEffort } from "@/lib/model-effort";
 import { SettingItem } from "@/components/ui/setting-item";
 import { logError } from "@/logger";
 import { useSettingsValue } from "@/settings/model";
@@ -67,16 +68,7 @@ export const AgentDefaultModelSetting: React.FC<Props> = ({ descriptor, manager 
   const rawEffortOptions = hasExplicitDefault
     ? resolveEffortOptions(manager, descriptor.id, selectedBaseId)
     : EMPTY_EFFORT_OPTIONS;
-  // A stored `effort: null` means "let the agent choose". Some catalogs (e.g.
-  // Claude's low/medium/high) only enumerate concrete values, so without an
-  // explicit unset option the select would render the first concrete effort as
-  // selected while the runtime still treats null as the agent default. Prepend
-  // an "Agent default" option (the null-valued convention) when the catalog
-  // doesn't already carry one.
-  const effortOptions =
-    rawEffortOptions.length > 0 && !rawEffortOptions.some((o) => o.value === null)
-      ? [{ value: null, label: AGENT_DEFAULT_LABEL }, ...rawEffortOptions]
-      : rawEffortOptions;
+  const effortOptions = rawEffortOptions;
   const onModelChange = (baseModelId: string): void => {
     if (baseModelId === AGENT_DEFAULT_VALUE) {
       manager
@@ -84,14 +76,14 @@ export const AgentDefaultModelSetting: React.FC<Props> = ({ descriptor, manager 
         .catch((e) => logError(`[AgentMode] clear default model for ${descriptor.id} failed`, e));
       return;
     }
-    // A model-only change carries no effort choice, so persist the agent
-    // default (null) rather than auto-selecting the new model's first concrete
-    // effort — that would silently run new chats and fan-out at an effort the
-    // user never picked. The user can then pick a concrete effort explicitly.
-    // Persisting null also drops any stale effort from the previous model
-    // (opencode's effort is model-specific).
+    // Keep a valid effort across model changes, otherwise select the lowest offered.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/219
+    const effort = resolveEffort(
+      current?.effort,
+      resolveEffortOptions(manager, descriptor.id, baseModelId)
+    );
     manager
-      .persistDefaultSelection(descriptor.id, { baseModelId, effort: null })
+      .persistDefaultSelection(descriptor.id, { baseModelId, effort })
       .catch((e) => logError(`[AgentMode] persist default model for ${descriptor.id} failed`, e));
   };
 
