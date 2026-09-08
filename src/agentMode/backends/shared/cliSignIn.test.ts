@@ -61,6 +61,29 @@ describe("cliSignIn", () => {
     });
   });
   describe("signInWithCli()", () => {
+    it(`supports account protocol input and settles broken input without leaking a probe: ${ISSUE}`, async () => {
+      const stdin = new PassThrough();
+      const child = Object.assign(new EventEmitter(), {
+        stdin,
+        stdout: new PassThrough(),
+        stderr: new PassThrough(),
+      });
+      mockSpawn.mockReset().mockReturnValue(child);
+      const readStatus = jest.fn();
+      const { done } = signInWithCli("/cli", ["app-server"], {}, readStatus, {
+        onStdin: (input) => input.write("initialize\n"),
+      });
+      expect(stdin.read().toString()).toBe("initialize\n");
+      expect(mockSpawn).toHaveBeenCalledWith(
+        "/cli",
+        ["app-server"],
+        expect.objectContaining({ stdio: ["pipe", "pipe", "pipe"] })
+      );
+      stdin.emit("error", new Error("EPIPE"));
+      await expect(done).resolves.toEqual({ loggedIn: false });
+      expect(readStatus).not.toHaveBeenCalled();
+    });
+
     let child: EventEmitter & {
       stdout: PassThrough;
       stderr: PassThrough;

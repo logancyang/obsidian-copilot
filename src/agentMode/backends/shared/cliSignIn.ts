@@ -8,6 +8,8 @@ export interface CliAuthStatus {
 export interface SignInHandlers {
   onUrl?: (url: string) => void;
   onLine?: (line: string) => void;
+  /** Supplies protocol input for CLI account probes that use stdio. */
+  onStdin?: (stdin: import("node:stream").Writable) => void;
   signal?: AbortSignal;
   /** Select the backend's authorization page when CLI output also contains diagnostic URLs. */
   acceptUrl?: (url: string) => boolean;
@@ -92,7 +94,7 @@ export function signInWithCli(
   try {
     child = spawn(command, args, {
       env,
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: [handlers.onStdin ? "pipe" : "ignore", "pipe", "pipe"],
       windowsHide: true,
       detached: process.platform !== "win32",
     });
@@ -125,6 +127,10 @@ export function signInWithCli(
       if (treeStopped) finish({ loggedIn: false });
     } else if (!settled) void readStatus().then(finish, () => finish({ loggedIn: false }));
   });
+  // A probe may race a failed child startup while writing its initialization request.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
+  child.stdin?.on("error", cancel);
+  if (child.stdin && handlers.onStdin) handlers.onStdin(child.stdin);
   return { done, cancel };
 }
 

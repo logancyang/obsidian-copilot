@@ -39,7 +39,7 @@ The Claude backend runs through Claude Code on your computer:
 3. Select **Sign in** if Claude Code is not already authenticated, then finish in your browser. If the page does not open, select **Open sign-in page**. You can cancel and try again.
 4. Enable the models you want and choose a default.
 
-Claude Code stores the credentials on your computer. Copilot checks its sign-in status when the login finishes. To run the login command yourself, expand **Sign in using a terminal instead**.
+Claude Code stores the credentials on your computer. Copilot checks its sign-in status when the login finishes. To run the login command yourself, use **Sign in using a terminal instead**.
 
 Claude models and billing come from your Claude Code account. Models added under **BYOK** do not join the Claude model list.
 
@@ -65,9 +65,11 @@ For an existing or manually installed `@agentclientprotocol/codex-acp` adapter, 
 4. If you prefer your own adapter, use **My own binary** to Auto-detect it or enter its absolute path. You remain responsible for upgrades to that binary.
 5. Enable the models you want and choose a default.
 
-You can also choose **Sign in to Codex** on the Agent Chat status card. For terminal login, run your configured adapter with `cli login` using the same `CODEX_HOME` as Copilot.
+The **Authentication** section shows your signed-in ChatGPT email and plan when Codex provides them. Select **Sign out** beside the account to switch accounts. API-key authentication and accounts without an email show the signed-in badge without an email. An installed agent shows **Sign in required** until it is authenticated.
 
-Switching to your own Codex binary keeps prior managed downloads. Open **Managed by Copilot → Uninstall** to remove those downloads without changing your custom selection. Cancel is available during downloads; configuration changes finish before another action can start.
+You can also choose **Sign in** on the Agent Chat status card. For terminal login, run your configured adapter with `cli login` using the same `CODEX_HOME` as Copilot.
+
+Switching to your own Codex binary removes unused managed downloads. Your custom binary and account credentials remain on your computer. Cancel is available during downloads; configuration changes finish before another action can start.
 
 When the plugin's managed version changes, Agent Chat and Settings show the same **Upgrade** action and shared progress or **Retry** state. The older `@zed-industries/codex-acp` package is not supported. Copilot uses the login stored by the bundled Codex CLI. Models added under **BYOK** do not join the Codex model list.
 

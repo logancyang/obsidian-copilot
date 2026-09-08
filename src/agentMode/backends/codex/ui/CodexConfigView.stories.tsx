@@ -240,7 +240,7 @@ export const ManagedSignedIn: StoryObj<CodexConfigViewProps> = {
     activeSource: "managed",
     state: { kind: "ready", source: "managed" },
     customPath: "",
-    auth: { ...meta.args.auth, status: { signedIn: true, label: "user@example.com" } },
+    auth: { ...meta.args.auth, status: { signedIn: true, label: "user@example.com (pro)" } },
   },
 };
 
@@ -300,7 +300,7 @@ export const CustomSignedIn: StoryObj<CodexConfigViewProps> = {
     activeSource: "custom",
     state: { kind: "ready", source: "custom" },
     customPath: "/usr/local/bin/codex-acp",
-    auth: { ...meta.args.auth, status: { signedIn: true, label: "user@example.com" } },
+    auth: { ...meta.args.auth, status: { signedIn: true, label: "user@example.com (pro)" } },
   },
 };
 

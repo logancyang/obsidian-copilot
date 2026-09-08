@@ -1,4 +1,4 @@
-import type { BackendAuth } from "@/agentMode/session/types";
+import type { BackendAuth, BackendAuthStatus } from "@/agentMode/session/types";
 import { buildSimpleSpawnDescriptor } from "@/agentMode/backends/shared/simpleBinaryBackend";
 import { sanitizeBuiltinSkillEnvOverrides } from "@/agentMode/backends/shared/builtinSkillEnv";
 import { signInWithCli, signOutWithCli } from "@/agentMode/backends/shared/cliSignIn";
@@ -6,6 +6,12 @@ import { requireNodeModule } from "@/utils/desktopRuntime";
 import { detectBinary } from "@/utils/detectBinary";
 import { buildCodexAcpInvocation, resolveSupportedCodexAcpEntry } from "./codexVersion";
 import type { CopilotSettings } from "@/settings/model";
+
+interface AccountReply {
+  id?: unknown;
+  result?: { account?: { type?: unknown; email?: unknown; planType?: unknown } | null };
+  error?: unknown;
+}
 
 async function invocation(settings: CopilotSettings) {
   const config = settings.agentMode?.backends?.codex;
@@ -29,32 +35,71 @@ async function readCodexAuthStatus(settings: CopilotSettings) {
   if (call.env.CODEX_API_KEY?.trim() || call.env.OPENAI_API_KEY?.trim()) return { signedIn: true };
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), 10_000);
-  let loggedIn: boolean | undefined;
-  let completed = false;
+  let status: BackendAuthStatus | undefined;
+  let input: import("node:stream").Writable;
   try {
-    // Status probes need the same process-tree cleanup as login. Never expose API key suffixes.
+    // account/read exposes identity without opening credential files or returning tokens.
+    // The shared CLI owner closes the whole adapter tree if the probe times out.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
     await signInWithCli(
       call.command,
-      [...call.args, "cli", "login", "status"],
+      [...call.args, "cli", "app-server"],
       call.env,
-      async () => {
-        completed = true;
-        return { loggedIn: loggedIn === true };
-      },
+      async () => ({ loggedIn: status?.signedIn === true }),
       {
         signal: controller.signal,
+        onStdin: (stdin) => {
+          input = stdin;
+          input.write(
+            JSON.stringify({
+              id: 0,
+              method: "initialize",
+              params: { clientInfo: { name: "obsidian_copilot", version: "1.0.0" } },
+            }) + "\n"
+          );
+        },
         onLine: (line) => {
-          if (/^Logged in (?:using|with)\b/.test(line)) loggedIn = true;
-          else if (/^Not logged in\b/.test(line)) loggedIn = false;
+          // App-server also emits diagnostics and notifications; only our replies select an account.
+          // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
+          let reply: AccountReply | null;
+          try {
+            reply = JSON.parse(line);
+          } catch {
+            return;
+          }
+          if (!reply || typeof reply !== "object") return;
+          if (reply.id === 0 && reply.result) {
+            input.write(JSON.stringify({ method: "initialized" }) + "\n");
+            input.write(
+              JSON.stringify({ id: 1, method: "account/read", params: { refreshToken: false } }) +
+                "\n"
+            );
+          } else if (reply.id === 1 && reply.result) {
+            const account = reply.result.account;
+            if (account === null) status = { signedIn: false };
+            else if (account && typeof account.type === "string") {
+              // Only ChatGPT accounts have an email. API-key accounts remain signed in without a label.
+              // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
+              const email =
+                account.type === "chatgpt" && typeof account.email === "string"
+                  ? account.email.trim()
+                  : "";
+              const plan = typeof account.planType === "string" ? account.planType.trim() : "";
+              status = {
+                signedIn: true,
+                ...(email ? { label: plan ? `${email} (${plan})` : email } : {}),
+              };
+            }
+            input.end();
+          } else if ((reply.id === 0 || reply.id === 1) && reply.error) input.end();
         },
       }
     ).done;
-    // A failed or unrecognized probe cannot confirm that logout removed the account.
+    // Probe failures must not masquerade as successful logout.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
-    if (!completed || controller.signal.aborted || loggedIn === undefined)
+    if (!status || controller.signal.aborted)
       throw new Error("Unable to verify Codex authentication status.");
-    return { signedIn: loggedIn };
+    return status;
   } finally {
     window.clearTimeout(timeout);
   }
@@ -102,10 +147,13 @@ export const codexAuth: BackendAuth = {
       call.command,
       [...call.args, "cli", "logout"],
       call.env,
-      async () => ({ loggedIn: (await readCodexAuthStatus(settings)).signedIn }),
+      async () => {
+        const status = await readCodexAuthStatus(settings);
+        return { loggedIn: status.signedIn, label: status.label };
+      },
       options
     );
-    return { signedIn: status.loggedIn };
+    return { signedIn: status.loggedIn, ...(status.label ? { label: status.label } : {}) };
   },
   async signIn(settings, handlers) {
     const call = await invocation(settings);
@@ -113,7 +161,10 @@ export const codexAuth: BackendAuth = {
       call.command,
       [...call.args, "cli", "login"],
       call.env,
-      async () => ({ loggedIn: (await codexAuth.getStatus(settings)).signedIn }),
+      async () => {
+        const status = await codexAuth.getStatus(settings);
+        return { loggedIn: status.signedIn, label: status.label };
+      },
       {
         ...handlers,
         // Codex prints its localhost callback server before the actual OpenAI authorization URL.
@@ -121,6 +172,6 @@ export const codexAuth: BackendAuth = {
         acceptUrl: (url) => url.startsWith("https://auth.openai.com/"),
       }
     ).done;
-    return { signedIn: result.loggedIn };
+    return { signedIn: result.loggedIn, ...(result.label ? { label: result.label } : {}) };
   },
 };
