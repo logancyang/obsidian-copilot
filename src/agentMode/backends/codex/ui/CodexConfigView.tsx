@@ -6,6 +6,7 @@ import {
 } from "@/agentMode/backends/shared/ui/ManagedBinaryConfigView";
 import { ConfigSection } from "@/agentMode/backends/shared/ui/ConfigDialogShell";
 import { SignInAction, type SignInActionProps } from "@/agentMode/backends/shared/ui/SignInAction";
+import { AlertTriangle } from "lucide-react";
 import React from "react";
 
 export type {
@@ -23,7 +24,7 @@ export const CodexConfigView: React.FC<CodexConfigViewProps> = (props) => (
     {...props}
     title="Configure Codex"
     binaryName={CODEX_BINARY_NAME}
-    managedDescription="Download Codex and its runtime. No Node.js or npm installation is needed. Copilot keeps your working installation until the download is verified."
+    managedDescription="Let Copilot download and manage Codex."
     customDescription={
       <>
         Copilot supports <code>@agentclientprotocol/codex-acp</code> {CODEX_ACP_MIN_VERSION} or
@@ -34,18 +35,20 @@ export const CodexConfigView: React.FC<CodexConfigViewProps> = (props) => (
     customPathNotFoundHint={`A supported ${CODEX_BINARY_NAME} adapter was not found. Install your own adapter or choose Managed by Copilot.`}
     upgradeLabel="Upgrade"
   >
-    <ConfigSection title="Sign in">
+    <ConfigSection title="Authentication">
       {/* Sign-in needs a usable adapter; starting earlier would fail to launch it.
           https://github.com/Brevilabs/obsidian-copilot-private/issues/379 */}
       {props.state.kind === "ready" ? (
-        <SignInAction {...props.auth} />
+        <SignInAction {...props.auth} signInLabel="Sign in with your browser" />
       ) : (
-        <p>Install Codex to sign in.</p>
+        <div
+          role="alert"
+          className="tw-flex tw-items-start tw-gap-2 tw-rounded-md tw-border tw-border-solid tw-bg-callout-warning/20 tw-p-3 tw-text-sm tw-border-warning/40"
+        >
+          <AlertTriangle aria-hidden className="tw-mt-0.5 tw-size-4 tw-shrink-0 tw-text-warning" />
+          <p className="tw-my-0">Set up a supported Codex adapter above to enable sign-in.</p>
+        </div>
       )}
-      <p className="tw-my-0 tw-text-sm tw-text-muted">
-        Sign in with your browser. Codex keeps your existing profile and credentials on this
-        computer.
-      </p>
     </ConfigSection>
   </ManagedBinaryConfigView>
 );

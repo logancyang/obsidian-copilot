@@ -67,9 +67,30 @@ describe("CodexConfigView", () => {
         state: { kind: "ready", source: "managed" },
         auth: { status: { signedIn: false }, onSignIn, signingIn: false, url: null },
       });
-      fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+      fireEvent.click(screen.getByRole("button", { name: "Sign in with your browser" }));
       expect(onSignIn).toHaveBeenCalled();
       expect(screen.queryByText(/cli login/)).toBeNull();
+    });
+
+    it("shows an authentication warning without browser instructions until an adapter is ready: https://github.com/Brevilabs/obsidian-copilot-private/issues/379", () => {
+      renderView({ source: "custom" });
+      expect(screen.getByRole("heading", { name: "Authentication" })).toBeTruthy();
+      expect(screen.getByRole("alert").textContent).toContain(
+        "Set up a supported Codex adapter above"
+      );
+      expect(screen.queryByRole("button", { name: /Sign in/ })).toBeNull();
+      expect(screen.queryByText(/existing profile and credentials/)).toBeNull();
+    });
+
+    it("offers browser authentication for a user-owned adapter: https://github.com/Brevilabs/obsidian-copilot-private/issues/379", () => {
+      const onSignIn = jest.fn();
+      renderView({
+        source: "custom",
+        state: { kind: "ready", source: "custom" },
+        auth: { status: { signedIn: false }, signingIn: false, url: null, onSignIn },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Sign in with your browser" }));
+      expect(onSignIn).toHaveBeenCalledTimes(1);
     });
 
     it(`offers reinstall and uninstall for the active managed copy: ${ISSUE}`, () => {
@@ -129,7 +150,7 @@ describe("CodexConfigView", () => {
       });
       expect(
         screen.getByText(
-          "The managed binary is in use right now — apply a path here to switch to it."
+          "The Copilot-managed binary is currently in use. Apply your own binary path below to switch to it."
         )
       ).toBeTruthy();
       await act(async () => {

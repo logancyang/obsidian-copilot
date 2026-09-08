@@ -104,7 +104,7 @@ export const ConfigSection: React.FC<{ title?: string; children: React.ReactNode
   children,
 }) => (
   <div className="copilot-divider-t tw-flex tw-flex-col tw-gap-2 tw-p-4">
-    {title && <div className="tw-text-sm tw-font-medium">{title}</div>}
+    {title && <h4 className="tw-m-0 tw-text-sm tw-font-semibold">{title}</h4>}
     {children}
   </div>
 );

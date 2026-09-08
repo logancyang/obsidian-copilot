@@ -1,3 +1,4 @@
+import { FULL_BLEED_MODAL_CLASS } from "@/components/modals/ReactModal";
 import {
   CodexConfigView,
   CODEX_BUNDLE_VERSION,
@@ -66,7 +67,9 @@ const meta = {
     actions: ACTIONS,
     onClose: () => undefined,
   },
-  parameters: { gallery: { host: "modal", layout: "padded" } },
+  parameters: {
+    gallery: { host: "modal", layout: "fullscreen", modalClass: FULL_BLEED_MODAL_CLASS },
+  },
 } satisfies Meta<CodexConfigViewProps>;
 export default meta;
 
@@ -164,4 +167,145 @@ export const RetainedManagedDownloads: StoryObj<CodexConfigViewProps> = {
 export const ManagedDestinationUnavailable: StoryObj<CodexConfigViewProps> = {
   render: InteractiveConfigView,
   args: { managed: { ...MANAGED, destination: "Unavailable" } },
+};
+
+export const ManagedChecking: StoryObj<CodexConfigViewProps> = {
+  render: InteractiveConfigView,
+  args: {
+    source: "managed",
+    activeSource: "managed",
+    state: { kind: "ready", source: "managed" },
+    customPath: "",
+    auth: { ...meta.args.auth, status: null },
+  },
+};
+
+export const ManagedStarting: StoryObj<CodexConfigViewProps> = {
+  render: InteractiveConfigView,
+  args: {
+    source: "managed",
+    activeSource: "managed",
+    state: { kind: "ready", source: "managed" },
+    customPath: "",
+    auth: { ...meta.args.auth, signingIn: true, onCancel: () => undefined },
+  },
+};
+
+export const ManagedBrowserWaiting: StoryObj<CodexConfigViewProps> = {
+  render: InteractiveConfigView,
+  args: {
+    source: "managed",
+    activeSource: "managed",
+    state: { kind: "ready", source: "managed" },
+    customPath: "",
+    auth: {
+      ...meta.args.auth,
+      signingIn: true,
+      url: "https://auth.openai.com/authorize",
+      onCancel: () => undefined,
+    },
+  },
+};
+
+export const ManagedSignInFailed: StoryObj<CodexConfigViewProps> = {
+  render: InteractiveConfigView,
+  args: {
+    source: "managed",
+    activeSource: "managed",
+    state: { kind: "ready", source: "managed" },
+    customPath: "",
+    auth: { ...meta.args.auth, failed: true },
+  },
+};
+
+export const ManagedSignedIn: StoryObj<CodexConfigViewProps> = {
+  render: InteractiveConfigView,
+  args: {
+    source: "managed",
+    activeSource: "managed",
+    state: { kind: "ready", source: "managed" },
+    customPath: "",
+    auth: { ...meta.args.auth, status: { signedIn: true, label: "user@example.com" } },
+  },
+};
+
+export const CustomChecking: StoryObj<CodexConfigViewProps> = {
+  render: InteractiveConfigView,
+  args: {
+    source: "custom",
+    activeSource: "custom",
+    state: { kind: "ready", source: "custom" },
+    customPath: "/usr/local/bin/codex-acp",
+    auth: { ...meta.args.auth, status: null },
+  },
+};
+
+export const CustomStarting: StoryObj<CodexConfigViewProps> = {
+  render: InteractiveConfigView,
+  args: {
+    source: "custom",
+    activeSource: "custom",
+    state: { kind: "ready", source: "custom" },
+    customPath: "/usr/local/bin/codex-acp",
+    auth: { ...meta.args.auth, signingIn: true, onCancel: () => undefined },
+  },
+};
+
+export const CustomBrowserWaiting: StoryObj<CodexConfigViewProps> = {
+  render: InteractiveConfigView,
+  args: {
+    source: "custom",
+    activeSource: "custom",
+    state: { kind: "ready", source: "custom" },
+    customPath: "/usr/local/bin/codex-acp",
+    auth: {
+      ...meta.args.auth,
+      signingIn: true,
+      url: "https://auth.openai.com/authorize",
+      onCancel: () => undefined,
+    },
+  },
+};
+
+export const CustomSignInFailed: StoryObj<CodexConfigViewProps> = {
+  render: InteractiveConfigView,
+  args: {
+    source: "custom",
+    activeSource: "custom",
+    state: { kind: "ready", source: "custom" },
+    customPath: "/usr/local/bin/codex-acp",
+    auth: { ...meta.args.auth, failed: true },
+  },
+};
+
+export const CustomSignedIn: StoryObj<CodexConfigViewProps> = {
+  render: InteractiveConfigView,
+  args: {
+    source: "custom",
+    activeSource: "custom",
+    state: { kind: "ready", source: "custom" },
+    customPath: "/usr/local/bin/codex-acp",
+    auth: { ...meta.args.auth, status: { signedIn: true, label: "user@example.com" } },
+  },
+};
+
+export const CustomNotInstalled: StoryObj<CodexConfigViewProps> = {
+  render: InteractiveConfigView,
+  args: { source: "custom" },
+};
+
+export const FailedDownloadWithCustomActive: StoryObj<CodexConfigViewProps> = {
+  render: InteractiveConfigView,
+  args: {
+    state: { kind: "ready", source: "custom" },
+    activeSource: "custom",
+    customPath: "/usr/local/bin/codex-acp",
+    managed: {
+      ...MANAGED,
+      run: {
+        kind: "error",
+        message: "Archive download failed. Check your connection, then retry.",
+      },
+    },
+  },
 };

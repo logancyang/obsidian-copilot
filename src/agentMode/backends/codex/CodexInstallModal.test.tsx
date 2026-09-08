@@ -157,6 +157,7 @@ describe("CodexInstallModal", () => {
 
     it(`defaults new setups to managed and starts the manager's install for ${ISSUE}`, async () => {
       const fixture = makeManager();
+      fixture.manager.downloadsSize.mockResolvedValue(0);
       await fixture.render();
       expect(screen.queryByRole("textbox")).toBeNull();
       await act(async () =>
@@ -181,7 +182,9 @@ describe("CodexInstallModal", () => {
     it(`offers a first install when a persisted managed adapter is missing for ${ISSUE}`, async () => {
       setCodexSettings({ binaryPath: "/missing/codex-acp", binarySource: "managed" });
       jest.mocked(CodexBackendDescriptor.getInstallState).mockReturnValue({ kind: "absent" });
-      await makeManager().render();
+      const fixture = makeManager();
+      fixture.manager.downloadsSize.mockResolvedValue(0);
+      await fixture.render();
       expect(screen.getByRole("button", { name: "Download & install" })).toBeTruthy();
       expect(screen.queryByRole("button", { name: "Reinstall" })).toBeNull();
     });
@@ -226,6 +229,33 @@ describe("CodexInstallModal", () => {
       expect(getSettings().agentMode.backends?.codex?.binaryPath).toBe("/my/codex-acp");
     });
 
+    it.each(["install", "configure"] as const)(
+      `reopens %s failures on the relevant tab while preserving the custom adapter for ${ISSUE}`,
+      async (operation) => {
+        setCodexSettings({ binaryPath: "/my/codex-acp", binarySource: "custom" });
+        const fixture = makeManager();
+        const runtime = { kind: "error", operation, message: "Download failed" } as const;
+        jest.spyOn(fixture.manager, "getRuntimeState").mockReturnValue(runtime);
+        jest
+          .spyOn(fixture.manager, "getActionState")
+          .mockReturnValue({ kind: "error", message: runtime.message });
+        await fixture.render();
+        expect(
+          screen
+            .getByRole("radio", {
+              name: operation === "install" ? "Managed by Copilot" : "My own binary",
+            })
+            .getAttribute("aria-checked")
+        ).toBe("true");
+        if (operation === "install") {
+          expect(screen.getByText("Download failed")).toBeTruthy();
+          fireEvent.click(screen.getByRole("button", { name: "Reinstall & use managed" }));
+          expect(fixture.manager.install).toHaveBeenCalledTimes(1);
+        }
+        expect(getSettings().agentMode.backends?.codex?.binaryPath).toBe("/my/codex-acp");
+      }
+    );
+
     it(`subscribes to installs started elsewhere and only cancels explicitly for ${ISSUE}`, async () => {
       const fixture = makeManager();
       const { unmount } = await fixture.render();
@@ -246,6 +276,7 @@ describe("CodexInstallModal", () => {
       `reports install failures and competing operations but treats cancellation as intentional for ${ISSUE}: %s`,
       async (error, logged, noticed) => {
         const fixture = makeManager();
+        fixture.manager.downloadsSize.mockResolvedValue(0);
         fixture.manager.install.mockRejectedValue(error);
         await fixture.render();
         await act(async () =>

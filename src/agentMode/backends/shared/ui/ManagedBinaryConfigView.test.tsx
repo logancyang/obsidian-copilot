@@ -24,9 +24,9 @@ const OUTDATED: InstallState = {
 };
 
 const IN_USE_MANAGED =
-  "The managed binary is in use right now — apply a path here to switch to it.";
+  "The Copilot-managed binary is currently in use. Apply your own binary path below to switch to it.";
 const IN_USE_CUSTOM =
-  "Your own binary is in use right now — download the managed copy to switch to it.";
+  "Your own binary is currently in use. Download and install the managed copy to switch to Managed by Copilot.";
 
 const makeActions = (): jest.Mocked<ManagedBinaryConfigActions> => ({
   install: jest.fn(),
@@ -101,14 +101,15 @@ describe("ManagedBinaryConfigView", () => {
     it("names the active source only when it differs from the source being viewed (https://github.com/Brevilabs/obsidian-copilot-private/issues/368)", () => {
       renderView({ source: "managed", activeSource: "custom" });
 
-      expect(screen.getByText(IN_USE_CUSTOM)).toBeTruthy();
+      expect(screen.getByRole("status").textContent).toBe(IN_USE_CUSTOM);
+      expect(screen.queryByText("Download opencode.")).toBeNull();
       expect(screen.queryByText(IN_USE_MANAGED)).toBeNull();
     });
 
     it("names the managed binary when the custom path is being viewed instead (https://github.com/Brevilabs/obsidian-copilot-private/issues/368)", () => {
       renderView({ source: "custom", activeSource: "managed" });
 
-      expect(screen.getByText(IN_USE_MANAGED)).toBeTruthy();
+      expect(screen.getByRole("status").textContent).toBe(IN_USE_MANAGED);
       expect(screen.queryByText(IN_USE_CUSTOM)).toBeNull();
     });
 
@@ -135,7 +136,11 @@ describe("ManagedBinaryConfigView", () => {
       fireEvent.click(screen.getByRole("button", { name: "Uninstall" }));
       expect(actions.uninstall).toHaveBeenCalledTimes(1);
       expect(actions.install).not.toHaveBeenCalled();
-      expect(screen.getByRole("button", { name: "Download & install" })).toBeTruthy();
+      expect(screen.getByRole("status").textContent).toContain(
+        "Copilot's managed downloads are still on this computer."
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Reinstall & use managed" }));
+      expect(actions.install).toHaveBeenCalledTimes(1);
     });
 
     it("omits the in-use note when the viewed source is the active one (https://github.com/Brevilabs/obsidian-copilot-private/issues/368)", () => {

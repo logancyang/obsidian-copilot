@@ -43,15 +43,17 @@ export const CodexConfigContainer: React.FC<CodexConfigContainerProps> = ({ mana
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
   const activeSource =
     state.kind === "ready" || state.kind === "incompatible" ? state.source : null;
-  // Browsing setup choices must never replace the configured adapter. Reopened installs need progress and Cancel.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
-  const [source, setSource] = React.useState<CodexBinarySource>(() =>
-    manager.getRuntimeState().kind === "installing" ? "managed" : (configuredSource ?? "managed")
-  );
   const runtime = React.useSyncExternalStore(
     manager.subscribeRuntimeState,
     manager.getRuntimeState,
     manager.getRuntimeState
+  );
+  // Reopened downloads must expose progress or failure without replacing the selected custom adapter.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
+  const [source, setSource] = React.useState<CodexBinarySource>(() =>
+    runtime.kind === "installing" || (runtime.kind === "error" && runtime.operation === "install")
+      ? "managed"
+      : (configuredSource ?? "managed")
   );
   const run = manager.getActionState();
   const [hasDownloads, setHasDownloads] = React.useState(false);
