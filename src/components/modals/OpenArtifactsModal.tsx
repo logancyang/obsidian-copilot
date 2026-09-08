@@ -143,13 +143,13 @@ export function OpenArtifactsModalContent({
   const [previewOpened, setPreviewOpened] = useState(false);
   const [previewFailed, setPreviewFailed] = useState(false);
   const [manuallyReviewed, setManuallyReviewed] = useState(false);
-  const canConfirmReview = previewOpened || manuallyReviewed;
+  // A successful system launch can still show an editor or an unreadable file.
+  // https://github.com/logancyang/obsidian-copilot/issues/3121
+  const canConfirmReview = manuallyReviewed;
   const presentPreview = useCallback(async () => {
     if (!review) return;
     setPreviewOpened(false);
     setManuallyReviewed(false);
-    // Browser dispatch is required before human approval; a link alone is insufficient.
-    // https://github.com/logancyang/obsidian-copilot/issues/3121
     const opened = await openPreview(review.previewPath).catch(() => false);
     setPreviewOpened(opened);
     setPreviewFailed(!opened);
@@ -321,15 +321,15 @@ export function OpenArtifactsModalContent({
                 browser:
               </p>
               <code className="tw-break-all tw-text-small">{review.previewPath}</code>
-              <label className="tw-flex tw-items-center tw-gap-2 tw-text-small">
-                <Checkbox
-                  checked={manuallyReviewed}
-                  onCheckedChange={(checked) => setManuallyReviewed(checked === true)}
-                />
-                I reviewed the preview
-              </label>
             </div>
           )}
+          <label className="tw-flex tw-items-center tw-gap-2 tw-text-small">
+            <Checkbox
+              checked={manuallyReviewed}
+              onCheckedChange={(checked) => setManuallyReviewed(checked === true)}
+            />
+            I reviewed the preview
+          </label>
         </div>
       )}
 

@@ -147,7 +147,7 @@ describe("OpenArtifactsModal", () => {
         expect(publishModal.contentEl.childElementCount).toBeGreaterThan(0);
       });
 
-      it("https://github.com/logancyang/obsidian-copilot/issues/3121 automatically presents the preview before enabling approval and cancels without confirming", async () => {
+      it("https://github.com/logancyang/obsidian-copilot/issues/3121 requires human acknowledgment even after successful dispatch and resets it when reopening", async () => {
         const onConfirm = createConfirmMock();
         const modal = renderModal(onConfirm, null, undefined, undefined, REVIEW, jest.fn());
         const baseClose = (modal as unknown as { baseClose: jest.Mock }).baseClose;
@@ -170,10 +170,19 @@ describe("OpenArtifactsModal", () => {
         await act(async () => {});
         expect(
           screen.getByRole<HTMLButtonElement>("button", { name: "Yes, publish" }).disabled
+        ).toBe(true);
+        await clickButton("Yes, publish");
+        expect(onConfirm).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByRole("checkbox", { name: "I reviewed the preview" }));
+        expect(
+          screen.getByRole<HTMLButtonElement>("button", { name: "Yes, publish" }).disabled
         ).toBe(false);
         await act(async () => {
           fireEvent.click(previewLink);
         });
+        expect(
+          screen.getByRole<HTMLButtonElement>("button", { name: "Yes, publish" }).disabled
+        ).toBe(true);
         expect(openWithSystemDefault).toHaveBeenCalledWith(REVIEW.previewPath);
         expectButtonsInSameRow("Ask agent to regenerate", "No, cancel", "Yes, publish");
 
@@ -183,7 +192,7 @@ describe("OpenArtifactsModal", () => {
         expect(onConfirm).not.toHaveBeenCalled();
       });
 
-      it("https://github.com/logancyang/obsidian-copilot/issues/3121 keeps confirmation disabled after browser failure until the existing link opens successfully", async () => {
+      it("https://github.com/logancyang/obsidian-copilot/issues/3121 keeps confirmation disabled after a successful browser retry until human acknowledgment", async () => {
         jest.mocked(openWithSystemDefault).mockResolvedValueOnce(false).mockResolvedValueOnce(true);
         const onConfirm = createConfirmMock();
         renderModal(onConfirm, null, undefined, undefined, REVIEW);
@@ -198,8 +207,11 @@ describe("OpenArtifactsModal", () => {
         });
         expect(
           screen.getByRole<HTMLButtonElement>("button", { name: "Yes, publish" }).disabled
-        ).toBe(false);
+        ).toBe(true);
         expect(screen.queryByRole("alert")).toBeNull();
+        fireEvent.click(screen.getByRole("checkbox", { name: "I reviewed the preview" }));
+        await clickButton("Yes, publish");
+        expect(onConfirm).toHaveBeenCalledTimes(1);
       });
 
       it("https://github.com/logancyang/obsidian-copilot/issues/3121 allows explicit manual review acknowledgment after automatic opening fails", async () => {
@@ -241,6 +253,7 @@ describe("OpenArtifactsModal", () => {
         renderModal(onConfirm, DOC_ID, undefined, undefined, REVIEW, jest.fn());
         await act(async () => {});
 
+        fireEvent.click(screen.getByRole("checkbox", { name: "I reviewed the preview" }));
         await clickButton("Yes, update");
 
         expect(await screen.findByText("Update failed")).toBeTruthy();

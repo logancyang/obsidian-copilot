@@ -168,7 +168,7 @@ On Windows, creating the folder links may require **Developer Mode** or administ
 
 Copilot bundles OpenArtifacts' shared publishing rules with the plugin. Publishing tasks read the local copy and need no web-fetch tool or separate Node.js/npm installation. Network access is needed only for authentication and publication.
 
-For an agent-prepared page, Copilot opens a local preview in your default browser. Review it, then return to the existing Obsidian dialog to approve publishing. If automatic opening fails, retry the preview link or open the displayed preview file in your browser and check **I reviewed the preview** before confirming. Local previews disable scripts, external resources, and navigation. The published HTML is preserved. The published page keeps the Copilot attribution banner. Cancellation or failure preserves the prepared file so the agent can reopen review. Successful publication or an explicit regeneration request removes the unchanged staged artifact.
+For an agent-prepared page, Copilot opens a local preview in your default browser. Review the rendered page, then return to the existing Obsidian dialog, check **I reviewed the preview**, and confirm publishing. Opening the file never enables approval by itself. If automatic opening fails, retry the preview link or open the displayed preview file in your browser. Local previews disable scripts, external resources, and navigation. The published HTML is preserved. The published page keeps the Copilot attribution banner. Cancellation or failure preserves the prepared file so the agent can reopen review. Successful publication or an explicit regeneration request removes the unchanged staged artifact.
 
 ### Upgrading an agent
 

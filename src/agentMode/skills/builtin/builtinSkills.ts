@@ -587,7 +587,7 @@ const FETCH_X = relaySkill({
   scriptFile: "fetch-x.sh",
 });
 
-const OPENARTIFACTS_PUBLISH_VERSION = 5;
+const OPENARTIFACTS_PUBLISH_VERSION = 6;
 const OPENARTIFACTS_PUBLISH: BuiltinSkill = {
   name: "openartifacts-publish",
   legacyName: "symposium-publish",
@@ -635,9 +635,9 @@ publishing. The bundled \`${OPENARTIFACTS_DEFAULT_THEME}\` is an optional exampl
 
 ## Open the existing host review
 
-The host automatically opens the rendered HTML in the default browser and keeps
-confirmation disabled until preview opening succeeds or the user explicitly
-acknowledges manually reviewing the preview after an opening failure. The existing
+The host automatically opens the HTML preview in the default browser and keeps
+confirmation disabled until the user explicitly acknowledges manually reviewing the preview.
+A successful file launch alone does not establish that the page rendered. The existing
 preview link retries opening it. Ask the user to inspect the page and confirm in Obsidian's
 existing dialog; never choose an action or document id, simulate clicks, or treat
 a chat reply as a dialog confirmation. Do not create a new modal or render HTML inside a modal.
