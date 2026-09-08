@@ -74,9 +74,18 @@ function translateModel(
   // Newer opencode (≥ 1.15.13) dropped that field and advertises its catalog
   // only through a generic `category:"model"` select config option, switched
   // via `session/set_config_option` instead of `session/set_model`.
-  const fromConfig = inputs.models ? null : modelStateFromConfigOption(inputs.configOptions);
+  const configModel = modelStateFromConfigOption(inputs.configOptions);
+  const fromConfig = inputs.models ? null : configModel;
   const modelState = inputs.models ?? fromConfig?.state ?? null;
   if (!modelState) return null;
+  // Dedicated catalogs describe effort variants; the model option describes
+  // the whole model. https://github.com/Brevilabs/obsidian-copilot-private/issues/219
+  const baseDescriptions = new Map<string, string>();
+  if (inputs.models && configModel) {
+    for (const model of configModel.state.availableModels) {
+      if (model.description) baseDescriptions.set(model.modelId, model.description);
+    }
+  }
   const effortFromConfig = fromConfig ? effortConfigOption(inputs.configOptions) : null;
   const apply: ModelApplySpec = fromConfig
     ? {
@@ -134,7 +143,9 @@ function translateModel(
     ),
     // Only backends that opt in surface their per-model blurb; others (opencode)
     // would just add noisy/duplicative lines, so the field is dropped here.
-    description: descriptor.showModelDescriptions ? g.description : undefined,
+    description: descriptor.showModelDescriptions
+      ? (baseDescriptions.get(g.baseModelId) ?? g.description)
+      : undefined,
     provider: g.provider,
     effortOptions: deriveEffortOptions(g, descriptor),
   }));
@@ -153,6 +164,11 @@ function translateModel(
     currentEntry = {
       baseModelId: currentBaseId,
       name: normalizeName(currentBaseId, descriptor),
+      // A stale catalog must not hide the active model's available description.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/219
+      description: descriptor.showModelDescriptions
+        ? baseDescriptions.get(currentBaseId)
+        : undefined,
       provider: decodedCurrent.provider,
       effortOptions: synthEffortOptions,
     };
