@@ -78,7 +78,9 @@ export class CodexBinaryManager extends ManagedBinaryManager<CodexInstallProgres
       .filter(
         (entry) =>
           entry.isDirectory() &&
-          /^(?:\.tmp-)?\d+\.\d+\.\d+-r\d+(?:-[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12})?$/.test(
+          // Published bundles omit the revision suffix; both layouts need safe reclamation.
+          // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
+          /^(?:\.tmp-)?\d+\.\d+\.\d+(?:-r\d+)?(?:-[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12})?$/.test(
             entry.name
           )
       )

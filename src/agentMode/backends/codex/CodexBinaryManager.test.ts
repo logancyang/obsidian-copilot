@@ -174,7 +174,7 @@ describe("CodexBinaryManager", () => {
           expect(fs.existsSync(stage)).toBe(true);
         }
       );
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/380 replaces the same revision without accumulating installation directories", async () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 replaces and uninstalls a release without a revision suffix", async () => {
         const manager = new CodexBinaryManager();
         const first = await manager.install();
         fs.writeFileSync(first.path, "previous executable");
@@ -472,7 +472,12 @@ describe("CodexBinaryManager", () => {
       );
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/380 removes recorded native versions and stages while preserving unrecognized folders", async () => {
         const manager = new CodexBinaryManager();
-        const preserved = ["1.10.0", ".tmp-1.10.0-12345", `${PREVIOUS_DIR}.old-abcd`, "user-files"];
+        const preserved = [
+          "1.10.0-custom",
+          ".tmp-1.10.0-12345",
+          `${PREVIOUS_DIR}.old-abcd`,
+          "user-files",
+        ];
         const removed = [CODEX_BUNDLE_VERSION, PREVIOUS_DIR, `.tmp-${PREVIOUS_DIR}`];
         for (const name of [...preserved, ...removed])
           writeNativeBundle(path.join(manager.getDataDir(), name));
