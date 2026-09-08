@@ -20,6 +20,29 @@ describe("MiyoConnectContent", () => {
   const noop = () => undefined;
   const noopAdd = async () => "added" as const;
 
+  describe("MiyoConnectContent()", () => {
+    it("opens the supplied download URL without dropping referral parameters", () => {
+      const downloadUrl = "https://www.miyo.md/?utm_source=obsidian_copilot&utm_medium=connection";
+      const openSpy = jest.spyOn(window, "open").mockImplementation(() => null);
+      try {
+        render(
+          <MiyoConnectContent
+            step="guide"
+            downloadUrl={downloadUrl}
+            canAutoAdd
+            onClose={noop}
+            onRetry={noop}
+            onAddVault={noopAdd}
+          />
+        );
+        fireEvent.click(screen.getByRole("button", { name: "Download Miyo" }));
+        expect(openSpy).toHaveBeenCalledWith(downloadUrl, "_blank");
+      } finally {
+        openSpy.mockRestore();
+      }
+    });
+  });
+
   it("renders the guide step with a working Retry/Cancel", () => {
     const onRetry = jest.fn();
     const onClose = jest.fn();

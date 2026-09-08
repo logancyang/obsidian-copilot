@@ -4,7 +4,7 @@ import { SettingDisclosure } from "@/components/ui/setting-disclosure";
 import { SettingItem } from "@/components/ui/setting-item";
 import { SettingSection } from "@/components/ui/setting-section";
 import { SettingSwitch } from "@/components/ui/setting-switch";
-import { MIYO_HOMEPAGE_URL } from "@/constants";
+import { createMiyoPageUrl } from "@/lib/miyoLinks";
 import { useApp } from "@/context";
 import { usePlugin } from "@/contexts/PluginContext";
 import { cn } from "@/lib/utils";
@@ -39,9 +39,6 @@ import { getVaultBase } from "@/utils/vaultPath";
 import { ArrowUpRight, CornerDownRight } from "lucide-react";
 import { Notice, Platform } from "obsidian";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-
-/** Landing page for users who don't have Miyo installed yet. */
-const MIYO_DOWNLOAD_URL = MIYO_HOMEPAGE_URL;
 
 /** Accent-tinted "Relay" chip shown next to the Connector (the paid relay plan). */
 const RelayTag: React.FC = () => (
@@ -457,7 +454,7 @@ export const MiyoSettings: React.FC = () => {
       connectModalRef.current?.close();
       const modal = new MiyoConnectModal(app, {
         initialStep,
-        downloadUrl: MIYO_DOWNLOAD_URL,
+        downloadUrl: createMiyoPageUrl("connection"),
         canAutoAdd: canAutoAddVault(),
         onClose: () => {
           // Closing (Cancel / ESC / header X / after connecting) invalidates any
@@ -623,7 +620,7 @@ export const MiyoSettings: React.FC = () => {
             <span>
               Runs locally and connects automatically. Don&apos;t have Miyo yet?{" "}
               <a
-                href={MIYO_DOWNLOAD_URL}
+                href={createMiyoPageUrl("miyo_settings")}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="tw-inline-flex tw-items-center tw-gap-0.5 tw-text-accent"

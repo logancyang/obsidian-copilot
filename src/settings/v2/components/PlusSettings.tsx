@@ -1,9 +1,10 @@
+import { createMiyoPageUrl } from "@/lib/miyoLinks";
 import { CopilotPlusWelcomeModal } from "@/components/modals/CopilotPlusWelcomeModal";
 import { useApp } from "@/context";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { PasswordInput } from "@/components/ui/password-input";
-import { MIYO_HOMEPAGE_URL, PLUS_UTM_MEDIUMS } from "@/constants";
+import { PLUS_UTM_MEDIUMS } from "@/constants";
 import {
   checkIsPaidUser,
   createPlusPageUrl,
@@ -76,7 +77,7 @@ export function PlusSettings() {
           <strong className="tw-font-semibold tw-text-normal">multi-agent capabilities</strong> to
           your Copilot agentic experience. Pair it with{" "}
           <a
-            href={MIYO_HOMEPAGE_URL}
+            href={createMiyoPageUrl("license_settings")}
             target="_blank"
             rel="noopener noreferrer"
             className="tw-font-semibold tw-text-accent"
@@ -104,7 +105,7 @@ export function PlusSettings() {
               See plans <ExternalLink className="tw-size-2 md:tw-size-4" />
             </Button>
             <a
-              href={MIYO_HOMEPAGE_URL}
+              href={createMiyoPageUrl("pairing")}
               target="_blank"
               rel="noopener noreferrer"
               className="tw-inline-flex tw-items-center tw-gap-0.5 tw-text-sm tw-text-accent"
