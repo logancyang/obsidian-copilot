@@ -4,9 +4,67 @@ import {
   type RelevantNoteRowProps,
 } from "@/components/chat-components/ui/RelevantNoteRow";
 import { useRelevantNoteRowTransitions } from "@/components/chat-components/ui/useRelevantNoteRowTransitions";
+import { AppContext, useApp } from "@/context";
 import type { Meta, StoryObj } from "@/lib/story";
 import type { RelevantNoteEntry } from "@/search/findRelevantNotes";
-import React, { useState } from "react";
+import { App, TFile } from "obsidian";
+import React, { useMemo, useState } from "react";
+
+const PREVIEW_MARKDOWN = `---
+tags: [design]
+---
+# Design principles
+
+Start with a **clear question**, then gather evidence.
+
+## Review checklist
+
+- Describe the reader's goal.
+- Keep the next action visible.
+- Compare the result with the original question.
+
+> A useful preview lets you decide whether to open the note.
+
+Read [the Markdown guide](https://www.markdownguide.org/) for examples.
+
+\`\`\`typescript
+const nextAction = "Review the evidence";
+\`\`\`
+
+## Follow-up
+
+Longer notes stay inside the preview. Scroll to continue reading without losing the note actions.
+`;
+
+function MarkdownHoverPreview(props: RelevantNoteRowProps): React.ReactElement {
+  const app = useApp();
+  const previewApp = useMemo<App>(() => {
+    const file: unknown = Object.create(TFile.prototype);
+    if (!(file instanceof TFile)) throw new Error("Expected a TFile fixture");
+    Object.assign(file, {
+      name: `${props.note.note.title}.md`,
+      path: props.note.note.path,
+      basename: props.note.note.title,
+      extension: "md",
+      vault: app.vault,
+    });
+    // Supply note content without creating files in the gallery's vault.
+    return Object.assign(Object.create(app) as App, {
+      vault: Object.assign(Object.create(app.vault) as App["vault"], {
+        getAbstractFileByPath: (path: string) =>
+          path === file.path ? file : app.vault.getAbstractFileByPath(path),
+        cachedRead: (requested: TFile) =>
+          requested === file ? Promise.resolve(PREVIEW_MARKDOWN) : app.vault.cachedRead(requested),
+      }),
+    });
+  }, [app, props.note.note.path, props.note.note.title]);
+
+  return (
+    <AppContext.Provider value={previewApp}>
+      <RelevantNoteRow {...props} />
+    </AppContext.Provider>
+  );
+}
 
 function entry(title: string, score: number, links: Partial<RelevantNoteEntry["metadata"]> = {}) {
   return {
@@ -80,6 +138,10 @@ const meta = {
 export default meta;
 
 export const StrongMatch: StoryObj<RelevantNoteRowProps> = {};
+
+export const MarkdownPreview: StoryObj<RelevantNoteRowProps> = {
+  render: MarkdownHoverPreview,
+};
 
 export const WeakMatch: StoryObj<RelevantNoteRowProps> = {
   args: { note: entry("Interview notes", 0.28) },
