@@ -62,6 +62,20 @@ describe("FanoutTurnView", () => {
     expect(screen.getByTestId("agent-md").textContent).toBe("the narrative summary");
   });
 
+  it.each(["", "Partial summary"])(
+    "https://github.com/Brevilabs/obsidian-copilot-private/issues/219 shows the summary failure alongside any partial text: %s",
+    (partialText) => {
+      const t = turn([answer("opencode", "done", "Successful answer")], partialText);
+      t.summary.error = "Choose an explicit effort or update the Codex adapter.";
+      renderView(t);
+      expect(screen.getByText(t.summary.error)).toBeTruthy();
+      expect(screen.queryByText("Summary unavailable")).toBeNull();
+      if (partialText) expect(screen.getByTestId("agent-md").textContent).toBe(partialText);
+      fireEvent.click(screen.getByRole("tab", { name: /opencode/ }));
+      expect(screen.getByTestId("agent-md").textContent).toBe("Successful answer");
+    }
+  );
+
   it("shows a pending placeholder when the summary has no text yet", () => {
     const t = turn([answer("opencode", "running")], "", "pending");
     renderView(t);

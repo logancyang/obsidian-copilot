@@ -220,6 +220,26 @@ describe("descriptor", () => {
         };
       }
 
+      it.each(["high", null])(
+        "https://github.com/Brevilabs/obsidian-copilot-private/issues/219 resolves missing effort on the active model without resetting it: %s",
+        async (effort) => {
+          const { session, applyModelWireId, setConfigOption } = makeSession({
+            model: {
+              current: { baseModelId: "openai/gpt-5", effort },
+              availableModels: [entryOffering("openai/gpt-5", ["high", "low"])],
+              apply: { kind: "setConfigOption", configId: "model", effortConfigId: "effort" },
+            },
+            mode: null,
+          });
+          await OpencodeBackendDescriptor.applySelection(session, {
+            baseModelId: "openai/gpt-5",
+            effort: null,
+          });
+          expect(applyModelWireId).not.toHaveBeenCalled();
+          expect(setConfigOption).toHaveBeenCalledWith("effort", "low");
+        }
+      );
+
       it("routes config-option-backed effort through the thought-level option", async () => {
         const { session, applyModelWireId, setConfigOption } = makeSession({
           model: {

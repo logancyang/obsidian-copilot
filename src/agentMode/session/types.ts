@@ -15,6 +15,7 @@ export type {
   BackendDescriptor,
   BackendSignInHandlers,
   InstallState,
+  ModelSelectionSession,
 } from "./descriptor";
 export type { CurrentPlan, PlanDecisionAction, PlanProposalDecision } from "./plan";
 
