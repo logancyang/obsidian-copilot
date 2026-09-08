@@ -166,3 +166,13 @@ export const ManagedActiveViewingCustom: StoryObj<ManagedBinaryConfigViewProps> 
   render: InteractiveConfigView,
   args: { source: "custom", activeSource: "managed", state: { kind: "ready", source: "managed" } },
 };
+
+export const LongDestination: StoryObj<ManagedBinaryConfigViewProps> = {
+  render: InteractiveConfigView,
+  args: {
+    managed: {
+      ...MANAGED,
+      destination: "/Users/example/Library/Application Support/obsidian-copilot/agent",
+    },
+  },
+};

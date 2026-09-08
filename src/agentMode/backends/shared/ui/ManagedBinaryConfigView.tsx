@@ -145,7 +145,7 @@ const ManagedBinaryInstall: React.FC<ManagedBinaryInstallProps> = ({
         <dt className="tw-text-muted">Version</dt>
         <dd className="tw-font-mono">v{managed.version} (pinned)</dd>
         <dt className="tw-text-muted">Destination</dt>
-        <dd className="tw-break-all tw-font-mono tw-text-xs">{managed.destination}</dd>
+        <dd className="tw-break-all tw-font-mono">{managed.destination}</dd>
       </dl>
       {/* Failed downloads must leave their explanation beside the retry action.
           https://github.com/Brevilabs/obsidian-copilot-private/issues/368 */}
