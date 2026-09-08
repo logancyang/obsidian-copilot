@@ -95,13 +95,16 @@ export interface BackendAuthUiState {
  * may import.
  *
  * @param descriptor - Backend whose authentication capability should be observed and driven.
- * @param probeKey - Caller-owned identity for auth-relevant inputs that should trigger a fresh probe.
+ * @param callerProbeKey - Fallback identity when the backend does not define its authentication inputs.
  */
 export function useBackendAuthState(
   descriptor: BackendDescriptor,
-  probeKey?: unknown
+  callerProbeKey?: unknown
 ): BackendAuthUiState {
   const settings = useSettingsValue();
+  // All surfaces must invalidate the same profile; installation paths may change without changing accounts.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
+  const probeKey = descriptor.auth?.getProbeKey?.(settings) ?? callerProbeKey;
   // Latest settings without making the mount probe re-fire on unrelated edits.
   const settingsRef = React.useRef(settings);
   settingsRef.current = settings;

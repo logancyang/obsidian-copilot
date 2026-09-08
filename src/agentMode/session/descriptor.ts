@@ -87,6 +87,10 @@ export interface ApplySelectionContext {
  * surface a "Sign in" CTA without knowing the backend's auth mechanism.
  */
 export interface BackendAuth {
+  /** Stable opaque identity for the configured account/profile; never expose credentials.
+   * @param settings - Current settings that select the backend and its authentication environment.
+   */
+  getProbeKey?(settings: CopilotSettings): string;
   /** Probe current sign-in state (may spawn the CLI). */
   getStatus(settings: CopilotSettings): Promise<BackendAuthStatus>;
   /** Run the interactive sign-in flow; resolves with the post-login state. */

@@ -27,7 +27,7 @@ Copilot connects through `codex-acp`, not the `codex` executable alone.
 1. Open **Basic → Agents → Codex → Configure**.
 2. Run the install command shown in the dialog. It removes the conflicting `@zed-industries/codex-acp` package before installing the supported adapter. Manual installations require adapter version 0.0.45 or newer. This is the minimum supported version; the managed download is pinned to 1.10.0 in this Copilot release.
 3. Choose **Auto-detect**. For manual setup, enter the absolute path to `codex-acp` on macOS/Linux or `%APPDATA%\npm\node_modules\@agentclientprotocol\codex-acp\dist\index.js` on Windows, then choose **Apply**.
-4. Run `codex-acp cli login` in a terminal if Codex is not authenticated.
+4. If Codex is signed out, choose **Sign in to Codex** on the Agent Chat status card. As a fallback, run `codex-acp cli login` in a terminal using the same `CODEX_HOME`.
 
 See [Getting Started](getting-started.md) for the complete setup flow and [Windows setup for Agent Chat](agent-mode-windows-setup.md) for Windows-specific commands.
 

@@ -63,7 +63,7 @@ For an existing or manually installed `@agentclientprotocol/codex-acp` adapter, 
 
 1. Open **Basic → Agents → Codex → Configure**.
 2. Run the adapter installation command shown in the dialog. It removes the conflicting Zed npm package before installing the supported adapter.
-3. Run `codex-acp cli login`.
+3. Choose **Sign in to Codex** on the Agent Chat status card and complete browser login. As a fallback, run `codex-acp cli login` in a terminal using the same `CODEX_HOME`.
 4. Select **Auto-detect**, or enter the absolute path to the `codex-acp` launcher on macOS/Linux or its `dist\index.js` entry point on Windows, and select **Apply**.
 5. Enable the models you want and choose a default.
 
