@@ -1,3 +1,4 @@
+import { extractArchive } from "@/agentMode/backends/shared/extractArchive";
 import {
   ManagedBinaryManager,
   type BinarySettings,
@@ -848,46 +849,6 @@ async function downloadToFile(
       resolve();
     });
     res.pipe(out);
-  });
-}
-
-/**
- * Extract `archivePath` into `destDir` by shelling out to the system `tar`
- * (bsdtar on Windows 10 1803+). Distinguishes "tar not found" from
- * non-zero exits so the user gets actionable error text.
- *
- * Path-traversal note: both GNU tar and bsdtar strip leading `/` and refuse
- * to follow `..` outside the extraction root by default, so a malicious
- * archive cannot escape `destDir`. We rely on that default rather than
- * re-implementing extraction in JS.
- */
-async function extractArchive(archivePath: string, destDir: string): Promise<void> {
-  const { spawn } = requireNodeModule<typeof import("node:child_process")>("child_process");
-  // Cross-platform: macOS and Linux ship `tar`; Windows 10 1803+ ships `tar.exe`
-  // built in (`bsdtar`), which handles .zip / .tar.gz / .tar.xz transparently.
-  await new Promise<void>((resolve, reject) => {
-    const proc = spawn("tar", ["-xf", archivePath, "-C", destDir], {
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    let stderr = "";
-    proc.stderr.on("data", (d: Uint8Array) => {
-      stderr += Buffer.from(d).toString();
-    });
-    proc.on("error", (e: NodeJS.ErrnoException) => {
-      if (e.code === "ENOENT") {
-        reject(
-          new Error(
-            "`tar` was not found on PATH. macOS/Linux ship it by default; on Windows you need 10 1803+ (which ships `tar.exe`/bsdtar) or to install bsdtar manually."
-          )
-        );
-      } else {
-        reject(new Error(`Failed to launch tar: ${e instanceof Error ? e.message : String(e)}`));
-      }
-    });
-    proc.on("close", (code) => {
-      if (code === 0) resolve();
-      else reject(new Error(`tar exited with code ${code}: ${stderr.slice(0, 500)}`));
-    });
   });
 }
 

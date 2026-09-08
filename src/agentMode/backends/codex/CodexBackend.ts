@@ -61,7 +61,12 @@ export class CodexBackend implements AcpBackend {
     // Deliberately no `project_doc_fallback_filenames=["project.md"]`: project.md is metadata,
     // while Codex discovers the canonical AGENTS.md instructions from the session cwd.
     const entryPath = resolveSupportedCodexAcpEntry(descriptor.command);
-    const nodePath = process.platform === "win32" ? await detectBinary("node") : undefined;
+    // Native bundles include their runtime; only user-owned npm entries need Node.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
+    const nodePath =
+      process.platform === "win32" && entryPath.endsWith(".js")
+        ? await detectBinary("node")
+        : undefined;
     const invocation = buildCodexAcpInvocation(
       entryPath,
       descriptor.args,

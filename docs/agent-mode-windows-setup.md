@@ -35,7 +35,7 @@ Copilot uses Claude Code's credentials. Do not add an Anthropic API key to this 
 
 ## 3. Connect Codex
 
-The Codex backend needs `@agentclientprotocol/codex-acp` 0.0.45 or newer. The package includes a compatible Codex CLI; the older `@zed-industries/codex-acp` adapter is not supported.
+For manual installations, the Codex backend needs `@agentclientprotocol/codex-acp` 0.0.45 or newer. This is the minimum supported adapter version; managed downloads are pinned to 1.10.0 in this Copilot release and use Windows `tar.exe` to extract ZIP files. See [Codex installation details](agent-mode-and-tools.md#codex). The package includes a compatible Codex CLI; the older `@zed-industries/codex-acp` adapter is not supported.
 
 1. Open **Settings → Copilot → Basic → Agents → Codex** and select **Configure**.
 2. Copy the **Install it** command from the dialog and run it in PowerShell. The first command removes the unsupported Zed npm package because both packages create the same global `codex-acp` command; the second installs the supported adapter.
