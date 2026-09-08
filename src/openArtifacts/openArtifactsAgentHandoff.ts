@@ -101,12 +101,18 @@ function createBrowserPreview(html: string): string {
 <body>
 <iframe title="OpenArtifacts HTML preview" sandbox="allow-same-origin" referrerpolicy="no-referrer"></iframe>
 <script>
-const template = document.createElement("template");
-template.innerHTML = ${source};
-for (const element of template.content.querySelectorAll("*")) {
+// Inert full-document parsing preserves root styling without executing note scripts.
+// https://github.com/logancyang/obsidian-copilot/issues/3121
+const parsed = new DOMParser().parseFromString(${source}, "text/html");
+for (const element of parsed.querySelectorAll("*")) {
   if (["noscript", "script", "iframe", "frame", "object", "embed", "template", "meta", "base", "animate", "animatetransform", "animatemotion", "set"].includes(element.localName.toLowerCase())) { element.remove(); continue; }
   for (const attribute of Array.from(element.attributes)) {
-    if (["href", "action", "formaction"].includes(attribute.localName.toLowerCase())) {
+    const name = attribute.localName.toLowerCase();
+    // Keep static SVG references; anchors must remain non-navigable.
+    // https://github.com/logancyang/obsidian-copilot/issues/3121
+    const svgResource = element.namespaceURI === "http://www.w3.org/2000/svg" && element.localName !== "a" &&
+      (attribute.value.startsWith("#") || (element.localName === "image" && attribute.value.startsWith("data:image/")));
+    if ((name === "href" && !svgResource) || name === "action" || name === "formaction") {
       element.removeAttributeNode(attribute);
     }
   }
@@ -116,7 +122,16 @@ const mount = () => {
   const child = frame.contentDocument;
   if (child?.querySelector('meta[http-equiv="Content-Security-Policy"]')?.content !== ${JSON.stringify(contentPolicy)}) return;
   frame.removeEventListener("load", mount);
-  child.body.replaceChildren(template.content);
+  for (const [sourceRoot, targetRoot] of [[parsed.documentElement, child.documentElement], [parsed.body, child.body]]) {
+    for (const attribute of Array.from(sourceRoot.attributes)) {
+      if (["class", "style", "id", "lang", "dir"].includes(attribute.name) || attribute.name.startsWith("data-")) {
+        targetRoot.setAttribute(attribute.name, attribute.value);
+      }
+    }
+  }
+  while (parsed.head.firstChild) child.head.appendChild(parsed.head.firstChild);
+  child.body.replaceChildren();
+  while (parsed.body.firstChild) child.body.appendChild(parsed.body.firstChild);
 };
 frame.addEventListener("load", mount);
 frame.srcdoc = ${JSON.stringify(frameHtml).replaceAll("<", "\\u003c")};

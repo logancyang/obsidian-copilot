@@ -14,7 +14,7 @@ function renderPreviewShell(html: string): { shell: Document; content: Document 
   const frame = shell.querySelector("iframe")!;
   let content = new DOMParser().parseFromString("<body></body>", "text/html");
   Object.defineProperty(frame, "contentDocument", { get: () => content });
-  runInNewContext(shell.querySelector("script")!.textContent!, { document: shell });
+  runInNewContext(shell.querySelector("script")!.textContent!, { document: shell, DOMParser });
   frame.dispatchEvent(new Event("load"));
   expect(content.body.childNodes).toHaveLength(0);
   content = new DOMParser().parseFromString(frame.getAttribute("srcdoc")!, "text/html");
@@ -114,6 +114,32 @@ describe("openArtifactsAgentHandoff", () => {
       await handoff.cleanup();
     });
 
+    it("https://github.com/logancyang/obsidian-copilot/issues/3121 preserves root theme attributes and passive SVG references without restoring navigation", async () => {
+      const image = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==";
+      const html = `<html class="dark" lang="ja" data-theme="night" style="color: white"><head><style>.theme h1 { color: teal }</style></head><body class="theme" dir="rtl" style="background: black" onload="alert(1)"><h1>Theme</h1><svg><defs><path id="icon" d="M0 0h10v10z"/></defs><use href="#icon"/><use xlink:href="#icon"/><image href="${image}"/><use href="https://example.invalid/icon.svg#icon"/><a href="#icon">Link</a></svg></body></html>`;
+      const stagedPath = path.join(vaultRoot, ...STAGED_PATH.split("/"));
+      await writeFile(stagedPath, html);
+      const handoff = await consumeOpenArtifactsAgentHandoff(vaultRoot, STAGED_PATH);
+      const { content } = renderPreviewShell(await readFile(handoff.previewPath, "utf8"));
+      expect(content.documentElement.className).toBe("dark");
+      expect(content.documentElement.lang).toBe("ja");
+      expect(content.documentElement.dataset.theme).toBe("night");
+      expect(content.documentElement.style.color).toBe("white");
+      expect(content.body.className).toBe("theme");
+      expect(content.body.dir).toBe("rtl");
+      expect(content.body.style.background).toBe("black");
+      expect(content.body.hasAttribute("onload")).toBe(false);
+      expect(content.head.querySelector("style")?.textContent).toContain(".theme h1");
+      expect(content.querySelector("use")?.getAttribute("href")).toBe("#icon");
+      expect(content.querySelectorAll("use")[1].getAttribute("xlink:href")).toBe("#icon");
+      expect(content.querySelector("image")?.getAttribute("href")).toBe(image);
+      expect(content.querySelectorAll("use")[2].hasAttribute("href")).toBe(false);
+      expect(content.querySelector("a")?.hasAttribute("href")).toBe(false);
+      expect(handoff.html).toBe(html);
+      expect(await readFile(stagedPath, "utf8")).toBe(html);
+      await handoff.cleanup();
+    });
+
     it("reopens the same HTML after the first preview is closed", async () => {
       const absolutePath = path.join(vaultRoot, ...STAGED_PATH.split("/"));
       const html = "<!doctype html><p>Review me again</p>";
@@ -172,7 +198,7 @@ describe("openArtifactsAgentHandoff", () => {
       const handoff = await consumeOpenArtifactsAgentHandoff(vaultRoot, STAGED_PATH);
       expect(handoff.html).toBe(html);
       const { content } = renderPreviewShell(await readFile(handoff.previewPath, "utf8"));
-      expect(content.body.innerHTML).toContain('content:"\\00b7"');
+      expect(content.querySelector("style")?.textContent).toContain('content:"\\00b7"');
       expect(content.querySelector("script")).toBeNull();
       await handoff.cleanup();
     });
