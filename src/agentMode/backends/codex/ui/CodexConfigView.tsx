@@ -27,12 +27,12 @@ export const CodexConfigView: React.FC<CodexConfigViewProps> = (props) => (
     customDescription={
       <>
         Copilot supports <code>@agentclientprotocol/codex-acp</code> {CODEX_ACP_MIN_VERSION} or
-        newer. You manage its updates; Auto-detect checks the usual npm locations and your PATH.
+        newer. You manage its upgrades; Auto-detect checks the usual npm locations and your PATH.
       </>
     }
     customPathPlaceholder={codexBinaryPathPlaceholder(process.platform)}
     customPathNotFoundHint={`A supported ${CODEX_BINARY_NAME} adapter was not found. Install your own adapter or choose Managed by Copilot.`}
-    upgradeLabel="Update"
+    upgradeLabel="Upgrade"
   >
     <ConfigSection title="Sign in">
       {/* Sign-in needs a usable adapter; starting earlier would fail to launch it.

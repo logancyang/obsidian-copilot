@@ -32,7 +32,7 @@ const OUTDATED: InstallState = {
   source: "managed",
   currentVersion: "1.9.0-r1",
   minVersion: CODEX_BUNDLE_VERSION,
-  message: `Codex adapter v1.9.0-r1 is not supported. Copilot requires Codex adapter v${CODEX_BUNDLE_VERSION} or newer.`,
+  message: `Codex adapter v1.9.0-r1 requires an upgrade. Copilot requires Codex adapter v${CODEX_BUNDLE_VERSION} or newer.`,
 };
 
 /**

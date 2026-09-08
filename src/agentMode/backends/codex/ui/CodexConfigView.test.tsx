@@ -113,11 +113,11 @@ describe("CodexConfigView", () => {
           source: "managed",
           currentVersion: "1.9.0-r1",
           minVersion: CODEX_BUNDLE_VERSION,
-          message: "Update required",
+          message: "Upgrade required",
         },
         activeSource: "managed",
       });
-      fireEvent.click(screen.getByRole("button", { name: "Update" }));
+      fireEvent.click(screen.getByRole("button", { name: "Upgrade" }));
       expect(actions.upgrade).toHaveBeenCalledTimes(1);
     });
 

@@ -261,13 +261,13 @@ describe("CodexInstallModal", () => {
       jest.mocked(CodexBackendDescriptor.getInstallState).mockReturnValue({
         kind: "incompatible",
         source: "managed",
-        message: "Update required",
+        message: "Upgrade required",
         currentVersion: "1.9.0-r1",
         minVersion: "1.10.0-r1",
       });
       const fixture = makeManager();
       await fixture.render();
-      await act(async () => fireEvent.click(screen.getByRole("button", { name: "Update" })));
+      await act(async () => fireEvent.click(screen.getByRole("button", { name: "Upgrade" })));
       expect(fixture.manager.install).toHaveBeenCalledTimes(1);
     });
 
