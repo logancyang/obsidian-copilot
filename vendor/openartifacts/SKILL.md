@@ -61,6 +61,7 @@ Use `openartifacts` when installed, otherwise `npx --yes openartifacts@latest`.
 - Revoke one: `openartifacts revoke <tokenId>`
 - Sign in again after an `unauthorized` response: `openartifacts login`
 
+
 Run `openartifacts preview <file> > <separate-review.html>`. Never overwrite the
 source. The command runs without authentication and prints the reviewed HTML's
 SHA-256 to stderr. Open the protected review file in a user-visible browser and
