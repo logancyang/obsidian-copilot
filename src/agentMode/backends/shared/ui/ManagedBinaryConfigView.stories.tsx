@@ -112,7 +112,7 @@ export const Incompatible: StoryObj<ManagedBinaryConfigViewProps> = {
       source: "managed",
       currentVersion: "1.0.0",
       minVersion: MANAGED.version,
-      message: "The installed agent is not supported. Update to the version tested with Copilot.",
+      message: "The installed agent is not supported. Upgrade to the version tested with Copilot.",
     },
   },
 };

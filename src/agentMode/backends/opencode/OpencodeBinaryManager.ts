@@ -35,7 +35,7 @@ function nodePath(): typeof import("node:path") {
 async function execFileAsync(
   file: string,
   args: string[],
-  options: Pick<import("node:child_process").ExecFileOptions, "timeout" | "windowsHide">
+  options: Pick<import("node:child_process").ExecFileOptions, "timeout" | "windowsHide" | "signal">
 ): Promise<{ stdout: string | Buffer }> {
   const { execFile } = requireNodeModule<typeof import("node:child_process")>("child_process");
   const { promisify } = requireNodeModule<typeof import("node:util")>("util");
@@ -575,7 +575,7 @@ export class OpencodeBinaryManager extends ManagedBinaryManager<ProgressEvent, I
    * are untouched. Throws with a readable message on failure.
    */
   async upgradeCustomBinary(): Promise<{ version: string; path: string }> {
-    return this.runExclusive({ kind: "busy" }, async () => {
+    return this.runExclusive({ kind: "installing", progress: null }, async (signal) => {
       const s = readOpencodeSettings();
       if (s.binarySource !== "custom" || !s.binaryPath) {
         throw new Error("No custom opencode binary is configured to upgrade.");
@@ -583,14 +583,21 @@ export class OpencodeBinaryManager extends ManagedBinaryManager<ProgressEvent, I
       const binaryPath = s.binaryPath;
       try {
         await execFileAsync(binaryPath, ["upgrade"], {
+          // Configure exposes Cancel for this shared operation; stop the process as well.
+          // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
+          signal,
           timeout: UPGRADE_BINARY_TIMEOUT_MS,
           windowsHide: true,
         });
       } catch (e) {
+        this.throwIfAborted(signal);
         const err = e as NodeJS.ErrnoException;
         throw new Error(`\`${binaryPath} upgrade\` failed: ${err.message ?? String(err)}`);
       }
       const { stdout } = await verifyOpencodeBinary(binaryPath);
+      // Cancellation during validation must not publish an updated configuration.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
+      this.throwIfAborted(signal);
       const version = parseVersionFromStdout(stdout);
       if (!version) {
         throw new Error(`${binaryPath} --version didn't report a version after upgrade.`);

@@ -7,7 +7,7 @@ export type ManagedInstallRuntimeState<TProgress> =
   | { kind: "detecting" }
   | { kind: "installing"; progress: TProgress | null }
   | { kind: "busy" }
-  | { kind: "error"; message: string };
+  | { kind: "error"; message: string; operation: "install" | "configure" };
 
 /** Reports a competing process-local operation without changing the active run. */
 export class ManagedInstallOperationInFlightError extends Error {

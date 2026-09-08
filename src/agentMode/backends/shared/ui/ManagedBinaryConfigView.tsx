@@ -21,7 +21,7 @@ export type ManagedBinarySource = "managed" | "custom";
  */
 export type ManagedBinaryRunState =
   | { kind: "idle" }
-  | { kind: "running"; label: string; percent: number }
+  | { kind: "running"; label: string; percent?: number }
   | { kind: "error"; message: string };
 
 /** What the managed download would install here, plus any install in flight. */
