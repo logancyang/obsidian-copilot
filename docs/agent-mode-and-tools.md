@@ -144,6 +144,6 @@ On Windows, creating the folder links may require **Developer Mode** or administ
 - [Copilot Commands and Quick Ask](custom-commands.md)
 - [Copilot Plans, Privacy, and Self-Hosting](copilot-plus-and-self-host.md)
 
-### Updating an agent
+### Upgrading an agent
 
-When an installed agent needs a supported version, Basic → Agents and Agent Chat offer **Update** if Copilot can update that installation. Both show the same progress, including updates started in Configure. If an update fails, use **Retry**. A failed custom-path selection is reported in Configure and does not turn the update action into a path-validation retry.
+When an installed agent needs a supported version, Basic → Agents and Agent Chat offer **Upgrade** if Copilot can upgrade that installation. Both show the same progress, including upgrades started in Configure. If an upgrade fails, use **Retry**. A failed custom-path selection is reported in Configure and does not turn the upgrade action into a path-validation retry.

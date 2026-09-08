@@ -83,7 +83,7 @@ export const AgentModeStatus: React.FC<Props> = ({ manager, plugin, onInstallCli
               ? "Upgrading…"
               : failed
                 ? "Retry"
-                : "Update"
+                : "Upgrade"
             : `Configure ${descriptor.displayName}`,
           disabled: canUpgrade && upgrading,
           onClick: canUpgrade ? handleUpgrade : () => descriptor.openInstallUI(plugin),

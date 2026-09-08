@@ -48,15 +48,15 @@ export const LongErrorRetry: StoryObj<AgentStatusCardProps> = {
   },
 };
 
-export const ManagedUpdateRequired: StoryObj<AgentStatusCardProps> = {
+export const ManagedUpgradeRequired: StoryObj<AgentStatusCardProps> = {
   args: {
     tone: "warning",
     message: "opencode v1.15.0 is not supported. Copilot requires opencode v1.16.0 or newer.",
-    action: { label: "Update", onClick: () => undefined },
+    action: { label: "Upgrade", onClick: () => undefined },
   },
 };
 
-export const ManagedUpdateRunning: StoryObj<AgentStatusCardProps> = {
+export const ManagedUpgradeRunning: StoryObj<AgentStatusCardProps> = {
   args: {
     tone: "warning",
     message: "Downloading opencode-darwin-arm64.zip 42%",
@@ -64,7 +64,7 @@ export const ManagedUpdateRunning: StoryObj<AgentStatusCardProps> = {
   },
 };
 
-export const ManagedUpdateFailed: StoryObj<AgentStatusCardProps> = {
+export const ManagedUpgradeFailed: StoryObj<AgentStatusCardProps> = {
   args: {
     tone: "error",
     message: "GitHub API rate-limited. Retry after the limit resets.",

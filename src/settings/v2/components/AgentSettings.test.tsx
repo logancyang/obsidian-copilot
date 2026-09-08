@@ -381,13 +381,13 @@ describe("AgentSettings", () => {
     };
     const view = render(<AgentSettings />);
     fireEvent.click(screen.getByRole("tab", { name: "Codex" }));
-    fireEvent.click(screen.getByRole("button", { name: "Update" }));
+    fireEvent.click(screen.getByRole("button", { name: "Upgrade" }));
     expect(runManagedInstall).toHaveBeenCalledTimes(1);
 
     managedInstallStates.codex = { kind: "running", label: "Installing… 30%" };
     view.rerender(<AgentSettings />);
     expect(screen.getByText("Installing… 30%")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Updating…" }).hasAttribute("disabled")).toBe(true);
+    expect(screen.getByRole("button", { name: "Upgrading…" }).hasAttribute("disabled")).toBe(true);
 
     managedInstallStates.codex = { kind: "error", message: "npm unavailable" };
     view.rerender(<AgentSettings />);

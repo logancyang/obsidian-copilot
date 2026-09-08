@@ -13,7 +13,7 @@ const meta = {
       source: "managed",
       currentVersion: "1.0.0",
       minVersion: "2.0.0",
-      message: "Update opencode to the supported version.",
+      message: "Upgrade opencode to the supported version.",
     },
     managedInstall: { kind: "idle" },
     canUpdate: true,
@@ -24,7 +24,7 @@ const meta = {
   parameters: { gallery: { host: "settings-tab", layout: "padded" } },
 } satisfies Meta<AgentBackendHeaderProps>;
 export default meta;
-export const Update: StoryObj<AgentBackendHeaderProps> = {};
+export const Upgrade: StoryObj<AgentBackendHeaderProps> = {};
 export const Running: StoryObj<AgentBackendHeaderProps> = {
   args: { managedInstall: { kind: "running", label: "Downloading opencode.zip (42%)" } },
 };

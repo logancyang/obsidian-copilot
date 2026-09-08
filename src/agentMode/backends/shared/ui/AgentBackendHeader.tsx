@@ -74,7 +74,7 @@ export function AgentBackendHeader({
           inlineInstall
         ) : canUpdate ? (
           <Button className="tw-shrink-0" size="default" disabled={updating} onClick={onUpdate}>
-            {updating ? "Updating…" : updateFailed ? "Retry" : "Update"}
+            {updating ? "Upgrading…" : updateFailed ? "Retry" : "Upgrade"}
           </Button>
         ) : (
           <Button

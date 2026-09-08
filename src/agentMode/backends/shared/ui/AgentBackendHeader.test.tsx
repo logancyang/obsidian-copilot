@@ -8,10 +8,12 @@ describe("AgentBackendHeader", () => {
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/368 shows update, shared progress, and retry in the settings row", () => {
       const onUpdate = jest.fn();
       const view = render(<AgentBackendHeader {...meta.args} onUpdate={onUpdate} />);
-      fireEvent.click(screen.getByRole("button", { name: "Update" }));
+      fireEvent.click(screen.getByRole("button", { name: "Upgrade" }));
       expect(onUpdate).toHaveBeenCalledTimes(1);
       view.rerender(<AgentBackendHeader {...meta.args} {...Running.args} />);
-      expect(screen.getByRole("button", { name: "Updating…" }).hasAttribute("disabled")).toBe(true);
+      expect(screen.getByRole("button", { name: "Upgrading…" }).hasAttribute("disabled")).toBe(
+        true
+      );
       expect(screen.getByText("Downloading opencode.zip (42%)")).toBeTruthy();
       view.rerender(<AgentBackendHeader {...meta.args} {...Indeterminate.args} />);
       expect(screen.getByText("Downloading opencode.zip")).toBeTruthy();

@@ -39,13 +39,13 @@ export function installBadge(state: InstallState): InstallBadgeSpec | null {
  * Status vocabulary for the Configure dialogs. It differs from {@link installBadge}
  * on the two states where a dialog and a settings card have different jobs: a
  * dialog is the place you go to fix things, so `absent` says so outright instead
- * of staying silent, and `incompatible` names the remedy ("Update required")
+ * of staying silent, and `incompatible` names the remedy ("Upgrade required")
  * rather than the diagnosis.
  */
 const CONFIG_STATUS_BADGES: Record<InstallState["kind"], InstallBadgeSpec> = {
   ready: { label: "Ready", variant: "success", showCheck: true },
   absent: { label: "Not set up", variant: "outline" },
-  incompatible: { label: "Update required", variant: "destructive", showAlert: true },
+  incompatible: { label: "Upgrade required", variant: "destructive", showAlert: true },
   checking: { label: "Checking…", variant: "outline" },
   error: { label: "Error", variant: "destructive" },
 };
