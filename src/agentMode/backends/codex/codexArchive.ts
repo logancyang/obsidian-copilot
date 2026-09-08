@@ -1,10 +1,10 @@
-import { Unzip, UnzipInflate } from "fflate";
+import { extractArchive } from "@/agentMode/backends/shared/extractArchive";
 import { requestUrl } from "obsidian";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 import { ManagedInstallAbortError } from "@/agentMode/backends/shared/managedInstall";
-import { CODEX_ACP_PINNED_VERSION, CODEX_PACKAGING_REVISION } from "./cliSetup";
+import { CODEX_ACP_PINNED_VERSION } from "./cliSetup";
 
-export const CODEX_BUNDLE_VERSION = `${CODEX_ACP_PINNED_VERSION}-r${CODEX_PACKAGING_REVISION}`;
+export const CODEX_BUNDLE_VERSION = CODEX_ACP_PINNED_VERSION;
 const RELEASE = `https://github.com/Brevilabs/codex-acp-binary/releases/download/v${CODEX_BUNDLE_VERSION}`;
 
 /** Downloads and verifies the pinned full bundle into an unselected staging directory.
@@ -26,20 +26,21 @@ export async function installCodexArchive(stage: string, signal: AbortSignal): P
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
   if (signal.aborted) throw new ManagedInstallAbortError();
   const stem = `codex-acp-v${CODEX_BUNDLE_VERSION}-${target}`;
+  // Linux releases use tar.gz so extraction works with GNU tar.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
+  const archiveName = `${stem}${process.platform === "linux" ? ".tar.gz" : ".zip"}`;
   const manifest = (await requestUrl(`${RELEASE}/${stem}.json`)).json as {
     archive: string;
     target: string;
     acpVersion: string;
-    packagingRevision: number;
     sha256: string;
     archiveBytes: number;
     extractedBytes: number;
   };
   if (
-    manifest?.archive !== `${stem}.zip` ||
+    manifest?.archive !== archiveName ||
     manifest.target !== target ||
     manifest.acpVersion !== CODEX_ACP_PINNED_VERSION ||
-    manifest.packagingRevision !== CODEX_PACKAGING_REVISION ||
     !/^[a-f0-9]{64}$/.test(manifest.sha256) ||
     !Number.isSafeInteger(manifest.archiveBytes) ||
     manifest.archiveBytes <= 0 ||
@@ -59,7 +60,7 @@ export async function installCodexArchive(stage: string, signal: AbortSignal): P
       "Not enough disk space to download and unpack Codex while keeping your current installation."
     );
   if (signal.aborted) throw new ManagedInstallAbortError();
-  const archive = path.join(stage, "download.zip");
+  const archive = path.join(stage, archiveName);
   const response = await new Promise<import("node:http").IncomingMessage>((resolve, reject) => {
     const get = (url: string, hops: number): void => {
       const req = https.get(url, { signal }, (res) => {
@@ -82,7 +83,7 @@ export async function installCodexArchive(stage: string, signal: AbortSignal): P
       );
       req.on("error", reject);
     };
-    get(`${RELEASE}/${stem}.zip`, 5);
+    get(`${RELEASE}/${archiveName}`, 5);
   });
   const hash = crypto.createHash("sha256");
   let received = 0;
@@ -103,54 +104,6 @@ export async function installCodexArchive(stage: string, signal: AbortSignal): P
   }
   if (received !== manifest.archiveBytes || hash.digest("hex") !== manifest.sha256)
     throw new Error("Codex archive checksum mismatch.");
-  let extracted = 0;
-  const entries = new Set<string>();
-  const openFiles = new Set<number>();
-  // Reject traversal and duplicate files before writing; links are extracted only as ordinary files.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
-  const unzip = new Unzip((file) => {
-    const parts = file.name.split("/");
-    if (
-      parts.shift() !== stem ||
-      parts.some((part) => part === ".." || part.includes("\\") || part.includes(":")) ||
-      parts[0] === ""
-    )
-      throw new Error("Unsafe Codex archive path.");
-    if (file.name.endsWith("/")) return;
-    const relative = parts.join("/");
-    if (!relative || entries.has(relative)) throw new Error("Duplicate Codex archive entry.");
-    entries.add(relative);
-    const dest = path.join(stage, relative);
-    fs.mkdirSync(path.dirname(dest), { recursive: true });
-    const fd = fs.openSync(dest, "wx", 0o755);
-    openFiles.add(fd);
-    file.ondata = (error, data, final) => {
-      if (error) throw error;
-      extracted += data.length;
-      if (extracted > manifest.extractedBytes) throw new Error("Codex extracted size mismatch.");
-      // Complete short filesystem writes before accepting the extracted byte count.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
-      fs.writeFileSync(fd, data);
-      if (final) {
-        fs.closeSync(fd);
-        openFiles.delete(fd);
-      }
-    };
-    file.start();
-  });
-  unzip.register(UnzipInflate);
-  try {
-    for await (const chunk of fs.createReadStream(archive) as AsyncIterable<Uint8Array>) {
-      if (signal.aborted) throw new ManagedInstallAbortError();
-      unzip.push(new Uint8Array(chunk));
-    }
-    unzip.push(new Uint8Array(), true);
-    if (openFiles.size || extracted !== manifest.extractedBytes)
-      throw new Error(
-        `Incomplete Codex archive: ${openFiles.size} open, ${extracted}/${manifest.extractedBytes}.`
-      );
-  } finally {
-    openFiles.forEach((fd) => fs.closeSync(fd));
-  }
+  await extractArchive(archive, stage, { signal, stripComponents: 1 });
   await fs.promises.unlink(archive);
 }

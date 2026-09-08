@@ -57,12 +57,11 @@ describe("codexVersion", () => {
         const entry = platform === "win32" ? "C:\\bundle\\codex-acp.exe" : "/bundle/codex-acp";
         const nativeFs = packageFs(entry, {
           acpVersion: "1.10.0",
-          packagingRevision: 1,
           target: `${platform}-${process.arch}`,
         });
         expect(resolveSupportedCodexAcpPackage(entry, platform, nativeFs)).toEqual({
           entryPath: entry,
-          version: "1.10.0-r1",
+          version: "1.10.0",
         });
       }
     );

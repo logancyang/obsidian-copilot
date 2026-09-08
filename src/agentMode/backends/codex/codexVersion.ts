@@ -88,11 +88,20 @@ export function resolveSupportedCodexAcpPackage(
       if (
         parsedVersion &&
         (versionOrder > 0 || (versionOrder === 0 && parsedVersion[4] === undefined)) &&
-        Number.isSafeInteger(provenance.packagingRevision) &&
-        provenance.packagingRevision! > 0 &&
+        (provenance.packagingRevision === undefined ||
+          (Number.isSafeInteger(provenance.packagingRevision) &&
+            provenance.packagingRevision > 0)) &&
         provenance.target === `${platform}-${process.arch}`
       ) {
-        return { entryPath, version: `${provenance.acpVersion}-r${provenance.packagingRevision}` };
+        // Published bundles use ACP versions; retain revision identities for older installations.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
+        return {
+          entryPath,
+          version:
+            provenance.packagingRevision === undefined
+              ? provenance.acpVersion!
+              : `${provenance.acpVersion}-r${provenance.packagingRevision}`,
+        };
       }
     } catch {
       throw unsupportedAdapter();

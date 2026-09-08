@@ -1,5 +1,4 @@
 import { installCodexArchive, CODEX_BUNDLE_VERSION } from "./codexArchive";
-import { zipSync, strToU8 } from "fflate";
 import { requestUrl } from "obsidian";
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -19,21 +18,22 @@ const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/379"
 describe("codexArchive", () => {
   describe("installCodexArchive()", () => {
     let stage: string;
-    const target = `${process.platform}-${process.arch}`;
-    const stem = `codex-acp-v${CODEX_BUNDLE_VERSION}-${target}`;
+    const platform = Object.getOwnPropertyDescriptor(process, "platform")!;
+    let stem: string;
     let bytes: Uint8Array;
     let manifest: Record<string, unknown>;
     beforeEach(() => {
       stage = fs.mkdtempSync(path.join(os.tmpdir(), "codex-archive-"));
-      bytes = zipSync({
-        [`${stem}/codex-acp`]: new Uint8Array(strToU8("native")),
-        [`${stem}/codex-runtime/codex`]: new Uint8Array(strToU8("runtime")),
-      });
+      const target = `${process.platform}-${process.arch}`;
+      stem = `codex-acp-v${CODEX_BUNDLE_VERSION}-${target}`;
+      const extension = process.platform === "linux" ? ".tar.gz" : ".zip";
+      bytes = new Uint8Array(
+        fs.readFileSync(path.join(__dirname, "__fixtures__", `runtime${extension}`))
+      );
       manifest = {
-        archive: `${stem}.zip`,
+        archive: `${stem}${extension}`,
         target,
         acpVersion: "1.10.0",
-        packagingRevision: 1,
         sha256: createHash("sha256").update(bytes).digest("hex"),
         archiveBytes: bytes.length,
         extractedBytes: 13,
@@ -50,6 +50,7 @@ describe("codexArchive", () => {
       });
     });
     afterEach(() => {
+      Object.defineProperty(process, "platform", platform);
       jest.restoreAllMocks();
       fs.rmSync(stage, { recursive: true, force: true });
     });
@@ -57,7 +58,9 @@ describe("codexArchive", () => {
       `extracts and launches the locally built full archive with no external runtime: ${ISSUE}`,
       async () => {
         const archive = process.env.CODEX_BUNDLE_TEST_ARCHIVE!;
-        manifest = JSON.parse(fs.readFileSync(archive.replace(/\.zip$/, ".json"), "utf8"));
+        manifest = JSON.parse(
+          fs.readFileSync(archive.replace(/\.(zip|tar\.gz)$/, ".json"), "utf8")
+        );
         mockGet.mockImplementation((_url, _options, callback) => {
           const response = fs.createReadStream(archive);
           Object.assign(response, { statusCode: 200 });
@@ -79,54 +82,84 @@ describe("codexArchive", () => {
       },
       60_000
     );
-    it(`extracts the full runtime only after verifying the trusted pinned archive: ${ISSUE}`, async () => {
-      await installCodexArchive(stage, new AbortController().signal);
-      expect(fs.readFileSync(path.join(stage, "codex-runtime/codex"), "utf8")).toBe("runtime");
-      expect(fs.existsSync(path.join(stage, "download.zip"))).toBe(false);
-      expect(requestUrl).toHaveBeenCalledWith(
-        `https://github.com/Brevilabs/codex-acp-binary/releases/download/v${CODEX_BUNDLE_VERSION}/${stem}.json`
-      );
-    });
-    it(`completes short filesystem writes without truncating extracted executables: ${ISSUE}`, async () => {
-      const nodeFs = jest.requireActual<typeof import("node:fs")>("node:fs");
-      const write = nodeFs.writeSync;
-      const shortWrite = jest
-        .spyOn(nodeFs, "writeSync")
-        .mockImplementation(((
-          fd: number,
-          data: Uint8Array,
-          offset: number = 0,
-          length: number = data.length - offset,
-          position: number | null = null
-        ) => write(fd, data, offset, Math.min(length, 2), position)) as typeof nodeFs.writeSync);
-      await installCodexArchive(stage, new AbortController().signal);
-      expect(shortWrite).toHaveBeenCalled();
-      expect(fs.readFileSync(path.join(stage, "codex-acp"), "utf8")).toBe("native");
-      expect(fs.readFileSync(path.join(stage, "codex-runtime/codex"), "utf8")).toBe("runtime");
-    });
-    it.each(["checksum", "size", "pin", "extracted size"])(
+    it.each(process.platform === "linux" ? [".tar.gz"] : [".zip", ".tar.gz"])(
+      `extracts the full runtime from %s after verifying the pinned archive: ${ISSUE}`,
+      async (extension) => {
+        if (extension === ".tar.gz") Object.defineProperty(process, "platform", { value: "linux" });
+        const target = `${process.platform}-${process.arch}`;
+        stem = `codex-acp-v${CODEX_BUNDLE_VERSION}-${target}`;
+        bytes = new Uint8Array(
+          fs.readFileSync(path.join(__dirname, "__fixtures__", `runtime${extension}`))
+        );
+        Object.assign(manifest, {
+          target,
+          archive: `${stem}${extension}`,
+          archiveBytes: bytes.length,
+          sha256: createHash("sha256").update(bytes).digest("hex"),
+        });
+        await installCodexArchive(stage, new AbortController().signal);
+        expect(fs.readFileSync(path.join(stage, "codex-runtime/codex"), "utf8")).toBe("runtime");
+        expect(fs.existsSync(path.join(stage, manifest.archive as string))).toBe(false);
+        expect(requestUrl).toHaveBeenCalledWith(
+          `https://github.com/Brevilabs/codex-acp-binary/releases/download/v${CODEX_BUNDLE_VERSION}/${stem}.json`
+        );
+      }
+    );
+    it.each(["linux", "darwin", "win32"])(
+      `downloads the published archive format for %s: ${ISSUE}`,
+      async (targetPlatform) => {
+        Object.defineProperty(process, "platform", { value: targetPlatform });
+        const target = `${targetPlatform}-${process.arch}`;
+        const extension = targetPlatform === "linux" ? ".tar.gz" : ".zip";
+        bytes = new Uint8Array(
+          fs.readFileSync(path.join(__dirname, "__fixtures__", `runtime${extension}`))
+        );
+        Object.assign(manifest, {
+          target,
+          archive: `codex-acp-v${CODEX_BUNDLE_VERSION}-${target}${extension}`,
+          sha256: createHash("sha256").update(bytes).digest("hex"),
+          archiveBytes: bytes.length,
+        });
+        // GNU tar cannot read ZIP; native ZIP extraction is exercised on macOS/Windows.
+        const extractor = jest
+          .spyOn(
+            jest.requireActual<typeof import("@/agentMode/backends/shared/extractArchive")>(
+              "@/agentMode/backends/shared/extractArchive"
+            ),
+            "extractArchive"
+          )
+          .mockResolvedValue();
+        await installCodexArchive(stage, new AbortController().signal);
+        expect(mockGet.mock.calls[0][0]).toBe(
+          `https://github.com/Brevilabs/codex-acp-binary/releases/download/v${CODEX_BUNDLE_VERSION}/${manifest.archive as string}`
+        );
+        expect(extractor).toHaveBeenCalledWith(
+          path.join(stage, manifest.archive as string),
+          stage,
+          { signal: expect.anything(), stripComponents: 1 }
+        );
+      }
+    );
+    it.each(["checksum", "size", "pin", "archive format"])(
       `rejects a %s mismatch without extracting an executable: ${ISSUE}`,
       async (fault) => {
         if (fault === "checksum") manifest.sha256 = "0".repeat(64);
         if (fault === "size") manifest.archiveBytes = bytes.length - 1;
-        if (fault === "pin") manifest.packagingRevision = 2;
-        if (fault === "extracted size") manifest.extractedBytes = 1;
+        if (fault === "pin") manifest.acpVersion = "0.0.0";
+        if (fault === "archive format") manifest.archive = "unexpected.zip";
         await expect(installCodexArchive(stage, new AbortController().signal)).rejects.toThrow();
-        if (fault !== "extracted size")
-          expect(fs.existsSync(path.join(stage, "codex-acp"))).toBe(false);
+        expect(fs.existsSync(path.join(stage, "codex-acp"))).toBe(false);
       }
     );
-    it(`rejects ZIP traversal before writing outside the stage: ${ISSUE}`, async () => {
-      bytes = zipSync({ [`${stem}/../escaped`]: new Uint8Array(strToU8("no")) });
+    it(`rejects a corrupt archive when tar cannot extract it: ${ISSUE}`, async () => {
+      bytes = new Uint8Array(Buffer.from("not an archive"));
       Object.assign(manifest, {
         archiveBytes: bytes.length,
         sha256: createHash("sha256").update(bytes).digest("hex"),
-        extractedBytes: 2,
       });
       await expect(installCodexArchive(stage, new AbortController().signal)).rejects.toThrow(
-        "Unsafe"
+        "tar exited"
       );
-      expect(fs.existsSync(path.join(stage, "../escaped"))).toBe(false);
     });
     it(`honors cancellation before downloading: ${ISSUE}`, async () => {
       const controller = new AbortController();

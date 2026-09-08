@@ -43,6 +43,8 @@ Claude models and billing come from your Claude Code account. Models added under
 
 ### Codex
 
+Managed Codex downloads use the system `tar` command to unpack the runtime, as OpenCode does. If installation reports that `tar` is missing, install it and retry. Windows includes `tar.exe` starting with Windows 10 version 1803.
+
 The Codex backend needs `@agentclientprotocol/codex-acp` 0.0.45 or newer. The package includes a compatible Codex CLI:
 
 1. Open **Basic → Agents → Codex → Configure**.
