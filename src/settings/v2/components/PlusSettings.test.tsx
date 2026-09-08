@@ -48,6 +48,17 @@ describe("PlusSettings", () => {
   });
 
   describe("PlusSettings()", () => {
+    it("attributes the license link and pairing CTA to distinct Copilot surfaces", () => {
+      render(<PlusSettings />);
+
+      expect(screen.getByRole("link", { name: "Miyo" }).getAttribute("href")).toBe(
+        "https://www.miyo.md/?utm_source=obsidian_copilot&utm_medium=license_settings"
+      );
+      expect(
+        screen.getByRole("link", { name: "New: pair Copilot with Miyo" }).getAttribute("href")
+      ).toBe("https://www.miyo.md/?utm_source=obsidian_copilot&utm_medium=pairing");
+    });
+
     it("names a lifetime purchase Lifetime rather than its stored plan", () => {
       mockLicenseState = { status: "active", plan: "believer" };
       mockIsPaidUser = true;

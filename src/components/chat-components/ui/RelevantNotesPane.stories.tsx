@@ -1,3 +1,4 @@
+import { createMiyoPageUrl } from "@/lib/miyoLinks";
 import {
   RelevantNotesPane,
   type RelevantNotesPaneProps,
@@ -31,7 +32,7 @@ const baseArgs: RelevantNotesPaneProps = {
   status: "matches",
   noteRows: NoteRows(),
   actions: {
-    miyoDownloadUrl: "https://www.miyo.md/",
+    miyoDownloadUrl: createMiyoPageUrl("relevant_notes"),
     onOpenMiyoSettings: () => undefined,
     onRefresh: () => undefined,
     reviewIndexing: {

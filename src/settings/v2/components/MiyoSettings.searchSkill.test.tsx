@@ -97,6 +97,7 @@ jest.mock("@/miyo/miyoIndex", () => ({
 // modal's callbacks (onRetry/onAddVault) directly — the Retry button has no
 // busy-guard, which is the real path that fires concurrent enable attempts.
 let lastModalOptions: {
+  downloadUrl: string;
   onRetry: () => Promise<unknown>;
   onClose: () => void;
   onAddVault?: () => Promise<unknown>;
@@ -106,6 +107,7 @@ jest.mock("@/settings/v2/components/MiyoConnectModal", () => ({
     constructor(
       _app: unknown,
       options: {
+        downloadUrl: string;
         onRetry: () => Promise<unknown>;
         onClose: () => void;
         onAddVault?: () => Promise<unknown>;
@@ -176,6 +178,23 @@ describe("MiyoSettings", () => {
     mockIgnoreFilters = [];
     mockLifecycleActive = true;
     expireLifecycleBeforeAddRequest = false;
+  });
+
+  describe("MiyoSettings()", () => {
+    it("attributes the settings Download link and connection guide separately", async () => {
+      mockReachable = false;
+      render(<MiyoSettings />);
+
+      expect(screen.getByRole("link", { name: "Download" }).getAttribute("href")).toBe(
+        "https://www.miyo.md/?utm_source=obsidian_copilot&utm_medium=miyo_settings"
+      );
+      fireEvent.click(await screen.findByText("Connect"));
+      await waitFor(() =>
+        expect(lastModalOptions?.downloadUrl).toBe(
+          "https://www.miyo.md/?utm_source=obsidian_copilot&utm_medium=connection"
+        )
+      );
+    });
   });
 
   it("registers the vault with system roots and Obsidian ignores, but no user QA rules — https://github.com/Brevilabs/obsidian-copilot-private/issues/284", async () => {

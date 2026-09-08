@@ -2,7 +2,7 @@ import { RelevantNoteRow } from "@/components/chat-components/ui/RelevantNoteRow
 import { RelevantNotesPane } from "@/components/chat-components/ui/RelevantNotesPane";
 import { RelevantNotesToolbar } from "@/components/chat-components/ui/RelevantNotesToolbar";
 import { useRelevantNoteRowTransitions } from "@/components/chat-components/ui/useRelevantNoteRowTransitions";
-import { MIYO_HOMEPAGE_URL } from "@/constants";
+import { createMiyoPageUrl } from "@/lib/miyoLinks";
 import { useApp } from "@/context";
 import { useActiveFile } from "@/hooks/useActiveFile";
 import { useLiveRelevantNotesRefresh } from "@/hooks/useLiveRelevantNotesRefresh";
@@ -320,7 +320,7 @@ export const RelevantNotes = memo(
                 />
               ))}
               actions={{
-                miyoDownloadUrl: MIYO_HOMEPAGE_URL,
+                miyoDownloadUrl: createMiyoPageUrl("relevant_notes"),
                 onOpenMiyoSettings: (event) =>
                   openCopilotSettings(app, event.currentTarget.win, "miyo"),
                 onRefresh: refresh,
