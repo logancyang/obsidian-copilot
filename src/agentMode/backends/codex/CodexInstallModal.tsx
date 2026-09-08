@@ -1,11 +1,14 @@
 import { CodexConfigView } from "@/agentMode/backends/codex/ui/CodexConfigView";
 import { FullBleedReactModal } from "@/components/modals/ReactModal";
 import { useSettingsValue } from "@/settings/model";
-import { validateExecutableFile } from "@/utils/detectBinary";
 import { App, Notice } from "obsidian";
 import React from "react";
-import { codexAcpDetectionSearchDirs, detectCodexAcpPath, updateCodexFields } from "./descriptor";
-import { isSupportedCodexAcpPath, resolveSupportedCodexAcpEntry } from "./codexVersion";
+import {
+  codexAcpDetectionSearchDirs,
+  detectCodexAcpPath,
+  getCodexBinaryManager,
+} from "./descriptor";
+import { isSupportedCodexAcpPath } from "./codexVersion";
 
 /**
  * Stateful half of the Codex Configure dialog: the only place that reads
@@ -14,35 +17,47 @@ import { isSupportedCodexAcpPath, resolveSupportedCodexAcpEntry } from "./codexV
  */
 const CodexConfigContainer: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const settings = useSettingsValue();
+  const manager = getCodexBinaryManager();
   const binaryPath = settings.agentMode?.backends?.codex?.binaryPath ?? "";
   const state = isSupportedCodexAcpPath(binaryPath)
-    ? ({ kind: "ready", source: "custom" } as const)
+    ? ({
+        kind: "ready",
+        source: settings.agentMode?.backends?.codex?.binarySource ?? "custom",
+      } as const)
     : ({ kind: "absent" } as const);
 
-  const onSavePath = React.useCallback(async (path: string): Promise<string | null> => {
-    const err = await validateExecutableFile(path);
-    if (err) return err;
-    try {
-      resolveSupportedCodexAcpEntry(path);
-    } catch (error) {
-      return error instanceof Error ? error.message : String(error);
-    }
-    updateCodexFields({ binaryPath: path });
-    new Notice("Codex adapter path saved.");
-    return null;
-  }, []);
+  // Path changes must share the installer lock and update ownership together.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
+  const onSavePath = React.useCallback(
+    async (path: string): Promise<string | null> => {
+      try {
+        await manager.setCustomBinaryPath(path);
+        new Notice("Codex adapter path saved.");
+        return null;
+      } catch (error) {
+        return error instanceof Error ? error.message : String(error);
+      }
+    },
+    [manager]
+  );
 
-  const onClearPath = React.useCallback((): void => {
-    updateCodexFields({ binaryPath: undefined });
-    new Notice("Codex adapter path cleared.");
-  }, []);
+  const onClearPath = React.useCallback(async (): Promise<void> => {
+    try {
+      await manager.setCustomBinaryPath(null);
+      new Notice("Codex adapter path cleared.");
+    } catch (error) {
+      new Notice(
+        `Couldn't clear the custom path: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  }, [manager]);
 
   return (
     <CodexConfigView
       state={state}
       binaryPath={binaryPath}
       onSavePath={onSavePath}
-      onClearPath={onClearPath}
+      onClearPath={() => void onClearPath()}
       detect={detectCodexAcpPath}
       searchedDirs={codexAcpDetectionSearchDirs}
       onClose={onClose}
