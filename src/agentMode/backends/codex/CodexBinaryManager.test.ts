@@ -1,7 +1,7 @@
 import { installCodexArchive, CODEX_BUNDLE_VERSION } from "./codexArchive";
 jest.mock("./codexArchive", () => ({
   installCodexArchive: jest.fn(),
-  CODEX_BUNDLE_VERSION: "1.10.0-r1",
+  CODEX_BUNDLE_VERSION: "1.10.0",
 }));
 import { getSettings, setSettings } from "@/settings/model";
 import { requireNodeModule } from "@/utils/desktopRuntime";
@@ -85,7 +85,6 @@ describe("CodexBinaryManager", () => {
             path.join(stage, "provenance.json"),
             JSON.stringify({
               acpVersion: CODEX_ACP_PINNED_VERSION,
-              packagingRevision: 1,
               target: `darwin-${process.arch}`,
             })
           );
