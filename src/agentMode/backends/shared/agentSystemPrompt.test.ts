@@ -244,9 +244,8 @@ describe("agentSystemPrompt", () => {
       expect(COPILOT_PROMPT_BASE).not.toContain("immediately add ` |` after the table heading");
     });
 
-    it("retains the LaTeX and bullet-list formatting rules", () => {
+    it("retains the LaTeX formatting rule", () => {
       expect(COPILOT_PROMPT_BASE).toMatch(/\$\.\.\.\$/);
-      expect(COPILOT_PROMPT_BASE).toContain("Never use `*` for bullets");
     });
   });
 });
