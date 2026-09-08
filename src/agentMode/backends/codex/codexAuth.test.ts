@@ -44,19 +44,35 @@ const configured = (config: object) => ({
 const child = () =>
   Object.assign(new EventEmitter(), {
     pid: 987654,
+    stdin: new PassThrough(),
     stdout: new PassThrough(),
     stderr: new PassThrough(),
   });
 
+const ACCOUNT = { type: "chatgpt", email: "zero@example.com", planType: "pro" };
+const SIGNED_IN = { signedIn: true, label: "zero@example.com (pro)" };
+const serve = (account: unknown = ACCOUNT) => {
+  const proc = child();
+  proc.stdin.on("data", (data) => {
+    const request = JSON.parse(String(data));
+    if (request.id !== undefined)
+      queueMicrotask(() => {
+        proc.stdout.write(
+          JSON.stringify({ id: request.id, result: request.id === 0 ? {} : { account } }) + "\n"
+        );
+      });
+  });
+  proc.stdin.on("finish", () => queueMicrotask(() => proc.emit("close", 0)));
+  return proc;
+};
+
 describe("codexAuth", () => {
   beforeEach(() => {
-    mockSpawn.mockReset().mockImplementation(() => {
-      const process = child();
-      queueMicrotask(() => {
-        process.stderr.write("Logged in using ChatGPT\n");
-        process.emit("close", 0);
-      });
-      return process;
+    mockSpawn.mockReset().mockImplementation((_command, args) => {
+      if (args.includes("app-server")) return serve();
+      const proc = child();
+      queueMicrotask(() => proc.emit("close", 0));
+      return proc;
     });
   });
   afterEach(() => {
@@ -114,26 +130,75 @@ describe("codexAuth", () => {
         }
       }
     );
-    it.each(["Logged in using ChatGPT", "Logged in using an API key - fixture-secret"])(
-      `reads CLI status without exposing credentials %s: ${ISSUE}`,
-      async (line) => {
-        mockSpawn.mockImplementation(() => {
-          const process = child();
-          queueMicrotask(() => {
-            process.stderr.write(line + "\n");
-            process.emit("close", 0);
-          });
-          return process;
-        });
-        await expect(codexAuth.getStatus(settings)).resolves.toEqual({ signedIn: true });
+    it.each([
+      [ACCOUNT, SIGNED_IN],
+      [
+        { type: "chatgpt", email: "zero@example.com", planType: null },
+        { signedIn: true, label: "zero@example.com" },
+      ],
+      [{ type: "chatgpt", email: null, planType: "pro" }, { signedIn: true }],
+      [{ type: "apiKey", apiKey: "fixture-secret" }, { signedIn: true }],
+      [null, { signedIn: false }],
+    ])(
+      `reads account identity without exposing credentials %j: ${ISSUE}`,
+      async (account, expected) => {
+        const proc = serve(account);
+        const write = jest.spyOn(proc.stdin, "write");
+        mockSpawn.mockReturnValue(proc);
+        await expect(codexAuth.getStatus(settings)).resolves.toEqual(expected);
+        expect(write.mock.calls.map(([line]) => JSON.parse(String(line)))).toEqual([
+          {
+            id: 0,
+            method: "initialize",
+            params: { clientInfo: { name: "obsidian_copilot", version: "1.0.0" } },
+          },
+          { method: "initialized" },
+          { id: 1, method: "account/read", params: { refreshToken: false } },
+        ]);
         expect(mockSpawn).toHaveBeenCalledWith(
           "/bundle/codex-acp",
-          ["cli", "login", "status"],
+          ["cli", "app-server"],
           expect.objectContaining({
             env: expect.objectContaining({ CODEX_HOME: "/my profile" }),
             detached: process.platform !== "win32",
           })
         );
+      }
+    );
+    it(`ignores notifications and diagnostics while assembling a split account response: ${ISSUE}`, async () => {
+      const proc = child();
+      mockSpawn.mockReturnValue(proc);
+      proc.stdin.on("data", (data) => {
+        const request = JSON.parse(String(data));
+        queueMicrotask(() => {
+          if (request.id === 0) proc.stdout.write('{"id":0,"result":{}}\n');
+          if (request.id === 1) {
+            proc.stderr.write("diagnostic\n");
+            proc.stdout.write('null\n{"method":"account/updated","params":{}}\n');
+            proc.stdout.write('{"id":1,"result":{"account":');
+            proc.stdout.write(JSON.stringify(ACCOUNT) + "}}\n");
+          }
+        });
+      });
+      proc.stdin.on("finish", () => proc.emit("close", 0));
+      await expect(codexAuth.getStatus(settings)).resolves.toEqual(SIGNED_IN);
+    });
+    it.each([
+      { id: 0, error: { message: "unsupported" } },
+      { id: 1, error: { message: "failed" } },
+      { id: 1, result: {} },
+    ])(
+      `does not treat failed or malformed account replies as authenticated: %j ${ISSUE}`,
+      async (reply) => {
+        const proc = child();
+        mockSpawn.mockImplementation(() => {
+          queueMicrotask(() => {
+            proc.stdout.write(JSON.stringify(reply) + "\n");
+            proc.emit("close", 0);
+          });
+          return proc;
+        });
+        await expect(codexAuth.getStatus(settings)).resolves.toEqual({ signedIn: false });
       }
     );
     it.each(["OPENAI_API_KEY", "CODEX_API_KEY"])(
@@ -195,22 +260,106 @@ describe("codexAuth", () => {
       }
     );
   });
+  describe("signOut()", () => {
+    it(`logs out and checks the configured adapter profile: ${ISSUE}`, async () => {
+      mockSpawn.mockImplementation((_command, args) => {
+        if (args.includes("app-server")) return serve(null);
+        const proc = child();
+        queueMicrotask(() => proc.emit("close", 0));
+        return proc;
+      });
+      await expect(codexAuth.signOut!(settings)).resolves.toEqual({ signedIn: false });
+      expect(mockSpawn).toHaveBeenCalledTimes(2);
+      expect(mockSpawn).toHaveBeenNthCalledWith(
+        1,
+        "/bundle/codex-acp",
+        ["cli", "logout"],
+        expect.objectContaining({ env: expect.objectContaining({ CODEX_HOME: "/my profile" }) })
+      );
+      expect(mockSpawn).toHaveBeenNthCalledWith(
+        2,
+        "/bundle/codex-acp",
+        ["cli", "app-server"],
+        expect.objectContaining({ env: expect.objectContaining({ CODEX_HOME: "/my profile" }) })
+      );
+    });
+    it.each(["startup failure", "unrecognized output"])(
+      `rejects unverifiable status after logout exits successfully: %s ${ISSUE}`,
+      async (failure) => {
+        mockSpawn.mockImplementation((_command, args) => {
+          if (args.includes("app-server") && failure === "startup failure")
+            throw new Error("missing status CLI");
+          const process = child();
+          queueMicrotask(() => process.emit("close", 0));
+          return process;
+        });
+        await expect(codexAuth.signOut!(settings)).rejects.toThrow("Sign-out did not complete");
+        expect(mockSpawn).toHaveBeenCalledTimes(2);
+      }
+    );
+    it(`rejects a timed-out status probe after successful logout: ${ISSUE}`, async () => {
+      jest.useFakeTimers();
+      const logout = child();
+      const probe = child();
+      mockSpawn.mockReturnValueOnce(logout).mockReturnValueOnce(probe);
+      jest.spyOn(process, "kill").mockImplementation(() => {
+        queueMicrotask(() => probe.emit("close", 1));
+        return true;
+      });
+      mockExec.mockImplementation((_command, _args, _options, callback) => {
+        callback(null);
+        queueMicrotask(() => probe.emit("close", 1));
+      });
+      const pending = expect(codexAuth.signOut!(settings)).rejects.toThrow(
+        "Sign-out did not complete"
+      );
+      await Promise.resolve();
+      logout.emit("close", 0);
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(mockSpawn).toHaveBeenCalledTimes(2);
+      await jest.advanceTimersByTimeAsync(10_000);
+      await pending;
+    });
+    it(`preserves authenticated status when logout does not remove the account: ${ISSUE}`, async () => {
+      await expect(codexAuth.signOut!(settings)).resolves.toEqual(SIGNED_IN);
+    });
+    it(`does not claim environment credentials were removed by CLI logout: ${ISSUE}`, async () => {
+      await expect(
+        codexAuth.signOut!(configured({ envOverrides: { OPENAI_API_KEY: "fixture-key" } }))
+      ).resolves.toEqual({ signedIn: true });
+      expect(mockSpawn).toHaveBeenCalledTimes(1);
+    });
+    it(`reports failed process startup without claiming successful sign-out: ${ISSUE}`, async () => {
+      mockSpawn.mockImplementation(() => {
+        throw new Error("failed");
+      });
+      await expect(codexAuth.signOut!(settings)).rejects.toThrow("Sign-out did not complete");
+    });
+    it(`never starts a cancelled sign-out: ${ISSUE}`, async () => {
+      const controller = new AbortController();
+      controller.abort();
+      await expect(codexAuth.signOut!(settings, { signal: controller.signal })).rejects.toThrow(
+        "Sign-out did not complete"
+      );
+      expect(mockSpawn).not.toHaveBeenCalled();
+    });
+  });
   describe("signIn()", () => {
     it(`selects the OpenAI authorization URL and verifies status with the same profile: ${ISSUE}`, async () => {
       const onUrl = jest.fn();
       mockSpawn.mockImplementation((_command, args) => {
-        const process = child();
+        if (args.includes("app-server")) return serve();
+        const proc = child();
         queueMicrotask(() => {
-          process.stderr.write(
-            args.includes("status")
-              ? "Logged in using ChatGPT\n"
-              : "Starting on http://localhost:1455\nhttps://auth.openai.com/oauth/authorize?client_id=test\n"
+          proc.stderr.write(
+            "Starting on http://localhost:1455\nhttps://auth.openai.com/oauth/authorize?client_id=test\n"
           );
-          process.emit("close", 0);
+          proc.emit("close", 0);
         });
-        return process;
+        return proc;
       });
-      await expect(codexAuth.signIn(settings, { onUrl })).resolves.toEqual({ signedIn: true });
+      await expect(codexAuth.signIn(settings, { onUrl })).resolves.toEqual(SIGNED_IN);
       expect(onUrl).toHaveBeenCalledTimes(1);
       expect(onUrl).toHaveBeenCalledWith("https://auth.openai.com/oauth/authorize?client_id=test");
       expect(mockSpawn).toHaveBeenCalledTimes(2);

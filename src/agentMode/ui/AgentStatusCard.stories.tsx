@@ -81,3 +81,10 @@ export const LinkedSignIn: StoryObj<AgentStatusCardProps> = {
     },
   },
 };
+
+export const SignIn: StoryObj<AgentStatusCardProps> = {
+  args: {
+    message: "Codex not signed in",
+    action: { label: "Sign in", onClick: () => undefined },
+  },
+};

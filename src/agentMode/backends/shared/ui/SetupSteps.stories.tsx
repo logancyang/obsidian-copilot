@@ -3,27 +3,24 @@ import {
   SetupStep,
   type CommandShell,
 } from "@/agentMode/backends/shared/ui/SetupSteps";
-import { Button } from "@/components/ui/button";
 import type { Meta, StoryObj } from "@/lib/story";
 import * as React from "react";
 
 interface SetupStepsStoryProps {
   /** Command in the first step, so the overflow case can push a long one through. */
   installCommand: string;
-  /** Extra control beside Copy on the sign-in command. */
-  action?: React.ReactNode;
   /** Prompt convention for the platform whose commands the story renders. */
   shell?: CommandShell;
 }
 
 /** The two-step "don't have it yet" block the CLI dialogs compose. */
-const SetupStepsBlock: React.FC<SetupStepsStoryProps> = ({ installCommand, action, shell }) => (
+const SetupStepsBlock: React.FC<SetupStepsStoryProps> = ({ installCommand, shell }) => (
   <div className="tw-flex tw-flex-col tw-gap-4">
     <SetupStep index={1} title="Install it">
       <CommandBlock command={installCommand} shell={shell} />
     </SetupStep>
     <SetupStep index={2} title="Sign in">
-      <CommandBlock command="claude auth login --claudeai" shell={shell} action={action} />
+      <CommandBlock command="claude auth login --claudeai" shell={shell} />
       <p className="tw-my-0 tw-text-sm tw-text-muted">
         Copilot inherits whatever credentials the Claude Code CLI holds — there is no key to paste
         here.
@@ -40,19 +37,8 @@ const meta = {
 } satisfies Meta<SetupStepsStoryProps>;
 export default meta;
 
-/** The command-only pair, as Codex renders it. */
+/** Copyable setup commands for a user-owned CLI. */
 export const CommandsOnly: StoryObj<SetupStepsStoryProps> = {};
-
-/** With the in-app alternative to the sign-in command, as Claude renders it. */
-export const WithInAppAction: StoryObj<SetupStepsStoryProps> = {
-  args: {
-    action: (
-      <Button variant="secondary" size="sm">
-        Sign in
-      </Button>
-    ),
-  },
-};
 
 /** A one-liner installer that has to wrap without pushing Copy out of reach. */
 export const LongCommand: StoryObj<SetupStepsStoryProps> = {

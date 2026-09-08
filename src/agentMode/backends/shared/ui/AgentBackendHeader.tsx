@@ -1,6 +1,7 @@
 import React from "react";
 import type {
   BackendDescriptor,
+  BackendAuthStatus,
   InstallState,
   ManagedInstallActionState,
 } from "@/agentMode/session/types";
@@ -13,6 +14,7 @@ export interface AgentBackendHeaderProps {
   displayName: string;
   Icon: BackendDescriptor["Icon"];
   installState: InstallState;
+  authStatus?: BackendAuthStatus | null;
   managedInstall: ManagedInstallActionState;
   canUpdate: boolean;
   resolvedPath: string | null;
@@ -25,6 +27,7 @@ export function AgentBackendHeader({
   displayName,
   Icon,
   installState,
+  authStatus,
   managedInstall,
   canUpdate,
   resolvedPath,
@@ -42,9 +45,9 @@ export function AgentBackendHeader({
         <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-2">
           <Icon className="tw-size-4 tw-shrink-0" />
           <div className="tw-flex tw-min-w-0 tw-flex-col">
-            <div className="tw-flex tw-items-center tw-gap-2">
+            <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-2">
               <span className="tw-text-base tw-font-semibold">{displayName}</span>
-              <InstallBadge state={installState} />
+              <InstallBadge state={installState} authStatus={authStatus} />
               {inlineInstall && (
                 <Badge variant="accent" className="tw-font-normal">
                   Recommended

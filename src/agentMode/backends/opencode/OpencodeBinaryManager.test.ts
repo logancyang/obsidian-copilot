@@ -410,9 +410,11 @@ describe("OpencodeBinaryManager.setCustomBinaryPath", () => {
   beforeEach(async () => {
     settingsMock.__reset({});
     tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "opencode-custom-"));
+    jest.mocked(os.homedir).mockReturnValue(tmpDir);
   });
 
   afterEach(async () => {
+    jest.mocked(os.homedir).mockReset();
     await fs.promises.rm(tmpDir, { recursive: true, force: true });
   });
 
@@ -451,6 +453,19 @@ describe("OpencodeBinaryManager.setCustomBinaryPath", () => {
       binaryVersion: undefined,
       binarySource: undefined,
     });
+  });
+
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 selects a custom executable and removes managed and legacy downloads", async () => {
+    const vaultBase = path.join(tmpDir, "vault");
+    const mgr = new OpencodeBinaryManager(vaultPlugin(vaultBase));
+    const legacy = legacyVaultDataDir(vaultBase, CONFIG_DIR, "copilot-test");
+    fs.mkdirSync(mgr.getDataDir(), { recursive: true });
+    fs.mkdirSync(legacy, { recursive: true });
+    await mgr.setCustomBinaryPath(process.execPath);
+    expect(fs.existsSync(mgr.getDataDir())).toBe(false);
+    expect(fs.existsSync(legacy)).toBe(false);
+    expect(fs.existsSync(process.execPath)).toBe(true);
+    expect(settingsMock.__get().binarySource).toBe("custom");
   });
 
   it("accepting a real binary captures version from --version and tags source as custom", async () => {
@@ -680,7 +695,16 @@ describe("OpencodeBinaryManager.uninstall / downloadsSize", () => {
 });
 
 describe("OpencodeBinaryManager.runtimeState", () => {
-  beforeEach(() => settingsMock.__reset({}));
+  let home: string;
+  beforeEach(() => {
+    settingsMock.__reset({});
+    home = fs.mkdtempSync(path.join(os.tmpdir(), "opencode-runtime-test-"));
+    jest.mocked(os.homedir).mockReturnValue(home);
+  });
+  afterEach(() => {
+    jest.mocked(os.homedir).mockReset();
+    fs.rmSync(home, { recursive: true, force: true });
+  });
 
   it("starts idle and hands every subscriber the same snapshot object", () => {
     const mgr = new OpencodeBinaryManager(fakePlugin);

@@ -1,3 +1,5 @@
+import type { BackendAuthStatus } from "@/agentMode/session/types";
+const mockAuthStatuses: Record<string, BackendAuthStatus | null> = {};
 import { OpencodeAbsentInstallActions } from "@/agentMode/backends/opencode/OpencodeInlineInstall";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import React from "react";
@@ -93,6 +95,7 @@ function makeDescriptor(id: string, displayName: string, selfHostable = false) {
     id,
     displayName,
     selfHostable,
+    auth: id === "opencode" ? undefined : {},
     Icon,
     getInstallState: () => installStates[id],
     getResolvedBinaryPath: () => resolvedPaths[id] ?? null,
@@ -123,6 +126,10 @@ const mockGetCachedModelCatalog = jest.fn();
 const mockPreloadModels = jest.fn();
 
 jest.mock("@/agentMode", () => ({
+  // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the actual hook export
+  useBackendAuthState: (descriptor: { id: string }) => ({
+    status: mockAuthStatuses[descriptor.id],
+  }),
   AgentBackendHeader: jest.requireActual<
     typeof import("@/agentMode/backends/shared/ui/AgentBackendHeader")
   >("@/agentMode/backends/shared/ui/AgentBackendHeader").AgentBackendHeader,
@@ -175,6 +182,8 @@ jest.mock("./ConfiguredModelEnableList", () => ({
 describe("AgentSettings", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockAuthStatuses.claude = { signedIn: true };
+    mockAuthStatuses.codex = { signedIn: true };
     install.mockResolvedValue({ version: "1.2.3", path: MANAGED_BINARY_PATH });
     mockSettings = {
       agentMode: {
@@ -196,6 +205,24 @@ describe("AgentSettings", () => {
     mockPreloadModels.mockReset().mockResolvedValue(undefined);
     resolvedPaths = {};
   });
+
+  it.each(["claude", "codex"])(
+    "https://github.com/Brevilabs/obsidian-copilot-private/issues/379 reflects %s account readiness in the settings header",
+    (id) => {
+      mockSettings.agentMode.activeBackend = id;
+      mockAuthStatuses[id] = { signedIn: false };
+      const view = render(<AgentSettings />);
+      fireEvent.click(screen.getByRole("tab", { name: id === "claude" ? "Claude" : "Codex" }));
+      expect(screen.getByText("Sign in required")).toBeTruthy();
+      expect(screen.queryByText("Ready")).toBeNull();
+      mockAuthStatuses[id] = null;
+      view.rerender(<AgentSettings />);
+      expect(screen.getByText("Checking sign-in…")).toBeTruthy();
+      mockAuthStatuses[id] = { signedIn: true };
+      view.rerender(<AgentSettings />);
+      expect(screen.getByText("Ready")).toBeTruthy();
+    }
+  );
 
   it("skips model preload when the shared catalog is already available", async () => {
     render(<AgentSettings />);

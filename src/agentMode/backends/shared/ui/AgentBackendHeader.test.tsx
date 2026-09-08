@@ -1,10 +1,26 @@
 import React from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { AgentBackendHeader } from "./AgentBackendHeader";
-import meta, { Running, Retry, Indeterminate } from "./AgentBackendHeader.stories";
+import meta, {
+  Running,
+  Retry,
+  Indeterminate,
+  SignInRequired,
+  CheckingSignIn,
+  SignedIn,
+} from "./AgentBackendHeader.stories";
 
 describe("AgentBackendHeader", () => {
   describe("AgentBackendHeader()", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 shows Ready only after the installed agent is signed in", () => {
+      const view = render(<AgentBackendHeader {...meta.args} {...SignInRequired.args} />);
+      expect(screen.getByText("Sign in required")).toBeTruthy();
+      expect(screen.queryByText("Ready")).toBeNull();
+      view.rerender(<AgentBackendHeader {...meta.args} {...CheckingSignIn.args} />);
+      expect(screen.getByText("Checking sign-in…")).toBeTruthy();
+      view.rerender(<AgentBackendHeader {...meta.args} {...SignedIn.args} />);
+      expect(screen.getByText("Ready")).toBeTruthy();
+    });
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/368 shows update, shared progress, and retry in the settings row", () => {
       const onUpdate = jest.fn();
       const view = render(<AgentBackendHeader {...meta.args} onUpdate={onUpdate} />);

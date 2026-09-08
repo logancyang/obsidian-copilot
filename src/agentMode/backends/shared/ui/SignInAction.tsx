@@ -9,6 +9,7 @@ export interface SignInActionProps {
   url: string | null;
   onCancel?: () => void;
   failed?: boolean;
+  signInLabel?: string;
 }
 
 /** Browser sign-in controls shared by Claude and Codex, including recoverable browser-launch failure.
@@ -46,7 +47,7 @@ export const SignInAction: React.FC<SignInActionProps> = (auth) => (
                   ? "Try again"
                   : auth.status === null
                     ? "Checking sign-in…"
-                    : "Sign in"}
+                    : (auth.signInLabel ?? "Sign in")}
             </Button>
           )}
           {auth.signingIn && auth.onCancel && (

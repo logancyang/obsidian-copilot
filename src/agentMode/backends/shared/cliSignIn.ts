@@ -8,6 +8,8 @@ export interface CliAuthStatus {
 export interface SignInHandlers {
   onUrl?: (url: string) => void;
   onLine?: (line: string) => void;
+  /** Supplies protocol input for CLI account probes that use stdio. */
+  onStdin?: (stdin: import("node:stream").Writable) => void;
   signal?: AbortSignal;
   /** Select the backend's authorization page when CLI output also contains diagnostic URLs. */
   acceptUrl?: (url: string) => boolean;
@@ -92,7 +94,7 @@ export function signInWithCli(
   try {
     child = spawn(command, args, {
       env,
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: [handlers.onStdin ? "pipe" : "ignore", "pipe", "pipe"],
       windowsHide: true,
       detached: process.platform !== "win32",
     });
@@ -125,7 +127,42 @@ export function signInWithCli(
       if (treeStopped) finish({ loggedIn: false });
     } else if (!settled) void readStatus().then(finish, () => finish({ loggedIn: false }));
   });
+  // A probe may race a failed child startup while writing its initialization request.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
+  child.stdin?.on("error", cancel);
+  if (child.stdin && handlers.onStdin) handlers.onStdin(child.stdin);
   return { done, cancel };
+}
+
+/** Runs logout using the same process ownership as login and verifies the resulting account state.
+ * @param command - Configured CLI or adapter executable.
+ * @param args - Backend-specific logout arguments.
+ * @param env - Session environment selecting the credential profile.
+ * @param readStatus - Authoritative account check after the process closes.
+ * @param options - Cancellation owned by the initiating surface.
+ */
+export async function signOutWithCli(
+  command: string,
+  args: string[],
+  env: NodeJS.ProcessEnv,
+  readStatus: () => Promise<CliAuthStatus>,
+  options?: { signal?: AbortSignal }
+): Promise<CliAuthStatus> {
+  let status: CliAuthStatus | undefined;
+  await signInWithCli(
+    command,
+    args,
+    env,
+    async () => {
+      status = await readStatus();
+      return status;
+    },
+    options
+  ).done;
+  // Login's signed-out failure result cannot prove that logout removed any credentials.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
+  if (!status || options?.signal?.aborted) throw new Error("Sign-out did not complete.");
+  return status;
 }
 
 /** Emit complete (newline-delimited) lines from a piped child stream. */

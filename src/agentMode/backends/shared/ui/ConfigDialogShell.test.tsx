@@ -114,6 +114,17 @@ describe("ConfigDialogShell", () => {
       expect(band.textContent).toBe("Use your own binarybody");
     });
 
+    it("places account status beside the section heading: https://github.com/Brevilabs/obsidian-copilot-private/issues/379", () => {
+      render(
+        <ConfigSection title="Authentication" badge={<span>Signed in</span>}>
+          <p>Account controls</p>
+        </ConfigSection>
+      );
+      expect(
+        screen.getByRole("heading", { name: "Authentication" }).parentElement?.textContent
+      ).toBe("AuthenticationSigned in");
+    });
+
     it("drops the section heading when no title is given", () => {
       const { container } = render(
         <ConfigSection>

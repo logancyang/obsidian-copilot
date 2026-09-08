@@ -26,6 +26,9 @@ const meta = {
     detect: () => Promise.resolve(null),
     searchedDirs: () => [],
     auth: {
+      terminalCommand: "claude auth login --claudeai",
+      onSignOut: () => undefined,
+      signingOut: false,
       status: { signedIn: false },
       onSignIn: () => undefined,
       signingIn: false,
@@ -47,6 +50,9 @@ export const Ready: StoryObj<ClaudeConfigViewProps> = {
     state: { kind: "ready", source: "managed" },
     binaryPath: "/Users/zero/.local/bin/claude",
     auth: {
+      terminalCommand: "claude auth login --claudeai",
+      onSignOut: () => undefined,
+      signingOut: false,
       status: { signedIn: true, label: "zero@example.com" },
       onSignIn: () => undefined,
       signingIn: false,
@@ -71,6 +77,9 @@ export const SigningIn: StoryObj<ClaudeConfigViewProps> = {
     binaryPath: "/Users/zero/.local/bin/claude",
     hasBinaryPathOverride: true,
     auth: {
+      terminalCommand: "claude auth login --claudeai",
+      onSignOut: () => undefined,
+      signingOut: false,
       status: { signedIn: false },
       onSignIn: () => undefined,
       signingIn: true,
@@ -87,6 +96,9 @@ export const OAuthFallback: StoryObj<ClaudeConfigViewProps> = {
     binaryPath: "/Users/zero/.local/bin/claude",
     hasBinaryPathOverride: true,
     auth: {
+      terminalCommand: "claude auth login --claudeai",
+      onSignOut: () => undefined,
+      signingOut: false,
       status: { signedIn: false },
       onSignIn: () => undefined,
       signingIn: true,
@@ -111,6 +123,9 @@ export const SignInRetry: StoryObj<ClaudeConfigViewProps> = {
     state: { kind: "ready", source: "custom" },
     binaryPath: "/Users/zero/.local/bin/claude",
     auth: {
+      terminalCommand: "claude auth login --claudeai",
+      onSignOut: () => undefined,
+      signingOut: false,
       status: { signedIn: false },
       onSignIn: () => undefined,
       signingIn: false,
@@ -123,6 +138,35 @@ export const SignInRetry: StoryObj<ClaudeConfigViewProps> = {
 export const CheckingSignIn: StoryObj<ClaudeConfigViewProps> = {
   args: {
     state: { kind: "ready", source: "custom" },
-    auth: { status: null, onSignIn: () => undefined, signingIn: false, url: null },
+    auth: {
+      terminalCommand: "claude auth login --claudeai",
+      onSignOut: () => undefined,
+      signingOut: false,
+      status: null,
+      onSignIn: () => undefined,
+      signingIn: false,
+      url: null,
+    },
+  },
+};
+
+export const SigningOut: StoryObj<ClaudeConfigViewProps> = {
+  args: {
+    ...Ready.args,
+    auth: {
+      ...meta.args.auth,
+      status: { signedIn: true, label: "zero@example.com" },
+      signingOut: true,
+    },
+  },
+};
+export const SignOutFailed: StoryObj<ClaudeConfigViewProps> = {
+  args: {
+    ...Ready.args,
+    auth: {
+      ...meta.args.auth,
+      status: { signedIn: true, label: "zero@example.com" },
+      failed: true,
+    },
   },
 };

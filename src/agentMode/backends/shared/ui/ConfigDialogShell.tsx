@@ -1,5 +1,5 @@
 import { ConfigStatusBadge } from "@/agentMode/backends/shared/installStatus";
-import type { InstallState } from "@/agentMode/session/types";
+import type { BackendAuthStatus, InstallState } from "@/agentMode/session/types";
 import { Button } from "@/components/ui/button";
 import { AlertTriangle } from "lucide-react";
 import React from "react";
@@ -9,6 +9,8 @@ interface ConfigDialogShellProps {
   title: string;
   /** Readiness of the agent being configured; rendered as the badge beside the title. */
   state: InstallState;
+  /** Account status for auth-capable agents; null while probing. */
+  authStatus?: BackendAuthStatus | null;
   /** Blocking-condition strip below the header — compose <ConfigWarningStrip>. */
   warning?: React.ReactNode;
   /** Ordered body sections — compose <ConfigSection> children. */
@@ -32,6 +34,7 @@ interface ConfigDialogShellProps {
 export const ConfigDialogShell: React.FC<ConfigDialogShellProps> = ({
   title,
   state,
+  authStatus,
   warning,
   children,
   footer,
@@ -42,7 +45,7 @@ export const ConfigDialogShell: React.FC<ConfigDialogShellProps> = ({
       <h3 className="tw-m-0 tw-text-ui-medium tw-font-semibold tw-leading-tight tw-text-normal">
         {title}
       </h3>
-      <ConfigStatusBadge state={state} />
+      <ConfigStatusBadge state={state} authStatus={authStatus} />
     </div>
     {(state.kind === "incompatible" || state.kind === "error") && warning && (
       <div className="tw-px-4 tw-pb-3">{warning}</div>
@@ -99,12 +102,18 @@ export const ConfigWarningStrip: React.FC<ConfigWarningStripProps> = ({
  * renders a subtle header above the body; a hairline divider separates each
  * section from the content above it.
  */
-export const ConfigSection: React.FC<{ title?: string; children: React.ReactNode }> = ({
-  title,
-  children,
-}) => (
+export const ConfigSection: React.FC<{
+  title?: string;
+  badge?: React.ReactNode;
+  children: React.ReactNode;
+}> = ({ title, badge, children }) => (
   <div className="copilot-divider-t tw-flex tw-flex-col tw-gap-2 tw-p-4">
-    {title && <div className="tw-text-sm tw-font-medium">{title}</div>}
+    {title && (
+      <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-2">
+        <h4 className="tw-m-0 tw-text-sm tw-font-semibold">{title}</h4>
+        {badge}
+      </div>
+    )}
     {children}
   </div>
 );

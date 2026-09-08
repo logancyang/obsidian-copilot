@@ -15,7 +15,7 @@ import type { AgentSession } from "@/agentMode/session/AgentSession";
 import { MethodUnsupportedError } from "@/agentMode/session/errors";
 import { claudeBinarySearchDirs, resolveClaudeBinary } from "./claudeBinaryResolver";
 import { CLAUDE_INSTALL_COMMAND } from "./cliSetup";
-import { getClaudeAuthStatus, signInToClaude } from "./claudeAuth";
+import { getClaudeAuthStatus, signInToClaude, signOutFromClaude } from "./claudeAuth";
 import { assertClaudeVersionSupported } from "./claudeVersion";
 import { agentOriginEnabledModelEntries } from "@/agentMode/backends/shared/agentEnabledModels";
 import { ClaudeSdkBackendProcess } from "@/agentMode/sdk/ClaudeSdkBackendProcess";
@@ -283,10 +283,33 @@ export const ClaudeBackendDescriptor: ClaudeDescriptor = {
   },
 
   auth: {
+    getProbeKey(settings) {
+      // CLI credentials can come from a profile or an environment-selected provider.
+      // Hash the effective environment so account changes cancel stale authentication
+      // operations without exposing credentials in the shared UI identity.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
+      return requireNodeModule<typeof import("node:crypto")>("crypto")
+        .createHash("sha256")
+        .update(
+          JSON.stringify([
+            resolveClaudeCliPath(settings),
+            Object.entries(claudeChildEnv(settings)).sort(([a], [b]) => a.localeCompare(b)),
+          ])
+        )
+        .digest("hex");
+    },
     async getStatus(settings) {
       const claudePath = resolveClaudeCliPath(settings);
       if (!claudePath) return { signedIn: false };
       const status = await getClaudeAuthStatus(claudePath, claudeChildEnv(settings));
+      return { signedIn: status.loggedIn, label: status.label };
+    },
+    async signOut(settings, options) {
+      const claudePath = resolveClaudeCliPath(settings);
+      // An absent CLI cannot remove credentials from the configured account.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
+      if (!claudePath) throw new Error("Install Claude Code before signing out.");
+      const status = await signOutFromClaude(claudePath, claudeChildEnv(settings), options);
       return { signedIn: status.loggedIn, label: status.label };
     },
     async signIn(settings, handlers) {

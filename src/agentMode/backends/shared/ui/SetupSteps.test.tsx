@@ -57,24 +57,6 @@ describe("SetupSteps", () => {
       }
     });
 
-    it("renders an in-app alternative beside Copy when one is supplied", () => {
-      const onSignIn = jest.fn();
-      render(
-        <CommandBlock
-          command="claude auth login --claudeai"
-          action={
-            <button type="button" onClick={onSignIn}>
-              Sign in
-            </button>
-          }
-        />
-      );
-
-      fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
-
-      expect(onSignIn).toHaveBeenCalledTimes(1);
-    });
-
     it("offers only Copy when no in-app alternative exists", () => {
       render(<CommandBlock command="codex login" />);
 

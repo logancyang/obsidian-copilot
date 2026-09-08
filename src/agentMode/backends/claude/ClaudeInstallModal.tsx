@@ -1,3 +1,4 @@
+import { claudeSignInCommand } from "@/agentMode/backends/claude/cliSetup";
 import { ClaudeConfigView } from "@/agentMode/backends/claude/ui/ClaudeConfigView";
 import { useBackendAuthState } from "@/agentMode/session/useBackendAuthState";
 import { FullBleedReactModal } from "@/components/modals/ReactModal";
@@ -68,6 +69,13 @@ const ClaudeConfigContainer: React.FC<{
         url: auth.url,
         onCancel: auth.cancelSignIn,
         failed: auth.failed,
+        signingOut: auth.signingOut,
+        onSignOut: auth.signOut,
+        terminalCommand: claudeSignInCommand(
+          binaryPath ? (binaryPathOverride ?? "claude") : undefined,
+          settings.agentMode?.backends?.claude?.envOverrides,
+          process.platform
+        ),
       }}
       onClose={onClose}
     />

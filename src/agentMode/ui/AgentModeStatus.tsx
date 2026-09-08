@@ -121,7 +121,7 @@ export const AgentModeStatus: React.FC<Props> = ({ manager, plugin, onInstallCli
             ? auth.url
               ? { label: "Open sign-in page", href: auth.url }
               : undefined
-            : { label: `Sign in to ${descriptor.displayName}`, onClick: auth.signIn }
+            : { label: "Sign in", onClick: auth.signIn }
         }
       />
     );

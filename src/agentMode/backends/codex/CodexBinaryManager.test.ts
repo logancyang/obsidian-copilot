@@ -221,6 +221,20 @@ describe("CodexBinaryManager", () => {
           binarySource: "custom",
         });
       });
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 removes managed downloads while preserving the custom adapter and profile", async () => {
+        const manager = new CodexBinaryManager();
+        fs.mkdirSync(manager.getDataDir(), { recursive: true });
+        fs.writeFileSync(path.join(manager.getDataDir(), "codex-acp"), "managed");
+        const profile = path.join(tempDir, ".codex");
+        fs.mkdirSync(profile);
+        fs.writeFileSync(path.join(profile, "auth.json"), "credentials");
+        const entry = writeAdapter(path.join(tempDir, "custom"));
+        await manager.setCustomBinaryPath(entry);
+        expect(fs.existsSync(manager.getDataDir())).toBe(false);
+        expect(fs.existsSync(entry)).toBe(true);
+        expect(fs.readFileSync(path.join(profile, "auth.json"), "utf8")).toBe("credentials");
+        expect(getSettings().agentMode.backends?.codex?.binarySource).toBe("custom");
+      });
       it("rejects an unsupported custom package before changing settings", async () => {
         const entry = writeAdapter(path.join(tempDir, "custom"), "0.0.1");
         const before = getSettings().agentMode.backends?.codex;
