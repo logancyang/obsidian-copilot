@@ -22,6 +22,7 @@ export interface CodexConfigViewProps extends ManagedBinaryConfigProps {
 
 export const CodexConfigView: React.FC<CodexConfigViewProps> = (props) => (
   <ManagedBinaryConfigView
+    authStatus={props.auth.status}
     {...props}
     title="Configure Codex"
     binaryName={CODEX_BINARY_NAME}

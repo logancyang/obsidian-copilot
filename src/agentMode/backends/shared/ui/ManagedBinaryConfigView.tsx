@@ -4,7 +4,7 @@ import {
   ConfigSection,
   ConfigWarningStrip,
 } from "@/agentMode/backends/shared/ui/ConfigDialogShell";
-import type { InstallState } from "@/agentMode/session/types";
+import type { BackendAuthStatus, InstallState } from "@/agentMode/session/types";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { SegmentedControl, type SegmentedControlOption } from "@/components/ui/segmented-control";
@@ -61,6 +61,8 @@ export interface ManagedBinaryConfigActions {
 export interface ManagedBinaryConfigProps {
   /** Readiness of the configured binary; drives the header badge and the warning strip. */
   state: InstallState;
+  /** Account status for auth-capable agents; null while probing. */
+  authStatus?: BackendAuthStatus | null;
   /**
    * The setup path currently being viewed. Local view state: switching it shows
    * the other path's controls and persists nothing.
@@ -184,6 +186,7 @@ const ManagedBinaryInstall: React.FC<ManagedBinaryInstallProps> = ({
  */
 export const ManagedBinaryConfigView: React.FC<ManagedBinaryConfigViewProps> = ({
   state,
+  authStatus,
   source,
   onSourceChange,
   activeSource,
@@ -205,6 +208,7 @@ export const ManagedBinaryConfigView: React.FC<ManagedBinaryConfigViewProps> = (
   <ConfigDialogShell
     title={title}
     state={state}
+    authStatus={authStatus}
     warning={
       <ConfigWarningStrip
         state={state}

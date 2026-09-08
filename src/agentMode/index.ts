@@ -476,3 +476,5 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
 }
 
 export { AgentBackendHeader } from "./backends/shared/ui/AgentBackendHeader";
+
+export { useBackendAuthState } from "./session/useBackendAuthState";

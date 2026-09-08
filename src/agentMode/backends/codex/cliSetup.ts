@@ -11,7 +11,7 @@ export function codexBinaryPathPlaceholder(platform: NodeJS.Platform): string {
 }
 
 /**
- * Uses the configured adapter's bundled CLI and profile for terminal sign-in.
+ * Uses the selected adapter with explicit profile overrides.
  * @param binaryPath - Selected native adapter or npm package entry point.
  * @param envOverrides - Configured environment, filtered to non-secret profile settings.
  * @param platform - Platform whose terminal will run the command.

@@ -72,7 +72,7 @@ const ClaudeConfigContainer: React.FC<{
         signingOut: auth.signingOut,
         onSignOut: auth.signOut,
         terminalCommand: claudeSignInCommand(
-          binaryPath,
+          binaryPath ? (binaryPathOverride ?? "claude") : undefined,
           settings.agentMode?.backends?.claude?.envOverrides,
           process.platform
         ),

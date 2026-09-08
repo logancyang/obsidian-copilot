@@ -1,8 +1,6 @@
 import { codexBinaryPathPlaceholder, codexSignInCommand } from "./cliSetup";
 
 describe("cliSetup", () => {
-  beforeEach(() => jest.replaceProperty(process, "env", { HOME: "/app-home" }));
-  afterEach(() => jest.restoreAllMocks());
   describe("codexSignInCommand()", () => {
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 targets the configured native adapter and profile without exposing API keys", () => {
       expect(
@@ -11,17 +9,15 @@ describe("cliSetup", () => {
           { CODEX_HOME: "/profile", CODEX_PATH: "/custom codex", OPENAI_API_KEY: "secret" },
           "darwin"
         )
-      ).toBe(
-        "env HOME='/app-home' CODEX_HOME='/profile' CODEX_PATH='/custom codex' '/managed codex/codex-acp' 'cli' 'login'"
-      );
+      ).toBe("CODEX_HOME=/profile CODEX_PATH='/custom codex' '/managed codex/codex-acp' cli login");
     });
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 runs Windows npm adapters through Node and native adapters directly", () => {
       const profile = { CODEX_HOME: "/profile", CODEX_PATH: "/custom codex" };
       expect(codexSignInCommand("C:\\npm\\index.js", profile, "win32")).toBe(
-        "$env:HOME = '/app-home'; $env:USERPROFILE = $null; $env:HOMEDRIVE = $null; $env:HOMEPATH = $null; $env:CODEX_HOME = '/profile'; $env:CODEX_PATH = '/custom codex'; & 'node' 'C:\\npm\\index.js' 'cli' 'login'"
+        "$env:CODEX_HOME = '/profile'; $env:CODEX_PATH = '/custom codex'; node 'C:\\npm\\index.js' cli login"
       );
       expect(codexSignInCommand("C:\\native\\codex-acp.exe", profile, "win32")).toBe(
-        "$env:HOME = '/app-home'; $env:USERPROFILE = $null; $env:HOMEDRIVE = $null; $env:HOMEPATH = $null; $env:CODEX_HOME = '/profile'; $env:CODEX_PATH = '/custom codex'; & 'C:\\native\\codex-acp.exe' 'cli' 'login'"
+        "$env:CODEX_HOME = '/profile'; $env:CODEX_PATH = '/custom codex'; & 'C:\\native\\codex-acp.exe' cli login"
       );
     });
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 omits terminal sign-in until a binary is selected", () => {

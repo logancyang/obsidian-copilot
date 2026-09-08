@@ -233,7 +233,7 @@ describe("ClaudeConfigView", () => {
       expect(screen.queryByRole("button", { name: /Upgrade/ })).toBeNull();
     });
 
-    it("shows no warning strip while the CLI is healthy", () => {
+    it("shows sign-in required without an install warning for a healthy signed-out CLI: https://github.com/Brevilabs/obsidian-copilot-private/issues/379", () => {
       renderView({
         state: { kind: "ready", source: "custom" },
         binaryPath: "/usr/local/bin/claude",
@@ -241,7 +241,7 @@ describe("ClaudeConfigView", () => {
       });
 
       expect(screen.queryByRole("alert")).toBeNull();
-      expect(screen.getByText("Ready")).toBeTruthy();
+      expect(screen.getByText("Sign in required")).toBeTruthy();
       expect(screen.getByRole("button", { name: "Clear" })).toBeTruthy();
     });
   });

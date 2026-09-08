@@ -4,6 +4,7 @@ import {
   backendDisplayOrder,
   backendNeedsSelfHostWarning,
   useBackendInstallState,
+  useBackendAuthState,
   useManagedInstallActionState,
   type BackendDescriptor,
 } from "@/agentMode";
@@ -228,6 +229,7 @@ const BackendPanel: React.FC<{
 
   const installState = useBackendInstallState(descriptor, plugin);
   const managedInstall = useManagedInstallActionState(descriptor, plugin);
+  const auth = useBackendAuthState(descriptor);
   const resolvedPath = descriptor.getResolvedBinaryPath?.(settings) ?? null;
   const canUpdate = installState.kind === "incompatible" && descriptor.managedInstall !== undefined;
   const updating = managedInstall.kind === "running";
@@ -281,6 +283,7 @@ const BackendPanel: React.FC<{
           displayName={descriptor.displayName}
           Icon={descriptor.Icon}
           installState={installState}
+          authStatus={descriptor.auth ? auth.status : undefined}
           managedInstall={managedInstall}
           canUpdate={canUpdate}
           resolvedPath={resolvedPath ? formatBinaryPathForDisplay(resolvedPath) : null}

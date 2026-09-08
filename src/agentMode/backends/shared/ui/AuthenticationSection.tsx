@@ -50,17 +50,19 @@ export const AuthenticationSection: React.FC<AuthenticationSectionProps> = ({
       </div>
     ) : auth.status?.signedIn ? (
       <div className="tw-flex tw-flex-col tw-items-start tw-gap-2">
-        {auth.status.label && (
-          <p className="tw-my-0 tw-break-words tw-text-sm tw-text-muted">
-            Signed in as {auth.status.label}.
-          </p>
-        )}
+        <div className="tw-flex tw-w-full tw-flex-wrap tw-items-center tw-gap-3">
+          {auth.status.label && (
+            <p className="tw-my-0 tw-min-w-0 tw-break-words tw-text-sm tw-text-muted">
+              Signed in as {auth.status.label}.
+            </p>
+          )}
+          <Button variant="secondary" onClick={auth.onSignOut} disabled={auth.signingOut}>
+            {auth.signingOut ? "Signing out…" : "Sign out"}
+          </Button>
+        </div>
         {auth.failed && (
           <p className="tw-my-0 tw-text-sm tw-text-error">Sign-out didn't complete. Try again.</p>
         )}
-        <Button variant="secondary" size="sm" onClick={auth.onSignOut} disabled={auth.signingOut}>
-          {auth.signingOut ? "Signing out…" : "Sign out"}
-        </Button>
       </div>
     ) : (
       <>

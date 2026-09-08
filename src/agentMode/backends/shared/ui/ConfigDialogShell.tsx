@@ -1,5 +1,5 @@
 import { ConfigStatusBadge } from "@/agentMode/backends/shared/installStatus";
-import type { InstallState } from "@/agentMode/session/types";
+import type { BackendAuthStatus, InstallState } from "@/agentMode/session/types";
 import { Button } from "@/components/ui/button";
 import { AlertTriangle } from "lucide-react";
 import React from "react";
@@ -9,6 +9,8 @@ interface ConfigDialogShellProps {
   title: string;
   /** Readiness of the agent being configured; rendered as the badge beside the title. */
   state: InstallState;
+  /** Account status for auth-capable agents; null while probing. */
+  authStatus?: BackendAuthStatus | null;
   /** Blocking-condition strip below the header — compose <ConfigWarningStrip>. */
   warning?: React.ReactNode;
   /** Ordered body sections — compose <ConfigSection> children. */
@@ -32,6 +34,7 @@ interface ConfigDialogShellProps {
 export const ConfigDialogShell: React.FC<ConfigDialogShellProps> = ({
   title,
   state,
+  authStatus,
   warning,
   children,
   footer,
@@ -42,7 +45,7 @@ export const ConfigDialogShell: React.FC<ConfigDialogShellProps> = ({
       <h3 className="tw-m-0 tw-text-ui-medium tw-font-semibold tw-leading-tight tw-text-normal">
         {title}
       </h3>
-      <ConfigStatusBadge state={state} />
+      <ConfigStatusBadge state={state} authStatus={authStatus} />
     </div>
     {(state.kind === "incompatible" || state.kind === "error") && warning && (
       <div className="tw-px-4 tw-pb-3">{warning}</div>

@@ -39,3 +39,19 @@ export const Retry: StoryObj<AgentBackendHeaderProps> = {
     },
   },
 };
+
+export const SignInRequired: StoryObj<AgentBackendHeaderProps> = {
+  args: {
+    displayName: "Codex",
+    installState: { kind: "ready", source: "managed" },
+    authStatus: { signedIn: false },
+    canUpdate: false,
+    resolvedPath: null,
+  },
+};
+export const CheckingSignIn: StoryObj<AgentBackendHeaderProps> = {
+  args: { ...SignInRequired.args, authStatus: null },
+};
+export const SignedIn: StoryObj<AgentBackendHeaderProps> = {
+  args: { ...SignInRequired.args, authStatus: { signedIn: true } },
+};

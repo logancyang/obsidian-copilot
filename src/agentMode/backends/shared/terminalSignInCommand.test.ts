@@ -3,129 +3,83 @@ import { execFileSync } from "node:child_process";
 
 describe("terminalSignInCommand", () => {
   describe("terminalSignInCommand()", () => {
-    const profileVariable = "COPILOT_TEST_PROFILE";
-    const windowsHome =
-      "$env:HOME = '/app-home'; $env:USERPROFILE = $null; $env:HOMEDRIVE = $null; $env:HOMEPATH = $null; ";
-    beforeEach(() => jest.replaceProperty(process, "env", { HOME: "/app-home" }));
-    afterEach(() => jest.restoreAllMocks());
-
-    it.each([undefined, "", "  "])(
-      "https://github.com/Brevilabs/obsidian-copilot-private/issues/379 omits a terminal command without a selected binary (%s)",
-      (binaryPath) => {
-        expect(
-          terminalSignInCommand({
-            binaryPath,
-            args: ["login"],
-            profileVariables: [],
-            envOverrides: undefined,
-            platform: "darwin",
-          })
-        ).toBeNull();
+    const options = {
+      binaryPath: "codex-acp",
+      args: ["cli", "login"],
+      profileVariables: ["CODEX_HOME"],
+      envOverrides: undefined,
+      platform: "darwin" as NodeJS.Platform,
+    };
+    it.each(["darwin", "win32"] as const)(
+      "https://github.com/Brevilabs/obsidian-copilot-private/issues/379 keeps ordinary commands readable on %s without copying the app environment",
+      (platform) => {
+        jest.replaceProperty(process, "env", { CODEX_HOME: "/app-profile", HOME: "/app-home" });
+        try {
+          expect(terminalSignInCommand({ ...options, platform })).toBe("codex-acp cli login");
+        } finally {
+          jest.restoreAllMocks();
+        }
       }
     );
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 uses configured profiles before inherited values and never emits unlisted secrets", () => {
-      process.env[profileVariable] = "/inherited";
-      const options = {
-        binaryPath: "/bin/agent",
-        args: ["login"],
-        profileVariables: [profileVariable],
-        envOverrides: undefined,
-        platform: "darwin" as const,
-      };
-      expect(terminalSignInCommand(options)).toBe(
-        "env HOME='/app-home' COPILOT_TEST_PROFILE='/inherited' '/bin/agent' 'login'"
+    it.each([undefined, "", "  "])(
+      "https://github.com/Brevilabs/obsidian-copilot-private/issues/379 omits a command without a configured binary (%s)",
+      (binaryPath) => expect(terminalSignInCommand({ ...options, binaryPath })).toBeNull()
+    );
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 includes only explicit safe profile overrides", () => {
+      expect(
+        terminalSignInCommand({
+          ...options,
+          envOverrides: {
+            CODEX_HOME: "/my profile",
+            HOME: "/custom-home",
+            OPENAI_API_KEY: "secret",
+          },
+        })
+      ).toBe("HOME=/custom-home CODEX_HOME='/my profile' codex-acp cli login");
+      expect(terminalSignInCommand({ ...options, envOverrides: { CODEX_HOME: "" } })).toBe(
+        "CODEX_HOME='' codex-acp cli login"
+      );
+    });
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 quotes PowerShell paths and profile values without interpreting punctuation", () => {
+      expect(
+        terminalSignInCommand({
+          ...options,
+          binaryPath: "C:\\Agent's files\\agent.exe",
+          platform: "win32",
+          envOverrides: { CODEX_HOME: "C:\\User's profile\\$(unsafe)`value" },
+        })
+      ).toBe(
+        "$env:CODEX_HOME = 'C:\\User''s profile\\$(unsafe)`value'; & 'C:\\Agent''s files\\agent.exe' cli login"
       );
       expect(
         terminalSignInCommand({
           ...options,
-          envOverrides: { [profileVariable]: "/selected", API_KEY: "secret" },
-        })
-      ).toBe("env HOME='/app-home' COPILOT_TEST_PROFILE='/selected' '/bin/agent' 'login'");
-      expect(terminalSignInCommand({ ...options, envOverrides: { [profileVariable]: "" } })).toBe(
-        "env HOME='/app-home' COPILOT_TEST_PROFILE='' '/bin/agent' 'login'"
-      );
-    });
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 quotes PowerShell paths and profile values literally", () => {
-      expect(
-        terminalSignInCommand({
-          binaryPath: "C:\\Agent's files\\agent.exe",
-          args: ["login"],
-          profileVariables: [profileVariable],
-          envOverrides: { [profileVariable]: "C:\\User's profile\\$(unsafe)`value" },
-          platform: "win32",
-        })
-      ).toBe(
-        windowsHome +
-          "$env:COPILOT_TEST_PROFILE = 'C:\\User''s profile\\$(unsafe)`value'; & 'C:\\Agent''s files\\agent.exe' 'login'"
-      );
-    });
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 runs an optional interpreter before the selected entry point", () => {
-      expect(
-        terminalSignInCommand({
-          binaryPath: "C:\\path with spaces\\index.js",
-          args: ["cli", "login"],
-          profileVariables: [],
-          envOverrides: undefined,
+          binaryPath: "C:\\adapter\\index.js",
           platform: "win32",
           runtime: "node",
         })
-      ).toBe(windowsHome + "& 'node' 'C:\\path with spaces\\index.js' 'cli' 'login'");
+      ).toBe("node 'C:\\adapter\\index.js' cli login");
     });
-    it.each([undefined, "/configured-home"])(
-      "https://github.com/Brevilabs/obsidian-copilot-private/issues/379 ignores conflicting terminal profiles and uses the app home override %s",
-      (homeOverride) => {
-        const command = terminalSignInCommand({
-          binaryPath: process.execPath,
-          args: [
-            "-e",
-            "process.stdout.write(JSON.stringify([process.env.HOME, process.env.COPILOT_TEST_PROFILE]))",
-          ],
-          profileVariables: [profileVariable],
-          envOverrides: homeOverride === undefined ? undefined : { HOME: homeOverride },
-          platform: "darwin",
-        });
-        const output = execFileSync("/bin/sh", ["-c", command!], {
-          encoding: "utf8",
-          env: { HOME: "/terminal-home", [profileVariable]: "/terminal-profile" },
-        });
-        expect(JSON.parse(output)).toEqual([homeOverride ?? "/app-home", null]);
-      }
-    );
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 clears absent PowerShell profiles and forwards Windows home overrides", () => {
-      expect(
-        terminalSignInCommand({
-          binaryPath: "C:\\agent.exe",
-          args: ["login"],
-          profileVariables: [profileVariable],
-          envOverrides: {
-            HOME: "C:\\home",
-            USERPROFILE: "C:\\profile",
-            HOMEDRIVE: "D:",
-            HOMEPATH: "\\account",
-          },
-          platform: "win32",
-        })
-      ).toBe(
-        "$env:HOME = 'C:\\home'; $env:USERPROFILE = 'C:\\profile'; $env:HOMEDRIVE = 'D:'; $env:HOMEPATH = '\\account'; $env:COPILOT_TEST_PROFILE = $null; & 'C:\\agent.exe' 'login'"
-      );
-    });
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 passes POSIX profile values and arguments without executing shell punctuation", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 preserves literal arguments and explicit profiles while allowing terminal defaults", () => {
       const literal = "space ' apostrophe $(printf injected) `printf injected` ; end";
       const command = terminalSignInCommand({
+        ...options,
         binaryPath: process.execPath,
         args: [
           "-e",
-          "process.stdout.write(JSON.stringify([process.env.COPILOT_TEST_PROFILE, process.argv[1]]))",
+          "process.stdout.write(JSON.stringify([process.env.CODEX_HOME, process.env.HOME, process.argv[1]]))",
           literal,
         ],
-        profileVariables: [profileVariable],
-        envOverrides: { [profileVariable]: literal },
-        platform: "darwin",
+        envOverrides: { CODEX_HOME: literal },
       });
-      expect(JSON.parse(execFileSync("/bin/sh", ["-c", command!], { encoding: "utf8" }))).toEqual([
-        literal,
-        literal,
-      ]);
+      expect(
+        JSON.parse(
+          execFileSync("/bin/sh", ["-c", command!], {
+            encoding: "utf8",
+            env: { HOME: "/terminal-home" },
+          })
+        )
+      ).toEqual([literal, "/terminal-home", literal]);
     });
   });
 });

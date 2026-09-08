@@ -175,7 +175,7 @@ describe("AgentModeStatus", () => {
       const plugin = { app: {} } as unknown as CopilotPlugin;
       const { rerender } = render(<AgentModeStatus plugin={plugin} onInstallClick={jest.fn()} />);
 
-      fireEvent.click(screen.getByRole("button", { name: "Sign in to Claude" }));
+      fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
       expect(authState.signIn).toHaveBeenCalledTimes(1);
 
       authState = {

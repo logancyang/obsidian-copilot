@@ -63,6 +63,7 @@ export const ClaudeConfigView: React.FC<ClaudeConfigViewProps> = ({
   onClose,
 }) => (
   <ConfigDialogShell
+    authStatus={auth.status}
     title="Configure Claude"
     state={state}
     warning={<ConfigWarningStrip state={state} detail={claudeUpdateDetail(state)} />}
