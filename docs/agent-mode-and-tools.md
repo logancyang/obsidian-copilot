@@ -168,6 +168,12 @@ On Windows, creating the folder links may require **Developer Mode** or administ
 
 Copilot bundles OpenArtifacts' shared publishing rules with the plugin. Publishing tasks read the local copy and need no web-fetch tool or separate Node.js/npm installation. Network access is needed only for authentication and publication.
 
+Each Copilot release that includes these rules pins them to one reviewed commit in the OpenArtifacts repository. The commit hash identifies the source revision, and a separate content hash verifies that the bundled snapshot matches it. Multiple Copilot releases may use the same snapshot.
+
+The rules stay fixed for that Copilot version; publishing a new `openartifacts` version to npm does not change them. A Copilot update can include a newer snapshot and refresh the installed built-in Skill. You do not need to install or update the npm package, or wait for its release, to use the rules shipped with Copilot.
+
+Copilot bundles the shared rules, not the complete npm CLI. Its publishing commands, authentication, document identity, browser preview, and confirmation dialog are implemented by Copilot. The built-in Skill has its own revision number for refreshing installed copies; that number is separate from both the Copilot release version and the OpenArtifacts npm version.
+
 For an agent-prepared page, Copilot opens a local preview in your default browser. Review the rendered page, then return to the existing Obsidian dialog, check **I reviewed the preview**, and confirm publishing. Opening the file never enables approval by itself. If automatic opening fails, retry the preview link or open the displayed preview file in your browser. Local previews disable scripts, external resources, and navigation. The published HTML is preserved. The published page keeps the Copilot attribution banner. Cancellation or failure preserves the prepared file so the agent can reopen review. Successful publication or an explicit regeneration request removes the unchanged staged artifact.
 
 ### Upgrading an agent
