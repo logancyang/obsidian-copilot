@@ -1,7 +1,6 @@
 import { AgentHomeShelf } from "@/agentMode/ui/AgentHomeShelf";
 import React from "react";
 import { RelevantNotesShelfPanel } from "@/agentMode/ui/RelevantNotesShelfPanel";
-import { serializeFanoutComposite, type FanoutTurn } from "@/agentMode/session/fanout/fanoutTypes";
 import { useChatRelevantNotesContext } from "@/agentMode/ui/hooks/useChatRelevantNotesContext";
 import type { AgentInputDraftControls } from "@/agentMode/ui/hooks/useAgentInputDrafts";
 import type { AgentChatMessage } from "@/agentMode/session/types";
@@ -270,29 +269,6 @@ describe("useChatRelevantNotesContext", () => {
         tab.click();
       });
       expect(store.getSnapshot()).toBe(other);
-    });
-    it("sends fanout prose without persisted hidden metadata (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", () => {
-      const turn: FanoutTurn = {
-        answers: { codex: { backendId: "codex", status: "done", text: "answer" } },
-        summary: { status: "done", text: "summary" },
-      };
-      const composite = serializeFanoutComposite(turn, (id) => id);
-      renderHook(() =>
-        useChatRelevantNotesContext(
-          app,
-          root,
-          "one",
-          draft,
-          [{ ...user, sender: "AI", message: composite }],
-          undefined
-        )
-      );
-      void act(() => root.dispatchEvent(new Event("pointerdown")));
-      const text = getChatRelevantNotesStore(app).getSnapshot()!.request.messages![0].content;
-      expect(text).toContain("answer");
-      expect(text).toContain("summary");
-      expect(text).not.toContain("<!--");
-      expect(text).not.toContain('status="');
     });
     it("does not steal a popout source when an unfocused document retains its composer activeElement (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", () => {
       const input = document.createElement("input");

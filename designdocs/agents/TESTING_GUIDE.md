@@ -20,6 +20,54 @@ need unit tests; use end-to-end tests when unit tests can't answer the question.
 - For how to structure code so it's unit-testable — dependency injection, pure
   leaf modules, the litmus test — see [`STYLE_GUIDE.md`](./STYLE_GUIDE.md).
 
+### Test design workflow
+
+Unit tests are executable specifications. A developer or agent should be able to
+read the `describe`/`it` outline and explain what the module does, how its public
+operations affect observable state or output, and which constraints it preserves.
+A green suite alone does not establish that the intended behavior is covered.
+
+When adding or changing behavior:
+
+1. **Write the behavioral outline first.** Derive cases from the required contract.
+   For each affected callable, establish its normal use before adding relevant
+   boundary, failure, and regression cases. If an existing suite only covers edge
+   cases, add the missing normal behavior. Avoid copying implementation branches
+   into tests or inventing cases for unsupported states.
+2. **Name the condition and outcome.** Read each `describe` plus `it` as a sentence.
+   State what changes or is returned and when. Avoid names such as "works",
+   "handles updates", or "publishes once" that leave the behavior unexplained.
+   Keep required issue URLs, but make the description understandable without
+   opening the issue.
+3. **Make the body demonstrate the claim.** Use concrete inputs and meaningful
+   fixture names, with clear arrange, act, and assert sections. Keep one behavioral
+   scenario per case; multiple assertions may establish that scenario. Assert
+   observable results. Call counts are useful when notification or interaction is
+   part of the contract, but do not substitute for checking the promised state or
+   output. Helpers should remove setup noise while leaving decisive inputs and
+   outcomes visible.
+4. **Red, green, refactor.** Run the new test before implementing the behavior or
+   fix. Confirm it fails because the promised behavior is missing or wrong, not
+   because setup, imports, or mocks are broken. Make the smallest production change
+   that passes, then improve the code while keeping tests green. When adding
+   coverage for behavior that already works, temporarily break that behavior
+   locally to verify the test detects it, then restore it. Do not claim a red phase
+   that was not observed.
+5. **Review the outline and the assertions.** Read the test names without their
+   bodies: can a newcomer explain the affected module's contract? Then inspect
+   each body: would it fail if the named behavior broke? Fix gaps in coverage or
+   assertions; renaming a weak test alone is insufficient.
+
+For example, a `select()` suite should explain selection before deduplication:
+
+- `it("makes the chosen chat the context source for Relevant Notes", ...)`
+- `it("switches the context source to another chat before notifying subscribers", ...)`
+- `it("does not notify subscribers again when the same chat context object is reselected", ...)`
+
+This workflow applies Uncle Bob's guidance that tests should read as specifications
+and express intent clearly before making them pass. See
+[Robert C. Martin, "Test First"](https://blog.cleancoder.com/uncle-bob/2013/09/23/Test-first.html).
+
 ## End-to-end testing (Obsidian CLI)
 
 E2E via the CLI is the slowest and most fragile layer — reach for it only when
