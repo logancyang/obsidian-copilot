@@ -8,6 +8,8 @@ On desktop, start with **Agent Chat** for multi-step work, reusable Skills, perm
 
 Run **Open Copilot Chat Window** from the command palette. On mobile, the Copilot ribbon button opens Quick Chat because Agent Chat requires desktop Obsidian.
 
+In a mobile workspace tab, the message box stays above the software keyboard and Obsidian's bottom navigation bar as you open and close the keyboard.
+
 ## Choose a model
 
 Use the model picker below the message box. It shows only models enabled under **Settings → Copilot → Basic → Agents → Quick Chat**, including Copilot-hosted and bring-your-own-key models.
