@@ -6,6 +6,8 @@ import React, { memo } from "react";
 interface AgentHomeTabProps {
   /** Stable id for this tab, so the panel can reference it via aria-labelledby. */
   id: string;
+  /** Logical shelf section, used to preserve the recommendation source on tab selection. */
+  sectionId?: string;
   /** Leading type icon (sized by the caller, typically `tw-size-4`). */
   icon: React.ReactNode;
   title: string;
@@ -37,6 +39,7 @@ interface AgentHomeTabProps {
  */
 export const AgentHomeTab = memo(function AgentHomeTab({
   id,
+  sectionId,
   icon,
   title,
   count,
@@ -49,6 +52,7 @@ export const AgentHomeTab = memo(function AgentHomeTab({
   const tab = (
     <Button
       id={id}
+      data-section-id={sectionId}
       type="button"
       role="tab"
       variant="ghost2"
