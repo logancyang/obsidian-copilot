@@ -1,6 +1,7 @@
 /** Pure grouping logic for `ConfiguredModelEnableList`, split from the React container so it's testable with plain data. */
 
-import { isOpencodeZenWireId, type ModelEnableGroup, type ModelEnableRow } from "@/agentMode";
+import type { ModelEnableGroup, ModelEnableRow } from "@/components/ui/ModelEnableList";
+import { isOpencodeZenWireId } from "@/utils/opencodeModelId";
 import {
   COPILOT_PLUS_MODELS,
   capabilitiesFromConfiguredInfo,

@@ -29,7 +29,7 @@ A Copilot license is optional. You can use Agent Chat with opencode plus BYOK or
 
 ### Agents
 
-This section is desktop-only. The first selector and four inline tabs control what new Agent Chat and Quick Chat sessions can use.
+On desktop, the first selector and four inline tabs control what new Agent Chat and Quick Chat sessions can use. On mobile, **Quick Chat models** appears directly in **Basic**, below the desktop-only agent notice. Its default model, search, and model switches work the same on both platforms.
 
 | Control                            | Default                      | What it does                                                                                                                                                                                                                                                                                                     |
 | ---------------------------------- | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

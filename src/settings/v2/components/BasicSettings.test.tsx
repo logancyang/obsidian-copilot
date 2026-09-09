@@ -14,6 +14,10 @@ jest.mock("@/settings/v2/components/AgentSettings", () => ({
   AgentSettings: () => <div data-testid="agents-section">agents</div>,
 }));
 
+jest.mock("@/settings/v2/components/QuickChatPanel", () => ({
+  QuickChatPanel: () => <div>Quick Chat models</div>,
+}));
+
 const isDesktopRuntime = jest.fn<boolean, []>().mockReturnValue(true);
 jest.mock("@/utils/desktopRuntime", () => ({ isDesktopRuntime: () => isDesktopRuntime() }));
 
@@ -104,11 +108,12 @@ describe("BasicSettings", () => {
     expect(agents.compareDocumentPosition(general) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it("renders a desktop-only placeholder instead of the Agents section on mobile", async () => {
+  it("shows Quick Chat settings beside the desktop agent notice on mobile (https://github.com/Brevilabs/obsidian-copilot-private/issues/373)", async () => {
     isDesktopRuntime.mockReturnValue(false);
     render(<BasicSettings />);
     expect(screen.getByText("Agent settings are available on desktop.")).not.toBeNull();
     expect(screen.queryByTestId("agents-section")).toBeNull();
+    expect(screen.getByText("Quick Chat models")).not.toBeNull();
     // The rest of Basic still renders.
     expect(screen.getByText("General")).not.toBeNull();
   });

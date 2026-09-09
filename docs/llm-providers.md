@@ -26,7 +26,7 @@ You do not need an API key from an AI provider. Enter your license under
 
 Licensed models can appear in both places:
 
-- **Basic → Agents → Quick Chat** for regular Copilot chat.
+- **Basic → Agents → Quick Chat** for regular Copilot chat on desktop, or **Basic → Quick Chat models** on mobile.
 - **Basic → Agents → opencode** for Agent Chat.
 
 They do not appear under Claude or Codex, because those agents use their own
