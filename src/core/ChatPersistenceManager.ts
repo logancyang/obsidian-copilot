@@ -1,3 +1,4 @@
+import { prepareChatImagesForSave } from "@/utils/chatImagePersistence";
 import { AI_SENDER, COPILOT_CONVERSATION_TAG, USER_SENDER } from "@/constants";
 import ChainManager from "@/LLMProviders/chainManager";
 import { parseReasoningBlock } from "@/LLMProviders/chainRunner/utils/AgentReasoningState";
@@ -61,7 +62,6 @@ export class ChatPersistenceManager {
         return;
       }
 
-      const chatContent = this.formatChatContent(messages);
       const firstMessageEpoch = messages[0].timestamp?.epoch || Date.now();
 
       // Capture the conversations folder once at the start of the save so a
@@ -99,6 +99,13 @@ export class ChatPersistenceManager {
       const preferredFileName = existingFile
         ? existingFile.path
         : this.generateFileName(messages, firstMessageEpoch, conversationsFolder, existingTopic);
+
+      const preparedMessages = await prepareChatImagesForSave(
+        this.app,
+        messages,
+        preferredFileName
+      );
+      const chatContent = this.formatChatContent(preparedMessages);
 
       const noteContent = this.generateNoteContent(
         chatContent,

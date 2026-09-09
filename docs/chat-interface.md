@@ -59,6 +59,8 @@ Use **Chat History** to search saved conversations, reopen one, rename it, open 
 
 **Autosave Chat as Markdown** is enabled by default. Copilot saves after each user message and response under `<Copilot folder>/copilot-conversations/`. If autosave is off, use **Save Chat as Note** in the top bar. Change autosave and **Conversation Filename Template** under **Settings → Copilot → Basic → Saving conversations**.
 
+Uploaded images are embedded in saved conversation notes. Copilot stores the image files using your vault attachment setting and reuses them when the conversation is saved again.
+
 ## Chat settings
 
 Use **Chat Settings** (gear) to choose a **System Prompt** for the current chat or reset the session choice. These settings do not configure Agent Chat, which reads `AGENTS.md` instead. See [Instructions for Agent Chat and Quick Chat](system-prompts.md).
