@@ -1,4 +1,4 @@
-import { ModelEnableList, type ModelEnableGroup } from "@/agentMode/ui/ModelEnableList";
+import { ModelEnableList, type ModelEnableGroup } from "@/components/ui/ModelEnableList";
 import type { ModelCapability } from "@/constants";
 import type { Meta, StoryObj } from "@/lib/story";
 import * as React from "react";

@@ -1,4 +1,4 @@
-import { ModelEnableList, type ModelEnableGroup } from "@/agentMode/ui/ModelEnableList";
+import { ModelEnableList, type ModelEnableGroup } from "@/components/ui/ModelEnableList";
 import { fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
 

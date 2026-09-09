@@ -17,13 +17,12 @@ import {
 import { SettingSection } from "@/components/ui/setting-section";
 import { TabContent, TabItem, type TabItem as TabItemType } from "@/components/ui/setting-tabs";
 import { usePlugin } from "@/contexts/PluginContext";
-import { useChatBackendModelOptions } from "@/hooks/useChatBackendModelOptions";
 import { logError } from "@/logger";
-import { setSettings, updateSetting, useSettingsValue } from "@/settings/model";
+import { setSettings, useSettingsValue } from "@/settings/model";
 import { formatBinaryPathForDisplay } from "@/utils/binaryPath";
 import { AlertTriangle, MessageCircle } from "lucide-react";
 import React from "react";
-import { ChatModelEnableList } from "./ChatModelEnableList";
+import { QuickChatPanel } from "./QuickChatPanel";
 import { ConfiguredModelEnableList } from "./ConfiguredModelEnableList";
 import { AgentNotificationSoundSettings } from "./ui/AgentNotificationSoundSettings";
 
@@ -166,49 +165,6 @@ export const AgentSettings: React.FC = () => {
         </TabContent>
       </div>
     </section>
-  );
-};
-
-/**
- * Quick Chat curation panel: which models appear in the (non-agent) chat model
- * picker. Lives under Agents per the model-management design (chat is a
- * first-class curation backend alongside the agents). Models come from the
- * BYOK / Plus registries — chat doesn't own providers.
- */
-const QuickChatPanel: React.FC = () => {
-  const settings = useSettingsValue();
-  const { options: chatModelOptions, resolveSelectionId } = useChatBackendModelOptions();
-  const resolvedDefaultModelId = resolveSelectionId(settings.defaultModelKey);
-  const hasDefault = resolvedDefaultModelId !== undefined;
-
-  return (
-    <SettingSection>
-      <div className="tw-flex tw-min-w-0 tw-flex-col tw-py-4">
-        <span className="tw-text-base tw-font-semibold">Quick Chat models</span>
-        <span className="tw-text-xs tw-text-muted">
-          Models shown in the chat model picker. Add providers on the Models (BYOK) tab.
-        </span>
-      </div>
-      <SettingItem
-        type="select"
-        title="Default model"
-        description="The model new chats start with. Pick from your enabled Quick Chat models."
-        value={resolvedDefaultModelId ?? "Select Model"}
-        onChange={(value) => {
-          if (value === "Select Model") return;
-          updateSetting("defaultModelKey", value);
-        }}
-        options={
-          hasDefault
-            ? chatModelOptions
-            : [{ label: "Select Model", value: "Select Model" }, ...chatModelOptions]
-        }
-        placeholder="Model"
-      />
-      <div className="tw-py-4">
-        <ChatModelEnableList />
-      </div>
-    </SettingSection>
   );
 };
 

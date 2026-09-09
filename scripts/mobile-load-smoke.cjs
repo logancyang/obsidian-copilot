@@ -13,6 +13,12 @@ const loadCriticalFiles = [
   "src/settings/SettingsPage.tsx",
   "src/settings/v2/SettingsMainV2.tsx",
   "src/settings/v2/components/AdvancedSettings.tsx",
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/373:
+  // Quick Chat settings must not load desktop agents when opened on mobile.
+  "src/settings/v2/components/BasicSettings.tsx",
+  "src/settings/v2/components/QuickChatPanel.tsx",
+  "src/settings/v2/components/ChatModelEnableList.tsx",
+  "src/settings/v2/components/configuredModelGrouping.ts",
   "src/components/chat-components/plugins/SlashCommandPlugin.tsx",
   "src/components/chat-components/plugins/slashMenuItems.ts",
 ];

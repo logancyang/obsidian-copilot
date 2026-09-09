@@ -20,6 +20,7 @@ import {
   findCopilotRootFileConflict,
 } from "@/settings/copilotRootChange";
 import { updateSetting, useSettingsValue, validateCopilotFolder } from "@/settings/model";
+import { QuickChatPanel } from "@/settings/v2/components/QuickChatPanel";
 import { DesktopOnlySettingsPanel } from "@/settings/v2/components/DesktopOnlySettingsPanel";
 import { CopilotFolderChangeNotice } from "@/settings/v2/components/CopilotFolderChangeNotice";
 import { LegacyChatPromptsNotice } from "@/settings/v2/components/LegacyChatPromptsNotice";
@@ -39,14 +40,20 @@ const LazyAgentSettings = React.lazy(() =>
 );
 
 /**
- * The Agents block of the Basic tab, behind the desktop gate. `React.lazy`
- * defers the import until this actually renders, so the desktop check runs
- * before the `@/agentMode` barrel — which pulls in Node-only modules that throw
- * on evaluation under a mobile runtime — is ever requested.
+ * Basic model settings: mobile exposes Quick Chat directly, while desktop
+ * lazily loads the backend tabs. The desktop check must precede evaluation of
+ * the `@/agentMode` barrel, whose Node-only dependencies cannot run on mobile.
  */
 const AgentsSection: React.FC = () => {
   if (!isDesktopRuntime()) {
-    return <DesktopOnlySettingsPanel message="Agent settings are available on desktop." />;
+    // Quick Chat also runs on mobile; its settings must stay outside the desktop import gate.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/373
+    return (
+      <>
+        <DesktopOnlySettingsPanel message="Agent settings are available on desktop." />
+        <QuickChatPanel />
+      </>
+    );
   }
   return (
     <React.Suspense fallback={null}>

@@ -1,4 +1,4 @@
-import { ModelEnableList, type ModelEnableGroup } from "@/agentMode";
+import { ModelEnableList, type ModelEnableGroup } from "@/components/ui/ModelEnableList";
 import { logError } from "@/logger";
 import {
   backendsAtom,

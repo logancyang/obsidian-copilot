@@ -63,8 +63,8 @@ export type {
   ModelState,
 } from "./session/types";
 export { AgentDefaultModelSetting } from "./ui/AgentDefaultModelSetting";
-export { ModelEnableList } from "./ui/ModelEnableList";
-export type { ModelEnableGroup, ModelEnableRow } from "./ui/ModelEnableList";
+export { ModelEnableList } from "@/components/ui/ModelEnableList";
+export type { ModelEnableGroup, ModelEnableRow } from "@/components/ui/ModelEnableList";
 export { PlanPreviewView, PLAN_PREVIEW_VIEW_TYPE } from "./ui/PlanPreviewView";
 export type { PlanPreviewViewState } from "./ui/PlanPreviewView";
 export { ReportIssueModal } from "./ui/ReportIssueModal";
