@@ -28,11 +28,28 @@ const MAX_DERIVED_TITLE_CHARS = 60;
  * Code, whose SDK exposes no session-title API, so without this every CC chat
  * in recent history would read "Untitled chat". Stored as an overridable
  * (agent-sourced) title so an opencode/codex summarizer title still wins later.
- * Returns null when there's no usable user text.
+ * Returns null when there is no user text or image.
+ * @param messages The conversation messages in display order.
  */
 export function deriveChatTitleFromMessages(messages: AgentChatMessage[]): string | null {
   const firstUser = messages.find((m) => m.sender === USER_SENDER && m.message.trim());
-  if (!firstUser) return null;
+  if (!firstUser) {
+    // Screenshot-only sessions still need a recognizable tab and history title.
+    // https://github.com/logancyang/obsidian-copilot/issues/2850
+    return messages.some(
+      (m) =>
+        m.sender === USER_SENDER &&
+        m.content?.some(
+          (block) =>
+            typeof block === "object" &&
+            block !== null &&
+            "type" in block &&
+            block.type === "image_url"
+        )
+    )
+      ? "Image attachment"
+      : null;
+  }
   const text = firstUser.message
     .replace(/\[\[([^\]]+)\]\]/g, "$1") // show wikilink target text, not the brackets
     .replace(/\s+/g, " ")

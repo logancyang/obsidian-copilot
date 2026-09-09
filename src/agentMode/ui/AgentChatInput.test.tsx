@@ -1,10 +1,11 @@
+import { expandCustomCommandPrefix } from "@/agentMode/session/expandCustomCommandPrefix";
 import { EMPTY_AGENT_MENTION_BRANDS } from "@/components/chat-components/hooks/useAtMentionCategories";
 import { AgentChatInput } from "@/agentMode/ui/AgentChatInput";
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
 import type { AgentInputDraftControls } from "@/agentMode/ui/hooks/useAgentInputDrafts";
 import { useAgentInputDrafts } from "@/agentMode/ui/hooks/useAgentInputDrafts";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import type { App } from "obsidian";
+import { Notice, type App } from "obsidian";
 import React from "react";
 
 // Mock factory names must match the real `use*` exports, so the no-hook `use`
@@ -84,7 +85,7 @@ jest.mock("@/commands/customCommandManager", () => ({
 }));
 jest.mock("@/commands/state", () => ({ getCachedCustomCommands: () => [] }));
 jest.mock("@/agentMode/session/expandCustomCommandPrefix", () => ({
-  expandCustomCommandPrefix: async (text: string) => ({ text }),
+  expandCustomCommandPrefix: jest.fn(async (text: string) => ({ text })),
 }));
 jest.mock("@/services/webViewerService/activeWebTabSnapshot", () => ({
   buildWebTabsWithActiveSnapshot: () => [],
@@ -173,6 +174,125 @@ function setupCancellation() {
 }
 
 describe("AgentChatInput", () => {
+  describe("handleSendMessage()", () => {
+    it("sends text-only commands that expand to empty without an image-read error https://github.com/logancyang/obsidian-copilot/issues/2850", async () => {
+      jest.mocked(expandCustomCommandPrefix).mockResolvedValueOnce({ text: "" });
+      jest.mocked(Notice).mockClear();
+      const backend = {
+        sendMessage: jest.fn(() => ({ turn: Promise.resolve() })),
+      } as unknown as AgentChatBackend;
+      renderInput(backend, makeDraft({ input: "/empty" }));
+      fireEvent.click(screen.getByText("send"));
+      await waitFor(() => expect(backend.sendMessage).toHaveBeenCalledTimes(1));
+      expect(Notice).not.toHaveBeenCalled();
+    });
+
+    const image = {
+      type: "image/png",
+      arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+    } as File;
+    const imageBlock = { type: "image", mimeType: "image/png", data: "AQID" };
+
+    it.each(["", "   ", "Describe this"])(
+      "sends image content with draft %p https://github.com/logancyang/obsidian-copilot/issues/2850",
+      async (input) => {
+        const backend = {
+          sendMessage: jest.fn(() => ({ turn: Promise.resolve() })),
+          cancel: jest.fn(),
+        } as unknown as AgentChatBackend;
+        const draft = makeDraft({ input, images: [image] });
+        renderInput(backend, draft);
+        fireEvent.click(screen.getByText("send"));
+        await waitFor(() => expect(backend.sendMessage).toHaveBeenCalledTimes(1));
+        expect(jest.mocked(backend.sendMessage).mock.calls[0].slice(0, 3)).toEqual([
+          input.trim(),
+          undefined,
+          [imageBlock],
+        ]);
+        expect(draft.resetCompose).toHaveBeenCalledTimes(1);
+      }
+    );
+
+    it.each(["", "   "])(
+      "does not send empty draft %p without images https://github.com/logancyang/obsidian-copilot/issues/2850",
+      async (input) => {
+        const backend = {
+          sendMessage: jest.fn(),
+          cancel: jest.fn(),
+        } as unknown as AgentChatBackend;
+        const draft = makeDraft({ input });
+        renderInput(backend, draft);
+        await act(async () => fireEvent.click(screen.getByText("send")));
+        expect(backend.sendMessage).not.toHaveBeenCalled();
+        expect(draft.resetCompose).not.toHaveBeenCalled();
+      }
+    );
+
+    it.each(["empty", "unreadable"])(
+      "does not send or queue an image-only draft when its image is %s https://github.com/logancyang/obsidian-copilot/issues/2850",
+      async (failure) => {
+        jest.mocked(Notice).mockClear();
+        const brokenImage = {
+          type: "image/png",
+          arrayBuffer: async () => {
+            if (failure === "unreadable") throw new Error("Image read failed");
+            return new ArrayBuffer(0);
+          },
+        } as File;
+        const backend = {
+          sendMessage: jest.fn(),
+          cancel: jest.fn(),
+        } as unknown as AgentChatBackend;
+        const draft = makeDraft({ input: "", images: [brokenImage], loading: true });
+        renderInput(backend, draft);
+        await act(async () => fireEvent.click(screen.getByText("send")));
+        expect(backend.sendMessage).not.toHaveBeenCalled();
+        expect(draft.setQueue).not.toHaveBeenCalled();
+        expect(draft.setLoading).not.toHaveBeenCalled();
+        expect(Notice).toHaveBeenCalledWith(
+          "Could not read the attached images. Please attach them again."
+        );
+      }
+    );
+
+    it("keeps an image-only draft when the selected model lacks vision https://github.com/logancyang/obsidian-copilot/issues/2850", async () => {
+      const backend = { sendMessage: jest.fn(), cancel: jest.fn() } as unknown as AgentChatBackend;
+      const draft = makeDraft({ input: "", images: [image] });
+      renderInput(backend, draft, {
+        modelPickerOverride: {
+          models: [{ name: "text-only", provider: "agent", enabled: true, capabilities: [] }],
+          value: "text-only|agent",
+          onChange: jest.fn(),
+        },
+      });
+      await act(async () => fireEvent.click(screen.getByText("send")));
+      expect(backend.sendMessage).not.toHaveBeenCalled();
+      expect(draft.resetCompose).not.toHaveBeenCalled();
+    });
+
+    it("preserves a queued image-only follow-up through normal auto-send https://github.com/logancyang/obsidian-copilot/issues/2850", async () => {
+      const { backend, getDraft, settleTurn } = setupCancellation();
+      act(() => getDraft().setInput("first turn"));
+      fireEvent.click(screen.getByText("send"));
+      await waitFor(() => expect(backend.sendMessage).toHaveBeenCalledTimes(1));
+      act(() => getDraft().setSelectedImages([image]));
+      fireEvent.click(screen.getByText("send"));
+      await waitFor(() => expect(getDraft().queue).toHaveLength(1));
+      expect(getDraft().queue[0]).toMatchObject({ text: "", promptContent: [imageBlock] });
+      expect(getDraft().images).toHaveLength(0);
+
+      await act(async () => settleTurn());
+
+      expect(backend.sendMessage).toHaveBeenCalledTimes(2);
+      expect(jest.mocked(backend.sendMessage).mock.calls[1].slice(0, 3)).toEqual([
+        "",
+        undefined,
+        [imageBlock],
+      ]);
+      expect(getDraft().queue).toHaveLength(0);
+      await act(async () => settleTurn());
+    });
+  });
   describe("handleStopGenerating()", () => {
     it("discards queued follow-ups before cancellation settles the active turn https://github.com/Brevilabs/obsidian-copilot-private/issues/365", async () => {
       const { backend, getDraft, settleCancel } = setupCancellation();

@@ -17,9 +17,7 @@ import { getCachedCustomCommands } from "@/commands/state";
 import ChatInput, { type ChatInputProps } from "@/components/chat-components/ChatInput";
 import { EMPTY_AGENT_MENTION_BRANDS } from "@/components/chat-components/hooks/useAtMentionCategories";
 import { useActiveWebTabState } from "@/components/chat-components/hooks/useActiveWebTabState";
-import { Button } from "@/components/ui/button";
 import { ACTIVE_WEB_TAB_MARKER, EVENT_NAMES } from "@/constants";
-import { cn } from "@/lib/utils";
 import { useCanUseMultiAgent } from "@/plusUtils";
 import { EventTargetContext } from "@/context";
 import { logError, logWarn } from "@/logger";
@@ -42,7 +40,7 @@ import { getModelKeyFromModel } from "@/settings/model";
 import { modelSupportsVision } from "@/utils";
 import { arrayBufferToBase64 } from "@/utils/base64";
 import { mergeWebTabContexts } from "@/utils/urlNormalization";
-import { Clock, X } from "lucide-react";
+import { QueuedMessageList } from "@/agentMode/ui/QueuedMessageList";
 import { App, Notice, TFile } from "obsidian";
 import React, { memo, useCallback, useContext, useEffect, useMemo, useRef } from "react";
 import { v4 as uuidv4 } from "uuid";
@@ -316,7 +314,9 @@ export const AgentChatInput = memo(function AgentChatInput({
       // otherwise submit a turn via the keyboard; bail before any prep work.
       if (disabled) return;
       const text = inputMessage.trim();
-      if (!text) return;
+      // A screenshot can answer the preceding turn without additional text.
+      // https://github.com/logancyang/obsidian-copilot/issues/2850
+      if (!text && selectedImages.length === 0) return;
       const rawInput = inputMessage;
 
       const activeFile = app.workspace.getActiveFile();
@@ -406,6 +406,13 @@ export const AgentChatInput = memo(function AgentChatInput({
       for (const image of selectedImages) {
         const block = await fileToImageBlock(image);
         if (block) content.push(block);
+      }
+
+      // Failed image reads must not turn an image-only message into an empty request.
+      // https://github.com/logancyang/obsidian-copilot/issues/2850
+      if (selectedImages.length > 0 && !resolvedText && content.length === 0) {
+        new Notice("Could not read the attached images. Please attach them again.");
+        return;
       }
 
       const item: QueuedAgentMessage = {
@@ -596,44 +603,3 @@ export const AgentChatInput = memo(function AgentChatInput({
     </>
   );
 });
-
-interface QueuedMessageListProps {
-  messages: QueuedAgentMessage[];
-  onRemove: (id: string) => void;
-}
-
-const QueuedMessageList: React.FC<QueuedMessageListProps> = ({ messages, onRemove }) => {
-  return (
-    <div className="tw-flex tw-max-h-24 tw-flex-col tw-gap-1 tw-overflow-y-auto tw-px-2 tw-pb-1">
-      {messages.map((m) => (
-        <div
-          key={m.id}
-          className="tw-flex tw-min-w-0 tw-items-center tw-gap-2 tw-rounded-md tw-bg-secondary-alt tw-px-2 tw-py-1 tw-text-ui-smaller"
-          title={m.text}
-        >
-          <Clock
-            className={cn(
-              "tw-size-3 tw-shrink-0",
-              m.queueReason === "context" ? "tw-text-warning" : "tw-text-muted"
-            )}
-          />
-          <span className="tw-min-w-0 tw-flex-1 tw-truncate tw-whitespace-nowrap tw-text-normal">
-            {m.queueReason === "context" && (
-              <span className="tw-font-semibold tw-text-warning">Waiting for context · </span>
-            )}
-            {m.text}
-          </span>
-          <Button
-            variant="ghost2"
-            size="fit"
-            className="tw-shrink-0 tw-text-muted hover:tw-text-error"
-            onClick={() => onRemove(m.id)}
-            aria-label="Remove queued message"
-          >
-            <X className="tw-size-3" />
-          </Button>
-        </div>
-      ))}
-    </div>
-  );
-};
