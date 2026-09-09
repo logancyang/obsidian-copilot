@@ -182,3 +182,5 @@ Copilot also includes **research-memo** as an optional theme. For a named theme,
 ### Upgrading an agent
 
 When an installed agent needs a supported version, Basic → Agents and Agent Chat offer **Upgrade** if Copilot can upgrade that installation. Both show the same progress, including upgrades started in Configure. If an upgrade fails, use **Retry**. A failed custom-path selection is reported in Configure and does not turn the upgrade action into a path-validation retry.
+
+Image-only messages appear as "Image attachment" in the queue. Sessions with only images use the same fallback title in tabs and Recent Chats until a text or agent-generated title is available.

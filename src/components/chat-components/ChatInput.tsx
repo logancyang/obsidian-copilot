@@ -1,3 +1,4 @@
+import { ChatSendButton } from "@/components/ui/ChatSendButton";
 import { useChainType, useModelKey } from "@/aiParams";
 import { Button } from "@/components/ui/button";
 import { ModelSelector, type ModelSelectorEntry } from "@/components/ui/ModelSelector";
@@ -13,7 +14,7 @@ import {
 import { SelectedTextContext, WebTabContext } from "@/types/message";
 import { isAllowedFileForNoteContext } from "@/utils";
 import { getFileIdentityKey } from "@/utils/fileListUtils";
-import { ArrowUp, CornerDownLeft, Square, X } from "lucide-react";
+import { CornerDownLeft, Square, X } from "lucide-react";
 import { App, TFile, TFolder } from "obsidian";
 import React, {
   useCallback,
@@ -936,17 +937,11 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
                   <span>save</span>
                 </Button>
               ) : (
-                <Button
-                  size="icon"
-                  className={cn(ACCENT_CIRCLE_BUTTON_CLASS)}
-                  aria-label="Send"
-                  onClick={() => onSendMessage()}
-                  // Images can supply the entire next turn.
-                  // https://github.com/logancyang/obsidian-copilot/issues/2850
-                  disabled={!inputMessage.trim() && selectedImages.length === 0}
-                >
-                  <ArrowUp className="tw-size-4" />
-                </Button>
+                <ChatSendButton
+                  inputMessage={inputMessage}
+                  imageCount={selectedImages.length}
+                  onSend={() => onSendMessage()}
+                />
               )}
             </>
           )}

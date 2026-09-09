@@ -1,3 +1,4 @@
+import { expandCustomCommandPrefix } from "@/agentMode/session/expandCustomCommandPrefix";
 import { EMPTY_AGENT_MENTION_BRANDS } from "@/components/chat-components/hooks/useAtMentionCategories";
 import { AgentChatInput } from "@/agentMode/ui/AgentChatInput";
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
@@ -84,7 +85,7 @@ jest.mock("@/commands/customCommandManager", () => ({
 }));
 jest.mock("@/commands/state", () => ({ getCachedCustomCommands: () => [] }));
 jest.mock("@/agentMode/session/expandCustomCommandPrefix", () => ({
-  expandCustomCommandPrefix: async (text: string) => ({ text }),
+  expandCustomCommandPrefix: jest.fn(async (text: string) => ({ text })),
 }));
 jest.mock("@/services/webViewerService/activeWebTabSnapshot", () => ({
   buildWebTabsWithActiveSnapshot: () => [],
@@ -174,6 +175,18 @@ function setupCancellation() {
 
 describe("AgentChatInput", () => {
   describe("handleSendMessage()", () => {
+    it("sends text-only commands that expand to empty without an image-read error https://github.com/logancyang/obsidian-copilot/issues/2850", async () => {
+      jest.mocked(expandCustomCommandPrefix).mockResolvedValueOnce({ text: "" });
+      jest.mocked(Notice).mockClear();
+      const backend = {
+        sendMessage: jest.fn(() => ({ turn: Promise.resolve() })),
+      } as unknown as AgentChatBackend;
+      renderInput(backend, makeDraft({ input: "/empty" }));
+      fireEvent.click(screen.getByText("send"));
+      await waitFor(() => expect(backend.sendMessage).toHaveBeenCalledTimes(1));
+      expect(Notice).not.toHaveBeenCalled();
+    });
+
     const image = {
       type: "image/png",
       arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
