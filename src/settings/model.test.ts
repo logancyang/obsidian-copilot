@@ -531,6 +531,25 @@ describe("model", () => {
       expect(loaded.lastShownStartupVersion).toBe("4.1.0");
       expect(loaded.lastDismissedVersion).toBe("4.0.9");
     });
+
+    it("preserves valid built-in opt-outs and drops malformed preference values https://github.com/logancyang/obsidian-copilot/issues/3022", () => {
+      const result = sanitizeSettings({
+        ...DEFAULT_SETTINGS,
+        agentMode: {
+          ...DEFAULT_SETTINGS.agentMode,
+          skills: {
+            folder: "copilot/skills",
+            builtinPreferences: {
+              kept: { disabled: true, disabledAgents: ["opencode", 3] },
+              invalid: null,
+            },
+          },
+        },
+      } as unknown as CopilotSettings);
+      expect(result.agentMode.skills.builtinPreferences).toEqual({
+        kept: { disabled: true, disabledAgents: ["opencode"] },
+      });
+    });
     it.each(["parallel", "exa"] as const)(
       "preserves the %s self-host search provider (https://github.com/Brevilabs/obsidian-copilot-private/issues/285)",
       (provider) => {

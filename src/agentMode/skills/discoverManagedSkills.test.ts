@@ -1,3 +1,4 @@
+import { ALL_MANAGED_SKILLS } from "./builtin/builtinSkills";
 import { logWarn } from "@/logger";
 import { discoverManagedSkills, type SkillsFsAdapter } from "./discoverManagedSkills";
 
@@ -78,6 +79,30 @@ const validSkillMd = (overrides: Record<string, string> = {}) => {
 };
 
 describe("discoverManagedSkills", () => {
+  it("marks only catalog skills with YAML metadata read-only, preserving renamed copies and body examples https://github.com/logancyang/obsidian-copilot/issues/3022", async () => {
+    const [managed, bodyExample, markerless] = ALL_MANAGED_SKILLS;
+    const result = await discoverManagedSkills({
+      skillsFolderRelPath: SKILLS_ROOT,
+      skillsFolderAbsPath: null,
+      adapter: makeAdapter({
+        [`${SKILLS_ROOT}/${managed.name}/SKILL.md`]: validSkillMd({
+          name: managed.name,
+          metadata: '\n  copilot-builtin-version: "1"',
+        }),
+        [`${SKILLS_ROOT}/renamed-copy/SKILL.md`]: validSkillMd({
+          name: "renamed-copy",
+          metadata: '\n  copilot-builtin-version: "1"',
+        }),
+        [`${SKILLS_ROOT}/${bodyExample.name}/SKILL.md`]:
+          validSkillMd({ name: bodyExample.name }) + '\nExample:\n  copilot-builtin-version: "1"',
+        [`${SKILLS_ROOT}/${markerless.name}/SKILL.md`]: validSkillMd({ name: markerless.name }),
+      }),
+    });
+    expect(result.accepted.find((skill) => skill.name === managed.name)?.builtin).toBe(true);
+    for (const name of ["renamed-copy", bodyExample.name, markerless.name]) {
+      expect(result.accepted.find((skill) => skill.name === name)?.builtin).toBe(false);
+    }
+  });
   beforeEach(() => {
     mockedLogWarn.mockClear();
   });

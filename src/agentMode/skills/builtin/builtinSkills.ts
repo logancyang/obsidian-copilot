@@ -1215,7 +1215,7 @@ Processor to Plus.
 };
 
 /** Every builtin the host may seed, gated or not — the universe it reconciles. */
-const ALL_MANAGED_SKILLS: readonly BuiltinSkill[] = [
+export const ALL_MANAGED_SKILLS: readonly BuiltinSkill[] = [
   ...BUILTIN_SKILLS,
   MIYO_SEARCH_SKILL,
   MIYO_PARSE_SKILL,

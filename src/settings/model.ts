@@ -317,6 +317,8 @@ export interface CopilotSettings {
        * action until the user opts out.
        */
       suppressMigrationConfirm?: boolean;
+      /** Saved opt-outs for bundled skills; files are derived from these choices. */
+      builtinPreferences?: Record<string, { disabled?: boolean; disabledAgents?: string[] }>;
     };
   };
   /**
@@ -1312,6 +1314,30 @@ function sanitizeAgentMode(raw: unknown): CopilotSettings["agentMode"] {
       ? skillsValidation.folder
       : DEFAULT_SETTINGS.agentMode.skills.folder,
     ...(suppressMigrationConfirm !== undefined ? { suppressMigrationConfirm } : {}),
+    // Keep valid opt-outs across settings saves, including agents not currently installed.
+    // https://github.com/logancyang/obsidian-copilot/issues/3022
+    ...(skillsRaw?.builtinPreferences && typeof skillsRaw.builtinPreferences === "object"
+      ? {
+          builtinPreferences: Object.fromEntries(
+            Object.entries(skillsRaw.builtinPreferences)
+              .filter(([, value]) => value !== null && typeof value === "object")
+              .map(([name, value]) => {
+                const pref = value as Record<string, unknown>;
+                return [
+                  name,
+                  {
+                    disabled: pref.disabled === true,
+                    disabledAgents: Array.isArray(pref.disabledAgents)
+                      ? pref.disabledAgents.filter(
+                          (agent): agent is string => typeof agent === "string"
+                        )
+                      : [],
+                  },
+                ];
+              })
+          ),
+        }
+      : {}),
   };
 
   return {

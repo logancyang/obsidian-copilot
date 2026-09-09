@@ -1,5 +1,6 @@
 import { logError, logInfo } from "@/logger";
 import { joinPosix, parentDir } from "@/utils/pathUtils";
+import { getBuiltinSkillVersion } from "./builtinOwnership";
 import { BUILTIN_SKILLS, type BuiltinSkill } from "./builtinSkills";
 
 /**
@@ -25,19 +26,8 @@ export interface SeedBuiltinSkillsOptions {
   fs: BuiltinSeedFs;
   /** Override the skill set (tests). Defaults to {@link BUILTIN_SKILLS}. */
   skills?: readonly BuiltinSkill[];
-}
-
-/**
- * Matches `metadata.copilot-builtin-version` in a SKILL.md. Absence of this
- * field means the file is user-authored — we must not overwrite it even if the
- * folder name collides with a builtin skill name.
- */
-const VERSION_RE = /copilot-builtin-version:\s*"?(\d+)"?/;
-
-/** Returns the seeded version number, or null if the file is not a builtin. */
-function seededVersion(skillMd: string): number | null {
-  const m = skillMd.match(VERSION_RE);
-  return m ? Number.parseInt(m[1], 10) : null;
+  /** Settings-derived agent lists override legacy file preferences. */
+  enabledAgents?: Readonly<Record<string, readonly string[]>>;
 }
 
 /**
@@ -72,7 +62,7 @@ export async function inspectBuiltinSkill(
   const skillMdPath = joinPosix(joinPosix(skillsFolderRelPath, name), "SKILL.md");
   try {
     if (!(await fs.exists(skillMdPath))) return "absent";
-    const version = seededVersion(await fs.read(skillMdPath));
+    const version = getBuiltinSkillVersion(await fs.read(skillMdPath));
     if (version === null) return "collision";
     if (expectedVersion !== undefined && version < expectedVersion) return "stale";
     return "seeded";
@@ -132,7 +122,8 @@ export async function seedBuiltinSkills(
   const skills = options.skills ?? BUILTIN_SKILLS;
   const seeded: string[] = [];
 
-  await ensureDir(fs, skillsFolderRelPath);
+  // No eligible skill means no folders should be created.
+  // https://github.com/logancyang/obsidian-copilot/issues/3022
 
   for (const skill of skills) {
     const dir = joinPosix(skillsFolderRelPath, skill.name);
@@ -145,7 +136,7 @@ export async function seedBuiltinSkills(
     if (await fs.exists(skillMdPath)) {
       try {
         existingContent = await fs.read(skillMdPath);
-        const existing = seededVersion(existingContent);
+        const existing = getBuiltinSkillVersion(existingContent);
         // null = no copilot-builtin-version marker → user-authored file; skip.
         if (existing === null) {
           // The user chose to own this name, so the managed predecessor still retires: its
@@ -179,7 +170,7 @@ export async function seedBuiltinSkills(
       try {
         if (await fs.exists(legacyMdPath)) {
           const legacyContent = await fs.read(legacyMdPath);
-          if (seededVersion(legacyContent) !== null) existingContent = legacyContent;
+          if (getBuiltinSkillVersion(legacyContent) !== null) existingContent = legacyContent;
         }
       } catch (e) {
         logError(`[Skills] could not read legacy builtin skill ${skill.legacyName}`, e);
@@ -190,6 +181,16 @@ export async function seedBuiltinSkills(
       }
     }
 
+    const effectiveAgents = options.enabledAgents?.[skill.name];
+    // Settings opt-outs must apply even when bundled content is already current.
+    // https://github.com/logancyang/obsidian-copilot/issues/3022
+    if (current && existingContent !== null && effectiveAgents !== undefined) {
+      const next = existingContent.replace(
+        ENABLED_AGENTS_RE,
+        `$1${effectiveAgents.join(", ") || '""'}`
+      );
+      if (next !== existingContent) await fs.write(skillMdPath, next);
+    }
     if (!current) {
       try {
         // Retire only explicitly owned files: users can add references and themes beside
@@ -206,9 +207,12 @@ export async function seedBuiltinSkills(
         // agent off via the UI, copilot-enabled-agents was rewritten on disk.
         // Preserve that value in the bundled replacement so the upgrade doesn't
         // silently undo the user's preference.
-        const skillMd = existingContent
-          ? preserveEnabledAgents(existingContent, skill.skillMd)
-          : skill.skillMd;
+        const skillMd =
+          effectiveAgents !== undefined
+            ? skill.skillMd.replace(ENABLED_AGENTS_RE, `$1${effectiveAgents.join(", ") || '""'}`)
+            : existingContent
+              ? preserveEnabledAgents(existingContent, skill.skillMd)
+              : skill.skillMd;
         // Write support files before SKILL.md so the version stamp in SKILL.md
         // only appears once all scripts are on disk. A crash between writes then
         // leaves no SKILL.md (or a stale-version one), so the next startup
@@ -261,7 +265,7 @@ export async function removeSeededBuiltin(
   try {
     if (!(await fs.exists(skillMdPath))) return false;
     // null marker = user-authored file → never delete.
-    if (seededVersion(await fs.read(skillMdPath)) === null) return false;
+    if (getBuiltinSkillVersion(await fs.read(skillMdPath)) === null) return false;
     await fs.rmRecursive(dir);
     logInfo(`[Skills] removed de-gated builtin skill: ${name}`);
     return true;
