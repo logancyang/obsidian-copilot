@@ -62,6 +62,14 @@ export const BinaryPathSetting: React.FC<Props> = ({
   const [error, setError] = React.useState<string | null>(null);
   const [searched, setSearched] = React.useState<string[]>([]);
   const [busy, setBusy] = React.useState(false);
+  const mounted = React.useRef(false);
+
+  React.useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
   React.useEffect(() => {
     // eslint-disable-next-line @eslint-react/hooks-extra/no-direct-set-state-in-use-effect -- sync the editable draft when the persisted path changes underneath us (e.g. auto-detect from another panel); a key-prop remount would drop in-flight edits
@@ -101,6 +109,10 @@ export const BinaryPathSetting: React.FC<Props> = ({
     setSearched([]);
     try {
       const found = detect ? await detect() : await detectBinary(binaryName);
+      // Leaving this control abandons detection; a late result must not overwrite
+      // a managed installation selected in the meantime.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/398
+      if (!mounted.current) return;
       if (!found) {
         setError(
           notFoundHint ??
