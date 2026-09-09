@@ -31,6 +31,24 @@ If your plugin does not need CSS, delete this file.
   );
 }
 
+/* Obsidian's phone drawer stays full-height and reserves its own bottom
+   controls. Constrain this host to the keyboard-visible area instead of
+   adding keyboard padding on top of that reservation, which strands the
+   composer above the keyboard. Match the drawer's top safe-area padding.
+   https://github.com/Brevilabs/obsidian-copilot-private/issues/400 */
+.is-phone
+  .workspace-drawer.mod-right
+  .workspace-leaf-content[data-type="copilot-chat-view"]
+  .view-content {
+  max-height: calc(
+    100vh - max(var(--size-4-2), var(--safe-area-inset-top)) - var(--keyboard-height)
+  );
+  padding-bottom: max(
+    var(--size-4-8),
+    calc(var(--safe-area-inset-bottom) - var(--keyboard-height))
+  );
+}
+
 .copilot-openartifacts-modal {
   width: min(32rem, calc(100vw - 2rem));
   min-width: 0;
