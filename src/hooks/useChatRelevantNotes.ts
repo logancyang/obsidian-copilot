@@ -66,9 +66,13 @@ export function useChatRelevantNotes(
       window.clearTimeout(timer);
     };
   }, [app, context, connectionKey, mock, revision]); // eslint-disable-line react-hooks/exhaustive-deps -- settled rows must not retrigger retrieval
+  const result = settled && settled.id === context?.id ? settled.result : LOADING;
+  // Unsupported chat retrieval must leave the existing editor-note flow usable.
+  // Empty context and real retrieval failures still belong to the selected chat.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/383
   return {
-    context,
-    result: settled && settled.id === context?.id ? settled.result : LOADING,
+    context: result.status === "unsupported-service" ? null : context,
+    result,
     refresh: () => setRevision((value) => value + 1),
   };
 }
