@@ -324,13 +324,18 @@ export class OpenArtifactsPublisher {
         // propagates to the failure result without a path back to POST.
         const receipt = await this.client.update(docId, document, licenseKey);
         await this.recordPublishedReceipt(file, document, receipt);
+        // Saving is idempotent for a current identity and moves a legacy `symposium` key to
+        // `openartifacts`, so every successful update completes the migration.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/395
+        let saved = false;
         let currentDocId: string | null | undefined;
         try {
           currentDocId = await getOpenArtifactsDocId(this.app, file);
+          if (currentDocId === docId) saved = await saveOpenArtifactsLink(this.app, file, receipt);
         } catch {
           // Remote success is still partial success when the local identity cannot be verified.
         }
-        if (currentDocId !== docId) {
+        if (!saved) {
           const result: OpenArtifactsPersistenceResult = {
             kind: "persistence",
             action: "update",

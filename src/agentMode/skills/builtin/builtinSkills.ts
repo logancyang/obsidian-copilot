@@ -586,7 +586,7 @@ const FETCH_X = relaySkill({
   scriptFile: "fetch-x.sh",
 });
 
-const OPENARTIFACTS_PUBLISH_VERSION = 8;
+const OPENARTIFACTS_PUBLISH_VERSION = 9;
 const OPENARTIFACTS_PUBLISH_USAGE = "openartifacts-publish";
 /** Where the wrapper sends requests unless a test or self-host points it elsewhere. */
 const OPENARTIFACTS_API_HOST_ENV = "OPENARTIFACTS_API_HOST";
@@ -623,8 +623,10 @@ the user: ${OPENARTIFACTS_MISSING_KEY_MESSAGE}
 Read one existing Markdown source note. Treat YAML frontmatter as metadata, never as page
 content. Note its \`openartifacts\` property, or on older notes the \`symposium\` property:
 an \`https://…/d/<docId>\` value means the note is already published and this task updates
-that page; pass that \`docId\` to the wrapper. If either property holds any other value, or
-both hold different links, stop and ask the user before touching them.
+that page; pass that \`docId\` to the wrapper. Compare document ids, not urls: an older
+\`symposium.site\` link and an \`openartifacts.site\` link with the same id are the same page.
+If either property holds any other value, or the two name different ids, stop and ask the
+user before touching them.
 
 Write complete UTF-8 HTML (at most \`${OPENARTIFACTS_MAX_HTML_BYTES}\` bytes) to a new file
 under \`$${OPENARTIFACTS_WORKSPACE_ROOT_ENV}/${OPENARTIFACTS_AGENT_HANDOFF_DIR}/\`, creating
@@ -665,8 +667,8 @@ On Windows, use the \`.cmd\` wrapper (prefix with \`&\` in PowerShell):
 
 Success prints the server's JSON, \`{"docId", "url", "version"}\`. Set the note's
 \`openartifacts\` frontmatter property to that \`url\` (create the frontmatter block if
-needed, keep every other property) and remove a \`symposium\` property that holds the same
-link, then report the URL. Publishing the same note again updates the same page.
+needed, keep every other property) and remove a \`symposium\` property whose link has the
+same document id, then report the URL. Publishing the same note again updates the same page.
 
 On failure the wrapper prints the HTTP status and the server's message to stderr and
 exits 1. Report that message verbatim. Do not retry on your own, invent a cause, strip

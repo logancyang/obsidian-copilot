@@ -234,11 +234,13 @@ describe("OpenArtifactsPublisher", () => {
           })
         );
         expect(harness.client.publish).not.toHaveBeenCalled();
-        expect(harness.processFrontMatter).not.toHaveBeenCalled();
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/395 a successful update
+        // moves the identity to the current property.
+        expect(harness.frontmatter).toEqual({ openartifacts: RECEIPT.url });
       });
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/337 routes a legacy stored document URL through update without publishing", async () => {
-        const harness = createHarness({ symposium: LEGACY_DOC_URL });
+        const harness = createHarness({ symposium: LEGACY_DOC_URL, tags: ["shared"] });
 
         const result = await openAndConfirm(harness, "publish");
 
@@ -249,6 +251,18 @@ describe("OpenArtifactsPublisher", () => {
         });
         expect(harness.client.update).toHaveBeenCalledWith(DOC_ID, DOCUMENT, "decrypted-license");
         expect(harness.client.publish).not.toHaveBeenCalled();
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/395 the legacy host and
+        // key are both replaced by the receipt's link under `openartifacts`.
+        expect(harness.frontmatter).toEqual({ openartifacts: RECEIPT.url, tags: ["shared"] });
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/395 leaves a note already on openartifacts untouched after an update", async () => {
+        const harness = createHarness({ openartifacts: DOC_URL });
+
+        const result = await openAndConfirm(harness, "update");
+
+        expect(result.kind).toBe("success");
+        expect(harness.frontmatter).toEqual({ openartifacts: DOC_URL });
       });
 
       it("lets copied notes intentionally update the same remote id", async () => {
