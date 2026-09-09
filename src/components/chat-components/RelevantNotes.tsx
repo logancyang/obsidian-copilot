@@ -1,3 +1,4 @@
+import { useChatRelevantNotes } from "@/hooks/useChatRelevantNotes";
 import { RelevantNoteRow } from "@/components/chat-components/ui/RelevantNoteRow";
 import { RelevantNotesPane } from "@/components/chat-components/ui/RelevantNotesPane";
 import { RelevantNotesToolbar } from "@/components/chat-components/ui/RelevantNotesToolbar";
@@ -95,6 +96,7 @@ interface RelevantNotesRequery {
 const INITIAL_REQUERY: RelevantNotesRequery = Object.freeze({ restart: 0, live: false });
 
 interface UseRelevantNotesOptions {
+  paused?: boolean;
   enableMiyo: boolean;
   miyoServerUrl: string;
   miyoBackendAvailable: boolean;
@@ -104,6 +106,7 @@ interface UseRelevantNotesOptions {
 }
 
 function useRelevantNotes({
+  paused,
   enableMiyo,
   miyoServerUrl,
   miyoBackendAvailable,
@@ -123,7 +126,7 @@ function useRelevantNotes({
   // Non-Markdown leaves do not provide a note Miyo can relate, so they share
   // the neutral no-source state instead of showing setup guidance.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
-  const activeFilePath = activeFile?.extension === "md" ? activeFile.path : undefined;
+  const activeFilePath = !paused && activeFile?.extension === "md" ? activeFile.path : undefined;
   const refresh = useCallback(
     () => setRequery((current) => ({ restart: current.restart + 1, live: false })),
     []
@@ -241,28 +244,50 @@ export const RelevantNotes = memo(
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/362
     const canFollowMiyoIndex = shouldUseMiyo(settings);
     const liveUpdateEnabled = canFollowMiyoIndex && settings.relevantNotesLiveUpdate;
-    const { result, refresh, liveRefresh } = useRelevantNotes({
+    const mock =
+      typeof localStorage !== "undefined" &&
+      localStorage.getItem("copilot.mockRelatedContext") === "true";
+    const chat = useChatRelevantNotes(
+      app,
+      liveUpdateEnabled,
+      JSON.stringify([settings.miyoServerUrl, miyoCredentialIdentity]),
+      mock
+    );
+    const {
+      result: noteResult,
+      refresh: noteRefresh,
+      liveRefresh,
+    } = useRelevantNotes({
+      paused: !!chat.context,
       enableMiyo: settings.enableMiyo,
       miyoServerUrl: settings.miyoServerUrl,
       miyoBackendAvailable,
       miyoCredentialIdentity,
-      liveUpdateEnabled,
+      liveUpdateEnabled: liveUpdateEnabled && !chat.context,
     });
+    const result = chat.context ? chat.result : noteResult;
+    const refresh = chat.context ? chat.refresh : noteRefresh;
     // The toolbar must name only a source the search contract accepts; showing
     // an attachment name would imply that Miyo searched it.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
-    const activeFileName = activeFile?.extension === "md" ? activeFile.basename : undefined;
+    const activeFileName = chat.context
+      ? "Agent chat context"
+      : activeFile?.extension === "md"
+        ? activeFile.basename
+        : undefined;
     const activeFilePath = activeFile?.extension === "md" ? activeFile.path : undefined;
     const animated = !useReducedMotion();
     const { rows, registerRow } = useRelevantNoteRowTransitions(
       result.notes,
-      activeFilePath,
+      // A different chat or editor owns a different list; retiring rows must not cross sources.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/383
+      chat.context ? `chat:${chat.context.id}` : activeFilePath,
       animated
     );
 
     useLiveRelevantNotesRefresh({
       app,
-      enabled: liveUpdateEnabled,
+      enabled: liveUpdateEnabled && !chat.context,
       filePath: activeFilePath,
       onRefresh: liveRefresh,
     });
@@ -287,7 +312,10 @@ export const RelevantNotes = memo(
     )}`;
 
     return (
-      <div className={cn("tw-flex tw-min-h-full tw-w-full tw-flex-1 tw-flex-col", className)}>
+      <div
+        data-relevant-notes
+        className={cn("tw-flex tw-min-h-full tw-w-full tw-flex-1 tw-flex-col", className)}
+      >
         <RelevantNotesToolbar
           activeFileName={activeFileName}
           // Live update follows the Miyo index, so the control is meaningless
@@ -315,7 +343,11 @@ export const RelevantNotes = memo(
                   entering={row.entering}
                   animated={animated}
                   rowRef={registerRow(row.note.note.path)}
-                  onAddToChat={() => addToChat(row.note.note.title)}
+                  onAddToChat={() =>
+                    chat.context
+                      ? chat.context.addFile(row.note.note.path)
+                      : addToChat(row.note.note.title)
+                  }
                   onNavigateToNote={() => navigateToNote(row.note.note.path)}
                 />
               ))}
