@@ -1,4 +1,4 @@
-import { logInfo } from "@/logger";
+import { logInfo, logError } from "@/logger";
 import { MiyoClient, MiyoRequestError } from "@/miyo/MiyoClient";
 import { MiyoServiceDiscovery } from "@/miyo/MiyoServiceDiscovery";
 import { getSettings } from "@/settings/model";
@@ -182,6 +182,67 @@ describe("MiyoClient", () => {
         method: "GET",
       })
     );
+  });
+
+  describe("searchRelatedContext()", () => {
+    it("sends the agreed contract without logging conversation text even with debug enabled (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", async () => {
+      mockedGetSettings.mockReturnValue({ plusLicenseKey: "key", debug: true } as CopilotSettings);
+      const response = {
+        status: "ok",
+        results: [],
+        count: 0,
+        skipped_files: [],
+        context_truncated: true,
+        execution_time_ms: 420,
+      };
+      mockedRequestUrl.mockResolvedValue({ status: 200, json: response } as RequestUrlResponse);
+      const request = {
+        folder_name: "Vault",
+        messages: [{ role: "user" as const, content: "private conversation" }],
+        draft: "private draft",
+        excerpts: ["private excerpt"],
+        file_paths: ["Vault/file.md"],
+      };
+      expect(await new MiyoClient().searchRelatedContext("http://localhost:8742", request)).toEqual(
+        response
+      );
+      expect(mockedRequestUrl).toHaveBeenCalledWith(
+        expect.objectContaining({
+          url: "http://localhost:8742/v0/search/related/context",
+          body: JSON.stringify(request),
+        })
+      );
+      expect(JSON.stringify(mockedLogInfo.mock.calls)).not.toContain("private");
+    });
+    it("redacts malformed response parse errors (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", async () => {
+      mockedGetSettings.mockReturnValue({ plusLicenseKey: "key", debug: true } as CopilotSettings);
+      mockedRequestUrl.mockResolvedValue({
+        status: 400,
+        json: "private echoed draft",
+      } as RequestUrlResponse);
+      await expect(
+        new MiyoClient().searchRelatedContext("http://localhost:8742", {
+          folder_name: "Vault",
+          draft: "private echoed draft",
+        })
+      ).rejects.toBeInstanceOf(MiyoRequestError);
+      expect(JSON.stringify((logError as jest.Mock).mock.calls)).not.toContain(
+        "private echoed draft"
+      );
+    });
+    it("retains error codes without retaining a server echo (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", async () => {
+      mockedRequestUrl.mockResolvedValue({
+        status: 400,
+        json: { code: "empty_context", detail: "private draft" },
+      } as RequestUrlResponse);
+      await expect(
+        new MiyoClient().searchRelatedContext("http://localhost:8742", { folder_name: "Vault" })
+      ).rejects.toMatchObject({
+        status: 400,
+        errorCode: "empty_context",
+        message: expect.not.stringContaining("private draft") as unknown,
+      });
+    });
   });
 
   describe("fileStatus()", () => {

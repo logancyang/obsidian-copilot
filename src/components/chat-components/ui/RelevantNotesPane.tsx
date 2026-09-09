@@ -36,6 +36,10 @@ interface GuidancePanelProps {
     | "indexing"
     | "index-error"
     | "excluded"
+    | "no-usable-context"
+    | "unsupported-service"
+    | "request-too-large"
+    | "request-error"
     | "not-indexed";
   title: string;
   description: string;
@@ -96,6 +100,53 @@ export function RelevantNotesPane({
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
   let guidancePanel: React.ReactNode = null;
   switch (status) {
+    // An unusable chat or incompatible service must explain the failure instead
+    // of silently showing results for an unrelated editor note.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/383
+    case "no-usable-context":
+      guidancePanel = (
+        <GuidancePanel
+          id="no-usable-context"
+          title="No usable chat context"
+          description="The attachments aren't available in Miyo. Write a message or add an indexed note to find related notes."
+        />
+      );
+      break;
+    case "unsupported-service":
+      guidancePanel = (
+        <GuidancePanel
+          id="unsupported-service"
+          title="Update Miyo for chat context"
+          description="This Miyo service doesn't support chat-context retrieval. Connect a compatible Miyo version and try again."
+        >
+          <Button variant="default" size="sm" onClick={actions.onOpenMiyoSettings}>
+            Open Miyo settings
+          </Button>
+        </GuidancePanel>
+      );
+      break;
+    case "request-too-large":
+      guidancePanel = (
+        <GuidancePanel
+          id="request-too-large"
+          title="Chat context is too large"
+          description="Miyo couldn't accept this request. Remove some attached context or try a shorter conversation."
+        />
+      );
+      break;
+    case "request-error":
+      guidancePanel = (
+        <GuidancePanel
+          id="request-error"
+          title="Miyo couldn't use this chat context"
+          description="Check that this vault is registered in Miyo, then try again."
+        >
+          <Button variant="default" size="sm" onClick={actions.onOpenMiyoSettings}>
+            Open Miyo settings
+          </Button>
+        </GuidancePanel>
+      );
+      break;
     case "disabled":
       guidancePanel = (
         <GuidancePanel
@@ -261,16 +312,39 @@ export function RelevantNotesPane({
       break;
   }
 
-  if (status !== "matches" || noteRows.length === 0) {
-    return (
-      <div
-        data-relevant-notes-empty-state
-        className="tw-flex tw-h-full tw-items-center tw-justify-center tw-px-4"
-      >
-        {guidancePanel ?? <span className="tw-text-sm tw-text-muted">No relevant notes found</span>}
-      </div>
-    );
-  }
+  // Mock suggestions and skipped sources remain visible even for an empty result.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/383
+  const notices = (
+    <>
+      {details?.mock && (
+        <p role="status" className="tw-m-0 tw-p-2 tw-text-xs tw-text-muted">
+          Mock preview: these are example notes, not relevance results.
+        </p>
+      )}
+      {!!details?.skippedAttachments && (
+        <p role="status" className="tw-m-0 tw-p-2 tw-text-xs tw-text-muted">
+          Skipped attachments: {details.skippedAttachments}. They aren't indexed or supported by
+          Miyo.
+        </p>
+      )}
+    </>
+  );
 
-  return <div className="tw-flex tw-flex-col tw-gap-0.5">{noteRows}</div>;
+  return (
+    <div className="tw-flex tw-h-full tw-flex-col tw-gap-0.5">
+      {notices}
+      {status !== "matches" || noteRows.length === 0 ? (
+        <div
+          data-relevant-notes-empty-state
+          className="tw-flex tw-flex-1 tw-items-center tw-justify-center tw-px-4"
+        >
+          {guidancePanel ?? (
+            <span className="tw-text-sm tw-text-muted">No relevant notes found</span>
+          )}
+        </div>
+      ) : (
+        noteRows
+      )}
+    </div>
+  );
 }
