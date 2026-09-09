@@ -6,7 +6,7 @@
  * `resetSettings` / `setSettings`).
  */
 
-import { resetSettings, getSettings } from "@/settings/model";
+import { resetSettings, getSettings, setSettings } from "@/settings/model";
 import { KeychainService } from "@/services/keychainService";
 
 import type { ProviderAdapter } from "./adapters/ProviderAdapter";
@@ -68,6 +68,7 @@ describe("ProviderRegistry", () => {
 
     beforeEach(() => {
       resetSettings();
+      setSettings({ providers: {} });
       KeychainService.resetInstance();
       const fake = makeFakeApp();
       app = fake.app;
@@ -79,169 +80,218 @@ describe("ProviderRegistry", () => {
       registry = new ProviderRegistry(app, adapters);
     });
 
-    it("add() mints id, stamps addedAt, persists the row", async () => {
-      const before = Date.now();
-      const id = await registry.add({
-        providerType: "anthropic",
-        displayName: "Anthropic (prod)",
-        origin: { kind: "byok" },
-      });
-      expect(typeof id).toBe("string");
-      expect(id.length).toBeGreaterThan(0);
+    describe("add()", () => {
+      it("add() mints id, stamps addedAt, persists the row", async () => {
+        const before = Date.now();
+        const id = await registry.add({
+          providerType: "anthropic",
+          displayName: "Anthropic (prod)",
+          origin: { kind: "byok" },
+        });
+        expect(typeof id).toBe("string");
+        expect(id.length).toBeGreaterThan(0);
 
-      const row = registry.get(id);
-      expect(row).toBeDefined();
-      expect(row?.displayName).toBe("Anthropic (prod)");
-      expect(row?.providerType).toBe("anthropic");
-      expect(row?.origin).toEqual({ kind: "byok" });
-      expect(row?.addedAt).toBeGreaterThanOrEqual(before);
-      expect(row?.apiKeyKeychainId).toBeNull();
+        const row = registry.get(id);
+        expect(row).toBeDefined();
+        expect(row?.displayName).toBe("Anthropic (prod)");
+        expect(row?.providerType).toBe("anthropic");
+        expect(row?.origin).toEqual({ kind: "byok" });
+        expect(row?.addedAt).toBeGreaterThanOrEqual(before);
+        expect(row?.apiKeyKeychainId).toBeNull();
+      });
     });
 
-    it("list() / listByOrigin / listByProviderType return stable references when settings unchanged", async () => {
-      await registry.add({
-        providerType: "anthropic",
-        displayName: "A",
-        origin: { kind: "byok" },
+    describe("get()", () => {
+      it("returns the persisted row and undefined for an unknown provider", async () => {
+        const id = await registry.add({
+          providerType: "anthropic",
+          displayName: "A",
+          origin: { kind: "byok" },
+        });
+        expect(registry.get(id)).toBe(getSettings().providers[id]);
+        expect(registry.get("unknown")).toBeUndefined();
       });
-      await registry.add({
-        providerType: "anthropic",
-        displayName: "B",
-        origin: { kind: "agent", agentType: "claude" },
-      });
-      const list1 = registry.list();
-      const list2 = registry.list();
-      expect(list1).toBe(list2);
-
-      const byok1 = registry.listByOrigin("byok");
-      const byok2 = registry.listByOrigin("byok");
-      expect(byok1).toBe(byok2);
-      expect(byok1.length).toBe(1);
-
-      const ant1 = registry.listByProviderType("anthropic");
-      const ant2 = registry.listByProviderType("anthropic");
-      expect(ant1).toBe(ant2);
-      expect(ant1.length).toBe(2);
     });
 
-    it("empty filtered views reuse a shared frozen empty array", () => {
-      const empty1 = registry.listByOrigin("byok");
-      const empty2 = registry.listByOrigin("copilot-plus");
-      expect(empty1).toBe(empty2);
-      expect(empty1.length).toBe(0);
-    });
-
-    it("update() merges patch and refuses to mutate providerId / addedAt / providerType / origin", async () => {
-      const id = await registry.add({
-        providerType: "anthropic",
-        displayName: "Original",
-        origin: { kind: "byok" },
-      });
-      const originalAddedAt = registry.get(id)!.addedAt;
-
-      // Bypass the typed Omit to verify the runtime guard strips immutable
-      // fields even when callers shove them in via an untyped object.
-      // providerType is the adapter-dispatch key and origin determines
-      // which settings tab owns the row — both must stay pinned to the
-      // values supplied at creation.
-      await registry.update(id, {
-        displayName: "Renamed",
-        baseUrl: "https://example.test",
-        ...({
-          providerId: "hacked",
-          addedAt: 1,
-          providerType: "openai",
+    describe("listByOrigin()", () => {
+      it("returns stable references while settings are unchanged", async () => {
+        await registry.add({
+          providerType: "anthropic",
+          displayName: "A",
+          origin: { kind: "byok" },
+        });
+        await registry.add({
+          providerType: "anthropic",
+          displayName: "B",
           origin: { kind: "agent", agentType: "claude" },
-        } as Record<string, unknown>),
+        });
+        const rows = registry.listByOrigin("byok");
+        expect(registry.listByOrigin("byok")).toBe(rows);
+        expect(rows).toHaveLength(1);
       });
-      const row = registry.get(id)!;
-      expect(row.displayName).toBe("Renamed");
-      expect(row.baseUrl).toBe("https://example.test");
-      expect(row.providerId).toBe(id);
-      expect(row.addedAt).toBe(originalAddedAt);
-      expect(row.providerType).toBe("anthropic");
-      expect(row.origin).toEqual({ kind: "byok" });
+      it("empty filtered views reuse a shared frozen empty array", () => {
+        const empty1 = registry.listByOrigin("byok");
+        const empty2 = registry.listByOrigin("copilot-plus");
+        expect(empty1).toBe(empty2);
+        expect(empty1.length).toBe(0);
+      });
     });
 
-    it("update() throws for unknown providerId", async () => {
-      await expect(registry.update("nope", { displayName: "x" })).rejects.toThrow(/unknown/);
+    describe("update()", () => {
+      it("update() merges patch and refuses to mutate providerId / addedAt / providerType / origin", async () => {
+        const id = await registry.add({
+          providerType: "anthropic",
+          displayName: "Original",
+          origin: { kind: "byok" },
+        });
+        const originalAddedAt = registry.get(id)!.addedAt;
+
+        // Bypass the typed Omit to verify the runtime guard strips immutable
+        // fields even when callers shove them in via an untyped object.
+        // providerType is the adapter-dispatch key and origin determines
+        // which settings tab owns the row — both must stay pinned to the
+        // values supplied at creation.
+        await registry.update(id, {
+          displayName: "Renamed",
+          baseUrl: "https://example.test",
+          ...({
+            providerId: "hacked",
+            addedAt: 1,
+            providerType: "openai",
+            origin: { kind: "agent", agentType: "claude" },
+          } as Record<string, unknown>),
+        });
+        const row = registry.get(id)!;
+        expect(row.displayName).toBe("Renamed");
+        expect(row.baseUrl).toBe("https://example.test");
+        expect(row.providerId).toBe(id);
+        expect(row.addedAt).toBe(originalAddedAt);
+        expect(row.providerType).toBe("anthropic");
+        expect(row.origin).toEqual({ kind: "byok" });
+      });
+      it("update() throws for unknown providerId", async () => {
+        await expect(registry.update("nope", { displayName: "x" })).rejects.toThrow(/unknown/);
+      });
+      it("update() ignores attempts to overwrite apiKeyKeychainId", async () => {
+        const id = await registry.add({
+          providerType: "anthropic",
+          displayName: "A",
+          origin: { kind: "byok" },
+        });
+        await registry.setApiKey(id, "sk-real");
+        const realKeychainId = registry.get(id)!.apiKeyKeychainId;
+        expect(realKeychainId).not.toBeNull();
+
+        // Bypass the typed Omit to verify the runtime strip refuses to move
+        // the keychain pointer (which would orphan the secret or repoint the
+        // row at a keychain entry this registry never wrote).
+        await registry.update(id, {
+          ...({ apiKeyKeychainId: "copilot-v0-provider-attacker" } as Record<string, unknown>),
+        });
+        expect(registry.get(id)!.apiKeyKeychainId).toBe(realKeychainId);
+        // The real secret is still readable.
+        expect(await registry.getApiKey(id)).toBe("sk-real");
+      });
     });
 
-    it("setApiKey mints apiKeyKeychainId on first call and reuses it on rotation", async () => {
-      const id = await registry.add({
-        providerType: "anthropic",
-        displayName: "A",
-        origin: { kind: "byok" },
+    describe("setApiKey()", () => {
+      it("setApiKey mints apiKeyKeychainId on first call and reuses it on rotation", async () => {
+        const id = await registry.add({
+          providerType: "anthropic",
+          displayName: "A",
+          origin: { kind: "byok" },
+        });
+        expect(registry.get(id)!.apiKeyKeychainId).toBeNull();
+
+        await registry.setApiKey(id, "sk-first");
+        const firstKeychainId = registry.get(id)!.apiKeyKeychainId;
+        const vaultId = KeychainService.getInstance(app).getVaultId();
+        // Vault-namespaced so `KeychainService.clearAllVaultSecrets()` (which
+        // filters by `copilot-v{vaultId}-`) sweeps these entries.
+        expect(firstKeychainId).toBe(`copilot-v${vaultId}-provider-${id}`);
+        expect(await registry.getApiKey(id)).toBe("sk-first");
+
+        await registry.setApiKey(id, "sk-rotated");
+        expect(registry.get(id)!.apiKeyKeychainId).toBe(firstKeychainId);
+        expect(await registry.getApiKey(id)).toBe("sk-rotated");
       });
-      expect(registry.get(id)!.apiKeyKeychainId).toBeNull();
-
-      await registry.setApiKey(id, "sk-first");
-      const firstKeychainId = registry.get(id)!.apiKeyKeychainId;
-      const vaultId = KeychainService.getInstance(app).getVaultId();
-      // Vault-namespaced so `KeychainService.clearAllVaultSecrets()` (which
-      // filters by `copilot-v{vaultId}-`) sweeps these entries.
-      expect(firstKeychainId).toBe(`copilot-v${vaultId}-provider-${id}`);
-      expect(await registry.getApiKey(id)).toBe("sk-first");
-
-      await registry.setApiKey(id, "sk-rotated");
-      expect(registry.get(id)!.apiKeyKeychainId).toBe(firstKeychainId);
-      expect(await registry.getApiKey(id)).toBe("sk-rotated");
     });
 
-    it("update() ignores attempts to overwrite apiKeyKeychainId", async () => {
-      const id = await registry.add({
-        providerType: "anthropic",
-        displayName: "A",
-        origin: { kind: "byok" },
+    describe("getApiKey()", () => {
+      it("getApiKey returns null when the provider has no apiKeyKeychainId", async () => {
+        const id = await registry.add({
+          providerType: "anthropic",
+          displayName: "Ollama-like",
+          origin: { kind: "byok" },
+        });
+        expect(await registry.getApiKey(id)).toBeNull();
       });
-      await registry.setApiKey(id, "sk-real");
-      const realKeychainId = registry.get(id)!.apiKeyKeychainId;
-      expect(realKeychainId).not.toBeNull();
-
-      // Bypass the typed Omit to verify the runtime strip refuses to move
-      // the keychain pointer (which would orphan the secret or repoint the
-      // row at a keychain entry this registry never wrote).
-      await registry.update(id, {
-        ...({ apiKeyKeychainId: "copilot-v0-provider-attacker" } as Record<string, unknown>),
-      });
-      expect(registry.get(id)!.apiKeyKeychainId).toBe(realKeychainId);
-      // The real secret is still readable.
-      expect(await registry.getApiKey(id)).toBe("sk-real");
     });
 
-    it("getApiKey returns null when the provider has no apiKeyKeychainId", async () => {
-      const id = await registry.add({
-        providerType: "anthropic",
-        displayName: "Ollama-like",
-        origin: { kind: "byok" },
+    describe("clearApiKey()", () => {
+      it("clearApiKey drops the keychain entry and clears the pointer", async () => {
+        const id = await registry.add({
+          providerType: "anthropic",
+          displayName: "A",
+          origin: { kind: "byok" },
+        });
+        await registry.setApiKey(id, "sk-x");
+        await registry.clearApiKey(id);
+        expect(registry.get(id)!.apiKeyKeychainId).toBeNull();
+        expect(await registry.getApiKey(id)).toBeNull();
       });
-      expect(await registry.getApiKey(id)).toBeNull();
     });
 
-    it("clearApiKey drops the keychain entry and clears the pointer", async () => {
-      const id = await registry.add({
-        providerType: "anthropic",
-        displayName: "A",
-        origin: { kind: "byok" },
+    describe("remove()", () => {
+      it("remove() drops the row and the keychain entry", async () => {
+        const id = await registry.add({
+          providerType: "anthropic",
+          displayName: "A",
+          origin: { kind: "byok" },
+        });
+        await registry.setApiKey(id, "sk-x");
+        const keychainId = registry.get(id)!.apiKeyKeychainId!;
+        await registry.remove(id);
+        expect(registry.get(id)).toBeUndefined();
+        // Verify keychain side cleaned up by reading raw storage.
+        expect(KeychainService.getInstance(app).getSecretById(keychainId)).toBeNull();
       });
-      await registry.setApiKey(id, "sk-x");
-      await registry.clearApiKey(id);
-      expect(registry.get(id)!.apiKeyKeychainId).toBeNull();
-      expect(await registry.getApiKey(id)).toBeNull();
     });
 
-    it("remove() drops the row and the keychain entry", async () => {
-      const id = await registry.add({
-        providerType: "anthropic",
-        displayName: "A",
-        origin: { kind: "byok" },
+    describe("list()", () => {
+      it("returns stable references while settings are unchanged", async () => {
+        await registry.add({
+          providerType: "anthropic",
+          displayName: "A",
+          origin: { kind: "byok" },
+        });
+        await registry.add({
+          providerType: "anthropic",
+          displayName: "B",
+          origin: { kind: "agent", agentType: "claude" },
+        });
+        const rows = registry.list();
+        expect(registry.list()).toBe(rows);
+        expect(rows).toHaveLength(2);
       });
-      await registry.setApiKey(id, "sk-x");
-      const keychainId = registry.get(id)!.apiKeyKeychainId!;
-      await registry.remove(id);
-      expect(registry.get(id)).toBeUndefined();
-      // Verify keychain side cleaned up by reading raw storage.
-      expect(KeychainService.getInstance(app).getSecretById(keychainId)).toBeNull();
+    });
+
+    describe("listByProviderType()", () => {
+      it("returns stable references while settings are unchanged", async () => {
+        await registry.add({
+          providerType: "anthropic",
+          displayName: "A",
+          origin: { kind: "byok" },
+        });
+        await registry.add({
+          providerType: "anthropic",
+          displayName: "B",
+          origin: { kind: "agent", agentType: "claude" },
+        });
+        const rows = registry.listByProviderType("anthropic");
+        expect(registry.listByProviderType("anthropic")).toBe(rows);
+        expect(rows).toHaveLength(2);
+      });
     });
 
     describe("verify()", () => {
@@ -293,17 +343,6 @@ describe("ProviderRegistry", () => {
         KeychainService.getInstance(app).deleteSecretById(registry.get(id)!.apiKeyKeychainId!);
         expect(await registry.verify(id)).toMatchObject({ ok: false, code: "missing_api_key" });
       });
-    });
-
-    it("settings reflect mutations atomically", async () => {
-      const id = await registry.add({
-        providerType: "anthropic",
-        displayName: "A",
-        origin: { kind: "byok" },
-      });
-      expect(getSettings().providers[id]).toBeDefined();
-      await registry.remove(id);
-      expect(getSettings().providers[id]).toBeUndefined();
     });
 
     describe("subscribe()", () => {

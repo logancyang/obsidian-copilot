@@ -59,42 +59,38 @@ export const ByokPanel: React.FC = () => {
   const [verification, setVerification] =
     useState<Readonly<Record<string, VerificationResult>>>(EMPTY_VERIFICATION);
   const [pendingChecks, setPendingChecks] = useState(0);
+  const [saveRevision, setSaveRevision] = useState(0);
+  const refreshVerification = (): void => setSaveRevision((revision) => revision + 1);
 
   useEffect(() => {
-    let generation = 0;
+    let cancelled = false;
     // https://github.com/logancyang/obsidian-copilot/issues/3147:
-    // Re-read secrets on every visit and provider mutation, including rotations
-    // that leave the settings pointer unchanged. Old requests cannot restore a
-    // success badge after the user edits a provider or leaves the tab.
-    const verifyProviders = (): void => {
-      const current = ++generation;
-      const snapshot = api.providerRegistry.listByOrigin("byok");
-      setVerification(EMPTY_VERIFICATION);
-      setPendingChecks(snapshot.length);
-      for (const provider of snapshot) {
-        void api.providerRegistry
-          .verify(provider.providerId)
-          .catch(
-            (): VerificationResult => ({
-              ok: false,
-              message: "Could not verify this provider. Reopen this tab to retry.",
-              checkedAt: Date.now(),
-            })
-          )
-          .then((result) => {
-            if (current !== generation) return;
-            setVerification((results) => ({ ...results, [provider.providerId]: result }));
-            setPendingChecks((remaining) => remaining - 1);
-          });
-      }
-    };
-    const unsubscribe = api.providerRegistry.subscribe(verifyProviders);
-    verifyProviders();
+    // Check completed saves, including CORS-only edits. Registry events can fire
+    // between key and endpoint writes and would send the new key to the old URL.
+
+    const snapshot = api.providerRegistry.listByOrigin("byok");
+    setVerification(EMPTY_VERIFICATION);
+    setPendingChecks(snapshot.length);
+    for (const provider of snapshot) {
+      void api.providerRegistry
+        .verify(provider.providerId)
+        .catch(
+          (): VerificationResult => ({
+            ok: false,
+            message: "Could not verify this provider. Reopen this tab to retry.",
+            checkedAt: Date.now(),
+          })
+        )
+        .then((result) => {
+          if (cancelled) return;
+          setVerification((results) => ({ ...results, [provider.providerId]: result }));
+          setPendingChecks((remaining) => remaining - 1);
+        });
+    }
     return () => {
-      generation++;
-      unsubscribe();
+      cancelled = true;
     };
-  }, [api]);
+  }, [api, saveRevision]);
 
   // Load the catalog once and keep our snapshot in sync. The disk-load path
   // of `ensureLoaded` does NOT fire `onChange`, so we sync explicitly after
@@ -160,7 +156,11 @@ export const ByokPanel: React.FC = () => {
       localTemplates: LOCAL_PROVIDER_DEFINITIONS,
       customTemplate: CUSTOM_OPENAI_DEFINITION,
       onPick: (source) =>
-        new ConfigureProviderModal(app, { state: { mode: "new", source }, api }).open(),
+        new ConfigureProviderModal(app, {
+          state: { mode: "new", source },
+          api,
+          onSaved: refreshVerification,
+        }).open(),
     }).open();
   };
 
@@ -226,6 +226,7 @@ export const ByokPanel: React.FC = () => {
             new ConfigureProviderModal(app, {
               state: { mode: "edit", providerId: id },
               api,
+              onSaved: refreshVerification,
             }).open()
           }
           onRemove={handleRemove}

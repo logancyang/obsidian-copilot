@@ -88,6 +88,15 @@ jest.mock("@/modelManagement/ui/dialogs/AddProviderDialog", () => ({
 }));
 
 import { ByokPanel } from "./ByokPanel";
+import { AddProviderModal } from "@/modelManagement/ui/dialogs/AddProviderDialog";
+import { ConfigureProviderModal } from "@/modelManagement/ui/dialogs/ConfigureProviderDialog";
+
+function completeProviderSave(): void {
+  fireEvent.click(screen.getByRole("button", { name: /Add a provider/i }));
+  const options = jest.mocked(AddProviderModal).mock.calls.at(-1)![1];
+  options.onPick({} as never);
+  jest.mocked(ConfigureProviderModal).mock.calls.at(-1)![1].onSaved!();
+}
 
 // Radix DropdownMenu portals resolve `activeDocument` at render time.
 beforeAll(() => {
@@ -149,7 +158,7 @@ describe("ByokPanel", () => {
       expect(screen.queryByRole("status")).toBeNull();
     });
 
-    it("rechecks rotated keys and ignores previous requests after a provider mutation (https://github.com/logancyang/obsidian-copilot/issues/3147)", async () => {
+    it("rechecks rotated keys and ignores previous requests after a completed save (https://github.com/logancyang/obsidian-copilot/issues/3147)", async () => {
       const oldResolvers: Array<(result: { ok: boolean; checkedAt: number }) => void> = [];
       mockVerify.mockImplementation(
         () =>
@@ -161,7 +170,7 @@ describe("ByokPanel", () => {
       await screen.findByText("Anthropic");
       mockVerify.mockResolvedValue({ ok: false, code: "missing_api_key", checkedAt: 1 });
       await act(async () => {
-        mockProviderListener!();
+        completeProviderSave();
       });
       expect(screen.getAllByText("No key")).toHaveLength(2);
       await act(async () => {
@@ -184,7 +193,7 @@ describe("ByokPanel", () => {
           })
       );
       act(() => {
-        mockProviderListener!();
+        completeProviderSave();
       });
       expect(screen.queryByText("Verified")).toBeNull();
       await act(async () => {
@@ -194,14 +203,27 @@ describe("ByokPanel", () => {
       expect(screen.queryByRole("status")).toBeNull();
     });
 
-    it("runs fresh checks when the tab remounts and unsubscribes on leave (https://github.com/logancyang/obsidian-copilot/issues/3147)", async () => {
+    it("runs fresh checks when the tab remounts (https://github.com/logancyang/obsidian-copilot/issues/3147)", async () => {
       const first = render(<ByokPanel />);
       await screen.findAllByText("Verified");
       first.unmount();
-      expect(mockUnsubscribe).toHaveBeenCalledTimes(1);
+      expect(mockSubscribe).not.toHaveBeenCalled();
       mockVerify.mockResolvedValue({ ok: false, code: "invalid_api_key", checkedAt: 1 });
       render(<ByokPanel />);
       await screen.findAllByText("Invalid key");
+      expect(mockVerify).toHaveBeenCalledTimes(4);
+    });
+
+    it("does not probe intermediate registry mutations before a save completes (https://github.com/logancyang/obsidian-copilot/issues/3147)", async () => {
+      render(<ByokPanel />);
+      await screen.findAllByText("Verified");
+      act(() => {
+        mockProviderListener?.();
+      });
+      expect(mockVerify).toHaveBeenCalledTimes(2);
+      await act(async () => {
+        completeProviderSave();
+      });
       expect(mockVerify).toHaveBeenCalledTimes(4);
     });
 
