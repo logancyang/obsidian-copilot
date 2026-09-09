@@ -39,15 +39,15 @@ export function AgentBackendHeader({
   return (
     <div className="tw-flex tw-flex-col tw-gap-2 tw-py-4">
       <div className="tw-flex tw-items-center tw-justify-between tw-gap-2">
-        <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-2">
+        <div className="tw-flex tw-min-w-0 tw-flex-1 tw-items-center tw-gap-2">
           <Icon className="tw-size-4 tw-shrink-0" />
-          <div className="tw-flex tw-min-w-0 tw-flex-col">
+          <div className="tw-flex tw-min-w-0 tw-flex-1 tw-flex-col">
             <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-2">
               <span className="tw-text-base tw-font-semibold">{displayName}</span>
               <InstallBadge state={installState} authStatus={authStatus} />
             </div>
             {resolvedPath && (
-              <TruncatedText className="tw-max-w-[90%] tw-font-mono tw-text-xs tw-text-muted">
+              <TruncatedText className="tw-font-mono tw-text-xs tw-text-muted">
                 {resolvedPath}
               </TruncatedText>
             )}

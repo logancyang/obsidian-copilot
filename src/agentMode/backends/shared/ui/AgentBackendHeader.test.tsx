@@ -13,6 +13,30 @@ import meta, {
 
 describe("AgentBackendHeader", () => {
   describe("AgentBackendHeader()", () => {
+    it.each(["opencode", "Claude", "Codex"])(
+      "renders %s through the shared icon, name, path, and Configure props",
+      (displayName) => {
+        const onConfigure = jest.fn();
+        const resolvedPath = `/usr/local/bin/${displayName.toLowerCase()}`;
+        render(
+          <AgentBackendHeader
+            {...meta.args}
+            displayName={displayName}
+            Icon={() => <svg aria-label={`${displayName} icon`} />}
+            resolvedPath={resolvedPath}
+            installState={{ kind: "ready", source: "custom" }}
+            authStatus={{ signedIn: true }}
+            canUpdate={false}
+            onConfigure={onConfigure}
+          />
+        );
+        expect(screen.getByLabelText(`${displayName} icon`)).toBeTruthy();
+        expect(screen.getByText(displayName)).toBeTruthy();
+        expect(screen.getByText(resolvedPath)).toBeTruthy();
+        fireEvent.click(screen.getByRole("button", { name: "Configure" }));
+        expect(onConfigure).toHaveBeenCalledTimes(1);
+      }
+    );
     it("opens configuration for an absent binary", () => {
       const onConfigure = jest.fn();
       render(
