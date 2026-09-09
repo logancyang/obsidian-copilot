@@ -290,6 +290,35 @@ describe("RelevantNotes", () => {
       expect(mockFindRelevantNotes).toHaveBeenCalledTimes(3);
     });
 
+    it("retries an unchanged chat when Miyo reconnects (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", async () => {
+      const store = getChatRelevantNotesStore(mockApp);
+      store.select({
+        id: "reconnecting",
+        request: { folder_name: "Vault", messages: [{ role: "user", content: "topic" }] },
+        skippedAttachments: 0,
+        addFile: jest.fn(),
+      });
+      const findChat = jest.mocked(findChatRelevantNotes);
+      findChat.mockResolvedValueOnce({ notes: [], status: "unavailable" }).mockResolvedValueOnce({
+        notes: [
+          {
+            note: { path: "Chat.md", title: "Reconnected suggestion" },
+            metadata: { score: 0.8, hasOutgoingLinks: false, hasBacklinks: false },
+          },
+        ],
+        status: "matches",
+      });
+      mockMiyoBackend = "unavailable";
+      const { rerender, unmount } = render(<RelevantNotes onAddToChat={jest.fn()} />);
+      await screen.findByText("Miyo is not connected");
+      mockMiyoBackend = "available";
+      rerender(<RelevantNotes onAddToChat={jest.fn()} />);
+      await screen.findByText("Reconnected suggestion");
+      expect(findChat).toHaveBeenCalledTimes(2);
+      unmount();
+      store.select(null);
+    });
+
     it("refetches when the configured Miyo backend becomes available (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
       mockMiyoBackend = "unavailable";
       mockFindRelevantNotes
