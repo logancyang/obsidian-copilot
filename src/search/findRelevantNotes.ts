@@ -298,6 +298,8 @@ const EMPTY_RELEVANT_NOTES: readonly RelevantNoteEntry[] = Object.freeze([]);
 export function isSameRelevantNotesResult(a: RelevantNotesResult, b: RelevantNotesResult): boolean {
   if (a === b) return true;
   if (a.status !== b.status) return false;
+  // Notice changes must render even when the recommendation rows stay the same.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/383
   if (
     a.details?.skippedAttachments !== b.details?.skippedAttachments ||
     a.details?.mock !== b.details?.mock

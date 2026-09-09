@@ -723,6 +723,32 @@ describe("findRelevantNotes", () => {
       ).toBe(false);
     });
 
+    it.each([
+      { field: "mock", before: { mock: false }, after: { mock: true } },
+      {
+        field: "skippedAttachments",
+        before: { skippedAttachments: 1 },
+        after: { skippedAttachments: 2 },
+      },
+    ])(
+      "updates the $field notice without changing rows (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)",
+      ({ before, after }) => {
+        const notes = [note("a.md", 0.7)];
+        expect(
+          isSameRelevantNotesResult(
+            { notes, status: "matches", details: before },
+            { notes, status: "matches", details: after }
+          )
+        ).toBe(false);
+        expect(
+          isSameRelevantNotesResult(
+            { notes, status: "matches", details: after },
+            { notes, status: "matches", details: { ...after } }
+          )
+        ).toBe(true);
+      }
+    );
+
     it("separates a result that gained a note from the one before it (https://github.com/Brevilabs/obsidian-copilot-private/issues/362)", () => {
       expect(
         isSameRelevantNotesResult(
