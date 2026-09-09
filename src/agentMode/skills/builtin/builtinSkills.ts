@@ -1,12 +1,12 @@
 import type { BackendId } from "@/agentMode/session/types";
 import {
-  OPENARTIFACTS_AGENT_BRIDGE_PROPERTY,
   OPENARTIFACTS_AGENT_HANDOFF_DIR,
+  OPENARTIFACTS_API_ORIGIN,
   OPENARTIFACTS_MAX_HTML_BYTES,
   OPENARTIFACTS_THEMES_DIR,
   OPENARTIFACTS_WORKSPACE_ROOT_ENV,
 } from "@/openArtifacts/constants";
-import { OPENARTIFACTS_DEFAULT_THEME, RESEARCH_MEMO_THEME } from "./openArtifactsThemes";
+import RESEARCH_MEMO_THEME from "openartifacts/skill/openartifacts/themes/research-memo.md";
 import { OBSIDIAN_SKILLS } from "./obsidianSkills";
 
 /**
@@ -53,6 +53,8 @@ export interface BuiltinSkill {
   readonly skillMd: string;
   /** Supporting scripts, references, or notices written alongside SKILL.md. */
   readonly files: ReadonlyArray<{ readonly path: string; readonly content: string }>;
+  /** Previously shipped files to remove on upgrade, leaving user-added files alone. */
+  readonly retiredFiles?: readonly string[];
 }
 
 /** Env var names the plugin injects and the scripts read. Single source of truth. */
@@ -586,15 +588,24 @@ const FETCH_X = relaySkill({
   scriptFile: "fetch-x.sh",
 });
 
-const OPENARTIFACTS_PUBLISH_VERSION = 1;
+const OPENARTIFACTS_PUBLISH_VERSION = 2;
+const OPENARTIFACTS_PUBLISH_USAGE = "openartifacts-publish";
+/** Where the wrapper sends requests unless a test or self-host points it elsewhere. */
+const OPENARTIFACTS_API_HOST_ENV = "OPENARTIFACTS_API_HOST";
+/** Theme design specs come from the openartifacts npm package; a user theme with the
+ * same name under `.openartifacts/themes/` in the vault takes precedence. */
+const OPENARTIFACTS_DEFAULT_THEME = "research-memo";
+const OPENARTIFACTS_MISSING_KEY_MESSAGE =
+  "Publishing to OpenArtifacts needs a Copilot Plus license key. Add it in Copilot Settings and try again.";
 const OPENARTIFACTS_PUBLISH: BuiltinSkill = {
   name: "openartifacts-publish",
   legacyName: "symposium-publish",
+  retiredFiles: ["shared-publishing-rules.md"],
   version: OPENARTIFACTS_PUBLISH_VERSION,
   enabledAgents: ["claude", "codex", "opencode"],
   skillMd: `---
 name: openartifacts-publish
-description: Publish, update, or withdraw an existing Markdown note through OpenArtifacts' host-owned review flow. Use when the user asks to publish, share, update, delete, remove, or withdraw an OpenArtifacts page.
+description: Publish, update, or withdraw an existing Markdown note as a public OpenArtifacts page. Use when the user asks to publish, share, update, delete, remove, or withdraw an OpenArtifacts page.
 metadata:
   copilot-enabled-agents: claude, codex, opencode
   copilot-builtin-version: "${OPENARTIFACTS_PUBLISH_VERSION}"
@@ -602,190 +613,312 @@ metadata:
 
 # Publish Markdown to OpenArtifacts
 
-Require one existing Markdown source file. When the user asks to delete, remove, or
-withdraw its current OpenArtifacts page, do not generate HTML. Run the host wrapper with
-only the vault-relative source-note path. Obsidian reads the note's current identity
-and opens its existing management modal; the user alone chooses Update or Delete.
-Never tell the user to delete the page at its public URL.
+Copilot supplies everything this skill needs through the environment:
+\`$${OPENARTIFACTS_WORKSPACE_ROOT_ENV}\` is the vault root, and \`${PLUS_ENV.licenseKey}\`
+is the credential the bundled wrapper sends. Do not read Copilot settings or credential
+files, print the key, install anything, or run Node, npm, npx, or the Obsidian CLI.
 
-For publishing or updating, finish a complete, self-contained,
-passive HTML document before asking Obsidian to review it. Render source-specific
-content such as Mermaid and Obsidian Bases into static HTML or SVG, embed images,
-and include no scripts, frames, forms, handlers, redirects, or external assets. Treat
-YAML frontmatter as note metadata: never render the raw frontmatter block as page
-content. The exact UTF-8 HTML must not exceed \`${OPENARTIFACTS_MAX_HTML_BYTES}\` bytes.
+If \`${PLUS_ENV.licenseKey}\` is unset or empty, stop before generating anything and tell
+the user: ${OPENARTIFACTS_MISSING_KEY_MESSAGE}
 
-Style the page from a theme file rather than improvising. Resolve the theme name in
-this order: \`OPENARTIFACTS_THEME\` from the environment when set, then a theme the
-user named in chat, then \`${OPENARTIFACTS_DEFAULT_THEME}\`. Read
-\`$${OPENARTIFACTS_WORKSPACE_ROOT_ENV}/${OPENARTIFACTS_THEMES_DIR}/<name>.md\` when the
-user has authored that theme, otherwise \`themes/<name>.md\` next to this file. Follow
-it exactly: tokens, type, scale, layout, components, and its theme-handling CSS, all
-inlined. If neither file exists, still publish with restrained defaults (system fonts,
-one accent, a readable measure, light and dark handled) and tell the user which theme
-was not found.
+## 1. Prepare the page
 
-Write those final bytes to a new unique \`.html\` file under
-\`$${OPENARTIFACTS_WORKSPACE_ROOT_ENV}/${OPENARTIFACTS_AGENT_HANDOFF_DIR}/\`, creating that
-directory first when it does not exist. Do not show a prose substitute or ask
-for confirmation in chat. Instead run the host wrapper with exactly two
-vault-relative paths: the source note and the staged HTML.
+Read one existing Markdown source note. Treat YAML frontmatter as metadata, never as page
+content. Note its \`openartifacts\` property, or on older notes the \`symposium\` property:
+an \`https://…/d/<docId>\` value means the note is already published and this task updates
+that page; pass that \`docId\` to the wrapper. Compare document ids, not urls: an older
+\`symposium.site\` link and an \`openartifacts.site\` link with the same id are the same page.
+If either property holds any other value, or the two name different ids, stop and ask the
+user before touching them.
 
-On macOS or Linux:
+Write complete UTF-8 HTML (at most \`${OPENARTIFACTS_MAX_HTML_BYTES}\` bytes) to a new file
+under \`$${OPENARTIFACTS_WORKSPACE_ROOT_ENV}/${OPENARTIFACTS_AGENT_HANDOFF_DIR}/\`, creating
+the directory if needed. Preserve the note's content; render Obsidian-specific syntax such
+as wikilinks, callouts, embeds, Mermaid, and Bases into static HTML or SVG. CSS, scripts,
+and external resources are allowed and are published unchanged.
+
+Themes are optional. For a named theme, check
+\`$${OPENARTIFACTS_WORKSPACE_ROOT_ENV}/${OPENARTIFACTS_THEMES_DIR}/<name>.md\`, then
+\`themes/<name>.md\` next to this skill. Check each path independently. If neither
+exists, continue with readable defaults; a missing theme must never block publishing.
+The bundled \`${OPENARTIFACTS_DEFAULT_THEME}\` is an optional example.
+
+## 2. Let the user review
+
+Tell the user the absolute path of the HTML file and that opening it in a browser shows
+the page as it will be uploaded; OpenArtifacts adds its own header and footer bylines when
+it serves the page. Then end your turn.
+
+Never publish in the same turn that generated the HTML. Publish only when a later
+message from the user clearly asks to publish this page. Treat anything else as feedback
+(revise the same file and repeat this step) or as a cancellation. When unsure whether a
+message is an approval, ask once. Never simulate the user's approval.
+
+## 3. Publish
+
+Run the wrapper next to this SKILL.md with the HTML file, the note's title (its file
+name without \`.md\`), and the existing \`docId\` when updating. On macOS or Linux:
 
 \`\`\`bash
-sh "/absolute/path/to/this/skill/directory/openartifacts-publish.sh" "Notes/source.md" "${OPENARTIFACTS_AGENT_HANDOFF_DIR}/unique.html"
+sh "/absolute/path/to/this/skill/directory/${OPENARTIFACTS_PUBLISH_USAGE}.sh" publish "$${OPENARTIFACTS_WORKSPACE_ROOT_ENV}/${OPENARTIFACTS_AGENT_HANDOFF_DIR}/unique.html" "Note title" [docId]
 \`\`\`
 
-For withdrawal, omit the staged-HTML argument:
-
-\`\`\`bash
-sh "/absolute/path/to/this/skill/directory/openartifacts-publish.sh" "Notes/source.md"
-\`\`\`
-
-On Windows, use the \`.cmd\` wrapper (prefix it with \`&\` in PowerShell):
+On Windows, use the \`.cmd\` wrapper (prefix with \`&\` in PowerShell):
 
 \`\`\`powershell
-& "/absolute/path/to/this/skill/directory/openartifacts-publish.cmd" "Notes/source.md" "${OPENARTIFACTS_AGENT_HANDOFF_DIR}/unique.html"
+& "/absolute/path/to/this/skill/directory/${OPENARTIFACTS_PUBLISH_USAGE}.cmd" publish "$env:${OPENARTIFACTS_WORKSPACE_ROOT_ENV}/${OPENARTIFACTS_AGENT_HANDOFF_DIR}/unique.html" "Note title" [docId]
 \`\`\`
 
-Omit the staged-HTML argument on Windows for withdrawal as well.
+Success prints the server's JSON, \`{"docId", "url", "version"}\`. Set the note's
+\`openartifacts\` frontmatter property to that \`url\` (create the frontmatter block if
+needed, keep every other property) and remove a \`symposium\` property whose link has the
+same document id. Delete the HTML file from \`${OPENARTIFACTS_AGENT_HANDOFF_DIR}/\`, then
+report the URL. Publishing the same note again updates the same page.
 
-With only the source path, the wrapper blocks while Obsidian shows its host-owned
-Update/Delete management modal. With a staged HTML path, it blocks while Obsidian
-consumes the artifact and shows its source, title, and a link to a sandboxed
-local-browser rendering of the exact captured page. Obsidian rejects active or
-externally loaded content, prevents navigation from the browser preview, removes the
-original artifact, removes its temporary browser preview after review, and alone reads
-the current note identity to choose whether confirmation publishes or updates; never
-choose an action or document id.
+On failure the wrapper prints the HTTP status and the server's message to stderr and
+exits 1. Report that message verbatim. Do not retry on your own, invent a cause, strip
+styling, or publish another way. For a 401, the license key was refused or the plan
+cannot publish; point the user at Copilot Settings. For \`not_found\` on an update, stop;
+do not create a replacement page unless the user explicitly asks.
 
-- \`cancelled\`: stop. No request was sent.
-- \`regenerate\`: create a new complete artifact and run the wrapper again. The
-  previous confirmation never applies to regenerated bytes.
-- \`published\` or \`updated\`: return the host-provided public URL verbatim.
-- \`deleted\`: report that the host withdrew the page and removed its note identity.
-- \`failed\`: if the host says to edit the staged file, address every listed issue in
-  that same file and retry exactly once. Otherwise, or if that retry fails, stop and
-  report the exact host message. Never invent a cause, change unrelated styling, create
-  another filename, bypass the review, or publish directly.
+## 4. Withdraw
+
+For delete, remove, or withdraw requests, read the \`docId\` with the same rules as step 1:
+\`openartifacts\` first, \`symposium\` on older notes, compared by document id, and stop to
+ask on any other value or on two properties naming different ids. If there is none, say
+nothing is published. Otherwise tell the user the link will stop working and that copies
+people already saved cannot be recalled, then end your turn. On a clear yes, run the wrapper
+with \`unshare <docId>\`, remove the \`openartifacts\` and \`symposium\` properties from the
+note, and report that the page is gone. Never tell the user to delete the page at its
+public URL.
 `,
   files: [
     { path: `themes/${OPENARTIFACTS_DEFAULT_THEME}.md`, content: RESEARCH_MEMO_THEME },
     {
-      path: "openartifacts-publish.sh",
-      content: `#!/bin/sh
-SOURCE=\${1:-}
-STAGED_HTML=\${2:-}
-case "$#" in
-  1) ;;
-  2) ;;
+      path: `${OPENARTIFACTS_PUBLISH_USAGE}.sh`,
+      // POSIX sh + curl + awk only. The JSON string encoder is the whole reason this
+      // script exists: three agents improvising it would each get it subtly wrong.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/394
+      content: String.raw`#!/bin/sh
+# Publish one HTML file to OpenArtifacts over HTTPS with the license key Copilot
+# supplies in the environment. Needs only sh, curl, and awk.
+usage() {
+  printf '%s\n' "Usage: sh ${OPENARTIFACTS_PUBLISH_USAGE}.sh publish <html-file> <title> [docId]" >&2
+  printf '%s\n' "       sh ${OPENARTIFACTS_PUBLISH_USAGE}.sh unshare <docId>" >&2
+  exit 1
+}
+
+KEY=$${PLUS_ENV.licenseKey}
+[ -n "$KEY" ] || {
+  printf '%s\n' "${OPENARTIFACTS_MISSING_KEY_MESSAGE}" >&2
+  exit 1
+}
+API_HOST=$${OPENARTIFACTS_API_HOST_ENV}
+[ -n "$API_HOST" ] || API_HOST="${OPENARTIFACTS_API_ORIGIN}"
+API_HOST=$(printf '%s' "$API_HOST" | sed 's,/*$,,')
+
+COMMAND=$1
+DOC_ID=
+case "$COMMAND" in
+  publish)
+    [ "$#" -eq 3 ] || [ "$#" -eq 4 ] || usage
+    HTML_FILE=$2
+    TITLE=$3
+    [ "$#" -eq 4 ] && DOC_ID=$4
+    [ -f "$HTML_FILE" ] || {
+      printf '%s\n' "HTML file not found: $HTML_FILE" >&2
+      exit 1
+    }
+    ;;
+  unshare)
+    [ "$#" -eq 2 ] || usage
+    DOC_ID=$2
+    ;;
   *)
-    printf '%s\\n' "Usage: sh openartifacts-publish.sh <source-note-path> [staged-html-path]" >&2
-    exit 1
+    usage
     ;;
 esac
-[ -n "$SOURCE" ] && { [ "$#" -eq 1 ] || [ -n "$STAGED_HTML" ]; } || {
-  printf '%s\\n' "Usage: sh openartifacts-publish.sh <source-note-path> [staged-html-path]" >&2
+if [ -n "$DOC_ID" ] && ! printf '%s' "$DOC_ID" | grep -Eq '^[0-9abcdefghjkmnpqrstvwxyz]{16}$'; then
+  printf '%s\n' "Invalid OpenArtifacts document id: $DOC_ID" >&2
   exit 1
-}
-
-OBSIDIAN_CLI=\${COPILOT_OBSIDIAN_CLI:-}
-WORKSPACE_ROOT=\${${OPENARTIFACTS_WORKSPACE_ROOT_ENV}:-}
-[ -n "$WORKSPACE_ROOT" ] || {
-  printf '%s\\n' "The owning Obsidian workspace is unavailable." >&2
-  exit 1
-}
-
-[ -n "$OBSIDIAN_CLI" ] || {
-  printf '%s\\n' "A compatible Obsidian CLI is unavailable." >&2
-  exit 1
-}
-
-cd "$WORKSPACE_ROOT" || {
-  printf '%s\\n' "The owning Obsidian workspace is unavailable." >&2
-  exit 1
-}
-VAULT_NAME=\${WORKSPACE_ROOT%/}
-VAULT_NAME=\${VAULT_NAME##*/}
-[ -n "$VAULT_NAME" ] || {
-  printf '%s\\n' "The owning Obsidian vault is unavailable." >&2
-  exit 1
-}
-
-SOURCE_B64=$(printf '%s' "$SOURCE" | base64 | tr -d '\\r\\n')
-if [ "$#" -eq 1 ]; then
-  CODE="(()=>{const decode=(value)=>new TextDecoder().decode(Uint8Array.from(atob(value),(char)=>char.charCodeAt(0)));const bridge=app.plugins.plugins.copilot?.${OPENARTIFACTS_AGENT_BRIDGE_PROPERTY};if(!bridge)throw new Error('Copilot OpenArtifacts host is unavailable.');return bridge.reviewAgentManage(decode('$SOURCE_B64')).then(JSON.stringify);})()"
-else
-  HTML_B64=$(printf '%s' "$STAGED_HTML" | base64 | tr -d '\\r\\n')
-  CODE="(()=>{const decode=(value)=>new TextDecoder().decode(Uint8Array.from(atob(value),(char)=>char.charCodeAt(0)));const bridge=app.plugins.plugins.copilot?.${OPENARTIFACTS_AGENT_BRIDGE_PROPERTY};if(!bridge)throw new Error('Copilot OpenArtifacts host is unavailable.');return bridge.reviewAgentPublish(decode('$SOURCE_B64'),decode('$HTML_B64')).then(JSON.stringify);})()"
 fi
 
-CLI_OUTPUT=$("$OBSIDIAN_CLI" "vault=$VAULT_NAME" eval "code=$CODE") || exit $?
-CLI_RESULT=$(printf '%s\\n' "$CLI_OUTPUT" | sed -n '/^=> {/p' | sed -n '$p')
-case "$CLI_RESULT" in
-  "=> {"*)
-    OUTCOME=\${CLI_RESULT#"=> "}
-    printf '%s\\n' "$OUTCOME"
+# stdin -> one JSON string literal. Bytes pass through untouched except the escapes
+# JSON requires: backslash, quote, tab, CR, LF, and every other control character as
+# \u00XX. Only NUL is dropped (awk cannot carry it, and HTML never contains it). A
+# sentinel byte keeps a trailing newline in the file from being lost. Backslashes are
+# joined in rather than substituted because awk implementations disagree on
+# backslashes inside gsub replacements.
+json_string() {
+  { cat; printf 'x'; } | LC_ALL=C tr -d '\000' | LC_ALL=C awk '
+    BEGIN { ORS = ""; bs = sprintf("%c", 92); printf "\"" }
+    NR > 1 { printf "%s\\n", prev }
+    {
+      n = split($0, parts, /\\/)
+      line = parts[1]
+      for (i = 2; i <= n; i++) line = line bs bs parts[i]
+      gsub(/"/, "\\\"", line)
+      gsub(/\t/, "\\t", line)
+      gsub(/\r/, "\\r", line)
+      for (c = 1; c < 32; c++) {
+        if (c != 9 && c != 10 && c != 13) gsub(sprintf("%c", c), sprintf("\\u%04x", c), line)
+      }
+      prev = line
+    }
+    END { printf "%s\"", substr(prev, 1, length(prev) - 1) }
+  '
+}
+
+HEADERS=$(mktemp) || exit 1
+BODY=$(mktemp) || exit 1
+RESPONSE=$(mktemp) || exit 1
+trap 'rm -f "$HEADERS" "$BODY" "$RESPONSE"' EXIT
+printf 'Authorization: Bearer %s\n' "$KEY" > "$HEADERS"
+
+if [ "$COMMAND" = unshare ]; then
+  STATUS=$(curl -sS -o "$RESPONSE" -w '%{http_code}' -X DELETE -H "@$HEADERS" "$API_HOST/api/v1/docs/$DOC_ID")
+  CURL_STATUS=$?
+else
+  {
+    printf '{"title":'
+    printf '%s' "$TITLE" | json_string
+    printf ',"html":'
+    json_string < "$HTML_FILE"
+    printf '}'
+  } > "$BODY"
+  if [ -n "$DOC_ID" ]; then
+    METHOD=PUT
+    URL="$API_HOST/api/v1/docs/$DOC_ID"
+  else
+    METHOD=POST
+    URL="$API_HOST/api/v1/docs"
+  fi
+  STATUS=$(curl -sS -o "$RESPONSE" -w '%{http_code}' -X "$METHOD" -H "@$HEADERS" -H 'Content-Type: application/json; charset=utf-8' --data-binary "@$BODY" "$URL")
+  CURL_STATUS=$?
+fi
+
+if [ "$CURL_STATUS" -ne 0 ]; then
+  printf '%s\n' "Could not reach OpenArtifacts at $API_HOST." >&2
+  exit 1
+fi
+# The API answers a structured not_found when the page is already gone, which is the
+# outcome asked for. Any other 404 is an error.
+if [ "$COMMAND" = unshare ] && [ "$STATUS" = 404 ] && grep -q '"not_found"' "$RESPONSE"; then
+  STATUS=204
+fi
+case "$STATUS" in
+  2??)
+    if [ "$COMMAND" = unshare ]; then
+      printf '{"docId":"%s","status":"unshared"}\n' "$DOC_ID"
+    else
+      cat "$RESPONSE"
+      printf '\n'
+    fi
     exit 0
     ;;
   *)
-    printf '%s\\n' "Copilot could not complete the OpenArtifacts review." >&2
+    printf '%s\n' "OpenArtifacts returned HTTP $STATUS" >&2
+    cat "$RESPONSE" >&2
+    printf '\n' >&2
     exit 1
     ;;
 esac
 `,
     },
     {
-      path: "openartifacts-publish.cmd",
-      content: cmdLauncher("openartifacts-publish.ps1"),
+      path: `${OPENARTIFACTS_PUBLISH_USAGE}.cmd`,
+      content: cmdLauncher(`${OPENARTIFACTS_PUBLISH_USAGE}.ps1`),
     },
     {
-      path: "openartifacts-publish.ps1",
-      content: `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+      path: `${OPENARTIFACTS_PUBLISH_USAGE}.ps1`,
+      // Windows PowerShell 5.1 and PowerShell 7 both ship ConvertTo-Json and
+      // Invoke-WebRequest, so no curl.exe or Node is needed there either.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/394
+      content: String.raw`[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding = [System.Text.Encoding]::UTF8
+# Publish one HTML file to OpenArtifacts over HTTPS with the license key Copilot
+# supplies in the environment.
 
-$SOURCE = if ($args.Count -ge 1) { $args[0] } else { '' }
-$STAGED_HTML = if ($args.Count -ge 2) { $args[1] } else { '' }
-if (($args.Count -ne 1 -and $args.Count -ne 2) -or -not $SOURCE -or ($args.Count -eq 2 -and -not $STAGED_HTML)) {
-  [Console]::Error.WriteLine('Usage: openartifacts-publish.ps1 <source-note-path> [staged-html-path]')
+function Show-Usage {
+  [Console]::Error.WriteLine('Usage: ${OPENARTIFACTS_PUBLISH_USAGE}.ps1 publish <html-file> <title> [docId]')
+  [Console]::Error.WriteLine('       ${OPENARTIFACTS_PUBLISH_USAGE}.ps1 unshare <docId>')
   exit 1
 }
 
-$OBSIDIAN_CLI = [Environment]::GetEnvironmentVariable('COPILOT_OBSIDIAN_CLI')
-$WORKSPACE_ROOT = [Environment]::GetEnvironmentVariable('${OPENARTIFACTS_WORKSPACE_ROOT_ENV}')
-if (-not $WORKSPACE_ROOT) {
-  [Console]::Error.WriteLine('The owning Obsidian workspace is unavailable.')
+$KEY = [Environment]::GetEnvironmentVariable('${PLUS_ENV.licenseKey}')
+if (-not $KEY) {
+  [Console]::Error.WriteLine('${OPENARTIFACTS_MISSING_KEY_MESSAGE}')
+  exit 1
+}
+$API_HOST = [Environment]::GetEnvironmentVariable('${OPENARTIFACTS_API_HOST_ENV}')
+if (-not $API_HOST) { $API_HOST = '${OPENARTIFACTS_API_ORIGIN}' }
+$API_HOST = $API_HOST.TrimEnd('/')
+
+$COMMAND = if ($args.Count -ge 1) { [string]$args[0] } else { '' }
+$DOC_ID = ''
+switch ($COMMAND) {
+  'publish' {
+    if ($args.Count -ne 3 -and $args.Count -ne 4) { Show-Usage }
+    $HTML_FILE = [string]$args[1]
+    $TITLE = [string]$args[2]
+    if ($args.Count -eq 4) { $DOC_ID = [string]$args[3] }
+    if (-not (Test-Path -LiteralPath $HTML_FILE -PathType Leaf)) {
+      [Console]::Error.WriteLine("HTML file not found: $HTML_FILE")
+      exit 1
+    }
+  }
+  'unshare' {
+    if ($args.Count -ne 2) { Show-Usage }
+    $DOC_ID = [string]$args[1]
+  }
+  default { Show-Usage }
+}
+if ($DOC_ID -and $DOC_ID -notmatch '^[0-9abcdefghjkmnpqrstvwxyz]{16}$') {
+  [Console]::Error.WriteLine("Invalid OpenArtifacts document id: $DOC_ID")
   exit 1
 }
 
-$EXIT_CODE = 0
+$headers = @{ Authorization = "Bearer $KEY" }
 try {
-  if (-not $OBSIDIAN_CLI) { throw 'A compatible Obsidian CLI is unavailable.' }
-  Set-Location -LiteralPath $WORKSPACE_ROOT
-  $VAULT_NAME = Split-Path -Leaf (Get-Location).Path
-  if (-not $VAULT_NAME) { throw 'The owning Obsidian vault is unavailable.' }
-  $SOURCE_B64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($SOURCE))
-  if ($args.Count -eq 1) {
-    $CODE = "(()=>{const decode=(value)=>new TextDecoder().decode(Uint8Array.from(atob(value),(char)=>char.charCodeAt(0)));const bridge=app.plugins.plugins.copilot?.${OPENARTIFACTS_AGENT_BRIDGE_PROPERTY};if(!bridge)throw new Error('Copilot OpenArtifacts host is unavailable.');return bridge.reviewAgentManage(decode('$SOURCE_B64')).then(JSON.stringify);})()"
+  if ($COMMAND -eq 'unshare') {
+    $null = Invoke-WebRequest -UseBasicParsing -Method Delete -Uri "$API_HOST/api/v1/docs/$DOC_ID" -Headers $headers
+    [Console]::Out.WriteLine('{"docId":"' + $DOC_ID + '","status":"unshared"}')
   } else {
-    $HTML_B64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($STAGED_HTML))
-    $CODE = "(()=>{const decode=(value)=>new TextDecoder().decode(Uint8Array.from(atob(value),(char)=>char.charCodeAt(0)));const bridge=app.plugins.plugins.copilot?.${OPENARTIFACTS_AGENT_BRIDGE_PROPERTY};if(!bridge)throw new Error('Copilot OpenArtifacts host is unavailable.');return bridge.reviewAgentPublish(decode('$SOURCE_B64'),decode('$HTML_B64')).then(JSON.stringify);})()"
+    $html = [System.IO.File]::ReadAllText($HTML_FILE, (New-Object System.Text.UTF8Encoding($false)))
+    $body = @{ title = $TITLE; html = $html } | ConvertTo-Json -Compress -Depth 2
+    $bytes = [System.Text.Encoding]::UTF8.GetBytes($body)
+    $method = if ($DOC_ID) { 'Put' } else { 'Post' }
+    $uri = if ($DOC_ID) { "$API_HOST/api/v1/docs/$DOC_ID" } else { "$API_HOST/api/v1/docs" }
+    $response = Invoke-WebRequest -UseBasicParsing -Method $method -Uri $uri -Headers $headers -ContentType 'application/json; charset=utf-8' -Body $bytes
+    [Console]::Out.WriteLine([string]$response.Content)
   }
-
-  $CLI_OUTPUT = & $OBSIDIAN_CLI "vault=$VAULT_NAME" 'eval' "code=$CODE"
-  if ($LASTEXITCODE -ne 0) { throw 'Copilot could not complete the OpenArtifacts review.' }
-  $CLI_RESULT = [string](@($CLI_OUTPUT | Where-Object { ([string]$_).StartsWith('=> {') })[-1])
-  if (-not $CLI_RESULT.StartsWith('=> {')) {
-    throw 'Copilot could not complete the OpenArtifacts review.'
-  }
-  $OUTCOME = $CLI_RESULT.Substring(3)
-  [Console]::Out.Write($OUTCOME)
 } catch {
-  [Console]::Error.WriteLine($_.Exception.Message)
-  $EXIT_CODE = 1
+  $status = $null
+  $detail = ''
+  if ($_.Exception.Response) {
+    try { $status = [int]$_.Exception.Response.StatusCode } catch { $status = $null }
+    try {
+      $reader = New-Object System.IO.StreamReader($_.Exception.Response.GetResponseStream())
+      $detail = $reader.ReadToEnd()
+    } catch { $detail = '' }
+  }
+  if (-not $detail -and $_.ErrorDetails) { $detail = [string]$_.ErrorDetails.Message }
+  if ($COMMAND -eq 'unshare' -and $status -eq 404 -and $detail -match '"not_found"') {
+    # The API's structured not_found means the page is already gone, which is the outcome asked for.
+    [Console]::Out.WriteLine('{"docId":"' + $DOC_ID + '","status":"unshared"}')
+    exit 0
+  }
+  if ($status) {
+    [Console]::Error.WriteLine("OpenArtifacts returned HTTP $status")
+    if ($detail) { [Console]::Error.WriteLine($detail) }
+  } elseif ($detail) {
+    [Console]::Error.WriteLine($detail)
+  } else {
+    [Console]::Error.WriteLine("Could not reach OpenArtifacts at $API_HOST. " + $_.Exception.Message)
+  }
+  exit 1
 }
-exit $EXIT_CODE
+exit 0
 `,
     },
   ],

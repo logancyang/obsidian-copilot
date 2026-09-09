@@ -164,6 +164,16 @@ On Windows, creating the folder links may require **Developer Mode** or administ
 - [Copilot Commands and Quick Ask](custom-commands.md)
 - [Copilot Plans, Privacy, and Self-Hosting](copilot-plus-and-self-host.md)
 
+### Publishing from Agent Chat
+
+Copilot ships an `openartifacts-publish` skill to Claude Code, Codex, and OpenCode. Publishing needs a Copilot Plus license key in Copilot settings. Copilot passes that key to the agent process, and the skill's bundled wrapper script sends it to `api.openartifacts.ai` over HTTPS. The wrapper needs only the shell tools already on your system: `sh`, `curl`, and `awk` on macOS and Linux, PowerShell on Windows.
+
+Ask the agent to publish a note. It renders the note to HTML, writes the file under `.openartifacts/handoffs/` in your vault, tells you the path, and stops. Open that file in your browser to see the page as it will be uploaded; OpenArtifacts adds its own header and footer bylines when it serves the page. Reply that it should publish, or describe changes and the agent revises the same file and asks again. The agent never publishes in the same turn that produced the HTML.
+
+After publishing, the agent saves the public link in the note's `openartifacts` property, so publishing the note again updates the same page and the regular **Publish file to OpenArtifacts** command recognizes it as published. Notes published under the older `symposium` property keep working and move to `openartifacts` the next time they are published. If a property already holds something other than an OpenArtifacts link, the agent asks before touching it. Ask the agent to withdraw a page to take it down; it confirms first and removes the property afterwards.
+
+Copilot also includes **research-memo** as an optional theme. For a named theme, the skill checks `.openartifacts/themes/<name>.md` in your vault, then `themes/<name>.md` alongside the installed skill. If neither exists, the agent continues with readable defaults. A missing theme never blocks publishing.
+
 ### Upgrading an agent
 
 When an installed agent needs a supported version, Basic → Agents and Agent Chat offer **Upgrade** if Copilot can upgrade that installation. Both show the same progress, including upgrades started in Configure. If an upgrade fails, use **Retry**. A failed custom-path selection is reported in Configure and does not turn the upgrade action into a path-validation retry.

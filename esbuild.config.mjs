@@ -79,6 +79,8 @@ const context = await esbuild.context({
   sourcemap: prod ? false : "inline",
   treeShaking: true,
   outfile: "main.js",
+  // Skill text shipped by the openartifacts package is imported as a string.
+  loader: { ".md": "text" },
   plugins: [nodeModuleShim, svgrPlugin, wasmPlugin, patchRendererUnsafeUnref, bundleSizeGuard],
   define: {
     global: "window",

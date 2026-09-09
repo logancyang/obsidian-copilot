@@ -22,6 +22,8 @@ export interface FilterRetrieverOptions {
 }
 
 /**
+ * Deprecated: Vault Search v3 is awaiting removal; retained for existing callers.
+ *
  * Standalone retriever for deterministic filter matching: title mentions ([[note]]),
  * tag matches (#hashtag), and time-range filtering. These results are "guaranteed
  * inclusion" — they bypass scored ranking and should not be dropped by downstream

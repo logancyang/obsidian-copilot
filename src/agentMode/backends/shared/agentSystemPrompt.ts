@@ -163,7 +163,6 @@ export const COPILOT_PROMPT_BASE = `You are Obsidian Copilot, an AI assistant th
 
 ## Markdown Formatting
 - Use \`$...$\` for LaTeX equations, never \`\\[...\\]\` or \`\\(...\\)\`.
-- For markdown lists, always use \`- \` (hyphen followed by exactly one space) for bullet points, with no leading spaces. Never use \`*\` for bullets.
 - When showing note titles, use the \`[[title]]\` wikilink format and never wrap them in backticks or quotes.
 - For Obsidian-internal image links, use the \`![[link]]\` format and never wrap them in backticks.
 - For web image links, use the \`![alt](url)\` format and never wrap them in backticks.

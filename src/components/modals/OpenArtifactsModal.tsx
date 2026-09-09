@@ -1,11 +1,6 @@
 import { Button } from "@/components/ui/button";
-import { openWithSystemDefault } from "@/utils/openWithSystemDefault";
 import { createPluginRoot } from "@/utils/react/createPluginRoot";
-import type {
-  OpenArtifactsAction,
-  OpenArtifactsDocument,
-  OpenArtifactsReceipt,
-} from "@/openArtifacts/types";
+import type { OpenArtifactsAction, OpenArtifactsReceipt } from "@/openArtifacts/types";
 import { App, Modal } from "obsidian";
 import React, { useState } from "react";
 import type { Root } from "react-dom/client";
@@ -38,25 +33,14 @@ export type OpenArtifactsModalResult =
   | OpenArtifactsFailureResult
   | OpenArtifactsPersistenceResult;
 
-/** Immutable host-owned data shown before an agent-authored document can be sent. */
-export interface OpenArtifactsDocumentReview {
-  readonly sourcePath: string;
-  readonly digest: string;
-  readonly payload: OpenArtifactsDocument;
-  readonly previewPath: string;
-  readonly previewUrl: string;
-}
-
 export interface OpenArtifactsModalOptions {
   fileName: string;
   docId: string | null;
-  review?: OpenArtifactsDocumentReview;
   initialResult?: OpenArtifactsModalResult;
   onConfirm: (
     action: OpenArtifactsAction,
     ownerDocument: Document
   ) => Promise<OpenArtifactsModalResult>;
-  onRegenerate?: () => void;
   onClosed?: () => void;
 }
 
@@ -125,14 +109,12 @@ function OpenArtifactsReceiptView({ receipt, actions }: OpenArtifactsReceiptView
 export function OpenArtifactsModalContent({
   fileName,
   docId,
-  review,
   initialResult,
   onConfirm,
-  onRegenerate,
   onClose,
 }: OpenArtifactsModalContentProps) {
   const [confirmationAction, setConfirmationAction] = useState<OpenArtifactsAction | null>(
-    review ? (docId ? "update" : "publish") : docId ? null : "publish"
+    docId ? null : "publish"
   );
   const [result, setResult] = useState<OpenArtifactsModalResult | null>(initialResult ?? null);
   const [workingAction, setWorkingAction] = useState<OpenArtifactsAction | null>(null);
@@ -200,7 +182,7 @@ export function OpenArtifactsModalContent({
           <Button variant="secondary" onClick={onClose}>
             Close
           </Button>
-          {result.retryable && !review && (
+          {result.retryable && (
             <Button onClick={retry} disabled={working}>
               {working ? "Retrying…" : "Retry"}
             </Button>
@@ -243,13 +225,10 @@ export function OpenArtifactsModalContent({
   }
 
   const heading = confirmationAction
-    ? review
-      ? `Review “${review.payload.title}”`
-      : `${actionLabel(confirmationAction)} “${fileName}”?`
+    ? `${actionLabel(confirmationAction)} “${fileName}”?`
     : `Manage “${fileName}”`;
-  const description = review
-    ? `These exact HTML bytes will ${confirmationAction === "update" ? "replace the current public page" : "become public"} only after you confirm.`
-    : confirmationAction === "delete"
+  const description =
+    confirmationAction === "delete"
       ? "Yes withdraws the link and deletes OpenArtifacts’s stored copy. Previously fetched or cached copies cannot be recalled."
       : confirmationAction === "update"
         ? "Yes replaces the current public page with this note’s latest content."
@@ -264,56 +243,12 @@ export function OpenArtifactsModalContent({
         <p className="tw-mb-0 tw-mt-2 tw-text-muted">{description}</p>
       </div>
 
-      {review && (
-        <div className="tw-flex tw-flex-col tw-gap-2">
-          <div className="tw-grid tw-grid-cols-[auto,1fr] tw-gap-x-3 tw-gap-y-1 tw-text-small">
-            <span className="tw-text-muted">Source</span>
-            <code className="tw-break-all">{review.sourcePath}</code>
-            <span className="tw-text-muted">Title</span>
-            <span>{review.payload.title}</span>
-            <span className="tw-text-muted">HTML</span>
-            <span>{review.payload.byteLength} bytes</span>
-            <span className="tw-text-muted">SHA-256</span>
-            <code className="tw-break-all">{review.digest}</code>
-          </div>
-          <p className="tw-m-0 tw-text-small tw-text-muted">
-            Open a sandboxed local preview of these exact HTML bytes in your default browser, review
-            it, then return here to confirm.
-          </p>
-          <a
-            href={review.previewUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            title={review.previewPath}
-            className="tw-text-accent tw-underline"
-            onClick={(event) => {
-              event.preventDefault();
-              void openWithSystemDefault(review.previewPath);
-            }}
-          >
-            Open local HTML preview
-          </a>
-        </div>
-      )}
-
       <div
         className="tw-flex tw-flex-wrap tw-justify-end tw-gap-2"
         aria-label="OpenArtifacts actions"
       >
         {confirmationAction ? (
           <>
-            {review && onRegenerate && (
-              <Button
-                variant="secondary"
-                onClick={() => {
-                  onRegenerate();
-                  onClose();
-                }}
-                disabled={working}
-              >
-                Ask agent to regenerate
-              </Button>
-            )}
             <Button variant="secondary" onClick={onClose} disabled={working}>
               No, cancel
             </Button>

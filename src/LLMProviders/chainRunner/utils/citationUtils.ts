@@ -162,6 +162,7 @@ export function getWebSearchCitationInstructions(enableInlineCitations: boolean 
 }
 
 // ===== CITATION PROCESSING UTILITIES =====
+// Deprecated: legacy citation parsing is awaiting removal; retained for existing callers.
 
 interface SourcesSection {
   mainContent: string;

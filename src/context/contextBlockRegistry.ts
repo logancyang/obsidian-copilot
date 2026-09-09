@@ -82,13 +82,6 @@ for (const blockType of CONTEXT_BLOCK_TYPES) {
 }
 
 /**
- * Get block type metadata by tag name
- */
-export function getBlockType(tag: string): ContextBlockType | undefined {
-  return blockTypeByTag.get(tag);
-}
-
-/**
  * Get the source type for a given tag name
  */
 export function getSourceType(tag: string): ContextSourceType {
@@ -100,19 +93,6 @@ export function getSourceType(tag: string): ContextSourceType {
  */
 export function isRecoverable(tag: string): boolean {
   return blockTypeByTag.get(tag)?.recoverable ?? false;
-}
-
-/**
- * Get all tags that should never be compacted
- */
-export function getNeverCompactTags(): Set<string> {
-  const tags = new Set<string>();
-  for (const blockType of CONTEXT_BLOCK_TYPES) {
-    if (!blockType.recoverable) {
-      tags.add(blockType.tag);
-    }
-  }
-  return tags;
 }
 
 /**
@@ -136,12 +116,4 @@ export function extractSourceFromBlock(xmlBlock: string, tag: string): string {
 export function extractContentFromBlock(xmlBlock: string): string {
   const contentMatch = /<content>([\s\S]*?)<\/content>/.exec(xmlBlock);
   return contentMatch ? contentMatch[1] : xmlBlock;
-}
-
-/**
- * Detect the XML tag name from a block string
- */
-export function detectBlockTag(xmlBlock: string): string | null {
-  const match = xmlBlock.match(/^<(\w+)[\s>]/);
-  return match?.[1] ?? null;
 }

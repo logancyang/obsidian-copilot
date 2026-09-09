@@ -37,6 +37,7 @@ export function buildBuiltinSeedFs(app: App): BuiltinSeedFs {
     read: (p) => adapter.read(p),
     write: (p, c) => adapter.write(p, c),
     mkdir: (p) => adapter.mkdir(p),
+    removeFile: (p) => adapter.remove(p),
     rmRecursive: (p) => adapter.rmdir(p, true),
   };
 }
