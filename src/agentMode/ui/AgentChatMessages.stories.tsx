@@ -138,3 +138,26 @@ export const TallQuestion: StoryObj<AgentChatMessagesProps> = {
     />
   ),
 };
+
+/** A new turn keeps its running indicator after the preceding turn was stopped. */
+export const RunningAfterStop: StoryObj<AgentChatMessagesProps> = {
+  args: {
+    ...actionRailArgs,
+    pendingToolPermissions: [],
+    pendingAskUserQuestions: [],
+    messages: [
+      { ...message, id: "first-request", sender: "user", message: "Summarize this note." },
+      {
+        ...message,
+        id: "stopped-response",
+        message: "I will read the note and summarize its main points.",
+        turnStopReason: "cancelled",
+        turnDurationMs: 2300,
+      },
+      { ...message, id: "next-request", sender: "user", message: "List its action items instead." },
+      { ...message, id: "running-response", message: "" },
+    ],
+    isLoading: true,
+  },
+  render: (props) => <QueuedActionsDemo {...actionRailArgs} {...props} />,
+};

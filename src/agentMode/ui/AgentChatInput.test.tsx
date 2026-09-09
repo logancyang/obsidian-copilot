@@ -3,6 +3,7 @@ import { AgentChatInput } from "@/agentMode/ui/AgentChatInput";
 import { AGENT_PROMPT_SUGGESTIONS } from "@/agentMode/ui/agentPromptSuggestions";
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
 import type { AgentInputDraftControls } from "@/agentMode/ui/hooks/useAgentInputDrafts";
+import { useAgentInputDrafts } from "@/agentMode/ui/hooks/useAgentInputDrafts";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { App } from "obsidian";
 import React from "react";
@@ -42,6 +43,7 @@ jest.mock("@/components/chat-components/ChatInput", () => ({
     topRightAccessory?: React.ReactNode;
     placeholderPrompts?: ReadonlyArray<string>;
     handleSendMessage?: () => void;
+    onStopGenerating?: () => void;
   }) => {
     capturedAgentBrands = props.agentBrands;
     capturedTopRightAccessory = props.topRightAccessory;
@@ -51,6 +53,9 @@ jest.mock("@/components/chat-components/ChatInput", () => ({
         {props.topRightAccessory}
         <button type="button" onClick={() => props.handleSendMessage?.()}>
           send
+        </button>
+        <button type="button" onClick={() => props.onStopGenerating?.()}>
+          stop
         </button>
       </>
     );
@@ -71,6 +76,7 @@ jest.mock("@/settings/model", () => ({
     return model._backendId ? `${model._backendId}:${baseKey}` : baseKey;
   },
   useSettingsValue: () => ({}),
+  getSettings: () => ({ debug: false }),
 }));
 /* eslint-enable @eslint-react/hooks-extra/no-unnecessary-use-prefix */
 
@@ -137,7 +143,142 @@ const renderInput = (
   extraProps: Partial<React.ComponentProps<typeof AgentChatInput>> = {}
 ) => render(inputNode(backend, draft, extraProps));
 
+function setupCancellation() {
+  let settleTurn!: () => void;
+  let settleCancel!: () => void;
+  const cancellation = new Promise<void>((resolve) => {
+    settleCancel = resolve;
+  });
+  const backend = {
+    sendMessage: jest.fn(() => ({
+      turn: new Promise<void>((resolve) => {
+        settleTurn = resolve;
+      }),
+    })),
+    cancel: jest.fn(() => {
+      settleTurn();
+      return cancellation;
+    }),
+  } as unknown as AgentChatBackend;
+  let draft!: AgentInputDraftControls;
+  function Composer() {
+    draft = useAgentInputDrafts({
+      activeChatInputId: "input-1",
+      liveChatInputIds: ["input-1"],
+      defaultIncludeActiveNote: false,
+    });
+    return inputNode(backend, draft);
+  }
+  render(<Composer />);
+  return { backend, getDraft: () => draft, settleCancel, settleTurn: () => settleTurn() };
+}
+
 describe("AgentChatInput", () => {
+  describe("handleStopGenerating()", () => {
+    it("discards queued follow-ups before cancellation settles the active turn https://github.com/Brevilabs/obsidian-copilot-private/issues/365", async () => {
+      const { backend, getDraft, settleCancel } = setupCancellation();
+      act(() => getDraft().setInput("first turn"));
+      fireEvent.click(screen.getByText("send"));
+      await waitFor(() => expect(backend.sendMessage).toHaveBeenCalledTimes(1));
+      act(() => getDraft().setInput("queued follow-up"));
+      fireEvent.click(screen.getByText("send"));
+      await waitFor(() => expect(getDraft().queue).toHaveLength(1));
+
+      await act(async () => fireEvent.click(screen.getByText("stop")));
+
+      expect(backend.sendMessage).toHaveBeenCalledTimes(1);
+      expect(getDraft().queue).toHaveLength(0);
+      expect(getDraft().loading).toBe(false);
+      await act(async () => settleCancel());
+    });
+
+    it("keeps a subsequent turn running when the previous cancellation resolves https://github.com/Brevilabs/obsidian-copilot-private/issues/365", async () => {
+      const { backend, getDraft, settleCancel } = setupCancellation();
+      act(() => getDraft().setInput("first turn"));
+      fireEvent.click(screen.getByText("send"));
+      await waitFor(() => expect(backend.sendMessage).toHaveBeenCalledTimes(1));
+      await act(async () => fireEvent.click(screen.getByText("stop")));
+      act(() => getDraft().setInput("new turn after Stop"));
+      fireEvent.click(screen.getByText("send"));
+      await waitFor(() => expect(backend.sendMessage).toHaveBeenCalledTimes(2));
+      expect(getDraft().loading).toBe(true);
+
+      await act(async () => settleCancel());
+
+      expect(getDraft().loading).toBe(true);
+    });
+    it("discards queued follow-ups but keeps the active turn running when cancellation fails https://github.com/Brevilabs/obsidian-copilot-private/issues/365", async () => {
+      const { backend, getDraft, settleTurn } = setupCancellation();
+      jest.mocked(backend.cancel).mockRejectedValueOnce(new Error("Cancellation failed"));
+      act(() => getDraft().setInput("first turn"));
+      fireEvent.click(screen.getByText("send"));
+      await waitFor(() => expect(backend.sendMessage).toHaveBeenCalledTimes(1));
+      act(() => getDraft().setInput("queued follow-up"));
+      fireEvent.click(screen.getByText("send"));
+      await waitFor(() => expect(getDraft().queue).toHaveLength(1));
+
+      await act(async () => fireEvent.click(screen.getByText("stop")));
+
+      expect(getDraft().queue).toHaveLength(0);
+      expect(getDraft().loading).toBe(true);
+      await act(async () => settleTurn());
+      expect(getDraft().loading).toBe(false);
+      expect(backend.sendMessage).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("runSend()", () => {
+    it("sends queued follow-ups when the active turn finishes normally", async () => {
+      const { backend, getDraft, settleTurn } = setupCancellation();
+      act(() => getDraft().setInput("first turn"));
+      fireEvent.click(screen.getByText("send"));
+      await waitFor(() => expect(backend.sendMessage).toHaveBeenCalledTimes(1));
+      act(() => getDraft().setInput("queued follow-up"));
+      fireEvent.click(screen.getByText("send"));
+      await waitFor(() => expect(getDraft().queue).toHaveLength(1));
+
+      await act(async () => settleTurn());
+
+      expect(backend.sendMessage).toHaveBeenCalledTimes(2);
+      expect(getDraft().queue).toHaveLength(0);
+      expect(getDraft().loading).toBe(true);
+      await act(async () => settleTurn());
+      expect(getDraft().loading).toBe(false);
+    });
+    it("regression: clears draft.loading when the turn resolves after the composer unmounted", async () => {
+      // First send from a landing: the user message lands, AgentHome flips
+      // landing→conversation, and the composer remounts mid-turn. The unmounting
+      // instance's runSend must still clear the shared draft's loading flag,
+      // or the Thinking spinner / stop button stick forever (#stuck-thinking).
+      let resolveTurn!: () => void;
+      const turn = new Promise<void>((resolve) => {
+        resolveTurn = resolve;
+      });
+      const backend = {
+        sendMessage: jest.fn(() => ({ turn })),
+        cancel: jest.fn(),
+      } as unknown as AgentChatBackend;
+      const draft = makeDraft();
+
+      const { unmount } = renderInput(backend, draft);
+      fireEvent.click(screen.getByText("send"));
+
+      await waitFor(() => expect(draft.setLoading).toHaveBeenCalledWith(true));
+      expect(backend.sendMessage).toHaveBeenCalledTimes(1);
+
+      // The landing→conversation flip unmounts this composer instance while the
+      // turn is still in flight.
+      unmount();
+
+      await act(async () => {
+        resolveTurn();
+        await turn;
+      });
+
+      await waitFor(() => expect(draft.setLoading).toHaveBeenCalledWith(false));
+    });
+  });
+
   describe("identity and agent-mention gate", () => {
     beforeEach(() => {
       capturedAgentBrands = undefined;
@@ -207,41 +348,6 @@ describe("AgentChatInput", () => {
       );
       view.rerender(inputNode(chat, makeDraft({ input: "" }), { isLanding: true }));
       expect(capturedPlaceholderPrompts).toBe(AGENT_PROMPT_SUGGESTIONS);
-    });
-  });
-
-  describe("turn-completion loading reset", () => {
-    it("regression: clears draft.loading when the turn resolves after the composer unmounted", async () => {
-      // First send from a landing: the user message lands, AgentHome flips
-      // landing→conversation, and the composer remounts mid-turn. The unmounting
-      // instance's runSend must still clear the shared draft's loading flag,
-      // or the Thinking spinner / stop button stick forever (#stuck-thinking).
-      let resolveTurn!: () => void;
-      const turn = new Promise<void>((resolve) => {
-        resolveTurn = resolve;
-      });
-      const backend = {
-        sendMessage: jest.fn(() => ({ turn })),
-        cancel: jest.fn(),
-      } as unknown as AgentChatBackend;
-      const draft = makeDraft();
-
-      const { unmount } = renderInput(backend, draft);
-      fireEvent.click(screen.getByText("send"));
-
-      await waitFor(() => expect(draft.setLoading).toHaveBeenCalledWith(true));
-      expect(backend.sendMessage).toHaveBeenCalledTimes(1);
-
-      // The landing→conversation flip unmounts this composer instance while the
-      // turn is still in flight.
-      unmount();
-
-      await act(async () => {
-        resolveTurn();
-        await turn;
-      });
-
-      await waitFor(() => expect(draft.setLoading).toHaveBeenCalledWith(false));
     });
   });
 
