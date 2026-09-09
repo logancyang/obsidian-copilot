@@ -6,7 +6,7 @@ import {
   OPENARTIFACTS_THEMES_DIR,
   OPENARTIFACTS_WORKSPACE_ROOT_ENV,
 } from "@/openArtifacts/constants";
-import { OPENARTIFACTS_DEFAULT_THEME, RESEARCH_MEMO_THEME } from "./openArtifactsThemes";
+import RESEARCH_MEMO_THEME from "openartifacts/skill/openartifacts/themes/research-memo.md";
 import { OBSIDIAN_SKILLS } from "./obsidianSkills";
 
 /**
@@ -590,6 +590,9 @@ const OPENARTIFACTS_PUBLISH_VERSION = 8;
 const OPENARTIFACTS_PUBLISH_USAGE = "openartifacts-publish";
 /** Where the wrapper sends requests unless a test or self-host points it elsewhere. */
 const OPENARTIFACTS_API_HOST_ENV = "OPENARTIFACTS_API_HOST";
+/** Theme design specs come from the openartifacts npm package; a user theme with the
+ * same name under `.openartifacts/themes/` in the vault takes precedence. */
+const OPENARTIFACTS_DEFAULT_THEME = "research-memo";
 const OPENARTIFACTS_MISSING_KEY_MESSAGE =
   "Publishing to OpenArtifacts needs a Copilot Plus license key. Add it in Copilot Settings and try again.";
 const OPENARTIFACTS_PUBLISH: BuiltinSkill = {

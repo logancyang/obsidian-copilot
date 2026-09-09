@@ -4,6 +4,7 @@ module.exports = {
   roots: ["<rootDir>/src", "<rootDir>/dev", "<rootDir>/scripts"],
   transform: {
     "^.+\\.(js|jsx|ts|tsx)$": "ts-jest",
+    "^.+\\.md$": "<rootDir>/jest.textTransform.js",
   },
   moduleNameMapper: {
     "\\.svg$": "<rootDir>/__mocks__/svg.js",
@@ -23,7 +24,9 @@ module.exports = {
     "^react-resizable-panels$": "<rootDir>/__mocks__/react-resizable-panels.js",
   },
   testRegex: ".*\\.test\\.(jsx?|tsx?)$",
-  moduleFileExtensions: ["ts", "tsx", "js", "jsx", "json", "node"],
+  moduleFileExtensions: ["ts", "tsx", "js", "jsx", "json", "node", "md"],
   testPathIgnorePatterns: ["/node_modules/"],
+  // Markdown shipped by the openartifacts package goes through the text transform above.
+  transformIgnorePatterns: ["/node_modules/(?!openartifacts/)", "\\.pnp\\.[^\\/]+$"],
   setupFiles: ["<rootDir>/jest.setup.js"],
 };
