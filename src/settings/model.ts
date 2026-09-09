@@ -1316,11 +1316,15 @@ function sanitizeAgentMode(raw: unknown): CopilotSettings["agentMode"] {
     ...(suppressMigrationConfirm !== undefined ? { suppressMigrationConfirm } : {}),
     // Keep valid opt-outs across settings saves, including agents not currently installed.
     // https://github.com/logancyang/obsidian-copilot/issues/3022
-    ...(skillsRaw?.builtinPreferences && typeof skillsRaw.builtinPreferences === "object"
+    ...(skillsRaw?.builtinPreferences &&
+    typeof skillsRaw.builtinPreferences === "object" &&
+    !Array.isArray(skillsRaw.builtinPreferences)
       ? {
           builtinPreferences: Object.fromEntries(
             Object.entries(skillsRaw.builtinPreferences)
-              .filter(([, value]) => value !== null && typeof value === "object")
+              .filter(
+                ([, value]) => value !== null && typeof value === "object" && !Array.isArray(value)
+              )
               .map(([name, value]) => {
                 const pref = value as Record<string, unknown>;
                 return [

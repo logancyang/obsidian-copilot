@@ -38,7 +38,14 @@ export function buildBuiltinSeedFs(app: App): BuiltinSeedFs {
     write: (p, c) => adapter.write(p, c),
     mkdir: (p) => adapter.mkdir(p),
     removeFile: (p) => adapter.remove(p),
-    rmRecursive: (p) => adapter.rmdir(p, true),
+    removeEmptyDir: async (p) => {
+      // Unknown user files keep their directories; rmdir remains nonrecursive even if
+      // contents change after listing. https://github.com/logancyang/obsidian-copilot/issues/3022
+      if (!(await adapter.exists(p))) return;
+      const contents = await adapter.list(p);
+      if (contents.files.length === 0 && contents.folders.length === 0)
+        await adapter.rmdir(p, false);
+    },
   };
 }
 

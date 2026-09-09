@@ -30,18 +30,12 @@ function memFs(initialFiles: Record<string, string> = {}): BuiltinSeedFs & {
     mkdir: async (p) => {
       dirs.add(p);
     },
+    removeEmptyDir: async (p) => {
+      if (![...files.keys(), ...dirs].some((child) => child.startsWith(`${p}/`))) dirs.delete(p);
+    },
     removeFile: async (p) => {
       if (dirs.has(p)) throw new Error(`EISDIR ${p}`);
       files.delete(p);
-    },
-    rmRecursive: async (p) => {
-      dirs.delete(p);
-      for (const key of [...files.keys()]) {
-        if (key === p || key.startsWith(`${p}/`)) files.delete(key);
-      }
-      for (const key of [...dirs]) {
-        if (key === p || key.startsWith(`${p}/`)) dirs.delete(key);
-      }
     },
   };
 }
@@ -66,6 +60,7 @@ function openArtifactsSkill(): BuiltinSkill {
     ...base,
     name: "openartifacts-publish",
     legacyName: "symposium-publish",
+    retiredFiles: ["symposium-publish.sh"],
     skillMd: base.skillMd.replaceAll("copilot-web-search", "openartifacts-publish"),
     files: [{ path: "openartifacts-publish.sh", content: "// script v1" }],
   };
@@ -251,10 +246,10 @@ describe("seedBuiltinSkills", () => {
         await write(path, content);
         operations.push(`write:${path}`);
       };
-      const rmRecursive = fs.rmRecursive;
-      fs.rmRecursive = async (path) => {
+      const removeFile = fs.removeFile;
+      fs.removeFile = async (path) => {
         operations.push(`remove:${path}`);
-        await rmRecursive(path);
+        await removeFile(path);
       };
 
       await seedBuiltinSkills({ skillsFolderRelPath: FOLDER, fs, skills: [openArtifactsSkill()] });
@@ -263,7 +258,7 @@ describe("seedBuiltinSkills", () => {
       expect(fs.files.get(RENAMED_SCRIPT)).toBe("// script v1");
       expect(fs.files.has(LEGACY_RENAMED_MD)).toBe(false);
       expect(operations.indexOf(`write:${RENAMED_MD}`)).toBeLessThan(
-        operations.indexOf("remove:copilot/skills/symposium-publish")
+        operations.indexOf(`remove:${LEGACY_RENAMED_MD}`)
       );
     });
 
@@ -292,7 +287,7 @@ describe("seedBuiltinSkills", () => {
         return read(path);
       };
       fs.write = jest.fn(fs.write);
-      fs.rmRecursive = jest.fn(fs.rmRecursive);
+      fs.removeFile = jest.fn(fs.removeFile);
 
       await expect(
         seedBuiltinSkills({ skillsFolderRelPath: FOLDER, fs, skills: [openArtifactsSkill()] })
@@ -301,7 +296,7 @@ describe("seedBuiltinSkills", () => {
       expect(fs.files.get(RENAMED_MD)).toBe(renamedUserMd);
       expect(fs.files.get(LEGACY_RENAMED_MD)).toBe(legacyMd);
       expect(fs.write).not.toHaveBeenCalled();
-      expect(fs.rmRecursive).not.toHaveBeenCalled();
+      expect(fs.removeFile).not.toHaveBeenCalled();
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/337 keeps the managed predecessor and its enable choices when it cannot be read", async () => {
@@ -316,7 +311,7 @@ describe("seedBuiltinSkills", () => {
         return read(path);
       };
       fs.write = jest.fn(fs.write);
-      fs.rmRecursive = jest.fn(fs.rmRecursive);
+      fs.removeFile = jest.fn(fs.removeFile);
 
       await expect(
         seedBuiltinSkills({ skillsFolderRelPath: FOLDER, fs, skills: [openArtifactsSkill()] })
@@ -325,7 +320,7 @@ describe("seedBuiltinSkills", () => {
       expect(fs.files.get(LEGACY_RENAMED_MD)).toBe(legacyMd);
       expect(fs.files.has(RENAMED_MD)).toBe(false);
       expect(fs.write).not.toHaveBeenCalled();
-      expect(fs.rmRecursive).not.toHaveBeenCalled();
+      expect(fs.removeFile).not.toHaveBeenCalled();
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/337 retries legacy cleanup after the renamed skill is already current", async () => {
@@ -373,9 +368,43 @@ describe("seedBuiltinSkills", () => {
   });
 
   describe("removeSeededBuiltin()", () => {
-    it("removes a seeded builtin folder and its files", async () => {
+    it("removes empty generated support directories and the skill root https://github.com/logancyang/obsidian-copilot/issues/3022", async () => {
+      const definition = {
+        ...skill(1),
+        files: [{ path: "references/owned.md", content: "owned" }],
+      };
+      const fs = memFs();
+      await seedBuiltinSkills({ skillsFolderRelPath: FOLDER, fs, skills: [definition] });
+      const root = `${FOLDER}/${definition.name}`;
+      expect(fs.dirs.has(`${root}/references`)).toBe(true);
+      expect(await removeSeededBuiltin(FOLDER, definition.name, fs, definition)).toBe(true);
+      expect(fs.dirs.has(`${root}/references`)).toBe(false);
+      expect(fs.dirs.has(root)).toBe(false);
+      expect(fs.dirs.has(FOLDER)).toBe(true);
+    });
+    it("removes only catalog paths and retains user references and themes https://github.com/logancyang/obsidian-copilot/issues/3022", async () => {
+      const root = `${FOLDER}/copilot-web-search`;
+      const userReference = `${root}/references/my-notes.md`;
+      const userTheme = `${root}/themes/custom.css`;
+      const retired = `${root}/retired.sh`;
+      const fs = memFs({
+        [MD]: skill(1).skillMd,
+        [SCRIPT]: "owned",
+        [retired]: "retired",
+        [userReference]: "my notes",
+        [userTheme]: "my theme",
+      });
+      expect(
+        await removeSeededBuiltin(FOLDER, "copilot-web-search", fs, {
+          ...skill(1),
+          retiredFiles: ["retired.sh"],
+        })
+      ).toBe(true);
+      expect([...fs.files.keys()].sort()).toEqual([userReference, userTheme].sort());
+    });
+    it("removes a seeded builtin definition and supporting files", async () => {
       const fs = memFs({ [MD]: skill(1).skillMd, [SCRIPT]: "// script v1" });
-      const removed = await removeSeededBuiltin(FOLDER, "copilot-web-search", fs);
+      const removed = await removeSeededBuiltin(FOLDER, "copilot-web-search", fs, skill(1));
 
       expect(removed).toBe(true);
       expect(fs.files.has(MD)).toBe(false);
@@ -384,14 +413,14 @@ describe("seedBuiltinSkills", () => {
 
     it("is a no-op when the skill folder is absent", async () => {
       const fs = memFs();
-      expect(await removeSeededBuiltin(FOLDER, "copilot-web-search", fs)).toBe(false);
+      expect(await removeSeededBuiltin(FOLDER, "copilot-web-search", fs, skill(1))).toBe(false);
     });
 
     it("refuses to remove a user-authored skill that lacks the builtin version marker", async () => {
       const userContent =
         "---\nname: copilot-web-search\ndescription: my custom search\n---\ncustom body";
       const fs = memFs({ [MD]: userContent });
-      const removed = await removeSeededBuiltin(FOLDER, "copilot-web-search", fs);
+      const removed = await removeSeededBuiltin(FOLDER, "copilot-web-search", fs, skill(1));
 
       expect(removed).toBe(false);
       expect(fs.files.get(MD)).toBe(userContent);

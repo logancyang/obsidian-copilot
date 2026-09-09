@@ -542,6 +542,7 @@ describe("model", () => {
             builtinPreferences: {
               kept: { disabled: true, disabledAgents: ["opencode", 3] },
               invalid: null,
+              malformedArray: [],
             },
           },
         },

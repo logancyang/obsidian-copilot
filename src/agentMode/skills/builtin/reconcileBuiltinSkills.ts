@@ -1,4 +1,8 @@
 import type { InstallState } from "@/agentMode/session/types";
+import type {
+  BuiltinPreferences,
+  BuiltinPreferencesUpdate,
+} from "@/settings/builtinSkillPreferences";
 import type { CopilotSettings } from "@/settings/model";
 import { joinPosix } from "@/utils/pathUtils";
 import { ALL_MANAGED_SKILLS, planManagedBuiltins } from "./builtinSkills";
@@ -10,9 +14,7 @@ import {
   type BuiltinSeedFs,
 } from "./seedBuiltinSkills";
 
-export type BuiltinPreferences = NonNullable<
-  CopilotSettings["agentMode"]["skills"]["builtinPreferences"]
->;
+export type { BuiltinPreferences } from "@/settings/builtinSkillPreferences";
 
 export interface ReconcileBuiltinOptions {
   folder: string;
@@ -20,7 +22,7 @@ export interface ReconcileBuiltinOptions {
   settings: CopilotSettings;
   availableAgents: readonly string[];
   registeredAgents: readonly string[];
-  savePreferences: (preferences: BuiltinPreferences) => Promise<void>;
+  savePreferences: (update: BuiltinPreferencesUpdate) => Promise<BuiltinPreferences>;
 }
 
 /**
@@ -30,7 +32,7 @@ export interface ReconcileBuiltinOptions {
  */
 export async function reconcileBuiltinSkills(options: ReconcileBuiltinOptions): Promise<void> {
   const { folder, fs, settings, availableAgents, registeredAgents, savePreferences } = options;
-  const preferences: BuiltinPreferences = { ...settings.agentMode.skills.builtinPreferences };
+  let preferences: BuiltinPreferences = { ...settings.agentMode.skills.builtinPreferences };
   // Import file choices once before any generation. Empty records mark completed migration,
   // preventing a temporarily unavailable agent from becoming a permanent opt-out.
   // https://github.com/logancyang/obsidian-copilot/issues/3022
@@ -55,7 +57,10 @@ export async function reconcileBuiltinSkills(options: ReconcileBuiltinOptions): 
     preferences[skill.name] = legacyPreference ?? { disabledAgents };
     changed = true;
   }
-  if (changed) await savePreferences(preferences);
+  if (changed) {
+    const migrated = preferences;
+    preferences = await savePreferences((current) => ({ ...migrated, ...current }));
+  }
   const gated = new Set(
     planManagedBuiltins({
       search: settings.enableMiyoSearchSkill === true,
@@ -68,11 +73,16 @@ export async function reconcileBuiltinSkills(options: ReconcileBuiltinOptions): 
     enabledAgents[skill.name] =
       !gated.has(skill.name) || pref?.disabled
         ? []
-        : availableAgents.filter((agent) => !pref?.disabledAgents?.includes(agent));
+        : registeredAgents.filter((agent) => !pref?.disabledAgents?.includes(agent));
   }
   // No effective consumer means no canonical files, including on a fresh vault.
   // https://github.com/logancyang/obsidian-copilot/issues/3022
-  const seed = ALL_MANAGED_SKILLS.filter((skill) => enabledAgents[skill.name].length > 0);
+  // Canonical metadata is synced; device availability must only govern local installation.
+  // An unavailable device retains existing canonical files so it cannot delete another
+  // device's tools through sync. https://github.com/logancyang/obsidian-copilot/issues/3022
+  const seed = ALL_MANAGED_SKILLS.filter((skill) =>
+    enabledAgents[skill.name].some((agent) => availableAgents.includes(agent))
+  );
   await seedBuiltinSkills({ skillsFolderRelPath: folder, fs, skills: seed, enabledAgents });
   const errors: string[] = [];
   for (const skill of seed) {

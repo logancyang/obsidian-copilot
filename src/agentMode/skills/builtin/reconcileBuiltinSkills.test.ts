@@ -27,12 +27,12 @@ function fixture(preferences?: BuiltinPreferences) {
     mkdir: async (path) => {
       dirs.add(path);
     },
+    removeEmptyDir: async (path) => {
+      if (![...files.keys(), ...dirs].some((child) => child.startsWith(`${path}/`)))
+        dirs.delete(path);
+    },
     removeFile: async (path) => {
       files.delete(path);
-    },
-    rmRecursive: async (path) => {
-      for (const key of files.keys()) if (key.startsWith(`${path}/`)) files.delete(key);
-      dirs.delete(path);
     },
   };
   const settings = {
@@ -40,9 +40,13 @@ function fixture(preferences?: BuiltinPreferences) {
     agentMode: { ...DEFAULT_SETTINGS.agentMode, skills: { ...DEFAULT_SETTINGS.agentMode.skills } },
   };
   settings.agentMode.skills.builtinPreferences = preferences;
-  const savePreferences = jest.fn(async (next: BuiltinPreferences) => {
-    settings.agentMode.skills.builtinPreferences = next;
-  });
+  const savePreferences = jest.fn(
+    async (update: (current: BuiltinPreferences) => BuiltinPreferences) => {
+      const next = update(settings.agentMode.skills.builtinPreferences ?? {});
+      settings.agentMode.skills.builtinPreferences = next;
+      return next;
+    }
+  );
   const options = {
     folder,
     fs,
@@ -82,6 +86,49 @@ describe("reconcileBuiltinSkills", () => {
     });
   });
   describe("reconcileBuiltinSkills()", () => {
+    it(`keeps canonical metadata stable across devices and retains existing files without a local agent ${ISSUE}`, async () => {
+      const skill = BUILTIN_SKILLS[0];
+      const f = fixture();
+      f.options.availableAgents = ["claude"];
+      await reconcileBuiltinSkills(f.options);
+      const content = f.files.get(f.path(skill.name));
+      expect(parseSkillFile(content!, skill.name).frontmatter.enabledAgents).toEqual([
+        "claude",
+        "codex",
+        "opencode",
+      ]);
+      f.options.availableAgents = ["codex"];
+      f.options.settings.agentMode.skills.builtinPreferences = undefined;
+      await reconcileBuiltinSkills(f.options);
+      expect(f.files.get(f.path(skill.name))).toBe(content);
+      const migrated =
+        await f.savePreferences.mock.results[f.savePreferences.mock.results.length - 1].value;
+      expect(migrated[skill.name].disabledAgents).toEqual([]);
+      f.options.availableAgents = [];
+      await reconcileBuiltinSkills(f.options);
+      expect(f.files.get(f.path(skill.name))).toBe(content);
+      const userPath = `${folder}/${skill.name}/references/personal.md`;
+      f.files.set(userPath, "personal reference");
+      migrated[skill.name].disabled = true;
+      await reconcileBuiltinSkills(f.options);
+      expect(f.files.has(f.path(skill.name))).toBe(false);
+      expect(f.files.get(userPath)).toBe("personal reference");
+    });
+    it(`preserves a concurrent user opt-out when importing missing preferences ${ISSUE}`, async () => {
+      const skill = BUILTIN_SKILLS[0];
+      const f = fixture();
+      f.options.availableAgents = ["claude"];
+      f.savePreferences.mockImplementation(async (update) => {
+        const next = update({ [skill.name]: { disabled: true } });
+        f.options.settings.agentMode.skills.builtinPreferences = next;
+        return next;
+      });
+      await reconcileBuiltinSkills(f.options);
+      expect(f.files.has(f.path(skill.name))).toBe(false);
+      expect(f.options.settings.agentMode.skills.builtinPreferences?.[skill.name].disabled).toBe(
+        true
+      );
+    });
     it(`preserves current-name user content containing a body marker with no agents and with an available agent ${ISSUE}`, async () => {
       const skill = BUILTIN_SKILLS[0];
       const f = fixture();
@@ -143,7 +190,7 @@ describe("reconcileBuiltinSkills", () => {
       const third = BUILTIN_SKILLS[2];
       expect(
         parseSkillFile(f.files.get(f.path(third.name))!, third.name).frontmatter.enabledAgents
-      ).toEqual(["claude", "opencode", "codex"]);
+      ).toEqual(["claude", "codex", "opencode"]);
       f.files.delete(f.path(first.name));
       await reconcileBuiltinSkills(f.options);
       expect(
@@ -195,7 +242,7 @@ describe("reconcileBuiltinSkills", () => {
       const skill = BUILTIN_SKILLS[0];
       const f = fixture({ [skill.name]: { disabled: true } });
       f.files.set(f.path(skill.name), skill.skillMd);
-      f.options.fs.rmRecursive = async () => {
+      f.options.fs.removeFile = async () => {
         throw new Error("permission denied");
       };
       await expect(reconcileBuiltinSkills(f.options)).rejects.toThrow("Could not remove disabled");

@@ -600,7 +600,7 @@ const OPENARTIFACTS_MISSING_KEY_MESSAGE =
 const OPENARTIFACTS_PUBLISH: BuiltinSkill = {
   name: "openartifacts-publish",
   legacyName: "symposium-publish",
-  retiredFiles: ["shared-publishing-rules.md"],
+  retiredFiles: ["shared-publishing-rules.md", "symposium-publish.sh", "symposium-publish.cmd"],
   version: OPENARTIFACTS_PUBLISH_VERSION,
   enabledAgents: ["claude", "codex", "opencode"],
   skillMd: `---

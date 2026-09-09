@@ -26,11 +26,17 @@ function fakeApp(initialFiles: Record<string, string> = {}) {
     mkdir: async (p: string) => {
       dirs.add(p);
     },
-    rmdir: async (p: string) => {
+    list: async (p: string) => ({
+      files: [...files.keys()].filter((child) => child.startsWith(`${p}/`)),
+      folders: [...dirs].filter((child) => child.startsWith(`${p}/`)),
+    }),
+    rmdir: async (p: string, recursive: boolean) => {
+      if (recursive || [...files.keys(), ...dirs].some((child) => child.startsWith(`${p}/`)))
+        throw new Error("nonempty");
       dirs.delete(p);
-      for (const key of [...files.keys()]) {
-        if (key === p || key.startsWith(`${p}/`)) files.delete(key);
-      }
+    },
+    remove: async (p: string) => {
+      files.delete(p);
     },
   };
   const app = { vault: { adapter } } as unknown as App;
@@ -101,9 +107,9 @@ describe("removeMiyoSearchSkill", () => {
   it("reports 'failed' when the delete throws and the skill is still on disk", async () => {
     const { app, adapter, files } = fakeApp();
     await installMiyoSearchSkill(app, FOLDER);
-    // The underlying rmdir fails; removeSeededBuiltin swallows it and returns
+    // The underlying file removal fails; removeSeededBuiltin swallows it and returns
     // false, so we must classify from disk (still seeded → failed), not assume.
-    adapter.rmdir = async () => {
+    adapter.remove = async () => {
       throw new Error("EPERM");
     };
     expect(await removeMiyoSearchSkill(app, FOLDER)).toBe("failed");

@@ -1,7 +1,7 @@
 import { logError, logInfo } from "@/logger";
 import { joinPosix, parentDir } from "@/utils/pathUtils";
 import { getBuiltinSkillVersion } from "./builtinOwnership";
-import { BUILTIN_SKILLS, type BuiltinSkill } from "./builtinSkills";
+import { ALL_MANAGED_SKILLS, BUILTIN_SKILLS, type BuiltinSkill } from "./builtinSkills";
 
 /**
  * Minimal write-capable FS surface the seeder needs, over vault-relative
@@ -16,8 +16,8 @@ export interface BuiltinSeedFs {
   mkdir(relPath: string): Promise<void>;
   /** Remove a known retired support file, never a directory. */
   removeFile(relPath: string): Promise<void>;
-  /** Remove a directory and its contents. Used to prune a de-gated builtin. */
-  rmRecursive(relPath: string): Promise<void>;
+  /** Remove an empty directory only; preserve nonempty contents. */
+  removeEmptyDir(relPath: string): Promise<void>;
 }
 
 export interface SeedBuiltinSkillsOptions {
@@ -143,7 +143,7 @@ export async function seedBuiltinSkills(
           // wrapper scripts no longer match the host and would only mislead an agent.
           // https://github.com/Brevilabs/obsidian-copilot-private/issues/337
           if (skill.legacyName)
-            await removeSeededBuiltin(skillsFolderRelPath, skill.legacyName, fs);
+            await removeSeededBuiltin(skillsFolderRelPath, skill.legacyName, fs, skill);
           continue;
         }
         // Version is current — only skip if all support files are also present.
@@ -234,7 +234,7 @@ export async function seedBuiltinSkills(
     // `removeSeededBuiltin` leaves a user-authored folder under the old name alone
     // and a failed removal is retried on the next startup.
     if (skill.legacyName) {
-      await removeSeededBuiltin(skillsFolderRelPath, skill.legacyName, fs);
+      await removeSeededBuiltin(skillsFolderRelPath, skill.legacyName, fs, skill);
     }
   }
 
@@ -245,20 +245,19 @@ export async function seedBuiltinSkills(
 }
 
 /**
- * Remove a previously-seeded builtin skill folder. Used to de-gate a
- * conditionally-seeded builtin (e.g. the Miyo skill when the user turns Miyo
- * off): once the canonical dir is gone, the next `SkillManager.refresh()`
- * reverse-sweep prunes the agent-dir symlinks pointing at it.
- *
- * Guarded by the same `copilot-builtin-version` marker the seeder uses: a
- * folder whose SKILL.md lacks the marker is user-authored and is left
- * untouched, even if its name collides with a builtin. A missing folder is a
- * no-op. Returns true iff a builtin copy was actually removed.
+ * Remove catalog-owned files while preserving user additions in the same folder.
+ * Missing or unmarked content is never removed; SKILL.md is removed last so a failed
+ * support-file cleanup can be retried with ownership evidence still intact.
+ * @param skillsFolderRelPath - Canonical skills root relative to the vault.
+ * @param name - Current or legacy folder name to retire.
+ * @param fs - Vault file operations.
+ * @param definition - Catalog entry that owns the known supporting and retired paths.
  */
 export async function removeSeededBuiltin(
   skillsFolderRelPath: string,
   name: string,
-  fs: BuiltinSeedFs
+  fs: BuiltinSeedFs,
+  definition = ALL_MANAGED_SKILLS.find((skill) => skill.name === name || skill.legacyName === name)
 ): Promise<boolean> {
   const dir = joinPosix(skillsFolderRelPath, name);
   const skillMdPath = joinPosix(dir, "SKILL.md");
@@ -266,7 +265,30 @@ export async function removeSeededBuiltin(
     if (!(await fs.exists(skillMdPath))) return false;
     // null marker = user-authored file → never delete.
     if (getBuiltinSkillVersion(await fs.read(skillMdPath)) === null) return false;
-    await fs.rmRecursive(dir);
+    // A marked folder may also contain user references/themes. Only bundled paths are
+    // ours to remove, and the ownership marker remains until support cleanup succeeds.
+    // https://github.com/logancyang/obsidian-copilot/issues/3022
+    if (!definition) return false;
+    const ownedPaths = [
+      ...definition.files.map((file) => file.path),
+      ...(definition.retiredFiles ?? []),
+    ];
+    for (const path of ownedPaths) {
+      const ownedPath = joinPosix(dir, path);
+      if (await fs.exists(ownedPath)) await fs.removeFile(ownedPath);
+    }
+    await fs.removeFile(skillMdPath);
+    const directories = new Set([dir]);
+    for (const path of ownedPaths) {
+      let parent = parentDir(joinPosix(dir, path));
+      while (parent.startsWith(`${dir}/`)) {
+        directories.add(parent);
+        parent = parentDir(parent);
+      }
+    }
+    for (const directory of [...directories].sort((a, b) => b.length - a.length)) {
+      await fs.removeEmptyDir(directory);
+    }
     logInfo(`[Skills] removed de-gated builtin skill: ${name}`);
     return true;
   } catch (e) {
