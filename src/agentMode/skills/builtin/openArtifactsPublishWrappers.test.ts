@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import { tmpdir } from "node:os";
@@ -89,26 +89,52 @@ describe("openArtifactsPublishWrappers", () => {
 
   afterEach(() => rmSync(root, { recursive: true, force: true }));
 
-  function run(args: string[], env: Record<string, string | undefined> = {}) {
-    return spawnSync(
-      windows ? "powershell.exe" : "sh",
-      [...(windows ? ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"] : []), wrapper, ...args],
-      {
-        encoding: "utf8",
-        timeout: 20000,
-        env: {
-          ...process.env,
-          COPILOT_PLUS_LICENSE_KEY: "test-license-key",
-          OPENARTIFACTS_API_HOST: origin,
-          OPENARTIFACTS_WORKSPACE_ROOT: root,
-          ...env,
-        },
-      }
-    );
+  interface RunResult {
+    status: number | null;
+    stdout: string;
+    stderr: string;
   }
 
-  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/394 publishes a new page with the exact HTML bytes and the license key as a bearer token", () => {
-    const result = run(["publish", htmlFile, "My “Note”"]);
+  // The mock server runs on this same event loop, so the wrapper has to run
+  // asynchronously: a blocking spawnSync would leave curl waiting on a request
+  // Node can never answer.
+  function run(args: string[], env: Record<string, string | undefined> = {}): Promise<RunResult> {
+    return new Promise((resolve, reject) => {
+      const child = spawn(
+        windows ? "powershell.exe" : "sh",
+        [
+          ...(windows ? ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"] : []),
+          wrapper,
+          ...args,
+        ],
+        {
+          timeout: 20000,
+          env: {
+            ...process.env,
+            COPILOT_PLUS_LICENSE_KEY: "test-license-key",
+            OPENARTIFACTS_API_HOST: origin,
+            OPENARTIFACTS_WORKSPACE_ROOT: root,
+            ...env,
+          },
+        }
+      );
+      let stdout = "";
+      let stderr = "";
+      child.stdout.setEncoding("utf8");
+      child.stderr.setEncoding("utf8");
+      child.stdout.on("data", (chunk: string) => {
+        stdout += chunk;
+      });
+      child.stderr.on("data", (chunk: string) => {
+        stderr += chunk;
+      });
+      child.on("error", reject);
+      child.on("close", (status) => resolve({ status, stdout, stderr }));
+    });
+  }
+
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/394 publishes a new page with the exact HTML bytes and the license key as a bearer token", async () => {
+    const result = await run(["publish", htmlFile, "My “Note”"]);
     expect(result.stderr).toBe("");
     expect(result.status).toBe(0);
     expect(result.stdout.trim()).toBe(canned.body);
@@ -121,12 +147,12 @@ describe("openArtifactsPublishWrappers", () => {
     expect(JSON.parse(request.body)).toEqual({ title: "My “Note”", html: HTML });
   });
 
-  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/394 updates the existing page when a document id is supplied", () => {
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/394 updates the existing page when a document id is supplied", async () => {
     canned = {
       status: 200,
       body: '{"docId":"9f2k4mvq7t0xbz3n","url":"https://x/d/9f","version":2}',
     };
-    const result = run(["publish", htmlFile, "Note", "9f2k4mvq7t0xbz3n"]);
+    const result = await run(["publish", htmlFile, "Note", "9f2k4mvq7t0xbz3n"]);
     expect(result.status).toBe(0);
     expect(result.stdout.trim()).toBe(canned.body);
     expect(requests[0].method).toBe("PUT");
@@ -134,9 +160,9 @@ describe("openArtifactsPublishWrappers", () => {
     expect(JSON.parse(requests[0].body).html).toBe(HTML);
   });
 
-  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/394 withdraws a page with DELETE and reports the id it removed", () => {
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/394 withdraws a page with DELETE and reports the id it removed", async () => {
     canned = { status: 204, body: "" };
-    const result = run(["unshare", "9f2k4mvq7t0xbz3n"]);
+    const result = await run(["unshare", "9f2k4mvq7t0xbz3n"]);
     expect(result.status).toBe(0);
     expect(JSON.parse(result.stdout)).toEqual({ docId: "9f2k4mvq7t0xbz3n", status: "unshared" });
     expect(requests[0].method).toBe("DELETE");
@@ -144,12 +170,12 @@ describe("openArtifactsPublishWrappers", () => {
     expect(requests[0].authorization).toBe("Bearer test-license-key");
   });
 
-  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/394 relays the server's status and error body verbatim without retrying", () => {
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/394 relays the server's status and error body verbatim without retrying", async () => {
     canned = {
       status: 401,
       body: '{"error":{"code":"unauthorized","message":"This plan cannot publish."}}',
     };
-    const result = run(["publish", htmlFile, "Note"]);
+    const result = await run(["publish", htmlFile, "Note"]);
     expect(result.status).toBe(1);
     expect(result.stdout).toBe("");
     expect(result.stderr).toContain("HTTP 401");
@@ -157,20 +183,20 @@ describe("openArtifactsPublishWrappers", () => {
     expect(requests).toHaveLength(1);
   });
 
-  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/394 refuses to run without a license key, an unknown command, or a malformed id, and sends nothing", () => {
-    const noKey = run(["publish", htmlFile, "Note"], { COPILOT_PLUS_LICENSE_KEY: "" });
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/394 refuses to run without a license key, an unknown command, or a malformed id, and sends nothing", async () => {
+    const noKey = await run(["publish", htmlFile, "Note"], { COPILOT_PLUS_LICENSE_KEY: "" });
     expect(noKey.status).toBe(1);
     expect(noKey.stderr).toContain("Copilot Plus license key");
 
-    const badCommand = run(["review", htmlFile]);
+    const badCommand = await run(["review", htmlFile]);
     expect(badCommand.status).toBe(1);
     expect(badCommand.stderr).toContain("Usage:");
 
-    const badId = run(["unshare", "../etc/passwd"]);
+    const badId = await run(["unshare", "../etc/passwd"]);
     expect(badId.status).toBe(1);
     expect(badId.stderr).toContain("Invalid OpenArtifacts document id");
 
-    const missingFile = run(["publish", path.join(root, "missing.html"), "Note"]);
+    const missingFile = await run(["publish", path.join(root, "missing.html"), "Note"]);
     expect(missingFile.status).toBe(1);
     expect(missingFile.stderr).toContain("HTML file not found");
 

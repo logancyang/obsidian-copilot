@@ -731,20 +731,22 @@ fi
 
 # stdin -> one JSON string literal. Bytes pass through untouched except the escapes
 # JSON requires; control characters other than tab, CR, and LF are dropped. A sentinel
-# byte keeps a trailing newline in the file from being lost.
+# byte keeps a trailing newline in the file from being lost. Awk implementations
+# disagree on backslashes in gsub replacements, so the escapes are written with byte
+# \001 (already stripped from the input) and turned into backslashes afterwards.
 json_string() {
   { cat; printf 'x'; } | LC_ALL=C tr -d '\000-\010\013\014\016-\037' | LC_ALL=C awk '
     BEGIN { ORS = ""; printf "\"" }
-    NR > 1 { printf "%s\\n", prev }
+    NR > 1 { printf "%s\001n", prev }
     {
-      gsub(/\\/, "\\\\&")
-      gsub(/"/, "\\\\&")
-      gsub(/\t/, "\\\\t")
-      gsub(/\r/, "\\\\r")
+      gsub(/\\/, "\001\001")
+      gsub(/"/, "\001\"")
+      gsub(/\t/, "\001t")
+      gsub(/\r/, "\001r")
       prev = $0
     }
     END { printf "%s\"", substr(prev, 1, length(prev) - 1) }
-  '
+  ' | LC_ALL=C tr '\001' '\\'
 }
 
 HEADERS=$(mktemp) || exit 1
