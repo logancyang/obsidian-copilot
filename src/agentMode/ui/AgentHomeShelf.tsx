@@ -130,6 +130,7 @@ export function AgentHomeShelf({
           <AgentHomeTab
             key={section.id}
             id={tabId(section.id)}
+            sectionId={section.id}
             icon={section.icon}
             title={section.title}
             count={section.count}

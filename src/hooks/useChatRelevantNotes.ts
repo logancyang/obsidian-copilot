@@ -1,7 +1,7 @@
 import { getChatRelevantNotesStore } from "@/search/chatRelevantNotesContext";
 import { findChatRelevantNotes } from "@/search/findChatRelevantNotes";
 import type { RelevantNotesResult } from "@/search/findRelevantNotes";
-import { App, MarkdownView } from "obsidian";
+import { App } from "obsidian";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 const LOADING = Object.freeze({
@@ -32,15 +32,13 @@ export function useChatRelevantNotes(
       request.file_paths?.length ||
       selected.skippedAttachments);
   const context = enabled && hasContext ? selected : null;
-  const [settled, setSettled] = useState<{ id: string; result: RelevantNotesResult } | null>(null);
+  const [settled, setSettled] = useState<{
+    id: string;
+    connectionKey: string;
+    result: RelevantNotesResult;
+  } | null>(null);
   const [revision, setRevision] = useState(0);
   const previous = useRef<{ id: string; draft: string | undefined } | null>(null);
-  useEffect(() => {
-    const ref = app.workspace.on("active-leaf-change", (leaf) => {
-      if (leaf?.view instanceof MarkdownView) store.select(null);
-    });
-    return () => app.workspace.offref(ref);
-  }, [app, store]);
   useEffect(() => {
     if (!context) {
       previous.current = null;
@@ -56,7 +54,7 @@ export function useChatRelevantNotes(
     const timer = window.setTimeout(
       () => {
         void findChatRelevantNotes(app, context, mock).then((result) => {
-          if (!cancelled) setSettled({ id: context.id, result });
+          if (!cancelled) setSettled({ id: context.id, connectionKey, result });
         });
       },
       draftChanged || (!settled && context.request.draft?.trim()) ? 500 : 0
@@ -66,7 +64,12 @@ export function useChatRelevantNotes(
       window.clearTimeout(timer);
     };
   }, [app, context, connectionKey, mock, revision]); // eslint-disable-line react-hooks/exhaustive-deps -- settled rows must not retrigger retrieval
-  const result = settled && settled.id === context?.id ? settled.result : LOADING;
+  // Results from an old server or credential scope must disappear immediately.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/383
+  const result =
+    settled && settled.id === context?.id && settled.connectionKey === connectionKey
+      ? settled.result
+      : LOADING;
   // Unsupported chat retrieval must leave the existing editor-note flow usable.
   // Empty context and real retrieval failures still belong to the selected chat.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/383

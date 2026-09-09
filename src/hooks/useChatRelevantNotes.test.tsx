@@ -101,6 +101,26 @@ describe("useChatRelevantNotes", () => {
       expect(result.current.context?.id).toBe("a");
       expect(find).toHaveBeenCalledTimes(2);
     });
+    it("hides the previous connection's rows while its replacement request is pending (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", async () => {
+      find.mockResolvedValueOnce({ notes: [{ note: { path: "old.md" } }], status: "matches" });
+      getChatRelevantNotesStore(app).select(context("a", "topic"));
+      const { result, rerender } = renderHook(
+        ({ connection }) => useChatRelevantNotes(app, true, connection, false),
+        { initialProps: { connection: "old" } }
+      );
+      await act(async () => {
+        jest.advanceTimersByTime(500);
+      });
+      expect(result.current.result.notes).toHaveLength(1);
+      find.mockImplementationOnce(() => new Promise(() => {}));
+      rerender({ connection: "new" });
+      expect(result.current.result.status).toBe("loading");
+      expect(result.current.result.notes).toHaveLength(0);
+      await act(async () => {
+        jest.runOnlyPendingTimers();
+      });
+      expect(result.current.result.notes).toHaveLength(0);
+    });
     it("rejects a superseded response (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", async () => {
       let resolve!: (value: unknown) => void;
       find.mockImplementationOnce(

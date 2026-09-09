@@ -12,7 +12,7 @@ import {
   type ChatRelevantNotesContext,
 } from "@/search/chatRelevantNotesContext";
 import { getMatchingPatterns, shouldIndexFile } from "@/search/searchUtils";
-import { App, TFile } from "obsidian";
+import { App, MarkdownView, TFile } from "obsidian";
 import { useEffect, useMemo, useRef } from "react";
 
 /** Publish composition snapshots to the vault's last-focused source.
@@ -45,18 +45,19 @@ export function useChatRelevantNotesContext(
           .filter((file) => shouldIndexFile(app, file, inclusions, exclusions, true))
       : [];
   }, [app, project?.contextSource]);
-  const completed = useRef<{ id: string; messages: AgentChatMessage[] }>({ id, messages });
-  // A streaming turn is one retrieval update, when it settles; never send token deltas.
+  // The unfinished assistant tail belongs to the running turn. Derive that
+  // boundary on mount and session changes instead of retaining partial text.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/383
-  if (completed.current.id !== id || !draft.loading) completed.current = { id, messages };
-  const history = draft.loading
-    ? messages.flatMap((message) => {
-        if (message.sender === "user") return [message];
-        const settled = completed.current.messages.find((previous) => previous.id === message.id);
-        return settled ? [settled] : [];
-      })
-    : messages;
-  const contexts = history.flatMap((message) => (message.context ? [message.context] : []));
+  const tail = messages[messages.length - 1];
+  const streamingId =
+    draft.loading && tail?.sender === "AI" && !tail.turnStopReason ? tail.id : undefined;
+  const history = messages.filter((message) => message.id !== streamingId);
+  // Queue entries remain visible after the composer resets and before dispatch.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/383
+  const queued = draft.queue;
+  const contexts = [...history, ...queued].flatMap((message) =>
+    message.context ? [message.context] : []
+  );
   const files = [
     ...projectFiles,
     ...contexts.flatMap((context) => context.notes),
@@ -65,29 +66,34 @@ export function useChatRelevantNotesContext(
   ];
   const snapshot = {
     folder_name: getMiyoFolderName(app),
-    messages: history
-      .filter(
-        (message) =>
-          message.isVisible &&
-          !message.isErrorMessage &&
-          (message.sender === "user" || message.sender === "AI")
-      )
-      .map((message) => ({
-        role: message.sender === "user" ? ("user" as const) : ("assistant" as const),
-        content:
-          (message.fanout ?? parseFanoutComposite(message.message))
-            ? renderFanoutComposite(
-                (message.fanout ?? parseFanoutComposite(message.message))!,
-                (id) => id
-              )
-            : message.parts
-              ? message.parts
-                  .filter((part) => part.kind === "text")
-                  .map((part) => part.text)
-                  .join("\n")
-              : message.message,
-      }))
-      .filter((message) => message.content.trim()),
+    messages: [
+      ...history
+        .filter(
+          (message) =>
+            message.isVisible &&
+            !message.isErrorMessage &&
+            (message.sender === "user" || message.sender === "AI")
+        )
+        .map((message) => ({
+          role: message.sender === "user" ? ("user" as const) : ("assistant" as const),
+          content:
+            (message.fanout ?? parseFanoutComposite(message.message))
+              ? renderFanoutComposite(
+                  (message.fanout ?? parseFanoutComposite(message.message))!,
+                  (id) => id
+                )
+              : message.parts
+                ? message.parts
+                    .filter((part) => part.kind === "text")
+                    .map((part) => part.text)
+                    .join("\n")
+                : message.message,
+        }))
+        .filter((message) => message.content.trim()),
+      ...queued
+        .filter((message) => message.rawInput.trim())
+        .map((message) => ({ role: "user" as const, content: message.rawInput })),
+    ],
     draft: draft.input,
     excerpts: [...contexts.flatMap((context) => context.selectedTextContexts ?? []), ...selections]
       .map((selection) => selection.content)
@@ -97,6 +103,11 @@ export function useChatRelevantNotesContext(
   };
   const skippedAttachments =
     draft.images.length +
+    queued.reduce(
+      (count, message) =>
+        count + (message.promptContent?.filter((part) => part.type === "image").length ?? 0),
+      0
+    ) +
     contexts.reduce(
       (count, context) => count + context.urls.length + (context.webTabs?.length ?? 0),
       0
@@ -129,17 +140,32 @@ export function useChatRelevantNotesContext(
       ownedPrevious ||
       (root?.doc.hasFocus() &&
         root.contains(root.doc.activeElement) &&
-        !root.doc.activeElement?.closest("[data-relevant-notes]"))
+        !root.doc.activeElement?.closest(
+          '[data-relevant-notes], [data-section-id="relevant-notes"]'
+        ))
     )
       store.select(current);
     else store.update(current);
   }, [store, current, root, id]);
   useEffect(() => {
+    // The source owner stays mounted while both recommendation hosts are closed.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/383
+    const ref = app.workspace.on("active-leaf-change", (leaf) => {
+      if (leaf?.view instanceof MarkdownView) store.select(null);
+    });
+    return () => app.workspace.offref(ref);
+  }, [app, store]);
+  useEffect(() => {
     if (!root) return;
     const focus = (event: Event) => {
       // Shelf controls are inside AgentHome but must preserve the previous source.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/383
-      if ((event.target as Element | null)?.closest?.("[data-relevant-notes]")) return;
+      if (
+        (event.target as Element | null)?.closest?.(
+          '[data-relevant-notes], [data-section-id="relevant-notes"]'
+        )
+      )
+        return;
       store.select(currentRef.current);
     };
     root.addEventListener("focusin", focus);
