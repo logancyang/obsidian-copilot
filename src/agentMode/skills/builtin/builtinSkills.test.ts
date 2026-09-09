@@ -245,7 +245,7 @@ describe("builtinSkills", () => {
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/337 hands OpenArtifacts HTML through the stable host wire without exposing publication controls", () => {
       const skill = BUILTIN_SKILLS.find((item) => item.name === "openartifacts-publish");
       expect(skill).toBeDefined();
-      expect(skill!.version).toBe(6);
+      expect(skill!.version).toBe(7);
       expect(skill!.legacyName).toBe("symposium-publish");
       expect(skill!.files.map((file) => file.path)).toEqual([
         "shared-publishing-rules.md",
@@ -273,9 +273,10 @@ describe("builtinSkills", () => {
       expect(skill!.skillMd).toContain('"Standalone CLI" section');
       expect(skill!.skillMd).toContain("Do not run Node, npm, or npx");
       expect(skill!.skillMd).toContain("Shared from Copilot");
-      expect(skill!.skillMd).toContain("acknowledges manually reviewing the preview");
+      expect(skill!.skillMd).toContain('"Open local HTML preview" link for the user to click');
+      expect(skill!.skillMd).toContain("It does not open the browser automatically");
       expect(skill!.skillMd).toContain("create a new modal or render HTML inside a modal");
-      expect(skill!.skillMd).toContain("never choose an action or document id");
+      expect(skill!.skillMd).toContain("Never choose an action or document id");
       expect(skill!.skillMd).toContain("create a new complete artifact");
       expect(skill!.skillMd).toContain("previous confirmation never applies");
       expect(skill!.skillMd).toContain("report the exact error");

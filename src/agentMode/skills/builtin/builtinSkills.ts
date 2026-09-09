@@ -587,7 +587,7 @@ const FETCH_X = relaySkill({
   scriptFile: "fetch-x.sh",
 });
 
-const OPENARTIFACTS_PUBLISH_VERSION = 6;
+const OPENARTIFACTS_PUBLISH_VERSION = 7;
 const OPENARTIFACTS_PUBLISH: BuiltinSkill = {
   name: "openartifacts-publish",
   legacyName: "symposium-publish",
@@ -635,11 +635,12 @@ publishing. The bundled \`${OPENARTIFACTS_DEFAULT_THEME}\` is an optional exampl
 
 ## Open the existing host review
 
-The host automatically opens the HTML preview in the default browser and keeps
-confirmation disabled until the user explicitly acknowledges manually reviewing the preview.
-A successful file launch alone does not establish that the page rendered. The existing
-preview link retries opening it. Ask the user to inspect the page and confirm in Obsidian's
-existing dialog; never choose an action or document id, simulate clicks, or treat
+The host dialog offers an "Open local HTML preview" link for the user to click.
+It does not open the browser automatically. Ask the user to open the link, inspect
+the rendered page, then check "I reviewed the preview" and confirm in Obsidian's
+existing dialog. Confirmation stays disabled until the user acknowledges review;
+a successful file launch alone does not establish that the page rendered.
+Never choose an action or document id, simulate clicks, or treat
 a chat reply as a dialog confirmation. Do not create a new modal or render HTML inside a modal.
 
 The Obsidian CLI communicates with the running desktop app through local IPC.
@@ -749,6 +750,8 @@ case "$CLI_RESULT" in
     exit 0
     ;;
   *)
+    # https://github.com/logancyang/obsidian-copilot/issues/3120: keep diagnostics
+    # when no result can be parsed so a failed review is not reported as success.
     [ -z "$CLI_OUTPUT" ] || printf '%s\\n' "$CLI_OUTPUT" >&2
     printf '%s\\n' "Copilot could not complete the OpenArtifacts review." >&2
     exit 1

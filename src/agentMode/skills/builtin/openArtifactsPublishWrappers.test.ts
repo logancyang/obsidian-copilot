@@ -86,7 +86,7 @@ describe("openArtifactsPublishWrappers", () => {
     }
   );
 
-  it("does not fabricate an outcome when the CLI returns no output", () => {
+  it("https://github.com/logancyang/obsidian-copilot/issues/3120 does not fabricate an outcome when the CLI returns no output", () => {
     const result = run("");
     expect(result.error).toBeUndefined();
     expect(result.status).not.toBe(0);
