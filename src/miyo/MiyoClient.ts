@@ -581,7 +581,7 @@ export class MiyoClient {
    * Execute related-notes search for a source note path.
    *
    * @param baseUrl - Miyo base URL.
-   * @param filePath - Absolute source note path to find related notes for.
+   * @param filePath - Source in Miyo public `FolderName/path/to/file` format.
    * @param options - Optional folder name, result limit, and filters.
    * @returns Search response in the same shape as /v0/search.
    */
@@ -594,6 +594,31 @@ export class MiyoClient {
       filters?: MiyoSearchFilter[];
     }
   ): Promise<MiyoRelatedSearchResponse> {
+    // Old Miyo installations must keep serving note recommendations during client upgrades.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/383
+    if (options?.folderName) {
+      try {
+        const response = await this.recommend(baseUrl, {
+          folder_name: options.folderName,
+          file_paths: [filePath],
+          limit: options.limit ?? 10,
+          filters: options.filters,
+        });
+        // Preserve the existing file-status lookup for a skipped single source.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/383
+        if (response.status === "no_usable_context") {
+          throw new MiyoRequestError(404, "No indexed context for source file");
+        }
+        return response;
+      } catch (error) {
+        if (
+          !(error instanceof MiyoRequestError) ||
+          error.status !== 501 ||
+          error.errorCode !== "not_implemented"
+        )
+          throw error;
+      }
+    }
     const payload = {
       file_path: filePath,
       ...(options?.folderName ? { folder_name: options.folderName } : {}),
@@ -606,19 +631,33 @@ export class MiyoClient {
     });
   }
 
-  /** Search transient chat context without indexing its contents.
+  /** Recommend notes from indexed file references and optional text without indexing it.
    * @param baseUrl - Resolved Miyo endpoint.
    * @param request - Vault-scoped visible text and indexed file references.
    */
-  public async searchRelatedContext(
+  public async recommend(
     baseUrl: string,
     request: RelatedContextRequest
   ): Promise<RelatedContextResponse> {
-    return this.requestJson<RelatedContextResponse>(baseUrl, "/v0/search/related/context", {
-      method: "POST",
-      body: request,
-      sensitive: true,
-    });
+    try {
+      return await this.requestJson<RelatedContextResponse>(baseUrl, "/v0/recommend", {
+        method: "POST",
+        body: request,
+        sensitive: true,
+      });
+    } catch (error) {
+      // Gateways may translate an old Miyo's missing route into 404. Confirm Miyo
+      // is reachable before offering compatibility fallback instead of connection recovery.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/383
+      if (
+        error instanceof MiyoRequestError &&
+        error.status === 404 &&
+        typeof (await this.fetchHealth(baseUrl))?.status === "string"
+      ) {
+        throw new MiyoRequestError(501, "Recommendations are unsupported", "not_implemented");
+      }
+      throw error;
+    }
   }
 
   /**

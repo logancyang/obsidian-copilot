@@ -36,7 +36,7 @@ describe("findChatRelevantNotes", () => {
       search.mockReset();
       (MiyoClient as unknown as jest.Mock).mockImplementation(() => ({
         resolveBaseUrl: async () => "url",
-        searchRelatedContext: search,
+        recommend: search,
         fetchHealth: async () => ({ status: "ok" }),
       }));
     });
@@ -84,8 +84,20 @@ describe("findChatRelevantNotes", () => {
       expect(result.notes.map((entry) => entry.note.path)).toEqual(["a.md", "b.md"]);
       expect(search).not.toHaveBeenCalled();
     });
+    it("identifies only a structured unsupported route for host fallback (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", async () => {
+      for (const errorCode of ["not_implemented", undefined]) {
+        search.mockRejectedValue(new MiyoRequestError(501, "", errorCode));
+        const result = await findChatRelevantNotes(app, {
+          id: "a",
+          request: { folder_name: "Vault", draft: "topic" },
+          skippedAttachments: 0,
+          addFile: jest.fn(),
+        });
+        expect(result.status).toBe(errorCode ? "unsupported-service" : "unavailable");
+      }
+    });
     it.each([
-      [404, "unsupported-service"],
+      [404, "unavailable"],
       [400, "request-error"],
       [413, "request-too-large"],
       [503, "unavailable"],
