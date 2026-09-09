@@ -56,9 +56,16 @@ function windowsCandidates(input: CodexAcpBinaryResolverInput): string[] {
   const { homeDir, env } = input;
   const appData = env.APPDATA ?? win.join(homeDir, "AppData", "Roaming");
   const npmGlobal = win.join(appData, "npm");
+  // GUI-launched Obsidian may know a custom npm prefix only through PATH.
+  // Resolve its package directly; empty or relative entries must not probe the working directory.
+  // https://github.com/logancyang/obsidian-copilot/issues/2967
+  const inheritedPrefixes = (env.PATH ?? env.Path ?? "")
+    .split(";")
+    .map((dir) => dir.trim().replace(/^"(.*)"$/, "$1"))
+    .filter((dir) => win.isAbsolute(dir));
   const out: string[] = [];
 
-  for (const dir of [...nodeToolBinDirCandidates(input), npmGlobal]) {
+  for (const dir of [...nodeToolBinDirCandidates(input), npmGlobal, ...inheritedPrefixes]) {
     out.push(
       win.join(dir, "node_modules", "@agentclientprotocol", "codex-acp", "dist", "index.js")
     );
