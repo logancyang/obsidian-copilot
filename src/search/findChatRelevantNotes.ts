@@ -57,7 +57,7 @@ export async function findChatRelevantNotes(
         "Miyo endpoint resolution"
       );
       response = await withTimeout(
-        () => client.searchRelatedContext(baseUrl!, request),
+        () => client.recommend(baseUrl!, request),
         8000,
         "Miyo chat related search"
       );
@@ -91,15 +91,14 @@ export async function findChatRelevantNotes(
       details,
     };
   } catch (error) {
-    // Confirm the endpoint itself before interpreting an older service's missing route.
+    // An old service cannot search chat context; hosts can retain editor-note retrieval.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/383
-    if (error instanceof MiyoRequestError && error.status === 404 && baseUrl) {
-      try {
-        if (!(await client.fetchHealth(baseUrl))) throw new Error("Miyo unavailable");
-        return { notes: EMPTY_NOTES, status: "unsupported-service", details };
-      } catch {
-        /* Connection guidance below. */
-      }
+    if (
+      error instanceof MiyoRequestError &&
+      error.status === 501 &&
+      error.errorCode === "not_implemented"
+    ) {
+      return { notes: EMPTY_NOTES, status: "unsupported-service", details };
     }
     return {
       notes: EMPTY_NOTES,
