@@ -2,6 +2,7 @@ import type { CustomModel } from "@/aiParams";
 import { ChatModelProviders, ModelCapability } from "@/constants";
 import { MissingApiKeyError } from "@/error";
 import { getSettings, setSettings } from "@/settings/model";
+import * as obsidianModule from "obsidian";
 
 import ChatModelManager from "./chatModelManager";
 
@@ -108,26 +109,119 @@ describe("chatModelManager", () => {
         expect(clientConfig.defaultHeaders?.["dangerously-allow-browser"]).toBeUndefined();
       });
 
-      it("omits Authorization for a keyless bridged OpenAI-compatible model (https://github.com/logancyang/obsidian-copilot/issues/2895)", async () => {
-        const model = await ChatModelManager.getInstance().createModelInstanceFromBridged(
-          bridgedModel({
-            provider: ChatModelProviders.OPENAI_FORMAT,
-            baseUrl: "http://127.0.0.1:8000/v1",
-            requiresApiKey: false,
-          })
-        );
-        const clientConfig = (
-          model as unknown as {
-            clientConfig: {
-              apiKey?: string;
-              defaultHeaders?: Record<string, string | null>;
-            };
-          }
-        ).clientConfig;
+      it.each([false, true])(
+        "rejects a required missing OpenAI-compatible key with CORS=%s (https://github.com/logancyang/obsidian-copilot/issues/2946)",
+        async (enableCors) => {
+          await expect(
+            ChatModelManager.getInstance().createModelInstanceFromBridged(
+              bridgedModel({
+                provider: ChatModelProviders.OPENAI_FORMAT,
+                requiresApiKey: true,
+                enableCors,
+              })
+            )
+          ).rejects.toBeInstanceOf(MissingApiKeyError);
+        }
+      );
 
-        expect(clientConfig.apiKey).toBeUndefined();
-        expect(clientConfig.defaultHeaders?.Authorization).toBeNull();
-      });
+      it.each(
+        [false, true].flatMap((enableCors) =>
+          [false, true].flatMap((stream) =>
+            [
+              { requiresApiKey: false, apiKey: undefined },
+              { requiresApiKey: false, apiKey: "provided-key" },
+              { requiresApiKey: true, apiKey: "provided-key" },
+            ].map((auth) => ({ enableCors, stream, ...auth }))
+          )
+        )
+      )(
+        "completes with the configured auth: CORS=$enableCors stream=$stream requiresApiKey=$requiresApiKey key=$apiKey (https://github.com/logancyang/obsidian-copilot/issues/2946)",
+        async ({ enableCors, stream, requiresApiKey, apiKey }) => {
+          const completion = {
+            id: "chatcmpl-test",
+            object: stream ? "chat.completion.chunk" : "chat.completion",
+            created: 1,
+            model: "local-model",
+            choices: [
+              {
+                index: 0,
+                [stream ? "delta" : "message"]: { role: "assistant", content: "ok" },
+                finish_reason: "stop",
+              },
+            ],
+          };
+          const text = stream
+            ? `data: ${JSON.stringify(completion)}\n\ndata: [DONE]\n\n`
+            : JSON.stringify(completion);
+          const headers = { "content-type": stream ? "text/event-stream" : "application/json" };
+          let sentHeaders: Headers | undefined;
+          let sentBody: string | undefined;
+          const capture = (options: RequestInit) => {
+            sentHeaders = new Headers(options.headers);
+            sentBody = options.body as string;
+          };
+          const requestUrl = jest.fn(async (options: RequestInit) => {
+            capture(options);
+            return {
+              status: 200,
+              text,
+              json: completion,
+              arrayBuffer: new ArrayBuffer(0),
+              headers,
+            };
+          });
+          const { __setRequestUrlImpl: setRequestUrlImpl } = obsidianModule as unknown as {
+            __setRequestUrlImpl: (impl: unknown) => void;
+          };
+          const originalFetch = window.fetch;
+          const fetchMock = jest.fn(async (_url: unknown, options: RequestInit) => {
+            capture(options);
+            return {
+              status: 200,
+              ok: true,
+              headers: new Headers(headers),
+              text: async () => text,
+              json: async () => completion,
+              body: new ReadableStream({
+                start(controller) {
+                  controller.enqueue(new TextEncoder().encode(text));
+                  controller.close();
+                },
+              }),
+            } as Response;
+          });
+          setRequestUrlImpl(requestUrl);
+          window.fetch = fetchMock;
+          setSettings({ openAIApiKey: "legacy-key-must-not-leak" });
+          try {
+            const model = await ChatModelManager.getInstance().createModelInstanceFromBridged(
+              bridgedModel({
+                name: "local-model",
+                provider: ChatModelProviders.OPENAI_FORMAT,
+                baseUrl: "http://127.0.0.1:1234/v1",
+                enableCors,
+                stream,
+                requiresApiKey,
+                apiKey,
+              })
+            );
+            let content = "";
+            if (stream) {
+              for await (const chunk of await model.stream("hi")) content += chunk.text;
+            } else {
+              content = (await model.invoke("hi")).text;
+            }
+            expect(content).toBe("ok");
+            expect(sentHeaders?.get("authorization")).toBe(apiKey ? `Bearer ${apiKey}` : null);
+            expect(JSON.parse(sentBody ?? "{}")).toMatchObject({ model: "local-model", stream });
+            expect(requestUrl).toHaveBeenCalledTimes(enableCors ? 1 : 0);
+            expect(fetchMock).toHaveBeenCalledTimes(enableCors ? 0 : 1);
+          } finally {
+            window.fetch = originalFetch;
+            setRequestUrlImpl(undefined);
+          }
+        }
+      );
 
       it("strips a versioned Google base URL because the client appends /v1beta itself", async () => {
         const GoogleMock = jest.requireMock("@langchain/google-genai").ChatGoogleGenerativeAI as {
