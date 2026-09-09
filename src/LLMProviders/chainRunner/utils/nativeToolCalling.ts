@@ -5,7 +5,7 @@
  * Replaces XML-based tool calling with structured tool_calls array.
  */
 
-import { AIMessage, ToolMessage } from "@langchain/core/messages";
+import { ToolMessage } from "@langchain/core/messages";
 import { logError } from "@/logger";
 
 /**
@@ -128,27 +128,4 @@ export function buildToolCallsFromChunks(chunks: Map<number, ToolCallChunk>): Na
   }
 
   return toolCalls;
-}
-
-/**
- * Create an AIMessage with tool calls for conversation history.
- * Used when we need to reconstruct the AIMessage after streaming.
- *
- * @param content - Text content of the message
- * @param toolCalls - Tool calls to include
- * @returns AIMessage with tool_calls
- */
-export function createAIMessageWithToolCalls(
-  content: string,
-  toolCalls: NativeToolCall[]
-): AIMessage {
-  return new AIMessage({
-    content,
-    tool_calls: toolCalls.map((tc) => ({
-      id: tc.id,
-      name: tc.name,
-      args: tc.args,
-      type: "tool_call" as const,
-    })),
-  });
 }
