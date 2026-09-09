@@ -2,9 +2,11 @@ import { OPENARTIFACTS_DOC_ID_PATTERN } from "@/openArtifacts/constants";
 import type { OpenArtifactsReceipt } from "@/openArtifacts/types";
 import { App, parseYaml, TFile } from "obsidian";
 
-// Existing notes persist their publishing identity under `symposium`; changing the key would
-// strand their remote documents.
-const OPENARTIFACTS_PROPERTY = "symposium";
+const OPENARTIFACTS_PROPERTY = "openartifacts";
+// Notes published before the rename hold their identity here. It is read as a fallback and
+// replaced by `openartifacts` on the next successful publish, so nothing is stranded.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/395
+const LEGACY_PROPERTY = "symposium";
 
 /**
  * Signals that a note already uses the reserved OpenArtifacts property for unrelated metadata.
@@ -12,7 +14,7 @@ const OPENARTIFACTS_PROPERTY = "symposium";
 export class OpenArtifactsPropertyConflictError extends Error {
   constructor() {
     super(
-      "This note already uses the symposium property for an unrecognized value. Recover its public link from .openartifacts/publish-history.md, then repair or remove the property before publishing."
+      "This note's openartifacts property (or its legacy symposium property) holds a value that is not this note's OpenArtifacts link. Recover the public link from .openartifacts/publish-history.md, then repair or remove the property before publishing."
     );
     this.name = "OpenArtifactsPropertyConflictError";
     Object.setPrototypeOf(this, OpenArtifactsPropertyConflictError.prototype);
@@ -58,6 +60,27 @@ function isFrontmatterProperties(value: unknown): value is Record<string, unknow
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+const hasProperty = (frontmatter: Record<string, unknown>, key: string): boolean =>
+  Object.hasOwn(frontmatter, key);
+
+/**
+ * The identity a property map holds, honouring the current key first and the legacy key as a
+ * fallback. Two keys naming different documents, or either key holding anything but a link,
+ * is a conflict the caller must not resolve silently.
+ */
+function identityFrom(frontmatter: Record<string, unknown>): string | null {
+  const keys = [OPENARTIFACTS_PROPERTY, LEGACY_PROPERTY].filter((key) =>
+    hasProperty(frontmatter, key)
+  );
+  if (keys.length === 0) return null;
+  const ids: Array<string | null> = keys.map((key) => parseOpenArtifactsDocId(frontmatter[key]));
+  const [first] = ids;
+  if (!first || ids.some((id) => id !== first)) {
+    throw new OpenArtifactsPropertyConflictError();
+  }
+  return first;
+}
+
 /**
  * Reads the current valid OpenArtifacts identity from the note itself.
  *
@@ -82,18 +105,12 @@ export async function getOpenArtifactsDocId(app: App, file: TFile): Promise<stri
   if (!isFrontmatterProperties(frontmatter)) {
     throw new OpenArtifactsFrontmatterParseError();
   }
-  if (!Object.prototype.hasOwnProperty.call(frontmatter, OPENARTIFACTS_PROPERTY)) {
-    return null;
-  }
-  const docId = parseOpenArtifactsDocId(frontmatter[OPENARTIFACTS_PROPERTY]);
-  if (!docId) {
-    throw new OpenArtifactsPropertyConflictError();
-  }
-  return docId;
+  return identityFrom(frontmatter);
 }
 
 /**
- * Saves a server-issued OpenArtifacts link without replacing unrelated frontmatter.
+ * Saves a server-issued OpenArtifacts link without replacing unrelated frontmatter. A legacy
+ * `symposium` key naming the same document is dropped, which completes its migration.
  *
  * @param app The Obsidian application that owns the note.
  * @param file The note whose publication identity should be saved.
@@ -113,12 +130,16 @@ export async function saveOpenArtifactsLink(
     if (!isFrontmatterProperties(frontmatter)) {
       throw new OpenArtifactsFrontmatterParseError();
     }
-    if (Object.prototype.hasOwnProperty.call(frontmatter, OPENARTIFACTS_PROPERTY)) {
+    const legacyDocId = hasProperty(frontmatter, LEGACY_PROPERTY)
+      ? parseOpenArtifactsDocId(frontmatter[LEGACY_PROPERTY])
+      : undefined;
+    if (hasProperty(frontmatter, OPENARTIFACTS_PROPERTY)) {
       saved = parseOpenArtifactsDocId(frontmatter[OPENARTIFACTS_PROPERTY]) === receipt.docId;
-      return;
+    } else if (legacyDocId === undefined || legacyDocId === receipt.docId) {
+      frontmatter[OPENARTIFACTS_PROPERTY] = receipt.url;
+      saved = true;
     }
-    frontmatter[OPENARTIFACTS_PROPERTY] = receipt.url;
-    saved = true;
+    if (saved && legacyDocId === receipt.docId) delete frontmatter[LEGACY_PROPERTY];
   });
   return saved;
 }
@@ -140,16 +161,12 @@ export async function removeOpenArtifactsDocId(
     if (!isFrontmatterProperties(frontmatter)) {
       throw new OpenArtifactsFrontmatterParseError();
     }
-    if (!Object.prototype.hasOwnProperty.call(frontmatter, OPENARTIFACTS_PROPERTY)) {
-      removed = true;
-      return;
-    }
-    const currentDocId = parseOpenArtifactsDocId(frontmatter[OPENARTIFACTS_PROPERTY]);
-    if (currentDocId !== expectedDocId) {
-      return;
-    }
-    delete frontmatter[OPENARTIFACTS_PROPERTY];
     removed = true;
+    for (const key of [OPENARTIFACTS_PROPERTY, LEGACY_PROPERTY]) {
+      if (!hasProperty(frontmatter, key)) continue;
+      if (parseOpenArtifactsDocId(frontmatter[key]) === expectedDocId) delete frontmatter[key];
+      else removed = false;
+    }
   });
   return removed;
 }

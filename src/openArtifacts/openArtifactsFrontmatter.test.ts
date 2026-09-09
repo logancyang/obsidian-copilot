@@ -52,7 +52,7 @@ describe("openArtifactsFrontmatter", () => {
         const error = new OpenArtifactsPropertyConflictError();
 
         expect(error).toBeInstanceOf(Error);
-        expect(error.message).toContain("already uses the symposium property");
+        expect(error.message).toContain("openartifacts property");
       });
     });
   });
@@ -84,7 +84,7 @@ describe("openArtifactsFrontmatter", () => {
 
   describe("getOpenArtifactsDocId()", () => {
     it("reads an id from a valid link and treats missing frontmatter as unpublished", async () => {
-      const valid = createApp({ symposium: DOC_URL });
+      const valid = createApp({ openartifacts: DOC_URL });
       await expect(getOpenArtifactsDocId(valid.app, file)).resolves.toBe(DOC_ID);
 
       const missing = createApp();
@@ -92,14 +92,34 @@ describe("openArtifactsFrontmatter", () => {
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/337 reads an existing id from the legacy persisted host", async () => {
-      const legacy = createApp({ symposium: LEGACY_DOC_URL });
+      const legacy = createApp({ openartifacts: LEGACY_DOC_URL });
 
       await expect(getOpenArtifactsDocId(legacy.app, file)).resolves.toBe(DOC_ID);
     });
 
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/395 falls back to the legacy symposium property", async () => {
+      const legacy = createApp({ symposium: DOC_URL });
+      await expect(getOpenArtifactsDocId(legacy.app, file)).resolves.toBe(DOC_ID);
+
+      const both = createApp({ openartifacts: DOC_URL, symposium: DOC_URL });
+      await expect(getOpenArtifactsDocId(both.app, file)).resolves.toBe(DOC_ID);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/395 refuses to choose between two properties naming different documents", async () => {
+      const conflicting = createApp({ openartifacts: DOC_URL, symposium: OTHER_DOC_URL });
+      await expect(getOpenArtifactsDocId(conflicting.app, file)).rejects.toBeInstanceOf(
+        OpenArtifactsPropertyConflictError
+      );
+
+      const legacyJunk = createApp({ openartifacts: DOC_URL, symposium: "draft" });
+      await expect(getOpenArtifactsDocId(legacyJunk.app, file)).rejects.toBeInstanceOf(
+        OpenArtifactsPropertyConflictError
+      );
+    });
+
     it("rejects invalid YAML before its identity can be treated as unpublished", async () => {
       const invalidYaml = createApp();
-      jest.mocked(invalidYaml.app.vault.read).mockResolvedValue("---\nsymposium: [\n---\n");
+      jest.mocked(invalidYaml.app.vault.read).mockResolvedValue("---\nopenartifacts: [\n---\n");
       await expect(getOpenArtifactsDocId(invalidYaml.app, file)).rejects.toBeInstanceOf(
         OpenArtifactsFrontmatterParseError
       );
@@ -118,7 +138,7 @@ describe("openArtifactsFrontmatter", () => {
     });
 
     it("rejects an occupied property whose value is not a valid document link", async () => {
-      const malformed = createApp({ symposium: { docId: DOC_ID } });
+      const malformed = createApp({ openartifacts: { docId: DOC_ID } });
 
       await expect(getOpenArtifactsDocId(malformed.app, file)).rejects.toBeInstanceOf(
         OpenArtifactsPropertyConflictError
@@ -133,14 +153,28 @@ describe("openArtifactsFrontmatter", () => {
       await expect(saveOpenArtifactsLink(app, file, RECEIPT)).resolves.toBe(true);
 
       expect(processFrontMatter).toHaveBeenCalledWith(file, expect.any(Function));
-      expect(frontmatter).toEqual({ symposium: DOC_URL, tags: ["public"] });
+      expect(frontmatter).toEqual({ openartifacts: DOC_URL, tags: ["public"] });
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/395 migrates a legacy symposium identity to openartifacts on save", async () => {
+      const { app, frontmatter } = createApp({ symposium: DOC_URL, tags: ["public"] });
+
+      await expect(saveOpenArtifactsLink(app, file, RECEIPT)).resolves.toBe(true);
+      expect(frontmatter).toEqual({ openartifacts: DOC_URL, tags: ["public"] });
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/395 leaves a legacy property naming another document alone", async () => {
+      const { app, frontmatter } = createApp({ symposium: OTHER_DOC_URL });
+
+      await expect(saveOpenArtifactsLink(app, file, RECEIPT)).resolves.toBe(false);
+      expect(frontmatter).toEqual({ symposium: OTHER_DOC_URL });
     });
 
     it("treats an already-saved receipt identity as idempotent", async () => {
-      const { app, frontmatter } = createApp({ symposium: DOC_URL });
+      const { app, frontmatter } = createApp({ openartifacts: DOC_URL });
 
       await expect(saveOpenArtifactsLink(app, file, RECEIPT)).resolves.toBe(true);
-      expect(frontmatter.symposium).toBe(DOC_URL);
+      expect(frontmatter.openartifacts).toBe(DOC_URL);
     });
 
     it("rejects a receipt whose link does not contain its id before changing the note", async () => {
@@ -153,18 +187,18 @@ describe("openArtifactsFrontmatter", () => {
     });
 
     it("does not overwrite an identity that changed after the remote action began", async () => {
-      const { app, frontmatter } = createApp({ symposium: OTHER_DOC_URL });
+      const { app, frontmatter } = createApp({ openartifacts: OTHER_DOC_URL });
 
       await expect(saveOpenArtifactsLink(app, file, RECEIPT)).resolves.toBe(false);
-      expect(frontmatter.symposium).toBe(OTHER_DOC_URL);
+      expect(frontmatter.openartifacts).toBe(OTHER_DOC_URL);
     });
 
     it("does not overwrite an occupied property with an unrecognized value", async () => {
       const existingValue = { url: "https://example.com/symposium" };
-      const { app, frontmatter } = createApp({ symposium: existingValue });
+      const { app, frontmatter } = createApp({ openartifacts: existingValue });
 
       await expect(saveOpenArtifactsLink(app, file, RECEIPT)).resolves.toBe(false);
-      expect(frontmatter.symposium).toBe(existingValue);
+      expect(frontmatter.openartifacts).toBe(existingValue);
     });
 
     it("rejects a non-mapping root supplied by the atomic callback", async () => {
@@ -182,7 +216,7 @@ describe("openArtifactsFrontmatter", () => {
   describe("removeOpenArtifactsDocId()", () => {
     it("deletes only the OpenArtifacts property through processFrontMatter", async () => {
       const { app, frontmatter, processFrontMatter } = createApp({
-        symposium: DOC_URL,
+        openartifacts: DOC_URL,
         tags: ["public"],
       });
 
@@ -192,11 +226,26 @@ describe("openArtifactsFrontmatter", () => {
       expect(frontmatter).toEqual({ tags: ["public"] });
     });
 
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/395 removes the legacy property too", async () => {
+      const { app, frontmatter } = createApp({
+        openartifacts: DOC_URL,
+        symposium: DOC_URL,
+        tags: ["public"],
+      });
+
+      await expect(removeOpenArtifactsDocId(app, file, DOC_ID)).resolves.toBe(true);
+      expect(frontmatter).toEqual({ tags: ["public"] });
+
+      const legacyOnly = createApp({ symposium: DOC_URL });
+      await expect(removeOpenArtifactsDocId(legacyOnly.app, file, DOC_ID)).resolves.toBe(true);
+      expect(legacyOnly.frontmatter).toEqual({});
+    });
+
     it("does not remove an identity that changed after the remote deletion began", async () => {
-      const { app, frontmatter } = createApp({ symposium: OTHER_DOC_URL });
+      const { app, frontmatter } = createApp({ openartifacts: OTHER_DOC_URL });
 
       await expect(removeOpenArtifactsDocId(app, file, DOC_ID)).resolves.toBe(false);
-      expect(frontmatter.symposium).toBe(OTHER_DOC_URL);
+      expect(frontmatter.openartifacts).toBe(OTHER_DOC_URL);
     });
 
     it("rejects a non-mapping root supplied by the atomic callback", async () => {

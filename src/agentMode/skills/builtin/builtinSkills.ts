@@ -621,9 +621,10 @@ the user: ${OPENARTIFACTS_MISSING_KEY_MESSAGE}
 ## 1. Prepare the page
 
 Read one existing Markdown source note. Treat YAML frontmatter as metadata, never as page
-content. Note its \`symposium\` property: an \`https://…/d/<docId>\` value means the note is
-already published and this task updates that page; pass that \`docId\` to the wrapper. If
-the property holds any other value, stop and ask the user before touching it.
+content. Note its \`openartifacts\` property, or on older notes the \`symposium\` property:
+an \`https://…/d/<docId>\` value means the note is already published and this task updates
+that page; pass that \`docId\` to the wrapper. If either property holds any other value, or
+both hold different links, stop and ask the user before touching them.
 
 Write complete UTF-8 HTML (at most \`${OPENARTIFACTS_MAX_HTML_BYTES}\` bytes) to a new file
 under \`$${OPENARTIFACTS_WORKSPACE_ROOT_ENV}/${OPENARTIFACTS_AGENT_HANDOFF_DIR}/\`, creating
@@ -663,9 +664,9 @@ On Windows, use the \`.cmd\` wrapper (prefix with \`&\` in PowerShell):
 \`\`\`
 
 Success prints the server's JSON, \`{"docId", "url", "version"}\`. Set the note's
-\`symposium\` frontmatter property to that \`url\` (create the frontmatter block if needed,
-keep every other property), then report the URL. Publishing the same note again updates
-the same page.
+\`openartifacts\` frontmatter property to that \`url\` (create the frontmatter block if
+needed, keep every other property) and remove a \`symposium\` property that holds the same
+link, then report the URL. Publishing the same note again updates the same page.
 
 On failure the wrapper prints the HTTP status and the server's message to stderr and
 exits 1. Report that message verbatim. Do not retry on your own, invent a cause, strip
@@ -675,11 +676,11 @@ do not create a replacement page unless the user explicitly asks.
 
 ## 4. Withdraw
 
-For delete, remove, or withdraw requests, read the \`docId\` from the \`symposium\`
-property. If there is none, say nothing is published. Otherwise tell the user the link
+For delete, remove, or withdraw requests, read the \`docId\` from the \`openartifacts\`
+property, or from \`symposium\` on older notes. If there is none, say nothing is published. Otherwise tell the user the link
 will stop working and that copies people already saved cannot be recalled, then end your
-turn. On a clear yes, run the wrapper with \`unshare <docId>\`, remove the \`symposium\`
-property from the note, and report that the page is gone. Never tell the user to delete
+turn. On a clear yes, run the wrapper with \`unshare <docId>\`, remove the \`openartifacts\`
+and \`symposium\` properties from the note, and report that the page is gone. Never tell the user to delete
 the page at its public URL.
 `,
   files: [

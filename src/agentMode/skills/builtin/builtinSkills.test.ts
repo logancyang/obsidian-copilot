@@ -252,7 +252,7 @@ describe("builtinSkills", () => {
       expect(md).toContain("Then end your turn");
       expect(md).toContain("Never publish in the same turn that generated the HTML");
       expect(md).toContain("Never simulate the user's approval");
-      expect(md).toContain("`symposium` frontmatter property");
+      expect(md).toContain("`openartifacts` frontmatter property");
       expect(md).toContain("Themes are optional");
       expect(md).toMatch(/a missing theme must never block publishing/);
       expect(md).toContain("Report that message verbatim");

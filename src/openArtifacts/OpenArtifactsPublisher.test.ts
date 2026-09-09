@@ -154,7 +154,7 @@ describe("OpenArtifactsPublisher", () => {
         expect(harness.recordLedger.mock.invocationCallOrder[0]).toBeLessThan(
           harness.processFrontMatter.mock.invocationCallOrder[0]
         );
-        expect(harness.frontmatter.symposium).toBe(DOC_URL);
+        expect(harness.frontmatter.openartifacts).toBe(DOC_URL);
       });
 
       it("keeps a successful publish usable when the advisory ledger cannot be written", async () => {
@@ -165,7 +165,7 @@ describe("OpenArtifactsPublisher", () => {
 
         expect(result).toEqual({ kind: "success", action: "publish", receipt: RECEIPT });
         expect(harness.recordLedger).toHaveBeenCalledTimes(1);
-        expect(harness.frontmatter.symposium).toBe(DOC_URL);
+        expect(harness.frontmatter.openartifacts).toBe(DOC_URL);
       });
 
       it.each([
@@ -180,7 +180,7 @@ describe("OpenArtifactsPublisher", () => {
           kind: "failure",
           action: "publish",
           message:
-            "This note already uses the symposium property for an unrecognized value. Recover its public link from .openartifacts/publish-history.md, then repair or remove the property before publishing.",
+            "This note's openartifacts property (or its legacy symposium property) holds a value that is not this note's OpenArtifacts link. Recover the public link from .openartifacts/publish-history.md, then repair or remove the property before publishing.",
           accessNotice: false,
           retryable: false,
         });
@@ -527,7 +527,7 @@ describe("OpenArtifactsPublisher", () => {
           .retrySave!();
 
         expect(saved).toEqual({ kind: "success", action: "publish", receipt: RECEIPT });
-        expect(harness.frontmatter.symposium).toBe(DOC_URL);
+        expect(harness.frontmatter.openartifacts).toBe(DOC_URL);
         expect(harness.client.publish).toHaveBeenCalledTimes(1);
 
         harness.modalOptions[1].onClosed?.();
