@@ -127,22 +127,6 @@ export class FileCache<T> {
     }
   }
 
-  async remove(vault: Vault, cacheKey: string): Promise<void> {
-    try {
-      // Remove from memory cache
-      this.memoryCache.delete(cacheKey);
-
-      // Remove from file cache (markdown format)
-      const cachePath = this.getCachePath(cacheKey);
-      if (await vault.adapter.exists(cachePath)) {
-        await vault.adapter.remove(cachePath);
-        logInfo("Removed file from cache:", cacheKey);
-      }
-    } catch (error) {
-      logError("Error removing file from cache:", error);
-    }
-  }
-
   async clear(vault: Vault): Promise<void> {
     try {
       // Clear memory cache
