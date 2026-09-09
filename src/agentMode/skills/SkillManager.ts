@@ -1,3 +1,5 @@
+import type { BuiltinPreferences } from "./builtin/reconcileBuiltinSkills";
+import { ALL_MANAGED_SKILLS, planManagedBuiltins } from "./builtin/builtinSkills";
 import { logError, logInfo, logWarn } from "@/logger";
 import { getSettings, updateSetting } from "@/settings/model";
 import { getEffectiveSkillsFolder } from "@/settings/copilotFolder";
@@ -35,6 +37,12 @@ import {
   matchExpectation,
   type Expectation,
 } from "./vaultEventExpectations";
+
+export interface BuiltinSkillRuntime {
+  prepare(folder: string): Promise<void>;
+  availableAgents(): readonly string[];
+  savePreferences(preferences: BuiltinPreferences): Promise<void>;
+}
 
 /** Debounce window for vault-watch-driven reconciliation, per spec. */
 const RECONCILE_DEBOUNCE_MS = 250;
@@ -137,7 +145,8 @@ export class SkillManager {
   /** App handle is captured at the plugin edge; inner helpers stay pure. */
   private constructor(
     private readonly app: App,
-    private readonly agentDirsProjectRel: Readonly<Record<BackendId, string>>
+    private readonly agentDirsProjectRel: Readonly<Record<BackendId, string>>,
+    private readonly builtinRuntime?: BuiltinSkillRuntime
   ) {
     this.normalizedAgentDirs = Object.values(agentDirsProjectRel).map(normalizeRelPath);
   }
@@ -148,10 +157,11 @@ export class SkillManager {
    */
   static initialize(
     app: App,
-    agentDirsProjectRel: Readonly<Record<BackendId, string>>
+    agentDirsProjectRel: Readonly<Record<BackendId, string>>,
+    builtinRuntime?: BuiltinSkillRuntime
   ): SkillManager {
     if (SkillManager.instance === null) {
-      SkillManager.instance = new SkillManager(app, agentDirsProjectRel);
+      SkillManager.instance = new SkillManager(app, agentDirsProjectRel, builtinRuntime);
       SkillManager.instance.subscribeToVaultEvents();
     }
     return SkillManager.instance;
@@ -235,11 +245,12 @@ export class SkillManager {
    * and publish the results into the store. Same-folder callers coalesce onto
    * the in-flight pass; a folder change queues one follow-up pass so the final
    * published state matches current settings.
+   * @param force - Queue another pass when preferences or availability changed during discovery.
    */
-  async refresh(): Promise<RefreshResult> {
+  async refresh(force = false): Promise<RefreshResult> {
     const folder = resolveSkillsFolder();
     if (this.inFlight !== null) {
-      if (this.inFlightFolder !== folder) {
+      if (force || this.inFlightFolder !== folder) {
         this.queuedRefresh = true;
       }
       return this.inFlight;
@@ -303,6 +314,15 @@ export class SkillManager {
     const vaultRoot = resolveVaultRootAbs(this.app);
 
     try {
+      // Every discovery entry point must settle bundled files before link fanout.
+      // https://github.com/logancyang/obsidian-copilot/issues/3022
+      let builtinError: string | undefined;
+      try {
+        if (this.builtinRuntime)
+          await this.runInternalMutation(() => this.builtinRuntime!.prepare(folder));
+      } catch (error) {
+        builtinError = error instanceof Error ? error.message : String(error);
+      }
       const canonicalDiscovery = await discoverManagedSkills({
         skillsFolderRelPath: folder,
         skillsFolderAbsPath: absRoot,
@@ -330,7 +350,32 @@ export class SkillManager {
         }
       }
 
-      const skills = mergeDiscovery(canonicalDiscovery.accepted, projectCandidates);
+      const settings = getSettings();
+      const eligible = new Set(
+        planManagedBuiltins({
+          search: settings.enableMiyoSearchSkill === true,
+          documents: settings.docProcessorBackend === "miyo",
+        }).seed.map((skill) => skill.name)
+      );
+      const skills = mergeDiscovery(canonicalDiscovery.accepted, projectCandidates).map((skill) => {
+        // Failed cleanup must never reactivate an opted-out skill through stale metadata.
+        // https://github.com/logancyang/obsidian-copilot/issues/3022
+        if (!skill.builtin || !this.builtinRuntime) return skill;
+        const pref = settings.agentMode.skills.builtinPreferences?.[skill.name];
+        return {
+          ...skill,
+          enabledAgents:
+            pref?.disabled || !eligible.has(skill.name)
+              ? []
+              : this.builtinRuntime
+                  .availableAgents()
+                  .filter((agent) =>
+                    pref
+                      ? !pref.disabledAgents?.includes(agent)
+                      : skill.enabledAgents.includes(agent)
+                  ),
+        };
+      });
       const rejectedSkills =
         canonicalDiscovery.rejected.length === 0 && rejectedProjectSkills.length === 0
           ? EMPTY_REJECTED_SKILLS
@@ -341,8 +386,8 @@ export class SkillManager {
       // Reconcile against the agent dirs if we have an on-disk vault.
       // Only canonical rows are passed in — project skills are not part
       // of reconciliation.
-      let reconcileErrorCount = 0;
-      let reconcileError: string | undefined;
+      let reconcileErrorCount = builtinError ? 1 : 0;
+      let reconcileError: string | undefined = builtinError;
       if (vaultRoot !== null && absRoot !== null) {
         try {
           const canonicalForReconcile = skills.filter((s) => s.location.kind === "canonical");
@@ -356,7 +401,7 @@ export class SkillManager {
               }),
             (r) => buildReconcileExpectations(r, vaultRoot)
           );
-          reconcileErrorCount = report.errors.length;
+          reconcileErrorCount += report.errors.length;
           recordReconcileReport(report);
         } catch (err) {
           reconcileError = err instanceof Error ? err.message : String(err);
@@ -391,6 +436,72 @@ export class SkillManager {
   }
 
   /**
+   * Save a whole-skill opt-out before reconciling its files and agent links.
+   * @param name - Catalog identity of the built-in skill.
+   * @param enabled - Whether the user permits installation for eligible agents.
+   */
+  async setBuiltinSkillEnabled(
+    name: string,
+    enabled: boolean
+  ): Promise<SkillOperationResult<"fs-error">> {
+    return this.updateBuiltinPreference(name, (pref) => ({ ...pref, disabled: !enabled }));
+  }
+
+  /**
+   * Save a per-agent opt-out without losing the whole-skill preference.
+   * @param name - Catalog identity of the built-in skill.
+   * @param agent - Backend whose installation preference changes.
+   * @param enabled - Whether this agent may receive the skill when available.
+   */
+  async setBuiltinAgentEnabled(
+    name: string,
+    agent: string,
+    enabled: boolean
+  ): Promise<SkillOperationResult<"fs-error">> {
+    return this.updateBuiltinPreference(name, (pref) => ({
+      ...pref,
+      disabledAgents: computeNextAgents(pref.disabledAgents ?? [], agent, !enabled),
+    }));
+  }
+
+  private builtinMutation: Promise<unknown> = Promise.resolve();
+
+  private async updateBuiltinPreference(
+    name: string,
+    update: (pref: BuiltinPreferences[string]) => BuiltinPreferences[string]
+  ): Promise<SkillOperationResult<"fs-error">> {
+    const operation = this.builtinMutation.then(
+      async (): Promise<SkillOperationResult<"fs-error">> => {
+        if (!this.builtinRuntime || !ALL_MANAGED_SKILLS.some((skill) => skill.name === name))
+          return fsFailure("Unknown built-in skill.");
+        try {
+          await this.inFlight;
+          const preferences = getSettings().agentMode.skills.builtinPreferences ?? {};
+          await this.builtinRuntime.savePreferences({
+            ...preferences,
+            [name]: update(preferences[name] ?? {}),
+          });
+          // A preference changed while discovery was running still requires a final pass.
+          // https://github.com/logancyang/obsidian-copilot/issues/3022
+          if (this.inFlight) this.queuedRefresh = true;
+          const result = await this.refresh();
+          return result.ok && result.reconcileErrorCount === 0
+            ? { ok: true }
+            : fsFailure(
+                result.reconcileError ??
+                  result.discoveryError ??
+                  "Could not update built-in skill files."
+              );
+        } catch (error) {
+          return fsFailure(error instanceof Error ? error.message : String(error));
+        }
+      }
+    );
+    this.builtinMutation = operation;
+    return operation;
+  }
+
+  /**
    * Toggle a single agent on/off for the given skill. Idempotent:
    *
    * 1. Write the canonical SKILL.md first with the new
@@ -405,6 +516,7 @@ export class SkillManager {
    *    changed row without rereading every managed skill.
    */
   async toggleAgent(skill: Skill, agent: BackendId, enabled: boolean): Promise<ToggleAgentResult> {
+    if (skill.builtin) return this.setBuiltinAgentEnabled(skill.name, agent, enabled);
     const vaultRoot = resolveVaultRootAbs(this.app);
     if (vaultRoot === null) {
       return noVaultPathFailure();
@@ -454,6 +566,10 @@ export class SkillManager {
    * behind a confirmation modal.
    */
   async deleteSkill(skill: Skill): Promise<DeleteSkillResult> {
+    // Bundled content is read-only; users control installation through saved opt-outs.
+    // https://github.com/logancyang/obsidian-copilot/issues/3022
+    if (skill.builtin)
+      return fsFailure("Built-in skills cannot be edited or deleted. Disable the skill instead.");
     const vaultRoot = resolveVaultRootAbs(this.app);
     if (vaultRoot === null) {
       return noVaultPathFailure();
@@ -488,6 +604,10 @@ export class SkillManager {
     skill: Skill,
     patch: Omit<SkillFrontmatterPatch, "name" | "enabledAgents">
   ): Promise<UpdatePropertiesResult> {
+    // Bundled content is read-only; users control installation through saved opt-outs.
+    // https://github.com/logancyang/obsidian-copilot/issues/3022
+    if (skill.builtin)
+      return fsFailure("Built-in skills cannot be edited or deleted. Disable the skill instead.");
     const fs = createNodeReconcileFs();
     const vaultRoot = resolveVaultRootAbs(this.app);
     const result = await this.runInternalMutation(
@@ -512,6 +632,10 @@ export class SkillManager {
       patch: Omit<SkillFrontmatterPatch, "name" | "enabledAgents">;
     }
   ): Promise<SavePropertiesResult> {
+    // Bundled content is read-only; users control installation through saved opt-outs.
+    // https://github.com/logancyang/obsidian-copilot/issues/3022
+    if (skill.builtin)
+      return fsFailure("Built-in skills cannot be edited or deleted. Disable the skill instead.");
     const fs = createNodeReconcileFs();
     const newName =
       req.newName !== undefined && req.newName !== skill.name ? req.newName : undefined;
@@ -598,6 +722,10 @@ export class SkillManager {
    * on the next pass once Developer Mode is on.
    */
   async renameSkill(skill: Skill, newName: string): Promise<RenameSkillResult> {
+    // Bundled content is read-only; users control installation through saved opt-outs.
+    // https://github.com/logancyang/obsidian-copilot/issues/3022
+    if (skill.builtin)
+      return fsFailure("Built-in skills cannot be edited or deleted. Disable the skill instead.");
     const vaultRoot = resolveVaultRootAbs(this.app);
     if (vaultRoot === null) {
       return noVaultPathFailure();

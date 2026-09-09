@@ -21,7 +21,6 @@ import {
 } from "@/miyo/miyoUtils";
 import { useMiyoStatus } from "@/miyo/useMiyoStatus";
 import { notifyMiyoIndexChanged } from "@/miyo/miyoIndex";
-import { deriveSkillsFolder } from "@/settings/copilotFolder";
 import { extractAppIgnoreSettings, getSystemExcludedFolders } from "@/search/searchUtils";
 import { getSettings, updateSetting, useSettingsValue } from "@/settings/model";
 import {
@@ -191,11 +190,6 @@ export const MiyoSettings: React.FC = () => {
       // Invalidate any in-flight connection attempt so it can't write settings
       // after the tab is gone.
       connectAttemptRef.current += 1;
-      // Deliberately DON'T advance skillAttemptRef here. An in-flight search-skill
-      // install/remove must still reconcile its completed disk result to the
-      // persisted flag after unmount (mountedRef gates only the UI updates);
-      // bumping the token would make it look superseded and skip that persist,
-      // leaving disk and flag divergent.
       connectModalRef.current?.close();
     };
   }, []);
@@ -500,82 +494,35 @@ export const MiyoSettings: React.FC = () => {
     await refresh(true);
   }, [refresh]);
 
-  // Install / remove the `miyo-search` agent skill (path B) — independent of the
-  // Miyo connection (path A) above. We AWAIT the disk op and read its real
-  // outcome before persisting the flag: a collision with a user-authored
-  // `miyo-search` folder, or a write failure, must leave the toggle off rather
-  // than claim success. A generation token drops a superseded flip (rapid
-  // on/off, or unmount) so it can't commit stale state or fire a late Notice.
-  // Derive the skills folder from the configurable Copilot root rather than the
-  // retired `agentMode.skills.folder`, which no longer tracks the root: a
-  // non-default root would otherwise install/remove the skill in the wrong
-  // directory (and collide with the derived path the background seeder uses).
-  const skillsFolder = deriveSkillsFolder(settings);
-  const handleToggleSearchSkill = useCallback(
-    async (next: boolean) => {
-      const attempt = (skillAttemptRef.current += 1);
-      // A newer toggle supersedes this one and owns the final state, so a
-      // superseded attempt must NOT persist. An unmount is separate: it only
-      // stops UI work (Notices / React state) — the completed disk result is
-      // still written to the persisted flag so the two can never diverge.
-      const superseded = () => skillAttemptRef.current !== attempt;
-      const unmounted = () => !mountedRef.current;
-      setPendingSkillEnabled(next);
-      try {
-        // Import the agent-mode barrel lazily: it pulls in Node-only modules and
-        // must never be evaluated on mobile (see main.ts). This handler only runs
-        // on desktop — the switch is disabled on `Platform.isMobile` — but the
-        // dynamic import keeps the barrel out of the mobile-eager settings bundle.
-        const { installMiyoSearchSkill, removeMiyoSearchSkill } = await import("@/agentMode");
-        // Nothing has touched disk yet, so bailing here can't diverge disk from flag.
-        if (superseded() || unmounted()) return;
-        if (next) {
-          const result = await installMiyoSearchSkill(app, skillsFolder);
-          if (superseded()) return;
-          if (result === "installed") {
-            // Persist regardless of unmount: the files ARE on disk now.
-            updateSetting("enableMiyoSearchSkill", true);
-            if (!unmounted()) new Notice("Miyo search skill installed");
-          } else if (result === "collision") {
-            if (!unmounted()) {
-              new Notice(
-                "A skill named “miyo-search” already exists in your skills folder. Rename or remove it, then try again."
-              );
-            }
-          } else if (!unmounted()) {
-            new Notice("Couldn't install the Miyo search skill. Please try again.");
-          }
-        } else {
-          const result = await removeMiyoSearchSkill(app, skillsFolder);
-          if (superseded()) return;
-          if (result === "failed") {
-            // The skill is still on disk — keep the flag on so UI and disk agree,
-            // and surface the failure instead of a silent no-op.
-            if (!unmounted()) {
-              new Notice("Couldn't remove the Miyo search skill. Please try again.");
-            }
-            return;
-          }
-          // Removed, or a markerless collision copy the user owns: honor the
-          // disable either way (persist regardless of unmount), only flagging the
-          // collision so they can clean up.
-          updateSetting("enableMiyoSearchSkill", false);
-          if (result === "collision" && !unmounted()) {
-            new Notice(
-              "Disabled. A user-created “miyo-search” skill was left in place — remove it manually if you don't want it."
-            );
-          }
-        }
-      } catch {
-        if (!superseded() && !unmounted()) {
-          new Notice("Couldn't update the Miyo search skill. Please try again.");
-        }
-      } finally {
-        if (!superseded() && !unmounted()) setPendingSkillEnabled(null);
+  // The feature gate shares built-in reconciliation so this tab cannot recreate
+  // skills the user disabled, or create directories for unconfigured agents.
+  // https://github.com/logancyang/obsidian-copilot/issues/3022
+  const handleToggleSearchSkill = useCallback(async (next: boolean) => {
+    const attempt = ++skillAttemptRef.current;
+    setPendingSkillEnabled(next);
+    try {
+      // Keep desktop-only agent modules out of the mobile settings bundle.
+      const { SkillManager } = await import("@/agentMode");
+      if (skillAttemptRef.current !== attempt || !mountedRef.current) return;
+      updateSetting("enableMiyoSearchSkill", next);
+      const result = await SkillManager.getInstance().refresh(true);
+      if (
+        (!result.ok || result.reconcileErrorCount > 0) &&
+        mountedRef.current &&
+        skillAttemptRef.current === attempt
+      ) {
+        new Notice(
+          "Miyo search preference saved, but skill files could not be updated. Check Skills settings and try again."
+        );
       }
-    },
-    [app, skillsFolder]
-  );
+    } catch {
+      if (mountedRef.current && skillAttemptRef.current === attempt) {
+        new Notice("Couldn't update the Miyo search skill. Please try again.");
+      }
+    } finally {
+      if (mountedRef.current && skillAttemptRef.current === attempt) setPendingSkillEnabled(null);
+    }
+  }, []);
 
   const commitUrl = useCallback(() => {
     const trimmed = urlDraft.trim();
