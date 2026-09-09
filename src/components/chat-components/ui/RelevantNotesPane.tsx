@@ -312,21 +312,12 @@ export function RelevantNotesPane({
       break;
   }
 
-  // Mock suggestions and skipped sources remain visible even for an empty result.
+  // Skipped sources remain visible even for an empty result.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/383
-  const notices = (
-    <>
-      {details?.mock && (
-        <p role="status" className="tw-m-0 tw-p-2 tw-text-xs tw-text-muted">
-          Mock preview: these are example notes, not relevance results.
-        </p>
-      )}
-      {!!details?.skippedAttachments && (
-        <p role="status" className="tw-m-0 tw-p-2 tw-text-xs tw-text-muted">
-          Skipped attachments: {details.skippedAttachments}. They aren't available for this request.
-        </p>
-      )}
-    </>
+  const notices = !!details?.skippedAttachments && (
+    <p role="status" className="tw-m-0 tw-p-2 tw-text-xs tw-text-muted">
+      Skipped attachments: {details.skippedAttachments}. They aren't available for this request.
+    </p>
   );
 
   return (

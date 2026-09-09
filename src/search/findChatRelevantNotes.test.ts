@@ -4,7 +4,6 @@ import { App, TFile } from "obsidian";
 jest.mock("@/settings/model", () => ({ getSettings: () => ({ plusLicenseKey: "key" }) }));
 jest.mock("@/miyo/miyoUtils", () => ({
   getMiyoCustomUrl: () => "url",
-  getMiyoFilePath: (_app: unknown, path: string) => `Vault/${path}`,
   getVaultRelativeMiyoPath: (_app: unknown, path: string) => path.replace(/^Vault\//, ""),
 }));
 jest.mock("@/miyo/MiyoClient", () => {
@@ -22,14 +21,6 @@ describe("findChatRelevantNotes", () => {
             basename: path.replace(".md", ""),
             extension: "md",
           }),
-        getMarkdownFiles: () => [
-          Object.assign(new (TFile as unknown as new (path: string) => TFile)("file.md"), {
-            path: "b.md",
-          }),
-          Object.assign(new (TFile as unknown as new (path: string) => TFile)("file.md"), {
-            path: "a.md",
-          }),
-        ],
       },
     } as unknown as App;
     beforeEach(() => {
@@ -54,6 +45,11 @@ describe("findChatRelevantNotes", () => {
         request: { folder_name: "Vault", draft: "topic", file_paths: ["Vault/a.md"] },
         skippedAttachments: 1,
         addFile: jest.fn(),
+      });
+      expect(search).toHaveBeenCalledWith("url", {
+        folder_name: "Vault",
+        draft: "topic",
+        file_paths: ["Vault/a.md"],
       });
       expect(result.notes.map((entry) => entry.note.path)).toEqual(["b.md"]);
       expect(result.notes[0].metadata.score).toBe(0.6);
@@ -101,21 +97,6 @@ describe("findChatRelevantNotes", () => {
         request: { folder_name: "Vault", file_paths: ["Vault/a.md"] },
       });
       expect(filtered.notes).toBe(blank.notes);
-    });
-    it("uses an explicitly labeled fixture without a service request (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", async () => {
-      const result = await findChatRelevantNotes(
-        app,
-        {
-          id: "a",
-          request: { folder_name: "Vault", draft: "topic" },
-          skippedAttachments: 0,
-          addFile: jest.fn(),
-        },
-        true
-      );
-      expect(result.details?.mock).toBe(true);
-      expect(result.notes.map((entry) => entry.note.path)).toEqual(["a.md", "b.md"]);
-      expect(search).not.toHaveBeenCalled();
     });
     it("identifies only a structured unsupported route for host fallback (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", async () => {
       for (const errorCode of ["not_implemented", undefined]) {

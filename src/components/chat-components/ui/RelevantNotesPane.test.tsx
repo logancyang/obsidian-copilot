@@ -50,26 +50,17 @@ describe("RelevantNotesPane", () => {
     });
 
     it.each(["matches", "no-usable-context"] as const)(
-      "shows mock and skipped-source notices with %s (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)",
+      "shows skipped-source notices with %s (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)",
       (status) => {
         render(
-          <RelevantNotesPane
-            {...BASE_PROPS}
-            status={status}
-            details={{ mock: true, skippedAttachments: 2 }}
-          />
+          <RelevantNotesPane {...BASE_PROPS} status={status} details={{ skippedAttachments: 2 }} />
         );
-        expect(
-          screen.getByText("Mock preview: these are example notes, not relevance results.")
-        ).toBeTruthy();
         expect(screen.getByText(/Skipped attachments: 2/)).toBeTruthy();
       }
     );
 
-    it("omits notices for real results without skipped sources (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", () => {
-      render(
-        <RelevantNotesPane {...BASE_PROPS} details={{ mock: false, skippedAttachments: 0 }} />
-      );
+    it("omits notices without skipped sources (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", () => {
+      render(<RelevantNotesPane {...BASE_PROPS} details={{ skippedAttachments: 0 }} />);
       expect(screen.queryByRole("status")).toBeNull();
     });
 
