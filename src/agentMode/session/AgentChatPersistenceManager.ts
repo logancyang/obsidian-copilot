@@ -1,3 +1,4 @@
+import { prepareChatImagesForSave } from "@/utils/chatImagePersistence";
 import { serializeFanoutComposite } from "@/agentMode/session/fanout/fanoutTypes";
 import { AGENT_CHAT_MODE, AI_SENDER, COPILOT_CONVERSATION_TAG, USER_SENDER } from "@/constants";
 import { logError, logInfo, logWarn } from "@/logger";
@@ -141,7 +142,6 @@ export class AgentChatPersistenceManager {
     if (messages.length === 0) return null;
 
     try {
-      const chatContent = this.formatChatContent(messages);
       const firstMessageEpoch = messages[0].timestamp?.epoch ?? Date.now();
 
       // Capture the conversations folder once so a concurrent Copilot-root
@@ -164,6 +164,13 @@ export class AgentChatPersistenceManager {
             conversationsFolder,
             existingMeta.topic
           );
+
+      const preparedMessages = await prepareChatImagesForSave(
+        this.app,
+        messages,
+        preferredFileName
+      );
+      const chatContent = this.formatChatContent(preparedMessages);
 
       const noteContent = this.generateNoteContent({
         chatContent,

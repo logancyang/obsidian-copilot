@@ -101,6 +101,8 @@ type MockApp = {
   vault: {
     getAbstractFileByPath: jest.Mock;
     createFolder: jest.Mock;
+    createBinary: jest.Mock;
+    getAvailablePathForAttachments: jest.Mock;
     create: jest.Mock;
     modify: jest.Mock;
     read: jest.Mock;
@@ -108,6 +110,7 @@ type MockApp = {
     adapter: {
       exists: jest.Mock;
       read: jest.Mock;
+      readBinary: jest.Mock;
       write: jest.Mock;
       list: jest.Mock;
       stat: jest.Mock;
@@ -133,6 +136,10 @@ describe("ChatPersistenceManager", () => {
       vault: {
         getAbstractFileByPath: jest.fn().mockReturnValue(null), // Default: file not found
         createFolder: jest.fn(),
+        createBinary: jest.fn(),
+        getAvailablePathForAttachments: jest.fn(
+          async (name, extension) => `attachments/${name}.${extension}`
+        ),
         create: jest.fn(),
         modify: jest.fn(),
         read: jest.fn(),
@@ -140,6 +147,7 @@ describe("ChatPersistenceManager", () => {
         adapter: {
           exists: jest.fn().mockResolvedValue(false),
           read: jest.fn().mockResolvedValue(""),
+          readBinary: jest.fn(),
           write: jest.fn().mockResolvedValue(undefined),
           list: jest.fn().mockResolvedValue({ files: [], folders: [] }),
           stat: jest.fn().mockResolvedValue({ ctime: Date.now(), mtime: Date.now(), size: 0 }),
@@ -353,6 +361,65 @@ Nature's quiet song`);
   });
 
   describe("saveChat", () => {
+    it("saves uploaded images with their message before context and timestamp metadata (https://github.com/logancyang/obsidian-copilot/issues/2900)", async () => {
+      const message: ChatMessage = {
+        id: "image",
+        sender: USER_SENDER,
+        message: "Look at this",
+        isVisible: true,
+        timestamp: {
+          epoch: 1695513480000,
+          display: "2024/09/23 22:18:00",
+          fileName: "2024_09_23_221800",
+        },
+        context: { notes: [], urls: ["https://example.com"] },
+        content: [{ type: "image_url", image_url: { url: "data:image/png;base64,AQID" } }],
+      };
+      mockMessageRepo.getDisplayMessages.mockReturnValue([message]);
+      mockApp.vault.createBinary.mockImplementation(async () => {
+        expect(mockApp.vault.create).not.toHaveBeenCalled();
+      });
+      await persistenceManager.saveChat("gpt-4");
+      const imagePath = mockApp.vault.createBinary.mock.calls[0][0] as string;
+      const saved = mockApp.vault.create.mock.calls[0][1] as string;
+      expect(saved).toContain(
+        `**user**: Look at this\n\n![](/${imagePath})\n[Context: URLs: https://example.com]\n[Timestamp:`
+      );
+      expect(message.message).toBe("Look at this");
+      expect(asInternal(persistenceManager).parseChatContent(saved)[0].message).toContain(
+        `![](/${imagePath})`
+      );
+    });
+
+    it("preserves an existing transcript when an uploaded image cannot be saved (https://github.com/logancyang/obsidian-copilot/issues/2900)", async () => {
+      const existingFile = mockTFile({ path: "test-folder/existing.md" });
+      jest.spyOn(persistenceManager, "getChatHistoryFiles").mockResolvedValue([existingFile]);
+      mockApp.metadataCache.getFileCache.mockReturnValue({ frontmatter: { epoch: 1695513480000 } });
+      mockApp.vault.getAbstractFileByPath.mockReturnValue(existingFile);
+      mockMessageRepo.getDisplayMessages.mockReturnValue([
+        {
+          id: "image",
+          sender: USER_SENDER,
+          message: "New image",
+          isVisible: true,
+          timestamp: {
+            epoch: 1695513480000,
+            display: "2024/09/23 22:18:00",
+            fileName: "2024_09_23_221800",
+          },
+          content: [{ type: "image_url", image_url: { url: "data:image/png;base64,AQID" } }],
+        },
+      ]);
+      mockApp.vault.createBinary.mockRejectedValueOnce(new Error("disk full"));
+      await persistenceManager.saveChat("gpt-4");
+      expect(mockApp.vault.modify).not.toHaveBeenCalled();
+      expect(mockApp.vault.create).not.toHaveBeenCalled();
+      expect(mockApp.vault.adapter.write).not.toHaveBeenCalled();
+      expect(Notice).toHaveBeenCalledWith(
+        "Failed to save chat as note. Check console for details."
+      );
+    });
+
     it("should save chat to a markdown file", async () => {
       const messages: ChatMessage[] = [
         {

@@ -59,6 +59,10 @@ function makeApp() {
   return {
     files,
     vault: {
+      createBinary: jest.fn(async (path: string, bytes: ArrayBuffer) => ({ path })),
+      getAvailablePathForAttachments: jest.fn(
+        async (name: string, extension: string) => `attachments/${name}.${extension}`
+      ),
       getAbstractFileByPath: jest.fn((path: string) => files.get(path) ?? null),
       create: jest.fn(async (path: string, content: string) => {
         const basename = path.split("/").pop()!.replace(/\.md$/, "");
@@ -74,6 +78,8 @@ function makeApp() {
         files.delete(file.path);
       }),
       adapter: {
+        list: jest.fn(async () => ({ files: [], folders: [] })),
+        readBinary: jest.fn(),
         exists: jest.fn(async (path: string) => files.has(path)),
         read: jest.fn(async (path: string) => files.get(path)?.contents ?? ""),
         write: jest.fn(async (path: string, content: string) => {
@@ -116,6 +122,52 @@ describe("AgentChatPersistenceManager", () => {
   beforeEach(() => {
     app = makeApp();
     manager = new AgentChatPersistenceManager(app as unknown as App);
+  });
+
+  describe("saveSession()", () => {
+    it("saves uploaded image embeds beside the user message and preserves them on reload (https://github.com/logancyang/obsidian-copilot/issues/2900)", async () => {
+      const message = {
+        ...makeMessage(USER_SENDER, "Look at this"),
+        content: [{ type: "image_url", image_url: { url: "data:image/png;base64,AQID" } }],
+      };
+      app.vault.createBinary.mockImplementation(async (path) => {
+        expect(app.vault.create).not.toHaveBeenCalled();
+        return { path };
+      });
+      const saved = await manager.saveSession(
+        [message, makeMessage(AI_SENDER, "An image")],
+        "claude"
+      );
+      const imagePath = app.vault.createBinary.mock.calls[0][0];
+      const file = app.files.get(saved!.path)!;
+      expect(file.contents).toContain(`**user**: Look at this\n\n![](/${imagePath})\n[Timestamp:`);
+      expect(file.contents).toContain("**ai**: An image");
+      const loaded = await manager.loadFile(file as unknown as TFile);
+      expect(loaded.messages[0].message).toContain(`![](/${imagePath})`);
+      expect(message.message).toBe("Look at this");
+    });
+
+    it("preserves the existing transcript and reports failure when an image write fails (https://github.com/logancyang/obsidian-copilot/issues/2900)", async () => {
+      const messages = [makeMessage(USER_SENDER, "Original")];
+      const original = await manager.saveSession(messages, "claude");
+      const content = app.files.get(original!.path)!.contents;
+      app.vault.createBinary.mockRejectedValueOnce(new Error("disk full"));
+      const result = await manager.saveSession(
+        [
+          {
+            ...messages[0],
+            message: "Image",
+            content: [{ type: "image_url", image_url: { url: "data:image/png;base64,AQID" } }],
+          },
+        ],
+        "claude",
+        { existingPath: original!.path }
+      );
+      expect(result).toBeNull();
+      expect(app.files.get(original!.path)!.contents).toBe(content);
+      expect(app.vault.modify).not.toHaveBeenCalled();
+      expect(app.vault.adapter.write).not.toHaveBeenCalled();
+    });
   });
 
   it("round-trips messages, backendId, and label", async () => {
