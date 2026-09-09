@@ -1,4 +1,6 @@
 /**
+ * Deprecated: Vault QA and its local index are unsupported; cleanup awaits removal.
+ *
  * Device-local cleanup for the retired client-side index pipeline: delete only
  * Copilot's known index artifacts and the credentials the removed embedding
  * models owned.

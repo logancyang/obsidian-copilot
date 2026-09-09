@@ -12,7 +12,6 @@ import {
   getSystemExcludedFolders,
   isInternalExcludedPath,
   parsePropertyPattern,
-  previewPatternValue,
   shouldIndexFile,
 } from "./searchUtils";
 
@@ -422,32 +421,6 @@ describe("searchUtils", () => {
     it("returns null for a non-property pattern", () => {
       expect(parsePropertyPattern("[[Note]]")).toBeNull();
       expect(parsePropertyPattern("folder1")).toBeNull();
-    });
-  });
-
-  describe("previewPatternValue", () => {
-    it("should correctly preview a single pattern", () => {
-      const value = "folder1";
-      expect(previewPatternValue(value)).toBe("folder1");
-    });
-
-    it("should correctly preview multiple patterns", () => {
-      const value = "folder1,folder2,folder3";
-      expect(previewPatternValue(value)).toBe("folder1, folder2, folder3");
-    });
-
-    it("should handle encoded patterns", () => {
-      const value = "folder%201,folder%202,folder%203";
-      expect(previewPatternValue(value)).toBe("folder 1, folder 2, folder 3");
-    });
-
-    it("should handle empty string", () => {
-      expect(previewPatternValue("")).toBe("");
-    });
-
-    it("should handle patterns with spaces and special characters", () => {
-      const value = "folder%20with%20spaces,special%23chars,%23tag";
-      expect(previewPatternValue(value)).toBe("folder with spaces, special#chars, #tag");
     });
   });
 

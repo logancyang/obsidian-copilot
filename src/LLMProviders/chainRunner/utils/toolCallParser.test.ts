@@ -1,5 +1,5 @@
 import { ToolResultFormatter } from "@/tools/ToolResultFormatter";
-import { createToolCallMarker, parseToolCallMarkers, updateToolCallMarker } from "./toolCallParser";
+import { createToolCallMarker, parseToolCallMarkers } from "./toolCallParser";
 
 jest.mock("@/logger");
 
@@ -25,19 +25,6 @@ describe("toolCallParser encoding/decoding", () => {
     expect(toolSeg.toolCall?.isExecuting).toBe(true);
     // Decoded result equals original
     expect(toolSeg.toolCall?.result).toBe('{"key":"value --><script>alert(1)</script> more"}');
-  });
-
-  it("updateToolCallMarker should encode result and set isExecuting=false", () => {
-    const id = "localSearch-456";
-    let marker = createToolCallMarker(id, "localSearch", "Vault Search", "🔍", "", true, "", "");
-
-    const rawResult = '{"key":"value <!-- nested --> and more"}';
-    marker = updateToolCallMarker(marker, id, rawResult);
-
-    const parsed = parseToolCallMarkers(marker);
-    const toolSeg = parsed.segments.find((s) => s.type === "toolCall")!;
-    expect(toolSeg.toolCall?.isExecuting).toBe(false);
-    expect(toolSeg.toolCall?.result).toBe(rawResult);
   });
 
   it("integration: ToolResultFormatter.format should handle encoded JSON localSearch results", () => {

@@ -96,6 +96,8 @@ export const normalizeFootnoteRendering = (root: HTMLElement): void => {
 const INLINE_CITATION_RE = /\[(\d+(?:\s*,\s*\d+)*)\]/g;
 
 /**
+ * Deprecated: legacy citation rendering is awaiting removal.
+ *
  * Makes inline citation numbers (e.g., [1], [2]) clickable by linking them
  * to the corresponding source note. Reads the source mapping from the
  * rendered .copilot-sources section in the same message.

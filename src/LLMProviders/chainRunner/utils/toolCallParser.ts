@@ -273,21 +273,3 @@ export function createToolCallMarker(
   const safeResult = result ? encodeResultForMarker(result) : result;
   return `<!--TOOL_CALL_START:${id}:${toolName}:${displayName}:${emoji}:${confirmationMessage}:${isExecuting}-->${content}<!--TOOL_CALL_END:${id}:${safeResult}-->`;
 }
-
-/**
- * Update a tool call marker with result
- *
- * @deprecated This function is deprecated and will be removed in a future version.
- * Agent mode now uses the Agent Reasoning Block (AgentReasoningState.ts) instead of
- * tool call markers. This function is kept only for backward compatibility.
- */
-export function updateToolCallMarker(message: string, id: string, result: string): string {
-  // Escape the id to prevent regex injection
-  const escapedId = id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const regex = new RegExp(
-    `(<!--TOOL_CALL_START:${escapedId}:[^:]+:[^:]+:[^:]+:[^:]*:)true(-->[\\s\\S]*?<!--TOOL_CALL_END:${escapedId}:)[\\s\\S]*?-->`,
-    "g"
-  );
-  const safeResult = encodeResultForMarker(result);
-  return message.replace(regex, `$1false$2${safeResult}-->`);
-}

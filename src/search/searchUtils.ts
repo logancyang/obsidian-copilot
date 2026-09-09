@@ -322,16 +322,6 @@ export function parsePropertyPattern(pattern: string): { key: string; value: str
 }
 
 /**
- * Convert the pattern settings value to a preview string.
- * @param value - The value to preview.
- * @returns The previewed value.
- */
-export function previewPatternValue(value: string): string {
-  const patterns = getDecodedPatterns(value);
-  return patterns.join(", ");
-}
-
-/**
  * Create the pattern settings value from the categorized patterns.
  * @param tagPatterns - The tag patterns.
  * @param extensionPatterns - The extension patterns.
