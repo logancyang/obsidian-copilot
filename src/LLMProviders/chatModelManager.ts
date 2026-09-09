@@ -320,6 +320,8 @@ export default class ChatModelManager {
             ? (url: string, options?: RequestInit) => {
                 const headers = new Headers(options?.headers);
                 headers.delete("authorization");
+                // scorecard: native fetch preserves streaming and AbortSignal cancellation;
+                // requestUrl supports neither when CORS compatibility is off.
                 return customModel.enableCors
                   ? safeFetchNoThrow(url, { ...options, headers })
                   : fetch(url, { ...options, headers });

@@ -55,8 +55,9 @@ Warnings remain for cases where automatic cleanup could change behavior or UI, i
 
 ### Permanent `fetch` disclosures
 
-`requestUrl` supports neither streaming responses nor AbortSignal, so the following call site must keep `fetch` and carry a `// scorecard:` comment. Any remaining scorecard `fetch` warning must match this list:
+`requestUrl` supports neither streaming responses nor AbortSignal, so the following call sites must keep `fetch` and carry a `// scorecard:` comment. Any remaining scorecard `fetch` warning must match this list:
 
+- `src/LLMProviders/chatModelManager.ts` — keyless OpenAI-compatible authentication wrapper preserves native streaming and AbortSignal cancellation when CORS compatibility is off.
 - `src/LLMProviders/ChatLMStudio.ts` — `window.fetch` fallback wrapped for LM Studio body sanitization in a streaming ChatOpenAI.
 
 Non-streaming JSON requests route through `safeFetchNoThrow`, which uses `requestUrl`. These include the Jina and custom OpenAI embedding adapters and every Amazon Bedrock request.
