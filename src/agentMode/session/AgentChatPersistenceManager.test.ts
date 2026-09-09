@@ -10,6 +10,7 @@ import { getSettings } from "@/settings/model";
 import { getEffectiveConversationsFolder } from "@/settings/copilotFolder";
 
 jest.mock("obsidian", () => ({
+  normalizePath: (path: string) => path,
   Notice: jest.fn(),
   TFile: jest.fn(),
 }));
@@ -60,9 +61,8 @@ function makeApp() {
     files,
     vault: {
       createBinary: jest.fn(async (path: string, bytes: ArrayBuffer) => ({ path })),
-      getAvailablePathForAttachments: jest.fn(
-        async (name: string, extension: string) => `attachments/${name}.${extension}`
-      ),
+      getConfig: jest.fn(() => "attachments"),
+      createFolder: jest.fn(),
       getAbstractFileByPath: jest.fn((path: string) => files.get(path) ?? null),
       create: jest.fn(async (path: string, content: string) => {
         const basename = path.split("/").pop()!.replace(/\.md$/, "");
@@ -80,6 +80,7 @@ function makeApp() {
       adapter: {
         list: jest.fn(async () => ({ files: [], folders: [] })),
         readBinary: jest.fn(),
+        mkdir: jest.fn(),
         exists: jest.fn(async (path: string) => files.has(path)),
         read: jest.fn(async (path: string) => files.get(path)?.contents ?? ""),
         write: jest.fn(async (path: string, content: string) => {

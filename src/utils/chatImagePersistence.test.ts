@@ -9,33 +9,24 @@ const IMAGE = { type: "image_url", image_url: { url: `data:image/png;base64,${DA
 
 function makeApp(attachmentFolder = "attachments") {
   const files = new Map<string, ArrayBuffer>();
+  const folders = new Set<string>();
   const vault = {
-    getAvailablePathForAttachments: jest.fn(
-      async (
-        name: string,
-        extension: string,
-        source: {
-          parent: { path: string; getParentPrefix(): string };
-        }
-      ) => {
-        const folder =
-          attachmentFolder === "."
-            ? source.parent.path
-            : attachmentFolder.startsWith("./")
-              ? `${source.parent.getParentPrefix()}${attachmentFolder.slice(2)}`
-              : attachmentFolder;
-        const prefix = folder ? `${folder}/` : "";
-        let path = `${prefix}${name}.${extension}`;
-        let suffix = 1;
-        while (files.has(path)) path = `${prefix}${name} ${suffix++}.${extension}`;
-        return path;
-      }
-    ),
+    getConfig: jest.fn(() => attachmentFolder),
+    createFolder: jest.fn(async (path: string) => {
+      folders.add(path);
+    }),
     createBinary: jest.fn(async (path: string, bytes: ArrayBuffer) => {
       files.set(path, bytes);
       return { path };
     }),
     adapter: {
+      exists: jest.fn(async (path: string) => files.has(path) || folders.has(path)),
+      mkdir: jest.fn(async (path: string) => {
+        folders.add(path);
+      }),
+      writeBinary: jest.fn(async (path: string, bytes: ArrayBuffer) => {
+        files.set(path, bytes);
+      }),
       list: jest.fn(async (folder: string) => ({
         files: [...files.keys()].filter(
           (path) => path.slice(0, Math.max(0, path.lastIndexOf("/"))) === folder
@@ -81,9 +72,7 @@ describe("chatImagePersistence", () => {
         expect([...files.keys()][0]).toBe(
           `${folder ? `${folder}/` : ""}copilot-image-${sha256(DATA)}.png`
         );
-        const source = vault.getAvailablePathForAttachments.mock.calls[0][2];
-        expect(source.parent.path).toBe("chats");
-        expect(source.parent.getParentPrefix()).toBe("chats/");
+        expect(vault.getConfig).toHaveBeenCalledWith("attachmentFolderPath");
       }
     );
 
@@ -94,6 +83,112 @@ describe("chatImagePersistence", () => {
         const prefix = notePath.startsWith(".") ? ".copilot/chats/" : "";
         expect([...files.keys()][0]).toBe(`${prefix}images/copilot-image-${sha256(DATA)}.png`);
       }
+    });
+
+    it.each([".", "./images", ".attachments"])(
+      `writes and reuses hidden attachments with setting %j through the adapter (${ISSUE})`,
+      async (setting) => {
+        const { app, files, vault } = makeApp(setting);
+        vault.createBinary.mockRejectedValue(new Error("not in vault cache"));
+        const messages = [{ message: "", content: [IMAGE] }];
+        const first = await prepareChatImagesForSave(app, messages, ".copilot/chats/new.md");
+        expect(await prepareChatImagesForSave(app, messages, ".copilot/chats/new.md")).toEqual(
+          first
+        );
+        expect(files.size).toBe(1);
+        expect(arrayBufferToBase64([...files.values()][0])).toBe(DATA);
+        expect(vault.adapter.writeBinary).toHaveBeenCalledTimes(1);
+        expect(vault.createBinary).not.toHaveBeenCalled();
+      }
+    );
+
+    it.each([DATA, "AQID"])(
+      `preserves a hidden attachment created after allocation with bytes %s (${ISSUE})`,
+      async (winner) => {
+        const { app, files, vault } = makeApp(".");
+        vault.adapter.list.mockImplementation(async () => {
+          files.set(`.chats/copilot-image-${sha256(DATA)}.png`, base64ToArrayBuffer(winner));
+          return { files: [], folders: [] };
+        });
+        const saving = prepareChatImagesForSave(
+          app,
+          [{ message: "", content: [IMAGE] }],
+          ".chats/new.md"
+        );
+        if (winner === DATA) await expect(saving).resolves.toHaveLength(1);
+        else await expect(saving).rejects.toThrow("File already exists.");
+        expect(arrayBufferToBase64([...files.values()][0])).toBe(winner);
+        expect(vault.adapter.writeBinary).not.toHaveBeenCalled();
+      }
+    );
+
+    it.each(["Folder already exists.", "permission denied"])(
+      `handles attachment folder creation failure %s (${ISSUE})`,
+      async (error) => {
+        const { app, vault } = makeApp(".attachments");
+        vault.adapter.mkdir.mockRejectedValueOnce(new Error(error));
+        const saving = prepareChatImagesForSave(
+          app,
+          [{ message: "", content: [IMAGE] }],
+          "chats/new.md"
+        );
+        if (error === "Folder already exists.") await expect(saving).resolves.toHaveLength(1);
+        else {
+          await expect(saving).rejects.toThrow(error);
+          expect(vault.createBinary).not.toHaveBeenCalled();
+        }
+      }
+    );
+
+    it(`propagates hidden attachment write failures (${ISSUE})`, async () => {
+      const { app, vault } = makeApp(".");
+      vault.adapter.writeBinary.mockRejectedValueOnce(new Error("disk full"));
+      await expect(
+        prepareChatImagesForSave(app, [{ message: "", content: [IMAGE] }], ".chats/new.md")
+      ).rejects.toThrow("disk full");
+    });
+
+    it.each([
+      ["x-icon", "ico"],
+      ["vnd.microsoft.icon", "ico"],
+      ["svg+xml", "svg"],
+      ["x-ms-bmp", "bmp"],
+      ["vnd.adobe.photoshop", "vndadobephotoshop"],
+    ])(`saves image/%s uploads with a safe %s extension (${ISSUE})`, async (subtype, extension) => {
+      const { app, files } = makeApp();
+      await prepareChatImagesForSave(
+        app,
+        [
+          {
+            message: "",
+            content: [
+              { type: "image_url", image_url: { url: `data:image/${subtype};base64,${DATA}` } },
+            ],
+          },
+        ],
+        "chats/new.md"
+      );
+      expect([...files.keys()][0]).toBe(`attachments/copilot-image-${sha256(DATA)}.${extension}`);
+    });
+
+    it(`accepts unpadded base64 without changing the uploaded bytes (${ISSUE})`, async () => {
+      const { app, files } = makeApp();
+      await prepareChatImagesForSave(
+        app,
+        [
+          {
+            message: "",
+            content: [
+              {
+                type: "image_url",
+                image_url: { url: `data:image/png;base64,${DATA.replace(/=+$/, "")}` },
+              },
+            ],
+          },
+        ],
+        "chats/new.md"
+      );
+      expect(arrayBufferToBase64([...files.values()][0])).toBe(DATA);
     });
 
     it(`reuses attachments within a message and across saves, including filename collisions (${ISSUE})`, async () => {
@@ -195,13 +290,16 @@ describe("chatImagePersistence", () => {
       const prepared = await prepareChatImagesForSave(app, messages, "chats/new.md");
       expect(prepared).toEqual(messages);
       expect(prepared[0]).toBe(messages[0]);
-      expect(vault.getAvailablePathForAttachments).not.toHaveBeenCalled();
+      expect(vault.getConfig).not.toHaveBeenCalled();
     });
 
     it.each([
       "data:image/png;base64,",
       "data:image/png;base64,???",
-      "data:image/x-invalid;base64,AQID",
+      "data:image/png;base64,AAAAA",
+      "data:image/png;base64,AQID=",
+      "data:image/png;base64,AQ=",
+      "data:image/png;base64,AR==",
       "data:image/png;base64,A",
     ])(
       `rejects malformed uploaded image %j without writing an attachment (${ISSUE})`,

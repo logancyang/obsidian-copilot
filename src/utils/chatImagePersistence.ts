@@ -1,7 +1,15 @@
 import { arrayBufferToBase64, base64ToArrayBuffer } from "@/utils/base64";
 import { sha256 } from "@/utils/hash";
 import { isFileAlreadyExistsError } from "@/utils/vaultAdapterUtils";
-import type { App, Vault } from "obsidian";
+import { normalizePath, type App, type Vault } from "obsidian";
+
+const IMAGE_EXTENSIONS = new Map([
+  ["jpeg", "jpg"],
+  ["svg+xml", "svg"],
+  ["x-icon", "ico"],
+  ["vnd.microsoft.icon", "ico"],
+  ["x-ms-bmp", "bmp"],
+]);
 
 interface MessageWithImages {
   message: string;
@@ -9,11 +17,7 @@ interface MessageWithImages {
 }
 
 interface AttachmentVault extends Vault {
-  getAvailablePathForAttachments(
-    name: string,
-    extension: string,
-    source: { parent: { path: string; getParentPrefix(): string } }
-  ): Promise<string>;
+  getConfig(key: "attachmentFolderPath"): string;
 }
 
 /**
@@ -58,29 +62,52 @@ export async function prepareChatImagesForSave<T extends MessageWithImages>(
       if (!match) throw new Error("Cannot save an invalid uploaded image.");
       const bytes = base64ToArrayBuffer(match[2]);
       const base64 = arrayBufferToBase64(bytes);
-      const extension = match[1].toLowerCase().replace("svg+xml", "svg").replace("jpeg", "jpg");
-      if (!bytes.byteLength || !/^[a-z0-9]+$/.test(extension)) {
+      const subtype = match[1].toLowerCase();
+      // Picker MIME subtypes can contain punctuation without making the upload corrupt.
+      // https://github.com/logancyang/obsidian-copilot/issues/2900
+      const extension = IMAGE_EXTENSIONS.get(subtype) ?? subtype.replace(/[^a-z0-9]/g, "");
+      if (
+        !bytes.byteLength ||
+        !extension ||
+        base64.replace(/=+$/, "") !== match[2].replace(/=+$/, "") ||
+        (match[2].includes("=") && match[2] !== base64)
+      ) {
         throw new Error("Cannot save an invalid uploaded image.");
       }
       const name = `copilot-image-${sha256(base64)}`;
 
-      // FileManager resolves a source by looking up an existing TFile, losing
-      // the destination folder for new or hidden notes. This internal Vault
-      // allocator is the same one FileManager uses; it needs only the source's
-      // parent to honor Obsidian's attachment-folder setting in those cases.
+      // Obsidian's attachment allocator uses cached folders and cannot allocate
+      // inside hidden chat roots. Resolve the same vault setting through the adapter.
       // https://github.com/logancyang/obsidian-copilot/issues/2900
-      let path = await (app.vault as AttachmentVault).getAvailablePathForAttachments(
-        name,
-        extension,
-        {
-          parent: {
-            path: parentPath,
-            getParentPrefix: () => (parentPath ? `${parentPath}/` : ""),
-          },
+      const setting = (app.vault as AttachmentVault).getConfig("attachmentFolderPath");
+      const folder = normalizePath(
+        setting === "." || setting === "./"
+          ? parentPath
+          : setting.startsWith("./")
+            ? `${parentPath}/${setting.slice(2)}`
+            : setting
+      ).replace(/^\/+|\/+$/g, "");
+      const hidden = folder.split("/").some((part) => part.startsWith("."));
+      let current = "";
+      for (const part of folder.split("/").filter(Boolean)) {
+        current = current ? `${current}/${part}` : part;
+        if (!(await app.vault.adapter.exists(current))) {
+          try {
+            if (hidden) await app.vault.adapter.mkdir(current);
+            else await app.vault.createFolder(current);
+          } catch (error) {
+            // Concurrent saves may create the shared attachment folder first.
+            // https://github.com/logancyang/obsidian-copilot/issues/2900
+            if (!isFileAlreadyExistsError(error)) throw error;
+          }
         }
-      );
-      const folder = path.slice(0, Math.max(0, path.lastIndexOf("/")));
+      }
       const prefix = folder ? `${folder}/` : "";
+      let path = `${prefix}${name}.${extension}`;
+      let suffix = 1;
+      while (await app.vault.adapter.exists(path)) {
+        path = `${prefix}${name} ${suffix++}.${extension}`;
+      }
       const candidates = (await app.vault.adapter.list(folder)).files.filter(
         (candidate) =>
           candidate.startsWith(`${prefix}${name}`) && candidate.endsWith(`.${extension}`)
@@ -99,7 +126,15 @@ export async function prepareChatImagesForSave<T extends MessageWithImages>(
       }
       if (!reused) {
         try {
-          await app.vault.createBinary(path, bytes);
+          // Hidden folders are absent from the vault cache. Adapter writes
+          // work there, but must not overwrite an existing attachment.
+          // https://github.com/logancyang/obsidian-copilot/issues/2900
+          if (hidden) {
+            if (await app.vault.adapter.exists(path)) throw new Error("File already exists.");
+            await app.vault.adapter.writeBinary(path, bytes);
+          } else {
+            await app.vault.createBinary(path, bytes);
+          }
         } catch (error) {
           // Concurrent saves can allocate the same path before either writes.
           // Only reuse that winner when its bytes match the uploaded image;

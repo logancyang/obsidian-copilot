@@ -20,6 +20,7 @@ const asInternal = (pm: ChatPersistenceManager): PMInternal => pm as unknown as 
 
 // Mock the imports
 jest.mock("obsidian", () => ({
+  normalizePath: (path: string) => path,
   Notice: jest.fn(),
   TFile: jest.fn(),
   TFolder: jest.fn(),
@@ -102,7 +103,7 @@ type MockApp = {
     getAbstractFileByPath: jest.Mock;
     createFolder: jest.Mock;
     createBinary: jest.Mock;
-    getAvailablePathForAttachments: jest.Mock;
+    getConfig: jest.Mock;
     create: jest.Mock;
     modify: jest.Mock;
     read: jest.Mock;
@@ -111,6 +112,7 @@ type MockApp = {
       exists: jest.Mock;
       read: jest.Mock;
       readBinary: jest.Mock;
+      mkdir: jest.Mock;
       write: jest.Mock;
       list: jest.Mock;
       stat: jest.Mock;
@@ -137,9 +139,7 @@ describe("ChatPersistenceManager", () => {
         getAbstractFileByPath: jest.fn().mockReturnValue(null), // Default: file not found
         createFolder: jest.fn(),
         createBinary: jest.fn(),
-        getAvailablePathForAttachments: jest.fn(
-          async (name, extension) => `attachments/${name}.${extension}`
-        ),
+        getConfig: jest.fn(() => "attachments"),
         create: jest.fn(),
         modify: jest.fn(),
         read: jest.fn(),
@@ -148,6 +148,7 @@ describe("ChatPersistenceManager", () => {
           exists: jest.fn().mockResolvedValue(false),
           read: jest.fn().mockResolvedValue(""),
           readBinary: jest.fn(),
+          mkdir: jest.fn(),
           write: jest.fn().mockResolvedValue(undefined),
           list: jest.fn().mockResolvedValue({ files: [], folders: [] }),
           stat: jest.fn().mockResolvedValue({ ctime: Date.now(), mtime: Date.now(), size: 0 }),
