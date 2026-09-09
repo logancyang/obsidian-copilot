@@ -104,9 +104,6 @@ function expectButtonsInSameRow(...names: string[]): void {
 }
 
 describe("OpenArtifactsModal", () => {
-  beforeEach(() => {
-    jest.mocked(openWithSystemDefault).mockResolvedValue(true);
-  });
   afterEach(() => {
     for (const modal of mountedModals.splice(0)) {
       act(() => {
@@ -147,7 +144,7 @@ describe("OpenArtifactsModal", () => {
         expect(publishModal.contentEl.childElementCount).toBeGreaterThan(0);
       });
 
-      it("https://github.com/logancyang/obsidian-copilot/issues/3121 requires human acknowledgment even after successful dispatch and resets it when reopening", async () => {
+      it("https://github.com/logancyang/obsidian-copilot/issues/3121 gates confirmation on an acknowledgment that reopening the preview does not revoke", async () => {
         const onConfirm = createConfirmMock();
         const modal = renderModal(onConfirm, null, undefined, undefined, REVIEW, jest.fn());
         const baseClose = (modal as unknown as { baseClose: jest.Mock }).baseClose;
@@ -164,27 +161,32 @@ describe("OpenArtifactsModal", () => {
         expect(previewLink.getAttribute("title")).toBe(REVIEW.previewPath);
         expect(previewLink.getAttribute("target")).toBe("_blank");
         expect(previewLink.getAttribute("rel")).toBe("noopener noreferrer");
-        expect(
-          screen.getByRole<HTMLButtonElement>("button", { name: "Yes, publish" }).disabled
-        ).toBe(true);
-        await act(async () => {});
+        expectButtonsInSameRow("Ask agent to regenerate", "No, cancel", "Yes, publish");
+
+        // Mounting must not hand the file to the OS on its own: on a machine whose
+        // .html association is missing or stale that surfaces an unrequested
+        // "how do you want to open this file" dialog the user never asked for.
+        expect(openWithSystemDefault).not.toHaveBeenCalled();
         expect(
           screen.getByRole<HTMLButtonElement>("button", { name: "Yes, publish" }).disabled
         ).toBe(true);
         await clickButton("Yes, publish");
         expect(onConfirm).not.toHaveBeenCalled();
+
+        fireEvent.click(previewLink);
+        expect(openWithSystemDefault).toHaveBeenCalledWith(REVIEW.previewPath);
+
         fireEvent.click(screen.getByRole("checkbox", { name: "I reviewed the preview" }));
         expect(
           screen.getByRole<HTMLButtonElement>("button", { name: "Yes, publish" }).disabled
         ).toBe(false);
-        await act(async () => {
-          fireEvent.click(previewLink);
-        });
+
+        // The preview file is immutable and the confirm path re-verifies its bytes, so a
+        // second look at the same page is not grounds for revoking the acknowledgment.
+        fireEvent.click(previewLink);
         expect(
           screen.getByRole<HTMLButtonElement>("button", { name: "Yes, publish" }).disabled
-        ).toBe(true);
-        expect(openWithSystemDefault).toHaveBeenCalledWith(REVIEW.previewPath);
-        expectButtonsInSameRow("Ask agent to regenerate", "No, cancel", "Yes, publish");
+        ).toBe(false);
 
         fireEvent.click(screen.getByRole("button", { name: "No, cancel" }));
 
@@ -192,36 +194,9 @@ describe("OpenArtifactsModal", () => {
         expect(onConfirm).not.toHaveBeenCalled();
       });
 
-      it("https://github.com/logancyang/obsidian-copilot/issues/3121 keeps confirmation disabled after a successful browser retry until human acknowledgment", async () => {
-        jest.mocked(openWithSystemDefault).mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+      it("https://github.com/logancyang/obsidian-copilot/issues/3121 confirms once the preview is acknowledged", async () => {
         const onConfirm = createConfirmMock();
         renderModal(onConfirm, null, undefined, undefined, REVIEW);
-        await act(async () => {});
-        expect(screen.getByRole("alert").textContent).toContain(
-          "Could not open the browser preview"
-        );
-        await clickButton("Yes, publish");
-        expect(onConfirm).not.toHaveBeenCalled();
-        await act(async () => {
-          fireEvent.click(screen.getByRole("link", { name: "Open local HTML preview" }));
-        });
-        expect(
-          screen.getByRole<HTMLButtonElement>("button", { name: "Yes, publish" }).disabled
-        ).toBe(true);
-        expect(screen.queryByRole("alert")).toBeNull();
-        fireEvent.click(screen.getByRole("checkbox", { name: "I reviewed the preview" }));
-        await clickButton("Yes, publish");
-        expect(onConfirm).toHaveBeenCalledTimes(1);
-      });
-
-      it("https://github.com/logancyang/obsidian-copilot/issues/3121 allows explicit manual review acknowledgment after automatic opening fails", async () => {
-        jest.mocked(openWithSystemDefault).mockResolvedValue(false);
-        const onConfirm = createConfirmMock();
-        renderModal(onConfirm, null, undefined, undefined, REVIEW);
-        await act(async () => {});
-        expect(screen.getByText(REVIEW.previewPath)).toBeTruthy();
-        await clickButton("Yes, publish");
-        expect(onConfirm).not.toHaveBeenCalled();
         fireEvent.click(screen.getByRole("checkbox", { name: "I reviewed the preview" }));
         await clickButton("Yes, publish");
         expect(onConfirm).toHaveBeenCalledTimes(1);

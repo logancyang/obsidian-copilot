@@ -11,7 +11,6 @@ const meta = {
     fileName: "Architecture",
     docId: null,
     onClose: () => undefined,
-    openPreview: async () => true,
     onConfirm: async (action) => ({
       kind: "failure",
       action,
@@ -40,7 +39,7 @@ export const Removed: StoryObj<OpenArtifactsModalContentProps> = {
   },
 };
 
-/** Successful dispatch still requires human acknowledgment of the rendered preview. */
+/** Host-owned review of the exact HTML bytes prepared by an agent, gated on acknowledgment. */
 export const AgentReview: StoryObj<OpenArtifactsModalContentProps> = {
   args: {
     review: {
@@ -56,9 +55,4 @@ export const AgentReview: StoryObj<OpenArtifactsModalContentProps> = {
     },
     onRegenerate: () => undefined,
   },
-};
-
-/** Failed opening supports retry or explicit acknowledgment after manually opening the preview. */
-export const PreviewFailed: StoryObj<OpenArtifactsModalContentProps> = {
-  args: { ...AgentReview.args, openPreview: async () => false },
 };

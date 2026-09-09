@@ -8,10 +8,9 @@ import { Notice } from "obsidian";
  * agent dotfile folders Obsidian doesn't index — because `openLinkText`
  * would otherwise materialize a phantom note (and its parent folders) for
  * an unresolved target. Surfaces the path via a `Notice` on failure so the
- * user can still open it manually. Returns whether the OS accepted opening it.
- * @param absPath Absolute path to open with its associated application.
+ * user can still open it manually.
  */
-export async function openWithSystemDefault(absPath: string): Promise<boolean> {
+export async function openWithSystemDefault(absPath: string): Promise<void> {
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports -- Electron shell is optional and loaded lazily for this desktop-only action
     const electron = require("electron") as {
@@ -21,18 +20,15 @@ export async function openWithSystemDefault(absPath: string): Promise<boolean> {
     const shell = electron.shell ?? electron.remote?.shell;
     if (!shell?.openPath) {
       new Notice(`Open this file manually: ${absPath}`);
-      return false;
+      return;
     }
     const errMsg = await shell.openPath(absPath);
     if (typeof errMsg === "string" && errMsg.length > 0) {
       logError(`openWithSystemDefault: shell.openPath failed for ${absPath}: ${errMsg}`);
       new Notice(`Could not open file: ${errMsg}`);
-      return false;
     }
-    return true;
   } catch (err) {
     logError(`openWithSystemDefault failed for ${absPath}:`, err);
     new Notice(`Open this file manually: ${absPath}`);
-    return false;
   }
 }
