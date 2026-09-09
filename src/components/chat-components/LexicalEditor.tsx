@@ -32,7 +32,6 @@ import { ActiveNotePillSyncPlugin } from "./plugins/ActiveNotePillSyncPlugin";
 import { WebTabPillSyncPlugin } from "./plugins/WebTabPillSyncPlugin";
 import { AgentPillSyncPlugin } from "./plugins/AgentPillSyncPlugin";
 import { PastePlugin } from "./plugins/PastePlugin";
-import { PromptSuggestionPlaceholder } from "./ui/PromptSuggestionPlaceholder";
 import { TextInsertionPlugin } from "./plugins/TextInsertionPlugin";
 import { useChatInput } from "@/context/ChatInputContext";
 import { cn } from "@/lib/utils";
@@ -48,13 +47,6 @@ interface LexicalEditorProps {
   onChange: (value: string) => void;
   onSubmit: () => void;
   placeholder?: string;
-  /**
-   * Sample prompts to type out in the placeholder, one at a time, while the
-   * editor is empty (Tab accepts the one on screen). When set and non-empty it
-   * replaces `placeholder`. Must be referentially stable — see
-   * {@link PromptSuggestionPlaceholder}.
-   */
-  placeholderPrompts?: readonly string[];
   disabled?: boolean;
   className?: string;
   onNotesChange?: (notes: { path: string; basename: string }[]) => void;
@@ -95,7 +87,6 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
   onChange,
   onSubmit,
   placeholder = "Type a message...",
-  placeholderPrompts,
   disabled = false,
   className = "",
   onNotesChange,
@@ -184,11 +175,6 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
     [onChange]
   );
 
-  // Unique per editor: Agent Home and a popout composer can be mounted at once,
-  // and a duplicated id would point both at the first one's description.
-  const promptSuggestionId = useId();
-  const showPromptSuggestions = !!placeholderPrompts && placeholderPrompts.length > 0;
-
   // Obsidian pops its own tooltip for anything carrying `aria-label`, which is
   // noise on an element the size of the composer — name it out of band instead.
   const editorLabelId = useId();
@@ -214,23 +200,11 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
                 <ContentEditable
                   className="tw-max-h-60 tw-min-h-[60px] tw-w-full tw-resize-none tw-overflow-y-auto tw-rounded-md tw-border-none tw-bg-transparent tw-px-2 tw-text-sm tw-text-normal tw-outline-none focus-visible:tw-ring-0"
                   aria-labelledby={editorLabelId}
-                  // The suggestions bind Tab, so a screen reader has to hear
-                  // what that key will do before it is pressed — the animated
-                  // text itself stays hidden.
-                  aria-describedby={showPromptSuggestions ? promptSuggestionId : undefined}
                 />
               }
               placeholder={
                 <div className="tw-pointer-events-none tw-absolute tw-left-2 tw-top-0 tw-select-none tw-text-sm tw-text-muted/60">
-                  {showPromptSuggestions ? (
-                    <PromptSuggestionPlaceholder
-                      prompts={placeholderPrompts}
-                      descriptionId={promptSuggestionId}
-                      staticPlaceholder={placeholder}
-                    />
-                  ) : (
-                    placeholder
-                  )}
+                  {placeholder}
                 </div>
               }
               ErrorBoundary={LexicalErrorBoundary}

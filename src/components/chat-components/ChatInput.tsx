@@ -62,8 +62,6 @@ export interface ChatInputProps {
   topRightAccessory?: React.ReactNode;
   /** Overrides the default composer placeholder copy. */
   placeholder?: string;
-  /** Forwarded to the editor's placeholder slot — see {@link LexicalEditor}. */
-  placeholderPrompts?: readonly string[];
   inputMessage: string;
   setInputMessage: (message: string) => void;
   handleSendMessage: (metadata?: {
@@ -219,7 +217,6 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
   {
     topRightAccessory,
     placeholder = DEFAULT_PLACEHOLDER,
-    placeholderPrompts,
     inputMessage,
     setInputMessage,
     handleSendMessage,
@@ -839,7 +836,6 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
               onImagePaste={onAddImage}
               onTagSelected={onTagSelected}
               placeholder={placeholder}
-              placeholderPrompts={placeholderPrompts}
               isCopilotPlus={isCopilotPlus}
               showTools={showAtMentionTools}
               currentActiveFile={currentActiveNote}
