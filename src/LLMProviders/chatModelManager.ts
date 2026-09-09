@@ -134,7 +134,7 @@ export default class ChatModelManager {
     // request, so the provider writes whatever the context window allows.
     // https://github.com/logancyang/obsidian-copilot-preview/issues/312
     const maxTokens = customModel.maxTokens;
-    const openAIFormatIsKeyless = customModel.requiresApiKey === false;
+    const openAIFormatIsKeyless = customModel.requiresApiKey === false && !customModel.apiKey;
 
     // No temperature is sent. Copilot exposes no way to choose one, and providers
     // disagree on which values a model accepts: the Moonshot Kimi line rejects
@@ -302,7 +302,7 @@ export default class ChatModelManager {
       [ChatModelProviders.OPENAI_FORMAT]: {
         modelName: modelName,
         apiKey: openAIFormatIsKeyless
-          ? undefined
+          ? "keyless-endpoint"
           : await this.resolveApiKey(
               customModel.apiKey,
               settings.openAIApiKey,
@@ -311,11 +311,22 @@ export default class ChatModelManager {
         streamUsage: customModel.streamUsage ?? false,
         configuration: {
           baseURL: customModel.baseUrl,
-          fetch: customModel.enableCors ? safeFetchNoThrow : undefined,
-          // The OpenAI SDK accepts an explicit null to omit its default auth
-          // header while still constructing a client for a keyless endpoint.
-          // https://github.com/logancyang/obsidian-copilot/issues/2895
-          defaultHeaders: openAIFormatIsKeyless ? { Authorization: null } : undefined,
+          // Keyless local endpoints still need an SDK credential to construct a client.
+          // LangChain drops null default headers, so strip the internal placeholder
+          // after SDK authentication, before either transport can send it. Native
+          // fetch preserves streaming and cancellation when CORS bypass is off.
+          // https://github.com/logancyang/obsidian-copilot/issues/2946
+          fetch: openAIFormatIsKeyless
+            ? (url: string, options?: RequestInit) => {
+                const headers = new Headers(options?.headers);
+                headers.delete("authorization");
+                return customModel.enableCors
+                  ? safeFetchNoThrow(url, { ...options, headers })
+                  : fetch(url, { ...options, headers });
+              }
+            : customModel.enableCors
+              ? safeFetchNoThrow
+              : undefined,
         },
         ...this.getOpenAISpecialConfig(modelName, maxTokens, customModel),
       },
