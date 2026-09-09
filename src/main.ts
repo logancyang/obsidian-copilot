@@ -128,12 +128,7 @@ import {
   trashFile,
 } from "@/utils/vaultAdapterUtils";
 import { v4 as uuidv4 } from "uuid";
-import {
-  createOpenArtifactsAgentBridge,
-  type OpenArtifactsAgentBridge,
-  OpenArtifactsPublisher,
-} from "@/openArtifacts/OpenArtifactsPublisher";
-import { OPENARTIFACTS_AGENT_BRIDGE_PROPERTY } from "@/openArtifacts/constants";
+import { OpenArtifactsPublisher } from "@/openArtifacts/OpenArtifactsPublisher";
 import { migrateOpenArtifactsFolder } from "@/openArtifacts/openArtifactsLedger";
 import {
   createSelfHostWebSearchAgentBridge,
@@ -160,11 +155,6 @@ export default class CopilotPlugin extends Plugin {
   private planPreviewViewType?: typeof import("@/agentMode").PLAN_PREVIEW_VIEW_TYPE;
   private agentModelDiscoveryUnsubscriber?: () => void;
   modelManagement!: ModelManagementApi;
-  /**
-   * Frozen path-only facade available to Agent Mode's Obsidian CLI bridge. The seeded skill
-   * scripts reach it by this property name.
-   */
-  [OPENARTIFACTS_AGENT_BRIDGE_PROPERTY]?: Readonly<OpenArtifactsAgentBridge>;
   /** Provider-credential-free channel available to the managed Agent Chat search skill. */
   selfHostWebSearchAgentBridge?: Readonly<SelfHostWebSearchAgentBridge>;
   private ribbonIconEl?: HTMLElement;
@@ -442,19 +432,12 @@ export default class CopilotPlugin extends Plugin {
       logError("Failed to move the Symposium publishing folder to .openartifacts.", error);
     }
     const openArtifactsPublisher = new OpenArtifactsPublisher(this.app);
-    const openArtifactsAgentBridge = createOpenArtifactsAgentBridge(openArtifactsPublisher);
-    this[OPENARTIFACTS_AGENT_BRIDGE_PROPERTY] = openArtifactsAgentBridge;
     const publishFile = (file: TFile): void => {
       void openArtifactsPublisher
         .open(file)
         .catch((error) => logError("Failed to open OpenArtifacts publishing.", error));
     };
-    this.register(() => {
-      openArtifactsPublisher.dispose();
-      if (this[OPENARTIFACTS_AGENT_BRIDGE_PROPERTY] === openArtifactsAgentBridge) {
-        this[OPENARTIFACTS_AGENT_BRIDGE_PROPERTY] = undefined;
-      }
-    });
+    this.register(() => openArtifactsPublisher.dispose());
     registerCommands(this, publishFile);
 
     // Tool initialization is now handled automatically in CopilotPlusChainRunner and AutonomousAgentChainRunner

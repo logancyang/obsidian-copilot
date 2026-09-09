@@ -30,6 +30,10 @@ function memFs(initialFiles: Record<string, string> = {}): BuiltinSeedFs & {
     mkdir: async (p) => {
       dirs.add(p);
     },
+    removeFile: async (p) => {
+      if (dirs.has(p)) throw new Error(`EISDIR ${p}`);
+      files.delete(p);
+    },
     rmRecursive: async (p) => {
       dirs.delete(p);
       for (const key of [...files.keys()]) {
@@ -114,6 +118,49 @@ describe("seedBuiltinSkills", () => {
       expect(seeded).toEqual(["copilot-web-search"]);
       expect(fs.files.get(MD)).toContain("body v2");
       expect(fs.files.get(SCRIPT)).toBe("// script v2");
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/394 removes retired support files while preserving user files and enabled agents", async () => {
+      const v1: BuiltinSkill = {
+        ...skill(1),
+        files: [...skill(1).files, { path: "obsolete-rules.md", content: "old guidance" }],
+      };
+      const fs = memFs();
+      await seedBuiltinSkills({ skillsFolderRelPath: FOLDER, fs, skills: [v1] });
+      const obsolete = "copilot/skills/copilot-web-search/obsolete-rules.md";
+      expect(fs.files.has(obsolete)).toBe(true);
+      const custom = "copilot/skills/copilot-web-search/themes/custom.md";
+      fs.files.set(custom, "user theme");
+      fs.files.set(MD, fs.files.get(MD)!.replace("claude, codex, opencode", "codex"));
+
+      await seedBuiltinSkills({
+        skillsFolderRelPath: FOLDER,
+        fs,
+        skills: [{ ...skill(2), retiredFiles: ["obsolete-rules.md", "already-removed.md"] }],
+      });
+      expect(fs.files.has(obsolete)).toBe(false);
+      expect(fs.files.get(custom)).toBe("user theme");
+      expect(fs.files.get(SCRIPT)).toBe("// script v2");
+      expect(fs.files.get(MD)).toContain('copilot-builtin-version: "2"');
+      expect(fs.files.get(MD)).toContain("copilot-enabled-agents: codex");
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/394 preserves the old skill and user directory when a retired path is a directory", async () => {
+      const fs = memFs();
+      await seedBuiltinSkills({ skillsFolderRelPath: FOLDER, fs, skills: [skill(1)] });
+      const retiredPath = "copilot/skills/copilot-web-search/retired.md";
+      fs.dirs.add(retiredPath);
+      fs.files.set(`${retiredPath}/user.md`, "user reference");
+
+      const result = await seedBuiltinSkills({
+        skillsFolderRelPath: FOLDER,
+        fs,
+        skills: [{ ...skill(2), retiredFiles: ["retired.md"] }],
+      });
+
+      expect(result.seeded).toEqual([]);
+      expect(fs.files.get(`${retiredPath}/user.md`)).toBe("user reference");
+      expect(fs.files.get(MD)).toContain('copilot-builtin-version: "1"');
     });
 
     it("re-seeds when the SKILL.md was deleted", async () => {

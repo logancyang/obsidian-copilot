@@ -9,8 +9,8 @@ import {
   SELF_HOST_WEB_SEARCH_URL_ENV,
 } from "./builtinSkills";
 import {
-  OPENARTIFACTS_AGENT_BRIDGE_PROPERTY,
   OPENARTIFACTS_AGENT_HANDOFF_DIR,
+  OPENARTIFACTS_API_ORIGIN,
   OPENARTIFACTS_MAX_HTML_BYTES,
   OPENARTIFACTS_WORKSPACE_ROOT_ENV,
 } from "@/openArtifacts/constants";
@@ -231,102 +231,68 @@ describe("builtinSkills", () => {
       expect(ps1).toContain("@{ pdf = $PDF; user_id = $USER_ID }");
     });
 
-    it("https://github.com/logancyang/obsidian-copilot/issues/3121 bundles shared safety rules without standalone publishing commands", () => {
-      const skill = BUILTIN_SKILLS.find((item) => item.name === "openartifacts-publish")!;
-      const rules = skill.files.find((file) => file.path === "shared-publishing-rules.md")!.content;
-      expect(rules).toContain("must block page scripts, network requests, and navigation");
-      expect(rules).toContain("Never open the unrestricted source HTML as a fallback");
-      expect(rules).toContain("Never simulate the user's confirmation");
-      expect(rules).not.toContain("## Standalone CLI");
-      expect(rules).not.toContain("npx --yes");
-      expect(skill.skillMd).toContain("Do not fetch publishing instructions from the internet");
-    });
-
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/337 hands OpenArtifacts HTML through the stable host wire without exposing publication controls", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/394 publishes over HTTPS with the injected license key and never touches the Obsidian CLI", () => {
       const skill = BUILTIN_SKILLS.find((item) => item.name === "openartifacts-publish");
       expect(skill).toBeDefined();
-      expect(skill!.version).toBe(7);
+      expect(skill!.version).toBe(2);
+      expect(skill!.retiredFiles).toEqual(["shared-publishing-rules.md"]);
       expect(skill!.legacyName).toBe("symposium-publish");
       expect(skill!.files.map((file) => file.path)).toEqual([
-        "shared-publishing-rules.md",
         "themes/research-memo.md",
         "openartifacts-publish.sh",
         "openartifacts-publish.cmd",
         "openartifacts-publish.ps1",
       ]);
-      expect(skill!.skillMd).toContain("Read one existing Markdown source note");
-      expect(skill!.skillMd).toContain("the user alone chooses Update or Delete");
-      expect(skill!.skillMd).toContain("Never tell the user to delete the page at its public URL");
-      expect(skill!.skillMd).toContain(`\`${OPENARTIFACTS_MAX_HTML_BYTES}\` bytes`);
-      expect(skill!.skillMd).toContain(
+
+      const md = skill!.skillMd;
+      expect(md).toContain(PLUS_ENV.licenseKey);
+      expect(md).toContain(
         `$${OPENARTIFACTS_WORKSPACE_ROOT_ENV}/${OPENARTIFACTS_AGENT_HANDOFF_DIR}/`
       );
-      expect(skill!.skillMd).toContain("Themes are optional");
-      expect(skill!.skillMd).toContain('sandbox_permissions="require_escalated"');
-      expect(skill!.skillMd).toContain("Do not disable the agent's sandbox");
-      expect(skill!.skillMd).toContain("does not establish that the app is closed");
-      expect(skill!.skillMd).toContain("Check each path independently");
-      expect(skill!.skillMd).toMatch(/a missing theme must never block\s+publishing/);
-      expect(skill!.skillMd).toContain("themes/<name>.md");
-      expect(skill!.skillMd).toContain("shared-publishing-rules.md");
-      expect(skill!.skillMd).not.toContain("cdn.jsdelivr.net");
-      expect(skill!.skillMd).toContain('"Standalone CLI" section');
-      expect(skill!.skillMd).toContain("Do not run Node, npm, or npx");
-      expect(skill!.skillMd).toContain("Shared from Copilot");
-      expect(skill!.skillMd).toContain('"Open local HTML preview" link for the user to click');
-      expect(skill!.skillMd).toContain("It does not open the browser automatically");
-      expect(skill!.skillMd).toContain("create a new modal or render HTML inside a modal");
-      expect(skill!.skillMd).toContain("Never choose an action or document id");
-      expect(skill!.skillMd).toContain("create a new complete artifact");
-      expect(skill!.skillMd).toContain("previous confirmation never applies");
-      expect(skill!.skillMd).toContain("report the exact error");
-      expect(skill!.skillMd).toContain("run the wrapper with the same HTML path");
-      expect(skill!.skillMd).not.toContain("self-contained");
-      expect(skill!.skillMd).not.toContain("include no scripts");
-      expect(skill!.skillMd).toContain("`deleted`");
-      expect(skill!.skillMd).not.toContain("OPENARTIFACTS_TOKEN");
-      expect(skill!.skillMd).not.toContain(PLUS_ENV.licenseKey);
-      expect(skill!.skillMd).not.toContain("/api/v1/docs");
-      expect(skill!.skillMd).not.toContain("Bearer");
-      expect(skill!.skillMd).not.toContain("POST exactly");
-      expect(skill!.skillMd).not.toContain("publish-history.md");
+      expect(md).toContain(`\`${OPENARTIFACTS_MAX_HTML_BYTES}\` bytes`);
+      expect(md).toContain("Then end your turn");
+      expect(md).toContain("Never publish in the same turn that generated the HTML");
+      expect(md).toContain("Never simulate the user's approval");
+      expect(md).toContain("`openartifacts` frontmatter property");
+      expect(md).toContain("Themes are optional");
+      expect(md).toMatch(/a missing theme must never block publishing/);
+      expect(md).toContain("Report that message verbatim");
+      expect(md).toContain("unshare <docId>");
+      expect(md).toContain(
+        'sh "/absolute/path/to/this/skill/directory/openartifacts-publish.sh" publish'
+      );
+      expect(md).toContain(
+        '& "/absolute/path/to/this/skill/directory/openartifacts-publish.cmd" publish'
+      );
+      for (const gone of [
+        "require_escalated",
+        "openArtifactsAgentBridge",
+        "shared-publishing-rules",
+        "sandbox",
+        "modal",
+        "protected",
+      ]) {
+        expect(md).not.toContain(gone);
+      }
 
       for (const script of [
         scriptOf("openartifacts-publish", ".sh"),
         scriptOf("openartifacts-publish", ".ps1"),
       ]) {
-        expect(script).toContain("reviewAgentManage");
-        expect(script).toContain("reviewAgentPublish");
-        expect(script).toContain("then(JSON.stringify)");
-        expect(script).toContain(OPENARTIFACTS_AGENT_BRIDGE_PROPERTY);
-        expect(script).not.toContain("openArtifactsPublisher");
-        expect(script).toContain(OPENARTIFACTS_WORKSPACE_ROOT_ENV);
-        expect(script).not.toContain("OPENARTIFACTS_VAULT_NAME");
-        expect(script).toContain("A compatible Obsidian CLI is unavailable.");
-        expect(script).not.toContain("COPILOT_OBSIDIAN_CLI:-obsidian");
+        expect(script).toContain(PLUS_ENV.licenseKey);
+        expect(script).toContain(OPENARTIFACTS_API_ORIGIN);
+        expect(script).toContain("OPENARTIFACTS_API_HOST");
+        expect(script).toContain("/api/v1/docs");
+        expect(script).toContain("Bearer");
+        expect(script).toContain("^[0-9abcdefghjkmnpqrstvwxyz]{16}$");
+        expect(script).not.toContain("COPILOT_OBSIDIAN_CLI");
+        expect(script).not.toContain("eval");
         expect(script).not.toContain("OPENARTIFACTS_TOKEN");
-        expect(script).not.toContain(PLUS_ENV.licenseKey);
-        expect(script).not.toContain("/api/v1/docs");
+        expect(script).not.toContain("node ");
       }
-
-      expect(OPENARTIFACTS_WORKSPACE_ROOT_ENV).toBe("OPENARTIFACTS_WORKSPACE_ROOT");
-      expect(OPENARTIFACTS_AGENT_BRIDGE_PROPERTY).toBe("openArtifactsAgentBridge");
-
-      const sh = scriptOf("openartifacts-publish", ".sh");
-      expect(sh).toContain('cd "$WORKSPACE_ROOT"');
-      expect(sh).toContain("VAULT_NAME=${WORKSPACE_ROOT%/}");
-      expect(sh).toContain('CLI_OUTPUT=$("$OBSIDIAN_CLI" "vault=$VAULT_NAME" eval');
-      expect(sh).toContain("sed -n '/^=> {/p' | sed -n '$p'");
-      expect(sh).not.toContain("trap cleanup");
-      expect(sh).not.toContain("rm -f");
-
-      const ps1 = scriptOf("openartifacts-publish", ".ps1");
-      expect(ps1).toContain("Set-Location -LiteralPath $WORKSPACE_ROOT");
-      expect(ps1).toContain("$VAULT_NAME = Split-Path -Leaf (Get-Location).Path");
-      expect(ps1).toContain("$CLI_OUTPUT = @(& $OBSIDIAN_CLI \"vault=$VAULT_NAME\" 'eval'");
-      expect(ps1).toContain("Where-Object { ([string]$_).StartsWith('=> {') }");
-      expect(ps1).not.toContain("finally {");
-      expect(ps1).not.toContain("Remove-Item");
+      expect(scriptOf("openartifacts-publish", ".cmd")).toContain(
+        '-File "%~dp0openartifacts-publish.ps1"'
+      );
     });
   });
 

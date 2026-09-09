@@ -19,6 +19,8 @@ const context = await esbuild.context({
   sourcemap: prod ? false : "inline",
   treeShaking: true,
   outfile: "dev/gallery/main.js",
+  // Skill text shipped by the openartifacts package is imported as a string.
+  loader: { ".md": "text" },
   // `module` gets a shim rather than a slot in `external` because the renderer
   // has no ESM `createRequire`; `svgrPlugin` loads the backend logo SVGs.
   plugins: [nodeModuleShim, svgrPlugin],

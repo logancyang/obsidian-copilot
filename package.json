@@ -37,8 +37,7 @@
     "test:vault": "bash scripts/test-vault.sh",
     "test:vault:script": "bash scripts/test-vault.test.sh",
     "test:gallery-vault:script": "bash scripts/gallery-vault.test.sh",
-    "test:reset-data": "bash scripts/test-reset-data.sh",
-    "sync:openartifacts-skill": "node scripts/sync-openartifacts-skill.mjs"
+    "test:reset-data": "bash scripts/test-reset-data.sh"
   },
   "keywords": [],
   "author": "Logan Yang",
@@ -84,6 +83,7 @@
     "nano-staged": "^0.8.0",
     "npm-run-all2": "^7.0.2",
     "obsidian": "^1.2.5",
+    "openartifacts": "0.2.2",
     "prettier": "3.8.3",
     "stylelint": "17.14.1",
     "stylelint-config-obsidianmd": "0.1.0",
