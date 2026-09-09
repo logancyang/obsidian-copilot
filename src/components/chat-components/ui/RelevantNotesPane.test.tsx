@@ -42,6 +42,13 @@ describe("RelevantNotesPane", () => {
       }
     );
 
+    it("describes skipped sources without assuming an indexing failure (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", () => {
+      render(<RelevantNotesPane {...BASE_PROPS} details={{ skippedAttachments: 1 }} />);
+      expect(
+        screen.getByText("Skipped attachments: 1. They aren't available for this request.")
+      ).toBeTruthy();
+    });
+
     it.each(["matches", "no-usable-context"] as const)(
       "shows mock and skipped-source notices with %s (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)",
       (status) => {

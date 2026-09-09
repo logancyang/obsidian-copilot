@@ -265,6 +265,20 @@ describe("MiyoClient", () => {
         );
       }
     );
+    it.each([{}, { status: "error" }])(
+      "does not classify unhealthy or malformed health as compatibility: %j (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)",
+      async (health) => {
+        mockedRequestUrl
+          .mockResolvedValueOnce({ status: 404, json: {} } as RequestUrlResponse)
+          .mockResolvedValueOnce({ status: 200, json: health } as RequestUrlResponse);
+        await expect(
+          new MiyoClient().recommend("http://localhost:8742", {
+            folder_name: "Vault",
+            draft: "topic",
+          })
+        ).rejects.toMatchObject({ status: 404 });
+      }
+    );
   });
 
   describe("searchRelated()", () => {

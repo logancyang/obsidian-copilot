@@ -21,16 +21,15 @@ export async function findChatRelevantNotes(
   const details = { skippedAttachments: context.skippedAttachments, mock };
   if (
     !request.draft?.trim() &&
-    !request.messages?.length &&
-    !request.excerpts?.length &&
-    !request.file_paths?.length
+    !request.messages?.some((message) => message.content.trim()) &&
+    !request.excerpts?.some((excerpt) => excerpt.trim()) &&
+    !request.file_paths?.some((path) => path.trim())
   ) {
     // Unsupported-only attachments must stay in chat rather than use an unrelated note.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/383
     return { notes: EMPTY_NOTES, status: "no-usable-context", details };
   }
   const client = new MiyoClient({ plusLicenseKey: getSettings().plusLicenseKey });
-  let baseUrl: string | undefined;
   try {
     let response: RelatedContextResponse;
     if (mock) {
@@ -51,13 +50,13 @@ export async function findChatRelevantNotes(
         execution_time_ms: 0,
       };
     } else {
-      baseUrl = await withTimeout(
+      const baseUrl = await withTimeout(
         () => client.resolveBaseUrl(getMiyoCustomUrl(getSettings())),
         8000,
         "Miyo endpoint resolution"
       );
       response = await withTimeout(
-        () => client.recommend(baseUrl!, request),
+        () => client.recommend(baseUrl, request),
         8000,
         "Miyo chat related search"
       );
@@ -81,7 +80,7 @@ export async function findChatRelevantNotes(
       ];
     });
     return {
-      notes,
+      notes: notes.length ? notes : EMPTY_NOTES,
       status:
         response.status === "no_usable_context"
           ? "no-usable-context"
