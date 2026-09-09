@@ -3,7 +3,7 @@ import { ChatMessage } from "@/types/message";
 import { App, Notice, TFile } from "obsidian";
 import type { MessageRepository } from "./MessageRepository";
 import { ChatPersistenceManager } from "./ChatPersistenceManager";
-import { mockTFile } from "@/__tests__/mockObsidian";
+import { mockTFile, mockTFolder } from "@/__tests__/mockObsidian";
 import { getSettings } from "@/settings/model";
 import { getEffectiveConversationsFolder } from "@/settings/copilotFolder";
 import { ensureFolderExists } from "@/utils";
@@ -23,6 +23,8 @@ jest.mock("obsidian", () => ({
   Notice: jest.fn(),
   TFile: jest.fn(),
   TFolder: jest.fn(),
+  parseYaml: (content: string): unknown =>
+    jest.requireActual<typeof import("yaml")>("yaml").parse(content),
 }));
 jest.mock("@/logger");
 jest.mock("@/settings/model", () => ({
@@ -1001,7 +1003,108 @@ Nature's quiet song`);
     });
   });
 
-  describe("loadChat", () => {
+  describe("loadChat()", () => {
+    it("keeps appended turns in the topic-renamed note after reload for https://github.com/logancyang/obsidian-copilot/issues/2886", async () => {
+      const display = "2024/09/23 22:18:00";
+      const epoch = new Date(display).getTime() + 865;
+      const firstMessage: ChatMessage = {
+        message: "testing1",
+        sender: USER_SENDER,
+        timestamp: { epoch, display, fileName: "20240923_221800" },
+        isVisible: true,
+      };
+      const file = mockTFile({ path: "test-folder/Generated_topic@20240923_221800.md" });
+      let savedContent = "";
+      mockApp.vault.create.mockImplementation(async (_path: string, content: string) => {
+        savedContent = content;
+        return file;
+      });
+      mockApp.vault.read.mockImplementation(async () => savedContent);
+      mockApp.vault.modify.mockImplementation(async (_file: TFile, content: string) => {
+        savedContent = content;
+      });
+      mockMessageRepo.getDisplayMessages.mockReturnValue([firstMessage]);
+      await persistenceManager.saveChat("gpt-4");
+      expect(mockApp.vault.create).toHaveBeenCalledTimes(1);
+
+      // Topic generation changes the filename independently of the first message.
+      mockApp.vault.getMarkdownFiles.mockReturnValue([file]);
+      const folder = mockTFolder({ path: "test-folder" });
+      mockApp.vault.getAbstractFileByPath.mockImplementation((path: string) =>
+        path === file.path ? file : path === folder.path ? folder : null
+      );
+      mockApp.metadataCache.getFileCache.mockReturnValue({
+        frontmatter: { epoch, topic: "Generated topic" },
+      });
+      const loaded = await persistenceManager.loadChat(file);
+      const appended = {
+        ...firstMessage,
+        message: "testing3",
+        timestamp: { ...firstMessage.timestamp!, epoch: epoch + 3000 },
+      };
+      mockMessageRepo.getDisplayMessages.mockReturnValue([...loaded, appended]);
+      await persistenceManager.saveChat("gpt-4");
+
+      expect(mockApp.vault.create).toHaveBeenCalledTimes(1);
+      expect(mockApp.vault.modify).toHaveBeenCalledWith(
+        file,
+        expect.stringContaining("**user**: testing3")
+      );
+      expect(loaded[0].timestamp).toMatchObject({ epoch, display });
+      expect(savedContent).toContain(`epoch: ${epoch}`);
+      expect((await persistenceManager.loadChat(file)).map((message) => message.message)).toEqual([
+        "testing1",
+        "testing3",
+      ]);
+    });
+
+    it.each(["1788916607865", '"1788916607865"'])(
+      "restores numeric or quoted identity %s only on the first message for https://github.com/logancyang/obsidian-copilot/issues/2886",
+      async (epoch) => {
+        mockApp.vault.read.mockResolvedValue(
+          `---\nepoch: ${epoch}\n---\n\n**user**: testing1\n[Timestamp: 2026/09/08 18:16:47]\n\n**ai**: OK\n[Timestamp: 2026/09/08 18:16:48]`
+        );
+        const messages = await persistenceManager.loadChat(mockTFile({ path: "chat.md" }));
+        expect(messages[0].timestamp).toMatchObject({
+          epoch: 1788916607865,
+          display: "2026/09/08 18:16:47",
+        });
+        expect(messages[1].timestamp?.epoch).toBe(new Date("2026/09/08 18:16:48").getTime());
+      }
+    );
+
+    it.each([
+      "",
+      "---\ntopic: Legacy\n---\n",
+      "---\nepoch: nope\n---\n",
+      "---\nepoch: .inf\n---\n",
+      "---\nepoch: true\n---\n",
+      "---\nepoch: 0\n---\n",
+      "---\nepoch: -1\n---\n",
+      "---\nepoch: [broken\n---\n",
+    ])(
+      "loads legacy message timestamps when identity is absent or invalid (%s) for https://github.com/logancyang/obsidian-copilot/issues/2886",
+      async (frontmatter) => {
+        const display = "2024/09/23 22:18:00";
+        mockApp.vault.read.mockResolvedValue(
+          `${frontmatter}\n**user**: Hello\n[Timestamp: ${display}]`
+        );
+        const messages = await persistenceManager.loadChat(mockTFile({ path: "legacy.md" }));
+        expect(messages[0].timestamp).toMatchObject({
+          epoch: new Date(display).getTime(),
+          display,
+        });
+      }
+    );
+
+    it("restores identity even without a display timestamp for https://github.com/logancyang/obsidian-copilot/issues/2886", async () => {
+      mockApp.vault.read.mockResolvedValue("---\nepoch: 1788916607865\n---\n**user**: Hello");
+      const messages = await persistenceManager.loadChat(mockTFile({ path: "chat.md" }));
+      expect(messages[0].timestamp).toMatchObject({
+        epoch: 1788916607865,
+        display: "Unknown time",
+      });
+    });
     it("should load and parse chat from file", async () => {
       const fileContent = `---
 epoch: 1695513480000
