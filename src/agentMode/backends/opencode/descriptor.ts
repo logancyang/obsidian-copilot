@@ -1,6 +1,5 @@
 import { resolveEffort } from "@/lib/model-effort";
 import { OpencodeInstallModal } from "@/agentMode/backends/opencode/OpencodeInstallModal";
-import { OpencodeAbsentInstallActions } from "@/agentMode/backends/opencode/OpencodeInlineInstall";
 import OpencodeLogo from "@/agentMode/backends/opencode/logo.svg";
 import type CopilotPlugin from "@/main";
 import { logWarn } from "@/logger";
@@ -194,8 +193,6 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
       arch: mapNodeArch(process.arch) ?? process.arch,
     }).open();
   },
-
-  AbsentInstallActions: OpencodeAbsentInstallActions,
 
   managedInstall: {
     getState(plugin: CopilotPlugin): ManagedInstallActionState {

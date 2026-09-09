@@ -1,3 +1,4 @@
+import React from "react";
 import type { Meta, StoryObj } from "@/lib/story";
 import { Terminal } from "lucide-react";
 import { AgentBackendHeader, type AgentBackendHeaderProps } from "./AgentBackendHeader";
@@ -24,6 +25,13 @@ const meta = {
   parameters: { gallery: { host: "settings-tab", layout: "padded" } },
 } satisfies Meta<AgentBackendHeaderProps>;
 export default meta;
+export const NotInstalled: StoryObj<AgentBackendHeaderProps> = {
+  args: {
+    installState: { kind: "absent" },
+    canUpdate: false,
+    resolvedPath: null,
+  },
+};
 export const Upgrade: StoryObj<AgentBackendHeaderProps> = {};
 export const Running: StoryObj<AgentBackendHeaderProps> = {
   args: { managedInstall: { kind: "running", label: "Downloading opencode.zip (42%)" } },
@@ -54,4 +62,31 @@ export const CheckingSignIn: StoryObj<AgentBackendHeaderProps> = {
 };
 export const SignedIn: StoryObj<AgentBackendHeaderProps> = {
   args: { ...SignInRequired.args, authStatus: { signedIn: true } },
+};
+
+export const InstalledPaths: StoryObj<AgentBackendHeaderProps> = {
+  render: () => (
+    <>
+      {[
+        {
+          displayName: "opencode",
+          resolvedPath: "~/.local/share/copilot/binaries/opencode/1.2.3/opencode",
+        },
+        { displayName: "Claude", resolvedPath: "/usr/local/bin/claude" },
+        {
+          displayName: "Codex",
+          resolvedPath: "~/.local/share/copilot/binaries/codex/1.2.3/node_modules/.bin/codex-acp",
+        },
+      ].map((backend) => (
+        <AgentBackendHeader
+          key={backend.displayName}
+          {...meta.args}
+          {...backend}
+          installState={{ kind: "ready", source: "managed" }}
+          authStatus={{ signedIn: true }}
+          canUpdate={false}
+        />
+      ))}
+    </>
+  ),
 };

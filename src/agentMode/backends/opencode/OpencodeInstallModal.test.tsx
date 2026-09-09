@@ -234,7 +234,7 @@ describe("OpencodeInstallModal", () => {
       expect(screen.getByRole("button", { name: "Download & install" })).toBeTruthy();
       expect(screen.queryByText("Aborted")).toBeNull();
 
-      // Unmounting is not a cancellation: the settings row may still be showing
+      // Unmounting is not a cancellation: reopening the dialog must still show
       // this same operation.
       cancelCurrentOperation.mockClear();
       unmount();

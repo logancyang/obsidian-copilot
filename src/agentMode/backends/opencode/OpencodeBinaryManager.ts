@@ -13,7 +13,6 @@ import { getSettings, setSettings, type OpencodeBackendSettings } from "@/settin
 import { FileSystemAdapter, requestUrl } from "obsidian";
 import { copilotAppDataDir } from "@/utils/appPaths";
 import { requireNodeModule } from "@/utils/desktopRuntime";
-import { detectOpencodeCliPath } from "./opencodeCliDetector";
 import { expectedBinaryName, resolveOpencodeTarget } from "./platformResolver";
 import type { InstallState as BackendInstallState } from "@/agentMode/session/types";
 import {
@@ -92,23 +91,6 @@ export class OperationInFlightError extends ManagedInstallOperationInFlightError
   constructor() {
     super("opencode");
     this.name = "OperationInFlightError";
-  }
-}
-
-/**
- * Thrown when auto-detect finds no opencode to adopt. A failure rather than an
- * empty success so it lands in the runtime error state: the settings row swaps
- * its adopt action for Configure only while showing an error, and Configure is
- * the sole way to reach a binary outside the searched locations.
- *
- * The message names no control, because every surface subscribed to the runtime
- * state renders it — including the Configure dialog itself, where telling the
- * user to open Configure would contradict where they already are.
- */
-export class OpencodeNotFoundError extends Error {
-  constructor() {
-    super("Couldn't find opencode in the usual install locations or on PATH.");
-    this.name = "OpencodeNotFoundError";
   }
 }
 
@@ -640,27 +622,6 @@ export class OpencodeBinaryManager extends ManagedBinaryManager<ProgressEvent, I
       );
     }
     return dirs;
-  }
-
-  /**
-   * Find an opencode the user installed themselves and adopt it.
-   *
-   * One operation rather than a detect the caller follows with
-   * {@link setCustomBinaryPath}: the lock has to span the search as well as the
-   * write, or a managed install started while the search was still running
-   * would land in between and leave settings naming a source the user did not
-   * choose last.
-   *
-   * @returns the adopted path.
-   * @throws OpencodeNotFoundError when the search turns up nothing.
-   */
-  async adoptExistingBinary(): Promise<string> {
-    return this.runExclusive({ kind: "detecting" }, async () => {
-      const found = await detectOpencodeCliPath();
-      if (!found) throw new OpencodeNotFoundError();
-      await this.writeCustomBinaryPath(found);
-      return found;
-    });
   }
 
   protected async validateCustomBinary(p: string): Promise<InstalledBinary> {

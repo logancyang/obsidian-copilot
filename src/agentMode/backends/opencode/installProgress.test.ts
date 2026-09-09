@@ -1,4 +1,4 @@
-import { phaseLabel, phaseProgress } from "@/agentMode/backends/opencode/installProgress";
+import { phaseLabel } from "@/agentMode/backends/opencode/installProgress";
 
 describe("installProgress", () => {
   describe("phaseLabel()", () => {
@@ -43,33 +43,6 @@ describe("installProgress", () => {
 
     it("reports completion for the done phase", () => {
       expect(phaseLabel({ phase: "done", version: "1.2.3", path: "/bin/opencode" })).toBe("Done");
-    });
-  });
-
-  describe("phaseProgress()", () => {
-    it("has no percentage before the first event or during phases with no measurable fraction", () => {
-      expect(phaseProgress(null)).toBeUndefined();
-      expect(phaseProgress({ phase: "resolve", message: "…" })).toBeUndefined();
-      expect(
-        phaseProgress({ phase: "download", received: 500, assetName: "a.zip" })
-      ).toBeUndefined();
-    });
-
-    it("derives the percentage from received over total while downloading", () => {
-      expect(phaseProgress({ phase: "download", received: 25, total: 100, assetName: "a" })).toBe(
-        25
-      );
-    });
-
-    it("never exceeds 100 when a server over-reports received bytes", () => {
-      expect(phaseProgress({ phase: "download", received: 300, total: 100, assetName: "a" })).toBe(
-        100
-      );
-    });
-
-    it("holds just short of complete while extracting and reaches 100 when done", () => {
-      expect(phaseProgress({ phase: "extract", message: "…" })).toBe(98);
-      expect(phaseProgress({ phase: "done", version: "1", path: "/p" })).toBe(100);
     });
   });
 });

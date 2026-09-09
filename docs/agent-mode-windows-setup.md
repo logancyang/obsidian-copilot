@@ -6,12 +6,12 @@ Agent Chat runs in the Obsidian desktop app. On Windows, start with **opencode**
 
 1. Open [**Settings → Copilot → Basic → Agents**](settings.md#basic).
 2. Open the **opencode** tab.
-3. Select **Download opencode**. Copilot downloads and manages the Windows executable outside your vault.
+3. Open **Configure**, choose **Managed by Copilot**, then select **Download & install**. Copilot downloads and manages the Windows executable outside your vault.
 4. When the status shows **Ready**, choose a **Default model** and set **Default backend** to **opencode**.
 
 The managed installation does not require a PowerShell command or PATH changes.
 
-If opencode is already installed, select **I already have it**. Copilot checks common Windows locations. If it cannot find your copy, open **Configure**, choose **My own binary**, then select **Auto-detect** or enter the absolute path to `opencode.exe` and select **Apply**.
+If opencode is already installed, open **Configure**, choose **My own binary**, then select **Auto-detect** or enter the absolute path to `opencode.exe` and select **Apply**.
 
 If Copilot reports that your opencode version is unsupported, update opencode and run detection again.
 

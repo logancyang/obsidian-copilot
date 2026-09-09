@@ -17,13 +17,13 @@ Open **Settings → Copilot → Basic** and find **Agents**. For most people, th
 ### Recommended: Download opencode
 
 1. Select the **opencode** tab under **Agents**.
-2. Click **Download opencode**. Copilot downloads the `opencode` binary and manages it for you.
+2. Open **Configure**, choose **Managed by Copilot**, then click **Download & install**. Copilot downloads the `opencode` binary and manages it for you.
 3. Choose how opencode gets models:
    - **Copilot-hosted models:** enter an eligible license under **Copilot License** on the Basic tab. Eligible hosted models then appear in opencode and Quick Chat.
    - **Bring your own key:** open the **BYOK** tab, select **Add a provider**, enter your provider details, and choose models. Copilot stores the key in this device's Obsidian Keychain and enables the selected models for opencode and Quick Chat.
 4. Return to **Basic → Agents → opencode** and choose the default model for new chats.
 
-Already have the `opencode` binary? Click **I already have it**. If detection fails, click **Configure**, choose **My own binary**, and enter its absolute path.
+Already have the `opencode` binary? Open **Configure**, choose **My own binary**, then select **Auto-detect** or enter its absolute path and click **Apply**.
 
 ### Alternative: Link Claude Code
 

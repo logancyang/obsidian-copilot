@@ -40,10 +40,14 @@ const makeActions = (): jest.Mocked<ManagedBinaryConfigActions> => ({
 
 const renderView = (
   overrides: Partial<ManagedBinaryConfigViewProps> = {}
-): { actions: jest.Mocked<ManagedBinaryConfigActions>; onSourceChange: jest.Mock } => {
+): {
+  actions: jest.Mocked<ManagedBinaryConfigActions>;
+  onSourceChange: jest.Mock;
+  unmount: () => void;
+} => {
   const actions = overrides.actions ?? makeActions();
   const onSourceChange = jest.fn();
-  render(
+  const view = render(
     <ManagedBinaryConfigView
       title="Configure opencode"
       binaryName="opencode"
@@ -66,11 +70,35 @@ const renderView = (
       {...overrides}
     />
   );
-  return { actions: actions as jest.Mocked<ManagedBinaryConfigActions>, onSourceChange };
+  return {
+    actions: actions as jest.Mocked<ManagedBinaryConfigActions>,
+    onSourceChange,
+    unmount: view.unmount,
+  };
 };
 
 describe("ManagedBinaryConfigView", () => {
   describe("ManagedBinaryConfigView()", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/398 discards detection after leaving the custom binary control", async () => {
+      let finishDetection!: (path: string) => void;
+      const actions = makeActions();
+      actions.detectCustomPath.mockReturnValue(
+        new Promise((resolve) => {
+          finishDetection = resolve;
+        })
+      );
+      const custom = renderView({ source: "custom", actions });
+      fireEvent.click(screen.getByRole("button", { name: "Auto-detect" }));
+      expect(actions.detectCustomPath).toHaveBeenCalledTimes(1);
+      custom.unmount();
+      renderView({ source: "managed", actions });
+      fireEvent.click(screen.getByRole("button", { name: "Download & install" }));
+      expect(actions.install).toHaveBeenCalledTimes(1);
+      await act(async () => {
+        finishDetection("/usr/local/bin/opencode");
+      });
+      expect(actions.saveCustomPath).not.toHaveBeenCalled();
+    });
     it("offers the two binary sources as one mutually exclusive choice (https://github.com/Brevilabs/obsidian-copilot-private/issues/368)", () => {
       renderView();
 

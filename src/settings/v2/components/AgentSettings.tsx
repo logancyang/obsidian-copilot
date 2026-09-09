@@ -253,13 +253,6 @@ const BackendPanel: React.FC<{
   }, [manager, descriptor.id, installState.kind]);
 
   const showCloudWarning = backendNeedsSelfHostWarning(descriptor, settings);
-  // Only a backend the plugin can install itself offers inline actions, and
-  // that is also the only kind whose models run on the user's own keys — so the
-  // same condition gates the recommendation and the BYOK hint. A vendor backend
-  // (claude, codex) authenticates against its own subscription, where "add
-  // providers on the BYOK tab" would be wrong advice.
-  const InlineInstall =
-    installState.kind === "absent" ? descriptor.AbsentInstallActions : undefined;
 
   return (
     <div className="tw-space-y-3">
@@ -287,7 +280,6 @@ const BackendPanel: React.FC<{
           managedInstall={managedInstall}
           canUpdate={canUpdate}
           resolvedPath={resolvedPath ? formatBinaryPathForDisplay(resolvedPath) : null}
-          inlineInstall={InlineInstall ? <InlineInstall plugin={plugin} /> : undefined}
           onUpdate={runManagedInstall}
           onConfigure={() => descriptor.openInstallUI(plugin)}
         />
