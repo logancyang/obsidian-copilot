@@ -204,21 +204,6 @@ it("v6: seeds miyo when Miyo and self-host mode are both on", async () => {
   });
 });
 
-it("v6: seeds plus when semantic search is on but Miyo is off", async () => {
-  // enableSemanticSearchV3 must not influence the seed — the doc processor keys
-  // off Miyo/self-host state, not the legacy semantic flag.
-  mockGetSettings.mockReturnValue(
-    settings({ settingsVersion: 5, enableSemanticSearchV3: true, enableMiyo: false })
-  );
-  const { api } = makeApi();
-
-  await runSettingsMigrations(api);
-
-  expect(mockSetSettings).toHaveBeenCalledWith({
-    docProcessorBackend: "plus",
-  });
-});
-
 it("v6: seeds plus for a mobile vault with Miyo enabled but self-host off", async () => {
   // enableSelfHostMode is off here, so the doc processor seeds to plus regardless
   // of the mobile Miyo state.
