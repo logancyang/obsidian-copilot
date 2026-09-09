@@ -1,4 +1,6 @@
 /* eslint-disable @eslint-react/hooks-extra/no-unnecessary-use-prefix -- Mock exports must preserve production hook names. */
+import { getChatRelevantNotesStore } from "@/search/chatRelevantNotesContext";
+import { findChatRelevantNotes } from "@/search/findChatRelevantNotes";
 import { RelevantNotes } from "@/components/chat-components/RelevantNotes";
 import { useActiveFile } from "@/hooks/useActiveFile";
 import { LIVE_REFRESH_INTERVAL_MS } from "@/hooks/useLiveRelevantNotesRefresh";
@@ -25,6 +27,8 @@ const mockApp = {
     }),
   },
   workspace: {
+    on: jest.fn(),
+    offref: jest.fn(),
     getLeaf: mockGetLeaf,
   },
 };
@@ -58,6 +62,8 @@ jest.mock("@/search/findRelevantNotes", () => ({
   ...jest.requireActual<typeof import("@/search/findRelevantNotes")>("@/search/findRelevantNotes"),
   findRelevantNotes: jest.fn(),
 }));
+
+jest.mock("@/search/findChatRelevantNotes", () => ({ findChatRelevantNotes: jest.fn() }));
 
 jest.mock("@/miyo/miyoIndex", () => ({
   onMiyoIndexChanged: (listener: () => void) => {
@@ -133,6 +139,41 @@ describe("RelevantNotes", () => {
       expect(
         (await screen.findByRole("link", { name: "Download Miyo" })).getAttribute("href")
       ).toBe("https://www.miyo.md/?utm_source=obsidian_copilot&utm_medium=relevant_notes");
+    });
+
+    it("drops chat rows immediately when focus returns to the editor or switches chats (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", async () => {
+      const store = getChatRelevantNotesStore(mockApp);
+      const selectChat = (id: string) =>
+        store.select({
+          id,
+          request: { folder_name: "Vault", messages: [{ role: "user", content: "topic" }] },
+          skippedAttachments: 0,
+          addFile: jest.fn(),
+        });
+      (
+        findChatRelevantNotes as jest.MockedFunction<typeof findChatRelevantNotes>
+      ).mockResolvedValue({
+        notes: [
+          {
+            note: { path: "Chat.md", title: "Chat suggestion" },
+            metadata: { score: 0.7, hasOutgoingLinks: false, hasBacklinks: false },
+          },
+        ],
+        status: "matches",
+      });
+      selectChat("first");
+      render(<RelevantNotes onAddToChat={jest.fn()} />);
+      await screen.findByText("Chat suggestion");
+      act(() => {
+        selectChat("second");
+      });
+      expect(screen.queryByText("Chat suggestion")).toBeNull();
+      await screen.findByText("Chat suggestion");
+      act(() => {
+        store.select(null);
+      });
+      expect(screen.queryByText("Chat suggestion")).toBeNull();
+      await screen.findByText("Target");
     });
 
     it("opens a result in a new leaf", async () => {

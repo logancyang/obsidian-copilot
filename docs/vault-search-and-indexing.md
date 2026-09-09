@@ -83,9 +83,15 @@ Links and backlinks do not create rows in any of these empty states. Copilot's o
 
 #### Live update
 
-The **Live** switch at the top right of the pane keeps Relevant Notes in step with the note you are writing. While it is on, the list re-ranks itself a few seconds after each change lands: notes that become more relevant rise and their relevance bar grows, newly relevant notes fade in, and notes that no longer relate fade out. Turning it off freezes the pane until you open another note or reconnect Miyo, and turning it back on catches it up on whatever you wrote while it was off. The switch is on by default and your choice is remembered.
+The **Live** switch makes Relevant Notes follow the last editor or Agent Chat you focused. The source label shows the note name or **Agent chat context**. Clicking inside Relevant Notes preserves that source. The switch is on by default and your choice is remembered.
 
-Updates follow what Miyo has indexed rather than the text on screen, so they arrive a few seconds behind your typing. A note you are not editing costs nothing, and a change that does not move the ranking leaves the list alone. If your system is set to reduce motion, the list still updates but nothing animates.
+For chat, suggestions use the conversation, your unsent draft, selected text, and notes attached to the chat or project. They update after a 500 ms typing pause, attachment changes, and completed agent responses. Previous results stay visible while a refresh runs. An empty composer still uses conversation history; a completely empty chat uses the active note.
+
+**Add** includes a suggested note in the chat context and refreshes suggestions. Full attached notes are excluded from results. Selecting an excerpt alone leaves its source note eligible. Miyo looks up existing indexed attachments; this feature does not upload or index their contents. Skipped attachments produce a notice. If none of the chat context is usable, the pane explains that instead of switching to an unrelated note.
+
+Chat-context retrieval needs a compatible Miyo service. **Update Miyo for chat context** means the connected service does not support it. Development previews can show a **Mock preview** notice; those example notes do not demonstrate relevance or retrieval speed.
+
+With Live off, only the active note supplies context, and the list stays fixed until you open another note or reconnect Miyo. Editor updates follow Miyo's index, so they arrive a few seconds behind typing. If your system is set to reduce motion, the list still updates without animation.
 
 ## Search conversations and process documents
 
