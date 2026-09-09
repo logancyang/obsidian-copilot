@@ -170,6 +170,18 @@ describe("openArtifactsPublishWrappers", () => {
     expect(requests[0].authorization).toBe("Bearer test-license-key");
   });
 
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/394 treats not_found on withdrawal as already unshared", async () => {
+    canned = {
+      status: 404,
+      body: '{"error":{"code":"not_found","message":"Document not found."}}',
+    };
+    const result = await run(["unshare", "9f2k4mvq7t0xbz3n"]);
+    expect(result.stderr).toBe("");
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual({ docId: "9f2k4mvq7t0xbz3n", status: "unshared" });
+    expect(requests).toHaveLength(1);
+  });
+
   it("https://github.com/Brevilabs/obsidian-copilot-private/issues/394 relays the server's status and error body verbatim without retrying", async () => {
     canned = {
       status: 401,

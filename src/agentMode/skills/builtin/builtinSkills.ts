@@ -619,7 +619,8 @@ the user: ${OPENARTIFACTS_MISSING_KEY_MESSAGE}
 
 Read one existing Markdown source note. Treat YAML frontmatter as metadata, never as page
 content. Note its \`symposium\` property: an \`https://…/d/<docId>\` value means the note is
-already published and this task updates that page; pass that \`docId\` to the wrapper.
+already published and this task updates that page; pass that \`docId\` to the wrapper. If
+the property holds any other value, stop and ask the user before touching it.
 
 Write complete UTF-8 HTML (at most \`${OPENARTIFACTS_MAX_HTML_BYTES}\` bytes) to a new file
 under \`$${OPENARTIFACTS_WORKSPACE_ROOT_ENV}/${OPENARTIFACTS_AGENT_HANDOFF_DIR}/\`, creating
@@ -649,13 +650,13 @@ Run the wrapper next to this SKILL.md with the HTML file, the note's title (its 
 name without \`.md\`), and the existing \`docId\` when updating. On macOS or Linux:
 
 \`\`\`bash
-sh "/absolute/path/to/this/skill/directory/${OPENARTIFACTS_PUBLISH_USAGE}.sh" publish "${OPENARTIFACTS_AGENT_HANDOFF_DIR}/unique.html" "Note title" [docId]
+sh "/absolute/path/to/this/skill/directory/${OPENARTIFACTS_PUBLISH_USAGE}.sh" publish "$${OPENARTIFACTS_WORKSPACE_ROOT_ENV}/${OPENARTIFACTS_AGENT_HANDOFF_DIR}/unique.html" "Note title" [docId]
 \`\`\`
 
 On Windows, use the \`.cmd\` wrapper (prefix with \`&\` in PowerShell):
 
 \`\`\`powershell
-& "/absolute/path/to/this/skill/directory/${OPENARTIFACTS_PUBLISH_USAGE}.cmd" publish "${OPENARTIFACTS_AGENT_HANDOFF_DIR}/unique.html" "Note title" [docId]
+& "/absolute/path/to/this/skill/directory/${OPENARTIFACTS_PUBLISH_USAGE}.cmd" publish "$${OPENARTIFACTS_WORKSPACE_ROOT_ENV}/${OPENARTIFACTS_AGENT_HANDOFF_DIR}/unique.html" "Note title" [docId]
 \`\`\`
 
 Success prints the server's JSON, \`{"docId", "url", "version"}\`. Set the note's
@@ -781,6 +782,10 @@ if [ "$CURL_STATUS" -ne 0 ]; then
   printf '%s\n' "Could not reach OpenArtifacts at $API_HOST." >&2
   exit 1
 fi
+# A 404 on delete means the page is already gone, which is the outcome asked for.
+if [ "$COMMAND" = unshare ] && [ "$STATUS" = 404 ]; then
+  STATUS=204
+fi
 case "$STATUS" in
   2??)
     if [ "$COMMAND" = unshare ]; then
@@ -878,6 +883,11 @@ try {
     } catch { $detail = '' }
   }
   if (-not $detail -and $_.ErrorDetails) { $detail = [string]$_.ErrorDetails.Message }
+  if ($COMMAND -eq 'unshare' -and $status -eq 404) {
+    # The page is already gone, which is the outcome asked for.
+    [Console]::Out.WriteLine('{"docId":"' + $DOC_ID + '","status":"unshared"}')
+    exit 0
+  }
   if ($status) {
     [Console]::Error.WriteLine("OpenArtifacts returned HTTP $status")
     if ($detail) { [Console]::Error.WriteLine($detail) }
