@@ -72,12 +72,21 @@ jobs:
           npm.cmd --version >> windows-test-results/environment.txt
           node -p "process.platform + ' ' + process.arch" >> windows-test-results/environment.txt
       - run: npm ci
+        id: install
       - name: Run complete native Windows unit suite
         shell: pwsh
         run: |
           npm.cmd test -- --runInBand --json --outputFile=windows-test-results/jest.json *> windows-test-results/jest.log
           $testExitCode = $LASTEXITCODE
           Get-Content windows-test-results/jest.log
+          exit $testExitCode
+      - name: Verify image sanitization without regexp optimization
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        shell: pwsh
+        run: |
+          node --no-regexp-optimization node_modules/jest/bin/jest.js --runInBand --runTestsByPath src/openArtifacts/openArtifactsDocument.test.ts *> windows-test-results/image-sanitization.log
+          $testExitCode = $LASTEXITCODE
+          Get-Content windows-test-results/image-sanitization.log
           exit $testExitCode
       - name: Retain native test results
         if: always()

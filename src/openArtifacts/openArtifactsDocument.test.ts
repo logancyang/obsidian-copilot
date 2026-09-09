@@ -332,6 +332,39 @@ describe("openArtifactsDocument", () => {
       expect(app.vault.readBinary).toHaveBeenCalledTimes(3);
     });
 
+    it.each([
+      ["uppercase header", "DATA:IMAGE/PNG;BASE64,Aa0+/=", true],
+      ["MIME subtype punctuation", "data:image/svg+xml.test-1;base64,AA==", true],
+      ["optional parameters", "data:image/png;charset=utf-8;v=1.2+3;base64,AA==", true],
+      ["allowed payload whitespace", "data:image/png;base64,A \tB\n\u2000==", true],
+      ["non-image MIME", "data:text/html;base64,AA==", false],
+      ["empty MIME subtype", "data:image/;base64,AA==", false],
+      ["invalid MIME character", "data:image/p_ng;base64,AA==", false],
+      ["empty parameter", "data:image/png;;base64,AA==", false],
+      ["invalid parameter character", "data:image/png;charset=utf_8;base64,AA==", false],
+      ["missing base64 marker", "data:image/png,AA==", false],
+      ["missing comma", "data:image/png;base64", false],
+      ["empty payload", "data:image/png;base64,", false],
+      ["invalid final payload character", "data:image/png;base64,AA==!", false],
+    ])(
+      "https://github.com/logancyang/obsidian-copilot/issues/2967 preserves the image URL policy for %s",
+      async (_label, source, allowed) => {
+        renderMock.mockImplementation(async (_app, _markdown, element) => {
+          appendHtml(element, `<img id="image" src="${source}">`);
+        });
+        const result = await buildOpenArtifactsDocument(
+          createApp(),
+          createFile("Images.md"),
+          createComponent(),
+          document
+        );
+        const parsed = new DOMParser().parseFromString(result.html, "text/html");
+        expect(parsed.querySelector("#image")?.getAttribute("src") ?? null).toBe(
+          allowed ? source : null
+        );
+      }
+    );
+
     it("rejects an oversized local image before loading its binary", async () => {
       const oversized = createFile(
         "Assets/oversized.png",
