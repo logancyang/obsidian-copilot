@@ -141,6 +141,8 @@ Changing the Copilot folder does not move existing files. The old root remains t
 | **Custom vault instructions** | Blank `AGENTS.md`                    | Edits the root `AGENTS.md` used by every agent for vault-wide instructions. Text saves automatically after a short delay. **Open AGENTS.md** closes settings and opens the file as a note. Start a new Agent Chat after changing instructions. |
 | **Saved Chat prompt notice**  | Hidden unless old prompt files exist | Points upgrading users to their old system-prompt files so useful instructions can be copied into `AGENTS.md`. It does not migrate or delete those files.                                                                                      |
 
+Empty instruction fields show a fixed example until you type.
+
 See [`AGENTS.md` examples](agents-md-examples.md) and [Projects](projects.md) for project-specific instructions.
 
 ### Saving conversations
