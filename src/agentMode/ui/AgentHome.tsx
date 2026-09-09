@@ -772,7 +772,6 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       contextLoadBlocking={contextLoadBlocking}
       disabled={isOrphanedProject}
       contextStatusIndicator={contextStatusIndicator}
-      isLanding={isLanding}
     />
   );
 
