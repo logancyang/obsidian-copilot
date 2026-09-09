@@ -18,6 +18,10 @@ Codex now shows one entry per model, with a separate choice of the reasoning eff
 
 ![Codex model picker with GPT-6 Astra selected and a separate reasoning-effort slider](https://github.com/user-attachments/assets/359b323b-a07e-4b81-ae25-e083ff434b70)
 
+## Publish notes from Agent Chat again
+
+Publishing a note to OpenArtifacts from Agent Chat works again, including on Windows. Ask Claude Code, Codex, or OpenCode to publish a note: the agent writes the page as an HTML file, tells you where it is so you can open it in your browser, and uploads it only after you say so. Nothing else needs to be installed, and notes you shared earlier keep their page and update in place. ([#3157](https://github.com/logancyang/obsidian-copilot/pull/3157), [#3122](https://github.com/logancyang/obsidian-copilot/pull/3122), @logancyang)
+
 ## Enhancements
 
 - **Browse all your projects in one place.** Search project names and descriptions inline, then keep scrolling to reach older projects. ([#3119](https://github.com/logancyang/obsidian-copilot/pull/3119), @logancyang)
