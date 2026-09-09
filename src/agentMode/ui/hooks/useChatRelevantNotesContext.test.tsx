@@ -198,6 +198,37 @@ describe("useChatRelevantNotesContext", () => {
       expect(snapshot.skippedAttachments).toBe(2);
       expect(JSON.stringify(snapshot.request)).not.toContain("private");
     });
+    it("keeps sent images in the skipped count after composer reset without sending pixels (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", () => {
+      const sent: AgentChatMessage = {
+        ...user,
+        content: [
+          { type: "text", text: "question" },
+          { type: "image_url", image_url: { url: "data:image/png;base64,private-pixels" } },
+        ],
+      };
+      const { rerender } = renderHook(
+        ({ messages }) =>
+          useChatRelevantNotesContext(
+            app,
+            root,
+            "one",
+            { ...draft, input: "" },
+            messages,
+            undefined
+          ),
+        { initialProps: { messages: [sent] } }
+      );
+      void act(() => root.dispatchEvent(new Event("pointerdown")));
+      expect(getChatRelevantNotesStore(app).getSnapshot()!.skippedAttachments).toBe(1);
+      rerender({ messages: [sent, { ...user, id: "answer", sender: "AI", message: "answer" }] });
+      const snapshot = getChatRelevantNotesStore(app).getSnapshot()!;
+      expect(snapshot.skippedAttachments).toBe(1);
+      expect(snapshot.request.messages).toEqual([
+        { role: "user", content: "question" },
+        { role: "assistant", content: "answer" },
+      ]);
+      expect(JSON.stringify(snapshot.request)).not.toContain("private-pixels");
+    });
     it("tracks editor focus with no recommendation consumer mounted (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", () => {
       renderHook(() => useChatRelevantNotesContext(app, root, "one", draft, [], undefined));
       void act(() => root.dispatchEvent(new Event("pointerdown")));
