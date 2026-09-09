@@ -1,4 +1,4 @@
-import { logInfo } from "@/logger";
+import { logInfo, logError } from "@/logger";
 import { MiyoClient, MiyoRequestError } from "@/miyo/MiyoClient";
 import { MiyoServiceDiscovery } from "@/miyo/MiyoServiceDiscovery";
 import { getSettings } from "@/settings/model";
@@ -182,6 +182,203 @@ describe("MiyoClient", () => {
         method: "GET",
       })
     );
+  });
+
+  describe("recommend()", () => {
+    it("sends the agreed contract without logging conversation text even with debug enabled (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", async () => {
+      mockedGetSettings.mockReturnValue({ plusLicenseKey: "key", debug: true } as CopilotSettings);
+      const response = {
+        status: "ok",
+        results: [],
+        count: 0,
+        skipped_files: [],
+        context_truncated: true,
+        execution_time_ms: 420,
+      };
+      mockedRequestUrl.mockResolvedValue({ status: 200, json: response } as RequestUrlResponse);
+      const request = {
+        folder_name: "Vault",
+        messages: [{ role: "user" as const, content: "private conversation" }],
+        draft: "private draft",
+        excerpts: ["private excerpt"],
+        file_paths: ["Vault/file.md"],
+      };
+      expect(await new MiyoClient().recommend("http://localhost:8742", request)).toEqual(response);
+      expect(mockedRequestUrl).toHaveBeenCalledWith(
+        expect.objectContaining({
+          url: "http://localhost:8742/v0/recommend",
+          body: JSON.stringify(request),
+        })
+      );
+      expect(JSON.stringify(mockedLogInfo.mock.calls)).not.toContain("private");
+    });
+    it("redacts malformed response parse errors (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", async () => {
+      mockedGetSettings.mockReturnValue({ plusLicenseKey: "key", debug: true } as CopilotSettings);
+      mockedRequestUrl.mockResolvedValue({
+        status: 400,
+        json: "private echoed draft",
+      } as RequestUrlResponse);
+      await expect(
+        new MiyoClient().recommend("http://localhost:8742", {
+          folder_name: "Vault",
+          draft: "private echoed draft",
+        })
+      ).rejects.toBeInstanceOf(MiyoRequestError);
+      expect(JSON.stringify((logError as jest.Mock).mock.calls)).not.toContain(
+        "private echoed draft"
+      );
+    });
+    it("retains error codes without retaining a server echo (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", async () => {
+      mockedRequestUrl.mockResolvedValue({
+        status: 400,
+        json: { code: "empty_context", detail: "private draft" },
+      } as RequestUrlResponse);
+      await expect(
+        new MiyoClient().recommend("http://localhost:8742", { folder_name: "Vault" })
+      ).rejects.toMatchObject({
+        status: 400,
+        errorCode: "empty_context",
+        message: expect.not.stringContaining("private draft") as unknown,
+      });
+    });
+    it.each([true, false])(
+      "confirms a gateway 404 against Miyo health before classifying support: %s (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)",
+      async (healthy) => {
+        mockedRequestUrl
+          .mockResolvedValueOnce({ status: 404, json: {} } as RequestUrlResponse)
+          .mockResolvedValueOnce({
+            status: healthy ? 200 : 503,
+            json: healthy ? { status: "ok" } : {},
+          } as RequestUrlResponse);
+        await expect(
+          new MiyoClient().recommend("http://localhost:8742", {
+            folder_name: "Vault",
+            draft: "topic",
+          })
+        ).rejects.toMatchObject(
+          healthy ? { status: 501, errorCode: "not_implemented" } : { status: 404 }
+        );
+        expect(mockedRequestUrl).toHaveBeenCalledTimes(2);
+        expect(mockedRequestUrl).toHaveBeenNthCalledWith(
+          2,
+          expect.objectContaining({ url: "http://127.0.0.1:8742/v0/health" })
+        );
+      }
+    );
+    it.each([{}, { status: "error" }])(
+      "does not classify unhealthy or malformed health as compatibility: %j (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)",
+      async (health) => {
+        mockedRequestUrl
+          .mockResolvedValueOnce({ status: 404, json: {} } as RequestUrlResponse)
+          .mockResolvedValueOnce({ status: 200, json: health } as RequestUrlResponse);
+        await expect(
+          new MiyoClient().recommend("http://localhost:8742", {
+            folder_name: "Vault",
+            draft: "topic",
+          })
+        ).rejects.toMatchObject({ status: 404 });
+      }
+    );
+  });
+
+  describe("searchRelated()", () => {
+    const baseUrl = "http://localhost:8742";
+    const response = {
+      status: "ok",
+      results: [{ path: "Vault/answer.md", score: 0.8 }],
+      count: 1,
+      skipped_files: [],
+      context_truncated: false,
+      execution_time_ms: 1,
+    };
+    it("uses one file reference and preserves server results (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", async () => {
+      mockedRequestUrl.mockResolvedValue({ status: 200, json: response } as RequestUrlResponse);
+      expect(
+        await new MiyoClient().searchRelated(baseUrl, "Vault/seed.md", {
+          folderName: "Vault",
+          limit: 20,
+        })
+      ).toEqual(response);
+      expect(mockedRequestUrl).toHaveBeenCalledTimes(1);
+      expect(mockedRequestUrl).toHaveBeenCalledWith(
+        expect.objectContaining({
+          url: `${baseUrl}/v0/recommend`,
+          body: JSON.stringify({ folder_name: "Vault", file_paths: ["Vault/seed.md"], limit: 20 }),
+        })
+      );
+    });
+    it("falls back on an old service's structured 501 (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", async () => {
+      mockedRequestUrl
+        .mockResolvedValueOnce({
+          status: 501,
+          json: { error: "not_implemented" },
+        } as RequestUrlResponse)
+        .mockResolvedValueOnce({
+          status: 200,
+          json: { results: response.results },
+        } as RequestUrlResponse);
+      expect(
+        await new MiyoClient().searchRelated(baseUrl, "Vault/seed.md", {
+          folderName: "Vault",
+          limit: 20,
+        })
+      ).toEqual({ results: response.results });
+      expect(mockedRequestUrl).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({
+          url: `${baseUrl}/v0/search/related`,
+          body: JSON.stringify({ file_path: "Vault/seed.md", folder_name: "Vault", limit: 20 }),
+        })
+      );
+    });
+    it("preserves folderless legacy calls (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", async () => {
+      mockedRequestUrl.mockResolvedValue({
+        status: 200,
+        json: { results: [] },
+      } as RequestUrlResponse);
+      await new MiyoClient().searchRelated(baseUrl, "Vault/seed.md");
+      expect(mockedRequestUrl).toHaveBeenCalledWith(
+        expect.objectContaining({ url: `${baseUrl}/v0/search/related` })
+      );
+    });
+    it("keeps source classification without legacy retrieval for skipped context (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", async () => {
+      mockedRequestUrl.mockResolvedValue({
+        status: 200,
+        json: { ...response, status: "no_usable_context", results: [] },
+      } as RequestUrlResponse);
+      await expect(
+        new MiyoClient().searchRelated(baseUrl, "Vault/seed.md", { folderName: "Vault" })
+      ).rejects.toMatchObject({ status: 404 });
+      expect(mockedRequestUrl).toHaveBeenCalledTimes(1);
+    });
+    it.each([400, 401, 403, 413, 500, 501, 503])(
+      "does not fall back on HTTP %s without unsupported-route proof (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)",
+      async (status) => {
+        mockedRequestUrl.mockResolvedValue({
+          status,
+          json: { code: "failure" },
+        } as RequestUrlResponse);
+        await expect(
+          new MiyoClient().searchRelated(baseUrl, "Vault/seed.md", { folderName: "Vault" })
+        ).rejects.toMatchObject({ status });
+        expect(mockedRequestUrl).toHaveBeenCalledTimes(1);
+      }
+    );
+    it("does not fall back on empty results or a transport failure (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", async () => {
+      mockedRequestUrl.mockResolvedValueOnce({
+        status: 200,
+        json: { ...response, results: [], count: 0 },
+      } as RequestUrlResponse);
+      expect(
+        (await new MiyoClient().searchRelated(baseUrl, "Vault/seed.md", { folderName: "Vault" }))
+          .results
+      ).toEqual([]);
+      mockedRequestUrl.mockRejectedValueOnce(new Error("offline"));
+      await expect(
+        new MiyoClient().searchRelated(baseUrl, "Vault/seed.md", { folderName: "Vault" })
+      ).rejects.toThrow("offline");
+      expect(mockedRequestUrl).toHaveBeenCalledTimes(2);
+    });
   });
 
   describe("fileStatus()", () => {

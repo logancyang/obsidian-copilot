@@ -104,6 +104,8 @@ Miyo's Connector can let supported ChatGPT and Claude clients work with files yo
 
 Connector access is separate from Agent Chat search. Review the folders, remote access, and write permissions in Miyo before enabling it. This is the ownership advantage of Miyo: one local-first knowledge layer can serve several AI tools without turning Copilot's private plugin data into the permanent home of your knowledge.
 
+Copilot uses Miyo’s recommendation API for related notes. Older Miyo installations continue to support recommendations from the editor note. Update Miyo to use conversation context for recommendations.
+
 ## Troubleshooting
 
 - **Unavailable:** open Miyo, return to **Settings → Copilot → Miyo**, and retry. Check the remote server address if you configured one.

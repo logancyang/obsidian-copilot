@@ -156,6 +156,25 @@ export interface MiyoSearchResponse {
 /**
  * Minimal result item for related-note queries.
  */
+export interface RelatedContextRequest {
+  folder_name: string;
+  messages?: Array<{ role: "user" | "assistant"; content: string }>;
+  draft?: string;
+  excerpts?: string[];
+  file_paths?: string[];
+  limit?: number;
+  filters?: MiyoSearchFilter[];
+}
+
+export interface RelatedContextResponse {
+  status: "ok" | "no_usable_context";
+  results: Array<{ path: string; score: number }>;
+  count: number;
+  skipped_files: Array<{ path: string; reason: "not_indexed" | "unsupported" | "outside_scope" }>;
+  context_truncated: boolean;
+  execution_time_ms: number;
+}
+
 export interface MiyoRelatedSearchResult {
   path: string;
   score: number;
@@ -562,7 +581,7 @@ export class MiyoClient {
    * Execute related-notes search for a source note path.
    *
    * @param baseUrl - Miyo base URL.
-   * @param filePath - Absolute source note path to find related notes for.
+   * @param filePath - Source in Miyo public `FolderName/path/to/file` format.
    * @param options - Optional folder name, result limit, and filters.
    * @returns Search response in the same shape as /v0/search.
    */
@@ -575,6 +594,31 @@ export class MiyoClient {
       filters?: MiyoSearchFilter[];
     }
   ): Promise<MiyoRelatedSearchResponse> {
+    // Old Miyo installations must keep serving note recommendations during client upgrades.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/383
+    if (options?.folderName) {
+      try {
+        const response = await this.recommend(baseUrl, {
+          folder_name: options.folderName,
+          file_paths: [filePath],
+          limit: options.limit ?? 10,
+          filters: options.filters,
+        });
+        // Preserve the existing file-status lookup for a skipped single source.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/383
+        if (response.status === "no_usable_context") {
+          throw new MiyoRequestError(404, "No indexed context for source file");
+        }
+        return response;
+      } catch (error) {
+        if (
+          !(error instanceof MiyoRequestError) ||
+          error.status !== 501 ||
+          error.errorCode !== "not_implemented"
+        )
+          throw error;
+      }
+    }
     const payload = {
       file_path: filePath,
       ...(options?.folderName ? { folder_name: options.folderName } : {}),
@@ -585,6 +629,35 @@ export class MiyoClient {
       method: "POST",
       body: payload,
     });
+  }
+
+  /** Recommend notes from indexed file references and optional text without indexing it.
+   * @param baseUrl - Resolved Miyo endpoint.
+   * @param request - Vault-scoped visible text and indexed file references.
+   */
+  public async recommend(
+    baseUrl: string,
+    request: RelatedContextRequest
+  ): Promise<RelatedContextResponse> {
+    try {
+      return await this.requestJson<RelatedContextResponse>(baseUrl, "/v0/recommend", {
+        method: "POST",
+        body: request,
+        sensitive: true,
+      });
+    } catch (error) {
+      // Gateways may translate an old Miyo's missing route into 404. Confirm Miyo
+      // is reachable before offering compatibility fallback instead of connection recovery.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/383
+      if (
+        error instanceof MiyoRequestError &&
+        error.status === 404 &&
+        (await this.fetchHealth(baseUrl))?.status === "ok"
+      ) {
+        throw new MiyoRequestError(501, "Recommendations are unsupported", "not_implemented");
+      }
+      throw error;
+    }
   }
 
   /**
@@ -652,6 +725,7 @@ export class MiyoClient {
     options: {
       method: "GET" | "POST";
       body?: unknown;
+      sensitive?: boolean;
       query?: Record<string, string | number | boolean | undefined>;
     }
   ): Promise<T> {
@@ -671,7 +745,9 @@ export class MiyoClient {
       url: url.toString(),
       hasBody: Boolean(body),
       hasAuthorizationHeader: Boolean(headers.Authorization),
-      ...(getSettings().debug && options.method === "POST" ? { postBody: options.body } : {}),
+      ...(getSettings().debug && options.method === "POST" && !options.sensitive
+        ? { postBody: options.body }
+        : {}),
     });
 
     const response = await requestUrl({
@@ -684,19 +760,28 @@ export class MiyoClient {
     });
 
     if (response.status >= 400) {
-      const errorPayload = this.parseResponseJson<{ detail?: string; error?: string }>(
-        response.json,
-        response.text
-      );
-      const errorText = errorPayload?.detail || response.text || errorPayload?.error || "";
+      const errorPayload = this.parseResponseJson<{
+        detail?: string;
+        error?: string;
+        code?: string;
+      }>(response.json, response.text, options.sensitive);
+      // Never retain server echoes of private conversation content.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/383
+      const errorText = options.sensitive
+        ? "Chat-context retrieval failed"
+        : errorPayload?.detail || response.text || errorPayload?.error || "";
       logWarn(`Miyo request failed (${response.status}): ${errorText}`);
       // Relevant Notes must distinguish an unindexed source from a service
       // outage without parsing human-readable error messages.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
-      throw new MiyoRequestError(response.status, errorText, errorPayload?.error);
+      throw new MiyoRequestError(
+        response.status,
+        errorText,
+        errorPayload?.code ?? errorPayload?.error
+      );
     }
 
-    const parsed = this.parseResponseJson<T>(response.json, response.text);
+    const parsed = this.parseResponseJson<T>(response.json, response.text, options.sensitive);
     if (getSettings().debug) {
       logInfo(`Miyo request ${options.method} ${url.toString()} succeeded`);
     }
@@ -710,12 +795,16 @@ export class MiyoClient {
    * @param text - Raw response text.
    * @returns Parsed JSON value or empty object.
    */
-  private parseResponseJson<T>(json: unknown, text?: string): T {
+  private parseResponseJson<T>(json: unknown, text?: string, sensitive = false): T {
     if (typeof json === "string") {
       try {
         return JSON.parse(json) as T;
       } catch (error) {
-        logError(`Failed to parse Miyo JSON response: ${err2String(error)}`);
+        logError(
+          sensitive
+            ? "Invalid Miyo chat response"
+            : `Failed to parse Miyo JSON response: ${err2String(error)}`
+        );
         return {} as T;
       }
     }
@@ -726,7 +815,11 @@ export class MiyoClient {
       try {
         return JSON.parse(text) as T;
       } catch (error) {
-        logError(`Failed to parse Miyo text response: ${err2String(error)}`);
+        logError(
+          sensitive
+            ? "Invalid Miyo chat response"
+            : `Failed to parse Miyo text response: ${err2String(error)}`
+        );
         return {} as T;
       }
     }

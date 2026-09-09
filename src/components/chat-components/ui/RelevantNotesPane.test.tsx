@@ -24,6 +24,46 @@ describe("RelevantNotesPane", () => {
       jest.clearAllMocks();
     });
 
+    it.each([
+      ["no-usable-context", "No usable chat context"],
+      ["unsupported-service", "Update Miyo for chat context"],
+      ["request-too-large", "Chat context is too large"],
+      ["request-error", "Miyo couldn't use this chat context"],
+    ] as const)(
+      "explains %s without showing stale rows (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)",
+      (status, title) => {
+        render(<RelevantNotesPane {...BASE_PROPS} status={status} />);
+        expect(screen.getByText(title)).toBeTruthy();
+        expect(screen.queryByText("Related note")).toBeNull();
+        if (status === "unsupported-service" || status === "request-error") {
+          fireEvent.click(screen.getByRole("button", { name: "Open Miyo settings" }));
+          expect(BASE_ACTIONS.onOpenMiyoSettings).toHaveBeenCalledTimes(1);
+        }
+      }
+    );
+
+    it("describes skipped sources without assuming an indexing failure (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", () => {
+      render(<RelevantNotesPane {...BASE_PROPS} details={{ skippedAttachments: 1 }} />);
+      expect(
+        screen.getByText("Skipped attachments: 1. They aren't available for this request.")
+      ).toBeTruthy();
+    });
+
+    it.each(["matches", "no-usable-context"] as const)(
+      "shows skipped-source notices with %s (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)",
+      (status) => {
+        render(
+          <RelevantNotesPane {...BASE_PROPS} status={status} details={{ skippedAttachments: 2 }} />
+        );
+        expect(screen.getByText(/Skipped attachments: 2/)).toBeTruthy();
+      }
+    );
+
+    it("omits notices without skipped sources (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", () => {
+      render(<RelevantNotesPane {...BASE_PROPS} details={{ skippedAttachments: 0 }} />);
+      expect(screen.queryByRole("status")).toBeNull();
+    });
+
     it("shows neutral loading feedback while the Miyo request is pending (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", () => {
       render(<RelevantNotesPane {...BASE_PROPS} status="loading" noteRows={[]} />);
 

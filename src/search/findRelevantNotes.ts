@@ -208,6 +208,10 @@ async function searchRelatedNotesWithMiyo(
 }
 
 export type RelevantNotesSearchStatus =
+  | "no-usable-context"
+  | "unsupported-service"
+  | "request-too-large"
+  | "request-error"
   | "disabled"
   | "matches"
   | "no-matches"
@@ -219,6 +223,7 @@ export type RelevantNotesSearchStatus =
   | "unavailable";
 
 export interface RelevantNotesStatusDetails {
+  skippedAttachments?: number;
   errorMessage?: string;
   exclusionReason?: MiyoFileStatusReason;
   exclusionRule?: string;
@@ -292,6 +297,9 @@ const EMPTY_RELEVANT_NOTES: readonly RelevantNoteEntry[] = Object.freeze([]);
 export function isSameRelevantNotesResult(a: RelevantNotesResult, b: RelevantNotesResult): boolean {
   if (a === b) return true;
   if (a.status !== b.status) return false;
+  // Notice changes must render even when the recommendation rows stay the same.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/383
+  if (a.details?.skippedAttachments !== b.details?.skippedAttachments) return false;
   if (a.details?.errorMessage !== b.details?.errorMessage) return false;
   if (a.details?.exclusionReason !== b.details?.exclusionReason) return false;
   if (a.details?.exclusionRule !== b.details?.exclusionRule) return false;
