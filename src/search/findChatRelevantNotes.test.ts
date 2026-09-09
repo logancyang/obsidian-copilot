@@ -69,6 +69,39 @@ describe("findChatRelevantNotes", () => {
       expect(result.status).toBe("no-usable-context");
       expect(search).not.toHaveBeenCalled();
     });
+    it("keeps blank-only text local and reuses the empty result slice (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", async () => {
+      const context = {
+        id: "a",
+        request: {
+          folder_name: "Vault",
+          messages: [{ role: "user" as const, content: "  " }],
+          excerpts: [""],
+          file_paths: [" "],
+        },
+        skippedAttachments: 0,
+        addFile: jest.fn(),
+      };
+      const blank = await findChatRelevantNotes(app, context);
+      expect(blank.status).toBe("no-usable-context");
+      expect(search).not.toHaveBeenCalled();
+      search.mockResolvedValue({ status: "ok", results: [], skipped_files: [] });
+      const empty = await findChatRelevantNotes(app, {
+        ...context,
+        request: { folder_name: "Vault", draft: "topic" },
+      });
+      expect(empty.status).toBe("no-matches");
+      expect(empty.notes).toBe(blank.notes);
+      search.mockResolvedValue({
+        status: "ok",
+        results: [{ path: "Vault/a.md", score: 0.8 }],
+        skipped_files: [],
+      });
+      const filtered = await findChatRelevantNotes(app, {
+        ...context,
+        request: { folder_name: "Vault", file_paths: ["Vault/a.md"] },
+      });
+      expect(filtered.notes).toBe(blank.notes);
+    });
     it("uses an explicitly labeled fixture without a service request (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", async () => {
       const result = await findChatRelevantNotes(
         app,

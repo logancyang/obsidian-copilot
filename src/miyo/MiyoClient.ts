@@ -652,7 +652,7 @@ export class MiyoClient {
       if (
         error instanceof MiyoRequestError &&
         error.status === 404 &&
-        typeof (await this.fetchHealth(baseUrl))?.status === "string"
+        (await this.fetchHealth(baseUrl))?.status === "ok"
       ) {
         throw new MiyoRequestError(501, "Recommendations are unsupported", "not_implemented");
       }

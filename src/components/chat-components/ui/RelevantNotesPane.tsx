@@ -323,8 +323,7 @@ export function RelevantNotesPane({
       )}
       {!!details?.skippedAttachments && (
         <p role="status" className="tw-m-0 tw-p-2 tw-text-xs tw-text-muted">
-          Skipped attachments: {details.skippedAttachments}. They aren't indexed or supported by
-          Miyo.
+          Skipped attachments: {details.skippedAttachments}. They aren't available for this request.
         </p>
       )}
     </>
