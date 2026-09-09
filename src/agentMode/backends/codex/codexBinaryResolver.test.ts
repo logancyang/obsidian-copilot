@@ -112,6 +112,33 @@ describe("codexBinaryResolver", () => {
       }
     );
 
+    it("ignores existing packages under empty or relative PATH entries — https://github.com/logancyang/obsidian-copilot/issues/2967", () => {
+      const prefixes = ["", ".", "relative", "C:drive-relative"];
+      const entries = prefixes.map((prefix) =>
+        path.win32.join(
+          prefix,
+          "node_modules",
+          "@agentclientprotocol",
+          "codex-acp",
+          "dist",
+          "index.js"
+        )
+      );
+      const accepts = jest.fn(() => true);
+      expect(
+        resolveCodexAcpBinary(
+          {
+            homeDir: "C:\\Users\\me",
+            platform: "win32",
+            env: { PATH: prefixes.join(";") },
+            fs: fsWith(entries),
+          },
+          accepts
+        )
+      ).toBeNull();
+      expect(accepts).not.toHaveBeenCalled();
+    });
+
     it("keeps known npm locations ahead of inherited PATH — https://github.com/logancyang/obsidian-copilot/issues/2967", () => {
       const known = "C:\\known-npm";
       const inherited = "D:\\custom-npm";
