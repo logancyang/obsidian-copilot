@@ -164,6 +164,20 @@ On Windows, creating the folder links may require **Developer Mode** or administ
 - [Copilot Commands and Quick Ask](custom-commands.md)
 - [Copilot Plans, Privacy, and Self-Hosting](copilot-plus-and-self-host.md)
 
+### Publishing from Agent Chat
+
+Copilot bundles OpenArtifacts' shared publishing rules with the plugin. Publishing tasks read the local copy and need no web-fetch tool or separate Node.js/npm installation. Network access is needed only for authentication and publication.
+
+Each Copilot release that includes these rules pins them to one reviewed commit in the OpenArtifacts repository. The commit hash identifies the source revision, and a separate content hash verifies that the bundled snapshot matches it. Multiple Copilot releases may use the same snapshot.
+
+The rules stay fixed for that Copilot version; publishing a new `openartifacts` version to npm does not change them. A Copilot update can include a newer snapshot and refresh the installed built-in Skill. You do not need to install or update the npm package, or wait for its release, to use the rules shipped with Copilot.
+
+Copilot bundles the shared rules, not the complete npm CLI. Its publishing commands, authentication, document identity, browser preview, and confirmation dialog are implemented by Copilot. The built-in Skill has its own revision number for refreshing installed copies; that number is separate from both the Copilot release version and the OpenArtifacts npm version.
+
+Copilot also includes **research-memo** as an optional theme; it is not supplied by the OpenArtifacts npm package. For a named theme, the Skill checks `.openartifacts/themes/<name>.md` in your vault, then `themes/<name>.md` alongside the installed Skill. If neither exists, the agent is instructed to continue with readable defaults. A missing theme must not block publishing.
+
+For an agent-prepared page, click **Open local HTML preview** in the Copilot dialog to open the preview in your default application for HTML files. Use a browser to review the rendered page, then return to the existing Obsidian dialog, check **I reviewed the preview**, and confirm publishing. Opening the file never enables approval by itself. The browser does not open automatically. If the link fails to open a browser, open its target file manually in your browser. Local previews disable scripts, external resources, and navigation. The published HTML is preserved. The published page keeps the Copilot attribution banner. Cancellation or failure preserves the prepared file so the agent can reopen review. Successful publication or an explicit regeneration request removes the unchanged staged artifact.
+
 ### Upgrading an agent
 
 When an installed agent needs a supported version, Basic → Agents and Agent Chat offer **Upgrade** if Copilot can upgrade that installation. Both show the same progress, including upgrades started in Configure. If an upgrade fails, use **Retry**. A failed custom-path selection is reported in Configure and does not turn the upgrade action into a path-validation retry.

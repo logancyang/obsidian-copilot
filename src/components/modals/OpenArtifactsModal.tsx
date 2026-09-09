@@ -1,3 +1,4 @@
+import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { openWithSystemDefault } from "@/utils/openWithSystemDefault";
 import { createPluginRoot } from "@/utils/react/createPluginRoot";
@@ -137,8 +138,14 @@ export function OpenArtifactsModalContent({
   const [result, setResult] = useState<OpenArtifactsModalResult | null>(initialResult ?? null);
   const [workingAction, setWorkingAction] = useState<OpenArtifactsAction | null>(null);
   const working = workingAction !== null;
+  // The OS accepting the file only means something opened it — that something can be an
+  // editor showing HTML source rather than a browser rendering the page, so confirmation
+  // waits for the user to say they reviewed it instead of inferring it from the launch.
+  // https://github.com/logancyang/obsidian-copilot/issues/3121
+  const [manuallyReviewed, setManuallyReviewed] = useState(false);
 
   const runAction = async (nextAction: OpenArtifactsAction, ownerDocument: Document) => {
+    if (review && !manuallyReviewed) return;
     setWorkingAction(nextAction);
     try {
       setResult(await onConfirm(nextAction, ownerDocument));
@@ -277,8 +284,7 @@ export function OpenArtifactsModalContent({
             <code className="tw-break-all">{review.digest}</code>
           </div>
           <p className="tw-m-0 tw-text-small tw-text-muted">
-            Open a sandboxed local preview of these exact HTML bytes in your default browser, review
-            it, then return here to confirm.
+            Review the rendered page in your default browser, then return here to confirm.
           </p>
           <a
             href={review.previewUrl}
@@ -293,6 +299,13 @@ export function OpenArtifactsModalContent({
           >
             Open local HTML preview
           </a>
+          <label className="tw-flex tw-items-center tw-gap-2 tw-text-small">
+            <Checkbox
+              checked={manuallyReviewed}
+              onCheckedChange={(checked) => setManuallyReviewed(checked === true)}
+            />
+            I reviewed the preview
+          </label>
         </div>
       )}
 
@@ -320,7 +333,7 @@ export function OpenArtifactsModalContent({
             <Button
               variant={confirmationAction === "delete" ? "destructive" : "default"}
               onClick={(event) => void runAction(confirmationAction, event.currentTarget.doc)}
-              disabled={working}
+              disabled={working || (!!review && !manuallyReviewed)}
             >
               {working ? WORKING_LABELS[confirmationAction] : `Yes, ${confirmationAction}`}
             </Button>

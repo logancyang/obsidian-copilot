@@ -45,6 +45,18 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
         run: npm run test:integration
 
+  publish-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: npm
+      - run: npm ci
+      - name: Test native PowerShell publishing wrapper
+        run: npm test -- --runInBand src/agentMode/skills/builtin/openArtifactsPublishWrappers.test.ts
+
   docs:
     runs-on: ubuntu-latest
     defaults:

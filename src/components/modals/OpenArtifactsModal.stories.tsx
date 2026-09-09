@@ -39,7 +39,7 @@ export const Removed: StoryObj<OpenArtifactsModalContentProps> = {
   },
 };
 
-/** Host-owned review of the exact HTML bytes prepared by an agent. */
+/** Host-owned review of the exact HTML bytes prepared by an agent, gated on acknowledgment. */
 export const AgentReview: StoryObj<OpenArtifactsModalContentProps> = {
   args: {
     review: {

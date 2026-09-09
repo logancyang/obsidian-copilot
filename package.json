@@ -38,7 +38,8 @@
     "test:vault": "bash scripts/test-vault.sh",
     "test:vault:script": "bash scripts/test-vault.test.sh",
     "test:gallery-vault:script": "bash scripts/gallery-vault.test.sh",
-    "test:reset-data": "bash scripts/test-reset-data.sh"
+    "test:reset-data": "bash scripts/test-reset-data.sh",
+    "sync:openartifacts-skill": "node scripts/sync-openartifacts-skill.mjs"
   },
   "keywords": [],
   "author": "Logan Yang",

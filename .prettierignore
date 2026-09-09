@@ -1,1 +1,4 @@
 designdocs/gallery-bootstrap.md
+
+# Preserve the exact upstream bytes checked by the OpenArtifacts snapshot hash.
+vendor/openartifacts/SKILL.md

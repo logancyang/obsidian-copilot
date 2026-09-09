@@ -1,3 +1,4 @@
+import { OPENARTIFACTS_SHARED_RULES } from "@/agentMode/skills/builtin/openArtifactsSharedRules";
 import type { BackendId } from "@/agentMode/session/types";
 import {
   OPENARTIFACTS_AGENT_BRIDGE_PROPERTY,
@@ -586,7 +587,7 @@ const FETCH_X = relaySkill({
   scriptFile: "fetch-x.sh",
 });
 
-const OPENARTIFACTS_PUBLISH_VERSION = 1;
+const OPENARTIFACTS_PUBLISH_VERSION = 7;
 const OPENARTIFACTS_PUBLISH: BuiltinSkill = {
   name: "openartifacts-publish",
   legacyName: "symposium-publish",
@@ -602,75 +603,87 @@ metadata:
 
 # Publish Markdown to OpenArtifacts
 
-Require one existing Markdown source file. When the user asks to delete, remove, or
-withdraw its current OpenArtifacts page, do not generate HTML. Run the host wrapper with
-only the vault-relative source-note path. Obsidian reads the note's current identity
-and opens its existing management modal; the user alone chooses Update or Delete.
+## Read the bundled rules first
+
+Read \`shared-publishing-rules.md\` next to this skill and follow it for this task.
+These rules ship with Copilot as a pinned snapshot of the OpenArtifacts shared skill.
+Do not fetch publishing instructions from the internet.
+
+This is the Copilot host adapter. The instructions below replace the shared
+skill's "Standalone CLI" section. Do not run Node, npm, or npx, install tools,
+read OpenArtifacts credential files, or publish directly through HTTP. Use only
+the bundled wrapper below. The host owns authentication, note identity, the
+"Shared from Copilot" banner, and the existing human confirmation dialogs.
+
+## Prepare the Copilot handoff
+
+Read one existing Markdown source note; treat frontmatter as metadata. For delete,
+remove, or withdraw requests, skip HTML generation and pass only the source-note
+path; the user alone chooses Update or Delete in the existing management dialog.
 Never tell the user to delete the page at its public URL.
 
-For publishing or updating, finish a complete, self-contained,
-passive HTML document before asking Obsidian to review it. Render source-specific
-content such as Mermaid and Obsidian Bases into static HTML or SVG, embed images,
-and include no scripts, frames, forms, handlers, redirects, or external assets. Treat
-YAML frontmatter as note metadata: never render the raw frontmatter block as page
-content. The exact UTF-8 HTML must not exceed \`${OPENARTIFACTS_MAX_HTML_BYTES}\` bytes.
+For publish/update, write UTF-8 HTML (at most \`${OPENARTIFACTS_MAX_HTML_BYTES}\` bytes)
+to a new unique \`.html\` file under
+\`$${OPENARTIFACTS_WORKSPACE_ROOT_ENV}/${OPENARTIFACTS_AGENT_HANDOFF_DIR}/\`, creating
+the directory if needed. Pass vault-relative paths to the wrapper.
 
-Style the page from a theme file rather than improvising. Resolve the theme name in
-this order: \`OPENARTIFACTS_THEME\` from the environment when set, then a theme the
-user named in chat, then \`${OPENARTIFACTS_DEFAULT_THEME}\`. Read
-\`$${OPENARTIFACTS_WORKSPACE_ROOT_ENV}/${OPENARTIFACTS_THEMES_DIR}/<name>.md\` when the
-user has authored that theme, otherwise \`themes/<name>.md\` next to this file. Follow
-it exactly: tokens, type, scale, layout, components, and its theme-handling CSS, all
-inlined. If neither file exists, still publish with restrained defaults (system fonts,
-one accent, a readable measure, light and dark handled) and tell the user which theme
-was not found.
+Themes are optional. For a named theme, check
+\`$${OPENARTIFACTS_WORKSPACE_ROOT_ENV}/${OPENARTIFACTS_THEMES_DIR}/<name>.md\`, then
+\`themes/<name>.md\` next to this skill. Check each path independently. If neither
+exists, continue with readable defaults; a missing theme must never block
+publishing. The bundled \`${OPENARTIFACTS_DEFAULT_THEME}\` is an optional example.
 
-Write those final bytes to a new unique \`.html\` file under
-\`$${OPENARTIFACTS_WORKSPACE_ROOT_ENV}/${OPENARTIFACTS_AGENT_HANDOFF_DIR}/\`, creating that
-directory first when it does not exist. Do not show a prose substitute or ask
-for confirmation in chat. Instead run the host wrapper with exactly two
-vault-relative paths: the source note and the staged HTML.
+## Open the existing host review
 
-On macOS or Linux:
+The host dialog offers an "Open local HTML preview" link for the user to click.
+It does not open the browser automatically. Ask the user to open the link, inspect
+the rendered page, then check "I reviewed the preview" and confirm in Obsidian's
+existing dialog. Confirmation stays disabled until the user acknowledges review;
+a successful file launch alone does not establish that the page rendered.
+Never choose an action or document id, simulate clicks, or treat
+a chat reply as a dialog confirmation. Do not create a new modal or render HTML inside a modal.
+
+The Obsidian CLI communicates with the running desktop app through local IPC.
+If your execution tool uses a sandbox, request its normal permission to run this
+wrapper outside the sandbox from the outset (for Codex, use
+\`sandbox_permissions="require_escalated"\`). Keep the same command and arguments;
+this only opens the existing human review. Do not disable the agent's sandbox
+settings or bypass a denied permission. If permission is unavailable, report that
+limitation and offer the regular publish command. "Unable to find Obsidian" inside
+a sandbox does not establish that the app is closed; do not tell the user to
+reopen it on that evidence alone.
+
+Run the wrapper next to this SKILL.md. On macOS or Linux:
 
 \`\`\`bash
 sh "/absolute/path/to/this/skill/directory/openartifacts-publish.sh" "Notes/source.md" "${OPENARTIFACTS_AGENT_HANDOFF_DIR}/unique.html"
 \`\`\`
 
-For withdrawal, omit the staged-HTML argument:
-
-\`\`\`bash
-sh "/absolute/path/to/this/skill/directory/openartifacts-publish.sh" "Notes/source.md"
-\`\`\`
-
-On Windows, use the \`.cmd\` wrapper (prefix it with \`&\` in PowerShell):
+On Windows, use the \`.cmd\` wrapper (prefix with \`&\` in PowerShell):
 
 \`\`\`powershell
 & "/absolute/path/to/this/skill/directory/openartifacts-publish.cmd" "Notes/source.md" "${OPENARTIFACTS_AGENT_HANDOFF_DIR}/unique.html"
 \`\`\`
 
-Omit the staged-HTML argument on Windows for withdrawal as well.
+For withdrawal, omit the HTML argument on either platform. The wrapper waits for
+the user's decision. The host preserves staged HTML on cancellation or failure and removes it after
+confirmed success or explicit regeneration. It cleans up its temporary browser
+preview when review closes. If the
+user asks to reopen a cancelled review, run the wrapper with the same HTML path.
 
-With only the source path, the wrapper blocks while Obsidian shows its host-owned
-Update/Delete management modal. With a staged HTML path, it blocks while Obsidian
-consumes the artifact and shows its source, title, and a link to a sandboxed
-local-browser rendering of the exact captured page. Obsidian rejects active or
-externally loaded content, prevents navigation from the browser preview, removes the
-original artifact, removes its temporary browser preview after review, and alone reads
-the current note identity to choose whether confirmation publishes or updates; never
-choose an action or document id.
+## 3. Report the result
 
-- \`cancelled\`: stop. No request was sent.
-- \`regenerate\`: create a new complete artifact and run the wrapper again. The
-  previous confirmation never applies to regenerated bytes.
+- \`cancelled\`: stop; nothing was published.
+- \`regenerate\`: create a new complete artifact and repeat review. The
+  previous confirmation never applies to changed HTML.
 - \`published\` or \`updated\`: return the host-provided public URL verbatim.
-- \`deleted\`: report that the host withdrew the page and removed its note identity.
-- \`failed\`: if the host says to edit the staged file, address every listed issue in
-  that same file and retry exactly once. Otherwise, or if that retry fails, stop and
-  report the exact host message. Never invent a cause, change unrelated styling, create
-  another filename, bypass the review, or publish directly.
+- \`deleted\`: report that the host withdrew the page.
+- \`failed\`: report the exact error and offer the existing "Publish file to
+  OpenArtifacts" command. Do not blindly retry, invent a cause, strip styling,
+  bypass the review, or claim that opening a review means publishing succeeded.
 `,
   files: [
+    { path: "shared-publishing-rules.md", content: OPENARTIFACTS_SHARED_RULES },
     { path: `themes/${OPENARTIFACTS_DEFAULT_THEME}.md`, content: RESEARCH_MEMO_THEME },
     {
       path: "openartifacts-publish.sh",
@@ -721,7 +734,14 @@ else
   CODE="(()=>{const decode=(value)=>new TextDecoder().decode(Uint8Array.from(atob(value),(char)=>char.charCodeAt(0)));const bridge=app.plugins.plugins.copilot?.${OPENARTIFACTS_AGENT_BRIDGE_PROPERTY};if(!bridge)throw new Error('Copilot OpenArtifacts host is unavailable.');return bridge.reviewAgentPublish(decode('$SOURCE_B64'),decode('$HTML_B64')).then(JSON.stringify);})()"
 fi
 
-CLI_OUTPUT=$("$OBSIDIAN_CLI" "vault=$VAULT_NAME" eval "code=$CODE") || exit $?
+CLI_OUTPUT=$("$OBSIDIAN_CLI" "vault=$VAULT_NAME" eval "code=$CODE" 2>&1)
+CLI_STATUS=$?
+# https://github.com/logancyang/obsidian-copilot/issues/3120: preserve host errors
+# so a failed review reports its actual cause instead of looking like a closed app.
+if [ "$CLI_STATUS" -ne 0 ]; then
+  printf '%s\\n' "$CLI_OUTPUT" >&2
+  exit "$CLI_STATUS"
+fi
 CLI_RESULT=$(printf '%s\\n' "$CLI_OUTPUT" | sed -n '/^=> {/p' | sed -n '$p')
 case "$CLI_RESULT" in
   "=> {"*)
@@ -730,6 +750,9 @@ case "$CLI_RESULT" in
     exit 0
     ;;
   *)
+    # https://github.com/logancyang/obsidian-copilot/issues/3120: keep diagnostics
+    # when no result can be parsed so a failed review is not reported as success.
+    [ -z "$CLI_OUTPUT" ] || printf '%s\\n' "$CLI_OUTPUT" >&2
     printf '%s\\n' "Copilot could not complete the OpenArtifacts review." >&2
     exit 1
     ;;
@@ -773,10 +796,15 @@ try {
     $CODE = "(()=>{const decode=(value)=>new TextDecoder().decode(Uint8Array.from(atob(value),(char)=>char.charCodeAt(0)));const bridge=app.plugins.plugins.copilot?.${OPENARTIFACTS_AGENT_BRIDGE_PROPERTY};if(!bridge)throw new Error('Copilot OpenArtifacts host is unavailable.');return bridge.reviewAgentPublish(decode('$SOURCE_B64'),decode('$HTML_B64')).then(JSON.stringify);})()"
   }
 
-  $CLI_OUTPUT = & $OBSIDIAN_CLI "vault=$VAULT_NAME" 'eval' "code=$CODE"
-  if ($LASTEXITCODE -ne 0) { throw 'Copilot could not complete the OpenArtifacts review.' }
+  $CLI_OUTPUT = @(& $OBSIDIAN_CLI "vault=$VAULT_NAME" 'eval' "code=$CODE" 2>&1)
+  $CLI_STATUS = $LASTEXITCODE
+  if ($CLI_STATUS -ne 0) {
+    [Console]::Error.WriteLine(($CLI_OUTPUT -join [Environment]::NewLine))
+    throw 'Copilot could not complete the OpenArtifacts review.'
+  }
   $CLI_RESULT = [string](@($CLI_OUTPUT | Where-Object { ([string]$_).StartsWith('=> {') })[-1])
   if (-not $CLI_RESULT.StartsWith('=> {')) {
+    [Console]::Error.WriteLine(($CLI_OUTPUT -join [Environment]::NewLine))
     throw 'Copilot could not complete the OpenArtifacts review.'
   }
   $OUTCOME = $CLI_RESULT.Substring(3)
