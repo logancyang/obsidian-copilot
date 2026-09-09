@@ -1,95 +1,179 @@
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { createServer, type IncomingMessage, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { BUILTIN_SKILLS } from "./builtinSkills";
 
 const windows = process.platform === "win32";
 
+interface CapturedRequest {
+  method: string | undefined;
+  url: string | undefined;
+  authorization: string | undefined;
+  contentType: string | undefined;
+  body: string;
+}
+
+interface CannedResponse {
+  status: number;
+  body: string;
+}
+
+// Every construct the JSON encoder has to get right: quotes, backslashes, tabs, CR,
+// non-ASCII, a closing script tag, printf metacharacters, and a trailing newline.
+const HTML = [
+  "<!doctype html>",
+  '<html lang="zh"><head><title>Tab\there "quoted" \\ back\\slash</title></head>',
+  "<body>\r",
+  "<p>100% done &amp; 中文 émoji 🚀 </script></p>",
+  "</body></html>",
+  "",
+].join("\n");
+
 describe("openArtifactsPublishWrappers", () => {
   let root: string;
-  let cli: string;
   let wrapper: string;
+  let htmlFile: string;
+  let server: Server;
+  let origin: string;
+  let requests: CapturedRequest[];
+  let canned: CannedResponse;
+
+  beforeAll(async () => {
+    server = createServer((request: IncomingMessage, response) => {
+      let body = "";
+      request.setEncoding("utf8");
+      request.on("data", (chunk: string) => {
+        body += chunk;
+      });
+      request.on("end", () => {
+        requests.push({
+          method: request.method,
+          url: request.url,
+          authorization: request.headers.authorization,
+          contentType: request.headers["content-type"],
+          body,
+        });
+        response.writeHead(canned.status, { "content-type": "application/json" });
+        response.end(canned.body);
+      });
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("Expected a TCP address");
+    origin = `http://127.0.0.1:${address.port}`;
+  });
+
+  afterAll(async () => {
+    await new Promise<void>((resolve, reject) =>
+      server.close((error) => (error ? reject(error) : resolve()))
+    );
+  });
 
   beforeEach(() => {
+    requests = [];
+    canned = {
+      status: 201,
+      body: '{"docId":"9f2k4mvq7t0xbz3n","url":"https://x/d/9f","version":1}',
+    };
     root = mkdtempSync(path.join(tmpdir(), "copilot publish test "));
     const skill = BUILTIN_SKILLS.find((item) => item.name === "openartifacts-publish")!;
     for (const file of skill.files.filter((item) => !item.path.includes("/"))) {
       writeFileSync(path.join(root, file.path), file.content);
     }
     wrapper = path.join(root, `openartifacts-publish.${windows ? "ps1" : "sh"}`);
-    cli = path.join(root, `fake-cli.${windows ? "cmd" : "sh"}`);
-    if (windows) {
-      writeFileSync(
-        cli,
-        '@echo off\r\npowershell.exe -NoProfile -File "%~dp0fake-cli.ps1"\r\nexit /b %errorlevel%\r\n'
-      );
-      writeFileSync(
-        path.join(root, "fake-cli.ps1"),
-        "[Console]::Out.WriteLine($env:MOCK_STDOUT)\n[Console]::Error.WriteLine($env:MOCK_STDERR)\nexit ([int]$env:MOCK_STATUS)\n"
-      );
-    } else {
-      writeFileSync(
-        cli,
-        '#!/bin/sh\nprintf "%s\\n" "$MOCK_STDOUT"\nprintf "%s\\n" "$MOCK_STDERR" >&2\nexit "$MOCK_STATUS"\n',
-        { mode: 0o700 }
-      );
-    }
+    htmlFile = path.join(root, "page.html");
+    writeFileSync(htmlFile, HTML);
   });
 
   afterEach(() => rmSync(root, { recursive: true, force: true }));
 
-  function run(stdout: string, stderr = "", status = 0) {
+  function run(args: string[], env: Record<string, string | undefined> = {}) {
     return spawnSync(
       windows ? "powershell.exe" : "sh",
-      [
-        ...(windows ? ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"] : []),
-        wrapper,
-        "Notes/source.md",
-        ".openartifacts/handoffs/review.html",
-      ],
+      [...(windows ? ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"] : []), wrapper, ...args],
       {
         encoding: "utf8",
-        timeout: 10000,
+        timeout: 20000,
         env: {
           ...process.env,
-          COPILOT_OBSIDIAN_CLI: cli,
+          COPILOT_PLUS_LICENSE_KEY: "test-license-key",
+          OPENARTIFACTS_API_HOST: origin,
           OPENARTIFACTS_WORKSPACE_ROOT: root,
-          MOCK_STDOUT: stdout,
-          MOCK_STDERR: stderr,
-          MOCK_STATUS: String(status),
+          ...env,
         },
       }
     );
   }
 
-  it("returns the host outcome despite unrelated CLI diagnostics", () => {
-    const result = run('Startup log\n=> {"status":"cancelled"}', "A startup warning");
-    expect(result.error).toBeUndefined();
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/394 publishes a new page with the exact HTML bytes and the license key as a bearer token", () => {
+    const result = run(["publish", htmlFile, "My “Note”"]);
+    expect(result.stderr).toBe("");
     expect(result.status).toBe(0);
-    expect(result.stdout.trim()).toBe('{"status":"cancelled"}');
+    expect(result.stdout.trim()).toBe(canned.body);
+    expect(requests).toHaveLength(1);
+    const [request] = requests;
+    expect(request.method).toBe("POST");
+    expect(request.url).toBe("/api/v1/docs");
+    expect(request.authorization).toBe("Bearer test-license-key");
+    expect(request.contentType).toMatch(/^application\/json/);
+    expect(JSON.parse(request.body)).toEqual({ title: "My “Note”", html: HTML });
   });
 
-  it.each([0, 1])(
-    "https://github.com/logancyang/obsidian-copilot/issues/3120 preserves stdout and stderr when review fails with exit %s",
-    (status) => {
-      const result = run(
-        "The CLI is unable to find Obsidian.",
-        "Local IPC connection denied.",
-        status
-      );
-      expect(result.error).toBeUndefined();
-      expect(result.status).not.toBe(0);
-      expect(result.stderr).toContain("The CLI is unable to find Obsidian.");
-      expect(result.stderr).toContain("Local IPC connection denied.");
-      expect(result.stdout).not.toContain('"status":"published"');
-    }
-  );
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/394 updates the existing page when a document id is supplied", () => {
+    canned = {
+      status: 200,
+      body: '{"docId":"9f2k4mvq7t0xbz3n","url":"https://x/d/9f","version":2}',
+    };
+    const result = run(["publish", htmlFile, "Note", "9f2k4mvq7t0xbz3n"]);
+    expect(result.status).toBe(0);
+    expect(result.stdout.trim()).toBe(canned.body);
+    expect(requests[0].method).toBe("PUT");
+    expect(requests[0].url).toBe("/api/v1/docs/9f2k4mvq7t0xbz3n");
+    expect(JSON.parse(requests[0].body).html).toBe(HTML);
+  });
 
-  it("https://github.com/logancyang/obsidian-copilot/issues/3120 does not fabricate an outcome when the CLI returns no output", () => {
-    const result = run("");
-    expect(result.error).toBeUndefined();
-    expect(result.status).not.toBe(0);
-    expect(result.stderr).toContain("Copilot could not complete the OpenArtifacts review.");
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/394 withdraws a page with DELETE and reports the id it removed", () => {
+    canned = { status: 204, body: "" };
+    const result = run(["unshare", "9f2k4mvq7t0xbz3n"]);
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual({ docId: "9f2k4mvq7t0xbz3n", status: "unshared" });
+    expect(requests[0].method).toBe("DELETE");
+    expect(requests[0].url).toBe("/api/v1/docs/9f2k4mvq7t0xbz3n");
+    expect(requests[0].authorization).toBe("Bearer test-license-key");
+  });
+
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/394 relays the server's status and error body verbatim without retrying", () => {
+    canned = {
+      status: 401,
+      body: '{"error":{"code":"unauthorized","message":"This plan cannot publish."}}',
+    };
+    const result = run(["publish", htmlFile, "Note"]);
+    expect(result.status).toBe(1);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toContain("HTTP 401");
+    expect(result.stderr).toContain("This plan cannot publish.");
+    expect(requests).toHaveLength(1);
+  });
+
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/394 refuses to run without a license key, an unknown command, or a malformed id, and sends nothing", () => {
+    const noKey = run(["publish", htmlFile, "Note"], { COPILOT_PLUS_LICENSE_KEY: "" });
+    expect(noKey.status).toBe(1);
+    expect(noKey.stderr).toContain("Copilot Plus license key");
+
+    const badCommand = run(["review", htmlFile]);
+    expect(badCommand.status).toBe(1);
+    expect(badCommand.stderr).toContain("Usage:");
+
+    const badId = run(["unshare", "../etc/passwd"]);
+    expect(badId.status).toBe(1);
+    expect(badId.stderr).toContain("Invalid OpenArtifacts document id");
+
+    const missingFile = run(["publish", path.join(root, "missing.html"), "Note"]);
+    expect(missingFile.status).toBe(1);
+    expect(missingFile.stderr).toContain("HTML file not found");
+
+    expect(requests).toHaveLength(0);
   });
 });

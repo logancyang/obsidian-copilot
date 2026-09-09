@@ -38,21 +38,3 @@ export const Removed: StoryObj<OpenArtifactsModalContentProps> = {
     initialResult: { kind: "success", action: "delete" },
   },
 };
-
-/** Host-owned review of the exact HTML bytes prepared by an agent, gated on acknowledgment. */
-export const AgentReview: StoryObj<OpenArtifactsModalContentProps> = {
-  args: {
-    review: {
-      sourcePath: "Notes/Architecture.md",
-      digest: "f3a2d869506a454b2f43ca76b82a7d2fb4a94825a1ef9290299e2960ab0c5c11",
-      payload: {
-        title: "Architecture",
-        html: "<!doctype html><html><body>Architecture</body></html>",
-        byteLength: 56,
-      },
-      previewPath: "/tmp/openartifacts-preview.html",
-      previewUrl: "file:///tmp/openartifacts-preview.html",
-    },
-    onRegenerate: () => undefined,
-  },
-};

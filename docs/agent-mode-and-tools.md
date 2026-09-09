@@ -166,17 +166,13 @@ On Windows, creating the folder links may require **Developer Mode** or administ
 
 ### Publishing from Agent Chat
 
-Copilot bundles OpenArtifacts' shared publishing rules with the plugin. Publishing tasks read the local copy and need no web-fetch tool or separate Node.js/npm installation. Network access is needed only for authentication and publication.
+Copilot ships an `openartifacts-publish` skill to Claude Code, Codex, and OpenCode. Publishing needs a Copilot Plus license key in Copilot settings. Copilot passes that key to the agent process, and the skill sends it straight to `api.openartifacts.ai` over HTTPS. Nothing else is required: no Obsidian CLI, no Node.js, no npm, and no sandbox permission beyond writing inside your vault.
 
-Each Copilot release that includes these rules pins them to one reviewed commit in the OpenArtifacts repository. The commit hash identifies the source revision, and a separate content hash verifies that the bundled snapshot matches it. Multiple Copilot releases may use the same snapshot.
+Ask the agent to publish a note. It renders the note to HTML, writes the file under `.openartifacts/handoffs/` in your vault, tells you the path, and stops. Open that file in your browser to see exactly what will be published. Reply that it should publish, or describe changes and the agent revises the same file and asks again. The agent never publishes in the same turn that produced the HTML.
 
-The rules stay fixed for that Copilot version; publishing a new `openartifacts` version to npm does not change them. A Copilot update can include a newer snapshot and refresh the installed built-in Skill. You do not need to install or update the npm package, or wait for its release, to use the rules shipped with Copilot.
+After publishing, the agent saves the public link in the note's `symposium` property, so publishing the note again updates the same page and the regular **Publish file to OpenArtifacts** command recognizes it as published. Ask the agent to withdraw a page to take it down; it confirms first and removes the property afterwards.
 
-Copilot bundles the shared rules, not the complete npm CLI. Its publishing commands, authentication, document identity, browser preview, and confirmation dialog are implemented by Copilot. The built-in Skill has its own revision number for refreshing installed copies; that number is separate from both the Copilot release version and the OpenArtifacts npm version.
-
-Copilot also includes **research-memo** as an optional theme; it is not supplied by the OpenArtifacts npm package. For a named theme, the Skill checks `.openartifacts/themes/<name>.md` in your vault, then `themes/<name>.md` alongside the installed Skill. If neither exists, the agent is instructed to continue with readable defaults. A missing theme must not block publishing.
-
-For an agent-prepared page, click **Open local HTML preview** in the Copilot dialog to open the preview in your default application for HTML files. Use a browser to review the rendered page, then return to the existing Obsidian dialog, check **I reviewed the preview**, and confirm publishing. Opening the file never enables approval by itself. The browser does not open automatically. If the link fails to open a browser, open its target file manually in your browser. Local previews disable scripts, external resources, and navigation. The published HTML is preserved. The published page keeps the Copilot attribution banner. Cancellation or failure preserves the prepared file so the agent can reopen review. Successful publication or an explicit regeneration request removes the unchanged staged artifact.
+Copilot also includes **research-memo** as an optional theme. For a named theme, the skill checks `.openartifacts/themes/<name>.md` in your vault, then `themes/<name>.md` alongside the installed skill. If neither exists, the agent continues with readable defaults. A missing theme never blocks publishing.
 
 ### Upgrading an agent
 
