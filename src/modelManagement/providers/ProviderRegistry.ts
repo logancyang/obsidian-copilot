@@ -22,6 +22,7 @@
 import type { App } from "obsidian";
 import { v4 as uuidv4 } from "uuid";
 
+import { providerNeedsResolvedApiKey } from "@/modelManagement/providers/providerRequiresApiKey";
 import { logError } from "@/logger";
 import { KeychainService } from "@/services/keychainService";
 import { getSettings, setSettings } from "@/settings/model";
@@ -46,6 +47,7 @@ function providerKeychainId(vaultId: string, providerId: string): string {
   return `copilot-v${vaultId}-provider-${providerId}`;
 }
 
+/** Owns persisted provider configuration and secret access; model enrollment and removal cascades belong to the coordinator. */
 export class ProviderRegistry {
   readonly #app: App;
   readonly #adapters: ProviderAdapterRegistry;
@@ -309,6 +311,7 @@ export class ProviderRegistry {
   /**
    * Issues an adapter-defined "ping". Returns the verification
    * result; does NOT persist it.
+   * @param providerId - Configured provider whose current credentials should be checked.
    */
   async verify(providerId: string): Promise<VerificationResult> {
     const provider = this.get(providerId);
@@ -318,6 +321,16 @@ export class ProviderRegistry {
       );
     }
     const apiKey = await this.getApiKey(providerId);
+    // https://github.com/logancyang/obsidian-copilot/issues/3147:
+    // A public models endpoint must not mask a missing stored credential.
+    if (providerNeedsResolvedApiKey(provider) && !apiKey?.trim()) {
+      return {
+        ok: false,
+        code: "missing_api_key",
+        message: "API key is missing. Configure this provider to enter it again.",
+        checkedAt: Date.now(),
+      };
+    }
     return this.#adapters.verifyCredentials(provider.providerType, {
       provider,
       apiKey,

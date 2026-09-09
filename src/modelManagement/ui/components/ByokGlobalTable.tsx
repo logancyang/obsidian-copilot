@@ -6,7 +6,8 @@
  * chevron, provider name, model count, status badge, and overflow menu. When
  * expanded, model names appear in a vertical list with hover × remove.
  */
-import { Badge } from "@/components/ui/badge";
+import { ProviderVerificationStatus } from "@/modelManagement/ui/components/ProviderVerificationStatus";
+import type { VerificationResult } from "@/modelManagement/types/runtime";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
@@ -32,6 +33,8 @@ import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
 export interface ByokTableGroup {
   provider: Provider;
   models: ConfiguredModel[];
+  /** Latest check from this tab visit; absent while checking. */
+  verification?: VerificationResult;
   /** `true` when Self-Host Mode is on and this is a cloud provider — the card
    *  header shows a cloud-egress warning icon. */
   needsSelfHostWarning?: boolean;
@@ -110,25 +113,6 @@ const ProviderCard: React.FC<ProviderCardProps> = ({
   const api = useModelManagement();
   const app = useApp();
 
-  const getStatusBadge = (): {
-    label: string;
-    variant: "default" | "secondary" | "destructive" | "outline";
-    /** Green tint for the "configured" states (key set / local running);
-     *  matches the repo's canonical success pill. `undefined` keeps the
-     *  neutral variant styling for the "No key" state. */
-    className?: string;
-  } => {
-    const requiresKey = providerRequiresApiKey(provider);
-    const successClassName = "tw-rounded-full tw-bg-success tw-text-success";
-    if (!requiresKey) {
-      return { label: "Running", variant: "default", className: successClassName };
-    }
-    if (provider.apiKeyKeychainId) {
-      return { label: "API key set", variant: "default", className: successClassName };
-    }
-    return { label: "No key", variant: "secondary", className: "tw-rounded-full" };
-  };
-
   const handleRemoveModel = async (configuredModelId: string, modelName: string): Promise<void> => {
     const modal = new ConfirmModal(
       app,
@@ -147,8 +131,6 @@ const ProviderCard: React.FC<ProviderCardProps> = ({
     );
     modal.open();
   };
-
-  const statusBadge = getStatusBadge();
 
   // Sub-line under the provider name. Local providers describe themselves
   // (their models aren't a curated count); key-based providers show the
@@ -212,12 +194,7 @@ const ProviderCard: React.FC<ProviderCardProps> = ({
               <span className="tw-text-xs tw-text-muted">{getSubLine()}</span>
             </div>
             <div className="tw-flex-1" />
-            <Badge
-              variant={statusBadge.variant}
-              className={cn("tw-shrink-0", statusBadge.className)}
-            >
-              {statusBadge.label}
-            </Badge>
+            <ProviderVerificationStatus result={group.verification} />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button

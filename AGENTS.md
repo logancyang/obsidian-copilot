@@ -8,7 +8,7 @@ Copilot for Obsidian is an AI-powered assistant plugin that integrates various L
 
 ## Commands
 
-- **NEVER RUN `npm run dev`** — the user handles all builds manually.
+- **NEVER RUN `npm run dev`**.
 - `npm run build` — production build (TypeScript check + minified output).
 - `npm run lint` / `npm run lint:fix` — ESLint check / autofix.
 - `npm run format` / `npm run format:check` — Prettier write / check.

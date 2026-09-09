@@ -71,6 +71,7 @@ export type ConfigureState =
 interface ConfigureProviderFormProps {
   state: ConfigureState;
   onClose: () => void;
+  onSaved?: () => void;
 }
 
 /**
@@ -82,7 +83,11 @@ interface ConfigureProviderFormProps {
  * seed the key field with the real value — so a genuinely keyless provider is
  * visibly empty — without an empty→filled flash.
  */
-export const ConfigureProviderForm: React.FC<ConfigureProviderFormProps> = ({ state, onClose }) => {
+export const ConfigureProviderForm: React.FC<ConfigureProviderFormProps> = ({
+  state,
+  onClose,
+  onSaved,
+}) => {
   const api = useModelManagement();
   const byokProviders = useAtomValue(byokProvidersAtom, { store: settingsStore });
   const configuredModels = useAtomValue(configuredModelsAtom, { store: settingsStore });
@@ -145,6 +150,7 @@ export const ConfigureProviderForm: React.FC<ConfigureProviderFormProps> = ({ st
     <ConfigureProviderBody
       state={state}
       onClose={onClose}
+      onSaved={onSaved}
       provider={provider}
       existingModels={existingModels}
       initialApiKey={initialApiKey}
@@ -155,6 +161,7 @@ export const ConfigureProviderForm: React.FC<ConfigureProviderFormProps> = ({ st
 interface ConfigureProviderBodyProps {
   state: ConfigureState;
   onClose: () => void;
+  onSaved?: () => void;
   /** Guaranteed defined in edit mode (the gate waits for it); undefined in new mode. */
   provider: Provider | undefined;
   existingModels: readonly ConfiguredModel[];
@@ -166,6 +173,7 @@ interface ConfigureProviderBodyProps {
 const ConfigureProviderBody: React.FC<ConfigureProviderBodyProps> = ({
   state,
   onClose,
+  onSaved,
   provider,
   existingModels,
   initialApiKey,
@@ -355,6 +363,9 @@ const ConfigureProviderBody: React.FC<ConfigureProviderBodyProps> = ({
         extras: Object.keys(extras).length > 0 ? extras : undefined,
         models: pool.buildSelectedModelInfos(),
       });
+      // https://github.com/logancyang/obsidian-copilot/issues/3147:
+      // Health checks must wait until the key and endpoint are both saved.
+      onSaved?.();
       onClose();
     } catch (err) {
       logError("[ConfigureProviderDialog] setupProvider failed", err);
@@ -391,6 +402,9 @@ const ConfigureProviderBody: React.FC<ConfigureProviderBodyProps> = ({
         selectedInfos: pool.buildSelectedModelInfos(),
         api,
       });
+      // https://github.com/logancyang/obsidian-copilot/issues/3147:
+      // Health checks must wait until the key and endpoint are both saved.
+      onSaved?.();
       onClose();
     } catch (err) {
       logError("[ConfigureProviderDialog] save changes failed", err);
@@ -683,8 +697,10 @@ async function saveProviderEdit({
 interface ConfigureProviderModalOptions {
   state: ConfigureState;
   api: ModelManagementApi;
+  onSaved?: () => void;
 }
 
+/** Hosts provider configuration and reports completed saves to the settings panel. */
 export class ConfigureProviderModal extends ReactModal {
   constructor(
     app: App,
@@ -708,7 +724,11 @@ export class ConfigureProviderModal extends ReactModal {
   protected renderContent(close: () => void): React.ReactElement {
     return (
       <ModelManagementProvider api={this.opts.api}>
-        <ConfigureProviderForm state={this.opts.state} onClose={close} />
+        <ConfigureProviderForm
+          state={this.opts.state}
+          onClose={close}
+          onSaved={this.opts.onSaved}
+        />
       </ModelManagementProvider>
     );
   }
