@@ -22,7 +22,7 @@ import {
   readFrontmatterViaAdapter,
 } from "@/utils/vaultAdapterUtils";
 import { joinPosix } from "@/utils/pathUtils";
-import { App, Notice, TFile } from "obsidian";
+import { App, Notice, parseYaml, TFile } from "obsidian";
 import { MessageRepository } from "./MessageRepository";
 
 const SAFE_FILENAME_BYTE_LIMIT = 100;
@@ -333,9 +333,25 @@ export class ChatPersistenceManager {
     // Extract the YAML frontmatter
     const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
     let chatContent = content;
+    let conversationEpoch: number | undefined;
 
     if (frontmatterMatch) {
       chatContent = content.slice(frontmatterMatch[0].length).trim();
+      // Display timestamps omit milliseconds, but saving locates renamed notes by exact epoch.
+      // Preserve that identity across history reloads: https://github.com/logancyang/obsidian-copilot/issues/2886
+      try {
+        const epochValue = (parseYaml(frontmatterMatch[1]) as { epoch?: unknown } | null)?.epoch;
+        const epoch =
+          typeof epochValue === "number" || typeof epochValue === "string"
+            ? Number(epochValue)
+            : NaN;
+        if (Number.isFinite(epoch) && epoch > 0) {
+          conversationEpoch = epoch;
+        }
+      } catch {
+        // Keep legacy chats readable when edited YAML is invalid; use message timestamps instead.
+        // https://github.com/logancyang/obsidian-copilot/issues/2886
+      }
     }
 
     // Parse messages from the content
@@ -401,6 +417,11 @@ export class ChatPersistenceManager {
         if (!isNaN(date.getTime())) {
           epoch = date.getTime();
         }
+      }
+
+      // The first message carries the saved conversation identity: https://github.com/logancyang/obsidian-copilot/issues/2886
+      if (messages.length === 0 && conversationEpoch !== undefined) {
+        epoch = conversationEpoch;
       }
 
       messages.push({

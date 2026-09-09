@@ -55,7 +55,7 @@ After a response, the token counter in the top bar shows the context used for th
 
 Use **New Chat** in the top bar or run **New Copilot Quick Chat**. Starting over clears the current messages and resets context to the active note when automatic context is enabled.
 
-Use **Chat History** to search saved conversations, reopen one, rename it, open its Markdown source, or delete it.
+Use **Chat History** to search saved conversations, reopen one, rename it, open its Markdown source, or delete it. Continuing a reopened conversation updates its existing note, including after the note has been renamed or while its source is open.
 
 **Autosave Chat as Markdown** is enabled by default. Copilot saves after each user message and response under `<Copilot folder>/copilot-conversations/`. If autosave is off, use **Save Chat as Note** in the top bar. Change autosave and **Conversation Filename Template** under **Settings → Copilot → Basic → Saving conversations**.
 
