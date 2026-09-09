@@ -37,25 +37,35 @@ export async function reconcileBuiltinSkills(options: ReconcileBuiltinOptions): 
   // preventing a temporarily unavailable agent from becoming a permanent opt-out.
   // https://github.com/logancyang/obsidian-copilot/issues/3022
   let changed = false;
+  const errors: string[] = [];
   for (const skill of ALL_MANAGED_SKILLS) {
     if (preferences[skill.name] !== undefined) continue;
-    const legacyPreference = skill.legacyName ? preferences[skill.legacyName] : undefined;
-    let disabledAgents: string[] = [];
-    for (const name of [skill.name, ...(skill.legacyName ? [skill.legacyName] : [])]) {
-      const state = await inspectBuiltinSkill(folder, name, fs);
-      if (state === "failed") throw new Error(`Could not read built-in skill ${name}.`);
-      if (state !== "seeded") continue;
-      const parsed = parseSkillFile(
-        await fs.read(joinPosix(joinPosix(folder, name), "SKILL.md")),
-        name
+    try {
+      const legacyPreference = skill.legacyName ? preferences[skill.legacyName] : undefined;
+      let disabledAgents: string[] = [];
+      for (const name of [skill.name, ...(skill.legacyName ? [skill.legacyName] : [])]) {
+        const state = await inspectBuiltinSkill(folder, name, fs);
+        if (state === "failed") throw new Error(`Could not read built-in skill ${name}.`);
+        if (state !== "seeded") continue;
+        const parsed = parseSkillFile(
+          await fs.read(joinPosix(joinPosix(folder, name), "SKILL.md")),
+          name
+        );
+        disabledAgents = registeredAgents.filter(
+          (agent) => !parsed.frontmatter.enabledAgents.includes(agent)
+        );
+        break;
+      }
+      preferences[skill.name] = legacyPreference ?? { disabledAgents };
+      changed = true;
+    } catch (error) {
+      // One damaged bundled file must not block unrelated installs or opt-outs. Keep
+      // its migration pending and its files untouched until it can be read safely.
+      // https://github.com/logancyang/obsidian-copilot/issues/3022
+      errors.push(
+        `Could not migrate built-in skill ${skill.name}: ${error instanceof Error ? error.message : String(error)}`
       );
-      disabledAgents = registeredAgents.filter(
-        (agent) => !parsed.frontmatter.enabledAgents.includes(agent)
-      );
-      break;
     }
-    preferences[skill.name] = legacyPreference ?? { disabledAgents };
-    changed = true;
   }
   if (changed) {
     const migrated = preferences;
@@ -80,11 +90,12 @@ export async function reconcileBuiltinSkills(options: ReconcileBuiltinOptions): 
   // Canonical metadata is synced; device availability must only govern local installation.
   // An unavailable device retains existing canonical files so it cannot delete another
   // device's tools through sync. https://github.com/logancyang/obsidian-copilot/issues/3022
-  const seed = ALL_MANAGED_SKILLS.filter((skill) =>
-    enabledAgents[skill.name].some((agent) => availableAgents.includes(agent))
+  const seed = ALL_MANAGED_SKILLS.filter(
+    (skill) =>
+      preferences[skill.name] !== undefined &&
+      enabledAgents[skill.name].some((agent) => availableAgents.includes(agent))
   );
   await seedBuiltinSkills({ skillsFolderRelPath: folder, fs, skills: seed, enabledAgents });
-  const errors: string[] = [];
   for (const skill of seed) {
     const state = await inspectBuiltinSkill(folder, skill.name, fs, skill.version);
     const supportFilesPresent =
@@ -104,7 +115,7 @@ export async function reconcileBuiltinSkills(options: ReconcileBuiltinOptions): 
       );
   }
   for (const skill of ALL_MANAGED_SKILLS) {
-    if (enabledAgents[skill.name].length > 0) continue;
+    if (preferences[skill.name] === undefined || enabledAgents[skill.name].length > 0) continue;
     for (const name of [skill.name, ...(skill.legacyName ? [skill.legacyName] : [])]) {
       await removeSeededBuiltin(folder, name, fs);
       const state = await inspectBuiltinSkill(folder, name, fs);

@@ -86,6 +86,35 @@ describe("reconcileBuiltinSkills", () => {
     });
   });
   describe("reconcileBuiltinSkills()", () => {
+    it.each(["name", "description"])(
+      `isolates a malformed built-in %s while reconciling other skills and retries its migration after repair ${ISSUE}`,
+      async (field) => {
+        const [damaged, disabled, enabled] = BUILTIN_SKILLS;
+        const f = fixture({ [disabled.name]: { disabled: true } });
+        const original = damaged.skillMd.replace(
+          /copilot-enabled-agents:.*/,
+          "copilot-enabled-agents: claude"
+        );
+        const malformed = original.replace(new RegExp(`^${field}:.*$`, "m"), `${field}: []`);
+        f.files.set(f.path(damaged.name), malformed);
+        f.files.set(f.path(disabled.name), disabled.skillMd);
+        f.options.availableAgents = ["claude"];
+        await expect(reconcileBuiltinSkills(f.options)).rejects.toThrow(
+          `Could not migrate built-in skill ${damaged.name}`
+        );
+        expect(f.files.get(f.path(damaged.name))).toBe(malformed);
+        expect(
+          f.options.settings.agentMode.skills.builtinPreferences?.[damaged.name]
+        ).toBeUndefined();
+        expect(f.files.has(f.path(disabled.name))).toBe(false);
+        expect(f.files.has(f.path(enabled.name))).toBe(true);
+        f.files.set(f.path(damaged.name), original);
+        await reconcileBuiltinSkills(f.options);
+        expect(
+          f.options.settings.agentMode.skills.builtinPreferences?.[damaged.name].disabledAgents
+        ).toEqual(["codex", "opencode"]);
+      }
+    );
     it(`keeps canonical metadata stable across devices and retains existing files without a local agent ${ISSUE}`, async () => {
       const skill = BUILTIN_SKILLS[0];
       const f = fixture();
