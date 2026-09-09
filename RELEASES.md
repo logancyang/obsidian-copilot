@@ -1,5 +1,43 @@
 # Release Notes
 
+# v4.0.7 - GPT-6 Astra, meet your notes
+
+![GPT-6 Astra galaxy artwork with OpenAI and Copilot logos](https://github.com/user-attachments/assets/b801ff23-cc12-41c3-924e-0b70bec698bc)
+
+GPT-6 Astra is here, and we want you to try it where your ideas already live. To celebrate, we've given Codex in Copilot a major setup upgrade: install it inside Obsidian, sign in through your browser, and choose your model and reasoning effort without a wall of duplicate entries. Bring a question you've been saving, a draft that needs another pass, or a folder of research. See what Astra can do with your notes. (https://developers.openai.com/api/docs/models/gpt-6-astra)
+
+## Install Codex and sign in
+
+Open Codex's **Configure** dialog and choose **Managed by Copilot** to download Codex and its adapter, with no Node.js, npm, or terminal setup required. Click **Sign in** to continue in your browser, or choose **My own binary** to keep using an installation you manage yourself. ([#3125](https://github.com/logancyang/obsidian-copilot/pull/3125), [#3117](https://github.com/logancyang/obsidian-copilot/pull/3117), @zeroliu)
+
+![Configure Codex with Managed by Copilot, Download & install, and sign-in status](https://github.com/user-attachments/assets/6e4d3ba4-4b7a-440d-b7ba-0b828cc0da39)
+
+## Choose your model and how deeply it thinks
+
+Codex now shows one entry per model, with a separate choice of the reasoning efforts your adapter supports. Pick GPT-6 Astra when it's available to your account, choose an effort, and get to work; your saved enabled models and default selection carry forward when you upgrade. ([#2766](https://github.com/logancyang/obsidian-copilot/pull/2766), [#2767](https://github.com/logancyang/obsidian-copilot/pull/2767), @zeroliu)
+
+![Codex model picker with GPT-6 Astra selected and a separate reasoning-effort slider](https://github.com/user-attachments/assets/359b323b-a07e-4b81-ae25-e083ff434b70)
+
+## Publish notes from Agent Chat again
+
+Publishing a note to OpenArtifacts from Agent Chat works again, including on Windows. Ask Claude Code, Codex, or OpenCode to publish a note: the agent writes the page as an HTML file, tells you where it is so you can open it in your browser, and uploads it only after you say so. Nothing else needs to be installed, and notes you shared earlier keep their page and update in place. ([#3157](https://github.com/logancyang/obsidian-copilot/pull/3157), [#3122](https://github.com/logancyang/obsidian-copilot/pull/3122), @logancyang)
+
+## Enhancements
+
+- **Browse all your projects in one place.** Search project names and descriptions inline, then keep scrolling to reach older projects. ([#3119](https://github.com/logancyang/obsidian-copilot/pull/3119), @logancyang)
+- **Keep relevant notes visible while you chat.** The **Open in Separate Pane** button in Relevant Notes opens them in their own view, so you can keep them visible while chatting with the agent. ([#3130](https://github.com/logancyang/obsidian-copilot/pull/3130), @brevilabs-agent-bot[bot])
+
+## Fixes
+
+- **Codex updates preserve running installations.** A replacement is verified before Copilot selects it, and previous downloads remain available to sessions already using them. ([#3126](https://github.com/logancyang/obsidian-copilot/pull/3126), @zeroliu)
+
+## 🧰 Troubleshoot
+
+- If models are missing, navigate to Copilot settings -> Models tab and click "Refresh Built-in Models".
+- Please report any issue you see in the member channel!
+
+---
+
 # v4.0.6 - Note indexing with Miyo and Relevant Note upgrade
 
 ![Relevant Notes in Obsidian, with a separate Powered by Miyo logo below the screenshot](https://github.com/user-attachments/assets/d3086fac-635a-46c5-b12b-bb4b4d4a1830)
