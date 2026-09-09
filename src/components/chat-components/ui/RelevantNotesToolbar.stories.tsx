@@ -18,6 +18,10 @@ export default meta;
 
 export const LiveUpdateOn: StoryObj<RelevantNotesToolbarProps> = {};
 
+export const AgentChatContext: StoryObj<RelevantNotesToolbarProps> = {
+  args: { activeFileName: "Agent chat context" },
+};
+
 export const LiveUpdateOff: StoryObj<RelevantNotesToolbarProps> = {
   args: { liveUpdate: { enabled: false, onChange: () => undefined } },
 };
