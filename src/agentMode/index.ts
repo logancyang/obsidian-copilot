@@ -21,7 +21,10 @@ import {
   availableBuiltinAgents,
   reconcileBuiltinSkills,
 } from "./skills/builtin/reconcileBuiltinSkills";
-import { saveBuiltinPreferences } from "@/settings/builtinSkillPreferences";
+import {
+  saveBuiltinPreferences,
+  type BuiltinPreferencesUpdate,
+} from "@/settings/builtinSkillPreferences";
 import { buildBuiltinSeedFs } from "./skills/builtin/miyoSearchSeed";
 import {
   createDefaultAskUserQuestionPrompter,
@@ -184,9 +187,8 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     lastAvailableSkillAgents = availableBuiltinAgents(states, lastAvailableSkillAgents);
     return lastAvailableSkillAgents;
   };
-  const saveSkillPreferences = (
-    preferences: NonNullable<CopilotSettings["agentMode"]["skills"]["builtinPreferences"]>
-  ): Promise<void> => saveBuiltinPreferences(preferences, (data) => plugin.saveData(data));
+  const saveSkillPreferences = (update: BuiltinPreferencesUpdate) =>
+    saveBuiltinPreferences(update, (data) => plugin.saveData(data));
   const skillManager = SkillManager.initialize(app, collectAgentSkillsDirsProjectRel(), {
     availableAgents: availableSkillAgents,
     savePreferences: saveSkillPreferences,

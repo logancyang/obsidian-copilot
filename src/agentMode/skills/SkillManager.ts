@@ -41,7 +41,9 @@ import {
 export interface BuiltinSkillRuntime {
   prepare(folder: string): Promise<void>;
   availableAgents(): readonly string[];
-  savePreferences(preferences: BuiltinPreferences): Promise<void>;
+  savePreferences(
+    update: (current: BuiltinPreferences) => BuiltinPreferences
+  ): Promise<BuiltinPreferences>;
 }
 
 /** Debounce window for vault-watch-driven reconciliation, per spec. */
@@ -357,23 +359,20 @@ export class SkillManager {
           documents: settings.docProcessorBackend === "miyo",
         }).seed.map((skill) => skill.name)
       );
+      const availableAgents = this.builtinRuntime?.availableAgents();
       const skills = mergeDiscovery(canonicalDiscovery.accepted, projectCandidates).map((skill) => {
         // Failed cleanup must never reactivate an opted-out skill through stale metadata.
         // https://github.com/logancyang/obsidian-copilot/issues/3022
-        if (!skill.builtin || !this.builtinRuntime) return skill;
+        if (!skill.builtin || !availableAgents) return skill;
         const pref = settings.agentMode.skills.builtinPreferences?.[skill.name];
         return {
           ...skill,
           enabledAgents:
             pref?.disabled || !eligible.has(skill.name)
               ? []
-              : this.builtinRuntime
-                  .availableAgents()
-                  .filter((agent) =>
-                    pref
-                      ? !pref.disabledAgents?.includes(agent)
-                      : skill.enabledAgents.includes(agent)
-                  ),
+              : availableAgents.filter((agent) =>
+                  pref ? !pref.disabledAgents?.includes(agent) : skill.enabledAgents.includes(agent)
+                ),
         };
       });
       const rejectedSkills =
@@ -472,15 +471,16 @@ export class SkillManager {
   ): Promise<SkillOperationResult<"fs-error">> {
     const operation = this.builtinMutation.then(
       async (): Promise<SkillOperationResult<"fs-error">> => {
+        // Reject identities outside the catalog before persisting an unusable preference.
+        // https://github.com/logancyang/obsidian-copilot/issues/3022
         if (!this.builtinRuntime || !ALL_MANAGED_SKILLS.some((skill) => skill.name === name))
           return fsFailure("Unknown built-in skill.");
         try {
           await this.inFlight;
-          const preferences = getSettings().agentMode.skills.builtinPreferences ?? {};
-          await this.builtinRuntime.savePreferences({
+          await this.builtinRuntime.savePreferences((preferences) => ({
             ...preferences,
             [name]: update(preferences[name] ?? {}),
-          });
+          }));
           // A preference changed while discovery was running still requires a final pass.
           // https://github.com/logancyang/obsidian-copilot/issues/3022
           if (this.inFlight) this.queuedRefresh = true;

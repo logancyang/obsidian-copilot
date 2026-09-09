@@ -283,6 +283,19 @@ describe("MiyoSettings", () => {
       expect(NoticeMock).not.toHaveBeenCalled();
     });
 
+    it.each([{ ok: false }, { ok: true, reconcileErrorCount: 1 }])(
+      "restores the disabled Miyo gate after an enable failure %j (https://github.com/logancyang/obsidian-copilot/issues/3022)",
+      async (result) => {
+        refreshSkills.mockResolvedValue(result);
+        render(<MiyoSettings />);
+        fireEvent.click(toggle());
+        await waitFor(() =>
+          expect(updateSetting).toHaveBeenLastCalledWith("enableMiyoSearchSkill", false)
+        );
+        expect(updateSetting).toHaveBeenCalledWith("enableMiyoSearchSkill", true);
+      }
+    );
+
     it("retains a disable preference and reports unsuccessful cleanup (https://github.com/logancyang/obsidian-copilot/issues/3022)", async () => {
       currentSettings = { ...DEFAULT_SETTINGS, enableMiyoSearchSkill: true };
       refreshSkills.mockResolvedValue({ ok: true, reconcileErrorCount: 1 });
@@ -306,7 +319,7 @@ describe("MiyoSettings", () => {
         gate.resolve({ ok: false });
       });
       expect(NoticeMock).not.toHaveBeenCalled();
-      expect(updateSetting).toHaveBeenCalledWith("enableMiyoSearchSkill", true);
+      expect(updateSetting).toHaveBeenLastCalledWith("enableMiyoSearchSkill", false);
     });
 
     it("reports an unexpected reconciliation failure (https://github.com/logancyang/obsidian-copilot/issues/3022)", async () => {
