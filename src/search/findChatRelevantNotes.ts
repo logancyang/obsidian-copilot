@@ -1,5 +1,5 @@
-import { MiyoClient, MiyoRequestError, type RelatedContextResponse } from "@/miyo/MiyoClient";
-import { getMiyoCustomUrl, getMiyoFilePath, getVaultRelativeMiyoPath } from "@/miyo/miyoUtils";
+import { MiyoClient, MiyoRequestError } from "@/miyo/MiyoClient";
+import { getMiyoCustomUrl, getVaultRelativeMiyoPath } from "@/miyo/miyoUtils";
 import type { ChatRelevantNotesContext } from "@/search/chatRelevantNotesContext";
 import type { RelevantNotesResult } from "@/search/findRelevantNotes";
 import { getSettings } from "@/settings/model";
@@ -7,18 +7,16 @@ import { withTimeout } from "@/utils";
 import { App, TFile } from "obsidian";
 
 const EMPTY_NOTES = Object.freeze([]);
-/** Retrieve one chat snapshot; the opt-in fixture exercises the UI without claiming relevance.
+/** Retrieve relevant notes from Miyo for one chat snapshot.
  * @param app - Vault used to resolve result paths.
  * @param context - Isolated composition and visible conversation snapshot.
- * @param mock - Explicit development-only fixture mode.
  */
 export async function findChatRelevantNotes(
   app: App,
-  context: ChatRelevantNotesContext,
-  mock = false
+  context: ChatRelevantNotesContext
 ): Promise<RelevantNotesResult> {
   const { request } = context;
-  const details = { skippedAttachments: context.skippedAttachments, mock };
+  const details = { skippedAttachments: context.skippedAttachments };
   if (
     !request.draft?.trim() &&
     !request.messages?.some((message) => message.content.trim()) &&
@@ -31,36 +29,16 @@ export async function findChatRelevantNotes(
   }
   const client = new MiyoClient({ plusLicenseKey: getSettings().plusLicenseKey });
   try {
-    let response: RelatedContextResponse;
-    if (mock) {
-      // Fixture order is alphabetical, independent of the conversation; it is not a ranking.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/383
-      const results = app.vault
-        .getMarkdownFiles()
-        .filter((file) => !request.file_paths?.includes(getMiyoFilePath(app, file.path)))
-        .sort((a, b) => a.path.localeCompare(b.path))
-        .slice(0, request.limit ?? 20)
-        .map((file) => ({ path: getMiyoFilePath(app, file.path), score: 0.73 }));
-      response = {
-        status: "ok",
-        results,
-        count: results.length,
-        skipped_files: [],
-        context_truncated: false,
-        execution_time_ms: 0,
-      };
-    } else {
-      const baseUrl = await withTimeout(
-        () => client.resolveBaseUrl(getMiyoCustomUrl(getSettings())),
-        8000,
-        "Miyo endpoint resolution"
-      );
-      response = await withTimeout(
-        () => client.recommend(baseUrl, request),
-        8000,
-        "Miyo chat related search"
-      );
-    }
+    const baseUrl = await withTimeout(
+      () => client.resolveBaseUrl(getMiyoCustomUrl(getSettings())),
+      8000,
+      "Miyo endpoint resolution"
+    );
+    const response = await withTimeout(
+      () => client.recommend(baseUrl, request),
+      8000,
+      "Miyo chat related search"
+    );
     details.skippedAttachments += response.skipped_files.length;
     const notes = response.results.flatMap(({ path, score }) => {
       const relativePath = getVaultRelativeMiyoPath(app, path);

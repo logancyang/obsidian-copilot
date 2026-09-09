@@ -224,7 +224,6 @@ export type RelevantNotesSearchStatus =
 
 export interface RelevantNotesStatusDetails {
   skippedAttachments?: number;
-  mock?: boolean;
   errorMessage?: string;
   exclusionReason?: MiyoFileStatusReason;
   exclusionRule?: string;
@@ -300,11 +299,7 @@ export function isSameRelevantNotesResult(a: RelevantNotesResult, b: RelevantNot
   if (a.status !== b.status) return false;
   // Notice changes must render even when the recommendation rows stay the same.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/383
-  if (
-    a.details?.skippedAttachments !== b.details?.skippedAttachments ||
-    a.details?.mock !== b.details?.mock
-  )
-    return false;
+  if (a.details?.skippedAttachments !== b.details?.skippedAttachments) return false;
   if (a.details?.errorMessage !== b.details?.errorMessage) return false;
   if (a.details?.exclusionReason !== b.details?.exclusionReason) return false;
   if (a.details?.exclusionRule !== b.details?.exclusionRule) return false;

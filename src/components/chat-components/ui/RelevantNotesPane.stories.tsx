@@ -53,10 +53,6 @@ export default meta;
 
 export const ConnectedScoredResults: StoryObj<RelevantNotesPaneProps> = {};
 
-export const MockChatContext: StoryObj<RelevantNotesPaneProps> = {
-  args: { details: { mock: true } },
-};
-
 export const SkippedChatAttachments: StoryObj<RelevantNotesPaneProps> = {
   args: { details: { skippedAttachments: 2 } },
 };
