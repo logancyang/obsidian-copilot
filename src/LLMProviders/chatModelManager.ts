@@ -324,7 +324,7 @@ export default class ChatModelManager {
                 // requestUrl supports neither when CORS compatibility is off.
                 return customModel.enableCors
                   ? safeFetchNoThrow(url, { ...options, headers })
-                  : fetch(url, { ...options, headers });
+                  : window.fetch(url, { ...options, headers });
               }
             : customModel.enableCors
               ? safeFetchNoThrow
