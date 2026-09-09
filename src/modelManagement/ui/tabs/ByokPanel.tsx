@@ -58,9 +58,14 @@ export const ByokPanel: React.FC = () => {
   const [query, setQuery] = useState("");
   const [verification, setVerification] =
     useState<Readonly<Record<string, VerificationResult>>>(EMPTY_VERIFICATION);
-  const [pendingChecks, setPendingChecks] = useState(0);
-  const [saveRevision, setSaveRevision] = useState(0);
-  const refreshVerification = (): void => setSaveRevision((revision) => revision + 1);
+  const [verificationProviders, setVerificationProviders] = useState(() =>
+    api.providerRegistry.listByOrigin("byok")
+  );
+  const pendingChecks = verificationProviders.length - Object.keys(verification).length;
+  const refreshVerification = (): void => {
+    setVerification(EMPTY_VERIFICATION);
+    setVerificationProviders([...api.providerRegistry.listByOrigin("byok")]);
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -68,10 +73,7 @@ export const ByokPanel: React.FC = () => {
     // Check completed saves, including CORS-only edits. Registry events can fire
     // between key and endpoint writes and would send the new key to the old URL.
 
-    const snapshot = api.providerRegistry.listByOrigin("byok");
-    setVerification(EMPTY_VERIFICATION);
-    setPendingChecks(snapshot.length);
-    for (const provider of snapshot) {
+    for (const provider of verificationProviders) {
       void api.providerRegistry
         .verify(provider.providerId)
         .catch(
@@ -84,13 +86,12 @@ export const ByokPanel: React.FC = () => {
         .then((result) => {
           if (cancelled) return;
           setVerification((results) => ({ ...results, [provider.providerId]: result }));
-          setPendingChecks((remaining) => remaining - 1);
         });
     }
     return () => {
       cancelled = true;
     };
-  }, [api, saveRevision]);
+  }, [api, verificationProviders]);
 
   // Load the catalog once and keep our snapshot in sync. The disk-load path
   // of `ensureLoaded` does NOT fire `onChange`, so we sync explicitly after
