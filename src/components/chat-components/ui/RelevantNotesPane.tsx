@@ -37,7 +37,6 @@ interface GuidancePanelProps {
     | "index-error"
     | "excluded"
     | "no-usable-context"
-    | "unsupported-service"
     | "request-too-large"
     | "request-error"
     | "not-indexed";
@@ -100,8 +99,8 @@ export function RelevantNotesPane({
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
   let guidancePanel: React.ReactNode = null;
   switch (status) {
-    // An unusable chat or incompatible service must explain the failure instead
-    // of silently showing results for an unrelated editor note.
+    // Unusable chat context must explain the failure instead of showing
+    // results for an unrelated editor note.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/383
     case "no-usable-context":
       guidancePanel = (
@@ -110,19 +109,6 @@ export function RelevantNotesPane({
           title="No usable chat context"
           description="The attachments aren't available in Miyo. Write a message or add an indexed note to find related notes."
         />
-      );
-      break;
-    case "unsupported-service":
-      guidancePanel = (
-        <GuidancePanel
-          id="unsupported-service"
-          title="Update Miyo for chat context"
-          description="This Miyo service doesn't support chat-context retrieval. Connect a compatible Miyo version and try again."
-        >
-          <Button variant="default" size="sm" onClick={actions.onOpenMiyoSettings}>
-            Open Miyo settings
-          </Button>
-        </GuidancePanel>
       );
       break;
     case "request-too-large":
