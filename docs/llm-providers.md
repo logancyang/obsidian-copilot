@@ -52,6 +52,14 @@ with that provider.
 5. Select or enter at least one model, optionally click **Test**, then click
    **Save**.
 
+Each time you open **BYOK**, Copilot checks your configured providers again. A small
+“Verifying providers…” indicator appears while checks run, and each provider updates
+as its check finishes. **Verified** means the provider passed its connection or key
+check. **No key** or **Invalid key** means you should configure that provider again.
+**Check failed** can also mean a connection or rate-limit problem; hover over the
+badge for details and reopen the tab to retry. Saving provider changes also refreshes
+these checks. A successful check does not guarantee access to every model.
+
 The provider list and model catalog are loaded in the app, so this guide does
 not keep a fixed provider or model count. If the endpoint cannot list its
 models, you can enter a model ID yourself.
