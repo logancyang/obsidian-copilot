@@ -199,6 +199,9 @@ export const SkillRow: React.FC<SkillRowProps> = ({
         </div>
       }
       actions={
+        // Non-modal menus avoid a body scroll lock: Reveal in vault moves focus out of
+        // Settings and can interrupt menu teardown, stranding Radix's wheel listener
+        // and disabling document scrolling until restart (issue #118).
         <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen} modal={false}>
           <DropdownMenuTrigger asChild>
             <Button

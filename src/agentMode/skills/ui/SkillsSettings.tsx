@@ -1,3 +1,4 @@
+import { availableBuiltinAgents } from "@/agentMode/skills/builtin/reconcileBuiltinSkills";
 import { useBackendInstallStates } from "@/agentMode/session/useBackendInstallStates";
 import { ALL_MANAGED_SKILLS, planManagedBuiltins } from "@/agentMode/skills/builtin/builtinSkills";
 import { parseSkillFile } from "@/agentMode/skills/skillFormat";
@@ -89,9 +90,13 @@ export const SkillsSettings: React.FC = () => {
   const [refreshError, setRefreshError] = useState<string>();
   const userSkills = useMemo(() => skills.filter((skill) => !skill.builtin), [skills]);
   const installStates = useBackendInstallStates(plugin, descriptors);
-  const availableAgents = agents
-    .filter((agent) => installStates[agent.id]?.kind === "ready")
-    .map((agent) => agent.id);
+  // Installed built-ins establish readiness if Settings opens during a recheck.
+  // https://github.com/logancyang/obsidian-copilot/issues/3022
+  const lastAvailableAgents = useRef(
+    skills.filter((skill) => skill.builtin).flatMap((skill) => skill.enabledAgents)
+  );
+  const availableAgents = availableBuiltinAgents(installStates, lastAvailableAgents.current);
+  lastAvailableAgents.current = availableAgents;
   const eligibleBuiltins = planManagedBuiltins({
     search: settings.enableMiyoSearchSkill === true,
     documents: settings.docProcessorBackend === "miyo",
@@ -100,9 +105,16 @@ export const SkillsSettings: React.FC = () => {
   // Catalog rows survive file removal so users can restore disabled built-ins.
   const builtinRows = ALL_MANAGED_SKILLS.map((skill) => {
     const preference = settings.agentMode?.skills?.builtinPreferences?.[skill.name];
-    const collision = userSkills.some(
-      (userSkill) => userSkill.name === skill.name && userSkill.location.kind === "canonical"
-    );
+    // Rejected user files still occupy their canonical path and cannot be overwritten.
+    // https://github.com/logancyang/obsidian-copilot/issues/3022
+    const collision =
+      userSkills.some(
+        (userSkill) => userSkill.name === skill.name && userSkill.location.kind === "canonical"
+      ) ||
+      rejectedSkills.some(
+        (rejected) =>
+          toVaultRelative(rejected.dirPath, getVaultBase(app)) === `${skillsFolder}/${skill.name}`
+      );
     return {
       name: skill.name,
       description: parseSkillFile(skill.skillMd, skill.name).frontmatter.description,
@@ -131,6 +143,9 @@ export const SkillsSettings: React.FC = () => {
           ? await manager.setBuiltinSkillEnabled(name, enabled)
           : await manager.setBuiltinAgentEnabled(name, agent, enabled);
       if (!result.ok) setBuiltinError(result.message);
+      // Successful mutations include reconciliation, so an older refresh failure is resolved.
+      // https://github.com/logancyang/obsidian-copilot/issues/3022
+      else setRefreshError(undefined);
     } catch (error) {
       setBuiltinError(
         `Could not update ${name}: ${error instanceof Error ? error.message : String(error)}`
@@ -367,7 +382,7 @@ export const SkillsSettings: React.FC = () => {
         </div>
 
         {/* Body — empty placeholder, or the Tidy list. */}
-        <div className="tw-mt-4" role="table" aria-label="Your Skills">
+        <div className="tw-mt-4" role="region" aria-label="Your Skills">
           <div
             role="heading"
             aria-level={3}

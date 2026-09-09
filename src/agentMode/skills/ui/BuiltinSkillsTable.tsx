@@ -54,9 +54,9 @@ export function BuiltinSkillsTable({
           {error}
         </div>
       )}
-      <div ref={containerRef} role="table" aria-label="Built-in Skills" className="tw-space-y-1.5">
+      <div ref={containerRef} className="tw-space-y-1.5">
         {skills.map((skill) => (
-          <div role="row" key={skill.name}>
+          <div key={skill.name}>
             <SkillRowLayout
               name={skill.name}
               description={skill.description}
@@ -169,6 +169,8 @@ export function BuiltinSkillsTable({
             )}
           </div>
         ))}
+        {/* Search can hide every catalog row; explain the result instead of implying missing bundled skills.
+            https://github.com/logancyang/obsidian-copilot/issues/3022 */}
         {skills.length === 0 && (
           <p className="tw-text-ui-smaller tw-text-muted">No built-in skills match your search.</p>
         )}

@@ -1,3 +1,5 @@
+import type { AgentBrand, InstallState } from "@/agentMode/session/types";
+import { Bot } from "lucide-react";
 import { AppContext } from "@/context";
 import { PluginProvider } from "@/contexts/PluginContext";
 import { DEFAULT_SETTINGS } from "@/constants";
@@ -21,6 +23,12 @@ const setBuiltinAgentEnabled = jest.fn().mockResolvedValue({ ok: true });
 const refresh = jest.fn().mockResolvedValue({ ok: true, reconcileErrorCount: 0 });
 const getAgentDirsProjectRel = jest.fn().mockReturnValue({});
 let mockManagedSkills: Skill[] = [];
+let mockAgents: AgentBrand[] = [];
+let mockInstallStates: Record<string, InstallState> = {};
+jest.mock("@/agentMode/session/useBackendInstallStates", () => ({
+  // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the production hook
+  useBackendInstallStates: () => mockInstallStates,
+}));
 let mockRejectedSkills: RejectedSkill[] = [];
 let mockCapturedLoadIssues: readonly SkillLoadIssue[] = [];
 let mockCapturedFixAll: () => void = () => undefined;
@@ -66,7 +74,7 @@ jest.mock("@/utils/openVaultPath", () => ({ openVaultPath: jest.fn() }));
 // The registry pulls in every backend's icon/adapter chain; the row list is
 // empty in these tests, so an empty descriptor set keeps the surface minimal.
 jest.mock("@/agentMode/backends/registry", () => ({
-  listBackendDescriptors: () => [],
+  listBackendDescriptors: () => mockAgents,
 }));
 
 function renderSettings(app: App = makeApp()) {
@@ -96,6 +104,8 @@ describe("SkillsSettings", () => {
       jest.clearAllMocks();
       __resetVaultBaseCache();
       mockManagedSkills = [];
+      mockAgents = [];
+      mockInstallStates = {};
       mockRejectedSkills = [];
       mockCapturedLoadIssues = [];
       mockCapturedFixAll = () => undefined;
@@ -117,8 +127,8 @@ describe("SkillsSettings", () => {
       await act(async () => {
         renderSettings();
       });
-      expect(screen.getByRole("table", { name: "Your Skills" })).toBeTruthy();
-      expect(screen.getByRole("table", { name: "Built-in Skills" })).toBeTruthy();
+      expect(screen.getByRole("region", { name: "Your Skills" })).toBeTruthy();
+      expect(screen.getByRole("region", { name: "Built-in Skills" })).toBeTruthy();
       fireEvent.pointerDown(
         screen.getByRole("button", { name: "More actions for copilot-youtube-transcript" }),
         { button: 0, ctrlKey: false }
@@ -193,6 +203,107 @@ describe("SkillsSettings", () => {
       });
       expect(screen.queryByRole("alert")).toBeNull();
     });
+
+    it("clears an earlier refresh failure after a successful built-in mutation for https://github.com/logancyang/obsidian-copilot/issues/3022", async () => {
+      refresh.mockResolvedValueOnce({
+        ok: true,
+        reconcileErrorCount: 1,
+        reconcileError: "Cleanup failed",
+      });
+      await act(async () => {
+        renderSettings();
+      });
+      expect(screen.getByRole("alert").textContent).toBe("Cleanup failed");
+      fireEvent.pointerDown(screen.getByLabelText("More actions for copilot-youtube-transcript"), {
+        button: 0,
+        ctrlKey: false,
+      });
+      await act(async () => {
+        fireEvent.click(screen.getByRole("menuitem", { name: "Disable skill" }));
+      });
+      expect(screen.queryByRole("alert")).toBeNull();
+    });
+
+    it("preserves a ready agent during rechecks without enabling an unverified first install for https://github.com/logancyang/obsidian-copilot/issues/3022", async () => {
+      mockAgents = [
+        { id: "claude", displayName: "Claude", Icon: Bot },
+        { id: "opencode", displayName: "OpenCode", Icon: Bot },
+      ];
+      mockInstallStates = {
+        claude: { kind: "ready", source: "managed" },
+        opencode: { kind: "checking", source: "managed" },
+      };
+      await act(async () => {
+        renderSettings();
+      });
+      expect(
+        screen
+          .getByRole("button", { name: "copilot-youtube-transcript for Claude" })
+          .getAttribute("aria-pressed")
+      ).toBe("true");
+      mockInstallStates = { ...mockInstallStates, claude: { kind: "checking", source: "managed" } };
+      await act(async () => {
+        updateSetting("copilotFolder", "recheck");
+      });
+      expect(
+        screen
+          .getByRole("button", { name: "copilot-youtube-transcript for Claude" })
+          .getAttribute("aria-pressed")
+      ).toBe("true");
+      expect(
+        screen
+          .getAllByRole("button", { name: "Set up OpenCode to enable" })[0]
+          .getAttribute("aria-pressed")
+      ).toBe("false");
+    });
+
+    it("keeps manager-published active agents available when settings opens during a recheck for https://github.com/logancyang/obsidian-copilot/issues/3022", async () => {
+      mockAgents = [{ id: "claude", displayName: "Claude", Icon: Bot }];
+      mockInstallStates = { claude: { kind: "checking", source: "managed" } };
+      mockManagedSkills = [
+        {
+          name: "copilot-youtube-transcript",
+          description: "Read transcripts",
+          body: "",
+          filePath: "/vault/copilot/skills/copilot-youtube-transcript/SKILL.md",
+          dirPath: "/vault/copilot/skills/copilot-youtube-transcript",
+          enabledAgents: ["claude"],
+          location: { kind: "canonical" },
+          builtin: true,
+        },
+      ];
+      await act(async () => {
+        renderSettings();
+      });
+      expect(
+        screen
+          .getByRole("button", { name: "copilot-youtube-transcript for Claude" })
+          .getAttribute("aria-pressed")
+      ).toBe("true");
+    });
+
+    it.each(["copilot/skills", ".claude/skills"])(
+      "only treats rejected canonical files as built-in collisions at %s for https://github.com/logancyang/obsidian-copilot/issues/3022",
+      async (folder) => {
+        mockAgents = [{ id: "claude", displayName: "Claude", Icon: Bot }];
+        mockInstallStates = { claude: { kind: "ready", source: "managed" } };
+        mockRejectedSkills = [
+          makeRejectedSkill({
+            name: "copilot-youtube-transcript",
+            dirPath: `/vault/${folder}/copilot-youtube-transcript`,
+            filePath: `/vault/${folder}/copilot-youtube-transcript/SKILL.md`,
+          }),
+        ];
+        await act(async () => {
+          renderSettings();
+        });
+        const agent = screen.getByRole("button", { name: "copilot-youtube-transcript for Claude" });
+        expect(agent.getAttribute("aria-disabled")).toBe(String(folder === "copilot/skills"));
+        expect(screen.queryByRole("table")).toBeNull();
+        expect(screen.getByRole("region", { name: "Your Skills" })).toBeTruthy();
+        expect(screen.getByRole("region", { name: "Built-in Skills" })).toBeTruthy();
+      }
+    );
 
     it("does not surface a Skills folder settings control (folder is root-derived, not user-editable)", async () => {
       await act(async () => {
