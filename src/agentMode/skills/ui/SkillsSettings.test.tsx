@@ -16,7 +16,9 @@ import { SkillsSettings } from "./SkillsSettings";
 // The manager owns filesystem discovery and a live subscription store; stub the
 // singleton so the component renders in isolation while letting us observe the
 // refresh triggered by a derived-path change.
-const refresh = jest.fn().mockResolvedValue(undefined);
+const setBuiltinSkillEnabled = jest.fn().mockResolvedValue({ ok: true });
+const setBuiltinAgentEnabled = jest.fn().mockResolvedValue({ ok: true });
+const refresh = jest.fn().mockResolvedValue({ ok: true, reconcileErrorCount: 0 });
 const getAgentDirsProjectRel = jest.fn().mockReturnValue({});
 let mockManagedSkills: Skill[] = [];
 let mockRejectedSkills: RejectedSkill[] = [];
@@ -26,7 +28,14 @@ const mockOpenSkillLoadIssuesModal = jest.fn();
 const mockNewAgentChatWithDraft = jest.fn().mockResolvedValue(undefined);
 const mockCloseSettings = jest.fn();
 jest.mock("@/agentMode/skills/SkillManager", () => ({
-  SkillManager: { getInstance: () => ({ refresh, getAgentDirsProjectRel }) },
+  SkillManager: {
+    getInstance: () => ({
+      refresh,
+      getAgentDirsProjectRel,
+      setBuiltinSkillEnabled,
+      setBuiltinAgentEnabled,
+    }),
+  },
   // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook; name must match the export
   useManagedSkills: () => mockManagedSkills,
   // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook; name must match the export
@@ -75,6 +84,13 @@ function renderSettings(app: App = makeApp()) {
 }
 
 describe("SkillsSettings", () => {
+  beforeAll(() => {
+    (window as unknown as { activeDocument: Document }).activeDocument = window.document;
+    (window as unknown as { PointerEvent: typeof MouseEvent }).PointerEvent = MouseEvent;
+    Element.prototype.hasPointerCapture = () => false;
+    Element.prototype.releasePointerCapture = () => {};
+    Element.prototype.scrollIntoView = () => {};
+  });
   describe("SkillsSettings()", () => {
     beforeEach(() => {
       jest.clearAllMocks();
@@ -86,16 +102,112 @@ describe("SkillsSettings", () => {
       settingsStore.set(settingsAtom, { ...DEFAULT_SETTINGS, copilotFolder: "copilot" });
     });
 
-    it("does not surface a Skills folder settings control (folder is root-derived, not user-editable)", () => {
-      renderSettings();
+    it("keeps disabled catalog rows visible and restores through saved preferences for https://github.com/logancyang/obsidian-copilot/issues/3022", async () => {
+      const initial = settingsStore.get(settingsAtom);
+      settingsStore.set(settingsAtom, {
+        ...initial,
+        agentMode: {
+          ...initial.agentMode,
+          skills: {
+            ...initial.agentMode.skills,
+            builtinPreferences: { "copilot-youtube-transcript": { disabled: true } },
+          },
+        },
+      });
+      await act(async () => {
+        renderSettings();
+      });
+      expect(screen.getByRole("table", { name: "Your Skills" })).toBeTruthy();
+      expect(screen.getByRole("table", { name: "Built-in Skills" })).toBeTruthy();
+      fireEvent.pointerDown(
+        screen.getByRole("button", { name: "More actions for copilot-youtube-transcript" }),
+        { button: 0, ctrlKey: false }
+      );
+      const toggle = screen.getByRole("menuitem", { name: "Enable skill" });
+      await act(async () => {
+        fireEvent.click(toggle);
+      });
+      expect(setBuiltinSkillEnabled).toHaveBeenCalledWith("copilot-youtube-transcript", true);
+    });
+
+    it("shows builtin update failures inline for https://github.com/logancyang/obsidian-copilot/issues/3022", async () => {
+      setBuiltinSkillEnabled.mockResolvedValueOnce({
+        ok: false,
+        message: "Could not remove skill files",
+      });
+      await act(async () => {
+        renderSettings();
+      });
+      fireEvent.pointerDown(
+        screen.getByRole("button", { name: "More actions for copilot-youtube-transcript" }),
+        { button: 0, ctrlKey: false }
+      );
+      await act(async () => {
+        fireEvent.click(screen.getByRole("menuitem", { name: "Disable skill" }));
+      });
+      expect(screen.getByRole("alert").textContent).toBe("Could not remove skill files");
+    });
+
+    it("filters bundled catalog rows with the shared search for https://github.com/logancyang/obsidian-copilot/issues/3022", async () => {
+      await act(async () => {
+        renderSettings();
+      });
+      fireEvent.change(screen.getByRole("textbox", { name: "Search skills" }), {
+        target: { value: "no-such-skill-xyz" },
+      });
+      expect(
+        screen.queryByRole("button", { name: "More actions for copilot-youtube-transcript" })
+      ).toBeNull();
+      expect(screen.getByText("No built-in skills match your search.")).toBeTruthy();
+    });
+
+    it("reports background cleanup failures when settings opens and clears them after focus refresh for https://github.com/logancyang/obsidian-copilot/issues/3022", async () => {
+      refresh.mockResolvedValueOnce({
+        ok: true,
+        reconcileErrorCount: 1,
+        reconcileError: "Could not remove disabled built-in skill transcript.",
+      });
+      await act(async () => {
+        renderSettings();
+      });
+      expect(screen.getByRole("alert").textContent).toBe(
+        "Could not remove disabled built-in skill transcript."
+      );
+      await act(async () => {
+        fireEvent.focus(window);
+      });
+      expect(screen.queryByRole("alert")).toBeNull();
+    });
+
+    it("ignores refresh results after unmount for https://github.com/logancyang/obsidian-copilot/issues/3022", async () => {
+      let finish!: (value: unknown) => void;
+      refresh.mockReturnValueOnce(
+        new Promise((resolve) => {
+          finish = resolve;
+        })
+      );
+      const { unmount } = renderSettings();
+      unmount();
+      await act(async () => {
+        finish({ ok: false, reconcileErrorCount: 1, reconcileError: "Late failure" });
+      });
+      expect(screen.queryByRole("alert")).toBeNull();
+    });
+
+    it("does not surface a Skills folder settings control (folder is root-derived, not user-editable)", async () => {
+      await act(async () => {
+        renderSettings();
+      });
       // The dedicated "Skills folder" setting row was removed: no editable input
       // bound to the retired agentMode.skills.folder field, and no setting row.
       expect(screen.queryByLabelText("Skills folder")).toBeNull();
       expect(screen.queryByText("Skills folder")).toBeNull();
     });
 
-    it("re-derives the discovered folder and re-scans when the Copilot root changes", () => {
-      renderSettings();
+    it("re-derives the discovered folder and re-scans when the Copilot root changes", async () => {
+      await act(async () => {
+        renderSettings();
+      });
       // Mount runs one discovery pass; the derived path surfaces in the
       // empty-state hint (there is no folder-setting row).
       expect(screen.getByText(/copilot\/skills/)).not.toBeNull();
@@ -104,7 +216,7 @@ describe("SkillsSettings", () => {
       // No manual rerender: useSettingsValue is a live jotai subscription, so
       // the store update alone must re-render and re-scan. Asserting that here
       // is what locks the reactive contract (a snapshot-only regression fails).
-      act(() => {
+      await act(async () => {
         updateSetting("copilotFolder", "vault-tools");
       });
 
@@ -115,18 +227,24 @@ describe("SkillsSettings", () => {
       expect(refresh).toHaveBeenCalledTimes(2);
     });
 
-    it("refreshes hidden external-editor repairs when Settings regains focus for https://github.com/Brevilabs/obsidian-copilot-private/issues/166", () => {
-      renderSettings();
+    it("refreshes hidden external-editor repairs when Settings regains focus for https://github.com/Brevilabs/obsidian-copilot-private/issues/166", async () => {
+      await act(async () => {
+        renderSettings();
+      });
       expect(refresh).toHaveBeenCalledTimes(1);
 
-      fireEvent.focus(window);
+      await act(async () => {
+        fireEvent.focus(window);
+      });
 
       expect(refresh).toHaveBeenCalledTimes(2);
     });
 
-    it("shows actionable recovery instead of the creation empty state for https://github.com/Brevilabs/obsidian-copilot-private/issues/166", () => {
+    it("shows actionable recovery instead of the creation empty state for https://github.com/Brevilabs/obsidian-copilot-private/issues/166", async () => {
       mockRejectedSkills = [makeRejectedSkill()];
-      renderSettings();
+      await act(async () => {
+        renderSettings();
+      });
 
       expect(screen.getByRole("alert", { name: "1 skill could not be loaded" })).not.toBeNull();
       expect(screen.getByText("The skills have format errors.")).not.toBeNull();
@@ -138,9 +256,11 @@ describe("SkillsSettings", () => {
       expect(screen.queryByText("No skills yet")).toBeNull();
     });
 
-    it("opens hidden rejected skills and their folders with system apps for https://github.com/Brevilabs/obsidian-copilot-private/issues/166", () => {
+    it("opens hidden rejected skills and their folders with system apps for https://github.com/Brevilabs/obsidian-copilot-private/issues/166", async () => {
       mockRejectedSkills = [makeRejectedSkill()];
-      renderSettings();
+      await act(async () => {
+        renderSettings();
+      });
 
       fireEvent.click(screen.getByRole("button", { name: "View details" }));
       expect(mockOpenSkillLoadIssuesModal).toHaveBeenCalledTimes(1);
@@ -160,7 +280,7 @@ describe("SkillsSettings", () => {
       expect(openWithSystemDefault).toHaveBeenCalledWith("/vault/.claude/skills/broken-skill");
     });
 
-    it("opens review-before-send Agent drafts for one or all rejected skills for https://github.com/Brevilabs/obsidian-copilot-private/issues/166", () => {
+    it("opens review-before-send Agent drafts for one or all rejected skills for https://github.com/Brevilabs/obsidian-copilot-private/issues/166", async () => {
       mockRejectedSkills = [
         makeRejectedSkill(),
         makeRejectedSkill({
@@ -170,7 +290,9 @@ describe("SkillsSettings", () => {
           offendingText: undefined,
         }),
       ];
-      renderSettings();
+      await act(async () => {
+        renderSettings();
+      });
 
       fireEvent.click(screen.getByRole("button", { name: "View details" }));
       mockCapturedLoadIssues[0].onFixWithAgent();
@@ -187,7 +309,7 @@ describe("SkillsSettings", () => {
       );
     });
 
-    it("opens and reveals indexed rejected skills inside Obsidian for https://github.com/Brevilabs/obsidian-copilot-private/issues/166", () => {
+    it("opens and reveals indexed rejected skills inside Obsidian for https://github.com/Brevilabs/obsidian-copilot-private/issues/166", async () => {
       const app = makeApp(true);
       mockRejectedSkills = [
         makeRejectedSkill({
@@ -195,7 +317,9 @@ describe("SkillsSettings", () => {
           dirPath: "/vault/copilot/skills/broken-skill",
         }),
       ];
-      renderSettings(app);
+      await act(async () => {
+        renderSettings(app);
+      });
 
       fireEvent.click(screen.getByRole("button", { name: "View details" }));
       mockCapturedLoadIssues[0].onOpen();
@@ -218,7 +342,7 @@ describe("SkillsSettings", () => {
       expect(openWithSystemDefault).not.toHaveBeenCalled();
     });
 
-    it("reveals vault-relative rejected skills inside Obsidian when no absolute vault path exists for https://github.com/Brevilabs/obsidian-copilot-private/issues/166", () => {
+    it("reveals vault-relative rejected skills inside Obsidian when no absolute vault path exists for https://github.com/Brevilabs/obsidian-copilot-private/issues/166", async () => {
       const app = makeApp(true);
       mockRejectedSkills = [
         makeRejectedSkill({
@@ -226,7 +350,9 @@ describe("SkillsSettings", () => {
           dirPath: "copilot/skills/broken-skill",
         }),
       ];
-      renderSettings(app);
+      await act(async () => {
+        renderSettings(app);
+      });
 
       fireEvent.click(screen.getByRole("button", { name: "View details" }));
       mockCapturedLoadIssues[0].onReveal();

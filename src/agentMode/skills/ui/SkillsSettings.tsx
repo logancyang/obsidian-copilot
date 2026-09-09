@@ -1,3 +1,7 @@
+import { useBackendInstallStates } from "@/agentMode/session/useBackendInstallStates";
+import { ALL_MANAGED_SKILLS, planManagedBuiltins } from "@/agentMode/skills/builtin/builtinSkills";
+import { parseSkillFile } from "@/agentMode/skills/skillFormat";
+import { BuiltinSkillsTable } from "./BuiltinSkillsTable";
 import { formatSkillDisplayName } from "@/agentMode/skills/mergeDiscovery";
 import {
   buildSkillRepairPrompt,
@@ -52,24 +56,7 @@ const SYNC_BRANDS: ReadonlyArray<{ substr: string; brand: string }> = [
   { substr: "dropbox", brand: "Dropbox" },
 ];
 
-/**
- * Skills tab.
- *
- * Renders the header copy, the toolbar (search + count), and either the
- * empty placeholder or the Tidy list of {@link SkillRow}s sourced from
- * {@link SkillManager}. The skills folder is root-derived and not editable
- * here, so there is no folder-setting row.
- *
- * Discovery is fully automatic — the unified walker (canonical folder plus
- * every registered agent's project-skills directory) runs on every mount
- * and on every settings-folder change. Skills sitting under
- * `.<agent>/skills/` show up as project-managed rows automatically; the
- * user never has to trigger discovery by hand.
- *
- * Wires per-agent toggles, overflow menu actions (Edit SKILL.md, Reveal
- * in vault, Delete), the delete confirmation modal, the EPERM banner,
- * and the sync-folder banner.
- */
+/** Skills management for user-owned files and persistent built-in preferences. */
 export const SkillsSettings: React.FC = () => {
   const app = useApp();
   const plugin = usePlugin();
@@ -82,20 +69,76 @@ export const SkillsSettings: React.FC = () => {
   // registry — descriptors are module-level constants so the list is stable
   // per session; the `useMemo` keeps the reference identity stable across
   // renders for child props.
+  const descriptors = useMemo(() => listBackendDescriptors(), []);
   const agents = useMemo<ReadonlyArray<AgentBrand>>(
     () =>
-      listBackendDescriptors().map(({ id, displayName, Icon }) => ({
+      descriptors.map(({ id, displayName, Icon }) => ({
         id,
         displayName,
         Icon,
       })),
-    []
+    [descriptors]
   );
   const skills = useManagedSkills();
   const rejectedSkills = useRejectedSkills();
   const epermSeen = useEpermSeen();
 
   const [searchValue, setSearchValue] = useState("");
+  const [builtinPending, setBuiltinPending] = useState(false);
+  const [builtinError, setBuiltinError] = useState<string>();
+  const [refreshError, setRefreshError] = useState<string>();
+  const userSkills = useMemo(() => skills.filter((skill) => !skill.builtin), [skills]);
+  const installStates = useBackendInstallStates(plugin, descriptors);
+  const availableAgents = agents
+    .filter((agent) => installStates[agent.id]?.kind === "ready")
+    .map((agent) => agent.id);
+  const eligibleBuiltins = planManagedBuiltins({
+    search: settings.enableMiyoSearchSkill === true,
+    documents: settings.docProcessorBackend === "miyo",
+  }).seed;
+  // https://github.com/logancyang/obsidian-copilot/issues/3022
+  // Catalog rows survive file removal so users can restore disabled built-ins.
+  const builtinRows = ALL_MANAGED_SKILLS.map((skill) => {
+    const preference = settings.agentMode?.skills?.builtinPreferences?.[skill.name];
+    const collision = userSkills.some(
+      (userSkill) => userSkill.name === skill.name && userSkill.location.kind === "canonical"
+    );
+    return {
+      name: skill.name,
+      description: parseSkillFile(skill.skillMd, skill.name).frontmatter.description,
+      content: skill.skillMd,
+      enabled: preference?.disabled !== true,
+      enabledAgents: skill.enabledAgents.filter(
+        (agent) => !preference?.disabledAgents?.includes(agent)
+      ),
+      unavailableReason: collision
+        ? "A skill with this name already exists in Your Skills. Your file is kept unchanged."
+        : !eligibleBuiltins.includes(skill)
+          ? "Unavailable with your current Miyo search or document settings."
+          : undefined,
+    };
+  }).filter((skill) =>
+    `${skill.name} ${skill.description}`.toLowerCase().includes(searchValue.trim().toLowerCase())
+  );
+
+  const handleBuiltinChange = async (name: string, enabled: boolean, agent?: string) => {
+    setBuiltinPending(true);
+    setBuiltinError(undefined);
+    try {
+      const manager = SkillManager.getInstance();
+      const result =
+        agent === undefined
+          ? await manager.setBuiltinSkillEnabled(name, enabled)
+          : await manager.setBuiltinAgentEnabled(name, agent, enabled);
+      if (!result.ok) setBuiltinError(result.message);
+    } catch (error) {
+      setBuiltinError(
+        `Could not update ${name}: ${error instanceof Error ? error.message : String(error)}`
+      );
+    } finally {
+      setBuiltinPending(false);
+    }
+  };
 
   // Anchor for Radix portals on this tab (e.g. SkillRow's overflow menu).
   // Portaling into the tab's own DOM keeps menus inside Obsidian's Settings
@@ -113,14 +156,31 @@ export const SkillsSettings: React.FC = () => {
   // editing a hidden agent file in an external editor, outside Obsidian's watcher.
   useEffect(() => {
     const manager = SkillManager.getInstance();
-    void manager.refresh();
-    const hostWindow = containerRef.current?.win;
-    if (hostWindow === undefined) return;
-    const handleFocus = (): void => {
-      void manager.refresh();
+    let active = true;
+    // https://github.com/logancyang/obsidian-copilot/issues/3022
+    // Reopening Settings must still explain unresolved background cleanup failures.
+    const refresh = async () => {
+      const result = await manager.refresh();
+      if (active) {
+        setRefreshError(
+          result.reconcileError ??
+            result.discoveryError ??
+            (result.reconcileErrorCount > 0
+              ? "Some skill links could not be updated. Check folder permissions."
+              : undefined)
+        );
+      }
     };
-    hostWindow.addEventListener("focus", handleFocus);
-    return () => hostWindow.removeEventListener("focus", handleFocus);
+    void refresh();
+    const hostWindow = containerRef.current?.win;
+    const handleFocus = (): void => {
+      void refresh();
+    };
+    hostWindow?.addEventListener("focus", handleFocus);
+    return () => {
+      active = false;
+      hostWindow?.removeEventListener("focus", handleFocus);
+    };
   }, [skillsFolder]);
 
   /** Open the canonical SKILL.md of a managed skill in Obsidian's editor. */
@@ -179,7 +239,10 @@ export const SkillsSettings: React.FC = () => {
     });
   }, [app, handleFixWithAgent, handleRevealSkillFolder, rejectedSkills]);
 
-  const filteredSkills = useMemo(() => filterSkills(skills, searchValue), [skills, searchValue]);
+  const filteredSkills = useMemo(
+    () => filterSkills(userSkills, searchValue),
+    [userSkills, searchValue]
+  );
 
   const displayFolder = skillsFolder;
 
@@ -256,6 +319,12 @@ export const SkillsSettings: React.FC = () => {
           </div>
         </div>
 
+        {refreshError && (
+          <div role="alert" className="tw-text-ui-smaller tw-text-error">
+            {refreshError}
+          </div>
+        )}
+
         {/* Durable banners — stack at the top of the tab body, above the toolbar. */}
         {(epermSeen || (syncBrand !== null && !syncBannerDismissed)) && (
           <div className="tw-mt-3 tw-flex tw-flex-col tw-gap-2">
@@ -294,12 +363,19 @@ export const SkillsSettings: React.FC = () => {
               aria-label="Search skills"
             />
           </div>
-          <span className="tw-text-xs tw-text-muted">{skills.length} loaded</span>
+          <span className="tw-text-xs tw-text-muted">{userSkills.length} loaded</span>
         </div>
 
         {/* Body — empty placeholder, or the Tidy list. */}
-        <div className="tw-mt-4">
-          {skills.length === 0 ? (
+        <div className="tw-mt-4" role="table" aria-label="Your Skills">
+          <div
+            role="heading"
+            aria-level={3}
+            className="tw-mb-3 tw-text-left tw-text-base tw-font-semibold"
+          >
+            Your Skills
+          </div>
+          {userSkills.length === 0 ? (
             // https://github.com/Brevilabs/obsidian-copilot-private/issues/166
             // Rejected files prove skills exist, so the ordinary creation-first
             // empty state would falsely tell the user they have none.
@@ -333,6 +409,19 @@ export const SkillsSettings: React.FC = () => {
           )}
         </div>
       </section>
+      <BuiltinSkillsTable
+        skills={builtinRows}
+        agents={agents}
+        availableAgents={availableAgents}
+        pending={builtinPending}
+        error={builtinError}
+        onToggleSkill={(name, enabled) => {
+          void handleBuiltinChange(name, enabled);
+        }}
+        onToggleAgent={(name, agent, enabled) => {
+          void handleBuiltinChange(name, enabled, agent);
+        }}
+      />
     </div>
   );
 };

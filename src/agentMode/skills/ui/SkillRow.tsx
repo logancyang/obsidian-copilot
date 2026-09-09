@@ -1,3 +1,4 @@
+import { SkillRowLayout } from "./SkillRowLayout";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -163,107 +164,96 @@ export const SkillRow: React.FC<SkillRowProps> = ({
   }, [agentDirsProjectRel, app, skill]);
 
   return (
-    <div
-      data-menu-open={menuOpen ? "true" : undefined}
-      className={cn(
-        "tw-grid tw-grid-cols-[1fr_auto_auto] tw-items-center tw-gap-4",
-        "tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-primary",
-        "tw-px-3.5 tw-py-2.5",
-        "tw-transition-colors hover:tw-border-border-hover hover:tw-bg-primary-alt",
-        "data-[menu-open=true]:tw-bg-primary-alt data-[menu-open=true]:tw-border-normal/100"
-      )}
-    >
-      {/* Name + description column */}
-      <div className="tw-min-w-0">
-        <div className="tw-flex tw-items-center tw-gap-2">
-          <span className="tw-text-ui-small tw-font-semibold tw-text-normal">{displayName}</span>
+    <SkillRowLayout
+      name={displayName}
+      description={skill.description}
+      menuOpen={menuOpen}
+      annotations={
+        <>
           {chips.map((chip) => (
             <Chip key={chip.label} variant={chip.variant} label={chip.label} />
           ))}
           {locationLabel !== null && (
             <span className="tw-truncate tw-text-ui-smaller tw-text-faint">{locationLabel}</span>
           )}
+        </>
+      }
+      controls={
+        <div className="tw-flex tw-items-center tw-gap-1.5">
+          {agents.map((agent) => {
+            const enabled = enabledAgents.has(agent.id);
+            return (
+              <AgentIconButton
+                key={agent.id}
+                Icon={agent.Icon}
+                agentId={agent.id}
+                agentName={agent.displayName}
+                enabled={enabled}
+                onClick={() => {
+                  void handleToggleAgent(agent.id);
+                }}
+                title={tooltipFor(agent.displayName, enabled)}
+              />
+            );
+          })}
         </div>
-        {skill.description.length > 0 && (
-          <div className="tw-mt-0.5 tw-max-w-[540px] tw-truncate tw-text-ui-smaller tw-text-muted">
-            {skill.description}
-          </div>
-        )}
-      </div>
-
-      {/* Agent toggle row */}
-      <div className="tw-flex tw-items-center tw-gap-1.5">
-        {agents.map((agent) => {
-          const enabled = enabledAgents.has(agent.id);
-          return (
-            <AgentIconButton
-              key={agent.id}
-              Icon={agent.Icon}
-              agentId={agent.id}
-              agentName={agent.displayName}
-              enabled={enabled}
-              onClick={() => {
-                void handleToggleAgent(agent.id);
-              }}
-              title={tooltipFor(agent.displayName, enabled)}
-            />
-          );
-        })}
-      </div>
-
-      {/* Overflow popover — Edit / Properties / Reveal / Delete (or Migrate when locked down).
-          modal={false} keeps Radix from engaging react-remove-scroll's body scroll lock:
-          "Reveal in vault" moves focus into the file-explorer leaf, which can interrupt the
-          menu's close/unmount and strand the document-level wheel listener, killing scroll
-          everywhere until restart (issue #118). The sibling menu in AgentTabStrip does the same. */}
-      <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen} modal={false}>
-        <DropdownMenuTrigger asChild>
-          <Button
-            variant="ghost"
-            size="icon"
-            title="More actions"
-            aria-label={`More actions for ${skill.name}`}
+      }
+      actions={
+        <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen} modal={false}>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              title="More actions"
+              aria-label={`More actions for ${skill.name}`}
+            >
+              <MoreVertical className="tw-size-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align="end"
+            className="tw-min-w-[180px]"
+            container={containerRef.current}
           >
-            <MoreVertical className="tw-size-4" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent
-          align="end"
-          className="tw-min-w-[180px]"
-          container={containerRef.current}
-        >
-          {mirroredLockdown ? (
-            <MirroredLockdownMenu
-              tooltip={lockdownTooltip ?? ""}
-              onMigrate={handleProactiveConsolidate}
-              onRevealInVault={onRevealInVault}
-            />
-          ) : (
-            <>
-              <DropdownMenuItem className="tw-gap-2.5 tw-text-ui-small" onSelect={onEditSkillMd}>
-                <Edit3 className="tw-size-3.5" aria-hidden="true" />
-                Edit SKILL.md
-              </DropdownMenuItem>
-              <DropdownMenuItem className="tw-gap-2.5 tw-text-ui-small" onSelect={onEditProperties}>
-                <Settings className="tw-size-3.5" aria-hidden="true" />
-                Properties…
-              </DropdownMenuItem>
-              <DropdownMenuItem className="tw-gap-2.5 tw-text-ui-small" onSelect={onRevealInVault}>
-                <FolderSearch className="tw-size-3.5" aria-hidden="true" />
-                Reveal in vault
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                className="tw-gap-2.5 tw-text-ui-small tw-text-error focus:tw-bg-modifier-error-rgb/15 focus:tw-text-error"
-                onSelect={onDelete}
-              >
-                <Trash2 className="tw-size-3.5" aria-hidden="true" />
-                Delete…
-              </DropdownMenuItem>
-            </>
-          )}
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </div>
+            {mirroredLockdown ? (
+              <MirroredLockdownMenu
+                tooltip={lockdownTooltip ?? ""}
+                onMigrate={handleProactiveConsolidate}
+                onRevealInVault={onRevealInVault}
+              />
+            ) : (
+              <>
+                <DropdownMenuItem className="tw-gap-2.5 tw-text-ui-small" onSelect={onEditSkillMd}>
+                  <Edit3 className="tw-size-3.5" aria-hidden="true" />
+                  Edit SKILL.md
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="tw-gap-2.5 tw-text-ui-small"
+                  onSelect={onEditProperties}
+                >
+                  <Settings className="tw-size-3.5" aria-hidden="true" />
+                  Properties…
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="tw-gap-2.5 tw-text-ui-small"
+                  onSelect={onRevealInVault}
+                >
+                  <FolderSearch className="tw-size-3.5" aria-hidden="true" />
+                  Reveal in vault
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="tw-gap-2.5 tw-text-ui-small tw-text-error focus:tw-bg-modifier-error-rgb/15 focus:tw-text-error"
+                  onSelect={onDelete}
+                >
+                  <Trash2 className="tw-size-3.5" aria-hidden="true" />
+                  Delete…
+                </DropdownMenuItem>
+              </>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      }
+    />
   );
 };
 

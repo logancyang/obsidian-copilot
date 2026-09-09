@@ -228,9 +228,15 @@ Copilot discovers skills automatically from:
 
 There is no separate Skills folder setting. Change the root under **Basic → General → Copilot folder location**.
 
+The tab separates **Your Skills** from **Built-in Skills**. Your Skills keeps the editing, properties, and deletion controls described below. Built-in Skills are maintained by Copilot; you can preview their content but cannot edit, rename, or delete them from this tab.
+
+Each built-in skill has per-agent icon switches. Choose **Disable skill** from its overflow menu to disable it for every agent. Disabling the whole skill removes its generated files and agent links, while leaving its row visible so you can re-enable it. Turning off one agent removes that agent's access and remembers your choice. Restarting Obsidian, updating Copilot, or changing the Copilot folder does not reset these choices. Re-enabling a skill preserves its per-agent opt-outs.
+
+Copilot generates a built-in skill only when at least one available agent can use it. Agents that have not been set up do not receive skill links or new skill directories. When another agent becomes available, Copilot automatically enables eligible built-in skills for it unless you previously disabled that skill or that agent's access to it. Feature requirements, such as Miyo settings, still apply. Disabling every current agent individually does not disable the skill for future agents; choose **Disable skill** for that.
+
 If Copilot finds a `SKILL.md` that it cannot load, a warning dot appears on the Skills tab and the top of that tab shows how many skills are not available to agents. Choose **View details** to see each file's path, its specific error, and the rejected line when available. Long rejected lines stay collapsed until you choose **Show more**. **Fix with Agent** opens a fresh vault-wide Agent chat using your saved default agent and model, with the file diagnostics filled into the composer but not sent; review the request and press Enter when ready. When several skills failed, **Fix All with Agent** prepares one reviewable request for the full list. You can also choose **Open SKILL.md** to edit an indexed file in Obsidian or a hidden agent file in your default editor, while **Reveal in vault** or **Show in folder** locates it. The notice and warning dot disappear after the repaired file loads successfully; returning to Obsidian refreshes files edited externally.
 
-### Skill list controls
+### Your Skills controls
 
 | Control                                       | What it does                                                                                                                                                                                                        |
 | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
