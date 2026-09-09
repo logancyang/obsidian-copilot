@@ -61,6 +61,7 @@ describe("cliSignIn", () => {
     });
   });
   describe("signInWithCli()", () => {
+    const hostPlatform = process.platform;
     it(`supports account protocol input and settles broken input without leaking a probe: ${ISSUE}`, async () => {
       const stdin = new PassThrough();
       const child = Object.assign(new EventEmitter(), {
@@ -91,6 +92,9 @@ describe("cliSignIn", () => {
       pid: number;
     };
     beforeEach(() => {
+      // Signal fixtures exercise POSIX process groups; Windows cases select their own platform.
+      // https://github.com/logancyang/obsidian-copilot/issues/2967
+      Object.defineProperty(process, "platform", { configurable: true, value: "darwin" });
       child = Object.assign(new EventEmitter(), {
         stdout: new PassThrough(),
         stderr: new PassThrough(),
@@ -100,7 +104,10 @@ describe("cliSignIn", () => {
       mockSpawn.mockReset().mockReturnValue(child);
       jest.spyOn(process, "kill").mockReturnValue(true);
     });
-    afterEach(() => jest.restoreAllMocks());
+    afterEach(() => {
+      jest.restoreAllMocks();
+      Object.defineProperty(process, "platform", { value: hostPlatform });
+    });
     it(`offers the printed browser fallback and reads authoritative status after exit: ${ISSUE}`, async () => {
       const read = jest.fn().mockResolvedValue({ loggedIn: false });
       const onUrl = jest.fn();

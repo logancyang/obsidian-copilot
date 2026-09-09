@@ -30,7 +30,7 @@ describe("probeClaudeSdkCatalog env passing", () => {
     expect(opts.pathToClaudeCodeExecutable).toBe("/bin/claude");
     expect(opts.env?.ANTHROPIC_MODEL).toBe("m-custom");
     // process.env is preserved (Options.env replaces the child env wholesale).
-    expect(opts.env?.PATH).toBe(process.env.PATH);
+    expect(opts.env).toEqual({ ...process.env, ANTHROPIC_MODEL: "m-custom" });
   });
 
   it("omits options.env entirely when there are no overrides", async () => {

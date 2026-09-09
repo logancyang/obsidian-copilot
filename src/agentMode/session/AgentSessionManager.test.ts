@@ -4,6 +4,7 @@
  * session-pool invariants without touching ACP or spawning a child process.
  */
 import { FileSystemAdapter, App, TFile } from "obsidian";
+import { join } from "node:path";
 import { waitFor } from "@testing-library/react";
 import { AgentSession } from "./AgentSession";
 import type { AgentModelPreloader } from "./AgentModelPreloader";
@@ -2993,7 +2994,7 @@ describe("AgentSessionManager chat history aggregation", () => {
     ]);
     try {
       const sessionExistsLocally = jest.fn(
-        async ({ cwd }: { cwd: string }) => cwd === "/vault/Projects/proj-1"
+        async ({ cwd }: { cwd: string }) => cwd === join("/vault", "Projects", "proj-1")
       );
       const { manager } = buildHistoryHarness({
         files: {
@@ -3012,7 +3013,7 @@ describe("AgentSessionManager chat history aggregation", () => {
       expect(titles).toContain("Project chat");
       expect(sessionExistsLocally).toHaveBeenCalledWith({
         sessionId: "proj-sess",
-        cwd: "/vault/Projects/proj-1",
+        cwd: join("/vault", "Projects", "proj-1"),
       });
     } finally {
       projectsState.updateCachedProjectRecords([]);
@@ -3056,7 +3057,7 @@ describe("AgentSessionManager chat history aggregation", () => {
       expect(sessionExistsLocally).toHaveBeenCalledWith({ sessionId: "g-sess", cwd: "/vault" });
       expect(sessionExistsLocally).toHaveBeenCalledWith({
         sessionId: "p-sess",
-        cwd: "/vault/Projects/proj-1",
+        cwd: join("/vault", "Projects", "proj-1"),
       });
     } finally {
       projectsState.updateCachedProjectRecords([]);
@@ -3101,7 +3102,7 @@ describe("AgentSessionManager chat history aggregation", () => {
       expect(titles).not.toContain("Foreign project chat");
       expect(sessionExistsLocally).toHaveBeenCalledWith({
         sessionId: "foreign-proj",
-        cwd: "/vault/Projects/proj-1",
+        cwd: join("/vault", "Projects", "proj-1"),
       });
       // The native twin is tombstoned, same as the global non-resumable path.
       expect(await index.isTombstoned("opencode", "foreign-proj")).toBe(true);

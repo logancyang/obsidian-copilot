@@ -51,6 +51,51 @@ jobs:
       - name: Test native PowerShell publishing wrapper
         run: npm test -- --runInBand src/agentMode/skills/builtin/openArtifactsPublishWrappers.test.ts
 
+  # Native coverage is required to diagnose Windows-only fixture failures.
+  # https://github.com/logancyang/obsidian-copilot/issues/2967
+  test-windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: npm
+      - name: Record native test environment
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path windows-test-results
+          git rev-parse HEAD > windows-test-results/environment.txt
+          [System.Environment]::OSVersion.VersionString >> windows-test-results/environment.txt
+          node --version >> windows-test-results/environment.txt
+          npm.cmd --version >> windows-test-results/environment.txt
+          node -p "process.platform + ' ' + process.arch" >> windows-test-results/environment.txt
+      - run: npm ci
+        id: install
+      - name: Run complete native Windows unit suite
+        shell: pwsh
+        run: |
+          npm.cmd test -- --runInBand --json --outputFile=windows-test-results/jest.json *> windows-test-results/jest.log
+          $testExitCode = $LASTEXITCODE
+          Get-Content windows-test-results/jest.log
+          exit $testExitCode
+      - name: Verify image sanitization without regexp optimization
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        shell: pwsh
+        run: |
+          node --no-regexp-optimization node_modules/jest/bin/jest.js --runInBand --runTestsByPath src/openArtifacts/openArtifactsDocument.test.ts *> windows-test-results/image-sanitization.log
+          $testExitCode = $LASTEXITCODE
+          Get-Content windows-test-results/image-sanitization.log
+          exit $testExitCode
+      - name: Retain native test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-unit-node-22
+          path: windows-test-results/
+          retention-days: 14
+
   docs:
     runs-on: ubuntu-latest
     defaults:

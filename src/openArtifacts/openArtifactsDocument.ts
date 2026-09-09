@@ -477,7 +477,21 @@ function isRemoteImageSource(source: string): boolean {
 }
 
 function isEmbeddedImageSource(source: string): boolean {
-  return /^data:image\/[a-z0-9.+-]+(?:;[a-z0-9=.+-]+)*;base64,[a-z0-9+/=\s]+$/i.test(source);
+  // Positive repetition over a valid large image can exhaust V8's unoptimized regexp stack.
+  // Reject invalid characters without payload-sized backtracking.
+  // https://github.com/logancyang/obsidian-copilot/issues/2967
+  const comma = source.indexOf(",");
+  if (comma === -1) return false;
+  const [mime, ...parameters] = source.slice(0, comma).split(";");
+  return (
+    /^data:image\//i.test(mime) &&
+    mime.length > 11 &&
+    !/[^a-z0-9.+-]/i.test(mime.slice(11)) &&
+    parameters.pop()?.toLowerCase() === "base64" &&
+    parameters.every((part) => part.length > 0 && !/[^a-z0-9=.+-]/i.test(part)) &&
+    comma < source.length - 1 &&
+    !/[^a-z0-9+/=\s]/i.test(source.slice(comma + 1))
+  );
 }
 
 function hasUrlScheme(value: string): boolean {

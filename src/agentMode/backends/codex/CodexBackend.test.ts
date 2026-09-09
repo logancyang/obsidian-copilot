@@ -66,7 +66,12 @@ jest.mock("@/agentMode/skills", () => {
 describe("CodexBackend", () => {
   describe("CodexBackend", () => {
     describe("buildSpawnDescriptor()", () => {
+      const hostPlatform = process.platform;
+      // POSIX descriptor fixtures must not inherit the Windows Node-launch branch.
+      // https://github.com/logancyang/obsidian-copilot/issues/2967
+      afterEach(() => Object.defineProperty(process, "platform", { value: hostPlatform }));
       beforeEach(() => {
+        Object.defineProperty(process, "platform", { value: "darwin" });
         jest
           .mocked(resolveSupportedCodexAcpEntry)
           .mockReset()

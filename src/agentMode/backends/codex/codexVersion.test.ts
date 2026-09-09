@@ -234,7 +234,7 @@ describe("codexVersion", () => {
       }
     );
     it("runs the validated package entry directly on Unix", () => {
-      expect(buildCodexAcpInvocation(UNIX_ENTRY, [], { PATH: "/usr/bin" })).toEqual({
+      expect(buildCodexAcpInvocation(UNIX_ENTRY, [], { PATH: "/usr/bin" }, "darwin")).toEqual({
         command: UNIX_ENTRY,
         args: [],
         env: { PATH: "/usr/bin" },

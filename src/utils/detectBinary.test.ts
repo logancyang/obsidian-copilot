@@ -71,7 +71,14 @@ describe("detectBinary", () => {
         cb(null, "/opt/homebrew/bin/codex-acp\n", "")
       );
 
-      const found = await detectBinary("codex-acp");
+      // binaryPath captures the separator at import, so initialize the POSIX fixture together.
+      // https://github.com/logancyang/obsidian-copilot/issues/2967
+      let detectPosixBinary!: typeof detectBinary;
+      jest.isolateModules(() => {
+        detectPosixBinary =
+          jest.requireActual<typeof import("./detectBinary")>("./detectBinary").detectBinary;
+      });
+      const found = await detectPosixBinary("codex-acp");
       expect(found).toBe("/opt/homebrew/bin/codex-acp");
 
       expect(execFileMock).toHaveBeenCalledTimes(1);
