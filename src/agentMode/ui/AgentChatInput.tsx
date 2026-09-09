@@ -280,16 +280,16 @@ export const AgentChatInput = memo(function AgentChatInput({
   }, [chatInputId]);
 
   const handleStopGenerating = useCallback(async () => {
+    // Clear follow-ups before cancellation can finish the turn and flush them.
+    // Only runSend owns loading: a late cancel response must not mark a newer turn idle.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/365
+    setQueuedMessages([]);
     try {
       await backend.cancel();
     } catch (e) {
       logError("[AgentMode] cancel failed", e);
     }
-    // Stop = user is bailing on the current turn; don't auto-flush queued
-    // follow-ups they composed while the agent was running.
-    setQueuedMessages([]);
-    setLoading(false);
-  }, [backend, setLoading, setQueuedMessages]);
+  }, [backend, setQueuedMessages]);
 
   const runSend = useCallback(
     async (item: QueuedAgentMessage) => {
