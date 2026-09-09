@@ -190,6 +190,10 @@ export async function seedBuiltinSkills(
 
     if (!current) {
       try {
+        // An upgrade replaces the managed folder wholesale so files the new version no
+        // longer ships do not linger beside it. `existingContent` is only set for a
+        // managed copy, so a user-authored folder never reaches this branch.
+        if (existingContent !== null && (await fs.exists(dir))) await fs.rmRecursive(dir);
         await ensureDir(fs, dir);
         // Carry the user's agent-disable choices forward: if they toggled any
         // agent off via the UI, copilot-enabled-agents was rewritten on disk.

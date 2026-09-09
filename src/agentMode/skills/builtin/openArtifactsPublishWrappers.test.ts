@@ -21,17 +21,24 @@ interface CannedResponse {
 }
 
 // Every construct the JSON encoder has to get right: quotes, backslashes, tabs, CR,
-// non-ASCII, a closing script tag, printf metacharacters, and a trailing newline.
+// other control characters, non-ASCII, a closing script tag, printf metacharacters,
+// a line that is only a backslash, and a trailing newline.
 const HTML = [
   "<!doctype html>",
   '<html lang="zh"><head><title>Tab\there "quoted" \\ back\\slash</title></head>',
   "<body>\r",
+  '<div\fclass="note">\u0001\u001f</div>',
+  "\\",
   "<p>100% done &amp; 中文 émoji 🚀 </script></p>",
   "</body></html>",
   "",
 ].join("\n");
 
 describe("openArtifactsPublishWrappers", () => {
+  // Each run starts a shell (PowerShell on Windows is slow to boot) and waits on curl or
+  // Invoke-WebRequest; the child itself is killed after 20 s, so give Jest headroom.
+  jest.setTimeout(30_000);
+
   let root: string;
   let wrapper: string;
   let htmlFile: string;
@@ -180,6 +187,14 @@ describe("openArtifactsPublishWrappers", () => {
     expect(result.status).toBe(0);
     expect(JSON.parse(result.stdout)).toEqual({ docId: "9f2k4mvq7t0xbz3n", status: "unshared" });
     expect(requests).toHaveLength(1);
+
+    // A bare 404 from a proxy or a wrong host is not evidence the page is gone.
+    requests.length = 0;
+    canned = { status: 404, body: "<html>not here</html>" };
+    const bare = await run(["unshare", "9f2k4mvq7t0xbz3n"]);
+    expect(bare.status).toBe(1);
+    expect(bare.stdout).toBe("");
+    expect(bare.stderr).toContain("HTTP 404");
   });
 
   it("https://github.com/Brevilabs/obsidian-copilot-private/issues/394 relays the server's status and error body verbatim without retrying", async () => {

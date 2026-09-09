@@ -116,6 +116,24 @@ describe("seedBuiltinSkills", () => {
       expect(fs.files.get(SCRIPT)).toBe("// script v2");
     });
 
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/394 drops support files the newer version no longer ships", async () => {
+      const v1: BuiltinSkill = {
+        ...skill(1),
+        files: [...skill(1).files, { path: "obsolete-rules.md", content: "old guidance" }],
+      };
+      const fs = memFs();
+      await seedBuiltinSkills({ skillsFolderRelPath: FOLDER, fs, skills: [v1] });
+      const obsolete = "copilot/skills/copilot-web-search/obsolete-rules.md";
+      expect(fs.files.has(obsolete)).toBe(true);
+      fs.files.set(MD, fs.files.get(MD)!.replace("claude, codex, opencode", "codex"));
+
+      await seedBuiltinSkills({ skillsFolderRelPath: FOLDER, fs, skills: [skill(2)] });
+      expect(fs.files.has(obsolete)).toBe(false);
+      expect(fs.files.get(SCRIPT)).toBe("// script v2");
+      expect(fs.files.get(MD)).toContain('copilot-builtin-version: "2"');
+      expect(fs.files.get(MD)).toContain("copilot-enabled-agents: codex");
+    });
+
     it("re-seeds when the SKILL.md was deleted", async () => {
       // Script lingered but SKILL.md is gone — treat as missing and re-seed.
       const fs = memFs({ [SCRIPT]: "// stale" });

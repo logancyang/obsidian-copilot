@@ -27,6 +27,9 @@ module.exports = {
   moduleFileExtensions: ["ts", "tsx", "js", "jsx", "json", "node", "md"],
   testPathIgnorePatterns: ["/node_modules/"],
   // Markdown shipped by the openartifacts package goes through the text transform above.
-  transformIgnorePatterns: ["/node_modules/(?!openartifacts/)", "\\.pnp\\.[^\\/]+$"],
+  transformIgnorePatterns: [
+    "[/\\\\]node_modules[/\\\\](?!openartifacts[/\\\\])",
+    "\\.pnp\\.[^\\/]+$",
+  ],
   setupFiles: ["<rootDir>/jest.setup.js"],
 };

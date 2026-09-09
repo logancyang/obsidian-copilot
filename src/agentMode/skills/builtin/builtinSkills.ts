@@ -659,7 +659,7 @@ sh "/absolute/path/to/this/skill/directory/${OPENARTIFACTS_PUBLISH_USAGE}.sh" pu
 On Windows, use the \`.cmd\` wrapper (prefix with \`&\` in PowerShell):
 
 \`\`\`powershell
-& "/absolute/path/to/this/skill/directory/${OPENARTIFACTS_PUBLISH_USAGE}.cmd" publish "$${OPENARTIFACTS_WORKSPACE_ROOT_ENV}/${OPENARTIFACTS_AGENT_HANDOFF_DIR}/unique.html" "Note title" [docId]
+& "/absolute/path/to/this/skill/directory/${OPENARTIFACTS_PUBLISH_USAGE}.cmd" publish "$env:${OPENARTIFACTS_WORKSPACE_ROOT_ENV}/${OPENARTIFACTS_AGENT_HANDOFF_DIR}/unique.html" "Note title" [docId]
 \`\`\`
 
 Success prints the server's JSON, \`{"docId", "url", "version"}\`. Set the note's
@@ -734,23 +734,29 @@ if [ -n "$DOC_ID" ] && ! printf '%s' "$DOC_ID" | grep -Eq '^[0-9abcdefghjkmnpqrs
 fi
 
 # stdin -> one JSON string literal. Bytes pass through untouched except the escapes
-# JSON requires; control characters other than tab, CR, and LF are dropped. A sentinel
-# byte keeps a trailing newline in the file from being lost. Awk implementations
-# disagree on backslashes in gsub replacements, so the escapes are written with byte
-# \001 (already stripped from the input) and turned into backslashes afterwards.
+# JSON requires: backslash, quote, tab, CR, LF, and every other control character as
+# \u00XX. Only NUL is dropped (awk cannot carry it, and HTML never contains it). A
+# sentinel byte keeps a trailing newline in the file from being lost. Backslashes are
+# joined in rather than substituted because awk implementations disagree on
+# backslashes inside gsub replacements.
 json_string() {
-  { cat; printf 'x'; } | LC_ALL=C tr -d '\000-\010\013\014\016-\037' | LC_ALL=C awk '
-    BEGIN { ORS = ""; printf "\"" }
-    NR > 1 { printf "%s\001n", prev }
+  { cat; printf 'x'; } | LC_ALL=C tr -d '\000' | LC_ALL=C awk '
+    BEGIN { ORS = ""; bs = sprintf("%c", 92); printf "\"" }
+    NR > 1 { printf "%s\\n", prev }
     {
-      gsub(/\\/, "\001\001")
-      gsub(/"/, "\001\"")
-      gsub(/\t/, "\001t")
-      gsub(/\r/, "\001r")
-      prev = $0
+      n = split($0, parts, /\\/)
+      line = parts[1]
+      for (i = 2; i <= n; i++) line = line bs bs parts[i]
+      gsub(/"/, "\\\"", line)
+      gsub(/\t/, "\\t", line)
+      gsub(/\r/, "\\r", line)
+      for (c = 1; c < 32; c++) {
+        if (c != 9 && c != 10 && c != 13) gsub(sprintf("%c", c), sprintf("\\u%04x", c), line)
+      }
+      prev = line
     }
     END { printf "%s\"", substr(prev, 1, length(prev) - 1) }
-  ' | LC_ALL=C tr '\001' '\\'
+  '
 }
 
 HEADERS=$(mktemp) || exit 1
@@ -785,8 +791,9 @@ if [ "$CURL_STATUS" -ne 0 ]; then
   printf '%s\n' "Could not reach OpenArtifacts at $API_HOST." >&2
   exit 1
 fi
-# A 404 on delete means the page is already gone, which is the outcome asked for.
-if [ "$COMMAND" = unshare ] && [ "$STATUS" = 404 ]; then
+# The API answers a structured not_found when the page is already gone, which is the
+# outcome asked for. Any other 404 is an error.
+if [ "$COMMAND" = unshare ] && [ "$STATUS" = 404 ] && grep -q '"not_found"' "$RESPONSE"; then
   STATUS=204
 fi
 case "$STATUS" in
@@ -886,8 +893,8 @@ try {
     } catch { $detail = '' }
   }
   if (-not $detail -and $_.ErrorDetails) { $detail = [string]$_.ErrorDetails.Message }
-  if ($COMMAND -eq 'unshare' -and $status -eq 404) {
-    # The page is already gone, which is the outcome asked for.
+  if ($COMMAND -eq 'unshare' -and $status -eq 404 -and $detail -match '"not_found"') {
+    # The API's structured not_found means the page is already gone, which is the outcome asked for.
     [Console]::Out.WriteLine('{"docId":"' + $DOC_ID + '","status":"unshared"}')
     exit 0
   }
