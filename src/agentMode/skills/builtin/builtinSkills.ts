@@ -53,6 +53,8 @@ export interface BuiltinSkill {
   readonly skillMd: string;
   /** Supporting scripts, references, or notices written alongside SKILL.md. */
   readonly files: ReadonlyArray<{ readonly path: string; readonly content: string }>;
+  /** Previously shipped files to remove on upgrade, leaving user-added files alone. */
+  readonly retiredFiles?: readonly string[];
 }
 
 /** Env var names the plugin injects and the scripts read. Single source of truth. */
@@ -586,7 +588,7 @@ const FETCH_X = relaySkill({
   scriptFile: "fetch-x.sh",
 });
 
-const OPENARTIFACTS_PUBLISH_VERSION = 9;
+const OPENARTIFACTS_PUBLISH_VERSION = 10;
 const OPENARTIFACTS_PUBLISH_USAGE = "openartifacts-publish";
 /** Where the wrapper sends requests unless a test or self-host points it elsewhere. */
 const OPENARTIFACTS_API_HOST_ENV = "OPENARTIFACTS_API_HOST";
@@ -598,6 +600,7 @@ const OPENARTIFACTS_MISSING_KEY_MESSAGE =
 const OPENARTIFACTS_PUBLISH: BuiltinSkill = {
   name: "openartifacts-publish",
   legacyName: "symposium-publish",
+  retiredFiles: ["shared-publishing-rules.md"],
   version: OPENARTIFACTS_PUBLISH_VERSION,
   enabledAgents: ["claude", "codex", "opencode"],
   skillMd: `---

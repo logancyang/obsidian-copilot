@@ -13,6 +13,8 @@ export interface BuiltinSeedFs {
   read(relPath: string): Promise<string>;
   write(relPath: string, content: string): Promise<void>;
   mkdir(relPath: string): Promise<void>;
+  /** Remove a known retired support file, never a directory. */
+  removeFile(relPath: string): Promise<void>;
   /** Remove a directory and its contents. Used to prune a de-gated builtin. */
   rmRecursive(relPath: string): Promise<void>;
 }
@@ -190,10 +192,15 @@ export async function seedBuiltinSkills(
 
     if (!current) {
       try {
-        // An upgrade replaces the managed folder wholesale so files the new version no
-        // longer ships do not linger beside it. `existingContent` is only set for a
-        // managed copy, so a user-authored folder never reaches this branch.
-        if (existingContent !== null && (await fs.exists(dir))) await fs.rmRecursive(dir);
+        // Retire only explicitly owned files: users can add references and themes beside
+        // a managed skill, and an upgrade must preserve them.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/394
+        if (existingContent !== null) {
+          for (const retiredFile of skill.retiredFiles ?? []) {
+            const retiredPath = joinPosix(dir, retiredFile);
+            if (await fs.exists(retiredPath)) await fs.removeFile(retiredPath);
+          }
+        }
         await ensureDir(fs, dir);
         // Carry the user's agent-disable choices forward: if they toggled any
         // agent off via the UI, copilot-enabled-agents was rewritten on disk.
