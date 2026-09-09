@@ -69,7 +69,6 @@ import {
   legacyVaultDataDir,
   opencodeManagedDataDir,
   OpencodeBinaryManager,
-  OpencodeNotFoundError,
   OperationInFlightError,
   parseVersionFromStdout,
   pickMatchingAsset,
@@ -756,7 +755,9 @@ describe("OpencodeBinaryManager.runtimeState", () => {
 
     // Both writers persist binaryPath/binarySource, so letting them overlap is
     // what lets whichever settles last name a source the user did not choose.
-    await expect(mgr.adoptExistingBinary()).rejects.toBeInstanceOf(OperationInFlightError);
+    await expect(mgr.setCustomBinaryPath(process.execPath)).rejects.toBeInstanceOf(
+      OperationInFlightError
+    );
 
     await first;
     expect(settingsMock.__get().binaryPath).toBe(process.execPath);
@@ -770,25 +771,9 @@ describe("OpencodeBinaryManager.runtimeState", () => {
     await expect(mgr.setCustomBinaryPath(process.execPath)).resolves.toBeUndefined();
   });
 
-  it("leaves a fruitless detect in the error state rather than back at idle", async () => {
-    const mgr = new OpencodeBinaryManager(fakePlugin);
-
-    await expect(mgr.adoptExistingBinary()).rejects.toBeInstanceOf(OpencodeNotFoundError);
-
-    // Resolving would settle the store back to idle, and the settings row only
-    // offers Configure — the one way to name a binary the search cannot see —
-    // while an error is showing.
-    expect(mgr.getRuntimeState()).toEqual({
-      kind: "error",
-      operation: "configure",
-      message: expect.stringContaining("Couldn't find opencode"),
-    });
-    expect(mgr.isBusy()).toBe(false);
-  });
-
   it("drops a settled error when a new plugin lifecycle starts", async () => {
     const mgr = new OpencodeBinaryManager(fakePlugin);
-    await expect(mgr.adoptExistingBinary()).rejects.toBeInstanceOf(OpencodeNotFoundError);
+    await expect(mgr.setCustomBinaryPath("/definitely/not/here")).rejects.toThrow();
 
     mgr.forgetSettledError();
 

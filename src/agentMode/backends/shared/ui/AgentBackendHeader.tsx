@@ -7,7 +7,6 @@ import type {
 } from "@/agentMode/session/types";
 import { InstallBadge } from "@/agentMode/backends/shared/installStatus";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { TruncatedText } from "@/components/TruncatedText";
 
 export interface AgentBackendHeaderProps {
@@ -18,7 +17,6 @@ export interface AgentBackendHeaderProps {
   managedInstall: ManagedInstallActionState;
   canUpdate: boolean;
   resolvedPath: string | null;
-  inlineInstall?: React.ReactNode;
   onUpdate: () => void;
   onConfigure: () => void;
 }
@@ -31,7 +29,6 @@ export function AgentBackendHeader({
   managedInstall,
   canUpdate,
   resolvedPath,
-  inlineInstall,
   onUpdate,
   onConfigure,
 }: AgentBackendHeaderProps) {
@@ -48,19 +45,11 @@ export function AgentBackendHeader({
             <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-2">
               <span className="tw-text-base tw-font-semibold">{displayName}</span>
               <InstallBadge state={installState} authStatus={authStatus} />
-              {inlineInstall && (
-                <Badge variant="accent" className="tw-font-normal">
-                  Recommended
-                </Badge>
-              )}
             </div>
             {resolvedPath && (
               <TruncatedText className="tw-max-w-[90%] tw-font-mono tw-text-xs tw-text-muted">
                 {resolvedPath}
               </TruncatedText>
-            )}
-            {inlineInstall && (
-              <span className="tw-text-xs tw-text-muted">Not installed — one download away.</span>
             )}
             {(installState.kind === "incompatible" || installState.kind === "error") && (
               <span className="tw-text-xs tw-text-error">
@@ -73,9 +62,7 @@ export function AgentBackendHeader({
             )}
           </div>
         </div>
-        {inlineInstall ? (
-          inlineInstall
-        ) : canUpdate ? (
+        {canUpdate ? (
           <Button className="tw-shrink-0" size="default" disabled={updating} onClick={onUpdate}>
             {updating ? "Upgrading…" : updateFailed ? "Retry" : "Upgrade"}
           </Button>
@@ -90,11 +77,6 @@ export function AgentBackendHeader({
           </Button>
         )}
       </div>
-      {inlineInstall && (
-        <div className="tw-text-xs tw-text-muted">
-          Works with Copilot Plus or your own API keys — add providers on the BYOK tab.
-        </div>
-      )}
     </div>
   );
 }

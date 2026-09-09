@@ -7,8 +7,8 @@ Start in **Settings → Copilot → Basic → Agents** and check the status besi
 ### opencode shows “Not set up” or “Error”
 
 1. Open **Basic → Agents → opencode**.
-2. Choose **Download opencode**. If it fails, choose **Try again** and read the displayed error.
-3. If opencode is already installed, choose **I already have it**. If detection misses it, open **Configure → My own binary**, enter its absolute path, and choose **Apply**.
+2. Open **Configure → Managed by Copilot** and select **Download & install**. If it fails, read the displayed error and retry.
+3. If opencode is already installed, open **Configure → My own binary** and select **Auto-detect**. If detection misses it, enter its absolute path and choose **Apply**.
 
 Use **Configure → Managed by Copilot** to reinstall or uninstall it. Setup is complete at **Ready**.
 

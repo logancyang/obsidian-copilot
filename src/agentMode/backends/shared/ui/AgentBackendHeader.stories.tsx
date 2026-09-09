@@ -24,6 +24,13 @@ const meta = {
   parameters: { gallery: { host: "settings-tab", layout: "padded" } },
 } satisfies Meta<AgentBackendHeaderProps>;
 export default meta;
+export const NotInstalled: StoryObj<AgentBackendHeaderProps> = {
+  args: {
+    installState: { kind: "absent" },
+    canUpdate: false,
+    resolvedPath: null,
+  },
+};
 export const Upgrade: StoryObj<AgentBackendHeaderProps> = {};
 export const Running: StoryObj<AgentBackendHeaderProps> = {
   args: { managedInstall: { kind: "running", label: "Downloading opencode.zip (42%)" } },

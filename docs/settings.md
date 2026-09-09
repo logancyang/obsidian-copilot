@@ -50,13 +50,13 @@ The model controls shared by installed agents behave as follows:
 
 #### opencode
 
-opencode is the recommended backend and the only one Copilot can install for you. It can route Copilot-hosted models, supported BYOK providers, local OpenAI-compatible endpoints, and models reported by opencode.
+Copilot can install and manage opencode for you. It can route Copilot-hosted models, supported BYOK providers, local OpenAI-compatible endpoints, and models reported by opencode.
 
 When opencode is absent:
 
-1. Select **Download opencode** to download Copilot's pinned build. Progress and **Cancel** appear in the row.
-2. If you already installed it, select **I already have it** to search known locations and adopt the binary.
-3. If detection fails, use **Try again** or **Configure** to enter an absolute path.
+1. Open **Configure**, choose **Managed by Copilot**, then select **Download & install** to download Copilot's pinned build. Progress and **Cancel** appear in the dialog.
+2. If you already installed it, choose **My own binary** and select **Auto-detect**.
+3. If detection fails, enter an absolute path and select **Apply**.
 
 The **Configure opencode** dialog has these controls:
 

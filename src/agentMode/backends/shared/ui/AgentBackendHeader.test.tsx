@@ -2,6 +2,7 @@ import React from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { AgentBackendHeader } from "./AgentBackendHeader";
 import meta, {
+  NotInstalled,
   Running,
   Retry,
   Indeterminate,
@@ -12,6 +13,15 @@ import meta, {
 
 describe("AgentBackendHeader", () => {
   describe("AgentBackendHeader()", () => {
+    it("opens configuration for an absent binary", () => {
+      const onConfigure = jest.fn();
+      render(
+        <AgentBackendHeader {...meta.args} {...NotInstalled.args} onConfigure={onConfigure} />
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Configure" }));
+      expect(onConfigure).toHaveBeenCalledTimes(1);
+      expect(screen.queryByText("Recommended")).toBeNull();
+    });
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 shows Ready only after the installed agent is signed in", () => {
       const view = render(<AgentBackendHeader {...meta.args} {...SignInRequired.args} />);
       expect(screen.getByText("Sign in required")).toBeTruthy();
