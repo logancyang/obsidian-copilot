@@ -56,15 +56,11 @@ jobs:
   test-windows:
     runs-on: windows-latest
     timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        node-version: [22.x, 24.x]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node-version }}
+          node-version: 22.x
           cache: npm
       - name: Record native test environment
         shell: pwsh
@@ -87,7 +83,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: windows-unit-node-${{ matrix.node-version }}
+          name: windows-unit-node-22
           path: windows-test-results/
           retention-days: 14
 

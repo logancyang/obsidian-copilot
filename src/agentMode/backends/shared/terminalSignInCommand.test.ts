@@ -60,11 +60,12 @@ describe("terminalSignInCommand", () => {
         })
       ).toBe("node 'C:\\adapter\\index.js' cli login");
     });
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 preserves literal arguments and explicit profiles while allowing terminal defaults", () => {
+    it("https://github.com/logancyang/obsidian-copilot/issues/2967 preserves literal arguments and explicit profiles in the native terminal", () => {
       const literal = "space ' apostrophe $(printf injected) `printf injected` ; end";
       const command = terminalSignInCommand({
         ...options,
         binaryPath: process.execPath,
+        platform: process.platform,
         args: [
           "-e",
           "process.stdout.write(JSON.stringify([process.env.CODEX_HOME, process.env.HOME, process.argv[1]]))",
@@ -74,10 +75,14 @@ describe("terminalSignInCommand", () => {
       });
       expect(
         JSON.parse(
-          execFileSync("/bin/sh", ["-c", command!], {
-            encoding: "utf8",
-            env: { HOME: "/terminal-home" },
-          })
+          execFileSync(
+            process.platform === "win32" ? "pwsh.exe" : "/bin/sh",
+            process.platform === "win32" ? ["-NoProfile", "-Command", command!] : ["-c", command!],
+            {
+              encoding: "utf8",
+              env: { ...process.env, HOME: "/terminal-home" },
+            }
+          )
         )
       ).toEqual([literal, "/terminal-home", literal]);
     });

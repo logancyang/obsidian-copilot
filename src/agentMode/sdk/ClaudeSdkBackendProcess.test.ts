@@ -1013,7 +1013,7 @@ describe("ClaudeSdkBackendProcess", () => {
       expect(probeCall.options.pathToClaudeCodeExecutable).toBe("/usr/local/bin/claude");
       expect(probeCall.options.env?.ANTHROPIC_MODEL).toBe("claude-fable-5");
       // Child env is process.env plus the overrides, not a bare override map.
-      expect(probeCall.options.env?.PATH).toBe(process.env.PATH);
+      expect(probeCall.options.env).toEqual({ ...process.env, ANTHROPIC_MODEL: "claude-fable-5" });
     });
   });
 

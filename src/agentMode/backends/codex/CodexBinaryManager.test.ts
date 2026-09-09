@@ -209,6 +209,9 @@ describe("CodexBinaryManager", () => {
     });
 
     describe("setCustomBinaryPath()", () => {
+      // Real filesystem fixtures need the host path rules, unlike mocked bundle installs.
+      // https://github.com/logancyang/obsidian-copilot/issues/2967
+      beforeEach(() => setPlatform(originalPlatform));
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/368 normalizes a supported package symlink before selecting the custom adapter", async () => {
         const entry = writeAdapter(path.join(tempDir, "custom"));
         const linked = path.join(tempDir, "codex-acp");

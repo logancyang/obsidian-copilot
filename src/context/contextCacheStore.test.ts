@@ -1,5 +1,6 @@
 import { Mutex } from "async-mutex";
-import { join } from "node:path";
+import { posix } from "node:path";
+
 import type { ContextCacheFs } from "./contextCacheFs";
 import {
   CACHE_SCHEMA_VERSION,
@@ -12,6 +13,10 @@ import {
   type MaterializeProgress,
   type RemoteSource,
 } from "./contextCacheStore";
+
+// Cache keys use the POSIX-relative ContextCacheFs contract on every host.
+// https://github.com/logancyang/obsidian-copilot/issues/2967
+const { join } = posix;
 
 /** Minimal in-memory {@link ContextCacheFs} for deterministic, network-free tests. */
 function memFs(seed: Record<string, string> = {}): ContextCacheFs & { files: Map<string, string> } {
