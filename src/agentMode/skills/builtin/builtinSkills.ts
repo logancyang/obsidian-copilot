@@ -588,7 +588,7 @@ const FETCH_X = relaySkill({
   scriptFile: "fetch-x.sh",
 });
 
-const OPENARTIFACTS_PUBLISH_VERSION = 11;
+const OPENARTIFACTS_PUBLISH_VERSION = 2;
 const OPENARTIFACTS_PUBLISH_USAGE = "openartifacts-publish";
 /** Where the wrapper sends requests unless a test or self-host points it elsewhere. */
 const OPENARTIFACTS_API_HOST_ENV = "OPENARTIFACTS_API_HOST";
