@@ -1,7 +1,3 @@
-import {
-  parseFanoutComposite,
-  renderFanoutComposite,
-} from "@/agentMode/session/fanout/fanoutTypes";
 import type { AgentChatMessage } from "@/agentMode/session/types";
 import type { AgentInputDraftControls } from "@/agentMode/ui/hooks/useAgentInputDrafts";
 import { useSelectedTextContexts, type ProjectConfig } from "@/aiParams";
@@ -76,18 +72,12 @@ export function useChatRelevantNotesContext(
         )
         .map((message) => ({
           role: message.sender === "user" ? ("user" as const) : ("assistant" as const),
-          content:
-            (message.fanout ?? parseFanoutComposite(message.message))
-              ? renderFanoutComposite(
-                  (message.fanout ?? parseFanoutComposite(message.message))!,
-                  (id) => id
-                )
-              : message.parts
-                ? message.parts
-                    .filter((part) => part.kind === "text")
-                    .map((part) => part.text)
-                    .join("\n")
-                : message.message,
+          content: message.parts
+            ? message.parts
+                .filter((part) => part.kind === "text")
+                .map((part) => part.text)
+                .join("\n")
+            : message.message,
         }))
         .filter((message) => message.content.trim()),
       ...queued
