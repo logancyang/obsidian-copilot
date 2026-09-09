@@ -89,7 +89,7 @@ For chat, suggestions use the conversation, your unsent draft, selected text, an
 
 **Add** includes a suggested note in the chat context and refreshes suggestions. Full attached notes are excluded from results. Selecting an excerpt alone leaves its source note eligible. Miyo looks up existing indexed attachments; this feature does not upload or index their contents. Skipped attachments produce a notice. If none of the chat context is usable, the pane explains that instead of switching to an unrelated note.
 
-Chat-context retrieval needs a compatible Miyo service. **Update Miyo for chat context** means the connected service does not support it. Development previews can show a **Mock preview** notice; those example notes do not demonstrate relevance or retrieval speed.
+Chat-context retrieval needs a compatible Miyo service. With an older Miyo, Relevant Notes returns to the editor-note flow and shows the note name as its source. Open a Markdown note if no source is available. Update Miyo to get conversation-based recommendations. Connection errors and valid empty chat results do not switch sources. Development previews can show a **Mock preview** notice; those example notes do not demonstrate relevance or retrieval speed.
 
 With Live off, only the active note supplies context, and the list stays fixed until you open another note or reconnect Miyo. Editor updates follow Miyo's index, so they arrive a few seconds behind typing. If your system is set to reduce motion, the list still updates without animation.
 

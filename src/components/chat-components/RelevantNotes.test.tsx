@@ -176,6 +176,25 @@ describe("RelevantNotes", () => {
       await screen.findByText("Target");
     });
 
+    it("shows the editor source and its notes when old Miyo cannot recommend from chat (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", async () => {
+      (findChatRelevantNotes as jest.Mock).mockResolvedValue({
+        notes: [],
+        status: "unsupported-service",
+      });
+      getChatRelevantNotesStore(mockApp).select({
+        id: "old-miyo",
+        request: { folder_name: "Vault", messages: [{ role: "user", content: "topic" }] },
+        skippedAttachments: 0,
+        addFile: jest.fn(),
+      });
+      render(<RelevantNotes onAddToChat={jest.fn()} />);
+      await screen.findByText("Target");
+      expect(screen.queryByText("Agent chat context")).toBeNull();
+      expect(screen.getByText("Source")).toBeTruthy();
+      expect(mockFindRelevantNotes).toHaveBeenCalledWith({ app: mockApp, filePath: "Source.md" });
+      act(() => getChatRelevantNotesStore(mockApp).select(null));
+    });
+
     it("opens a result in a new leaf", async () => {
       render(<RelevantNotes onAddToChat={jest.fn()} />);
 

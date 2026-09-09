@@ -26,7 +26,6 @@ describe("RelevantNotesPane", () => {
 
     it.each([
       ["no-usable-context", "No usable chat context"],
-      ["unsupported-service", "Update Miyo for chat context"],
       ["request-too-large", "Chat context is too large"],
       ["request-error", "Miyo couldn't use this chat context"],
     ] as const)(
@@ -35,7 +34,7 @@ describe("RelevantNotesPane", () => {
         render(<RelevantNotesPane {...BASE_PROPS} status={status} />);
         expect(screen.getByText(title)).toBeTruthy();
         expect(screen.queryByText("Related note")).toBeNull();
-        if (status === "unsupported-service" || status === "request-error") {
+        if (status === "request-error") {
           fireEvent.click(screen.getByRole("button", { name: "Open Miyo settings" }));
           expect(BASE_ACTIONS.onOpenMiyoSettings).toHaveBeenCalledTimes(1);
         }

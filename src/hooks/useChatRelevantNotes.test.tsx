@@ -63,6 +63,44 @@ describe("useChatRelevantNotes", () => {
       );
       expect(result.current.context).not.toBeNull();
     });
+    it.each([
+      "unsupported-service",
+      "no-matches",
+      "no-usable-context",
+      "unavailable",
+      "request-error",
+      "request-too-large",
+    ])(
+      "restores the editor only for unsupported service, not %s results (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)",
+      async (status) => {
+        find.mockResolvedValue({ notes: [], status });
+        getChatRelevantNotesStore(app).select(context("a", "topic"));
+        const { result } = renderHook(() => useChatRelevantNotes(app, true, "", false));
+        await act(async () => {
+          jest.advanceTimersByTime(500);
+        });
+        expect(result.current.context === null).toBe(status === "unsupported-service");
+        expect(result.current.result.status).toBe(status);
+      }
+    );
+    it("tries the new endpoint again after switching connections (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", async () => {
+      find.mockResolvedValueOnce({ notes: [], status: "unsupported-service" });
+      getChatRelevantNotesStore(app).select(context("a", "topic"));
+      const { result, rerender } = renderHook(
+        ({ connection }) => useChatRelevantNotes(app, true, connection, false),
+        { initialProps: { connection: "old" } }
+      );
+      await act(async () => {
+        jest.advanceTimersByTime(500);
+      });
+      expect(result.current.context).toBeNull();
+      rerender({ connection: "new" });
+      await act(async () => {
+        jest.runOnlyPendingTimers();
+      });
+      expect(result.current.context?.id).toBe("a");
+      expect(find).toHaveBeenCalledTimes(2);
+    });
     it("rejects a superseded response (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", async () => {
       let resolve!: (value: unknown) => void;
       find.mockImplementationOnce(
