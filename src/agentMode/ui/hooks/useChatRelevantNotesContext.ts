@@ -101,8 +101,19 @@ export function useChatRelevantNotesContext(
     file_paths: [...new Set(files.map((file) => getMiyoFilePath(app, file.path)))],
     limit: 20,
   };
+  // Sent images remain unsupported after the composer resets into chat history.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/383
   const skippedAttachments =
     draft.images.length +
+    history.reduce(
+      (count, message) =>
+        count +
+        (message.content?.filter(
+          (part) =>
+            typeof part === "object" && part !== null && "type" in part && part.type === "image_url"
+        ).length ?? 0),
+      0
+    ) +
     queued.reduce(
       (count, message) =>
         count + (message.promptContent?.filter((part) => part.type === "image").length ?? 0),
