@@ -124,6 +124,8 @@ Agent Chat keeps each conversation separate:
 - Add the active note, selected text, other notes, folders, a Copilot Web Viewer tab, or supported images. You can also mention a note with `[[Note title]]`.
 - Hover the context ring beside the send controls to see how much of the model's context window is in use. The ring stays empty until the agent reports usage, and a stopped response keeps the last reported reading. If the connected account reports usage limits, the same panel shows the available limit and reset time.
 
+You can send an image without adding text, for example when the agent asks for a screenshot. Choose a model that supports images.
+
 Attachments apply to the next message. For instructions and context that should be reused, create a [Project](projects.md) or add rules to [`AGENTS.md`](system-prompts.md). See [Context and Mentions](context-and-mentions.md) for every context option.
 
 Uploaded images are embedded in saved conversation notes. Copilot stores the image files using your vault attachment setting and reuses them when the conversation is saved again.

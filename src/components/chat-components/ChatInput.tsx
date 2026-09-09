@@ -941,7 +941,9 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
                   className={cn(ACCENT_CIRCLE_BUTTON_CLASS)}
                   aria-label="Send"
                   onClick={() => onSendMessage()}
-                  disabled={!inputMessage.trim()}
+                  // Images can supply the entire next turn.
+                  // https://github.com/logancyang/obsidian-copilot/issues/2850
+                  disabled={!inputMessage.trim() && selectedImages.length === 0}
                 >
                   <ArrowUp className="tw-size-4" />
                 </Button>

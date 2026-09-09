@@ -316,7 +316,9 @@ export const AgentChatInput = memo(function AgentChatInput({
       // otherwise submit a turn via the keyboard; bail before any prep work.
       if (disabled) return;
       const text = inputMessage.trim();
-      if (!text) return;
+      // A screenshot can answer the preceding turn without additional text.
+      // https://github.com/logancyang/obsidian-copilot/issues/2850
+      if (!text && selectedImages.length === 0) return;
       const rawInput = inputMessage;
 
       const activeFile = app.workspace.getActiveFile();
@@ -406,6 +408,13 @@ export const AgentChatInput = memo(function AgentChatInput({
       for (const image of selectedImages) {
         const block = await fileToImageBlock(image);
         if (block) content.push(block);
+      }
+
+      // Failed image reads must not turn an image-only message into an empty request.
+      // https://github.com/logancyang/obsidian-copilot/issues/2850
+      if (!resolvedText && content.length === 0) {
+        new Notice("Could not read the attached images. Please attach them again.");
+        return;
       }
 
       const item: QueuedAgentMessage = {
