@@ -588,7 +588,7 @@ const FETCH_X = relaySkill({
   scriptFile: "fetch-x.sh",
 });
 
-const OPENARTIFACTS_PUBLISH_VERSION = 10;
+const OPENARTIFACTS_PUBLISH_VERSION = 11;
 const OPENARTIFACTS_PUBLISH_USAGE = "openartifacts-publish";
 /** Where the wrapper sends requests unless a test or self-host points it elsewhere. */
 const OPENARTIFACTS_API_HOST_ENV = "OPENARTIFACTS_API_HOST";
@@ -646,7 +646,8 @@ The bundled \`${OPENARTIFACTS_DEFAULT_THEME}\` is an optional example.
 ## 2. Let the user review
 
 Tell the user the absolute path of the HTML file and that opening it in a browser shows
-exactly what will be published. Then end your turn.
+the page as it will be uploaded; OpenArtifacts adds its own header and footer bylines when
+it serves the page. Then end your turn.
 
 Never publish in the same turn that generated the HTML. Publish only when a later
 message from the user clearly asks to publish this page. Treat anything else as feedback
@@ -671,7 +672,8 @@ On Windows, use the \`.cmd\` wrapper (prefix with \`&\` in PowerShell):
 Success prints the server's JSON, \`{"docId", "url", "version"}\`. Set the note's
 \`openartifacts\` frontmatter property to that \`url\` (create the frontmatter block if
 needed, keep every other property) and remove a \`symposium\` property whose link has the
-same document id, then report the URL. Publishing the same note again updates the same page.
+same document id. Delete the HTML file from \`${OPENARTIFACTS_AGENT_HANDOFF_DIR}/\`, then
+report the URL. Publishing the same note again updates the same page.
 
 On failure the wrapper prints the HTTP status and the server's message to stderr and
 exits 1. Report that message verbatim. Do not retry on your own, invent a cause, strip
@@ -681,12 +683,14 @@ do not create a replacement page unless the user explicitly asks.
 
 ## 4. Withdraw
 
-For delete, remove, or withdraw requests, read the \`docId\` from the \`openartifacts\`
-property, or from \`symposium\` on older notes. If there is none, say nothing is published. Otherwise tell the user the link
-will stop working and that copies people already saved cannot be recalled, then end your
-turn. On a clear yes, run the wrapper with \`unshare <docId>\`, remove the \`openartifacts\`
-and \`symposium\` properties from the note, and report that the page is gone. Never tell the user to delete
-the page at its public URL.
+For delete, remove, or withdraw requests, read the \`docId\` with the same rules as step 1:
+\`openartifacts\` first, \`symposium\` on older notes, compared by document id, and stop to
+ask on any other value or on two properties naming different ids. If there is none, say
+nothing is published. Otherwise tell the user the link will stop working and that copies
+people already saved cannot be recalled, then end your turn. On a clear yes, run the wrapper
+with \`unshare <docId>\`, remove the \`openartifacts\` and \`symposium\` properties from the
+note, and report that the page is gone. Never tell the user to delete the page at its
+public URL.
 `,
   files: [
     { path: `themes/${OPENARTIFACTS_DEFAULT_THEME}.md`, content: RESEARCH_MEMO_THEME },
