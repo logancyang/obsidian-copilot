@@ -339,13 +339,11 @@ export class MiyoClient {
   /**
    * Register a folder with Miyo (`POST /v0/folder`).
    *
-   * Like {@link checkFolderRegistration}, this reads the raw status instead of
-   * letting {@link requestJson} throw on non-2xx, so 409 can be recognized as a
-   * success rather than an error:
+   * A conflict is idempotent success only after Miyo confirms the requested
+   * absolute path is registered; overlapping folders and duplicate names fail.
    *
    * - 201 → newly registered; returns the created folder record.
-   * - 409 → already registered; returns `null` (idempotent connect — a success
-   *   with no new record to hand back, and we don't fabricate one).
+   * - 409 → returns `null` only after verification; otherwise throws the conflict.
    * - 400 → validation error; throws with the server's detail so the caller can
    *   fall back to the manual add flow.
    * - anything else → throws with the status/detail.
@@ -394,18 +392,30 @@ export class MiyoClient {
         body,
         throw: false,
       });
+      // Overlap and duplicate-name conflicts do not register this vault. Ask
+      // Miyo to resolve its absolute path, retaining the POST endpoint and auth.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/402
+      if (response.status === 409) {
+        try {
+          url.searchParams.set("path", request.path);
+          const registration = await requestUrl({
+            url: url.toString(),
+            method: "GET",
+            headers,
+            throw: false,
+          });
+          if (registration.status === 200) return null;
+        } catch {
+          // A failed lookup must preserve the original registration conflict.
+          // https://github.com/Brevilabs/obsidian-copilot-private/issues/402
+        }
+      }
     } catch (error) {
       // No HTTP response (unresolved base URL, network failure): log and rethrow.
       logWarn(`Miyo add-folder request failed: ${err2String(error)}`);
       throw error;
     }
 
-    // Reason: 409 means the vault is already known to Miyo — the exact state the
-    // connect flow wants, so it's a success, not a failure.
-    if (response.status === 409) {
-      logInfo("Miyo folder already registered; treating as success");
-      return null;
-    }
     if (response.status === 201) {
       return this.parseResponseJson<MiyoFolderEntry>(response.json, response.text);
     }

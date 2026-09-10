@@ -125,7 +125,7 @@ Register a folder for indexing. Starts watching and scanning immediately.
 
 **Response 201** — `FolderEntry`
 
-**Errors:** 400 (invalid), 409 (already registered)
+**Errors:** 400 (invalid), 409 (already registered, overlapping folders, or duplicate folder name). Copilot accepts a conflict only after confirming the requested vault path is already registered; otherwise, the connection stays incomplete and registration-failure guidance remains available.
 
 ---
 
