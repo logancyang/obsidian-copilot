@@ -57,14 +57,14 @@ function GuidancePanel({
     <div className="tw-flex tw-w-full tw-justify-center">
       <div
         data-miyo-guidance={id}
-        className="tw-flex tw-w-full tw-max-w-xs tw-flex-col tw-items-center tw-gap-3 tw-rounded-lg tw-border tw-border-solid tw-border-border tw-bg-secondary tw-p-5 tw-text-center"
+        className="tw-flex tw-w-full tw-max-w-xs tw-flex-col tw-items-start tw-gap-3 tw-rounded-lg tw-border tw-border-solid tw-border-border tw-bg-secondary tw-p-5 tw-text-left"
       >
         <div className="tw-flex tw-flex-col tw-gap-1">
           <span className="tw-text-sm tw-font-semibold tw-text-normal">{title}</span>
           <span className="tw-text-xs tw-leading-normal tw-text-muted">{description}</span>
         </div>
         {children && (
-          <div className="tw-flex tw-flex-wrap tw-justify-center tw-gap-2">{children}</div>
+          <div className="tw-flex tw-flex-wrap tw-justify-start tw-gap-2">{children}</div>
         )}
       </div>
     </div>
