@@ -305,6 +305,46 @@ describe("RelevantNotes", () => {
       openSpy.mockRestore();
     });
 
+    it.each([
+      { runtime: "local", isMobile: false, miyoServerUrl: "", local: true },
+      { runtime: "mobile", isMobile: true, miyoServerUrl: "http://127.0.0.1:8742", local: false },
+      {
+        runtime: "remote",
+        isMobile: false,
+        miyoServerUrl: "https://remote-miyo.example",
+        local: false,
+      },
+    ])(
+      "opens the appropriate $runtime recovery destination for an unregistered vault (https://github.com/Brevilabs/obsidian-copilot-private/issues/401)",
+      async ({ isMobile, miyoServerUrl, local }) => {
+        (Platform as { isMobile: boolean }).isMobile = isMobile;
+        mockSettings = { ...mockSettings, miyoServerUrl };
+        mockFindRelevantNotes.mockResolvedValue({
+          notes: [],
+          status: "vault-not-registered",
+          details: { folderName: "Work Vault" },
+        });
+        const openSpy = jest.spyOn(window, "open").mockImplementation(() => null);
+        render(<RelevantNotes onAddToChat={jest.fn()} />);
+        fireEvent.click(
+          await screen.findByRole("button", {
+            name: local ? "Open folder settings in Miyo" : "Review Miyo connection",
+          })
+        );
+        if (local) {
+          expect(openSpy).toHaveBeenCalledWith(
+            "miyo://open?tab=sources&folder=Work%20Vault",
+            "_blank"
+          );
+          expect(openCopilotSettings).not.toHaveBeenCalled();
+        } else {
+          expect(openCopilotSettings).toHaveBeenCalledWith(mockApp, window, "miyo");
+          expect(openSpy).not.toHaveBeenCalled();
+        }
+        openSpy.mockRestore();
+      }
+    );
+
     it("refetches an unindexed note after the user asks Miyo for its latest state (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
       mockFindRelevantNotes
         .mockResolvedValueOnce({ notes: [], status: "not-indexed" })

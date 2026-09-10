@@ -159,3 +159,19 @@ export const NotIndexedRemoteGuidance: StoryObj<RelevantNotesPaneProps> = {
     },
   },
 };
+
+export const VaultNotRegistered: StoryObj<RelevantNotesPaneProps> = {
+  args: { status: "vault-not-registered", details: { folderName: "Work Vault" }, noteRows: [] },
+};
+
+export const VaultNotRegisteredRemote: StoryObj<RelevantNotesPaneProps> = {
+  args: {
+    status: "vault-not-registered",
+    details: { folderName: "Research and long-term project planning" },
+    noteRows: [],
+    actions: {
+      ...baseArgs.actions,
+      reviewIndexing: { ...baseArgs.actions.reviewIndexing, destination: "settings" },
+    },
+  },
+};

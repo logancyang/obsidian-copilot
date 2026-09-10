@@ -189,6 +189,20 @@ async function searchRelatedNotesWithMiyo(
           return { scoreByPath: new Map(), status: "unavailable" };
       }
     } catch (statusError) {
+      // Only this file-status response confirms a missing registration; a
+      // generic 404 can also come from an unsupported route or a proxy.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/401
+      if (
+        statusError instanceof MiyoRequestError &&
+        statusError.status === 404 &&
+        statusError.detail === "Folder not registered"
+      ) {
+        return {
+          scoreByPath: new Map(),
+          status: "vault-not-registered",
+          details: { folderName },
+        };
+      }
       // Old Miyo builds use this exact structured response for unknown routes.
       // Other 501s are real failures and must not be misreported as compatibility.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
@@ -220,9 +234,11 @@ export type RelevantNotesSearchStatus =
   | "index-error"
   | "excluded"
   | "not-indexed"
+  | "vault-not-registered"
   | "unavailable";
 
 export interface RelevantNotesStatusDetails {
+  folderName?: string;
   skippedAttachments?: number;
   errorMessage?: string;
   exclusionReason?: MiyoFileStatusReason;
@@ -303,6 +319,7 @@ export function isSameRelevantNotesResult(a: RelevantNotesResult, b: RelevantNot
   if (a.details?.errorMessage !== b.details?.errorMessage) return false;
   if (a.details?.exclusionReason !== b.details?.exclusionReason) return false;
   if (a.details?.exclusionRule !== b.details?.exclusionRule) return false;
+  if (a.details?.folderName !== b.details?.folderName) return false;
   if (a.notes.length !== b.notes.length) return false;
   return a.notes.every((note, index) => {
     const other = b.notes[index];
