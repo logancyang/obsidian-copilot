@@ -524,10 +524,12 @@ describe("main", () => {
           "Gallery/Test Probes/Broken",
           "Gallery/Test Probes/Overflow",
           "UI/Badge/Accent",
+          "UI/Badge/SecondarySurface",
           "UI/Badge/Status",
           "UI/Badge/Success",
           "UI/Badge/Variants",
           "UI/Button/Disabled",
+          "UI/Button/SecondarySurface",
           "UI/Button/Sizes",
           "UI/Button/Variants",
         ]);
