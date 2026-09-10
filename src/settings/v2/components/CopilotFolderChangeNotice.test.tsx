@@ -13,23 +13,36 @@ const DEFAULT_PROPS: CopilotFolderChangeNoticeProps = {
 
 describe("CopilotFolderChangeNotice", () => {
   describe("CopilotFolderChangeNotice()", () => {
-    it("explains where new and existing Copilot data will remain", () => {
+    it("labels both paths and separates retained data from permanent exclusion (https://github.com/Brevilabs/obsidian-copilot-private/issues/409)", () => {
       render(<CopilotFolderChangeNotice {...DEFAULT_PROPS} />);
 
       expect(screen.getByText("90 System/copilot/", { selector: "code" })).not.toBeNull();
-      expect(screen.getByText("copilot/", { selector: "strong" })).not.toBeNull();
+      expect(screen.getByText("copilot/", { selector: "code" })).not.toBeNull();
+      expect(
+        screen.getByText("New Copilot folder", { selector: "dt" }).nextElementSibling?.textContent
+      ).toContain("90 System/copilot/");
+      expect(
+        screen.getByText("Existing data", { selector: "dt" }).nextElementSibling?.textContent
+      ).toContain("copilot/");
+      expect(screen.getByText("Files are not moved automatically.")).not.toBeNull();
       expect(screen.getByText(/stays permanently excluded from Copilot search/)).not.toBeNull();
       expect(screen.queryByRole("alert")).toBeNull();
     });
 
-    it("warns that every Markdown file in a non-empty folder will stay excluded", () => {
+    it("leads with permanent Markdown exclusion before the path details (https://github.com/Brevilabs/obsidian-copilot-private/issues/409)", () => {
       render(<CopilotFolderChangeNotice {...DEFAULT_PROPS} containsMarkdown />);
 
       const warning = screen.getByRole("alert");
-      expect(warning.textContent).toContain("This folder already contains Markdown files.");
-      expect(warning.textContent).toContain("including regular notes");
+      expect(warning.textContent).toMatch(
+        /^Markdown files in this folder will be excluded from Copilot search\./
+      );
+      expect(
+        warning.compareDocumentPosition(screen.getByText("New Copilot folder")) &
+          Node.DOCUMENT_POSITION_FOLLOWING
+      ).toBeTruthy();
+      expect(warning.textContent).toContain("includes regular notes");
       expect(warning.textContent).toContain("excluded from Copilot search");
-      expect(warning.textContent).toContain("stays excluded even if you change");
+      expect(warning.textContent).toContain("even if you change the Copilot folder later");
     });
   });
 });

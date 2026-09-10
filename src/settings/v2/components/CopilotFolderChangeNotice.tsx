@@ -25,17 +25,11 @@ export const CopilotFolderChangeNotice: React.FC<CopilotFolderChangeNoticeProps>
         <FolderSync className={cn("tw-size-6 tw-shrink-0 tw-text-accent")} aria-hidden="true" />
         <h2 className={cn("tw-m-0 tw-text-xl tw-font-bold")}>Change Copilot folder</h2>
       </div>
-      <p className={cn("tw-m-0 tw-text-muted")}>
-        Copilot will keep new chats and data under <code>{newRoot}/</code>. Your files aren&apos;t
-        moved — your old data stays in <strong className={cn("tw-text-normal")}>{oldRoot}/</strong>,
-        which stays permanently excluded from Copilot search. Move it over if you want; Obsidian
-        updates the links.
-      </p>
       {containsMarkdown && (
         <div
           className={cn(
             "tw-flex tw-items-start tw-gap-2 tw-rounded-lg tw-border tw-border-solid tw-border-warning/40",
-            "tw-bg-secondary tw-px-3 tw-py-2.5 tw-text-xs tw-text-normal"
+            "tw-bg-secondary tw-px-3 tw-py-2.5 tw-text-sm tw-text-normal"
           )}
           role="alert"
         >
@@ -44,13 +38,34 @@ export const CopilotFolderChangeNotice: React.FC<CopilotFolderChangeNoticeProps>
             aria-hidden="true"
           />
           <span>
-            <strong>This folder already contains Markdown files.</strong> If you continue, every
-            Markdown file under <code>{newRoot}/</code> — including regular notes — will be excluded
-            from Copilot search. The folder stays excluded even if you change the Copilot folder
-            later.
+            <strong>Markdown files in this folder will be excluded from Copilot search.</strong>{" "}
+            This includes regular notes. The exclusion is permanent, even if you change the Copilot
+            folder later.
           </span>
         </div>
       )}
+      <dl className={cn("tw-m-0 tw-flex tw-min-w-0 tw-flex-col tw-gap-3 tw-text-sm")}>
+        <div>
+          <dt className={cn("tw-font-medium tw-text-normal")}>New Copilot folder</dt>
+          <dd className={cn("tw-m-0 [overflow-wrap:anywhere]")}>
+            <code className={cn("tw-whitespace-pre-wrap")}>{newRoot}/</code>
+          </dd>
+        </div>
+        <div>
+          <dt className={cn("tw-font-medium tw-text-normal")}>Existing data</dt>
+          <dd className={cn("tw-m-0 [overflow-wrap:anywhere]")}>
+            <code className={cn("tw-whitespace-pre-wrap")}>{oldRoot}/</code>
+          </dd>
+        </div>
+      </dl>
+      <p className={cn("tw-m-0 tw-text-sm tw-text-muted")}>
+        <strong className={cn("tw-text-normal")}>Files are not moved automatically.</strong> New
+        chats and data will use the new folder. You can move existing files yourself; Obsidian
+        updates the links.
+      </p>
+      <p className={cn("tw-m-0 tw-text-sm tw-text-muted")}>
+        The existing data folder stays permanently excluded from Copilot search.
+      </p>
     </div>
   );
 };

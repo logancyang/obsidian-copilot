@@ -165,7 +165,7 @@ export const BasicSettings: React.FC = () => {
         containsMarkdown={containsMarkdown}
       />,
       "",
-      containsMarkdown ? "Use folder" : "Change folder",
+      "Change folder",
       "Cancel",
       () => setFolderDraft(persistedRoot)
     ).open();
