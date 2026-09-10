@@ -1,0 +1,39 @@
+{
+  "beforeBuild": "4.0.7+dev.11229d26.clean.17a00a2f4ecb",
+  "afterBuild": "4.0.7+dev.cad3accd.clean.d1506f3bfa65",
+  "method": "Computed CSS foreground and composited ancestor backgrounds, WCAG relative luminance. Native pointer hover and keyboard focus; disabled controls excluded. Screenshots at300/340/400/600px. Default and secondary card surfaces. Other themes/custom accent colors require their own checks.",
+  "rows": [
+    {
+      "theme": "Default Obsidian",
+      "appearance": "dark",
+      "beforeMinimum": 2.019992938731908,
+      "afterMinimum": 4.930027623285512,
+      "afterSamples": 68,
+      "pass": true
+    },
+    {
+      "theme": "Default Obsidian",
+      "appearance": "light",
+      "beforeMinimum": 2.2963859535294997,
+      "afterMinimum": 4.995039189710778,
+      "afterSamples": 68,
+      "pass": true
+    },
+    {
+      "theme": "Things",
+      "appearance": "dark",
+      "beforeMinimum": 2.019992938731908,
+      "afterMinimum": 5.44144475860076,
+      "afterSamples": 68,
+      "pass": true
+    },
+    {
+      "theme": "Things",
+      "appearance": "light",
+      "beforeMinimum": 2.3497551820480123,
+      "afterMinimum": 4.946871381771405,
+      "afterSamples": 68,
+      "pass": true
+    }
+  ]
+}
