@@ -1,5 +1,5 @@
 import type { BuiltinPreferences } from "./builtin/reconcileBuiltinSkills";
-import { ALL_MANAGED_SKILLS, planManagedBuiltins } from "./builtin/builtinSkills";
+import { ALL_MANAGED_SKILLS, planManagedBuiltins } from "@/builtinSkills/builtinSkills";
 import { logError, logInfo, logWarn } from "@/logger";
 import { getSettings, updateSetting } from "@/settings/model";
 import { getEffectiveSkillsFolder } from "@/settings/copilotFolder";
@@ -370,9 +370,7 @@ export class SkillManager {
           enabledAgents:
             pref?.disabled || !eligible.has(skill.name)
               ? []
-              : availableAgents.filter((agent) =>
-                  pref ? !pref.disabledAgents?.includes(agent) : skill.enabledAgents.includes(agent)
-                ),
+              : availableAgents.filter((agent) => !pref?.disabledAgents?.includes(agent)),
         };
       });
       const rejectedSkills =

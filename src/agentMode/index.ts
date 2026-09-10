@@ -199,7 +199,6 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
         settings: getSettings(),
         availableAgents: availableSkillAgents(),
         registeredAgents: Object.keys(collectAgentSkillsDirsProjectRel()),
-        savePreferences: saveSkillPreferences,
       });
     },
   });

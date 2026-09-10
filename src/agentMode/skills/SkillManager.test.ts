@@ -1,4 +1,5 @@
-import { BUILTIN_SKILLS } from "./builtin/builtinSkills";
+import { BUILTIN_SKILLS, RETIRED_BUILTIN_SKILLS } from "@/builtinSkills/builtinSkills";
+import { sanitizeBuiltinPreferences } from "@/settings/model";
 import type { BuiltinPreferences } from "./builtin/reconcileBuiltinSkills";
 import { act, renderHook } from "@testing-library/react";
 import { FileSystemAdapter, type App, type EventRef } from "obsidian";
@@ -28,6 +29,7 @@ let preferences: BuiltinPreferences = {};
 const ISSUE = "https://github.com/logancyang/obsidian-copilot/issues/3022";
 
 jest.mock("@/settings/model", () => ({
+  sanitizeBuiltinPreferences: jest.requireActual("@/settings/model").sanitizeBuiltinPreferences,
   getSettings: () => ({
     agentMode: {
       skills: {
@@ -208,15 +210,15 @@ describe("SkillManager", () => {
         expect(listener.mock.calls.map((call) => call[0])).toEqual(["opencode", "opencode"]);
       });
 
-      it(`preserves legacy on-disk opt-outs when migration cannot persist ${ISSUE}`, async () => {
+      it(`uses default agents when no override exists despite stale file metadata ${ISSUE}`, async () => {
         const f = builtinFixture();
         (discoverManagedSkills as jest.Mock).mockResolvedValue({
           accepted: [{ ...builtinSkill, enabledAgents: ["claude"] }],
           rejected: [],
         });
-        f.prepare.mockRejectedValue(new Error("migration failed"));
+        f.prepare.mockRejectedValue(new Error("seed failed"));
         await f.manager.refresh();
-        expect(getManagedSkills()[0].enabledAgents).toEqual(["claude"]);
+        expect(getManagedSkills()[0].enabledAgents).toEqual(["claude", "opencode"]);
       });
       it(`applies durable opt-outs even when cleanup fails ${ISSUE}`, async () => {
         const f = builtinFixture();
@@ -225,6 +227,17 @@ describe("SkillManager", () => {
         const result = await f.manager.refresh();
         expect(result.reconcileError).toBe("cleanup failed");
         expect(getManagedSkills()[0].enabledAgents).toEqual(["claude"]);
+      });
+      it(`keeps retired skills disabled when file cleanup fails ${ISSUE}`, async () => {
+        const f = builtinFixture();
+        mockedDiscoverManagedSkills.mockResolvedValue(
+          discoveryResult([{ ...builtinSkill, name: RETIRED_BUILTIN_SKILLS[0].name }])
+        );
+        f.prepare.mockRejectedValue(new Error("retirement failed"));
+        const result = await f.manager.refresh();
+        expect(result.reconcileError).toBe("retirement failed");
+        expect(getManagedSkills()[0].enabledAgents).toEqual([]);
+        expect(mockedReconcile.mock.calls[0][0].skills[0].enabledAgents).toEqual([]);
       });
       it(`seeds before discovery on every refresh entry point ${ISSUE}`, async () => {
         const f = builtinFixture();
@@ -685,13 +698,19 @@ describe("SkillManager", () => {
           ok: true,
         });
         expect(preferences[builtinSkill.name]).toEqual({
-          disabled: false,
           disabledAgents: ["opencode"],
         });
         expect(f.savePreferences.mock.invocationCallOrder[0]).toBeLessThan(
           f.prepare.mock.invocationCallOrder[0]
         );
         expect(getManagedSkills()[0].enabledAgents).toEqual(["claude"]);
+      });
+      it(`removes the preference when restoring whole-skill defaults ${ISSUE}`, async () => {
+        const f = builtinFixture();
+        preferences[builtinSkill.name] = { disabled: true };
+        await f.manager.setBuiltinSkillEnabled(builtinSkill.name, true);
+        expect(preferences).toEqual({});
+        expect(getManagedSkills()[0].enabledAgents).toEqual(["claude", "opencode"]);
       });
       it(`does not remove files when saving the opt-out fails ${ISSUE}`, async () => {
         const f = builtinFixture();
@@ -712,6 +731,13 @@ describe("SkillManager", () => {
         ).toMatchObject({ ok: false, message: "Unknown built-in skill." });
         expect(f.savePreferences).not.toHaveBeenCalled();
         expect(f.prepare).not.toHaveBeenCalled();
+      });
+      it(`removes the preference when re-enabling the last opted-out agent ${ISSUE}`, async () => {
+        const f = builtinFixture();
+        preferences[builtinSkill.name] = { disabledAgents: ["opencode"] };
+        await f.manager.setBuiltinAgentEnabled(builtinSkill.name, "opencode", true);
+        expect(preferences).toEqual({});
+        expect(getManagedSkills()[0].enabledAgents).toEqual(["claude", "opencode"]);
       });
       it(`serializes rapid toggles and retains other agent choices ${ISSUE}`, async () => {
         const f = builtinFixture();
@@ -825,7 +851,7 @@ function builtinFixture() {
   const availableAgents = jest.fn(() => ["claude", "opencode"]);
   const savePreferences = jest.fn(
     async (update: (current: BuiltinPreferences) => BuiltinPreferences) => {
-      preferences = update(preferences);
+      preferences = sanitizeBuiltinPreferences(update(preferences)) ?? {};
       return preferences;
     }
   );
