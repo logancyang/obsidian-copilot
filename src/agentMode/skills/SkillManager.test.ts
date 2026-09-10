@@ -1,3 +1,4 @@
+import { composeDenyList } from "./denyListComposer";
 import { BUILTIN_SKILLS, RETIRED_BUILTIN_SKILLS } from "@/builtinSkills/builtinSkills";
 import { sanitizeBuiltinPreferences } from "@/settings/model";
 import type { BuiltinPreferences } from "./builtin/reconcileBuiltinSkills";
@@ -237,6 +238,9 @@ describe("SkillManager", () => {
         const result = await f.manager.refresh();
         expect(result.reconcileError).toBe("retirement failed");
         expect(getManagedSkills()[0].enabledAgents).toEqual([]);
+        expect(composeDenyList(getManagedSkills(), "opencode", ["claude", "codex"])).toEqual([
+          RETIRED_BUILTIN_SKILLS[0].name,
+        ]);
         expect(mockedReconcile.mock.calls[0][0].skills[0].enabledAgents).toEqual([]);
       });
       it(`seeds before discovery on every refresh entry point ${ISSUE}`, async () => {

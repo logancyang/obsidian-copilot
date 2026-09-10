@@ -38,7 +38,10 @@ export function composeDenyList(
   const deny = new Set<string>();
   for (const skill of allSkills) {
     if (skill.enabledAgents.includes(backend)) continue;
-    if (skill.enabledAgents.some((a) => crossDiscoveredAgents.includes(a))) {
+    // Failed cleanup can leave disabled or retired built-ins in cross-discovered folders
+    // even when their effective agent list is empty.
+    // https://github.com/logancyang/obsidian-copilot/issues/3022
+    if (skill.builtin || skill.enabledAgents.some((a) => crossDiscoveredAgents.includes(a))) {
       deny.add(skill.name);
     }
   }
