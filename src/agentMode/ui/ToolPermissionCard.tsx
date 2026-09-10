@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { extractDiffContents, formatAgentInput, renderDiff } from "@/agentMode/ui/diffRender";
 import type {
@@ -102,7 +103,10 @@ export const ToolPermissionCard: React.FC<ToolPermissionCardProps> = ({ request,
                 key={option.optionId}
                 variant={variantForKind(option.kind)}
                 size="sm"
-                className="tw-h-auto tw-min-h-8 tw-min-w-0 tw-max-w-full tw-whitespace-normal"
+                className={cn(
+                  "tw-h-auto tw-min-w-0 tw-max-w-full tw-whitespace-normal",
+                  persistent ? "tw-min-h-6" : "tw-min-h-8"
+                )}
                 aria-describedby={persistent ? descriptionId : undefined}
                 disabled={busy}
                 onClick={() => choose(option.optionId)}
@@ -152,16 +156,8 @@ export const ToolPermissionCard: React.FC<ToolPermissionCardProps> = ({ request,
 };
 
 /** Temporary approval is the primary action; persistent choices stay quiet. */
-function variantForKind(kind: PermissionOptionKind): "default" | "secondary" | "ghost" {
-  switch (kind) {
-    case "allow_once":
-      return "default";
-    case "reject_once":
-      return "secondary";
-    case "allow_always":
-    case "reject_always":
-      return "ghost";
-  }
+function variantForKind(kind: PermissionOptionKind): "default" | "secondary" {
+  return kind === "allow_once" ? "default" : "secondary";
 }
 
 /** Keep temporary decisions together in both visual and keyboard order. */
