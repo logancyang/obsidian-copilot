@@ -8,14 +8,27 @@ import { App, Notice } from "obsidian";
  * Starts a background update check and returns synchronous plugin-unload cleanup.
  * @param app - Obsidian app that owns the notice and release notes dialog.
  * @param currentVersion - Installed plugin version to compare with the released manifest.
+ * @param lastShownVersion - Release already announced at startup, independent of banner dismissal.
+ * @param onShown - Persists the release version after its notice is displayed.
  */
-export function startReleaseUpdateCheck(app: App, currentVersion: string): () => void {
+export function startReleaseUpdateCheck(
+  app: App,
+  currentVersion: string,
+  lastShownVersion: string | null,
+  onShown: (version: string) => void
+): () => void {
   let active = true;
   let notice: Notice | undefined;
   void requestLatestRelease()
     .then((release) => {
       // requestUrl cannot be cancelled; an unloaded plugin must not show late UI.
-      if (!active || !release || !isNewerVersion(release.version, currentVersion)) return;
+      if (
+        !active ||
+        !release ||
+        release.version === lastShownVersion ||
+        !isNewerVersion(release.version, currentVersion)
+      )
+        return;
       const fragment = app.workspace.containerEl.doc.win.createFragment();
       fragment.createDiv({ text: `Copilot ${release.version} is available.` });
       const button = fragment.createEl("button", { text: "View release notes" });
@@ -25,6 +38,7 @@ export function startReleaseUpdateCheck(app: App, currentVersion: string): () =>
         new ReleaseNotesModal(app, release).open();
       });
       notice = new Notice(fragment, 15000);
+      onShown(release.version);
     })
     .catch((error) => logWarn("Copilot update check failed", error));
   return () => {

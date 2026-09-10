@@ -816,6 +816,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   inlineEditCommands: [],
   projectList: [],
   lastDismissedVersion: null,
+  lastShownStartupVersion: null,
   passMarkdownImages: true,
   enableAutonomousAgent: true,
   enableCustomPromptTemplating: true,
