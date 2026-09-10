@@ -63,6 +63,11 @@ export const SecondarySurface: StoryObj<ButtonProps> = {
           Open sign-in page
         </a>
       </Button>
+      <Button asChild variant="secondary">
+        <a href="#release-notes" onClick={(event) => event.preventDefault()}>
+          View on GitHub
+        </a>
+      </Button>
     </div>
   ),
 };
