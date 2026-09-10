@@ -1074,6 +1074,6 @@ If your plugin does not need CSS, delete this file.
 
 /* Obsidian owns settings-tab padding; keep the Copilot host and its native gallery
    preview readable in narrow panes without changing other plugins' settings. */
-.vertical-tab-content.copilot-settings-content {
+.modal.mod-settings .vertical-tab-content.copilot-settings-content {
   padding-inline: clamp(var(--size-4-3), 4%, var(--size-4-8));
 }
