@@ -61,10 +61,6 @@ export const NoUsableChatContext: StoryObj<RelevantNotesPaneProps> = {
   args: { status: "no-usable-context", details: { skippedAttachments: 2 }, noteRows: [] },
 };
 
-export const UnsupportedChatService: StoryObj<RelevantNotesPaneProps> = {
-  args: { status: "unsupported-service", noteRows: [] },
-};
-
 export const ChatContextTooLarge: StoryObj<RelevantNotesPaneProps> = {
   args: { status: "request-too-large", noteRows: [] },
 };

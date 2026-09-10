@@ -24,23 +24,33 @@ describe("RelevantNotesPane", () => {
       jest.clearAllMocks();
     });
 
+    it("renders Miyo matches without setup guidance (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", () => {
+      render(<RelevantNotesPane {...BASE_PROPS} />);
+
+      expect(screen.getByText("Related note")).toBeTruthy();
+      expect(screen.queryByText(/Miyo/)).toBeNull();
+    });
+
     it.each([
       ["no-usable-context", "No usable chat context"],
-      ["unsupported-service", "Update Miyo for chat context"],
       ["request-too-large", "Chat context is too large"],
       ["request-error", "Miyo couldn't use this chat context"],
     ] as const)(
-      "explains %s without showing stale rows (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)",
+      "shows the %s explanation %s instead of note rows (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)",
       (status, title) => {
         render(<RelevantNotesPane {...BASE_PROPS} status={status} />);
         expect(screen.getByText(title)).toBeTruthy();
         expect(screen.queryByText("Related note")).toBeNull();
-        if (status === "unsupported-service" || status === "request-error") {
-          fireEvent.click(screen.getByRole("button", { name: "Open Miyo settings" }));
-          expect(BASE_ACTIONS.onOpenMiyoSettings).toHaveBeenCalledTimes(1);
-        }
       }
     );
+
+    it("opens Miyo settings from a chat request error (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", () => {
+      render(<RelevantNotesPane {...BASE_PROPS} status="request-error" />);
+
+      fireEvent.click(screen.getByRole("button", { name: "Open Miyo settings" }));
+
+      expect(BASE_ACTIONS.onOpenMiyoSettings).toHaveBeenCalledTimes(1);
+    });
 
     it("describes skipped sources without assuming an indexing failure (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", () => {
       render(<RelevantNotesPane {...BASE_PROPS} details={{ skippedAttachments: 1 }} />);
@@ -70,13 +80,6 @@ describe("RelevantNotesPane", () => {
       expect(screen.getByText("Finding relevant notes…")).toBeTruthy();
       expect(screen.queryByText("Miyo is not connected")).toBeNull();
       expect(screen.queryByText("No relevant notes found")).toBeNull();
-    });
-
-    it("renders Miyo matches without setup guidance (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", () => {
-      render(<RelevantNotesPane {...BASE_PROPS} />);
-
-      expect(screen.getByText("Related note")).toBeTruthy();
-      expect(screen.queryByText(/Miyo/)).toBeNull();
     });
 
     it("shows download guidance without rows when Miyo is disabled (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", () => {
