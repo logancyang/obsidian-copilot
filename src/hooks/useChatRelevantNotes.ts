@@ -32,10 +32,13 @@ export function useChatRelevantNotes(app: App, enabled: boolean, connectionKey: 
     result: RelevantNotesResult;
   } | null>(null);
   const [revision, setRevision] = useState(0);
+  // Completion controls the initial debounce without making results a search trigger.
+  const hasSettled = useRef(false);
   const previous = useRef<{ id: string; draft: string | undefined } | null>(null);
   useEffect(() => {
     if (!context) {
       previous.current = null;
+      hasSettled.current = false;
       setSettled(null);
       return;
     }
@@ -48,16 +51,19 @@ export function useChatRelevantNotes(app: App, enabled: boolean, connectionKey: 
     const timer = window.setTimeout(
       () => {
         void findChatRelevantNotes(app, context).then((result) => {
-          if (!cancelled) setSettled({ id: context.id, connectionKey, result });
+          if (!cancelled) {
+            hasSettled.current = true;
+            setSettled({ id: context.id, connectionKey, result });
+          }
         });
       },
-      draftChanged || (!settled && context.request.draft?.trim()) ? 500 : 0
+      draftChanged || (!hasSettled.current && context.request.draft?.trim()) ? 500 : 0
     );
     return () => {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [app, context, connectionKey, revision]); // eslint-disable-line react-hooks/exhaustive-deps -- settled rows must not retrigger retrieval
+  }, [app, context, connectionKey, revision]);
   // Results from an old server or credential scope must disappear immediately.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/383
   const result =

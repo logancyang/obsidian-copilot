@@ -120,6 +120,37 @@ describe("useChatRelevantNotesContext", () => {
       });
     });
 
+    it("preserves the selected context without notifying subscribers when only streaming text changes (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", () => {
+      const { rerender } = renderHook(
+        ({ text }) =>
+          useChatRelevantNotesContext(
+            app,
+            root,
+            "embeddings-chat",
+            { ...draft, loading: true },
+            [user, { ...user, id: "answer", sender: "AI", message: text }],
+            undefined
+          ),
+        { initialProps: { text: "partial" } }
+      );
+      act(() => {
+        root.dispatchEvent(new Event("pointerdown"));
+      });
+      const store = getChatRelevantNotesStore(app);
+      const selected = store.getSnapshot();
+      const listener = jest.fn();
+      const unsubscribe = store.subscribe(listener);
+
+      rerender({ text: "partial answer" });
+
+      expect(store.getSnapshot()).toBe(selected);
+      expect(store.getSnapshot()!.request.messages).toEqual([
+        { role: "user", content: "question" },
+      ]);
+      expect(listener).not.toHaveBeenCalled();
+      unsubscribe();
+    });
+
     it("clears the selected chat when its surface unmounts (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", () => {
       const { unmount } = renderHook(() =>
         useChatRelevantNotesContext(app, root, "embeddings-chat", draft, [], undefined)
