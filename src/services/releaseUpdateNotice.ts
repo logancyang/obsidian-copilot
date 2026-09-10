@@ -30,8 +30,9 @@ export function startReleaseUpdateCheck(
       )
         return;
       const fragment = app.workspace.containerEl.doc.win.createFragment();
-      fragment.createDiv({ text: `Copilot ${release.version} is available.` });
-      const button = fragment.createEl("button", { text: "View release notes" });
+      const content = fragment.createDiv({ cls: "copilot-release-notice" });
+      content.createDiv({ text: `Copilot ${release.version} is available` });
+      const button = content.createEl("button", { text: "View release notes" });
       button.addEventListener("click", () => {
         if (!active) return;
         notice?.hide();
