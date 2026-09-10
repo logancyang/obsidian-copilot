@@ -30,7 +30,7 @@ describe("ToolPermissionCard", () => {
       expect(container.firstElementChild?.classList.contains("tw-w-full")).toBe(true);
     });
 
-    it("keeps duplicate described actions together and numbers their tooltip triggers", async () => {
+    it("shows each persistent scope before its numbered action and preserves the opaque choice https://github.com/Brevilabs/obsidian-copilot-private/issues/405", () => {
       const onResolve = jest.fn();
       const firstRule = "Allow commands starting with mkdir";
       const secondRule = "Allow commands starting with dir";
@@ -52,20 +52,71 @@ describe("ToolPermissionCard", () => {
 
       render(<ToolPermissionCard request={makeRequest(options)} onResolve={onResolve} />);
 
-      expect(screen.queryByText(firstRule)).toBeNull();
-      expect(screen.queryByText(secondRule)).toBeNull();
+      expect(screen.getByText(firstRule)).toBeTruthy();
+      expect(screen.getByText(secondRule)).toBeTruthy();
 
       const firstButton = screen.getByRole("button", { name: "Allow Always 1" });
       const secondButton = screen.getByRole("button", { name: "Allow Always 2" });
       const rejectButton = screen.getByRole("button", { name: "Reject" });
-      expect(firstButton.parentElement).toBe(secondButton.parentElement);
-      expect(secondButton.parentElement).toBe(rejectButton.parentElement);
-
-      fireEvent.pointerMove(firstButton, { pointerType: "mouse" });
-      expect((await screen.findByRole("tooltip")).textContent).toBe(firstRule);
+      expect(document.getElementById(firstButton.getAttribute("aria-describedby")!)).toBe(
+        screen.getByText(firstRule)
+      );
+      expect(document.getElementById(secondButton.getAttribute("aria-describedby")!)).toBe(
+        screen.getByText(secondRule)
+      );
+      expect(screen.getAllByRole("button")).toEqual([rejectButton, firstButton, secondButton]);
+      expect(
+        screen.getByText(firstRule).compareDocumentPosition(firstButton) &
+          Node.DOCUMENT_POSITION_FOLLOWING
+      ).toBeTruthy();
+      expect(
+        screen.getByText(secondRule).compareDocumentPosition(secondButton) &
+          Node.DOCUMENT_POSITION_FOLLOWING
+      ).toBeTruthy();
 
       fireEvent.click(secondButton);
       expect(onResolve).toHaveBeenLastCalledWith(TOOL_CALL_ID, "apply_network_policy_amendment:0");
+    });
+
+    it("states when persistent scope is unavailable without inventing a lifetime https://github.com/Brevilabs/obsidian-copilot-private/issues/405", () => {
+      render(
+        <ToolPermissionCard
+          request={makeRequest([
+            { optionId: "opaque-always", name: "Always allow", kind: "allow_always" },
+          ])}
+          onResolve={jest.fn()}
+        />
+      );
+      expect(
+        screen.getByText("Applies beyond this request. The agent did not specify its scope.")
+      ).toBeTruthy();
+    });
+
+    it("offers temporary decisions first and forwards every backend choice unchanged https://github.com/Brevilabs/obsidian-copilot-private/issues/405", () => {
+      const options: PermissionOption[] = [
+        { optionId: "opaque-block", name: "Always deny", kind: "reject_always" },
+        { optionId: "opaque-always", name: "Always allow", kind: "allow_always" },
+        { optionId: "opaque-no", name: "Deny once", kind: "reject_once" },
+        { optionId: "opaque-yes", name: "Allow once", kind: "allow_once" },
+      ];
+      for (const option of options) {
+        const onResolve = jest.fn();
+        const { unmount } = render(
+          <ToolPermissionCard request={makeRequest(options)} onResolve={onResolve} />
+        );
+        expect(screen.getAllByRole("button").map((button) => button.textContent)).toEqual([
+          "Allow once",
+          "Deny once",
+          "Always allow",
+          "Always deny",
+        ]);
+        fireEvent.click(screen.getByRole("button", { name: option.name }));
+        expect(onResolve).toHaveBeenCalledWith(TOOL_CALL_ID, option.optionId);
+        expect(
+          screen.getAllByRole<HTMLButtonElement>("button").every((button) => button.disabled)
+        ).toBe(true);
+        unmount();
+      }
     });
 
     it("leaves a single described action unnumbered", () => {
@@ -85,7 +136,7 @@ describe("ToolPermissionCard", () => {
         />
       );
 
-      expect(screen.queryByText(description)).toBeNull();
+      expect(screen.getByText(description)).toBeTruthy();
       const button = screen.getByRole("button", { name: "Allow Always" });
       fireEvent.click(button);
       expect(onResolve).toHaveBeenLastCalledWith(TOOL_CALL_ID, "accept_execpolicy_amendment");
@@ -150,8 +201,8 @@ describe("ToolPermissionCard", () => {
 
       expect(screen.getAllByRole("button").map((button) => button.textContent)).toEqual([
         unbrokenLabel,
-        "Allow for Session",
         "No",
+        "Allow for Session",
       ]);
       const button = screen.getByRole("button", { name: unbrokenLabel });
       expect(button.classList.contains("tw-max-w-full")).toBe(true);
