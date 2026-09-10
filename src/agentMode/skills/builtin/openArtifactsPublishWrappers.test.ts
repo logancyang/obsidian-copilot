@@ -6,6 +6,7 @@ import path from "node:path";
 import { BUILTIN_SKILLS } from "@/builtinSkills/builtinSkills";
 
 const windows = process.platform === "win32";
+const WRAPPER_TIMEOUT_MS = 60_000;
 
 interface CapturedRequest {
   method: string | undefined;
@@ -35,9 +36,10 @@ const HTML = [
 ].join("\n");
 
 describe("openArtifactsPublishWrappers", () => {
-  // Each run starts a shell (PowerShell on Windows is slow to boot) and waits on curl or
-  // Invoke-WebRequest; the child itself is killed after 20 s, so give Jest headroom.
-  jest.setTimeout(30_000);
+  // Windows runners can exceed 20 seconds on the first PowerShell invocation.
+  // Allow cold startup, including up to four sequential invocations in one test.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/394
+  jest.setTimeout(4 * WRAPPER_TIMEOUT_MS + 10_000);
 
   let root: string;
   let wrapper: string;
@@ -115,7 +117,7 @@ describe("openArtifactsPublishWrappers", () => {
           ...args,
         ],
         {
-          timeout: 20000,
+          timeout: WRAPPER_TIMEOUT_MS,
           env: {
             ...process.env,
             COPILOT_PLUS_LICENSE_KEY: "test-license-key",
