@@ -163,7 +163,7 @@ const ManagedBinaryInstall: React.FC<ManagedBinaryInstallProps> = ({
       <div className="tw-flex tw-flex-wrap tw-justify-end tw-gap-2">
         <Button
           variant={hasActiveInstallation ? "secondary" : "default"}
-          size="default"
+          size={hasActiveInstallation ? "sm" : "default"}
           onClick={actions.install}
         >
           {/* Retained downloads are not a first install; switching still runs installation.
@@ -177,7 +177,7 @@ const ManagedBinaryInstall: React.FC<ManagedBinaryInstallProps> = ({
         {/* Switching to a custom binary must not hide removal of retained downloads.
             https://github.com/Brevilabs/obsidian-copilot-private/issues/379 */}
         {(managed.hasDownloads ?? installed) && (
-          <Button variant="secondary" size="default" onClick={actions.uninstall}>
+          <Button variant="secondary" size="sm" onClick={actions.uninstall}>
             Uninstall
           </Button>
         )}
