@@ -92,6 +92,7 @@ describe("AgentModeStatus", () => {
       render(<AgentModeStatus manager={manager} plugin={plugin} onInstallClick={jest.fn()} />);
 
       expect(screen.getByRole("alert")).toBeTruthy();
+      expect(screen.getByText("Claude session error")).toBeTruthy();
       expect(screen.getByText(error)).toBeTruthy();
       fireEvent.click(screen.getByRole("button", { name: "Retry" }));
       expect(manager.getOrCreateActiveSession).toHaveBeenCalledTimes(1);
@@ -117,6 +118,7 @@ describe("AgentModeStatus", () => {
 
       render(<AgentModeStatus manager={manager} plugin={plugin} onInstallClick={jest.fn()} />);
 
+      expect(screen.getByText("Claude update required")).toBeTruthy();
       expect(screen.getByText(message)).toBeTruthy();
       expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
       fireEvent.click(screen.getByRole("button", { name: "Configure Claude" }));
@@ -155,9 +157,22 @@ describe("AgentModeStatus", () => {
 
       managedInstallState = { kind: "error", message: "npm unavailable" };
       rerender(<AgentModeStatus plugin={plugin} onInstallClick={jest.fn()} />);
+      expect(screen.getByText("Claude update failed")).toBeTruthy();
       expect(screen.getByText("npm unavailable")).toBeTruthy();
       fireEvent.click(screen.getByRole("button", { name: "Retry" }));
       expect(run).toHaveBeenCalledTimes(2);
+    });
+
+    it("keeps the full setup error and its Configure action under a state-based summary (https://github.com/Brevilabs/obsidian-copilot-private/issues/410)", () => {
+      const message =
+        "Could not read /opt/local/custom-agent-runtime/bin/claude. Check the configured path.";
+      installState = { kind: "error", message };
+      const plugin = { app: {} } as unknown as CopilotPlugin;
+      render(<AgentModeStatus plugin={plugin} onInstallClick={jest.fn()} />);
+      expect(screen.getByText("Claude setup error")).toBeTruthy();
+      expect(screen.getByText(message).closest("details")).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Configure Claude" }));
+      expect(descriptor.openInstallUI).toHaveBeenCalledWith(plugin);
     });
 
     it("preserves the sign-in action and linked browser fallback", () => {
