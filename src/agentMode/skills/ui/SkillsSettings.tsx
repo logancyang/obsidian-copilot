@@ -1,6 +1,6 @@
 import { availableBuiltinAgents } from "@/agentMode/skills/builtin/reconcileBuiltinSkills";
 import { useBackendInstallStates } from "@/agentMode/session/useBackendInstallStates";
-import { planManagedBuiltins } from "@/agentMode/skills/builtin/builtinSkills";
+import { planManagedBuiltins } from "@/builtinSkills/builtinSkills";
 import { parseSkillFile } from "@/agentMode/skills/skillFormat";
 import { BuiltinSkillsTable } from "./BuiltinSkillsTable";
 import { formatSkillDisplayName } from "@/agentMode/skills/mergeDiscovery";
