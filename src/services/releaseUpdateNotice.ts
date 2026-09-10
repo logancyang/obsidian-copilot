@@ -36,7 +36,10 @@ export function startReleaseUpdateCheck(
       content.createDiv({ text: `Copilot ${release.version} is available` });
       const button = content.createEl("button", {
         text: "View release notes",
-        cls: cn(buttonVariants({ variant: "secondary" }), "tw-max-w-full tw-whitespace-normal"),
+        cls: cn(
+          buttonVariants({ variant: "secondary", size: "sm" }),
+          "tw-max-w-full tw-whitespace-normal"
+        ),
       });
       button.addEventListener("click", () => {
         if (!active) return;
