@@ -96,3 +96,17 @@ export const LongDescriptionPreview: StoryObj<SkillLoadIssuesProps> = {
     />
   ),
 };
+
+export const LongRepairPaths: StoryObj<SkillLoadIssuesProps> = {
+  parameters: { gallery: { host: "modal", layout: "padded" } },
+  render: () => (
+    <SkillLoadIssuesModalContent
+      issues={ISSUES.map((issue, index) => ({
+        ...issue,
+        location: `${index === 0 ? ".claude" : "copilot"}/skills/organization-workspace-with-a-long-unbroken-name/detailed-project-review-and-reporting/SKILL.md`,
+      }))}
+      onFixAll={noop}
+      onClose={noop}
+    />
+  ),
+};
