@@ -26,15 +26,18 @@ describe("builtinSkillPreferences", () => {
   describe("saveBuiltinPreferences()", () => {
     it("merges concurrent updater saves instead of losing the first opt-out https://github.com/logancyang/obsidian-copilot/issues/3022", async () => {
       await Promise.all([
-        saveBuiltinPreferences((current) => ({ ...current, first: { disabled: true } }), jest.fn()),
         saveBuiltinPreferences(
-          (current) => ({ ...current, second: { disabledAgents: ["opencode"] } }),
+          (current) => ({ ...current, "copilot-web-search": { disabled: true } }),
+          jest.fn()
+        ),
+        saveBuiltinPreferences(
+          (current) => ({ ...current, "copilot-web-fetch": { disabledAgents: ["opencode"] } }),
           jest.fn()
         ),
       ]);
       expect(getSettings().agentMode.skills.builtinPreferences).toEqual({
-        first: { disabled: true },
-        second: { disabledAgents: ["opencode"] },
+        "copilot-web-search": { disabled: true },
+        "copilot-web-fetch": { disabledAgents: ["opencode"] },
       });
       expect(persist.mock.calls[1][0].agentMode.skills.builtinPreferences).toEqual(
         getSettings().agentMode.skills.builtinPreferences
@@ -83,6 +86,20 @@ describe("builtinSkillPreferences", () => {
       expect(getSettings().agentMode.skills.builtinPreferences).toEqual({
         "copilot-web-search": { disabledAgents: ["opencode"] },
       });
+    });
+
+    it("persists, activates, and returns empty preferences when restoring defaults https://github.com/logancyang/obsidian-copilot/issues/3022", async () => {
+      await saveBuiltinPreferences(
+        () => ({ "copilot-web-search": { disabled: true, disabledAgents: ["opencode"] } }),
+        jest.fn()
+      );
+      const preferences = await saveBuiltinPreferences(
+        () => ({ "copilot-web-search": { disabled: false, disabledAgents: [] } }),
+        jest.fn()
+      );
+      expect(preferences).toEqual({});
+      expect(getSettings().agentMode.skills.builtinPreferences).toBe(preferences);
+      expect(persist.mock.calls[1][0].agentMode.skills.builtinPreferences).toBe(preferences);
     });
 
     it("leaves preferences unchanged when persistence fails (https://github.com/logancyang/obsidian-copilot/issues/3022)", async () => {

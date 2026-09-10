@@ -1,4 +1,4 @@
-import { ALL_MANAGED_SKILLS } from "./builtin/builtinSkills";
+import { ALL_MANAGED_SKILLS, RETIRED_BUILTIN_SKILLS } from "@/builtinSkills/builtinSkills";
 import { logWarn } from "@/logger";
 import { discoverManagedSkills, type SkillsFsAdapter } from "./discoverManagedSkills";
 
@@ -80,6 +80,22 @@ const validSkillMd = (overrides: Record<string, string> = {}) => {
 
 describe("discoverManagedSkills", () => {
   describe("discoverManagedSkills()", () => {
+    it("keeps retired marked skills managed during cleanup retries while preserving unmarked user collisions https://github.com/logancyang/obsidian-copilot/issues/3022", async () => {
+      const { name } = RETIRED_BUILTIN_SKILLS[0];
+      for (const marked of [true, false]) {
+        const result = await discoverManagedSkills({
+          skillsFolderRelPath: SKILLS_ROOT,
+          skillsFolderAbsPath: null,
+          adapter: makeAdapter({
+            [`${SKILLS_ROOT}/${name}/SKILL.md`]: validSkillMd({
+              name,
+              ...(marked ? { metadata: '\n  copilot-builtin-version: "1"' } : {}),
+            }),
+          }),
+        });
+        expect(result.accepted[0].builtin).toBe(marked);
+      }
+    });
     it("marks only catalog skills with YAML metadata read-only, preserving renamed copies and body examples https://github.com/logancyang/obsidian-copilot/issues/3022", async () => {
       const [managed, bodyExample, markerless] = ALL_MANAGED_SKILLS;
       const result = await discoverManagedSkills({

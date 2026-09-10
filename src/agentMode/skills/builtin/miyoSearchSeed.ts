@@ -2,7 +2,7 @@ import type { App } from "obsidian";
 
 import { joinPosix } from "@/utils/pathUtils";
 
-import { MIYO_SEARCH_SKILL } from "./builtinSkills";
+import { MIYO_SEARCH_SKILL } from "@/builtinSkills/builtinSkills";
 import {
   type BuiltinSeedFs,
   inspectBuiltinSkill,

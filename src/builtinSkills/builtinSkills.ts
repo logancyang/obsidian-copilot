@@ -1,4 +1,4 @@
-import type { BackendId } from "@/agentMode/session/types";
+import type { BackendId } from "@/agentMode";
 import {
   OPENARTIFACTS_AGENT_HANDOFF_DIR,
   OPENARTIFACTS_API_ORIGIN,
@@ -37,12 +37,6 @@ export interface BuiltinSkill {
   /** Folder name + SKILL.md `name`. */
   readonly name: string;
   /**
-   * Folder name of the managed predecessor this skill replaces. Its
-   * `copilot-enabled-agents` choice carries over and the old folder is removed
-   * once this one is seeded.
-   */
-  readonly legacyName?: string;
-  /**
    * Bump when `skillMd` or any support file changes so seeded copies refresh.
    * Stamped into `metadata.copilot-builtin-version` in the seeded SKILL.md.
    */
@@ -56,6 +50,23 @@ export interface BuiltinSkill {
   /** Previously shipped files to remove on upgrade, leaving user-added files alone. */
   readonly retiredFiles?: readonly string[];
 }
+
+/**
+ * Retain owned paths after a catalog removal so upgrades can retire generated files
+ * without deleting user additions. Renamed skills receive fresh defaults.
+ * https://github.com/logancyang/obsidian-copilot/issues/3022
+ */
+export const RETIRED_BUILTIN_SKILLS: readonly Pick<BuiltinSkill, "name" | "retiredFiles">[] = [
+  {
+    name: "symposium-publish",
+    retiredFiles: [
+      "shared-publishing-rules.md",
+      "symposium-publish.sh",
+      "symposium-publish.cmd",
+      "symposium-publish.ps1",
+    ],
+  },
+];
 
 /** Env var names the plugin injects and the scripts read. Single source of truth. */
 export const PLUS_ENV = {
@@ -599,7 +610,6 @@ const OPENARTIFACTS_MISSING_KEY_MESSAGE =
   "Publishing to OpenArtifacts needs a Copilot Plus license key. Add it in Copilot Settings and try again.";
 const OPENARTIFACTS_PUBLISH: BuiltinSkill = {
   name: "openartifacts-publish",
-  legacyName: "symposium-publish",
   retiredFiles: ["shared-publishing-rules.md", "symposium-publish.sh", "symposium-publish.cmd"],
   version: OPENARTIFACTS_PUBLISH_VERSION,
   enabledAgents: ["claude", "codex", "opencode"],

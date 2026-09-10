@@ -10,6 +10,7 @@ import {
   normalizeRootFolders,
   resetSettings,
   sanitizeEnvOverrides,
+  sanitizeBuiltinPreferences,
   sanitizeQaExclusions,
   sanitizeSettings,
   settingsAtom,
@@ -513,6 +514,39 @@ describe("sanitizeSettings - docProcessorBackend (v6 field)", () => {
 });
 
 describe("model", () => {
+  describe("sanitizeBuiltinPreferences()", () => {
+    it.each([
+      undefined,
+      null,
+      false,
+      [],
+      {},
+      { "copilot-web-search": { disabled: false, disabledAgents: [] } },
+    ])(
+      "keeps absent, malformed, or default preferences empty: %p https://github.com/logancyang/obsidian-copilot/issues/3022",
+      (raw) => {
+        expect(sanitizeBuiltinPreferences(raw)).toBe(sanitizeBuiltinPreferences({}));
+        expect(sanitizeBuiltinPreferences(raw)).toEqual({});
+      }
+    );
+
+    it("drops retired names and malformed entries while preserving sparse overrides for known skills and absent agents https://github.com/logancyang/obsidian-copilot/issues/3022", () => {
+      expect(
+        sanitizeBuiltinPreferences({
+          "copilot-web-search": { disabled: true },
+          "copilot-web-fetch": { disabled: false, disabledAgents: ["uninstalled-agent", 3] },
+          "miyo-search": { disabled: true, disabledAgents: [] },
+          "copilot-read-pdf": null,
+          "miyo-parse": [],
+          "retired-skill": { disabled: true },
+        })
+      ).toEqual({
+        "copilot-web-search": { disabled: true },
+        "copilot-web-fetch": { disabledAgents: ["uninstalled-agent"] },
+        "miyo-search": { disabled: true },
+      });
+    });
+  });
   describe("sanitizeSettings()", () => {
     it("defaults the startup notice marker without inheriting the Agent Home dismissal", () => {
       const persisted = { ...DEFAULT_SETTINGS, lastDismissedVersion: "4.1.0" };
@@ -540,7 +574,7 @@ describe("model", () => {
           skills: {
             folder: "copilot/skills",
             builtinPreferences: {
-              kept: { disabled: true, disabledAgents: ["opencode", 3] },
+              "copilot-web-search": { disabled: true, disabledAgents: ["opencode", 3] },
               invalid: null,
               malformedArray: [],
             },
@@ -548,7 +582,7 @@ describe("model", () => {
         },
       } as unknown as CopilotSettings);
       expect(result.agentMode.skills.builtinPreferences).toEqual({
-        kept: { disabled: true, disabledAgents: ["opencode"] },
+        "copilot-web-search": { disabled: true, disabledAgents: ["opencode"] },
       });
     });
     it.each(["parallel", "exa"] as const)(

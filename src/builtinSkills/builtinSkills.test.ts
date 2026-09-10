@@ -240,7 +240,6 @@ describe("builtinSkills", () => {
         "symposium-publish.sh",
         "symposium-publish.cmd",
       ]);
-      expect(skill!.legacyName).toBe("symposium-publish");
       expect(skill!.files.map((file) => file.path)).toEqual([
         "themes/research-memo.md",
         "openartifacts-publish.sh",

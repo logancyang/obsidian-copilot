@@ -4,10 +4,7 @@ jest.mock("./claudeAuth", () => ({ signOutFromClaude: jest.fn() }));
 import type { AgentSession } from "@/agentMode/session/AgentSession";
 import type { BackendState, InstallState } from "@/agentMode/session/types";
 import { resetSettings, setSettings, type CopilotSettings } from "@/settings/model";
-import {
-  MIYO_SEARCH_FOLDER_ENV,
-  MIYO_SEARCH_SCOPE_ENV,
-} from "@/agentMode/skills/builtin/builtinSkills";
+import { MIYO_SEARCH_FOLDER_ENV, MIYO_SEARCH_SCOPE_ENV } from "@/builtinSkills/builtinSkills";
 import { __resetVaultBaseCache } from "@/utils/vaultPath";
 import { FileSystemAdapter, type App } from "obsidian";
 import { resolveClaudeBinary } from "./claudeBinaryResolver";

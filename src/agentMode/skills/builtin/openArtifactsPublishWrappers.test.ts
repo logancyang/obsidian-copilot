@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { BUILTIN_SKILLS } from "./builtinSkills";
+import { BUILTIN_SKILLS } from "@/builtinSkills/builtinSkills";
 
 const windows = process.platform === "win32";
 

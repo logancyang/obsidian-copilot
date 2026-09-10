@@ -1,4 +1,9 @@
-import { getSettings, setSettings, type CopilotSettings } from "@/settings/model";
+import {
+  getSettings,
+  sanitizeBuiltinPreferences,
+  setSettings,
+  type CopilotSettings,
+} from "@/settings/model";
 import {
   persistSettingsWithinTransaction,
   runPersistenceTransaction,
@@ -26,7 +31,11 @@ export async function saveBuiltinPreferences(
     let preferences: BuiltinPreferences = EMPTY_PREFERENCES;
     await runPersistenceTransaction(async () => {
       const previous = getSettings();
-      preferences = update(previous.agentMode.skills.builtinPreferences ?? EMPTY_PREFERENCES);
+      // Persist and activate the same sparse overrides so restoring defaults clears the record.
+      // https://github.com/logancyang/obsidian-copilot/issues/3022
+      preferences = sanitizeBuiltinPreferences(
+        update(previous.agentMode.skills.builtinPreferences ?? EMPTY_PREFERENCES)
+      );
       await persistSettingsWithinTransaction(
         {
           ...previous,

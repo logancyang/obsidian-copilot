@@ -1,6 +1,6 @@
 import type { App } from "obsidian";
 
-import { MIYO_SEARCH_SKILL } from "./builtinSkills";
+import { MIYO_SEARCH_SKILL } from "@/builtinSkills/builtinSkills";
 import { installMiyoSearchSkill, removeMiyoSearchSkill } from "./miyoSearchSeed";
 
 jest.mock("@/logger", () => ({ logError: jest.fn(), logInfo: jest.fn() }));

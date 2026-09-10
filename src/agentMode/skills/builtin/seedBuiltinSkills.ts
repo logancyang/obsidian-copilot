@@ -1,7 +1,12 @@
 import { logError, logInfo } from "@/logger";
 import { joinPosix, parentDir } from "@/utils/pathUtils";
 import { getBuiltinSkillVersion } from "./builtinOwnership";
-import { ALL_MANAGED_SKILLS, BUILTIN_SKILLS, type BuiltinSkill } from "./builtinSkills";
+import {
+  ALL_MANAGED_SKILLS,
+  BUILTIN_SKILLS,
+  RETIRED_BUILTIN_SKILLS,
+  type BuiltinSkill,
+} from "@/builtinSkills/builtinSkills";
 
 /**
  * Minimal write-capable FS surface the seeder needs, over vault-relative
@@ -138,14 +143,7 @@ export async function seedBuiltinSkills(
         existingContent = await fs.read(skillMdPath);
         const existing = getBuiltinSkillVersion(existingContent);
         // null = no copilot-builtin-version marker → user-authored file; skip.
-        if (existing === null) {
-          // The user chose to own this name, so the managed predecessor still retires: its
-          // wrapper scripts no longer match the host and would only mislead an agent.
-          // https://github.com/Brevilabs/obsidian-copilot-private/issues/337
-          if (skill.legacyName)
-            await removeSeededBuiltin(skillsFolderRelPath, skill.legacyName, fs, skill);
-          continue;
-        }
+        if (existing === null) continue;
         // Version is current — only skip if all support files are also present.
         // A partial write (e.g. crash after SKILL.md but before the .sh file)
         // would leave the skill advertising a stale script; re-seed to self-heal.
@@ -155,28 +153,9 @@ export async function seedBuiltinSkills(
           ).then((results) => results.every(Boolean));
         }
       } catch (e) {
-        // Unreadable existing copy — fall through and re-seed.
+        // Unreadable content may be user-owned; retry without overwriting it.
+        // https://github.com/logancyang/obsidian-copilot/issues/3022
         logError(`[Skills] could not read builtin skill ${skill.name} for version check`, e);
-        // A renamed builtin also retires its predecessor below, so an unclassifiable target
-        // (possibly a user-authored collision) must leave both folders alone until the next
-        // startup can read it. https://github.com/Brevilabs/obsidian-copilot-private/issues/337
-        if (skill.legacyName) continue;
-      }
-    } else if (skill.legacyName) {
-      // A renamed builtin inherits the enable choices of its managed predecessor.
-      // An unmarked folder under the old name is user-authored and contributes nothing.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/337
-      const legacyMdPath = joinPosix(joinPosix(skillsFolderRelPath, skill.legacyName), "SKILL.md");
-      try {
-        if (await fs.exists(legacyMdPath)) {
-          const legacyContent = await fs.read(legacyMdPath);
-          if (getBuiltinSkillVersion(legacyContent) !== null) existingContent = legacyContent;
-        }
-      } catch (e) {
-        logError(`[Skills] could not read legacy builtin skill ${skill.legacyName}`, e);
-        // Seeding now would carry the default agent list forward and the predecessor's
-        // enable choices would be lost when it is retired; retry next startup instead.
-        // https://github.com/Brevilabs/obsidian-copilot-private/issues/337
         continue;
       }
     }
@@ -229,13 +208,6 @@ export async function seedBuiltinSkills(
         continue;
       }
     }
-
-    // The renamed skill is on disk and current, so its managed predecessor can go.
-    // `removeSeededBuiltin` leaves a user-authored folder under the old name alone
-    // and a failed removal is retried on the next startup.
-    if (skill.legacyName) {
-      await removeSeededBuiltin(skillsFolderRelPath, skill.legacyName, fs, skill);
-    }
   }
 
   if (seeded.length > 0) {
@@ -249,7 +221,7 @@ export async function seedBuiltinSkills(
  * Missing or unmarked content is never removed; SKILL.md is removed last so a failed
  * support-file cleanup can be retried with ownership evidence still intact.
  * @param skillsFolderRelPath - Canonical skills root relative to the vault.
- * @param name - Current or legacy folder name to retire.
+ * @param name - Active or retired catalog folder name.
  * @param fs - Vault file operations.
  * @param definition - Catalog entry that owns the known supporting and retired paths.
  */
@@ -257,7 +229,10 @@ export async function removeSeededBuiltin(
   skillsFolderRelPath: string,
   name: string,
   fs: BuiltinSeedFs,
-  definition = ALL_MANAGED_SKILLS.find((skill) => skill.name === name || skill.legacyName === name)
+  definition:
+    | (Pick<BuiltinSkill, "retiredFiles"> & Partial<Pick<BuiltinSkill, "files">>)
+    | undefined = ALL_MANAGED_SKILLS.find((skill) => skill.name === name) ??
+    RETIRED_BUILTIN_SKILLS.find((skill) => skill.name === name)
 ): Promise<boolean> {
   const dir = joinPosix(skillsFolderRelPath, name);
   const skillMdPath = joinPosix(dir, "SKILL.md");
@@ -270,7 +245,7 @@ export async function removeSeededBuiltin(
     // https://github.com/logancyang/obsidian-copilot/issues/3022
     if (!definition) return false;
     const ownedPaths = [
-      ...definition.files.map((file) => file.path),
+      ...(definition.files?.map((file) => file.path) ?? []),
       ...(definition.retiredFiles ?? []),
     ];
     for (const path of ownedPaths) {
