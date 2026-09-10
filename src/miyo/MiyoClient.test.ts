@@ -543,7 +543,8 @@ describe("MiyoClient", () => {
     });
   });
 
-  describe("addFolder", () => {
+  describe("addFolder()", () => {
+    beforeEach(() => mockedRequestUrl.mockReset());
     it("POSTs the request to /v0/folder and returns the created record on 201", async () => {
       const folderRecord = { path: "/Users/me/vault", exclude_folders: ["copilot"] };
       mockedRequestUrl.mockResolvedValue({
@@ -570,15 +571,122 @@ describe("MiyoClient", () => {
       );
     });
 
-    it("treats 409 already-registered as success and returns null", async () => {
-      mockedRequestUrl.mockResolvedValue({
-        status: 409,
-        json: { detail: "folder already registered" },
-        text: "",
-      } as RequestUrlResponse);
+    it("accepts 409 only after verifying the absolute vault path with the original endpoint and credentials (https://github.com/Brevilabs/obsidian-copilot-private/issues/402)", async () => {
+      mockedRequestUrl
+        .mockImplementationOnce(() => {
+          mockedGetSettings.mockReturnValue({
+            plusLicenseKey: "changed-license",
+            debug: false,
+          } as CopilotSettings);
+          mockResolveBaseUrl.mockResolvedValue("http://127.0.0.1:9999");
+          return Promise.resolve({
+            status: 409,
+            json: { detail: "Folder already registered" },
+            text: "",
+          } as RequestUrlResponse) as ReturnType<typeof requestUrl>;
+        })
+        .mockResolvedValueOnce({
+          status: 200,
+          json: { path: "/canonical/vault", allow_writes: false },
+          text: "",
+        } as RequestUrlResponse);
 
-      const client = new MiyoClient();
-      await expect(client.addFolder({ path: "/Users/me/vault" })).resolves.toBeNull();
+      await expect(new MiyoClient().addFolder({ path: "/Users/me/vault" })).resolves.toBeNull();
+      expect(mockedRequestUrl).toHaveBeenCalledTimes(2);
+      expect(mockedRequestUrl).toHaveBeenNthCalledWith(2, {
+        url: "http://127.0.0.1:8742/v0/folder?path=%2FUsers%2Fme%2Fvault",
+        method: "GET",
+        headers: { Authorization: "Bearer plus-test-license" },
+        throw: false,
+      });
+    });
+
+    it.each([
+      "Folder overlaps with existing registration: /Users/me/vault/subfolder",
+      "Folder overlaps with existing registration: /Users/me",
+      'A folder named "vault" is already registered',
+    ])(
+      "rejects an unregistered absolute vault path while preserving conflict detail: %s (https://github.com/Brevilabs/obsidian-copilot-private/issues/402)",
+      async (detail) => {
+        mockedRequestUrl
+          .mockResolvedValueOnce({ status: 409, json: { detail }, text: "" } as RequestUrlResponse)
+          .mockResolvedValueOnce({
+            status: 404,
+            json: { detail: "Folder not registered" },
+            text: "",
+          } as RequestUrlResponse);
+
+        await expect(new MiyoClient().addFolder({ path: "/Users/me/vault" })).rejects.toThrow(
+          `Miyo add-folder failed with status 409: ${detail}`
+        );
+        expect(
+          mockedRequestUrl.mock.calls.map(([request]) =>
+            typeof request === "string" ? "GET" : request.method
+          )
+        ).toEqual(["POST", "GET"]);
+        expect(mockedRequestUrl).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            url: "http://127.0.0.1:8742/v0/folder?path=%2FUsers%2Fme%2Fvault",
+          })
+        );
+      }
+    );
+
+    it.each([401, 500])(
+      "preserves the original conflict when verification returns HTTP %s (https://github.com/Brevilabs/obsidian-copilot-private/issues/402)",
+      async (status) => {
+        mockedRequestUrl
+          .mockResolvedValueOnce({
+            status: 409,
+            json: { detail: "Original conflict" },
+            text: "",
+          } as RequestUrlResponse)
+          .mockResolvedValueOnce({
+            status,
+            json: {},
+            text: "verification failed",
+          } as RequestUrlResponse);
+        await expect(new MiyoClient().addFolder({ path: "/Users/me/vault" })).rejects.toThrow(
+          "Miyo add-folder failed with status 409: Original conflict"
+        );
+      }
+    );
+
+    it("preserves the original conflict when verification fails at the network level (https://github.com/Brevilabs/obsidian-copilot-private/issues/402)", async () => {
+      mockedRequestUrl
+        .mockResolvedValueOnce({
+          status: 409,
+          json: { detail: "Original conflict" },
+          text: "",
+        } as RequestUrlResponse)
+        .mockRejectedValueOnce(new Error("verification network failure"));
+      await expect(new MiyoClient().addFolder({ path: "/Users/me/vault" })).rejects.toThrow(
+        "Miyo add-folder failed with status 409: Original conflict"
+      );
+    });
+
+    it("preserves the original conflict after eight seconds when verification never responds (https://github.com/Brevilabs/obsidian-copilot-private/issues/402)", async () => {
+      jest.useFakeTimers();
+      try {
+        mockedRequestUrl
+          .mockResolvedValueOnce({
+            status: 409,
+            json: { detail: "Original conflict" },
+            text: "",
+          } as RequestUrlResponse)
+          .mockReturnValueOnce(new Promise<never>(() => {}) as never);
+        const result = expect(
+          new MiyoClient().addFolder({ path: "/Users/me/vault" })
+        ).rejects.toThrow("Miyo add-folder failed with status 409: Original conflict");
+
+        await jest.advanceTimersByTimeAsync(8001);
+
+        expect(mockedRequestUrl).toHaveBeenCalledTimes(2);
+        await result;
+        expect(jest.getTimerCount()).toBe(0);
+      } finally {
+        jest.useRealTimers();
+      }
     });
 
     it("throws a detailed validation error on 400", async () => {
