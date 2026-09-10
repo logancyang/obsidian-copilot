@@ -34,7 +34,7 @@ interface AgentSelectViewProps {
   selectedId: BackendId;
   onSelect: (id: BackendId) => void;
   ctaLabel: string;
-  /** Footer text left of the button when the selected agent needs attention. */
+  /** Full-width explanation above the button when the selected agent needs attention. */
   footerNote: string | null;
   onCta: () => void;
   /** Prevents a transient readiness state from exposing an action. */
@@ -165,12 +165,12 @@ export const AgentSelectView: React.FC<AgentSelectViewProps> = ({
 
       <div
         className={cn(
-          "copilot-divider-t tw-flex tw-flex-wrap tw-items-center tw-gap-2 tw-pt-3",
-          footerNote ? "tw-justify-between" : "tw-justify-end"
+          "copilot-divider-t tw-flex tw-flex-col tw-gap-2 tw-pt-3",
+          footerNote ? "tw-items-start" : "tw-items-end"
         )}
       >
         {footerNote && (
-          <span className="tw-min-w-0 tw-flex-1 tw-break-words tw-text-ui-smaller tw-text-muted">
+          <span className="tw-w-full tw-min-w-0 tw-select-text tw-whitespace-pre-wrap tw-text-ui-smaller tw-text-muted [overflow-wrap:anywhere]">
             {footerNote}
           </span>
         )}

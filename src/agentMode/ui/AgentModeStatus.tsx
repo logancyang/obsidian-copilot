@@ -74,6 +74,15 @@ export const AgentModeStatus: React.FC<Props> = ({ manager, plugin, onInstallCli
     return (
       <AgentStatusCard
         tone={failed ? "error" : "warning"}
+        // State supplies the summary; never infer a cause by parsing the backend's full error.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/410
+        summary={
+          upgrading
+            ? `Updating ${descriptor.displayName}…`
+            : failed
+              ? `${descriptor.displayName} update failed`
+              : `${descriptor.displayName} update required`
+        }
         message={
           upgrading ? managedInstall.label : failed ? managedInstall.message : installState.message
         }
@@ -96,6 +105,7 @@ export const AgentModeStatus: React.FC<Props> = ({ manager, plugin, onInstallCli
     return (
       <AgentStatusCard
         tone="error"
+        summary={`${descriptor.displayName} setup error`}
         message={installState.message}
         action={{
           label: `Configure ${descriptor.displayName}`,
@@ -145,6 +155,7 @@ export const AgentModeStatus: React.FC<Props> = ({ manager, plugin, onInstallCli
   return (
     <AgentStatusCard
       tone="error"
+      summary={`${descriptor.displayName} session error`}
       message={bootError}
       action={{ label: "Retry", onClick: handleRetry }}
     />
