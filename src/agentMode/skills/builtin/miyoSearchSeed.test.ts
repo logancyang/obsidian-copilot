@@ -26,14 +26,14 @@ function fakeApp(initialFiles: Record<string, string> = {}) {
     mkdir: async (p: string) => {
       dirs.add(p);
     },
-    list: async (p: string) => ({
-      files: [...files.keys()].filter((child) => child.startsWith(`${p}/`)),
-      folders: [...dirs].filter((child) => child.startsWith(`${p}/`)),
-    }),
     rmdir: async (p: string, recursive: boolean) => {
-      if (recursive || [...files.keys(), ...dirs].some((child) => child.startsWith(`${p}/`)))
-        throw new Error("nonempty");
-      dirs.delete(p);
+      if (!recursive) throw new Error("recursive removal required");
+      for (const file of files.keys()) {
+        if (file.startsWith(`${p}/`)) files.delete(file);
+      }
+      for (const dir of dirs) {
+        if (dir === p || dir.startsWith(`${p}/`)) dirs.delete(dir);
+      }
     },
     remove: async (p: string) => {
       files.delete(p);
@@ -85,11 +85,13 @@ describe("installMiyoSearchSkill", () => {
 });
 
 describe("removeMiyoSearchSkill", () => {
-  it("removes a seeded copy and reports 'removed'", async () => {
-    const { app, files } = fakeApp();
+  it("removes a seeded copy and user additions and reports 'removed' https://github.com/logancyang/obsidian-copilot/issues/3022", async () => {
+    const { app, files, dirs } = fakeApp();
     await installMiyoSearchSkill(app, FOLDER);
+    files.set(`${SKILL_DIR}/personal.md`, "personal");
     expect(await removeMiyoSearchSkill(app, FOLDER)).toBe("removed");
-    expect(files.has(MD)).toBe(false);
+    expect(files.size).toBe(0);
+    expect(dirs.has(SKILL_DIR)).toBe(false);
   });
 
   it("reports 'removed' when nothing is on disk (no-op)", async () => {
@@ -107,9 +109,9 @@ describe("removeMiyoSearchSkill", () => {
   it("reports 'failed' when the delete throws and the skill is still on disk", async () => {
     const { app, adapter, files } = fakeApp();
     await installMiyoSearchSkill(app, FOLDER);
-    // The underlying file removal fails; removeSeededBuiltin swallows it and returns
+    // The underlying directory removal fails; removeSeededBuiltin swallows it and returns
     // false, so we must classify from disk (still seeded → failed), not assume.
-    adapter.remove = async () => {
+    adapter.rmdir = async () => {
       throw new Error("EPERM");
     };
     expect(await removeMiyoSearchSkill(app, FOLDER)).toBe("failed");

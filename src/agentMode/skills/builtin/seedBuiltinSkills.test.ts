@@ -30,8 +30,13 @@ function memFs(initialFiles: Record<string, string> = {}): BuiltinSeedFs & {
     mkdir: async (p) => {
       dirs.add(p);
     },
-    removeEmptyDir: async (p) => {
-      if (![...files.keys(), ...dirs].some((child) => child.startsWith(`${p}/`))) dirs.delete(p);
+    removeDir: async (p) => {
+      for (const file of files.keys()) {
+        if (file.startsWith(`${p}/`)) files.delete(file);
+      }
+      for (const dir of dirs) {
+        if (dir === p || dir.startsWith(`${p}/`)) dirs.delete(dir);
+      }
     },
     removeFile: async (p) => {
       if (dirs.has(p)) throw new Error(`EISDIR ${p}`);
@@ -262,44 +267,7 @@ describe("seedBuiltinSkills", () => {
   });
 
   describe("removeSeededBuiltin()", () => {
-    it("retires all previously shipped support files while retaining user additions https://github.com/logancyang/obsidian-copilot/issues/3022", async () => {
-      const root = `${FOLDER}/symposium-publish`;
-      const userFile = `${root}/references/custom.md`;
-      const fs = memFs({
-        [LEGACY_RENAMED_MD]: managedSymposiumSkillMd(),
-        [`${root}/shared-publishing-rules.md`]: "rules",
-        [`${root}/symposium-publish.sh`]: "shell",
-        [`${root}/symposium-publish.cmd`]: "cmd",
-        [`${root}/symposium-publish.ps1`]: "powershell",
-        [userFile]: "my reference",
-      });
-      expect(await removeSeededBuiltin(FOLDER, "symposium-publish", fs)).toBe(true);
-      expect([...fs.files.entries()]).toEqual([[userFile, "my reference"]]);
-    });
-
-    it("retains the ownership marker after partial retirement and retries remaining files https://github.com/logancyang/obsidian-copilot/issues/3022", async () => {
-      const root = `${FOLDER}/symposium-publish`;
-      const script = `${root}/symposium-publish.sh`;
-      const fs = memFs({ [LEGACY_RENAMED_MD]: managedSymposiumSkillMd(), [script]: "shell" });
-      const remove = fs.removeFile;
-      fs.removeFile = jest
-        .fn()
-        .mockRejectedValueOnce(new Error("locked"))
-        .mockImplementation(remove);
-      expect(await removeSeededBuiltin(FOLDER, "symposium-publish", fs)).toBe(false);
-      expect(fs.files.has(LEGACY_RENAMED_MD)).toBe(true);
-      expect(await removeSeededBuiltin(FOLDER, "symposium-publish", fs)).toBe(true);
-      expect(fs.files.size).toBe(0);
-    });
-
-    it("preserves marked skills outside the active and retired catalogs https://github.com/logancyang/obsidian-copilot/issues/3022", async () => {
-      const path = `${FOLDER}/unknown/SKILL.md`;
-      const fs = memFs({ [path]: skill(1).skillMd });
-      expect(await removeSeededBuiltin(FOLDER, "unknown", fs)).toBe(false);
-      expect(fs.files.has(path)).toBe(true);
-    });
-
-    it("removes empty generated support directories and the skill root https://github.com/logancyang/obsidian-copilot/issues/3022", async () => {
+    it("removes the whole managed directory including user additions and leaves sibling skills intact https://github.com/logancyang/obsidian-copilot/issues/3022", async () => {
       const definition = {
         ...skill(1),
         files: [{ path: "references/owned.md", content: "owned" }],
@@ -307,54 +275,60 @@ describe("seedBuiltinSkills", () => {
       const fs = memFs();
       await seedBuiltinSkills({ skillsFolderRelPath: FOLDER, fs, skills: [definition] });
       const root = `${FOLDER}/${definition.name}`;
-      expect(fs.dirs.has(`${root}/references`)).toBe(true);
-      expect(await removeSeededBuiltin(FOLDER, definition.name, fs, definition)).toBe(true);
-      expect(fs.dirs.has(`${root}/references`)).toBe(false);
-      expect(fs.dirs.has(root)).toBe(false);
+      fs.files.set(`${root}/references/my-notes.md`, "personal reference");
+      fs.dirs.add(`${root}/themes`);
+      fs.files.set(`${root}/themes/custom.css`, "personal theme");
+      const sibling = `${root}-extra`;
+      fs.dirs.add(sibling);
+      fs.files.set(`${sibling}/SKILL.md`, "sibling skill");
+
+      expect(await removeSeededBuiltin(FOLDER, definition.name, fs)).toBe(true);
+      expect([...fs.files.entries()]).toEqual([[`${sibling}/SKILL.md`, "sibling skill"]]);
+      expect([...fs.dirs].filter((dir) => dir === root || dir.startsWith(`${root}/`))).toEqual([]);
+      expect(fs.dirs.has(sibling)).toBe(true);
       expect(fs.dirs.has(FOLDER)).toBe(true);
     });
-    it("removes only catalog paths and retains user references and themes https://github.com/logancyang/obsidian-copilot/issues/3022", async () => {
-      const root = `${FOLDER}/copilot-web-search`;
-      const userReference = `${root}/references/my-notes.md`;
-      const userTheme = `${root}/themes/custom.css`;
-      const retired = `${root}/retired.sh`;
-      const fs = memFs({
-        [MD]: skill(1).skillMd,
-        [SCRIPT]: "owned",
-        [retired]: "retired",
-        [userReference]: "my notes",
-        [userTheme]: "my theme",
-      });
-      expect(
-        await removeSeededBuiltin(FOLDER, "copilot-web-search", fs, {
-          ...skill(1),
-          retiredFiles: ["retired.sh"],
-        })
-      ).toBe(true);
-      expect([...fs.files.keys()].sort()).toEqual([userReference, userTheme].sort());
-    });
-    it("removes a seeded builtin definition and supporting files", async () => {
-      const fs = memFs({ [MD]: skill(1).skillMd, [SCRIPT]: "// script v1" });
-      const removed = await removeSeededBuiltin(FOLDER, "copilot-web-search", fs, skill(1));
 
-      expect(removed).toBe(true);
-      expect(fs.files.has(MD)).toBe(false);
-      expect(fs.files.has(SCRIPT)).toBe(false);
+    it("removes a marked skill without requiring a catalog entry https://github.com/logancyang/obsidian-copilot/issues/3022", async () => {
+      const path = `${FOLDER}/unknown/SKILL.md`;
+      const fs = memFs({ [path]: skill(1).skillMd });
+      expect(await removeSeededBuiltin(FOLDER, "unknown", fs)).toBe(true);
+      expect(fs.files.size).toBe(0);
     });
 
-    it("is a no-op when the skill folder is absent", async () => {
-      const fs = memFs();
-      expect(await removeSeededBuiltin(FOLDER, "copilot-web-search", fs, skill(1))).toBe(false);
+    it("is a no-op when SKILL.md is absent https://github.com/logancyang/obsidian-copilot/issues/3022", async () => {
+      const fs = memFs({ [SCRIPT]: "unmarked support file" });
+      fs.removeDir = jest.fn(fs.removeDir);
+      expect(await removeSeededBuiltin(FOLDER, "copilot-web-search", fs)).toBe(false);
+      expect(fs.files.get(SCRIPT)).toBe("unmarked support file");
+      expect(fs.removeDir).not.toHaveBeenCalled();
     });
 
     it("refuses to remove a user-authored skill that lacks the builtin version marker", async () => {
       const userContent =
         "---\nname: copilot-web-search\ndescription: my custom search\n---\ncustom body";
       const fs = memFs({ [MD]: userContent });
-      const removed = await removeSeededBuiltin(FOLDER, "copilot-web-search", fs, skill(1));
+      const removed = await removeSeededBuiltin(FOLDER, "copilot-web-search", fs);
 
       expect(removed).toBe(false);
       expect(fs.files.get(MD)).toBe(userContent);
+    });
+
+    it("leaves unreadable skills untouched because ownership cannot be verified https://github.com/logancyang/obsidian-copilot/issues/3022", async () => {
+      const fs = memFs({ [MD]: skill(1).skillMd });
+      fs.read = jest.fn().mockRejectedValue(new Error("EACCES"));
+      fs.removeDir = jest.fn(fs.removeDir);
+      expect(await removeSeededBuiltin(FOLDER, "copilot-web-search", fs)).toBe(false);
+      expect(fs.files.has(MD)).toBe(true);
+      expect(fs.removeDir).not.toHaveBeenCalled();
+    });
+
+    it("reports failed directory removal https://github.com/logancyang/obsidian-copilot/issues/3022", async () => {
+      const fs = memFs({ [MD]: skill(1).skillMd, [SCRIPT]: "script" });
+      fs.removeDir = jest.fn().mockRejectedValue(new Error("EPERM"));
+      expect(await removeSeededBuiltin(FOLDER, "copilot-web-search", fs)).toBe(false);
+      expect(fs.files.has(MD)).toBe(true);
+      expect(fs.files.has(SCRIPT)).toBe(true);
     });
   });
 

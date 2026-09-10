@@ -31,9 +31,13 @@ function fixture(preferences?: BuiltinPreferences) {
     mkdir: async (path) => {
       dirs.add(path);
     },
-    removeEmptyDir: async (path) => {
-      if (![...files.keys(), ...dirs].some((child) => child.startsWith(`${path}/`)))
-        dirs.delete(path);
+    removeDir: async (path) => {
+      for (const file of files.keys()) {
+        if (file.startsWith(`${path}/`)) files.delete(file);
+      }
+      for (const dir of dirs) {
+        if (dir === path || dir.startsWith(`${path}/`)) dirs.delete(dir);
+      }
     },
     removeFile: async (path) => {
       files.delete(path);
@@ -105,7 +109,7 @@ describe("reconcileBuiltinSkills", () => {
       f.options.settings.agentMode.skills.builtinPreferences = { [skill.name]: { disabled: true } };
       await reconcileBuiltinSkills(f.options);
       expect(f.files.has(f.path(skill.name))).toBe(false);
-      expect(f.files.get(userPath)).toBe("personal reference");
+      expect(f.files.has(userPath)).toBe(false);
     });
     it(`preserves current-name user content containing a body marker with no agents and with an available agent ${ISSUE}`, async () => {
       const skill = BUILTIN_SKILLS[0];
@@ -151,16 +155,14 @@ describe("reconcileBuiltinSkills", () => {
         f.options.settings.agentMode.skills.builtinPreferences?.[replacement.name]
       ).toBeUndefined();
     });
-    it(`retires installed skills without an available agent or a saved preference and preserves user additions ${ISSUE}`, async () => {
+    it(`retires installed skills without an available agent or a saved preference and removes user additions ${ISSUE}`, async () => {
       const retired = RETIRED_BUILTIN_SKILLS[0];
       const f = fixture();
       f.files.set(f.path(retired.name), BUILTIN_SKILLS[0].skillMd);
-      for (const path of retired.retiredFiles ?? [])
-        f.files.set(`${folder}/${retired.name}/${path}`, "owned");
       const userPath = `${folder}/${retired.name}/references/personal.md`;
       f.files.set(userPath, "personal");
       await reconcileBuiltinSkills(f.options);
-      expect([...f.files.entries()]).toEqual([[userPath, "personal"]]);
+      expect(f.files.size).toBe(0);
       expect(f.options.settings.agentMode.skills.builtinPreferences).toBeUndefined();
     });
     it(`reports retired cleanup failures, continues installing defaults, and retries without preference records ${ISSUE}`, async () => {
@@ -168,15 +170,15 @@ describe("reconcileBuiltinSkills", () => {
       const f = fixture();
       f.files.set(f.path(retired.name), BUILTIN_SKILLS[0].skillMd);
       f.options.availableAgents = ["claude"];
-      const remove = f.options.fs.removeFile;
-      f.options.fs.removeFile = async () => {
+      const remove = f.options.fs.removeDir;
+      f.options.fs.removeDir = async () => {
         throw new Error("permission denied");
       };
       await expect(reconcileBuiltinSkills(f.options)).rejects.toThrow("Could not remove retired");
       expect(f.files.has(f.path(retired.name))).toBe(true);
       expect(f.files.has(f.path(BUILTIN_SKILLS[0].name))).toBe(true);
       expect(f.options.settings.agentMode.skills.builtinPreferences).toBeUndefined();
-      f.options.fs.removeFile = remove;
+      f.options.fs.removeDir = remove;
       await reconcileBuiltinSkills(f.options);
       expect(f.files.has(f.path(retired.name))).toBe(false);
     });
@@ -254,7 +256,7 @@ describe("reconcileBuiltinSkills", () => {
       const skill = BUILTIN_SKILLS[0];
       const f = fixture({ [skill.name]: { disabled: true } });
       f.files.set(f.path(skill.name), skill.skillMd);
-      f.options.fs.removeFile = async () => {
+      f.options.fs.removeDir = async () => {
         throw new Error("permission denied");
       };
       await expect(reconcileBuiltinSkills(f.options)).rejects.toThrow("Could not remove disabled");

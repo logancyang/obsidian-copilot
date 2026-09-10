@@ -52,20 +52,12 @@ export interface BuiltinSkill {
 }
 
 /**
- * Retain owned paths after a catalog removal so upgrades can retire generated files
- * without deleting user additions. Renamed skills receive fresh defaults.
+ * Retain retired names so Copilot can remove their managed folders and preferences.
+ * Renamed skills receive fresh defaults.
  * https://github.com/logancyang/obsidian-copilot/issues/3022
  */
-export const RETIRED_BUILTIN_SKILLS: readonly Pick<BuiltinSkill, "name" | "retiredFiles">[] = [
-  {
-    name: "symposium-publish",
-    retiredFiles: [
-      "shared-publishing-rules.md",
-      "symposium-publish.sh",
-      "symposium-publish.cmd",
-      "symposium-publish.ps1",
-    ],
-  },
+export const RETIRED_BUILTIN_SKILLS: readonly Pick<BuiltinSkill, "name">[] = [
+  { name: "symposium-publish" },
 ];
 
 /** Env var names the plugin injects and the scripts read. Single source of truth. */

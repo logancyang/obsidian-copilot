@@ -158,7 +158,7 @@ Shared Skills live under `<Copilot folder>/skills/`. Copilot links them into the
 
 Custom Skills and built-in Obsidian Skills are free. Active Plus access adds cloud-backed Skills for web research, PDF reading, YouTube transcripts, X posts, and OpenArtifacts.
 
-Built-in skill preferences record only your changes to the defaults. New skills use the defaults, and content updates keep your saved choices. When a skill is retired, Copilot clears its saved preferences and removes its bundled files while preserving files you added alongside them. A renamed skill starts with fresh defaults.
+Built-in skill preferences record only your changes to the defaults. New skills use the defaults, and content updates keep your saved choices. Copilot fully manages built-in skill folders. Removing a built-in skill deletes its entire folder, including any files you added. Keep custom skills and files in separate folders. When a skill is retired, Copilot also clears its saved preferences. A renamed skill starts with fresh defaults.
 
 In Self-Host Mode with OpenCode selected, Agent Chat's built-in web-search Skill uses the search provider selected under **Settings → Copilot → Self-Host**. Provider credentials stay inside Obsidian rather than being passed to OpenCode, and the feature does not require Obsidian's command line interface. Copilot disables OpenCode's native web-search and web-fetch tools so they cannot bypass that route. Full-page web fetching is unavailable through OpenCode in Self-Host Mode because the supported search providers do not share a page-fetch interface; Agent Chat can still use the configured provider's search results.
 
