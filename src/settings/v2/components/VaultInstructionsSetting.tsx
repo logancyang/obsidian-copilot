@@ -25,7 +25,7 @@ export const VaultInstructionsSetting: React.FC<VaultInstructionsSettingProps> =
       description="Your custom instructions for the agent to follow for every vault interaction. Saved to AGENTS.md in your vault root, which you can also edit as a note."
       className="tw-py-0"
     >
-      <Button variant="secondary" onClick={onOpen} className="tw-w-full @lg/setting-row:tw-w-auto">
+      <Button variant="secondary" size="sm" onClick={onOpen}>
         <ArrowUpRight className="tw-size-4" />
         Open AGENTS.md
       </Button>
