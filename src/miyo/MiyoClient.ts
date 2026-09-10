@@ -398,12 +398,20 @@ export class MiyoClient {
       if (response.status === 409) {
         try {
           url.searchParams.set("path", request.path);
-          const registration = await requestUrl({
-            url: url.toString(),
-            method: "GET",
-            headers,
-            throw: false,
-          });
+          // requestUrl cannot be aborted; a stalled lookup must still release setup
+          // and report the original conflict instead of leaving the modal busy.
+          // https://github.com/Brevilabs/obsidian-copilot-private/issues/402
+          const registration = await withTimeout(
+            async () =>
+              requestUrl({
+                url: url.toString(),
+                method: "GET",
+                headers,
+                throw: false,
+              }),
+            8000,
+            "Miyo folder conflict verification"
+          );
           if (registration.status === 200) return null;
         } catch {
           // A failed lookup must preserve the original registration conflict.

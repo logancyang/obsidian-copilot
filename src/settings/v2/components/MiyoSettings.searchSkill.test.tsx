@@ -198,6 +198,23 @@ describe("MiyoSettings", () => {
         )
       );
     });
+
+    it("keeps registration incomplete without enabling or announcing index changes after a folder conflict (https://github.com/Brevilabs/obsidian-copilot-private/issues/402)", async () => {
+      mockRegistration = "unregistered";
+      addFolderError = new Error(
+        "Miyo add-folder failed with status 409: Folder overlaps with existing registration"
+      );
+      render(<MiyoSettings />);
+      fireEvent.click(await screen.findByText("Connect"));
+      await waitFor(() => expect(lastModalOptions?.onAddVault).toBeDefined());
+      jest.mocked(refreshMiyoStatus).mockClear();
+      await act(async () => {
+        await expect(lastModalOptions?.onAddVault?.()).resolves.toBe("error");
+      });
+      expect(updateSetting).not.toHaveBeenCalledWith("enableMiyo", true);
+      expect(refreshMiyoStatus).not.toHaveBeenCalled();
+      expect(notifyMiyoIndexChanged).not.toHaveBeenCalled();
+    });
   });
 
   it("registers the vault with system roots and Obsidian ignores, but no user QA rules — https://github.com/Brevilabs/obsidian-copilot-private/issues/284", async () => {
@@ -248,23 +265,6 @@ describe("MiyoSettings", () => {
         allow_remote_read: true,
       },
     ]);
-  });
-
-  it("keeps registration incomplete without enabling or announcing index changes after a folder conflict (https://github.com/Brevilabs/obsidian-copilot-private/issues/402)", async () => {
-    mockRegistration = "unregistered";
-    addFolderError = new Error(
-      "Miyo add-folder failed with status 409: Folder overlaps with existing registration"
-    );
-    render(<MiyoSettings />);
-    fireEvent.click(await screen.findByText("Connect"));
-    await waitFor(() => expect(lastModalOptions?.onAddVault).toBeDefined());
-    jest.mocked(refreshMiyoStatus).mockClear();
-    await act(async () => {
-      await expect(lastModalOptions?.onAddVault?.()).resolves.toBe("error");
-    });
-    expect(updateSetting).not.toHaveBeenCalledWith("enableMiyo", true);
-    expect(refreshMiyoStatus).not.toHaveBeenCalled();
-    expect(notifyMiyoIndexChanged).not.toHaveBeenCalled();
   });
 
   it("does not register or enable from an expired plugin lifecycle (https://github.com/Brevilabs/obsidian-copilot-private/issues/284)", async () => {

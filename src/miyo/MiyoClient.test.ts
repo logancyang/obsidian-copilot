@@ -665,6 +665,30 @@ describe("MiyoClient", () => {
       );
     });
 
+    it("preserves the original conflict after eight seconds when verification never responds (https://github.com/Brevilabs/obsidian-copilot-private/issues/402)", async () => {
+      jest.useFakeTimers();
+      try {
+        mockedRequestUrl
+          .mockResolvedValueOnce({
+            status: 409,
+            json: { detail: "Original conflict" },
+            text: "",
+          } as RequestUrlResponse)
+          .mockReturnValueOnce(new Promise<never>(() => {}) as never);
+        const result = expect(
+          new MiyoClient().addFolder({ path: "/Users/me/vault" })
+        ).rejects.toThrow("Miyo add-folder failed with status 409: Original conflict");
+
+        await jest.advanceTimersByTimeAsync(8001);
+
+        expect(mockedRequestUrl).toHaveBeenCalledTimes(2);
+        await result;
+        expect(jest.getTimerCount()).toBe(0);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
     it("throws a detailed validation error on 400", async () => {
       mockedRequestUrl.mockResolvedValue({
         status: 400,
