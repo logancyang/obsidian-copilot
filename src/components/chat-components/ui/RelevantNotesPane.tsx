@@ -183,7 +183,7 @@ export function RelevantNotesPane({
               : `Miyo is connected, but ${vaultLabel} isn't registered. Add this vault in Miyo on the host machine.`
           }
         >
-          <Button variant="default" size="sm" onClick={actions.reviewIndexing.onSelect}>
+          <Button variant="secondary" size="sm" onClick={actions.reviewIndexing.onSelect}>
             {reviewInMiyo ? "Open folder settings in Miyo" : "Review Miyo connection"}
           </Button>
         </GuidancePanel>
