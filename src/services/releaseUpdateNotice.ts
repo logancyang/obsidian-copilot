@@ -1,5 +1,7 @@
+import { buttonVariants } from "@/components/ui/button";
 import { ReleaseNotesModal } from "@/components/release-update/ReleaseNotesDialog";
 import { requestLatestRelease } from "@/hooks/useLatestVersion";
+import { cn } from "@/lib/utils";
 import { logWarn } from "@/logger";
 import { isNewerVersion } from "@/utils";
 import { App, Notice } from "obsidian";
@@ -32,7 +34,10 @@ export function startReleaseUpdateCheck(
       const fragment = app.workspace.containerEl.doc.win.createFragment();
       const content = fragment.createDiv({ cls: "copilot-release-notice" });
       content.createDiv({ text: `Copilot ${release.version} is available` });
-      const button = content.createEl("button", { text: "View release notes" });
+      const button = content.createEl("button", {
+        text: "View release notes",
+        cls: cn(buttonVariants({ variant: "secondary" }), "tw-max-w-full tw-whitespace-normal"),
+      });
       button.addEventListener("click", () => {
         if (!active) return;
         notice?.hide();

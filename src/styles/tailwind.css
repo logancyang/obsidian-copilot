@@ -509,37 +509,10 @@ If your plugin does not need CSS, delete this file.
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: var(--size-4-1);
+  gap: var(--size-4-2);
   font-size: var(--font-ui-medium);
   font-weight: var(--font-medium);
   text-align: left;
-}
-
-.copilot-release-notice button {
-  height: auto;
-  min-height: var(--size-4-8);
-  max-width: 100%;
-  margin: 0;
-  padding: var(--size-4-1) 0;
-  border: 0;
-  border-radius: var(--radius-s);
-  background: transparent;
-  box-shadow: none;
-  color: inherit;
-  font-size: var(--font-ui-small);
-  font-weight: var(--font-normal);
-  text-align: left;
-  white-space: normal;
-  cursor: var(--cursor-link);
-}
-
-.copilot-release-notice button:hover {
-  text-decoration: underline;
-}
-
-.copilot-release-notice button:focus-visible {
-  outline: 2px solid currentcolor;
-  outline-offset: 2px;
 }
 
 .copilot-notice-container {
