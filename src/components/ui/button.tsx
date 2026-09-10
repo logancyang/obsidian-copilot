@@ -13,7 +13,7 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default:
-          "mod-cta tw-bg-interactive-accent tw-text-on-accent tw-shadow [--text-on-accent:var(--text-on-accent-inverted)] hover:tw-bg-interactive-accent-hover",
+          "mod-cta tw-bg-interactive-accent tw-text-on-accent tw-shadow [--text-on-accent:var(--text-on-accent-inverted)] hover:tw-bg-interactive-accent-hover hover:tw-text-on-accent",
         destructive:
           "clickable-icon tw-bg-modifier-error tw-text-on-accent [--text-on-accent:var(--text-on-accent-inverted)] hover:tw-bg-modifier-error hover:tw-text-on-accent",
         secondary: "tw-bg-secondary tw-text-normal tw-shadow-sm hover:tw-bg-interactive-hover",
