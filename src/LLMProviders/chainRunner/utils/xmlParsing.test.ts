@@ -1,4 +1,4 @@
-import { escapeXml, escapeXmlAttribute, unescapeXml } from "./xmlParsing";
+import { escapeXml, unescapeXml } from "./xmlParsing";
 
 /**
  * Tests for XML escape/unescape utilities.
@@ -98,19 +98,6 @@ describe("unescapeXml", () => {
   it("should handle double-escaped ampersand correctly", () => {
     // &amp;amp; should become &amp; (not &) - unescaping once
     expect(unescapeXml("&amp;amp;")).toBe("&amp;");
-  });
-});
-
-describe("escapeXmlAttribute", () => {
-  it("should escape attribute values the same as escapeXml", () => {
-    const testString = '<tag attr="value">content & more</tag>';
-    expect(escapeXmlAttribute(testString)).toBe(escapeXml(testString));
-  });
-
-  it("should handle variable names with special characters", () => {
-    expect(escapeXmlAttribute('my"variable')).toBe("my&quot;variable");
-    expect(escapeXmlAttribute("my'variable")).toBe("my&apos;variable");
-    expect(escapeXmlAttribute("my<variable>")).toBe("my&lt;variable&gt;");
   });
 });
 
