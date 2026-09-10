@@ -244,16 +244,12 @@ export const RelevantNotes = memo(
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/362
     const canFollowMiyoIndex = shouldUseMiyo(settings);
     const liveUpdateEnabled = canFollowMiyoIndex && settings.relevantNotesLiveUpdate;
-    const mock =
-      typeof localStorage !== "undefined" &&
-      localStorage.getItem("copilot.mockRelatedContext") === "true";
     // Retry the selected chat when Miyo reconnects without requiring a draft edit.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/383
     const chat = useChatRelevantNotes(
       app,
       liveUpdateEnabled,
-      JSON.stringify([settings.miyoServerUrl, miyoCredentialIdentity, miyoBackendAvailable]),
-      mock
+      JSON.stringify([settings.miyoServerUrl, miyoCredentialIdentity, miyoBackendAvailable])
     );
     const {
       result: noteResult,

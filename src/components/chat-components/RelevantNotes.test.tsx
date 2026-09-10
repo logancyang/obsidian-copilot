@@ -91,9 +91,34 @@ function makeMarkdownFile(path: string): TFile {
   return new MockTFile(path);
 }
 
+function selectChat(id: string, question: string) {
+  const chat = {
+    id,
+    request: { folder_name: "Vault", messages: [{ role: "user" as const, content: question }] },
+    skippedAttachments: 0,
+    addFile: jest.fn(),
+  };
+  getChatRelevantNotesStore(mockApp).select(chat);
+  return chat;
+}
+
+function chatMatches(title: string): Awaited<ReturnType<typeof findChatRelevantNotes>> {
+  return {
+    status: "matches",
+    notes: [
+      {
+        note: { path: `${title}.md`, title },
+        metadata: { score: 0.8, hasOutgoingLinks: false, hasBacklinks: false },
+      },
+    ],
+  };
+}
+
 describe("RelevantNotes", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    getChatRelevantNotesStore(mockApp).select(null);
+    jest.mocked(findChatRelevantNotes).mockReset();
     (Platform as { isMobile: boolean }).isMobile = false;
     mockSettings = {
       enableMiyo: true,
@@ -141,39 +166,59 @@ describe("RelevantNotes", () => {
       ).toBe("https://www.miyo.md/?utm_source=obsidian_copilot&utm_medium=relevant_notes");
     });
 
-    it("drops chat rows immediately when focus returns to the editor or switches chats (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", async () => {
-      const store = getChatRelevantNotesStore(mockApp);
-      const selectChat = (id: string) =>
-        store.select({
-          id,
-          request: { folder_name: "Vault", messages: [{ role: "user", content: "topic" }] },
-          skippedAttachments: 0,
-          addFile: jest.fn(),
-        });
-      (
-        findChatRelevantNotes as jest.MockedFunction<typeof findChatRelevantNotes>
-      ).mockResolvedValue({
-        notes: [
-          {
-            note: { path: "Chat.md", title: "Chat suggestion" },
-            metadata: { score: 0.7, hasOutgoingLinks: false, hasBacklinks: false },
-          },
-        ],
-        status: "matches",
-      });
-      selectChat("first");
+    it("shows recommendations from the selected chat instead of the active editor note (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", async () => {
+      const chat = selectChat("embeddings-chat", "How do embeddings work?");
+      jest.mocked(findChatRelevantNotes).mockResolvedValueOnce(chatMatches("Embeddings"));
+
       render(<RelevantNotes onAddToChat={jest.fn()} />);
-      await screen.findByText("Chat suggestion");
+
+      expect(await screen.findByText("Embeddings")).toBeTruthy();
+      expect(screen.getByText("Agent chat context")).toBeTruthy();
+      expect(screen.queryByText("Target")).toBeNull();
+      expect(findChatRelevantNotes).toHaveBeenCalledWith(mockApp, chat);
+      expect(mockFindRelevantNotes).not.toHaveBeenCalled();
+    });
+
+    it("hides the previous chat's notes while retrieving recommendations for the newly selected chat (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", async () => {
+      selectChat("embeddings-chat", "How do embeddings work?");
+      const findChat = jest.mocked(findChatRelevantNotes);
+      findChat.mockResolvedValueOnce(chatMatches("Embeddings"));
+      let completeSearch!: (result: Awaited<ReturnType<typeof findChatRelevantNotes>>) => void;
+      findChat.mockReturnValueOnce(
+        new Promise((resolve) => {
+          completeSearch = resolve;
+        })
+      );
+      render(<RelevantNotes onAddToChat={jest.fn()} />);
+      await screen.findByText("Embeddings");
+
       act(() => {
-        selectChat("second");
+        selectChat("lexical-chat", "How does lexical search work?");
       });
-      expect(screen.queryByText("Chat suggestion")).toBeNull();
-      await screen.findByText("Chat suggestion");
+
+      expect(screen.queryByText("Embeddings")).toBeNull();
+      await waitFor(() => expect(findChat).toHaveBeenCalledTimes(2));
+      await act(async () => {
+        completeSearch(chatMatches("Lexical search"));
+      });
+      expect(screen.getByText("Lexical search")).toBeTruthy();
+      expect(screen.queryByText("Embeddings")).toBeNull();
+    });
+
+    it("replaces chat recommendations with the active note's recommendations when focus returns to the editor (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", async () => {
+      selectChat("embeddings-chat", "How do embeddings work?");
+      jest.mocked(findChatRelevantNotes).mockResolvedValueOnce(chatMatches("Embeddings"));
+      render(<RelevantNotes onAddToChat={jest.fn()} />);
+      await screen.findByText("Embeddings");
+
       act(() => {
-        store.select(null);
+        getChatRelevantNotesStore(mockApp).select(null);
       });
-      expect(screen.queryByText("Chat suggestion")).toBeNull();
-      await screen.findByText("Target");
+
+      expect(screen.queryByText("Embeddings")).toBeNull();
+      expect(await screen.findByText("Target")).toBeTruthy();
+      expect(screen.getByText("Source")).toBeTruthy();
+      expect(mockFindRelevantNotes).toHaveBeenCalledWith({ app: mockApp, filePath: "Source.md" });
     });
 
     it("shows the editor source and its notes when old Miyo cannot recommend from chat (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", async () => {
@@ -290,7 +335,7 @@ describe("RelevantNotes", () => {
       expect(mockFindRelevantNotes).toHaveBeenCalledTimes(3);
     });
 
-    it("retries an unchanged chat when Miyo reconnects (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", async () => {
+    it("shows recommendations for the unchanged chat after Miyo reconnects (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", async () => {
       const store = getChatRelevantNotesStore(mockApp);
       store.select({
         id: "reconnecting",
