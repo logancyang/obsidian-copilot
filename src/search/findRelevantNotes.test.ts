@@ -539,13 +539,30 @@ describe("findRelevantNotes", () => {
       expect(mockedLogError).not.toHaveBeenCalled();
     });
 
+    it("identifies the unregistered vault without showing graph-only rows (https://github.com/Brevilabs/obsidian-copilot-private/issues/401)", async () => {
+      mockedGetMiyoFolderName.mockReturnValue("Work Vault");
+      mockSearchRelated.mockRejectedValue(new MiyoRequestError(404, "No indexed chunks"));
+      mockFileStatus.mockRejectedValue(new MiyoRequestError(404, "Folder not registered"));
+
+      expect(await findRelevantNotes({ app: window.app, filePath: "source.md" })).toEqual({
+        notes: [],
+        status: "vault-not-registered",
+        details: { folderName: "Work Vault" },
+      });
+      expect(mockedGetLinkedNotes).not.toHaveBeenCalled();
+      expect(mockedGetBacklinkedNotes).not.toHaveBeenCalled();
+      expect(mockedLogError).not.toHaveBeenCalled();
+    });
+
     it.each([
       new MiyoRequestError(501, "not supported", "other_error"),
       new MiyoRequestError(501, "not_implemented"),
       new MiyoRequestError(404, "Folder unavailable"),
+      new MiyoRequestError(503, "Folder not registered"),
+      new MiyoRequestError(404, "Not Found"),
       new Error("network down"),
     ])(
-      "returns no graph-only rows when file status fails with $message (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)",
+      "returns no graph-only rows when file status fails with $message (https://github.com/Brevilabs/obsidian-copilot-private/issues/401)",
       async (statusError) => {
         mockSearchRelated.mockRejectedValue(
           new MiyoRequestError(404, "No indexed chunks found for file_path")
@@ -721,6 +738,20 @@ describe("findRelevantNotes", () => {
           { notes: [], status: "excluded", details: { exclusionRule: "**/archive/**" } }
         )
       ).toBe(false);
+    });
+
+    it("updates guidance when the unregistered vault name changes (https://github.com/Brevilabs/obsidian-copilot-private/issues/401)", () => {
+      const result = {
+        notes: [],
+        status: "vault-not-registered" as const,
+        details: { folderName: "Work" },
+      };
+      expect(
+        isSameRelevantNotesResult(result, { ...result, details: { folderName: "Personal" } })
+      ).toBe(false);
+      expect(
+        isSameRelevantNotesResult(result, { ...result, details: { folderName: "Work" } })
+      ).toBe(true);
     });
 
     it("updates the skipped-attachment notice without changing rows (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", () => {

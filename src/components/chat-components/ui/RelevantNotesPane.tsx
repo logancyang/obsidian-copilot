@@ -31,6 +31,7 @@ interface GuidancePanelProps {
   id:
     | "download"
     | "unavailable"
+    | "vault-not-registered"
     | "no-matches"
     | "no-text"
     | "indexing"
@@ -166,6 +167,29 @@ export function RelevantNotesPane({
         </GuidancePanel>
       );
       break;
+    // A reachable service with no vault registration needs folder setup,
+    // rather than connection troubleshooting.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/401
+    case "vault-not-registered": {
+      const reviewInMiyo = actions.reviewIndexing.destination === "miyo";
+      const vaultLabel = details?.folderName ? `“${details.folderName}”` : "This vault";
+      guidancePanel = (
+        <GuidancePanel
+          id="vault-not-registered"
+          title="This vault isn't registered in Miyo"
+          description={
+            reviewInMiyo
+              ? `Miyo is connected, but ${vaultLabel} isn't registered. Add this vault in Miyo to find relevant notes.`
+              : `Miyo is connected, but ${vaultLabel} isn't registered. Add this vault in Miyo on the host machine.`
+          }
+        >
+          <Button variant="default" size="sm" onClick={actions.reviewIndexing.onSelect}>
+            {reviewInMiyo ? "Open folder settings in Miyo" : "Review Miyo connection"}
+          </Button>
+        </GuidancePanel>
+      );
+      break;
+    }
     case "unavailable":
       guidancePanel = (
         <GuidancePanel

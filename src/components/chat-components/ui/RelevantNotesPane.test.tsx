@@ -106,6 +106,38 @@ describe("RelevantNotesPane", () => {
       expect(container.querySelector("[data-miyo-guidance]")?.className).toContain("tw-max-w-xs");
     });
 
+    it.each(["miyo", "settings"] as const)(
+      "explains the missing vault and delegates the %s recovery action without stale rows (https://github.com/Brevilabs/obsidian-copilot-private/issues/401)",
+      (destination) => {
+        render(
+          <RelevantNotesPane
+            {...BASE_PROPS}
+            status="vault-not-registered"
+            details={{ folderName: "Work Vault" }}
+            actions={{
+              ...BASE_ACTIONS,
+              reviewIndexing: { ...BASE_ACTIONS.reviewIndexing, destination },
+            }}
+          />
+        );
+        expect(screen.getByText("This vault isn't registered in Miyo")).toBeTruthy();
+        expect(
+          screen.getByText(/Miyo is connected, but “Work Vault” isn't registered/)
+        ).toBeTruthy();
+        expect(screen.queryByText("Miyo is not connected")).toBeNull();
+        expect(screen.queryByText("Related note")).toBeNull();
+        if (destination === "settings")
+          expect(screen.getByText(/on the host machine/)).toBeTruthy();
+        fireEvent.click(
+          screen.getByRole("button", {
+            name:
+              destination === "miyo" ? "Open folder settings in Miyo" : "Review Miyo connection",
+          })
+        );
+        expect(BASE_ACTIONS.reviewIndexing.onSelect).toHaveBeenCalledTimes(1);
+      }
+    );
+
     it("shows a centered no-matches card without result rows or setup actions (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", () => {
       const { container } = render(<RelevantNotesPane {...BASE_PROPS} status="no-matches" />);
 
