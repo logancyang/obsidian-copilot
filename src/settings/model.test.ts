@@ -699,6 +699,23 @@ describe("sanitizeSettings - docProcessorBackend (v6 field)", () => {
 
 describe("model", () => {
   describe("sanitizeSettings()", () => {
+    it("defaults the startup notice marker without inheriting the Agent Home dismissal", () => {
+      const persisted = { ...DEFAULT_SETTINGS, lastDismissedVersion: "4.1.0" };
+      delete (persisted as Partial<CopilotSettings>).lastShownStartupVersion;
+      const loaded = sanitizeSettings(persisted);
+      expect(loaded.lastShownStartupVersion).toBeNull();
+      expect(loaded.lastDismissedVersion).toBe("4.1.0");
+    });
+
+    it("preserves distinct startup notice and Agent Home dismissal versions", () => {
+      const loaded = sanitizeSettings({
+        ...DEFAULT_SETTINGS,
+        lastDismissedVersion: "4.0.9",
+        lastShownStartupVersion: "4.1.0",
+      });
+      expect(loaded.lastShownStartupVersion).toBe("4.1.0");
+      expect(loaded.lastDismissedVersion).toBe("4.0.9");
+    });
     it.each(["parallel", "exa"] as const)(
       "preserves the %s self-host search provider (https://github.com/Brevilabs/obsidian-copilot-private/issues/285)",
       (provider) => {

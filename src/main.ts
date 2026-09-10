@@ -198,7 +198,6 @@ export default class CopilotPlugin extends Plugin {
     resetPersistenceState();
     KeychainService.resetInstance();
     KeychainService.getInstance(this.app);
-    this.register(startReleaseUpdateCheck(this.app, this.manifest.version));
     await this.loadSettings();
     this.modelManagement = createModelManagement({
       app: this.app,
@@ -239,6 +238,16 @@ export default class CopilotPlugin extends Plugin {
         }
       })();
     });
+    // Startup notices remember their own last shown release; Agent Home dismissal
+    // is independent. Hydration and the save subscriber must precede this check.
+    this.register(
+      startReleaseUpdateCheck(
+        this.app,
+        this.manifest.version,
+        getSettings().lastShownStartupVersion,
+        (version) => updateSetting("lastShownStartupVersion", version)
+      )
+    );
     // One-time settings migrations. Runs after the persist subscriber is wired
     // (so every mutation is saved) and after createModelManagement, and before
     // agent/model-discovery init below — so migrated BYOK providers are present
