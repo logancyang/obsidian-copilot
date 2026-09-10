@@ -47,8 +47,6 @@ export interface BuiltinSkill {
   readonly skillMd: string;
   /** Supporting scripts, references, or notices written alongside SKILL.md. */
   readonly files: ReadonlyArray<{ readonly path: string; readonly content: string }>;
-  /** Previously shipped files to remove on upgrade, leaving user-added files alone. */
-  readonly retiredFiles?: readonly string[];
 }
 
 /**
@@ -602,7 +600,6 @@ const OPENARTIFACTS_MISSING_KEY_MESSAGE =
   "Publishing to OpenArtifacts needs a Copilot Plus license key. Add it in Copilot Settings and try again.";
 const OPENARTIFACTS_PUBLISH: BuiltinSkill = {
   name: "openartifacts-publish",
-  retiredFiles: ["shared-publishing-rules.md", "symposium-publish.sh", "symposium-publish.cmd"],
   version: OPENARTIFACTS_PUBLISH_VERSION,
   enabledAgents: ["claude", "codex", "opencode"],
   skillMd: `---

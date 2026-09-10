@@ -102,6 +102,27 @@ describe("builtinSkillPreferences", () => {
       expect(persist.mock.calls[1][0].agentMode.skills.builtinPreferences).toBe(preferences);
     });
 
+    it("continues queued saves after a failed write without committing the failed opt-out https://github.com/logancyang/obsidian-copilot/issues/3022", async () => {
+      persist.mockRejectedValueOnce(new Error("disk full"));
+      const results = await Promise.allSettled([
+        saveBuiltinPreferences(
+          (current) => ({ ...current, "copilot-web-search": { disabled: true } }),
+          jest.fn()
+        ),
+        saveBuiltinPreferences(
+          (current) => ({ ...current, "copilot-web-fetch": { disabledAgents: ["codex"] } }),
+          jest.fn()
+        ),
+      ]);
+      expect(results.map((result) => result.status)).toEqual(["rejected", "fulfilled"]);
+      expect(getSettings().agentMode.skills.builtinPreferences).toEqual({
+        "copilot-web-fetch": { disabledAgents: ["codex"] },
+      });
+      expect(persist.mock.calls[1][0].agentMode.skills.builtinPreferences).toEqual(
+        getSettings().agentMode.skills.builtinPreferences
+      );
+    });
+
     it("leaves preferences unchanged when persistence fails (https://github.com/logancyang/obsidian-copilot/issues/3022)", async () => {
       persist.mockRejectedValue(new Error("disk full"));
       await expect(

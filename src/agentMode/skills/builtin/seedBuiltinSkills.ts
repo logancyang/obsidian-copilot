@@ -14,9 +14,7 @@ export interface BuiltinSeedFs {
   read(relPath: string): Promise<string>;
   write(relPath: string, content: string): Promise<void>;
   mkdir(relPath: string): Promise<void>;
-  /** Remove a known retired support file, never a directory. */
-  removeFile(relPath: string): Promise<void>;
-  /** Remove a managed skill directory and all its contents. */
+  /** Remove all managed contents, retaining SKILL.md until child cleanup succeeds. */
   removeDir(relPath: string): Promise<void>;
 }
 
@@ -167,15 +165,10 @@ export async function seedBuiltinSkills(
     }
     if (!current) {
       try {
-        // Retire only explicitly owned files: users can add references and themes beside
-        // a managed skill, and an upgrade must preserve them.
-        // https://github.com/Brevilabs/obsidian-copilot-private/issues/394
-        if (existingContent !== null) {
-          for (const retiredFile of skill.retiredFiles ?? []) {
-            const retiredPath = joinPosix(dir, retiredFile);
-            if (await fs.exists(retiredPath)) await fs.removeFile(retiredPath);
-          }
-        }
+        // Copilot owns the entire marked folder; replacement removes obsolete files
+        // and user additions without tracking previously shipped filenames.
+        // https://github.com/logancyang/obsidian-copilot/issues/3022
+        if (existingContent !== null) await fs.removeDir(dir);
         await ensureDir(fs, dir);
         // Carry the user's agent-disable choices forward: if they toggled any
         // agent off via the UI, copilot-enabled-agents was rewritten on disk.
@@ -217,26 +210,26 @@ export async function seedBuiltinSkills(
  * @param skillsFolderRelPath - Canonical skills root relative to the vault.
  * @param name - Managed skill folder name.
  * @param fs - Vault file operations.
- * @returns Whether the managed directory was removed; false also covers skipped or failed removal.
+ * @returns The removal outcome; failures remain distinct from absent or user-owned skills.
  */
 export async function removeSeededBuiltin(
   skillsFolderRelPath: string,
   name: string,
   fs: BuiltinSeedFs
-): Promise<boolean> {
+): Promise<"removed" | "absent" | "collision" | "failed"> {
   const dir = joinPosix(skillsFolderRelPath, name);
   const skillMdPath = joinPosix(dir, "SKILL.md");
   try {
-    if (!(await fs.exists(skillMdPath))) return false;
+    if (!(await fs.exists(skillMdPath))) return "absent";
     // null marker = user-authored file → never delete.
-    if (getBuiltinSkillVersion(await fs.read(skillMdPath)) === null) return false;
+    if (getBuiltinSkillVersion(await fs.read(skillMdPath)) === null) return "collision";
     // Copilot owns the entire marked directory, including user additions, so removal
     // must not leave orphaned files. https://github.com/logancyang/obsidian-copilot/issues/3022
     await fs.removeDir(dir);
     logInfo(`[Skills] removed de-gated builtin skill: ${name}`);
-    return true;
+    return "removed";
   } catch (e) {
     logError(`[Skills] failed to remove de-gated builtin skill ${name}`, e);
-    return false;
+    return "failed";
   }
 }

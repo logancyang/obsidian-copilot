@@ -39,9 +39,6 @@ function fixture(preferences?: BuiltinPreferences) {
         if (dir === path || dir.startsWith(`${path}/`)) dirs.delete(dir);
       }
     },
-    removeFile: async (path) => {
-      files.delete(path);
-    },
   };
   const settings = {
     ...DEFAULT_SETTINGS,
@@ -252,6 +249,30 @@ describe("reconcileBuiltinSkills", () => {
       await reconcileBuiltinSkills(f.options);
       expect(f.files.get(f.path(skill.name))).toBe("user-owned content");
     });
+    it.each(["disabled", "retired"])(
+      `reports interrupted %s removal after the ownership marker is lost ${ISSUE}`,
+      async (kind) => {
+        const skill =
+          kind === "retired"
+            ? { ...BUILTIN_SKILLS[0], name: RETIRED_BUILTIN_SKILLS[0].name }
+            : BUILTIN_SKILLS[0];
+        const f = fixture({ [skill.name]: { disabled: true } });
+        f.files.set(f.path(skill.name), skill.skillMd);
+        const supportPath = `${folder}/${skill.name}/remaining.sh`;
+        f.files.set(supportPath, "remaining support file");
+        f.options.fs.removeDir = async () => {
+          f.files.delete(f.path(skill.name));
+          throw new Error("recursive removal interrupted");
+        };
+
+        await expect(reconcileBuiltinSkills(f.options)).rejects.toThrow(`Could not remove ${kind}`);
+        expect(f.files.get(supportPath)).toBe("remaining support file");
+        expect(f.options.settings.agentMode.skills.builtinPreferences?.[skill.name].disabled).toBe(
+          true
+        );
+      }
+    );
+
     it(`surfaces disabled-file cleanup failures while retaining the opt-out ${ISSUE}`, async () => {
       const skill = BUILTIN_SKILLS[0];
       const f = fixture({ [skill.name]: { disabled: true } });

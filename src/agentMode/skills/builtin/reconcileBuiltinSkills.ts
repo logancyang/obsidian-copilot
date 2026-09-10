@@ -36,10 +36,8 @@ export async function reconcileBuiltinSkills(options: ReconcileBuiltinOptions): 
   // is enabled. Keep file ownership independent of user overrides so cleanup retries.
   // https://github.com/logancyang/obsidian-copilot/issues/3022
   for (const skill of RETIRED_BUILTIN_SKILLS) {
-    await removeSeededBuiltin(folder, skill.name, fs);
-    const state = await inspectBuiltinSkill(folder, skill.name, fs);
-    if (state === "seeded" || state === "failed")
-      errors.push(`Could not remove retired built-in skill ${skill.name}.`);
+    const result = await removeSeededBuiltin(folder, skill.name, fs);
+    if (result === "failed") errors.push(`Could not remove retired built-in skill ${skill.name}.`);
   }
   const gated = new Set(
     planManagedBuiltins({
@@ -84,10 +82,8 @@ export async function reconcileBuiltinSkills(options: ReconcileBuiltinOptions): 
   }
   for (const skill of ALL_MANAGED_SKILLS) {
     if (enabledAgents[skill.name].length > 0) continue;
-    await removeSeededBuiltin(folder, skill.name, fs);
-    const state = await inspectBuiltinSkill(folder, skill.name, fs);
-    if (state === "seeded" || state === "failed")
-      errors.push(`Could not remove disabled built-in skill ${skill.name}.`);
+    const result = await removeSeededBuiltin(folder, skill.name, fs);
+    if (result === "failed") errors.push(`Could not remove disabled built-in skill ${skill.name}.`);
   }
   if (errors.length > 0) throw new Error(errors.join(" "));
 }
