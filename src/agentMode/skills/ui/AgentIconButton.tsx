@@ -31,6 +31,8 @@ export const AgentIconButton: React.FC<AgentIconButtonProps> = ({
   title,
   size = "md",
 }) => {
+  // Obsidian uses aria-label for its tooltip; title would add a second native tooltip.
+  // https://github.com/logancyang/obsidian-copilot/issues/3022
   const label = agentName ?? agentId;
   return (
     <div
@@ -47,7 +49,6 @@ export const AgentIconButton: React.FC<AgentIconButtonProps> = ({
           onClick?.();
         }
       }}
-      title={title}
       aria-pressed={enabled}
       aria-label={title ?? `${enabled ? "Disable" : "Enable"} ${label}`}
       className={cn(

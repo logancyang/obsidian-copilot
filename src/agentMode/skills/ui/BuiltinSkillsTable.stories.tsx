@@ -19,7 +19,7 @@ const args: BuiltinSkillsTableProps = {
     { id: "opencode", displayName: "OpenCode", Icon: Bot },
   ],
   availableAgents: ["claude", "codex"],
-  pending: false,
+  pendingSkills: [],
   onToggleSkill: noop,
   onToggleAgent: noop,
 };
@@ -40,14 +40,14 @@ export const DisabledSkill: StoryObj<BuiltinSkillsTableProps> = {
 export const NoAgents: StoryObj<BuiltinSkillsTableProps> = {
   args: { ...args, availableAgents: [] },
 };
-export const FeatureUnavailable: StoryObj<BuiltinSkillsTableProps> = {
+export const NameCollision: StoryObj<BuiltinSkillsTableProps> = {
   args: {
     ...args,
     skills: [
       {
         ...args.skills[0],
-        name: "miyo-search",
-        unavailableReason: "Enable the Miyo search skill in Miyo settings to use this skill.",
+        unavailableReason:
+          "A skill with this name already exists in Your Skills. Your file is kept unchanged.",
       },
     ],
   },
@@ -57,5 +57,16 @@ export const CleanupError: StoryObj<BuiltinSkillsTableProps> = {
     ...args,
     error:
       "Your preference is saved, but some skill files could not be removed. Check folder permissions and try again.",
+  },
+};
+
+export const UpdatingOneSkill: StoryObj<BuiltinSkillsTableProps> = {
+  args: {
+    ...args,
+    pendingSkills: [args.skills[0].name],
+    skills: [
+      ...args.skills,
+      { ...args.skills[0], name: "copilot-read-pdf", description: "Read a PDF document." },
+    ],
   },
 };

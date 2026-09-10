@@ -20,7 +20,7 @@ function props(): BuiltinSkillsTableProps {
       { id: "opencode", displayName: "OpenCode", Icon: Bot },
     ],
     availableAgents: ["claude"],
-    pending: false,
+    pendingSkills: [],
     onToggleSkill: jest.fn(),
     onToggleAgent: jest.fn(),
   };
@@ -34,6 +34,35 @@ describe("BuiltinSkillsTable", () => {
     Element.prototype.scrollIntoView = () => {};
   });
   describe("BuiltinSkillsTable()", () => {
+    it(`does not render unrelated rows when a skill menu opens or its preference changes for ${issue}`, () => {
+      const p = props();
+      const Icon = jest.fn(() => <span />);
+      p.agents = [{ id: "claude", displayName: "Claude", Icon }];
+      p.skills = [p.skills[0], { ...p.skills[0], name: "other" }];
+      const { rerender } = render(<BuiltinSkillsTable {...p} />);
+      expect(Icon).toHaveBeenCalledTimes(2);
+      fireEvent.pointerDown(screen.getByLabelText("More actions for transcript"), {
+        button: 0,
+        ctrlKey: false,
+      });
+      expect(Icon).toHaveBeenCalledTimes(3);
+      Icon.mockClear();
+      rerender(
+        <BuiltinSkillsTable
+          {...p}
+          availableAgents={[...p.availableAgents]}
+          skills={p.skills.map((skill) => ({
+            ...skill,
+            enabledAgents: [...skill.enabledAgents],
+            enabled: skill.name !== "transcript",
+          }))}
+        />
+      );
+      expect(Icon).toHaveBeenCalledTimes(1);
+      expect(
+        screen.getByRole("button", { name: "other for Claude" }).getAttribute("aria-disabled")
+      ).toBe("false");
+    });
     it(`labels a disabled skill and removes the label when re-enabled for ${issue}`, () => {
       const p = props();
       const { rerender } = render(
@@ -75,7 +104,7 @@ describe("BuiltinSkillsTable", () => {
             unavailableReason: state === "unavailable" ? "Requires Miyo" : undefined,
           },
         ];
-        p.pending = state === "pending";
+        p.pendingSkills = state === "pending" ? ["transcript"] : [];
         render(<BuiltinSkillsTable {...p} />);
         const agent = screen.getByRole("button", { name: "transcript for Claude" });
         expect(agent.getAttribute("aria-disabled")).toBe("true");

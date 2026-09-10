@@ -112,6 +112,72 @@ describe("SkillsSettings", () => {
       settingsStore.set(settingsAtom, { ...DEFAULT_SETTINGS, copilotFolder: "copilot" });
     });
 
+    it.each<[boolean, "plus" | "miyo", boolean, boolean]>([
+      [false, "plus", false, false],
+      [true, "plus", true, false],
+      [false, "miyo", false, true],
+      [true, "miyo", true, true],
+    ])(
+      "shows Miyo tools only for enabled feature settings (%s, %s) for https://github.com/logancyang/obsidian-copilot/issues/3022",
+      async (search, documents, showSearch, showParse) => {
+        const initial = settingsStore.get(settingsAtom);
+        settingsStore.set(settingsAtom, {
+          ...initial,
+          enableMiyoSearchSkill: search,
+          docProcessorBackend: documents,
+        });
+        await act(async () => {
+          renderSettings();
+        });
+        expect(
+          Boolean(screen.queryByRole("button", { name: "More actions for miyo-search" }))
+        ).toBe(showSearch);
+        expect(Boolean(screen.queryByRole("button", { name: "More actions for miyo-parse" }))).toBe(
+          showParse
+        );
+        expect(
+          screen.queryByText("Unavailable with your current Miyo search or document settings.")
+        ).toBeNull();
+      }
+    );
+
+    it("keeps other skill rows interactive during overlapping updates for https://github.com/logancyang/obsidian-copilot/issues/3022", async () => {
+      mockAgents = [{ id: "claude", displayName: "Claude", Icon: Bot }];
+      mockInstallStates = { claude: { kind: "ready", source: "custom" } };
+      let finishFirst!: (value: { ok: true }) => void;
+      let finishSecond!: (value: { ok: true }) => void;
+      setBuiltinAgentEnabled
+        .mockReturnValueOnce(
+          new Promise((resolve) => {
+            finishFirst = resolve;
+          })
+        )
+        .mockReturnValueOnce(
+          new Promise((resolve) => {
+            finishSecond = resolve;
+          })
+        );
+      await act(async () => {
+        renderSettings();
+      });
+      const buttons = screen
+        .getAllByRole("button")
+        .filter((button) => button.getAttribute("aria-pressed") === "true");
+      fireEvent.click(buttons[0]);
+      expect(buttons[0].getAttribute("aria-disabled")).toBe("true");
+      expect(buttons[1].getAttribute("aria-disabled")).toBe("false");
+      fireEvent.click(buttons[1]);
+      await act(async () => {
+        finishFirst({ ok: true });
+      });
+      expect(buttons[0].getAttribute("aria-disabled")).toBe("false");
+      expect(buttons[1].getAttribute("aria-disabled")).toBe("true");
+      await act(async () => {
+        finishSecond({ ok: true });
+      });
+      expect(buttons[1].getAttribute("aria-disabled")).toBe("false");
+    });
+
     it("keeps disabled catalog rows visible and restores through saved preferences for https://github.com/logancyang/obsidian-copilot/issues/3022", async () => {
       const initial = settingsStore.get(settingsAtom);
       settingsStore.set(settingsAtom, {

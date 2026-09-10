@@ -5,6 +5,11 @@ import { AgentIconButton } from "./AgentIconButton";
 
 describe("AgentIconButton", () => {
   describe("AgentIconButton()", () => {
+    it("uses one Obsidian tooltip without a native title for https://github.com/logancyang/obsidian-copilot/issues/3022", () => {
+      render(<AgentIconButton Icon={Bot} agentId="claude" enabled title="Transcript for Claude" />);
+      const button = screen.getByRole("button", { name: "Transcript for Claude" });
+      expect(button.hasAttribute("title")).toBe(false);
+    });
     it("supports pointer and keyboard activation", () => {
       const onClick = jest.fn();
       render(<AgentIconButton Icon={Bot} agentId="claude" enabled onClick={onClick} />);

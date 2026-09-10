@@ -1,6 +1,6 @@
 import { availableBuiltinAgents } from "@/agentMode/skills/builtin/reconcileBuiltinSkills";
 import { useBackendInstallStates } from "@/agentMode/session/useBackendInstallStates";
-import { ALL_MANAGED_SKILLS, planManagedBuiltins } from "@/agentMode/skills/builtin/builtinSkills";
+import { planManagedBuiltins } from "@/agentMode/skills/builtin/builtinSkills";
 import { parseSkillFile } from "@/agentMode/skills/skillFormat";
 import { BuiltinSkillsTable } from "./BuiltinSkillsTable";
 import { formatSkillDisplayName } from "@/agentMode/skills/mergeDiscovery";
@@ -85,7 +85,7 @@ export const SkillsSettings: React.FC = () => {
   const epermSeen = useEpermSeen();
 
   const [searchValue, setSearchValue] = useState("");
-  const [builtinPending, setBuiltinPending] = useState(false);
+  const [builtinPending, setBuiltinPending] = useState<readonly string[]>([]);
   const [builtinError, setBuiltinError] = useState<string>();
   const [refreshError, setRefreshError] = useState<string>();
   const userSkills = useMemo(() => skills.filter((skill) => !skill.builtin), [skills]);
@@ -102,58 +102,74 @@ export const SkillsSettings: React.FC = () => {
     documents: settings.docProcessorBackend === "miyo",
   }).seed;
   // https://github.com/logancyang/obsidian-copilot/issues/3022
-  // Catalog rows survive file removal so users can restore disabled built-ins.
-  const builtinRows = ALL_MANAGED_SKILLS.map((skill) => {
-    const preference = settings.agentMode?.skills?.builtinPreferences?.[skill.name];
-    // Rejected user files still occupy their canonical path and cannot be overwritten.
-    // https://github.com/logancyang/obsidian-copilot/issues/3022
-    const collision =
-      userSkills.some(
-        (userSkill) => userSkill.name === skill.name && userSkill.location.kind === "canonical"
-      ) ||
-      rejectedSkills.some(
-        (rejected) =>
-          toVaultRelative(rejected.dirPath, getVaultBase(app)) === `${skillsFolder}/${skill.name}`
-      );
-    return {
-      name: skill.name,
-      description: parseSkillFile(skill.skillMd, skill.name).frontmatter.description,
-      content: skill.skillMd,
-      enabled: preference?.disabled !== true,
-      enabledAgents: skill.enabledAgents.filter(
-        (agent) => !preference?.disabledAgents?.includes(agent)
-      ),
-      unavailableReason: collision
-        ? "A skill with this name already exists in Your Skills. Your file is kept unchanged."
-        : !eligibleBuiltins.includes(skill)
-          ? "Unavailable with your current Miyo search or document settings."
-          : undefined,
-    };
-  }).filter((skill) =>
-    `${skill.name} ${skill.description}`.toLowerCase().includes(searchValue.trim().toLowerCase())
-  );
-
-  const handleBuiltinChange = async (name: string, enabled: boolean, agent?: string) => {
-    setBuiltinPending(true);
-    setBuiltinError(undefined);
-    try {
-      const manager = SkillManager.getInstance();
-      const result =
-        agent === undefined
-          ? await manager.setBuiltinSkillEnabled(name, enabled)
-          : await manager.setBuiltinAgentEnabled(name, agent, enabled);
-      if (!result.ok) setBuiltinError(result.message);
-      // Successful mutations include reconciliation, so an older refresh failure is resolved.
+  // Eligible catalog rows survive file removal so users can restore disabled built-ins.
+  // Miyo tools stay hidden until their feature setting enables them.
+  const builtinRows = eligibleBuiltins
+    .map((skill) => {
+      const preference = settings.agentMode?.skills?.builtinPreferences?.[skill.name];
+      // Rejected user files still occupy their canonical path and cannot be overwritten.
       // https://github.com/logancyang/obsidian-copilot/issues/3022
-      else setRefreshError(undefined);
-    } catch (error) {
-      setBuiltinError(
-        `Could not update ${name}: ${error instanceof Error ? error.message : String(error)}`
-      );
-    } finally {
-      setBuiltinPending(false);
-    }
-  };
+      const collision =
+        userSkills.some(
+          (userSkill) => userSkill.name === skill.name && userSkill.location.kind === "canonical"
+        ) ||
+        rejectedSkills.some(
+          (rejected) =>
+            toVaultRelative(rejected.dirPath, getVaultBase(app)) === `${skillsFolder}/${skill.name}`
+        );
+      return {
+        name: skill.name,
+        description: parseSkillFile(skill.skillMd, skill.name).frontmatter.description,
+        content: skill.skillMd,
+        enabled: preference?.disabled !== true,
+        enabledAgents: skill.enabledAgents.filter(
+          (agent) => !preference?.disabledAgents?.includes(agent)
+        ),
+        unavailableReason: collision
+          ? "A skill with this name already exists in Your Skills. Your file is kept unchanged."
+          : undefined,
+      };
+    })
+    .filter((skill) =>
+      `${skill.name} ${skill.description}`.toLowerCase().includes(searchValue.trim().toLowerCase())
+    );
+
+  const handleBuiltinChange = useCallback(
+    async (name: string, enabled: boolean, agent?: string) => {
+      setBuiltinPending((names) => [...names, name]);
+      setBuiltinError(undefined);
+      try {
+        const manager = SkillManager.getInstance();
+        const result =
+          agent === undefined
+            ? await manager.setBuiltinSkillEnabled(name, enabled)
+            : await manager.setBuiltinAgentEnabled(name, agent, enabled);
+        if (!result.ok) setBuiltinError(result.message);
+        // Successful mutations include reconciliation, so an older refresh failure is resolved.
+        // https://github.com/logancyang/obsidian-copilot/issues/3022
+        else setRefreshError(undefined);
+      } catch (error) {
+        setBuiltinError(
+          `Could not update ${name}: ${error instanceof Error ? error.message : String(error)}`
+        );
+      } finally {
+        setBuiltinPending((names) => names.filter((pendingName) => pendingName !== name));
+      }
+    },
+    []
+  );
+  const handleToggleBuiltinSkill = useCallback(
+    (name: string, enabled: boolean) => {
+      void handleBuiltinChange(name, enabled);
+    },
+    [handleBuiltinChange]
+  );
+  const handleToggleBuiltinAgent = useCallback(
+    (name: string, agent: string, enabled: boolean) => {
+      void handleBuiltinChange(name, enabled, agent);
+    },
+    [handleBuiltinChange]
+  );
 
   // Anchor for Radix portals on this tab (e.g. SkillRow's overflow menu).
   // Portaling into the tab's own DOM keeps menus inside Obsidian's Settings
@@ -428,14 +444,10 @@ export const SkillsSettings: React.FC = () => {
         skills={builtinRows}
         agents={agents}
         availableAgents={availableAgents}
-        pending={builtinPending}
+        pendingSkills={builtinPending}
         error={builtinError}
-        onToggleSkill={(name, enabled) => {
-          void handleBuiltinChange(name, enabled);
-        }}
-        onToggleAgent={(name, agent, enabled) => {
-          void handleBuiltinChange(name, enabled, agent);
-        }}
+        onToggleSkill={handleToggleBuiltinSkill}
+        onToggleAgent={handleToggleBuiltinAgent}
       />
     </div>
   );
