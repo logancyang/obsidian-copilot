@@ -383,7 +383,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     defaultIncludeActiveNote: settings.autoAddActiveContentToContext === true,
   });
   const setDraftInput = draft.setInput;
-  useChatRelevantNotesContext(app, rootEl, chatInputId, draft, messages, activeProject);
+  useChatRelevantNotesContext(app, rootEl, chatInputId, draft, messages);
 
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/166
   // The manager binds a handoff draft to the new chat input before publishing

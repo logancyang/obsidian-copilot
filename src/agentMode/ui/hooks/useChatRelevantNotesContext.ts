@@ -1,13 +1,12 @@
 import type { AgentChatMessage } from "@/agentMode/session/types";
 import type { AgentInputDraftControls } from "@/agentMode/ui/hooks/useAgentInputDrafts";
-import { useSelectedTextContexts, type ProjectConfig } from "@/aiParams";
+import { useSelectedTextContexts } from "@/aiParams";
 import { useActiveFile } from "@/hooks/useActiveFile";
 import { getMiyoFilePath, getMiyoFolderName } from "@/miyo/miyoUtils";
 import {
   getChatRelevantNotesStore,
   type ChatRelevantNotesContext,
 } from "@/search/chatRelevantNotesContext";
-import { getMatchingPatterns, shouldIndexFile } from "@/search/searchUtils";
 import { App, MarkdownView, TFile } from "obsidian";
 import { useEffect, useMemo, useRef } from "react";
 
@@ -17,30 +16,17 @@ import { useEffect, useMemo, useRef } from "react";
  * @param id - Logical input identity, isolated across session/project switches.
  * @param draft - Current composition and its attachment setters.
  * @param messages - Visible message store, including in-flight response state.
- * @param project - Current project's explicit source configuration.
  */
 export function useChatRelevantNotesContext(
   app: App,
   root: HTMLElement | null,
   id: string,
   draft: AgentInputDraftControls,
-  messages: AgentChatMessage[],
-  project: ProjectConfig | undefined
+  messages: AgentChatMessage[]
 ): void {
   const store = getChatRelevantNotesStore(app);
   const activeFile = useActiveFile();
   const [selections] = useSelectedTextContexts();
-  const projectFiles = useMemo(() => {
-    const { inclusions, exclusions } = getMatchingPatterns({
-      ...project?.contextSource,
-      isProject: true,
-    });
-    return inclusions
-      ? app.vault
-          .getFiles()
-          .filter((file) => shouldIndexFile(app, file, inclusions, exclusions, true))
-      : [];
-  }, [app, project?.contextSource]);
   // The unfinished assistant tail belongs to the running turn. Derive that
   // boundary on mount and session changes instead of retaining partial text.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/383
@@ -55,7 +41,6 @@ export function useChatRelevantNotesContext(
     message.context ? [message.context] : []
   );
   const files = [
-    ...projectFiles,
     ...contexts.flatMap((context) => context.notes),
     ...draft.contextNotes,
     ...(draft.includeActiveNote && activeFile ? [activeFile] : []),
