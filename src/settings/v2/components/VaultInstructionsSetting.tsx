@@ -1,3 +1,4 @@
+import { SettingItem } from "@/components/ui/setting-item";
 import { Button } from "@/components/ui/button";
 import { InstructionsTextarea } from "@/instructions/InstructionsTextarea";
 import { ArrowUpRight } from "lucide-react";
@@ -18,19 +19,17 @@ export const VaultInstructionsSetting: React.FC<VaultInstructionsSettingProps> =
   onOpen,
 }) => (
   <div className="tw-flex tw-w-full tw-flex-col tw-gap-4 tw-py-4">
-    <div className="tw-grid tw-w-full tw-grid-cols-[minmax(0,1fr)_auto] tw-items-center tw-gap-4">
-      <div className="tw-space-y-1.5">
-        <div className="tw-text-sm tw-font-medium tw-leading-none">Custom vault instructions</div>
-        <div className="tw-text-xs tw-text-muted">
-          Your custom instructions for the agent to follow for every vault interaction. Saved to
-          AGENTS.md in your vault root, which you can also edit as a note.
-        </div>
-      </div>
-      <Button variant="secondary" onClick={onOpen}>
+    <SettingItem
+      type="custom"
+      title="Custom vault instructions"
+      description="Your custom instructions for the agent to follow for every vault interaction. Saved to AGENTS.md in your vault root, which you can also edit as a note."
+      className="tw-py-0"
+    >
+      <Button variant="secondary" onClick={onOpen} className="tw-w-full @lg/setting-row:tw-w-auto">
         <ArrowUpRight className="tw-size-4" />
         Open AGENTS.md
       </Button>
-    </div>
+    </SettingItem>
     <InstructionsTextarea label="Custom vault instructions" value={value} onChange={onChange} />
   </div>
 );

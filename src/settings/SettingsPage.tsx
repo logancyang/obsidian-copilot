@@ -16,7 +16,7 @@ export class CopilotSettingTab extends PluginSettingTab {
   display(): void {
     const { containerEl } = this;
     containerEl.empty();
-    containerEl.addClass("tw-select-text");
+    containerEl.addClass("tw-select-text", "copilot-settings-content");
     const div = containerEl.createDiv("div");
     const sections = createPluginRoot(div, this.app);
 
