@@ -114,22 +114,22 @@ export function useChatRelevantNotesContext(
       0
     ) +
     (draft.includeActiveWebTab ? 1 : 0);
-  const key = JSON.stringify([id, snapshot, skippedAttachments]);
+  // Equal retrieval content must keep its identity across streaming renders.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/383
+  const key = JSON.stringify({ id, request: snapshot, skippedAttachments });
+  const { setContextNotes } = draft;
   const current = useMemo<ChatRelevantNotesContext>(
     () => ({
-      id,
-      request: snapshot,
-      skippedAttachments,
+      ...(JSON.parse(key) as Omit<ChatRelevantNotesContext, "addFile">),
       addFile: (path) => {
         const file = app.vault.getAbstractFileByPath(path);
         if (file instanceof TFile)
-          draft.setContextNotes((notes) =>
+          setContextNotes((notes) =>
             notes.some((note) => note.path === path) ? notes : [...notes, file]
           );
       },
     }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- serialized context defines retrieval identity
-    [key, app, draft.setContextNotes]
+    [key, app, setContextNotes]
   );
   const currentRef = useRef(current);
   currentRef.current = current;
