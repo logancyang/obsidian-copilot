@@ -38,7 +38,9 @@ export const CopilotFolderChangeNotice: React.FC<CopilotFolderChangeNoticeProps>
             aria-hidden="true"
           />
           <span>
-            <strong>Markdown files in this folder will be excluded from Copilot search.</strong>{" "}
+            <span className={cn("tw-font-semibold tw-text-normal")}>
+              Markdown files in this folder will be excluded from Copilot search.
+            </span>{" "}
             This includes regular notes. The exclusion is permanent, even if you change the Copilot
             folder later.
           </span>
@@ -59,8 +61,10 @@ export const CopilotFolderChangeNotice: React.FC<CopilotFolderChangeNoticeProps>
         </div>
       </dl>
       <p className={cn("tw-m-0 tw-text-sm tw-text-muted")}>
-        <strong className={cn("tw-text-normal")}>Files are not moved automatically.</strong> New
-        chats and data will use the new folder. You can move existing files yourself; Obsidian
+        <span className={cn("tw-font-semibold tw-text-normal")}>
+          Files are not moved automatically.
+        </span>{" "}
+        New chats and data will use the new folder. You can move existing files yourself; Obsidian
         updates the links.
       </p>
       <p className={cn("tw-m-0 tw-text-sm tw-text-muted")}>
