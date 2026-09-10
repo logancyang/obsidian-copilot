@@ -28,7 +28,7 @@ export const SkillLoadIssues: React.FC<SkillLoadIssuesProps> = ({ issues, onView
 
   return (
     <section
-      className="tw-flex tw-items-center tw-justify-between tw-gap-3 tw-rounded-sm tw-border tw-border-solid tw-p-3 tw-text-ui-smaller tw-bg-warning/10 tw-border-warning/40"
+      className="tw-flex tw-items-center tw-justify-between tw-gap-3 tw-rounded-sm tw-border tw-border-solid tw-p-3 tw-text-left tw-text-ui-smaller tw-bg-warning/10 tw-border-warning/40"
       role="alert"
       aria-label={title}
     >
@@ -130,7 +130,7 @@ export class SkillLoadIssuesModal extends ReactModal {
 
 /** Empty loaded-list copy shown when every discovered skill needs repair. */
 export const AllSkillsNotLoaded: React.FC = () => (
-  <div className="tw-rounded-sm tw-border tw-border-dashed tw-border-border tw-bg-primary tw-px-3 tw-py-6 tw-text-center tw-text-ui-smaller tw-text-muted">
+  <div className="tw-rounded-sm tw-border tw-border-dashed tw-border-border tw-bg-primary tw-px-3 tw-py-6 tw-text-left tw-text-ui-smaller tw-text-muted">
     No skills are loaded yet. Choose View details above to repair a SKILL.md. When it loads
     successfully, it will move into the loaded list.
   </div>

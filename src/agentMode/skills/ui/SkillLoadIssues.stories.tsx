@@ -96,3 +96,14 @@ export const LongDescriptionPreview: StoryObj<SkillLoadIssuesProps> = {
     />
   ),
 };
+
+/** Recovery guidance retains its reading edge even when a surrounding host centers content. */
+export const CenteredParent: StoryObj<SkillLoadIssuesProps> = {
+  args: { issues: ISSUES, onViewDetails: noop },
+  render: (args) => (
+    <div className="tw-space-y-4 tw-text-center">
+      <SkillLoadIssues issues={args.issues ?? ISSUES} onViewDetails={noop} />
+      <AllSkillsNotLoaded />
+    </div>
+  ),
+};
