@@ -2,6 +2,7 @@ import * as Obsidian from "obsidian";
 import { TFile } from "obsidian";
 import {
   checkLatestVersion,
+  isNewerVersion,
   extractNoteFiles,
   extractTemplateNoteFiles,
   formatDateTime,
@@ -346,6 +347,20 @@ describe("getNotesFromTags", () => {
 });
 
 describe("utils", () => {
+  describe("isNewerVersion()", () => {
+    it.each([
+      ["4.0.8", "4.0.7", true],
+      ["4.0.8", "4.0.7-dev.abc", true],
+      ["4.0.8", "4.0.7+build.123", true],
+      ["4.0.7", "4.0.7", false],
+      ["4.0.7", "4.0.7-dev.abc", false],
+      ["4.0.7", "4.0.8", false],
+      ["4.1.0", "4.0.9", true],
+      ["5.0.0", "4.9.9", true],
+    ])("compares release %s with installed %s as %s", (latest, current, expected) => {
+      expect(isNewerVersion(latest, current)).toBe(expected);
+    });
+  });
   describe("checkLatestVersion()", () => {
     const issueUrl = "https://github.com/Brevilabs/obsidian-copilot-private/issues/317";
     const mockedRequestUrl = Obsidian.requestUrl as jest.MockedFunction<typeof Obsidian.requestUrl>;
@@ -354,18 +369,26 @@ describe("utils", () => {
       mockedRequestUrl.mockReset();
     });
 
-    it(`returns the release body and destination from the version-check request for ${issueUrl}`, async () => {
-      mockedRequestUrl.mockResolvedValue({
-        status: 200,
-        text: "",
-        json: {
-          tag_name: "v4.0.4",
-          body: "# Copilot 4.0.4",
-          html_url: "https://github.com/logancyang/obsidian-copilot/releases/tag/4.0.4",
-        },
-        arrayBuffer: new ArrayBuffer(0),
-        headers: {},
-      });
+    const manifestUrl =
+      "https://github.com/logancyang/obsidian-copilot/releases/download/v4.0.4/manifest.json";
+    const response = (json: unknown): Obsidian.RequestUrlResponse => ({
+      status: 200,
+      text: "",
+      json,
+      arrayBuffer: new ArrayBuffer(0),
+      headers: {},
+    });
+    const releaseResponse = {
+      tag_name: "v4.0.3",
+      body: "# Copilot 4.0.4",
+      html_url: "https://github.com/logancyang/obsidian-copilot/releases/tag/v4.0.4",
+      assets: [{ name: "manifest.json", browser_download_url: manifestUrl }],
+    };
+
+    it(`returns release notes with the manifest version even when the tag differs for ${issueUrl}`, async () => {
+      mockedRequestUrl
+        .mockResolvedValueOnce(response(releaseResponse))
+        .mockResolvedValueOnce(response({ version: "4.0.4" }));
 
       await expect(checkLatestVersion()).resolves.toEqual({
         version: "4.0.4",
@@ -373,34 +396,93 @@ describe("utils", () => {
         release: {
           version: "4.0.4",
           body: "# Copilot 4.0.4",
-          htmlUrl: "https://github.com/logancyang/obsidian-copilot/releases/tag/4.0.4",
+          htmlUrl: releaseResponse.html_url,
         },
       });
-      expect(mockedRequestUrl).toHaveBeenCalledTimes(1);
+      expect(mockedRequestUrl).toHaveBeenNthCalledWith(1, {
+        url: "https://api.github.com/repos/logancyang/obsidian-copilot/releases/latest",
+        method: "GET",
+      });
+      expect(mockedRequestUrl).toHaveBeenNthCalledWith(2, {
+        url: manifestUrl,
+        method: "GET",
+      });
+      expect(mockedRequestUrl).toHaveBeenCalledTimes(2);
     });
 
-    it("returns an error when GitHub does not provide a release tag", async () => {
-      mockedRequestUrl.mockResolvedValue({
-        status: 200,
-        text: "",
-        json: {},
-        arrayBuffer: new ArrayBuffer(0),
-        headers: {},
-      });
+    it.each([
+      undefined,
+      [],
+      [{ name: "main.js", browser_download_url: manifestUrl }],
+      [{ name: "manifest.json" }],
+    ])(
+      "returns an error when the release has no downloadable manifest asset (%j)",
+      async (assets) => {
+        mockedRequestUrl.mockResolvedValueOnce(response({ ...releaseResponse, assets }));
+        await expect(checkLatestVersion()).resolves.toEqual({
+          version: null,
+          error: "The latest Copilot release has no manifest.json asset.",
+          release: null,
+        });
+        expect(mockedRequestUrl).toHaveBeenCalledTimes(1);
+      }
+    );
 
+    it.each([undefined, null, 404, "", "v4.0.4", "4.0", "4.0.x", "4.0.4-", "04.0.4"])(
+      "returns an error for malformed manifest version %j",
+      async (version) => {
+        mockedRequestUrl
+          .mockResolvedValueOnce(response(releaseResponse))
+          .mockResolvedValueOnce(response({ version }));
+        await expect(checkLatestVersion()).resolves.toEqual({
+          version: null,
+          error: "The latest Copilot manifest has no valid version.",
+          release: null,
+        });
+      }
+    );
+
+    it.each(["4.0.4-beta.1", "4.0.4+build.123", "4.0.4-beta.1+build.123"])(
+      "preserves valid manifest version suffixes in %s",
+      async (version) => {
+        mockedRequestUrl
+          .mockResolvedValueOnce(response(releaseResponse))
+          .mockResolvedValueOnce(response({ version }));
+        await expect(checkLatestVersion()).resolves.toMatchObject({ version, error: null });
+      }
+    );
+
+    it("keeps the manifest version when optional release notes are absent", async () => {
+      mockedRequestUrl
+        .mockResolvedValueOnce(response({ assets: releaseResponse.assets }))
+        .mockResolvedValueOnce(response({ version: "4.0.4" }));
       await expect(checkLatestVersion()).resolves.toEqual({
-        version: null,
-        error: "The latest Copilot release has no version tag.",
-        release: null,
+        version: "4.0.4",
+        error: null,
+        release: {
+          version: "4.0.4",
+          body: "",
+          htmlUrl: "https://github.com/logancyang/obsidian-copilot/releases/latest",
+        },
       });
     });
 
     it("returns the request error when GitHub cannot be reached", async () => {
       mockedRequestUrl.mockRejectedValue(new Error("offline"));
-
       await expect(checkLatestVersion()).resolves.toEqual({
         version: null,
         error: "offline",
+        release: null,
+      });
+    });
+
+    it("returns the manifest request error without falling back to the release tag", async () => {
+      mockedRequestUrl
+        .mockResolvedValueOnce(response(releaseResponse))
+        .mockRejectedValueOnce(new Error("manifest unavailable"));
+      await expect(checkLatestVersion()).resolves.toEqual({
+        version: null,
+        error: "manifest unavailable",
         release: null,
       });
     });

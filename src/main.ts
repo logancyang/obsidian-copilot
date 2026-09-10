@@ -1,3 +1,4 @@
+import { startReleaseUpdateCheck } from "@/services/releaseUpdateNotice";
 import type { AgentSessionManager, SkillManager } from "@/agentMode";
 // Deep import (not the barrel): these run on the load path for every
 // platform, and the barrel pulls Node-only modules that crash mobile.
@@ -197,6 +198,7 @@ export default class CopilotPlugin extends Plugin {
     resetPersistenceState();
     KeychainService.resetInstance();
     KeychainService.getInstance(this.app);
+    this.register(startReleaseUpdateCheck(this.app, this.manifest.version));
     await this.loadSettings();
     this.modelManagement = createModelManagement({
       app: this.app,
