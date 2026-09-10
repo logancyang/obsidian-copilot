@@ -13,14 +13,8 @@ const LOADING = Object.freeze({
  * @param app - Vault and workspace source.
  * @param enabled - Whether Live is enabled.
  * @param connectionKey - Endpoint/credential identity invalidating outstanding work.
- * @param mock - Explicit fixture mode for local UI verification.
  */
-export function useChatRelevantNotes(
-  app: App,
-  enabled: boolean,
-  connectionKey: string,
-  mock: boolean
-) {
+export function useChatRelevantNotes(app: App, enabled: boolean, connectionKey: string) {
   const store = getChatRelevantNotesStore(app);
   const selected = useSyncExternalStore(store.subscribe, store.getSnapshot);
   const request = selected?.request;
@@ -53,7 +47,7 @@ export function useChatRelevantNotes(
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/383
     const timer = window.setTimeout(
       () => {
-        void findChatRelevantNotes(app, context, mock).then((result) => {
+        void findChatRelevantNotes(app, context).then((result) => {
           if (!cancelled) setSettled({ id: context.id, connectionKey, result });
         });
       },
@@ -63,7 +57,7 @@ export function useChatRelevantNotes(
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [app, context, connectionKey, mock, revision]); // eslint-disable-line react-hooks/exhaustive-deps -- settled rows must not retrigger retrieval
+  }, [app, context, connectionKey, revision]); // eslint-disable-line react-hooks/exhaustive-deps -- settled rows must not retrigger retrieval
   // Results from an old server or credential scope must disappear immediately.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/383
   const result =

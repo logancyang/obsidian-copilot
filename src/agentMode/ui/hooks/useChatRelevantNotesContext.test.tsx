@@ -58,8 +58,82 @@ describe("useChatRelevantNotesContext", () => {
         setContextNotes: jest.fn(),
       } as unknown as AgentInputDraftControls;
     });
-    afterEach(() => root.remove());
-    it("sends literal excerpts, project references and visible prose only (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", () => {
+    afterEach(() => {
+      root.remove();
+      jest.restoreAllMocks();
+    });
+
+    it.each(["pointerdown", "focusin"])(
+      "selects the chat draft as the Relevant Notes source when its surface receives %s (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)",
+      (event) => {
+        renderHook(() =>
+          useChatRelevantNotesContext(
+            app,
+            root,
+            "embeddings-chat",
+            { ...draft, input: "How do embeddings work?" },
+            [],
+            undefined
+          )
+        );
+        const store = getChatRelevantNotesStore(app);
+        expect(store.getSnapshot()).toBeNull();
+
+        act(() => {
+          root.dispatchEvent(new Event(event, { bubbles: true }));
+        });
+
+        expect(store.getSnapshot()).toMatchObject({
+          id: "embeddings-chat",
+          request: {
+            folder_name: "Vault",
+            draft: "How do embeddings work?",
+            messages: [],
+            limit: 20,
+          },
+        });
+      }
+    );
+
+    it("updates the selected chat's retrieval draft when the composer text changes (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", () => {
+      const { rerender } = renderHook(
+        ({ input }) =>
+          useChatRelevantNotesContext(
+            app,
+            root,
+            "embeddings-chat",
+            { ...draft, input },
+            [],
+            undefined
+          ),
+        { initialProps: { input: "How do embeddings work?" } }
+      );
+      act(() => {
+        root.dispatchEvent(new Event("pointerdown"));
+      });
+
+      rerender({ input: "How are embeddings stored?" });
+
+      expect(getChatRelevantNotesStore(app).getSnapshot()).toMatchObject({
+        id: "embeddings-chat",
+        request: { draft: "How are embeddings stored?" },
+      });
+    });
+
+    it("clears the selected chat when its surface unmounts (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", () => {
+      const { unmount } = renderHook(() =>
+        useChatRelevantNotesContext(app, root, "embeddings-chat", draft, [], undefined)
+      );
+      act(() => {
+        root.dispatchEvent(new Event("pointerdown"));
+      });
+      expect(getChatRelevantNotesStore(app).getSnapshot()?.id).toBe("embeddings-chat");
+
+      unmount();
+
+      expect(getChatRelevantNotesStore(app).getSnapshot()).toBeNull();
+    });
+    it("builds retrieval history from visible user messages and assistant text, excluding reasoning and errors (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", () => {
       const assistant: AgentChatMessage = {
         ...user,
         id: "a",
@@ -71,7 +145,25 @@ describe("useChatRelevantNotesContext", () => {
         ],
       };
       renderHook(() =>
-        useChatRelevantNotesContext(app, root, "one", draft, [user, assistant], undefined)
+        useChatRelevantNotesContext(
+          app,
+          root,
+          "one",
+          draft,
+          [
+            user,
+            assistant,
+            { ...user, id: "hidden", isVisible: false, message: "hidden instructions" },
+            {
+              ...assistant,
+              id: "error",
+              isErrorMessage: true,
+              parts: undefined,
+              message: "provider failed",
+            },
+          ],
+          undefined
+        )
       );
       void act(() => root.dispatchEvent(new Event("pointerdown", { bubbles: true })));
       const request = getChatRelevantNotesStore(app).getSnapshot()!.request;
@@ -79,12 +171,20 @@ describe("useChatRelevantNotesContext", () => {
         { role: "user", content: "question" },
         { role: "assistant", content: "answer" },
       ]);
+    });
+
+    it("includes selected excerpts and project file references without implicitly attaching the active note (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", () => {
+      renderHook(() => useChatRelevantNotesContext(app, root, "one", draft, [], undefined));
+
+      act(() => {
+        root.dispatchEvent(new Event("pointerdown"));
+      });
+
+      const request = getChatRelevantNotesStore(app).getSnapshot()!.request;
       expect(request.excerpts).toEqual(["literal excerpt"]);
       expect(request.file_paths).toEqual(["Vault/project.md"]);
-      expect(JSON.stringify(request)).not.toContain("active.md");
-      expect(JSON.stringify(request)).not.toContain("reasoning");
     });
-    it("preserves the sent user while suppressing streamed tokens until completion (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", () => {
+    it("includes the sent question immediately and adds the assistant answer only when streaming finishes (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", () => {
       const { rerender } = renderHook(
         ({ messages, loading }) =>
           useChatRelevantNotesContext(app, root, "one", { ...draft, loading }, messages, undefined),
@@ -102,36 +202,62 @@ describe("useChatRelevantNotesContext", () => {
         messages: [user, { ...user, id: "a", sender: "AI", message: "answer" }],
         loading: false,
       });
-      expect(getChatRelevantNotesStore(app).getSnapshot()!.request.messages).toHaveLength(2);
-    });
-    it("omits a streaming assistant on initial mount and session switch (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", () => {
-      const prior = {
-        ...user,
-        id: "prior",
-        sender: "AI",
-        message: "previous answer",
-        turnStopReason: "end_turn" as const,
-      };
-      const partial = { ...user, id: "partial", sender: "AI", message: "partial answer" };
-      const { rerender } = renderHook(
-        ({ id, loading, messages }) =>
-          useChatRelevantNotesContext(app, root, id, { ...draft, loading }, messages, undefined),
-        { initialProps: { id: "one", loading: true, messages: [prior, user, partial] } }
-      );
-      void act(() => root.dispatchEvent(new Event("pointerdown")));
-      expect(getChatRelevantNotesStore(app).getSnapshot()!.request.messages).toEqual([
-        { role: "assistant", content: "previous answer" },
-        { role: "user", content: "question" },
-      ]);
-      rerender({ id: "two", loading: true, messages: [user, partial] });
       expect(getChatRelevantNotesStore(app).getSnapshot()!.request.messages).toEqual([
         { role: "user", content: "question" },
+        { role: "assistant", content: "answer" },
       ]);
-      rerender({ id: "two", loading: false, messages: [user, { ...partial, message: "final" }] });
-      expect(getChatRelevantNotesStore(app).getSnapshot()!.request.messages?.at(-1)?.content).toBe(
-        "final"
-      );
     });
+    it.each(["mount", "session switch"] as const)(
+      "excludes an unfinished assistant reply after %s while retaining completed history (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)",
+      (entry) => {
+        const prior: AgentChatMessage = {
+          ...user,
+          id: "prior",
+          sender: "AI",
+          message: "previous answer",
+          turnStopReason: "end_turn",
+        };
+        const partial: AgentChatMessage = {
+          ...user,
+          id: "partial",
+          sender: "AI",
+          message: "partial answer",
+        };
+        const streamingMessages = [prior, user, partial];
+        const { rerender } = renderHook(
+          ({ id, messages }) =>
+            useChatRelevantNotesContext(
+              app,
+              root,
+              id,
+              { ...draft, loading: true },
+              messages,
+              undefined
+            ),
+          {
+            initialProps: {
+              id: "first-chat",
+              messages: entry === "mount" ? streamingMessages : [user],
+            },
+          }
+        );
+        act(() => {
+          root.dispatchEvent(new Event("pointerdown"));
+        });
+        if (entry === "session switch")
+          rerender({ id: "second-chat", messages: streamingMessages });
+
+        expect(getChatRelevantNotesStore(app).getSnapshot()).toMatchObject({
+          id: entry === "mount" ? "first-chat" : "second-chat",
+          request: {
+            messages: [
+              { role: "assistant", content: "previous answer" },
+              { role: "user", content: "question" },
+            ],
+          },
+        });
+      }
+    );
     it("retains a completed answer while the next user turn starts (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", () => {
       const prior = {
         ...user,
@@ -151,9 +277,12 @@ describe("useChatRelevantNotesContext", () => {
         )
       );
       void act(() => root.dispatchEvent(new Event("pointerdown")));
-      expect(getChatRelevantNotesStore(app).getSnapshot()!.request.messages).toHaveLength(2);
+      expect(getChatRelevantNotesStore(app).getSnapshot()!.request.messages).toEqual([
+        { role: "assistant", content: "previous answer" },
+        { role: "user", content: "question" },
+      ]);
     });
-    it("retains queued text, excerpts, indexed files and skipped images after composer reset (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", () => {
+    it("uses a queued message's raw text, excerpt, and note reference while counting its URL and image as skipped (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", () => {
       const queue = [
         {
           id: "q",
@@ -228,7 +357,7 @@ describe("useChatRelevantNotesContext", () => {
       ]);
       expect(JSON.stringify(snapshot.request)).not.toContain("private-pixels");
     });
-    it("tracks editor focus with no recommendation consumer mounted (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", () => {
+    it("clears the selected chat when a Markdown editor becomes active even without a Relevant Notes pane (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", () => {
       renderHook(() => useChatRelevantNotesContext(app, root, "one", draft, [], undefined));
       void act(() => root.dispatchEvent(new Event("pointerdown")));
       expect(getChatRelevantNotesStore(app).getSnapshot()?.id).toBe("one");
@@ -238,7 +367,7 @@ describe("useChatRelevantNotesContext", () => {
       void act(() => listener({ view: Object.create(MarkdownView.prototype) }));
       expect(getChatRelevantNotesStore(app).getSnapshot()).toBeNull();
     });
-    it("preserves another source when selecting the real Relevant Notes tab (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", () => {
+    it("keeps the previously selected chat when opening the Relevant Notes shelf tab in another chat (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", () => {
       const { getByRole } = render(
         <AgentHomeShelf
           sections={[
@@ -293,20 +422,49 @@ describe("useChatRelevantNotesContext", () => {
       expect(store.getSnapshot()).toBe(popout);
       focus.mockRestore();
     });
-    it("transfers the focused source on session switch and Add targets that session (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", () => {
+    it("selects the new session's draft when the focused chat switches sessions (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", () => {
       const { rerender } = renderHook(
-        ({ id }) => useChatRelevantNotesContext(app, root, id, draft, [], undefined),
-        { initialProps: { id: "one" } }
+        ({ id, input }) =>
+          useChatRelevantNotesContext(app, root, id, { ...draft, input }, [], undefined),
+        { initialProps: { id: "first-chat", input: "How do embeddings work?" } }
       );
-      void act(() => root.dispatchEvent(new Event("pointerdown")));
-      rerender({ id: "two" });
-      const selected = getChatRelevantNotesStore(app).getSnapshot()!;
-      expect(selected.id).toBe("two");
-      selected.addFile("added.md");
-      const update = (draft.setContextNotes as jest.Mock).mock.calls[0][0];
-      expect(update([])[0].path).toBe("added.md");
+      act(() => {
+        root.dispatchEvent(new Event("pointerdown"));
+      });
+
+      rerender({ id: "second-chat", input: "How does lexical search work?" });
+
+      expect(getChatRelevantNotesStore(app).getSnapshot()).toMatchObject({
+        id: "second-chat",
+        request: { draft: "How does lexical search work?" },
+      });
     });
-    it("preserves editor source when interacting with Relevant Notes (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", () => {
+
+    it("adds a recommended file to the new session's attachments after switching sessions (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", () => {
+      const firstSessionSetter = jest.fn();
+      const secondSessionSetter = jest.fn();
+      const { rerender } = renderHook(
+        ({ id, setContextNotes }) =>
+          useChatRelevantNotesContext(app, root, id, { ...draft, setContextNotes }, [], undefined),
+        { initialProps: { id: "first-chat", setContextNotes: firstSessionSetter } }
+      );
+      act(() => {
+        root.dispatchEvent(new Event("pointerdown"));
+      });
+      rerender({ id: "second-chat", setContextNotes: secondSessionSetter });
+      const existingNote = new (TFile as unknown as new (path: string) => TFile)("Existing.md");
+
+      getChatRelevantNotesStore(app).getSnapshot()!.addFile("Embeddings.md");
+
+      expect(firstSessionSetter).not.toHaveBeenCalled();
+      expect(secondSessionSetter).toHaveBeenCalledTimes(1);
+      const updateAttachments = secondSessionSetter.mock.calls[0][0];
+      expect(updateAttachments([existingNote]).map((note: TFile) => note.path)).toEqual([
+        "Existing.md",
+        "Embeddings.md",
+      ]);
+    });
+    it("keeps the editor as the source when clicking the Relevant Notes popout control (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", () => {
       const { getByRole } = render(
         <RelevantNotesShelfPanel onPopOut={jest.fn()}>
           <span>Notes</span>
