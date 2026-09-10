@@ -186,10 +186,12 @@ describe("Gallery", () => {
         "Gallery/Host Environments/ModelPreferences",
         "Gallery/Host Environments/ResponseActions",
         "UI/Badge/Accent",
+        "UI/Badge/SecondarySurface",
         "UI/Badge/Status",
         "UI/Badge/Success",
         "UI/Badge/Variants",
         "UI/Button/Disabled",
+        "UI/Button/SecondarySurface",
         "UI/Button/Sizes",
         "UI/Button/Variants",
       ]);

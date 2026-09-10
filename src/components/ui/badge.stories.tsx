@@ -32,3 +32,15 @@ export const Variants: StoryObj<BadgeProps> = {
     </div>
   ),
 };
+
+/** Includes transparent and tinted badges on the darker card surface. */
+export const SecondarySurface: StoryObj<BadgeProps> = {
+  render: () => (
+    <div className="tw-flex tw-flex-wrap tw-gap-2 tw-rounded-md tw-bg-secondary tw-p-4">
+      <Badge variant="outline">Outline</Badge>
+      <Badge variant="destructive">Destructive</Badge>
+      <Badge variant="success">Success</Badge>
+      <Badge variant="accent">Accent</Badge>
+    </div>
+  ),
+};

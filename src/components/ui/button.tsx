@@ -4,23 +4,26 @@ import { cva, type VariantProps } from "class-variance-authority";
 
 import { cn } from "@/lib/utils";
 
+// Native accent styles and our utilities must resolve the same readable ink.
+// Keep this theme-variable override local to the shared control.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/406
 const buttonVariants = cva(
   "tw-inline-flex tw-items-center tw-justify-center tw-gap-1 tw-whitespace-nowrap tw-rounded-md tw-text-sm tw-font-medium tw-transition-colors focus-visible:tw-outline-none focus-visible:tw-ring-1 focus-visible:tw-ring-ring disabled:tw-pointer-events-none disabled:tw-opacity-50 [&_svg]:tw-shrink-0",
   {
     variants: {
       variant: {
         default:
-          "mod-cta tw-bg-interactive-accent tw-text-on-accent tw-shadow hover:tw-bg-interactive-accent-hover",
+          "mod-cta tw-bg-interactive-accent tw-text-on-accent tw-shadow [--text-on-accent:var(--text-on-accent-inverted)] hover:tw-bg-interactive-accent-hover",
         destructive:
-          "clickable-icon tw-bg-modifier-error tw-text-on-accent hover:tw-bg-modifier-error hover:tw-text-on-accent",
+          "clickable-icon tw-bg-modifier-error tw-text-on-accent [--text-on-accent:var(--text-on-accent-inverted)] hover:tw-bg-modifier-error hover:tw-text-on-accent",
         secondary: "tw-bg-secondary tw-text-normal tw-shadow-sm hover:tw-bg-interactive-hover",
         ghost:
-          "clickable-icon tw-bg-transparent hover:tw-bg-interactive-accent hover:tw-text-on-accent",
-        link: "tw-text-accent tw-underline-offset-4 hover:tw-underline",
+          "clickable-icon tw-bg-transparent tw-text-normal [--text-on-accent:var(--text-on-accent-inverted)] hover:tw-bg-interactive-accent hover:tw-text-on-accent",
+        link: "tw-text-normal tw-underline-offset-4 hover:tw-underline",
         success:
-          "clickable-icon tw-bg-modifier-success tw-text-on-accent hover:tw-bg-modifier-success hover:tw-text-on-accent",
+          "clickable-icon tw-bg-modifier-success tw-text-on-accent [--text-on-accent:var(--text-on-accent-inverted)] hover:tw-bg-modifier-success hover:tw-text-on-accent",
         ghost2:
-          "clickable-icon tw-bg-transparent tw-text-faint tw-outline-none hover:tw-bg-transparent hover:tw-bg-opacity-100 hover:tw-text-normal focus-visible:tw-text-normal focus-visible:tw-outline-none focus-visible:tw-ring-0",
+          "clickable-icon tw-bg-transparent tw-text-normal tw-outline-none hover:tw-bg-transparent hover:tw-bg-opacity-100 hover:tw-text-normal focus-visible:tw-text-normal focus-visible:tw-outline-none focus-visible:tw-ring-0",
       },
       size: {
         default: "tw-h-9 tw-px-4 tw-py-2",
