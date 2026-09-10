@@ -41,12 +41,3 @@ export function unescapeXml(str: unknown): string {
     .replace(/&lt;/g, "<")
     .replace(/&amp;/g, "&");
 }
-
-/**
- * Escapes special XML characters for use in XML attributes
- * @param str - The string to escape for attribute use
- * @returns The escaped string safe for XML attributes
- */
-export function escapeXmlAttribute(str: unknown): string {
-  return escapeXml(str);
-}
