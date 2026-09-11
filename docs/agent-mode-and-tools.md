@@ -109,7 +109,7 @@ opencode supports **Default** and **Auto**. Claude supports **Default**, **Plan*
 
 When an action needs approval, Agent Chat displays a **Permission required** card with the proposed change or tool input. Choose one of the temporary or persistent allow or deny options offered by that agent. Stopping the turn cancels unanswered requests.
 
-When an agent asks a set of questions, answer the current tab and select **Next**. On the final tab, **Submit** becomes available after every question has an answer. You can use the tabs to review or skip ahead; **Cancel** declines the entire request.
+When an agent asks a set of questions, the card shows your current question and how many are answered. Answered tabs have a checkmark. Answer the current tab and select **Next**. On the final tab, **Submit** becomes available after every question has an answer. You can use the tabs to review or skip ahead; **Cancel** declines the entire request.
 
 Permission and question cards stay in a scrolling action area above the message box until you answer them, even while the response continues streaming.
 

@@ -39,5 +39,26 @@ const meta = {
 } satisfies Meta<AskUserQuestionCardProps>;
 export default meta;
 
-/** Answer with Next, or select Checks early to inspect the disabled final Submit state. */
+/** Answer with Next, revisit an answered tab, or select Checks early to inspect final Submit. */
 export const MultipleQuestions: StoryObj<AskUserQuestionCardProps> = {};
+
+/** Multiple steps with verbose choices keep progress and submission visible while scrolling. */
+export const LongChoices: StoryObj<AskUserQuestionCardProps> = {
+  args: {
+    request: {
+      ...request,
+      questions: [
+        request.questions[0],
+        {
+          header: "Rollout",
+          question: "Which rollout strategy should I use?",
+          options: Array.from({ length: 8 }, (_, index) => ({
+            label: `Strategy ${index + 1}: staged rollout with regional validation`,
+            description:
+              "Validate telemetry, rollback readiness, and user impact before expanding to the next region.",
+          })),
+        },
+      ],
+    },
+  },
+};

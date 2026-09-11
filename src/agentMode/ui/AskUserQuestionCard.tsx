@@ -5,8 +5,8 @@ import type {
   AgentQuestionAnswers,
   AskUserQuestionPrompt,
 } from "@/agentMode/session/types";
-import { MessageCircleQuestion } from "lucide-react";
-import React, { useState } from "react";
+import { Check, MessageCircleQuestion } from "lucide-react";
+import React, { useId, useState } from "react";
 
 interface AskUserQuestionCardProps {
   request: AskUserQuestionPrompt;
@@ -61,21 +61,19 @@ export const AskUserQuestionCard: React.FC<AskUserQuestionCardProps> = ({ reques
   const [otherActive, setOtherActive] = useState<Record<number, boolean>>({});
   const [customTexts, setCustomTexts] = useState<Record<number, string>>({});
 
+  const answeredDescriptionId = useId();
   const showTabs = questions.length > 1;
   const active = questions[activeTab] ?? questions[0];
   const activeIdx = questions[activeTab] ? activeTab : 0;
 
   // Gate Submit until every question has a preset selection or a non-empty
   // "Other" response. An armed "Other" must be filled even when presets remain.
-  const canSubmit = questions.every((q, idx) =>
+  const answered = questions.map((q, idx) =>
     isAnswered(q, selections[idx], otherActive[idx] ?? false, customTexts[idx] ?? "")
   );
-  const canAdvance = isAnswered(
-    active,
-    selections[activeIdx],
-    otherActive[activeIdx] ?? false,
-    customTexts[activeIdx] ?? ""
-  );
+  const canSubmit = answered.every(Boolean);
+  const canAdvance = answered[activeIdx];
+  const answeredCount = answered.filter(Boolean).length;
   const isFinalQuestion = activeIdx === questions.length - 1;
 
   const submit = (): void => {
@@ -154,34 +152,49 @@ export const AskUserQuestionCard: React.FC<AskUserQuestionCardProps> = ({ reques
 
       <div className="tw-flex tw-flex-col tw-gap-2 tw-px-3 tw-py-2">
         {showTabs ? (
-          <div role="tablist" className="copilot-divider-b tw-flex tw-flex-wrap tw-gap-x-1">
-            {questions.map((q, idx) => {
-              const selected = idx === activeIdx;
-              return (
-                <button
-                  key={q.question}
-                  type="button"
-                  role="tab"
-                  aria-selected={selected}
-                  disabled={busy}
-                  onClick={() => setActiveTab(idx)}
-                  className={cn(
-                    // Underline tab: a colored inset bottom edge marks the
-                    // active question. box-shadow (not a border) avoids the
-                    // preflight-off border-style leak, and overlaps the
-                    // tablist's divider so the accent replaces the grey rule.
-                    "tw--mb-px !tw-rounded-none !tw-border-none !tw-bg-transparent tw-p-1.5 tw-text-sm tw-transition-colors",
-                    "disabled:tw-cursor-not-allowed disabled:tw-opacity-50",
-                    selected
-                      ? "tw-font-medium tw-text-normal !tw-shadow-[inset_0_-2px_0_0_var(--interactive-accent)]"
-                      : "tw-text-muted !tw-shadow-none hover:tw-text-normal"
-                  )}
-                >
-                  {q.header || `Question ${idx + 1}`}
-                </button>
-              );
-            })}
-          </div>
+          <>
+            {/* Progress uses the same validation as Submit, including unfinished Other answers.
+              https://github.com/Brevilabs/obsidian-copilot-private/issues/424 */}
+            <div className="tw-text-xs tw-text-muted" aria-live="polite" aria-atomic="true">
+              Question {activeIdx + 1} of {questions.length} · {answeredCount} of {questions.length}{" "}
+              answered
+            </div>
+            <span id={answeredDescriptionId} className="tw-sr-only">
+              Answered
+            </span>
+            <div role="tablist" className="copilot-divider-b tw-flex tw-flex-wrap tw-gap-x-1">
+              {questions.map((q, idx) => {
+                const selected = idx === activeIdx;
+                return (
+                  <button
+                    key={q.question}
+                    type="button"
+                    role="tab"
+                    aria-selected={selected}
+                    aria-describedby={answered[idx] ? answeredDescriptionId : undefined}
+                    disabled={busy}
+                    onClick={() => setActiveTab(idx)}
+                    className={cn(
+                      // Underline tab: a colored inset bottom edge marks the
+                      // active question. box-shadow (not a border) avoids the
+                      // preflight-off border-style leak, and overlaps the
+                      // tablist's divider so the accent replaces the grey rule.
+                      "tw--mb-px tw-inline-flex tw-items-center tw-gap-1 !tw-rounded-none !tw-border-none !tw-bg-transparent tw-p-1.5 tw-text-sm tw-transition-colors",
+                      "disabled:tw-cursor-not-allowed disabled:tw-opacity-50",
+                      selected
+                        ? "tw-font-medium tw-text-normal !tw-shadow-[inset_0_-2px_0_0_var(--interactive-accent)]"
+                        : "tw-text-muted !tw-shadow-none hover:tw-text-normal"
+                    )}
+                  >
+                    {q.header || `Question ${idx + 1}`}
+                    {answered[idx] ? (
+                      <Check className="tw-size-3 tw-shrink-0" aria-hidden="true" />
+                    ) : null}
+                  </button>
+                );
+              })}
+            </div>
+          </>
         ) : null}
 
         <QuestionPanel
@@ -199,7 +212,7 @@ export const AskUserQuestionCard: React.FC<AskUserQuestionCardProps> = ({ reques
         />
       </div>
 
-      <div className="copilot-divider-t tw-flex tw-flex-wrap tw-items-center tw-justify-end tw-gap-2 tw-px-3 tw-py-2">
+      <div className="copilot-divider-t tw-sticky tw-bottom-0 tw-z-cover tw-flex tw-flex-wrap tw-items-center tw-justify-end tw-gap-2 tw-bg-secondary tw-px-3 tw-py-2">
         <Button variant="secondary" size="sm" disabled={busy} onClick={cancel}>
           Cancel
         </Button>
@@ -247,7 +260,7 @@ const QuestionPanel: React.FC<QuestionPanelProps> = ({
   const control = question.multiSelect ? "checkbox" : "radio";
   return (
     <div role="tabpanel" className="tw-flex tw-flex-col tw-gap-2">
-      <div className="tw-text-sm">{question.question}</div>
+      <div className="tw-text-sm tw-font-medium tw-text-normal">{question.question}</div>
       <div className="tw-flex tw-flex-col tw-gap-1">
         {question.options.map((opt) => {
           const checked = question.multiSelect
