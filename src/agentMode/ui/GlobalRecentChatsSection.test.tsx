@@ -7,9 +7,15 @@ type SectionItems = React.ComponentProps<typeof GlobalRecentChatsSection>["items
 
 const noop = async () => {};
 
-function renderSection(props: Partial<React.ComponentProps<typeof GlobalRecentChatsSection>> = {}) {
+function renderSection(
+  props: Partial<React.ComponentProps<typeof GlobalRecentChatsSection>> & {
+    openChatIds?: ReadonlySet<string>;
+    onCloseSession?: (id: string) => Promise<void>;
+  } = {}
+) {
   return render(
     <GlobalRecentChatsSection
+      {...{ openChatIds: props.openChatIds, onCloseSession: props.onCloseSession }}
       items={props.items ?? []}
       variant={props.variant}
       title={props.title}
@@ -74,6 +80,31 @@ describe("GlobalRecentChatsSection", () => {
   });
 
   describe("GlobalRecentChatsSection()", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/429 shows idle and running open sessions, retaining saved chats after close", async () => {
+      const onLoadChat = jest.fn(noop);
+      const onDeleteChat = jest.fn(noop);
+      const onCloseSession = jest.fn(noop);
+      renderSection({
+        items: [makeItem("idle"), makeItem("running"), makeItem("closed")],
+        openChatIds: new Set(["idle", "running"]),
+        runningChatIds: new Set(["running"]),
+        onCloseSession,
+        onLoadChat,
+        onDeleteChat,
+      });
+      expect(screen.getAllByLabelText("Session open")).toHaveLength(2);
+      const buttons = screen.getAllByRole("button", { name: "Close session" });
+      expect(buttons).toHaveLength(2);
+      fireEvent.keyDown(buttons[0], { key: "Enter" });
+      await act(async () => {
+        fireEvent.click(buttons[0]);
+      });
+      expect(onCloseSession).toHaveBeenCalledTimes(1);
+      expect(onLoadChat).not.toHaveBeenCalled();
+      expect(onDeleteChat).not.toHaveBeenCalled();
+      expect(screen.getByText("Chat idle")).toBeTruthy();
+    });
+
     it("defaults to the global empty-state copy", () => {
       renderSection();
       expect(screen.getByText("No recent chats")).toBeTruthy();

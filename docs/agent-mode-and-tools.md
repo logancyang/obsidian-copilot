@@ -123,6 +123,7 @@ Agent Chat keeps each conversation separate:
 - Select **New Chat** to reset the current tab.
 - Select **Stop** to cancel the current turn and discard its queued follow-ups.
 - Use **Recent Chats** from the Agent Chat home screen, or **Chat History** inside a conversation, to resume saved work. The **Recent Chats** list can be scrolled or searched.
+- A subtle dot before a recent chat means its session is still open, even when it is idle. Hover the row and select **Close session** to stop its current turn and release that session. Saved history stays available to reopen, and other chats keep running. If the agent does not support closing individual sessions or release fails, the chat stays marked open with an error.
 - Add the active note, selected text, other notes, folders, a Copilot Web Viewer tab, or supported images. You can also mention a note with `[[Note title]]`.
 - Hover the context ring beside the send controls to see how much of the model's context window is in use. The ring stays empty until the agent reports usage, and a stopped response keeps the last reported reading. If the connected account reports usage limits, the same panel shows the available limit and reset time.
 

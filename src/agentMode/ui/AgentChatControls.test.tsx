@@ -2,7 +2,7 @@ import { AgentChatControls } from "@/agentMode/ui/AgentChatControls";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { PLUS_UTM_MEDIUMS } from "@/constants";
 import { navigateToPlusPage, useCanUseMultiAgent } from "@/plusUtils";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import * as React from "react";
 
 jest.mock("@/plusUtils", () => ({
@@ -10,10 +10,11 @@ jest.mock("@/plusUtils", () => ({
   navigateToPlusPage: jest.fn(),
 }));
 
-// Autosave on so the Save-Chat button stays out of the way; this suite is about
-// the left slot's entitlement gate, not the right-side control cluster.
+// Autosave keeps the manual save action out of control-bar fixtures.
 jest.mock("@/settings/model", () => ({
-  useSettingsValue: jest.fn().mockReturnValue({ autosaveChat: true }),
+  useSettingsValue: jest
+    .fn()
+    .mockReturnValue({ autosaveChat: true, chatHistorySortStrategy: "recent" }),
 }));
 
 const mockUseCanUseMultiAgent = useCanUseMultiAgent as jest.MockedFunction<
@@ -37,6 +38,49 @@ describe("AgentChatControls", () => {
   describe("AgentChatControls()", () => {
     beforeEach(() => {
       jest.clearAllMocks();
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/429 exposes live session release through the actual history popover", async () => {
+      const originalObserver = window.IntersectionObserver;
+      window.IntersectionObserver = jest.fn(() => ({
+        observe: jest.fn(),
+        disconnect: jest.fn(),
+      })) as unknown as typeof IntersectionObserver;
+      try {
+        const onCloseSession = jest.fn(async () => {});
+        const onLoadChat = jest.fn(async () => {});
+        const onDeleteChat = jest.fn(async () => {});
+        render(
+          <TooltipProvider>
+            <AgentChatControls
+              chatHistoryItems={[
+                {
+                  id: "research.md",
+                  title: "Research notes",
+                  createdAt: new Date(),
+                  lastAccessedAt: new Date(),
+                },
+              ]}
+              openChatIds={new Set(["research.md"])}
+              onCloseSession={onCloseSession}
+              onLoadChat={onLoadChat}
+              onDeleteChat={onDeleteChat}
+              onUpdateChatTitle={jest.fn(async () => {})}
+            />
+          </TooltipProvider>
+        );
+        fireEvent.click(screen.getByTitle("Chat History"));
+        expect(screen.getByLabelText("Session open")).toBeTruthy();
+        await act(async () =>
+          fireEvent.click(screen.getByRole("button", { name: "Close session" }))
+        );
+        expect(onCloseSession).toHaveBeenCalledWith("research.md");
+        expect(onLoadChat).not.toHaveBeenCalled();
+        expect(onDeleteChat).not.toHaveBeenCalled();
+        expect(screen.getByText("Research notes")).toBeTruthy();
+      } finally {
+        window.IntersectionObserver = originalObserver;
+      }
     });
 
     it("offers the multi-agent upsell when the user is not entitled", () => {
