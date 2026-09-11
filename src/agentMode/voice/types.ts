@@ -267,6 +267,12 @@ export interface VoiceHost {
   createPlayback(): VoicePlayback;
   /** Posts the SDP offer to the voice server and returns the parsed body. */
   createSession(request: VoiceCreationRequest): Promise<unknown>;
+  /**
+   * Releases a created session over HTTP. Used when no authenticated control
+   * socket is left to carry `session.close`, so a call the server already
+   * opened does not idle until its deadline.
+   */
+  deleteSession(request: { url: string; credential: string }): Promise<void>;
   /** Opens the control socket of the owning window. */
   openControlSocket(url: string, handlers: VoiceControlSocketHandlers): VoiceControlSocket;
 }

@@ -45,17 +45,21 @@ class FakeLiveConnection implements VoiceLiveConnection {
   closed = false;
   answer: string | null = null;
 
-  private readonly connected: Promise<void>;
-  private markConnectCalled!: () => void;
   private options: VoiceLiveConnectOptions | null = null;
   private settle: { resolve: () => void; reject: (error: unknown) => void } | null = null;
   private remoteStreamHandler: ((stream: MediaStream) => void) | null = null;
   private channelHandler: ((event: never) => void) | null = null;
 
   constructor() {
-    this.connected = new Promise<void>((resolve) => {
-      this.markConnectCalled = resolve;
-    });
+    this.reset();
+  }
+
+  /** Prepares the fake for another negotiation, as a fresh connection would. */
+  reset(): void {
+    this.closed = false;
+    this.answer = null;
+    this.options = null;
+    this.settle = null;
   }
 
   addMicrophone(stream: MediaStream): void {
@@ -72,7 +76,6 @@ class FakeLiveConnection implements VoiceLiveConnection {
 
   connect(options: VoiceLiveConnectOptions): Promise<void> {
     this.options = options;
-    this.markConnectCalled();
     return new Promise<void>((resolve, reject) => {
       this.settle = { resolve, reject };
     });
@@ -84,7 +87,11 @@ class FakeLiveConnection implements VoiceLiveConnection {
 
   /** Runs the SDP exchange the way the SDK helper does during negotiation. */
   async negotiate(): Promise<void> {
-    await this.connected;
+    // `start()` opens the microphone before it connects, so let those
+    // microtasks drain rather than assuming connect() already happened.
+    for (let attempt = 0; attempt < 100 && this.options === null; attempt += 1) {
+      await Promise.resolve();
+    }
     const options = this.options;
     if (!options) throw new Error("connect() was never called");
     try {
@@ -160,6 +167,7 @@ interface Harness {
   connection: FakeLiveConnection;
   playback: VoicePlayback & { play: jest.Mock; stop: jest.Mock };
   creations: VoiceCreationRequest[];
+  deletions: Array<{ url: string; credential: string }>;
   sockets: FakeControlSocket[];
   events: VoiceSessionEvent[];
   socket(): FakeControlSocket;
@@ -180,6 +188,7 @@ function createHarness(
   const connection = new FakeLiveConnection();
   const playback = { play: jest.fn(), stop: jest.fn() };
   const creations: VoiceCreationRequest[] = [];
+  const deletions: Array<{ url: string; credential: string }> = [];
   const sockets: FakeControlSocket[] = [];
   const events: VoiceSessionEvent[] = [];
   let nextId = 0;
@@ -190,7 +199,10 @@ function createHarness(
       clearTimeout: (id) => window.clearTimeout(id),
     },
     captureMicrophone: () => Promise.resolve(microphone),
-    createLiveConnection: () => connection,
+    createLiveConnection: () => {
+      connection.reset();
+      return connection;
+    },
     createPlayback: () => playback,
     createSession: (request) => {
       creations.push(request);
@@ -201,6 +213,10 @@ function createHarness(
         expiresAt: "2026-09-10T00:00:30.000Z",
         limits: { maxSessionSeconds: 600, warnAtSeconds: 540 },
       });
+    },
+    deleteSession: (request) => {
+      deletions.push(request);
+      return Promise.resolve();
     },
     openControlSocket: (url, handlers) => {
       const socket = new FakeControlSocket(url, handlers);
@@ -227,12 +243,15 @@ function createHarness(
     connection,
     playback,
     creations,
+    deletions,
     sockets,
     events,
-    socket: () => sockets[0],
+    // The latest socket, so a retry after a failed start drives its own call.
+    socket: () => sockets[sockets.length - 1],
     ack: (index, seq = index + 1) => {
-      const frame = JSON.parse(sockets[0].sent[index]) as { eventId: string };
-      sockets[0].deliver(harness.serverFrame({ type: "ack", ackEventId: frame.eventId, seq }));
+      const socket = sockets[sockets.length - 1];
+      const frame = JSON.parse(socket.sent[index]) as { eventId: string };
+      socket.deliver(harness.serverFrame({ type: "ack", ackEventId: frame.eventId, seq }));
     },
     serverFrame: (frame) => ({
       protocolVersion: VOICE_PROTOCOL_VERSION,
@@ -332,7 +351,10 @@ describe("VoiceSessionController", () => {
         jest.advanceTimersByTime(15_000);
 
         await expect(started).rejects.toThrow("never reported that it started");
-        expect(harness.controller.getSnapshot().state).toBe("error");
+        expect(harness.controller.getSnapshot()).toMatchObject({
+          state: "off",
+          errorCode: "transport",
+        });
         expect(harness.microphone.stopped).toBe(true);
       } finally {
         jest.useRealTimers();
@@ -382,6 +404,11 @@ describe("VoiceSessionController", () => {
         controlOnly: true,
       });
       expect(harness.microphone.stopped).toBe(true);
+      // A control-only call has no live session, so the log must not report
+      // one as started just because readiness stopped waiting for it.
+      expect(jest.mocked(logInfo).mock.calls.map(([message]) => message)).not.toContain(
+        "[Voice] live session started"
+      );
     });
 
     it("plays remote audio in the owning window and exposes its stream", async () => {
@@ -419,7 +446,7 @@ describe("VoiceSessionController", () => {
       await expect(harness.controller.start(START_REQUEST)).rejects.toThrow("turned off");
     });
 
-    it("reports an error state and releases the microphone when negotiation fails", async () => {
+    it("reports the failure and releases the microphone when negotiation fails", async () => {
       const harness = createHarness();
 
       const started = harness.controller.start(START_REQUEST);
@@ -427,9 +454,48 @@ describe("VoiceSessionController", () => {
       harness.connection.failConnecting(new Error("ICE failed"));
 
       await expect(started).rejects.toThrow("ICE failed");
-      expect(harness.controller.getSnapshot().state).toBe("error");
+      expect(harness.controller.getSnapshot()).toMatchObject({
+        state: "off",
+        errorCode: "transport",
+      });
       expect(harness.microphone.stopped).toBe(true);
       expect(harness.connection.closed).toBe(true);
+    });
+
+    it("allows another attempt after a failed one instead of staying wedged", async () => {
+      const harness = createHarness();
+      const first = harness.controller.start(START_REQUEST);
+      await harness.connection.negotiate();
+      harness.connection.failConnecting(new Error("ICE failed"));
+      await expect(first).rejects.toThrow("ICE failed");
+
+      expect(harness.controller.getSnapshot()).toMatchObject({
+        state: "off",
+        errorCode: "transport",
+      });
+
+      await connect(harness);
+
+      expect(harness.controller.getSnapshot().state).toBe("active");
+      expect(harness.creations).toHaveLength(2);
+    });
+
+    it("refuses an insecure server URL that would put the credential on the wire in the clear", async () => {
+      const harness = createHarness({ serverUrl: "http://voice.example.com" });
+
+      await expect(harness.controller.start(START_REQUEST)).rejects.toThrow("HTTPS");
+      expect(harness.creations).toHaveLength(0);
+    });
+
+    it("accepts a plain-HTTP loopback server, which never leaves the machine", async () => {
+      const harness = createHarness({ serverUrl: "http://127.0.0.1:8080" });
+
+      await connect(harness);
+
+      expect(harness.creations[0].url).toBe("http://127.0.0.1:8080/v1/voice/sessions");
+      expect(harness.socket().url).toBe(
+        `ws://127.0.0.1:8080/v1/voice/sessions/${VOICE_SESSION_ID}/control`
+      );
     });
 
     it("rejects a second call while one is already running", async () => {
@@ -673,6 +739,44 @@ describe("VoiceSessionController", () => {
 
       expect(harness.controller.getSnapshot().state).toBe("off");
     });
+
+    it("does not let a call closed while connecting come up afterwards", async () => {
+      const harness = createHarness();
+      const started = harness.controller.start(START_REQUEST);
+      await harness.connection.negotiate();
+      harness.socket().handlers.onOpen();
+      harness.ack(0);
+
+      const closed = harness.controller.close();
+      jest.advanceTimersByTime(5_000);
+      await closed;
+      // Media finishing after the user gave up must not resurrect the call.
+      harness.connection.finishConnecting();
+      harness.connection.deliverSessionStarted();
+      await expect(started).rejects.toThrow("closed while connecting");
+
+      expect(harness.controller.getSnapshot().state).toBe("off");
+      expect(harness.microphone.enabled).toBe(false);
+      expect(harness.microphone.stopped).toBe(true);
+    });
+
+    it("releases a created session over HTTP when no authenticated socket is left to close it", async () => {
+      const harness = createHarness();
+      const started = harness.controller.start(START_REQUEST);
+      await harness.connection.negotiate();
+      harness.connection.failConnecting(new Error("ICE failed"));
+      await expect(started).rejects.toThrow("ICE failed");
+
+      await harness.controller.close();
+
+      expect(harness.deletions).toEqual([
+        {
+          url: `https://voice.example.com/v1/voice/sessions/${VOICE_SESSION_ID}`,
+          credential: CREDENTIAL,
+        },
+      ]);
+      expect(harness.controller.getSnapshot().closureConfirmed).toBe(false);
+    });
   });
 
   describe("subscribe()", () => {
@@ -814,6 +918,50 @@ describe("VoiceSessionController", () => {
         expect.objectContaining({ type: "delegation.requested" })
       );
       expect(harness.controller.getSnapshot()).toBe(before);
+    });
+
+    it("ends an active call when the control socket drops, because the server ends the upstream call with it", async () => {
+      const harness = createHarness();
+      await connect(harness);
+
+      harness.socket().close();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(harness.events).toContainEqual({
+        type: "error",
+        code: "transport",
+        recoverable: false,
+      });
+      expect(harness.microphone.stopped).toBe(true);
+      expect(harness.connection.closed).toBe(true);
+      expect(harness.controller.getSnapshot().state).toBe("off");
+    });
+
+    it("does not report a transport failure for the socket closing during an ordinary close", async () => {
+      jest.useFakeTimers();
+      try {
+        const harness = createHarness();
+        await connect(harness);
+
+        const closed = harness.controller.close();
+        await Promise.resolve();
+        harness.socket().deliver(
+          harness.serverFrame({
+            type: "session.closed",
+            reason: "client-requested",
+            usage: { connectedSeconds: 3, estimatedCostUsd: 0.0025, source: "local-clock" },
+            usageFinal: true,
+          })
+        );
+        await closed;
+
+        expect(harness.events).not.toContainEqual(
+          expect.objectContaining({ type: "error", code: "transport" })
+        );
+      } finally {
+        jest.useRealTimers();
+      }
     });
 
     it("stops delivering events to a listener that unsubscribed", async () => {

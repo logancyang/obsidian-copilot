@@ -32,6 +32,9 @@ class FakeController {
   readonly taskUpdates: Array<Record<string, unknown>> = [];
   closedWith: string | undefined | null = null;
   startError: Error | null = null;
+  /** Set to a never-settling promise to hold the call in its closing window. */
+  closeDelay: Promise<void> | null = null;
+  startCount = 0;
 
   private listener: ((event: VoiceSessionEvent) => void) | null = null;
 
@@ -44,12 +47,13 @@ class FakeController {
 
   start(request: VoiceSessionStartRequest): Promise<void> {
     this.started.push(request);
+    this.startCount += 1;
     return this.startError ? Promise.reject(this.startError) : Promise.resolve();
   }
 
   close(reason?: string): Promise<void> {
     this.closedWith = reason;
-    return Promise.resolve();
+    return this.closeDelay ?? Promise.resolve();
   }
 
   acceptDelegation(liveDelegationId: string, taskId: string): void {
@@ -157,6 +161,9 @@ describe("voiceTransportSpike", () => {
           "user",
           "assistant",
         ]);
+        // Nobody is at the microphone during the check, so the frontend is
+        // told to speak first; seeded history alone leaves the call silent.
+        expect(request.instructionsSupplement).toContain("Greet the listener out loud");
         expect(harness.spike.isRunning()).toBe(true);
       });
 
@@ -179,6 +186,20 @@ describe("voiceTransportSpike", () => {
 
         expect(harness.controller.closedWith).toBe("voice transport check ended");
         expect(harness.spike.isRunning()).toBe(false);
+      });
+
+      it("does not open a second billable call while the first is still closing", async () => {
+        const harness = createHarness();
+        await harness.spike.toggle();
+        // Closure waits on the server's terminal frame, so a user pressing the
+        // command again during that window must not start a new call.
+        harness.controller.closeDelay = new Promise(() => undefined);
+
+        void harness.spike.toggle();
+        void harness.spike.toggle();
+
+        expect(harness.controller.startCount).toBe(1);
+        expect(harness.controller.started).toHaveLength(1);
       });
 
       it("returns to idle and reports why when the call does not connect", async () => {

@@ -131,6 +131,16 @@ export class VoiceSessionController {
   private rejectControlReady: ((error: Error) => void) | null = null;
   private confirmSessionStarted: (() => void) | null = null;
   private pendingInput: PendingInputCommand | null = null;
+  /**
+   * Counts start attempts. A `close()` during connection bumps it, so the
+   * attempt still in flight can tell that its call was given up on.
+   */
+  private startGeneration = 0;
+  /**
+   * Session the server created, kept past `disposeTransports()` so closure can
+   * still release an upstream call whose control socket never worked.
+   */
+  private createdSession: { voiceSessionId: string; serverUrl: string } | null = null;
 
   constructor(private readonly deps: VoiceSessionControllerDeps) {
     this.now = deps.now ?? (() => Date.now());
@@ -177,6 +187,9 @@ export class VoiceSessionController {
     if (!serverUrl) {
       throw new Error("The voice server URL is not configured.");
     }
+    if (!isSecureServerUrl(serverUrl)) {
+      throw new Error("The voice server must use HTTPS, or run on this machine.");
+    }
     const credential = this.deps.resolveCredential();
     if (!credential) {
       throw new Error("The voice server credential is not configured.");
@@ -184,6 +197,8 @@ export class VoiceSessionController {
 
     this.request = request;
     this.startedAtMs = this.now();
+    this.createdSession = null;
+    const generation = ++this.startGeneration;
     this.snapshot = OFF_SNAPSHOT;
     this.patch({ state: "connecting" });
     logInfo("[Voice] connecting", {
@@ -236,7 +251,13 @@ export class VoiceSessionController {
 
       await Promise.all([media, controlReady]);
     } catch (error) {
-      this.patch({ state: "error", errorCode: this.snapshot.errorCode ?? "transport" });
+      // A superseded attempt owns nothing: whoever bumped the generation has
+      // already released the transports and settled the call's state.
+      if (generation !== this.startGeneration) throw error;
+      // Back to `off`, not `error`: the call never opened, and parking the
+      // controller in a state `start()` refuses would make the failure
+      // permanent. `errorCode` still reports what went wrong.
+      this.patch({ state: "off", errorCode: this.snapshot.errorCode ?? "transport" });
       this.releaseMicrophone();
       this.disposeTransports();
       logWarn("[Voice] failed to connect", {
@@ -247,6 +268,9 @@ export class VoiceSessionController {
       throw error;
     }
 
+    if (generation !== this.startGeneration) {
+      throw new Error("The voice session was closed while connecting.");
+    }
     this.patch({ state: "active" });
     if (!this.snapshot.locallyMuted) this.microphone?.setEnabled(true);
     logInfo("[Voice] active", {
@@ -293,7 +317,10 @@ export class VoiceSessionController {
    */
   async close(reason?: string): Promise<void> {
     if (this.closing) return this.closing;
-    if (this.snapshot.state === "off") return;
+    if (this.snapshot.state === "off" && this.createdSession === null) return;
+    // A start still negotiating must not come up behind this closure.
+    this.startGeneration += 1;
+    this.failControlReady(new Error("The voice session was closed while connecting."));
     this.closing = this.runClose(reason).finally(() => {
       this.closing = null;
     });
@@ -362,10 +389,6 @@ export class VoiceSessionController {
       this.confirmSessionStarted = () => {
         this.deps.host.timers.clearTimeout(timer);
         this.confirmSessionStarted = null;
-        logInfo("[Voice] live session started", {
-          voiceSessionId: this.snapshot.voiceSessionId,
-          elapsedMs: this.now() - this.startedAtMs,
-        });
         resolve();
       };
     });
@@ -398,6 +421,7 @@ export class VoiceSessionController {
     }
     const created = parsed.value;
     this.creation = created;
+    this.createdSession = { voiceSessionId: created.voiceSessionId, serverUrl };
     this.patch({
       voiceSessionId: created.voiceSessionId,
       controlOnly: created.sdpAnswer === null,
@@ -489,6 +513,8 @@ export class VoiceSessionController {
         this.emit({ type: "usage.updated", usage: event.usage });
         return;
       case "session.closed":
+        // The upstream call is gone, so nothing is left to release over HTTP.
+        this.createdSession = null;
         this.patch({ usage: event.usage, closeReason: event.reason });
         this.emit({
           type: "session.closed",
@@ -533,20 +559,42 @@ export class VoiceSessionController {
     this.rejectPendingAcks();
     if (this.snapshot.state === "connecting") {
       this.failControlReady(new Error("The control socket closed before authentication."));
+      return;
     }
-  }
-
-  private handleControlError(): void {
-    logWarn("[Voice] control socket reported a transport error", {
+    // Closure closes this socket itself, and an ended call has nothing left to
+    // lose; only an active call is losing something it still needs.
+    if (this.snapshot.state !== "active") return;
+    // The server ends the upstream call when the control socket drops, so the
+    // media path is already talking to a call nobody is coordinating. Report
+    // it and tear the rest down rather than leaving a live microphone.
+    logWarn("[Voice] the control socket dropped during a call", {
       voiceSessionId: this.snapshot.voiceSessionId,
     });
     this.patch({ errorCode: "transport" });
     this.emit({ type: "error", code: "transport", recoverable: false });
+    void this.close("control-lost");
+  }
+
+  /**
+   * A socket error always precedes a close, and closure is where the call's
+   * fate is decided, so this only records the diagnostic.
+   */
+  private handleControlError(): void {
+    logWarn("[Voice] control socket reported a transport error", {
+      voiceSessionId: this.snapshot.voiceSessionId,
+    });
   }
 
   private handleChannelEvent(event: LiveChannelEvent): void {
     switch (event.type) {
       case "session.started":
+        // Logged here rather than where the wait resolves: closure and a
+        // control-only call retire that wait too, and a log line claiming the
+        // live session started would then be describing a session that never did.
+        logInfo("[Voice] live session started", {
+          voiceSessionId: this.snapshot.voiceSessionId,
+          elapsedMs: this.now() - this.startedAtMs,
+        });
         this.confirmSessionStarted?.();
         return;
       case "session.input_audio.muted":
@@ -671,7 +719,7 @@ export class VoiceSessionController {
   }
 
   private requestServerClosure(reason?: string): Promise<boolean> {
-    if (!this.authenticated || this.socket === null) return Promise.resolve(this.creation === null);
+    if (!this.authenticated || this.socket === null) return this.releaseCreatedSession();
     return new Promise<boolean>((resolve) => {
       const timer = this.deps.host.timers.setTimeout(() => {
         this.confirmClosure = null;
@@ -688,6 +736,35 @@ export class VoiceSessionController {
         ...(reason ? { reason } : {}),
       });
     });
+  }
+
+  /**
+   * Ends a call that has no usable control socket through the authenticated
+   * `DELETE` fallback, so an upstream session the server already opened is not
+   * left billing until its deadline. Closure stays unconfirmed either way: the
+   * endpoint is idempotent and says nothing about the call it released.
+   */
+  private async releaseCreatedSession(): Promise<boolean> {
+    const created = this.createdSession;
+    this.createdSession = null;
+    if (created === null) return true;
+    const credential = this.deps.resolveCredential();
+    if (credential === null) return false;
+    try {
+      await this.deps.host.deleteSession({
+        url: `${created.serverUrl}/v1/voice/sessions/${encodeURIComponent(created.voiceSessionId)}`,
+        credential,
+      });
+      logInfo("[Voice] released the session over HTTP", {
+        voiceSessionId: created.voiceSessionId,
+      });
+    } catch (error) {
+      logWarn("[Voice] could not release the session over HTTP", {
+        voiceSessionId: created.voiceSessionId,
+        errorName: error instanceof Error ? error.name : "unknown",
+      });
+    }
+    return false;
   }
 
   private disposeTransports(): void {
@@ -777,6 +854,18 @@ export class VoiceSessionController {
 /** Trailing slashes would produce `//v1/...` paths the server does not route. */
 function normalizeBaseUrl(raw: string): string {
   return raw.trim().replace(/\/+$/, "");
+}
+
+/**
+ * The bearer credential travels on the creation request, so plain HTTP would
+ * put it on the wire in the clear. Loopback is exempt: it never leaves the
+ * machine, and the local fake server runs there.
+ */
+function isSecureServerUrl(base: string): boolean {
+  if (base.startsWith("https://")) return true;
+  if (!base.startsWith("http://")) return false;
+  const host = base.slice("http://".length).split(/[:/]/)[0];
+  return host === "localhost" || host === "127.0.0.1" || host === "[::1]";
 }
 
 /** The control socket shares the creation endpoint's origin and scheme family. */

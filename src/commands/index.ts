@@ -168,8 +168,8 @@ export function registerCommands(plugin: CopilotPlugin, publish: PublishFile) {
           new Notice("Voice is turned off in Copilot settings.");
           return;
         }
-        const { createVoiceTransportSpike } = await import("@/agentMode");
-        spike ??= createVoiceTransportSpike(plugin);
+        const { loadVoiceTransportSpike } = await import("@/agentMode");
+        spike ??= (await loadVoiceTransportSpike())(plugin);
         await spike.toggle();
       });
     }

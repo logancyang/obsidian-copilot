@@ -41,6 +41,7 @@ export function createWindowVoiceHost(ownerWindow: Window): VoiceHost {
     createLiveConnection: () => createLiveConnection(),
     createPlayback: () => createPlayback(ownerWindow),
     createSession: (request) => createSession(request),
+    deleteSession: (request) => deleteSession(request),
     openControlSocket: (url, handlers) => openControlSocket(ownerWindow, url, handlers),
   };
 }
@@ -134,6 +135,23 @@ async function createSession(request: VoiceCreationRequest): Promise<unknown> {
     throw new Error(`The voice server refused the session (HTTP ${response.status}).`);
   }
   return response.json;
+}
+
+/**
+ * Asks the server to release a session. The endpoint is idempotent and always
+ * succeeds, so a failure here means the request never arrived; the call is
+ * reported as uncertain rather than retried.
+ */
+async function deleteSession(request: { url: string; credential: string }): Promise<void> {
+  const response = await requestUrl({
+    url: request.url,
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${request.credential}` },
+    throw: false,
+  });
+  if (response.status >= 400) {
+    throw new Error(`The voice server refused to release the session (HTTP ${response.status}).`);
+  }
 }
 
 function openControlSocket(

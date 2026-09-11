@@ -22,6 +22,15 @@ const SPIKE_STARTUP_CONTEXT: readonly StartupContextMessage[] = Object.freeze([
 ]);
 
 /**
+ * Instruction the harness appends to the voice frontend's own instructions.
+ * Seeded history describes the conversation but does not make the frontend
+ * speak, and this check runs with nobody at the microphone, so playback and
+ * output transcripts need an explicit directive to talk first.
+ */
+const SPIKE_INSTRUCTIONS =
+  "This call is an unattended transport check. Greet the listener out loud as soon as the call opens, then say one short sentence about the launch risks in their notes. Do not wait for the listener to speak first.";
+
+/**
  * Canned result the harness reports so the voice frontend has something
  * concrete to speak without any local agent running.
  */
@@ -86,6 +95,7 @@ export class VoiceTransportSpike {
   private readonly pending = new Map<string, PendingDelegation>();
 
   private controller: VoiceSessionController | null = null;
+  private inFlight: Promise<void> | null = null;
   private timers: VoiceTimers | null = null;
   private unsubscribe: (() => void) | null = null;
   private startedAtMs = 0;
@@ -105,11 +115,14 @@ export class VoiceTransportSpike {
    * reported to the user and leave the harness idle rather than half-open.
    */
   async toggle(): Promise<void> {
-    if (this.controller) {
-      await this.stop();
-      return;
-    }
-    await this.begin();
+    // Closure waits up to five seconds for the server's terminal frame.
+    // Without this guard a second invocation inside that window would see no
+    // controller and open a second billable call.
+    if (this.inFlight) return this.inFlight;
+    this.inFlight = (this.controller ? this.stop() : this.begin()).finally(() => {
+      this.inFlight = null;
+    });
+    return this.inFlight;
   }
 
   private async begin(): Promise<void> {
@@ -131,6 +144,7 @@ export class VoiceTransportSpike {
         conversationId: call.conversationId,
         backendDisplayName: call.backendDisplayName,
         startupContext: SPIKE_STARTUP_CONTEXT,
+        instructionsSupplement: SPIKE_INSTRUCTIONS,
       });
       this.deps.notify("Voice transport check connected. Run the command again to end it.");
     } catch (error) {

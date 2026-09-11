@@ -479,13 +479,29 @@ export { AgentBackendHeader } from "./backends/shared/ui/AgentBackendHeader";
 
 export { useBackendAuthState } from "./session/useBackendAuthState";
 
-// Voice chat demo. The transport layer is desktop-only and gated behind
-// `agentMode.voice.enabled`; see `designdocs/VOICE_CHAT_DEMO_DESIGN.md`.
-export { VoiceSessionController } from "./voice/VoiceSessionController";
-export type { VoiceSessionControllerDeps } from "./voice/VoiceSessionController";
-export { VoiceTransportSpike } from "./voice/voiceTransportSpike";
-export { createVoiceTransportSpike } from "./voice/voiceWiring";
+// Voice chat demo; see `designdocs/VOICE_CHAT_DEMO_DESIGN.md`. Only the
+// keychain helpers are re-exported: they pull nothing but Obsidian and
+// settings, so the settings tab can import them anywhere.
 export { readVoiceCredential, writeVoiceCredential } from "./voice/voiceCredential";
+
+/**
+ * Loads the voice transport harness. The transport reaches WebRTC through the
+ * `openai-live` package, so it is imported on demand: a mobile install
+ * evaluates this module graph for its settings tab and must not evaluate a
+ * browser media stack it can never use.
+ *
+ * esbuild emits one bundle, so the package's bytes still ship to every
+ * install. Keeping them out of the artifact entirely would need code
+ * splitting, which the plugin does not use; what this controls is evaluation.
+ */
+export async function loadVoiceTransportSpike(): Promise<
+  typeof import("./voice/voiceWiring").createVoiceTransportSpike
+> {
+  const module = await import("./voice/voiceWiring");
+  return module.createVoiceTransportSpike;
+}
+
+export type { VoiceTransportSpike } from "./voice/voiceTransportSpike";
 export type {
   VoiceSessionEvent,
   VoiceSessionSnapshot,
