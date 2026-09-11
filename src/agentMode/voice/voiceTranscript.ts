@@ -66,7 +66,6 @@ export class VoiceTranscriptAssembler {
   // session, and a reconnect is a new identity that never replays old events.
   private readonly seenFragmentIds = new Set<string>();
   private nextGroupIndex = 0;
-  private userWatermarkMs = 0;
 
   /**
    * Fold one fragment into the transcript. Returns the row to render, or null
@@ -85,22 +84,16 @@ export class VoiceTranscriptAssembler {
       endMs: delta.endMs,
       claimed: false,
     };
-    if (delta.role === "user") {
-      this.userWatermarkMs = Math.max(this.userWatermarkMs, delta.endMs);
-    }
     const target = this.resolveGroup(delta.role, fragment);
     insertInAudioOrder(target.group, fragment);
     return { group: snapshot(target.group), created: target.created };
   }
 
-  /** Latest point in the call that user speech has been transcribed up to. */
-  getUserWatermarkMs(): number {
-    return this.userWatermarkMs;
-  }
-
-  /** Whether any user speech at all has been transcribed in this call. */
+  /** Whether the call contains usable user text, regardless of its task ownership. */
   hasUserSpeech(): boolean {
-    return this.groups.some((group) => group.role === "user" && group.fragments.length > 0);
+    return this.groups.some(
+      (group) => group.role === "user" && group.fragments.some((fragment) => fragment.delta.trim())
+    );
   }
 
   /**

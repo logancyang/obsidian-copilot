@@ -28,7 +28,7 @@ import { AI_SENDER, USER_SENDER } from "@/constants";
 import type { MessageContext } from "@/types/message";
 
 /**
- * Quiet period after the newest transcript fragment before a delegation is
+ * Quiet period after the newest user transcript fragment before a delegation is
  * answered, and the longest a delegation waits for usable speech at all. Both
  * are starting parameters to measure against real speech, not API guarantees.
  *
@@ -129,7 +129,6 @@ export interface VoiceConversationBridgeDeps {
 /** A delegation waiting for the speech it belongs to. */
 interface PendingDelegation {
   liveDelegationId: string;
-  offsetMs: number;
   settleTimer: number | null;
   giveUpTimer: number;
 }
@@ -403,7 +402,7 @@ export class VoiceConversationBridge {
         this.ingestTranscript(call, event.delta);
         return;
       case "delegation.requested":
-        this.trackDelegation(call, event.liveDelegationId, event.offsetMs);
+        this.trackDelegation(call, event.liveDelegationId);
         return;
       case "session.warning":
         call.warningSecondsRemaining = event.secondsRemaining;
@@ -451,7 +450,10 @@ export class VoiceConversationBridge {
       store.updateVoiceTranscript(existing, change.group.text, change.group.ranges);
     }
     call.binding.conversation.notifyConversationChanged();
-    for (const pending of call.pending.values()) this.evaluate(call, pending);
+    // Assistant acknowledgments must not postpone dispatch of settled user speech.
+    if (delta.role === "user") {
+      for (const pending of call.pending.values()) this.evaluate(call, pending);
+    }
   }
 
   /** Mark the row that was still being spoken when the call ended abruptly. */
@@ -467,12 +469,12 @@ export class VoiceConversationBridge {
 
   /**
    * Record a delegation before acknowledging it, then wait for the speech it
-   * belongs to. A timer alone never authorizes work: without transcript
-   * coverage past the delegation's audio offset the request is deferred.
+   * belongs to. A timer alone never authorizes work: the request needs usable
+   * user speech before it can settle.
    *
    * See `designdocs/VOICE_CHAT_DEMO_DESIGN.md`, "From speech to a local task".
    */
-  private trackDelegation(call: ActiveCall, liveDelegationId: string, offsetMs: number): void {
+  private trackDelegation(call: ActiveCall, liveDelegationId: string): void {
     const known = call.delegationTasks.get(liveDelegationId);
     if (known !== undefined) {
       // A repeated notification returns the mapping we already recorded rather
@@ -483,7 +485,6 @@ export class VoiceConversationBridge {
     if (call.pending.has(liveDelegationId)) return;
     const pending: PendingDelegation = {
       liveDelegationId,
-      offsetMs,
       settleTimer: null,
       giveUpTimer: call.timers.setTimeout(
         () => this.deferForMissingSpeech(call, liveDelegationId),
@@ -494,9 +495,11 @@ export class VoiceConversationBridge {
     this.evaluate(call, pending);
   }
 
-  /** Arm the settle timer once speech covers the delegation's audio offset. */
+  /** Wait for user speech to settle before constructing its delegated request. */
   private evaluate(call: ActiveCall, pending: PendingDelegation): void {
-    if (call.transcript.getUserWatermarkMs() < pending.offsetMs) return;
+    // Delegation offsets mark when the model delegates, which can follow user silence.
+    // Waiting for user speech to reach that timestamp would reject complete requests.
+    if (!call.transcript.hasUserSpeech()) return;
     if (pending.settleTimer !== null) call.timers.clearTimeout(pending.settleTimer);
     pending.settleTimer = call.timers.setTimeout(
       () => this.acceptDelegation(call, pending.liveDelegationId),
@@ -551,11 +554,8 @@ export class VoiceConversationBridge {
     const pending = call.pending.get(liveDelegationId);
     if (!pending) return;
     this.forget(call, pending);
-    this.defer(
-      call,
-      liveDelegationId,
-      call.transcript.hasUserSpeech() ? "already-claimed" : "no-transcript"
-    );
+    // Timing out leaves speech unclaimed; it does not mean a task already owns it.
+    this.defer(call, liveDelegationId, "no-transcript");
   }
 
   private defer(

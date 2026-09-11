@@ -216,7 +216,7 @@ describe("commands", () => {
       expect(mockRequestMiyoIndexRefresh).not.toHaveBeenCalled();
     });
 
-    it("omits the voice check command while the voice demo is off", () => {
+    it("omits the voice toggle command while the voice demo is off", () => {
       jest.mocked(isDesktopRuntime).mockReturnValue(true);
       const commands: Command[] = [];
       const plugin = {
@@ -226,10 +226,10 @@ describe("commands", () => {
 
       registerCommands(plugin, jest.fn());
 
-      expect(commands.find(({ id }) => id === COMMAND_IDS.VOICE_TRANSPORT_SPIKE)).toBeUndefined();
+      expect(commands.find(({ id }) => id === COMMAND_IDS.VOICE_TOGGLE)).toBeUndefined();
     });
 
-    it("omits the voice check command on mobile even when the voice demo is on", () => {
+    it("omits the voice toggle command on mobile even when the voice demo is on", () => {
       jest.mocked(isDesktopRuntime).mockReturnValue(false);
       jest.mocked(getSettings).mockReturnValue({
         enableMiyo: false,
@@ -243,10 +243,10 @@ describe("commands", () => {
 
       registerCommands(plugin, jest.fn());
 
-      expect(commands.find(({ id }) => id === COMMAND_IDS.VOICE_TRANSPORT_SPIKE)).toBeUndefined();
+      expect(commands.find(({ id }) => id === COMMAND_IDS.VOICE_TOGGLE)).toBeUndefined();
     });
 
-    it("registers the voice check command for a desktop tester who turned the voice demo on", () => {
+    it("registers the voice toggle command for a desktop tester who turned the voice demo on", () => {
       jest.mocked(isDesktopRuntime).mockReturnValue(true);
       jest.mocked(getSettings).mockReturnValue({
         enableMiyo: false,
@@ -260,8 +260,8 @@ describe("commands", () => {
 
       registerCommands(plugin, jest.fn());
 
-      expect(commands.find(({ id }) => id === COMMAND_IDS.VOICE_TRANSPORT_SPIKE)).toMatchObject({
-        name: "Voice transport check (demo)",
+      expect(commands.find(({ id }) => id === COMMAND_IDS.VOICE_TOGGLE)).toMatchObject({
+        name: "Voice: start or end (demo)",
         icon: "mic",
       });
     });
@@ -285,7 +285,7 @@ describe("commands", () => {
         enableMiyo: false,
         agentMode: { voice: { enabled: false, serverUrl: "https://voice.example.com" } },
       } as ReturnType<typeof getSettings>);
-      commands.find(({ id }) => id === COMMAND_IDS.VOICE_TRANSPORT_SPIKE)?.callback?.();
+      commands.find(({ id }) => id === COMMAND_IDS.VOICE_TOGGLE)?.callback?.();
 
       await waitFor(() =>
         expect(Notice).toHaveBeenCalledWith("Voice is turned off in Copilot settings.")
