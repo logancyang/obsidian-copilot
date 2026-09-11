@@ -125,11 +125,6 @@ function configOptionFromAcp(opt: SessionConfigOption): BackendConfigOption {
   };
 }
 
-export function configOptionToAcp(opt: BackendConfigOption): SessionConfigOption {
-  // SDK's SessionConfigOption shape mirrors our neutral shape; cast through.
-  return opt as unknown as SessionConfigOption;
-}
-
 export function acpStateToBackendState(
   models: SessionModelState | null | undefined,
   modes: SessionModeState | null | undefined,
