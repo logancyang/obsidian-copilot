@@ -45,6 +45,8 @@ Actual narrow-window Settings captures show separate search, status and recovery
 
 Settings captures were repeated using actual window resizing to include native percentage padding; the earlier artificial-width captures are superseded. The matrix’s original outer wait expired just before its final artifact arrived; its completed 64 captures and all 308 samples were then verified without rerunning or altering the UI.
 
+Candice approved the six final combined review captures on September 10: narrow recovery and saved-prompt layouts, Skills alignment/count visibility, account-first setup, shared button treatments and the complete Show more focus ring. Approval is for those rendered states; the interaction and contrast matrix is recorded above.
+
 ## Hosted checks
 
 21 PR heads have all hosted checks green, including the corrected test-only amendment on PR 3208 and final gallery PR 3209. PRs 3188, 3191 and 3194 retain historical Windows failures; zeroliu’s merged PR 3202 moved Windows testing to release publication, and those prior rerun requests were retired. Their historical results have not been changed to green. The combined build uses the newer master containing that workflow policy.
