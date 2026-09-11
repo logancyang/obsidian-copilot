@@ -121,6 +121,7 @@ Agent Chat keeps each conversation separate:
 
 - Select **+** for another session. Each tab keeps its own history, draft, attachments, and queued follow-ups.
 - Select **New Chat** to reset the current tab.
+- With OpenCode, send a new request while the agent is working to interrupt it and start the new work in the same conversation. Completed edits remain in place. Rapid typed follow-ups combine into one replacement request.
 - Select **Stop** to cancel the current turn and discard its queued follow-ups.
 - Use **Recent Chats** from the Agent Chat home screen, or **Chat History** inside a conversation, to resume saved work. The **Recent Chats** list can be scrolled or searched.
 - Add the active note, selected text, other notes, folders, a Copilot Web Viewer tab, or supported images. You can also mention a note with `[[Note title]]`.
@@ -202,7 +203,9 @@ The voice bar shows assistant audio activity, microphone state and call time. **
 
 Spoken captions appear in the conversation. Work submitted while voice is active appears in a task card. Open **View details** for the full answer and tool activity. A saved task retains its answer, but its live activity trail may be unavailable after reload.
 
-Follow-ups queue behind the current task and do not change work already running. Use the existing **Stop** control to cancel local work and clear its queue. Permission requests, questions and plan decisions still require the on-screen controls; speaking an approval does not approve an operation.
+With OpenCode, an accepted typed or spoken request interrupts the active task. The replacement waits for cancellation to finish before starting. If another spoken request arrives during that handoff, the latest request replaces pending work and the discarded task is marked cancelled. Claude and Codex follow-ups still queue behind the current task.
+
+Use **Stop** to cancel local work and clear pending replacements. Steering cancels unanswered tool permissions and questions; it never approves them. Approvals and plan decisions still require the on-screen controls.
 
 Switching chat, project or agent, or closing the chat view, ends voice. Starting it again creates a new call in the same conversation. Voice is a desktop demo; it does not support multi-agent fan-out.
 

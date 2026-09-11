@@ -69,23 +69,15 @@ Existing submission locks during required plan or permission decisions still app
 | Start voice again                                       | Create a fresh Live session with bounded recent context and current task facts. Resume the existing backend session.                                           |
 | Change chat, project, or backend; close the owning view | End voice before changing ownership. Keep local tasks under their existing lifecycle rules.                                                                    |
 
-The demo supports one active voice conversation per plugin instance and one selected backend per conversation. Multi-agent fan-out, mobile voice, automatic call reconnection, voice-only approval, and backend steering are outside this demo. Existing text-only capabilities continue to work when voice is off. If fan-out is selected, the voice control explains that a single agent must be selected first.
+The demo supports one active voice conversation per plugin instance and one selected backend per conversation. Multi-agent fan-out, mobile voice, automatic call reconnection, and voice-only approval are outside this demo. Existing text-only capabilities continue to work when voice is off. If fan-out is selected, the voice control explains that a single agent must be selected first.
 
 ### What steering means here
 
-Steering injects a new instruction into an agent's currently running turn. It is different from interrupting speech, queuing a later message, or cancelling work. The shared `BackendProcess` contract currently exposes `prompt()` and `cancel()`, not a uniform steering operation. The adapters would need different implementations and lifecycle tests before Copilot could promise equivalent steering behavior.
+Task steering means cancelling the active agent turn and dispatching replacement work in the same conversation. It reuses the existing `BackendProcess.cancel()` and `prompt()` contract. Interrupting assistant speech alone does not submit or cancel local work.
 
-Steering is not required for the first voice demo. Corrections made while a task is running become clearly labelled follow-ups. They do not undo work already performed. If the user needs the running operation stopped, they use Stop and then send the replacement request. A future steering interface should advertise backend capability and return an explicit result such as applied, queued, or rejected; voice must never infer success from an interrupted waveform.
+The original demo queued corrections until the active task finished. OpenCode now opts into task steering through its backend descriptor: accepted typed and delegated requests cancel the active turn, then start replacement work in the same session. Cancellation acknowledgment and the existing prompt-drain barrier protect the replacement from late cancellation and output. Consecutive typed requests during handoff still merge; a newer request involving voice supersedes pending replacements and reports them cancelled. Other backends retain queueing until they opt in. Context and foreground dispatch holds still apply. Steering does not undo completed work or approve pending permissions, and an interrupted waveform alone never indicates that local work stopped.
 
-The implementation difficulty differs by backend:
-
-| Backend at this checkout         | What a later steering implementation needs                                                                                                                                                                                                                        |
-| -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Codex, pinned `codex-acp` 1.10.0 | The upstream adapter exposes `_session/steering`. Wire capability discovery, explicit outcomes, and any newly started turn back into Copilot's task ownership. This is the most direct starting point; an RPC alone is not the complete UI/session integration.   |
-| Claude, SDK 0.3.206              | The current Copilot driver creates a query per prompt and breaks its event consumer at the first result. Support for additional in-flight input needs a consumer lifecycle that keeps receiving the resulting work, plus cancellation and permission-state tests. |
-| OpenCode, pinned 1.18.16         | Copilot has no explicit steering contract through its current adapter. Verify the upstream behavior and define a reliable receipt before advertising steering; do not equate a second concurrent prompt with an applied instruction.                              |
-
-These are code-level assessments, not native steering test results. See the [pinned Codex extension](https://github.com/agentclientprotocol/codex-acp/blob/v1.10.0/src/AcpExtensions.ts), `src/agentMode/sdk/ClaudeSdkBackendProcess.ts`, and `src/agentMode/backends/opencode/OpencodeBackend.ts`. The demo avoids making the shared voice experience depend on closing these gaps.
+Backend capability is enabled separately after cancellation and replacement tests for that adapter. OpenCode is enabled here; Claude and Codex remain queued until their dedicated steering changes. This does not require native in-turn instruction injection or concurrent prompts. Native verification is recorded separately from unit tests.
 
 ## Context and orientation
 

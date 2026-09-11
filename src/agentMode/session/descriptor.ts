@@ -119,6 +119,13 @@ export interface BackendDescriptor {
   readonly displayName: string;
 
   /**
+   * New typed or delegated requests cancel the active turn before dispatch.
+   * Opt in only when cancellation leaves this backend session reusable; absent
+   * or false keeps follow-ups queued until normal completion.
+   */
+  readonly supportsSteering?: boolean;
+
+  /**
    * Brand icon component for this backend. Rendered in the session tab strip
    * and anywhere else the UI surfaces backend identity. Should accept a
    * `className` for sizing/coloring and use `currentColor` for fill so it

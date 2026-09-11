@@ -342,6 +342,7 @@ export class AgentSession {
   readonly tasks: AgentTaskCoordinator = new AgentTaskCoordinator({
     submitTask: (submission, taskId) => this.submitTask(submission, taskId),
     settleTask: (taskId, outcome) => this.settleTask(taskId, outcome),
+    supportsSteering: () => this.getDescriptor?.()?.supportsSteering ?? false,
     cancel: () => this.cancel(),
     getTask: (taskId) => this.store.getTask(taskId),
   });

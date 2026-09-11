@@ -56,6 +56,8 @@ export interface AgentTaskExecutor {
     taskId: string,
     outcome: { stopReason?: StopReason; error?: unknown }
   ): AgentTaskResult;
+  /** Whether new requests interrupt the active turn before dispatching. */
+  supportsSteering?(): boolean;
   /** Cancel the in-flight turn, if any. */
   cancel(): Promise<void>;
   getTask(taskId: string): AgentTaskRecord | undefined;
@@ -156,7 +158,8 @@ export class AgentTaskCoordinator {
   // from an empty holder map before any composer registers, which is simply a
   // conversation nothing has rendered yet.
   private backgrounded = false;
-  private active: { taskId: string; generation: number } | null = null;
+  private active: { taskId: string; generation: number; cancelRequested?: boolean } | null = null;
+  private cancellation: Promise<void> | null = null;
   // Monotonic per dispatch. A turn's callback carries the generation it was
   // started with, so a late settlement from a superseded turn can still record
   // its own outcome without clearing the replacement task that took its slot.
@@ -189,11 +192,30 @@ export class AgentTaskCoordinator {
     if (this.disposed) {
       return { taskId, disposition: "rejected", rejectionReason: "Conversation is closed" };
     }
-    // A non-empty queue holds the line too: a submission accepted while
-    // earlier work is still parked must run after it, not in front of it.
-    if (this.hold !== null || this.active !== null || this.queue.length > 0) {
+    // Cancellation is a dispatch barrier even after the local task settles;
+    // replacements must use the same queue until the backend is ready.
+    if (
+      this.hold !== null ||
+      this.active !== null ||
+      this.cancellation !== null ||
+      this.queue.length > 0
+    ) {
+      const steering =
+        (this.active !== null || this.cancellation !== null) && this.executor.supportsSteering?.();
+      // A newer delegated request replaces pending work, so it cannot wait for
+      // an obsolete replacement to finish. Consecutive typed edits still merge.
+      if (
+        steering &&
+        (submission.source !== "typed" ||
+          this.queue.some((item) => item.submission.source !== "typed"))
+      ) {
+        const discarded = this.queue;
+        this.queue = [];
+        this.reportDiscarded(discarded);
+      }
       this.queue.push({ taskId, submission, queueReason: this.hold ?? "busy" });
       this.invalidateQueue();
+      if (steering && this.active && !this.active.cancelRequested) void this.requestCancellation();
       this.notify();
       return { taskId, disposition: "queued" };
     }
@@ -288,11 +310,25 @@ export class AgentTaskCoordinator {
       this.reportDiscarded(discarded);
       this.notify();
     }
-    try {
-      await this.executor.cancel();
-    } catch (e) {
-      logError("[AgentMode] cancel failed", e);
-    }
+    await this.requestCancellation();
+  }
+
+  private requestCancellation(): Promise<void> {
+    if (this.cancellation) return this.cancellation;
+    const active = this.active;
+    if (active) active.cancelRequested = true;
+    // Local settlement can precede the backend's cancel acknowledgment. Hold
+    // dispatch until both settle so a late cancel cannot stop the replacement.
+    this.cancellation = Promise.resolve()
+      .then(() => {
+        if (this.active === active) return this.executor.cancel();
+      })
+      .catch((error) => logError("[AgentMode] cancel failed", error))
+      .finally(() => {
+        this.cancellation = null;
+        this.drain();
+      });
+    return this.cancellation;
   }
 
   subscribe(listener: () => void): () => void {
@@ -402,7 +438,8 @@ export class AgentTaskCoordinator {
    * stay one task each.
    */
   private drain(): void {
-    if (this.disposed || this.hold !== null || this.active !== null) return;
+    if (this.disposed || this.hold !== null || this.active !== null || this.cancellation !== null)
+      return;
     if (this.queue.length === 0) return;
     const head = this.queue[0];
     // The leading run of typed submissions merges; a spoken request ends the

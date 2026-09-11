@@ -151,6 +151,161 @@ describe("AgentTaskCoordinator", () => {
         ]);
       });
 
+      it.each([typed, spoken])(
+        "interrupts active work for an accepted replacement request",
+        async (submission) => {
+          const { executor, dispatched, cancel, settled } = makeExecutor();
+          Object.assign(executor, { supportsSteering: () => true });
+          const coordinator = new AgentTaskCoordinator(executor);
+          coordinator.submit(typed("s1", "read every note"));
+          cancel.mockImplementation(async () => {
+            dispatched[0].resolve("cancelled");
+          });
+
+          const replacement = coordinator.submit(submission("s2", "only read the selected note"));
+          await flushMicrotasks();
+
+          expect(cancel).toHaveBeenCalledTimes(1);
+          expect(settled[0].outcome).toEqual({ stopReason: "cancelled" });
+          expect(dispatched.map((turn) => turn.submission.requestText)).toEqual([
+            "read every note",
+            "only read the selected note",
+          ]);
+          expect(coordinator.getActiveTask()?.taskId).toBe(replacement.taskId);
+        }
+      );
+
+      it("coalesces rapid typed replacements while cancellation is pending without cancelling their turn", async () => {
+        const { executor, dispatched, cancel } = makeExecutor();
+        Object.assign(executor, { supportsSteering: () => true });
+        const coordinator = new AgentTaskCoordinator(executor);
+        let finishCancel!: () => void;
+        cancel.mockImplementation(
+          () =>
+            new Promise<void>((resolve) => {
+              finishCancel = resolve;
+            })
+        );
+        coordinator.submit(typed("s1", "first"));
+        coordinator.submit(typed("s2", "use the selected note"));
+        coordinator.submit(typed("s3", "keep it short"));
+        await flushMicrotasks();
+        expect(cancel).toHaveBeenCalledTimes(1);
+        dispatched[0].resolve("cancelled");
+        await flushMicrotasks();
+        expect(dispatched).toHaveLength(1);
+
+        finishCancel();
+        await flushMicrotasks();
+        expect(dispatched).toHaveLength(2);
+        expect(dispatched[1].submission.requestText).toBe("use the selected note\n\nkeep it short");
+        expect(cancel).toHaveBeenCalledTimes(1);
+      });
+
+      it("does not cancel a replacement twice when more requests arrive after cancellation returns", async () => {
+        const { executor, dispatched, cancel } = makeExecutor();
+        Object.assign(executor, { supportsSteering: () => true });
+        const coordinator = new AgentTaskCoordinator(executor);
+        coordinator.submit(typed("s1", "first"));
+        coordinator.submit(typed("s2", "second"));
+        await flushMicrotasks();
+        coordinator.submit(typed("s3", "third"));
+        await flushMicrotasks();
+        expect(cancel).toHaveBeenCalledTimes(1);
+        expect(dispatched).toHaveLength(1);
+      });
+
+      it("keeps replacement work parked when its composer is backgrounded during cancellation", async () => {
+        const { executor, dispatched, cancel } = makeExecutor();
+        Object.assign(executor, { supportsSteering: () => true });
+        const coordinator = new AgentTaskCoordinator(executor);
+        coordinator.setDispatchHold(null);
+        coordinator.submit(typed("s1", "first"));
+        cancel.mockImplementation(async () => {
+          dispatched[0].resolve("cancelled");
+        });
+        coordinator.submit(spoken("s2", "second"));
+        coordinator.releaseDispatchHold();
+        await flushMicrotasks();
+        expect(cancel).toHaveBeenCalledTimes(1);
+        expect(dispatched).toHaveLength(1);
+        expect(coordinator.getQueuedTasks()).toHaveLength(1);
+        coordinator.setDispatchHold(null);
+        expect(dispatched).toHaveLength(2);
+      });
+
+      it("treats a repeated delegation as the same replacement without interrupting it again", async () => {
+        const { executor, dispatched, cancel } = makeExecutor();
+        Object.assign(executor, { supportsSteering: () => true });
+        const coordinator = new AgentTaskCoordinator(executor);
+        coordinator.submit(typed("s1", "first"));
+        cancel.mockImplementation(async () => {
+          dispatched[0].resolve("cancelled");
+        });
+        const replacement = spoken("s2", "second", { delegationId: "delegation-2" });
+        coordinator.submit(replacement);
+        await flushMicrotasks();
+        expect(coordinator.submit({ ...replacement, submissionId: "s3" }).disposition).toBe(
+          "duplicate"
+        );
+        await flushMicrotasks();
+        expect(cancel).toHaveBeenCalledTimes(1);
+        expect(dispatched).toHaveLength(2);
+      });
+
+      it.each([
+        [spoken, spoken],
+        [typed, spoken],
+        [spoken, typed],
+      ])(
+        "replaces a pending voice handoff with the newest request and reports abandoned work cancelled",
+        async (previous, latest) => {
+          const { executor, dispatched, cancel } = makeExecutor();
+          Object.assign(executor, { supportsSteering: () => true });
+          const coordinator = new AgentTaskCoordinator(executor);
+          const results: AgentTaskResult[] = [];
+          coordinator.onTaskSettled((result) => results.push(result));
+          let finishCancel!: () => void;
+          cancel.mockImplementation(
+            () =>
+              new Promise<void>((resolve) => {
+                finishCancel = resolve;
+              })
+          );
+          coordinator.submit(typed("s1", "first"));
+          const superseded = coordinator.submit(previous("s2", "obsolete replacement"));
+          await flushMicrotasks();
+          expect(cancel).toHaveBeenCalledTimes(1);
+          dispatched[0].resolve("cancelled");
+          await flushMicrotasks();
+          const replacement = coordinator.submit(latest("s3", "latest replacement"));
+          expect(results).toContainEqual(
+            expect.objectContaining({ taskId: superseded.taskId, state: "cancelled" })
+          );
+          finishCancel();
+          await flushMicrotasks();
+          expect(dispatched.map((turn) => turn.submission.requestText)).toEqual([
+            "first",
+            "latest replacement",
+          ]);
+          expect(coordinator.getActiveTask()?.taskId).toBe(replacement.taskId);
+          expect(cancel).toHaveBeenCalledTimes(1);
+        }
+      );
+
+      it("starts the replacement without cancellation when the previous task already completed", async () => {
+        const { executor, dispatched, cancel } = makeExecutor();
+        Object.assign(executor, { supportsSteering: () => true });
+        const coordinator = new AgentTaskCoordinator(executor);
+        coordinator.submit(typed("s1", "first"));
+        dispatched[0].resolve("end_turn");
+        const replacement = coordinator.submit(typed("s2", "second"));
+        await flushMicrotasks();
+        expect(cancel).not.toHaveBeenCalled();
+        expect(dispatched.map((turn) => turn.submission.requestText)).toEqual(["first", "second"]);
+        expect(coordinator.getActiveTask()?.taskId).toBe(replacement.taskId);
+      });
+
       it("labels a submission parked behind a running turn as busy", () => {
         const { executor } = makeExecutor();
         const coordinator = new AgentTaskCoordinator(executor);
@@ -370,6 +525,35 @@ describe("AgentTaskCoordinator", () => {
     });
 
     describe("cancelActiveAndClearQueue()", () => {
+      it("discards the steering replacement when Stop races pending cancellation", async () => {
+        const { executor, dispatched, cancel } = makeExecutor();
+        Object.assign(executor, { supportsSteering: () => true });
+        const coordinator = new AgentTaskCoordinator(executor);
+        const results: AgentTaskResult[] = [];
+        coordinator.onTaskSettled((result) => results.push(result));
+        let finishCancel!: () => void;
+        cancel.mockImplementation(
+          () =>
+            new Promise<void>((resolve) => {
+              finishCancel = resolve;
+            })
+        );
+        coordinator.submit(typed("s1", "first"));
+        const replacement = coordinator.submit(spoken("s2", "second"));
+        await flushMicrotasks();
+        const stopped = coordinator.cancelActiveAndClearQueue();
+        expect(coordinator.getQueuedTasks()).toHaveLength(0);
+        expect(results).toContainEqual(
+          expect.objectContaining({ taskId: replacement.taskId, state: "cancelled" })
+        );
+        dispatched[0].resolve("cancelled");
+        finishCancel();
+        await stopped;
+        await flushMicrotasks();
+        expect(dispatched).toHaveLength(1);
+        expect(cancel).toHaveBeenCalledTimes(1);
+      });
+
       it("discards queued submissions before requesting cancellation https://github.com/Brevilabs/obsidian-copilot-private/issues/365", async () => {
         const { executor, dispatched, cancel } = makeExecutor();
         const coordinator = new AgentTaskCoordinator(executor);
@@ -531,3 +715,7 @@ describe("AgentTaskCoordinator", () => {
     });
   });
 });
+
+async function flushMicrotasks(): Promise<void> {
+  for (let i = 0; i < 12; i++) await Promise.resolve();
+}

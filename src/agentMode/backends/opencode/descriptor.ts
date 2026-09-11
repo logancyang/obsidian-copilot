@@ -139,6 +139,7 @@ function managedInstallActionState(manager: OpencodeBinaryManager): ManagedInsta
 export const OpencodeBackendDescriptor: BackendDescriptor = {
   id: "opencode",
   displayName: "opencode",
+  supportsSteering: true,
   Icon: OpencodeLogo,
   // opencode routes through user-controlled / self-hosted endpoints, so it
   // stays available in Self-Host Mode.
