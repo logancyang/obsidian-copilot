@@ -41,7 +41,7 @@ The conversation reads approximately like this:
     Assistant: I'll look through your notes.
     [OpenCode · Working · View details]
     User: Focus on the customer feedback.
-    [Follow-up queued · Runs after the current task]
+    [Follow-up queued · Waiting for cancellation]
     Assistant: I found three relevant notes. The main concern was onboarding.
 
     [assistant waveform]  Mic on  01:24  End voice
@@ -51,7 +51,7 @@ Speech transcripts appear as user messages, and GPT-Live output transcripts appe
 
 Approvals, questions, plan review, and errors remain visible and actionable. GPT-Live may explain that Copilot needs a click, but a spoken “yes” does not approve a tool operation in this demo. Existing local permission enforcement remains authoritative.
 
-Existing submission locks during required plan or permission decisions still apply. The voice frontend can continue talking, but neither typed nor spoken submissions bypass the required decision. Accepted queued requests remain queued until the session is allowed to run them.
+Existing submission locks during required plan or permission decisions still apply. The voice frontend can continue talking, but neither typed nor spoken submissions bypass the required decision. An accepted replacement denies pending permissions when cancelling the active task; it never approves them. Context and foreground holds still delay dispatch.
 
 ### Mode and control behavior
 
@@ -60,7 +60,7 @@ Existing submission locks during required plan or permission decisions still app
 | Start voice while the backend is idle                   | Keep the same chat and backend session; connect voice using recent conversation context.                                                                       |
 | Start voice during a text task                          | The existing task keeps its ordinary text presentation. Voice learns that it is already running and does not submit it again.                                  |
 | Type while voice is active                              | Submit through the shared local queue, mirror the accepted request into voice context, and show the backend response in a task card.                           |
-| Speak while a task is running                           | Conversation continues; delegated follow-ups wait in the shared queue. The UI explicitly says they have not changed the running task.                          |
+| Speak while a task is running                           | Conversation continues; accepted delegated follow-ups cancel the active OpenCode, Claude, or Codex turn before replacement work starts.                        |
 | Interrupt the assistant's speech                        | Stop or redirect speech through GPT-Live's conversational behavior. Local agent work continues.                                                                |
 | Click the existing Stop control                         | Clear queued work first, request cancellation of the active backend turn, and report cancellation only after its outcome is known. Voice may remain connected. |
 | Mute microphone                                         | Stop sending microphone content. Keep playback and local work available. Muting is not the end of billing.                                                     |
@@ -75,9 +75,9 @@ The demo supports one active voice conversation per plugin instance and one sele
 
 Task steering means cancelling the active agent turn and dispatching replacement work in the same conversation. It reuses the existing `BackendProcess.cancel()` and `prompt()` contract. Interrupting assistant speech alone does not submit or cancel local work.
 
-The original demo queued corrections until the active task finished. OpenCode now opts into task steering through its backend descriptor: accepted typed and delegated requests cancel the active turn, then start replacement work in the same session. Cancellation acknowledgment and the existing prompt-drain barrier protect the replacement from late cancellation and output. Consecutive typed requests during handoff still merge; a newer request involving voice supersedes pending replacements and reports them cancelled. Other backends retain queueing until they opt in. Context and foreground dispatch holds still apply. Steering does not undo completed work or approve pending permissions, and an interrupted waveform alone never indicates that local work stopped.
+The original demo queued corrections until the active task finished. OpenCode, Claude, and Codex opt into task steering through their backend descriptors: accepted typed and delegated requests cancel the active turn, then start replacement work in the same session. Cancellation acknowledgment and the existing prompt-drain barrier protect the replacement from late cancellation and output. Consecutive typed requests during handoff still merge; a newer request involving voice supersedes pending replacements and reports them cancelled. Other backends retain queueing until they opt in. Context and foreground dispatch holds still apply. Steering does not undo completed work or approve pending permissions, and an interrupted waveform alone never indicates that local work stopped.
 
-Backend capability is enabled separately after cancellation and replacement tests for that adapter. OpenCode is enabled here; Claude and Codex remain queued until their dedicated steering changes. This does not require native in-turn instruction injection or concurrent prompts. Native verification is recorded separately from unit tests.
+Backend capability is enabled separately after cancellation and replacement tests for that adapter. OpenCode, Claude, and Codex are enabled in separate commits above the voice implementation. This does not require native in-turn instruction injection or concurrent prompts. Native verification is recorded separately from unit tests.
 
 ## Context and orientation
 
@@ -152,7 +152,7 @@ Persist the assembled text, stable row identity, source ranges, and task links; 
 
 Introduce `AgentTaskCoordinator` in `session/`, owned by the existing session lifecycle. It accepts typed submissions and voice delegation context, assigns stable task IDs, captures presentation, and serializes all calls to `AgentSession`. Move the current queue scheduling into this owner instead of implementing a parallel voice queue. The composer remains responsible for collecting the draft and attachments before submitting an immutable payload.
 
-Preserve existing typed queue ordering and combination semantics. Voice requests have explicit source boundaries and cannot be merged across different delegation IDs without recording all of those IDs against the resulting task. For the demo, keep distinct voice requests as distinct queued tasks. There is still only one active backend turn. Preserve the current foreground-only queue dispatch rule; changing chats ends voice and must not secretly flush queued work in an inactive chat.
+Preserve existing typed queue ordering and combination semantics. Voice requests have explicit source boundaries and cannot be merged across different delegation IDs without recording all of those IDs against the resulting task. Keep distinct voice requests as distinct task records; when steering, mark a superseded pending request cancelled so the latest request runs next. There is still only one active backend turn. Preserve the current foreground-only queue dispatch rule; changing chats ends voice and must not secretly flush queued work in an inactive chat.
 
 The task coordinator inserts or references public user rows once. `AgentSession` creates the backend assistant placeholder with its task ID, but does not add another public copy of already displayed voice text or typed text. Prompt context stays in the backend request rather than appearing as a synthetic user bubble.
 
@@ -178,7 +178,7 @@ For the initial spike, use a short configurable settling delay after new user tr
 
 The backend receives a labelled conversation request, not a guessed standalone imperative. It must interpret the latest request, use ordinary local tools when appropriate, and ask for clarification when essential details are missing. Transcript errors can still misstate user intent; existing operation permissions remain necessary. The demo does not promise perfect utterance segmentation or natural-language deduplication.
 
-Claim source speech fragment IDs when accepting a task. Repeated delegation IDs return the recorded task status. A new delegation that covers only already claimed speech does not start the same task again. Later user speech can create a new task; if work is busy it queues. The queued request retains its captured context and gains current verified task outcomes when eventually dispatched. Do not quietly reinterpret a queued correction as already applied steering.
+Claim source speech fragment IDs when accepting a task. Repeated delegation IDs return the recorded task status. A new delegation that covers only already claimed speech does not start the same task again. Later user speech can create a new task. If work is busy, a steering-capable backend cancels the active turn before dispatching the replacement; other backends queue it. The accepted request retains its captured context and gains current verified task outcomes when dispatched. A replacement waiting for cancellation is not yet running.
 
 ### Typed input during voice
 
@@ -380,7 +380,7 @@ Transport/server tests cover authentication and ownership, creation deduplicatio
 
 ### Native end-to-end demo
 
-For each of Claude, Codex, and OpenCode, open an existing text conversation and ask a harmless question about a note. Start voice, ask a follow-up referring to that answer, and observe the waveform and assistant transcript. Ask the agent to find relevant notes: exactly one local task starts and its raw answer stays inside its card. Type an exact search term while voice is active, then speak a clarification while the agent is busy; verify the typed input is not executed twice and the clarification is labelled queued.
+For each of Claude, Codex, and OpenCode, open an existing text conversation and ask a harmless question about a note. Start voice, ask a follow-up referring to that answer, and observe the waveform and assistant transcript. Ask the agent to find relevant notes: exactly one local task starts and its raw answer stays inside its card. Type an exact search term while voice is active, then speak a clarification while the agent is busy; verify the typed input is not executed twice and the clarification cancels the active task before its replacement starts.
 
 Exercise a permission request and answer it through existing UI. Interrupt spoken output and verify local work continues. End voice during a slow read-only task, verify microphone capture stops, and wait for the task's result in its existing card. Type “use the option we just discussed” and verify recent voice context reaches the same backend session. Start voice again and verify it knows the current task facts without replaying an old task or answer announcement.
 
@@ -412,7 +412,9 @@ September 10, 2026: Preserve one conversation and the selected local backend ses
 
 September 10, 2026: GPT-Live owns spoken conversational output during voice mode; local backend output is linked task detail. Task presentation is fixed at submission so mode changes cannot duplicate or relocate active answers.
 
-September 10, 2026: Omit backend steering from the demo. Queue delegated follow-ups and preserve explicit Stop, because the shared backend contract has no uniform steering operation today.
+September 10, 2026: Initially omit backend steering from the demo and queue delegated follow-ups while preserving explicit Stop.
+
+September 11, 2026: Enable cancellation-based steering for OpenCode, Claude, and Codex in separate commits. The existing cancellation and prompt-drain contract serializes replacement work without changing the voice transport.
 
 September 10, 2026: Recommend direct client delegation to the selected agent, with transcript/context assembly in Copilot. Managed Luna routing remains a documented experiment if the initial boundary proves unreliable; it is not a hidden required dependency.
 

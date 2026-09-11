@@ -1,4 +1,5 @@
 import { AgentSession } from "@/agentMode/session/AgentSession";
+import { CodexBackendDescriptor } from "@/agentMode/backends/codex/descriptor";
 import { ClaudeBackendDescriptor } from "@/agentMode/backends/claude/descriptor";
 import { OpencodeBackendDescriptor } from "@/agentMode/backends/opencode/descriptor";
 import type {
@@ -61,8 +62,8 @@ describe("AgentSession", () => {
       afterEach(() => jest.useRealTimers());
 
       it.each(
-        [OpencodeBackendDescriptor, ClaudeBackendDescriptor].flatMap((descriptor) =>
-          (["typed", "voice"] as const).map((source) => ({ descriptor, source }))
+        [OpencodeBackendDescriptor, ClaudeBackendDescriptor, CodexBackendDescriptor].flatMap(
+          (descriptor) => (["typed", "voice"] as const).map((source) => ({ descriptor, source }))
         )
       )(
         "interrupts $descriptor.displayName for a $source request and isolates cancelled output until the backend drains",
@@ -108,7 +109,7 @@ describe("AgentSession", () => {
         }
       );
 
-      it.each([OpencodeBackendDescriptor, ClaudeBackendDescriptor])(
+      it.each([OpencodeBackendDescriptor, ClaudeBackendDescriptor, CodexBackendDescriptor])(
         "replaces a spoken task waiting for the cancelled $displayName prompt to drain",
         async (descriptor) => {
           const { session, prompts, cancel } = makeSession(descriptor);
@@ -135,7 +136,7 @@ describe("AgentSession", () => {
         }
       );
 
-      it.each([OpencodeBackendDescriptor, ClaudeBackendDescriptor])(
+      it.each([OpencodeBackendDescriptor, ClaudeBackendDescriptor, CodexBackendDescriptor])(
         "denies an unanswered $displayName permission before dispatching the replacement",
         async (descriptor) => {
           const { session, prompts, cancel } = makeSession(descriptor);
@@ -167,7 +168,7 @@ describe("AgentSession", () => {
         }
       );
 
-      it.each([OpencodeBackendDescriptor, ClaudeBackendDescriptor])(
+      it.each([OpencodeBackendDescriptor, ClaudeBackendDescriptor, CodexBackendDescriptor])(
         "dismisses $displayName questions when steering and lets Stop discard the replacement during cancellation",
         async (descriptor) => {
           const { session, prompts } = makeSession(descriptor);
@@ -194,6 +195,67 @@ describe("AgentSession", () => {
           expect(prompts).toHaveLength(1);
           expect(session.store.getTask(next.taskId)?.state).toBe("cancelled");
           expect(session.tasks.getActiveTask()).toBeNull();
+          await session.dispose();
+        }
+      );
+
+      it.each(
+        [OpencodeBackendDescriptor, ClaudeBackendDescriptor, CodexBackendDescriptor].flatMap(
+          (descriptor) => (["steering", "Stop"] as const).map((action) => ({ descriptor, action }))
+        )
+      )(
+        "denies a pending $descriptor.displayName plan on $action so subsequent work can start",
+        async ({ descriptor, action }) => {
+          const { session, prompts, emit } = makeSession(descriptor);
+          session.tasks.submit(submission("plan note changes"));
+          const decision = session.handlePlanProposalPermission({
+            sessionId: "backend-session",
+            toolCall: {
+              toolCallId: "proposed-plan",
+              kind: "switch_mode",
+              status: "pending",
+              title: "ExitPlanMode",
+              isPlanProposal: true,
+              rawInput: { plan: "# Update note titles" },
+            },
+            options: [
+              { optionId: "allow_once", name: "Allow once", kind: "allow_once" },
+              { optionId: "reject_once", name: "Deny once", kind: "reject_once" },
+            ],
+          });
+          expect(session.hasPendingPlanPermission()).toBe(true);
+          expect(session.getCurrentPlan()?.body).toBe("# Update note titles");
+          const next =
+            action === "steering"
+              ? session.tasks.submit(submission("summarize instead", "voice"))
+              : null;
+          if (action === "Stop") await session.tasks.cancelActiveAndClearQueue();
+          await jest.advanceTimersByTimeAsync(0);
+          expect(session.hasPendingPlanPermission()).toBe(false);
+          expect(session.getCurrentPlan()).toBeNull();
+          await expect(decision).resolves.toEqual({
+            outcome: { outcome: "selected", optionId: "reject_once" },
+          });
+          prompts[0].resolve({ stopReason: "cancelled" });
+          await jest.advanceTimersByTimeAsync(1_000);
+          if (action === "Stop") {
+            expect(prompts).toHaveLength(1);
+            expect(session.getStatus()).toBe("idle");
+          }
+          const replacement = next ?? session.tasks.submit(submission("start after Stop"));
+          await jest.advanceTimersByTimeAsync(0);
+          expect(prompts).toHaveLength(2);
+          expect(session.getStatus()).toBe("running");
+          emit({
+            sessionId: "backend-session",
+            update: {
+              sessionUpdate: "agent_message_chunk",
+              content: { type: "text", text: "The selected note describes the next meeting." },
+            },
+          });
+          prompts[1].resolve({ stopReason: "end_turn" });
+          await jest.advanceTimersByTimeAsync(0);
+          expect(session.store.getTask(replacement.taskId)?.state).toBe("completed");
           await session.dispose();
         }
       );

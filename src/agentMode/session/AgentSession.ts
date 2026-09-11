@@ -1603,7 +1603,7 @@ export class AgentSession {
    * the backend ignores ACP `session/cancel`; the backend notification still
    * runs so a compliant agent can stop work and keep its session reusable.
    *
-   * Flushes any pending tool-permission and AskUserQuestion resolvers (rejects
+   * Flushes any pending plan, tool-permission and AskUserQuestion resolvers (rejects
    * / empty answers respectively) so the inline cards disappear immediately
    * (and the SDK sees a deny rather than a dangling promise) instead of waiting
    * for the user to click them.
@@ -1616,6 +1616,12 @@ export class AgentSession {
     this.settledStream = null;
     for (const messageId of this.currentMessageIds) this.cancelledMessageIds.add(messageId);
     this.currentMessageIds = new Set();
+    // A cancelled plan must stop blocking the composer and replacement task.
+    if (this.pendingPlanResolvers.size > 0) {
+      this.flushResolvers(this.pendingPlanResolvers);
+      if (this.currentPlan?.permissionGated) this.finalizePlanDecision(this.currentPlan.id);
+      this.notifyMessages();
+    }
     if (this.pendingToolResolvers.size > 0) {
       this.flushResolvers(this.pendingToolResolvers);
       this.notifyMessages();

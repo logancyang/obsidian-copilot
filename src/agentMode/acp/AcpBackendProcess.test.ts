@@ -1,5 +1,8 @@
 import { FileSystemAdapter, App } from "obsidian";
 import type { BackendDescriptor, PermissionOption } from "@/agentMode/session/types";
+import { AgentSession } from "@/agentMode/session/AgentSession";
+import { CodexBackendDescriptor } from "@/agentMode/backends/codex/descriptor";
+import type { PromptOutput } from "@/agentMode/session/types";
 import { AcpBackendProcess } from "./AcpBackendProcess";
 import type { AcpBackend } from "./types";
 import type { VaultClient } from "./VaultClient";
@@ -117,6 +120,112 @@ describe("AcpBackendProcess", () => {
     mockResumeSession.mockResolvedValue({});
     mockLoadSession.mockClear();
     mockLoadSession.mockResolvedValue({});
+  });
+
+  describe("AcpBackendProcess", () => {
+    describe("cancel()", () => {
+      it.each(["typed", "voice"] as const)(
+        "sends Codex cancellation before the %s replacement and reuses its ACP session after the old prompt drains",
+        async (source) => {
+          jest.useFakeTimers();
+          const backend = new AcpBackendProcess(
+            buildApp(),
+            buildStubBackend({ id: "codex", displayName: "Codex" }),
+            "1.0.0",
+            CodexBackendDescriptor
+          );
+          await backend.start();
+          const { sessionId } = await backend.newSession({ cwd: "/vault" });
+          const session = new AgentSession({
+            backend,
+            backendSessionId: sessionId,
+            internalId: "conversation",
+            backendId: "codex",
+            getDescriptor: () => CodexBackendDescriptor,
+          });
+          const connection = (
+            backend as unknown as {
+              connection: { prompt: jest.Mock; cancel: jest.Mock };
+            }
+          ).connection;
+          const order: string[] = [];
+          let finishOriginal!: (output: PromptOutput) => void;
+          let finishReplacement!: (output: PromptOutput) => void;
+          connection.prompt
+            .mockImplementationOnce(
+              () =>
+                new Promise<PromptOutput>((resolve) => {
+                  order.push("original");
+                  finishOriginal = resolve;
+                })
+            )
+            .mockImplementationOnce(
+              () =>
+                new Promise<PromptOutput>((resolve) => {
+                  order.push("replacement");
+                  finishReplacement = resolve;
+                })
+            );
+          connection.cancel.mockImplementation(async () => {
+            order.push("cancel");
+          });
+          const submit = (requestText: string, taskSource: "typed" | "voice") =>
+            session.tasks.submit({
+              submissionId: requestText,
+              conversationId: "conversation",
+              sourceMessageIds: [],
+              source: taskSource,
+              presentation: taskSource === "voice" ? "voice-card" : "text",
+              requestText,
+              ...(taskSource === "voice"
+                ? { voiceSessionId: "call", delegationId: requestText }
+                : {}),
+            });
+          const emit = async (text: string) =>
+            getVaultClient(backend).sessionUpdate({
+              sessionId,
+              update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text } },
+            });
+          try {
+            const original = submit("Inspect every note", "typed");
+            await emit("Inspecting notes");
+            const replacement = submit("Summarize the selected note", source);
+            await jest.advanceTimersByTimeAsync(0);
+            expect(connection.cancel).toHaveBeenCalledWith({ sessionId });
+            expect(session.store.getTask(original.taskId)?.state).toBe("cancelled");
+            expect(order).toEqual(["original", "cancel"]);
+
+            await emit("stale original answer");
+            await jest.advanceTimersByTimeAsync(2_000);
+            expect(order).toEqual(["original", "cancel"]);
+            finishOriginal({ stopReason: "cancelled" });
+            await jest.advanceTimersByTimeAsync(1_000);
+            expect(order).toEqual(["original", "cancel", "replacement"]);
+            expect(connection.prompt.mock.calls.map(([input]) => input.sessionId)).toEqual([
+              sessionId,
+              sessionId,
+            ]);
+            expect(connection.prompt.mock.calls[1][0].prompt).toContainEqual({
+              type: "text",
+              text: "Summarize the selected note",
+            });
+            expect(mockNewSession).toHaveBeenCalledTimes(1);
+            await emit("Selected note summary");
+            finishReplacement({ stopReason: "end_turn" });
+            await jest.advanceTimersByTimeAsync(0);
+            const task = session.store.getTask(replacement.taskId);
+            expect(task?.state).toBe("completed");
+            expect(session.store.getMessage(task?.assistantMessageId ?? "")?.message).toBe(
+              "Selected note summary"
+            );
+          } finally {
+            await session.dispose();
+            await backend.shutdown();
+            jest.useRealTimers();
+          }
+        }
+      );
+    });
   });
 
   describe("start()", () => {

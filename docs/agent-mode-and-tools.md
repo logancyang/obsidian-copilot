@@ -203,9 +203,9 @@ The voice bar shows assistant audio activity, microphone state and call time. **
 
 Spoken captions appear in the conversation. Work submitted while voice is active appears in a task card. Open **View details** for the full answer and tool activity. A saved task retains its answer, but its live activity trail may be unavailable after reload.
 
-With OpenCode and Claude, an accepted typed or spoken request interrupts the active task. The replacement waits for cancellation to finish before starting. If another spoken request arrives during that handoff, the latest request replaces pending work and the discarded task is marked cancelled. Codex follow-ups still queue behind the current task.
+With OpenCode, Claude, and Codex, an accepted typed or spoken request interrupts the active task. The replacement waits for cancellation to finish before starting. If another spoken request arrives during that handoff, the latest request replaces pending work and the discarded task is marked cancelled.
 
-Use **Stop** to cancel local work and clear pending replacements. Steering cancels unanswered tool permissions and questions; it never approves them. Approvals and plan decisions still require the on-screen controls.
+Use **Stop** to cancel local work and clear pending replacements. Steering cancels unanswered tool permissions, plan proposals, and questions; it never approves them. Approvals still require the on-screen controls.
 
 Switching chat, project or agent, or closing the chat view, ends voice. Starting it again creates a new call in the same conversation. Voice is a desktop demo; it does not support multi-agent fan-out.
 
