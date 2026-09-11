@@ -1,3 +1,4 @@
+import type { AgentTaskAcceptance } from "@/agentMode/session/AgentTaskCoordinator";
 import type { BackendId, PromptContent } from "@/agentMode/session/types";
 import type { MessageContext } from "@/types/message";
 
@@ -57,16 +58,81 @@ export type AgentTaskTerminalState = Extract<
 export type VoiceSessionState = "off" | "connecting" | "active" | "closing" | "error";
 
 /**
- * Live voice channel state. Mute and playback are independent flags rather
- * than states, because a muted microphone and silenced playback are both
- * legal in an otherwise `active` call.
+ * Cumulative usage for the current call. Each report replaces the previous
+ * one — these are a latest observation, never a sum and never a bill.
  */
-export interface VoiceRuntimeState {
-  session: VoiceSessionState;
+export interface AgentVoiceUsage {
+  connectedSeconds: number;
+  estimatedCostUsd: number;
+  /** Whether the provider confirmed the final accounting. */
+  confirmed: boolean;
+}
+
+/**
+ * Everything the chat UI needs to describe the spoken channel, read from the
+ * same snapshot as messages and tasks so a render can never mix a stale voice
+ * state with fresh task state. Mute and playback are flags rather than states:
+ * a muted microphone is legal in an otherwise `active` call.
+ *
+ * See `designdocs/VOICE_CHAT_DEMO_DESIGN.md`, "Mode and control behavior".
+ */
+export interface AgentVoiceRuntimeState {
+  readonly session: VoiceSessionState;
   /** Local microphone capture is suppressed. */
-  inputMuted: boolean;
-  /** Remote speech playback is suppressed. */
-  playbackMuted: boolean;
+  readonly inputMuted: boolean;
+  /** A mute or unmute command has not been answered yet. */
+  readonly inputCommandPending: boolean;
+  /** Remote speech is attached and playing in the owning window. */
+  readonly playbackActive: boolean;
+  readonly usage: AgentVoiceUsage | null;
+  /** Seconds left before the call's hard deadline, once the server warns. */
+  readonly secondsRemainingWarning: number | null;
+  /** Last failure the call reported, for a UI that must name the problem. */
+  readonly errorCode: string | null;
+  /**
+   * Spoken requests parked behind the running turn, one short line each. The
+   * UI says plainly that they have not changed the running task.
+   */
+  readonly queuedFollowUps: readonly string[];
+}
+
+/** Frozen "no queued follow-ups" slice; keeps an idle snapshot stable. */
+export const EMPTY_VOICE_FOLLOW_UPS: readonly string[] = Object.freeze([]);
+
+/** The state every conversation reports until a call is actually running. */
+export const VOICE_OFF_RUNTIME_STATE: AgentVoiceRuntimeState = Object.freeze({
+  session: "off",
+  inputMuted: false,
+  inputCommandPending: false,
+  playbackActive: false,
+  usage: null,
+  secondsRemainingWarning: null,
+  errorCode: null,
+  queuedFollowUps: EMPTY_VOICE_FOLLOW_UPS,
+});
+
+/**
+ * What starting voice did. A refusal carries the sentence the UI shows, so the
+ * user learns why voice is unavailable instead of watching a dead button.
+ */
+export type AgentVoiceStartOutcome = { started: true } | { started: false; reason: string };
+
+/**
+ * The spoken channel as one conversation's UI drives it. The implementation
+ * lives in the transport layer and is handed to the chat through
+ * `AgentChatUIState.attachVoice`, so the UI never imports a transport.
+ */
+export interface AgentVoiceControls {
+  /** Current call state for this conversation. Stable by reference. */
+  getState(): AgentVoiceRuntimeState;
+  /** Fires whenever {@link getState} would return something new. */
+  subscribe(listener: () => void): () => void;
+  /** Open a call for this conversation, or report why it cannot open. */
+  start(): Promise<AgentVoiceStartOutcome>;
+  /** End the call. Local tasks and the backend session are left alone. */
+  end(): Promise<void>;
+  /** Suppress or resume microphone content without ending the call. */
+  setMuted(muted: boolean): void;
 }
 
 /**
@@ -84,6 +150,34 @@ export interface VoiceSourceRange {
   /** End offset within the voice session, in milliseconds. */
   endMs: number;
 }
+
+/**
+ * How the voice layer stamps and mirrors typed submissions. Separate from
+ * {@link AgentVoiceControls} because no UI calls these: the chat's task owner
+ * does, at the moment a typed request is sent.
+ *
+ * See `designdocs/VOICE_CHAT_DEMO_DESIGN.md`, "Typed input during voice".
+ */
+export interface AgentVoiceSubmissionMirror {
+  /**
+   * Stamp the presentation a live call requires, captured at submit time so a
+   * later mode change never moves the answer.
+   *
+   * @param submission - The composer's immutable request.
+   */
+  prepareSubmission(submission: AgentTaskSubmission): AgentTaskSubmission;
+  /**
+   * Mirror an accepted typed request into the spoken conversation, so speech
+   * never asks for work Copilot has already taken on.
+   *
+   * @param submission - The submission as prepared and sent.
+   * @param acceptance - What the task owner decided.
+   */
+  noteSubmissionAccepted(submission: AgentTaskSubmission, acceptance: AgentTaskAcceptance): void;
+}
+
+/** Everything one conversation's chat binds when voice wiring is present. */
+export interface AgentVoiceAttachment extends AgentVoiceControls, AgentVoiceSubmissionMirror {}
 
 /**
  * An immutable request for backend work. The composer (or the voice layer)

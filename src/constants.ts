@@ -671,7 +671,7 @@ export const COMMAND_IDS = {
   // The wire id is persisted by Obsidian in hotkeys and command integrations.
   PUBLISH_FILE_TO_OPENARTIFACTS: "publish-file-to-symposium",
   TRIGGER_QUICK_ASK: "trigger-quick-ask",
-  VOICE_TRANSPORT_SPIKE: "voice-transport-spike",
+  VOICE_TOGGLE: "voice-toggle",
 } as const;
 
 export const COMMAND_NAMES: Record<CommandId, string> = {
@@ -698,7 +698,7 @@ export const COMMAND_NAMES: Record<CommandId, string> = {
   [COMMAND_IDS.DOWNLOAD_YOUTUBE_SCRIPT]: "Download YouTube Script (plus)",
   [COMMAND_IDS.PUBLISH_FILE_TO_OPENARTIFACTS]: "Publish file to OpenArtifacts",
   [COMMAND_IDS.TRIGGER_QUICK_ASK]: "Quick Ask",
-  [COMMAND_IDS.VOICE_TRANSPORT_SPIKE]: "Voice transport check (demo)",
+  [COMMAND_IDS.VOICE_TOGGLE]: "Voice: start or end (demo)",
 };
 
 export type CommandId = (typeof COMMAND_IDS)[keyof typeof COMMAND_IDS];
@@ -718,7 +718,7 @@ export const COMMAND_ICONS: Partial<Record<CommandId, string>> = {
   [COMMAND_IDS.LOAD_COPILOT_CHAT_CONVERSATION]: "history",
   [COMMAND_IDS.TRIGGER_QUICK_COMMAND]: "terminal-square",
   [COMMAND_IDS.TRIGGER_QUICK_ASK]: "sparkles",
-  [COMMAND_IDS.VOICE_TRANSPORT_SPIKE]: "mic",
+  [COMMAND_IDS.VOICE_TOGGLE]: "mic",
   [COMMAND_IDS.ADD_SELECTION_TO_CHAT_CONTEXT]: "text-cursor-input",
   [COMMAND_IDS.ADD_WEB_SELECTION_TO_CHAT_CONTEXT]: "globe",
   [COMMAND_IDS.ADD_CUSTOM_COMMAND]: "plus-circle",

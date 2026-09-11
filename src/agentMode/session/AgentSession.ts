@@ -60,6 +60,7 @@ import type { ContextMaterializationResult } from "@/context/projectContextMater
 import { escapeXml } from "@/LLMProviders/chainRunner/utils/xmlParsing";
 import type { FanoutRunInput } from "@/agentMode/session/fanout/FanoutOrchestrator";
 import { isFanout } from "@/agentMode/session/fanout/answerers";
+import { selectVoiceContext } from "@/agentMode/session/voiceContextBlock";
 import {
   buildConversationHistoryBlock,
   buildPriorFanoutContextBlock,
@@ -112,6 +113,9 @@ const EMPTY_ANSWERS: AgentQuestionAnswers = Object.freeze({});
 const EMPTY_BACKEND_IDS: ReadonlyArray<BackendId> = Object.freeze([]);
 // Frozen empty so a task with no voice delegation keeps a stable reference.
 const EMPTY_DELEGATION_IDS: readonly string[] = Object.freeze([]);
+// "No spoken context rode this prompt" — frozen so the common text-only turn
+// allocates nothing.
+const EMPTY_MESSAGE_IDS: readonly string[] = Object.freeze([]);
 // Shared "no extra roots" array so a session created without project context
 // keeps a stable reference (no fresh `[]` allocation per construction).
 const EMPTY_ADDITIONAL_DIRECTORIES: string[] = Object.freeze([]) as unknown as string[];
@@ -1241,6 +1245,9 @@ export class AgentSession {
     const placeholderId = this.placeholderId;
     const sessionId = this.backendSessionId!;
     const signal = this.abortController!.signal;
+    // Declared out here so a prompt that throws can put the spoken entries it
+    // carried into the same delivery doubt as the request itself.
+    let voiceContextMessageIds: readonly string[] = EMPTY_MESSAGE_IDS;
     try {
       const priorPromptDrain = this.cancelledPromptDrain;
       if (priorPromptDrain) {
@@ -1317,7 +1324,26 @@ export class AgentSession {
       // prior-turn block so the backend regains continuity. Empty buffer → `null`
       // → unchanged prompt. Cleared only after `backend.prompt()` resolves below,
       // so a thrown prompt preserves the buffer for the next turn.
-      const leadingContextBlock = buildPriorFanoutContextBlock(this.pendingFanoutContext);
+      const fanoutContextBlock = buildPriorFanoutContextBlock(this.pendingFanoutContext);
+      // Spoken exchanges this backend session has never been given. Kept as its
+      // own block beside the fan-out buffer: both are prior context, but they
+      // come from different places and clear on different rules.
+      // See `designdocs/VOICE_CHAT_DEMO_DESIGN.md`, "Text and voice context continuity".
+      const voiceContext = selectVoiceContext(
+        this.store.getDisplayMessages(),
+        this.contextDelivery,
+        coveredMessageIds
+      );
+      voiceContextMessageIds = voiceContext.messageIds;
+      const leadingContextBlock =
+        [fanoutContextBlock, voiceContext.block].filter((block) => block !== null).join("\n\n") ||
+        null;
+      // The prompt speaks for the request's own entries plus every spoken entry
+      // the block carries, so all of them move through the cursor together.
+      const deliveredMessageIds =
+        voiceContext.messageIds.length > 0
+          ? [...coveredMessageIds, ...voiceContext.messageIds]
+          : coveredMessageIds;
       const promptBlocks = buildPromptBlocks(
         displayText,
         context,
@@ -1369,7 +1395,7 @@ export class AgentSession {
       // backend durably ingested the `<prior_turns>` block. A cancelled prompt may
       // have stopped before ingesting it, so keep and re-inject (a duplicate is
       // harmless; losing the multi-agent context is the bug).
-      if (leadingContextBlock !== null && resp.stopReason !== "cancelled") {
+      if (fanoutContextBlock !== null && resp.stopReason !== "cancelled") {
         this.pendingFanoutContext = [];
       }
       // Mark the project-context block delivered only once the backend has accepted
@@ -1389,7 +1415,7 @@ export class AgentSession {
       // backend has them, so a later context block must not repeat them. The
       // fan-out path returns above and never reaches this ack, because those
       // ephemeral sub-sessions are not this backend session.
-      if (promptStarted) this.contextDelivery.markDelivered(coveredMessageIds);
+      if (promptStarted) this.contextDelivery.markDelivered(deliveredMessageIds);
       if (
         placeholderId &&
         resp.stopReason !== "cancelled" &&
@@ -1430,6 +1456,10 @@ export class AgentSession {
       // A prompt that threw may still have reached the agent, so these entries
       // are neither delivered nor eligible for an automatic resend.
       this.contextDelivery.markUncertain(coveredMessageIds);
+      // The voice block rode the same failed prompt, so its entries are in the
+      // same doubt: neither delivered nor eligible for an automatic resend.
+      if (voiceContextMessageIds.length > 0)
+        this.contextDelivery.markUncertain(voiceContextMessageIds);
       if (placeholderId) {
         this.store.markMessageError(
           placeholderId,
@@ -2222,6 +2252,17 @@ export class AgentSession {
         logWarn(`[AgentMode] status listener threw`, e);
       }
     }
+  }
+
+  /**
+   * Announce a transcript change made outside the turn loop. The voice layer
+   * writes spoken captions straight into the store and owns no listeners of
+   * its own, so this is how those rows reach the chat.
+   *
+   * See `designdocs/VOICE_CHAT_DEMO_DESIGN.md`, "Transcript assembly".
+   */
+  notifyConversationChanged(): void {
+    this.notifyMessages();
   }
 
   private notifyMessages(): void {

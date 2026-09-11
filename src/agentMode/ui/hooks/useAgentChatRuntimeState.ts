@@ -1,7 +1,11 @@
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
 import type { AgentHistoryRestoreStatus } from "@/agentMode/session/agentChatSnapshot";
 import type { AgentQueuedTask } from "@/agentMode/session/AgentTaskCoordinator";
-import type { AgentTaskRecord } from "@/agentMode/session/voiceTypes";
+import {
+  VOICE_OFF_RUNTIME_STATE,
+  type AgentTaskRecord,
+  type AgentVoiceRuntimeState,
+} from "@/agentMode/session/voiceTypes";
 import type {
   AgentChatMessage,
   AgentTodoListEntry,
@@ -38,6 +42,13 @@ export interface AgentChatRuntimeState {
    * live chat and for any host that has no saved agent conversation.
    */
   historyRestoreStatus: AgentHistoryRestoreStatus;
+  /**
+   * The spoken channel's state, read in the same snapshot as messages and
+   * tasks so a voice bar can never render a call state from a different tick
+   * than the transcript beside it.
+   * See `designdocs/VOICE_CHAT_DEMO_DESIGN.md`, "Mode and control behavior".
+   */
+  voice: AgentVoiceRuntimeState;
 }
 
 interface BackendRuntimeSnapshot {
@@ -59,6 +70,7 @@ function readBackendRuntimeSnapshot(backend: AgentChatBackend): BackendRuntimeSn
       activeTask: backend.getActiveTask(),
       queuedTasks: backend.getQueuedTasks(),
       historyRestoreStatus: backend.getHistoryRestoreStatus?.() ?? "none",
+      voice: backend.getVoiceState?.() ?? VOICE_OFF_RUNTIME_STATE,
     },
   };
 }

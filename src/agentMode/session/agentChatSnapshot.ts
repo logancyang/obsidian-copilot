@@ -74,6 +74,7 @@ interface PersistedMessage {
   taskId?: string;
   presentation?: AgentMessagePresentation;
   sourceRanges?: VoiceSourceRange[];
+  interrupted?: boolean;
 }
 
 interface PersistedTask {
@@ -327,6 +328,7 @@ function toPersistedMessage(message: AgentChatMessage): PersistedMessage {
     ...(message.sourceRanges && message.sourceRanges.length > 0
       ? { sourceRanges: message.sourceRanges.map((range) => ({ ...range })) }
       : {}),
+    ...(message.interrupted ? { interrupted: true } : {}),
   };
 }
 
@@ -360,6 +362,7 @@ function fromPersistedMessage(raw: unknown): AgentChatMessage | null {
     ...(Array.isArray(entry.sourceRanges)
       ? { sourceRanges: entry.sourceRanges.filter(isSourceRange) }
       : {}),
+    ...(entry.interrupted === true ? { interrupted: true } : {}),
   };
 }
 

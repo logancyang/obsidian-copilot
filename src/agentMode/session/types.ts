@@ -947,6 +947,13 @@ export interface AgentChatMessage {
    * voice entries; persisted so a reloaded transcript keeps its provenance.
    */
   sourceRanges?: readonly VoiceSourceRange[];
+  /**
+   * The call ended before this entry could be completed, so its text is what
+   * was captured rather than what was said or heard. An output caption is
+   * model output, not proof of playback.
+   * See `designdocs/VOICE_CHAT_DEMO_DESIGN.md`, "Transcript assembly".
+   */
+  interrupted?: boolean;
 }
 
 /** Creation shape — id is assigned by the store if absent. */

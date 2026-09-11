@@ -4,7 +4,13 @@ import type {
   AgentQueueHoldReason,
   AgentTaskAcceptance,
 } from "./AgentTaskCoordinator";
-import type { AgentTaskRecord, AgentTaskResult, AgentTaskSubmission } from "./voiceTypes";
+import type {
+  AgentTaskRecord,
+  AgentTaskResult,
+  AgentTaskSubmission,
+  AgentVoiceControls,
+  AgentVoiceRuntimeState,
+} from "./voiceTypes";
 import type {
   AgentChatMessage,
   AgentQuestionAnswers,
@@ -67,6 +73,18 @@ export interface AgentChatBackend {
    * See `designdocs/VOICE_CHAT_DEMO_DESIGN.md`, "Persistence and reload".
    */
   getHistoryRestoreStatus?(): AgentHistoryRestoreStatus;
+  /**
+   * Current state of the spoken channel for this conversation. Optional
+   * because a host with no voice wiring has no call to describe; it reports
+   * the off state.
+   * See `designdocs/VOICE_CHAT_DEMO_DESIGN.md`, "Mode and control behavior".
+   */
+  getVoiceState?(): AgentVoiceRuntimeState;
+  /**
+   * Start, end, and mute the spoken channel for this conversation, or null
+   * where voice is unavailable (mobile, feature off, no wiring attached).
+   */
+  getVoiceControls?(): AgentVoiceControls | null;
   deleteMessage(id: string): Promise<boolean>;
   clearMessages(): void;
   getMessages(): AgentChatMessage[];

@@ -18,7 +18,7 @@ import {
 import { CustomCommandChatModal } from "@/commands/CustomCommandChatModal";
 import { ApplyCustomCommandModal } from "@/components/modals/ApplyCustomCommandModal";
 import { YoutubeTranscriptModal } from "@/components/modals/YoutubeTranscriptModal";
-import type { VoiceTransportSpike } from "@/agentMode";
+import type { VoiceCommandHandle } from "@/agentMode";
 import { checkIsPaidUser } from "@/plusUtils";
 import type CopilotPlugin from "@/main";
 import { MiyoRequestError } from "@/miyo/MiyoClient";
@@ -155,12 +155,12 @@ export function registerCommands(plugin: CopilotPlugin, publish: PublishFile) {
     addCommand(plugin, COMMAND_IDS.NEW_AGENT_CHAT, () => {
       void plugin.newAgentChat();
     });
-    // The voice demo is off by default and its transport harness is not a
-    // product surface, so the command only exists where a tester turned voice
-    // on. See `designdocs/VOICE_CHAT_DEMO_DESIGN.md` → "Milestone 1".
+    // The voice demo is off by default, so the command only exists where a
+    // tester turned voice on.
+    // See `designdocs/VOICE_CHAT_DEMO_DESIGN.md` → "Mode and control behavior".
     if (getAgentVoiceSettings(getSettings()).enabled) {
-      let spike: VoiceTransportSpike | null = null;
-      addCommand(plugin, COMMAND_IDS.VOICE_TRANSPORT_SPIKE, async () => {
+      let voice: VoiceCommandHandle | null = null;
+      addCommand(plugin, COMMAND_IDS.VOICE_TOGGLE, async () => {
         // Commands register once per load, so turning voice off afterwards
         // leaves this entry in the palette; re-read the intent before opening
         // a billable call.
@@ -168,9 +168,9 @@ export function registerCommands(plugin: CopilotPlugin, publish: PublishFile) {
           new Notice("Voice is turned off in Copilot settings.");
           return;
         }
-        const { loadVoiceTransportSpike } = await import("@/agentMode");
-        spike ??= (await loadVoiceTransportSpike())(plugin);
-        await spike.toggle();
+        const { loadVoiceCommand } = await import("@/agentMode");
+        voice ??= (await loadVoiceCommand())(plugin);
+        await voice.toggle();
       });
     }
   }

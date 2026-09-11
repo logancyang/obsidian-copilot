@@ -7,10 +7,14 @@ import type {
   AgentQueueHoldReason,
   AgentTaskAcceptance,
 } from "@/agentMode/session/AgentTaskCoordinator";
-import type {
-  AgentTaskRecord,
-  AgentTaskResult,
-  AgentTaskSubmission,
+import {
+  VOICE_OFF_RUNTIME_STATE,
+  type AgentTaskRecord,
+  type AgentTaskResult,
+  type AgentTaskSubmission,
+  type AgentVoiceAttachment,
+  type AgentVoiceControls,
+  type AgentVoiceRuntimeState,
 } from "@/agentMode/session/voiceTypes";
 import type {
   AgentChatMessage,
@@ -35,6 +39,8 @@ import type {
  */
 export class AgentChatUIState implements AgentChatBackend {
   private listeners = new Set<() => void>();
+  private voice: AgentVoiceAttachment | null = null;
+  private unsubscribeVoice: (() => void) | null = null;
 
   constructor(private readonly session: AgentSession) {
     // Forward message, status, and model changes. The chat UI gates the
@@ -57,6 +63,31 @@ export class AgentChatUIState implements AgentChatBackend {
     return () => this.listeners.delete(listener);
   }
 
+  /**
+   * Bind this conversation's voice controls, or clear them with `null`. The
+   * transport layer attaches itself here so the chat UI reads voice state from
+   * the same snapshot as messages and tasks, and never imports a transport.
+   *
+   * See `designdocs/VOICE_CHAT_DEMO_DESIGN.md`, "Mode and control behavior".
+   *
+   * @param controls - Controls bound to this conversation, or null to detach.
+   */
+  attachVoice(controls: AgentVoiceAttachment | null): void {
+    this.unsubscribeVoice?.();
+    this.unsubscribeVoice = null;
+    this.voice = controls;
+    if (controls) this.unsubscribeVoice = controls.subscribe(() => this.notifyListeners());
+    this.notifyListeners();
+  }
+
+  getVoiceControls(): AgentVoiceControls | null {
+    return this.voice;
+  }
+
+  getVoiceState(): AgentVoiceRuntimeState {
+    return this.voice?.getState() ?? VOICE_OFF_RUNTIME_STATE;
+  }
+
   private notifyListeners(): void {
     for (const l of this.listeners) {
       try {
@@ -68,7 +99,12 @@ export class AgentChatUIState implements AgentChatBackend {
   }
 
   submitTask(submission: AgentTaskSubmission): AgentTaskAcceptance {
-    const acceptance = this.session.tasks.submit(submission);
+    // A live call fixes the presentation of work started while it runs, and
+    // hears about the request as soon as the task owner accepts it.
+    // See `designdocs/VOICE_CHAT_DEMO_DESIGN.md`, "Typed input during voice".
+    const prepared = this.voice ? this.voice.prepareSubmission(submission) : submission;
+    const acceptance = this.session.tasks.submit(prepared);
+    this.voice?.noteSubmissionAccepted(prepared, acceptance);
     this.notifyListeners();
     return acceptance;
   }

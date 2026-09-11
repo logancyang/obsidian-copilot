@@ -485,7 +485,7 @@ export { useBackendAuthState } from "./session/useBackendAuthState";
 export { readVoiceCredential, writeVoiceCredential } from "./voice/voiceCredential";
 
 /**
- * Loads the voice transport harness. The transport reaches WebRTC through the
+ * Loads the voice chat owner. The transport reaches WebRTC through the
  * `openai-live` package, so it is imported on demand: a mobile install
  * evaluates this module graph for its settings tab and must not evaluate a
  * browser media stack it can never use.
@@ -493,15 +493,19 @@ export { readVoiceCredential, writeVoiceCredential } from "./voice/voiceCredenti
  * esbuild emits one bundle, so the package's bytes still ship to every
  * install. Keeping them out of the artifact entirely would need code
  * splitting, which the plugin does not use; what this controls is evaluation.
+ *
+ * The backend display name is resolved here because `voice/` may not read the
+ * backend registry.
  */
-export async function loadVoiceTransportSpike(): Promise<
-  typeof import("./voice/voiceWiring").createVoiceTransportSpike
+export async function loadVoiceCommand(): Promise<
+  (plugin: CopilotPlugin) => import("./voice/voiceWiring").VoiceCommandHandle
 > {
   const module = await import("./voice/voiceWiring");
-  return module.createVoiceTransportSpike;
+  return (plugin) =>
+    module.createVoiceCommand(plugin, (id) => backendRegistry[id]?.displayName ?? id);
 }
 
-export type { VoiceTransportSpike } from "./voice/voiceTransportSpike";
+export type { VoiceCommandHandle } from "./voice/voiceWiring";
 export type {
   VoiceSessionEvent,
   VoiceSessionSnapshot,

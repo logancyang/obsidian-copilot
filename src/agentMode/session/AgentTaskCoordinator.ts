@@ -257,8 +257,9 @@ export class AgentTaskCoordinator {
   removeQueuedTask(taskId: string): boolean {
     const idx = this.queue.findIndex((item) => item.taskId === taskId);
     if (idx === -1) return false;
-    this.queue.splice(idx, 1);
+    const [dropped] = this.queue.splice(idx, 1);
     this.invalidateQueue();
+    this.reportDiscarded([dropped]);
     this.notify();
     return true;
   }
@@ -281,8 +282,10 @@ export class AgentTaskCoordinator {
    */
   async cancelActiveAndClearQueue(): Promise<void> {
     if (this.queue.length > 0) {
+      const discarded = this.queue;
       this.queue = [];
       this.invalidateQueue();
+      this.reportDiscarded(discarded);
       this.notify();
     }
     try {
@@ -357,7 +360,32 @@ export class AgentTaskCoordinator {
 
   private settle(taskId: string, outcome: { stopReason?: StopReason; error?: unknown }): void {
     if (this.disposed) return;
-    const result = this.executor.settleTask(taskId, outcome);
+    this.emitSettlement(this.executor.settleTask(taskId, outcome));
+  }
+
+  /**
+   * Report abandoned queued work as cancelled. These submissions never reached
+   * the session, so there is no turn to settle — but anything already told
+   * that the request was queued must learn it was dropped instead of waiting
+   * for an outcome that will never arrive.
+   *
+   * See `designdocs/VOICE_CHAT_DEMO_DESIGN.md`, "Local task submission and queue".
+   *
+   * @param discarded - Queue rows removed without ever being dispatched.
+   */
+  private reportDiscarded(discarded: readonly AgentQueuedTask[]): void {
+    if (this.disposed) return;
+    for (const item of discarded) {
+      this.emitSettlement({
+        taskId: item.taskId,
+        state: "cancelled",
+        assistantMessageId: "",
+        answerText: "",
+      });
+    }
+  }
+
+  private emitSettlement(result: AgentTaskResult): void {
     for (const listener of this.settlementListeners) {
       try {
         listener(result);

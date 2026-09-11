@@ -58,6 +58,7 @@ interface StoredAgentMessage {
   taskId?: string;
   presentation?: AgentMessagePresentation;
   sourceRanges?: readonly VoiceSourceRange[];
+  interrupted?: boolean;
 }
 
 /**
@@ -384,6 +385,7 @@ export class AgentMessageStore {
       taskId: message.taskId,
       presentation: message.presentation,
       sourceRanges: message.sourceRanges,
+      interrupted: message.interrupted,
       version: 0,
     });
     this.lastDisplay = null;
@@ -450,6 +452,49 @@ export class AgentMessageStore {
     const msg = this.messages.find((m) => m.id === id);
     if (!msg) return false;
     msg.displayText += chunk;
+    this.touch(msg);
+    return true;
+  }
+
+  /**
+   * Replace a spoken entry's assembled caption and the fragments it came from.
+   * Transcript fragments arrive out of order and a late one can amend text
+   * already shown, so the assembler owns the fragments and rewrites the whole
+   * caption rather than appending blindly.
+   *
+   * See `designdocs/VOICE_CHAT_DEMO_DESIGN.md`, "Transcript assembly".
+   *
+   * @param id - Voice entry being updated.
+   * @param text - Caption assembled from every fragment known so far.
+   * @param sourceRanges - Those fragments' ids and audio ranges, in audio order.
+   */
+  updateVoiceTranscript(
+    id: string,
+    text: string,
+    sourceRanges: readonly VoiceSourceRange[]
+  ): boolean {
+    const msg = this.messages.find((m) => m.id === id);
+    if (!msg) return false;
+    if (msg.displayText === text && msg.sourceRanges === sourceRanges) return false;
+    msg.displayText = text;
+    msg.sourceRanges = sourceRanges;
+    this.touch(msg);
+    return true;
+  }
+
+  /**
+   * Record that a spoken entry was cut off by an abrupt closure. An output
+   * caption is model output, not evidence that every word was played, so the
+   * entry says it is unfinished instead of standing as a complete turn.
+   *
+   * See `designdocs/VOICE_CHAT_DEMO_DESIGN.md`, "Transcript assembly".
+   *
+   * @param id - Voice entry the closure interrupted.
+   */
+  markVoiceInterrupted(id: string): boolean {
+    const msg = this.messages.find((m) => m.id === id);
+    if (!msg || msg.interrupted === true) return false;
+    msg.interrupted = true;
     this.touch(msg);
     return true;
   }
@@ -762,6 +807,7 @@ export class AgentMessageStore {
         taskId: msg.taskId,
         presentation: msg.presentation,
         sourceRanges: msg.sourceRanges,
+        interrupted: msg.interrupted,
         fanout,
         version: 0,
       });
@@ -812,6 +858,7 @@ export class AgentMessageStore {
       ...(m.taskId !== undefined ? { taskId: m.taskId } : {}),
       ...(m.presentation !== undefined ? { presentation: m.presentation } : {}),
       ...(m.sourceRanges !== undefined ? { sourceRanges: m.sourceRanges } : {}),
+      ...(m.interrupted === true ? { interrupted: true } : {}),
       // Snapshot so each adapted view carries a fresh reference; the orchestrator
       // mutates one turn in place, so the same reference would freeze the dropdown.
       ...(m.fanout ? { fanout: snapshotFanoutTurn(m.fanout) } : {}),
