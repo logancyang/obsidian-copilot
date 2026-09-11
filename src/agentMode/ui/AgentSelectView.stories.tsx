@@ -8,8 +8,7 @@ type AgentSelectViewProps = React.ComponentProps<typeof AgentSelectView>;
 const OPENCODE: AgentSelectRow = {
   id: "opencode",
   name: "opencode",
-  description:
-    "Copilot Plus models, or any model on your own provider key. Copilot can download and manage the binary for you.",
+  description: "Copilot Plus models, or models using your own provider API key.",
   status: "absent",
   recommended: true,
   statusMessage: null,
@@ -18,8 +17,7 @@ const OPENCODE: AgentSelectRow = {
 const CLAUDE: AgentSelectRow = {
   id: "claude",
   name: "Claude",
-  description:
-    "Anthropic models, billed to your Claude Code subscription. Runs the claude CLI already on your machine.",
+  description: "Anthropic models, billed to your Claude Code subscription.",
   status: "absent",
   recommended: false,
   statusMessage: null,
@@ -28,8 +26,7 @@ const CLAUDE: AgentSelectRow = {
 const CODEX: AgentSelectRow = {
   id: "codex",
   name: "Codex",
-  description:
-    "OpenAI models, billed to your ChatGPT subscription. Runs the codex-acp adapter on your machine.",
+  description: "OpenAI models, billed to your ChatGPT subscription.",
   status: "absent",
   recommended: false,
   statusMessage: null,

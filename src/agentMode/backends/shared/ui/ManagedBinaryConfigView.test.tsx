@@ -79,6 +79,43 @@ const renderView = (
 
 describe("ManagedBinaryConfigView", () => {
   describe("ManagedBinaryConfigView()", () => {
+    it("reveals completed installation diagnostics without triggering maintenance: https://github.com/Brevilabs/obsidian-copilot-private/issues/413", () => {
+      const { actions } = renderView({
+        state: { kind: "ready", source: "managed" },
+        activeSource: "managed",
+      });
+      const disclosure = screen.getByRole("button", { name: "Installation details" });
+      expect(disclosure.getAttribute("aria-expanded")).toBe("false");
+      expect(screen.queryByText(MANAGED.destination)).toBeNull();
+      disclosure.focus();
+      expect(document.activeElement).toBe(disclosure);
+      fireEvent.click(disclosure);
+      expect(disclosure.getAttribute("aria-expanded")).toBe("true");
+      expect(screen.getByText(MANAGED.destination)).toBeTruthy();
+      expect(screen.getByText(`v${MANAGED.version} (pinned)`)).toBeTruthy();
+      fireEvent.click(disclosure);
+      expect(screen.queryByRole("button", { name: "Reinstall" })).toBeNull();
+      expect(actions.install).not.toHaveBeenCalled();
+      expect(actions.uninstall).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      { kind: "running" as const, label: "Installing managed files…" },
+      { kind: "error" as const, message: "Download could not finish" },
+    ])(
+      "keeps $kind installation visible even with a ready active agent: https://github.com/Brevilabs/obsidian-copilot-private/issues/413",
+      (run) => {
+        renderView({ state: { kind: "ready", source: "custom" }, managed: { ...MANAGED, run } });
+        expect(screen.getByText(run.kind === "running" ? run.label : run.message)).toBeTruthy();
+        expect(screen.queryByRole("button", { name: "Installation details" })).toBeNull();
+        expect(
+          screen.getByRole("button", {
+            name: run.kind === "running" ? "Cancel" : "Download & install",
+          })
+        ).toBeTruthy();
+      }
+    );
+
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/398 discards detection after leaving the custom binary control", async () => {
       let finishDetection!: (path: string) => void;
       const actions = makeActions();
@@ -115,6 +152,7 @@ describe("ManagedBinaryConfigView", () => {
         activeSource: "custom",
         customPath: "/opt/homebrew/bin/opencode",
       });
+      fireEvent.click(screen.getByRole("button", { name: "Installation details" }));
 
       fireEvent.click(screen.getByRole("radio", { name: "Managed by Copilot" }));
 
@@ -202,6 +240,7 @@ describe("ManagedBinaryConfigView", () => {
         state: { kind: "ready", source: "managed" },
         activeSource: "managed",
       });
+      fireEvent.click(screen.getByRole("button", { name: "Installation details" }));
 
       expect(screen.queryByRole("button", { name: "Download & install" })).toBeNull();
       fireEvent.click(screen.getByRole("button", { name: "Reinstall" }));
@@ -277,6 +316,7 @@ describe("ManagedBinaryConfigView", () => {
         activeSource: "custom",
         customPath: "/opt/homebrew/bin/opencode",
       });
+      fireEvent.click(screen.getByRole("button", { name: "Installation details" }));
 
       expect(
         screen.getByPlaceholderText<HTMLInputElement>("/absolute/path/to/opencode").value

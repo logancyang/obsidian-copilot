@@ -157,6 +157,7 @@ describe("CodexConfigView", () => {
         state: { kind: "ready", source: "managed" },
         activeSource: "managed",
       });
+      fireEvent.click(screen.getByRole("button", { name: "Installation details" }));
       fireEvent.click(screen.getByRole("button", { name: "Reinstall" }));
       fireEvent.click(screen.getByRole("button", { name: "Uninstall" }));
       expect(actions.install).toHaveBeenCalledTimes(1);
@@ -207,6 +208,7 @@ describe("CodexConfigView", () => {
         state: { kind: "ready", source: "managed" },
         activeSource: "managed",
       });
+      fireEvent.click(screen.getByRole("button", { name: "Installation details" }));
       expect(
         screen.getByText(
           "The Copilot-managed binary is currently in use. Apply your own binary path below to switch to it."

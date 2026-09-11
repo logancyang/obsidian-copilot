@@ -49,12 +49,32 @@ const renderView = (overrides: Partial<ClaudeConfigViewProps> = {}): HTMLElement
 
 describe("ClaudeConfigView", () => {
   describe("ClaudeConfigView()", () => {
-    it("leads with the binary path and demotes the setup steps below it", () => {
+    it("leads with installation before path controls when unavailable: https://github.com/Brevilabs/obsidian-copilot-private/issues/413", () => {
       renderView({ binaryPath: "/usr/local/bin/claude", hasBinaryPathOverride: true });
 
       const input = screen.getByDisplayValue("/usr/local/bin/claude");
       const steps = screen.getByText("Install Claude Code");
-      expect(input.compareDocumentPosition(steps) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(steps.compareDocumentPosition(input) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    it("keeps sign-in first and reveals completed installation without changing the account: https://github.com/Brevilabs/obsidian-copilot-private/issues/413", () => {
+      renderView({ state: { kind: "ready", source: "custom" }, binaryPath: "/opt/claude" });
+      const signIn = screen.getByRole("button", { name: "Sign in with your browser" });
+      const disclosure = screen.getByRole("button", { name: "Installation details" });
+      expect(disclosure.getAttribute("aria-expanded")).toBe("false");
+      expect(screen.queryByDisplayValue("/opt/claude")).toBeNull();
+      expect(
+        signIn.compareDocumentPosition(disclosure) & Node.DOCUMENT_POSITION_FOLLOWING
+      ).toBeTruthy();
+      disclosure.focus();
+      expect(document.activeElement).toBe(disclosure);
+      fireEvent.click(disclosure);
+      expect(disclosure.getAttribute("aria-expanded")).toBe("true");
+      expect(screen.getByDisplayValue("/opt/claude")).toBeTruthy();
+      expect(screen.getByText(commandBlock(CLAUDE_INSTALL_COMMAND))).toBeTruthy();
+      fireEvent.click(disclosure);
+      expect(screen.queryByDisplayValue("/opt/claude")).toBeNull();
+      expect(screen.getByRole("button", { name: "Sign in with your browser" })).toBe(signIn);
     });
 
     it("shows an auto-detected binary without offering to apply or clear it", () => {
@@ -63,6 +83,7 @@ describe("ClaudeConfigView", () => {
         binaryPath: "/opt/homebrew/bin/claude",
         hasBinaryPathOverride: false,
       });
+      fireEvent.click(screen.getByRole("button", { name: "Installation details" }));
 
       expect(screen.getByDisplayValue("/opt/homebrew/bin/claude")).toBeTruthy();
       expect(screen.queryByRole("button", { name: "Apply" })).toBeNull();
@@ -239,6 +260,7 @@ describe("ClaudeConfigView", () => {
         binaryPath: "/usr/local/bin/claude",
         hasBinaryPathOverride: true,
       });
+      fireEvent.click(screen.getByRole("button", { name: "Installation details" }));
 
       expect(screen.queryByRole("alert")).toBeNull();
       expect(screen.getByText("Sign in required")).toBeTruthy();

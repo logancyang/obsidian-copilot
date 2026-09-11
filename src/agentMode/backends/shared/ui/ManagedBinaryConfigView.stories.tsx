@@ -176,3 +176,16 @@ export const LongDestination: StoryObj<ManagedBinaryConfigViewProps> = {
     },
   },
 };
+
+/** An existing agent remains ready while a managed replacement is being installed. */
+export const ReadyWhileInstalling: StoryObj<ManagedBinaryConfigViewProps> = {
+  render: InteractiveConfigView,
+  args: {
+    state: { kind: "ready", source: "custom" },
+    activeSource: "custom",
+    managed: {
+      ...MANAGED,
+      run: { kind: "running", label: "Installing managed files…", percent: 30 },
+    },
+  },
+};

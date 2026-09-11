@@ -6,6 +6,8 @@ import {
 } from "@/agentMode/backends/shared/ui/ConfigDialogShell";
 import type { BackendAuthStatus, InstallState } from "@/agentMode/session/types";
 import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { SettingDisclosure } from "@/components/ui/setting-disclosure";
 import { Progress } from "@/components/ui/progress";
 import { SegmentedControl, type SegmentedControlOption } from "@/components/ui/segmented-control";
 import { cn } from "@/lib/utils";
@@ -137,16 +139,6 @@ const ManagedBinaryInstall: React.FC<ManagedBinaryInstallProps> = ({
 
   return (
     <div className="tw-flex tw-flex-col tw-gap-2">
-      {/* Preflight is off, so the browser's own `dl` margins and 40px `dd` indent
-          would survive and push the values out of their grid track. */}
-      <dl className="tw-my-0 tw-grid tw-grid-cols-[max-content_1fr] tw-gap-x-4 tw-gap-y-1 tw-text-sm [&>dd]:tw-ml-0">
-        <dt className="tw-text-muted">Platform</dt>
-        <dd className="tw-font-mono">{managed.platform}</dd>
-        <dt className="tw-text-muted">Version</dt>
-        <dd className="tw-font-mono">v{managed.version} (pinned)</dd>
-        <dt className="tw-text-muted">Destination</dt>
-        <dd className="tw-break-all tw-font-mono">{managed.destination}</dd>
-      </dl>
       {/* Failed downloads must leave their explanation beside the retry action.
           https://github.com/Brevilabs/obsidian-copilot-private/issues/368 */}
       {run.kind === "error" && (
@@ -176,6 +168,16 @@ const ManagedBinaryInstall: React.FC<ManagedBinaryInstallProps> = ({
           </Button>
         )}
       </div>
+      {/* Preflight is off, so the browser's own `dl` margins and 40px `dd` indent
+          would survive and push the values out of their grid track. */}
+      <dl className="tw-my-0 tw-grid tw-grid-cols-[max-content_1fr] tw-gap-x-4 tw-gap-y-1 tw-text-sm [&>dd]:tw-ml-0">
+        <dt className="tw-text-muted">Platform</dt>
+        <dd className="tw-font-mono">{managed.platform}</dd>
+        <dt className="tw-text-muted">Version</dt>
+        <dd className="tw-font-mono">v{managed.version} (pinned)</dd>
+        <dt className="tw-text-muted">Destination</dt>
+        <dd className="tw-break-all tw-font-mono">{managed.destination}</dd>
+      </dl>
     </div>
   );
 };
@@ -204,97 +206,115 @@ export const ManagedBinaryConfigView: React.FC<ManagedBinaryConfigViewProps> = (
   searchedDirs,
   upgradeLabel,
   children,
-}) => (
-  <ConfigDialogShell
-    title={title}
-    state={state}
-    authStatus={authStatus}
-    warning={
-      <ConfigWarningStrip
-        state={state}
-        // Keep update progress and failures attached to the shared warning.
-        // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
-        action={
-          upgradeRun.kind === "running" ? (
-            <>
-              <p className="tw-my-0 tw-text-xs">{upgradeRun.label}</p>
-              <Progress value={upgradeRun.percent} />
-            </>
-          ) : (
-            <div className="tw-flex tw-items-center tw-justify-end tw-gap-2">
-              {upgradeRun.kind === "error" && (
-                <span className="tw-text-xs tw-text-error">{upgradeRun.message}</span>
-              )}
-              <Button variant="default" size="sm" onClick={actions.upgrade}>
-                {upgradeLabel}
-              </Button>
-            </div>
-          )
-        }
-      />
-    }
-    onClose={onClose}
-  >
-    <ConfigSection>
-      <SegmentedControl
-        aria-label={`${binaryName} binary source`}
-        // Flex items are blockified, which would stretch the control across the
-        // band and leave the segments floating in an empty track.
-        className={cn("tw-self-start")}
-        options={SOURCE_OPTIONS}
-        value={source}
-        onChange={onSourceChange}
-        // Prevent path edits from competing with the running install.
-        // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
-        disabled={managed.run.kind === "running"}
-      />
-      {/* Browsing another setup option must identify the binary still in use until a switch succeeds.
+}) => {
+  const [detailsOpen, setDetailsOpen] = React.useState(false);
+  // Keep required setup and active or failed operations visible; completed mechanics can recede.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/413
+  const installationRequired =
+    state.kind !== "ready" || managed.run.kind !== "idle" || upgradeRun.kind !== "idle";
+  const showDetails = installationRequired || detailsOpen;
+  return (
+    <ConfigDialogShell
+      title={title}
+      state={state}
+      authStatus={authStatus}
+      warning={
+        <ConfigWarningStrip
+          state={state}
+          // Keep update progress and failures attached to the shared warning.
+          // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
+          action={
+            upgradeRun.kind === "running" ? (
+              <>
+                <p className="tw-my-0 tw-text-xs">{upgradeRun.label}</p>
+                <Progress value={upgradeRun.percent} />
+              </>
+            ) : (
+              <div className="tw-flex tw-items-center tw-justify-end tw-gap-2">
+                {upgradeRun.kind === "error" && (
+                  <span className="tw-text-xs tw-text-error">{upgradeRun.message}</span>
+                )}
+                <Button variant="default" size="sm" onClick={actions.upgrade}>
+                  {upgradeLabel}
+                </Button>
+              </div>
+            )
+          }
+        />
+      }
+      onClose={onClose}
+    >
+      {!installationRequired && children}
+      <Collapsible open={showDetails} onOpenChange={setDetailsOpen}>
+        <ConfigSection>
+          {!installationRequired && (
+            <CollapsibleTrigger asChild>
+              <SettingDisclosure open={showDetails} label="Installation details" />
+            </CollapsibleTrigger>
+          )}
+          <CollapsibleContent className="tw-flex tw-flex-col tw-gap-2">
+            <SegmentedControl
+              aria-label={`${binaryName} binary source`}
+              // Flex items are blockified, which would stretch the control across the
+              // band and leave the segments floating in an empty track.
+              className={cn("tw-self-start")}
+              options={SOURCE_OPTIONS}
+              value={source}
+              onChange={onSourceChange}
+              // Prevent path edits from competing with the running install.
+              // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
+              disabled={managed.run.kind === "running"}
+            />
+            {/* Browsing another setup option must identify the binary still in use until a switch succeeds.
           https://github.com/Brevilabs/obsidian-copilot-private/issues/368 */}
-      {activeSource !== null && activeSource !== source ? (
-        <div
-          role="status"
-          className="tw-flex tw-items-start tw-gap-2 tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-secondary tw-p-3 tw-text-sm"
-        >
-          <Info aria-hidden className="tw-mt-0.5 tw-size-4 tw-shrink-0 tw-text-accent" />
-          <p className="tw-my-0 tw-text-normal">
-            {/* Custom selection leaves managed downloads on disk until explicitly removed.
+            {activeSource !== null && activeSource !== source ? (
+              <div
+                role="status"
+                className="tw-flex tw-items-start tw-gap-2 tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-secondary tw-p-3 tw-text-sm"
+              >
+                <Info aria-hidden className="tw-mt-0.5 tw-size-4 tw-shrink-0 tw-text-accent" />
+                <p className="tw-my-0 tw-text-normal">
+                  {/* Custom selection leaves managed downloads on disk until explicitly removed.
                 https://github.com/Brevilabs/obsidian-copilot-private/issues/379 */}
-            {activeSource === "custom"
-              ? managed.hasDownloads
-                ? "Your own binary is currently in use. Copilot's managed downloads are still on this computer. Reinstall to switch to Managed by Copilot, or uninstall to free up space."
-                : "Your own binary is currently in use. Download and install the managed copy to switch to Managed by Copilot."
-              : "The Copilot-managed binary is currently in use. Apply your own binary path below to switch to it."}
-          </p>
-        </div>
-      ) : (
-        <p className="tw-my-0 tw-text-sm tw-text-muted">
-          {source === "managed" ? managedDescription : customDescription}
-        </p>
-      )}
-      {source === "managed" ? (
-        <>
-          <ManagedBinaryInstall
-            managed={managed}
-            installed={activeSource === "managed"}
-            actions={actions}
-          />
-        </>
-      ) : (
-        <>
-          <BinaryPathSetting
-            binaryName={binaryName}
-            placeholder={customPathPlaceholder}
-            initialPath={customPath}
-            notFoundHint={customPathNotFoundHint}
-            onSave={actions.saveCustomPath}
-            onClear={actions.clearCustomPath}
-            persistOnAutoDetect
-            detect={actions.detectCustomPath}
-            searchedDirs={searchedDirs}
-          />
-        </>
-      )}
-    </ConfigSection>
-    {children}
-  </ConfigDialogShell>
-);
+                  {activeSource === "custom"
+                    ? managed.hasDownloads
+                      ? "Your own binary is currently in use. Copilot's managed downloads are still on this computer. Reinstall to switch to Managed by Copilot, or uninstall to free up space."
+                      : "Your own binary is currently in use. Download and install the managed copy to switch to Managed by Copilot."
+                    : "The Copilot-managed binary is currently in use. Apply your own binary path below to switch to it."}
+                </p>
+              </div>
+            ) : (
+              <p className="tw-my-0 tw-text-sm tw-text-muted">
+                {source === "managed" ? managedDescription : customDescription}
+              </p>
+            )}
+            {source === "managed" ? (
+              <>
+                <ManagedBinaryInstall
+                  managed={managed}
+                  installed={activeSource === "managed"}
+                  actions={actions}
+                />
+              </>
+            ) : (
+              <>
+                <BinaryPathSetting
+                  binaryName={binaryName}
+                  placeholder={customPathPlaceholder}
+                  initialPath={customPath}
+                  notFoundHint={customPathNotFoundHint}
+                  onSave={actions.saveCustomPath}
+                  onClear={actions.clearCustomPath}
+                  persistOnAutoDetect
+                  detect={actions.detectCustomPath}
+                  searchedDirs={searchedDirs}
+                />
+              </>
+            )}
+          </CollapsibleContent>
+        </ConfigSection>
+      </Collapsible>
+      {installationRequired && children}
+    </ConfigDialogShell>
+  );
+};

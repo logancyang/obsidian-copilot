@@ -42,9 +42,10 @@ const meta = {
 } satisfies Meta<ClaudeConfigViewProps>;
 export default meta;
 
-/** First run: no CLI found, so the path field is empty and the steps below explain why. */
+/** First run: installation leads, with existing-path and auto-detection controls below. */
 export const NotSetUp: StoryObj<ClaudeConfigViewProps> = {};
 
+/** Account controls lead; Installation details can be expanded for the path and command. */
 export const Ready: StoryObj<ClaudeConfigViewProps> = {
   args: {
     state: { kind: "ready", source: "managed" },
