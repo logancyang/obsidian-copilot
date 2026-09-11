@@ -11,7 +11,6 @@ function props(): BuiltinSkillsTableProps {
         name: "transcript",
         description: "Read video transcripts",
         content: "# Read a transcript",
-        enabled: true,
         enabledAgents: ["claude", "opencode"],
       },
     ],
@@ -50,12 +49,8 @@ describe("BuiltinSkillsTable", () => {
       rerender(
         <BuiltinSkillsTable
           {...p}
-          availableAgents={[...p.availableAgents]}
-          skills={p.skills.map((skill) => ({
-            ...skill,
-            enabledAgents: [...skill.enabledAgents],
-            enabled: skill.name !== "transcript",
-          }))}
+          skills={[...p.skills]}
+          preferences={{ transcript: { disabled: true } }}
         />
       );
       expect(Icon).toHaveBeenCalledTimes(1);
@@ -63,10 +58,33 @@ describe("BuiltinSkillsTable", () => {
         screen.getByRole("button", { name: "other for Claude" }).getAttribute("aria-disabled")
       ).toBe("false");
     });
+    it(`updates agent opt-outs without rendering another skill with saved preferences for ${issue}`, () => {
+      const p = props();
+      const Icon = jest.fn(() => <span />);
+      p.agents = [{ id: "claude", displayName: "Claude", Icon }];
+      p.skills = [p.skills[0], { ...p.skills[0], name: "other" }];
+      const otherPreference = { disabledAgents: ["opencode"] };
+      p.preferences = { other: otherPreference };
+      const { rerender } = render(<BuiltinSkillsTable {...p} />);
+      Icon.mockClear();
+      rerender(
+        <BuiltinSkillsTable
+          {...p}
+          preferences={{ other: otherPreference, transcript: { disabledAgents: ["claude"] } }}
+        />
+      );
+      expect(Icon).toHaveBeenCalledTimes(1);
+      expect(
+        screen.getByRole("button", { name: "transcript for Claude" }).getAttribute("aria-pressed")
+      ).toBe("false");
+      expect(
+        screen.getByRole("button", { name: "other for Claude" }).getAttribute("aria-pressed")
+      ).toBe("true");
+    });
     it(`labels a disabled skill and removes the label when re-enabled for ${issue}`, () => {
       const p = props();
       const { rerender } = render(
-        <BuiltinSkillsTable {...p} skills={[{ ...p.skills[0], enabled: false }]} />
+        <BuiltinSkillsTable {...p} preferences={{ transcript: { disabled: true } }} />
       );
       expect(screen.getByText("Disabled")).toBeTruthy();
       rerender(<BuiltinSkillsTable {...p} />);
@@ -97,13 +115,9 @@ describe("BuiltinSkillsTable", () => {
       `prevents agent changes when %s for ${issue}`,
       (state) => {
         const p = props();
-        p.skills = [
-          {
-            ...p.skills[0],
-            enabled: state !== "disabled",
-            unavailableReason: state === "unavailable" ? "Requires Miyo" : undefined,
-          },
-        ];
+        p.preferences = { transcript: { disabled: state === "disabled" } };
+        p.unavailableReasons =
+          state === "unavailable" ? { transcript: "Requires Miyo" } : undefined;
         p.pendingSkills = state === "pending" ? ["transcript"] : [];
         render(<BuiltinSkillsTable {...p} />);
         const agent = screen.getByRole("button", { name: "transcript for Claude" });

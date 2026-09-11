@@ -9,7 +9,6 @@ const args: BuiltinSkillsTableProps = {
       name: "copilot-youtube-transcript",
       description: "Get a YouTube video transcript.",
       content: "# YouTube transcript\n\nRetrieve the transcript for a supplied video URL.",
-      enabled: true,
       enabledAgents: ["claude"],
     },
   ],
@@ -35,7 +34,7 @@ export const AgentPreferences: StoryObj<BuiltinSkillsTableProps> = {
 };
 export const DisabledSkill: StoryObj<BuiltinSkillsTableProps> = {
   name: "Disabled skill with visible badge",
-  args: { ...args, skills: [{ ...args.skills[0], enabled: false }] },
+  args: { ...args, preferences: { [args.skills[0].name]: { disabled: true } } },
 };
 export const NoAgents: StoryObj<BuiltinSkillsTableProps> = {
   args: { ...args, availableAgents: [] },
@@ -43,13 +42,10 @@ export const NoAgents: StoryObj<BuiltinSkillsTableProps> = {
 export const NameCollision: StoryObj<BuiltinSkillsTableProps> = {
   args: {
     ...args,
-    skills: [
-      {
-        ...args.skills[0],
-        unavailableReason:
-          "A skill with this name already exists in Your Skills. Your file is kept unchanged.",
-      },
-    ],
+    unavailableReasons: {
+      [args.skills[0].name]:
+        "A skill with this name already exists in Your Skills. Your file is kept unchanged.",
+    },
   },
 };
 export const CleanupError: StoryObj<BuiltinSkillsTableProps> = {

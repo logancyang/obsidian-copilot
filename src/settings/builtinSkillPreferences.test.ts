@@ -43,6 +43,23 @@ describe("builtinSkillPreferences", () => {
         getSettings().agentMode.skills.builtinPreferences
       );
     });
+    it("preserves untouched preference objects when saving another skill https://github.com/logancyang/obsidian-copilot/issues/3022", async () => {
+      await saveBuiltinPreferences(
+        () => ({ "copilot-web-search": { disabledAgents: ["codex"] } }),
+        jest.fn()
+      );
+      const previous = getSettings().agentMode.skills.builtinPreferences!["copilot-web-search"];
+      await saveBuiltinPreferences(
+        (current) => ({ ...current, "copilot-web-fetch": { disabled: true } }),
+        jest.fn()
+      );
+      expect(getSettings().agentMode.skills.builtinPreferences!["copilot-web-search"]).toBe(
+        previous
+      );
+      expect(getSettings().agentMode.skills.builtinPreferences!["copilot-web-fetch"]).toEqual({
+        disabled: true,
+      });
+    });
     beforeEach(() => {
       jest.clearAllMocks();
       settingsStore.set(settingsAtom, { ...DEFAULT_SETTINGS });

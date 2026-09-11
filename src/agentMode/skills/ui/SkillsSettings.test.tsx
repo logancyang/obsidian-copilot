@@ -112,6 +112,45 @@ describe("SkillsSettings", () => {
       settingsStore.set(settingsAtom, { ...DEFAULT_SETTINGS, copilotFolder: "copilot" });
     });
 
+    it("renders only the changed built-in when preferences publish and discovery reruns https://github.com/logancyang/obsidian-copilot/issues/3022", async () => {
+      const Icon = jest.fn(() => <span />);
+      mockAgents = [{ id: "claude", displayName: "Claude", Icon }];
+      mockInstallStates = { claude: { kind: "ready", source: "managed" } };
+      await act(async () => {
+        renderSettings();
+      });
+      expect(Icon.mock.calls.length).toBeGreaterThan(1);
+      Icon.mockClear();
+      await act(async () => {
+        const current = settingsStore.get(settingsAtom).agentMode;
+        updateSetting("agentMode", {
+          ...current,
+          skills: {
+            ...current.skills,
+            builtinPreferences: { "copilot-youtube-transcript": { disabled: true } },
+          },
+        });
+      });
+      expect(Icon).toHaveBeenCalledTimes(1);
+      expect(
+        screen
+          .getByRole("button", { name: "copilot-youtube-transcript for Claude" })
+          .getAttribute("aria-disabled")
+      ).toBe("true");
+      expect(
+        screen
+          .getByRole("button", { name: "copilot-web-search for Claude" })
+          .getAttribute("aria-disabled")
+      ).toBe("false");
+      Icon.mockClear();
+      mockManagedSkills = [];
+      mockInstallStates = { claude: { kind: "ready", source: "managed" } };
+      await act(async () => {
+        updateSetting("enableMiyoSearchSkill", false);
+      });
+      expect(Icon).not.toHaveBeenCalled();
+    });
+
     it.each<[boolean, "plus" | "miyo", boolean, boolean]>([
       [false, "plus", false, false],
       [true, "plus", true, false],

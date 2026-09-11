@@ -1,6 +1,6 @@
 import { availableBuiltinAgents } from "@/agentMode/skills/builtin/reconcileBuiltinSkills";
 import { useBackendInstallStates } from "@/agentMode/session/useBackendInstallStates";
-import { planManagedBuiltins } from "@/builtinSkills/builtinSkills";
+import { ALL_MANAGED_SKILLS, planManagedBuiltins } from "@/builtinSkills/builtinSkills";
 import { parseSkillFile } from "@/agentMode/skills/skillFormat";
 import { BuiltinSkillsTable } from "./BuiltinSkillsTable";
 import { formatSkillDisplayName } from "@/agentMode/skills/mergeDiscovery";
@@ -57,6 +57,14 @@ const SYNC_BRANDS: ReadonlyArray<{ substr: string; brand: string }> = [
   { substr: "dropbox", brand: "Dropbox" },
 ];
 
+// Catalog content is immutable for the plugin lifetime; preferences belong to each row.
+const BUILTIN_ROWS = ALL_MANAGED_SKILLS.map((skill) => ({
+  name: skill.name,
+  description: parseSkillFile(skill.skillMd, skill.name).frontmatter.description,
+  content: skill.skillMd,
+  enabledAgents: skill.enabledAgents,
+}));
+
 /** Skills management for user-owned files and persistent built-in preferences. */
 export const SkillsSettings: React.FC = () => {
   const app = useApp();
@@ -92,7 +100,7 @@ export const SkillsSettings: React.FC = () => {
   const installStates = useBackendInstallStates(plugin, descriptors);
   // Installed built-ins establish readiness if Settings opens during a recheck.
   // https://github.com/logancyang/obsidian-copilot/issues/3022
-  const lastAvailableAgents = useRef(
+  const lastAvailableAgents = useRef<readonly string[]>(
     skills.filter((skill) => skill.builtin).flatMap((skill) => skill.enabledAgents)
   );
   const availableAgents = availableBuiltinAgents(installStates, lastAvailableAgents.current);
@@ -104,35 +112,28 @@ export const SkillsSettings: React.FC = () => {
   // https://github.com/logancyang/obsidian-copilot/issues/3022
   // Eligible catalog rows survive file removal so users can restore disabled built-ins.
   // Miyo tools stay hidden until their feature setting enables them.
-  const builtinRows = eligibleBuiltins
-    .map((skill) => {
-      const preference = settings.agentMode?.skills?.builtinPreferences?.[skill.name];
-      // Rejected user files still occupy their canonical path and cannot be overwritten.
-      // https://github.com/logancyang/obsidian-copilot/issues/3022
-      const collision =
-        userSkills.some(
-          (userSkill) => userSkill.name === skill.name && userSkill.location.kind === "canonical"
-        ) ||
-        rejectedSkills.some(
-          (rejected) =>
-            toVaultRelative(rejected.dirPath, getVaultBase(app)) === `${skillsFolder}/${skill.name}`
-        );
-      return {
-        name: skill.name,
-        description: parseSkillFile(skill.skillMd, skill.name).frontmatter.description,
-        content: skill.skillMd,
-        enabled: preference?.disabled !== true,
-        enabledAgents: skill.enabledAgents.filter(
-          (agent) => !preference?.disabledAgents?.includes(agent)
-        ),
-        unavailableReason: collision
-          ? "A skill with this name already exists in Your Skills. Your file is kept unchanged."
-          : undefined,
-      };
-    })
-    .filter((skill) =>
+  const unavailableReasons: Record<string, string> = {};
+  for (const skill of eligibleBuiltins) {
+    // Rejected user files still occupy their canonical path and cannot be overwritten.
+    // https://github.com/logancyang/obsidian-copilot/issues/3022
+    const collision =
+      userSkills.some(
+        (userSkill) => userSkill.name === skill.name && userSkill.location.kind === "canonical"
+      ) ||
+      rejectedSkills.some(
+        (rejected) =>
+          toVaultRelative(rejected.dirPath, getVaultBase(app)) === `${skillsFolder}/${skill.name}`
+      );
+    if (collision) {
+      unavailableReasons[skill.name] =
+        "A skill with this name already exists in Your Skills. Your file is kept unchanged.";
+    }
+  }
+  const builtinRows = BUILTIN_ROWS.filter(
+    (skill) =>
+      eligibleBuiltins.some((builtin) => builtin.name === skill.name) &&
       `${skill.name} ${skill.description}`.toLowerCase().includes(searchValue.trim().toLowerCase())
-    );
+  );
 
   const handleBuiltinChange = useCallback(
     async (name: string, enabled: boolean, agent?: string) => {
@@ -442,6 +443,8 @@ export const SkillsSettings: React.FC = () => {
       </section>
       <BuiltinSkillsTable
         skills={builtinRows}
+        preferences={settings.agentMode.skills.builtinPreferences}
+        unavailableReasons={unavailableReasons}
         agents={agents}
         availableAgents={availableAgents}
         pendingSkills={builtinPending}
