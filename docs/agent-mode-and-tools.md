@@ -194,7 +194,7 @@ Voice is a private desktop demo. You need a working local agent, microphone acce
 1. Open **Settings → Copilot → Basic → Agents** and turn on **Voice (demo)**.
 2. Enter the supplied HTTPS base address in **Voice server URL** and paste your tester token into **Demo credential**. This is a demo access token, not your OpenAI API key. Copilot stores it in the operating system keychain, so enter it separately on each device.
 3. Reload Copilot by turning it off and on under **Community plugins**, or restart Obsidian. The voice controls are registered when the plugin loads.
-4. Open Agent Chat, select one agent, and confirm it can answer a typed request. Choose **Start voice** above the composer and allow Obsidian to use the microphone.
+4. Open Agent Chat, select one agent, and confirm it can answer a typed request. Choose the **Start voice** microphone icon between the mode picker and Send and allow Obsidian to use the microphone.
 
 The same conversation stays open, and you can continue typing, attaching images and adding note references while voice is connected. Spoken work uses the composer's current note references, selected text, web-tab attachments and images. Images go to the selected local agent, not GPT-Live. Speech leaves the typed draft and attachments in place.
 

@@ -1,10 +1,27 @@
-import { AgentVoiceControls } from "@/agentMode/ui/AgentVoiceControls";
+import {
+  AgentVoiceControls,
+  type AgentVoiceControlsProps,
+} from "@/agentMode/ui/AgentVoiceControls";
 import {
   VOICE_OFF_RUNTIME_STATE,
   type AgentVoiceControls as Controls,
 } from "@/agentMode/session/voiceTypes";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
+
+function VoiceComposer(props: Omit<AgentVoiceControlsProps, "children">) {
+  return (
+    <AgentVoiceControls {...props}>
+      {(startButton) => (
+        <div role="group" aria-label="Composer actions">
+          <button type="button">Mode</button>
+          {startButton}
+          <button type="button">Send</button>
+        </div>
+      )}
+    </AgentVoiceControls>
+  );
+}
 
 describe("AgentVoiceControls", () => {
   describe("AgentVoiceControls()", () => {
@@ -16,22 +33,32 @@ describe("AgentVoiceControls", () => {
       subscribe: () => () => {},
     };
     beforeEach(() => jest.clearAllMocks());
+    it("keeps the composer available when voice is unavailable", () => {
+      render(<VoiceComposer controls={null} state={VOICE_OFF_RUNTIME_STATE} />);
+      expect(screen.getByRole("button", { name: "Send" })).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Start voice" })).toBeNull();
+    });
     it("starts on request and follows connecting and active states in the same conversation", async () => {
       jest.mocked(controls.start).mockResolvedValue({ started: true });
-      const view = render(
-        <AgentVoiceControls controls={controls} state={VOICE_OFF_RUNTIME_STATE} />
-      );
-      await act(async () => fireEvent.click(screen.getByRole("button", { name: "Start voice" })));
+      const view = render(<VoiceComposer controls={controls} state={VOICE_OFF_RUNTIME_STATE} />);
+      const startButton = screen.getByRole("button", { name: "Start voice" });
+      expect(startButton.textContent).toBe("");
+      expect(startButton.getAttribute("aria-label")).toBe("Start voice");
+      expect(startButton.title).toBe("Start voice");
+      expect(startButton.previousElementSibling?.textContent).toBe("Mode");
+      expect(startButton.nextElementSibling?.textContent).toBe("Send");
+      await act(async () => fireEvent.click(startButton));
       expect(controls.start).toHaveBeenCalledTimes(1);
       view.rerender(
-        <AgentVoiceControls
+        <VoiceComposer
           controls={controls}
           state={{ ...VOICE_OFF_RUNTIME_STATE, session: "connecting" }}
         />
       );
       expect(screen.getByText("Connecting voice…")).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Start voice" })).toBeNull();
       view.rerender(
-        <AgentVoiceControls
+        <VoiceComposer
           controls={controls}
           state={{ ...VOICE_OFF_RUNTIME_STATE, session: "active" }}
         />
@@ -43,7 +70,7 @@ describe("AgentVoiceControls", () => {
     it("reports a disconnected call and allows restart while voice is off", async () => {
       jest.mocked(controls.start).mockResolvedValue({ started: true });
       render(
-        <AgentVoiceControls
+        <VoiceComposer
           controls={controls}
           state={{ ...VOICE_OFF_RUNTIME_STATE, errorCode: "transport" }}
         />
@@ -56,16 +83,16 @@ describe("AgentVoiceControls", () => {
       jest
         .mocked(controls.start)
         .mockResolvedValue({ started: false, reason: "Select a single agent first." });
-      render(<AgentVoiceControls controls={controls} state={VOICE_OFF_RUNTIME_STATE} />);
+      render(<VoiceComposer controls={controls} state={VOICE_OFF_RUNTIME_STATE} />);
       await act(async () => fireEvent.click(screen.getByRole("button", { name: "Start voice" })));
       expect(screen.getByRole("alert").textContent).toBe("Select a single agent first.");
     });
     it("ends the call only on explicit End voice, preserving it across composer remounts", async () => {
       const state = { ...VOICE_OFF_RUNTIME_STATE, session: "active" as const };
-      const first = render(<AgentVoiceControls controls={controls} state={state} />);
+      const first = render(<VoiceComposer controls={controls} state={state} />);
       first.unmount();
       expect(controls.end).not.toHaveBeenCalled();
-      render(<AgentVoiceControls controls={controls} state={state} />);
+      render(<VoiceComposer controls={controls} state={state} />);
       await act(async () => fireEvent.click(screen.getByRole("button", { name: "End voice" })));
       expect(controls.end).toHaveBeenCalledTimes(1);
     });
@@ -73,7 +100,7 @@ describe("AgentVoiceControls", () => {
       jest.useFakeTimers();
       jest.setSystemTime(100_000);
       const view = render(
-        <AgentVoiceControls
+        <VoiceComposer
           controls={controls}
           state={{ ...VOICE_OFF_RUNTIME_STATE, session: "active", startedAtMs: 90_000 }}
         />

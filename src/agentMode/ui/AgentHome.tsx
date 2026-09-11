@@ -781,29 +781,31 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   useAgentVoiceViewLifetime(voiceControls, rootEl?.ownerDocument.defaultView ?? null);
 
   const composerNode = (
-    <>
-      <AgentVoiceControls key={chatInputId} controls={voiceControls} state={voice} />
-      <AgentChatInput
-        backend={backend}
-        plugin={plugin}
-        chatInputId={chatInputId}
-        draft={draft}
-        app={app}
-        mainAgentId={mainAgentId}
-        updateUserMessageHistory={updateUserMessageHistory}
-        queuedTasks={queuedTasks}
-        isTaskActive={activeTask !== null}
-        isStarting={isStarting}
-        hasPendingPlanPermission={hasPendingPlanPermission}
-        modelPickerOverride={modelPickerOverride ?? undefined}
-        modePickerOverride={modePickerOverride ?? undefined}
-        onCycleMode={handleCycleMode}
-        activeProjectId={activeProjectId}
-        contextLoadBlocking={contextLoadBlocking}
-        disabled={isOrphanedProject}
-        contextStatusIndicator={contextStatusIndicator}
-      />
-    </>
+    <AgentVoiceControls key={chatInputId} controls={voiceControls} state={voice}>
+      {(startButton) => (
+        <AgentChatInput
+          backend={backend}
+          plugin={plugin}
+          chatInputId={chatInputId}
+          draft={draft}
+          app={app}
+          mainAgentId={mainAgentId}
+          updateUserMessageHistory={updateUserMessageHistory}
+          queuedTasks={queuedTasks}
+          isTaskActive={activeTask !== null}
+          isStarting={isStarting}
+          hasPendingPlanPermission={hasPendingPlanPermission}
+          modelPickerOverride={modelPickerOverride ?? undefined}
+          modePickerOverride={modePickerOverride ?? undefined}
+          onCycleMode={handleCycleMode}
+          activeProjectId={activeProjectId}
+          contextLoadBlocking={contextLoadBlocking}
+          disabled={isOrphanedProject}
+          contextStatusIndicator={contextStatusIndicator}
+          sendAccessory={startButton}
+        />
+      )}
+    </AgentVoiceControls>
   );
 
   // Hero: a single title line above the composer — the rotating greeting

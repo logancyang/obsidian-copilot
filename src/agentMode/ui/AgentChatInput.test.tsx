@@ -50,6 +50,7 @@ jest.mock("@/components/chat-components/ChatInput", () => {
       props: {
         agentBrands?: ReadonlyArray<unknown>;
         topRightAccessory?: React.ReactNode;
+        sendAccessory?: React.ReactNode;
         placeholder?: string;
         handleSendMessage?: () => void;
         onStopGenerating?: () => void;
@@ -66,6 +67,7 @@ jest.mock("@/components/chat-components/ChatInput", () => {
       return (
         <>
           {props.topRightAccessory}
+          {props.sendAccessory}
           <button type="button" onClick={() => props.handleSendMessage?.()}>
             send
           </button>
@@ -621,6 +623,12 @@ describe("AgentChatInput", () => {
   });
 
   describe("AgentChatInput()", () => {
+    it("passes the voice action through to the composer", () => {
+      renderInput(makeStubBackend(), makeDraft({ input: "" }), {
+        sendAccessory: <button type="button" aria-label="Start voice" />,
+      });
+      expect(screen.getByRole("button", { name: "Start voice" })).toBeTruthy();
+    });
     it("keeps the static composer guidance when an empty draft is typed into and cleared", () => {
       mockUseCanUseMultiAgent.mockReturnValue(true);
       const backend = makeStubBackend();

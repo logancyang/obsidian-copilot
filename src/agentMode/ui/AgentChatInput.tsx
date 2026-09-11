@@ -80,6 +80,7 @@ interface AgentChatInputProps {
   hasPendingPlanPermission: boolean;
   modelPickerOverride: ChatInputProps["modelPickerOverride"];
   modePickerOverride: ChatInputProps["modePickerOverride"];
+  sendAccessory?: React.ReactNode;
   onCycleMode: () => void;
   /**
    * Active scope ({@link GLOBAL_SCOPE} or a project id). Gates the
@@ -186,6 +187,7 @@ export const AgentChatInput = memo(function AgentChatInput({
   hasPendingPlanPermission,
   modelPickerOverride,
   modePickerOverride,
+  sendAccessory,
   onCycleMode,
   activeProjectId,
   contextLoadBlocking = false,
@@ -577,6 +579,7 @@ export const AgentChatInput = memo(function AgentChatInput({
           disableModelSwitch={!modelPickerOverride}
           modelPickerOverride={modelPickerOverride ?? undefined}
           modePickerOverride={modePickerOverride ?? undefined}
+          sendAccessory={sendAccessory}
           selectedTextContexts={selectedTextContexts}
           onRemoveSelectedText={removeSelectedTextContext}
           agentBrands={agentBrands}

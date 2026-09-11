@@ -10,10 +10,12 @@ import React, { useEffect, useRef, useState } from "react";
 export interface AgentVoiceControlsProps {
   controls: VoiceControls | null;
   state: AgentVoiceRuntimeState;
+  /** Places the start action in the composer while call status stays above it. */
+  children: (startButton: React.ReactNode) => React.ReactNode;
 }
 
 /** Composer controls observe the conversation owner; remounting them never closes its call. */
-export function AgentVoiceControls({ controls, state }: AgentVoiceControlsProps) {
+export function AgentVoiceControls({ controls, state, children }: AgentVoiceControlsProps) {
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -24,7 +26,7 @@ export function AgentVoiceControls({ controls, state }: AgentVoiceControlsProps)
     const timer = ownerWindow.setInterval(() => setNow(Date.now()), 1000);
     return () => ownerWindow.clearInterval(timer);
   }, [state.session]);
-  if (!controls) return null;
+  if (!controls) return <>{children(null)}</>;
   const start = async () => {
     setError(null);
     try {
@@ -49,28 +51,40 @@ export function AgentVoiceControls({ controls, state }: AgentVoiceControlsProps)
     (state.session === "off" && state.errorCode
       ? "Voice disconnected. Start voice again, or keep typing."
       : null);
+  const startButton =
+    state.session === "off" ? (
+      <Button
+        variant="ghost2"
+        size="icon"
+        aria-label="Start voice"
+        title="Start voice"
+        onClick={() => void start()}
+      >
+        <Mic aria-hidden="true" className="tw-size-4" />
+      </Button>
+    ) : null;
   return (
-    <div ref={rootRef} className="tw-px-2 tw-pb-2">
-      {state.session === "off" ? (
-        <Button variant="ghost" size="sm" onClick={() => void start()}>
-          <Mic className="tw-size-4" />
-          Start voice
-        </Button>
-      ) : (
-        <VoiceModeBar
-          state={state}
-          elapsedSeconds={
-            state.startedAtMs ? Math.max(0, Math.floor((now - state.startedAtMs) / 1000)) : 0
-          }
-          onMutedChange={(muted) => controls.setMuted(muted)}
-          onEnd={() => void end()}
-        />
-      )}
-      {visibleError && (
-        <p role="alert" className="tw-m-0 tw-text-ui-small tw-text-normal">
-          {visibleError}
-        </p>
-      )}
-    </div>
+    <>
+      <div ref={rootRef}>
+        {state.session !== "off" && (
+          <div className="tw-px-2 tw-pb-2">
+            <VoiceModeBar
+              state={state}
+              elapsedSeconds={
+                state.startedAtMs ? Math.max(0, Math.floor((now - state.startedAtMs) / 1000)) : 0
+              }
+              onMutedChange={(muted) => controls.setMuted(muted)}
+              onEnd={() => void end()}
+            />
+          </div>
+        )}
+        {visibleError && (
+          <p role="alert" className="tw-m-0 tw-px-2 tw-pb-2 tw-text-ui-small tw-text-normal">
+            {visibleError}
+          </p>
+        )}
+      </div>
+      {children(startButton)}
+    </>
   );
 }

@@ -145,6 +145,9 @@ export interface ChatInputProps {
    */
   toolControls?: React.ReactNode;
 
+  /** Optional action between the mode picker and Send/Stop. */
+  sendAccessory?: React.ReactNode;
+
   /**
    * Fires whenever the set of tool pills (`@vault`, `@websearch`, `@composer`)
    * inside the editor changes. Lets a wrapper mirror toggle state from pills.
@@ -242,6 +245,7 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
     selectedTextContexts,
     onRemoveSelectedText,
     toolControls,
+    sendAccessory,
     onToolPillsChange,
     onTagSelected,
     onEscape,
@@ -911,6 +915,7 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
         <div className="tw-flex tw-items-center tw-gap-1">
           {!isGenerating && toolControls}
           {modePickerOverride && <ModePicker override={modePickerOverride} />}
+          {sendAccessory}
           {isGenerating ? (
             <Button
               size="icon"
