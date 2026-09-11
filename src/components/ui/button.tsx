@@ -13,14 +13,15 @@ const buttonVariants = cva(
           "mod-cta tw-bg-interactive-accent tw-text-on-accent tw-shadow hover:tw-bg-interactive-accent-hover",
         destructive:
           "clickable-icon tw-bg-modifier-error tw-text-on-accent hover:tw-bg-modifier-error hover:tw-text-on-accent",
-        secondary: "tw-bg-secondary tw-text-normal tw-shadow-sm hover:tw-bg-interactive-hover",
+        secondary:
+          "tw-bg-secondary tw-text-normal tw-shadow-sm hover:tw-bg-interactive-hover hover:tw-text-normal focus-visible:tw-text-normal",
         ghost:
-          "clickable-icon tw-bg-transparent hover:tw-bg-interactive-accent hover:tw-text-on-accent",
-        link: "tw-text-accent tw-underline-offset-4 hover:tw-underline",
+          "clickable-icon tw-bg-transparent tw-text-normal tw-shadow-none hover:tw-bg-modifier-hover hover:tw-text-normal focus-visible:tw-text-normal",
+        link: "clickable-icon tw-bg-transparent tw-text-normal tw-underline tw-underline-offset-4 tw-shadow-none hover:tw-bg-transparent hover:tw-text-normal focus-visible:tw-text-normal",
         success:
           "clickable-icon tw-bg-modifier-success tw-text-on-accent hover:tw-bg-modifier-success hover:tw-text-on-accent",
         ghost2:
-          "clickable-icon tw-bg-transparent tw-text-faint tw-outline-none hover:tw-bg-transparent hover:tw-bg-opacity-100 hover:tw-text-normal focus-visible:tw-text-normal focus-visible:tw-outline-none focus-visible:tw-ring-0",
+          "clickable-icon tw-bg-transparent tw-text-normal tw-shadow-none hover:tw-bg-transparent hover:tw-text-normal hover:tw-underline focus-visible:tw-text-normal",
       },
       size: {
         default: "tw-h-9 tw-px-4 tw-py-2",

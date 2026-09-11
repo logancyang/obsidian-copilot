@@ -30,12 +30,12 @@ import React, { memo, useEffect, useState } from "react";
 // instructions, so the file must stay visible).
 const HIDDEN_BASENAMES = new Set(["project.md", "agents.md"]);
 
-/** Semantic per-extension badge tints for quickly distinguishing file types. */
+/** Semantic per-extension background tints; shared neutral ink keeps each label readable. */
 const BADGE_CLASSES: Record<string, string> = {
-  pdf: "tw-bg-project-red tw-text-project-red",
-  md: "tw-bg-project-blue tw-text-project-blue",
-  html: "tw-bg-project-orange tw-text-project-orange",
-  png: "tw-bg-project-green tw-text-project-green",
+  pdf: "tw-bg-project-red",
+  md: "tw-bg-project-blue",
+  html: "tw-bg-project-orange",
+  png: "tw-bg-project-green",
 };
 
 function FileBadge({ ext }: { ext: string }) {
@@ -43,8 +43,8 @@ function FileBadge({ ext }: { ext: string }) {
     <span
       aria-hidden="true"
       className={cn(
-        "tw-flex tw-h-4 tw-w-7 tw-shrink-0 tw-items-center tw-justify-center tw-rounded tw-text-smallest tw-font-bold tw-uppercase",
-        BADGE_CLASSES[ext] ?? "tw-bg-secondary tw-text-muted"
+        "tw-flex tw-h-4 tw-w-7 tw-shrink-0 tw-items-center tw-justify-center tw-rounded tw-text-smallest tw-font-bold tw-uppercase tw-text-normal",
+        BADGE_CLASSES[ext] ?? "tw-bg-secondary"
       )}
     >
       {ext.slice(0, 4) || "file"}
@@ -145,7 +145,7 @@ export function ProjectFilesList({
           variant="ghost2"
           size="icon"
           aria-label="Reveal project files in vault"
-          className="tw-size-5 tw-text-faint hover:tw-text-normal"
+          className="tw-size-5"
           onClick={onReveal}
         >
           <FolderSearch className="tw-size-3.5" />

@@ -48,3 +48,28 @@ export const Sizes: StoryObj<ButtonProps> = {
     </div>
   ),
 };
+
+/** Filled and quiet actions keep their shared treatment as native buttons or links. */
+export const SecondarySurface: StoryObj<ButtonProps> = {
+  render: () => (
+    <div className="tw-flex tw-flex-wrap tw-gap-2 tw-rounded-md tw-bg-secondary tw-p-4">
+      {VARIANTS.map((variant) => (
+        <Button key={variant} variant={variant}>
+          {variant}
+        </Button>
+      ))}
+      <Button asChild>
+        <a href="#sign-in" onClick={(event) => event.preventDefault()}>
+          Open sign-in page
+        </a>
+      </Button>
+      {(["secondary", "link", "ghost", "ghost2"] as const).map((variant) => (
+        <Button key={variant} asChild variant={variant}>
+          <a href="#release-notes" onClick={(event) => event.preventDefault()}>
+            {variant} link
+          </a>
+        </Button>
+      ))}
+    </div>
+  ),
+};

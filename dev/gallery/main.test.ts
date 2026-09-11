@@ -528,6 +528,7 @@ describe("main", () => {
           "UI/Badge/Success",
           "UI/Badge/Variants",
           "UI/Button/Disabled",
+          "UI/Button/SecondarySurface",
           "UI/Button/Sizes",
           "UI/Button/Variants",
         ]);
