@@ -8,7 +8,8 @@ describe("CopilotPlusWelcomeModal", () => {
       render(<CopilotPlusWelcomeModalContent onConfirm={jest.fn()} onCancel={jest.fn()} />);
 
       expect(screen.getByText("copilot-plus-flash")).toBeTruthy();
-      expect(screen.getByText(/default model for chat and your agents/)).toBeTruthy();
+      expect(screen.getByText(/default for chat and compatible agents/)).toBeTruthy();
+      expect(screen.getByText(/also updates current chats/)).toBeTruthy();
     });
 
     it("names what the license includes, including the OpenArtifacts link", () => {
@@ -43,18 +44,20 @@ describe("CopilotPlusWelcomeModal", () => {
       expect(container.textContent).not.toMatch(/default mode\b|embedding model:|rebuild/i);
     });
 
-    it("confirms on Apply Now and declines on Apply Later, never both", () => {
+    it("changes defaults only on Use copilot-plus-flash and preserves them on Keep current defaults", () => {
       const onConfirm = jest.fn();
       const onCancel = jest.fn();
       render(<CopilotPlusWelcomeModalContent onConfirm={onConfirm} onCancel={onCancel} />);
 
-      fireEvent.click(screen.getByRole("button", { name: "Apply Now" }));
-      expect(onConfirm).toHaveBeenCalledTimes(1);
+      expect(onConfirm).not.toHaveBeenCalled();
       expect(onCancel).not.toHaveBeenCalled();
-
-      fireEvent.click(screen.getByRole("button", { name: "Apply Later" }));
+      fireEvent.click(screen.getByRole("button", { name: "Keep current defaults" }));
       expect(onCancel).toHaveBeenCalledTimes(1);
+      expect(onConfirm).not.toHaveBeenCalled();
+
+      fireEvent.click(screen.getByRole("button", { name: "Use copilot-plus-flash" }));
       expect(onConfirm).toHaveBeenCalledTimes(1);
+      expect(onCancel).toHaveBeenCalledTimes(1);
     });
   });
 });

@@ -18,26 +18,24 @@ export function CopilotPlusWelcomeModalContent({
 }: CopilotPlusWelcomeModalContentProps) {
   return (
     <div className="tw-flex tw-flex-col tw-gap-4">
-      <div>
-        <p>
-          Thanks for purchasing! Your license includes Copilot exclusive models, cross-agent skills,
-          access to the <a href="https://openartifacts.ai">OpenArtifacts</a> doc sharing service,
-          and much more!
-        </p>
-        <p>
-          Would you like to make <b className="tw-text-accent">{DEFAULT_COPILOT_PLUS_CHAT_MODEL}</b>{" "}
-          the default model for chat and your agents now? You can always change this later in
-          Settings.
-        </p>
-      </div>
-      <div className="tw-flex tw-w-full tw-justify-end tw-gap-2">
-        <Button variant="ghost" onClick={onCancel}>
-          Apply Later
+      <p className="tw-m-0">
+        Make{" "}
+        <span className="tw-font-semibold tw-text-normal">{DEFAULT_COPILOT_PLUS_CHAT_MODEL}</span>{" "}
+        the default for chat and compatible agents. This also updates current chats. You can change
+        these defaults in Settings.
+      </p>
+      <div className="tw-flex tw-w-full tw-flex-wrap tw-justify-end tw-gap-2">
+        <Button variant="secondary" onClick={onCancel}>
+          Keep current defaults
         </Button>
         <Button variant="default" onClick={onConfirm}>
-          Apply Now
+          Use {DEFAULT_COPILOT_PLUS_CHAT_MODEL}
         </Button>
       </div>
+      <p className="tw-m-0 tw-text-sm tw-text-muted">
+        Your license includes Copilot exclusive models, cross-agent skills, and{" "}
+        <a href="https://openartifacts.ai">OpenArtifacts</a> document sharing.
+      </p>
     </div>
   );
 }

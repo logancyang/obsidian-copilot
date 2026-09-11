@@ -19,7 +19,7 @@ export default meta;
  * What a user sees right after a license key validates, including OpenArtifacts publishing. The single offer is the
  * whole state — there is no loading, error, or partially-applied variant, since
  * the modal only reports the choice and `applyLicenseSettings` owns the outcome.
- * Check it at narrow widths with the gallery's width toolbar: the model name is
- * the one unbreakable token in the sentence.
+ * Check at 300–600 px: explicit default-setting choices wrap above the shorter
+ * benefits line, and declining leaves the current defaults untouched.
  */
 export const Default: StoryObj<CopilotPlusWelcomeModalContentProps> = {};
