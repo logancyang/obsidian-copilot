@@ -20,11 +20,15 @@ import { FANOUT_READONLY_PREAMBLE, type FanoutTurn } from "./fanout/fanoutTypes"
 import type {
   AgentToolCallOutput,
   BackendDescriptor,
+  BackendId,
   BackendProcess,
   BackendState,
+  PromptContent,
   SessionEvent,
   SessionUpdateHandler,
+  StopReason,
 } from "./types";
+import type { MessageContext } from "@/types/message";
 
 jest.mock("@/logger", () => ({
   logInfo: jest.fn(),
@@ -105,6 +109,41 @@ function makeMockBackend(): MockBackend {
     setSessionMode,
     listSessions,
     emit: (event) => handler?.(event),
+  };
+}
+
+let typedTaskSeq = 0;
+
+/**
+ * Submit one typed request the way `AgentTaskCoordinator` does, so turn
+ * behavior is exercised through the only entry production uses.
+ */
+function sendTyped(
+  session: AgentSession,
+  requestText: string,
+  options: {
+    context?: MessageContext;
+    promptContent?: PromptContent[];
+    mentionedAgents?: ReadonlyArray<BackendId>;
+  } = {}
+): { userMessageId: string; assistantMessageId: string; turn: Promise<StopReason> } {
+  const taskId = `task-${++typedTaskSeq}`;
+  const { assistantMessageId, turn } = session.submitTask(
+    {
+      submissionId: `submission-${taskId}`,
+      conversationId: session.chatInputId,
+      sourceMessageIds: [],
+      source: "typed",
+      presentation: "text",
+      requestText,
+      ...options,
+    },
+    taskId
+  );
+  return {
+    userMessageId: session.store.getTask(taskId)?.sourceMessageIds[0] ?? "",
+    assistantMessageId,
+    turn,
   };
 }
 
@@ -471,7 +510,7 @@ describe("AgentSession session usage", () => {
   it("handles usage without a placeholder (session-scoped, no active turn)", () => {
     const mock = makeMockBackend();
     const session = makeSession(mock);
-    // No sendPrompt → no placeholder. A session-scoped usage must still land.
+    // No turn → no placeholder. A session-scoped usage must still land.
     mock.emit({
       sessionId: "acp-1",
       update: {
@@ -494,7 +533,7 @@ describe("AgentSession session usage", () => {
         usage: { usedTokens: 5000, contextWindow: 200_000, updatedAt: 1 },
       },
     });
-    const { turn } = session.sendPrompt("stop this turn");
+    const { turn } = sendTyped(session, "stop this turn");
     await session.cancel();
 
     mock.emit({
@@ -786,7 +825,7 @@ describe("buildUserDisplayContent", () => {
   });
 });
 
-describe("AgentSession.sendPrompt", () => {
+describe("AgentSession turn execution", () => {
   it("appends user + placeholder synchronously and resolves on stopReason", async () => {
     const mock = makeMockBackend();
     const session = new AgentSession({
@@ -795,7 +834,7 @@ describe("AgentSession.sendPrompt", () => {
       internalId: "internal-1",
       backendId: "opencode",
     });
-    const { userMessageId, turn } = session.sendPrompt("Hi there");
+    const { userMessageId, turn } = sendTyped(session, "Hi there");
 
     const messages = session.store.getDisplayMessages();
     expect(messages).toHaveLength(2);
@@ -830,7 +869,7 @@ describe("AgentSession.sendPrompt", () => {
         backendId: "opencode",
       });
 
-      const { turn } = session.sendPrompt("time this");
+      const { turn } = sendTyped(session, "time this");
       const running = session.store
         .getDisplayMessages()
         .find((message) => message.sender === AI_SENDER);
@@ -858,9 +897,9 @@ describe("AgentSession.sendPrompt", () => {
       internalId: "internal-1",
       backendId: "opencode",
     });
-    await session.sendPrompt("describe", undefined, [
-      { type: "image", mimeType: "image/png", data: "aGVsbG8=" },
-    ]).turn;
+    await sendTyped(session, "describe", {
+      promptContent: [{ type: "image", mimeType: "image/png", data: "aGVsbG8=" }],
+    }).turn;
     const messages = session.store.getDisplayMessages();
     expect(messages[0].message).toBe("describe");
     // The posted user bubble carries the prompt text plus the image as a
@@ -887,7 +926,7 @@ describe("AgentSession.sendPrompt", () => {
       internalId: "internal-1",
       backendId: "opencode",
     });
-    session.sendPrompt("just text");
+    sendTyped(session, "just text");
     expect(session.store.getDisplayMessages()[0].content).toBeUndefined();
   });
 
@@ -899,8 +938,8 @@ describe("AgentSession.sendPrompt", () => {
       internalId: "internal-1",
       backendId: "opencode",
     });
-    session.sendPrompt("first");
-    expect(() => session.sendPrompt("second")).toThrow(/in flight/);
+    sendTyped(session, "first");
+    expect(() => sendTyped(session, "second")).toThrow(/in flight/);
   });
 
   it("injects the project-context-updates note and acks its epoch after acceptance", async () => {
@@ -919,7 +958,7 @@ describe("AgentSession.sendPrompt", () => {
       markProjectContextUpdatesDelivered: markDelivered,
     });
 
-    await session.sendPrompt("hi").turn;
+    await sendTyped(session, "hi").turn;
 
     const promptArg = mock.prompt.mock.calls[0][0] as { prompt: Array<{ text?: string }> };
     expect(promptArg.prompt[0].text).toContain(
@@ -941,7 +980,7 @@ describe("AgentSession.sendPrompt", () => {
       markProjectContextUpdatesDelivered: markDelivered,
     });
 
-    await session.sendPrompt("hi").turn;
+    await sendTyped(session, "hi").turn;
 
     const promptArg = mock.prompt.mock.calls[0][0] as { prompt: Array<{ text?: string }> };
     expect(promptArg.prompt[0].text).not.toContain("<project_context_updates>");
@@ -957,7 +996,7 @@ describe("AgentSession.sendPrompt", () => {
       backendId: "opencode",
     });
 
-    await session.sendPrompt("hi").turn;
+    await sendTyped(session, "hi").turn;
 
     const placeholder = session.store.getDisplayMessages().find((m) => m.sender === AI_SENDER);
     expect(placeholder?.isErrorMessage).toBe(true);
@@ -983,7 +1022,7 @@ describe("AgentSession.sendPrompt", () => {
       backendId: "opencode",
     });
 
-    await expect(session.sendPrompt("hi").turn).rejects.toThrow("stream error");
+    await expect(sendTyped(session, "hi").turn).rejects.toThrow("stream error");
 
     const placeholder = session.store.getDisplayMessages().find((m) => m.sender === AI_SENDER);
     expect(placeholder?.isErrorMessage).toBe(true);
@@ -1017,7 +1056,7 @@ describe("AgentSession.sendPrompt", () => {
       backendId: "codex",
     });
 
-    await expect(session.sendPrompt("hi").turn).rejects.toThrow("Internal error");
+    await expect(sendTyped(session, "hi").turn).rejects.toThrow("Internal error");
 
     const placeholder = session.store.getDisplayMessages().find((m) => m.sender === AI_SENDER);
     expect(placeholder?.isErrorMessage).toBe(true);
@@ -1035,7 +1074,7 @@ describe("AgentSession.sendPrompt", () => {
       backendId: "claude",
     });
 
-    await expect(session.sendPrompt("hi").turn).rejects.toBeInstanceOf(AuthRequiredError);
+    await expect(sendTyped(session, "hi").turn).rejects.toBeInstanceOf(AuthRequiredError);
 
     const placeholder = session.store.getDisplayMessages().find((m) => m.sender === AI_SENDER);
     expect(placeholder?.isErrorMessage).toBe(true);
@@ -1055,7 +1094,7 @@ describe("AgentSession.sendPrompt", () => {
       internalId: "internal-1",
       backendId: "opencode",
     });
-    const { turn } = session.sendPrompt("hi");
+    const { turn } = sendTyped(session, "hi");
 
     mock.emit({
       sessionId: "acp-1",
@@ -1094,7 +1133,7 @@ describe("AgentSession.sendPrompt", () => {
         internalId: "internal-1",
         backendId: "opencode",
       });
-      const { turn } = session.sendPrompt("hi");
+      const { turn } = sendTyped(session, "hi");
 
       // Chunk delivered before the result.
       mock.emit({
@@ -1147,7 +1186,7 @@ describe("AgentSession.sendPrompt", () => {
     });
 
     // Turn A streams under messageId msg-a, then the result is flushed early.
-    const { turn: turnA } = session.sendPrompt("first");
+    const { turn: turnA } = sendTyped(session, "first");
     mock.emit({
       sessionId: "acp-1",
       update: {
@@ -1160,7 +1199,7 @@ describe("AgentSession.sendPrompt", () => {
     await turnA;
 
     // Turn B begins before A's trailing chunk lands.
-    const { turn: turnB } = session.sendPrompt("second");
+    const { turn: turnB } = sendTyped(session, "second");
     mock.emit({
       sessionId: "acp-1",
       update: {
@@ -1199,7 +1238,7 @@ describe("AgentSession.sendPrompt", () => {
       internalId: "internal-1",
       backendId: "opencode",
     });
-    const { turn } = session.sendPrompt("hi");
+    const { turn } = sendTyped(session, "hi");
 
     mock.emit({
       sessionId: "acp-1",
@@ -1249,7 +1288,7 @@ describe("AgentSession.sendPrompt", () => {
       backendId: "claude-code",
     });
 
-    const first = session.sendPrompt("launch a background agent");
+    const first = sendTyped(session, "launch a background agent");
     mock.emit({
       sessionId: "acp-1",
       update: {
@@ -1262,7 +1301,7 @@ describe("AgentSession.sendPrompt", () => {
     resolvePrompt!({ stopReason: "end_turn" });
     await first.turn;
 
-    const second = session.sendPrompt("meanwhile");
+    const second = sendTyped(session, "meanwhile");
     mock.emit({
       sessionId: "acp-1",
       update: {
@@ -1310,7 +1349,7 @@ describe("AgentSession.sendPrompt", () => {
         backendId: "claude-code",
       });
 
-      const first = session.sendPrompt("launch a background agent");
+      const first = sendTyped(session, "launch a background agent");
       mock.emit({
         sessionId: "acp-1",
         update: {
@@ -1323,7 +1362,7 @@ describe("AgentSession.sendPrompt", () => {
       resolvePrompts[0]({ stopReason: "end_turn" });
       await first.turn;
 
-      const second = session.sendPrompt("do something else");
+      const second = sendTyped(session, "do something else");
       mock.emit({
         sessionId: "acp-1",
         update: {
@@ -1388,7 +1427,7 @@ describe("AgentSession.sendPrompt", () => {
       internalId: "internal-1",
       backendId: "claude-code",
     });
-    const { turn } = session.sendPrompt("hi");
+    const { turn } = sendTyped(session, "hi");
 
     mock.emit({
       sessionId: "acp-1",
@@ -1433,7 +1472,7 @@ describe("AgentSession.sendPrompt", () => {
       internalId: "internal-1",
       backendId: "codex",
     });
-    const { turn } = session.sendPrompt("hi");
+    const { turn } = sendTyped(session, "hi");
     mock.emit({
       sessionId: "acp-1",
       update: {
@@ -1476,7 +1515,7 @@ describe("AgentSession.sendPrompt", () => {
       internalId: "internal-1",
       backendId: "opencode",
     });
-    const { turn } = session.sendPrompt("hi");
+    const { turn } = sendTyped(session, "hi");
     await session.cancel();
     expect(mock.cancel).toHaveBeenCalledWith({ sessionId: "acp-1" });
     resolvePrompt!({ stopReason: "cancelled" });
@@ -1515,7 +1554,7 @@ describe("AgentSession.sendPrompt", () => {
         sessionId: "acp-1",
         update: { sessionUpdate, messageId, content: { type: "text", text } },
       });
-    const { turn } = session.sendPrompt("first");
+    const { turn } = sendTyped(session, "first");
 
     emitChunk("agent_thought_chunk", "initial thought");
     emitChunk("agent_message_chunk", "partial answer");
@@ -1550,7 +1589,7 @@ describe("AgentSession.sendPrompt", () => {
     expect(firstAnswer?.parts?.some((part) => part.kind === "tool_call")).toBe(false);
     expect(firstAnswer?.turnStopReason).toBe("cancelled");
 
-    const next = session.sendPrompt("second");
+    const next = sendTyped(session, "second");
     expect(mock.prompt).toHaveBeenCalledTimes(1);
     emitChunk("agent_message_chunk", " stale retry", "msg-retry");
 
@@ -1995,6 +2034,39 @@ describe("AgentSession.settleTask", () => {
 
     expect(session.settleTask("task-1", { stopReason }).state).toBe("cancelled");
   });
+
+  it("posts a visible failure for a task the session refused before any turn started", () => {
+    // A queued submission refused at dispatch has no answer bubble and no
+    // composer left to report it, so the transcript is the only place the
+    // user can learn the work never ran.
+    // See `designdocs/VOICE_CHAT_DEMO_DESIGN.md`, "Local task submission and queue".
+    const mock = makeMockBackend();
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "opencode",
+    });
+
+    const result = session.settleTask("task-never-started", {
+      error: new Error("Session is closed"),
+    });
+
+    expect(result).toMatchObject({
+      state: "failed",
+      errorCode: "turn_rejected",
+      answerText: "Failed to send message: Session is closed",
+    });
+    const messages = session.store.getDisplayMessages();
+    expect(messages).toHaveLength(1);
+    expect(messages[0]).toMatchObject({
+      id: result.assistantMessageId,
+      sender: AI_SENDER,
+      isErrorMessage: true,
+      taskId: "task-never-started",
+      message: "Failed to send message: Session is closed",
+    });
+  });
 });
 
 describe("withReadOnlyPreamble", () => {
@@ -2032,10 +2104,9 @@ describe("AgentSession fan-out branching", () => {
       runFanoutTurn,
     });
 
-    const stopReason = await session.sendPrompt("review", undefined, undefined, [
-      "opencode",
-      "claude",
-    ]).turn;
+    const stopReason = await sendTyped(session, "review", {
+      mentionedAgents: ["opencode", "claude"],
+    }).turn;
 
     expect(stopReason).toBe("end_turn");
     expect(runFanoutTurn).toHaveBeenCalledTimes(1);
@@ -2076,7 +2147,7 @@ describe("AgentSession fan-out branching", () => {
       runFanoutTurn,
     });
 
-    await session.sendPrompt("review", undefined, undefined, ["opencode", "claude"]).turn;
+    await sendTyped(session, "review", { mentionedAgents: ["opencode", "claude"] }).turn;
 
     const placeholder = session.store.getDisplayMessages().find((m) => m.sender === AI_SENDER);
     // Phase 2: the persisted body is the FULL composite so the dropdown is
@@ -2116,14 +2187,14 @@ describe("AgentSession fan-out branching", () => {
 
     // Turn 1 is a fan-out: only the ephemeral sub-sessions receive the block,
     // and the visible backend is never prompted.
-    await session.sendPrompt("review", undefined, undefined, ["opencode", "claude"]).turn;
+    await sendTyped(session, "review", { mentionedAgents: ["opencode", "claude"] }).turn;
     const fanoutPrompt = runFanoutTurn.mock.calls[0][0].prompt[0] as { type: "text"; text: string };
     expect(fanoutPrompt.text).toContain("<project_context>");
     expect(mock.prompt).not.toHaveBeenCalled();
 
     // Turn 2 is a normal turn: the visible backend must finally receive the
     // first-turn project context (regression — a fan-out turn used to burn it).
-    await session.sendPrompt("now you").turn;
+    await sendTyped(session, "now you").turn;
     expect(mock.prompt).toHaveBeenCalledTimes(1);
     const req = mock.prompt.mock.calls[0][0] as { prompt: Array<{ type: string; text?: string }> };
     const visibleText = (req.prompt[0] as { type: "text"; text: string }).text;
@@ -2170,10 +2241,9 @@ describe("AgentSession fan-out paywall (send-boundary entitlement)", () => {
       runFanoutTurn,
     });
 
-    const stopReason = await session.sendPrompt("review", undefined, undefined, [
-      "opencode",
-      "claude",
-    ]).turn;
+    const stopReason = await sendTyped(session, "review", {
+      mentionedAgents: ["opencode", "claude"],
+    }).turn;
 
     expect(mockedEnsure).toHaveBeenCalledTimes(1);
     expect(mockedPrompt).not.toHaveBeenCalled();
@@ -2193,10 +2263,9 @@ describe("AgentSession fan-out paywall (send-boundary entitlement)", () => {
       runFanoutTurn,
     });
 
-    const stopReason = await session.sendPrompt("review", undefined, undefined, [
-      "opencode",
-      "claude",
-    ]).turn;
+    const stopReason = await sendTyped(session, "review", {
+      mentionedAgents: ["opencode", "claude"],
+    }).turn;
 
     expect(mockedEnsure).toHaveBeenCalledTimes(1);
     // Hard stop: the fan-out runner never ran, and there was NO silent
@@ -2228,9 +2297,9 @@ describe("AgentSession fan-out paywall (send-boundary entitlement)", () => {
     });
 
     // No mentioned agents -> single-agent path; the paywall must never run.
-    await session.sendPrompt("hi").turn;
+    await sendTyped(session, "hi").turn;
     // Only the main agent @-ed -> collapses to single-agent; also no gate.
-    await session.sendPrompt("hi again", undefined, undefined, ["opencode"]).turn;
+    await sendTyped(session, "hi again", { mentionedAgents: ["opencode"] }).turn;
 
     expect(mockedEnsure).not.toHaveBeenCalled();
     expect(mockedPrompt).not.toHaveBeenCalled();
@@ -2344,14 +2413,14 @@ describe("AgentSession fan-out conversation history", () => {
       runFanoutTurn,
     });
 
-    await session.sendPrompt("what is the master plan").turn;
+    await sendTyped(session, "what is the master plan").turn;
     // Simulate the assistant's prior reply landing in the transcript.
     session.store.appendAgentText(
       session.store.getDisplayMessages().find((m) => m.sender === AI_SENDER)!.id,
       "the master plan is X"
     );
 
-    await session.sendPrompt("expand on that plan", undefined, undefined, ["opencode", "claude"])
+    await sendTyped(session, "expand on that plan", { mentionedAgents: ["opencode", "claude"] })
       .turn;
 
     const text = fanoutPromptText(runFanoutTurn).text;
@@ -2415,10 +2484,10 @@ describe("AgentSession fan-out follow-up continuity", () => {
       runFanoutTurn,
     });
 
-    await session.sendPrompt("compare X and Y", undefined, undefined, ["opencode", "claude"]).turn;
+    await sendTyped(session, "compare X and Y", { mentionedAgents: ["opencode", "claude"] }).turn;
     expect(mock.prompt).not.toHaveBeenCalled();
 
-    await session.sendPrompt("now expand on that").turn;
+    await sendTyped(session, "now expand on that").turn;
 
     const text = lastPromptText(mock);
     expect(text).toContain("<prior_turns>");
@@ -2427,7 +2496,7 @@ describe("AgentSession fan-out follow-up continuity", () => {
     expect(text).toContain("<user-message>\nnow expand on that\n</user-message>");
 
     // Buffer cleared: a second single-agent turn carries no prior-turn block.
-    await session.sendPrompt("and again").turn;
+    await sendTyped(session, "and again").turn;
     expect(lastPromptText(mock)).not.toContain("<prior_turns>");
   });
 
@@ -2442,8 +2511,8 @@ describe("AgentSession fan-out follow-up continuity", () => {
       runFanoutTurn,
     });
 
-    await session.sendPrompt("multi question", undefined, undefined, ["opencode", "claude"]).turn;
-    await session.sendPrompt("follow-up").turn;
+    await sendTyped(session, "multi question", { mentionedAgents: ["opencode", "claude"] }).turn;
+    await sendTyped(session, "follow-up").turn;
 
     // No summary was generated, but agents answered — so the follow-up replays
     // the readable answers themselves (not a generic 'unavailable' note), so a
@@ -2568,8 +2637,8 @@ describe("AgentSession.create (via start)", () => {
     });
     await session.ready;
 
-    await session.sendPrompt("first").turn;
-    await session.sendPrompt("second").turn;
+    await sendTyped(session, "first").turn;
+    await sendTyped(session, "second").turn;
 
     const promptText = (call: number): string => {
       const input = mock.prompt.mock.calls[call][0] as {
@@ -2603,8 +2672,8 @@ describe("AgentSession.create (via start)", () => {
     });
     await session.ready;
 
-    await expect(session.sendPrompt("first").turn).rejects.toThrow("transport down");
-    await session.sendPrompt("retry").turn;
+    await expect(sendTyped(session, "first").turn).rejects.toThrow("transport down");
+    await sendTyped(session, "retry").turn;
 
     const promptText = (call: number): string => {
       const input = mock.prompt.mock.calls[call][0] as {
@@ -2847,7 +2916,7 @@ describe("AgentSession.create (via start)", () => {
       });
     });
     expect(session.getStatus()).toBe("starting");
-    expect(() => session.sendPrompt("too early")).toThrow("Session is still starting");
+    expect(() => sendTyped(session, "too early")).toThrow("Session is still starting");
     expect(mock.prompt).not.toHaveBeenCalled();
 
     resolveSetModel!({
@@ -3157,7 +3226,7 @@ function makeConfigOptionDescriptor(): BackendDescriptor {
 }
 
 describe("AgentSession warm-adoption ready gating", () => {
-  it("stays starting until setModel resolves so sendPrompt can't fire on the probe model", async () => {
+  it("stays starting until setModel resolves so no turn can fire on the probe model", async () => {
     const mock = makeMockBackend();
     const probeState: BackendState = {
       model: {
@@ -3198,7 +3267,7 @@ describe("AgentSession warm-adoption ready gating", () => {
       });
     });
     expect(session.getStatus()).toBe("starting");
-    expect(() => session.sendPrompt("too early")).toThrow("Session is still starting");
+    expect(() => sendTyped(session, "too early")).toThrow("Session is still starting");
     expect(mock.prompt).not.toHaveBeenCalled();
 
     resolveSetModel({
@@ -3826,7 +3895,7 @@ describe("AgentSession title poll after turn", () => {
       backendId: "opencode",
       cwd: "/vault",
     });
-    const { turn } = session.sendPrompt("hi");
+    const { turn } = sendTyped(session, "hi");
     await turn;
     await flushMicrotasks();
 
@@ -3853,7 +3922,7 @@ describe("AgentSession title poll after turn", () => {
       backendId: "opencode",
       cwd: "/vault",
     });
-    await session.sendPrompt("hi").turn;
+    await sendTyped(session, "hi").turn;
     await flushMicrotasks();
     expect(session.getLabel()).toBeNull();
   });
@@ -3868,7 +3937,7 @@ describe("AgentSession title poll after turn", () => {
       cwd: "/vault",
     });
     session.setLabel("My label");
-    await session.sendPrompt("hi").turn;
+    await sendTyped(session, "hi").turn;
     await flushMicrotasks();
     expect(mock.listSessions).not.toHaveBeenCalled();
     expect(session.getLabel()).toBe("My label");
@@ -3884,7 +3953,7 @@ describe("AgentSession title poll after turn", () => {
       backendId: "opencode",
       cwd: "/vault",
     });
-    await session.sendPrompt("hi").turn;
+    await sendTyped(session, "hi").turn;
     await flushMicrotasks();
     expect(mock.listSessions).not.toHaveBeenCalled();
   });
@@ -3899,7 +3968,7 @@ describe("AgentSession title poll after turn", () => {
       backendId: "opencode",
       cwd: "/vault",
     });
-    await session.sendPrompt("hi").turn;
+    await sendTyped(session, "hi").turn;
     await flushMicrotasks();
     expect(session.getLabel()).toBeNull();
   });
@@ -3915,7 +3984,7 @@ describe("AgentSession title poll after turn", () => {
       internalId: "internal-1",
       backendId: "opencode",
     });
-    await session.sendPrompt("hi").turn;
+    await sendTyped(session, "hi").turn;
     await flushMicrotasks();
     expect(mock.listSessions).toHaveBeenCalledWith({});
     expect(session.getLabel()).toBe("Found me");
@@ -3941,42 +4010,42 @@ describe("AgentSession client-derived title (non-summarizing backends)", () => {
 
   it("derives the tab label from the first user message for codex", () => {
     const session = makeSession("codex", false);
-    session.sendPrompt("Summarize my meeting notes");
+    sendTyped(session, "Summarize my meeting notes");
     expect(session.getLabel()).toBe("Summarize my meeting notes");
     expect(session.getLabelSource()).toBe("agent");
   });
 
   it("derives the tab label from the first user message for Claude Code", () => {
     const session = makeSession("claude", false);
-    session.sendPrompt("Refactor the auth module");
+    sendTyped(session, "Refactor the auth module");
     expect(session.getLabel()).toBe("Refactor the auth module");
   });
 
   it("strips wikilink brackets when deriving the title", () => {
     const session = makeSession("codex", false);
-    session.sendPrompt("Review [[Project Plan]] please");
+    sendTyped(session, "Review [[Project Plan]] please");
     expect(session.getLabel()).toBe("Review Project Plan please");
   });
 
   it("keeps the first message's derived title across later turns", async () => {
     const session = makeSession("codex", false);
-    await session.sendPrompt("First prompt").turn;
+    await sendTyped(session, "First prompt").turn;
     expect(session.getLabel()).toBe("First prompt");
-    await session.sendPrompt("A different second prompt").turn;
+    await sendTyped(session, "A different second prompt").turn;
     expect(session.getLabel()).toBe("First prompt");
   });
 
   it("does not override a user rename with a derived title", () => {
     const session = makeSession("codex", false);
     session.setLabel("My rename");
-    session.sendPrompt("Some prompt that would otherwise become the title");
+    sendTyped(session, "Some prompt that would otherwise become the title");
     expect(session.getLabel()).toBe("My rename");
     expect(session.getLabelSource()).toBe("user");
   });
 
   it("does not derive a label for a summarizing backend (opencode)", () => {
     const session = makeSession("opencode", true);
-    session.sendPrompt("This should not become the tab title");
+    sendTyped(session, "This should not become the tab title");
     expect(session.getLabel()).toBeNull();
   });
 
@@ -3989,7 +4058,7 @@ describe("AgentSession client-derived title (non-summarizing backends)", () => {
       backendId: "codex",
       getDescriptor: nonSummarizingDescriptor,
     });
-    session.sendPrompt("Original user prompt");
+    sendTyped(session, "Original user prompt");
     mock.emit({
       sessionId: "acp-1",
       update: { sessionUpdate: "session_info_update", title: "<copilot-context> leaked title" },
@@ -4007,7 +4076,7 @@ describe("AgentSession client-derived title (non-summarizing backends)", () => {
       cwd: "/vault",
       getDescriptor: nonSummarizingDescriptor,
     });
-    await session.sendPrompt("hello").turn;
+    await sendTyped(session, "hello").turn;
     await flushMicrotasks();
     expect(mock.listSessions).not.toHaveBeenCalled();
   });
@@ -4026,7 +4095,7 @@ describe("AgentSession plan proposal lifecycle", () => {
       internalId: "internal-1",
       backendId: "claude",
     });
-    const { turn } = session.sendPrompt("plan something");
+    const { turn } = sendTyped(session, "plan something");
 
     mock.emit({
       sessionId: "acp-1",
@@ -4081,7 +4150,7 @@ describe("AgentSession plan proposal lifecycle", () => {
       internalId: "internal-1",
       backendId: "claude",
     });
-    const { turn } = session.sendPrompt("plan something");
+    const { turn } = sendTyped(session, "plan something");
 
     const planBody = "# proposed plan body";
     mock.emit({
@@ -4152,7 +4221,7 @@ describe("AgentSession plan proposal lifecycle", () => {
             absolutePath === "/Users/test/.claude/plans/plan.md",
         }) as unknown as BackendDescriptor,
     });
-    const { turn } = session.sendPrompt("plan something");
+    const { turn } = sendTyped(session, "plan something");
 
     mock.emit({
       sessionId: "acp-1",
@@ -4231,7 +4300,7 @@ describe("AgentSession plan proposal lifecycle", () => {
       onMessagesChanged: () => {},
       onStatusChanged: (status) => statusChanges.push(status),
     });
-    const { turn } = session.sendPrompt("edit a file");
+    const { turn } = sendTyped(session, "edit a file");
     expect(session.getStatus()).toBe("running");
 
     const decisionPromise = session.handleToolPermission({
@@ -4278,7 +4347,7 @@ describe("AgentSession plan proposal lifecycle", () => {
       internalId: "internal-1",
       backendId: "claude",
     });
-    const { turn } = session.sendPrompt("edit a file");
+    const { turn } = sendTyped(session, "edit a file");
 
     decisionPromise = session.handleToolPermission({
       sessionId: "acp-1",
@@ -4323,7 +4392,7 @@ describe("AgentSession plan proposal lifecycle", () => {
       onMessagesChanged: () => {},
       onStatusChanged: (status) => statusChanges.push(status),
     });
-    const { turn } = session.sendPrompt("ask me something");
+    const { turn } = sendTyped(session, "ask me something");
     expect(session.getStatus()).toBe("running");
 
     const answersPromise = session.handleAskUserQuestion({
@@ -4372,7 +4441,7 @@ describe("AgentSession plan proposal lifecycle", () => {
       internalId: "internal-1",
       backendId: "claude",
     });
-    const { turn } = session.sendPrompt("ask me something");
+    const { turn } = sendTyped(session, "ask me something");
 
     answersPromise = session.handleAskUserQuestion({
       sessionId: "acp-1",
@@ -4404,7 +4473,7 @@ describe("AgentSession plan proposal lifecycle", () => {
       internalId: "internal-1",
       backendId: "claude",
     });
-    const { turn } = session.sendPrompt("plan something");
+    const { turn } = sendTyped(session, "plan something");
 
     const decisionPromise = session.handlePlanProposalPermission({
       sessionId: "acp-1",
@@ -4445,7 +4514,7 @@ describe("AgentSession plan proposal lifecycle", () => {
       internalId: "internal-1",
       backendId: "claude",
     });
-    const { turn } = session.sendPrompt("plan something");
+    const { turn } = sendTyped(session, "plan something");
 
     const decisionPromise = session.handlePlanProposalPermission({
       sessionId: "acp-1",
@@ -4476,7 +4545,7 @@ describe("AgentSession plan proposal lifecycle", () => {
 });
 
 describe("AgentSession status derivation", () => {
-  it("reports 'error' after a failed turn and resets to 'running' on the next sendPrompt", async () => {
+  it("reports 'error' after a failed turn and resets to 'running' on the next turn", async () => {
     const mock = makeMockBackend();
     mock.prompt.mockRejectedValueOnce(new Error("boom"));
     const session = new AgentSession({
@@ -4486,11 +4555,11 @@ describe("AgentSession status derivation", () => {
       backendId: "opencode",
     });
 
-    await expect(session.sendPrompt("hi").turn).rejects.toThrow("boom");
+    await expect(sendTyped(session, "hi").turn).rejects.toThrow("boom");
     expect(session.getStatus()).toBe("error");
 
     // A fresh prompt should clear the prior turn error and report running.
-    const { turn } = session.sendPrompt("retry");
+    const { turn } = sendTyped(session, "retry");
     expect(session.getStatus()).toBe("running");
     await turn;
     expect(session.getStatus()).toBe("idle");
@@ -4514,7 +4583,7 @@ describe("AgentSession status derivation", () => {
       onStatusChanged: (status) => statusChanges.push(status),
     });
 
-    const { turn } = session.sendPrompt("edit a file");
+    const { turn } = sendTyped(session, "edit a file");
     const decisionPromise = session.handleToolPermission({
       sessionId: "acp-1",
       toolCall: {
@@ -4655,7 +4724,7 @@ describe("AgentSession streamed-token notification coalescing", () => {
     const onMessagesChanged = jest.fn();
     session.subscribe({ onMessagesChanged, onStatusChanged: () => {} });
 
-    const { turn } = session.sendPrompt("hi");
+    const { turn } = sendTyped(session, "hi");
     // The synchronous user-message + placeholder append notifies immediately so
     // the user's message paints within one frame — NOT rAF-deferred.
     expect(onMessagesChanged).toHaveBeenCalledTimes(1);
@@ -4697,7 +4766,7 @@ describe("AgentSession streamed-token notification coalescing", () => {
     const onMessagesChanged = jest.fn();
     session.subscribe({ onMessagesChanged, onStatusChanged: () => {} });
 
-    const { turn } = session.sendPrompt("hi");
+    const { turn } = sendTyped(session, "hi");
     onMessagesChanged.mockClear();
 
     // A chunk arrives and schedules a rAF that has NOT fired yet.

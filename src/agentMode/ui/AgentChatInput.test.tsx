@@ -118,7 +118,7 @@ const makeDraft = (overrides: Partial<AgentInputDraftControls> = {}): AgentInput
  * session, so the composer is exercised against the scheduling contract it
  * actually talks to rather than a hand-written queue mock.
  */
-function makeTaskBackend() {
+function makeTaskBackend(options: { refuseWith?: Error } = {}) {
   const dispatched: Array<{
     submission: AgentTaskSubmission;
     resolve: (stopReason: StopReason) => void;
@@ -126,6 +126,7 @@ function makeTaskBackend() {
   const cancel = jest.fn(async () => {});
   const coordinator = new AgentTaskCoordinator({
     submitTask(submission, taskId) {
+      if (options.refuseWith) throw options.refuseWith;
       let resolve!: (stopReason: StopReason) => void;
       const turn = new Promise<StopReason>((res) => {
         resolve = res;
@@ -151,8 +152,9 @@ function makeTaskBackend() {
   });
   const backend = {
     submitTask: (submission: AgentTaskSubmission) => coordinator.submit(submission),
-    setQueueHold: (reason: Parameters<typeof coordinator.setDispatchHold>[0]) =>
-      coordinator.setDispatchHold(reason),
+    setQueueHold: (reason: Parameters<typeof coordinator.setDispatchHold>[0], holderId?: string) =>
+      coordinator.setDispatchHold(reason, holderId),
+    releaseQueueHold: (holderId?: string) => coordinator.releaseDispatchHold(holderId),
     getQueuedTasks: () => coordinator.getQueuedTasks(),
     removeQueuedTask: (taskId: string) => coordinator.removeQueuedTask(taskId),
     cancelActiveAndClearQueue: () => coordinator.cancelActiveAndClearQueue(),
@@ -200,6 +202,7 @@ const makeStubBackend = () =>
   ({
     submitTask: jest.fn(() => ({ taskId: "task-1", disposition: "dispatched" as const })),
     setQueueHold: jest.fn(),
+    releaseQueueHold: jest.fn(),
     getQueuedTasks: () => NO_QUEUED_TASKS,
     removeQueuedTask: jest.fn(),
     cancelActiveAndClearQueue: jest.fn(async () => {}),
@@ -215,8 +218,11 @@ const submittedTexts = (backend: AgentChatBackend) =>
  * Render the composer against the real coordinator, mirroring how AgentHome
  * feeds queue and active-task state back down as props.
  */
-function renderComposer(extraProps: Partial<React.ComponentProps<typeof AgentChatInput>> = {}) {
-  const harness = makeTaskBackend();
+function renderComposer(
+  extraProps: Partial<React.ComponentProps<typeof AgentChatInput>> = {},
+  backendOptions: { refuseWith?: Error } = {}
+) {
+  const harness = makeTaskBackend(backendOptions);
   let draft!: AgentInputDraftControls;
   function Harness() {
     draft = useAgentInputDrafts({
@@ -352,6 +358,20 @@ describe("AgentChatInput", () => {
       });
       expect(coordinator.getQueuedTasks()).toHaveLength(0);
     });
+
+    it("gives the draft back with the reason when the session refuses the turn", async () => {
+      // A refused submission starts no turn and posts no row, so a cleared
+      // composer would simply lose what the user wrote.
+      // See `designdocs/VOICE_CHAT_DEMO_DESIGN.md`, "Local task submission and queue".
+      jest.mocked(Notice).mockClear();
+      const { getDraft } = renderComposer({}, { refuseWith: new Error("Session is closed") });
+      act(() => getDraft().setInput("this must not vanish"));
+
+      await act(async () => fireEvent.click(screen.getByText("send")));
+
+      expect(Notice).toHaveBeenCalledWith("Failed to send message: Session is closed");
+      expect(getDraft().input).toBe("this must not vanish");
+    });
   });
 
   describe("handleStopGenerating()", () => {
@@ -443,6 +463,25 @@ describe("AgentChatInput", () => {
 
       expect(dispatched).toHaveLength(1);
       expect(coordinator.getQueuedTasks()).toHaveLength(1);
+    });
+
+    it("keeps draining for the second composer of the same chat when one unmounts", async () => {
+      // The same conversation can be composed from the sidebar and a popout at
+      // once; closing one window must not park the queue the other one drives.
+      // See `designdocs/VOICE_CHAT_DEMO_DESIGN.md`, "Local task submission and queue".
+      const { backend, coordinator, dispatched } = makeTaskBackend();
+      const sidebar = renderInput(backend, makeDraft({ input: "first turn" }));
+      const popout = renderInput(backend, makeDraft({ input: "follow-up" }));
+      const sendButtons = screen.getAllByText("send");
+      await act(async () => fireEvent.click(sendButtons[0]));
+      await act(async () => fireEvent.click(sendButtons[1]));
+      expect(coordinator.getQueuedTasks()).toHaveLength(1);
+
+      sidebar.unmount();
+      await act(async () => dispatched[0].resolve("end_turn"));
+
+      expect(dispatched.map((d) => d.submission.requestText)).toEqual(["first turn", "follow-up"]);
+      popout.unmount();
     });
 
     it("removes a queued row the user dismissed", async () => {
@@ -586,7 +625,7 @@ describe("AgentChatInput", () => {
       });
       await act(async () => {});
 
-      expect(backend.setQueueHold).toHaveBeenCalledWith("busy");
+      expect(backend.setQueueHold).toHaveBeenCalledWith("busy", expect.any(String));
       expect(Notice).toHaveBeenCalledWith(
         "text-only doesn't support images. Switch to a vision-capable model to send images."
       );

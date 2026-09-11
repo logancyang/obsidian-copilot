@@ -324,8 +324,8 @@ export interface AgentSessionStateOptions extends ProjectContextUpdatesHooks {
  * Construction is split: `AgentSession.start()` returns synchronously with
  * status `"starting"` so the UI can swap to the new (empty) chat immediately.
  * The backend `newSession` runs in the background; once it resolves the
- * session transitions to `"idle"` and `sendPrompt` becomes usable. While
- * starting, `sendPrompt` throws — the chat UI gates the send button on
+ * session transitions to `"idle"` and `submitTask` becomes usable. While
+ * starting, `submitTask` throws — the chat UI gates the send button on
  * `getStatus() === "starting"`.
  */
 export class AgentSession {
@@ -394,7 +394,7 @@ export class AgentSession {
   // Remains false until the backend has accepted or rejected the persisted
   // model selection, preventing a prompt from racing that startup write.
   private startupSettled = false;
-  // Set in `runTurn`'s catch; cleared at the top of `sendPrompt` once
+  // Set in `runTurn`'s catch; cleared at the top of every turn once
   // preconditions pass. Yields the per-turn `"error"` status while the
   // session sits idle between a failed turn and the next prompt.
   private lastTurnError = false;
@@ -543,7 +543,7 @@ export class AgentSession {
         opts.backendSessionId,
         (event) => this.handleSessionEvent(event)
       );
-      // Gate `ready` on the model confirmation round-trip so `sendPrompt`
+      // Gate `ready` on the model confirmation round-trip so a turn
       // can't fire on the probe's model before the user's persisted
       // selection is applied to the backend.
       const selection = opts.defaultModelSelection ?? originalState?.model?.current;
@@ -568,7 +568,7 @@ export class AgentSession {
   /**
    * Construct an `AgentSession` synchronously and kick off backend
    * initialization in the background. The returned session is immediately
-   * registerable with the manager and renderable in the UI; `sendPrompt`
+   * registerable with the manager and renderable in the UI; `submitTask`
    * is gated until `ready` resolves.
    */
   static start(opts: AgentSessionStartOptions): AgentSession {
@@ -1013,29 +1013,6 @@ export class AgentSession {
   }
 
   /**
-   * Submit a user prompt. Synchronously appends the user message + an empty
-   * assistant placeholder to the store and kicks off the backend prompt.
-   * Streaming session events mutate the placeholder in place. Returns:
-   *   - `userMessageId`: id of the appended user message.
-   *   - `turn`: promise that resolves with `StopReason` when the turn
-   *     completes, or rejects on transport errors.
-   */
-  sendPrompt(
-    displayText: string,
-    context?: MessageContext,
-    promptContent?: PromptContent[],
-    mentionedAgents?: ReadonlyArray<BackendId>
-  ): { userMessageId: string; turn: Promise<StopReason> } {
-    const { userMessageId, turn } = this.startTurn({
-      displayText,
-      context,
-      promptContent,
-      mentionedAgents,
-    });
-    return { userMessageId, turn };
-  }
-
-  /**
    * Run one backend turn for a task the coordinator accepted. When the
    * submission already names the public entries that display the request
    * (spoken text the user can already read), no second user bubble is added —
@@ -1088,7 +1065,13 @@ export class AgentSession {
     outcome: { stopReason?: StopReason; error?: unknown }
   ): AgentTaskResult {
     const task = this.store.getTask(taskId);
-    const assistantMessageId = task?.assistantMessageId ?? "";
+    // No record means no turn ever started: the session refused the submission
+    // before `submitTask` could create its answer bubble. A refusal that
+    // reached the coordinator from the queue has no other surface, so write the
+    // failure into the transcript rather than settling into nothing.
+    // See `designdocs/VOICE_CHAT_DEMO_DESIGN.md`, "Local task submission and queue".
+    if (!task) return this.recordRefusedTask(taskId, outcome.error);
+    const assistantMessageId = task.assistantMessageId ?? "";
     const message = assistantMessageId ? this.store.getMessage(assistantMessageId) : undefined;
     let state: AgentTaskTerminalState;
     let errorCode: string | undefined;
@@ -1110,6 +1093,37 @@ export class AgentSession {
       assistantMessageId,
       answerText: message?.message ?? "",
       ...(errorCode !== undefined ? { errorCode } : {}),
+    };
+  }
+
+  /**
+   * Post the one visible failure a refused submission leaves behind, and
+   * report it as the task's terminal result.
+   *
+   * @param taskId - Task the coordinator assigned before the refusal.
+   * @param error - What the session threw when it refused the turn.
+   */
+  private recordRefusedTask(taskId: string, error: unknown): AgentTaskResult {
+    const reason = error === undefined ? "" : err2String(error);
+    const answerText = reason
+      ? `Failed to send message: ${reason}`
+      : "Failed to send message. Please try again.";
+    const assistantMessageId = this.store.addMessage({
+      message: answerText,
+      sender: AI_SENDER,
+      timestamp: formatDateTime(new Date()),
+      isVisible: true,
+      isErrorMessage: true,
+      taskId,
+      origin: "backend",
+    });
+    this.notifyMessages();
+    return {
+      taskId,
+      state: "failed",
+      assistantMessageId,
+      answerText,
+      errorCode: "turn_rejected",
     };
   }
 
@@ -1211,7 +1225,7 @@ export class AgentSession {
     return { userMessageId, assistantMessageId, turn };
   }
 
-  /** The resolved answerer selection for the most recent `sendPrompt`; empty on the single-agent path. */
+  /** The resolved answerer selection for the most recent turn; empty on the single-agent path. */
   getLastMentionedAgents(): ReadonlyArray<BackendId> {
     return this.lastMentionedAgents;
   }
@@ -2263,7 +2277,7 @@ export class AgentSession {
   private async pollSessionTitle(): Promise<void> {
     if (this.labelSource === "user") return;
     // Only backends that summarize return a clean title; for the rest the tab
-    // label is derived client-side from the first user message (see sendPrompt).
+    // label is derived client-side from the first user message (see startTurn).
     if (!this.backendSummarizesTitle()) return;
     try {
       const resp = await this.backend.listSessions(this.cwd ? { cwd: this.cwd } : {});

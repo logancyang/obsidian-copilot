@@ -37,6 +37,7 @@ import { App, FileSystemAdapter, Notice, Platform, TFile } from "obsidian";
 import { v4 as uuidv4 } from "uuid";
 import { AgentSession, ATTENTION_TRIGGER_STATUSES, DEFAULT_TITLE_PREFIX } from "./AgentSession";
 import type { AgentChatPersistenceManager, LoadedAgentChat } from "./AgentChatPersistenceManager";
+import type { AgentHistoryRestoreStatus } from "./agentChatSnapshot";
 import type { AgentModelPreloader } from "./AgentModelPreloader";
 import { buildNativeChatId, parseNativeChatId } from "@/utils/nativeChatId";
 import { CHAT_AGENT_VIEWTYPE } from "@/constants";
@@ -2941,6 +2942,15 @@ export class AgentSessionManager {
         );
         return;
       }
+      // The overlay replaces the transcript wholesale, so a snapshot that is
+      // shorter than what the backend just replayed would delete exchanges the
+      // user had after the last save. The newer transcript wins.
+      if (loaded.mixed.messages.length < session.store.getDisplayMessages().length) {
+        logWarn(
+          `[AgentMode] saved transcript ${path} is older than the resumed one; keeping the resumed transcript`
+        );
+        return;
+      }
       this.applyLoadedTranscript(session, loaded);
       const state = this.getSessionState(session.internalId);
       state.path = file.path;
@@ -3372,12 +3382,17 @@ export class AgentSessionManager {
   }
 
   /**
-   * Manual save entry point. Writes the active session via the same code path
-   * auto-save uses, but ignores `settings.autosaveChat`. Returns the on-disk
-   * path on success, or `null` when there was nothing to save (no active
-   * session, no messages, persistence not configured, or signature unchanged).
+   * Save the active session now, via the same code path auto-save uses but
+   * ignoring `settings.autosaveChat`. Returns the on-disk path on success, or
+   * `null` when there was nothing to save (no active session, no messages,
+   * persistence not configured, or signature unchanged).
+   *
+   * @param options - `explicit` marks a save the user asked for by name. Only
+   *   an explicit save may rewrite a chat whose file no longer matches its
+   *   saved snapshot; leave it false for hook-driven saves so a background
+   *   trigger cannot overwrite the user's edits.
    */
-  async saveActiveSession(): Promise<{ path: string } | null> {
+  async saveActiveSession(options?: { explicit?: boolean }): Promise<{ path: string } | null> {
     const session = this.getActiveSession();
     if (!session) return null;
     // Drain any pending debounced write first so it doesn't race with us.
@@ -3386,7 +3401,7 @@ export class AgentSessionManager {
       window.clearTimeout(state.timer);
       state.timer = undefined;
     }
-    return this.flushAutoSave(session, { explicit: true });
+    return this.flushAutoSave(session, { explicit: options?.explicit ?? true });
   }
 
   /**
@@ -3466,6 +3481,13 @@ export class AgentSessionManager {
       return state.path ? { path: state.path } : null;
     }
 
+    // The status checked above was decided when the chat was opened. A note
+    // edited in Obsidian since then still looks restorable to this session, so
+    // re-read the file before a background write rather than overwriting the
+    // user's edits with a stale snapshot.
+    // See `designdocs/VOICE_CHAT_DEMO_DESIGN.md`, "Persistence and reload".
+    if (!explicit && !(await this.mixedSnapshotIsStillOurs(session))) return null;
+
     const result = await persistence.saveSession(messages, session.backendId, {
       label,
       existingPath: state.path,
@@ -3492,6 +3514,35 @@ export class AgentSessionManager {
     }
     session.setHistoryRestoreStatus(result.wroteMixedSchema ? "restored" : "none");
     return { path: result.path };
+  }
+
+  /**
+   * Whether the file this session last wrote as a mixed transcript still
+   * carries the snapshot Copilot put there. A file edited after the chat was
+   * opened does not, and the session is marked so the transcript says so and
+   * only an explicit Save may rewrite it. A file that cannot be re-read (for
+   * instance the user deleted it) is not treated as edited, so the next save
+   * recreates it.
+   *
+   * @param session - The session about to write in the background.
+   */
+  private async mixedSnapshotIsStillOurs(session: AgentSession): Promise<boolean> {
+    const persistence = this.opts.persistenceManager;
+    const state = this.getSessionState(session.internalId);
+    const path = state.mixedPath;
+    if (!persistence || !path || path !== state.path) return true;
+    const file = this.app.vault.getAbstractFileByPath(path);
+    if (!(file instanceof TFile)) return true;
+    let status: AgentHistoryRestoreStatus;
+    try {
+      status = await persistence.readStructuredHistoryStatus(file);
+    } catch (e) {
+      logWarn(`[AgentMode] could not re-read ${path} before saving`, e);
+      return true;
+    }
+    if (status === "restored") return true;
+    session.setHistoryRestoreStatus(status === "unsupported-schema" ? status : "unavailable");
+    return false;
   }
 
   /**

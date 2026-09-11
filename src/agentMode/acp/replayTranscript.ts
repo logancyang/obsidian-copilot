@@ -38,7 +38,7 @@ export function createReplayTranscriptState(): ReplayTranscriptState {
  * DESIGN NOTE — the boundary rule is deliberately asymmetric, because the two
  * senders map onto ACP's `messageId` differently.
  *
- * A *user* bubble is one prompt (`AgentSession.sendPrompt` adds exactly one per
+ * A *user* bubble is one prompt (`AgentSession` adds exactly one per
  * prompt), so a user chunk continues the current message only when it repeats
  * that message's id, and starts a new one otherwise. Defaulting to "new" is what
  * keeps two prompts apart when the agent emitted nothing between them — what a

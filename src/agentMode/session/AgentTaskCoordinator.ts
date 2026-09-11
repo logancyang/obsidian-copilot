@@ -65,6 +65,11 @@ export interface AgentTaskExecutor {
 // and the memoized queue UI bails out instead of re-rendering.
 const EMPTY_QUEUED_TASKS: readonly AgentQueuedTask[] = Object.freeze([]);
 
+// Holder key for a caller that owns dispatch on its own (every test, and any
+// future single-surface driver). A conversation shown in two windows passes a
+// distinct key per composer instead.
+const SOLE_HOLDER = "sole-holder";
+
 const dedupeBy = <T>(items: Iterable<T>, key: (item: T) => string): T[] => {
   const seen = new Set<string>();
   const out: T[] = [];
@@ -142,6 +147,15 @@ export class AgentTaskCoordinator {
   private queue: AgentQueuedTask[] = [];
   private queueSnapshot: readonly AgentQueuedTask[] = EMPTY_QUEUED_TASKS;
   private hold: AgentQueueHoldReason | null = null;
+  // What each registered composer reports. One conversation can be composed
+  // from several surfaces at once (sidebar plus popout), so the hold is the
+  // union of what they report rather than whatever the last one said.
+  private readonly holders = new Map<string, AgentQueueHoldReason | null>();
+  // Set when the last registered composer goes away: a conversation with no
+  // composer on screen is backgrounded and must not flush its queue. Distinct
+  // from an empty holder map before any composer registers, which is simply a
+  // conversation nothing has rendered yet.
+  private backgrounded = false;
   private active: { taskId: string; generation: number } | null = null;
   // Monotonic per dispatch. A turn's callback carries the generation it was
   // started with, so a late settlement from a superseded turn can still record
@@ -175,7 +189,9 @@ export class AgentTaskCoordinator {
     if (this.disposed) {
       return { taskId, disposition: "rejected", rejectionReason: "Conversation is closed" };
     }
-    if (this.hold !== null || this.active !== null) {
+    // A non-empty queue holds the line too: a submission accepted while
+    // earlier work is still parked must run after it, not in front of it.
+    if (this.hold !== null || this.active !== null || this.queue.length > 0) {
       this.queue.push({ taskId, submission, queueReason: this.hold ?? "busy" });
       this.invalidateQueue();
       this.notify();
@@ -185,17 +201,51 @@ export class AgentTaskCoordinator {
   }
 
   /**
-   * Park or release queue dispatch. The composer holds while its project's
-   * context is materializing and while it is not the foreground conversation,
-   * so switching chats never secretly flushes queued work into a backgrounded
-   * session.
+   * Register what one composer currently allows. A composer holds while its
+   * project's context is materializing and while it cannot accept work, so
+   * queued work never flushes into a conversation that is not ready for it.
    *
-   * @param reason - Why dispatch is held, or null to release and drain.
+   * @param reason - Why this composer holds dispatch, or null to let it run.
+   * @param holderId - Identity of the composer reporting; one per mounted instance.
    */
-  setDispatchHold(reason: AgentQueueHoldReason | null): void {
-    if (this.hold === reason) return;
-    this.hold = reason;
-    if (reason === null) this.drain();
+  setDispatchHold(reason: AgentQueueHoldReason | null, holderId: string = SOLE_HOLDER): void {
+    this.holders.set(holderId, reason);
+    this.backgrounded = false;
+    this.applyHold();
+  }
+
+  /**
+   * Drop a composer that unmounted. Dispatch keeps running while any other
+   * composer is still registered — closing a popout must not park the queue
+   * the sidebar composer is still driving — and parks once the last one goes,
+   * so switching chats never secretly flushes a backgrounded conversation.
+   *
+   * See `designdocs/VOICE_CHAT_DEMO_DESIGN.md`, "Local task submission and queue".
+   *
+   * @param holderId - Identity the unmounting composer registered under.
+   */
+  releaseDispatchHold(holderId: string = SOLE_HOLDER): void {
+    if (!this.holders.delete(holderId)) return;
+    if (this.holders.size === 0) this.backgrounded = true;
+    this.applyHold();
+  }
+
+  /** Recompute the effective hold from every registered composer and react to it. */
+  private applyHold(): void {
+    let next: AgentQueueHoldReason | null = null;
+    if (this.backgrounded) {
+      next = "busy";
+    } else {
+      for (const reason of this.holders.values()) {
+        if (reason !== null) {
+          next = reason;
+          break;
+        }
+      }
+    }
+    if (this.hold === next) return;
+    this.hold = next;
+    if (next === null) this.drain();
     this.notify();
   }
 
@@ -257,6 +307,7 @@ export class AgentTaskCoordinator {
     this.disposed = true;
     this.queue = [];
     this.queueSnapshot = EMPTY_QUEUED_TASKS;
+    this.holders.clear();
     this.listeners.clear();
     this.settlementListeners.clear();
   }
@@ -272,6 +323,9 @@ export class AgentTaskCoordinator {
       const rejectionReason = e instanceof Error ? e.message : String(e);
       logWarn("[AgentMode] task submission refused", e);
       this.settle(taskId, { error: e });
+      // One refused submission must not strand everything behind it: the rest
+      // of the queue still gets its turn.
+      this.drain();
       this.notify();
       return { taskId, disposition: "rejected", rejectionReason };
     }

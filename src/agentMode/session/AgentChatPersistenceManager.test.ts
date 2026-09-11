@@ -665,6 +665,23 @@ describe("AgentChatPersistenceManager", () => {
       expect(loaded.messages[0].message).toContain("Which notes mention the retro?");
     });
 
+    it("keeps a legacy chat whose answer ends in a look-alike metadata comment autosaving", async () => {
+      // Only a chat that declares the schema owns a metadata comment; a chat
+      // saved before mixed transcripts existed owns every character of its
+      // body, and demoting it to unavailable would silently stop its autosave.
+      // See `designdocs/VOICE_CHAT_DEMO_DESIGN.md`, "Persistence and reload".
+      const answer = "Paste this at the end:\n<!-- copilot-agent-chat:2 ZmFrZQ== -->";
+      const saved = await manager.saveSession(
+        [makeMessage(USER_SENDER, "show me the marker"), makeMessage(AI_SENDER, answer)],
+        "claude"
+      );
+
+      const loaded = await manager.loadFile(app.files.get(saved!.path)! as unknown as TFile);
+
+      expect(loaded.structuredHistory).toBe("none");
+      expect(loaded.messages.map((m) => m.message)).toEqual(["show me the marker", answer]);
+    });
+
     it("round-trips message text that imitates a transcript marker and a metadata comment", async () => {
       const adversarial = {
         ...makeMessage(USER_SENDER, ""),

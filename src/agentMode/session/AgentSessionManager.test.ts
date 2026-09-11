@@ -2545,6 +2545,8 @@ describe("AgentSessionManager chat history aggregation", () => {
     applyInitialSessionConfig?: BackendDescriptor["applyInitialSessionConfig"];
     loadFile?: jest.Mock;
     saveSession?: jest.Mock;
+    /** What a re-read of a saved file reports just before a background write. */
+    readStructuredHistoryStatus?: jest.Mock;
   }) {
     const frontmatterByPath = opts?.files ?? {};
     const hiddenByPath = opts?.hiddenFiles ?? {};
@@ -2596,6 +2598,8 @@ describe("AgentSessionManager chat history aggregation", () => {
       saveSession:
         opts?.saveSession ??
         jest.fn(async () => ({ path: "chats/agent__saved.md", wroteMixedSchema: true })),
+      readStructuredHistoryStatus:
+        opts?.readStructuredHistoryStatus ?? jest.fn(async () => "restored"),
     };
     const index = new AgentSessionIndex(makeIndexStorage(), "plugins/copilot/index.json");
     const backendId = opts?.backendId ?? "opencode";
@@ -3487,6 +3491,53 @@ describe("AgentSessionManager chat history aggregation", () => {
       expect(saveSession).not.toHaveBeenCalled();
     });
 
+    it("skips a background write once the note is edited after the chat was opened", async () => {
+      // The restore status is decided at load time; without re-reading the
+      // file, autosave would overwrite edits the user made in Obsidian while
+      // the chat stayed open.
+      // See `designdocs/VOICE_CHAT_DEMO_DESIGN.md`, "Persistence and reload".
+      enableAutosave();
+      const saveSession = jest.fn(async () => ({
+        path: "chats/agent__voice.md",
+        wroteMixedSchema: true,
+      }));
+      const { manager } = buildHistoryHarness({
+        saveSession,
+        files: { "chats/agent__voice.md": { epoch: 1_000, backendId: "opencode" } },
+        loadFile: jest.fn(async () => savedChat()),
+        readStructuredHistoryStatus: jest.fn(async () => "unavailable"),
+      });
+      const session = await manager.loadSessionFromHistory(new MockTFile("chats/agent__voice.md"));
+      getSessionTestHandle(session).setConversation(MIXED_CONVERSATION);
+
+      getSessionTestHandle(session).notifyMessagesChanged();
+      await settleBackgroundWrites();
+
+      expect(saveSession).not.toHaveBeenCalled();
+      expect(session.getHistoryRestoreStatus()).toBe("unavailable");
+    });
+
+    it("keeps writing in the background while the note still matches its snapshot", async () => {
+      enableAutosave();
+      const saveSession = jest.fn(async () => ({
+        path: "chats/agent__voice.md",
+        wroteMixedSchema: true,
+      }));
+      const { manager } = buildHistoryHarness({
+        saveSession,
+        files: { "chats/agent__voice.md": { epoch: 1_000, backendId: "opencode" } },
+        loadFile: jest.fn(async () => savedChat()),
+      });
+      const session = await manager.loadSessionFromHistory(new MockTFile("chats/agent__voice.md"));
+      getSessionTestHandle(session).setConversation(MIXED_CONVERSATION);
+
+      getSessionTestHandle(session).notifyMessagesChanged();
+      await settleBackgroundWrites();
+
+      expect(saveSession).toHaveBeenCalledTimes(1);
+      expect(session.getHistoryRestoreStatus()).toBe("restored");
+    });
+
     it("writes a fresh snapshot when the user explicitly saves a hand-edited chat", async () => {
       const saveSession = jest.fn(async () => ({
         path: "chats/agent__voice.md",
@@ -3507,6 +3558,30 @@ describe("AgentSessionManager chat history aggregation", () => {
       expect(saveSession).toHaveBeenCalledTimes(1);
       expect(result).toEqual({ path: "chats/agent__voice.md" });
       expect(session.getHistoryRestoreStatus()).toBe("restored");
+    });
+
+    it("refuses a non-explicit save of a hand-edited chat so a save hook cannot overwrite it", async () => {
+      // The plugin's autosave hook drives the same entry point as the Save
+      // button; only the button is the user asking for the file to be rewritten.
+      // See `designdocs/VOICE_CHAT_DEMO_DESIGN.md`, "Persistence and reload".
+      const saveSession = jest.fn(async () => ({
+        path: "chats/agent__voice.md",
+        wroteMixedSchema: true,
+      }));
+      const { manager } = buildHistoryHarness({
+        saveSession,
+        files: { "chats/agent__voice.md": { epoch: 1_000, backendId: "opencode" } },
+        loadFile: jest.fn(async () =>
+          savedChat({ structuredHistory: "unavailable", mixed: undefined })
+        ),
+      });
+      const session = await manager.loadSessionFromHistory(new MockTFile("chats/agent__voice.md"));
+      getSessionTestHandle(session).setConversation(MIXED_CONVERSATION);
+
+      const result = await manager.saveActiveSession({ explicit: false });
+
+      expect(result).toBeNull();
+      expect(saveSession).not.toHaveBeenCalled();
     });
 
     it("never writes a chat saved by a newer Copilot, even when the user asks", async () => {
@@ -3554,6 +3629,61 @@ describe("AgentSessionManager chat history aggregation", () => {
       expect(rows.map((row) => row.kind)).toEqual(["message", "task-card"]);
       expect(session.store.getMessage("m-spoken")?.origin).toBe("voice-user");
       expect(session.getConversationId()).toBe("conv-saved");
+    });
+
+    it("keeps the resumed transcript when the saved snapshot is older than the replay", async () => {
+      // The overlay replaces the transcript wholesale, so an outdated snapshot
+      // would delete exchanges the backend replayed from after the last save.
+      // See `designdocs/VOICE_CHAT_DEMO_DESIGN.md`, "Persistence and reload".
+      const laterNativeExchange: AgentChatMessage[] = [
+        ...BACKEND_ONLY_TRANSCRIPT,
+        {
+          id: "backend-newer-question",
+          sender: "user",
+          message: "and after that?",
+          timestamp: null,
+          isVisible: true,
+        },
+        {
+          id: "backend-newer-answer",
+          sender: "ai",
+          message: "Answered after the last save.",
+          timestamp: null,
+          isVisible: true,
+        },
+      ];
+      const createBackendProcess = jest.fn(() => ({
+        ...makeMockBackendProcess(),
+        loadSession: jest.fn(async () => {
+          throw new MethodUnsupportedError("session/load");
+        }),
+        resumeSession: jest.fn(async ({ sessionId }: { sessionId: string }) => ({
+          sessionId,
+          state: null,
+        })),
+        readPersistedTranscript: jest.fn(async () => laterNativeExchange),
+      }));
+      const { manager, index } = buildHistoryHarness({
+        createBackendProcess,
+        loadFile: jest.fn(async () => savedChat()),
+        files: { "chats/agent__voice.md": { epoch: 1_000, backendId: "opencode" } },
+      });
+      await index.recordSession({
+        backendId: "opencode",
+        sessionId: "resumable-1",
+        title: "Voice chat",
+        createdAtMs: 1_000,
+        lastAccessedAtMs: 2_000,
+        transcriptPath: "chats/agent__voice.md",
+      });
+
+      const session = await manager.loadNativeSessionFromHistory("opencode", "resumable-1");
+
+      expect(session.store.getDisplayMessages().map((m) => m.id)).toEqual([
+        "backend-replayed",
+        "backend-newer-question",
+        "backend-newer-answer",
+      ]);
     });
 
     it("keeps the backend's own transcript when the saved file belongs to another project", async () => {

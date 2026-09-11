@@ -297,17 +297,9 @@ export class AgentChatPersistenceManager {
    * preserves sender + text (display-only history, mirroring legacy mode).
    */
   async loadFile(file: TFile): Promise<LoadedAgentChat> {
-    let content: string;
-    try {
-      content = await this.app.vault.read(file);
-    } catch {
-      content = await this.app.vault.adapter.read(file.path);
-    }
+    const content = await this.readContent(file);
 
     const { frontmatter, body } = this.splitFrontmatter(content);
-    // Always separate the metadata comment first: even an unusable snapshot
-    // must not leak base64 into the last readable message.
-    const { visibleBody, encoded } = splitSnapshotComment(body);
     const backendId = (frontmatter.backendId ?? "").trim();
     if (!backendId) {
       throw new Error(`Missing backendId in agent chat frontmatter: ${file.path}`);
@@ -320,54 +312,91 @@ export class AgentChatPersistenceManager {
     const projectId = frontmatter.projectId?.trim() || GLOBAL_SCOPE;
     const usage = parseUsageJson(frontmatter.usage);
     const base = { backendId, topic, label, sessionId, projectId, usage };
-    const declaredSchema = Number.parseInt(frontmatter.agentChatSchema ?? "", 10);
 
-    if (Number.isFinite(declaredSchema) && declaredSchema > AGENT_CHAT_SCHEMA_VERSION) {
-      logWarn(
-        `[AgentChatPersistenceManager] ${file.path} declares agent chat schema ${declaredSchema}; opening read-only`
+    const history = this.readStructuredHistory(frontmatter, body);
+    if (history.conversation) {
+      logInfo(
+        `[AgentChatPersistenceManager] Restored ${history.conversation.messages.length} messages and ${history.conversation.tasks.length} tasks from ${file.path} (backend=${backendId}, projectId=${projectId})`
       );
       return {
         ...base,
-        messages: this.parseChatBody(visibleBody),
-        structuredHistory: "unsupported-schema",
+        messages: [...history.conversation.messages],
+        structuredHistory: "restored",
+        mixed: history.conversation,
       };
     }
-
-    if (encoded !== null) {
-      const snapshot = readSnapshotComment(encoded, visibleBody);
-      if (snapshot.status === "restored") {
-        logInfo(
-          `[AgentChatPersistenceManager] Restored ${snapshot.conversation.messages.length} messages and ${snapshot.conversation.tasks.length} tasks from ${file.path} (backend=${backendId}, projectId=${projectId})`
-        );
-        return {
-          ...base,
-          messages: [...snapshot.conversation.messages],
-          structuredHistory: "restored",
-          mixed: snapshot.conversation,
-        };
-      }
+    if (history.status !== "none") {
       logWarn(
-        `[AgentChatPersistenceManager] structured voice history unavailable for ${file.path} (${snapshot.status === "unavailable" ? snapshot.reason : "unsupported schema"})`
+        `[AgentChatPersistenceManager] structured voice history ${history.status} for ${file.path}`
       );
-      return {
-        ...base,
-        messages: this.parseChatBody(visibleBody),
-        structuredHistory:
-          snapshot.status === "unsupported-schema" ? "unsupported-schema" : "unavailable",
-      };
     }
-
-    // A file that claims the mixed schema but carries no snapshot was edited
-    // down to its readable half; show that half and protect it from autosave.
-    const structuredHistory: AgentHistoryRestoreStatus = Number.isFinite(declaredSchema)
-      ? "unavailable"
-      : "none";
-    const messages = this.parseChatBody(visibleBody);
+    const messages = this.parseChatBody(history.visibleBody);
 
     logInfo(
       `[AgentChatPersistenceManager] Loaded ${messages.length} messages from ${file.path} (backend=${backendId}, sessionId=${sessionId ?? "none"}, projectId=${projectId})`
     );
-    return { ...base, messages, structuredHistory };
+    return { ...base, messages, structuredHistory: history.status };
+  }
+
+  /**
+   * What a saved chat's structured history would restore to right now. The
+   * caller uses it to re-check a file just before a background write, so edits
+   * made in Obsidian after the chat was opened are never overwritten.
+   *
+   * See `designdocs/VOICE_CHAT_DEMO_DESIGN.md`, "Persistence and reload".
+   *
+   * @param file - The saved chat to re-read.
+   */
+  async readStructuredHistoryStatus(file: TFile): Promise<AgentHistoryRestoreStatus> {
+    const { frontmatter, body } = this.splitFrontmatter(await this.readContent(file));
+    return this.readStructuredHistory(frontmatter, body).status;
+  }
+
+  private async readContent(file: TFile): Promise<string> {
+    try {
+      return await this.app.vault.read(file);
+    } catch {
+      return await this.app.vault.adapter.read(file.path);
+    }
+  }
+
+  /**
+   * Split a saved body into the half a human reads and whatever its metadata
+   * comment still proves. The comment is only consulted when frontmatter
+   * declares a schema: a chat written before mixed transcripts existed owns
+   * every character of its body, so a look-alike comment the agent itself
+   * wrote into an answer must not demote that chat to unreadable history and
+   * stop it from autosaving.
+   *
+   * See `designdocs/VOICE_CHAT_DEMO_DESIGN.md`, "Persistence and reload".
+   */
+  private readStructuredHistory(
+    frontmatter: Record<string, string>,
+    body: string
+  ): {
+    status: AgentHistoryRestoreStatus;
+    visibleBody: string;
+    conversation?: AgentMixedConversation;
+  } {
+    const declaredSchema = Number.parseInt(frontmatter.agentChatSchema ?? "", 10);
+    if (!Number.isFinite(declaredSchema)) return { status: "none", visibleBody: body.trim() };
+    // Separate the metadata comment before anything else: even an unusable
+    // snapshot must not leak base64 into the last readable message.
+    const { visibleBody, encoded } = splitSnapshotComment(body);
+    if (declaredSchema > AGENT_CHAT_SCHEMA_VERSION) {
+      return { status: "unsupported-schema", visibleBody };
+    }
+    // A file that claims the mixed schema but carries no snapshot was edited
+    // down to its readable half; show that half and protect it from autosave.
+    if (encoded === null) return { status: "unavailable", visibleBody };
+    const snapshot = readSnapshotComment(encoded, visibleBody);
+    if (snapshot.status === "restored") {
+      return { status: "restored", visibleBody, conversation: snapshot.conversation };
+    }
+    return {
+      status: snapshot.status === "unsupported-schema" ? "unsupported-schema" : "unavailable",
+      visibleBody,
+    };
   }
 
   /**

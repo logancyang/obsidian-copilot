@@ -693,7 +693,7 @@ export class AgentMessageStore {
    * card folded away — plus the task records that link requests to answers.
    */
   getPersistableConversation(): AgentPersistableConversation {
-    const messages = this.messages.filter((m) => m.isVisible).map((m) => this.adaptCached(m));
+    const messages = this.getDisplayMessages();
     const tasks = this.tasks.size > 0 ? [...this.tasks.values()] : EMPTY_TASKS;
     return { messages: messages.length > 0 ? messages : EMPTY_TASK_MESSAGES, tasks };
   }

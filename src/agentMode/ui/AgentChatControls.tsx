@@ -1,4 +1,5 @@
 import { backendRegistry } from "@/agentMode/backends/registry";
+import type { AgentHistoryRestoreStatus } from "@/agentMode/session/agentChatSnapshot";
 import {
   ChatHistoryItem,
   ChatHistoryPopover,
@@ -20,9 +21,16 @@ interface AgentChatControlsProps {
    * button is hidden — clicking it would be a no-op since there's nothing to
    * clear. */
   onNewChat?: () => void;
-  /** Manual save handler. Surfaced as a Download button when
-   * `settings.autosaveChat` is off, mirroring the regular chat. */
+  /** Manual save handler. Surfaced as a Download button when autosave is off
+   * (mirroring the regular chat) or when autosave refuses to write this chat. */
   onSaveAsNote?: () => void | Promise<void>;
+  /**
+   * What the loader recovered from this chat's saved file. `"unavailable"`
+   * means background writes are refused for it, so the manual control is the
+   * only way the user can put a fresh copy on disk.
+   * See `designdocs/VOICE_CHAT_DEMO_DESIGN.md`, "Persistence and reload".
+   */
+  historyRestoreStatus?: AgentHistoryRestoreStatus;
   /** Items rendered inside the chat-history popover. */
   chatHistoryItems?: ChatHistoryItem[];
   /** Refresh the popover items (called when the user opens the button). */
@@ -51,7 +59,7 @@ interface AgentChatControlsProps {
 /**
  * Minimal control bar for the Agent Chat view. The agent view stands alone
  * (no chain switcher needed), so this only renders New Chat, an optional
- * Save Chat button (when autosave is off), and the chat history popover.
+ * Save Chat button, and the chat history popover.
  * Intentionally omits the model picker, project picker, and settings popover
  * — Agent Mode owns its own model/conversation state via ACP. The left side
  * doubles as the multi-agent upsell slot for unentitled users whose caller
@@ -61,6 +69,7 @@ interface AgentChatControlsProps {
 export const AgentChatControls: React.FC<AgentChatControlsProps> = ({
   onNewChat,
   onSaveAsNote,
+  historyRestoreStatus,
   chatHistoryItems,
   onLoadHistory,
   onLoadChat,
@@ -74,6 +83,12 @@ export const AgentChatControls: React.FC<AgentChatControlsProps> = ({
   const canUseMultiAgent = useCanUseMultiAgent();
   const historyAvailable = Boolean(
     chatHistoryItems && onLoadChat && onUpdateChatTitle && onDeleteChat
+  );
+  // A chat whose saved structure could not be trusted is excluded from
+  // background writes, so Save is the user's only route back to a clean file
+  // even when autosave is on.
+  const canSave = Boolean(
+    onSaveAsNote && (!settings.autosaveChat || historyRestoreStatus === "unavailable")
   );
 
   return (
@@ -112,14 +127,14 @@ export const AgentChatControls: React.FC<AgentChatControlsProps> = ({
             <TooltipContent>New Chat</TooltipContent>
           </Tooltip>
         )}
-        {!settings.autosaveChat && onSaveAsNote && (
+        {canSave && (
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
                 variant="ghost2"
                 size="icon"
                 title="Save Chat as Note"
-                onClick={() => void onSaveAsNote()}
+                onClick={() => void onSaveAsNote?.()}
               >
                 <Download className="tw-size-4" />
               </Button>

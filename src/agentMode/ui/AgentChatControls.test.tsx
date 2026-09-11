@@ -10,8 +10,8 @@ jest.mock("@/plusUtils", () => ({
   navigateToPlusPage: jest.fn(),
 }));
 
-// Autosave on so the Save-Chat button stays out of the way; this suite is about
-// the left slot's entitlement gate, not the right-side control cluster.
+// Autosave on, so the Save-Chat button only appears when a chat autosave
+// refuses to write; the upsell suite below is unaffected by it.
 jest.mock("@/settings/model", () => ({
   useSettingsValue: jest.fn().mockReturnValue({ autosaveChat: true }),
 }));
@@ -23,10 +23,17 @@ const mockNavigateToPlusPage = navigateToPlusPage as jest.MockedFunction<typeof 
 
 /** The control-bar buttons need a Radix `TooltipProvider` ancestor, which the
  * chat-view root supplies in the app. */
-function renderControls({ showMultiAgentUpsell = true } = {}) {
+function renderControls({
+  showMultiAgentUpsell = true,
+  ...props
+}: Partial<React.ComponentProps<typeof AgentChatControls>> = {}) {
   return render(
     <TooltipProvider>
-      <AgentChatControls onNewChat={() => {}} showMultiAgentUpsell={showMultiAgentUpsell} />
+      <AgentChatControls
+        onNewChat={() => {}}
+        showMultiAgentUpsell={showMultiAgentUpsell}
+        {...props}
+      />
     </TooltipProvider>
   );
 }
@@ -70,6 +77,23 @@ describe("AgentChatControls", () => {
       fireEvent.click(screen.getByText(UPSELL_COPY));
 
       expect(mockNavigateToPlusPage).toHaveBeenCalledWith(PLUS_UTM_MEDIUMS.MULTI_AGENT);
+    });
+
+    it("offers Save with autosave on for a chat whose saved structure is unavailable", () => {
+      // Autosave refuses to rewrite such a chat, so hiding Save would leave the
+      // user no way to put a fresh copy on disk.
+      // See `designdocs/VOICE_CHAT_DEMO_DESIGN.md`, "Persistence and reload".
+      mockUseCanUseMultiAgent.mockReturnValue(true);
+      renderControls({ onSaveAsNote: jest.fn(), historyRestoreStatus: "unavailable" });
+
+      expect(screen.queryByTitle("Save Chat as Note")).not.toBeNull();
+    });
+
+    it("hides Save with autosave on for a chat that keeps saving itself", () => {
+      mockUseCanUseMultiAgent.mockReturnValue(true);
+      renderControls({ onSaveAsNote: jest.fn(), historyRestoreStatus: "restored" });
+
+      expect(screen.queryByTitle("Save Chat as Note")).toBeNull();
     });
   });
 });

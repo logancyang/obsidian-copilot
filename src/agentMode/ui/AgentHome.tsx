@@ -155,19 +155,26 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
 
   // External callers (CopilotPlugin.autosaveCurrentChat → CopilotAgentView.saveChat)
   // already gate on `settings.autosaveChat`, so this handler is the autosave-on
-  // path — silent on success. The manual Save button uses `handleSaveAsNote`
-  // below, which surfaces a Notice on completion.
+  // path — silent on success, and never explicit: a hook-driven save must stay
+  // subject to the same edited-file guard every background write obeys.
+  // See `designdocs/VOICE_CHAT_DEMO_DESIGN.md`, "Persistence and reload".
   useEffect(() => {
     onSaveChat(async () => {
-      await manager.saveActiveSession();
+      await manager.saveActiveSession({ explicit: false });
     });
   }, [onSaveChat, manager]);
 
+  // The Save button is the user asking by name, so it may rewrite a chat whose
+  // file no longer matches its snapshot.
   const handleSaveAsNote = useCallback(async () => {
     try {
-      const result = await manager.saveActiveSession();
+      const result = await manager.saveActiveSession({ explicit: true });
       if (result) {
         new Notice("Chat saved as note.");
+      } else if (historyRestoreStatus === "unsupported-schema") {
+        // Nothing is missing — the file was written by a newer Copilot and is
+        // deliberately read-only, which "Nothing to save yet" would misreport.
+        new Notice("This chat was saved by a newer version of Copilot, so it is read-only.");
       } else {
         new Notice("Nothing to save yet.");
       }
@@ -175,7 +182,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       logError("[AgentMode] manual save failed", error);
       new Notice("Failed to save chat as note. Check console for details.");
     }
-  }, [manager]);
+  }, [manager, historyRestoreStatus]);
 
   const handleNewChat = useCallback(() => {
     if (manager.getIsStarting()) return;
@@ -987,6 +994,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                     <AgentChatControls
                       onNewChat={handleNewChat}
                       onSaveAsNote={handleSaveAsNote}
+                      historyRestoreStatus={historyRestoreStatus}
                       chatHistoryItems={chatHistoryItems}
                       onLoadHistory={handleLoadChatHistory}
                       onLoadChat={handleLoadChat}

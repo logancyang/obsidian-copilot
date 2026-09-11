@@ -73,8 +73,12 @@ export class AgentChatUIState implements AgentChatBackend {
     return acceptance;
   }
 
-  setQueueHold(reason: AgentQueueHoldReason | null): void {
-    this.session.tasks.setDispatchHold(reason);
+  setQueueHold(reason: AgentQueueHoldReason | null, holderId?: string): void {
+    this.session.tasks.setDispatchHold(reason, holderId);
+  }
+
+  releaseQueueHold(holderId?: string): void {
+    this.session.tasks.releaseDispatchHold(holderId);
   }
 
   getQueuedTasks(): readonly AgentQueuedTask[] {

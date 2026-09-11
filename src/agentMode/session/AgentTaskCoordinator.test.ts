@@ -36,7 +36,11 @@ function makeExecutor() {
 
   const executor: AgentTaskExecutor = {
     submitTask(submission, taskId) {
-      if (submitThrows) throw submitThrows;
+      if (submitThrows) {
+        const error = submitThrows;
+        submitThrows = null;
+        throw error;
+      }
       let resolve!: (stopReason: StopReason) => void;
       let reject!: (error: unknown) => void;
       const turn = new Promise<StopReason>((res, rej) => {
@@ -80,6 +84,7 @@ function makeExecutor() {
     dispatched,
     settled,
     cancel,
+    /** Refuse exactly the next dispatch, the way a closed session would. */
     failNextSubmit: (error: Error) => {
       submitThrows = error;
     },
@@ -217,6 +222,32 @@ describe("AgentTaskCoordinator", () => {
         expect(acceptance.rejectionReason).toBe("Session is closed");
         expect(coordinator.getActiveTask()).toBeNull();
       });
+
+      it("parks a submission made while earlier work is still queued behind it", async () => {
+        // A refused dispatch frees the active slot while the queue is still
+        // full; a submission arriving in that window (here from a settlement
+        // listener) must not overtake the requests the user sent first.
+        // See `designdocs/VOICE_CHAT_DEMO_DESIGN.md`, "Local task submission and queue".
+        const { executor, dispatched, failNextSubmit } = makeExecutor();
+        const coordinator = new AgentTaskCoordinator(executor);
+        coordinator.setDispatchHold("busy");
+        coordinator.submit(spoken("s1", "refused request", { delegationId: "d1" }));
+        coordinator.submit(spoken("s2", "queued first", { delegationId: "d2" }));
+        let reentered = false;
+        coordinator.onTaskSettled(() => {
+          if (reentered) return;
+          reentered = true;
+          coordinator.submit(spoken("s3", "submitted during settlement", { delegationId: "d3" }));
+        });
+        failNextSubmit(new Error("Session is closed"));
+
+        coordinator.setDispatchHold(null);
+
+        expect(dispatched.map((d) => d.submission.requestText)).toEqual(["queued first"]);
+        expect(coordinator.getQueuedTasks().map((t) => t.submission.requestText)).toEqual([
+          "submitted during settlement",
+        ]);
+      });
     });
 
     describe("setDispatchHold()", () => {
@@ -261,6 +292,56 @@ describe("AgentTaskCoordinator", () => {
 
         coordinator.setDispatchHold(null);
         expect(dispatched).toHaveLength(2);
+      });
+
+      it("holds dispatch while any registered composer reports a reason", () => {
+        const { executor, dispatched } = makeExecutor();
+        const coordinator = new AgentTaskCoordinator(executor);
+        coordinator.setDispatchHold(null, "sidebar");
+        coordinator.setDispatchHold("context", "popout");
+
+        coordinator.submit(typed("s1", "held while one composer waits for context"));
+
+        expect(dispatched).toHaveLength(0);
+        expect(coordinator.getQueuedTasks()[0].queueReason).toBe("context");
+      });
+    });
+
+    describe("releaseDispatchHold()", () => {
+      it("keeps dispatching for the composer that is still mounted", async () => {
+        // A conversation open in the sidebar and in a popout has two
+        // composers; closing one must not park the other one's queue.
+        // See `designdocs/VOICE_CHAT_DEMO_DESIGN.md`, "Local task submission and queue".
+        const { executor, dispatched } = makeExecutor();
+        const coordinator = new AgentTaskCoordinator(executor);
+        coordinator.setDispatchHold(null, "sidebar");
+        coordinator.setDispatchHold(null, "popout");
+        coordinator.submit(typed("s1", "first"));
+        coordinator.submit(typed("s2", "queued follow-up"));
+
+        coordinator.releaseDispatchHold("popout");
+        dispatched[0].resolve("end_turn");
+        await Promise.resolve();
+
+        expect(dispatched.map((d) => d.submission.requestText)).toEqual([
+          "first",
+          "queued follow-up",
+        ]);
+      });
+
+      it("parks the queue once the last composer unmounts", async () => {
+        const { executor, dispatched } = makeExecutor();
+        const coordinator = new AgentTaskCoordinator(executor);
+        coordinator.setDispatchHold(null, "sidebar");
+        coordinator.submit(typed("s1", "first"));
+        coordinator.submit(typed("s2", "queued follow-up"));
+
+        coordinator.releaseDispatchHold("sidebar");
+        dispatched[0].resolve("end_turn");
+        await Promise.resolve();
+
+        expect(dispatched).toHaveLength(1);
+        expect(coordinator.getQueuedTasks()).toHaveLength(1);
       });
     });
 
@@ -429,6 +510,23 @@ describe("AgentTaskCoordinator", () => {
         expect(dispatched[1].submission.promptContent).toHaveLength(1);
         expect(dispatched[1].submission.mentionedAgents).toEqual(["claude", "codex"]);
         expect(dispatched[1].submission.rawInput).toBe("second\n\nthird");
+      });
+
+      it("starts the next queued submission when the session refuses the current one", () => {
+        // A refusal frees the slot without any turn to settle it, so nothing
+        // else would ever restart the queue.
+        // See `designdocs/VOICE_CHAT_DEMO_DESIGN.md`, "Local task submission and queue".
+        const { executor, dispatched, failNextSubmit } = makeExecutor();
+        const coordinator = new AgentTaskCoordinator(executor);
+        coordinator.setDispatchHold("busy");
+        coordinator.submit(spoken("s1", "refused request", { delegationId: "d1" }));
+        coordinator.submit(spoken("s2", "still has to run", { delegationId: "d2" }));
+        failNextSubmit(new Error("Session is closed"));
+
+        coordinator.setDispatchHold(null);
+
+        expect(dispatched.map((d) => d.submission.requestText)).toEqual(["still has to run"]);
+        expect(coordinator.getQueuedTasks()).toHaveLength(0);
       });
     });
   });

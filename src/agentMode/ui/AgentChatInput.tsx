@@ -273,18 +273,22 @@ export const AgentChatInput = memo(function AgentChatInput({
   }, [queuedImageBlocked, unsupportedImageModelLabel]);
 
   // The task owner only dispatches for the FOREGROUND conversation: this
-  // composer releases the hold while it is mounted and re-applies it on
-  // unmount, so switching chats never secretly flushes a backgrounded
-  // conversation's queued work.
+  // composer releases the hold while it is mounted and unregisters on unmount,
+  // so switching chats never secretly flushes a backgrounded conversation's
+  // queued work. Registration is per composer instance, because the same chat
+  // can be composed from the sidebar and a popout at once and closing one of
+  // them must not park the survivor's queue.
+  // See `designdocs/VOICE_CHAT_DEMO_DESIGN.md`, "Local task submission and queue".
+  const holderId = useMemo(() => `composer-${uuidv4()}`, []);
   const dispatchHold: AgentQueueHoldReason | null = holdForContext
     ? "context"
     : disabled || isStarting || queuedImageBlocked
       ? "busy"
       : null;
+  useEffect(() => () => backend.releaseQueueHold(holderId), [backend, holderId]);
   useEffect(() => {
-    backend.setQueueHold(dispatchHold);
-    return () => backend.setQueueHold("busy");
-  }, [backend, dispatchHold]);
+    backend.setQueueHold(dispatchHold, holderId);
+  }, [backend, dispatchHold, holderId]);
 
   const handleSendMessage = useCallback(
     async (webTabs?: WebTabContext[]) => {
@@ -409,7 +413,21 @@ export const AgentChatInput = memo(function AgentChatInput({
         promptContent: content.length > 0 ? content : undefined,
         mentionedAgents,
       };
-      backend.submitTask(submission);
+      const acceptance = backend.submitTask(submission);
+      // A refused submission starts no turn, and the draft above was already
+      // cleared for work that will not run. Say why and hand the user's text
+      // and attachments back so the request is not silently lost.
+      // See `designdocs/VOICE_CHAT_DEMO_DESIGN.md`, "Local task submission and queue".
+      if (acceptance.disposition === "rejected") {
+        new Notice(
+          acceptance.rejectionReason
+            ? `Failed to send message: ${acceptance.rejectionReason}`
+            : "Failed to send message. Please try again."
+        );
+        setInputMessage(rawInput);
+        if (selectedImages.length > 0) setSelectedImages(selectedImages);
+        return;
+      }
       if (rawInput) updateUserMessageHistory(rawInput);
     },
     [
@@ -425,6 +443,8 @@ export const AgentChatInput = memo(function AgentChatInput({
       unsupportedImageModelLabel,
       disabled,
       resetCompose,
+      setInputMessage,
+      setSelectedImages,
       updateUserMessageHistory,
       mainAgentId,
       installedAgentIds,

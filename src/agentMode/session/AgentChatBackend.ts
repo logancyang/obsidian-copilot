@@ -37,10 +37,19 @@ export interface AgentChatBackend {
    */
   submitTask(submission: AgentTaskSubmission): AgentTaskAcceptance;
   /**
-   * Park or release queue dispatch. The composer holds while its project's
-   * context materializes and while it is not the foreground conversation.
+   * Report what one composer currently allows. The composer holds while its
+   * project's context materializes and while it cannot accept work.
+   *
+   * @param reason - Why this composer holds dispatch, or null to let it run.
+   * @param holderId - Identity of the reporting composer; one per mounted instance.
    */
-  setQueueHold(reason: AgentQueueHoldReason | null): void;
+  setQueueHold(reason: AgentQueueHoldReason | null, holderId?: string): void;
+  /**
+   * Drop an unmounted composer. Dispatch keeps running while another composer
+   * (a popout of the same chat) is still mounted, and parks once the last one
+   * goes so a backgrounded conversation never flushes its queue.
+   */
+  releaseQueueHold(holderId?: string): void;
   /** Submissions waiting for the session to free up, in send order. */
   getQueuedTasks(): readonly AgentQueuedTask[];
   /** Drop a queued submission the user dismissed. */
