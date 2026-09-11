@@ -127,15 +127,16 @@ jest.mock("@/agentMode", () => ({
   ),
 }));
 
+const mockPlugin = {
+  app: {},
+  agentSessionManager: {
+    getCachedModelCatalog: mockGetCachedModelCatalog,
+    preloadModels: mockPreloadModels,
+  },
+};
 jest.mock("@/contexts/PluginContext", () => ({
-  // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real `usePlugin` hook; the name must match the export
-  usePlugin: () => ({
-    app: {},
-    agentSessionManager: {
-      getCachedModelCatalog: mockGetCachedModelCatalog,
-      preloadModels: mockPreloadModels,
-    },
-  }),
+  // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook
+  usePlugin: () => mockPlugin,
 }));
 
 jest.mock("./ChatModelEnableList", () => ({
@@ -143,12 +144,65 @@ jest.mock("./ChatModelEnableList", () => ({
 }));
 
 jest.mock("./ConfiguredModelEnableList", () => ({
-  ConfiguredModelEnableList: ({ descriptor }: { descriptor: { id: string } }) => (
-    <div data-testid={`model-list-${descriptor.id}`}>model list</div>
+  ConfiguredModelEnableList: ({
+    descriptor,
+    loading,
+    onConfigure,
+  }: {
+    descriptor: { id: string };
+    loading: boolean;
+    onConfigure: () => void;
+  }) => (
+    <div data-testid={`model-list-${descriptor.id}`}>
+      {loading ? (
+        "Loading models…"
+      ) : (
+        <button type="button" onClick={onConfigure}>
+          Configure empty {descriptor.id}
+        </button>
+      )}
+    </div>
   ),
 }));
 
 describe("AgentSettings", () => {
+  it("keeps recovery hidden until model discovery settles and reuses backend configuration (https://github.com/Brevilabs/obsidian-copilot-private/issues/418)", async () => {
+    let finish!: () => void;
+    mockGetCachedModelCatalog.mockReturnValue(null);
+    mockPreloadModels.mockReturnValue(
+      new Promise<void>((resolve) => {
+        finish = resolve;
+      })
+    );
+    render(<AgentSettings />);
+    expect(
+      within(screen.getByTestId("model-list-opencode")).getByText("Loading models…")
+    ).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Configure empty opencode" })).toBeNull();
+    await act(async () => {
+      finish();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Configure empty opencode" }));
+    expect(DESCRIPTORS[0].openInstallUI).toHaveBeenCalledWith(mockPlugin);
+  });
+  it("clears a cancelled probe's loading state when the backend returns with a cached catalog (https://github.com/Brevilabs/obsidian-copilot-private/issues/418)", async () => {
+    mockGetCachedModelCatalog.mockReturnValue(null);
+    mockPreloadModels.mockReturnValue(new Promise<void>(() => {}));
+    render(<AgentSettings />);
+    expect(
+      within(screen.getByTestId("model-list-opencode")).getByText("Loading models…")
+    ).not.toBeNull();
+    act(() => {
+      installStates.opencode = { kind: "not_found" };
+      publishInstallState();
+    });
+    mockGetCachedModelCatalog.mockReturnValue({ availableModels: [] });
+    act(() => {
+      installStates.opencode = { kind: "ready", source: "managed" };
+      publishInstallState();
+    });
+    expect(screen.getByRole("button", { name: "Configure empty opencode" })).not.toBeNull();
+  });
   beforeEach(() => {
     jest.clearAllMocks();
     mockAuthStatuses.claude = { signedIn: true };

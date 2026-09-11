@@ -1,4 +1,6 @@
 import { ModelEnableList, type ModelEnableGroup } from "@/components/ui/ModelEnableList";
+import { Button } from "@/components/ui/button";
+import { useTab } from "@/contexts/TabContext";
 import { logError } from "@/logger";
 import {
   backendsAtom,
@@ -23,6 +25,7 @@ const EMPTY_ENABLED: readonly string[] = Object.freeze([]);
  */
 export const ChatModelEnableList: React.FC = () => {
   const api = useModelManagement();
+  const { setSelectedTab } = useTab();
 
   const configuredModels = useAtomValue(configuredModelsAtom, { store: settingsStore });
   const providers = useAtomValue(providersAtom, { store: settingsStore });
@@ -59,10 +62,18 @@ export const ChatModelEnableList: React.FC = () => {
   );
 
   const emptyState = (
-    <span>
-      No models configured yet. Add a provider on the{" "}
-      <span className="tw-font-medium">Models (BYOK)</span> tab to populate Quick Chat.
-    </span>
+    <>
+      <div className="tw-font-medium tw-text-normal">No models configured</div>
+      <div>Add a provider and models in BYOK settings to populate Quick Chat.</div>
+      <Button
+        variant="secondary"
+        size="sm"
+        className="tw-h-auto tw-min-h-6 tw-max-w-full tw-whitespace-normal tw-text-left"
+        onClick={() => setSelectedTab("byok")}
+      >
+        Open provider settings
+      </Button>
+    </>
   );
 
   return (

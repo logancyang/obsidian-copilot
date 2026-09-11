@@ -197,15 +197,33 @@ const BackendPanel: React.FC<{
       .catch((error) => logError(`[AgentMode] ${descriptor.id} update failed`, error));
   }, [descriptor, plugin, updating]);
 
+  const [modelsLoading, setModelsLoading] = React.useState(
+    () =>
+      installState.kind === "ready" && !!manager && !manager.getCachedModelCatalog(descriptor.id)
+  );
+
   // Probe when ready but uncached — the load-time preload may have skipped this
   // backend (binary installed after plugin start).
   React.useEffect(() => {
-    if (!manager) return;
-    if (installState.kind !== "ready") return;
-    if (manager.getCachedModelCatalog(descriptor.id)) return;
+    if (!manager || installState.kind !== "ready" || manager.getCachedModelCatalog(descriptor.id)) {
+      // eslint-disable-next-line @eslint-react/hooks-extra/no-direct-set-state-in-use-effect -- clear presentation state when the previous probe no longer applies
+      setModelsLoading(false);
+      return;
+    }
+    // Keep configuration recovery hidden until this existing discovery request settles.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/418
+    let active = true;
+    // eslint-disable-next-line @eslint-react/hooks-extra/no-direct-set-state-in-use-effect -- this effect owns the existing async probe and its visible pending state
+    setModelsLoading(true);
     manager
       .preloadModels(descriptor.id)
-      .catch((e) => logError(`[AgentMode] preload ${descriptor.id} failed`, e));
+      .catch((e) => logError(`[AgentMode] preload ${descriptor.id} failed`, e))
+      .finally(() => {
+        if (active) setModelsLoading(false);
+      });
+    return () => {
+      active = false;
+    };
   }, [manager, descriptor.id, installState.kind]);
 
   const showCloudWarning = backendNeedsSelfHostWarning(descriptor, settings);
@@ -246,7 +264,11 @@ const BackendPanel: React.FC<{
 
         {installState.kind === "ready" && (
           <div className="tw-py-4">
-            <ConfiguredModelEnableList descriptor={descriptor} />
+            <ConfiguredModelEnableList
+              descriptor={descriptor}
+              loading={modelsLoading}
+              onConfigure={() => descriptor.openInstallUI(plugin)}
+            />
           </div>
         )}
 

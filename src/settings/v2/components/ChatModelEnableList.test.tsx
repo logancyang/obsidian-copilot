@@ -4,6 +4,11 @@ import { logError } from "@/logger";
 import type { BackendConfig, ConfiguredModel, Provider } from "@/modelManagement";
 import React from "react";
 
+const setSelectedTab = jest.fn();
+jest.mock("@/contexts/TabContext", () => ({
+  // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the public hook
+  useTab: () => ({ setSelectedTab }),
+}));
 const enableModel = jest.fn().mockResolvedValue(undefined);
 const disableModel = jest.fn().mockResolvedValue(undefined);
 let models: ConfiguredModel[];
@@ -83,11 +88,25 @@ describe("ChatModelEnableList", () => {
       expect(screen.queryByText("Model A")).toBeNull();
       expect(screen.getByText("Model B")).not.toBeNull();
     });
-    it("explains where to add models when no chat backend is configured", () => {
+    it("opens provider settings when no chat models are configured (https://github.com/Brevilabs/obsidian-copilot-private/issues/418)", () => {
       models = [];
       backends = {};
       render(<ChatModelEnableList />);
-      expect(screen.getByText(/No models configured yet/)).not.toBeNull();
+      expect(screen.getByText("No models configured")).not.toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Open provider settings" }));
+      expect(setSelectedTab).toHaveBeenCalledWith("byok");
+    });
+    it("clears an unmatched search to recover existing models without configuration guidance (https://github.com/Brevilabs/obsidian-copilot-private/issues/418)", () => {
+      render(<ChatModelEnableList />);
+      fireEvent.change(screen.getByPlaceholderText("Search chat models…"), {
+        target: { value: "missing" },
+      });
+      expect(screen.getByText("No matching models")).not.toBeNull();
+      expect(screen.queryByRole("button", { name: "Open provider settings" })).toBeNull();
+      fireEvent.click(screen.getByText("Clear search", { selector: "button" }));
+      expect(screen.getByText("Model A")).not.toBeNull();
+      expect(screen.getByText("Model B")).not.toBeNull();
+      expect(enableModel).not.toHaveBeenCalled();
     });
     it("reports failed model changes without an unhandled rejection", async () => {
       const error = new Error("save failed");

@@ -1,3 +1,4 @@
+import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { FreeModelWarningIcon } from "@/components/ui/FreeModelWarningIcon";
@@ -76,8 +77,10 @@ interface ModelEnableListProps {
   onQueryChange: (next: string) => void;
   /** Placeholder for the search box. */
   searchPlaceholder?: string;
-  /** Rendered when there are no groups/rows to show (after filtering). */
+  /** Recovery guidance for an empty catalog, never for a search miss or pending load. */
   emptyState?: React.ReactNode;
+  /** The host is still discovering models; suppress premature configuration guidance. */
+  loading?: boolean;
   /**
    * When set, only the group with this key starts expanded; all others start
    * collapsed. A user's explicit expand/collapse still wins (tracked per key),
@@ -101,6 +104,7 @@ export const ModelEnableList: React.FC<ModelEnableListProps> = ({
   onQueryChange,
   searchPlaceholder = "Search models…",
   emptyState,
+  loading = false,
   defaultOpenGroupKey,
 }) => {
   const searching = query.trim().length > 0;
@@ -168,8 +172,29 @@ export const ModelEnableList: React.FC<ModelEnableListProps> = ({
           of pushing everything below it off the settings pane. */}
       <div className="tw-max-h-80 tw-overflow-y-auto tw-pr-1">
         {!hasRows ? (
-          <div className="tw-py-6 tw-text-center tw-text-sm tw-text-muted">
-            {emptyState ?? (searching ? `No models match “${query.trim()}”.` : "No models.")}
+          // A temporary search miss or probe must not send users to reconfigure models.
+          // https://github.com/Brevilabs/obsidian-copilot-private/issues/418
+          <div className="tw-space-y-2 tw-py-4 tw-text-left tw-text-sm tw-text-muted">
+            {loading ? (
+              <div role="status">Loading models…</div>
+            ) : searching ? (
+              <>
+                <div className="tw-font-medium tw-text-normal">No matching models</div>
+                <div className="tw-break-words [overflow-wrap:anywhere]">
+                  No models match “{query.trim()}”.
+                </div>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="tw-h-auto tw-min-h-6 tw-max-w-full tw-whitespace-normal tw-text-left"
+                  onClick={() => onQueryChange("")}
+                >
+                  Clear search
+                </Button>
+              </>
+            ) : (
+              (emptyState ?? "No models configured")
+            )}
           </div>
         ) : (
           <div className="tw-space-y-2">

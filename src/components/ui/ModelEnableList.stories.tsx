@@ -1,3 +1,4 @@
+import { Button } from "@/components/ui/button";
 import { ModelEnableList, type ModelEnableGroup } from "@/components/ui/ModelEnableList";
 import type { ModelCapability } from "@/constants";
 import type { Meta, StoryObj } from "@/lib/story";
@@ -50,11 +51,22 @@ const FREE_GROUP: ModelEnableGroup = {
 };
 
 /** Search is controlled, so a story has to own the query for the field to behave. */
-const Controlled: React.FC<{ groups: ModelEnableGroup[] }> = ({ groups }) => {
-  const [query, setQuery] = React.useState("");
+const Controlled: React.FC<Partial<ModelEnableListProps> & { groups: ModelEnableGroup[] }> = ({
+  groups,
+  query: initialQuery = "",
+  ...props
+}) => {
+  const [query, setQuery] = React.useState(initialQuery);
+  const filtered = groups.map((group) => ({
+    ...group,
+    rows: group.rows.filter((row) =>
+      `${row.label} ${row.wireId ?? ""}`.toLowerCase().includes(query.trim().toLowerCase())
+    ),
+  }));
   return (
     <ModelEnableList
-      groups={groups}
+      {...props}
+      groups={filtered}
       query={query}
       onQueryChange={setQuery}
       onToggle={() => undefined}
@@ -79,7 +91,55 @@ export const ShortCatalog: StoryObj<ModelEnableListProps> = {
 };
 
 export const Empty: StoryObj<ModelEnableListProps> = {
-  render: () => <Controlled groups={[]} />,
+  render: () => (
+    <Controlled
+      groups={[]}
+      emptyState={
+        <>
+          <div className="tw-font-medium tw-text-normal">No models configured</div>
+          <div>Add a provider and models in BYOK settings to populate Quick Chat.</div>
+          <Button
+            variant="secondary"
+            size="sm"
+            className="tw-h-auto tw-min-h-6 tw-max-w-full tw-whitespace-normal tw-text-left"
+          >
+            Open provider settings
+          </Button>
+        </>
+      }
+    />
+  ),
+};
+
+export const SearchMiss: StoryObj<ModelEnableListProps> = {
+  render: () => (
+    <Controlled groups={[PLUS_GROUP, FREE_GROUP]} query="unavailable-model-with-a-long-name" />
+  ),
+};
+
+export const Loading: StoryObj<ModelEnableListProps> = {
+  render: () => <Controlled groups={[]} loading />,
+};
+
+export const AgentRecovery: StoryObj<ModelEnableListProps> = {
+  render: () => (
+    <Controlled
+      groups={[]}
+      emptyState={
+        <>
+          <div className="tw-font-medium tw-text-normal">No models reported</div>
+          <div>Check Codex setup and sign-in, then open a chat session to discover models.</div>
+          <Button
+            variant="secondary"
+            size="sm"
+            className="tw-h-auto tw-min-h-6 tw-max-w-full tw-whitespace-normal tw-text-left"
+          >
+            Configure Codex
+          </Button>
+        </>
+      }
+    />
+  ),
 };
 
 /**
