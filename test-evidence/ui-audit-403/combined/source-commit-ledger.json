@@ -1,0 +1,187 @@
+[
+  {
+    "issue": 404,
+    "source": "cbc8fdd84fe5a4a3cfeb0541f6f3599cdb5e7f8c",
+    "integrated": "4646c87ac39a5c9ebb1ed895ca96f2b75d949182"
+  },
+  {
+    "issue": 404,
+    "source": "880abe30c43a64cd31ccedb3041f12e0cc53c842",
+    "integrated": "b684531a7d4d798bdb3c14b3f529409db10ca80a"
+  },
+  {
+    "issue": 404,
+    "source": "ec143d7752df13376016dd6bedb9a1131c023208",
+    "integrated": "2da379e16eaf69ceb195fdf6d3333d0a088a2e1f"
+  },
+  {
+    "issue": 405,
+    "source": "61be458f9b2c719ec616299534c9e08441e84c22",
+    "integrated": "9af579df6a9cd344dcecb88238049cec2a06ecbf"
+  },
+  {
+    "issue": 405,
+    "source": "ff80499df108784803cd17843be63fb70572d333",
+    "integrated": "8c73cc22bf211d5bacd1d2a670a9c13cea0f2011"
+  },
+  {
+    "issue": 406,
+    "source": "010a94b582ff6216a86996736c044d68c98913d9",
+    "integrated": "446d4afcdf564af6f071e1f4660a979cae675539"
+  },
+  {
+    "issue": 406,
+    "source": "f66418338d2d4b6542ab098504a1f56b1a49b7f2",
+    "integrated": "57b971f337e636f75d92db25202c77ebf5727856"
+  },
+  {
+    "issue": 406,
+    "source": "cad3accde853e06a5a3dc8535b7a5c3ec519b146",
+    "integrated": "ed32c7df5458a8a3f66948081fc5859eca77eb39"
+  },
+  {
+    "issue": 406,
+    "source": "6eeb39c89250fbf271e5a282719c3a5f0efdbaac",
+    "integrated": "25c2b38f9014ce89af0614d2a068ea8cb159169b"
+  },
+  {
+    "issue": 407,
+    "source": "a0961b0bed6d4973720cae8cb23e6afd2c5a5fea",
+    "integrated": "1c217abc16a43a0694c16b2657c1a714afe46de7"
+  },
+  {
+    "issue": 407,
+    "source": "790b5a3bb6b7fc2175fe5929e9d82adbb1ac4ab9",
+    "integrated": "d4ee07d62adcf6caa9a2a626e8548a93b18929df"
+  },
+  {
+    "issue": 408,
+    "source": "024314de033b50d00feb29f3e73ee7c46c26e143",
+    "integrated": "bacc2d4aec0cf9b928cbb21e23db052f5d5910bd"
+  },
+  {
+    "issue": 409,
+    "source": "4496d187ba982cc4e4544a68fdaf0c485b195739",
+    "integrated": "2694a4784ccf280537edc924c30cae16c3a4464a"
+  },
+  {
+    "issue": 409,
+    "source": "e9e7dacb2f46964977c8ecbbe98a53b66f793559",
+    "integrated": "edab9022281f38f3c8f5f4a1ec24d36e0d3cbdd7"
+  },
+  {
+    "issue": 410,
+    "source": "d4e19d4c4a6d42708039fb17dd2fadd6afefe3c3",
+    "integrated": "42f55e3d6689d9031d92469678267dd0bd64f4c6"
+  },
+  {
+    "issue": 411,
+    "source": "7ef3493fbedbd78685f1405afe146c33e6d818e6",
+    "integrated": "b73be9db50452eb5b333c4a317810aae115970b6"
+  },
+  {
+    "issue": 412,
+    "source": "568be08017ece95cfee3ca943315fb4caa08a059",
+    "integrated": "c53e4c021e75fb39ec9c8dd5c52a7e80653fb4e0",
+    "resolution": "Preserved 411 left alignment with 412 stacked repair layout; retained both CenteredParent and LongRepairPaths stories."
+  },
+  {
+    "issue": 413,
+    "source": "7d2fbc0ddf5e7ec08c5a5a2aff25b21487d52a9f",
+    "integrated": "0f1ba6275a91b36f65e55c88ef4b3fec01a17622",
+    "resolution": "Combined 407 readiness footer and quiet maintenance with 413 account-first disclosure; retained both state stories and test groups."
+  },
+  {
+    "issue": 413,
+    "source": "ce1a24f9f26d97b3b17e8d6cb61a9d34db4fd904",
+    "integrated": "f65929a41efc1f2bab14d568be3fb37267d29843"
+  },
+  {
+    "issue": 414,
+    "source": "bbd82a731c328133b89fe4fe8b9396bb5a613d7e",
+    "integrated": "e7b9f2dcf550cb0b78bfd529cdab83a7591da359"
+  },
+  {
+    "issue": 415,
+    "source": "a70ad1f39d7d25610717446080aab67614b91c39",
+    "integrated": "2653f17251b138d7ec4a72f5d7461786a2bae1c4"
+  },
+  {
+    "issue": 416,
+    "source": "23bb8e2cf9516c2b6b2db85644f79fc93f072e80",
+    "integrated": "31a41206119d6f6d06fe45600fe473588b5abd99"
+  },
+  {
+    "issue": 417,
+    "source": "6f30e516fe8c72655eee21e40be7fb5488c1166e",
+    "integrated": "ef3fb301e7380f89da7c38a72e96366f405d9497"
+  },
+  {
+    "issue": 418,
+    "source": "6e62a3eb2e5f7432a60de39c6c003b844882e28f",
+    "integrated": "1a1fb3ab78b4b1b025a37bb864f69c27877fb3a4"
+  },
+  {
+    "issue": 419,
+    "source": "bd46c7e40fd72a3dbfd2fbb9441c3fe93b7fa549",
+    "integrated": "140517e0668c687a5df547ee42c4a7e7cc320d2e"
+  },
+  {
+    "issue": 420,
+    "source": "bbc92574c3f83fb0720c4cc4a26a8fb72ec42837",
+    "integrated": "7998d0899e6a78fb827310fd16b331c0556b4c62"
+  },
+  {
+    "issue": 420,
+    "source": "fad0c6aa2607bbce4f5d979f930ade20010ce246",
+    "integrated": "e9187446f96025792a60e01ab718467473ef40c9"
+  },
+  {
+    "issue": 421,
+    "source": "75eeaabd4e0d8a4a5b316cd2b7a56ad2362370a3",
+    "integrated": "495b6d719b3fd8f17191b18e67f6d317935e72c4"
+  },
+  {
+    "issue": 422,
+    "source": "e8f2afda698deb621807b59100dc8c24c5c7a430",
+    "integrated": "ae867e1740db70bb6bba76e759ea81c0209df6fd"
+  },
+  {
+    "issue": 423,
+    "source": "fc8cc10f924fae99babcd0d4156bf30d99b30087",
+    "integrated": "b7a8db9f0783c903a929d3922e7031f89a375f8e"
+  },
+  {
+    "issue": 424,
+    "source": "06dc845a7137bf640e43926a75a9d955668ebe64",
+    "integrated": "4bc9f3794d2eb44bb934a2bc57950423d7d27399"
+  },
+  {
+    "issue": 425,
+    "source": "ee624aec7c39e697d8cf8731b5faa38b51398cf6",
+    "integrated": "7bb4dd54ad55f4ad5e58789556e367b29d8b2c0c"
+  },
+  {
+    "issue": 426,
+    "source": "d4abcded65c46df90f6ee875243e448b7df2c779",
+    "integrated": "9b9b8ba934d488db34af92aa44cd1386a9e56979",
+    "resolution": "Preserved 406 colored contrast and base anchor hover; adopted 426 neutral variants, consolidated SecondarySurface fixture, removed obsolete faint-ink assertions."
+  },
+  {
+    "issue": 426,
+    "source": "9d5ebf2542527c097e3d816c06a376a05bfeb37f",
+    "integrated": "2c7f2f8d6f0133e7ffbdf0b74580bd6f22f447d1"
+  },
+  {
+    "issue": 427,
+    "source": "a5b5dbd27afd808385ca2b5482de266f23d53226",
+    "integrated": "7690363426b4c6c22cf7608f7c4cc7876125e4e5",
+    "resolution": "Kept one identical MultipleFiles fixture plus 405 command and long labels; retained 420 skipped-source story alongside 427 state replay."
+  },
+  {
+    "issue": 426,
+    "source": "b544c4556088e14bbe105f1211611769411e3b37",
+    "integrated": "7690363426b4c6c22cf7608f7c4cc7876125e4e5",
+    "resolution": "Deduplicated test-only amendment: reverse patch check passed; identical SecondarySurface Gallery.test entry already present via 406. No tree change."
+  }
+]

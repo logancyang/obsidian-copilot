@@ -1,0 +1,63 @@
+{
+  "build": "76903634.clean.63c170ca237e",
+  "cases": [
+    {
+      "case": "404/after-integrated",
+      "count": 8,
+      "version": "4.0.7+dev.76903634.clean.63c170ca237e"
+    },
+    {
+      "case": "412/after-host",
+      "count": 16,
+      "version": "4.0.7+dev.76903634.clean.63c170ca237e"
+    },
+    {
+      "case": "413/after-host",
+      "count": 18,
+      "version": "4.0.7+dev.76903634.clean.63c170ca237e"
+    },
+    {
+      "case": "418/after-agent",
+      "count": 16,
+      "version": "4.0.7+dev.76903634.clean.63c170ca237e"
+    },
+    {
+      "case": "419/after-host",
+      "count": 16,
+      "version": "4.0.7+dev.76903634.clean.63c170ca237e"
+    },
+    {
+      "case": "427/after-gallery",
+      "count": 64,
+      "version": "4.0.7+dev.76903634.clean.63c170ca237e"
+    },
+    {
+      "case": "411/after-gallery",
+      "count": 40,
+      "version": "4.0.7+dev.76903634.clean.63c170ca237e"
+    },
+    {
+      "case": "407/after-gallery",
+      "count": 96,
+      "version": "4.0.7+dev.76903634.clean.63c170ca237e"
+    },
+    {
+      "case": "407/keyboard",
+      "count": 3,
+      "version": "4.0.7+dev.76903634.clean.63c170ca237e"
+    },
+    {
+      "case": "426/after-matrix",
+      "count": 64,
+      "version": "4.0.7+dev.76903634.clean.63c170ca237e"
+    },
+    {
+      "case": "426/after-host",
+      "count": 24,
+      "version": "4.0.7+dev.76903634.clean.63c170ca237e"
+    }
+  ],
+  "totalCaseRecords": 365,
+  "allPassed": true,
+  "note": "Settings412/418/419 final captures use actual resized native windows, replacing earlier simulated widths. Matrix completed after the original harness outer wait; final64captureartifact308samples verified."
+}

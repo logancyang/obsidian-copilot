@@ -1,0 +1,9 @@
+{
+  "version": "4.0.7+dev.76903634.clean.63c170ca237e",
+  "captures": 64,
+  "samples": 308,
+  "minimumContrast": 4.930027623285512,
+  "focusCases": 76,
+  "allPass": true,
+  "harnessNote": "The original180second outer wait expired immediately before final64capture artifact arrived. Full artifact and sample count verified; no product failure or recapture needed."
+}
