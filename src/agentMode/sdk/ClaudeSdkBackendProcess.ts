@@ -92,6 +92,8 @@ interface SessionState {
    * session with our pre-allocated id).
    */
   firstPromptStarted: boolean;
+  /** Cancels prompts still awaiting authentication or runtime credentials before query creation. */
+  cancelGeneration: number;
   model?: string;
   permissionMode?: PermissionMode;
   /**
@@ -356,6 +358,7 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       cwd,
       projectId: params.projectId,
       firstPromptStarted: false,
+      cancelGeneration: 0,
       model: seedModelId,
       additionalDirectories: params.additionalDirectories,
       systemPromptAppend: this.resolveSystemPromptAppend(),
@@ -378,15 +381,18 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       throw new Error(`Unknown session ${params.sessionId}`);
     }
 
+    const cancelGeneration = session.cancelGeneration;
+
     // Deterministic sign-in gate. Without it, an unauthenticated CLI yields a
     // non-success result with an empty `errors` array, which maps to
     // `stopReason: "cancelled"` and slips past `runTurn`'s empty-turn net —
     // leaving an empty assistant bubble and no error. Checked once per backend
     // lifetime (cached) so signed-in turns pay nothing.
     if (this.opts.checkAuth && !this.authConfirmed) {
-      if (await this.opts.checkAuth()) {
-        this.authConfirmed = true;
-      } else {
+      const signedIn = await this.opts.checkAuth();
+      if (signedIn) this.authConfirmed = true;
+      if (session.cancelGeneration !== cancelGeneration) return { stopReason: "cancelled" };
+      if (!signedIn) {
         throw new AuthRequiredError(
           "You're not signed in to Claude. Use the Sign in button above the chat box to continue."
         );
@@ -464,6 +470,7 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
     // descriptor supplies them via `getManagedEnv` (sdk/ can't import
     // backends/); user overrides are merged last so they can still shadow them.
     const managedEnv = (await this.opts.getManagedEnv?.()) ?? {};
+    if (session.cancelGeneration !== cancelGeneration) return { stopReason: "cancelled" };
     const extraEnv = { ...managedEnv, ...envOverrides };
     if (Object.keys(extraEnv).length > 0) {
       // Options.env replaces (not merges with) the child env, so include
@@ -562,7 +569,9 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
   async cancel(params: CancelInput): Promise<void> {
     logSdkOutbound("cancel", {}, params.sessionId);
     const session = this.sessions.get(params.sessionId);
-    if (!session?.active) return;
+    if (!session) return;
+    session.cancelGeneration++;
+    if (!session.active) return;
     try {
       await session.active.interrupt();
     } catch (e) {
@@ -778,6 +787,7 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       cwd,
       projectId: params.projectId,
       firstPromptStarted: true,
+      cancelGeneration: 0,
       model: seedModelId,
       additionalDirectories: params.additionalDirectories,
       systemPromptAppend: this.resolveSystemPromptAppend(),

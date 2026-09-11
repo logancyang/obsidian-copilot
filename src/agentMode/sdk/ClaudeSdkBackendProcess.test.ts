@@ -1,3 +1,6 @@
+import { AgentSession } from "@/agentMode/session/AgentSession";
+import { ClaudeBackendDescriptor } from "@/agentMode/backends/claude/descriptor";
+import type { AgentTaskSubmission } from "@/agentMode/session/voiceTypes";
 import type {
   CanUseTool,
   HookCallback,
@@ -554,6 +557,110 @@ describe("ClaudeSdkBackendProcess", () => {
       const chunks = seen.filter((u) => u.update.sessionUpdate === "agent_message_chunk");
       expect(chunks.length).toBeGreaterThan(0);
     });
+
+    it.each(["typed", "voice"] as const)(
+      "interrupts the active SDK query for a %s task and resumes the same conversation after its output drains",
+      async (source) => {
+        jest.useFakeTimers();
+        try {
+          const firstQuery = makeControlledQuery();
+          queryMock.mockReturnValueOnce(firstQuery.query).mockImplementation(() =>
+            makeQuery([
+              streamEvent({ type: "message_start", message: { id: "replacement-message" } }),
+              streamEvent({
+                type: "content_block_delta",
+                index: 0,
+                delta: { type: "text_delta", text: "Selected note summary" },
+              }),
+              resultMessage(),
+            ])
+          );
+          const proc = new ClaudeSdkBackendProcess({
+            pathToClaudeCodeExecutable: "/usr/local/bin/claude",
+            app: { vault: {} } as never,
+            clientVersion: "1.2.3",
+            descriptor: ClaudeBackendDescriptor,
+          });
+          const { sessionId } = await proc.newSession({ cwd: "/vault" });
+          const session = new AgentSession({
+            backend: proc,
+            backendSessionId: sessionId,
+            internalId: "claude-steering",
+            backendId: "claude",
+            getDescriptor: () => ClaudeBackendDescriptor,
+          });
+          const task = (text: string): AgentTaskSubmission => ({
+            submissionId: text,
+            conversationId: session.internalId,
+            sourceMessageIds: [],
+            source,
+            presentation: source === "voice" ? "voice-card" : "text",
+            requestText: text,
+            ...(source === "voice" ? { voiceSessionId: "voice", delegationId: text } : {}),
+          });
+          const first = session.tasks.submit(task("Read all notes"));
+          await jest.advanceTimersByTimeAsync(0);
+          expect(getPromptQueryCalls()).toHaveLength(1);
+          const next = session.tasks.submit(task("Read the selected note"));
+          await jest.advanceTimersByTimeAsync(0);
+          expect(firstQuery.query.interrupt).toHaveBeenCalledTimes(1);
+          expect(session.store.getTask(first.taskId)?.state).toBe("cancelled");
+          expect(getPromptQueryCalls()).toHaveLength(1);
+          firstQuery.finish();
+          await jest.advanceTimersByTimeAsync(1_000);
+          expect(getPromptQueryCalls()).toHaveLength(2);
+          const replacement = session.store.getTask(next.taskId);
+          expect(replacement?.state).toBe("completed");
+          expect(session.store.getMessage(replacement?.assistantMessageId ?? "")?.message).toBe(
+            "Selected note summary"
+          );
+          const [call] = getPromptQueryCalls()[1] as [{ options: Record<string, unknown> }];
+          expect(call.options.resume).toBe(sessionId);
+          expect(call.options.sessionId).toBeUndefined();
+          await session.dispose();
+        } finally {
+          jest.useRealTimers();
+        }
+      }
+    );
+
+    it.each(["authentication", "managed environment"] as const)(
+      "cancels during %s setup without starting abandoned work or consuming the initial session ID",
+      async (phase) => {
+        let release!: () => void;
+        const gate = new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        queryMock.mockImplementation(() => makeQuery([resultMessage()]));
+        const proc = new ClaudeSdkBackendProcess({
+          pathToClaudeCodeExecutable: "/usr/local/bin/claude",
+          app: { vault: {} } as never,
+          clientVersion: "1.2.3",
+          descriptor: fakeDescriptor(),
+          checkAuth: async () => {
+            if (phase === "authentication") await gate;
+            return true;
+          },
+          getManagedEnv: async () => {
+            if (phase === "managed environment") await gate;
+            return {};
+          },
+        });
+        const { sessionId } = await proc.newSession({ cwd: "/vault" });
+        const abandoned = proc.prompt({ sessionId, prompt: [{ type: "text", text: "old work" }] });
+        await flushMicrotasks();
+        await proc.cancel({ sessionId });
+        release();
+        await expect(abandoned).resolves.toEqual({ stopReason: "cancelled" });
+        expect(getPromptQueryCalls()).toHaveLength(0);
+        await expect(
+          proc.prompt({ sessionId, prompt: [{ type: "text", text: "new work" }] })
+        ).resolves.toEqual({ stopReason: "end_turn" });
+        const [call] = getPromptQueryCalls()[0] as [{ options: Record<string, unknown> }];
+        expect(call.options.sessionId).toBe(sessionId);
+        expect(call.options.resume).toBeUndefined();
+      }
+    );
 
     it("passes resume on the second prompt for the same session", async () => {
       queryMock.mockImplementation(() => makeQuery([resultMessage()]));

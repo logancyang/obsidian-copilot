@@ -221,6 +221,7 @@ function isClaudePlanModePlanFilePath(absolutePath: string): boolean {
  */
 export const ClaudeBackendDescriptor: ClaudeDescriptor = {
   id: "claude",
+  supportsSteering: true,
   displayName: "Claude",
   Icon: ClaudeLogo,
   // Cloud agent — flagged with a cloud-egress warning while Self-Host Mode is on.
