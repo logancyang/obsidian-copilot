@@ -38,24 +38,37 @@ describe("SetupSteps", () => {
       ).toBeTruthy();
     });
 
-    it("copies the command verbatim and confirms in the button's own label", () => {
-      jest.useFakeTimers();
-      try {
-        render(<CommandBlock command="npm install -g @anthropic-ai/claude-code" />);
+    it.each([
+      ["posix", "npm install -g @anthropic-ai/claude-code"],
+      [
+        "powershell",
+        "irm https://gist.githubusercontent.com/logancyang/7a87eb38d91015eac567521f8cc9c729/raw/install-claude-agent-mode-windows.ps1 | iex",
+      ],
+      [
+        "posix",
+        "CLAUDE_CONFIG_DIR='/Users/Example/Library/Application Support/Claude profile' '/Applications/Claude Tools/claude' auth login --claudeai",
+      ],
+    ] as const)(
+      "copies the full %s command verbatim and confirms in the button's own label (https://github.com/Brevilabs/obsidian-copilot-private/issues/422)",
+      (shell, command) => {
+        jest.useFakeTimers();
+        try {
+          render(<CommandBlock command={command} shell={shell} />);
 
-        fireEvent.click(screen.getByRole("button", { name: "Copy" }));
+          fireEvent.click(screen.getByRole("button", { name: "Copy" }));
 
-        expect(writeText).toHaveBeenCalledWith("npm install -g @anthropic-ai/claude-code");
-        expect(screen.getByRole("button", { name: "Copied" })).toBeTruthy();
+          expect(writeText).toHaveBeenCalledWith(command);
+          expect(screen.getByRole("button", { name: "Copied" })).toBeTruthy();
 
-        act(() => {
-          jest.advanceTimersByTime(1400);
-        });
-        expect(screen.getByRole("button", { name: "Copy" })).toBeTruthy();
-      } finally {
-        jest.useRealTimers();
+          act(() => {
+            jest.advanceTimersByTime(1400);
+          });
+          expect(screen.getByRole("button", { name: "Copy" })).toBeTruthy();
+        } finally {
+          jest.useRealTimers();
+        }
       }
-    });
+    );
 
     it("offers only Copy when no in-app alternative exists", () => {
       render(<CommandBlock command="codex login" />);

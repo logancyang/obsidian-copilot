@@ -48,10 +48,17 @@ export const CommandBlock: React.FC<CommandBlockProps> = ({ command, shell }) =>
     <div className="tw-flex tw-items-start tw-gap-2 tw-rounded-md tw-bg-secondary tw-p-2">
       {/* Obsidian styles bare `code` with its own background and padding, which
           would draw a second block inside this one. */}
-      <code className="tw-min-w-0 tw-flex-1 tw-break-all tw-bg-transparent tw-px-0 tw-py-0.5 tw-text-xs tw-leading-5">
-        <span className="tw-select-none tw-text-faint">{prompt}</span>
-        {command}
-      </code>
+      <div
+        role="region"
+        aria-label="Setup command"
+        tabIndex={0}
+        className="tw-min-w-0 tw-flex-1 tw-overflow-x-auto tw-rounded-sm focus-visible:tw-outline-none focus-visible:tw-ring-1 focus-visible:tw-ring-inset focus-visible:tw-ring-ring"
+      >
+        <code className="tw-block tw-select-text tw-whitespace-pre tw-bg-transparent tw-px-0 tw-py-0.5 tw-text-xs tw-leading-5">
+          <span className="tw-select-none tw-text-faint">{prompt}</span>
+          {command}
+        </code>
+      </div>
       <div className="tw-flex tw-shrink-0 tw-items-center tw-gap-1">
         <Button variant="ghost" size="sm" onClick={copy}>
           {copied ? "Copied" : "Copy"}
