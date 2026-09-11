@@ -1,4 +1,7 @@
-import ChatInput, { type ChatInputProps } from "@/components/chat-components/ChatInput";
+import ChatInput, {
+  type ChatInputProps,
+  type ChatInputHandle,
+} from "@/components/chat-components/ChatInput";
 import { fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
 
@@ -16,10 +19,30 @@ jest.mock("@/components/chat-components/AddContextButton", () => ({
 }));
 jest.mock("@/components/chat-components/LexicalEditor", () => ({
   __esModule: true,
-  default: ({ onSubmit }: { onSubmit: () => void }) => (
-    <input aria-label="Message" onKeyDown={(event) => event.key === "Enter" && onSubmit()} />
-  ),
+  default: ({
+    onSubmit,
+    onEditorReady,
+  }: {
+    onSubmit: () => void;
+    onEditorReady: (editor: unknown) => void;
+  }) => {
+    mockEditorReady = onEditorReady;
+    return (
+      <input aria-label="Message" onKeyDown={(event) => event.key === "Enter" && onSubmit()} />
+    );
+  },
 }));
+
+jest.mock("@/components/chat-components/pills/WebTabPillNode", () => ({
+  $findWebTabPills: () => [
+    {
+      getURL: () => "https://example.com/reference",
+      getTitle: () => "Reference",
+      getFaviconUrl: () => undefined,
+    },
+  ],
+}));
+let mockEditorReady: ((editor: unknown) => void) | undefined;
 
 const image = new File(["image bytes"], "screenshot.png", { type: "image/png" });
 
@@ -43,7 +66,7 @@ function composer(inputMessage: string, selectedImages: File[]) {
     includeActiveWebTab: false,
     activeWebTab: null,
   } as unknown as ChatInputProps;
-  return { node: <ChatInput {...props} />, send: props.handleSendMessage };
+  return { node: <ChatInput {...props} />, props, send: props.handleSendMessage };
 }
 
 describe("ChatInput", () => {
@@ -53,6 +76,29 @@ describe("ChatInput", () => {
   });
   afterAll(() => {
     URL.createObjectURL = createObjectURL;
+  });
+  describe("getAttachedWebTabs()", () => {
+    it("returns the same live editor snapshot as typed Send without submitting the draft", () => {
+      const ref: { current: ChatInputHandle | null } = { current: null };
+      const { props, send } = composer("Summarize", []);
+      render(
+        <ChatInput
+          {...props}
+          ref={(handle) => {
+            ref.current = handle;
+          }}
+        />
+      );
+      mockEditorReady!({ read: (read: () => unknown) => read() });
+      expect(ref.current?.getAttachedWebTabs).toEqual(expect.any(Function));
+      const tabs = ref.current!.getAttachedWebTabs();
+      expect(tabs).toEqual([
+        { url: "https://example.com/reference", title: "Reference", faviconUrl: undefined },
+      ]);
+      expect(send).not.toHaveBeenCalled();
+      fireEvent.click(screen.getByRole("button", { name: "Send" }));
+      expect(send).toHaveBeenCalledWith({ webTabs: tabs });
+    });
   });
   describe("onSendMessage()", () => {
     it.each(["", "   ", "Describe this"])(

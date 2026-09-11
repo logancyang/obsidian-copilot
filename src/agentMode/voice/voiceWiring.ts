@@ -68,6 +68,7 @@ export function createVoiceCommand(
             chat,
             backendDisplayName: resolveBackendName(session.backendId),
             getSelectedBackendIds: () => session.getLastMentionedAgents(),
+            resolveSubmission: (text) => chat.resolveVoiceSubmission(text),
           };
         },
       })

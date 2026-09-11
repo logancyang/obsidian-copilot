@@ -4300,8 +4300,11 @@ describe("AgentSession plan proposal lifecycle", () => {
       onMessagesChanged: () => {},
       onStatusChanged: (status) => statusChanges.push(status),
     });
-    const { turn } = sendTyped(session, "edit a file");
+    const { turn, assistantMessageId } = sendTyped(session, "edit a file");
+    const taskId = session.store.getMessage(assistantMessageId)!.taskId!;
+    expect(session.store.getTask(taskId)?.state).toBe("running");
     expect(session.getStatus()).toBe("running");
+    expect(session.store.getTask(taskId)?.state).toBe("running");
 
     const decisionPromise = session.handleToolPermission({
       sessionId: "acp-1",
@@ -4319,6 +4322,7 @@ describe("AgentSession plan proposal lifecycle", () => {
     });
 
     expect(session.getStatus()).toBe("awaiting_permission");
+    expect(session.store.getTask(taskId)?.state).toBe("awaiting-user");
     expect(session.getPendingToolPermissions()).toHaveLength(1);
     expect(statusChanges).toContain("awaiting_permission");
 
@@ -4328,6 +4332,7 @@ describe("AgentSession plan proposal lifecycle", () => {
     });
     expect(session.getPendingToolPermissions()).toHaveLength(0);
     expect(session.getStatus()).toBe("running");
+    expect(session.store.getTask(taskId)?.state).toBe("running");
 
     resolvePrompt!({ stopReason: "end_turn" });
     await turn;
@@ -4392,8 +4397,11 @@ describe("AgentSession plan proposal lifecycle", () => {
       onMessagesChanged: () => {},
       onStatusChanged: (status) => statusChanges.push(status),
     });
-    const { turn } = sendTyped(session, "ask me something");
+    const { turn, assistantMessageId } = sendTyped(session, "ask me something");
+    const taskId = session.store.getMessage(assistantMessageId)!.taskId!;
+    expect(session.store.getTask(taskId)?.state).toBe("running");
     expect(session.getStatus()).toBe("running");
+    expect(session.store.getTask(taskId)?.state).toBe("running");
 
     const answersPromise = session.handleAskUserQuestion({
       sessionId: "acp-1",
@@ -4402,6 +4410,7 @@ describe("AgentSession plan proposal lifecycle", () => {
     });
 
     expect(session.getStatus()).toBe("awaiting_permission");
+    expect(session.store.getTask(taskId)?.state).toBe("awaiting-user");
     expect(session.getPendingAskUserQuestions()).toHaveLength(1);
     expect(statusChanges).toContain("awaiting_permission");
 
@@ -4409,6 +4418,7 @@ describe("AgentSession plan proposal lifecycle", () => {
     await expect(answersPromise).resolves.toEqual({ "Pick a fruit": "Pear" });
     expect(session.getPendingAskUserQuestions()).toHaveLength(0);
     expect(session.getStatus()).toBe("running");
+    expect(session.store.getTask(taskId)?.state).toBe("running");
 
     resolvePrompt!({ stopReason: "end_turn" });
     await turn;

@@ -33,6 +33,7 @@ export const Closing: StoryObj<VoiceModeBarProps> = {
 };
 export const FollowUpQueued: StoryObj<VoiceModeBarProps> = {
   args: {
+    elapsedSeconds: 565,
     state: {
       ...state,
       queuedFollowUps: ["Focus on the customer feedback in the launch review."],

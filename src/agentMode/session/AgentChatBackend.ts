@@ -10,6 +10,7 @@ import type {
   AgentTaskResult,
   AgentTaskSubmission,
   AgentVoiceControls,
+  AgentVoiceSubmissionResolver,
   AgentVoiceRuntimeState,
 } from "./voiceTypes";
 import type {
@@ -38,6 +39,8 @@ import type {
  */
 export interface AgentChatBackend {
   subscribe(listener: () => void): () => void;
+  /** Attach the mounted composer's context snapshotter; release it on unmount. */
+  registerVoiceSubmissionResolver?(resolver: AgentVoiceSubmissionResolver): () => void;
   /**
    * Hand an immutable request to the conversation's task owner. Returns
    * synchronously with the assigned task id and whether it started or queued.

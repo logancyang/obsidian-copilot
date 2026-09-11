@@ -8,6 +8,7 @@ This record covers the September 11, 2026 desktop demo. The feature is implement
 | -------------------------- | ------------------------------------------------------------------------------------------- |
 | Plugin implementation      | `8f0e47d0`, branch `zeroliu/voice-chat-brainstorm-v1`                                       |
 | Loaded build after commit  | `4.0.7+dev.8f0e47d0.clean.b1455c65625a`                                                     |
+| Follow-up native bundle    | `2ae84cb69cd9`, including composer context and permission-status fixes                      |
 | Earlier native Codex build | `c063f58c-dirty-b1455c65625a`, matching the committed implementation bundle hash            |
 | Runtime                    | Native Obsidian desktop on macOS, real local agent processes and OpenAI WebRTC              |
 | Speech input               | Synthesized speech injected into the microphone media stream; no human speech quality claim |
@@ -26,7 +27,7 @@ Temporary probes, timing logs and test output are under `.context/voice-demo/`. 
 | Typed submission during voice          | One task for one typed submission                                                                                                                                                                 | Full attachment/context acceptance sequence remains pending                        |
 | Mute                                   | Microphone track disabled while the call remained active                                                                                                                                          | Human listening test pending                                                       |
 | End voice with running and queued work | Capture tracks stopped synchronously in 1.5 ms; closing state shown; accepted tasks finished in their same cards                                                                                  | Native operating system microphone indicator not separately recorded               |
-| Save and reload                        | All 12 messages and four completed task answers restored; historical activity labelled unavailable                                                                                                | Native edited-file and project-isolation sequences pending                         |
+| Save and reload                        | All 12 messages and four completed task answers restored; historical activity labelled unavailable                                                                                                | Native manually edited history-file and project-isolation sequences pending        |
 | Forced control disconnect              | Visible error, followed by successful explicit restart                                                                                                                                            | Simulated control loss; server restart and network outage not separately exercised |
 | Microphone denial                      | Simulated permission rejection showed an error and left voice off                                                                                                                                 | Does not establish native operating system permission-dialog behavior              |
 | Popout ownership                       | Moving the view ended the old call; the popout opened voice and stopped capture when detached                                                                                                     | Full chat/project/backend switching sequence pending                               |
@@ -44,18 +45,37 @@ Two further native OpenCode Flash checks passed:
 
 Evidence is in `.context/voice-demo/product-continuity-stop.json`. The reviewed recording is `.context/voice-demo/voice-demo-final.mp4`; it remains a local artifact.
 
-Permission and plan decisions, barge-in without backend cancellation, re-entry without replay, the ten-minute warning and closure in Obsidian, and the complete sequence for every backend remain acceptance items. Unit coverage of those contracts does not mark them natively verified.
+Further native checks on `8f0e47d0` passed:
+
+- Voice re-entry remained silent for 44.065 seconds without adding messages or delegations, then recalled the prior Bluejay nickname without starting a local task.
+- Barge-in interrupted a spoken story while the same read-only OpenCode task kept running. The task completed with `BARGE_DONE` after 100,614 ms, without cancellation or a second delegation. Evidence is in `.context/voice-demo/product-barge-mid.json` and `product-barge-final.json`.
+- The ten-minute warning arrived 539.317 seconds after client readiness. Voice was off and its capture track ended at the 599.916-second observation. Playback stopped, the timer stopped, and no error remained. Provider-confirmed usage was 598 seconds, estimated at $0.4983. Evidence is in `.context/voice-demo/product-native-soak.json`.
+
+An emulated backend question first reproduced a task-card status defect: the real action rail awaited a decision while the task card still said Working. Spoken "Yes, continue" did not resolve the question. The same soak exposed a one-time warning displayed as a stale countdown. Both defects were corrected and verified below.
+
+The final native bundle `2ae84cb69cd9` passed an actual OpenCode Flash attachment and edit-permission sequence:
+
+- A fresh session used Safe mode without changing the saved default. The tester selected a disposable note through the composer's Notes picker and removed the active-note reference.
+- The spoken request asked to change the attached note's canvas color from red to blue without naming its file. OpenCode requested edit permission for that attached file, confirming the spoken task received composer context.
+- The task state became `awaiting-user` and its card displayed "Needs your input." Spoken "Yes, continue" left the permission pending and the file unchanged. Clicking **Allow once** changed the task back to running; it completed with the correct linked answer and the file changed to blue.
+- The spoken acknowledgment became a queued follow-up and ran only after the on-screen approval. End voice immediately ended the capture track, and the temporary probe was restored.
+
+The edited-note conversation also passed a fresh-session persistence check. After saving, the tester explicitly closed its native session and loaded the saved conversation into a new internal session. All six messages and two completed task cards restored; both cards reported historical activity unavailable, the edit answer retained its file link, and voice stayed off. This covers persistence after the OpenCode edit workflow, not manual modification of the saved chat's metadata. Evidence is in `.context/voice-demo/product-attachment-reload.json`.
+
+Evidence is in `.context/voice-demo/product-real-approval-before.json` and `product-attachment-approval-green.json`. This establishes a real OpenCode tool-permission flow; Claude and Codex permission flows, plan decisions, human speech quality, and the complete sequence for every backend remain acceptance items. Native attachment coverage here is for a note; image, selection and explicit web-tab context have automated coverage.
 
 ## Automated and component checks
 
-The focused plugin suite passed 428 tests. The exact Jest filter and build/gallery commands are in [the design](VOICE_CHAT_DEMO_DESIGN.md#milestone-5-deploy-and-demonstrate). Production build, formatting, lint and Obsidian review passed. Three pre-existing lint warnings and existing nonblocking Obsidian warnings remain.
+The original UI milestone passed 428 focused tests. The follow-up suite passed 618 tests across 20 suites, adding the full AgentSession suite and the shared ChatInput send/snapshot suite to the design's filter. The exact Jest filter and build/gallery commands are in [the design](VOICE_CHAT_DEMO_DESIGN.md#milestone-5-deploy-and-demonstrate). Production build, formatting, lint and Obsidian review passed. Three pre-existing lint warnings and existing nonblocking Obsidian warnings remain.
 
-The native component gallery rendered 17 states at four widths in each theme, 68 renders per theme. No overflow, render errors or zero-size containers were observed. Remaining audit diagnostics concern disabled End-button contrast and the audit parser's unsupported inherited `oklch` background on existing user-message styling. This is not a claim of a clean accessibility audit.
+The original native component gallery rendered 17 states at four widths in each theme, 68 renders per theme. No overflow, render errors or zero-size containers were observed. Remaining audit diagnostics concern disabled End-button contrast and the audit parser's unsupported inherited `oklch` background on existing user-message styling. This is not a claim of a clean accessibility audit.
+
+The final bundle's dark and light galleries each completed 68 renders without overflow, rendering errors or zero-size containers. Dark-theme warnings concern four instances of contrast on the disabled End voice button in the Closing state. Light-theme diagnostics retain that contrast limitation and the audit parser's unsupported inherited `oklch` background. The 09:25 warning story was visually inspected in both themes and displayed "Voice ends within a minute." The tester restored the dark theme.
 
 The separate server suite passed 162 tests during this session. Server tests and plugin tests are distinct from native backend acceptance.
 
 ## Prior Railway soak
 
-The server repository's `docs/DEPLOY.md` records a real ten-minute call on September 11, 2026. Its Node WebRTC client streamed silent audio. The warning arrived at 540.0 seconds and the server deadline closed the call at 600.7 seconds. Provider usage reported 583 connected seconds and an estimated $0.4858. This establishes the prior server/host deadline and connection result; it does not verify the ten-minute warning or microphone teardown in the current Obsidian UI.
+The server repository's `docs/DEPLOY.md` records a real ten-minute call on September 11, 2026. Its Node WebRTC client streamed silent audio. The warning arrived at 540.0 seconds and the server deadline closed the call at 600.7 seconds. Provider usage reported 583 connected seconds and an estimated $0.4858. This establishes the prior server/host deadline and connection result. The separate current-build Obsidian deadline and microphone teardown check is recorded above.
 
 A deployment or process restart ends active calls. The service uses one replica, a ten-minute call limit, and one concurrent call per tester credential. Operators should use the server repository's deployment instructions and run acceptance between deployments.

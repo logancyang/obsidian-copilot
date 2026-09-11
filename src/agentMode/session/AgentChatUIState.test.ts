@@ -13,6 +13,44 @@ function makeChat() {
 }
 describe("AgentChatUIState", () => {
   describe("AgentChatUIState", () => {
+    describe("registerVoiceSubmissionResolver()", () => {
+      it("restores the remaining composer's attachments when the newer composer closes", async () => {
+        const { chat } = makeChat();
+        const earlier = jest.fn(async () => ({ context: { notes: [], urls: ["earlier"] } }));
+        const newer = jest.fn(async () => ({ context: { notes: [], urls: ["newer"] } }));
+        const releaseEarlier = chat.registerVoiceSubmissionResolver(earlier);
+        const releaseNewer = chat.registerVoiceSubmissionResolver(newer);
+        releaseNewer();
+        await expect(chat.resolveVoiceSubmission("read attachment")).resolves.toEqual({
+          context: { notes: [], urls: ["earlier"] },
+        });
+        expect(newer).not.toHaveBeenCalled();
+        releaseEarlier();
+        await expect(chat.resolveVoiceSubmission("read attachment")).rejects.toThrow("unavailable");
+      });
+      it("keeps the current composer's resolver when an older view releases its registration", async () => {
+        const { chat } = makeChat();
+        const old = jest.fn(async () => ({ context: { notes: [], urls: ["old"] } }));
+        const current = jest.fn(async () => ({ context: { notes: [], urls: ["current"] } }));
+        const releaseOld = chat.registerVoiceSubmissionResolver(old);
+        const releaseCurrent = chat.registerVoiceSubmissionResolver(current);
+        releaseOld();
+        await expect(chat.resolveVoiceSubmission("read attachment")).resolves.toEqual({
+          context: { notes: [], urls: ["current"] },
+        });
+        expect(current).toHaveBeenCalledWith("read attachment");
+        expect(old).not.toHaveBeenCalled();
+        releaseCurrent();
+        await expect(chat.resolveVoiceSubmission("read attachment")).rejects.toThrow("unavailable");
+      });
+    });
+    describe("resolveVoiceSubmission()", () => {
+      it("refuses spoken work when there is no mounted composer to resolve its attachments", async () => {
+        await expect(makeChat().chat.resolveVoiceSubmission("read attachment")).rejects.toThrow(
+          "unavailable"
+        );
+      });
+    });
     describe("getConversationRows()", () => {
       it("returns the store's stable public conversation projection", () => {
         const { store, chat } = makeChat();

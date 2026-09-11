@@ -15,6 +15,8 @@ import {
   type AgentTaskSubmission,
   type AgentVoiceAttachment,
   type AgentVoiceControls,
+  type AgentVoiceSubmissionResolver,
+  type AgentVoiceSubmissionContext,
   type AgentVoiceRuntimeState,
 } from "@/agentMode/session/voiceTypes";
 import type {
@@ -40,6 +42,7 @@ import type {
  */
 export class AgentChatUIState implements AgentChatBackend {
   private listeners = new Set<() => void>();
+  private readonly voiceSubmissionResolvers = new Map<symbol, AgentVoiceSubmissionResolver>();
   private voice: AgentVoiceAttachment | null = null;
   private unsubscribeVoice: (() => void) | null = null;
 
@@ -79,6 +82,28 @@ export class AgentChatUIState implements AgentChatBackend {
     this.voice = controls;
     if (controls) this.unsubscribeVoice = controls.subscribe(() => this.notifyListeners());
     this.notifyListeners();
+  }
+
+  /**
+   * Bind current composer attachments without letting an old view clear its replacement.
+   * @param resolver Captures the current notes, selections and images for a spoken request.
+   */
+  registerVoiceSubmissionResolver(resolver: AgentVoiceSubmissionResolver): () => void {
+    const registration = Symbol("voice-composer");
+    this.voiceSubmissionResolvers.set(registration, resolver);
+    return () => {
+      this.voiceSubmissionResolvers.delete(registration);
+    };
+  }
+
+  /**
+   * Resolve composer attachments for the local backend submission.
+   * @param requestText Spoken text used to resolve the active-context markers.
+   */
+  async resolveVoiceSubmission(requestText: string): Promise<AgentVoiceSubmissionContext> {
+    const resolver = [...this.voiceSubmissionResolvers.values()].pop();
+    if (!resolver) throw new Error("The voice composer's context is unavailable.");
+    return resolver(requestText);
   }
 
   getVoiceControls(): AgentVoiceControls | null {

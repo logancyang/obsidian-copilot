@@ -5,6 +5,17 @@ import React from "react";
 
 describe("VoiceModeBar", () => {
   describe("VoiceModeBar()", () => {
+    it("keeps a one-time deadline warning truthful as elapsed time advances", () => {
+      render(
+        <VoiceModeBar
+          state={{ ...VOICE_OFF_RUNTIME_STATE, session: "active", secondsRemainingWarning: 60 }}
+          elapsedSeconds={565}
+          onMutedChange={jest.fn()}
+          onEnd={jest.fn()}
+        />
+      );
+      expect(screen.getByText("Voice ends within a minute.")).toBeTruthy();
+    });
     it("keeps microphone and End voice controls available while the assistant speaks", () => {
       const onMutedChange = jest.fn();
       const onEnd = jest.fn();

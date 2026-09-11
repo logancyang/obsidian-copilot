@@ -2245,6 +2245,14 @@ export class AgentSession {
     const next = this.getStatus();
     if (next === this.cachedStatus) return;
     this.cachedStatus = next;
+    // Task cards must show the same pending decision as the session's action rail.
+    // See designdocs/VOICE_CHAT_DEMO_DESIGN.md, "The experience".
+    const taskId = this.placeholderId
+      ? this.store.getMessage(this.placeholderId)?.taskId
+      : undefined;
+    if (taskId && (next === "running" || next === "awaiting_permission")) {
+      this.store.setTaskState(taskId, next === "awaiting_permission" ? "awaiting-user" : "running");
+    }
     for (const l of this.listeners) {
       try {
         l.onStatusChanged(next);

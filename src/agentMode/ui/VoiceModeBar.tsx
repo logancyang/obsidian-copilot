@@ -94,9 +94,7 @@ export function VoiceModeBar({ state, elapsedSeconds, onMutedChange, onEnd }: Vo
         </p>
       )}
       {state.secondsRemainingWarning !== null && (
-        <p className="tw-m-0 tw-text-normal">
-          Voice ends in {state.secondsRemainingWarning} seconds.
-        </p>
+        <p className="tw-m-0 tw-text-normal">Voice ends within a minute.</p>
       )}
       {state.queuedFollowUps.length > 0 && (
         <p className="tw-m-0 tw-text-normal">

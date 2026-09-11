@@ -196,7 +196,7 @@ Voice is a private desktop demo. You need a working local agent, microphone acce
 3. Reload Copilot by turning it off and on under **Community plugins**, or restart Obsidian. The voice controls are registered when the plugin loads.
 4. Open Agent Chat, select one agent, and confirm it can answer a typed request. Choose **Start voice** above the composer and allow Obsidian to use the microphone.
 
-The same conversation stays open, and you can continue typing, attaching images and adding note references while voice is connected.
+The same conversation stays open, and you can continue typing, attaching images and adding note references while voice is connected. Spoken work uses the composer's current note references, selected text, web-tab attachments and images. Images go to the selected local agent, not GPT-Live. Speech leaves the typed draft and attachments in place.
 
 The voice bar shows assistant audio activity, microphone state and call time. **Mute microphone** stops sending your speech while playback and agent work continue. Muting does not end the call. **End voice** stops the microphone and playback; accepted agent tasks continue and their answers remain in the conversation.
 

@@ -212,6 +212,8 @@ export interface ChatInputProps {
  */
 export interface ChatInputHandle {
   removeToolPills(toolNames: string[]): void;
+  /** Snapshot explicit web-tab attachments for either typed or spoken submission. */
+  getAttachedWebTabs(): WebTabContext[];
 }
 
 const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput(
@@ -284,7 +286,7 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
    * Extract WebTabPillNode data directly from the Lexical editor at send time.
    * This avoids React state synchronization races (webTabsFromPills) when the user sends quickly.
    */
-  const getWebTabsFromEditorSnapshot = (): WebTabContext[] => {
+  const getWebTabsFromEditorSnapshot = useCallback((): WebTabContext[] => {
     const editor = lexicalEditorRef.current;
     if (!editor) {
       return webTabsFromPills;
@@ -298,7 +300,11 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
         faviconUrl: pill.getFaviconUrl(),
       }));
     });
-  };
+  }, [webTabsFromPills]);
+  const getAttachedWebTabs = useCallback(
+    () => mergeWebTabContexts([...contextWebTabs, ...getWebTabsFromEditorSnapshot()]),
+    [contextWebTabs, getWebTabsFromEditorSnapshot]
+  );
 
   const onSendMessage = () => {
     // Handle edit mode
@@ -314,8 +320,7 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
     // Combine badge-only web tabs with the send-time Lexical snapshot of WebTab pills.
     // This avoids React state synchronization races when the user sends quickly.
     // Active Web Tab is handled by ChatManager.
-    const webTabsFromEditor = getWebTabsFromEditorSnapshot();
-    const allWebTabs = mergeWebTabContexts([...contextWebTabs, ...webTabsFromEditor]);
+    const allWebTabs = getAttachedWebTabs();
 
     if (!isCopilotPlus) {
       // Non-Plus chains: only webTabs needs explicit passing
@@ -725,6 +730,7 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
   useImperativeHandle(
     ref,
     () => ({
+      getAttachedWebTabs,
       removeToolPills(toolNames: string[]) {
         if (!lexicalEditorRef.current) return;
         lexicalEditorRef.current.update(() => {
@@ -732,7 +738,7 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
         });
       },
     }),
-    []
+    [getAttachedWebTabs]
   );
 
   // Active note pill sync callbacks

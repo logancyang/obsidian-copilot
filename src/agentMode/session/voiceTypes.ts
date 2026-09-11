@@ -180,6 +180,16 @@ export interface AgentVoiceSubmissionMirror {
   noteSubmissionAccepted(submission: AgentTaskSubmission, acceptance: AgentTaskAcceptance): void;
 }
 
+/** Composer attachments captured for a spoken request before it enters the task queue. */
+export interface AgentVoiceSubmissionContext {
+  context?: MessageContext;
+  promptContent?: readonly PromptContent[];
+}
+
+export type AgentVoiceSubmissionResolver = (
+  requestText: string
+) => Promise<AgentVoiceSubmissionContext>;
+
 /** Everything one conversation's chat binds when voice wiring is present. */
 export interface AgentVoiceAttachment extends AgentVoiceControls, AgentVoiceSubmissionMirror {}
 

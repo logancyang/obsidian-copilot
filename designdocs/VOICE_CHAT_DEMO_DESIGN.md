@@ -20,6 +20,9 @@ The main recommendation is a small Node service on Railway, direct WebRTC audio 
 - [x] Complete native spoken delegation with Codex and OpenCode; record measured costs and latency.
 - [x] Verify Claude spoken delegation and visible/spoken failure handling against its real account-quota error.
 - [x] Verify spoken-to-typed context continuity and Stop with queued work on OpenCode Flash; capture and visually review a local captioned demo.
+- [x] Verify voice re-entry without replay, barge-in without backend cancellation, and the ten-minute call cap with microphone teardown in native Obsidian.
+- [x] Verify spoken composer-note context and the corrected task-card status through an actual OpenCode Safe-mode edit permission; spoken acknowledgment does not approve the operation.
+- [x] Save and restore the OpenCode edited-note conversation in a fresh native session; verify both completed cards and their linked answer survive with voice off. Complete final gallery checks in both themes.
 - [ ] Complete the full native acceptance sequence for every backend; successful Claude execution is blocked by account quota.
 
 This section tracks implementation of the feature. The workspace `TODO.md` tracks the current implementation and verification task.
@@ -361,7 +364,7 @@ From the separate server checkout, using Node 24:
 From this plugin repository root:
 
     npm ci
-    npm test -- --runInBand --testPathPattern='AgentVoice|VoiceModeBar|VoiceSessionController|VoiceConversationBridge|windowVoiceHost|voiceTranscript|AgentTaskCoordinator|AgentMessageStore|AgentChatPersistenceManager|AgentChatUIState|AgentChatInput|AgentChatMessages|AgentSessionManager|useAgentChatRuntimeState|commands/index.test'
+    npm test -- --runInBand --testPathPattern='AgentVoice|VoiceModeBar|VoiceSessionController|VoiceConversationBridge|windowVoiceHost|voiceTranscript|AgentTaskCoordinator|AgentMessageStore|AgentChatPersistenceManager|AgentChatUIState|AgentChatInput|AgentChatMessages|AgentSessionManager|useAgentChatRuntimeState|commands/index.test|ChatInput.send|AgentSession.test'
     npm run build
     npm run gallery:vault
     npm run test:vault
@@ -433,7 +436,9 @@ The desktop product controls and shared task flow are implemented. Native Codex 
 
 OpenCode also completed one spoken read-only request using the user-selected `copilot-plus/copilot-plus-flash` model. Delegation acceptance took 505 ms and local task completion took 4,684 ms. Voice spoke the correct result, End voice stopped capture, and the completed card remained visible. Provider-confirmed usage was 62 seconds, estimated at $0.0517. A subsequent native check confirmed a typed follow-up recalled a nickname introduced only through speech. Stop also cancelled an active task and removed its queued follow-up without starting it. A reviewed 36-second captioned recording is available locally; it has no audio track and has not been published.
 
-The [verification record](VOICE_CHAT_DEMO_VERIFICATION.md) separates native acceptance, component rendering, unit coverage and the prior server soak. The focused suite passes 428 tests. Native testing uses synthesized microphone input through the real WebRTC connection and actual local backend. Claude voice delegation also reached the real backend and surfaced its account-quota failure in one task card, with spoken acknowledgment of failure. This does not establish successful Claude execution, human speech quality, or completion of the remaining backend and full acceptance matrix.
+A later native call verified re-entry without replay and interruption of spoken output without cancelling the local task. The ten-minute warning arrived 539.317 seconds after readiness; voice was off with its capture track ended at the 599.916-second observation. Provider-confirmed usage was 598 seconds, estimated at $0.4983. A safe emulated question exercised the real permission rail and confirmed that speech did not approve it, while exposing a task-card status defect. Follow-up code connects that status and the composer's current attachments to spoken submissions and replaces the stale warning countdown with a one-minute notice. Native bundle `2ae84cb69cd9` then passed an actual OpenCode Flash edit-permission flow using a note selected only in the composer. The spoken request omitted its filename; the correct note was edited only after clicking Allow once. The task card showed Needs your input while permission was pending, and spoken acknowledgment stayed queued until approval. End voice immediately stopped capture. The final dark and light galleries each passed 68 renders without overflow or rendering failures and confirmed the one-minute notice at 09:25 elapsed. Saving and loading the edited-note conversation into a new native session restored all six messages and both completed cards, including the edit answer's file link, with historical activity unavailable and voice off.
+
+The [verification record](VOICE_CHAT_DEMO_VERIFICATION.md) separates native acceptance, component rendering, unit coverage and the prior server soak. The expanded focused suite passes 618 tests across 20 suites. Native testing uses synthesized microphone input through the real WebRTC connection and actual local backend. Claude voice delegation also reached the real backend and surfaced its account-quota failure in one task card, with spoken acknowledgment of failure. This does not establish successful Claude execution, human speech quality, or completion of the remaining backend and full acceptance matrix.
 
 ## Artifacts and notes
 

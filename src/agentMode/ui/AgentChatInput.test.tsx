@@ -7,6 +7,7 @@ import { useAgentInputDrafts } from "@/agentMode/ui/hooks/useAgentInputDrafts";
 import { AgentTaskCoordinator } from "@/agentMode/session/AgentTaskCoordinator";
 import type { AgentQueuedTask } from "@/agentMode/session/AgentTaskCoordinator";
 import type { AgentTaskResult, AgentTaskSubmission } from "@/agentMode/session/voiceTypes";
+import type { SelectedTextContext } from "@/types/message";
 import type { StopReason } from "@/agentMode/session/types";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { Notice, type App } from "obsidian";
@@ -37,42 +38,54 @@ jest.mock("@/agentMode/ui/mentionedAgents", () => ({
 // editor (agent-mention gate) AND renders a clickable send button that routes
 // through `handleSendMessage` — the same entry the real Lexical editor's Enter
 // key hits (send-flow regression tests).
+let mockAttachedWebTabs: import("@/types/message").WebTabContext[] = [];
 let capturedAgentBrands: ReadonlyArray<unknown> | undefined;
 let capturedTopRightAccessory: React.ReactNode | undefined;
 let capturedPlaceholder: string | undefined;
-jest.mock("@/components/chat-components/ChatInput", () => ({
-  __esModule: true,
-  default: (props: {
-    agentBrands?: ReadonlyArray<unknown>;
-    topRightAccessory?: React.ReactNode;
-    placeholder?: string;
-    handleSendMessage?: () => void;
-    onStopGenerating?: () => void;
-  }) => {
-    capturedAgentBrands = props.agentBrands;
-    capturedTopRightAccessory = props.topRightAccessory;
-    capturedPlaceholder = props.placeholder;
-    return (
-      <>
-        {props.topRightAccessory}
-        <button type="button" onClick={() => props.handleSendMessage?.()}>
-          send
-        </button>
-        <button type="button" onClick={() => props.onStopGenerating?.()}>
-          stop
-        </button>
-      </>
-    );
-  },
-}));
+jest.mock("@/components/chat-components/ChatInput", () => {
+  const React = jest.requireActual<typeof import("react")>("react");
+  return {
+    __esModule: true,
+    default: React.forwardRef(function MockChatInput(
+      props: {
+        agentBrands?: ReadonlyArray<unknown>;
+        topRightAccessory?: React.ReactNode;
+        placeholder?: string;
+        handleSendMessage?: () => void;
+        onStopGenerating?: () => void;
+      },
+      ref: React.ForwardedRef<import("@/components/chat-components/ChatInput").ChatInputHandle>
+    ) {
+      React.useImperativeHandle(ref, () => ({
+        removeToolPills: () => {},
+        getAttachedWebTabs: () => mockAttachedWebTabs,
+      }));
+      capturedAgentBrands = props.agentBrands;
+      capturedTopRightAccessory = props.topRightAccessory;
+      capturedPlaceholder = props.placeholder;
+      return (
+        <>
+          {props.topRightAccessory}
+          <button type="button" onClick={() => props.handleSendMessage?.()}>
+            send
+          </button>
+          <button type="button" onClick={() => props.onStopGenerating?.()}>
+            stop
+          </button>
+        </>
+      );
+    }),
+  };
+});
 
 jest.mock("@/components/chat-components/hooks/useActiveWebTabState", () => ({
   useActiveWebTabState: () => ({ activeWebTabForMentions: undefined }),
 }));
+let mockSelectedContexts: readonly SelectedTextContext[] = [];
 jest.mock("@/aiParams", () => ({
   clearSelectedTextContexts: jest.fn(),
   removeSelectedTextContext: jest.fn(),
-  useSelectedTextContexts: () => [[], jest.fn()],
+  useSelectedTextContexts: () => [mockSelectedContexts, jest.fn()],
 }));
 jest.mock("@/settings/model", () => ({
   getModelKeyFromModel: (model: { name: string; provider: string; _backendId?: string }) => {
@@ -92,7 +105,7 @@ jest.mock("@/agentMode/session/expandCustomCommandPrefix", () => ({
   expandCustomCommandPrefix: jest.fn(async (text: string) => ({ text })),
 }));
 jest.mock("@/services/webViewerService/activeWebTabSnapshot", () => ({
-  buildWebTabsWithActiveSnapshot: () => [],
+  buildWebTabsWithActiveSnapshot: (_app: unknown, tabs: unknown[]) => tabs,
 }));
 
 const makeApp = (): App => ({ workspace: { getActiveFile: () => null } }) as unknown as App;
@@ -243,6 +256,81 @@ function renderComposer(
 }
 
 describe("AgentChatInput", () => {
+  describe("voice submission context", () => {
+    afterEach(() => {
+      mockSelectedContexts = [];
+      mockAttachedWebTabs = [];
+    });
+    it("drops the previous chat's selection and resolves only the new chat's attachments", async () => {
+      mockSelectedContexts = [
+        { id: "old-selection", content: "Private old selection" } as SelectedTextContext,
+      ];
+      const register = jest.fn<
+        () => void,
+        [import("@/agentMode/session/voiceTypes").AgentVoiceSubmissionResolver]
+      >(() => () => {});
+      const backend = Object.assign(makeStubBackend(), {
+        registerVoiceSubmissionResolver: register,
+      });
+      const view = renderInput(backend, makeDraft());
+      await expect(register.mock.calls.at(-1)![0]("Read selection")).resolves.toMatchObject({
+        context: { selectedTextContexts: mockSelectedContexts },
+      });
+      const nextNote = { path: "Next.md" } as unknown as import("obsidian").TFile;
+      view.rerender(
+        inputNode(backend, makeDraft({ contextNotes: [nextNote] }), { chatInputId: "input-2" })
+      );
+      const snapshot = await register.mock.calls.at(-1)![0]("Read attachment");
+      expect(snapshot.context?.notes).toEqual([nextNote]);
+      expect(snapshot.context?.selectedTextContexts).toBeUndefined();
+    });
+    it("refuses spoken work when any image cannot be read instead of dropping that attachment", async () => {
+      const register = jest.fn<
+        () => void,
+        [import("@/agentMode/session/voiceTypes").AgentVoiceSubmissionResolver]
+      >(() => () => {});
+      const backend = Object.assign(makeStubBackend(), {
+        registerVoiceSubmissionResolver: register,
+      });
+      const image = {
+        type: "image/png",
+        arrayBuffer: async () => {
+          throw new Error("unreadable");
+        },
+      } as unknown as File;
+      renderInput(backend, makeDraft({ images: [image] }));
+      await expect(register.mock.calls.at(-1)![0]("Explain image")).rejects.toThrow(
+        "could not be read"
+      );
+    });
+    it("resolves the attached note and image for speech without sending the typed draft", async () => {
+      const release = jest.fn();
+      const registerVoiceSubmissionResolver = jest.fn(() => release);
+      const backend = Object.assign(makeStubBackend(), { registerVoiceSubmissionResolver });
+      const note = { path: "Reference.md" } as unknown as import("obsidian").TFile;
+      const image = {
+        type: "image/png",
+        arrayBuffer: async () => new Uint8Array([1, 2]).buffer,
+      } as File;
+      mockAttachedWebTabs = [{ url: "https://example.com/attached", title: "Attached reference" }];
+      const draft = makeDraft({ input: "Unsent draft", contextNotes: [note], images: [image] });
+      const view = renderInput(backend, draft);
+      expect(registerVoiceSubmissionResolver).toHaveBeenCalledTimes(1);
+      const resolve = (
+        registerVoiceSubmissionResolver.mock.calls[0] as unknown as [
+          (text: string) => Promise<Partial<AgentTaskSubmission>>,
+        ]
+      )[0];
+      await expect(resolve("Summarize the attachment")).resolves.toMatchObject({
+        context: { notes: [note], webTabs: mockAttachedWebTabs },
+        promptContent: [{ type: "image", mimeType: "image/png", data: "AQI=" }],
+      });
+      expect(backend.submitTask).not.toHaveBeenCalled();
+      expect(draft.resetCompose).not.toHaveBeenCalled();
+      view.unmount();
+      expect(release).toHaveBeenCalledTimes(1);
+    });
+  });
   describe("handleSendMessage()", () => {
     it("sends text-only commands that expand to empty without an image-read error https://github.com/logancyang/obsidian-copilot/issues/2850", async () => {
       jest.mocked(expandCustomCommandPrefix).mockResolvedValueOnce({ text: "" });

@@ -3,7 +3,10 @@ import {
   AgentTaskCoordinator,
   type AgentTaskExecutor,
 } from "@/agentMode/session/AgentTaskCoordinator";
-import type { AgentVoiceAttachment } from "@/agentMode/session/voiceTypes";
+import type {
+  AgentVoiceAttachment,
+  AgentVoiceSubmissionResolver,
+} from "@/agentMode/session/voiceTypes";
 import {
   TRANSCRIPT_MAX_WAIT_MS,
   TRANSCRIPT_SETTLE_MS,
@@ -14,7 +17,7 @@ import type { VoiceSessionSnapshot, VoiceSessionEvent } from "@/agentMode/voice/
 
 jest.mock("@/logger", () => ({ logInfo: jest.fn(), logWarn: jest.fn(), logError: jest.fn() }));
 
-function createHarness() {
+function createHarness(resolveSubmission?: AgentVoiceSubmissionResolver) {
   let emit!: (event: VoiceSessionEvent) => void;
   let controls!: AgentVoiceAttachment;
   let sequence = 0;
@@ -72,6 +75,7 @@ function createHarness() {
   });
   bridge.attach({
     backendDisplayName: "Codex",
+    resolveSubmission,
     getSelectedBackendIds: () => ["codex"],
     chat: {
       attachVoice: (attachment) => {
@@ -181,6 +185,89 @@ describe("VoiceConversationBridge", () => {
         await expect(h.controls.start()).resolves.toEqual({ started: true });
       });
 
+      it("waits for local attachments and accepts a repeated delegation only once", async () => {
+        let finish!: (value: {
+          promptContent: [{ type: "image"; mimeType: string; data: string }];
+        }) => void;
+        h = createHarness(
+          () =>
+            new Promise((resolve) => {
+              finish = resolve;
+            })
+        );
+        await h.controls.start();
+        h.transcript("user", "Explain the image");
+        h.delegate();
+        jest.advanceTimersByTime(TRANSCRIPT_SETTLE_MS);
+        h.delegate();
+        jest.advanceTimersByTime(TRANSCRIPT_MAX_WAIT_MS);
+        expect(h.submitTask).not.toHaveBeenCalled();
+        expect(h.controller.deferDelegation).not.toHaveBeenCalled();
+        finish({ promptContent: [{ type: "image", mimeType: "image/png", data: "AQI=" }] });
+        await jest.advanceTimersByTimeAsync(0);
+        expect(h.submitTask).toHaveBeenCalledTimes(1);
+        expect(h.submitTask.mock.calls[0][0].promptContent).toEqual([
+          { type: "image", mimeType: "image/png", data: "AQI=" },
+        ]);
+      });
+      it("preserves speech order when a later request's attachments finish first", async () => {
+        let finishFirst!: (value: Awaited<ReturnType<AgentVoiceSubmissionResolver>>) => void;
+        const resolve = jest
+          .fn<ReturnType<AgentVoiceSubmissionResolver>, Parameters<AgentVoiceSubmissionResolver>>()
+          .mockImplementationOnce(
+            () =>
+              new Promise((done) => {
+                finishFirst = done;
+              })
+          )
+          .mockResolvedValueOnce({});
+        h = createHarness(resolve);
+        await h.controls.start();
+        h.transcript("user", "Explain the image");
+        h.delegate("first");
+        jest.advanceTimersByTime(TRANSCRIPT_SETTLE_MS);
+        h.transcript("assistant", "I will check it.", 6400);
+        h.transcript("user", "Then summarize the note", 6600);
+        h.delegate("second");
+        jest.advanceTimersByTime(TRANSCRIPT_SETTLE_MS);
+        await jest.advanceTimersByTimeAsync(0);
+        expect(resolve).toHaveBeenCalledTimes(2);
+        expect(h.submitTask).not.toHaveBeenCalled();
+        finishFirst({ promptContent: [{ type: "image", mimeType: "image/png", data: "AQI=" }] });
+        await jest.advanceTimersByTimeAsync(0);
+        expect(h.submitTask.mock.calls[0][0].requestText).toBe("Explain the image");
+        expect(h.tasks.getQueuedTasks()[0].submission.requestText).toBe("Then summarize the note");
+      });
+      it("does not dispatch speech when End voice occurs during attachment reads", async () => {
+        let finish!: (value: Awaited<ReturnType<AgentVoiceSubmissionResolver>>) => void;
+        h = createHarness(
+          () =>
+            new Promise((resolve) => {
+              finish = resolve;
+            })
+        );
+        await h.controls.start();
+        h.transcript("user", "Explain the image");
+        h.delegate();
+        jest.advanceTimersByTime(TRANSCRIPT_SETTLE_MS);
+        await h.controls.end();
+        finish({});
+        await jest.advanceTimersByTimeAsync(0);
+        expect(h.submitTask).not.toHaveBeenCalled();
+        expect(h.controller.acceptDelegation).not.toHaveBeenCalled();
+      });
+      it("declines a spoken task when its local attachments cannot be read", async () => {
+        h = createHarness(async () => {
+          throw new Error("Image unreadable");
+        });
+        await h.controls.start();
+        h.transcript("user", "Explain the image");
+        h.delegate();
+        jest.advanceTimersByTime(TRANSCRIPT_SETTLE_MS);
+        await jest.advanceTimersByTimeAsync(0);
+        expect(h.submitTask).not.toHaveBeenCalled();
+        expect(h.controller.deferDelegation).toHaveBeenCalledWith("delegation-1", "declined");
+      });
       it("dispatches settled user speech once and links the existing transcript row to its task", () => {
         h.transcript("user", "Find notes about Obsidian");
         h.delegate();

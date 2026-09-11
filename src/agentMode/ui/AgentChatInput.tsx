@@ -7,7 +7,10 @@ import type {
   AgentQueuedTask,
   AgentQueueHoldReason,
 } from "@/agentMode/session/AgentTaskCoordinator";
-import type { AgentTaskSubmission } from "@/agentMode/session/voiceTypes";
+import type {
+  AgentTaskSubmission,
+  AgentVoiceSubmissionResolver,
+} from "@/agentMode/session/voiceTypes";
 import type { AgentInputDraftControls } from "@/agentMode/ui/hooks/useAgentInputDrafts";
 import {
   clearSelectedTextContexts,
@@ -16,7 +19,10 @@ import {
 } from "@/aiParams";
 import { CustomCommandManager } from "@/commands/customCommandManager";
 import { getCachedCustomCommands } from "@/commands/state";
-import ChatInput, { type ChatInputProps } from "@/components/chat-components/ChatInput";
+import ChatInput, {
+  type ChatInputProps,
+  type ChatInputHandle,
+} from "@/components/chat-components/ChatInput";
 import { EMPTY_AGENT_MENTION_BRANDS } from "@/components/chat-components/hooks/useAtMentionCategories";
 import { useActiveWebTabState } from "@/components/chat-components/hooks/useActiveWebTabState";
 import { ACTIVE_WEB_TAB_MARKER, EVENT_NAMES } from "@/constants";
@@ -103,6 +109,7 @@ interface AgentChatInputProps {
 // Frozen empty so a typed submission — which has no public entry yet — keeps
 // a stable reference instead of allocating a fresh [] per send.
 const EMPTY_SOURCE_MESSAGE_IDS: readonly string[] = Object.freeze([]);
+const EMPTY_SELECTED_TEXT: readonly SelectedTextContext[] = Object.freeze([]);
 
 const dedupeBy = <T,>(items: Iterable<T>, key: (item: T) => string): T[] => {
   const seen = new Set<string>();
@@ -144,6 +151,15 @@ async function fileToImageBlock(file: File): Promise<PromptContent | null> {
     logWarn("[AgentMode] failed to read attached image", e);
     return null;
   }
+}
+
+async function readImageBlocks(images: readonly File[]): Promise<PromptContent[]> {
+  const content: PromptContent[] = [];
+  for (const image of images) {
+    const block = await fileToImageBlock(image);
+    if (block) content.push(block);
+  }
+  return content;
 }
 
 /**
@@ -190,6 +206,7 @@ export const AgentChatInput = memo(function AgentChatInput({
   const { activeWebTabForMentions } = useActiveWebTabState();
 
   const previousChatInputIdRef = useRef(chatInputId);
+  const chatInputRef = useRef<ChatInputHandle>(null);
 
   // The `@agent` typeahead group + pills are paid-only. Reactive so a settings
   // change flips the gate live; the authoritative send-time check is separate.
@@ -248,6 +265,58 @@ export const AgentChatInput = memo(function AgentChatInput({
     mentionedAgentIdsRef.current = [];
   }, [chatInputId]);
 
+  const currentSelectedTextContexts =
+    previousChatInputIdRef.current === chatInputId ? selectedTextContexts : EMPTY_SELECTED_TEXT;
+  const captureContext = useCallback(
+    (
+      text: string,
+      webTabs: readonly WebTabContext[] = [],
+      activeFile = app.workspace.getActiveFile()
+    ) => {
+      const notes = dedupeBy(
+        [...(includeActiveNote && activeFile ? [activeFile] : []), ...contextNotes],
+        (note) => note.path
+      );
+      const resolvedWebTabs = buildWebTabsWithActiveSnapshot(
+        app,
+        [...webTabs],
+        currentSelectedTextContexts.length === 0 &&
+          (includeActiveWebTab || text.includes(ACTIVE_WEB_TAB_MARKER))
+      );
+      return buildMessageContext(notes, currentSelectedTextContexts, resolvedWebTabs);
+    },
+    [app, includeActiveNote, contextNotes, currentSelectedTextContexts, includeActiveWebTab]
+  );
+  const resolveVoiceSubmission = useCallback<AgentVoiceSubmissionResolver>(
+    async (text) => {
+      if (disabled || hasPendingPlanPermission) {
+        new Notice("Resolve the pending decision before sending spoken work.");
+        throw new Error("Composer is unavailable");
+      }
+      if (selectedImages.length > 0 && unsupportedImageModelLabel) {
+        new Notice(
+          `${unsupportedImageModelLabel} doesn't support images. Switch to a vision-capable model to send images.`
+        );
+        throw new Error("The selected model cannot use the attached images");
+      }
+      // Capture before image reads so changes made while decoding belong to the
+      // next request. Typed and spoken submissions use the same attachment path.
+      // See designdocs/VOICE_CHAT_DEMO_DESIGN.md, "Text and voice context continuity".
+      const context = captureContext(text, chatInputRef.current?.getAttachedWebTabs());
+      const content = await readImageBlocks(selectedImages);
+      if (content.length !== selectedImages.length) {
+        new Notice("Could not read the attached images. Please attach them again.");
+        throw new Error("The spoken request's image attachments could not be read");
+      }
+      return { context, promptContent: content.length > 0 ? content : undefined };
+    },
+    [disabled, hasPendingPlanPermission, selectedImages, unsupportedImageModelLabel, captureContext]
+  );
+  useEffect(
+    () => backend.registerVoiceSubmissionResolver?.(resolveVoiceSubmission),
+    [backend, resolveVoiceSubmission]
+  );
+
   const handleStopGenerating = useCallback(async () => {
     // The task owner discards queued follow-ups before requesting
     // cancellation, so a cancel that finishes the turn cannot flush work the
@@ -304,13 +373,6 @@ export const AgentChatInput = memo(function AgentChatInput({
 
       const activeFile = app.workspace.getActiveFile();
 
-      const candidateNotes: TFile[] = [];
-      if (includeActiveNote && activeFile) {
-        candidateNotes.push(activeFile);
-      }
-      candidateNotes.push(...contextNotes);
-      const notes = dedupeBy(candidateNotes, (n) => n.path);
-
       // Slash-menu CustomCommands are inserted as literal `/<title>` text by
       // SlashCommandPlugin. Skills are recognized by the backend via its
       // command catalog, but CustomCommands aren't — expand the body here so
@@ -328,17 +390,7 @@ export const AgentChatInput = memo(function AgentChatInput({
       }
       const resolvedText = resolveActiveNoteToken(expanded.text, activeFile);
 
-      // Resolve the Active Web Tab into the outgoing webTabs (snapshot at send
-      // time). Mirrors ChatManager: any text selection suppresses the active
-      // tab to avoid redundant context.
-      const hasAnySelection = selectedTextContexts.length > 0;
-      const shouldIncludeActiveWebTab =
-        !hasAnySelection && (includeActiveWebTab || resolvedText.includes(ACTIVE_WEB_TAB_MARKER));
-      const resolvedWebTabs = buildWebTabsWithActiveSnapshot(
-        app,
-        webTabs ?? [],
-        shouldIncludeActiveWebTab
-      );
+      const context = captureContext(resolvedText, webTabs, activeFile);
 
       // Hard-block sending images to a model that is KNOWN to lack vision. We
       // only block when the active entry's capabilities are populated (an empty
@@ -385,11 +437,7 @@ export const AgentChatInput = memo(function AgentChatInput({
       clearSelectedTextContexts();
 
       // Convert the attached images to base64 image content blocks.
-      const content: PromptContent[] = [];
-      for (const image of selectedImages) {
-        const block = await fileToImageBlock(image);
-        if (block) content.push(block);
-      }
+      const content = await readImageBlocks(selectedImages);
 
       // Failed image reads must not turn an image-only message into an empty request.
       // https://github.com/logancyang/obsidian-copilot/issues/2850
@@ -409,7 +457,7 @@ export const AgentChatInput = memo(function AgentChatInput({
         presentation: "text",
         requestText: resolvedText,
         rawInput,
-        context: buildMessageContext(notes, selectedTextContexts, resolvedWebTabs),
+        context,
         promptContent: content.length > 0 ? content : undefined,
         mentionedAgents,
       };
@@ -436,9 +484,7 @@ export const AgentChatInput = memo(function AgentChatInput({
       chatInputId,
       inputMessage,
       selectedImages,
-      contextNotes,
-      includeActiveNote,
-      includeActiveWebTab,
+      captureContext,
       selectedTextContexts,
       unsupportedImageModelLabel,
       disabled,
@@ -507,6 +553,7 @@ export const AgentChatInput = memo(function AgentChatInput({
             replaced, so that transition preserves editor-owned state. */}
         <ChatInput
           key={chatInputId}
+          ref={chatInputRef}
           isAgentMode
           placeholder="Ask anything • @ to add context • / for commands"
           inputMessage={inputMessage}

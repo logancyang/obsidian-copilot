@@ -13,6 +13,7 @@ import {
   type AgentVoiceAttachment,
   type AgentVoiceRuntimeState,
   type AgentVoiceStartOutcome,
+  type AgentVoiceSubmissionResolver,
 } from "@/agentMode/session/voiceTypes";
 import type {
   VoiceSessionEvent,
@@ -25,7 +26,6 @@ import { buildVoiceStartupContext } from "@/agentMode/voice/voiceStartupContext"
 import { VoiceTranscriptAssembler } from "@/agentMode/voice/voiceTranscript";
 import type { VoiceTaskState } from "@/agentMode/voice/voiceProtocol";
 import { AI_SENDER, USER_SENDER } from "@/constants";
-import type { MessageContext } from "@/types/message";
 
 /**
  * Quiet period after the newest user transcript fragment before a delegation is
@@ -86,7 +86,7 @@ export interface VoiceChatBinding {
    */
   getSelectedBackendIds(): readonly string[];
   /** Composer context (attached notes, selections) to attach to spoken work. */
-  resolveContext?: () => MessageContext | undefined;
+  resolveSubmission?: AgentVoiceSubmissionResolver;
   /** Short factual lines about what the user currently has open. */
   describeUiContext?: () => readonly string[];
 }
@@ -131,6 +131,7 @@ interface PendingDelegation {
   liveDelegationId: string;
   settleTimer: number | null;
   giveUpTimer: number;
+  resolvingAttachments: boolean;
 }
 
 /** Local work this call is responsible for reporting on. */
@@ -157,6 +158,7 @@ interface ActiveCall {
   /** Set once the user (or a lifecycle hook) asked to end this call. */
   endRequested: boolean;
   warningSecondsRemaining: number | null;
+  preparationTail: Promise<void>;
 }
 
 /**
@@ -386,6 +388,7 @@ export class VoiceConversationBridge {
       releases: [],
       endRequested: false,
       warningSecondsRemaining: null,
+      preparationTail: Promise.resolve(),
     };
     const { tasks } = binding.conversation;
     call.releases.push(
@@ -510,6 +513,7 @@ export class VoiceConversationBridge {
     const pending: PendingDelegation = {
       liveDelegationId,
       settleTimer: null,
+      resolvingAttachments: false,
       giveUpTimer: call.timers.setTimeout(
         () => this.deferForMissingSpeech(call, liveDelegationId),
         TRANSCRIPT_MAX_WAIT_MS
@@ -523,27 +527,56 @@ export class VoiceConversationBridge {
   private evaluate(call: ActiveCall, pending: PendingDelegation): void {
     // Delegation offsets mark when the model delegates, which can follow user silence.
     // Waiting for user speech to reach that timestamp would reject complete requests.
-    if (!call.transcript.hasUserSpeech()) return;
+    if (pending.resolvingAttachments || !call.transcript.hasUserSpeech()) return;
     if (pending.settleTimer !== null) call.timers.clearTimeout(pending.settleTimer);
     pending.settleTimer = call.timers.setTimeout(
-      () => this.acceptDelegation(call, pending.liveDelegationId),
+      () => void this.acceptDelegation(call, pending.liveDelegationId),
       TRANSCRIPT_SETTLE_MS
     );
   }
 
   /** Turn settled speech into one local task, or say why it did not become one. */
-  private acceptDelegation(call: ActiveCall, liveDelegationId: string): void {
+  private async acceptDelegation(call: ActiveCall, liveDelegationId: string): Promise<void> {
     const pending = call.pending.get(liveDelegationId);
-    if (!pending) return;
-    this.forget(call, pending);
+    if (!pending || pending.resolvingAttachments) return;
+    pending.resolvingAttachments = true;
+    if (pending.settleTimer !== null) call.timers.clearTimeout(pending.settleTimer);
+    call.timers.clearTimeout(pending.giveUpTimer);
     const claim = call.transcript.claimUserSpeech();
     if (!claim) {
       // Every fragment already belongs to a task. Typed requests and earlier
       // spoken requests are not re-run because the model asked again.
+      this.forget(call, pending);
       this.defer(call, liveDelegationId, "already-claimed");
       return;
     }
     const binding = call.binding;
+    let attachments;
+    try {
+      if (binding.resolveSubmission) {
+        // Snapshot immediately, but preserve spoken request order when one image
+        // decodes more slowly than the following request's attachments.
+        const preparation = binding.resolveSubmission(claim.text);
+        call.preparationTail = Promise.all([
+          call.preparationTail,
+          preparation.then(
+            () => undefined,
+            () => undefined
+          ),
+        ]).then(() => undefined);
+        await call.preparationTail;
+        attachments = await preparation;
+      }
+    } catch {
+      this.forget(call, pending);
+      if (this.call === call && !call.endRequested) this.defer(call, liveDelegationId, "declined");
+      return;
+    }
+    this.forget(call, pending);
+    // Image reads may finish after End voice or a chat switch. That old speech
+    // must not start work after its owning view has gone away.
+    // See designdocs/VOICE_CHAT_DEMO_DESIGN.md, "Mode and control behavior".
+    if (this.call !== call || call.endRequested) return;
     const submission: AgentTaskSubmission = {
       submissionId: this.deps.newSubmissionId(),
       conversationId: binding.conversation.getConversationId(),
@@ -553,7 +586,7 @@ export class VoiceConversationBridge {
       source: "voice",
       presentation: "voice-card",
       requestText: claim.text,
-      context: binding.resolveContext?.(),
+      ...attachments,
       voiceSessionId: call.controller.getSnapshot().voiceSessionId ?? undefined,
       delegationId: liveDelegationId,
     };
