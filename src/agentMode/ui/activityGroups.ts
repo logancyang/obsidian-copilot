@@ -122,13 +122,13 @@ function fileFamilyFor(part: ToolCallPart): FileActivityFamily | null {
   }
 }
 
-/** Lowercase sentence fragment for one file family's contribution to the line. */
+/** Compact count phrase for one file family's contribution to the line. */
 function filePhraseFor(family: FileActivityFamily, n: number): string {
   switch (family) {
     case "read":
-      return `read ${pluralize(n, "file")}`;
+      return `${pluralize(n, "file")} read`;
     case "edit":
-      return `edited ${pluralize(n, "file")}`;
+      return `${pluralize(n, "file")} edited`;
   }
 }
 
@@ -157,7 +157,7 @@ export interface ActivitySummaryOptions {
 }
 
 export interface ActivitySummary {
-  /** The collapsed row's line, e.g. `Ran 12 commands, read 2 files, thought for 51s`. */
+  /** The collapsed row's line, e.g. `12 commands · 2 files read · 51s thinking`. */
   line: string;
   /** Members that failed, surfaced by the card as a badge. */
   failed: number;
@@ -204,7 +204,7 @@ export function summarizeActivity(
     else for (const path of paths) count.paths.add(path);
   }
 
-  const parts = commands > 0 ? [`ran ${pluralize(commands, "command")}`] : [];
+  const parts = commands > 0 ? [pluralize(commands, "command")] : [];
   for (const family of fileOrder) {
     const count = fileCounts.get(family)!;
     parts.push(filePhraseFor(family, count.paths.size + count.withoutPath));
@@ -212,11 +212,13 @@ export function summarizeActivity(
 
   const thinkingMs = completedThinkingMs + (options.thinkingMs ?? 0);
   if (thoughts > 0) {
-    if (thinkingMs >= 1000) parts.push(`thought for ${formatDuration(thinkingMs)}`);
+    if (thinkingMs >= 1000) parts.push(`${formatDuration(thinkingMs)} thinking`);
     else if (parts.length === 0) parts.push("thought");
   }
 
-  const line = parts.join(", ");
+  // Keep meaningful totals compact so narrow traces can show every family.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/423
+  const line = parts.join(" · ");
   return {
     line: line.length > 0 ? line.charAt(0).toUpperCase() + line.slice(1) : "Worked",
     failed,

@@ -37,7 +37,7 @@ export interface ActivityGroupCardProps {
 
 /**
  * One collapsed run of the agent's tool calls and reasoning, summarized as a
- * single line the user can open. Groups are born collapsed and never close
+ * single summary the user can open. Groups are born collapsed and never close
  * themselves, so nothing the user is mid-read disappears; see
  * `designdocs/AGENT_TRAIL_GROUPING.md`.
  */
@@ -58,7 +58,7 @@ export const ActivityGroupCard: React.FC<ActivityGroupCardProps> = ({
   return (
     <AgentActivityCard
       icon={Icon}
-      label={summary.line}
+      label={<span className="tw-whitespace-normal">{summary.line}</span>}
       trailing={
         <>
           {summary.failed > 0 ? (

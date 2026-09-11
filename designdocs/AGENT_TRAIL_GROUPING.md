@@ -36,9 +36,8 @@ run of machine rows before the next piece of prose.
 ## What an activity group is
 
 A maximal run of consecutive **tool calls and reasoning blocks**, folded into
-one collapsed row summarizing the work: `Ran 12 commands, read 2 files, thought
-for 51s`. A run of one member keeps its own row — a single `Read` gets no group
-chrome.
+one collapsed row summarizing the work: `12 commands · 2 files read · 51s thinking`.
+A run of one member keeps its own row — a single `Read` gets no group chrome.
 
 ### What breaks a run
 
@@ -55,7 +54,7 @@ chrome.
 
 ### What folds in
 
-- **Reasoning**, as `thought for Xs` at the end of the line. This is the single
+- **Reasoning**, as `Xs thinking` at the end of the line. This is the single
   largest win — larger than folding tool calls — because a thought sits between
   nearly every pair of tool calls.
 - **Every tool family**, heterogeneously. Unlike the shipping compaction, a
@@ -68,14 +67,15 @@ the total command count, and file-specific tools add distinct file totals:
 
 - **read** — `Read` / `NotebookRead` by vendor name, or the ACP
   `toolKind: "read"` fallback, so a backend that sends no vendor names still
-  says `read 2 files`.
+  says `2 files read`.
 - **edit** — `Edit` / `MultiEdit` / `Write` / `NotebookEdit`, or
   `toolKind: "edit"`.
 - **command** — every tool call, including reads and edits. This total matches
   the number of tool rows in the expanded group.
 
-`Ran 8 commands, read 2 files, edited 1 file, thought for 51s` is the longest
-shape the line can take. An earlier revision named more families (searches,
+`8 commands · 2 files read · 1 file edited · 51s thinking` is the longest
+shape the summary can take. It wraps in narrow panels to retain every count.
+An earlier revision named more families (searches,
 fetches, skills), kept unregistered tools under their own name (`Design sync
 ×16`), and keyed MCP tools per server — which then needed a family cap with
 `+N more` and verb dedup to stay readable. It was dropped: every new tool was
@@ -97,15 +97,12 @@ outputs. Paths are de-duplicated across the group. A file-classified tool with
 no structured path counts as one file, preserving useful output for backends
 that provide only a tool kind.
 
-### Measured at pane width
+### Narrow panes
 
-Rendered in a real leaf pane, the longest line the vocabulary can produce —
-all three families plus `thought for Xs` — runs about 59 characters and needs
-~377px. A chat leaf gives the line 228px at 300px wide and 328px at 400px, so
-roughly 36–51 characters fit and the tail truncates; it only fits whole at
-600px. Truncation is graceful — families appear in first-use order and the
-full detail is one click away. Moving the reasoning duration off the line is
-unvalidated: it changes what the replay measured.
+Compact count phrases wrap instead of truncating the end of the summary, so
+command, file and reasoning totals remain visible before expansion. Expanded
+file links and diff paths use stronger text and wrapping to distinguish the
+affected notes from incidental tool output.
 
 ## Interaction invariants
 

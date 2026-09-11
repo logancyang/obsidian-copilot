@@ -1,3 +1,4 @@
+import { ActionCard } from "@/agentMode/ui/ActionCard";
 import { ActivityGroupCard } from "@/agentMode/ui/ActivityGroupCard";
 import type { ActivityGroupNode, ActivityMember } from "@/agentMode/ui/activityGroups";
 import { activityLiveStep } from "@/agentMode/ui/activityLiveStep";
@@ -33,21 +34,38 @@ function group(members: ActivityMember[]): ActivityGroupNode {
   return { type: "activityGroup", id: "activity-0", members };
 }
 
-/** Stands in for the trail's dispatch so stories stay free of plugin state. */
+/** Real tool rows keep file identity and nested disclosure visible in the gallery. */
+const StoryAction: React.FC<{ part: ToolCallPart }> = ({ part }) => {
+  const [open, setOpen] = useState(false);
+  return <ActionCard part={part} open={open} onToggle={() => setOpen((value) => !value)} />;
+};
+
 function renderMember(member: ActivityMember, key: string | number): React.ReactNode {
-  return (
-    <div key={key} className="tw-truncate tw-py-1 tw-text-sm tw-text-muted">
-      {member.type === "action" ? member.part.title : "Thought about the vault layout"}
+  return member.type === "action" ? (
+    <StoryAction key={key} part={member.part} />
+  ) : (
+    <div key={key} className="tw-py-1 tw-text-sm tw-text-muted">
+      Thought about the vault layout
     </div>
   );
 }
 
 const MIXED = group([
-  action("Read Projects/Copilot/Roadmap.md", { vendorToolName: "Read" }),
+  action("Read Projects/Copilot/Roadmap.md", {
+    vendorToolName: "Read",
+    input: { file_path: "Projects/Copilot/Roadmap.md" },
+    locations: [{ path: "Projects/Copilot/Roadmap.md" }],
+  }),
   THINKING,
   action("npm run lint", { vendorToolName: "Bash" }),
   action("npm run test -- activityGroups", { vendorToolName: "Bash" }),
-  action("Edit Projects/Copilot/Roadmap.md", { vendorToolName: "Edit" }),
+  action("Edit Projects/Copilot/Roadmap.md", {
+    vendorToolName: "Edit",
+    input: { file_path: "Projects/Copilot/Roadmap.md" },
+    output: [
+      { type: "diff", path: "Projects/Copilot/Roadmap.md", oldText: "before", newText: "after" },
+    ],
+  }),
 ]);
 
 const meta = {
@@ -96,10 +114,20 @@ export const InFlight: StoryObj<ActivityGroupCardProps> = {
 export const MultiFileEdit: StoryObj<ActivityGroupCardProps> = {
   args: {
     group: group([
+      action("Read skill definitions", {
+        toolKind: "read",
+        locations: [{ path: "Skills/Planning/Review checklist.md" }],
+      }),
       action("Calculate description lengths", { toolKind: "execute" }),
       action("Edit skill definitions", {
         toolKind: "edit",
-        output: ["a.md", "b.md", "c.md", "d.md", "e.md"].map((path) => ({
+        output: [
+          "Skills/Planning/Review checklist.md",
+          "Skills/Planning/Release checklist.md",
+          "Skills/Planning/Review checklist for desktop and mobile compatibility.md",
+          "Skills/Research/Source evaluation.md",
+          "Skills/Writing/Editorial standards.md",
+        ].map((path) => ({
           type: "diff" as const,
           path,
           oldText: "before",
