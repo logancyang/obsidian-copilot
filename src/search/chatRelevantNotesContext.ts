@@ -1,9 +1,12 @@
+import type { SkippedRelevantSource } from "@/search/findRelevantNotes";
 import type { RelatedContextRequest } from "@/miyo/MiyoClient";
 
 export interface ChatRelevantNotesContext {
   id: string;
   request: RelatedContextRequest;
   skippedAttachments: number;
+  skippedSources?: readonly SkippedRelevantSource[];
+  reviewContext?: () => void;
   addFile: (path: string) => void;
 }
 

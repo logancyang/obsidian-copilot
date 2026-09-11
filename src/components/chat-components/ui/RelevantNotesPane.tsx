@@ -1,9 +1,10 @@
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Button } from "@/components/ui/button";
 import type {
   RelevantNotesSearchStatus,
   RelevantNotesStatusDetails,
 } from "@/search/findRelevantNotes";
-import { Download, Loader2 } from "lucide-react";
+import { ChevronDown, Download, Loader2 } from "lucide-react";
 import React from "react";
 
 type RelevantNotesPaneStatus = RelevantNotesSearchStatus | "idle" | "loading";
@@ -17,6 +18,7 @@ export interface RelevantNotesPaneActions {
   miyoDownloadUrl: string;
   onOpenMiyoSettings: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onRefresh: () => void;
+  onReviewContext?: () => void;
   reviewIndexing: RelevantNotesIndexingReviewAction;
 }
 
@@ -117,8 +119,19 @@ export function RelevantNotesPane({
         <GuidancePanel
           id="request-too-large"
           title="Chat context is too large"
-          description="Miyo couldn't accept this request. Remove some attached context or try a shorter conversation."
-        />
+          description="Miyo couldn't accept this request. Review attached context or try a shorter conversation; sent messages also contribute."
+        >
+          {actions.onReviewContext && (
+            <Button
+              variant="secondary"
+              size="sm"
+              className="tw-h-auto tw-min-h-6 tw-max-w-full tw-whitespace-normal tw-text-left"
+              onClick={actions.onReviewContext}
+            >
+              Review chat context
+            </Button>
+          )}
+        </GuidancePanel>
       );
       break;
     case "request-error":
@@ -324,11 +337,50 @@ export function RelevantNotesPane({
 
   // Skipped sources remain visible even for an empty result.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/383
-  const notices = !!details?.skippedAttachments && (
-    <p role="status" className="tw-m-0 tw-p-2 tw-text-xs tw-text-muted">
-      Skipped attachments: {details.skippedAttachments}. They aren't available for this request.
-    </p>
+  const unnamedCount = Math.max(
+    0,
+    (details?.skippedAttachments ?? 0) - (details?.skippedSources?.length ?? 0)
   );
+  /* eslint-disable @eslint-react/no-array-index-key -- identical attachments can occur in multiple messages; these are read-only snapshot rows */
+  const notices = !!details?.skippedAttachments && (
+    <Collapsible className="tw-p-2 tw-text-xs">
+      <CollapsibleTrigger asChild>
+        <Button
+          variant="secondary"
+          size="sm"
+          className="tw-h-auto tw-min-h-6 tw-max-w-full tw-whitespace-normal tw-text-left"
+        >
+          Skipped attachments: {details.skippedAttachments}
+          <ChevronDown className="tw-size-3 tw-shrink-0" aria-hidden="true" />
+        </Button>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="tw-space-y-2 tw-pt-2 tw-text-muted">
+        <p role="status" className="tw-m-0">
+          These sources weren't used for this request.
+        </p>
+        <ul className="tw-m-0 tw-space-y-2 tw-pl-4">
+          {details.skippedSources?.map((source, index) => (
+            <li
+              key={`${source.label}:${index}`}
+              className="tw-select-text tw-break-words [overflow-wrap:anywhere]"
+            >
+              <div className="tw-font-medium tw-text-normal">
+                {source.label || "Name unavailable"}
+              </div>
+              <div>{source.reason || "Reason not provided"}</div>
+            </li>
+          ))}
+        </ul>
+        {unnamedCount > 0 && (
+          <p className="tw-m-0">
+            Names are unavailable for {unnamedCount} skipped{" "}
+            {unnamedCount === 1 ? "attachment" : "attachments"}.
+          </p>
+        )}
+      </CollapsibleContent>
+    </Collapsible>
+  );
+  /* eslint-enable @eslint-react/no-array-index-key -- resume checking outside the read-only skipped-source snapshot */
 
   return (
     <div className="tw-flex tw-h-full tw-flex-col tw-gap-0.5">

@@ -31,7 +31,7 @@ describe("findChatRelevantNotes", () => {
         fetchHealth: async () => ({ status: "ok" }),
       }));
     });
-    it("preserves order/scores, full-file exclusions and skipped count (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", async () => {
+    it("preserves result order and scores while retaining skipped file identity and reason (https://github.com/Brevilabs/obsidian-copilot-private/issues/420)", async () => {
       search.mockResolvedValue({
         status: "ok",
         results: [
@@ -54,6 +54,9 @@ describe("findChatRelevantNotes", () => {
       expect(result.notes.map((entry) => entry.note.path)).toEqual(["b.md"]);
       expect(result.notes[0].metadata.score).toBe(0.6);
       expect(result.details?.skippedAttachments).toBe(2);
+      expect(result.details?.skippedSources).toEqual([
+        { label: "missing.pdf", reason: "Not indexed in Miyo" },
+      ]);
     });
     it("keeps unsupported-only context unavailable without a request (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", async () => {
       const result = await findChatRelevantNotes(app, {

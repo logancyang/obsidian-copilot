@@ -354,6 +354,7 @@ export const RelevantNotes = memo(
                 onOpenMiyoSettings: (event) =>
                   openCopilotSettings(app, event.currentTarget.win, "miyo"),
                 onRefresh: refresh,
+                onReviewContext: chat.context?.reviewContext,
                 reviewIndexing: {
                   destination: canOpenMiyoApp ? "miyo" : "settings",
                   onSelect: (event) => {

@@ -63,6 +63,54 @@ describe("useChatRelevantNotesContext", () => {
       jest.restoreAllMocks();
     });
 
+    it("retains draft image names without pixels and reveals the owning leaf before focusing context controls (https://github.com/Brevilabs/obsidian-copilot-private/issues/420)", async () => {
+      const composer = document.createElement("div");
+      composer.setAttribute("data-chat-context-controls", "");
+      composer.tabIndex = -1;
+      composer.scrollIntoView = jest.fn();
+      root.appendChild(composer);
+      const leaf = { view: { containerEl: root } };
+      let revealed!: () => void;
+      const revealLeaf = jest.fn(
+        () =>
+          new Promise<void>((resolve) => {
+            revealed = resolve;
+          })
+      );
+      Object.assign(app.workspace, {
+        iterateAllLeaves: (visitor: (value: typeof leaf) => void) => visitor(leaf),
+        revealLeaf,
+      });
+      jest.spyOn(window, "focus").mockImplementation(() => undefined);
+      renderHook(() =>
+        useChatRelevantNotesContext(
+          app,
+          root,
+          "one",
+          { ...draft, images: [new File(["private pixels"], "diagram.png")] },
+          [],
+          undefined
+        )
+      );
+      void act(() => root.dispatchEvent(new Event("pointerdown")));
+      const snapshot = getChatRelevantNotesStore(app).getSnapshot()!;
+      expect(snapshot.skippedSources).toEqual([
+        {
+          label: "diagram.png",
+          reason: "Image attachments are not included in relevance requests",
+        },
+      ]);
+      expect(JSON.stringify(snapshot.request)).not.toContain("diagram.png");
+      expect(JSON.stringify(snapshot)).not.toContain("private pixels");
+      snapshot.reviewContext!();
+      expect(revealLeaf).toHaveBeenCalledWith(leaf);
+      expect(document.activeElement).not.toBe(composer);
+      await act(async () => {
+        revealed();
+      });
+      expect(document.activeElement).toBe(composer);
+    });
+
     it.each(["pointerdown", "focusin"])(
       "selects the chat draft as the Relevant Notes source when its surface receives %s (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)",
       (event) => {
@@ -355,6 +403,9 @@ describe("useChatRelevantNotesContext", () => {
       expect(snapshot.request.excerpts).toContain("queued excerpt");
       expect(snapshot.request.file_paths).toContain("Vault/queued.md");
       expect(snapshot.skippedAttachments).toBe(2);
+      expect(snapshot.skippedSources).toEqual([
+        { label: "https://example.com", reason: "Web URLs are not included in relevance requests" },
+      ]);
       expect(JSON.stringify(snapshot.request)).not.toContain("private");
     });
     it("keeps sent images in the skipped count after composer reset without sending pixels (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", () => {

@@ -1,12 +1,17 @@
 import { MiyoClient, MiyoRequestError } from "@/miyo/MiyoClient";
 import { getMiyoCustomUrl, getVaultRelativeMiyoPath } from "@/miyo/miyoUtils";
 import type { ChatRelevantNotesContext } from "@/search/chatRelevantNotesContext";
-import type { RelevantNotesResult } from "@/search/findRelevantNotes";
+import type { RelevantNotesResult, RelevantNotesStatusDetails } from "@/search/findRelevantNotes";
 import { getSettings } from "@/settings/model";
 import { withTimeout } from "@/utils";
 import { App, TFile } from "obsidian";
 
 const EMPTY_NOTES = Object.freeze([]);
+const SKIPPED_REASONS = {
+  not_indexed: "Not indexed in Miyo",
+  unsupported: "Not supported by Miyo",
+  outside_scope: "Outside this request's scope",
+};
 /** Retrieve relevant notes from Miyo for one chat snapshot.
  * @param app - Vault used to resolve result paths.
  * @param context - Isolated composition and visible conversation snapshot.
@@ -16,7 +21,8 @@ export async function findChatRelevantNotes(
   context: ChatRelevantNotesContext
 ): Promise<RelevantNotesResult> {
   const { request } = context;
-  const details = { skippedAttachments: context.skippedAttachments };
+  const details: RelevantNotesStatusDetails = { skippedAttachments: context.skippedAttachments };
+  if (context.skippedSources?.length) details.skippedSources = context.skippedSources;
   if (
     !request.draft?.trim() &&
     !request.messages?.some((message) => message.content.trim()) &&
@@ -39,7 +45,19 @@ export async function findChatRelevantNotes(
       8000,
       "Miyo chat related search"
     );
-    details.skippedAttachments += response.skipped_files.length;
+    details.skippedAttachments = context.skippedAttachments + response.skipped_files.length;
+    // Miyo already reports file identities and reasons; keep them inspectable without
+    // changing its retrieval request or ordered results.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/420
+    if (response.skipped_files.length) {
+      details.skippedSources = [
+        ...(context.skippedSources ?? []),
+        ...response.skipped_files.map(({ path, reason }) => ({
+          label: getVaultRelativeMiyoPath(app, path),
+          reason: SKIPPED_REASONS[reason] ?? reason,
+        })),
+      ];
+    }
     const notes = response.results.flatMap(({ path, score }) => {
       const relativePath = getVaultRelativeMiyoPath(app, path);
       const file = app.vault.getAbstractFileByPath(relativePath);

@@ -754,6 +754,28 @@ describe("findRelevantNotes", () => {
       ).toBe(true);
     });
 
+    it("updates changed skipped identities even when the count and results are unchanged (https://github.com/Brevilabs/obsidian-copilot-private/issues/420)", () => {
+      expect(
+        isSameRelevantNotesResult(
+          {
+            notes: [],
+            status: "matches",
+            details: {
+              skippedAttachments: 1,
+              skippedSources: [{ label: "old.pdf", reason: "Not indexed" }],
+            },
+          },
+          {
+            notes: [],
+            status: "matches",
+            details: {
+              skippedAttachments: 1,
+              skippedSources: [{ label: "new.pdf", reason: "Not indexed" }],
+            },
+          }
+        )
+      ).toBe(false);
+    });
     it("updates the skipped-attachment notice without changing rows (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", () => {
       const before = { skippedAttachments: 1 };
       const after = { skippedAttachments: 2 };
