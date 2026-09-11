@@ -164,6 +164,7 @@ describe("OpencodeInstallModal", () => {
       });
       const { manager } = makeManager();
       renderContainer(manager);
+      fireEvent.click(screen.getByRole("button", { name: "Installation details" }));
 
       const input = screen.getByPlaceholderText<HTMLInputElement>("/absolute/path/to/opencode");
       expect(input.value).toBe(EXISTING_BINARY_PATH);
@@ -177,6 +178,7 @@ describe("OpencodeInstallModal", () => {
       });
       const { manager, setCustomBinaryPath } = makeManager();
       renderContainer(manager);
+      fireEvent.click(screen.getByRole("button", { name: "Installation details" }));
 
       fireEvent.click(screen.getByRole("radio", { name: "Managed by Copilot" }));
       expect(screen.getByRole("button", { name: "Download & install" })).toBeTruthy();
@@ -422,6 +424,7 @@ describe("OpencodeInstallModal", () => {
       });
       const { manager, setCustomBinaryPath } = makeManager();
       renderContainer(manager);
+      fireEvent.click(screen.getByRole("button", { name: "Installation details" }));
 
       await act(async () => {
         fireEvent.click(screen.getByRole("button", { name: "Clear" }));
@@ -440,6 +443,7 @@ describe("OpencodeInstallModal", () => {
       const { manager, setCustomBinaryPath } = makeManager();
       setCustomBinaryPath.mockRejectedValue(new OperationInFlightError());
       renderContainer(manager);
+      fireEvent.click(screen.getByRole("button", { name: "Installation details" }));
 
       await act(async () => {
         fireEvent.click(screen.getByRole("button", { name: "Clear" }));
@@ -473,6 +477,7 @@ describe("OpencodeInstallModal", () => {
       });
       const { manager, uninstall } = makeManager();
       renderContainer(manager);
+      fireEvent.click(screen.getByRole("button", { name: "Installation details" }));
 
       await act(async () => {
         fireEvent.click(screen.getByRole("button", { name: "Uninstall" }));

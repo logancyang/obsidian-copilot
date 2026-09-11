@@ -127,6 +127,7 @@ describe("CodexInstallModal", () => {
       setCodexSettings({ binaryPath: "/my/codex-acp", binarySource: "custom" });
       const fixture = makeManager();
       await fixture.render();
+      fireEvent.click(screen.getByRole("button", { name: "Installation details" }));
       fireEvent.click(screen.getByRole("radio", { name: "Managed by Copilot" }));
       await waitFor(() => expect(screen.getByRole("button", { name: "Uninstall" })).toBeTruthy());
       await act(async () => fireEvent.click(screen.getByRole("button", { name: "Uninstall" })));
@@ -170,6 +171,7 @@ describe("CodexInstallModal", () => {
       setCodexSettings({ binaryPath: "/my/codex-acp" });
       const fixture = makeManager();
       await fixture.render();
+      fireEvent.click(screen.getByRole("button", { name: "Installation details" }));
       expect(screen.getByRole<HTMLInputElement>("textbox").value).toBe("/my/codex-acp");
       fireEvent.click(screen.getByRole("radio", { name: "Managed by Copilot" }));
       expect(screen.queryByRole("textbox")).toBeNull();
@@ -193,6 +195,7 @@ describe("CodexInstallModal", () => {
       setCodexSettings({ binaryPath: "/my/codex-acp", binarySource: "custom" });
       const fixture = makeManager();
       await fixture.render();
+      fireEvent.click(screen.getByRole("button", { name: "Installation details" }));
       fireEvent.change(screen.getByRole("textbox"), { target: { value: "/new/codex-acp" } });
       await act(async () => fireEvent.click(screen.getByRole("button", { name: "Apply" })));
       expect(fixture.manager.setCustomBinaryPath).toHaveBeenCalledWith("/new/codex-acp");
@@ -206,6 +209,7 @@ describe("CodexInstallModal", () => {
       const fixture = makeManager();
       fixture.manager.setCustomBinaryPath.mockRejectedValue(new Error("invalid adapter"));
       await fixture.render();
+      fireEvent.click(screen.getByRole("button", { name: "Installation details" }));
       fireEvent.change(screen.getByRole("textbox"), { target: { value: "/bad/codex-acp" } });
       await act(async () => fireEvent.click(screen.getByRole("button", { name: "Apply" })));
       expect(screen.getByText("invalid adapter")).toBeTruthy();
@@ -306,6 +310,7 @@ describe("CodexInstallModal", () => {
       setCodexSettings({ binaryPath: "/managed/codex-acp", binarySource: "managed" });
       const fixture = makeManager();
       await fixture.render();
+      fireEvent.click(screen.getByRole("button", { name: "Installation details" }));
       await act(async () => fireEvent.click(screen.getByRole("button", { name: "Uninstall" })));
       expect(mockConfirm).toHaveBeenCalledWith(expect.stringContaining("2.0 KB"));
       expect(fixture.manager.uninstall).not.toHaveBeenCalled();
@@ -318,6 +323,7 @@ describe("CodexInstallModal", () => {
       const fixture = makeManager();
       fixture.manager.uninstall.mockRejectedValue(new Error("permission denied"));
       await fixture.render();
+      fireEvent.click(screen.getByRole("button", { name: "Installation details" }));
       await act(async () => fireEvent.click(screen.getByRole("button", { name: "Uninstall" })));
       await act(async () => mockOnConfirm());
       expect(Notice).toHaveBeenCalledWith(
@@ -330,6 +336,7 @@ describe("CodexInstallModal", () => {
       const fixture = makeManager();
       fixture.manager.downloadsSize.mockRejectedValue(new Error("unreadable directory"));
       await fixture.render();
+      fireEvent.click(screen.getByRole("button", { name: "Installation details" }));
       await act(async () => fireEvent.click(screen.getByRole("button", { name: "Uninstall" })));
       expect(mockConfirm).not.toHaveBeenCalled();
       expect(Notice).toHaveBeenCalledWith("Couldn't inspect Codex downloads: unreadable directory");
