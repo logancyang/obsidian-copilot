@@ -189,7 +189,14 @@ Image-only messages appear as "Image attachment" in the queue. Sessions with onl
 
 ## Voice chat demo
 
-On desktop, testers with the voice demo enabled and configured can choose **Start voice** above the Agent Chat composer. Select one agent first. The same conversation stays open, and you can continue typing, attaching images and adding note references while voice is connected.
+Voice is a private desktop demo. You need a working local agent, microphone access, and a voice service URL and demo credential from the demo operator.
+
+1. Open **Settings → Copilot → Basic → Agents** and turn on **Voice (demo)**.
+2. Enter the supplied HTTPS base address in **Voice server URL** and paste your tester token into **Demo credential**. This is a demo access token, not your OpenAI API key. Copilot stores it in the operating system keychain, so enter it separately on each device.
+3. Reload Copilot by turning it off and on under **Community plugins**, or restart Obsidian. The voice controls are registered when the plugin loads.
+4. Open Agent Chat, select one agent, and confirm it can answer a typed request. Choose **Start voice** above the composer and allow Obsidian to use the microphone.
+
+The same conversation stays open, and you can continue typing, attaching images and adding note references while voice is connected.
 
 The voice bar shows assistant audio activity, microphone state and call time. **Mute microphone** stops sending your speech while playback and agent work continue. Muting does not end the call. **End voice** stops the microphone and playback; accepted agent tasks continue and their answers remain in the conversation.
 
@@ -198,3 +205,7 @@ Spoken captions appear in the conversation. Work submitted while voice is active
 Follow-ups queue behind the current task and do not change work already running. Use the existing **Stop** control to cancel local work and clear its queue. Permission requests, questions and plan decisions still require the on-screen controls; speaking an approval does not approve an operation.
 
 Switching chat, project or agent, or closing the chat view, ends voice. Starting it again creates a new call in the same conversation. Voice is a desktop demo; it does not support multi-agent fan-out.
+
+Calls end after ten minutes, with a warning one minute before the limit. A connection failure ends voice and shows an error; choose **Start voice** to make a new call. Accepted agent work continues locally. If startup fails, check the URL, credential and microphone permission. A credential must be stored successfully in the keychain before voice can start.
+
+Recent conversation context, spoken captions and delegated task results are sent to the voice service and OpenAI to support the conversation. Audio travels directly between Obsidian and OpenAI. Local agents keep their existing vault access and permission controls. The demo does not save raw audio in the chat history.

@@ -4,7 +4,7 @@
 
 A user can open an existing Copilot Agent Mode conversation, turn on voice above the composer, talk and type while the selected agent works, then turn voice off and continue typing in the same conversation. GPT-Live handles the spoken conversation. Claude, Codex, or OpenCode continues to do the actual vault work through Copilot's existing local agent integration.
 
-This is an implementation-ready design for a desktop end-to-end demo, researched on September 10, 2026 against checkout `20837e19`. It records the requested experience and resolves implementation choices needed to build it. The implementation now includes shared task ownership, mixed conversation storage, the Railway service and WebRTC transport, and the desktop composer controls. Native synthesized speech has delegated work to Codex in this workspace; the full backend and UI verification matrix remains pending.
+This is an implementation-ready design for a desktop end-to-end demo, researched on September 10, 2026 against checkout `20837e19`. It records the requested experience and resolves implementation choices needed to build it. The implementation now includes shared task ownership, mixed conversation storage, the Railway service and WebRTC transport, and the desktop composer controls. Native synthesized speech has completed delegated work through Codex and OpenCode. Claude delegation reached the real backend and surfaced its account-quota error. The full backend and UI verification matrix remains pending.
 
 The main recommendation is a small Node service on Railway, direct WebRTC audio between Copilot and OpenAI, and a server-side control connection to GPT-Live. We host the voice service, credentials, and coordination; OpenAI hosts the `gpt-live-1` model. Local coding agents and vault access stay on the user's computer.
 
@@ -17,7 +17,10 @@ The main recommendation is a small Node service on Railway, direct WebRTC audio 
 - [x] Implement shared task submission and mixed conversation storage.
 - [x] Implement the Railway voice service and Copilot transport.
 - [x] Implement waveform, task cards, mixed transcript, and mode transitions. Native Codex verification covers synthesized speech, typed requests, queued work after End voice, save/reload, disconnect/restart, microphone denial, and popout teardown.
-- [ ] Verify native end-to-end behavior with Claude, Codex, and OpenCode; record measured costs and latency.
+- [x] Complete native spoken delegation with Codex and OpenCode; record measured costs and latency.
+- [x] Verify Claude spoken delegation and visible/spoken failure handling against its real account-quota error.
+- [x] Verify spoken-to-typed context continuity and Stop with queued work on OpenCode Flash; capture and visually review a local captioned demo.
+- [ ] Complete the full native acceptance sequence for every backend; successful Claude execution is blocked by account quota.
 
 This section tracks implementation of the feature. The workspace `TODO.md` tracks the current implementation and verification task.
 
@@ -256,7 +259,7 @@ Add a default-off demo setting under `agentMode.voice` in `src/settings/model.ts
 
 ### Application protocol
 
-Keep one dependency-free protocol definition at `shared/voiceProtocol.ts`, with runtime validation used by both the plugin transport and the server. Include it in both builds and explicitly allow the new shared path in boundary/tooling configuration. Do not create an additional publishable package or generated client framework for the demo.
+The dependency-free protocol definition lives at `shared/voiceProtocol.ts` in the separate `zeroliu/copilot-voice` repository. The corresponding copy at `src/agentMode/voice/voiceProtocol.ts` ships in the plugin. Change the server copy first and copy it into the plugin; both sides use its runtime validation. The current copies differ only in the plugin's provenance comment and formatting. No separate published protocol package or generated client is required.
 
 Every application event includes `protocolVersion: 1`, `eventId`, `conversationId`, and our `voiceSessionId`. Server events carry a monotonically increasing sequence number within that session. Acks refer to event IDs. Live's session ID and delegation ID are separate opaque identifiers; never reconstruct them from application IDs.
 
@@ -316,7 +319,7 @@ Record cumulative usage as a maximum/latest value, not a sum of repeated usage e
 
 ### Authentication and deployment contract
 
-Create `services/voice-server/` with its own `package.json`, lockfile, `tsconfig.json`, `Dockerfile`, source, tests, and deployment README. Build from repository root so it can import `shared/voiceProtocol.ts`; bundle the server separately from the Obsidian plugin. Proposed scripts are `build`, `test`, `typecheck`, and `start`, with the latter running `node dist/index.js`.
+The server is maintained in the separate [zeroliu/copilot-voice repository](https://github.com/zeroliu/copilot-voice), locally checked out at `/Users/zeroliu/Developer/copilot-voice` for this demo. It owns its dependencies, Dockerfile, protocol source and deployment scripts. Its `build`, `test`, `typecheck` and `start` scripts run from that checkout; `start` runs `node dist/src/index.js`. Operator setup, credential provisioning and deployment evidence are in that repository's `docs/DEPLOY.md`. There is no `services/voice-server/` directory in this plugin checkout.
 
 Configure `OPENAI_API_KEY`, hashed allowlisted demo credentials, `PORT`, `MAX_SESSION_SECONDS=600`, `MAX_CONCURRENT_SESSIONS=3`, and log level as Railway environment settings/secrets. Bind the server to `0.0.0.0:$PORT`. `GET /healthz` returns HTTP 200 and `{"status":"ok"}` without exposing keys or creating a Live session. Readiness fails when required configuration is absent. On SIGTERM stop accepting creation, notify clients, and attempt graceful upstream closure within the platform shutdown window.
 
@@ -346,16 +349,19 @@ Add `VoiceModeBar.tsx` and its adjacent stories, integrate the composer action, 
 
 ### Milestone 5: deploy and demonstrate
 
-Deploy the service to Railway with tester credentials, run the native acceptance sequence below, measure end-to-end latency and actual usage, and record the loaded plugin build and server revision. Add setup/usage documentation and update this document's Progress and Outcomes. Create implementation issues before landing new behavioral branches and cite their full URLs in code/tests as required by this repository. This documentation task does not itself create issues or deploy infrastructure.
+Deploy the service to Railway with tester credentials, run the native acceptance sequence below, measure end-to-end latency and actual usage, and record the loaded plugin build and server revision. Add setup/usage documentation and update this document's Progress and Outcomes. The user waived issue creation for this branch, as recorded in `TODO.md`. See [tester setup](../docs/agent-mode-and-tools.md#voice-chat-demo) and the [verification record](VOICE_CHAT_DEMO_VERIFICATION.md) for the implemented setup and measured acceptance coverage.
 
-From the repository root, implementation validation will use the following commands after dependencies and proposed server scripts exist:
+From the separate server checkout, using Node 24:
 
     npm ci
-    npm --prefix services/voice-server ci
-    npm --prefix services/voice-server run typecheck
-    npm --prefix services/voice-server test
-    npm --prefix services/voice-server run build
-    npm test -- --runInBand --testPathPattern='AgentTaskCoordinator|VoiceSessionController|AgentMessageStore|AgentChatPersistenceManager|AgentChatInput|AgentChatMessages|AgentSessionManager'
+    npm run typecheck
+    npm test
+    npm run build
+
+From this plugin repository root:
+
+    npm ci
+    npm test -- --runInBand --testPathPattern='AgentVoice|VoiceModeBar|VoiceSessionController|VoiceConversationBridge|windowVoiceHost|voiceTranscript|AgentTaskCoordinator|AgentMessageStore|AgentChatPersistenceManager|AgentChatUIState|AgentChatInput|AgentChatMessages|AgentSessionManager|useAgentChatRuntimeState|commands/index.test'
     npm run build
     npm run gallery:vault
     npm run test:vault
@@ -425,7 +431,9 @@ September 10, 2026: Bound the private demo to desktop, one voice conversation pe
 
 The desktop product controls and shared task flow are implemented. Native Codex testing on September 11, 2026 connected in 1.8 seconds and accepted two spoken delegations in 505 ms and 501 ms. A 96-second call reported provider-confirmed usage with an estimated cost of $0.08. Four task answers survived ending voice and reloading the plugin. The tests also exposed and corrected stale ownership after disconnect and missing closing-state feedback.
 
-The focused suite passes 428 tests. Native testing uses synthesized microphone input through the real WebRTC connection and actual local backend. It does not establish human speech quality or replace the remaining Claude/OpenCode and full acceptance matrix.
+OpenCode also completed one spoken read-only request using the user-selected `copilot-plus/copilot-plus-flash` model. Delegation acceptance took 505 ms and local task completion took 4,684 ms. Voice spoke the correct result, End voice stopped capture, and the completed card remained visible. Provider-confirmed usage was 62 seconds, estimated at $0.0517. A subsequent native check confirmed a typed follow-up recalled a nickname introduced only through speech. Stop also cancelled an active task and removed its queued follow-up without starting it. A reviewed 36-second captioned recording is available locally; it has no audio track and has not been published.
+
+The [verification record](VOICE_CHAT_DEMO_VERIFICATION.md) separates native acceptance, component rendering, unit coverage and the prior server soak. The focused suite passes 428 tests. Native testing uses synthesized microphone input through the real WebRTC connection and actual local backend. Claude voice delegation also reached the real backend and surfaced its account-quota failure in one task card, with spoken acknowledgment of failure. This does not establish successful Claude execution, human speech quality, or completion of the remaining backend and full acceptance matrix.
 
 ## Artifacts and notes
 
