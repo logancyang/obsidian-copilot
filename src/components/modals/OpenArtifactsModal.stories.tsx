@@ -23,10 +23,10 @@ const meta = {
 } satisfies Meta<OpenArtifactsModalContentProps>;
 export default meta;
 
-/** Confirmation shown when a note has no existing public identity. */
+/** Publish page names the action; the public-link audience stays visible before confirmation. */
 export const Publish: StoryObj<OpenArtifactsModalContentProps> = {};
 
-/** Management state for a note that already has an OpenArtifacts page. */
+/** Update and unpublish name the public page; withdrawal opens a separate destructive confirmation. */
 export const Manage: StoryObj<OpenArtifactsModalContentProps> = {
   args: { docId: "9f2k4mvq7t0xbz3n" },
 };

@@ -105,20 +105,20 @@ describe("OpenArtifactsModal", () => {
         const modal = renderModal(onConfirm);
         const baseClose = (modal as unknown as { baseClose: jest.Mock }).baseClose;
 
-        expect(screen.getByText("Publish “Architecture”?")).toBeTruthy();
+        expect(screen.getByText("Publish page “Architecture”?")).toBeTruthy();
         expect(screen.getByText(/anyone with the public link/i)).toBeTruthy();
         expect(screen.queryByText(/theme/i)).toBeNull();
         expect(screen.queryByText(/preview/i)).toBeNull();
 
         expect(modal.modalEl.classList.contains("copilot-openartifacts-modal")).toBe(true);
-        expectButtonsInSameRow("No, cancel", "Yes, publish");
+        expectButtonsInSameRow("Cancel", "Publish page");
 
-        fireEvent.click(screen.getByRole("button", { name: "No, cancel" }));
+        fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
         expect(baseClose).toHaveBeenCalledTimes(1);
         expect(onConfirm).not.toHaveBeenCalled();
 
         const publishModal = renderModal(onConfirm);
-        await clickButton("Yes, publish");
+        await clickButton("Publish page");
         expect(onConfirm).toHaveBeenCalledWith("publish", activeDocument);
         expect(publishModal.contentEl.childElementCount).toBeGreaterThan(0);
       });
@@ -135,7 +135,7 @@ describe("OpenArtifactsModal", () => {
         const modal = renderModal(onConfirm, null, onClosed);
         const baseClose = (modal as unknown as { baseClose: jest.Mock }).baseClose;
 
-        fireEvent.click(screen.getByRole("button", { name: "Yes, publish" }));
+        fireEvent.click(screen.getByRole("button", { name: "Publish page" }));
         expect(screen.getByRole("button", { name: "Publishing…" })).toBeTruthy();
 
         act(() => {
@@ -157,7 +157,7 @@ describe("OpenArtifactsModal", () => {
         expect(baseClose).toHaveBeenCalledTimes(1);
       });
 
-      it("replaces the manage actions with delete confirmation before deleting", async () => {
+      it("confirms removal of the public page before sending the delete action", async () => {
         const onConfirm = createConfirmMock().mockResolvedValue({
           kind: "success",
           action: "delete",
@@ -165,19 +165,20 @@ describe("OpenArtifactsModal", () => {
         renderModal(onConfirm, DOC_ID);
 
         expect(screen.getByText("Manage “Architecture”")).toBeTruthy();
-        expectButtonsInSameRow("Cancel", "Update", "Delete");
+        expectButtonsInSameRow("Cancel", "Update public page", "Unpublish page");
 
-        fireEvent.click(screen.getByRole("button", { name: "Delete" }));
-        expect(screen.getByText("Delete “Architecture”?")).toBeTruthy();
+        fireEvent.click(screen.getByRole("button", { name: "Unpublish page" }));
+        expect(screen.getByText("Unpublish page “Architecture”?")).toBeTruthy();
         expect(
           screen.getByText(/previously fetched or cached copies cannot be recalled/i)
         ).toBeTruthy();
-        expectButtonsInSameRow("No, cancel", "Yes, delete");
-        expect(screen.queryByRole("button", { name: "Update" })).toBeNull();
-        expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
+        expectButtonsInSameRow("Cancel", "Unpublish page");
+        expect(screen.queryByRole("button", { name: "Update public page" })).toBeNull();
+        expect(screen.getAllByRole("button", { name: "Unpublish page" })).toHaveLength(1);
+        expect(screen.getByText(/Your local note is kept/)).toBeTruthy();
         expect(onConfirm).not.toHaveBeenCalled();
 
-        await clickButton("Yes, delete");
+        await clickButton("Unpublish page");
         expect(onConfirm).toHaveBeenCalledWith("delete", activeDocument);
         expect(await screen.findByText("Removed from OpenArtifacts")).toBeTruthy();
       });
@@ -192,7 +193,7 @@ describe("OpenArtifactsModal", () => {
         });
         renderModal(onConfirm);
 
-        await clickButton("Yes, publish");
+        await clickButton("Publish page");
 
         expect(await screen.findByText("OpenArtifacts access required")).toBeTruthy();
         expect(
@@ -217,7 +218,7 @@ describe("OpenArtifactsModal", () => {
           });
         renderModal(onConfirm);
 
-        await clickButton("Yes, publish");
+        await clickButton("Publish page");
         expect(await screen.findByText("Publish failed")).toBeTruthy();
 
         await clickButton("Retry");
@@ -241,7 +242,7 @@ describe("OpenArtifactsModal", () => {
         });
         renderModal(onConfirm);
 
-        await clickButton("Yes, publish");
+        await clickButton("Publish page");
         expect(await screen.findByText("Published, but not saved to the note")).toBeTruthy();
         expect(screen.getByText(RECEIPT.url)).toBeTruthy();
         expectButtonsInSameRow("Close", "Retry save", "Copy", "Open");
@@ -286,13 +287,13 @@ describe("OpenArtifactsModal", () => {
         });
         renderModal(onConfirm, DOC_ID);
 
-        fireEvent.click(screen.getByRole("button", { name: "Update" }));
-        expect(screen.getByText("Update “Architecture”?")).toBeTruthy();
-        expectButtonsInSameRow("No, cancel", "Yes, update");
-        expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
+        fireEvent.click(screen.getByRole("button", { name: "Update public page" }));
+        expect(screen.getByText("Update public page “Architecture”?")).toBeTruthy();
+        expectButtonsInSameRow("Cancel", "Update public page");
+        expect(screen.queryByRole("button", { name: "Unpublish page" })).toBeNull();
         expect(onConfirm).not.toHaveBeenCalled();
 
-        await clickButton("Yes, update");
+        await clickButton("Update public page");
 
         expect(await screen.findByText("Page updated; note identity not verified")).toBeTruthy();
         expect(
@@ -316,8 +317,8 @@ describe("OpenArtifactsModal", () => {
         });
         renderModal(onConfirm, DOC_ID);
 
-        fireEvent.click(screen.getByRole("button", { name: "Update" }));
-        await clickButton("Yes, update");
+        fireEvent.click(screen.getByRole("button", { name: "Update public page" }));
+        await clickButton("Update public page");
         expectButtonsInSameRow("Close", "Copy", "Open");
         const link = screen.getByRole("link", { name: RECEIPT.url });
         expect(link.getAttribute("href")).toBe(RECEIPT.url);
