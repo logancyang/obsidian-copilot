@@ -1,21 +1,28 @@
-import { logError, logWarn } from "@/logger";
+import { logWarn } from "@/logger";
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
+import type {
+  AgentQueuedTask,
+  AgentQueueHoldReason,
+  AgentTaskAcceptance,
+} from "@/agentMode/session/AgentTaskCoordinator";
+import type {
+  AgentTaskRecord,
+  AgentTaskResult,
+  AgentTaskSubmission,
+} from "@/agentMode/session/voiceTypes";
 import type {
   AgentChatMessage,
   AgentQuestionAnswers,
   AgentTodoListEntry,
   AskUserQuestionPrompt,
-  BackendId,
   BackendState,
   CurrentPlan,
   PermissionPrompt,
   PlanDecisionAction,
-  PromptContent,
   PlanUsage,
   SessionUsage,
 } from "@/agentMode/session/types";
-import type { MessageContext } from "@/types/message";
 
 /**
  * `AgentChatBackend` implementation backed by an `AgentSession`. The Agent
@@ -39,6 +46,9 @@ export class AgentChatUIState implements AgentChatBackend {
       onCurrentPlanChanged: () => this.notifyListeners(),
       onCurrentTodoListChanged: () => this.notifyListeners(),
     });
+    // Queue and active-task changes are part of the same runtime snapshot the
+    // UI reads, so they ride the one listener set.
+    this.session.tasks.subscribe(() => this.notifyListeners());
   }
 
   subscribe(listener: () => void): () => void {
@@ -56,35 +66,34 @@ export class AgentChatUIState implements AgentChatBackend {
     }
   }
 
-  /**
-   * Append a user message and kick off the ACP turn. Returns the new user
-   * message id synchronously plus a `turn` promise the caller can await for
-   * loading-state lifecycle (Stop button, input lock).
-   */
-  sendMessage(
-    text: string,
-    context?: MessageContext,
-    promptContent?: PromptContent[],
-    mentionedAgents?: ReadonlyArray<BackendId>
-  ): { id: string; turn: Promise<void> } {
-    const { userMessageId, turn } = this.session.sendPrompt(
-      text,
-      context,
-      promptContent,
-      mentionedAgents
-    );
+  submitTask(submission: AgentTaskSubmission): AgentTaskAcceptance {
+    const acceptance = this.session.tasks.submit(submission);
     this.notifyListeners();
-    const wrapped = turn.then(
-      () => undefined,
-      (err) => {
-        logError("[AgentMode] turn failed", err);
-      }
-    );
-    return { id: userMessageId, turn: wrapped };
+    return acceptance;
   }
 
-  async cancel(): Promise<void> {
-    await this.session.cancel();
+  setQueueHold(reason: AgentQueueHoldReason | null): void {
+    this.session.tasks.setDispatchHold(reason);
+  }
+
+  getQueuedTasks(): readonly AgentQueuedTask[] {
+    return this.session.tasks.getQueuedTasks();
+  }
+
+  removeQueuedTask(taskId: string): boolean {
+    return this.session.tasks.removeQueuedTask(taskId);
+  }
+
+  getActiveTask(): AgentTaskRecord | null {
+    return this.session.tasks.getActiveTask();
+  }
+
+  onTaskSettled(listener: (result: AgentTaskResult) => void): () => void {
+    return this.session.tasks.onTaskSettled(listener);
+  }
+
+  async cancelActiveAndClearQueue(): Promise<void> {
+    await this.session.tasks.cancelActiveAndClearQueue();
   }
 
   async deleteMessage(id: string): Promise<boolean> {

@@ -1,4 +1,6 @@
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
+import type { AgentQueuedTask } from "@/agentMode/session/AgentTaskCoordinator";
+import type { AgentTaskRecord } from "@/agentMode/session/voiceTypes";
 import type {
   AgentChatMessage,
   AgentTodoListEntry,
@@ -23,6 +25,13 @@ export interface AgentChatRuntimeState {
   currentTodoList: AgentTodoListEntry[] | null;
   pendingToolPermissions: PermissionPrompt[];
   pendingAskUserQuestions: AskUserQuestionPrompt[];
+  /**
+   * The task whose turn is running, or null when idle. Read instead of the
+   * transcript's last row so a spoken reply appended mid-task cannot be
+   * mistaken for the streaming answer.
+   */
+  activeTask: AgentTaskRecord | null;
+  queuedTasks: readonly AgentQueuedTask[];
 }
 
 interface BackendRuntimeSnapshot {
@@ -41,6 +50,8 @@ function readBackendRuntimeSnapshot(backend: AgentChatBackend): BackendRuntimeSn
       currentTodoList: backend.getCurrentTodoList(),
       pendingToolPermissions: backend.getPendingToolPermissions(),
       pendingAskUserQuestions: backend.getPendingAskUserQuestions(),
+      activeTask: backend.getActiveTask(),
+      queuedTasks: backend.getQueuedTasks(),
     },
   };
 }

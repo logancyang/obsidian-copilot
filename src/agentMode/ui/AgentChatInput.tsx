@@ -4,9 +4,11 @@ import { expandCustomCommandPrefix } from "@/agentMode/session/expandCustomComma
 import { resolveActiveNoteToken } from "@/agentMode/session/resolveActiveNoteToken";
 import type { PromptContent } from "@/agentMode/session/types";
 import type {
-  AgentInputDraftControls,
-  QueuedAgentMessage,
-} from "@/agentMode/ui/hooks/useAgentInputDrafts";
+  AgentQueuedTask,
+  AgentQueueHoldReason,
+} from "@/agentMode/session/AgentTaskCoordinator";
+import type { AgentTaskSubmission } from "@/agentMode/session/voiceTypes";
+import type { AgentInputDraftControls } from "@/agentMode/ui/hooks/useAgentInputDrafts";
 import {
   clearSelectedTextContexts,
   removeSelectedTextContext,
@@ -20,7 +22,7 @@ import { useActiveWebTabState } from "@/components/chat-components/hooks/useActi
 import { ACTIVE_WEB_TAB_MARKER, EVENT_NAMES } from "@/constants";
 import { useCanUseMultiAgent } from "@/plusUtils";
 import { EventTargetContext } from "@/context";
-import { logError, logWarn } from "@/logger";
+import { logWarn } from "@/logger";
 import {
   isFanout,
   resolveAnswerers,
@@ -39,7 +41,6 @@ import {
 import { getModelKeyFromModel } from "@/settings/model";
 import { modelSupportsVision } from "@/utils";
 import { arrayBufferToBase64 } from "@/utils/base64";
-import { mergeWebTabContexts } from "@/utils/urlNormalization";
 import { QueuedMessageList } from "@/agentMode/ui/QueuedMessageList";
 import { App, Notice, TFile } from "obsidian";
 import React, { memo, useCallback, useContext, useEffect, useMemo, useRef } from "react";
@@ -53,10 +54,9 @@ interface AgentChatInputProps {
   /** Identity of the logical chat input whose UI state this component owns. */
   chatInputId: string;
   /**
-   * Per-session draft controls, owned by AgentHome (the common owner of the
-   * transcript spinner and drop overlay that also read this draft's `loading`
-   * and feed its context). Referentially stable, so it doesn't break this
-   * component's memo on per-token stream re-renders.
+   * Per-session compose draft, owned by AgentHome (the common owner of the
+   * drop overlay that also feeds its context). Referentially stable, so it
+   * doesn't break this component's memo on per-token stream re-renders.
    */
   draft: AgentInputDraftControls;
   app: App;
@@ -66,6 +66,10 @@ interface AgentChatInputProps {
    */
   mainAgentId: BackendId | null;
   updateUserMessageHistory: (newMessage: string) => void;
+  /** Submissions the session's task owner has parked, in send order. */
+  queuedTasks: readonly AgentQueuedTask[];
+  /** True while a task is running. Drives the Stop button and the spinner. */
+  isTaskActive: boolean;
   isStarting: boolean;
   hasPendingPlanPermission: boolean;
   modelPickerOverride: ChatInputProps["modelPickerOverride"];
@@ -96,6 +100,10 @@ interface AgentChatInputProps {
   contextStatusIndicator?: React.ReactNode;
 }
 
+// Frozen empty so a typed submission — which has no public entry yet — keeps
+// a stable reference instead of allocating a fresh [] per send.
+const EMPTY_SOURCE_MESSAGE_IDS: readonly string[] = Object.freeze([]);
+
 const dedupeBy = <T,>(items: Iterable<T>, key: (item: T) => string): T[] => {
   const seen = new Set<string>();
   const out: T[] = [];
@@ -122,33 +130,6 @@ const buildMessageContext = (
   };
 };
 
-const combineQueuedMessages = (items: QueuedAgentMessage[]): QueuedAgentMessage => {
-  if (items.length === 1) return items[0];
-
-  const allNotes = items.flatMap((i) => i.context?.notes ?? []);
-  const allSelected = items.flatMap((i) => i.context?.selectedTextContexts ?? []);
-  const allWebTabs = items.flatMap((i) => i.context?.webTabs ?? []);
-  const allPromptContent = items.flatMap((i) => i.promptContent ?? []);
-  // Union the per-message answerer selections, preserving first-seen order.
-  const mergedAgents = dedupeBy(
-    items.flatMap((i) => i.mentionedAgents ?? []),
-    (id) => id
-  );
-
-  return {
-    id: `queued-combined-${uuidv4()}`,
-    text: items.map((i) => i.text).join("\n\n"),
-    rawInput: items.map((i) => i.rawInput).join("\n\n"),
-    context: buildMessageContext(
-      dedupeBy(allNotes, (n) => n.path),
-      dedupeBy(allSelected, (s) => s.id),
-      mergeWebTabContexts(allWebTabs)
-    ),
-    promptContent: allPromptContent.length > 0 ? allPromptContent : undefined,
-    mentionedAgents: mergedAgents.length > 0 ? mergedAgents : undefined,
-  };
-};
-
 /**
  * Convert a `File` (from `<input type="file">` or paste/drop) into a base64
  * image `PromptContent` block. Returns `null` when the file is empty or
@@ -167,10 +148,13 @@ async function fileToImageBlock(file: File): Promise<PromptContent | null> {
 
 /**
  * Composer for Agent Mode: consumes per-chat-input draft state (input,
- * attachments, include flags, in-flight loading, queued follow-ups), owns the
- * send/queue/stop flow, and renders `ChatInput`. Memoized and detached from the message stream
- * so streamed tokens don't re-render the input. The plan/permission gate
- * (`pointer-events-none` while a plan permission is pending) wraps the input.
+ * attachments, include flags), resolves attachments into one immutable
+ * submission, and hands it to the session's task owner. Scheduling — whether a
+ * submission runs now or queues behind the active turn — belongs to that owner,
+ * so a second input channel cannot race a parallel queue. Memoized and detached
+ * from the message stream so streamed tokens don't re-render the input. The
+ * plan/permission gate (`pointer-events-none` while a plan permission is
+ * pending) wraps the input.
  */
 export const AgentChatInput = memo(function AgentChatInput({
   backend,
@@ -180,6 +164,8 @@ export const AgentChatInput = memo(function AgentChatInput({
   app,
   mainAgentId,
   updateUserMessageHistory,
+  queuedTasks,
+  isTaskActive,
   isStarting,
   hasPendingPlanPermission,
   modelPickerOverride,
@@ -228,24 +214,20 @@ export const AgentChatInput = memo(function AgentChatInput({
     mentionedAgentIdsRef.current = backendIds;
   }, []);
 
-  // Draft state is owned by AgentHome (so it can read `loading`/feed the drop
-  // overlay); this composer is the controlled consumer.
+  // Draft state is owned by AgentHome (so it can feed the drop overlay); this
+  // composer is the controlled consumer.
   const {
     input: inputMessage,
     images: selectedImages,
     contextNotes,
     includeActiveNote,
     includeActiveWebTab,
-    loading,
-    queue: queuedMessages,
     setInput: setInputMessage,
     setContextNotes,
     setSelectedImages,
     addImages,
     setIncludeActiveNote,
     setIncludeActiveWebTab,
-    setLoading,
-    setQueue: setQueuedMessages,
     resetCompose,
   } = draft;
   const activeModelEntry = modelPickerOverride?.models.find(
@@ -267,45 +249,42 @@ export const AgentChatInput = memo(function AgentChatInput({
   }, [chatInputId]);
 
   const handleStopGenerating = useCallback(async () => {
-    // Clear follow-ups before cancellation can finish the turn and flush them.
-    // Only runSend owns loading: a late cancel response must not mark a newer turn idle.
+    // The task owner discards queued follow-ups before requesting
+    // cancellation, so a cancel that finishes the turn cannot flush work the
+    // user just abandoned.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/365
-    setQueuedMessages([]);
-    try {
-      await backend.cancel();
-    } catch (e) {
-      logError("[AgentMode] cancel failed", e);
-    }
-  }, [backend, setQueuedMessages]);
+    await backend.cancelActiveAndClearQueue();
+  }, [backend]);
 
-  const runSend = useCallback(
-    async (item: QueuedAgentMessage) => {
-      setLoading(true);
-      try {
-        const { turn } = backend.sendMessage(
-          item.text,
-          item.context,
-          item.promptContent,
-          item.mentionedAgents
-        );
-        if (item.rawInput) updateUserMessageHistory(item.rawInput);
-        await turn;
-      } catch (error) {
-        logError("Error sending agent message:", error);
-        new Notice("Failed to send message. Please try again.");
-      } finally {
-        // No mounted guard here: this composer remounts on the
-        // landing→conversation flip (AgentHome renders it at different tree
-        // positions), which happens DURING the first turn of every session —
-        // the unmounting instance must still clear the in-flight flag.
-        // `setLoading` writes AgentHome's per-chat-input draft store (not local
-        // state), so calling it after unmount is safe, and the store itself
-        // drops updates for chat inputs that are no longer live.
-        setLoading(false);
-      }
-    },
-    [backend, setLoading, updateUserMessageHistory]
-  );
+  // A queued image cannot reach a model known to lack vision, and dropping the
+  // attachment silently would send a different request than the user queued.
+  // Hold the queue and say so instead.
+  // https://github.com/logancyang/obsidian-copilot/issues/2850
+  const queuedImageBlocked =
+    unsupportedImageModelLabel !== null &&
+    queuedTasks.some((task) =>
+      task.submission.promptContent?.some((content) => content.type === "image")
+    );
+  useEffect(() => {
+    if (!queuedImageBlocked) return;
+    new Notice(
+      `${unsupportedImageModelLabel} doesn't support images. Switch to a vision-capable model to send images.`
+    );
+  }, [queuedImageBlocked, unsupportedImageModelLabel]);
+
+  // The task owner only dispatches for the FOREGROUND conversation: this
+  // composer releases the hold while it is mounted and re-applies it on
+  // unmount, so switching chats never secretly flushes a backgrounded
+  // conversation's queued work.
+  const dispatchHold: AgentQueueHoldReason | null = holdForContext
+    ? "context"
+    : disabled || isStarting || queuedImageBlocked
+      ? "busy"
+      : null;
+  useEffect(() => {
+    backend.setQueueHold(dispatchHold);
+    return () => backend.setQueueHold("busy");
+  }, [backend, dispatchHold]);
 
   const handleSendMessage = useCallback(
     async (webTabs?: WebTabContext[]) => {
@@ -415,104 +394,48 @@ export const AgentChatInput = memo(function AgentChatInput({
         return;
       }
 
-      const item: QueuedAgentMessage = {
-        id: `queued-${uuidv4()}`,
-        text: resolvedText,
+      // One immutable payload: every attachment is already resolved, so the
+      // task owner never reaches back into composer state. It decides whether
+      // this runs now or waits behind the active turn.
+      const submission: AgentTaskSubmission = {
+        submissionId: `submission-${uuidv4()}`,
+        conversationId: chatInputId,
+        sourceMessageIds: EMPTY_SOURCE_MESSAGE_IDS,
+        source: "typed",
+        presentation: "text",
+        requestText: resolvedText,
         rawInput,
         context: buildMessageContext(notes, selectedTextContexts, resolvedWebTabs),
         promptContent: content.length > 0 ? content : undefined,
         mentionedAgents,
       };
-
-      // Queue-and-hold: while a turn is in flight, starting, or the project's
-      // context is still materializing, park the message instead of sending.
-      // The flush effect below drains it once all three clear. Context-held
-      // rows get an amber "Waiting for context" label; the reason is an
-      // enqueue-time snapshot, not re-derived as blockers evolve.
-      if (loading || isStarting || holdForContext) {
-        setQueuedMessages((q) => [
-          ...q,
-          { ...item, queueReason: holdForContext ? "context" : "busy" },
-        ]);
-        return;
-      }
-
-      await runSend(item);
+      backend.submitTask(submission);
+      if (rawInput) updateUserMessageHistory(rawInput);
     },
     [
       app,
+      backend,
+      chatInputId,
       inputMessage,
       selectedImages,
       contextNotes,
       includeActiveNote,
       includeActiveWebTab,
       selectedTextContexts,
-      loading,
-      isStarting,
       unsupportedImageModelLabel,
-      holdForContext,
       disabled,
       resetCompose,
-      runSend,
-      setQueuedMessages,
+      updateUserMessageHistory,
       mainAgentId,
       installedAgentIds,
     ]
   );
 
-  // When a turn ends, flush the queue as one combined message. The
-  // `loading` and `queuedMessages.length` guards prevent re-entry: the
-  // synchronous `setQueuedMessages([])` + `setLoading(true)` inside
-  // runSend are batched, so the next effect run sees both updates.
-  //
-  // DESIGN NOTE: this only flushes the *foreground* session's queue — the
-  // hook returns the active session's draft, so the effect observes whichever
-  // session is on screen. If a turn runs in session A, the user queues a
-  // follow-up, then switches to B, A's queue flushes when (and only when) the
-  // user returns to A. That's intentional, not a regression: the legacy
-  // AgentChat had the same queue mechanism but kept it in component useState,
-  // and it remounted on every tab switch (`key={internalId}`) — so a
-  // backgrounded session's queued follow-ups lived only in that now-unmounted
-  // component and were discarded before they could flush. The per-session
-  // draft store strictly improves on that — the queue now survives the switch
-  // and flushes on return instead of being lost. True cross-session auto-flush
-  // (a background turn draining its own queue with no foreground visit) would
-  // require the session layer to own queue execution, which is backend work
-  // deferred to PR2; PR1 keeps execution in the foreground composer. If a
-  // future review flags this again, point them at this note.
-  useEffect(() => {
-    // `disabled` guards the same hard-disable as the send path: a project
-    // orphaned while messages are queued must not drain its queue into a
-    // disabled composer.
-    if (disabled || loading || isStarting || holdForContext || queuedMessages.length === 0) return;
-    const combined = combineQueuedMessages(queuedMessages);
-    if (
-      combined.promptContent?.some((content) => content.type === "image") &&
-      unsupportedImageModelLabel
-    ) {
-      new Notice(
-        `${unsupportedImageModelLabel} doesn't support images. Switch to a vision-capable model to send images.`
-      );
-      return;
-    }
-    setQueuedMessages([]);
-    void runSend(combined);
-  }, [
-    disabled,
-    loading,
-    isStarting,
-    holdForContext,
-    queuedMessages,
-    runSend,
-    setQueuedMessages,
-    unsupportedImageModelLabel,
-  ]);
-
   const handleRemoveQueuedMessage = useCallback(
-    (id: string) => {
-      setQueuedMessages((q) => q.filter((m) => m.id !== id));
+    (taskId: string) => {
+      backend.removeQueuedTask(taskId);
     },
-    [setQueuedMessages]
+    [backend]
   );
 
   // Global ABORT_STREAM events (Chat selection / new-chat triggers) stop the
@@ -529,8 +452,8 @@ export const AgentChatInput = memo(function AgentChatInput({
 
   return (
     <>
-      {queuedMessages.length > 0 && (
-        <QueuedMessageList messages={queuedMessages} onRemove={handleRemoveQueuedMessage} />
+      {queuedTasks.length > 0 && (
+        <QueuedMessageList tasks={queuedTasks} onRemove={handleRemoveQueuedMessage} />
       )}
       <div
         className={
@@ -569,9 +492,9 @@ export const AgentChatInput = memo(function AgentChatInput({
           inputMessage={inputMessage}
           setInputMessage={setInputMessage}
           handleSendMessage={safeAsyncHandler((meta) => handleSendMessage(meta?.webTabs))}
-          isGenerating={loading}
+          isGenerating={isTaskActive}
           onStopGenerating={safeAsyncHandler(handleStopGenerating)}
-          onEscape={loading ? safeAsyncHandler(handleStopGenerating) : undefined}
+          onEscape={isTaskActive ? safeAsyncHandler(handleStopGenerating) : undefined}
           onShiftTab={modePickerOverride ? onCycleMode : undefined}
           app={app}
           contextNotes={contextNotes}

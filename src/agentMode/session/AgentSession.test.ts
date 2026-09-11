@@ -1575,6 +1575,201 @@ describe("AgentSession.sendPrompt", () => {
   });
 });
 
+describe("AgentSession.submitTask", () => {
+  const typedSubmission = (overrides = {}) => ({
+    submissionId: "submission-1",
+    conversationId: "chat-1",
+    sourceMessageIds: [] as readonly string[],
+    source: "typed" as const,
+    presentation: "text" as const,
+    requestText: "summarize this note",
+    ...overrides,
+  });
+
+  it("adds exactly one public user row for a typed request and links it to the task", async () => {
+    const mock = makeMockBackend();
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "opencode",
+    });
+
+    const { assistantMessageId, turn } = session.submitTask(typedSubmission(), "task-1");
+    await turn;
+
+    const messages = session.store.getDisplayMessages();
+    expect(messages.filter((m) => m.sender === USER_SENDER)).toHaveLength(1);
+    expect(messages[0]).toMatchObject({
+      sender: USER_SENDER,
+      message: "summarize this note",
+      origin: "typed",
+      taskId: "task-1",
+    });
+    expect(session.store.getTask("task-1")).toMatchObject({
+      assistantMessageId,
+      sourceMessageIds: [messages[0].id],
+      presentation: "text",
+      state: "running",
+    });
+  });
+
+  it("reuses the entry a spoken request is already displayed in instead of posting a duplicate", async () => {
+    // Voice text is on screen before the backend is asked to act on it; a
+    // second bubble would show the same sentence twice.
+    // See `designdocs/VOICE_CHAT_DEMO_DESIGN.md`, "Local task submission and queue".
+    const mock = makeMockBackend();
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "opencode",
+    });
+    const spokenRowId = session.store.addMessage({
+      message: "find my planning notes",
+      sender: USER_SENDER,
+      timestamp: null,
+      isVisible: true,
+      origin: "voice-user",
+    });
+
+    const { turn } = session.submitTask(
+      typedSubmission({
+        source: "voice",
+        presentation: "voice-card",
+        sourceMessageIds: [spokenRowId],
+        requestText: "find my planning notes",
+        delegationId: "delegation-1",
+      }),
+      "task-1"
+    );
+    await turn;
+
+    const messages = session.store.getDisplayMessages();
+    expect(messages.filter((m) => m.sender === USER_SENDER).map((m) => m.id)).toEqual([
+      spokenRowId,
+    ]);
+    expect(session.store.getTask("task-1")).toMatchObject({
+      sourceMessageIds: [spokenRowId],
+      delegationIds: ["delegation-1"],
+      presentation: "voice-card",
+    });
+  });
+
+  it("stamps the task id on the assistant entry the backend streams into", () => {
+    const mock = makeMockBackend();
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "opencode",
+    });
+
+    const { assistantMessageId } = session.submitTask(typedSubmission(), "task-1");
+
+    expect(session.store.getMessage(assistantMessageId)).toMatchObject({
+      sender: AI_SENDER,
+      taskId: "task-1",
+      origin: "backend",
+    });
+  });
+});
+
+describe("AgentSession.settleTask", () => {
+  const submission = {
+    submissionId: "submission-1",
+    conversationId: "chat-1",
+    sourceMessageIds: [] as readonly string[],
+    source: "typed" as const,
+    presentation: "text" as const,
+    requestText: "summarize this note",
+  };
+
+  it("records a finished turn as completed with its answer text", async () => {
+    const mock = makeMockBackend();
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "opencode",
+    });
+    const { assistantMessageId, turn } = session.submitTask(submission, "task-1");
+    mock.emit({
+      sessionId: "acp-1",
+      update: {
+        sessionUpdate: "agent_message_chunk",
+        content: { type: "text", text: "Here is the summary." },
+      },
+    });
+    const stopReason = await turn;
+
+    const result = session.settleTask("task-1", { stopReason });
+
+    expect(result).toMatchObject({
+      taskId: "task-1",
+      state: "completed",
+      assistantMessageId,
+      answerText: "Here is the summary.",
+    });
+    expect(session.store.getTask("task-1")?.state).toBe("completed");
+  });
+
+  it("records a backend failure as failed even though the turn promise resolved", async () => {
+    // The UI wrapper resolves on error and an empty turn resolves normally, so
+    // a resolved promise is not evidence the work succeeded.
+    // See `designdocs/VOICE_CHAT_DEMO_DESIGN.md`, "Local task submission and queue".
+    const mock = makeMockBackend();
+    mock.prompt.mockResolvedValue({ stopReason: "end_turn" });
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "opencode",
+    });
+    const { turn } = session.submitTask(submission, "task-1");
+    // No assistant text or tool activity: the session marks the answer an error.
+    const stopReason = await turn;
+    expect(stopReason).toBe("end_turn");
+
+    const result = session.settleTask("task-1", { stopReason });
+
+    expect(result.state).toBe("failed");
+    expect(result.errorCode).toBe("backend_error");
+  });
+
+  it("records a rejected turn as failed", async () => {
+    const mock = makeMockBackend();
+    mock.prompt.mockRejectedValue(new Error("transport died"));
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "opencode",
+    });
+    const { turn } = session.submitTask(submission, "task-1");
+    await expect(turn).rejects.toThrow("transport died");
+
+    const result = session.settleTask("task-1", { error: new Error("transport died") });
+
+    expect(result).toMatchObject({ state: "failed", errorCode: "turn_rejected" });
+  });
+
+  it("records a cancelled turn as cancelled rather than failed", async () => {
+    const mock = makeMockBackend();
+    mock.prompt.mockResolvedValue({ stopReason: "cancelled" });
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "opencode",
+    });
+    const { turn } = session.submitTask(submission, "task-1");
+    const stopReason = await turn;
+
+    expect(session.settleTask("task-1", { stopReason }).state).toBe("cancelled");
+  });
+});
+
 describe("withReadOnlyPreamble", () => {
   it("leads the first text block with the read-only instruction", () => {
     const out = withReadOnlyPreamble([{ type: "text", text: "the question" }]);

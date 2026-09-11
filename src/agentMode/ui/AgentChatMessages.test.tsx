@@ -108,7 +108,7 @@ function plan(id: string): CurrentPlan {
 
 function renderMessages(
   messages: AgentChatMessage[],
-  isLoading: boolean,
+  streamingMessageId: string | null,
   overrides: Partial<AgentChatMessagesProps> = {}
 ) {
   const props: AgentChatMessagesProps = {
@@ -118,7 +118,7 @@ function renderMessages(
     pendingToolPermissions: [],
     pendingAskUserQuestions: [],
     chatBackend,
-    isLoading,
+    streamingMessageId,
     ...overrides,
   };
   return { ...render(<AgentChatMessages {...props} />), props };
@@ -136,7 +136,7 @@ describe("AgentChatMessages", () => {
     it("retains the latest completed turn duration with a static icon", () => {
       const { container } = renderMessages(
         [assistantMessage("answer-1", 62_000, { turnDurationMs: 138_000 })],
-        false
+        null
       );
 
       expect(screen.getByText("2m 18s")).toBeTruthy();
@@ -153,7 +153,7 @@ describe("AgentChatMessages", () => {
           assistantMessage("answer-1", 1_000, { turnDurationMs: 51_000 }),
           assistantMessage("answer-2", 198_000, { message: "", parts: [] }),
         ],
-        true
+        "answer-2"
       );
 
       expect(screen.queryByText("51s")).toBeNull();
@@ -173,14 +173,14 @@ describe("AgentChatMessages", () => {
             parts: [{ kind: "thought", text: "Inspect the response." }],
           }),
         ],
-        false
+        null
       );
 
       expect(screen.getByTestId("agent-trail-timestamp").textContent).toBe(timestamp);
     });
 
     it("shows questions before permissions and reveals a permission after questions clear for https://github.com/logancyang/obsidian-copilot/issues/2948", () => {
-      const { rerender, props } = renderMessages([assistantMessage("answer-1", 62_000)], false, {
+      const { rerender, props } = renderMessages([assistantMessage("answer-1", 62_000)], null, {
         pendingToolPermissions: [permission("permission-first"), permission("permission-second")],
         pendingAskUserQuestions: [question("question-first")],
       });
@@ -207,7 +207,7 @@ describe("AgentChatMessages", () => {
     });
 
     it("bounds and scrolls a tall action rail so controls remain reachable for https://github.com/logancyang/obsidian-copilot/issues/2948", () => {
-      renderMessages([], false, {
+      renderMessages([], null, {
         pendingAskUserQuestions: [question("empty-chat-question")],
       });
 
@@ -220,8 +220,24 @@ describe("AgentChatMessages", () => {
       expect(rail.className).not.toContain("tw-border");
     });
 
+    it("keeps the running timer on the task's own answer when a later assistant row exists", () => {
+      // Presentation follows the active task's identity, so an assistant row
+      // appended after it (spoken reply) must not steal the spinner.
+      // See `designdocs/VOICE_CHAT_DEMO_DESIGN.md`, "Surprises and discoveries".
+      const { container } = renderMessages(
+        [
+          assistantMessage("answer-1", 198_000, { message: "", parts: [] }),
+          assistantMessage("later-speech", 199_000, { message: "Sure, working on it." }),
+        ],
+        "answer-1"
+      );
+
+      expect(container.querySelector(".copilot-spinner")).toBeTruthy();
+      expect(screen.getByText("Sure, working on it.")).toBeTruthy();
+    });
+
     it("keeps a plan-only state in the transcript without creating an action rail", () => {
-      renderMessages([], false, { currentPlan: plan("plan-1") });
+      renderMessages([], null, { currentPlan: plan("plan-1") });
 
       expect(screen.getByTestId("chat-messages").textContent).toContain("Plan plan-1");
       expect(screen.queryByTestId("agent-action-rail")).toBeNull();

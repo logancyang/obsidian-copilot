@@ -1,15 +1,18 @@
-import type { MessageContext } from "@/types/message";
+import type {
+  AgentQueuedTask,
+  AgentQueueHoldReason,
+  AgentTaskAcceptance,
+} from "./AgentTaskCoordinator";
+import type { AgentTaskRecord, AgentTaskResult, AgentTaskSubmission } from "./voiceTypes";
 import type {
   AgentChatMessage,
   AgentQuestionAnswers,
   AgentTodoListEntry,
   AskUserQuestionPrompt,
-  BackendId,
   BackendState,
   CurrentPlan,
   PermissionPrompt,
   PlanDecisionAction,
-  PromptContent,
   PlanUsage,
   SessionUsage,
 } from "./types";
@@ -20,27 +23,33 @@ import type {
  * Mode has no edit/regenerate/persistence flow and no chain-type or
  * include-active-note plumbing — ACP owns those concerns server-side.
  *
- * `sendMessage` returns `{ id, turn }` so the caller can synchronously read
- * the new user message id (for input history) and separately await the full
- * turn for loading-state management.
+ * Work is requested through {@link submitTask} rather than a fire-and-await
+ * send: the session's task owner decides whether a submission runs now or
+ * queues, and reports completion through {@link onTaskSettled}. A resolved
+ * promise here would not be proof that the backend succeeded.
  */
 export interface AgentChatBackend {
   subscribe(listener: () => void): () => void;
   /**
-   * Append a user message and start the turn. `mentionedAgents` is the resolved
-   * answerer selection (the deduped `@`-mentioned installed agents, which may or
-   * may not include the main agent). Present only when the turn fans out; absent
-   * for the single-agent path (no qualifying mentions, or only the main agent
-   * `@`-ed). Consumed by the fan-out orchestration via
-   * `AgentSession.getLastMentionedAgents()`; the main agent summarizes separately.
+   * Hand an immutable request to the conversation's task owner. Returns
+   * synchronously with the assigned task id and whether it started or queued.
    */
-  sendMessage(
-    text: string,
-    context?: MessageContext,
-    promptContent?: PromptContent[],
-    mentionedAgents?: ReadonlyArray<BackendId>
-  ): { id: string; turn: Promise<void> };
-  cancel(): Promise<void>;
+  submitTask(submission: AgentTaskSubmission): AgentTaskAcceptance;
+  /**
+   * Park or release queue dispatch. The composer holds while its project's
+   * context materializes and while it is not the foreground conversation.
+   */
+  setQueueHold(reason: AgentQueueHoldReason | null): void;
+  /** Submissions waiting for the session to free up, in send order. */
+  getQueuedTasks(): readonly AgentQueuedTask[];
+  /** Drop a queued submission the user dismissed. */
+  removeQueuedTask(taskId: string): boolean;
+  /** The task the backend is running, or null when idle. */
+  getActiveTask(): AgentTaskRecord | null;
+  /** Observe settled task outcomes, including failures. */
+  onTaskSettled(listener: (result: AgentTaskResult) => void): () => void;
+  /** Stop: discard queued submissions first, then cancel the active turn. */
+  cancelActiveAndClearQueue(): Promise<void>;
   deleteMessage(id: string): Promise<boolean>;
   clearMessages(): void;
   getMessages(): AgentChatMessage[];

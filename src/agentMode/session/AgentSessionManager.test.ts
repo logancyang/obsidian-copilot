@@ -198,6 +198,12 @@ function makeMockSession(overrides: {
     getBackendSessionId: () => sessionId,
     getStatus: () => status,
     store: { getDisplayMessages: () => displayMessages },
+    tasks: {
+      subscribe: () => () => {},
+      getQueuedTasks: () => [],
+      getActiveTask: () => null,
+      dispose: () => {},
+    },
     cancel: mockSessionCancel,
     dispose: mockSessionDispose,
     setModel: jest.fn(),

@@ -594,6 +594,241 @@ describe("AgentMessageStore", () => {
       });
     });
 
+    describe("recordTask()", () => {
+      it("stores a task once so a retried submission cannot overwrite its mapping", () => {
+        const store = new AgentMessageStore();
+        const record = {
+          taskId: "task-1",
+          sourceMessageIds: ["user-1"],
+          assistantMessageId: "assistant-1",
+          delegationIds: [],
+          state: "running" as const,
+          presentation: "text" as const,
+        };
+
+        expect(store.recordTask(record)).toBe(true);
+        expect(
+          store.recordTask({ ...record, presentation: "voice-card", assistantMessageId: "other" })
+        ).toBe(false);
+        expect(store.getTask("task-1")).toMatchObject({
+          presentation: "text",
+          assistantMessageId: "assistant-1",
+        });
+      });
+    });
+
+    describe("setTaskState()", () => {
+      it("moves a task to its new state and reports unknown tasks", () => {
+        const store = new AgentMessageStore();
+        store.recordTask({
+          taskId: "task-1",
+          sourceMessageIds: [],
+          delegationIds: [],
+          state: "running",
+          presentation: "text",
+        });
+
+        expect(store.setTaskState("task-1", "completed")).toBe(true);
+        expect(store.getTask("task-1")?.state).toBe("completed");
+        expect(store.setTaskState("task-1", "completed")).toBe(false);
+        expect(store.setTaskState("missing", "failed")).toBe(false);
+      });
+    });
+
+    describe("getConversationRows()", () => {
+      it("lists a text-mode conversation as plain message rows", () => {
+        const store = new AgentMessageStore();
+        const userId = store.addMessage({
+          message: "summarize this",
+          sender: USER_SENDER,
+          timestamp: formatDateTime(new Date()),
+          isVisible: true,
+          taskId: "task-1",
+        });
+        const answerId = store.addMessage({ ...placeholder(), taskId: "task-1" });
+        store.appendAgentText(answerId, "Here is the summary.");
+        store.recordTask({
+          taskId: "task-1",
+          sourceMessageIds: [userId],
+          assistantMessageId: answerId,
+          delegationIds: [],
+          state: "completed",
+          presentation: "text",
+        });
+
+        expect(store.getConversationRows().map((row) => row.kind)).toEqual(["message", "message"]);
+      });
+
+      it("collapses a voice-card task's answer into one card while keeping its request visible", () => {
+        // A spoken request stays readable in the transcript; its raw backend
+        // answer belongs inside the card, not inline.
+        // See `designdocs/VOICE_CHAT_DEMO_DESIGN.md`, "One conversation with two kinds of assistant output".
+        const store = new AgentMessageStore();
+        const spokenId = store.addMessage({
+          message: "find my planning notes",
+          sender: USER_SENDER,
+          timestamp: formatDateTime(new Date()),
+          isVisible: true,
+          origin: "voice-user",
+          taskId: "task-1",
+        });
+        const answerId = store.addMessage({ ...placeholder(), taskId: "task-1" });
+        store.appendAgentText(answerId, "I read six notes.");
+        store.addMessage({ ...placeholder(), taskId: "task-1" });
+        store.recordTask({
+          taskId: "task-1",
+          sourceMessageIds: [spokenId],
+          assistantMessageId: answerId,
+          delegationIds: ["delegation-1"],
+          state: "completed",
+          presentation: "voice-card",
+        });
+
+        const rows = store.getConversationRows();
+
+        expect(rows.map((row) => row.kind)).toEqual(["message", "task-card"]);
+        expect(rows[0].kind === "message" && rows[0].message.id).toBe(spokenId);
+        expect(rows[1].kind === "task-card" && rows[1].task.taskId).toBe("task-1");
+      });
+
+      it("keeps a task's presentation fixed after later messages change the mode", () => {
+        // Presentation is captured at submission, so turning voice off must not
+        // move a historical answer out of its card.
+        // See `designdocs/VOICE_CHAT_DEMO_DESIGN.md`, "One conversation with two kinds of assistant output".
+        const store = new AgentMessageStore();
+        const spokenId = store.addMessage({
+          message: "find my planning notes",
+          sender: USER_SENDER,
+          timestamp: formatDateTime(new Date()),
+          isVisible: true,
+          origin: "voice-user",
+          taskId: "task-1",
+        });
+        const answerId = store.addMessage({ ...placeholder(), taskId: "task-1" });
+        store.recordTask({
+          taskId: "task-1",
+          sourceMessageIds: [spokenId],
+          assistantMessageId: answerId,
+          delegationIds: [],
+          state: "completed",
+          presentation: "voice-card",
+        });
+        store.addMessage({
+          message: "and now by hand",
+          sender: USER_SENDER,
+          timestamp: formatDateTime(new Date()),
+          isVisible: true,
+          origin: "typed",
+        });
+
+        expect(store.getConversationRows().map((row) => row.kind)).toEqual([
+          "message",
+          "task-card",
+          "message",
+        ]);
+      });
+
+      it("returns the same frozen empty slice for an empty conversation", () => {
+        const store = new AgentMessageStore();
+
+        expect(store.getConversationRows()).toBe(store.getConversationRows());
+        expect(store.getConversationRows()).toHaveLength(0);
+      });
+    });
+
+    describe("getTaskDetails()", () => {
+      it("supplies the backend prose a card renders, excluding the request rows", () => {
+        const store = new AgentMessageStore();
+        const spokenId = store.addMessage({
+          message: "find my planning notes",
+          sender: USER_SENDER,
+          timestamp: formatDateTime(new Date()),
+          isVisible: true,
+          taskId: "task-1",
+        });
+        const answerId = store.addMessage({ ...placeholder(), taskId: "task-1" });
+        store.appendAgentText(answerId, "I read six notes.");
+        store.recordTask({
+          taskId: "task-1",
+          sourceMessageIds: [spokenId],
+          assistantMessageId: answerId,
+          delegationIds: [],
+          state: "completed",
+          presentation: "voice-card",
+        });
+
+        const details = store.getTaskDetails("task-1");
+
+        expect(details?.messages.map((m) => m.id)).toEqual([answerId]);
+        expect(details?.messages[0].message).toBe("I read six notes.");
+        expect(store.getTaskDetails("missing")).toBeUndefined();
+      });
+    });
+
+    describe("getPersistableConversation()", () => {
+      it("retains an answer the conversation folded into a card, alongside its task record", () => {
+        // The display projection drops the card's body; saving must not, or
+        // the answer disappears on reload.
+        // See `designdocs/VOICE_CHAT_DEMO_DESIGN.md`, "One conversation with two kinds of assistant output".
+        const store = new AgentMessageStore();
+        const spokenId = store.addMessage({
+          message: "find my planning notes",
+          sender: USER_SENDER,
+          timestamp: formatDateTime(new Date()),
+          isVisible: true,
+          taskId: "task-1",
+        });
+        const answerId = store.addMessage({ ...placeholder(), taskId: "task-1" });
+        store.appendAgentText(answerId, "I read six notes.");
+        store.recordTask({
+          taskId: "task-1",
+          sourceMessageIds: [spokenId],
+          assistantMessageId: answerId,
+          delegationIds: [],
+          state: "completed",
+          presentation: "voice-card",
+        });
+
+        const persistable = store.getPersistableConversation();
+
+        expect(persistable.messages.map((m) => m.id)).toEqual([spokenId, answerId]);
+        expect(store.getConversationRows()).toHaveLength(2);
+        expect(persistable.tasks).toEqual([
+          expect.objectContaining({ taskId: "task-1", presentation: "voice-card" }),
+        ]);
+      });
+    });
+
+    describe("addMessage()", () => {
+      it("keeps conversation provenance on the stored message and omits it when absent", () => {
+        const store = new AgentMessageStore();
+        const spokenId = store.addMessage({
+          message: "find my planning notes",
+          sender: USER_SENDER,
+          timestamp: formatDateTime(new Date()),
+          isVisible: true,
+          origin: "voice-user",
+          voiceSessionId: "voice-1",
+          taskId: "task-1",
+          presentation: "conversation",
+        });
+        const plainId = store.addMessage({
+          message: "typed the old way",
+          sender: USER_SENDER,
+          timestamp: formatDateTime(new Date()),
+          isVisible: true,
+        });
+
+        expect(store.getMessage(spokenId)).toMatchObject({
+          origin: "voice-user",
+          voiceSessionId: "voice-1",
+          taskId: "task-1",
+          presentation: "conversation",
+        });
+        expect(store.getMessage(plainId)).not.toHaveProperty("origin");
+      });
+    });
+
     describe("setFanout()", () => {
       it("surfaces a fresh snapshot each tick so React state updates do not bail", () => {
         const store = new AgentMessageStore();

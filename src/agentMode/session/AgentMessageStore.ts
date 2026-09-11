@@ -11,6 +11,12 @@ import {
   NewAgentChatMessage,
   StopReason,
 } from "@/agentMode/session/types";
+import type {
+  AgentMessageOrigin,
+  AgentMessagePresentation,
+  AgentTaskRecord,
+  AgentTaskState,
+} from "@/agentMode/session/voiceTypes";
 import { USER_SENDER } from "@/constants";
 import { FormattedDateTime, MessageContext } from "@/types/message";
 import { formatDateTime } from "@/utils";
@@ -46,7 +52,44 @@ interface StoredAgentMessage {
   // and object references), so a structural diff would miss them — the
   // version counter is the source of truth for "this message changed".
   version: number;
+  origin?: AgentMessageOrigin;
+  voiceSessionId?: string;
+  taskId?: string;
+  presentation?: AgentMessagePresentation;
 }
+
+/**
+ * One entry of the public conversation. A task whose presentation is
+ * `voice-card` contributes a single card instead of its backend prose, so the
+ * transcript stays readable while the raw answer remains reachable through
+ * {@link AgentMessageStore.getTaskDetails}.
+ */
+export type AgentConversationRow =
+  | { kind: "message"; message: AgentChatMessage }
+  | { kind: "task-card"; task: AgentTaskRecord };
+
+/** Everything a task card needs to render its own body. */
+export interface AgentTaskDetails {
+  task: AgentTaskRecord;
+  messages: readonly AgentChatMessage[];
+}
+
+/**
+ * The conversation as it should be written to disk: the public transcript
+ * plus the task records that link requests to answers. Distinct from
+ * {@link AgentMessageStore.getDisplayMessages}, which drops anything the
+ * renderer folded into a card.
+ */
+export interface AgentPersistableConversation {
+  messages: readonly AgentChatMessage[];
+  tasks: readonly AgentTaskRecord[];
+}
+
+// Frozen empties so a store with no tasks hands out referentially stable
+// slices instead of a fresh `[]` that would defeat downstream memoization.
+const EMPTY_CONVERSATION_ROWS: readonly AgentConversationRow[] = Object.freeze([]);
+const EMPTY_TASKS: readonly AgentTaskRecord[] = Object.freeze([]);
+const EMPTY_TASK_MESSAGES: readonly AgentChatMessage[] = Object.freeze([]);
 
 const MAX_COMPARE_JSON_CHARS = 8_000;
 const MAX_COMPARE_EDGE_CHARS = 512;
@@ -230,6 +273,13 @@ export class AgentMessageStore {
   // (notification with no content change) returns the same reference and the
   // top-level `messages` memo bails out entirely.
   private lastDisplay: AgentChatMessage[] | null = null;
+  // Task records keyed by task id, in submission order. Separate from
+  // `messages` because one task links several public entries to one backend
+  // answer, and because hiding a backend answer behind a card must not rely on
+  // `isVisible` — the display and autosave paths both filter on that flag and
+  // would silently drop the answer.
+  private tasks = new Map<string, AgentTaskRecord>();
+  private lastConversationRows: readonly AgentConversationRow[] | null = null;
 
   private generateId(): string {
     return `msg-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
@@ -239,6 +289,7 @@ export class AgentMessageStore {
   private touch(msg: StoredAgentMessage): void {
     msg.version += 1;
     this.lastDisplay = null;
+    this.lastConversationRows = null;
   }
 
   /**
@@ -278,9 +329,14 @@ export class AgentMessageStore {
       parts: message.parts,
       turnStopReason: message.turnStopReason,
       turnDurationMs: message.turnDurationMs,
+      origin: message.origin,
+      voiceSessionId: message.voiceSessionId,
+      taskId: message.taskId,
+      presentation: message.presentation,
       version: 0,
     });
     this.lastDisplay = null;
+    this.lastConversationRows = null;
     return id;
   }
 
@@ -498,6 +554,7 @@ export class AgentMessageStore {
     this.messages.splice(idx, 1);
     this.displayCache.delete(id);
     this.lastDisplay = null;
+    this.lastConversationRows = null;
     return true;
   }
 
@@ -505,6 +562,8 @@ export class AgentMessageStore {
     this.messages = [];
     this.displayCache.clear();
     this.lastDisplay = null;
+    this.lastConversationRows = null;
+    this.tasks.clear();
   }
 
   truncateAfterMessageId(messageId: string): void {
@@ -515,7 +574,95 @@ export class AgentMessageStore {
       }
       this.messages = this.messages.slice(0, idx + 1);
       this.lastDisplay = null;
+      this.lastConversationRows = null;
     }
+  }
+
+  /**
+   * Register one unit of backend work. Re-registering an existing task id is
+   * ignored so a retried submission cannot overwrite the mapping that the
+   * original request already handed back to its caller.
+   */
+  recordTask(record: AgentTaskRecord): boolean {
+    if (this.tasks.has(record.taskId)) return false;
+    this.tasks.set(record.taskId, record);
+    this.lastConversationRows = null;
+    return true;
+  }
+
+  /** Move a task to a new lifecycle state. Returns false for an unknown task. */
+  setTaskState(taskId: string, state: AgentTaskState): boolean {
+    const task = this.tasks.get(taskId);
+    if (!task || task.state === state) return false;
+    this.tasks.set(taskId, { ...task, state });
+    this.lastConversationRows = null;
+    return true;
+  }
+
+  getTask(taskId: string): AgentTaskRecord | undefined {
+    return this.tasks.get(taskId);
+  }
+
+  /**
+   * The public conversation: every visible entry in order, with each
+   * `voice-card` task collapsed into one card placed where its answer would
+   * have appeared. Entries belonging to a `voice-card` task are omitted here
+   * and reachable through {@link getTaskDetails} instead.
+   *
+   * See `designdocs/VOICE_CHAT_DEMO_DESIGN.md`,
+   * "One conversation with two kinds of assistant output".
+   */
+  getConversationRows(): readonly AgentConversationRow[] {
+    if (this.lastConversationRows !== null) return this.lastConversationRows;
+    const cardTasks = new Map<string, AgentTaskRecord>();
+    for (const task of this.tasks.values()) {
+      if (task.presentation === "voice-card") cardTasks.set(task.taskId, task);
+    }
+    const rows: AgentConversationRow[] = [];
+    const emitted = new Set<string>();
+    for (const msg of this.messages) {
+      if (!msg.isVisible) continue;
+      const card = msg.taskId ? cardTasks.get(msg.taskId) : undefined;
+      if (!card) {
+        rows.push({ kind: "message", message: this.adaptCached(msg) });
+        continue;
+      }
+      // A card stands in for the task's backend output only. The public user
+      // entries that requested it stay in the transcript.
+      if (card.sourceMessageIds.includes(msg.id)) {
+        rows.push({ kind: "message", message: this.adaptCached(msg) });
+        continue;
+      }
+      if (emitted.has(card.taskId)) continue;
+      emitted.add(card.taskId);
+      rows.push({ kind: "task-card", task: card });
+    }
+    const result = rows.length > 0 ? rows : EMPTY_CONVERSATION_ROWS;
+    this.lastConversationRows = result;
+    return result;
+  }
+
+  /**
+   * The prose and activity a task card renders in its detail body: every
+   * entry the backend wrote for that task, in order.
+   */
+  getTaskDetails(taskId: string): AgentTaskDetails | undefined {
+    const task = this.tasks.get(taskId);
+    if (!task) return undefined;
+    const messages = this.messages
+      .filter((m) => m.taskId === taskId && !task.sourceMessageIds.includes(m.id))
+      .map((m) => this.adaptCached(m));
+    return { task, messages: messages.length > 0 ? messages : EMPTY_TASK_MESSAGES };
+  }
+
+  /**
+   * Everything worth saving: the full visible transcript — including entries a
+   * card folded away — plus the task records that link requests to answers.
+   */
+  getPersistableConversation(): AgentPersistableConversation {
+    const messages = this.messages.filter((m) => m.isVisible).map((m) => this.adaptCached(m));
+    const tasks = this.tasks.size > 0 ? [...this.tasks.values()] : EMPTY_TASKS;
+    return { messages: messages.length > 0 ? messages : EMPTY_TASK_MESSAGES, tasks };
   }
 
   /**
@@ -577,6 +724,10 @@ export class AgentMessageStore {
         parts: msg.parts,
         turnStopReason: msg.turnStopReason,
         turnDurationMs: msg.turnDurationMs,
+        origin: msg.origin,
+        voiceSessionId: msg.voiceSessionId,
+        taskId: msg.taskId,
+        presentation: msg.presentation,
         fanout,
         version: 0,
       });
@@ -604,6 +755,10 @@ export class AgentMessageStore {
       parts: m.parts,
       turnStopReason: m.turnStopReason,
       turnDurationMs: m.turnDurationMs,
+      ...(m.origin !== undefined ? { origin: m.origin } : {}),
+      ...(m.voiceSessionId !== undefined ? { voiceSessionId: m.voiceSessionId } : {}),
+      ...(m.taskId !== undefined ? { taskId: m.taskId } : {}),
+      ...(m.presentation !== undefined ? { presentation: m.presentation } : {}),
       // Snapshot so each adapted view carries a fresh reference; the orchestrator
       // mutates one turn in place, so the same reference would freeze the dropdown.
       ...(m.fanout ? { fanout: snapshotFanoutTurn(m.fanout) } : {}),

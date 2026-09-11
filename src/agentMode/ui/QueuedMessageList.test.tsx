@@ -1,20 +1,39 @@
+import type { AgentQueuedTask } from "@/agentMode/session/AgentTaskCoordinator";
+import type { AgentTaskSubmission } from "@/agentMode/session/voiceTypes";
 import { QueuedMessageList } from "@/agentMode/ui/QueuedMessageList";
 import { fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
+
+const queuedTask = (
+  taskId: string,
+  submission: Partial<AgentTaskSubmission>,
+  queueReason: AgentQueuedTask["queueReason"] = "busy"
+): AgentQueuedTask => ({
+  taskId,
+  queueReason,
+  submission: {
+    submissionId: `submission-${taskId}`,
+    conversationId: "chat-1",
+    sourceMessageIds: [],
+    source: "typed",
+    presentation: "text",
+    requestText: "",
+    ...submission,
+  },
+});
+
 describe("QueuedMessageList", () => {
   describe("QueuedMessageList()", () => {
     it("labels image-only rows while retaining context status and removal https://github.com/logancyang/obsidian-copilot/issues/2850", () => {
       const onRemove = jest.fn();
       render(
         <QueuedMessageList
-          messages={[
-            {
-              id: "image",
-              text: "",
-              rawInput: "",
-              promptContent: [{ type: "image", mimeType: "image/png", data: "AQID" }],
-              queueReason: "context",
-            },
+          tasks={[
+            queuedTask(
+              "image",
+              { promptContent: [{ type: "image", mimeType: "image/png", data: "AQID" }] },
+              "context"
+            ),
           ]}
           onRemove={onRemove}
         />
@@ -27,7 +46,7 @@ describe("QueuedMessageList", () => {
     it("labels an empty command without claiming it contains an image https://github.com/logancyang/obsidian-copilot/issues/2850", () => {
       render(
         <QueuedMessageList
-          messages={[{ id: "empty", text: "", rawInput: "/empty" }]}
+          tasks={[queuedTask("empty", { requestText: "", rawInput: "/empty" })]}
           onRemove={jest.fn()}
         />
       );
@@ -36,7 +55,7 @@ describe("QueuedMessageList", () => {
     it("displays the text of a queued message", () => {
       render(
         <QueuedMessageList
-          messages={[{ id: "text", text: "Explain this", rawInput: "Explain this" }]}
+          tasks={[queuedTask("text", { requestText: "Explain this" })]}
           onRemove={jest.fn()}
         />
       );

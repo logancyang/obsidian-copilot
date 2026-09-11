@@ -137,7 +137,13 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     currentTodoList,
     pendingToolPermissions,
     pendingAskUserQuestions,
+    activeTask,
+    queuedTasks,
   } = useAgentChatRuntimeState(backend);
+  // The answer the running task streams into. Identity, not "the last
+  // assistant row": a spoken reply can land after that row while the backend
+  // is still writing into an earlier one.
+  const streamingMessageId = activeTask?.assistantMessageId ?? null;
 
   // Whole-surface root — the portal container for header-anchored overlays
   // (the project-info popover), which live OUTSIDE chatContainerRef. Held in
@@ -383,7 +389,10 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     defaultIncludeActiveNote: settings.autoAddActiveContentToContext === true,
   });
   const setDraftInput = draft.setInput;
-  useChatRelevantNotesContext(app, rootEl, chatInputId, draft, messages, activeProject);
+  useChatRelevantNotesContext(app, rootEl, chatInputId, draft, messages, activeProject, {
+    streamingMessageId,
+    queued: queuedTasks,
+  });
 
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/166
   // The manager binds a handoff draft to the new chat input before publishing
@@ -430,7 +439,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       draft.input.trim() === "" &&
       draft.images.length === 0 &&
       draft.contextNotes.length === 0 &&
-      draft.queue.length === 0;
+      queuedTasks.length === 0;
     if (!draftEmpty) return false;
     try {
       await manager.replaceSessionInPlace(active.internalId, active.backendId, {
@@ -441,7 +450,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       logError("[AgentMode] refresh landing context failed", e);
       return false;
     }
-  }, [manager, draft]);
+  }, [manager, draft, queuedTasks]);
 
   // Reactively refresh the empty landing when the active project's context
   // sources change underneath it (drag-drop / inline edit / +URL / chip removal
@@ -452,7 +461,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     draft.input.trim() === "" &&
     draft.images.length === 0 &&
     draft.contextNotes.length === 0 &&
-    draft.queue.length === 0;
+    queuedTasks.length === 0;
   // Fingerprint of what an empty landing session captures at creation: the
   // materialization signature PLUS the project instructions. Deliberately
   // broader than the session manager's materialization dirty-tracking signature,
@@ -765,6 +774,8 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       app={app}
       mainAgentId={mainAgentId}
       updateUserMessageHistory={updateUserMessageHistory}
+      queuedTasks={queuedTasks}
+      isTaskActive={activeTask !== null}
       isStarting={isStarting}
       hasPendingPlanPermission={hasPendingPlanPermission}
       modelPickerOverride={modelPickerOverride ?? undefined}
@@ -969,7 +980,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                       pendingToolPermissions={pendingToolPermissions}
                       pendingAskUserQuestions={pendingAskUserQuestions}
                       chatBackend={backend}
-                      isLoading={draft.loading}
+                      streamingMessageId={streamingMessageId}
                     />
                     <AgentChatControls
                       onNewChat={handleNewChat}

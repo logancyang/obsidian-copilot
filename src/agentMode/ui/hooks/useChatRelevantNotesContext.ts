@@ -1,4 +1,5 @@
 import type { AgentChatMessage } from "@/agentMode/session/types";
+import type { AgentQueuedTask } from "@/agentMode/session/AgentTaskCoordinator";
 import type { AgentInputDraftControls } from "@/agentMode/ui/hooks/useAgentInputDrafts";
 import { useSelectedTextContexts, type ProjectConfig } from "@/aiParams";
 import { useActiveFile } from "@/hooks/useActiveFile";
@@ -18,6 +19,7 @@ import { useEffect, useMemo, useRef } from "react";
  * @param draft - Current composition and its attachment setters.
  * @param messages - Visible message store, including in-flight response state.
  * @param project - Current project's explicit source configuration.
+ * @param turn - The running answer's identity and the submissions waiting behind it.
  */
 export function useChatRelevantNotesContext(
   app: App,
@@ -25,7 +27,8 @@ export function useChatRelevantNotesContext(
   id: string,
   draft: AgentInputDraftControls,
   messages: AgentChatMessage[],
-  project: ProjectConfig | undefined
+  project: ProjectConfig | undefined,
+  turn: { streamingMessageId: string | null; queued: readonly AgentQueuedTask[] }
 ): void {
   const store = getChatRelevantNotesStore(app);
   const activeFile = useActiveFile();
@@ -41,19 +44,19 @@ export function useChatRelevantNotesContext(
           .filter((file) => shouldIndexFile(app, file, inclusions, exclusions, true))
       : [];
   }, [app, project?.contextSource]);
-  // The unfinished assistant tail belongs to the running turn. Derive that
-  // boundary on mount and session changes instead of retaining partial text.
+  // The unfinished assistant answer belongs to the running task. Its identity
+  // comes from the task owner rather than the transcript's last row, which a
+  // spoken reply can occupy while backend work is still streaming.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/383
-  const tail = messages[messages.length - 1];
-  const streamingId =
-    draft.loading && tail?.sender === "AI" && !tail.turnStopReason ? tail.id : undefined;
+  const streamingId = turn.streamingMessageId ?? undefined;
   const history = messages.filter((message) => message.id !== streamingId);
   // Queue entries remain visible after the composer resets and before dispatch.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/383
-  const queued = draft.queue;
-  const contexts = [...history, ...queued].flatMap((message) =>
-    message.context ? [message.context] : []
-  );
+  const queued = turn.queued;
+  const contexts = [
+    ...history.flatMap((message) => (message.context ? [message.context] : [])),
+    ...queued.flatMap((task) => (task.submission.context ? [task.submission.context] : [])),
+  ];
   const files = [
     ...projectFiles,
     ...contexts.flatMap((context) => context.notes),
@@ -81,8 +84,9 @@ export function useChatRelevantNotesContext(
         }))
         .filter((message) => message.content.trim()),
       ...queued
-        .filter((message) => message.rawInput.trim())
-        .map((message) => ({ role: "user" as const, content: message.rawInput })),
+        .map((task) => task.submission.rawInput ?? "")
+        .filter((rawInput) => rawInput.trim())
+        .map((rawInput) => ({ role: "user" as const, content: rawInput })),
     ],
     draft: draft.input,
     excerpts: [...contexts.flatMap((context) => context.selectedTextContexts ?? []), ...selections]
@@ -105,8 +109,9 @@ export function useChatRelevantNotesContext(
       0
     ) +
     queued.reduce(
-      (count, message) =>
-        count + (message.promptContent?.filter((part) => part.type === "image").length ?? 0),
+      (count, task) =>
+        count +
+        (task.submission.promptContent?.filter((part) => part.type === "image").length ?? 0),
       0
     ) +
     contexts.reduce(

@@ -1,6 +1,13 @@
 import { AI_SENDER, USER_SENDER, WEB_SELECTED_TEXT_TAG } from "@/constants";
 import { logInfo, logWarn } from "@/logger";
 import { AgentMessageStore } from "@/agentMode/session/AgentMessageStore";
+import { AgentTaskCoordinator } from "@/agentMode/session/AgentTaskCoordinator";
+import type {
+  AgentMessageOrigin,
+  AgentTaskResult,
+  AgentTaskSubmission,
+  AgentTaskTerminalState,
+} from "@/agentMode/session/voiceTypes";
 import { GLOBAL_SCOPE, type ProjectScopeId } from "@/agentMode/session/scope";
 import {
   AgentChatMessage,
@@ -100,6 +107,8 @@ const EMPTY_QUESTIONS: AskUserQuestionPrompt[] = [];
 const EMPTY_ANSWERS: AgentQuestionAnswers = Object.freeze({});
 // Canonical "no fan-out" selection — referential stability on the single-agent path.
 const EMPTY_BACKEND_IDS: ReadonlyArray<BackendId> = Object.freeze([]);
+// Frozen empty so a task with no voice delegation keeps a stable reference.
+const EMPTY_DELEGATION_IDS: readonly string[] = Object.freeze([]);
 // Shared "no extra roots" array so a session created without project context
 // keeps a stable reference (no fresh `[]` allocation per construction).
 const EMPTY_ADDITIONAL_DIRECTORIES: string[] = Object.freeze([]) as unknown as string[];
@@ -318,6 +327,17 @@ export interface AgentSessionStateOptions extends ProjectContextUpdatesHooks {
  */
 export class AgentSession {
   readonly store = new AgentMessageStore();
+  /**
+   * Single owner of local task submission for this conversation: it assigns
+   * task ids, holds the follow-up queue, and serializes every request — typed
+   * or spoken — into this session one turn at a time.
+   */
+  readonly tasks: AgentTaskCoordinator = new AgentTaskCoordinator({
+    submitTask: (submission, taskId) => this.submitTask(submission, taskId),
+    settleTask: (taskId, outcome) => this.settleTask(taskId, outcome),
+    cancel: () => this.cancel(),
+    getTask: (taskId) => this.store.getTask(taskId),
+  });
   readonly internalId: string;
   readonly chatInputId: string;
   readonly backendId: BackendId;
@@ -942,6 +962,110 @@ export class AgentSession {
     promptContent?: PromptContent[],
     mentionedAgents?: ReadonlyArray<BackendId>
   ): { userMessageId: string; turn: Promise<StopReason> } {
+    const { userMessageId, turn } = this.startTurn({
+      displayText,
+      context,
+      promptContent,
+      mentionedAgents,
+    });
+    return { userMessageId, turn };
+  }
+
+  /**
+   * Run one backend turn for a task the coordinator accepted. When the
+   * submission already names the public entries that display the request
+   * (spoken text the user can already read), no second user bubble is added —
+   * the placeholder simply carries the task id.
+   *
+   * See `designdocs/VOICE_CHAT_DEMO_DESIGN.md`, "Local task submission and queue".
+   *
+   * @param submission - Immutable request, with every attachment already resolved.
+   * @param taskId - Identity the coordinator handed back to the caller.
+   */
+  submitTask(
+    submission: AgentTaskSubmission,
+    taskId: string
+  ): { assistantMessageId: string; turn: Promise<StopReason> } {
+    const origin: AgentMessageOrigin = submission.source === "voice" ? "voice-user" : "typed";
+    const { userMessageId, assistantMessageId, turn } = this.startTurn({
+      displayText: submission.requestText,
+      context: submission.context,
+      promptContent: submission.promptContent ? [...submission.promptContent] : undefined,
+      mentionedAgents: submission.mentionedAgents,
+      taskId,
+      origin,
+      voiceSessionId: submission.voiceSessionId,
+      linkedMessageIds: submission.sourceMessageIds,
+    });
+    this.store.recordTask({
+      taskId,
+      sourceMessageIds:
+        submission.sourceMessageIds.length > 0 ? [...submission.sourceMessageIds] : [userMessageId],
+      assistantMessageId,
+      delegationIds: submission.delegationId ? [submission.delegationId] : EMPTY_DELEGATION_IDS,
+      state: "running",
+      presentation: submission.presentation,
+    });
+    return { assistantMessageId, turn };
+  }
+
+  /**
+   * Record what actually happened to a task. A settled UI promise proves
+   * nothing: a turn that resolved while its answer bubble carries a backend
+   * failure is `failed`, not `completed`.
+   *
+   * See `designdocs/VOICE_CHAT_DEMO_DESIGN.md`, "Local task submission and queue".
+   *
+   * @param taskId - Task being settled.
+   * @param outcome - The turn's raw result: its stop reason, or the error it threw.
+   */
+  settleTask(
+    taskId: string,
+    outcome: { stopReason?: StopReason; error?: unknown }
+  ): AgentTaskResult {
+    const task = this.store.getTask(taskId);
+    const assistantMessageId = task?.assistantMessageId ?? "";
+    const message = assistantMessageId ? this.store.getMessage(assistantMessageId) : undefined;
+    let state: AgentTaskTerminalState;
+    let errorCode: string | undefined;
+    if (outcome.error !== undefined) {
+      state = "failed";
+      errorCode = "turn_rejected";
+    } else if (outcome.stopReason === "cancelled") {
+      state = "cancelled";
+    } else if (message?.isErrorMessage) {
+      state = "failed";
+      errorCode = "backend_error";
+    } else {
+      state = "completed";
+    }
+    this.store.setTaskState(taskId, state);
+    return {
+      taskId,
+      state,
+      assistantMessageId,
+      answerText: message?.message ?? "",
+      ...(errorCode !== undefined ? { errorCode } : {}),
+    };
+  }
+
+  /**
+   * Shared entry for every backend turn. Appends the public user entry (unless
+   * the caller already owns one), adds the assistant placeholder streaming
+   * updates target, and starts the prompt.
+   */
+  private startTurn(options: {
+    displayText: string;
+    context?: MessageContext;
+    promptContent?: PromptContent[];
+    mentionedAgents?: ReadonlyArray<BackendId>;
+    taskId?: string;
+    origin?: AgentMessageOrigin;
+    voiceSessionId?: string;
+    /** Public entries that already display this request; empty means create one. */
+    linkedMessageIds?: readonly string[];
+  }): { userMessageId: string; assistantMessageId: string; turn: Promise<StopReason> } {
+    const { displayText, context, promptContent, mentionedAgents, taskId } = options;
     const status = this.getStatus();
     if (status === "starting") {
       throw new Error("Session is still starting");
@@ -953,17 +1077,28 @@ export class AgentSession {
       throw new Error("Session is closed");
     }
 
-    const userMessage: NewAgentChatMessage = {
-      message: displayText,
-      sender: USER_SENDER,
-      timestamp: formatDateTime(new Date()),
-      isVisible: true,
-      context,
-      // Surface attached images in the posted bubble. The backend consumes the
-      // original `promptContent` image blocks; this is a display-only projection.
-      content: buildUserDisplayContent(displayText, promptContent),
-    };
-    const userMessageId = this.store.addMessage(userMessage);
+    const linkedMessageIds = options.linkedMessageIds ?? [];
+    let userMessageId: string;
+    if (linkedMessageIds.length > 0) {
+      // The request is already on screen (spoken text the user can read). A
+      // second bubble would duplicate it.
+      userMessageId = linkedMessageIds[linkedMessageIds.length - 1];
+    } else {
+      const userMessage: NewAgentChatMessage = {
+        message: displayText,
+        sender: USER_SENDER,
+        timestamp: formatDateTime(new Date()),
+        isVisible: true,
+        context,
+        // Surface attached images in the posted bubble. The backend consumes the
+        // original `promptContent` image blocks; this is a display-only projection.
+        content: buildUserDisplayContent(displayText, promptContent),
+        ...(options.origin !== undefined ? { origin: options.origin } : {}),
+        ...(options.voiceSessionId !== undefined ? { voiceSessionId: options.voiceSessionId } : {}),
+        ...(taskId !== undefined ? { taskId } : {}),
+      };
+      userMessageId = this.store.addMessage(userMessage);
+    }
 
     const turnStartedAtMs = Date.now();
     const placeholder: NewAgentChatMessage = {
@@ -972,8 +1107,10 @@ export class AgentSession {
       timestamp: formatDateTime(new Date(turnStartedAtMs)),
       isVisible: true,
       parts: [],
+      ...(taskId !== undefined ? { taskId, origin: "backend" as const } : {}),
     };
     this.placeholderId = this.store.addMessage(placeholder);
+    const assistantMessageId = this.placeholderId;
     this.currentMessageIds = new Set();
     this.currentTurnHadRoutedToolActivity = false;
     this.notifyMessages();
@@ -997,7 +1134,7 @@ export class AgentSession {
     this.recomputeStatusIfChanged();
 
     const turn = this.runTurn(displayText, userMessageId, context, turnStartedAtMs, promptContent);
-    return { userMessageId, turn };
+    return { userMessageId, assistantMessageId, turn };
   }
 
   /** The resolved answerer selection for the most recent `sendPrompt`; empty on the single-agent path. */
@@ -1369,6 +1506,7 @@ export class AgentSession {
   /** Detach from the backend. Does not cancel — call `cancel()` first. */
   async dispose(): Promise<void> {
     this.disposed = true;
+    this.tasks.dispose();
     this.unregisterSessionHandler?.();
     this.unregisterSessionHandler = null;
     this.flushResolvers(this.pendingPlanResolvers);

@@ -5,6 +5,7 @@ import type { FormattedDateTime, MessageContext } from "@/types/message";
 // `import type` keeps the cycle with `fanoutTypes` compile-time only.
 import type { FanoutTurn } from "@/agentMode/session/fanout/fanoutTypes";
 import type { PlanUsage } from "@/agentMode/session/planUsage";
+import type { AgentMessageOrigin, AgentMessagePresentation } from "@/agentMode/session/voiceTypes";
 
 export type { PlanUsage, UsageWindow } from "@/agentMode/session/planUsage";
 import type { ProjectScopeId } from "./scope";
@@ -924,6 +925,19 @@ export interface AgentChatMessage {
    * (`parseFanoutComposite`). When present, the UI renders the tab row.
    */
   fanout?: FanoutTurn;
+  /**
+   * Who produced this entry. Absent on every message written before mixed
+   * typed/spoken conversations existed, and absent means `"typed"` behavior:
+   * a plain conversation row with no task link.
+   * See `designdocs/VOICE_CHAT_DEMO_DESIGN.md`, "One conversation with two kinds of assistant output".
+   */
+  origin?: AgentMessageOrigin;
+  /** Live voice channel that produced this entry, when one did. */
+  voiceSessionId?: string;
+  /** Backend work this entry requested or answers. */
+  taskId?: string;
+  /** Where this entry renders. Absent means the public conversation. */
+  presentation?: AgentMessagePresentation;
 }
 
 /** Creation shape — id is assigned by the store if absent. */

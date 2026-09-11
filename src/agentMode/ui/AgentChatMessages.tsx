@@ -25,9 +25,14 @@ interface AgentChatMessagesProps {
   pendingToolPermissions: PermissionPrompt[];
   pendingAskUserQuestions: AskUserQuestionPrompt[];
   chatBackend: AgentChatBackend;
-  /** True while a turn is in flight. The last assistant message in the
-   *  visible list is treated as the streaming placeholder. */
-  isLoading: boolean;
+  /**
+   * The assistant entry the active task is streaming into, or null when no
+   * task is running. Read from the task owner rather than inferred from the
+   * last assistant row: voice can append an assistant entry while a backend
+   * task is still writing into an earlier one.
+   * See `designdocs/VOICE_CHAT_DEMO_DESIGN.md`, "Surprises and discoveries".
+   */
+  streamingMessageId: string | null;
 }
 
 /**
@@ -64,7 +69,7 @@ const AgentChatMessages = memo(
     pendingToolPermissions,
     pendingAskUserQuestions,
     chatBackend,
-    isLoading,
+    streamingMessageId,
   }: AgentChatMessagesProps) => {
     const visible = useMemo(() => messages.filter((m) => m.isVisible), [messages]);
     const adapted = useMemo(() => visible.map(toChatMessageView), [visible]);
@@ -87,11 +92,9 @@ const AgentChatMessages = memo(
         ? `permission:${pendingPermission.toolCall.toolCallId}`
         : null;
 
-    // The latest assistant message owns both timer states: it ticks while that
-    // turn is in flight, then retains the frozen duration until the next turn
-    // appends a newer placeholder and naturally retires this row.
+    // The latest assistant message owns the frozen duration until the next
+    // turn appends a newer placeholder and naturally retires this row.
     const latestAssistant = useMemo(() => lastAssistant(visible), [visible]);
-    const streamingMessageId = isLoading ? latestAssistant?.id : undefined;
 
     return (
       <div className="tw-flex tw-h-full tw-flex-1 tw-flex-col tw-overflow-hidden">
@@ -114,10 +117,15 @@ const AgentChatMessages = memo(
             const isAssistant = message.sender !== USER_SENDER;
             const hasParts = (message.parts?.length ?? 0) > 0;
             const renderTrail = isAssistant && hasParts;
-            const ownsTurnDuration = isAssistant && message.id === latestAssistant?.id;
-            const completedTurnDurationMs = ownsTurnDuration ? message.turnDurationMs : undefined;
+            // The frozen duration belongs to the newest answer; the live timer
+            // belongs to whichever answer the active task is streaming into.
+            // In text mode these are the same row, so rendering is unchanged.
+            const completedTurnDurationMs =
+              isAssistant && message.id === latestAssistant?.id
+                ? message.turnDurationMs
+                : undefined;
             const runningTurnStartedAtMs =
-              ownsTurnDuration && message.id === streamingMessageId
+              isAssistant && message.id === streamingMessageId
                 ? message.timestamp?.epoch
                 : undefined;
             const completedTurnDuration =

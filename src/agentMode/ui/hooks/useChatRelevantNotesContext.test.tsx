@@ -4,6 +4,7 @@ import { RelevantNotesShelfPanel } from "@/agentMode/ui/RelevantNotesShelfPanel"
 import { useChatRelevantNotesContext } from "@/agentMode/ui/hooks/useChatRelevantNotesContext";
 import type { AgentInputDraftControls } from "@/agentMode/ui/hooks/useAgentInputDrafts";
 import type { AgentChatMessage } from "@/agentMode/session/types";
+import type { AgentQueuedTask } from "@/agentMode/session/AgentTaskCoordinator";
 import { getChatRelevantNotesStore } from "@/search/chatRelevantNotesContext";
 import { act, render, renderHook } from "@testing-library/react";
 import { App, MarkdownView, TFile } from "obsidian";
@@ -23,8 +24,15 @@ jest.mock("@/search/searchUtils", () => ({
   getMatchingPatterns: () => ({ inclusions: {}, exclusions: {} }),
   shouldIndexFile: () => true,
 }));
+const EMPTY_QUEUED: readonly AgentQueuedTask[] = Object.freeze([]);
+
 describe("useChatRelevantNotesContext", () => {
   describe("useChatRelevantNotesContext()", () => {
+    const idleTurn = { streamingMessageId: null, queued: EMPTY_QUEUED };
+    const streaming = (messageId: string) => ({
+      streamingMessageId: messageId,
+      queued: EMPTY_QUEUED,
+    });
     let app: App;
     let root: HTMLDivElement;
     let draft: AgentInputDraftControls;
@@ -50,11 +58,9 @@ describe("useChatRelevantNotesContext", () => {
       document.body.append(root);
       draft = {
         input: "draft",
-        queue: [],
         images: [],
         contextNotes: [],
         includeActiveNote: false,
-        loading: false,
         setContextNotes: jest.fn(),
       } as unknown as AgentInputDraftControls;
     });
@@ -73,7 +79,8 @@ describe("useChatRelevantNotesContext", () => {
             "embeddings-chat",
             { ...draft, input: "How do embeddings work?" },
             [],
-            undefined
+            undefined,
+            idleTurn
           )
         );
         const store = getChatRelevantNotesStore(app);
@@ -104,7 +111,8 @@ describe("useChatRelevantNotesContext", () => {
             "embeddings-chat",
             { ...draft, input },
             [],
-            undefined
+            undefined,
+            idleTurn
           ),
         { initialProps: { input: "How do embeddings work?" } }
       );
@@ -127,9 +135,10 @@ describe("useChatRelevantNotesContext", () => {
             app,
             root,
             "embeddings-chat",
-            { ...draft, loading: true },
+            draft,
             [user, { ...user, id: "answer", sender: "AI", message: text }],
-            undefined
+            undefined,
+            streaming("answer")
           ),
         { initialProps: { text: "partial" } }
       );
@@ -153,7 +162,7 @@ describe("useChatRelevantNotesContext", () => {
 
     it("clears the selected chat when its surface unmounts (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", () => {
       const { unmount } = renderHook(() =>
-        useChatRelevantNotesContext(app, root, "embeddings-chat", draft, [], undefined)
+        useChatRelevantNotesContext(app, root, "embeddings-chat", draft, [], undefined, idleTurn)
       );
       act(() => {
         root.dispatchEvent(new Event("pointerdown"));
@@ -193,7 +202,8 @@ describe("useChatRelevantNotesContext", () => {
               message: "provider failed",
             },
           ],
-          undefined
+          undefined,
+          idleTurn
         )
       );
       void act(() => root.dispatchEvent(new Event("pointerdown", { bubbles: true })));
@@ -205,7 +215,9 @@ describe("useChatRelevantNotesContext", () => {
     });
 
     it("includes selected excerpts and project file references without implicitly attaching the active note (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", () => {
-      renderHook(() => useChatRelevantNotesContext(app, root, "one", draft, [], undefined));
+      renderHook(() =>
+        useChatRelevantNotesContext(app, root, "one", draft, [], undefined, idleTurn)
+      );
 
       act(() => {
         root.dispatchEvent(new Event("pointerdown"));
@@ -218,7 +230,10 @@ describe("useChatRelevantNotesContext", () => {
     it("includes the sent question immediately and adds the assistant answer only when streaming finishes (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", () => {
       const { rerender } = renderHook(
         ({ messages, loading }) =>
-          useChatRelevantNotesContext(app, root, "one", { ...draft, loading }, messages, undefined),
+          useChatRelevantNotesContext(app, root, "one", draft, messages, undefined, {
+            streamingMessageId: loading ? "a" : null,
+            queued: EMPTY_QUEUED,
+          }),
         { initialProps: { messages: [] as AgentChatMessage[], loading: false } }
       );
       void act(() => root.dispatchEvent(new Event("pointerdown")));
@@ -261,9 +276,10 @@ describe("useChatRelevantNotesContext", () => {
               app,
               root,
               id,
-              { ...draft, loading: true },
+              draft,
               messages,
-              undefined
+              undefined,
+              streaming("partial")
             ),
           {
             initialProps: {
@@ -298,14 +314,7 @@ describe("useChatRelevantNotesContext", () => {
         turnStopReason: "end_turn" as const,
       };
       renderHook(() =>
-        useChatRelevantNotesContext(
-          app,
-          root,
-          "one",
-          { ...draft, loading: true },
-          [prior, user],
-          undefined
-        )
+        useChatRelevantNotesContext(app, root, "one", draft, [prior, user], undefined, idleTurn)
       );
       void act(() => root.dispatchEvent(new Event("pointerdown")));
       expect(getChatRelevantNotesStore(app).getSnapshot()!.request.messages).toEqual([
@@ -314,40 +323,44 @@ describe("useChatRelevantNotesContext", () => {
       ]);
     });
     it("uses a queued message's raw text, excerpt, and note reference while counting its URL and image as skipped (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", () => {
-      const queue = [
+      const queue: AgentQueuedTask[] = [
         {
-          id: "q",
-          text: "expanded private transport text",
-          rawInput: "queued topic",
-          context: {
-            notes: [new (TFile as unknown as new (path: string) => TFile)("queued.md")],
-            urls: ["https://example.com"],
-            selectedTextContexts: [
-              {
-                content: "queued excerpt",
-                notePath: "excerpt.md",
-                sourceType: "note" as const,
-                noteTitle: "Excerpt",
-                startLine: 0,
-                endLine: 1,
-                id: "selection",
-              },
+          taskId: "task-q",
+          queueReason: "busy",
+          submission: {
+            submissionId: "submission-q",
+            conversationId: "one",
+            sourceMessageIds: [],
+            source: "typed",
+            presentation: "text",
+            requestText: "expanded private transport text",
+            rawInput: "queued topic",
+            context: {
+              notes: [new (TFile as unknown as new (path: string) => TFile)("queued.md")],
+              urls: ["https://example.com"],
+              selectedTextContexts: [
+                {
+                  content: "queued excerpt",
+                  notePath: "excerpt.md",
+                  sourceType: "note" as const,
+                  noteTitle: "Excerpt",
+                  startLine: 0,
+                  endLine: 1,
+                  id: "selection",
+                },
+              ],
+            },
+            promptContent: [
+              { type: "image" as const, mimeType: "image/png", data: "private pixels" },
             ],
           },
-          promptContent: [
-            { type: "image" as const, mimeType: "image/png", data: "private pixels" },
-          ],
         },
       ];
       renderHook(() =>
-        useChatRelevantNotesContext(
-          app,
-          root,
-          "one",
-          { ...draft, input: "", queue },
-          [user],
-          undefined
-        )
+        useChatRelevantNotesContext(app, root, "one", { ...draft, input: "" }, [user], undefined, {
+          streamingMessageId: null,
+          queued: queue,
+        })
       );
       void act(() => root.dispatchEvent(new Event("pointerdown")));
       const snapshot = getChatRelevantNotesStore(app).getSnapshot()!;
@@ -373,7 +386,8 @@ describe("useChatRelevantNotesContext", () => {
             "one",
             { ...draft, input: "" },
             messages,
-            undefined
+            undefined,
+            idleTurn
           ),
         { initialProps: { messages: [sent] } }
       );
@@ -389,7 +403,9 @@ describe("useChatRelevantNotesContext", () => {
       expect(JSON.stringify(snapshot.request)).not.toContain("private-pixels");
     });
     it("clears the selected chat when a Markdown editor becomes active even without a Relevant Notes pane (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", () => {
-      renderHook(() => useChatRelevantNotesContext(app, root, "one", draft, [], undefined));
+      renderHook(() =>
+        useChatRelevantNotesContext(app, root, "one", draft, [], undefined, idleTurn)
+      );
       void act(() => root.dispatchEvent(new Event("pointerdown")));
       expect(getChatRelevantNotesStore(app).getSnapshot()?.id).toBe("one");
       const listener = (app.workspace.on as jest.Mock).mock.calls.find(
@@ -413,7 +429,9 @@ describe("useChatRelevantNotesContext", () => {
         />,
         { container: root }
       );
-      renderHook(() => useChatRelevantNotesContext(app, root, "one", draft, [], undefined));
+      renderHook(() =>
+        useChatRelevantNotesContext(app, root, "one", draft, [], undefined, idleTurn)
+      );
       const other = {
         id: "other",
         request: { folder_name: "Vault", draft: "other topic" },
@@ -445,7 +463,15 @@ describe("useChatRelevantNotesContext", () => {
       store.select(popout);
       const { rerender } = renderHook(
         ({ text }) =>
-          useChatRelevantNotesContext(app, root, "main", { ...draft, input: text }, [], undefined),
+          useChatRelevantNotesContext(
+            app,
+            root,
+            "main",
+            { ...draft, input: text },
+            [],
+            undefined,
+            idleTurn
+          ),
         { initialProps: { text: "main draft" } }
       );
       rerender({ text: "main update" });
@@ -456,7 +482,7 @@ describe("useChatRelevantNotesContext", () => {
     it("selects the new session's draft when the focused chat switches sessions (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", () => {
       const { rerender } = renderHook(
         ({ id, input }) =>
-          useChatRelevantNotesContext(app, root, id, { ...draft, input }, [], undefined),
+          useChatRelevantNotesContext(app, root, id, { ...draft, input }, [], undefined, idleTurn),
         { initialProps: { id: "first-chat", input: "How do embeddings work?" } }
       );
       act(() => {
@@ -476,7 +502,15 @@ describe("useChatRelevantNotesContext", () => {
       const secondSessionSetter = jest.fn();
       const { rerender } = renderHook(
         ({ id, setContextNotes }) =>
-          useChatRelevantNotesContext(app, root, id, { ...draft, setContextNotes }, [], undefined),
+          useChatRelevantNotesContext(
+            app,
+            root,
+            id,
+            { ...draft, setContextNotes },
+            [],
+            undefined,
+            idleTurn
+          ),
         { initialProps: { id: "first-chat", setContextNotes: firstSessionSetter } }
       );
       act(() => {
@@ -503,7 +537,9 @@ describe("useChatRelevantNotesContext", () => {
         { container: root }
       );
       const shelf = getByRole("button", { name: "Open in separate pane" });
-      renderHook(() => useChatRelevantNotesContext(app, root, "one", draft, [], undefined));
+      renderHook(() =>
+        useChatRelevantNotesContext(app, root, "one", draft, [], undefined, idleTurn)
+      );
       void act(() => shelf.dispatchEvent(new Event("pointerdown", { bubbles: true })));
       expect(getChatRelevantNotesStore(app).getSnapshot()).toBeNull();
     });

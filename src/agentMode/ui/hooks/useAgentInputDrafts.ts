@@ -1,45 +1,17 @@
-import type { BackendId, PromptContent } from "@/agentMode/session/types";
-import type { MessageContext } from "@/types/message";
 import { TFile } from "obsidian";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-
-// Snapshotted at enqueue time so context (active note, selections) doesn't
-// drift between when the user queues the message and when it actually flushes.
-export interface QueuedAgentMessage {
-  id: string;
-  text: string;
-  rawInput: string;
-  context?: MessageContext;
-  /**
-   * Why the message entered the queue, snapshotted at enqueue time — an
-   * enqueue reason, not a live "what's blocking now" (the blockers can evolve
-   * before the queue drains; the label deliberately doesn't chase them).
-   * Absent on combined flush items, which are sent immediately and never
-   * rendered as queue rows.
-   */
-  queueReason?: "context" | "busy";
-  /** Image blocks for the backend prompt. */
-  promptContent?: PromptContent[];
-  /**
-   * Resolved answerer selection (the deduped `@`-mentioned installed agents).
-   * Present only when the turn fans out; absent for the single-agent path (no
-   * qualifying mentions, or only the main agent `@`-ed). Snapshotted at enqueue
-   * time alongside the rest.
-   */
-  mentionedAgents?: ReadonlyArray<BackendId>;
-}
 
 /**
  * Per-chat-input compose state. Replaces the old `key={internalId}` remount of
  * the chat surface: instead of throwing away and rebuilding input state on
- * every tab switch, each logical input keeps its own draft so unsent text,
- * attachments, and queued follow-ups survive switching away and back.
+ * every tab switch, each logical input keeps its own draft so unsent text and
+ * attachments survive switching away and back.
  *
- * `loading` (turn in flight) and `queue` live here too — without the remount
- * to reset them per session, a single shared flag would bleed a backgrounded
- * session's running state onto whichever session is foregrounded.
+ * Purely the compose box. The in-flight turn and its queued follow-ups belong
+ * to the session's task owner (`AgentTaskCoordinator`), so a backgrounded
+ * conversation's running state can never bleed into the foreground one.
  * `selectedTextContexts` is deliberately NOT here: it's a global ephemeral
- * atom, snapshotted into the queued item at send time.
+ * atom, snapshotted into the submission at send time.
  */
 export interface AgentInputDraft {
   input: string;
@@ -47,8 +19,6 @@ export interface AgentInputDraft {
   contextNotes: TFile[];
   includeActiveNote: boolean;
   includeActiveWebTab: boolean;
-  loading: boolean;
-  queue: QueuedAgentMessage[];
 }
 
 interface UseAgentInputDraftsArgs {
@@ -66,9 +36,7 @@ export interface AgentInputDraftControls extends AgentInputDraft {
   addImages: (files: File[]) => void;
   setIncludeActiveNote: (include: boolean) => void;
   setIncludeActiveWebTab: (include: boolean) => void;
-  setLoading: (loading: boolean) => void;
-  setQueue: React.Dispatch<React.SetStateAction<QueuedAgentMessage[]>>;
-  /** Clear the compose fields after a send; leaves loading/queue untouched. */
+  /** Clear the compose fields after a send. */
   resetCompose: () => void;
 }
 
@@ -76,7 +44,6 @@ export interface AgentInputDraftControls extends AgentInputDraft {
 // arrays (no fresh `[]` that would defeat memo/identity checks downstream).
 const EMPTY_IMAGES = Object.freeze([]) as unknown as File[];
 const EMPTY_CONTEXT_NOTES = Object.freeze([]) as unknown as TFile[];
-const EMPTY_QUEUE = Object.freeze([]) as unknown as QueuedAgentMessage[];
 
 const createDraft = (includeActiveNote: boolean): AgentInputDraft => ({
   input: "",
@@ -84,8 +51,6 @@ const createDraft = (includeActiveNote: boolean): AgentInputDraft => ({
   contextNotes: [],
   includeActiveNote,
   includeActiveWebTab: false,
-  loading: false,
-  queue: [],
 });
 
 const applyArrayState = <T>(value: React.SetStateAction<T[]>, previous: T[]): T[] =>
@@ -176,16 +141,6 @@ export function useAgentInputDrafts({
     [updateActive]
   );
 
-  const setLoading = useCallback(
-    (loading: boolean) => updateActive((draft) => ({ ...draft, loading })),
-    [updateActive]
-  );
-
-  const setQueue = useCallback<React.Dispatch<React.SetStateAction<QueuedAgentMessage[]>>>(
-    (value) => updateActive((draft) => ({ ...draft, queue: applyArrayState(value, draft.queue) })),
-    [updateActive]
-  );
-
   // DESIGN NOTE: resetCompose hard-clears includeActiveNote to false after a
   // send, so within one session the active note auto-attaches only to the
   // FIRST message. Two scenarios, only one of which matches the legacy
@@ -228,8 +183,6 @@ export function useAgentInputDrafts({
         contextNotes: EMPTY_CONTEXT_NOTES,
         includeActiveNote: defaultIncludeActiveNote,
         includeActiveWebTab: false,
-        loading: false,
-        queue: EMPTY_QUEUE,
       },
     [active, defaultIncludeActiveNote]
   );
@@ -248,8 +201,6 @@ export function useAgentInputDrafts({
       addImages,
       setIncludeActiveNote,
       setIncludeActiveWebTab,
-      setLoading,
-      setQueue,
       resetCompose,
     }),
     [
@@ -260,8 +211,6 @@ export function useAgentInputDrafts({
       addImages,
       setIncludeActiveNote,
       setIncludeActiveWebTab,
-      setLoading,
-      setQueue,
       resetCompose,
     ]
   );

@@ -112,7 +112,7 @@ const actionRailArgs: AgentChatMessagesProps = {
   pendingToolPermissions: permissions,
   pendingAskUserQuestions: questions,
   chatBackend: {} as AgentChatBackend,
-  isLoading: true,
+  streamingMessageId: message.id,
 };
 
 const meta = {
@@ -157,7 +157,7 @@ export const RunningAfterStop: StoryObj<AgentChatMessagesProps> = {
       { ...message, id: "next-request", sender: "user", message: "List its action items instead." },
       { ...message, id: "running-response", message: "" },
     ],
-    isLoading: true,
+    streamingMessageId: "running-response",
   },
   render: (props) => <QueuedActionsDemo {...actionRailArgs} {...props} />,
 };

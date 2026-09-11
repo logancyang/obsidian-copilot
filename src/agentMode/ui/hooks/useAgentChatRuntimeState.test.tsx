@@ -6,6 +6,8 @@ import type {
   CurrentPlan,
   PermissionPrompt,
 } from "@/agentMode/session/types";
+import type { AgentQueuedTask } from "@/agentMode/session/AgentTaskCoordinator";
+import type { AgentTaskRecord } from "@/agentMode/session/voiceTypes";
 import { useAgentChatRuntimeState } from "@/agentMode/ui/hooks/useAgentChatRuntimeState";
 import { act, render, renderHook } from "@testing-library/react";
 import React, { useEffect } from "react";
@@ -18,7 +20,11 @@ interface FakeBackendState {
   currentTodoList?: AgentTodoListEntry[] | null;
   pendingToolPermissions: PermissionPrompt[];
   pendingAskUserQuestions: AskUserQuestionPrompt[];
+  activeTask: AgentTaskRecord | null;
+  queuedTasks: readonly AgentQueuedTask[];
 }
+
+const NO_QUEUED_TASKS: readonly AgentQueuedTask[] = Object.freeze([]);
 
 /**
  * Minimal stand-in for the backend the hook subscribes to. Only the getters
@@ -34,6 +40,8 @@ function makeFakeBackend(initial: Partial<FakeBackendState> = {}) {
     currentTodoList: initial.currentTodoList ?? null,
     pendingToolPermissions: initial.pendingToolPermissions ?? [],
     pendingAskUserQuestions: initial.pendingAskUserQuestions ?? [],
+    activeTask: initial.activeTask ?? null,
+    queuedTasks: initial.queuedTasks ?? NO_QUEUED_TASKS,
   };
   const listeners = new Set<() => void>();
 
@@ -49,6 +57,8 @@ function makeFakeBackend(initial: Partial<FakeBackendState> = {}) {
     getCurrentTodoList: () => state.currentTodoList ?? null,
     getPendingToolPermissions: () => state.pendingToolPermissions,
     getPendingAskUserQuestions: () => state.pendingAskUserQuestions,
+    getActiveTask: () => state.activeTask,
+    getQueuedTasks: () => state.queuedTasks,
   } as unknown as AgentChatBackend;
 
   return {
@@ -71,6 +81,8 @@ describe("useAgentChatRuntimeState", () => {
     expect(result.current.hasPendingPlanPermission).toBe(false);
     expect(result.current.currentPlan).toBeNull();
     expect(result.current.pendingToolPermissions).toEqual([]);
+    expect(result.current.activeTask).toBeNull();
+    expect(result.current.queuedTasks).toEqual([]);
   });
 
   it("re-syncs every field when the backend notifies", () => {
@@ -81,12 +93,21 @@ describe("useAgentChatRuntimeState", () => {
       fake.state.messages = [msg("x"), msg("y")];
       fake.state.isStarting = true;
       fake.state.hasPendingPlanPermission = true;
+      fake.state.activeTask = {
+        taskId: "task-1",
+        sourceMessageIds: ["user-1"],
+        assistantMessageId: "assistant-1",
+        delegationIds: [],
+        state: "running",
+        presentation: "text",
+      };
       fake.emit();
     });
 
     expect(result.current.messages).toHaveLength(2);
     expect(result.current.isStarting).toBe(true);
     expect(result.current.hasPendingPlanPermission).toBe(true);
+    expect(result.current.activeTask?.assistantMessageId).toBe("assistant-1");
   });
 
   it("imperatively syncs to the new backend when the backend prop changes", () => {
