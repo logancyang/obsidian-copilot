@@ -24,6 +24,18 @@ import { joinPosix } from "@/utils/pathUtils";
 import { TFile, type App } from "obsidian";
 import { Notice } from "obsidian";
 import { coerceProjectId, escapeYamlString, unescapeYamlString } from "./agentChatYaml";
+import {
+  AGENT_CHAT_SCHEMA_VERSION,
+  buildSnapshotComment,
+  conversationNeedsMixedSchema,
+  readSnapshotComment,
+  renderMixedChatBody,
+  splitSnapshotComment,
+  type AgentHistoryRestoreStatus,
+  type AgentMixedConversation,
+} from "./agentChatSnapshot";
+import type { ContextDeliveryState } from "./ContextDeliveryCursor";
+import type { AgentTaskRecord } from "./voiceTypes";
 import { GLOBAL_SCOPE } from "./scope";
 import type { AgentChatMessage, BackendId, SessionUsage } from "./types";
 
@@ -83,6 +95,37 @@ export interface LoadedAgentChat {
    * a resumed session show its last-known usage before the next turn.
    */
   usage?: SessionUsage;
+  /**
+   * What happened to the structured voice history in this file. Absent ≙
+   * `"none"` — an ordinary chat with nothing structured to restore. Anything
+   * other than `"restored"` means the caller must not let background saves
+   * overwrite the file.
+   * See `designdocs/VOICE_CHAT_DEMO_DESIGN.md`, "Persistence and reload".
+   */
+  structuredHistory?: AgentHistoryRestoreStatus;
+  /**
+   * The validated mixed conversation, present only when `structuredHistory`
+   * is `"restored"`. `messages` above mirrors its transcript so callers that
+   * only render text need no branching.
+   */
+  mixed?: AgentMixedConversation;
+}
+
+/**
+ * The structure a mixed conversation adds to its markdown file: the stable
+ * conversation identity, its task records, and how much of the public
+ * transcript the backend session has already been given.
+ */
+/** Where a save landed, and whether it used the mixed-transcript schema. */
+export interface AgentChatSaveResult {
+  path: string;
+  wroteMixedSchema: boolean;
+}
+
+export interface AgentMixedConversationSave {
+  conversationId: string;
+  tasks: readonly AgentTaskRecord[];
+  contextDelivery: ContextDeliveryState;
 }
 
 interface ExistingMeta {
@@ -121,7 +164,7 @@ export class AgentChatPersistenceManager {
    * `firstMessageEpoch`. When omitted, the file is matched by epoch.
    */
   async saveSession(
-    messages: AgentChatMessage[],
+    messages: readonly AgentChatMessage[],
     backendId: BackendId,
     options?: {
       label?: string | null;
@@ -137,8 +180,14 @@ export class AgentChatPersistenceManager {
       projectId?: string;
       /** Latest token-usage snapshot to persist for resume. */
       usage?: SessionUsage;
+      /**
+       * Structure that only a conversation with spoken content or task cards
+       * has. Supplying it lets this write use the mixed-transcript schema;
+       * a conversation with neither still writes the original format.
+       */
+      mixed?: AgentMixedConversationSave;
     }
-  ): Promise<{ path: string } | null> {
+  ): Promise<AgentChatSaveResult | null> {
     if (messages.length === 0) return null;
 
     try {
@@ -167,13 +216,21 @@ export class AgentChatPersistenceManager {
 
       const preparedMessages = await prepareChatImagesForSave(
         this.app,
-        messages,
+        [...messages],
         preferredFileName
       );
-      const chatContent = this.formatChatContent(preparedMessages);
+      const mixed = options?.mixed;
+      const useMixedSchema =
+        mixed !== undefined && conversationNeedsMixedSchema(preparedMessages, mixed.tasks);
+      // The whole note is assembled in memory and written once, so a write
+      // that fails leaves the previous valid file in place.
+      const chatContent = useMixedSchema
+        ? this.formatMixedChatContent(preparedMessages, mixed)
+        : this.formatChatContent(preparedMessages);
 
       const noteContent = this.generateNoteContent({
         chatContent,
+        conversationId: useMixedSchema ? mixed.conversationId : undefined,
         firstMessageEpoch,
         backendId,
         topic: existingMeta.topic,
@@ -193,7 +250,7 @@ export class AgentChatPersistenceManager {
 
       if (existingFile && isInVaultCache(this.app, existingFile.path)) {
         await this.app.vault.modify(existingFile, noteContent);
-        return { path: existingFile.path };
+        return { path: existingFile.path, wroteMixedSchema: useMixedSchema };
       }
 
       if (
@@ -201,27 +258,27 @@ export class AgentChatPersistenceManager {
         (await this.app.vault.adapter.exists(preferredFileName))
       ) {
         await this.app.vault.adapter.write(preferredFileName, noteContent);
-        return { path: preferredFileName };
+        return { path: preferredFileName, wroteMixedSchema: useMixedSchema };
       }
 
       try {
         const created = await this.app.vault.create(preferredFileName, noteContent);
-        return { path: created.path };
+        return { path: created.path, wroteMixedSchema: useMixedSchema };
       } catch (err) {
         if (isFileAlreadyExistsError(err)) {
           await this.app.vault.adapter.write(preferredFileName, noteContent);
-          return { path: preferredFileName };
+          return { path: preferredFileName, wroteMixedSchema: useMixedSchema };
         }
         if (isNameTooLongError(err)) {
           logWarn("[AgentChatPersistenceManager] Filename too long, falling back to minimal name");
           const fallback = `${conversationsFolder}/${AGENT_FILENAME_PREFIX}chat-${firstMessageEpoch}.md`;
           try {
             const created = await this.app.vault.create(fallback, noteContent);
-            return { path: created.path };
+            return { path: created.path, wroteMixedSchema: useMixedSchema };
           } catch (fallbackErr) {
             if (isFileAlreadyExistsError(fallbackErr)) {
               await this.app.vault.adapter.write(fallback, noteContent);
-              return { path: fallback };
+              return { path: fallback, wroteMixedSchema: useMixedSchema };
             }
             throw fallbackErr;
           }
@@ -248,6 +305,9 @@ export class AgentChatPersistenceManager {
     }
 
     const { frontmatter, body } = this.splitFrontmatter(content);
+    // Always separate the metadata comment first: even an unusable snapshot
+    // must not leak base64 into the last readable message.
+    const { visibleBody, encoded } = splitSnapshotComment(body);
     const backendId = (frontmatter.backendId ?? "").trim();
     if (!backendId) {
       throw new Error(`Missing backendId in agent chat frontmatter: ${file.path}`);
@@ -259,12 +319,55 @@ export class AgentChatPersistenceManager {
     // chats stay in the global history. Never inferred from the filename.
     const projectId = frontmatter.projectId?.trim() || GLOBAL_SCOPE;
     const usage = parseUsageJson(frontmatter.usage);
-    const messages = this.parseChatBody(body);
+    const base = { backendId, topic, label, sessionId, projectId, usage };
+    const declaredSchema = Number.parseInt(frontmatter.agentChatSchema ?? "", 10);
+
+    if (Number.isFinite(declaredSchema) && declaredSchema > AGENT_CHAT_SCHEMA_VERSION) {
+      logWarn(
+        `[AgentChatPersistenceManager] ${file.path} declares agent chat schema ${declaredSchema}; opening read-only`
+      );
+      return {
+        ...base,
+        messages: this.parseChatBody(visibleBody),
+        structuredHistory: "unsupported-schema",
+      };
+    }
+
+    if (encoded !== null) {
+      const snapshot = readSnapshotComment(encoded, visibleBody);
+      if (snapshot.status === "restored") {
+        logInfo(
+          `[AgentChatPersistenceManager] Restored ${snapshot.conversation.messages.length} messages and ${snapshot.conversation.tasks.length} tasks from ${file.path} (backend=${backendId}, projectId=${projectId})`
+        );
+        return {
+          ...base,
+          messages: [...snapshot.conversation.messages],
+          structuredHistory: "restored",
+          mixed: snapshot.conversation,
+        };
+      }
+      logWarn(
+        `[AgentChatPersistenceManager] structured voice history unavailable for ${file.path} (${snapshot.status === "unavailable" ? snapshot.reason : "unsupported schema"})`
+      );
+      return {
+        ...base,
+        messages: this.parseChatBody(visibleBody),
+        structuredHistory:
+          snapshot.status === "unsupported-schema" ? "unsupported-schema" : "unavailable",
+      };
+    }
+
+    // A file that claims the mixed schema but carries no snapshot was edited
+    // down to its readable half; show that half and protect it from autosave.
+    const structuredHistory: AgentHistoryRestoreStatus = Number.isFinite(declaredSchema)
+      ? "unavailable"
+      : "none";
+    const messages = this.parseChatBody(visibleBody);
 
     logInfo(
       `[AgentChatPersistenceManager] Loaded ${messages.length} messages from ${file.path} (backend=${backendId}, sessionId=${sessionId ?? "none"}, projectId=${projectId})`
     );
-    return { messages, backendId, topic, label, sessionId, projectId, usage };
+    return { ...base, messages, structuredHistory };
   }
 
   /**
@@ -332,7 +435,7 @@ export class AgentChatPersistenceManager {
     }
   }
 
-  private formatChatContent(messages: AgentChatMessage[]): string {
+  private formatChatContent(messages: readonly AgentChatMessage[]): string {
     return messages
       .map((m) => {
         const ts = m.timestamp ? m.timestamp.display : "Unknown time";
@@ -349,6 +452,20 @@ export class AgentChatPersistenceManager {
         return `**${m.sender}**: ${body}\n[Timestamp: ${ts}]`;
       })
       .join("\n\n");
+  }
+
+  /**
+   * Readable transcript plus the encoded metadata comment that makes it
+   * reloadable. Both halves describe the same conversation, which is what the
+   * comment's digest of the visible body attests.
+   */
+  private formatMixedChatContent(
+    messages: readonly AgentChatMessage[],
+    mixed: AgentMixedConversationSave
+  ): string {
+    const visibleBody = renderMixedChatBody(messages, mixed.tasks);
+    const comment = buildSnapshotComment({ ...mixed, messages }, visibleBody);
+    return `${visibleBody}\n\n${comment}`;
   }
 
   private parseChatBody(body: string): AgentChatMessage[] {
@@ -430,7 +547,7 @@ export class AgentChatPersistenceManager {
   }
 
   private generateFileName(
-    messages: AgentChatMessage[],
+    messages: readonly AgentChatMessage[],
     firstMessageEpoch: number,
     folder: string,
     topic?: string
@@ -502,6 +619,8 @@ export class AgentChatPersistenceManager {
     chatContent: string;
     firstMessageEpoch: number;
     backendId: BackendId;
+    /** Set only for mixed conversations, which also stamp the schema. */
+    conversationId?: string;
     topic?: string;
     label?: string | null;
     modelKey?: string;
@@ -516,6 +635,12 @@ export class AgentChatPersistenceManager {
       `mode: ${AGENT_CHAT_MODE}`,
       `backendId: ${args.backendId}`,
     ];
+    // Stamped only for conversations that need the mixed-transcript reader,
+    // so every chat saved before voice keeps its original bytes.
+    if (args.conversationId) {
+      lines.push(`agentChatSchema: ${AGENT_CHAT_SCHEMA_VERSION}`);
+      lines.push(`conversationId: "${escapeYamlString(args.conversationId)}"`);
+    }
     // Reason: global chats write no projectId, staying byte-identical to legacy
     // `agent__` chats (which loadFile maps back to GLOBAL_SCOPE). Coerce so a
     // blank/whitespace id never leaks a stray frontmatter line.

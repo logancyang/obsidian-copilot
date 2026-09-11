@@ -1,3 +1,4 @@
+import type { AgentHistoryRestoreStatus } from "./agentChatSnapshot";
 import type {
   AgentQueuedTask,
   AgentQueueHoldReason,
@@ -50,6 +51,13 @@ export interface AgentChatBackend {
   onTaskSettled(listener: (result: AgentTaskResult) => void): () => void;
   /** Stop: discard queued submissions first, then cancel the active turn. */
   cancelActiveAndClearQueue(): Promise<void>;
+  /**
+   * What the loader recovered from this chat's saved file, when the surface
+   * has a session behind it. Optional because a non-agent chat host has no
+   * saved agent conversation to report on.
+   * See `designdocs/VOICE_CHAT_DEMO_DESIGN.md`, "Persistence and reload".
+   */
+  getHistoryRestoreStatus?(): AgentHistoryRestoreStatus;
   deleteMessage(id: string): Promise<boolean>;
   clearMessages(): void;
   getMessages(): AgentChatMessage[];

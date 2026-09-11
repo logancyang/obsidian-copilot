@@ -133,6 +133,34 @@ describe("AgentChatMessages", () => {
 
     afterEach(() => jest.useRealTimers());
 
+    it("shows no history notice for a chat whose saved structure loaded normally", () => {
+      renderMessages([assistantMessage("answer-1", 62_000)], null, {
+        historyRestoreStatus: "restored",
+      });
+
+      expect(screen.queryByTestId("agent-history-restore-notice")).toBeNull();
+    });
+
+    it("tells the reader the structured voice history is unavailable after a hand edit", () => {
+      renderMessages([assistantMessage("answer-1", 62_000)], null, {
+        historyRestoreStatus: "unavailable",
+      });
+
+      expect(screen.getByTestId("agent-history-restore-notice").textContent).toContain(
+        "Structured voice history unavailable"
+      );
+    });
+
+    it("says a chat saved by a newer Copilot is open read-only", () => {
+      renderMessages([assistantMessage("answer-1", 62_000)], null, {
+        historyRestoreStatus: "unsupported-schema",
+      });
+
+      expect(screen.getByTestId("agent-history-restore-notice").textContent).toContain(
+        "open read-only"
+      );
+    });
+
     it("retains the latest completed turn duration with a static icon", () => {
       const { container } = renderMessages(
         [assistantMessage("answer-1", 62_000, { turnDurationMs: 138_000 })],

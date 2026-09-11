@@ -5,7 +5,11 @@ import type { FormattedDateTime, MessageContext } from "@/types/message";
 // `import type` keeps the cycle with `fanoutTypes` compile-time only.
 import type { FanoutTurn } from "@/agentMode/session/fanout/fanoutTypes";
 import type { PlanUsage } from "@/agentMode/session/planUsage";
-import type { AgentMessageOrigin, AgentMessagePresentation } from "@/agentMode/session/voiceTypes";
+import type {
+  AgentMessageOrigin,
+  AgentMessagePresentation,
+  VoiceSourceRange,
+} from "@/agentMode/session/voiceTypes";
 
 export type { PlanUsage, UsageWindow } from "@/agentMode/session/planUsage";
 import type { ProjectScopeId } from "./scope";
@@ -938,6 +942,11 @@ export interface AgentChatMessage {
   taskId?: string;
   /** Where this entry renders. Absent means the public conversation. */
   presentation?: AgentMessagePresentation;
+  /**
+   * Spoken fragments this entry's text was assembled from. Present only on
+   * voice entries; persisted so a reloaded transcript keeps its provenance.
+   */
+  sourceRanges?: readonly VoiceSourceRange[];
 }
 
 /** Creation shape — id is assigned by the store if absent. */

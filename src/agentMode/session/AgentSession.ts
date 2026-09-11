@@ -2,6 +2,9 @@ import { AI_SENDER, USER_SENDER, WEB_SELECTED_TEXT_TAG } from "@/constants";
 import { logInfo, logWarn } from "@/logger";
 import { AgentMessageStore } from "@/agentMode/session/AgentMessageStore";
 import { AgentTaskCoordinator } from "@/agentMode/session/AgentTaskCoordinator";
+import type { AgentPersistableConversation } from "@/agentMode/session/AgentMessageStore";
+import type { AgentHistoryRestoreStatus } from "@/agentMode/session/agentChatSnapshot";
+import { ContextDeliveryCursor } from "@/agentMode/session/ContextDeliveryCursor";
 import type {
   AgentMessageOrigin,
   AgentTaskResult,
@@ -338,6 +341,13 @@ export class AgentSession {
     cancel: () => this.cancel(),
     getTask: (taskId) => this.store.getTask(taskId),
   });
+  /**
+   * Which public entries this backend session has already been given. Lives
+   * beside the transcript so restoring context can never re-run past work.
+   *
+   * See `designdocs/VOICE_CHAT_DEMO_DESIGN.md`, "Text and voice context continuity".
+   */
+  readonly contextDelivery = new ContextDeliveryCursor();
   readonly internalId: string;
   readonly chatInputId: string;
   readonly backendId: BackendId;
@@ -346,6 +356,10 @@ export class AgentSession {
   /** Resolves when startup and any initial model selection have settled. */
   readonly ready: Promise<void>;
   private backendSessionId: SessionId | null = null;
+  // Stable across reloads for conversations saved with the mixed-transcript
+  // schema; a fresh chat mints one that is only written once it needs saving.
+  private conversationId: string = uuidv4();
+  private historyRestore: AgentHistoryRestoreStatus = "none";
   private readonly backend: BackendProcess;
   private readonly cwd: string | null;
   // Resolves to the project's context-materialization result; awaited before
@@ -870,6 +884,56 @@ export class AgentSession {
   }
 
   /**
+   * Replace the transcript AND the task records from a saved mixed
+   * conversation, so reopened voice work keeps its cards, origins, and
+   * answers. Restoring never dispatches anything: the tasks are history.
+   *
+   * See `designdocs/VOICE_CHAT_DEMO_DESIGN.md`, "Persistence and reload".
+   *
+   * @param conversation - Transcript and task records read from disk.
+   */
+  loadPersistedConversation(conversation: AgentPersistableConversation): void {
+    this.store.loadConversation(conversation);
+    this.notifyMessages();
+  }
+
+  /** Stable identity of this conversation across saves and reloads. */
+  getConversationId(): string {
+    return this.conversationId;
+  }
+
+  /**
+   * Adopt the identity a saved conversation was written under, so reopening a
+   * chat updates its own file instead of forking a second conversation.
+   *
+   * @param conversationId - Identity read from the saved snapshot.
+   */
+  restoreConversationId(conversationId: string): void {
+    if (conversationId.trim()) this.conversationId = conversationId;
+  }
+
+  /**
+   * Whether this chat's structured voice history came back intact. Anything
+   * other than `"none"` or `"restored"` means the file on disk must not be
+   * rewritten in the background.
+   */
+  getHistoryRestoreStatus(): AgentHistoryRestoreStatus {
+    return this.historyRestore;
+  }
+
+  /**
+   * Record what the loader found, and tell subscribers so the transcript can
+   * show (or drop) the "structured voice history unavailable" notice.
+   *
+   * @param status - Outcome reported by the persistence layer.
+   */
+  setHistoryRestoreStatus(status: AgentHistoryRestoreStatus): void {
+    if (this.historyRestore === status) return;
+    this.historyRestore = status;
+    this.notifyMessages();
+  }
+
+  /**
    * User-supplied label for this session (shown in the tab strip). `null`
    * means "no label" — the UI falls back to a positional default like
    * "Session N".
@@ -1133,7 +1197,17 @@ export class AgentSession {
     this.lastTurnError = false;
     this.recomputeStatusIfChanged();
 
-    const turn = this.runTurn(displayText, userMessageId, context, turnStartedAtMs, promptContent);
+    // The public entries this prompt speaks for. Handed to `runTurn` so the
+    // delivery cursor can advance on acceptance instead of on Send.
+    const coveredMessageIds = linkedMessageIds.length > 0 ? [...linkedMessageIds] : [userMessageId];
+    const turn = this.runTurn(
+      displayText,
+      userMessageId,
+      context,
+      turnStartedAtMs,
+      coveredMessageIds,
+      promptContent
+    );
     return { userMessageId, assistantMessageId, turn };
   }
 
@@ -1147,6 +1221,7 @@ export class AgentSession {
     userMessageId: string,
     context: MessageContext | undefined,
     turnStartedAtMs: number,
+    coveredMessageIds: readonly string[],
     promptContent?: PromptContent[]
   ): Promise<StopReason> {
     const placeholderId = this.placeholderId;
@@ -1296,6 +1371,11 @@ export class AgentSession {
       if (projectContextUpdates && promptStarted) {
         this.markProjectContextUpdatesDeliveredFn?.(projectContextUpdates.epoch);
       }
+      // Same delivery contract for the public entries this prompt carried: the
+      // backend has them, so a later context block must not repeat them. The
+      // fan-out path returns above and never reaches this ack, because those
+      // ephemeral sub-sessions are not this backend session.
+      if (promptStarted) this.contextDelivery.markDelivered(coveredMessageIds);
       if (
         placeholderId &&
         resp.stopReason !== "cancelled" &&
@@ -1333,6 +1413,9 @@ export class AgentSession {
       return resp.stopReason;
     } catch (err) {
       logWarn(`[AgentMode] prompt failed`, err);
+      // A prompt that threw may still have reached the agent, so these entries
+      // are neither delivered nor eligible for an automatic resend.
+      this.contextDelivery.markUncertain(coveredMessageIds);
       if (placeholderId) {
         this.store.markMessageError(
           placeholderId,

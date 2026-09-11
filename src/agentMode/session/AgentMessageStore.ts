@@ -16,6 +16,7 @@ import type {
   AgentMessagePresentation,
   AgentTaskRecord,
   AgentTaskState,
+  VoiceSourceRange,
 } from "@/agentMode/session/voiceTypes";
 import { USER_SENDER } from "@/constants";
 import { FormattedDateTime, MessageContext } from "@/types/message";
@@ -56,6 +57,7 @@ interface StoredAgentMessage {
   voiceSessionId?: string;
   taskId?: string;
   presentation?: AgentMessagePresentation;
+  sourceRanges?: readonly VoiceSourceRange[];
 }
 
 /**
@@ -72,6 +74,13 @@ export type AgentConversationRow =
 export interface AgentTaskDetails {
   task: AgentTaskRecord;
   messages: readonly AgentChatMessage[];
+  /**
+   * Whether the card can show what the agent actually did. Tool trails are
+   * live-only, so a task restored from a saved conversation reports `false`
+   * and the card says its activity details are unavailable.
+   * See `designdocs/VOICE_CHAT_DEMO_DESIGN.md`, "Persistence and reload".
+   */
+  activityAvailable: boolean;
 }
 
 /**
@@ -90,6 +99,44 @@ export interface AgentPersistableConversation {
 const EMPTY_CONVERSATION_ROWS: readonly AgentConversationRow[] = Object.freeze([]);
 const EMPTY_TASKS: readonly AgentTaskRecord[] = Object.freeze([]);
 const EMPTY_TASK_MESSAGES: readonly AgentChatMessage[] = Object.freeze([]);
+
+/**
+ * Fold a transcript into the public conversation: entries in order, with each
+ * `voice-card` task collapsed into one card placed where its answer would have
+ * appeared. Pure so the renderer and the persistence layer project the same
+ * rows from the same rule.
+ *
+ * @param messages - Visible entries in conversation order.
+ * @param tasks - Task records linking requests to answers.
+ */
+export function projectConversationRows(
+  messages: readonly AgentChatMessage[],
+  tasks: readonly AgentTaskRecord[]
+): readonly AgentConversationRow[] {
+  const cardTasks = new Map<string, AgentTaskRecord>();
+  for (const task of tasks) {
+    if (task.presentation === "voice-card") cardTasks.set(task.taskId, task);
+  }
+  const rows: AgentConversationRow[] = [];
+  const emitted = new Set<string>();
+  for (const message of messages) {
+    const card = message.taskId ? cardTasks.get(message.taskId) : undefined;
+    if (!card) {
+      rows.push({ kind: "message", message });
+      continue;
+    }
+    // A card stands in for the task's backend output only. The public user
+    // entries that requested it stay in the transcript.
+    if (card.sourceMessageIds.includes(message.id)) {
+      rows.push({ kind: "message", message });
+      continue;
+    }
+    if (emitted.has(card.taskId)) continue;
+    emitted.add(card.taskId);
+    rows.push({ kind: "task-card", task: card });
+  }
+  return rows.length > 0 ? rows : EMPTY_CONVERSATION_ROWS;
+}
 
 const MAX_COMPARE_JSON_CHARS = 8_000;
 const MAX_COMPARE_EDGE_CHARS = 512;
@@ -279,6 +326,9 @@ export class AgentMessageStore {
   // `isVisible` — the display and autosave paths both filter on that flag and
   // would silently drop the answer.
   private tasks = new Map<string, AgentTaskRecord>();
+  // Tasks that came back from a saved conversation. Their tool trails were
+  // never persisted, so their cards must not imply they have activity to show.
+  private restoredTaskIds = new Set<string>();
   private lastConversationRows: readonly AgentConversationRow[] | null = null;
 
   private generateId(): string {
@@ -333,6 +383,7 @@ export class AgentMessageStore {
       voiceSessionId: message.voiceSessionId,
       taskId: message.taskId,
       presentation: message.presentation,
+      sourceRanges: message.sourceRanges,
       version: 0,
     });
     this.lastDisplay = null;
@@ -564,6 +615,7 @@ export class AgentMessageStore {
     this.lastDisplay = null;
     this.lastConversationRows = null;
     this.tasks.clear();
+    this.restoredTaskIds.clear();
   }
 
   truncateAfterMessageId(messageId: string): void {
@@ -614,30 +666,7 @@ export class AgentMessageStore {
    */
   getConversationRows(): readonly AgentConversationRow[] {
     if (this.lastConversationRows !== null) return this.lastConversationRows;
-    const cardTasks = new Map<string, AgentTaskRecord>();
-    for (const task of this.tasks.values()) {
-      if (task.presentation === "voice-card") cardTasks.set(task.taskId, task);
-    }
-    const rows: AgentConversationRow[] = [];
-    const emitted = new Set<string>();
-    for (const msg of this.messages) {
-      if (!msg.isVisible) continue;
-      const card = msg.taskId ? cardTasks.get(msg.taskId) : undefined;
-      if (!card) {
-        rows.push({ kind: "message", message: this.adaptCached(msg) });
-        continue;
-      }
-      // A card stands in for the task's backend output only. The public user
-      // entries that requested it stay in the transcript.
-      if (card.sourceMessageIds.includes(msg.id)) {
-        rows.push({ kind: "message", message: this.adaptCached(msg) });
-        continue;
-      }
-      if (emitted.has(card.taskId)) continue;
-      emitted.add(card.taskId);
-      rows.push({ kind: "task-card", task: card });
-    }
-    const result = rows.length > 0 ? rows : EMPTY_CONVERSATION_ROWS;
+    const result = projectConversationRows(this.getDisplayMessages(), [...this.tasks.values()]);
     this.lastConversationRows = result;
     return result;
   }
@@ -652,7 +681,11 @@ export class AgentMessageStore {
     const messages = this.messages
       .filter((m) => m.taskId === taskId && !task.sourceMessageIds.includes(m.id))
       .map((m) => this.adaptCached(m));
-    return { task, messages: messages.length > 0 ? messages : EMPTY_TASK_MESSAGES };
+    return {
+      task,
+      messages: messages.length > 0 ? messages : EMPTY_TASK_MESSAGES,
+      activityAvailable: !this.restoredTaskIds.has(taskId),
+    };
   }
 
   /**
@@ -728,11 +761,30 @@ export class AgentMessageStore {
         voiceSessionId: msg.voiceSessionId,
         taskId: msg.taskId,
         presentation: msg.presentation,
+        sourceRanges: msg.sourceRanges,
         fanout,
         version: 0,
       });
     }
     logInfo(`[AgentMessageStore] Loaded ${messages.length} messages`);
+  }
+
+  /**
+   * Replace the transcript AND the task records from a saved conversation.
+   * Restored tasks are read-only history: their activity trails were never
+   * saved, so {@link getTaskDetails} reports activity as unavailable for them.
+   *
+   * See `designdocs/VOICE_CHAT_DEMO_DESIGN.md`, "Persistence and reload".
+   *
+   * @param conversation - Transcript and task records read from disk.
+   */
+  loadConversation(conversation: AgentPersistableConversation): void {
+    this.loadMessages([...conversation.messages]);
+    for (const task of conversation.tasks) {
+      this.tasks.set(task.taskId, task);
+      this.restoredTaskIds.add(task.taskId);
+    }
+    this.lastConversationRows = null;
   }
 
   getDebugInfo() {
@@ -759,6 +811,7 @@ export class AgentMessageStore {
       ...(m.voiceSessionId !== undefined ? { voiceSessionId: m.voiceSessionId } : {}),
       ...(m.taskId !== undefined ? { taskId: m.taskId } : {}),
       ...(m.presentation !== undefined ? { presentation: m.presentation } : {}),
+      ...(m.sourceRanges !== undefined ? { sourceRanges: m.sourceRanges } : {}),
       // Snapshot so each adapted view carries a fresh reference; the orchestrator
       // mutates one turn in place, so the same reference would freeze the dropdown.
       ...(m.fanout ? { fanout: snapshotFanoutTurn(m.fanout) } : {}),

@@ -1,7 +1,12 @@
 /* eslint-disable obsidianmd/no-tfile-tfolder-cast -- test fixtures; not real TFiles */
 import { AI_SENDER, USER_SENDER } from "@/constants";
 import { readFrontmatterViaAdapter } from "@/utils/vaultAdapterUtils";
-import { AgentChatPersistenceManager } from "./AgentChatPersistenceManager";
+import {
+  AgentChatPersistenceManager,
+  type AgentMixedConversationSave,
+} from "./AgentChatPersistenceManager";
+import { EMPTY_CONTEXT_DELIVERY } from "./ContextDeliveryCursor";
+import type { AgentTaskRecord } from "./voiceTypes";
 import { GLOBAL_SCOPE } from "./scope";
 import type { AgentChatMessage } from "./types";
 import { TFile } from "obsidian";
@@ -113,6 +118,45 @@ function makeMessage(sender: string, message: string, epoch = 1735732800000): Ag
     message,
     isVisible: true,
     timestamp: { epoch, display: "2026/01/01 12:00:00", fileName: "20260101_120000" },
+  };
+}
+
+const VOICE_TASK: AgentTaskRecord = {
+  taskId: "task-1",
+  sourceMessageIds: ["msg-spoken"],
+  assistantMessageId: "msg-answer",
+  delegationIds: ["deleg-1"],
+  state: "completed",
+  presentation: "voice-card",
+};
+
+/** The spoken request and the backend answer a voice card folds away. */
+function makeVoiceConversation(): AgentChatMessage[] {
+  return [
+    {
+      ...makeMessage(USER_SENDER, "Which notes mention the retro?"),
+      id: "msg-spoken",
+      origin: "voice-user",
+      voiceSessionId: "voice-1",
+      taskId: "task-1",
+    },
+    {
+      ...makeMessage(AI_SENDER, "Retro 2026-01 and Team norms mention it."),
+      id: "msg-answer",
+      origin: "backend",
+      taskId: "task-1",
+    },
+  ];
+}
+
+function makeMixedSave(
+  overrides: Partial<AgentMixedConversationSave> = {}
+): AgentMixedConversationSave {
+  return {
+    conversationId: "conv-1",
+    tasks: [VOICE_TASK],
+    contextDelivery: { delivered: ["msg-spoken"], uncertain: [] },
+    ...overrides,
   };
 }
 
@@ -458,6 +502,205 @@ describe("AgentChatPersistenceManager", () => {
       const loaded = await manager.loadFile(app.files.get(path) as unknown as TFile);
       expect(loaded.usage).toBeUndefined();
       expect(loaded.backendId).toBe("claude");
+    });
+  });
+
+  describe("mixed voice conversations", () => {
+    it("writes a typed-only conversation in the original format even when voice structure is offered", async () => {
+      const typed = [makeMessage(USER_SENDER, "hello"), makeMessage(AI_SENDER, "hi")];
+
+      const withoutVoice = await manager.saveSession(typed, "claude", {
+        mixed: makeMixedSave({ tasks: [] }),
+      });
+      const written = app.files.get(withoutVoice!.path)!.contents;
+
+      expect(withoutVoice!.wroteMixedSchema).toBe(false);
+      expect(written).not.toContain("agentChatSchema");
+      expect(written).not.toContain("copilot-agent-chat:");
+      expect(written).toContain("**user**: hello");
+    });
+
+    it("reopens a chat saved before voice existed with no structured-history state", async () => {
+      const saved = await manager.saveSession([makeMessage(USER_SENDER, "hello")], "claude");
+
+      const loaded = await manager.loadFile(app.files.get(saved!.path)! as unknown as TFile);
+
+      expect(loaded.structuredHistory).toBe("none");
+      expect(loaded.mixed).toBeUndefined();
+      expect(loaded.messages[0].message).toBe("hello");
+    });
+
+    it("stamps the schema and conversation id once a conversation carries spoken content", async () => {
+      const saved = await manager.saveSession(makeVoiceConversation(), "claude", {
+        mixed: makeMixedSave(),
+      });
+
+      const written = app.files.get(saved!.path)!.contents!;
+      expect(saved!.wroteMixedSchema).toBe(true);
+      expect(written).toContain("agentChatSchema: 2");
+      expect(written).toContain('conversationId: "conv-1"');
+      expect(written).toMatch(/<!-- copilot-agent-chat:2 [A-Za-z0-9+/=]+ -->\s*$/);
+    });
+
+    it("restores messages, task records, origins, and the delivery cursor on reload", async () => {
+      const saved = await manager.saveSession(makeVoiceConversation(), "claude", {
+        mixed: makeMixedSave(),
+      });
+
+      const loaded = await manager.loadFile(app.files.get(saved!.path)! as unknown as TFile);
+
+      expect(loaded.structuredHistory).toBe("restored");
+      expect(loaded.mixed?.conversationId).toBe("conv-1");
+      expect(loaded.mixed?.tasks).toEqual([VOICE_TASK]);
+      expect(loaded.mixed?.contextDelivery).toEqual({ delivered: ["msg-spoken"], uncertain: [] });
+      expect(loaded.messages.map((m) => m.origin)).toEqual(["voice-user", "backend"]);
+      expect(loaded.messages[0].voiceSessionId).toBe("voice-1");
+    });
+
+    it("keeps a task answer out of the public transcript yet restores it with the chat", async () => {
+      const saved = await manager.saveSession(makeVoiceConversation(), "claude", {
+        mixed: makeMixedSave(),
+      });
+      const written = app.files.get(saved!.path)!.contents!;
+
+      const loaded = await manager.loadFile(app.files.get(saved!.path)! as unknown as TFile);
+
+      expect(written).toContain("_Voice task — completed_");
+      expect(written).not.toContain("**ai**: Retro 2026-01");
+      expect(loaded.messages[1].message).toBe("Retro 2026-01 and Team norms mention it.");
+    });
+
+    it("survives a save and reload cycle that starts from restored content", async () => {
+      const first = await manager.saveSession(makeVoiceConversation(), "claude", {
+        mixed: makeMixedSave(),
+      });
+      const reloaded = await manager.loadFile(app.files.get(first!.path)! as unknown as TFile);
+
+      const second = await manager.saveSession(reloaded.messages, "claude", {
+        existingPath: first!.path,
+        mixed: makeMixedSave({ tasks: [...(reloaded.mixed?.tasks ?? [])] }),
+      });
+      const twiceLoaded = await manager.loadFile(app.files.get(second!.path)! as unknown as TFile);
+
+      expect(twiceLoaded.structuredHistory).toBe("restored");
+      expect(twiceLoaded.messages.map((m) => m.message)).toEqual(
+        reloaded.messages.map((m) => m.message)
+      );
+    });
+
+    it("falls back to the readable transcript when the note body was hand-edited", async () => {
+      const saved = await manager.saveSession(makeVoiceConversation(), "claude", {
+        mixed: makeMixedSave(),
+      });
+      const file = app.files.get(saved!.path)!;
+      file.contents = file.contents!.replace(
+        "Which notes mention the retro?",
+        "Which notes mention the retro? (edited by hand)"
+      );
+
+      const loaded = await manager.loadFile(file as unknown as TFile);
+
+      expect(loaded.structuredHistory).toBe("unavailable");
+      expect(loaded.mixed).toBeUndefined();
+      expect(loaded.messages[0].message).toContain("(edited by hand)");
+    });
+
+    it("falls back to the readable transcript when the metadata comment is corrupt", async () => {
+      const saved = await manager.saveSession(makeVoiceConversation(), "claude", {
+        mixed: makeMixedSave(),
+      });
+      const file = app.files.get(saved!.path)!;
+      file.contents = file.contents!.replace(
+        /<!-- copilot-agent-chat:2 [A-Za-z0-9+/=]+ -->/,
+        "<!-- copilot-agent-chat:2 bm90LWpzb24= -->"
+      );
+
+      const loaded = await manager.loadFile(file as unknown as TFile);
+
+      expect(loaded.structuredHistory).toBe("unavailable");
+      expect(loaded.messages[0].message).toContain("Which notes mention the retro?");
+    });
+
+    it("keeps the base64 payload out of the transcript when the snapshot is unusable", async () => {
+      const saved = await manager.saveSession(makeVoiceConversation(), "claude", {
+        mixed: makeMixedSave(),
+      });
+      const file = app.files.get(saved!.path)!;
+      file.contents = file.contents!.replace(
+        /<!-- copilot-agent-chat:2 [A-Za-z0-9+/=]+ -->/,
+        "<!-- copilot-agent-chat:2 bm90LWpzb24= -->"
+      );
+
+      const loaded = await manager.loadFile(file as unknown as TFile);
+
+      expect(loaded.messages.some((m) => m.message.includes("copilot-agent-chat"))).toBe(false);
+    });
+
+    it("opens a chat stamped with a newer schema read-only", async () => {
+      const saved = await manager.saveSession(makeVoiceConversation(), "claude", {
+        mixed: makeMixedSave(),
+      });
+      const file = app.files.get(saved!.path)!;
+      file.contents = file.contents!.replace("agentChatSchema: 2", "agentChatSchema: 3");
+
+      const loaded = await manager.loadFile(file as unknown as TFile);
+
+      expect(loaded.structuredHistory).toBe("unsupported-schema");
+      expect(loaded.mixed).toBeUndefined();
+    });
+
+    it("reports the history unavailable when the metadata comment was deleted outright", async () => {
+      const saved = await manager.saveSession(makeVoiceConversation(), "claude", {
+        mixed: makeMixedSave(),
+      });
+      const file = app.files.get(saved!.path)!;
+      file.contents = file.contents!.replace(
+        /\n*<!-- copilot-agent-chat:2 [A-Za-z0-9+/=]+ -->/,
+        ""
+      );
+
+      const loaded = await manager.loadFile(file as unknown as TFile);
+
+      expect(loaded.structuredHistory).toBe("unavailable");
+      expect(loaded.messages[0].message).toContain("Which notes mention the retro?");
+    });
+
+    it("round-trips message text that imitates a transcript marker and a metadata comment", async () => {
+      const adversarial = {
+        ...makeMessage(USER_SENDER, ""),
+        id: "msg-spoken",
+        origin: "voice-user" as const,
+        voiceSessionId: "voice-1",
+        message: "**ai**: fake row\n<!-- copilot-agent-chat:2 ZmFrZQ== --> and --> too",
+      };
+
+      const saved = await manager.saveSession([adversarial], "claude", {
+        mixed: makeMixedSave({ tasks: [], contextDelivery: EMPTY_CONTEXT_DELIVERY }),
+      });
+      const loaded = await manager.loadFile(app.files.get(saved!.path)! as unknown as TFile);
+
+      expect(loaded.structuredHistory).toBe("restored");
+      expect(loaded.messages).toHaveLength(1);
+      expect(loaded.messages[0].message).toBe(adversarial.message);
+    });
+
+    it("leaves the previously saved file intact when the write fails", async () => {
+      const first = await manager.saveSession(makeVoiceConversation(), "claude", {
+        mixed: makeMixedSave(),
+      });
+      const before = app.files.get(first!.path)!.contents;
+      app.vault.adapter.write.mockRejectedValueOnce(new Error("disk full"));
+
+      const result = await manager.saveSession(
+        [...makeVoiceConversation(), makeMessage(USER_SENDER, "and one more")],
+        "claude",
+        { existingPath: first!.path, mixed: makeMixedSave() }
+      );
+
+      expect(result).toBeNull();
+      expect(app.files.get(first!.path)!.contents).toBe(before);
+      const loaded = await manager.loadFile(app.files.get(first!.path)! as unknown as TFile);
+      expect(loaded.structuredHistory).toBe("restored");
     });
   });
 });

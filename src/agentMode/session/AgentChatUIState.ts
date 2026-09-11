@@ -1,3 +1,4 @@
+import type { AgentHistoryRestoreStatus } from "@/agentMode/session/agentChatSnapshot";
 import { logWarn } from "@/logger";
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
@@ -94,6 +95,10 @@ export class AgentChatUIState implements AgentChatBackend {
 
   async cancelActiveAndClearQueue(): Promise<void> {
     await this.session.tasks.cancelActiveAndClearQueue();
+  }
+
+  getHistoryRestoreStatus(): AgentHistoryRestoreStatus {
+    return this.session.getHistoryRestoreStatus();
   }
 
   async deleteMessage(id: string): Promise<boolean> {

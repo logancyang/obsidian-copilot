@@ -32,6 +32,15 @@ export interface AgentSessionIndexEntry {
    * native sweeps falling back to cwd→project-folder attribution.
    */
   projectId?: string;
+  /**
+   * Markdown file holding this session's mixed (typed + spoken) transcript,
+   * when one was saved. Native resume replays only what the backend itself
+   * saw, so reopening from native history uses this file to put the public
+   * voice entries and task cards back instead of a backend-only transcript.
+   * Absent for every session whose chat has no voice content.
+   * See `designdocs/VOICE_CHAT_DEMO_DESIGN.md`, "Persistence and reload".
+   */
+  transcriptPath?: string;
 }
 
 interface AgentSessionIndexFile {
@@ -86,6 +95,10 @@ function sanitizeEntry(raw: unknown): AgentSessionIndexEntry | null {
     createdAtMs: createdAtMs ?? lastAccessedAtMs!,
     lastAccessedAtMs: lastAccessedAtMs ?? createdAtMs!,
     projectId: typeof r.projectId === "string" && r.projectId.trim() ? r.projectId : undefined,
+    transcriptPath:
+      typeof r.transcriptPath === "string" && r.transcriptPath.trim()
+        ? r.transcriptPath
+        : undefined,
   };
 }
 
@@ -148,6 +161,9 @@ export class AgentSessionIndex {
       // agree — keep whichever side knows it (an absent incoming value must
       // not strip a previously recorded scope).
       projectId: entry.projectId ?? existing?.projectId,
+      // Only a save knows where the transcript landed; an update that doesn't
+      // mention it must not detach the session from its saved conversation.
+      transcriptPath: entry.transcriptPath ?? existing?.transcriptPath,
     });
     this.scheduleSave();
   }
@@ -180,6 +196,9 @@ export class AgentSessionIndex {
         // Write-through knows the scope authoritatively; a sweep's cwd-derived
         // attribution only fills gaps, never overrides.
         projectId: existing?.projectId ?? entry.projectId,
+        // A native sweep cannot see markdown files, so only the recorded path
+        // is authoritative here.
+        transcriptPath: existing?.transcriptPath,
       };
       if (
         !existing ||

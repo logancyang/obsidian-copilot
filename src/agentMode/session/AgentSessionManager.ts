@@ -36,12 +36,12 @@ import { readFrontmatterViaAdapter } from "@/utils/vaultAdapterUtils";
 import { App, FileSystemAdapter, Notice, Platform, TFile } from "obsidian";
 import { v4 as uuidv4 } from "uuid";
 import { AgentSession, ATTENTION_TRIGGER_STATUSES, DEFAULT_TITLE_PREFIX } from "./AgentSession";
-import type { AgentChatPersistenceManager } from "./AgentChatPersistenceManager";
+import type { AgentChatPersistenceManager, LoadedAgentChat } from "./AgentChatPersistenceManager";
 import type { AgentModelPreloader } from "./AgentModelPreloader";
 import { buildNativeChatId, parseNativeChatId } from "@/utils/nativeChatId";
 import { CHAT_AGENT_VIEWTYPE } from "@/constants";
 import { playNotificationSound } from "@/utils/notificationSound";
-import type { AgentSessionIndex } from "./AgentSessionIndex";
+import type { AgentSessionIndex, AgentSessionIndexEntry } from "./AgentSessionIndex";
 import {
   deriveChatTitleFromMessages,
   mergeChatHistoryItems,
@@ -373,6 +373,10 @@ export class AgentSessionManager {
   // - `signature`: last serialized snapshot, for no-op skipping
   // - `attentionUnsub`: tear-down for the per-session status watcher that both
   //   flags needs-attention AND notifies on running-membership flips (spinner)
+  // - `mixedPath`: file last written with the mixed (typed + spoken) schema,
+  //   the identity native resume needs to overlay its public voice entries
+  // - `saveChain`: serializes this session's writes so two saves can never
+  //   interleave and leave a half-projected snapshot on disk
   private readonly sessionState = new Map<
     string,
     {
@@ -382,6 +386,8 @@ export class AgentSessionManager {
       unsub?: () => void;
       signature?: string;
       attentionUnsub?: () => void;
+      mixedPath?: string;
+      saveChain?: Promise<{ path: string } | null>;
     }
   >();
 
@@ -2867,10 +2873,12 @@ export class AgentSessionManager {
       throw err;
     }
 
-    session.loadDisplayMessages(loaded.messages);
+    this.applyLoadedTranscript(session, loaded);
     session.seedSessionUsage(loaded.usage);
     if (loaded.label) session.setLabel(loaded.label);
-    this.getSessionState(session.internalId).path = file.path;
+    const loadedState = this.getSessionState(session.internalId);
+    loadedState.path = file.path;
+    if (loaded.mixed) loadedState.mixedPath = file.path;
     if (loaded.sessionId) {
       // Keep the native twin's recency in step with the markdown side so the
       // merged history ranks this chat correctly after a reopen.
@@ -2882,6 +2890,64 @@ export class AgentSessionManager {
       this.notify();
     }
     return session;
+  }
+
+  /**
+   * Put a loaded chat's transcript into its session. A validated mixed
+   * conversation brings back its task records, origins, and delivery cursor;
+   * anything else falls back to the readable messages, and the session is told
+   * which of the two it got so the transcript can say so.
+   */
+  private applyLoadedTranscript(session: AgentSession, loaded: LoadedAgentChat): void {
+    if (loaded.mixed) {
+      session.restoreConversationId(loaded.mixed.conversationId);
+      session.contextDelivery.restore(loaded.mixed.contextDelivery);
+      session.loadPersistedConversation({
+        messages: loaded.mixed.messages,
+        tasks: loaded.mixed.tasks,
+      });
+    } else {
+      session.loadDisplayMessages(loaded.messages);
+    }
+    session.setHistoryRestoreStatus(loaded.structuredHistory ?? "none");
+  }
+
+  /**
+   * Put the saved public conversation back over a natively-resumed session.
+   * A backend's own replay contains only what the agent saw — no spoken user
+   * entries and no task cards — so a session whose index entry names a saved
+   * mixed transcript reopens from that file instead. A file that no longer
+   * validates, or that belongs to another project, is left alone.
+   *
+   * See `designdocs/VOICE_CHAT_DEMO_DESIGN.md`, "Persistence and reload".
+   */
+  private async overlayMixedTranscript(
+    session: AgentSession,
+    entry: AgentSessionIndexEntry | null
+  ): Promise<void> {
+    const persistence = this.opts.persistenceManager;
+    const path = entry?.transcriptPath;
+    if (!persistence || !path) return;
+    const file = this.app.vault.getAbstractFileByPath(path);
+    if (!(file instanceof TFile)) return;
+    try {
+      const loaded = await persistence.loadFile(file);
+      // Only a verified snapshot may replace a transcript the backend just
+      // replayed; an edited note would otherwise lose live history.
+      if (!loaded.mixed) return;
+      if (loaded.projectId !== session.projectId) {
+        logWarn(
+          `[AgentMode] saved transcript ${path} belongs to another scope; keeping the resumed transcript`
+        );
+        return;
+      }
+      this.applyLoadedTranscript(session, loaded);
+      const state = this.getSessionState(session.internalId);
+      state.path = file.path;
+      state.mixedPath = file.path;
+    } catch (e) {
+      logWarn(`[AgentMode] could not overlay saved transcript ${path}`, e);
+    }
   }
 
   /**
@@ -2974,6 +3040,7 @@ export class AgentSessionManager {
     // and this is a no-op for them. Best-effort: an empty result leaves
     // the resumed-but-blank session as-is rather than failing the open.
     await this.hydrateResumedTranscript(session, backendId, sessionId);
+    await this.overlayMixedTranscript(session, entry);
     // Reapply with the recorded source: a user rename stays sticky, but an
     // agent/derived title is agent-sourced so a resumed opencode/codex
     // session can still refresh its title from later agent updates.
@@ -3300,6 +3367,7 @@ export class AgentSessionManager {
       // carry the scope in frontmatter; native-only chats have only this).
       // GLOBAL_SCOPE maps to the field's "absent" encoding.
       projectId: session.projectId === GLOBAL_SCOPE ? undefined : session.projectId,
+      transcriptPath: this.sessionState.get(session.internalId)?.mixedPath,
     });
   }
 
@@ -3318,15 +3386,53 @@ export class AgentSessionManager {
       window.clearTimeout(state.timer);
       state.timer = undefined;
     }
-    return this.flushAutoSave(session);
+    return this.flushAutoSave(session, { explicit: true });
   }
 
-  private async flushAutoSave(session: AgentSession): Promise<{ path: string } | null> {
+  /**
+   * Run this session's writes one at a time. Autosave debounces, an explicit
+   * Save, and the dispose drain can all fire within one turn; chaining them
+   * keeps each write a complete snapshot of the state it read.
+   */
+  private flushAutoSave(
+    session: AgentSession,
+    options?: { explicit?: boolean }
+  ): Promise<{ path: string } | null> {
+    const state = this.getSessionState(session.internalId);
+    const explicit = options?.explicit === true;
+    const pending = state.saveChain;
+    // Only queue behind a write that is actually in flight — an idle session
+    // must still start its write in this tick, as callers expect.
+    const run = pending
+      ? pending.catch(() => null).then(() => this.writeSession(session, explicit))
+      : this.writeSession(session, explicit);
+    state.saveChain = run;
+    const release = () => {
+      if (state.saveChain === run) state.saveChain = undefined;
+    };
+    run.then(release, release);
+    return run;
+  }
+
+  private async writeSession(
+    session: AgentSession,
+    explicit: boolean
+  ): Promise<{ path: string } | null> {
     const persistence = this.opts.persistenceManager;
     if (!persistence) return null;
     if (!this.sessions.has(session.internalId)) return null;
 
-    const messages = session.store.getDisplayMessages();
+    // A chat whose saved structure could not be trusted is showing the user's
+    // own edited markdown (or a file from a newer Copilot). Background saves
+    // must never overwrite it; only an explicit Save may write a fresh
+    // snapshot, and a future schema stays read-only entirely.
+    // See `designdocs/VOICE_CHAT_DEMO_DESIGN.md`, "Persistence and reload".
+    const historyRestore = session.getHistoryRestoreStatus();
+    if (historyRestore === "unsupported-schema") return null;
+    if (historyRestore === "unavailable" && !explicit) return null;
+
+    const conversation = session.store.getPersistableConversation();
+    const messages = conversation.messages;
     if (messages.length === 0) return null;
 
     const label = session.getLabel();
@@ -3349,9 +3455,12 @@ export class AgentSessionManager {
       : "";
     // Fold in the usage `updatedAt` so a turn that only changed token usage
     // (message text/label/sessionId all unchanged) still writes through.
+    // A task settling changes no message text, so its state joins the
+    // signature — otherwise a card would stay "running" in the saved file.
+    const taskSig = conversation.tasks.map((t) => `${t.taskId}:${t.state}`).join(",");
     const signature = `${label ?? ""}-${sessionId ?? ""}-${messages.length}-${
       last?.message ?? ""
-    }-${fanoutSig}-${usage?.updatedAt ?? ""}`;
+    }-${fanoutSig}-${usage?.updatedAt ?? ""}-${taskSig}`;
     const state = this.getSessionState(session.internalId);
     if (state.signature === signature) {
       return state.path ? { path: state.path } : null;
@@ -3365,12 +3474,24 @@ export class AgentSessionManager {
       // a real project id binds the chat to that scope on disk.
       projectId: session.projectId,
       usage: usage ?? undefined,
+      mixed: {
+        conversationId: session.getConversationId(),
+        tasks: conversation.tasks,
+        contextDelivery: session.contextDelivery.getState(),
+      },
     });
-    if (result) {
-      state.path = result.path;
-      state.signature = signature;
+    // A failed save returns null, having left the previous file untouched:
+    // keep the old path and signature so the next attempt writes again.
+    if (!result) return null;
+    state.path = result.path;
+    state.signature = signature;
+    if (result.wroteMixedSchema && state.mixedPath !== result.path) {
+      // Native history has to be able to find this transcript again.
+      state.mixedPath = result.path;
+      this.scheduleIndexTouch(session);
     }
-    return result;
+    session.setHistoryRestoreStatus(result.wroteMixedSchema ? "restored" : "none");
+    return { path: result.path };
   }
 
   /**

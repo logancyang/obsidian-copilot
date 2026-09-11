@@ -761,7 +761,98 @@ describe("AgentMessageStore", () => {
 
         expect(details?.messages.map((m) => m.id)).toEqual([answerId]);
         expect(details?.messages[0].message).toBe("I read six notes.");
+        expect(details?.activityAvailable).toBe(true);
         expect(store.getTaskDetails("missing")).toBeUndefined();
+      });
+    });
+
+    describe("loadConversation()", () => {
+      it("brings back a saved voice task as a card with its answer intact", () => {
+        const store = new AgentMessageStore();
+
+        store.loadConversation({
+          messages: [
+            {
+              id: "m-spoken",
+              sender: USER_SENDER,
+              message: "find my planning notes",
+              timestamp: null,
+              isVisible: true,
+              origin: "voice-user",
+              taskId: "task-1",
+            },
+            {
+              id: "m-answer",
+              sender: AI_SENDER,
+              message: "I read six notes.",
+              timestamp: null,
+              isVisible: true,
+              origin: "backend",
+              taskId: "task-1",
+            },
+          ],
+          tasks: [
+            {
+              taskId: "task-1",
+              sourceMessageIds: ["m-spoken"],
+              assistantMessageId: "m-answer",
+              delegationIds: [],
+              state: "completed",
+              presentation: "voice-card",
+            },
+          ],
+        });
+
+        const rows = store.getConversationRows();
+        expect(rows.map((row) => row.kind)).toEqual(["message", "task-card"]);
+        expect(store.getTaskDetails("task-1")?.messages[0].message).toBe("I read six notes.");
+        expect(store.getMessage("m-spoken")?.origin).toBe("voice-user");
+      });
+
+      it("reports a restored task's activity as unavailable because trails are never saved", () => {
+        const store = new AgentMessageStore();
+
+        store.loadConversation({
+          messages: [
+            {
+              id: "m-answer",
+              sender: AI_SENDER,
+              message: "I read six notes.",
+              timestamp: null,
+              isVisible: true,
+              taskId: "task-1",
+            },
+          ],
+          tasks: [
+            {
+              taskId: "task-1",
+              sourceMessageIds: ["m-spoken"],
+              assistantMessageId: "m-answer",
+              delegationIds: [],
+              state: "completed",
+              presentation: "voice-card",
+            },
+          ],
+        });
+
+        expect(store.getTaskDetails("task-1")?.activityAvailable).toBe(false);
+      });
+
+      it("replaces any transcript and task records the store already held", () => {
+        const store = new AgentMessageStore();
+        store.addMessage({ ...placeholder(), taskId: "task-old" });
+        store.recordTask({
+          taskId: "task-old",
+          sourceMessageIds: [],
+          delegationIds: [],
+          state: "running",
+          presentation: "voice-card",
+        });
+
+        store.loadConversation({ messages: [], tasks: [] });
+
+        expect(store.getTask("task-old")).toBeUndefined();
+        expect(store.getDisplayMessages()).toHaveLength(0);
       });
     });
 

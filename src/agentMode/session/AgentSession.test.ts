@@ -1675,6 +1675,233 @@ describe("AgentSession.submitTask", () => {
   });
 });
 
+describe("AgentSession.contextDelivery", () => {
+  const submission = {
+    submissionId: "submission-1",
+    conversationId: "chat-1",
+    sourceMessageIds: [] as readonly string[],
+    source: "typed" as const,
+    presentation: "text" as const,
+    requestText: "summarize this note",
+  };
+
+  function buildSession(mock: ReturnType<typeof makeMockBackend>) {
+    return new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "opencode",
+    });
+  }
+
+  it("marks a request delivered once the backend has accepted the prompt", async () => {
+    const mock = makeMockBackend();
+    const session = buildSession(mock);
+
+    const { turn } = session.submitTask(submission, "task-1");
+    await turn;
+
+    const userMessageId = session.store.getDisplayMessages()[0].id;
+    expect(session.contextDelivery.getState().delivered).toEqual([userMessageId]);
+    expect(session.contextDelivery.selectUndelivered([userMessageId])).toEqual([]);
+  });
+
+  it("marks the spoken entries a task spoke for, not a duplicate request row", async () => {
+    const mock = makeMockBackend();
+    const session = buildSession(mock);
+    const spokenRowId = session.store.addMessage({
+      message: "find my planning notes",
+      sender: USER_SENDER,
+      timestamp: null,
+      isVisible: true,
+      origin: "voice-user",
+    });
+
+    const { turn } = session.submitTask(
+      {
+        ...submission,
+        source: "voice",
+        presentation: "voice-card",
+        sourceMessageIds: [spokenRowId],
+      },
+      "task-1"
+    );
+    await turn;
+
+    expect(session.contextDelivery.getState().delivered).toEqual([spokenRowId]);
+  });
+
+  it("records delivery as uncertain when the prompt fails, so it is never auto-resent", async () => {
+    // The agent may have read the request before the transport died; resending
+    // it would make the same instruction arrive twice.
+    // See `designdocs/VOICE_CHAT_DEMO_DESIGN.md`, "Text and voice context continuity".
+    const mock = makeMockBackend();
+    mock.prompt.mockRejectedValueOnce(new Error("transport closed"));
+    const session = buildSession(mock);
+
+    const { turn } = session.submitTask(submission, "task-1");
+    await expect(turn).rejects.toThrow("transport closed");
+
+    const userMessageId = session.store.getDisplayMessages()[0].id;
+    const state = session.contextDelivery.getState();
+    expect(state.delivered).toEqual([]);
+    expect(state.uncertain).toEqual([userMessageId]);
+    expect(session.contextDelivery.selectUndelivered([userMessageId])).toEqual([]);
+  });
+});
+
+describe("AgentSession.loadPersistedConversation", () => {
+  function buildSession() {
+    return new AgentSession({
+      backend: makeMockBackend().asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "opencode",
+    });
+  }
+
+  it("restores a saved voice task as a card and notifies the open chat view", () => {
+    const session = buildSession();
+    const onMessagesChanged = jest.fn();
+    session.subscribe({ onMessagesChanged, onStatusChanged: () => {} });
+
+    session.loadPersistedConversation({
+      messages: [
+        {
+          id: "m-spoken",
+          sender: USER_SENDER,
+          message: "find my planning notes",
+          timestamp: null,
+          isVisible: true,
+          origin: "voice-user",
+          taskId: "task-1",
+        },
+        {
+          id: "m-answer",
+          sender: AI_SENDER,
+          message: "I read six notes.",
+          timestamp: null,
+          isVisible: true,
+          taskId: "task-1",
+        },
+      ],
+      tasks: [
+        {
+          taskId: "task-1",
+          sourceMessageIds: ["m-spoken"],
+          assistantMessageId: "m-answer",
+          delegationIds: [],
+          state: "interrupted",
+          presentation: "voice-card",
+        },
+      ],
+    });
+
+    expect(onMessagesChanged).toHaveBeenCalled();
+    expect(session.store.getConversationRows().map((row) => row.kind)).toEqual([
+      "message",
+      "task-card",
+    ]);
+    expect(session.store.getTask("task-1")?.state).toBe("interrupted");
+  });
+
+  it("starts no backend work while restoring saved tasks", () => {
+    const mock = makeMockBackend();
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "opencode",
+    });
+
+    session.loadPersistedConversation({
+      messages: [],
+      tasks: [
+        {
+          taskId: "task-1",
+          sourceMessageIds: ["m-spoken"],
+          delegationIds: [],
+          state: "interrupted",
+          presentation: "voice-card",
+        },
+      ],
+    });
+
+    expect(mock.prompt).not.toHaveBeenCalled();
+    expect(session.tasks.isBusy()).toBe(false);
+    expect(session.getStatus()).toBe("idle");
+  });
+});
+
+describe("AgentSession.getConversationId", () => {
+  function buildSession() {
+    return new AgentSession({
+      backend: makeMockBackend().asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "opencode",
+    });
+  }
+
+  it("gives a new conversation its own identity", () => {
+    expect(buildSession().getConversationId()).not.toBe(buildSession().getConversationId());
+  });
+
+  it("adopts the identity a reopened conversation was saved under", () => {
+    const session = buildSession();
+
+    session.restoreConversationId("conv-42");
+
+    expect(session.getConversationId()).toBe("conv-42");
+  });
+
+  it("keeps its own identity when asked to adopt a blank one", () => {
+    const session = buildSession();
+    const original = session.getConversationId();
+
+    session.restoreConversationId("   ");
+
+    expect(session.getConversationId()).toBe(original);
+  });
+});
+
+describe("AgentSession.getHistoryRestoreStatus", () => {
+  function buildSession() {
+    return new AgentSession({
+      backend: makeMockBackend().asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "opencode",
+    });
+  }
+
+  it("reports nothing structured to restore for a fresh conversation", () => {
+    expect(buildSession().getHistoryRestoreStatus()).toBe("none");
+  });
+
+  it("publishes a change so the transcript can show the unavailable notice", () => {
+    const session = buildSession();
+    const onMessagesChanged = jest.fn();
+    session.subscribe({ onMessagesChanged, onStatusChanged: () => {} });
+
+    session.setHistoryRestoreStatus("unavailable");
+
+    expect(session.getHistoryRestoreStatus()).toBe("unavailable");
+    expect(onMessagesChanged).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not notify when the status is reasserted", () => {
+    const session = buildSession();
+    session.setHistoryRestoreStatus("restored");
+    const onMessagesChanged = jest.fn();
+    session.subscribe({ onMessagesChanged, onStatusChanged: () => {} });
+
+    session.setHistoryRestoreStatus("restored");
+
+    expect(onMessagesChanged).not.toHaveBeenCalled();
+  });
+});
+
 describe("AgentSession.settleTask", () => {
   const submission = {
     submissionId: "submission-1",

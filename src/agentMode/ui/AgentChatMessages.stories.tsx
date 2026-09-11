@@ -161,3 +161,41 @@ export const RunningAfterStop: StoryObj<AgentChatMessagesProps> = {
   },
   render: (props) => <QueuedActionsDemo {...actionRailArgs} {...props} />,
 };
+
+/** A hand-edited note reloads as readable text with its structured voice history flagged. */
+export const StructuredHistoryUnavailable: StoryObj<AgentChatMessagesProps> = {
+  args: {
+    ...actionRailArgs,
+    pendingToolPermissions: [],
+    pendingAskUserQuestions: [],
+    messages: [
+      {
+        ...message,
+        id: "spoken-request",
+        sender: "user",
+        message: "What did we decide on Tuesday?",
+      },
+      {
+        ...message,
+        id: "voice-task-summary",
+        message: "_Voice task — completed_\n\nThe team agreed to ship the rollout in two stages.",
+      },
+    ],
+    streamingMessageId: null,
+    historyRestoreStatus: "unavailable",
+  },
+  render: (props) => <QueuedActionsDemo {...actionRailArgs} {...props} />,
+};
+
+/** A chat written by a newer Copilot opens read-only rather than being rewritten. */
+export const StructuredHistoryFromNewerVersion: StoryObj<AgentChatMessagesProps> = {
+  args: {
+    ...actionRailArgs,
+    pendingToolPermissions: [],
+    pendingAskUserQuestions: [],
+    messages: [{ ...message, id: "future-answer", message: "Saved by a newer build." }],
+    streamingMessageId: null,
+    historyRestoreStatus: "unsupported-schema",
+  },
+  render: (props) => <QueuedActionsDemo {...actionRailArgs} {...props} />,
+};

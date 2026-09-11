@@ -8,6 +8,7 @@ import ChatSingleMessage from "@/components/chat-components/ChatSingleMessage";
 import { USER_SENDER } from "@/constants";
 import { useChatScrolling } from "@/hooks/useChatScrolling";
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
+import type { AgentHistoryRestoreStatus } from "@/agentMode/session/agentChatSnapshot";
 import type {
   AgentChatMessage,
   AskUserQuestionPrompt,
@@ -33,6 +34,27 @@ interface AgentChatMessagesProps {
    * See `designdocs/VOICE_CHAT_DEMO_DESIGN.md`, "Surprises and discoveries".
    */
   streamingMessageId: string | null;
+  /**
+   * What the loader recovered from this chat's saved file. Anything other
+   * than `"none"` / `"restored"` means the transcript on screen is only the
+   * readable half of the note, which the reader has to be told.
+   */
+  historyRestoreStatus?: AgentHistoryRestoreStatus;
+}
+
+/**
+ * The notice shown above a transcript whose saved structure could not be
+ * trusted, or `null` when there is nothing to warn about.
+ * See `designdocs/VOICE_CHAT_DEMO_DESIGN.md`, "Persistence and reload".
+ */
+function historyRestoreNotice(status: AgentHistoryRestoreStatus | undefined): string | null {
+  if (status === "unavailable") {
+    return "Structured voice history unavailable. This note no longer matches its saved data, so only its readable transcript is shown and Copilot will not overwrite it automatically. Save the chat to write a fresh copy.";
+  }
+  if (status === "unsupported-schema") {
+    return "This chat was saved by a newer version of Copilot. It is open read-only so nothing is lost.";
+  }
+  return null;
 }
 
 /**
@@ -70,6 +92,7 @@ const AgentChatMessages = memo(
     pendingAskUserQuestions,
     chatBackend,
     streamingMessageId,
+    historyRestoreStatus,
   }: AgentChatMessagesProps) => {
     const visible = useMemo(() => messages.filter((m) => m.isVisible), [messages]);
     const adapted = useMemo(() => visible.map(toChatMessageView), [visible]);
@@ -95,6 +118,7 @@ const AgentChatMessages = memo(
     // The latest assistant message owns the frozen duration until the next
     // turn appends a newer placeholder and naturally retires this row.
     const latestAssistant = useMemo(() => lastAssistant(visible), [visible]);
+    const historyNotice = historyRestoreNotice(historyRestoreStatus);
 
     return (
       <div className="tw-flex tw-h-full tw-flex-1 tw-flex-col tw-overflow-hidden">
@@ -103,6 +127,15 @@ const AgentChatMessages = memo(
           data-testid="chat-messages"
           className="tw-relative tw-flex tw-w-full tw-flex-1 tw-select-text tw-flex-col tw-items-start tw-justify-start tw-overflow-y-auto tw-scroll-smooth tw-break-words tw-text-[calc(var(--font-text-size)_-_2px)]"
         >
+          {historyNotice ? (
+            <div
+              role="status"
+              data-testid="agent-history-restore-notice"
+              className="tw-border-warning tw-mx-3 tw-mb-2 tw-mt-1 tw-rounded-md tw-border tw-border-solid tw-bg-secondary tw-px-3 tw-py-2 tw-text-ui-smaller tw-text-muted"
+            >
+              {historyNotice}
+            </div>
+          ) : null}
           {visible.map((message, index) => {
             const isLastMessage = index === visible.length - 1;
             // A plan remains part of the transcript, so it supplies tail

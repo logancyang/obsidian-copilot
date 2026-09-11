@@ -1,4 +1,5 @@
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
+import type { AgentHistoryRestoreStatus } from "@/agentMode/session/agentChatSnapshot";
 import type { AgentQueuedTask } from "@/agentMode/session/AgentTaskCoordinator";
 import type { AgentTaskRecord } from "@/agentMode/session/voiceTypes";
 import type {
@@ -32,6 +33,11 @@ export interface AgentChatRuntimeState {
    */
   activeTask: AgentTaskRecord | null;
   queuedTasks: readonly AgentQueuedTask[];
+  /**
+   * What the loader recovered from this chat's saved file. `"none"` for a
+   * live chat and for any host that has no saved agent conversation.
+   */
+  historyRestoreStatus: AgentHistoryRestoreStatus;
 }
 
 interface BackendRuntimeSnapshot {
@@ -52,6 +58,7 @@ function readBackendRuntimeSnapshot(backend: AgentChatBackend): BackendRuntimeSn
       pendingAskUserQuestions: backend.getPendingAskUserQuestions(),
       activeTask: backend.getActiveTask(),
       queuedTasks: backend.getQueuedTasks(),
+      historyRestoreStatus: backend.getHistoryRestoreStatus?.() ?? "none",
     },
   };
 }

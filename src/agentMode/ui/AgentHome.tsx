@@ -139,6 +139,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     pendingAskUserQuestions,
     activeTask,
     queuedTasks,
+    historyRestoreStatus,
   } = useAgentChatRuntimeState(backend);
   // The answer the running task streams into. Identity, not "the last
   // assistant row": a spoken reply can land after that row while the backend
@@ -981,6 +982,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                       pendingAskUserQuestions={pendingAskUserQuestions}
                       chatBackend={backend}
                       streamingMessageId={streamingMessageId}
+                      historyRestoreStatus={historyRestoreStatus}
                     />
                     <AgentChatControls
                       onNewChat={handleNewChat}

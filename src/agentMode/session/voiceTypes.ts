@@ -70,6 +70,22 @@ export interface VoiceRuntimeState {
 }
 
 /**
+ * Where a transcript entry came from in the spoken stream. Kept with the
+ * assembled text so a late fragment can still be matched to the group it
+ * amends after a reload; the audio itself is never stored.
+ *
+ * See `designdocs/VOICE_CHAT_DEMO_DESIGN.md`, "Transcript assembly".
+ */
+export interface VoiceSourceRange {
+  /** Provider fragment id this text came from. */
+  fragmentId: string;
+  /** Start offset within the voice session, in milliseconds. */
+  startMs: number;
+  /** End offset within the voice session, in milliseconds. */
+  endMs: number;
+}
+
+/**
  * An immutable request for backend work. The composer (or the voice layer)
  * resolves every attachment before constructing this; the task owner never
  * reaches back for more input.

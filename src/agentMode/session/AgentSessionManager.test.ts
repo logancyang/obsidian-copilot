@@ -35,12 +35,16 @@ import { getProjectContextSignature } from "@/projects/projectContextSignature";
 import { MethodUnsupportedError } from "@/agentMode/session/errors";
 import { buildCodexModeMapping } from "@/agentMode/backends/codex/codexModeMapping";
 import type {
+  AgentChatMessage,
   BackendDescriptor,
   BackendId,
   BackendModelCatalog,
   BackendState,
   InstallState,
 } from "./types";
+import type { AgentPersistableConversation } from "./AgentMessageStore";
+import type { AgentHistoryRestoreStatus } from "./agentChatSnapshot";
+import { ContextDeliveryCursor } from "./ContextDeliveryCursor";
 
 const mockEnsureMaterialized = ensureProjectContextMaterialized as jest.Mock;
 
@@ -162,6 +166,12 @@ interface MockSessionTestHandle {
   setMessages(messages: { message: string }[]): void;
   /** Toggle whether the session reports user-visible messages (detach gating). */
   setHasUserVisibleMessages(value: boolean): void;
+  /** Seed the persistable conversation (messages plus voice task records). */
+  setConversation(conversation: AgentPersistableConversation): void;
+  /** Fire the message subscription the way a streamed turn does. */
+  notifyMessagesChanged(): void;
+  /** What the session was last asked to restore, or null for a plain transcript. */
+  getRestoredConversation(): AgentPersistableConversation | null;
 }
 
 const sessionTestHandles = new Map<string, MockSessionTestHandle>();
@@ -185,9 +195,15 @@ function makeMockSession(overrides: {
   let needsAttention = false;
   let displayMessages: { message: string }[] = [];
   let hasUserVisibleMessages = false;
+  let conversation: AgentPersistableConversation | null = null;
+  let restoredConversation: AgentPersistableConversation | null = null;
+  let conversationId = `conv-${overrides.internalId}`;
+  let historyRestore: AgentHistoryRestoreStatus = "none";
+  const contextDelivery = new ContextDeliveryCursor();
   const listeners = new Set<{
     onStatusChanged?: (s: typeof status) => void;
     onNeedsAttentionChanged?: (v: boolean) => void;
+    onMessagesChanged?: () => void;
   }>();
   const session = {
     internalId: overrides.internalId,
@@ -197,7 +213,31 @@ function makeMockSession(overrides: {
     ready: overrides.ready ?? Promise.resolve(),
     getBackendSessionId: () => sessionId,
     getStatus: () => status,
-    store: { getDisplayMessages: () => displayMessages },
+    store: {
+      getDisplayMessages: () => displayMessages,
+      getPersistableConversation: () =>
+        conversation ?? { messages: displayMessages as unknown as AgentChatMessage[], tasks: [] },
+    },
+    getHistoryRestoreStatus: () => historyRestore,
+    setHistoryRestoreStatus: (status: AgentHistoryRestoreStatus) => {
+      historyRestore = status;
+    },
+    getConversationId: () => conversationId,
+    restoreConversationId: (id: string) => {
+      conversationId = id;
+    },
+    contextDelivery,
+    loadDisplayMessages: (messages: AgentChatMessage[]) => {
+      displayMessages = messages;
+      restoredConversation = null;
+    },
+    loadPersistedConversation: (loaded: AgentPersistableConversation) => {
+      restoredConversation = loaded;
+      conversation = loaded;
+      displayMessages = loaded.messages as unknown as { message: string }[];
+    },
+    seedSessionUsage: jest.fn(),
+    restoreLabel: jest.fn(),
     tasks: {
       subscribe: () => () => {},
       getQueuedTasks: () => [],
@@ -243,6 +283,14 @@ function makeMockSession(overrides: {
     setHasUserVisibleMessages: (value) => {
       hasUserVisibleMessages = value;
     },
+    setConversation: (next) => {
+      conversation = next;
+      displayMessages = next.messages as unknown as { message: string }[];
+    },
+    notifyMessagesChanged: () => {
+      for (const l of listeners) l.onMessagesChanged?.();
+    },
+    getRestoredConversation: () => restoredConversation,
   });
   return session;
 }
@@ -2495,6 +2543,8 @@ describe("AgentSessionManager chat history aggregation", () => {
     backendId?: BackendId;
     createBackendProcess?: jest.Mock;
     applyInitialSessionConfig?: BackendDescriptor["applyInitialSessionConfig"];
+    loadFile?: jest.Mock;
+    saveSession?: jest.Mock;
   }) {
     const frontmatterByPath = opts?.files ?? {};
     const hiddenByPath = opts?.hiddenFiles ?? {};
@@ -2540,6 +2590,12 @@ describe("AgentSessionManager chat history aggregation", () => {
       getAgentChatHistoryFiles: jest.fn(async () => tfiles),
       updateTopic: jest.fn(async () => undefined),
       deleteFile: jest.fn(async () => undefined),
+      loadFile:
+        opts?.loadFile ??
+        jest.fn(async () => ({ messages: [], backendId, projectId: GLOBAL_SCOPE })),
+      saveSession:
+        opts?.saveSession ??
+        jest.fn(async () => ({ path: "chats/agent__saved.md", wroteMixedSchema: true })),
     };
     const index = new AgentSessionIndex(makeIndexStorage(), "plugins/copilot/index.json");
     const backendId = opts?.backendId ?? "opencode";
@@ -3213,6 +3269,354 @@ describe("AgentSessionManager chat history aggregation", () => {
     expect(native[0]?.id).toBe(buildNativeChatId("opencode", "in-vault"));
     expect(native[0]?.title).toBe("Real chat");
     expect(native[0]?.lastAccessedAt.getTime()).toBe(7_000);
+  });
+
+  describe("mixed voice conversation persistence", () => {
+    // Mirrors the manager's own autosave debounce; the timer is what makes a
+    // background save distinguishable from an explicit one.
+    const AUTOSAVE_DEBOUNCE_MS = 500;
+    // Real timers: the manager debounces on `window.setTimeout` and the rest of
+    // this suite runs unfaked, so background writes are awaited, not advanced.
+    const settleBackgroundWrites = () =>
+      new Promise((resolve) => window.setTimeout(resolve, AUTOSAVE_DEBOUNCE_MS * 2));
+    const defaultSettings = (mockedGetSettings as jest.Mock).getMockImplementation();
+
+    afterEach(() => {
+      (mockedGetSettings as jest.Mock).mockReset();
+      if (defaultSettings) (mockedGetSettings as jest.Mock).mockImplementation(defaultSettings);
+    });
+    const SPOKEN: AgentChatMessage = {
+      id: "m-spoken",
+      sender: "user",
+      message: "which notes mention the retro?",
+      timestamp: null,
+      isVisible: true,
+      origin: "voice-user",
+      voiceSessionId: "voice-1",
+      taskId: "task-1",
+    };
+    const ANSWER: AgentChatMessage = {
+      id: "m-answer",
+      sender: "ai",
+      message: "Retro 2026-01 mentions it.",
+      timestamp: null,
+      isVisible: true,
+      origin: "backend",
+      taskId: "task-1",
+    };
+    const VOICE_TASK = {
+      taskId: "task-1",
+      sourceMessageIds: ["m-spoken"],
+      assistantMessageId: "m-answer",
+      delegationIds: [] as readonly string[],
+      state: "completed" as const,
+      presentation: "voice-card" as const,
+    };
+    const MIXED_CONVERSATION = { messages: [SPOKEN, ANSWER], tasks: [VOICE_TASK] };
+
+    function enableAutosave(): void {
+      (mockedGetSettings as jest.Mock).mockReturnValue({
+        autosaveChat: true,
+        agentMode: { activeBackend: "opencode", backends: {} },
+      });
+    }
+
+    /** A markdown chat whose snapshot loaded (or failed to) as described. */
+    function savedChat(overrides: Record<string, unknown> = {}) {
+      return {
+        messages: [SPOKEN, ANSWER],
+        backendId: "opencode",
+        projectId: GLOBAL_SCOPE,
+        sessionId: "resumable-1",
+        structuredHistory: "restored",
+        mixed: {
+          conversationId: "conv-saved",
+          messages: [SPOKEN, ANSWER],
+          tasks: [VOICE_TASK],
+          contextDelivery: { delivered: ["m-spoken"], uncertain: [] },
+        },
+        ...overrides,
+      };
+    }
+
+    /** The backend's own replay: what the agent saw, with no spoken entries. */
+    const BACKEND_ONLY_TRANSCRIPT: AgentChatMessage[] = [
+      {
+        id: "backend-replayed",
+        sender: "ai",
+        message: "Replayed from the agent's own session store.",
+        timestamp: null,
+        isVisible: true,
+      },
+    ];
+
+    function resumingBackend(): jest.Mock {
+      return jest.fn(() => ({
+        ...makeMockBackendProcess(),
+        loadSession: jest.fn(async () => {
+          throw new MethodUnsupportedError("session/load");
+        }),
+        resumeSession: jest.fn(async ({ sessionId }: { sessionId: string }) => ({
+          sessionId,
+          state: null,
+        })),
+        readPersistedTranscript: jest.fn(async () => BACKEND_ONLY_TRANSCRIPT),
+      }));
+    }
+
+    it("saves the answer a voice card folds away together with its task records", async () => {
+      const saveSession = jest.fn(async () => ({
+        path: "chats/agent__voice.md",
+        wroteMixedSchema: true,
+      }));
+      const { manager } = buildHistoryHarness({ saveSession });
+      const session = await manager.createSession("opencode");
+      getSessionTestHandle(session).setConversation(MIXED_CONVERSATION);
+
+      await manager.saveActiveSession();
+
+      const [messages, backendId, options] = saveSession.mock.calls[0] as unknown as [
+        AgentChatMessage[],
+        string,
+        { mixed: { conversationId: string; tasks: unknown[] } },
+      ];
+      expect(backendId).toBe("opencode");
+      expect(messages.map((m) => m.id)).toEqual(["m-spoken", "m-answer"]);
+      expect(options.mixed.tasks).toEqual([VOICE_TASK]);
+      expect(options.mixed.conversationId).toBe(session.getConversationId());
+    });
+
+    it("writes nothing in the background while autosave is disabled", async () => {
+      const saveSession = jest.fn(async () => ({
+        path: "chats/agent__voice.md",
+        wroteMixedSchema: true,
+      }));
+      const { manager } = buildHistoryHarness({ saveSession });
+      const session = await manager.createSession("opencode");
+      getSessionTestHandle(session).setConversation(MIXED_CONVERSATION);
+
+      getSessionTestHandle(session).notifyMessagesChanged();
+      await settleBackgroundWrites();
+
+      expect(saveSession).not.toHaveBeenCalled();
+      // The user can still put the conversation on disk deliberately.
+      await manager.saveActiveSession();
+      expect(saveSession).toHaveBeenCalledTimes(1);
+    });
+
+    it("writes the conversation in the background once the autosave debounce elapses", async () => {
+      enableAutosave();
+      const saveSession = jest.fn(async () => ({
+        path: "chats/agent__voice.md",
+        wroteMixedSchema: true,
+      }));
+      const { manager } = buildHistoryHarness({ saveSession });
+      const session = await manager.createSession("opencode");
+      getSessionTestHandle(session).setConversation(MIXED_CONVERSATION);
+
+      getSessionTestHandle(session).notifyMessagesChanged();
+      await settleBackgroundWrites();
+
+      expect(saveSession).toHaveBeenCalledTimes(1);
+    });
+
+    it("restores a reopened chat's task cards, identity, and delivery cursor", async () => {
+      const { manager } = buildHistoryHarness({
+        files: { "chats/agent__voice.md": { epoch: 1_000, backendId: "opencode" } },
+        loadFile: jest.fn(async () => savedChat()),
+      });
+
+      const session = await manager.loadSessionFromHistory(new MockTFile("chats/agent__voice.md"));
+
+      const handle = getSessionTestHandle(session);
+      expect(handle.getRestoredConversation()?.tasks).toEqual([VOICE_TASK]);
+      expect(session.getConversationId()).toBe("conv-saved");
+      expect(session.contextDelivery.getState()).toEqual({
+        delivered: ["m-spoken"],
+        uncertain: [],
+      });
+      expect(session.getHistoryRestoreStatus()).toBe("restored");
+    });
+
+    it("reopens a chat without running any backend work for its saved tasks", async () => {
+      const prompt = jest.fn();
+      const createBackendProcess = jest.fn(() => ({ ...makeMockBackendProcess(), prompt }));
+      const { manager } = buildHistoryHarness({
+        createBackendProcess,
+        files: { "chats/agent__voice.md": { epoch: 1_000, backendId: "opencode" } },
+        loadFile: jest.fn(async () =>
+          savedChat({
+            sessionId: undefined,
+            mixed: {
+              conversationId: "conv-saved",
+              messages: [SPOKEN, ANSWER],
+              tasks: [{ ...VOICE_TASK, state: "interrupted" }],
+              contextDelivery: { delivered: [], uncertain: [] },
+            },
+          })
+        ),
+      });
+
+      const session = await manager.loadSessionFromHistory(new MockTFile("chats/agent__voice.md"));
+
+      expect(prompt).not.toHaveBeenCalled();
+      expect(getSessionTestHandle(session).getRestoredConversation()?.tasks).toEqual([
+        { ...VOICE_TASK, state: "interrupted" },
+      ]);
+    });
+
+    it("leaves a hand-edited note untouched during background saves", async () => {
+      enableAutosave();
+      const saveSession = jest.fn(async () => ({
+        path: "chats/agent__voice.md",
+        wroteMixedSchema: true,
+      }));
+      const { manager } = buildHistoryHarness({
+        saveSession,
+        files: { "chats/agent__voice.md": { epoch: 1_000, backendId: "opencode" } },
+        loadFile: jest.fn(async () =>
+          savedChat({ structuredHistory: "unavailable", mixed: undefined })
+        ),
+      });
+      const session = await manager.loadSessionFromHistory(new MockTFile("chats/agent__voice.md"));
+      getSessionTestHandle(session).setConversation(MIXED_CONVERSATION);
+
+      getSessionTestHandle(session).notifyMessagesChanged();
+      await settleBackgroundWrites();
+
+      expect(saveSession).not.toHaveBeenCalled();
+    });
+
+    it("writes a fresh snapshot when the user explicitly saves a hand-edited chat", async () => {
+      const saveSession = jest.fn(async () => ({
+        path: "chats/agent__voice.md",
+        wroteMixedSchema: true,
+      }));
+      const { manager } = buildHistoryHarness({
+        saveSession,
+        files: { "chats/agent__voice.md": { epoch: 1_000, backendId: "opencode" } },
+        loadFile: jest.fn(async () =>
+          savedChat({ structuredHistory: "unavailable", mixed: undefined })
+        ),
+      });
+      const session = await manager.loadSessionFromHistory(new MockTFile("chats/agent__voice.md"));
+      getSessionTestHandle(session).setConversation(MIXED_CONVERSATION);
+
+      const result = await manager.saveActiveSession();
+
+      expect(saveSession).toHaveBeenCalledTimes(1);
+      expect(result).toEqual({ path: "chats/agent__voice.md" });
+      expect(session.getHistoryRestoreStatus()).toBe("restored");
+    });
+
+    it("never writes a chat saved by a newer Copilot, even when the user asks", async () => {
+      const saveSession = jest.fn(async () => ({
+        path: "chats/agent__voice.md",
+        wroteMixedSchema: true,
+      }));
+      const { manager } = buildHistoryHarness({
+        saveSession,
+        files: { "chats/agent__voice.md": { epoch: 1_000, backendId: "opencode" } },
+        loadFile: jest.fn(async () =>
+          savedChat({ structuredHistory: "unsupported-schema", mixed: undefined })
+        ),
+      });
+      const session = await manager.loadSessionFromHistory(new MockTFile("chats/agent__voice.md"));
+      getSessionTestHandle(session).setConversation(MIXED_CONVERSATION);
+
+      const result = await manager.saveActiveSession();
+
+      expect(result).toBeNull();
+      expect(saveSession).not.toHaveBeenCalled();
+      expect(session.getHistoryRestoreStatus()).toBe("unsupported-schema");
+    });
+
+    it("overlays the saved public voice transcript on a natively resumed session", async () => {
+      const loadFile = jest.fn(async () => savedChat());
+      const { manager, index } = buildHistoryHarness({
+        createBackendProcess: resumingBackend(),
+        loadFile,
+        files: { "chats/agent__voice.md": { epoch: 1_000, backendId: "opencode" } },
+      });
+      await index.recordSession({
+        backendId: "opencode",
+        sessionId: "resumable-1",
+        title: "Voice chat",
+        createdAtMs: 1_000,
+        lastAccessedAtMs: 2_000,
+        transcriptPath: "chats/agent__voice.md",
+      });
+
+      const session = await manager.loadNativeSessionFromHistory("opencode", "resumable-1");
+
+      expect(loadFile).toHaveBeenCalled();
+      const rows = session.store.getConversationRows();
+      expect(rows.map((row) => row.kind)).toEqual(["message", "task-card"]);
+      expect(session.store.getMessage("m-spoken")?.origin).toBe("voice-user");
+      expect(session.getConversationId()).toBe("conv-saved");
+    });
+
+    it("keeps the backend's own transcript when the saved file belongs to another project", async () => {
+      const loadFile = jest.fn(async () => savedChat({ projectId: "project-other" }));
+      const { manager, index } = buildHistoryHarness({
+        createBackendProcess: resumingBackend(),
+        loadFile,
+        files: { "chats/agent__voice.md": { epoch: 1_000, backendId: "opencode" } },
+      });
+      await index.recordSession({
+        backendId: "opencode",
+        sessionId: "resumable-1",
+        title: "Voice chat",
+        createdAtMs: 1_000,
+        lastAccessedAtMs: 2_000,
+        transcriptPath: "chats/agent__voice.md",
+      });
+
+      const session = await manager.loadNativeSessionFromHistory("opencode", "resumable-1");
+
+      expect(session.store.getDisplayMessages().map((m) => m.id)).toEqual(["backend-replayed"]);
+    });
+
+    it("keeps the backend's own transcript when the saved file no longer validates", async () => {
+      const loadFile = jest.fn(async () =>
+        savedChat({ structuredHistory: "unavailable", mixed: undefined })
+      );
+      const { manager, index } = buildHistoryHarness({
+        createBackendProcess: resumingBackend(),
+        loadFile,
+        files: { "chats/agent__voice.md": { epoch: 1_000, backendId: "opencode" } },
+      });
+      await index.recordSession({
+        backendId: "opencode",
+        sessionId: "resumable-1",
+        title: "Voice chat",
+        createdAtMs: 1_000,
+        lastAccessedAtMs: 2_000,
+        transcriptPath: "chats/agent__voice.md",
+      });
+
+      const session = await manager.loadNativeSessionFromHistory("opencode", "resumable-1");
+
+      expect(session.store.getDisplayMessages().map((m) => m.id)).toEqual(["backend-replayed"]);
+    });
+
+    it("records where a mixed transcript was saved so native history can find it", async () => {
+      enableAutosave();
+      const { manager, index } = buildHistoryHarness({
+        saveSession: jest.fn(async () => ({
+          path: "chats/agent__voice.md",
+          wroteMixedSchema: true,
+        })),
+      });
+      const session = await manager.createSession("opencode");
+      getSessionTestHandle(session).setConversation(MIXED_CONVERSATION);
+
+      await manager.saveActiveSession();
+      await settleBackgroundWrites();
+
+      const entry = await index.getEntry("opencode", session.getBackendSessionId()!);
+      expect(entry?.transcriptPath).toBe("chats/agent__voice.md");
+    });
   });
 
   it("skips native title discovery for non-summarizing backends (codex)", async () => {
