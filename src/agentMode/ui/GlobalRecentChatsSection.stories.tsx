@@ -58,3 +58,20 @@ export const ShortList: StoryObj<GlobalRecentChatsSectionProps> = {
 export const ScrollableList: StoryObj<GlobalRecentChatsSectionProps> = {
   render: renderShelf,
 };
+
+/** Full conversation names remain distinguishable even when their opening words match. */
+export const SimilarTitles: StoryObj<GlobalRecentChatsSectionProps> = {
+  render: renderShelf,
+  args: {
+    items: [
+      "pricing and packaging",
+      "navigation and onboarding",
+      "accessibility and keyboard support",
+    ].map((topic, index) => ({
+      ...items[index],
+      title: `Compare homepage research findings for the next product launch: ${topic}`,
+      projectId: "research",
+    })),
+    projectNamesById: { research: "International product research and competitive analysis" },
+  },
+};

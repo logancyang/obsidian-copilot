@@ -121,7 +121,7 @@ describe("GlobalRecentChatsSection", () => {
       expect(queryAttentionDot(container)).toBeNull();
     });
 
-    it("shows a project badge beside project-scoped chats on the global landing", () => {
+    it("identifies the project for project-scoped chats on the global landing", () => {
       const item = makeItem("project-chat", { projectId: "project-1" });
       renderSection({
         items: [item],
@@ -129,12 +129,32 @@ describe("GlobalRecentChatsSection", () => {
       });
 
       const badge = screen.getByLabelText("Project: Product research");
-      const timestamp = screen.getByTitle(new Date(item.lastAccessedAt).toLocaleString());
-      const title = screen.getByText(item.title);
       expect(badge.textContent).toBe("Product research");
       expect(badge.getAttribute("title")).toBe("Product research");
-      expect(badge.parentElement).toBe(timestamp.parentElement);
-      expect(title.nextElementSibling).toBe(badge.parentElement);
+    });
+
+    it("opens the selected same-prefix conversation while preserving its full accessible title", async () => {
+      const title = "Compare homepage research findings for the next product launch";
+      const onLoadChat = jest.fn().mockResolvedValue(undefined);
+      renderSection({
+        items: [
+          makeItem("pricing", { title: `${title}: pricing and packaging`, projectId: "research" }),
+          makeItem("navigation", {
+            title: `${title}: navigation and onboarding`,
+            projectId: "research",
+          }),
+        ],
+        projectNamesById: { research: "International product research and competitive analysis" },
+        onLoadChat,
+      });
+      const row = screen.getByRole("button", {
+        name: new RegExp(`${title}: navigation and onboarding`),
+      });
+      expect(
+        screen.getByRole("button", { name: new RegExp(`${title}: pricing and packaging`) })
+      ).toBeTruthy();
+      await act(async () => fireEvent.keyDown(row, { key: "Enter" }));
+      expect(onLoadChat).toHaveBeenCalledWith("navigation");
     });
 
     it("omits project badges for global chats, unknown projects, and project landings", () => {
@@ -153,13 +173,11 @@ describe("GlobalRecentChatsSection", () => {
       expect(screen.queryByLabelText(/^Project:/)).toBeNull();
     });
 
-    it("uses an explicit ellipsis contract while preserving the full title for hover", () => {
+    it("preserves the full conversation title for hover", () => {
       const title = "Do a research on Mobbin that explains how people express their app value";
       renderSection({ items: [makeItem("long-title", { title })] });
 
       const titleElement = screen.getByText(title);
-      expect(titleElement.classList.contains("tw-block")).toBe(true);
-      expect(titleElement.classList.contains("tw-truncate")).toBe(true);
       expect(titleElement.getAttribute("title")).toBe(title);
     });
 

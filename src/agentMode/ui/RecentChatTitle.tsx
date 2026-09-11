@@ -6,16 +6,16 @@ export interface RecentChatProjectBadgeProps {
   name: string;
 }
 
-/** Compact project marker that keeps long names from taking over a chat row. */
+/** Secondary project context that wraps within the conversation text column. */
 export function RecentChatProjectBadge({ name }: RecentChatProjectBadgeProps): React.ReactElement {
   return (
     <Badge
       variant="secondary"
       aria-label={`Project: ${name}`}
       title={name}
-      className="tw-min-w-0 tw-max-w-24 tw-shrink-0 tw-px-1.5 tw-py-0 tw-font-normal tw-text-muted"
+      className="tw-min-w-0 tw-max-w-full tw-self-start tw-px-1.5 tw-py-0 tw-font-normal tw-text-muted"
     >
-      <span className="tw-truncate">{name}</span>
+      <span className="tw-whitespace-normal [overflow-wrap:anywhere]">{name}</span>
     </Badge>
   );
 }
@@ -25,12 +25,12 @@ export interface RecentChatTitleProps {
   className?: string;
 }
 
-/** Conversation title that consumes the row space left by trailing metadata. */
+/** Full conversation title, wrapping so similar opening words do not hide the distinguishing text. */
 export function RecentChatTitle({ title, className }: RecentChatTitleProps): React.ReactElement {
   return (
     <span
       className={cn(
-        "tw-block tw-min-w-0 tw-flex-1 tw-truncate tw-text-ui-small tw-text-normal",
+        "tw-block tw-min-w-0 tw-whitespace-normal tw-text-ui-small tw-text-normal [overflow-wrap:anywhere]",
         className
       )}
       title={title}
