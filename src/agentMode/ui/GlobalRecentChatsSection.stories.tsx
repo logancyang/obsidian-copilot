@@ -67,6 +67,7 @@ export const OpenSessions: StoryObj<GlobalRecentChatsSectionProps> = {
     })),
     openChatIds: new Set([items[0].id, items[1].id]),
     runningChatIds: new Set([items[1].id]),
+    attentionChatIds: new Set([items[0].id]),
     onCloseSession: noop,
   },
   render: renderShelf,

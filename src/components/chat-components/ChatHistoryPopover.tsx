@@ -1,7 +1,4 @@
-import {
-  OpenSessionIndicator,
-  CloseSessionButton,
-} from "@/components/chat-components/ui/OpenSessionControls";
+import { CloseSessionButton } from "@/components/chat-components/ui/OpenSessionControls";
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ArrowUpRight, Check, Edit2, MessageCircle, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -485,11 +482,9 @@ function ChatHistoryItem({
       <ChatIconWithAttention
         icon={RowIcon}
         needsAttention={chat.needsAttention}
+        isSessionOpen={isSessionOpen}
         iconClassName="tw-size-3 tw-text-muted"
       />
-
-      {/* Idle backends still hold resources: https://github.com/Brevilabs/obsidian-copilot-private/issues/429 */}
-      {isSessionOpen && <OpenSessionIndicator />}
       <span
         className="tw-block tw-min-w-0 tw-flex-1 tw-truncate tw-text-sm tw-font-medium tw-text-normal"
         title={chat.title}

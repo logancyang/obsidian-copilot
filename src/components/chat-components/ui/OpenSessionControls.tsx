@@ -7,7 +7,7 @@ export function OpenSessionIndicator() {
     <span
       aria-label="Session open"
       title="Session open"
-      className="tw-size-1.5 tw-shrink-0 tw-rounded-full tw-bg-error tw-opacity-60"
+      className="tw-absolute -tw-right-0.5 -tw-top-0.5 tw-size-2 tw-rounded-full tw-bg-current tw-text-success tw-ring-1 tw-ring-[var(--background-primary)]"
     />
   );
 }
