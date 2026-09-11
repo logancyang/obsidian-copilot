@@ -299,6 +299,11 @@ export interface CopilotSettings {
      */
     welcomeDismissed: boolean;
     /**
+     * Voice chat demo connection. Absent until a tester configures it, which
+     * reads the same as disabled everywhere — use `getAgentVoiceSettings()`.
+     */
+    voice?: AgentVoiceSettings;
+    /**
      * Skills management — canonical-store discovery, symlink lifecycle,
      * reconciliation. See `designdocs/SKILLS_MANAGEMENT.md` and
      * `designdocs/SKILLS_DISCOVERY_REDESIGN.md`.
@@ -378,6 +383,43 @@ export interface CodexBackendSettings {
   defaultMode?: CopilotMode | null;
   /** See `ClaudeBackendSettings.envOverrides`. Applied to the spawned `codex-acp` subprocess. */
   envOverrides?: Record<string, string>;
+}
+
+/**
+ * Connection settings for the voice chat demo. Absent on every install that has
+ * not opted in, which is the same as `enabled: false`; see
+ * `designdocs/VOICE_CHAT_DEMO_DESIGN.md` → "Copilot domain contracts".
+ */
+export interface AgentVoiceSettings {
+  /** Whether the demo voice transport and its command are available at all. */
+  enabled: boolean;
+  /** Base URL of the voice session service, e.g. `https://voice.example.com`. */
+  serverUrl: string;
+  /**
+   * Keychain entry holding the per-tester bearer credential. Only the entry id
+   * is persisted here; the credential itself never enters `data.json`, which
+   * syncs between devices.
+   */
+  credentialKeychainId?: string;
+}
+
+/**
+ * Returned whenever the voice slice is absent so readers observe one stable,
+ * default-off value instead of a fresh object per call.
+ */
+export const DEFAULT_AGENT_VOICE_SETTINGS: AgentVoiceSettings = Object.freeze({
+  enabled: false,
+  serverUrl: "",
+});
+
+/**
+ * Reads the voice slice, substituting the default-off value for installs that
+ * never configured voice.
+ *
+ * @param settings Settings snapshot to read the voice slice from.
+ */
+export function getAgentVoiceSettings(settings: CopilotSettings): AgentVoiceSettings {
+  return settings.agentMode.voice ?? DEFAULT_AGENT_VOICE_SETTINGS;
 }
 
 /** Settings slice owned by the OpenCode backend. */
@@ -1314,6 +1356,8 @@ function sanitizeAgentMode(raw: unknown): CopilotSettings["agentMode"] {
     ...(suppressMigrationConfirm !== undefined ? { suppressMigrationConfirm } : {}),
   };
 
+  const voice = sanitizeAgentVoice(r.voice);
+
   return {
     byok,
     activeBackend,
@@ -1325,6 +1369,27 @@ function sanitizeAgentMode(raw: unknown): CopilotSettings["agentMode"] {
     skills,
     ...(claudeCli ? { claudeCli } : {}),
     ...(deviceProfiles ? { deviceProfiles } : {}),
+    ...(voice ? { voice } : {}),
+  };
+}
+
+/**
+ * Validate the voice demo slice, dropping it entirely when nothing usable was
+ * stored so an install that never opted in keeps behaving as it did before
+ * voice existed.
+ */
+function sanitizeAgentVoice(raw: unknown): AgentVoiceSettings | undefined {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const r = raw as Record<string, unknown>;
+  const serverUrl = typeof r.serverUrl === "string" ? r.serverUrl.trim() : "";
+  const credentialKeychainId =
+    typeof r.credentialKeychainId === "string" && r.credentialKeychainId.length > 0
+      ? r.credentialKeychainId
+      : undefined;
+  return {
+    enabled: r.enabled === true,
+    serverUrl,
+    ...(credentialKeychainId ? { credentialKeychainId } : {}),
   };
 }
 

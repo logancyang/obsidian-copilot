@@ -1,6 +1,6 @@
 # Agent Mode — layer rules
 
-Six element types, strict imports. Enforced by `eslint-plugin-boundaries`
+Seven element types, strict imports. Enforced by `eslint-plugin-boundaries`
 (see root `eslint.config.mjs`). The list below mirrors `boundaries/elements` and
 `boundaries/dependencies` exactly — when in doubt, the lint config wins.
 
@@ -20,9 +20,14 @@ Six element types, strict imports. Enforced by `eslint-plugin-boundaries`
    `BackendProcess`.
 5. **`backends/registry.ts`** — the only place that names every
    backend.
-6. **`ui/`** — backend-agnostic React UI. — permission modals, model pickers, and
+6. **`voice/`** — the voice chat demo's transport: the shared wire protocol,
+   the WebRTC media/event channel, the authenticated control socket, and the
+   feature-gated transport harness. It may read `session/` types and host
+   utilities; **`session/` never imports `voice/`**, so a transport failure can
+   never reach into conversation ownership.
+7. **`ui/`** — backend-agnostic React UI. — permission modals, model pickers, and
    trail rendering all read session-domain types;
-7. **`skills/`** — canonical-store discovery, symlink lifecycle, reconciliation,
+8. **`skills/`** — canonical-store discovery, symlink lifecycle, reconciliation,
    and the Skills settings UI.
 
 ## Why two adapters under one session
@@ -97,6 +102,8 @@ Then in either case:
 - "Canonical-store skill discovery, symlink lifecycle, SKILL.md
   parser/serializer, Skills settings tab (reads `backends/registry.ts`
   for the brand list)" → `skills/`
+- "Voice wire protocol (copied from the `copilot-voice` server repo), WebRTC
+  transport, control socket, voice settings credential access" → `voice/`
 - "Plugin-level wiring" → `index.ts` only
 
 ## Modals and dialogs

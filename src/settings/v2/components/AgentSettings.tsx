@@ -6,6 +6,8 @@ import {
   useBackendInstallState,
   useBackendAuthState,
   useManagedInstallActionState,
+  readVoiceCredential,
+  writeVoiceCredential,
   type BackendDescriptor,
 } from "@/agentMode";
 import { SettingItem } from "@/components/ui/setting-item";
@@ -18,13 +20,20 @@ import { SettingSection } from "@/components/ui/setting-section";
 import { TabContent, TabItem, type TabItem as TabItemType } from "@/components/ui/setting-tabs";
 import { usePlugin } from "@/contexts/PluginContext";
 import { logError } from "@/logger";
-import { setSettings, useSettingsValue } from "@/settings/model";
+import {
+  getAgentVoiceSettings,
+  getSettings,
+  setSettings,
+  useSettingsValue,
+  type AgentVoiceSettings as AgentVoiceSettingsValue,
+} from "@/settings/model";
 import { formatBinaryPathForDisplay } from "@/utils/binaryPath";
 import { AlertTriangle, MessageCircle } from "lucide-react";
 import React from "react";
 import { QuickChatPanel } from "./QuickChatPanel";
 import { ConfiguredModelEnableList } from "./ConfiguredModelEnableList";
 import { AgentNotificationSoundSettings } from "./ui/AgentNotificationSoundSettings";
+import { AgentVoiceSettings } from "./ui/AgentVoiceSettings";
 
 /** Synthetic sub-tab id for the (non-backend) Quick Chat model curation. */
 const QUICK_CHAT_TAB_ID = "quickchat";
@@ -129,6 +138,7 @@ export const AgentSettings: React.FC = () => {
           soundId={settings.agentMode.notificationSoundId}
           soundOptions={NOTIFICATION_SOUND_OPTIONS}
         />
+        <AgentVoiceSection />
       </SettingSection>
 
       <div className="tw-flex tw-flex-col">
@@ -165,6 +175,40 @@ export const AgentSettings: React.FC = () => {
         </TabContent>
       </div>
     </section>
+  );
+};
+
+/**
+ * Binds the voice demo settings to persisted state: the toggle and URL live in
+ * `agentMode.voice`, while the credential lives in the OS keychain and is only
+ * mirrored in component state so the field can show what is stored.
+ */
+const AgentVoiceSection: React.FC = () => {
+  const settings = useSettingsValue();
+  const plugin = usePlugin();
+  const voice = getAgentVoiceSettings(settings);
+  const [credential, setCredential] = React.useState(
+    () => readVoiceCredential(plugin.app, getAgentVoiceSettings(getSettings())) ?? ""
+  );
+
+  const patchVoice = React.useCallback((partial: Partial<AgentVoiceSettingsValue>) => {
+    setSettings((cur) => ({
+      agentMode: { ...cur.agentMode, voice: { ...getAgentVoiceSettings(cur), ...partial } },
+    }));
+  }, []);
+
+  return (
+    <AgentVoiceSettings
+      enabled={voice.enabled}
+      serverUrl={voice.serverUrl}
+      credential={credential}
+      onEnabledChange={(enabled) => patchVoice({ enabled })}
+      onServerUrlChange={(serverUrl) => patchVoice({ serverUrl })}
+      onCredentialChange={(value) => {
+        setCredential(value);
+        writeVoiceCredential(plugin.app, value);
+      }}
+    />
   );
 };
 

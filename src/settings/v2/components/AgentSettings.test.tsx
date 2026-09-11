@@ -19,14 +19,20 @@ let mockSettings: {
     backends: Record<string, unknown>;
     notificationSound: boolean;
     notificationSoundId: string;
+    voice?: { enabled: boolean; serverUrl: string; credentialKeychainId?: string };
   };
   enableSelfHostMode: boolean;
 };
+let mockVoiceCredential: string | null = null;
+const mockWriteVoiceCredential = jest.fn();
 jest.mock("@/settings/model", () => ({
   // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook; name must match the export
   useSettingsValue: () => mockSettings,
+  getSettings: () => mockSettings,
   setSettings: jest.fn(),
   updateSetting: jest.fn(),
+  getAgentVoiceSettings: (settings: { agentMode: { voice?: unknown } }) =>
+    settings.agentMode.voice ?? { enabled: false, serverUrl: "" },
 }));
 
 // Mock the chat-backend options hook to avoid pulling the heavy @/modelManagement
@@ -125,6 +131,10 @@ jest.mock("@/agentMode", () => ({
   AgentDefaultModelSetting: ({ descriptor }: { descriptor: { id: string } }) => (
     <div data-testid={`default-model-${descriptor.id}`}>default model</div>
   ),
+  readVoiceCredential: () => mockVoiceCredential,
+  writeVoiceCredential: (...args: unknown[]): void => {
+    mockWriteVoiceCredential(...args);
+  },
 }));
 
 jest.mock("@/contexts/PluginContext", () => ({
@@ -148,6 +158,13 @@ jest.mock("./ConfiguredModelEnableList", () => ({
   ),
 }));
 
+/** The toggle belonging to the settings row with this title. */
+function settingRowToggle(title: string): HTMLElement {
+  const row = screen.getByText(title).closest("div")?.parentElement?.parentElement;
+  if (!row) throw new Error(`No settings row titled "${title}"`);
+  return within(row).getByRole("switch");
+}
+
 describe("AgentSettings", () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -162,6 +179,7 @@ describe("AgentSettings", () => {
       },
       enableSelfHostMode: false,
     };
+    mockVoiceCredential = null;
     (setSettings as jest.Mock).mockClear();
     (playNotificationSound as jest.Mock).mockClear();
     installStates.opencode = { kind: "ready", source: "managed" };
@@ -228,7 +246,7 @@ describe("AgentSettings", () => {
 
   it("mutes the chime when the notification sound switch is turned off", () => {
     render(<AgentSettings />);
-    const toggle = screen.getByRole("switch");
+    const toggle = settingRowToggle("Notification");
     expect(toggle.getAttribute("aria-checked")).toBe("true");
 
     fireEvent.click(toggle);
@@ -260,6 +278,29 @@ describe("AgentSettings", () => {
 
     expect(screen.queryByText("Sound")).toBeNull();
     expect(screen.getByText("Notification")).not.toBeNull();
+  });
+
+  it("offers the voice demo in the Agents section, with its connection details hidden while it is off", () => {
+    render(<AgentSettings />);
+
+    expect(screen.getByText("Voice (demo)")).not.toBeNull();
+    expect(screen.queryByText("Voice server URL")).toBeNull();
+  });
+
+  it("stores an edited voice credential in the keychain rather than in the settings file", async () => {
+    mockSettings.agentMode.voice = { enabled: true, serverUrl: "https://voice.example.com" };
+    render(<AgentSettings />);
+
+    fireEvent.change(screen.getByPlaceholderText("Paste the credential you were given"), {
+      target: { value: "tester-credential" },
+    });
+
+    // The settings row debounces edits for a second before reporting them.
+    await waitFor(
+      () => expect(mockWriteVoiceCredential).toHaveBeenCalledWith({}, "tester-credential"),
+      { timeout: 3_000 }
+    );
+    expect(setSettings).not.toHaveBeenCalled();
   });
 
   it("shows the first backend's content by default and the default-model picker above the model list", () => {

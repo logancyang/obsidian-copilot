@@ -13,6 +13,7 @@ import {
   sanitizeEnvOverrides,
   sanitizeQaExclusions,
   sanitizeSettings,
+  getAgentVoiceSettings,
   settingsAtom,
   settingsStore,
   validateCopilotFolder,
@@ -371,6 +372,87 @@ describe("sanitizeSettings - agentMode shape migration", () => {
       binaryVersion: undefined,
       binarySource: undefined,
     });
+  });
+});
+
+describe("sanitizeSettings - agentMode voice slice", () => {
+  it("leaves the slice absent for an install that never configured voice, so it stays off", () => {
+    const sanitized = sanitizeSettings({
+      ...DEFAULT_SETTINGS,
+      agentMode: { byok: {}, activeBackend: "opencode", backends: {} },
+    } as unknown as CopilotSettings);
+
+    expect(sanitized.agentMode.voice).toBeUndefined();
+    expect(getAgentVoiceSettings(sanitized)).toEqual({ enabled: false, serverUrl: "" });
+  });
+
+  it("keeps a configured slice and trims the server URL", () => {
+    const sanitized = sanitizeSettings({
+      ...DEFAULT_SETTINGS,
+      agentMode: {
+        ...DEFAULT_SETTINGS.agentMode,
+        voice: {
+          enabled: true,
+          serverUrl: "  https://voice.example.com  ",
+          credentialKeychainId: "copilot-va1b2c3d4-voice-credential",
+        },
+      },
+    });
+
+    expect(sanitized.agentMode.voice).toEqual({
+      enabled: true,
+      serverUrl: "https://voice.example.com",
+      credentialKeychainId: "copilot-va1b2c3d4-voice-credential",
+    });
+  });
+
+  it("fills a partial slice with the default-off values instead of failing to load", () => {
+    const sanitized = sanitizeSettings({
+      ...DEFAULT_SETTINGS,
+      agentMode: { ...DEFAULT_SETTINGS.agentMode, voice: { serverUrl: 42 } },
+    } as unknown as CopilotSettings);
+
+    expect(sanitized.agentMode.voice).toEqual({ enabled: false, serverUrl: "" });
+  });
+
+  it("drops a slice that is not an object and an empty credential reference", () => {
+    const notAnObject = sanitizeSettings({
+      ...DEFAULT_SETTINGS,
+      agentMode: { ...DEFAULT_SETTINGS.agentMode, voice: "yes" },
+    } as unknown as CopilotSettings);
+    expect(notAnObject.agentMode.voice).toBeUndefined();
+
+    const emptyCredential = sanitizeSettings({
+      ...DEFAULT_SETTINGS,
+      agentMode: {
+        ...DEFAULT_SETTINGS.agentMode,
+        voice: { enabled: true, serverUrl: "https://voice.example.com", credentialKeychainId: "" },
+      },
+    });
+    expect(emptyCredential.agentMode.voice).toEqual({
+      enabled: true,
+      serverUrl: "https://voice.example.com",
+    });
+  });
+});
+
+describe("getAgentVoiceSettings()", () => {
+  it("returns the configured slice when voice was set up", () => {
+    const voice = { enabled: true, serverUrl: "https://voice.example.com" };
+    const settings = {
+      ...DEFAULT_SETTINGS,
+      agentMode: { ...DEFAULT_SETTINGS.agentMode, voice },
+    } as CopilotSettings;
+
+    expect(getAgentVoiceSettings(settings)).toBe(voice);
+  });
+
+  it("returns one stable default-off value for every install without the slice", () => {
+    const first = getAgentVoiceSettings(DEFAULT_SETTINGS);
+    const second = getAgentVoiceSettings({ ...DEFAULT_SETTINGS });
+
+    expect(first).toEqual({ enabled: false, serverUrl: "" });
+    expect(second).toBe(first);
   });
 });
 

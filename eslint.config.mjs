@@ -541,6 +541,7 @@ export default [
         { type: "session", pattern: "src/agentMode/session" },
         { type: "acp", pattern: "src/agentMode/acp" },
         { type: "sdk", pattern: "src/agentMode/sdk" },
+        { type: "voice", pattern: "src/agentMode/voice" },
         { type: "backend", pattern: "src/agentMode/backends/*", capture: ["name"] },
         { type: "ui", pattern: "src/agentMode/ui" },
         { type: "skills", pattern: "src/agentMode/skills" },
@@ -557,6 +558,10 @@ export default [
             { from: { type: "session" }, allow: { to: { type: ["session", "host"] } } },
             { from: { type: "acp" }, allow: { to: { type: ["acp", "session", "host"] } } },
             { from: { type: "sdk" }, allow: { to: { type: ["sdk", "session", "host"] } } },
+            // voice/ owns the browser and network transport for the voice
+            // demo. It may read session-domain types, but session/ must never
+            // depend on a transport, so the arrow only points this way.
+            { from: { type: "voice" }, allow: { to: { type: ["voice", "session", "host"] } } },
             {
               from: { type: "backend" },
               allow: [
@@ -580,7 +585,17 @@ export default [
               from: { type: "barrel" },
               allow: {
                 to: {
-                  type: ["acp", "session", "sdk", "backend", "registry", "ui", "skills", "host"],
+                  type: [
+                    "acp",
+                    "session",
+                    "sdk",
+                    "voice",
+                    "backend",
+                    "registry",
+                    "ui",
+                    "skills",
+                    "host",
+                  ],
                 },
               },
             },

@@ -53,6 +53,7 @@ describe("commands", () => {
       jest.mocked(getSettings).mockReturnValue({
         enableMiyo: false,
         miyoServerUrl: "",
+        agentMode: {},
       } as ReturnType<typeof getSettings>);
       mockRequestMiyoIndexRefresh.mockResolvedValue(undefined);
     });
@@ -139,6 +140,7 @@ describe("commands", () => {
         enableMiyo: true,
         miyoServerUrl: "http://miyo.local",
         plusLicenseKey: "license",
+        agentMode: {},
       } as ReturnType<typeof getSettings>);
       const commands: Command[] = [];
       const plugin = {
@@ -168,6 +170,7 @@ describe("commands", () => {
       jest.mocked(getSettings).mockReturnValue({
         enableMiyo: true,
         miyoServerUrl: "",
+        agentMode: {},
       } as ReturnType<typeof getSettings>);
       jest.mocked(isDesktopRuntime).mockReturnValue(false);
       const commands: Command[] = [];
@@ -189,6 +192,7 @@ describe("commands", () => {
       jest.mocked(getSettings).mockReturnValue({
         enableMiyo: true,
         miyoServerUrl: "http://miyo.local",
+        agentMode: {},
       } as ReturnType<typeof getSettings>);
       const commands: Command[] = [];
       const plugin = {
@@ -200,6 +204,7 @@ describe("commands", () => {
       jest.mocked(getSettings).mockReturnValue({
         enableMiyo: false,
         miyoServerUrl: "http://miyo.local",
+        agentMode: {},
       } as ReturnType<typeof getSettings>);
       commands.find(({ id }) => id === COMMAND_IDS.REFRESH_MIYO_INDEX)?.callback?.();
 
@@ -209,6 +214,82 @@ describe("commands", () => {
         )
       );
       expect(mockRequestMiyoIndexRefresh).not.toHaveBeenCalled();
+    });
+
+    it("omits the voice check command while the voice demo is off", () => {
+      jest.mocked(isDesktopRuntime).mockReturnValue(true);
+      const commands: Command[] = [];
+      const plugin = {
+        addCommand: jest.fn((command: Command) => commands.push(command)),
+        app: { workspace: { getActiveFile: jest.fn(() => null) } },
+      } as unknown as CopilotPlugin;
+
+      registerCommands(plugin, jest.fn());
+
+      expect(commands.find(({ id }) => id === COMMAND_IDS.VOICE_TRANSPORT_SPIKE)).toBeUndefined();
+    });
+
+    it("omits the voice check command on mobile even when the voice demo is on", () => {
+      jest.mocked(isDesktopRuntime).mockReturnValue(false);
+      jest.mocked(getSettings).mockReturnValue({
+        enableMiyo: false,
+        agentMode: { voice: { enabled: true, serverUrl: "https://voice.example.com" } },
+      } as ReturnType<typeof getSettings>);
+      const commands: Command[] = [];
+      const plugin = {
+        addCommand: jest.fn((command: Command) => commands.push(command)),
+        app: { workspace: { getActiveFile: jest.fn(() => null) } },
+      } as unknown as CopilotPlugin;
+
+      registerCommands(plugin, jest.fn());
+
+      expect(commands.find(({ id }) => id === COMMAND_IDS.VOICE_TRANSPORT_SPIKE)).toBeUndefined();
+    });
+
+    it("registers the voice check command for a desktop tester who turned the voice demo on", () => {
+      jest.mocked(isDesktopRuntime).mockReturnValue(true);
+      jest.mocked(getSettings).mockReturnValue({
+        enableMiyo: false,
+        agentMode: { voice: { enabled: true, serverUrl: "https://voice.example.com" } },
+      } as ReturnType<typeof getSettings>);
+      const commands: Command[] = [];
+      const plugin = {
+        addCommand: jest.fn((command: Command) => commands.push(command)),
+        app: { workspace: { getActiveFile: jest.fn(() => null) } },
+      } as unknown as CopilotPlugin;
+
+      registerCommands(plugin, jest.fn());
+
+      expect(commands.find(({ id }) => id === COMMAND_IDS.VOICE_TRANSPORT_SPIKE)).toMatchObject({
+        name: "Voice transport check (demo)",
+        icon: "mic",
+      });
+    });
+
+    it("refuses to open a call after voice was turned off while the palette entry survived", async () => {
+      jest.mocked(isDesktopRuntime).mockReturnValue(true);
+      jest.mocked(getSettings).mockReturnValue({
+        enableMiyo: false,
+        agentMode: { voice: { enabled: true, serverUrl: "https://voice.example.com" } },
+      } as ReturnType<typeof getSettings>);
+      const commands: Command[] = [];
+      const plugin = {
+        addCommand: jest.fn((command: Command) => commands.push(command)),
+        app: {
+          workspace: { getActiveFile: jest.fn(() => null), getLeavesOfType: jest.fn(() => []) },
+        },
+      } as unknown as CopilotPlugin;
+      registerCommands(plugin, jest.fn());
+
+      jest.mocked(getSettings).mockReturnValue({
+        enableMiyo: false,
+        agentMode: { voice: { enabled: false, serverUrl: "https://voice.example.com" } },
+      } as ReturnType<typeof getSettings>);
+      commands.find(({ id }) => id === COMMAND_IDS.VOICE_TRANSPORT_SPIKE)?.callback?.();
+
+      await waitFor(() =>
+        expect(Notice).toHaveBeenCalledWith("Voice is turned off in Copilot settings.")
+      );
     });
 
     it.each([
@@ -223,6 +304,7 @@ describe("commands", () => {
         jest.mocked(getSettings).mockReturnValue({
           enableMiyo: true,
           miyoServerUrl: "http://miyo.local",
+          agentMode: {},
         } as ReturnType<typeof getSettings>);
         mockRequestMiyoIndexRefresh.mockRejectedValue(error);
         const commands: Command[] = [];

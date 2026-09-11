@@ -18,13 +18,14 @@ import {
 import { CustomCommandChatModal } from "@/commands/CustomCommandChatModal";
 import { ApplyCustomCommandModal } from "@/components/modals/ApplyCustomCommandModal";
 import { YoutubeTranscriptModal } from "@/components/modals/YoutubeTranscriptModal";
+import type { VoiceTransportSpike } from "@/agentMode";
 import { checkIsPaidUser } from "@/plusUtils";
 import type CopilotPlugin from "@/main";
 import { MiyoRequestError } from "@/miyo/MiyoClient";
 import { requestMiyoIndexRefresh } from "@/miyo/miyoIndex";
 import { getMiyoCustomUrl } from "@/miyo/miyoUtils";
 import { getAllQAMarkdownContent } from "@/search/searchUtils";
-import { getSettings } from "@/settings/model";
+import { getAgentVoiceSettings, getSettings } from "@/settings/model";
 import { NoteSelectedTextContext, WebSelectedTextContext } from "@/types/message";
 import { isSourceModeOn } from "@/utils";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
@@ -154,6 +155,24 @@ export function registerCommands(plugin: CopilotPlugin, publish: PublishFile) {
     addCommand(plugin, COMMAND_IDS.NEW_AGENT_CHAT, () => {
       void plugin.newAgentChat();
     });
+    // The voice demo is off by default and its transport harness is not a
+    // product surface, so the command only exists where a tester turned voice
+    // on. See `designdocs/VOICE_CHAT_DEMO_DESIGN.md` → "Milestone 1".
+    if (getAgentVoiceSettings(getSettings()).enabled) {
+      let spike: VoiceTransportSpike | null = null;
+      addCommand(plugin, COMMAND_IDS.VOICE_TRANSPORT_SPIKE, async () => {
+        // Commands register once per load, so turning voice off afterwards
+        // leaves this entry in the palette; re-read the intent before opening
+        // a billable call.
+        if (!getAgentVoiceSettings(getSettings()).enabled) {
+          new Notice("Voice is turned off in Copilot settings.");
+          return;
+        }
+        const { createVoiceTransportSpike } = await import("@/agentMode");
+        spike ??= createVoiceTransportSpike(plugin);
+        await spike.toggle();
+      });
+    }
   }
 
   // Quick Command - opens a modal dialog for quick interactions

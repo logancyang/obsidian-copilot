@@ -478,3 +478,18 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
 export { AgentBackendHeader } from "./backends/shared/ui/AgentBackendHeader";
 
 export { useBackendAuthState } from "./session/useBackendAuthState";
+
+// Voice chat demo. The transport layer is desktop-only and gated behind
+// `agentMode.voice.enabled`; see `designdocs/VOICE_CHAT_DEMO_DESIGN.md`.
+export { VoiceSessionController } from "./voice/VoiceSessionController";
+export type { VoiceSessionControllerDeps } from "./voice/VoiceSessionController";
+export { VoiceTransportSpike } from "./voice/voiceTransportSpike";
+export { createVoiceTransportSpike } from "./voice/voiceWiring";
+export { readVoiceCredential, writeVoiceCredential } from "./voice/voiceCredential";
+export type {
+  VoiceSessionEvent,
+  VoiceSessionSnapshot,
+  VoiceSessionStartRequest,
+  VoiceSessionState,
+  VoiceTranscriptDelta,
+} from "./voice/types";
