@@ -9,16 +9,17 @@ const meta = {
   component: CopilotPlusExpiredModalContent,
   args: {
     onCancel: () => undefined,
+    onOpenModelSettings: () => undefined,
     isUsingPlusModels: false,
   },
   parameters: { gallery: { host: "modal", layout: "padded" } },
 } satisfies Meta<CopilotPlusExpiredModalContentProps>;
 export default meta;
 
-/** The lapsed user is on their own model: renewing is a choice, so no warning. */
+/** The current default is not a Copilot model; renewal and model settings remain available. */
 export const NoWarning: StoryObj<CopilotPlusExpiredModalContentProps> = {};
 
-/** The lapsed user's default chat model is a Copilot one, so it is about to stop answering. */
+/** The selected Copilot model is unavailable; model settings provides a separate recovery path. */
 export const ModelsWillStopWorking: StoryObj<CopilotPlusExpiredModalContentProps> = {
   args: { isUsingPlusModels: true },
 };
