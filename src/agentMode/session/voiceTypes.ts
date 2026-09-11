@@ -84,6 +84,10 @@ export interface AgentVoiceRuntimeState {
   readonly inputCommandPending: boolean;
   /** Remote speech is attached and playing in the owning window. */
   readonly playbackActive: boolean;
+  /** Measured remote audio RMS, from zero (silence) to one. */
+  readonly outputLevel?: number;
+  /** Epoch milliseconds when the call became active, excluding connection setup. */
+  readonly startedAtMs?: number;
   readonly usage: AgentVoiceUsage | null;
   /** Seconds left before the call's hard deadline, once the server warns. */
   readonly secondsRemainingWarning: number | null;

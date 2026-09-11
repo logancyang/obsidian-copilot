@@ -18,7 +18,6 @@ import {
 import { CustomCommandChatModal } from "@/commands/CustomCommandChatModal";
 import { ApplyCustomCommandModal } from "@/components/modals/ApplyCustomCommandModal";
 import { YoutubeTranscriptModal } from "@/components/modals/YoutubeTranscriptModal";
-import type { VoiceCommandHandle } from "@/agentMode";
 import { checkIsPaidUser } from "@/plusUtils";
 import type CopilotPlugin from "@/main";
 import { MiyoRequestError } from "@/miyo/MiyoClient";
@@ -159,7 +158,13 @@ export function registerCommands(plugin: CopilotPlugin, publish: PublishFile) {
     // tester turned voice on.
     // See `designdocs/VOICE_CHAT_DEMO_DESIGN.md` → "Mode and control behavior".
     if (getAgentVoiceSettings(getSettings()).enabled) {
-      let voice: VoiceCommandHandle | null = null;
+      // main.ts creates the session manager before registering commands. Attach
+      // the voice owner now so the composer can start a call without a palette
+      // invocation. See designdocs/VOICE_CHAT_DEMO_DESIGN.md, "User experience".
+      const voice = import("@/agentMode").then(async ({ loadVoiceCommand }) =>
+        (await loadVoiceCommand())(plugin)
+      );
+      void voice.catch((error) => logError("Failed to initialize voice controls", error));
       addCommand(plugin, COMMAND_IDS.VOICE_TOGGLE, async () => {
         // Commands register once per load, so turning voice off afterwards
         // leaves this entry in the palette; re-read the intent before opening
@@ -168,9 +173,7 @@ export function registerCommands(plugin: CopilotPlugin, publish: PublishFile) {
           new Notice("Voice is turned off in Copilot settings.");
           return;
         }
-        const { loadVoiceCommand } = await import("@/agentMode");
-        voice ??= (await loadVoiceCommand())(plugin);
-        await voice.toggle();
+        await (await voice).toggle();
       });
     }
   }

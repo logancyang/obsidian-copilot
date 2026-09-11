@@ -1,3 +1,4 @@
+import type { AgentConversationRow, AgentTaskDetails } from "@/agentMode/session/AgentMessageStore";
 import type { AgentHistoryRestoreStatus } from "@/agentMode/session/agentChatSnapshot";
 import { logWarn } from "@/logger";
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
@@ -162,6 +163,14 @@ export class AgentChatUIState implements AgentChatBackend {
 
   getMessages(): AgentChatMessage[] {
     return this.session.store.getDisplayMessages();
+  }
+
+  getConversationRows(): readonly AgentConversationRow[] {
+    return this.session.store.getConversationRows();
+  }
+
+  getTaskDetails(taskId: string): AgentTaskDetails | undefined {
+    return this.session.store.getTaskDetails(taskId);
   }
 
   isStarting(): boolean {

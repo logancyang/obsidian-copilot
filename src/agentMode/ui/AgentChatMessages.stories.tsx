@@ -199,3 +199,71 @@ export const StructuredHistoryFromNewerVersion: StoryObj<AgentChatMessagesProps>
   },
   render: (props) => <QueuedActionsDemo {...actionRailArgs} {...props} />,
 };
+
+const spokenRequest: AgentChatMessage = {
+  ...message,
+  id: "voice-user",
+  sender: "user",
+  origin: "voice-user",
+  message: "Find my launch risks.",
+};
+const speechReply: AgentChatMessage = {
+  ...message,
+  id: "voice-assistant",
+  origin: "voice-assistant",
+  message: "I'll check the launch notes while we talk.",
+};
+const taskAnswer: AgentChatMessage = {
+  ...message,
+  id: "voice-answer",
+  taskId: "voice-task",
+  presentation: "task-detail",
+  message:
+    "The launch review identifies onboarding as the main risk. See [[Launch review]] for the full customer feedback.",
+};
+
+/** Speech stays public while exact backend output remains in its linked task card. */
+export const MixedVoiceConversation: StoryObj<AgentChatMessagesProps> = {
+  render: function MixedVoiceDemo(props) {
+    const app = useApp();
+    const task = {
+      taskId: "voice-task",
+      sourceMessageIds: [spokenRequest.id],
+      delegationIds: [],
+      assistantMessageId: taskAnswer.id,
+      state:
+        props.streamingMessageId === taskAnswer.id ? ("running" as const) : ("completed" as const),
+      presentation: "voice-card" as const,
+    };
+    const chatBackend = {
+      getTaskDetails: () => ({ task, messages: [taskAnswer], activityAvailable: true }),
+    } as unknown as AgentChatBackend;
+    return (
+      <TooltipProvider>
+        <div className="tw-h-96 tw-overflow-hidden">
+          <AgentChatMessages
+            {...actionRailArgs}
+            app={app}
+            messages={[spokenRequest, speechReply, taskAnswer]}
+            conversationRows={[
+              { kind: "message", message: spokenRequest },
+              { kind: "message", message: speechReply },
+              { kind: "task-card", task },
+            ]}
+            backendDisplayName="Codex"
+            chatBackend={chatBackend}
+            streamingMessageId={null}
+            pendingToolPermissions={[]}
+            pendingAskUserQuestions={[]}
+          />
+        </div>
+      </TooltipProvider>
+    );
+  },
+};
+
+/** Ending voice leaves accepted backend work visible and running in its original card. */
+export const TaskContinuesAfterVoiceEnds: StoryObj<AgentChatMessagesProps> = {
+  ...MixedVoiceConversation,
+  args: { ...actionRailArgs, streamingMessageId: taskAnswer.id },
+};

@@ -271,7 +271,7 @@ export class VoiceSessionController {
     if (generation !== this.startGeneration) {
       throw new Error("The voice session was closed while connecting.");
     }
-    this.patch({ state: "active" });
+    this.patch({ state: "active", startedAtMs: this.now() });
     if (!this.snapshot.locallyMuted) this.microphone?.setEnabled(true);
     logInfo("[Voice] active", {
       voiceSessionId: this.snapshot.voiceSessionId,
@@ -631,7 +631,8 @@ export class VoiceSessionController {
 
   private attachRemoteStream(stream: MediaStream): void {
     this.remoteStream = stream;
-    this.playback = this.deps.host.createPlayback();
+    this.playback?.stop();
+    this.playback = this.deps.host.createPlayback((outputLevel) => this.patch({ outputLevel }));
     this.playback.play(stream);
     this.patch({ playbackActive: true });
   }
@@ -700,7 +701,7 @@ export class VoiceSessionController {
     this.releaseMicrophone();
     this.playback?.stop();
     this.playback = null;
-    this.patch({ playbackActive: false });
+    this.patch({ playbackActive: false, outputLevel: 0 });
 
     const closureConfirmed = await confirmed;
     this.disposeTransports();
@@ -786,7 +787,7 @@ export class VoiceSessionController {
     this.request = null;
     this.resolveControlReady = null;
     this.rejectControlReady = null;
-    this.patch({ inputCommandPending: false, playbackActive: false });
+    this.patch({ inputCommandPending: false, playbackActive: false, outputLevel: 0 });
   }
 
   private releaseMicrophone(): void {
@@ -882,6 +883,8 @@ function sameSnapshot(a: VoiceSessionSnapshot, b: VoiceSessionSnapshot): boolean
     a.locallyMuted === b.locallyMuted &&
     a.inputCommandPending === b.inputCommandPending &&
     a.playbackActive === b.playbackActive &&
+    a.outputLevel === b.outputLevel &&
+    a.startedAtMs === b.startedAtMs &&
     a.controlOnly === b.controlOnly &&
     a.usage === b.usage &&
     a.errorCode === b.errorCode &&

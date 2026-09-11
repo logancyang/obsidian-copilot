@@ -39,7 +39,7 @@ export function createWindowVoiceHost(ownerWindow: Window): VoiceHost {
     },
     captureMicrophone: () => captureMicrophone(ownerWindow),
     createLiveConnection: () => createLiveConnection(),
-    createPlayback: () => createPlayback(ownerWindow),
+    createPlayback: (onOutputLevel) => createPlayback(ownerWindow, onOutputLevel),
     createSession: (request) => createSession(request),
     deleteSession: (request) => deleteSession(request),
     openControlSocket: (url, handlers) => openControlSocket(ownerWindow, url, handlers),
@@ -92,12 +92,38 @@ function createLiveConnection(): VoiceLiveConnection {
   };
 }
 
-function createPlayback(ownerWindow: Window): VoicePlayback {
+function createPlayback(
+  ownerWindow: Window,
+  onOutputLevel?: (level: number) => void
+): VoicePlayback {
   let element: HTMLAudioElement | null = null;
+  let context: AudioContext | null = null;
+  let source: MediaStreamAudioSourceNode | null = null;
+  let analyser: AnalyserNode | null = null;
+  let frame: number | null = null;
+  const stopMeter = () => {
+    if (frame !== null) ownerWindow.cancelAnimationFrame(frame);
+    frame = null;
+    source?.disconnect();
+    analyser?.disconnect();
+    if (context) void context.close().catch(() => undefined);
+    context = null;
+    source = null;
+    analyser = null;
+    onOutputLevel?.(0);
+  };
+  const stop = () => {
+    stopMeter();
+    if (!element) return;
+    element.pause();
+    element.srcObject = null;
+    element.remove();
+    element = null;
+  };
   return {
     play: (stream: MediaStream) => {
-      // The element lives in the owning window's document because playback
-      // follows the view, not whichever window happens to be focused.
+      stop();
+      // Playback and metering follow the view, including when it lives in a popout.
       element = ownerWindow.document.body.createEl("audio", {}, (el) => {
         el.autoplay = true;
       });
@@ -107,14 +133,46 @@ function createPlayback(ownerWindow: Window): VoicePlayback {
           errorName: error instanceof Error ? error.name : "unknown",
         });
       });
+      if (!onOutputLevel) return;
+      try {
+        const { AudioContext: OwnerAudioContext } = ownerWindow as Window & {
+          AudioContext: typeof AudioContext;
+        };
+        context = new OwnerAudioContext();
+        source = context.createMediaStreamSource(stream);
+        analyser = context.createAnalyser();
+        analyser.fftSize = 256;
+        source.connect(analyser);
+        // The audio element owns playback; this graph only measures received
+        // samples. See designdocs/VOICE_CHAT_DEMO_DESIGN.md, "User experience".
+        const samples = new Float32Array(analyser.fftSize);
+        let lastSampleMs = -Infinity;
+        const sample = (time: number) => {
+          if (!analyser) return;
+          if (time - lastSampleMs >= 50) {
+            analyser.getFloatTimeDomainData(samples);
+            let energy = 0;
+            for (const value of samples) energy += value * value;
+            onOutputLevel(
+              Math.min(1, Math.round(Math.sqrt(energy / samples.length) * 1000) / 1000)
+            );
+            lastSampleMs = time;
+          }
+          frame = ownerWindow.requestAnimationFrame(sample);
+        };
+        frame = ownerWindow.requestAnimationFrame(sample);
+        const meteredContext = context;
+        void context.resume().catch(() => {
+          if (context === meteredContext) stopMeter();
+        });
+      } catch {
+        // A meter failure must not stop the call's audio. The waveform stays
+        // flat, as required by designdocs/VOICE_CHAT_DEMO_DESIGN.md.
+        stopMeter();
+        logWarn("[Voice] remote audio metering is unavailable");
+      }
     },
-    stop: () => {
-      if (!element) return;
-      element.pause();
-      element.srcObject = null;
-      element.remove();
-      element = null;
-    },
+    stop,
   };
 }
 

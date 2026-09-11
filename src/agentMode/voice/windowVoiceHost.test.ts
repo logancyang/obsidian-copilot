@@ -169,6 +169,73 @@ describe("windowVoiceHost", () => {
       expect(owner.audioElements[0].remove).toHaveBeenCalled();
     });
 
+    it("measures remote samples in the owning window and releases the meter on stop", () => {
+      const owner = createOwnerWindow();
+      let sample = 0.5;
+      let frame: FrameRequestCallback | undefined;
+      const analyser = {
+        fftSize: 0,
+        getFloatTimeDomainData: (samples: Float32Array) => samples.fill(sample),
+        disconnect: jest.fn(),
+      };
+      const source = { connect: jest.fn(), disconnect: jest.fn() };
+      const context = {
+        createAnalyser: () => analyser,
+        createMediaStreamSource: jest.fn(() => source),
+        close: jest.fn().mockResolvedValue(undefined),
+        resume: jest.fn().mockResolvedValue(undefined),
+      };
+      Object.assign(owner.window, {
+        AudioContext: jest.fn(() => context),
+        requestAnimationFrame: jest.fn((callback) => {
+          frame = callback;
+          return 12;
+        }),
+        cancelAnimationFrame: jest.fn(),
+      });
+      const levels = jest.fn();
+      const playback = createWindowVoiceHost(owner.window).createPlayback(levels);
+      playback.play(owner.stream);
+      frame?.(100);
+      expect(levels).toHaveBeenLastCalledWith(0.5);
+      sample = 2;
+      frame?.(125);
+      expect(levels).toHaveBeenLastCalledWith(0.5);
+      frame?.(150);
+      expect(levels).toHaveBeenLastCalledWith(1);
+      sample = 0;
+      frame?.(200);
+      expect(levels).toHaveBeenLastCalledWith(0);
+      expect(context.createMediaStreamSource).toHaveBeenCalledWith(owner.stream);
+      playback.stop();
+      expect(owner.window.cancelAnimationFrame).toHaveBeenCalledWith(12);
+      expect(source.disconnect).toHaveBeenCalled();
+      expect(analyser.disconnect).toHaveBeenCalled();
+      expect(context.close).toHaveBeenCalledTimes(1);
+      expect(levels).toHaveBeenLastCalledWith(0);
+      playback.stop();
+      expect(context.close).toHaveBeenCalledTimes(1);
+      levels.mockClear();
+      frame?.(300);
+      expect(levels).not.toHaveBeenCalled();
+    });
+
+    it("keeps playback working with a flat meter when audio analysis cannot initialize", () => {
+      const owner = createOwnerWindow();
+      Object.assign(owner.window, {
+        AudioContext: jest.fn(() => {
+          throw new Error("unavailable");
+        }),
+      });
+      const levels = jest.fn();
+      const playback = createWindowVoiceHost(owner.window).createPlayback(levels);
+      playback.play(owner.stream);
+      expect(owner.audioElements[0].play).toHaveBeenCalled();
+      expect(levels).toHaveBeenLastCalledWith(0);
+      playback.stop();
+      expect(owner.audioElements[0].remove).toHaveBeenCalled();
+    });
+
     it("opens the control socket in the owning window and forwards its frames", () => {
       const owner = createOwnerWindow();
 

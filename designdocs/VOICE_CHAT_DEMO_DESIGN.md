@@ -4,7 +4,7 @@
 
 A user can open an existing Copilot Agent Mode conversation, turn on voice above the composer, talk and type while the selected agent works, then turn voice off and continue typing in the same conversation. GPT-Live handles the spoken conversation. Claude, Codex, or OpenCode continues to do the actual vault work through Copilot's existing local agent integration.
 
-This is an implementation-ready design for a desktop end-to-end demo, researched on September 10, 2026 against checkout `20837e19`. It records the requested experience and resolves implementation choices needed to build it. Choices introduced here are engineering recommendations, not claims that the user previously approved every detail. No voice implementation, infrastructure, account access, latency result, or deployment has been verified yet.
+This is an implementation-ready design for a desktop end-to-end demo, researched on September 10, 2026 against checkout `20837e19`. It records the requested experience and resolves implementation choices needed to build it. The implementation now includes shared task ownership, mixed conversation storage, the Railway service and WebRTC transport, and the desktop composer controls. Native synthesized speech has delegated work to Codex in this workspace; the full backend and UI verification matrix remains pending.
 
 The main recommendation is a small Node service on Railway, direct WebRTC audio between Copilot and OpenAI, and a server-side control connection to GPT-Live. We host the voice service, credentials, and coordination; OpenAI hosts the `gpt-live-1` model. Local coding agents and vault access stay on the user's computer.
 
@@ -13,13 +13,13 @@ The main recommendation is a small Node service on Railway, direct WebRTC audio 
 - [x] Inspect the current Agent Mode submission, cancellation, rendering, session, and persistence paths.
 - [x] Verify GPT-Live's client delegation, transcript, transport, session, and cost contracts against official documentation.
 - [x] Compare Railway and Cloudflare and specify an executable demo design.
-- [ ] Prove WebRTC and sideband delegation in the actual Obsidian desktop runtime.
-- [ ] Implement shared task submission and mixed conversation storage.
-- [ ] Implement the Railway voice service and Copilot transport.
-- [ ] Implement waveform, task cards, mixed transcript, and mode transitions.
+- [x] Prove WebRTC and sideband delegation in the actual Obsidian desktop runtime. The voice handoff verification recorded in `TODO.md` completed one native Codex task.
+- [x] Implement shared task submission and mixed conversation storage.
+- [x] Implement the Railway voice service and Copilot transport.
+- [x] Implement waveform, task cards, mixed transcript, and mode transitions. Native Codex verification covers synthesized speech, typed requests, queued work after End voice, save/reload, disconnect/restart, microphone denial, and popout teardown.
 - [ ] Verify native end-to-end behavior with Claude, Codex, and OpenCode; record measured costs and latency.
 
-This section tracks implementation of the feature. The workspace `TODO.md` tracks the current documentation task.
+This section tracks implementation of the feature. The workspace `TODO.md` tracks the current implementation and verification task.
 
 ## Product design
 
@@ -423,7 +423,9 @@ September 10, 2026: Bound the private demo to desktop, one voice conversation pe
 
 ## Outcomes and retrospective
 
-The design now specifies the product behavior, hosting choice, ownership boundaries, API contracts, task routing, context handoff, persistence, failure recovery, implementation locations, and acceptance evidence. Implementation and deployment remain pending. The first result to obtain is a real Obsidian-to-GPT-Live session that produces one correctly contextualized local delegation; this will validate the largest uncertainty before extensive UI work.
+The desktop product controls and shared task flow are implemented. Native Codex testing on September 11, 2026 connected in 1.8 seconds and accepted two spoken delegations in 505 ms and 501 ms. A 96-second call reported provider-confirmed usage with an estimated cost of $0.08. Four task answers survived ending voice and reloading the plugin. The tests also exposed and corrected stale ownership after disconnect and missing closing-state feedback.
+
+The focused suite passes 428 tests. Native testing uses synthesized microphone input through the real WebRTC connection and actual local backend. It does not establish human speech quality or replace the remaining Claude/OpenCode and full acceptance matrix.
 
 ## Artifacts and notes
 

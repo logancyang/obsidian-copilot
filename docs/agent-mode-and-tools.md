@@ -186,3 +186,15 @@ Copilot also includes **research-memo** as an optional theme. For a named theme,
 When an installed agent needs a supported version, Basic → Agents and Agent Chat offer **Upgrade** if Copilot can upgrade that installation. Both show the same progress, including upgrades started in Configure. If an upgrade fails, use **Retry**. A failed custom-path selection is reported in Configure and does not turn the upgrade action into a path-validation retry.
 
 Image-only messages appear as "Image attachment" in the queue. Sessions with only images use the same fallback title in tabs and Recent Chats until a text or agent-generated title is available.
+
+## Voice chat demo
+
+On desktop, testers with the voice demo enabled and configured can choose **Start voice** above the Agent Chat composer. Select one agent first. The same conversation stays open, and you can continue typing, attaching images and adding note references while voice is connected.
+
+The voice bar shows assistant audio activity, microphone state and call time. **Mute microphone** stops sending your speech while playback and agent work continue. Muting does not end the call. **End voice** stops the microphone and playback; accepted agent tasks continue and their answers remain in the conversation.
+
+Spoken captions appear in the conversation. Work submitted while voice is active appears in a task card. Open **View details** for the full answer and tool activity. A saved task retains its answer, but its live activity trail may be unavailable after reload.
+
+Follow-ups queue behind the current task and do not change work already running. Use the existing **Stop** control to cancel local work and clear its queue. Permission requests, questions and plan decisions still require the on-screen controls; speaking an approval does not approve an operation.
+
+Switching chat, project or agent, or closing the chat view, ends voice. Starting it again creates a new call in the same conversation. Voice is a desktop demo; it does not support multi-agent fan-out.

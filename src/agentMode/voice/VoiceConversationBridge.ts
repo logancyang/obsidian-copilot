@@ -174,6 +174,7 @@ interface ActiveCall {
 export class VoiceConversationBridge {
   private call: ActiveCall | null = null;
   private starting: VoiceChatBinding | null = null;
+  private lastState: { binding: VoiceChatBinding; state: AgentVoiceRuntimeState } | null = null;
   private readonly listeners = new Set<() => void>();
   private disposed = false;
 
@@ -192,11 +193,17 @@ export class VoiceConversationBridge {
   attach(binding: VoiceChatBinding): () => void {
     const attachment: AgentVoiceAttachment = {
       getState: () =>
-        this.call?.binding === binding ? this.snapshotState() : VOICE_OFF_RUNTIME_STATE,
+        this.call?.binding === binding
+          ? this.snapshotState()
+          : this.lastState?.binding === binding
+            ? this.lastState.state
+            : VOICE_OFF_RUNTIME_STATE,
       subscribe: (listener) => this.subscribe(listener),
       start: () => this.start(binding),
       end: () =>
-        this.call?.binding === binding ? this.end("user ended voice") : Promise.resolve(),
+        this.call?.binding === binding || this.lastState?.binding === binding
+          ? this.end("user ended voice")
+          : Promise.resolve(),
       setMuted: (muted) => {
         if (this.call?.binding === binding) this.call.controller.setMuted(muted);
       },
@@ -210,6 +217,7 @@ export class VoiceConversationBridge {
       if (detached) return;
       detached = true;
       binding.chat.attachVoice(null);
+      if (this.lastState?.binding === binding) this.lastState = null;
       if (this.call?.binding === binding) void this.end("chat is no longer active");
     };
   }
@@ -252,7 +260,7 @@ export class VoiceConversationBridge {
 
   /** Current call state, or the off state when nothing is running. */
   getState(): AgentVoiceRuntimeState {
-    return this.call ? this.snapshotState() : VOICE_OFF_RUNTIME_STATE;
+    return this.call ? this.snapshotState() : (this.lastState?.state ?? VOICE_OFF_RUNTIME_STATE);
   }
 
   /** The conversation the live call belongs to, or null when voice is off. */
@@ -289,6 +297,9 @@ export class VoiceConversationBridge {
     // One active voice conversation per plugin instance: a call somewhere else
     // ends before this one opens, and its tasks are left running.
     if (this.call) {
+      if (this.call.endRequested || this.call.controller.getSnapshot().state === "closing") {
+        return refuse("Voice is ending. Wait for it to finish before starting again.");
+      }
       if (this.call.binding === binding) return refuse("Voice is already on in this chat.");
       await this.end("voice moved to another chat");
     }
@@ -299,6 +310,7 @@ export class VoiceConversationBridge {
       if (!opened) return refuse("Open a Copilot Agent chat first — voice runs in its window.");
       const call = this.openCall(binding, opened);
       this.call = call;
+      this.lastState = null;
       const conversation = binding.conversation;
       const persistable = conversation.store.getPersistableConversation();
       try {
@@ -339,17 +351,24 @@ export class VoiceConversationBridge {
    */
   private async end(reason: string): Promise<void> {
     const call = this.call;
-    if (!call) return;
+    this.lastState = null;
+    if (!call) {
+      this.notify();
+      return;
+    }
     call.endRequested = true;
-    this.call = null;
     this.releaseCall(call);
-    this.notify();
     try {
-      await call.controller.close(reason);
+      const closing = call.controller.close(reason);
+      this.notify();
+      await closing;
     } catch (error) {
       logWarn("[Voice] closing the call failed", {
         errorName: error instanceof Error ? error.name : "unknown",
       });
+    } finally {
+      if (this.call === call) this.call = null;
+      this.notify();
     }
   }
 
@@ -396,6 +415,15 @@ export class VoiceConversationBridge {
   private handleCallEvent(call: ActiveCall, event: VoiceSessionEvent): void {
     switch (event.type) {
       case "state.changed":
+        // A dropped control socket can end without a session.closed frame.
+        // Release ownership only once transport is off, while retaining the
+        // failure for restart UI. See designdocs/VOICE_CHAT_DEMO_DESIGN.md.
+        if (event.snapshot.state === "off" && this.call === call) {
+          if (!call.endRequested) this.markInterrupted(call);
+          this.lastState = { binding: call.binding, state: this.snapshotState() };
+          this.call = null;
+          this.releaseCall(call);
+        }
         this.notify();
         return;
       case "transcript.delta":
@@ -416,10 +444,6 @@ export class VoiceConversationBridge {
         // mid-sentence, and the affected row must say so rather than standing
         // as a complete turn.
         if (!call.endRequested) this.markInterrupted(call);
-        if (this.call === call) {
-          this.call = null;
-          this.releaseCall(call);
-        }
         this.notify();
         return;
       case "error":
@@ -721,6 +745,8 @@ export class VoiceConversationBridge {
       inputMuted: snapshot.locallyMuted,
       inputCommandPending: snapshot.inputCommandPending,
       playbackActive: snapshot.playbackActive,
+      outputLevel: snapshot.outputLevel,
+      startedAtMs: snapshot.startedAtMs,
       usage: snapshot.usage
         ? {
             connectedSeconds: snapshot.usage.connectedSeconds,

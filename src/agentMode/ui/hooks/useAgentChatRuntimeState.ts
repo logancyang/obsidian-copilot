@@ -1,3 +1,4 @@
+import type { AgentConversationRow } from "@/agentMode/session/AgentMessageStore";
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
 import type { AgentHistoryRestoreStatus } from "@/agentMode/session/agentChatSnapshot";
 import type { AgentQueuedTask } from "@/agentMode/session/AgentTaskCoordinator";
@@ -24,6 +25,7 @@ import { useEffect, useRef, useState } from "react";
  */
 export interface AgentChatRuntimeState {
   messages: AgentChatMessage[];
+  conversationRows?: readonly AgentConversationRow[];
   isStarting: boolean;
   hasPendingPlanPermission: boolean;
   currentPlan: CurrentPlan | null;
@@ -61,6 +63,7 @@ function readBackendRuntimeSnapshot(backend: AgentChatBackend): BackendRuntimeSn
     backend,
     state: {
       messages: backend.getMessages(),
+      conversationRows: backend.getConversationRows?.(),
       isStarting: backend.isStarting(),
       hasPendingPlanPermission: backend.hasPendingPlanPermission(),
       currentPlan: backend.getCurrentPlan(),

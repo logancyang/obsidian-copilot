@@ -133,6 +133,45 @@ describe("AgentChatMessages", () => {
 
     afterEach(() => jest.useRealTimers());
 
+    it("folds backend prose into one linked task while spoken assistant output remains public", () => {
+      const answer = assistantMessage("backend-answer", 62_000, {
+        message: "Exact backend answer",
+        taskId: "task-1",
+        presentation: "task-detail",
+      });
+      const speech = assistantMessage("speech", 63_000, {
+        message: "Spoken summary",
+        origin: "voice-assistant",
+      });
+      const task = {
+        taskId: "task-1",
+        sourceMessageIds: [],
+        delegationIds: [],
+        assistantMessageId: answer.id,
+        state: "completed" as const,
+        presentation: "voice-card" as const,
+      };
+      renderMessages([answer, speech], null, {
+        conversationRows: [
+          { kind: "task-card", task },
+          { kind: "message", message: speech },
+        ],
+        backendDisplayName: "Codex",
+        chatBackend: {
+          ...chatBackend,
+          getTaskDetails: () => ({ task, messages: [answer], activityAvailable: false }),
+        },
+      });
+      expect(screen.getByText("Spoken summary")).toBeTruthy();
+      const backendAnswer = screen.getByText("Exact backend answer");
+      expect(backendAnswer.closest("details")).not.toBeNull();
+      expect(screen.getByText("Codex · Completed")).toBeTruthy();
+      expect(screen.getAllByText("Exact backend answer")).toHaveLength(1);
+      expect(
+        screen.getByText("Activity details are unavailable for this saved task.")
+      ).toBeTruthy();
+    });
+
     it("shows no history notice for a chat whose saved structure loaded normally", () => {
       renderMessages([assistantMessage("answer-1", 62_000)], null, {
         historyRestoreStatus: "restored",

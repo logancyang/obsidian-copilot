@@ -8,6 +8,13 @@ import { waitFor } from "@testing-library/react";
 import { Notice, TFile, type Command } from "obsidian";
 
 const mockRequestMiyoIndexRefresh = jest.fn();
+const mockVoiceToggle = jest.fn();
+const mockCreateVoiceCommand = jest.fn(() => ({ toggle: mockVoiceToggle }));
+const mockLoadVoiceCommand = jest.fn(async () => mockCreateVoiceCommand);
+
+jest.mock("@/agentMode", () => ({
+  loadVoiceCommand: () => mockLoadVoiceCommand(),
+}));
 
 jest.mock("@/commands/CustomCommandChatModal", () => ({
   CustomCommandChatModal: jest.fn(),
@@ -50,6 +57,8 @@ describe("commands", () => {
   describe("registerCommands()", () => {
     beforeEach(() => {
       jest.clearAllMocks();
+      jest.mocked(isDesktopRuntime).mockReturnValue(false);
+      mockVoiceToggle.mockResolvedValue(undefined);
       jest.mocked(getSettings).mockReturnValue({
         enableMiyo: false,
         miyoServerUrl: "",
@@ -227,6 +236,7 @@ describe("commands", () => {
       registerCommands(plugin, jest.fn());
 
       expect(commands.find(({ id }) => id === COMMAND_IDS.VOICE_TOGGLE)).toBeUndefined();
+      expect(mockLoadVoiceCommand).not.toHaveBeenCalled();
     });
 
     it("omits the voice toggle command on mobile even when the voice demo is on", () => {
@@ -244,9 +254,10 @@ describe("commands", () => {
       registerCommands(plugin, jest.fn());
 
       expect(commands.find(({ id }) => id === COMMAND_IDS.VOICE_TOGGLE)).toBeUndefined();
+      expect(mockLoadVoiceCommand).not.toHaveBeenCalled();
     });
 
-    it("registers the voice toggle command for a desktop tester who turned the voice demo on", () => {
+    it("registers the voice toggle command for a desktop tester who turned the voice demo on", async () => {
       jest.mocked(isDesktopRuntime).mockReturnValue(true);
       jest.mocked(getSettings).mockReturnValue({
         enableMiyo: false,
@@ -264,6 +275,30 @@ describe("commands", () => {
         name: "Voice: start or end (demo)",
         icon: "mic",
       });
+      await waitFor(() => expect(mockCreateVoiceCommand).toHaveBeenCalledWith(plugin));
+    });
+
+    it("creates the shared voice owner before any palette invocation and reuses it for toggles", async () => {
+      jest.mocked(isDesktopRuntime).mockReturnValue(true);
+      jest.mocked(getSettings).mockReturnValue({
+        enableMiyo: false,
+        agentMode: { voice: { enabled: true, serverUrl: "https://voice.example.com" } },
+      } as ReturnType<typeof getSettings>);
+      const commands: Command[] = [];
+      const plugin = {
+        agentSessionManager: {},
+        addCommand: jest.fn((command: Command) => commands.push(command)),
+        app: { workspace: { getActiveFile: jest.fn(() => null) } },
+      } as unknown as CopilotPlugin;
+      registerCommands(plugin, jest.fn());
+
+      await waitFor(() => expect(mockCreateVoiceCommand).toHaveBeenCalledWith(plugin));
+      expect(mockVoiceToggle).not.toHaveBeenCalled();
+      const command = commands.find(({ id }) => id === COMMAND_IDS.VOICE_TOGGLE);
+      command?.callback?.();
+      command?.callback?.();
+      await waitFor(() => expect(mockVoiceToggle).toHaveBeenCalledTimes(2));
+      expect(mockCreateVoiceCommand).toHaveBeenCalledTimes(1);
     });
 
     it("refuses to open a call after voice was turned off while the palette entry survived", async () => {

@@ -1,3 +1,5 @@
+import type { AgentConversationRow } from "@/agentMode/session/AgentMessageStore";
+import { AgentVoiceTaskCard } from "@/agentMode/ui/AgentVoiceTaskCard";
 import { AgentTrail } from "@/agentMode/ui/AgentTrailView";
 import { AskUserQuestionCard } from "@/agentMode/ui/AskUserQuestionCard";
 import { FanoutMessageCard } from "@/agentMode/ui/FanoutMessageCard";
@@ -21,6 +23,8 @@ import React, { memo, useMemo } from "react";
 
 interface AgentChatMessagesProps {
   messages: AgentChatMessage[];
+  conversationRows?: readonly AgentConversationRow[];
+  backendDisplayName?: string;
   app: App;
   currentPlan: CurrentPlan | null;
   pendingToolPermissions: PermissionPrompt[];
@@ -86,6 +90,8 @@ function lastAssistant(visible: AgentChatMessage[]): AgentChatMessage | undefine
 const AgentChatMessages = memo(
   ({
     messages,
+    conversationRows,
+    backendDisplayName = "Agent",
     app,
     currentPlan,
     pendingToolPermissions,
@@ -95,6 +101,12 @@ const AgentChatMessages = memo(
     historyRestoreStatus,
   }: AgentChatMessagesProps) => {
     const visible = useMemo(() => messages.filter((m) => m.isVisible), [messages]);
+    const rows = useMemo(
+      () =>
+        conversationRows ??
+        visible.map((message): AgentConversationRow => ({ kind: "message", message })),
+      [conversationRows, visible]
+    );
     const adapted = useMemo(() => visible.map(toChatMessageView), [visible]);
     const { containerMinHeight, scrollContainerCallbackRef, getMessageKey } = useChatScrolling({
       chatHistory: adapted,
@@ -136,14 +148,27 @@ const AgentChatMessages = memo(
               {historyNotice}
             </div>
           ) : null}
-          {visible.map((message, index) => {
-            const isLastMessage = index === visible.length - 1;
+          {rows.map((row, index) => {
+            if (row.kind === "task-card") {
+              return (
+                <div key={row.task.taskId} className="tw-w-full">
+                  <AgentVoiceTaskCard
+                    task={row.task}
+                    details={chatBackend.getTaskDetails?.(row.task.taskId)}
+                    backendDisplayName={backendDisplayName}
+                    app={app}
+                  />
+                </div>
+              );
+            }
+            const message = row.message;
+            const isLastMessage = index === rows.length - 1;
             // A plan remains part of the transcript, so it supplies tail
             // content. Blocking actions live in their own rail and do not
             // change the transcript's scroll headroom.
             const shouldApplyMinHeight =
               isLastMessage && message.sender !== USER_SENDER && !showPlanCard;
-            const adaptedMessage = adapted[index];
+            const adaptedMessage = toChatMessageView(message);
             // When an assistant message has structured parts, the trail owns
             // its entire body — `text` parts already cover streamed prose, so
             // an additional `ChatSingleMessage` would duplicate it.

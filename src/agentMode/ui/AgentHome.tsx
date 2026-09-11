@@ -1,3 +1,5 @@
+import { useAgentVoiceViewLifetime } from "@/agentMode/ui/hooks/useAgentVoiceViewLifetime";
+import { AgentVoiceControls } from "@/agentMode/ui/AgentVoiceControls";
 import { useChatRelevantNotesContext } from "@/agentMode/ui/hooks/useChatRelevantNotesContext";
 import AgentChatMessages from "@/agentMode/ui/AgentChatMessages";
 import { AgentChatControls } from "@/agentMode/ui/AgentChatControls";
@@ -140,6 +142,8 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     activeTask,
     queuedTasks,
     historyRestoreStatus,
+    voice,
+    conversationRows,
   } = useAgentChatRuntimeState(backend);
   // The answer the running task streams into. Identity, not "the last
   // assistant row": a spoken reply can land after that row while the backend
@@ -773,27 +777,33 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       />
     ) : undefined;
 
+  const voiceControls = backend.getVoiceControls?.() ?? null;
+  useAgentVoiceViewLifetime(voiceControls, rootEl?.ownerDocument.defaultView ?? null);
+
   const composerNode = (
-    <AgentChatInput
-      backend={backend}
-      plugin={plugin}
-      chatInputId={chatInputId}
-      draft={draft}
-      app={app}
-      mainAgentId={mainAgentId}
-      updateUserMessageHistory={updateUserMessageHistory}
-      queuedTasks={queuedTasks}
-      isTaskActive={activeTask !== null}
-      isStarting={isStarting}
-      hasPendingPlanPermission={hasPendingPlanPermission}
-      modelPickerOverride={modelPickerOverride ?? undefined}
-      modePickerOverride={modePickerOverride ?? undefined}
-      onCycleMode={handleCycleMode}
-      activeProjectId={activeProjectId}
-      contextLoadBlocking={contextLoadBlocking}
-      disabled={isOrphanedProject}
-      contextStatusIndicator={contextStatusIndicator}
-    />
+    <>
+      <AgentVoiceControls key={chatInputId} controls={voiceControls} state={voice} />
+      <AgentChatInput
+        backend={backend}
+        plugin={plugin}
+        chatInputId={chatInputId}
+        draft={draft}
+        app={app}
+        mainAgentId={mainAgentId}
+        updateUserMessageHistory={updateUserMessageHistory}
+        queuedTasks={queuedTasks}
+        isTaskActive={activeTask !== null}
+        isStarting={isStarting}
+        hasPendingPlanPermission={hasPendingPlanPermission}
+        modelPickerOverride={modelPickerOverride ?? undefined}
+        modePickerOverride={modePickerOverride ?? undefined}
+        onCycleMode={handleCycleMode}
+        activeProjectId={activeProjectId}
+        contextLoadBlocking={contextLoadBlocking}
+        disabled={isOrphanedProject}
+        contextStatusIndicator={contextStatusIndicator}
+      />
+    </>
   );
 
   // Hero: a single title line above the composer — the rotating greeting
@@ -983,6 +993,8 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                     <AgentChatMessages
                       key={sessionId}
                       messages={messages}
+                      conversationRows={conversationRows}
+                      backendDisplayName={descriptor.displayName}
                       app={app}
                       currentPlan={currentPlan}
                       pendingToolPermissions={pendingToolPermissions}

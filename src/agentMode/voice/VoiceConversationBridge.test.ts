@@ -10,7 +10,7 @@ import {
   VoiceConversationBridge,
 } from "@/agentMode/voice/VoiceConversationBridge";
 import type { VoiceSessionController } from "@/agentMode/voice/VoiceSessionController";
-import type { VoiceSessionEvent } from "@/agentMode/voice/types";
+import type { VoiceSessionSnapshot, VoiceSessionEvent } from "@/agentMode/voice/types";
 
 jest.mock("@/logger", () => ({ logInfo: jest.fn(), logWarn: jest.fn(), logError: jest.fn() }));
 
@@ -39,14 +39,22 @@ function createHarness() {
     cancel: jest.fn(),
     getTask: (id) => store.getTask(id),
   });
+  let snapshot = {
+    state: "active",
+    voiceSessionId: "voice-1",
+    outputLevel: 0.4,
+    startedAtMs: 1000,
+  } as VoiceSessionSnapshot;
   const controller = {
     subscribe: (listener: (event: VoiceSessionEvent) => void) => {
       emit = listener;
-      return () => {};
+      return () => {
+        emit = () => {};
+      };
     },
     start: jest.fn(async () => {}),
     close: jest.fn(async () => {}),
-    getSnapshot: () => ({ state: "active", voiceSessionId: "voice-1" }),
+    getSnapshot: () => snapshot,
     acceptDelegation: jest.fn(),
     deferDelegation: jest.fn(),
     updateTask: jest.fn(),
@@ -94,7 +102,21 @@ function createHarness() {
     });
   const delegate = (id = "delegation-1", offsetMs = 6000) =>
     emit({ type: "delegation.requested", liveDelegationId: id, offsetMs });
-  return { bridge, controls, controller, store, tasks, submitTask, transcript, delegate };
+  const changeState = (change: Partial<VoiceSessionSnapshot>) => {
+    snapshot = { ...snapshot, ...change };
+    emit({ type: "state.changed", snapshot });
+  };
+  return {
+    bridge,
+    controls,
+    controller,
+    store,
+    tasks,
+    submitTask,
+    transcript,
+    delegate,
+    changeState,
+  };
 }
 
 describe("VoiceConversationBridge", () => {
@@ -109,6 +131,54 @@ describe("VoiceConversationBridge", () => {
       afterEach(async () => {
         await h.bridge.dispose();
         jest.useRealTimers();
+      });
+
+      it("exposes measured audio and the active start time through the conversation controls", () => {
+        expect(h.controls.getState()).toMatchObject({ outputLevel: 0.4, startedAtMs: 1000 });
+      });
+
+      it("retains a disconnected call's error and allows a fresh call without changing existing tasks or text", async () => {
+        h.transcript("user", "Find notes about Obsidian");
+        h.delegate();
+        jest.advanceTimersByTime(TRANSCRIPT_SETTLE_MS);
+        const task = h.tasks.getActiveTask();
+        const text = h.store.getDisplayMessages().map((message) => message.message);
+        h.changeState({ state: "off", errorCode: "transport", outputLevel: 0 });
+        expect(h.bridge.getActiveConversationId()).toBeNull();
+        expect(h.controls.getState()).toMatchObject({ session: "off", errorCode: "transport" });
+        expect(h.tasks.getActiveTask()).toBe(task);
+        expect(h.store.getDisplayMessages().map((message) => message.message)).toEqual(text);
+        h.controller.start.mockImplementationOnce(async () => {
+          h.changeState({ state: "active", errorCode: null });
+        });
+        await expect(h.controls.start()).resolves.toEqual({ started: true });
+        expect(h.controls.getState()).toMatchObject({ session: "active", errorCode: null });
+      });
+
+      it("clears a retained disconnect error when the user ends the already stopped call", async () => {
+        h.changeState({ state: "off", errorCode: "transport" });
+        await h.controls.end();
+        expect(h.controls.getState()).toMatchObject({ session: "off", errorCode: null });
+      });
+
+      it("keeps closing visible and refuses a new call until the old transport finishes closing", async () => {
+        let finish!: () => void;
+        const closed = new Promise<void>((resolve) => {
+          finish = resolve;
+        });
+        h.controller.close.mockImplementation(() => {
+          h.changeState({ state: "closing" });
+          return closed;
+        });
+        const ended = h.controls.end();
+        const endedAgain = h.controls.end();
+        expect(h.controls.getState().session).toBe("closing");
+        await expect(h.controls.start()).resolves.toMatchObject({ started: false });
+        expect(h.controller.start).toHaveBeenCalledTimes(1);
+        finish();
+        await Promise.all([ended, endedAgain]);
+        expect(h.controls.getState().session).toBe("off");
+        await expect(h.controls.start()).resolves.toEqual({ started: true });
       });
 
       it("dispatches settled user speech once and links the existing transcript row to its task", () => {

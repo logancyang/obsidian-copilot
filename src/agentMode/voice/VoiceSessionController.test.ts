@@ -170,6 +170,7 @@ interface Harness {
   deletions: Array<{ url: string; credential: string }>;
   sockets: FakeControlSocket[];
   events: VoiceSessionEvent[];
+  reportOutputLevel(level: number): void;
   socket(): FakeControlSocket;
   /** Acknowledges the client frame at `index`, as the server does on receipt. */
   ack(index: number, seq?: number): void;
@@ -182,6 +183,7 @@ function createHarness(
     serverUrl?: string;
     enabled?: boolean;
     credential?: string | null;
+    now?: () => number;
   } = {}
 ): Harness {
   const microphone = new FakeMicrophone();
@@ -192,6 +194,7 @@ function createHarness(
   const sockets: FakeControlSocket[] = [];
   const events: VoiceSessionEvent[] = [];
   let nextId = 0;
+  let reportOutputLevel: ((level: number) => void) | undefined;
 
   const host: VoiceHost = {
     timers: {
@@ -203,7 +206,10 @@ function createHarness(
       connection.reset();
       return connection;
     },
-    createPlayback: () => playback,
+    createPlayback: (onOutputLevel?: (level: number) => void) => {
+      reportOutputLevel = onOutputLevel;
+      return playback;
+    },
     createSession: (request) => {
       creations.push(request);
       return Promise.resolve({
@@ -233,7 +239,7 @@ function createHarness(
     }),
     resolveCredential: () => (options.credential === undefined ? CREDENTIAL : options.credential),
     newEventId: () => `ev-${++nextId}`,
-    now: () => 1_000,
+    now: options.now ?? (() => 1_000),
   });
   controller.subscribe((event) => events.push(event));
 
@@ -246,6 +252,7 @@ function createHarness(
     deletions,
     sockets,
     events,
+    reportOutputLevel: (level) => reportOutputLevel?.(level),
     // The latest socket, so a retry after a failed start drives its own call.
     socket: () => sockets[sockets.length - 1],
     ack: (index, seq = index + 1) => {
@@ -409,6 +416,32 @@ describe("VoiceSessionController", () => {
       expect(jest.mocked(logInfo).mock.calls.map(([message]) => message)).not.toContain(
         "[Voice] live session started"
       );
+    });
+
+    it("reports the active call start and measured audio, then clears the level immediately on close", async () => {
+      let now = 1000;
+      const harness = createHarness({ now: () => now });
+      expect(harness.controller.getSnapshot()).not.toHaveProperty("startedAtMs");
+      const started = harness.controller.start(START_REQUEST);
+      await harness.connection.negotiate();
+      expect(harness.controller.getSnapshot()).not.toHaveProperty("startedAtMs");
+      harness.socket().handlers.onOpen();
+      harness.ack(0);
+      now = 2500;
+      harness.connection.finishConnecting();
+      harness.connection.deliverSessionStarted();
+      await started;
+      expect(harness.controller.getSnapshot()).toMatchObject({ startedAtMs: 2500 });
+      harness.connection.deliverRemoteStream({ id: "remote" } as MediaStream);
+      harness.reportOutputLevel(0.5);
+      expect(harness.controller.getSnapshot()).toMatchObject({ outputLevel: 0.5 });
+      harness.reportOutputLevel(0);
+      expect(harness.controller.getSnapshot()).toMatchObject({ outputLevel: 0 });
+      harness.reportOutputLevel(0.75);
+      const closed = harness.controller.close();
+      expect(harness.controller.getSnapshot()).toMatchObject({ outputLevel: 0 });
+      harness.socket().handlers.onClose();
+      await closed;
     });
 
     it("plays remote audio in the owning window and exposes its stream", async () => {

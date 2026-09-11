@@ -30,6 +30,10 @@ export interface VoiceSessionSnapshot {
   readonly inputCommandPending: boolean;
   /** Remote audio is attached to the owning window and playing. */
   readonly playbackActive: boolean;
+  /** Measured remote audio RMS, from zero (silence) to one. */
+  readonly outputLevel?: number;
+  /** Epoch milliseconds when the call became active, excluding connection setup. */
+  readonly startedAtMs?: number;
   /** The call carries control events only because the server returned no SDP answer. */
   readonly controlOnly: boolean;
   /** Latest cumulative usage. Values replace earlier ones; they never add. */
@@ -264,7 +268,7 @@ export interface VoiceHost {
   /** Creates the peer connection and its `oai-events` data channel. */
   createLiveConnection(): VoiceLiveConnection;
   /** Plays remote audio inside the owning window. */
-  createPlayback(): VoicePlayback;
+  createPlayback(onOutputLevel?: (level: number) => void): VoicePlayback;
   /** Posts the SDP offer to the voice server and returns the parsed body. */
   createSession(request: VoiceCreationRequest): Promise<unknown>;
   /**

@@ -1,3 +1,4 @@
+import type { AgentConversationRow, AgentTaskDetails } from "@/agentMode/session/AgentMessageStore";
 import type { AgentHistoryRestoreStatus } from "./agentChatSnapshot";
 import type {
   AgentQueuedTask,
@@ -88,6 +89,10 @@ export interface AgentChatBackend {
   deleteMessage(id: string): Promise<boolean>;
   clearMessages(): void;
   getMessages(): AgentChatMessage[];
+  /** Public transcript with backend work folded into linked cards. */
+  getConversationRows?(): readonly AgentConversationRow[];
+  /** Full answer and activity for a linked task. */
+  getTaskDetails?(taskId: string): AgentTaskDetails | undefined;
 
   /** True while ACP `session/new` is still in flight. Send is gated on this. */
   isStarting(): boolean;
