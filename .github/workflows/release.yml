@@ -17,20 +17,14 @@ on:
       - master
 
 jobs:
-  release:
+  validate-release:
     # Only proceed when the PR was actually merged (not just closed/abandoned).
     if: github.event.pull_request.merged == true
-
     runs-on: ubuntu-latest
-
-    permissions:
-      contents: write # required to create GitHub releases and tags
-      attestations: write # required to publish artifact attestations
-      id-token: write # required for the workflow's OIDC token (used to sign attestations)
-
-    env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
+    outputs:
+      version: ${{ steps.semver.outputs.version }}
+      is_release: ${{ steps.semver.outputs.is_release }}
+      is_prerelease: ${{ steps.semver.outputs.is_prerelease }}
     steps:
       # ── Step 1: Validate that the PR title is a semver (stable or prerelease) ──
       # Exits without error when the title is not semver so non-release PRs
@@ -57,9 +51,90 @@ jobs:
             echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
           fi
 
+  publish-windows:
+    needs: validate-release
+    if: needs.validate-release.outputs.is_release == 'true'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: npm
+      - run: npm ci
+      - name: Test native PowerShell publishing wrapper
+        run: npm test -- --runInBand src/agentMode/skills/builtin/openArtifactsPublishWrappers.test.ts
+
+  # Native coverage is required to diagnose Windows-only fixture failures.
+  # https://github.com/logancyang/obsidian-copilot/issues/2967
+  test-windows:
+    needs: validate-release
+    if: needs.validate-release.outputs.is_release == 'true'
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: npm
+      - name: Record native test environment
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path windows-test-results
+          git rev-parse HEAD > windows-test-results/environment.txt
+          [System.Environment]::OSVersion.VersionString >> windows-test-results/environment.txt
+          node --version >> windows-test-results/environment.txt
+          npm.cmd --version >> windows-test-results/environment.txt
+          node -p "process.platform + ' ' + process.arch" >> windows-test-results/environment.txt
+      - run: npm ci
+        id: install
+      # The PowerShell wrapper suite runs in publish-windows. Running it again
+      # in the full-suite process intermittently exceeds its subprocess timeout.
+      - name: Run remaining native Windows unit suite
+        shell: pwsh
+        run: |
+          npm.cmd test -- --runInBand --testPathIgnorePatterns=openArtifactsPublishWrappers.test.ts --json --outputFile=windows-test-results/jest.json *> windows-test-results/jest.log
+          $testExitCode = $LASTEXITCODE
+          Get-Content windows-test-results/jest.log
+          exit $testExitCode
+      - name: Verify image sanitization without regexp optimization
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        shell: pwsh
+        run: |
+          node --no-regexp-optimization node_modules/jest/bin/jest.js --runInBand --runTestsByPath src/openArtifacts/openArtifactsDocument.test.ts *> windows-test-results/image-sanitization.log
+          $testExitCode = $LASTEXITCODE
+          Get-Content windows-test-results/image-sanitization.log
+          exit $testExitCode
+      - name: Retain native test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-unit-node-22
+          path: windows-test-results/
+          retention-days: 14
+
+  release:
+    needs: [validate-release, publish-windows, test-windows]
+    if: needs.validate-release.outputs.is_release == 'true'
+
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write # required to create GitHub releases and tags
+      attestations: write # required to publish artifact attestations
+      id-token: write # required for the workflow's OIDC token (used to sign attestations)
+
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
       # ── Step 2: Checkout the merge commit on master ─────────────────────────
       - name: Checkout
-        if: steps.semver.outputs.is_release == 'true'
         uses: actions/checkout@v4
         with:
           # Pin to the exact merge commit SHA so concurrent PRs merging to
@@ -76,11 +151,10 @@ jobs:
       # still matches the latest stable GitHub Release tag. This defends against
       # an old-style version-bump or hand edit accidentally re-poisoning master.
       - name: Verify version matches manifest
-        if: steps.semver.outputs.is_release == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VERSION: ${{ steps.semver.outputs.version }}
-          IS_PRERELEASE: ${{ steps.semver.outputs.is_prerelease }}
+          VERSION: ${{ needs.validate-release.outputs.version }}
+          IS_PRERELEASE: ${{ needs.validate-release.outputs.is_prerelease }}
         run: |
           if [ "$IS_PRERELEASE" = "true" ]; then
             MANIFEST_FILE="manifest-beta.json"
@@ -117,7 +191,6 @@ jobs:
 
       # ── Step 4: Set up Node.js ───────────────────────────────────────────────
       - name: Setup Node.js 22.x
-        if: steps.semver.outputs.is_release == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: 22.x
@@ -125,16 +198,13 @@ jobs:
 
       # ── Step 5: Install dependencies ────────────────────────────────────────
       - name: Install dependencies
-        if: steps.semver.outputs.is_release == 'true'
         run: npm ci
 
       - name: Obsidian community review gate
-        if: steps.semver.outputs.is_release == 'true'
         run: npm run review:obsidian
 
       # ── Step 6: Build the plugin ─────────────────────────────────────────────
       - name: Build
-        if: steps.semver.outputs.is_release == 'true'
         run: npm run build
 
       # ── Step 7: Write PR body to a file (avoids shell injection) ─────────────
@@ -142,17 +212,15 @@ jobs:
       # characters (backticks, quotes, dollar signs, etc.) from being
       # interpreted by the shell.
       - name: Write release notes to file
-        if: steps.semver.outputs.is_release == 'true'
         env:
           PR_BODY: ${{ github.event.pull_request.body }}
         run: printf '%s' "$PR_BODY" > /tmp/release-notes.md
 
       # ── Step 8: Check if release already exists (idempotency guard) ─────────
       - name: Check if release already exists
-        if: steps.semver.outputs.is_release == 'true'
         id: check_existing
         env:
-          VERSION: ${{ steps.semver.outputs.version }}
+          VERSION: ${{ needs.validate-release.outputs.version }}
         run: |
           if gh release view "$VERSION" > /dev/null 2>&1; then
             echo "::warning::Release $VERSION already exists — skipping."
@@ -169,7 +237,7 @@ jobs:
       # this never gets pushed back to master, so the committed manifest.json
       # stays pinned to the latest stable.
       - name: Prepare release-asset manifest
-        if: steps.semver.outputs.is_release == 'true' && steps.semver.outputs.is_prerelease == 'true'
+        if: needs.validate-release.outputs.is_prerelease == 'true'
         run: |
           cp manifest-beta.json manifest.json
           echo "Release-asset manifest.json (prerelease):"
@@ -185,7 +253,7 @@ jobs:
       # Runs AFTER the prerelease manifest swap so the attested manifest.json
       # exactly matches the file uploaded to the GitHub Release.
       - name: Generate artifact attestation
-        if: steps.semver.outputs.is_release == 'true' && steps.check_existing.outputs.exists != 'true'
+        if: steps.check_existing.outputs.exists != 'true'
         uses: actions/attest-build-provenance@v2
         with:
           subject-path: |
@@ -200,11 +268,11 @@ jobs:
       # so Obsidian's plugin browser does not offer it as a stable update.
       # Artifacts: main.js, manifest.json, styles.css
       - name: Create GitHub Release
-        if: steps.semver.outputs.is_release == 'true' && steps.check_existing.outputs.exists != 'true'
+        if: steps.check_existing.outputs.exists != 'true'
         env:
-          VERSION: ${{ steps.semver.outputs.version }}
+          VERSION: ${{ needs.validate-release.outputs.version }}
           MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
-          IS_PRERELEASE: ${{ steps.semver.outputs.is_prerelease }}
+          IS_PRERELEASE: ${{ needs.validate-release.outputs.is_prerelease }}
         run: |
           PRERELEASE_FLAG=""
           if [ "$IS_PRERELEASE" = "true" ]; then
