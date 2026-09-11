@@ -1,7 +1,4 @@
-import {
-  OpenSessionIndicator,
-  CloseSessionButton,
-} from "@/components/chat-components/ui/OpenSessionControls";
+import { CloseSessionButton } from "@/components/chat-components/ui/OpenSessionControls";
 import { backendRegistry } from "@/agentMode/backends/registry";
 import { AgentHomePreviewList } from "@/agentMode/ui/AgentHomeSection";
 import { RecentChatProjectBadge, RecentChatTitle } from "@/agentMode/ui/RecentChatTitle";
@@ -114,17 +111,17 @@ const ChatIconTile = memo(
   ({
     Icon,
     needsAttention,
+    isSessionOpen,
   }: {
     Icon: React.ComponentType<{ className?: string }>;
     needsAttention?: boolean;
+    isSessionOpen?: boolean;
   }) => (
-    <span
-      aria-hidden="true"
-      className="tw-flex tw-size-6 tw-shrink-0 tw-items-center tw-justify-center tw-rounded-md tw-bg-secondary tw-text-muted"
-    >
+    <span className="tw-flex tw-size-6 tw-shrink-0 tw-items-center tw-justify-center tw-rounded-md tw-bg-secondary tw-text-muted">
       <ChatIconWithAttention
         icon={Icon}
         needsAttention={needsAttention}
+        isSessionOpen={isSessionOpen}
         iconClassName="tw-size-4"
       />
     </span>
@@ -231,9 +228,7 @@ const RecentChatRow = memo(function RecentChatRow({
         }
       }}
     >
-      <ChatIconTile Icon={Icon} needsAttention={hasAttention} />
-      {/* Idle backends still hold resources: https://github.com/Brevilabs/obsidian-copilot-private/issues/429 */}
-      {isSessionOpen && <OpenSessionIndicator />}
+      <ChatIconTile Icon={Icon} needsAttention={hasAttention} isSessionOpen={isSessionOpen} />
       <RecentChatTitle title={item.title} />
 
       {/* Relative time by default; a backgrounded running session shows an accent
