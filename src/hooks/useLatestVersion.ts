@@ -10,7 +10,8 @@ interface UseLatestVersionResult {
 
 let latestReleaseRequest: Promise<LatestRelease | null> | null = null;
 
-function requestLatestRelease(): Promise<LatestRelease | null> {
+/** Shares the latest release request between startup and mounted update surfaces. */
+export function requestLatestRelease(): Promise<LatestRelease | null> {
   // Release surfaces share one request until a new agent tab invalidates it.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/317
   latestReleaseRequest ??= checkLatestVersion().then((result) => result.release);

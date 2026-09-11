@@ -68,6 +68,7 @@ export interface CopilotSettings {
   defaultModelKey: string;
   contextTurns: number;
   lastDismissedVersion: string | null;
+  lastShownStartupVersion: string | null;
   // DEPRECATED: Do not use this directly, migrated to file-based system prompts
   userSystemPrompt: string;
   openAIProxyBaseUrl: string;
@@ -899,6 +900,7 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   }
 
   const sanitizedSettings: CopilotSettings = { ...settingsToSanitize };
+  sanitizedSettings.lastShownStartupVersion ??= null;
   const sanitizedSettingsRecord = sanitizedSettings as unknown as Record<string, unknown>;
   delete sanitizedSettingsRecord.miyoRemoteVaultPath;
   delete sanitizedSettingsRecord.miyoVaultName;

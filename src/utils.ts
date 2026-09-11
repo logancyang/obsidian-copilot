@@ -1,3 +1,4 @@
+import { compareSemver } from "@/utils/semver";
 // Reason: `buffer` is the npm polyfill (browser-compatible), bundled by esbuild
 // so the same Buffer code path works on desktop (Electron) and mobile (WebView).
 import { Buffer } from "buffer/";
@@ -1010,18 +1011,12 @@ export async function insertIntoEditor(app: App, message: string, replace: boole
 export { debounce } from "@/utils/debounce";
 
 /**
- * Compare two semantic version strings.
- * @returns true if latest version is newer than current version
+ * Whether a released version has a newer major/minor/patch than the installed build.
+ * @param latest - Version from the released plugin manifest.
+ * @param current - Installed manifest version, possibly carrying a development suffix.
  */
 export function isNewerVersion(latest: string, current: string): boolean {
-  const latestParts = latest.split(".").map(Number);
-  const currentParts = current.split(".").map(Number);
-
-  for (let i = 0; i < 3; i++) {
-    if (latestParts[i] > currentParts[i]) return true;
-    if (latestParts[i] < currentParts[i]) return false;
-  }
-  return false;
+  return compareSemver(latest, current) > 0;
 }
 
 const LATEST_RELEASE_API_URL =
@@ -1036,10 +1031,10 @@ export interface LatestRelease {
 interface GitHubReleaseResponse {
   body?: unknown;
   html_url?: unknown;
-  tag_name?: unknown;
+  assets?: { name?: unknown; browser_download_url?: unknown }[];
 }
 
-/** Check the latest GitHub release for both update detection and release-note presentation. */
+/** Read the latest release's installable manifest version and its release notes. */
 export async function checkLatestVersion(): Promise<{
   version: string | null;
   error: string | null;
@@ -1051,8 +1046,29 @@ export async function checkLatestVersion(): Promise<{
       method: "GET",
     });
     const responseRelease = response.json as GitHubReleaseResponse;
-    if (typeof responseRelease.tag_name !== "string") {
-      throw new Error("The latest Copilot release has no version tag.");
+    const manifestAsset = Array.isArray(responseRelease?.assets)
+      ? responseRelease.assets.find((asset) => asset?.name === "manifest.json")
+      : undefined;
+    if (
+      typeof manifestAsset?.browser_download_url !== "string" ||
+      !manifestAsset.browser_download_url
+    ) {
+      throw new Error("The latest Copilot release has no manifest.json asset.");
+    }
+    // The installed plugin gets its version from this asset; a release tag can differ.
+    const manifestResponse = await requestUrl({
+      url: manifestAsset.browser_download_url,
+      method: "GET",
+    });
+    const manifest = manifestResponse.json as { version?: unknown } | null;
+    const version = manifest?.version;
+    if (
+      typeof version !== "string" ||
+      !/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[\da-zA-Z-]+(?:\.[\da-zA-Z-]+)*)?(?:\+[\da-zA-Z-]+(?:\.[\da-zA-Z-]+)*)?$/.test(
+        version
+      )
+    ) {
+      throw new Error("The latest Copilot manifest has no valid version.");
     }
 
     const release: LatestRelease = {
@@ -1061,7 +1077,7 @@ export async function checkLatestVersion(): Promise<{
         typeof responseRelease.html_url === "string"
           ? responseRelease.html_url
           : "https://github.com/logancyang/obsidian-copilot/releases/latest",
-      version: responseRelease.tag_name.replace(/^v/, ""),
+      version,
     };
     return {
       version: release.version,

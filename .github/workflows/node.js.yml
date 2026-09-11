@@ -73,10 +73,12 @@ jobs:
           node -p "process.platform + ' ' + process.arch" >> windows-test-results/environment.txt
       - run: npm ci
         id: install
-      - name: Run complete native Windows unit suite
+      # The PowerShell wrapper suite runs in publish-windows. Running it again
+      # in the full-suite process intermittently exceeds its subprocess timeout.
+      - name: Run remaining native Windows unit suite
         shell: pwsh
         run: |
-          npm.cmd test -- --runInBand --json --outputFile=windows-test-results/jest.json *> windows-test-results/jest.log
+          npm.cmd test -- --runInBand --testPathIgnorePatterns=openArtifactsPublishWrappers.test.ts --json --outputFile=windows-test-results/jest.json *> windows-test-results/jest.log
           $testExitCode = $LASTEXITCODE
           Get-Content windows-test-results/jest.log
           exit $testExitCode
