@@ -1,6 +1,5 @@
-import { resetSettings, setSettings } from "@/settings/model";
+import { resetSettings, setSettings, updateSetting } from "@/settings/model";
 import {
-  setDefaultSystemPromptTitle,
   setDisableBuiltinSystemPrompt,
   setSelectedPromptTitle,
   updateCachedSystemPrompts,
@@ -42,7 +41,7 @@ function makeSystemPrompt(title: string, content: string): UserSystemPrompt {
 function resetPromptState(): void {
   setDisableBuiltinSystemPrompt(false);
   setSelectedPromptTitle("");
-  setDefaultSystemPromptTitle("");
+  updateSetting("defaultSystemPromptTitle", "");
   updateCachedSystemPrompts([]);
 }
 

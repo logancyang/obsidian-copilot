@@ -1,7 +1,6 @@
 import { atom, createStore, useAtom } from "jotai";
 import { useAtomValue } from "jotai";
 import { UserSystemPrompt } from "@/system-prompts/type";
-import { getSettings, updateSetting } from "@/settings/model";
 
 // Create independent store for system prompts (similar to custom commands)
 const systemPromptsStore = createStore();
@@ -108,14 +107,13 @@ export function getDisableBuiltinSystemPrompt(): boolean {
 /**
  * Subscribe to changes in the session-level system-prompt state: the selected
  * prompt title, the "disable builtin" toggle, and the prompts list (whose
- * contents feed `getEffectiveSystemPromptContent`). Returns an unsubscribe
+ * contents provide the selected prompt). Returns an unsubscribe
  * function.
  *
  * Used by Agent Mode to recompute its composed system prompt and restart
  * spawn-time backends when the effective prompt changes. This fires on any of
  * those atoms changing — including no-op list reloads — so callers should
- * debounce by comparing a derived key (e.g. `getEffectiveUserPrompt()` +
- * `getDisableBuiltinSystemPrompt()`).
+ * debounce by comparing the selected prompt content and builtin toggle.
  */
 export function subscribeToSystemPromptChange(callback: () => void): () => void {
   const unsubscribers = [
@@ -152,61 +150,6 @@ export function removePendingFileWrite(path: string): void {
  */
 export function isPendingFileWrite(path: string): boolean {
   return pendingFileWrites.has(path);
-}
-
-// ================================
-// PERSISTENT STATE (Settings Integration)
-// ================================
-
-/**
- * Get the global default system prompt title from settings
- * @returns The default prompt title (empty string means no custom prompt)
- */
-export function getDefaultSystemPromptTitle(): string {
-  return getSettings().defaultSystemPromptTitle;
-}
-
-/**
- * Set the global default system prompt title (persisted to settings)
- * @param title - The prompt title to set as default
- */
-export function setDefaultSystemPromptTitle(title: string): void {
-  updateSetting("defaultSystemPromptTitle", title);
-}
-
-/**
- * Get the effective system prompt content to use
- * Priority: session (selectedPromptTitleAtom) > global default > ""
- * @returns The prompt content
- */
-export function getEffectiveSystemPromptContent(): string {
-  const prompts = getCachedSystemPrompts();
-
-  // 1. Check session-level selection first (from atom - temporary)
-  const sessionPrompt = getSelectedPromptTitle();
-  if (sessionPrompt) {
-    const prompt = prompts.find((p) => p.title === sessionPrompt);
-    if (prompt) return prompt.content;
-  }
-
-  // 2. Check global default (from settings - persistent)
-  const defaultPrompt = getDefaultSystemPromptTitle();
-  if (defaultPrompt) {
-    const prompt = prompts.find((p) => p.title === defaultPrompt);
-    if (prompt) return prompt.content;
-  }
-
-  // 3. No custom prompt selected
-  return "";
-}
-
-/**
- * Initialize session prompt from global default on plugin load
- * This ensures ChatSettingsPopover starts with the global default
- */
-export function initializeSessionPromptFromDefault(): void {
-  const defaultPrompt = getDefaultSystemPromptTitle();
-  setSelectedPromptTitle(defaultPrompt);
 }
 
 /**

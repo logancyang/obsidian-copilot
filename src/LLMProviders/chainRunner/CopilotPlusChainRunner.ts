@@ -16,7 +16,10 @@ import {
 import { logInfo, logWarn } from "@/logger";
 import { checkIsPaidUser } from "@/plusUtils";
 import { getSettings } from "@/settings/model";
-import { getSystemPromptWithMemory } from "@/system-prompts/systemPromptBuilder";
+import {
+  getEffectiveUserPrompt,
+  getSystemPromptWithMemory,
+} from "@/system-prompts/systemPromptBuilder";
 import { createWriteFileTool } from "@/tools/ComposerTools";
 import { ToolManager } from "@/tools/toolManager";
 import { ToolResultFormatter } from "@/tools/ToolResultFormatter";
@@ -1283,7 +1286,10 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
   }
 
   protected async getSystemPrompt(): Promise<string> {
-    return getSystemPromptWithMemory(this.chainManager.userMemoryManager);
+    return getSystemPromptWithMemory(
+      this.chainManager.userMemoryManager,
+      await getEffectiveUserPrompt(this.chainManager.app)
+    );
   }
 
   /**

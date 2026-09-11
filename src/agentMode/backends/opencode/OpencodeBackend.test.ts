@@ -13,7 +13,6 @@ import type {
 } from "@/modelManagement";
 import type { Skill } from "@/agentMode/skills";
 import {
-  setDefaultSystemPromptTitle,
   setDisableBuiltinSystemPrompt,
   setSelectedPromptTitle,
   updateCachedSystemPrompts,
@@ -47,7 +46,7 @@ function makeSystemPrompt(title: string, content: string): UserSystemPrompt {
 function resetPromptState(): void {
   setDisableBuiltinSystemPrompt(false);
   setSelectedPromptTitle("");
-  setDefaultSystemPromptTitle("");
+  updateSetting("defaultSystemPromptTitle", "");
   updateCachedSystemPrompts([]);
 }
 

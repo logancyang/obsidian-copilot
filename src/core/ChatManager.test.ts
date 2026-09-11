@@ -147,6 +147,127 @@ describe("ChatManager", () => {
     jest.clearAllMocks();
   });
 
+  // These integration cases use the real builder; the template isolation suites below
+  // intentionally replace it to exercise malformed prompt and memory boundaries.
+  describe("vault instruction integration", () => {
+    const builder = jest.requireMock<Record<string, jest.Mock>>(
+      "@/system-prompts/systemPromptBuilder"
+    );
+    const actualBuilder = jest.requireActual<typeof import("@/system-prompts/systemPromptBuilder")>(
+      "@/system-prompts/systemPromptBuilder"
+    );
+    const state =
+      jest.requireActual<typeof import("@/system-prompts/state")>("@/system-prompts/state");
+    let instructions: string;
+    let read: jest.Mock;
+    const context = { notes: [], urls: [], selectedTextContexts: [] };
+
+    beforeEach(() => {
+      instructions = "Answer with citations.";
+      state.resetSessionSystemPromptSettings();
+      state.updateCachedSystemPrompts([]);
+      for (const key of Object.keys(actualBuilder) as Array<keyof typeof actualBuilder>) {
+        builder[key].mockImplementation(actualBuilder[key]);
+      }
+      jest.requireMock("@/settings/model").getSettings.mockReturnValue({
+        enableCustomPromptTemplating: false,
+        userSystemPrompt: "Obsolete instructions",
+        defaultSystemPromptTitle: "Hidden default",
+      });
+      const file = mockTFile({ path: "AGENTS.md", basename: "AGENTS" });
+      read = jest.fn(async () => instructions);
+      Object.assign(mockPlugin.app, { vault: { getAbstractFileByPath: () => file, read } });
+      mockPlugin.app.workspace.getActiveFile.mockReturnValue(null);
+      mockMessageRepo.addMessage.mockReturnValue("msg-1");
+      mockMessageRepo.getMessage.mockReturnValue(createMockMessage("msg-1", "Hello", USER_SENDER));
+      mockContextManager.processMessageContext.mockResolvedValue(createContextResult());
+      mockMessageRepo.editMessage.mockReturnValue(true);
+    });
+    afterEach(() => {
+      builder.getEffectiveUserPrompt.mockReset().mockReturnValue("");
+      builder.getSystemPrompt.mockReset().mockReturnValue("Test system prompt");
+      builder.getSystemPromptWithMemory.mockReset().mockResolvedValue("Test system prompt");
+      jest
+        .requireMock("@/settings/model")
+        .getSettings.mockReturnValue({ enableCustomPromptTemplating: true });
+    });
+
+    describe("sendMessage()", () => {
+      it("sends current root instructions once per message and sees edits in the same chat (https://github.com/logancyang/obsidian-copilot/issues/3210)", async () => {
+        await chatManager.sendMessage("Hello", context, ChainType.LLM_CHAIN);
+        expect(mockContextManager.processMessageContext.mock.calls[0][8]).toContain(
+          "Answer with citations."
+        );
+        instructions = "Answer in French.";
+        await chatManager.sendMessage("Again", context, ChainType.LLM_CHAIN);
+        expect(mockContextManager.processMessageContext.mock.calls[1][8]).toContain(
+          "Answer in French."
+        );
+        expect(mockContextManager.processMessageContext.mock.calls[1][8]).not.toContain(
+          "Answer with citations."
+        );
+        expect(read).toHaveBeenCalledTimes(2);
+      });
+      it("uses one instruction snapshot through memory loading and template expansion (https://github.com/logancyang/obsidian-copilot/issues/3210)", async () => {
+        instructions = "Use {activeNote}.";
+        jest
+          .requireMock("@/settings/model")
+          .getSettings.mockReturnValue({ enableCustomPromptTemplating: true });
+        const includedFile = mockTFile({ path: "Plan.md", basename: "Plan" });
+        jest.requireMock("@/commands/customCommandUtils").processPrompt.mockResolvedValueOnce({
+          processedPrompt: "Use the launch plan.",
+          includedFiles: [includedFile],
+        });
+        Object.assign(mockChainManager, {
+          userMemoryManager: {
+            getUserMemoryPrompt: async () => {
+              instructions = "Changed during memory loading.";
+              return "<memory>Timezone</memory>";
+            },
+          },
+        });
+        await chatManager.sendMessage("Hello", context, ChainType.LLM_CHAIN);
+        const call = mockContextManager.processMessageContext.mock.calls[0];
+        expect(call[8]).toContain("<memory>Timezone</memory>");
+        expect(call[8]).toContain("Use the launch plan.");
+        expect(call[8]).not.toContain("Changed during memory loading.");
+        expect(call[9]).toEqual([includedFile]);
+        expect(read).toHaveBeenCalledTimes(1);
+      });
+    });
+    describe("editMessage()", () => {
+      it("uses current vault instructions when reprocessing an edited message (https://github.com/logancyang/obsidian-copilot/issues/3210)", async () => {
+        instructions = "Use the updated rules.";
+        expect(await chatManager.editMessage("msg-1", "Edited", ChainType.LLM_CHAIN)).toBe(true);
+        expect(mockContextManager.reprocessMessageContext.mock.calls[0][8]).toContain(instructions);
+      });
+    });
+    describe("regenerateMessage()", () => {
+      it("reprocesses an existing envelope with current instructions before retrying (https://github.com/logancyang/obsidian-copilot/issues/3210)", async () => {
+        const userMessage = { ...createMockMessage("msg-1", "Hello", USER_SENDER), context };
+        const aiMessage = createMockMessage("msg-2", "Response", "AI");
+        const oldMessage = {
+          ...userMessage,
+          contextEnvelope: { layers: [] } as unknown as PromptContextEnvelope,
+        };
+        const refreshedMessage = { ...oldMessage, message: "Refreshed original context" };
+        mockMessageRepo.getMessage.mockReturnValue(aiMessage);
+        mockMessageRepo.getDisplayMessages.mockReturnValue([userMessage, aiMessage]);
+        mockMessageRepo.getLLMMessage
+          .mockReturnValueOnce(oldMessage)
+          .mockReturnValue(refreshedMessage);
+        instructions = "Use changed retry instructions.";
+        expect(await chatManager.regenerateMessage("msg-2", jest.fn(), jest.fn())).toBe(true);
+        expect(mockContextManager.reprocessMessageContext.mock.calls[0]?.[8]).toContain(
+          instructions
+        );
+        expect(mockContextManager.reprocessMessageContext.mock.calls[0]?.[1]).toBe("msg-1");
+        expect(userMessage.context).toBe(context);
+        expect(mockChainManager.runChain.mock.calls[0][0]).toBe(refreshedMessage);
+      });
+    });
+  });
+
   describe("sendMessage", () => {
     it("should send a message with basic context", async () => {
       const mockActiveFile = mockTFile({ path: "active.md", basename: "active" });

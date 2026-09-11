@@ -1,4 +1,4 @@
-import { getSelectedTextContexts } from "@/aiParams";
+import { SelectedTextContext } from "@/types/message";
 import { ChainType } from "@/chainType";
 import { RESTRICTION_MESSAGES } from "@/constants";
 import { logWarn, logInfo, logError } from "@/logger";
@@ -648,9 +648,13 @@ export class ContextProcessor {
     return additionalContext;
   }
 
-  processSelectedTextContexts(): string {
-    const selectedTextContexts = getSelectedTextContexts();
-
+  /**
+   * Format the selections owned by a message for its model context.
+   * @param selectedTextContexts - Saved note or web excerpts attached to the message
+   */
+  processSelectedTextContexts(
+    selectedTextContexts: readonly SelectedTextContext[] | undefined
+  ): string {
     if (!selectedTextContexts || selectedTextContexts.length === 0) {
       return "";
     }
