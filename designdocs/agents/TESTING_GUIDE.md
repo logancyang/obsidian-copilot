@@ -439,7 +439,7 @@ path (from `app.vault.adapter.basePath`) and then call
 
 ## Component gallery workflow
 
-Use the component gallery whenever a feature adds or changes a user-visible React component or a meaningful visual state. A story is not required for non-visual backend, data, or tooling changes. Gallery verification complements callable-level unit coverage; it does not replace it.
+Use the component gallery whenever a feature adds or changes a user-visible React component or a meaningful visual state. A story is not required for non-visual backend, data, or tooling changes. Gallery verification complements callable-level unit coverage; it does not replace it. See the [bounded review coverage inventory](../GALLERY_REVIEW_COVERAGE.md) for representative settings, open-menu, permission-diff and transition checks, plus remaining gaps.
 
 ### Authoring stories
 
