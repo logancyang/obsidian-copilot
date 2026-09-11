@@ -144,7 +144,7 @@ Each answer appears in its own tab, with **Summary** first. If one answerer fail
 
 Multi-agent answers are designed for read-only research, not edits. Copilot denies explicit vault edit, delete, and move tools, along with tools it cannot classify. Retrieval Skills can still run their own scripts under the agent's permissions, so multi-agent answers are not a security sandbox. Use only trusted Skills, and use a regular single-agent turn when you want files changed.
 
-The default model and effort saved for each mentioned agent are used for its answer. If the summary fails, its tab shows the error and any partial summary; the individual answers remain available. If an agent is not installed or ready, configure it before adding it to the prompt.
+The default model and effort saved for each mentioned agent are used for its answer. If the summary fails, its tab labels it **Summary incomplete** and keeps the error and any partial text. Completed answers remain available in the agent tabs. If an agent is not installed or ready, configure it before adding it to the prompt.
 
 ## Skills across agents
 

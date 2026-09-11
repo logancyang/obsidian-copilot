@@ -1,5 +1,6 @@
 import { AgentMarkdownText } from "@/agentMode/ui/AgentMarkdownText";
 import {
+  agentStateForAnswer,
   buildFanoutOptions,
   FANOUT_SUMMARY_OPTION,
   selectedAnswer,
@@ -133,13 +134,27 @@ const FanoutTurnBody: React.FC<FanoutTurnBodyProps> = ({ turn, value, app }) => 
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/219
     if (turn.summary.error) {
       return (
-        <FanoutTerminalState app={app} partialText={turn.summary.text}>
-          <FanoutStatusLine
-            icon={<AlertTriangle className="tw-size-4 tw-text-error" />}
-            text={turn.summary.error}
-            tone="error"
-          />
-        </FanoutTerminalState>
+        <div className="tw-flex tw-flex-col tw-gap-2">
+          <div className="tw-flex tw-flex-col tw-gap-1">
+            <div className="tw-text-sm tw-font-medium tw-text-normal">Summary incomplete</div>
+            {/* Only point to completed answers when a successful, non-empty slot exists.
+                https://github.com/Brevilabs/obsidian-copilot-private/issues/425 */}
+            {Object.values(turn.answers).some(
+              (answer) => agentStateForAnswer(answer) === "answer"
+            ) ? (
+              <div className="tw-text-sm tw-text-muted">
+                Completed answers are available in the agent tabs above.
+              </div>
+            ) : null}
+          </div>
+          <FanoutTerminalState app={app} partialText={turn.summary.text}>
+            <FanoutStatusLine
+              icon={<AlertTriangle className="tw-size-4 tw-text-error" />}
+              text={turn.summary.error}
+              tone="error"
+            />
+          </FanoutTerminalState>
+        </div>
       );
     }
     if (turn.summary.text) {
