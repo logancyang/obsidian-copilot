@@ -1,3 +1,4 @@
+import { useActiveWebTabState } from "@/components/chat-components/hooks/useActiveWebTabState";
 import { logError } from "@/logger";
 import type { WorkspaceLeaf } from "obsidian";
 import type { AgentChatMessage } from "@/agentMode/session/types";
@@ -31,6 +32,7 @@ export function useChatRelevantNotesContext(
 ): void {
   const store = getChatRelevantNotesStore(app);
   const activeFile = useActiveFile();
+  const { activeWebTabForMentions } = useActiveWebTabState();
   const [selections] = useSelectedTextContexts();
   const projectFiles = useMemo(() => {
     const { inclusions, exclusions } = getMatchingPatterns({
@@ -124,16 +126,19 @@ export function useChatRelevantNotesContext(
       label: file.name,
       reason: "Image attachments are not included in relevance requests",
     })),
-    ...contexts.flatMap((context) => [
-      ...context.urls.map((url) => ({
+    ...contexts.flatMap((context) =>
+      context.urls.map((url) => ({
         label: url,
         reason: "Web URLs are not included in relevance requests",
-      })),
-      ...(context.webTabs ?? []).map((tab) => ({
-        label: tab.title ? `${tab.title} — ${tab.url}` : tab.url,
-        reason: "Web tabs are not included in relevance requests",
-      })),
-    ]),
+      }))
+    ),
+    ...[
+      ...contexts.flatMap((context) => context.webTabs ?? []),
+      ...(draft.includeActiveWebTab && activeWebTabForMentions ? [activeWebTabForMentions] : []),
+    ].map((tab) => ({
+      label: tab.title ? `${tab.title} — ${tab.url}` : tab.url,
+      reason: "Web tabs are not included in relevance requests",
+    })),
   ];
   // Equal retrieval content must keep its identity across streaming renders.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/383
