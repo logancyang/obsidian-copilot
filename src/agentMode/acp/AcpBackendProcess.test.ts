@@ -17,6 +17,7 @@ jest.mock("@/logger", () => ({
 let mockInitializeResult: unknown = { protocolVersion: 1 };
 const mockNewSession = jest.fn(async (..._args: unknown[]) => ({ sessionId: "test-session" }));
 const mockResumeSession = jest.fn(async (..._args: unknown[]) => ({}));
+const mockCloseSession = jest.fn(async (..._args: unknown[]) => ({}));
 const mockLoadSession = jest.fn(async (..._args: unknown[]) => ({}));
 
 jest.mock("@agentclientprotocol/sdk", () => {
@@ -36,6 +37,7 @@ jest.mock("@agentclientprotocol/sdk", () => {
     initialize = jest.fn(async () => mockInitializeResult);
     newSession = (...args: unknown[]) => mockNewSession(...args);
     resumeSession = (...args: unknown[]) => mockResumeSession(...args);
+    closeSession = (...args: unknown[]) => mockCloseSession(...args);
     loadSession = (...args: unknown[]) => mockLoadSession(...args);
     prompt = jest.fn(async () => ({ stopReason: "end_turn" }));
     cancel = jest.fn(async () => undefined);
@@ -115,8 +117,71 @@ describe("AcpBackendProcess", () => {
     mockNewSession.mockResolvedValue({ sessionId: "test-session" });
     mockResumeSession.mockClear();
     mockResumeSession.mockResolvedValue({});
+    mockCloseSession.mockReset();
+    mockCloseSession.mockResolvedValue({});
     mockLoadSession.mockClear();
     mockLoadSession.mockResolvedValue({});
+  });
+
+  describe("closeSession()", () => {
+    it("releases only the requested session and keeps the shared backend running https://github.com/Brevilabs/obsidian-copilot-private/issues/429", async () => {
+      mockInitializeResult = {
+        protocolVersion: 1,
+        agentCapabilities: { sessionCapabilities: { close: {} } },
+      };
+      const backend = new AcpBackendProcess(
+        buildApp(),
+        buildStubBackend(),
+        "1.0.0",
+        buildStubDescriptor()
+      );
+      await backend.start();
+      const sibling = jest.fn();
+      backend.registerSessionHandler("sibling", sibling);
+      await backend.closeSession({ sessionId: "closed" });
+      expect(mockCloseSession).toHaveBeenCalledWith({ sessionId: "closed" });
+      expect(backend.isRunning()).toBe(true);
+      await getVaultClient(backend).sessionUpdate({
+        sessionId: "sibling",
+        update: {
+          sessionUpdate: "agent_message_chunk",
+          content: { type: "text", text: "still here" },
+        },
+      });
+      expect(sibling).toHaveBeenCalledWith(expect.objectContaining({ sessionId: "sibling" }));
+    });
+
+    it("rejects unsupported close without sending a request https://github.com/Brevilabs/obsidian-copilot-private/issues/429", async () => {
+      const backend = new AcpBackendProcess(
+        buildApp(),
+        buildStubBackend(),
+        "1.0.0",
+        buildStubDescriptor()
+      );
+      await backend.start();
+      await expect(backend.closeSession({ sessionId: "open" })).rejects.toThrow(
+        "Agent does not implement session/close"
+      );
+      expect(mockCloseSession).not.toHaveBeenCalled();
+      expect(backend.isRunning()).toBe(true);
+    });
+
+    it("preserves the close failure for callers to keep the session open https://github.com/Brevilabs/obsidian-copilot-private/issues/429", async () => {
+      mockInitializeResult = {
+        protocolVersion: 1,
+        agentCapabilities: { sessionCapabilities: { close: {} } },
+      };
+      mockCloseSession.mockRejectedValueOnce(new Error("backend busy"));
+      const backend = new AcpBackendProcess(
+        buildApp(),
+        buildStubBackend(),
+        "1.0.0",
+        buildStubDescriptor()
+      );
+      await backend.start();
+      await expect(backend.closeSession({ sessionId: "open" })).rejects.toThrow("backend busy");
+      expect(backend.isRunning()).toBe(true);
+    });
   });
 
   describe("start()", () => {

@@ -58,3 +58,25 @@ export const ShortList: StoryObj<GlobalRecentChatsSectionProps> = {
 export const ScrollableList: StoryObj<GlobalRecentChatsSectionProps> = {
   render: renderShelf,
 };
+
+export const OpenSessions: StoryObj<GlobalRecentChatsSectionProps> = {
+  args: {
+    items: items.slice(0, 3).map((item, index) => ({
+      ...item,
+      title: ["Idle session open", "Running session open", "Saved chat, session closed"][index],
+    })),
+    openChatIds: new Set([items[0].id, items[1].id]),
+    runningChatIds: new Set([items[1].id]),
+    onCloseSession: noop,
+  },
+  render: renderShelf,
+};
+
+export const IdleOpenSessions: StoryObj<GlobalRecentChatsSectionProps> = {
+  args: {
+    items: items.slice(0, 5),
+    openChatIds: new Set([items[0].id, items[1].id]),
+    onCloseSession: noop,
+  },
+  render: renderShelf,
+};

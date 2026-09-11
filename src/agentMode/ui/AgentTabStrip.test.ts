@@ -8,6 +8,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { refreshLatestVersion } from "@/hooks/useLatestVersion";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import React from "react";
+import { Notice } from "obsidian";
 
 jest.mock("@/hooks/useLatestVersion", () => ({ refreshLatestVersion: jest.fn() }));
 
@@ -113,6 +114,46 @@ describe("AgentTabStrip", () => {
   });
 
   describe("AgentTabStrip()", () => {
+    it("requests backend release and reports failed closes without hiding the tab for https://github.com/Brevilabs/obsidian-copilot-private/issues/429", async () => {
+      const session = {
+        internalId: "existing",
+        backendId: "test",
+        subscribe: () => () => {},
+        getLabel: () => "Existing chat",
+        getStatus: () => "idle",
+        getNeedsAttention: () => false,
+      };
+      const manager = {
+        subscribe: () => () => {},
+        getSessionsForScope: () => [session],
+        getActiveProjectId: () => null,
+        getActiveSession: () => session,
+        getIsStarting: () => false,
+        closeSession: jest.fn(async () => {}),
+      };
+      render(
+        React.createElement(
+          TooltipProvider,
+          null,
+          React.createElement(AgentTabStrip, { manager: manager as unknown as AgentSessionManager })
+        )
+      );
+      fireEvent.click(screen.getByRole("button", { name: /Close/ }));
+      await waitFor(() =>
+        expect(manager.closeSession).toHaveBeenCalledWith("existing", { releaseBackend: true })
+      );
+      manager.closeSession.mockRejectedValueOnce(
+        new Error("This agent does not support closing individual sessions.")
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Close session" }));
+      await waitFor(() =>
+        expect(Notice).toHaveBeenCalledWith(
+          "This agent does not support closing individual sessions."
+        )
+      );
+      expect(screen.getByText("Existing chat")).toBeTruthy();
+    });
+
     it("refreshes releases after the new-session button creates a tab for https://github.com/Brevilabs/obsidian-copilot-private/issues/317", async () => {
       const session = {
         internalId: "existing",
