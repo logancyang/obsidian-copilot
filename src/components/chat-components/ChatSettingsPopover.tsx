@@ -3,14 +3,13 @@ import { useApp } from "@/context";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Label } from "@/components/ui/label";
-import { ObsidianNativeSelect } from "@/components/ui/obsidian-native-select";
+import { QuickChatPromptSelect } from "@/components/chat-components/ui/QuickChatPromptSelect";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { AlertTriangle, ArrowUpRight, RotateCcw, Settings } from "lucide-react";
 import { SettingSwitch } from "@/components/ui/setting-switch";
 import {
-  getDefaultSystemPromptTitle,
   getDisableBuiltinSystemPrompt,
   getPromptFilePath,
   setDisableBuiltinSystemPrompt,
@@ -24,7 +23,6 @@ export function ChatSettingsPopover() {
   // System prompt state (session-level, in-memory)
   const prompts = useSystemPrompts();
   const [sessionPrompt, setSessionPrompt] = useSelectedPrompt();
-  const globalDefault = getDefaultSystemPromptTitle();
 
   /**
    * Check if a prompt title exists in the current prompts list
@@ -34,12 +32,9 @@ export function ChatSettingsPopover() {
     return prompts.some((p) => p.title === title);
   };
 
-  // Display value: use existing prompts only, otherwise show placeholder
-  const displayValue = promptExists(sessionPrompt)
-    ? sessionPrompt
-    : promptExists(globalDefault)
-      ? globalDefault
-      : "";
+  // An unselected session uses AGENTS.md, including vaults with a saved legacy default.
+  // https://github.com/logancyang/obsidian-copilot/issues/3210
+  const displayValue = promptExists(sessionPrompt) ? sessionPrompt : "";
 
   // Read state from session atom
   const [disableBuiltin, setDisableBuiltin] = useState(() => getDisableBuiltinSystemPrompt());
@@ -68,7 +63,7 @@ export function ChatSettingsPopover() {
   }, []);
 
   const handleReset = useCallback(() => {
-    // Reset session prompt to use global default
+    // Reset the session to the current vault instructions in AGENTS.md.
     setSessionPrompt("");
     setDisableBuiltin(false);
     setShowConfirmation(false);
@@ -139,13 +134,14 @@ export function ChatSettingsPopover() {
             <div className="tw-space-y-4 tw-p-4">
               {/* System Prompt */}
               <div className="tw-space-y-2">
-                <div className="tw-flex tw-flex-col tw-gap-2 sm:tw-flex-row sm:tw-items-center sm:tw-justify-between">
+                <div className="tw-flex tw-flex-col tw-gap-2">
                   <Label htmlFor="system-prompt" className="tw-text-sm sm:tw-min-w-fit">
                     System Prompt
                   </Label>
                   <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-2 sm:tw-flex-1">
-                    <ObsidianNativeSelect
+                    <QuickChatPromptSelect
                       value={displayValue}
+                      prompts={prompts}
                       onChange={(e) => {
                         const value = e.target.value;
                         if (value === "") {
@@ -154,18 +150,6 @@ export function ChatSettingsPopover() {
                           setSessionPrompt(value);
                         }
                       }}
-                      options={[
-                        { label: "None (use built-in prompt)", value: "" },
-                        ...prompts.map((prompt) => ({
-                          label:
-                            prompt.title === globalDefault
-                              ? `${prompt.title} (Default)`
-                              : prompt.title,
-                          value: prompt.title,
-                        })),
-                      ]}
-                      placeholder="Select system prompt"
-                      containerClassName="tw-flex-1"
                     />
                     <Button
                       variant="ghost"

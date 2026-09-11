@@ -1,7 +1,6 @@
 import { resetSettings, updateSetting } from "@/settings/model";
 import { AGENT_TODO_PLANNING_STEERING } from "@/system-prompts/agentTodoPlanningSteering";
 import {
-  setDefaultSystemPromptTitle,
   setDisableBuiltinSystemPrompt,
   setSelectedPromptTitle,
   updateCachedSystemPrompts,
@@ -32,7 +31,7 @@ function makePrompt(title: string, content: string): UserSystemPrompt {
 function resetPromptState(): void {
   setDisableBuiltinSystemPrompt(false);
   setSelectedPromptTitle("");
-  setDefaultSystemPromptTitle("");
+  updateSetting("defaultSystemPromptTitle", "");
   updateCachedSystemPrompts([]);
 }
 
@@ -55,7 +54,7 @@ describe("agentSystemPrompt", () => {
     it("does not copy Chat mode custom prompts into the Agent Mode system prompt", () => {
       updateCachedSystemPrompts([makePrompt("Haiku", "respond in haiku")]);
       setSelectedPromptTitle("Haiku");
-      setDefaultSystemPromptTitle("Haiku");
+      updateSetting("defaultSystemPromptTitle", "Haiku");
 
       const prompt = buildAgentSystemPrompt();
 
@@ -180,7 +179,7 @@ describe("agentSystemPrompt", () => {
 
       updateCachedSystemPrompts([makePrompt("Haiku", "respond in haiku")]);
       setSelectedPromptTitle("Haiku");
-      setDefaultSystemPromptTitle("Haiku");
+      updateSetting("defaultSystemPromptTitle", "Haiku");
 
       expect(buildAgentSystemPrompt()).toBe(baseline);
     });

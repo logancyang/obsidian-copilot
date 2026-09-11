@@ -1,5 +1,8 @@
 import ChainManager from "@/LLMProviders/chainManager";
-import { getSystemPromptWithMemory } from "@/system-prompts/systemPromptBuilder";
+import {
+  getEffectiveUserPrompt,
+  getSystemPromptWithMemory,
+} from "@/system-prompts/systemPromptBuilder";
 import { ToolMetadata, ToolRegistry } from "@/tools/ToolRegistry";
 import { ChatMessage } from "@/types/message";
 import { messageRequiresTools, ModelAdapter } from "./modelAdapter";
@@ -66,7 +69,10 @@ export async function generatePromptDebugReportForAgent(
  * @returns The base system prompt inclusive of memory content.
  */
 export async function resolveBasePrompt(chainManager: ChainManager): Promise<string> {
-  return getSystemPromptWithMemory(chainManager.userMemoryManager);
+  return getSystemPromptWithMemory(
+    chainManager.userMemoryManager,
+    await getEffectiveUserPrompt(chainManager.app)
+  );
 }
 
 interface AgentPromptDebugOptions {

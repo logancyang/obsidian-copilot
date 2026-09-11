@@ -210,7 +210,11 @@ export class ContextManager {
       }
 
       // 7. Process selected text contexts
-      const selectedTextContextAddition = this.contextProcessor.processSelectedTextContexts();
+      // Retries must preserve the sent excerpts even if the composer now has another selection.
+      // https://github.com/logancyang/obsidian-copilot/issues/3210
+      const selectedTextContextAddition = this.contextProcessor.processSelectedTextContexts(
+        message.context?.selectedTextContexts
+      );
 
       // 8. Process web tab contexts (L3 - current turn only)
       const webTabs = message.context?.webTabs || [];

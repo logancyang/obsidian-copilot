@@ -10,7 +10,6 @@ import {
 } from "@/system-prompts/systemPromptUtils";
 import {
   isPendingFileWrite,
-  initializeSessionPromptFromDefault,
   upsertCachedSystemPrompt,
   deleteCachedSystemPrompt,
   updateCachedSystemPrompts,
@@ -46,8 +45,8 @@ export class SystemPromptRegister {
    */
   async initialize(): Promise<void> {
     await loadAllSystemPrompts(this.app);
-    // Initialize session prompt from global default
-    initializeSessionPromptFromDefault();
+    // Loading saved prompts must not turn a hidden legacy default into a session choice.
+    // https://github.com/logancyang/obsidian-copilot/issues/3210
   }
 
   /**

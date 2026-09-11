@@ -170,7 +170,7 @@ export class ChatManager {
    * Also expands template variables (e.g., {activeNote}, {[[Note Title]]}, {#tag}) using the
    * same behavior as custom commands.
    *
-   * IMPORTANT: Only the user-defined custom prompt portion (from `getEffectiveSystemPromptContent()`)
+   * IMPORTANT: Only the user-defined custom prompt portion (from `getEffectiveUserPrompt()`)
    * is processed for template variables. DEFAULT_SYSTEM_PROMPT and memory prompts are never processed.
    *
    * This method preserves the behavior of `getSystemPromptWithMemory()` by:
@@ -187,15 +187,17 @@ export class ChatManager {
     vault: Vault,
     activeNote: TFile | null
   ): Promise<ProcessedPromptResult> {
-    // Use getEffectiveUserPrompt to ensure consistency with getSystemPrompt (includes legacy fallback)
-    const userCustomPrompt = getEffectiveUserPrompt();
+    // Keep one instruction snapshot across memory composition and template expansion.
+    // https://github.com/logancyang/obsidian-copilot/issues/3210
+    const userCustomPrompt = await getEffectiveUserPrompt(this.plugin.app);
     const allIncludedFiles: TFile[] = [];
 
     // Preserve original behavior (memory + system prompt) via settings/model helpers
     const basePromptWithMemory = await getSystemPromptWithMemory(
-      this.chainManager.userMemoryManager
+      this.chainManager.userMemoryManager,
+      userCustomPrompt
     );
-    const systemPromptWithoutMemory = getSystemPrompt();
+    const systemPromptWithoutMemory = getSystemPrompt(userCustomPrompt);
 
     let processedBasePromptWithMemory = basePromptWithMemory;
 
@@ -441,30 +443,27 @@ export class ChatManager {
         return false;
       }
 
-      // Lazy reprocess: if contextEnvelope is missing (e.g., loaded from disk),
-      // reprocess context before running the chain
-      if (!llmMessage.contextEnvelope) {
-        logInfo(`[ChatManager] Context envelope missing, reprocessing context for regeneration`);
-        const chainType = getChainType();
-        const activeNote = this.plugin.app.workspace.getActiveFile();
-        const { processedPrompt: systemPrompt, includedFiles: systemPromptIncludedFiles } =
-          await this.getSystemPromptForMessage(chainType, this.plugin.app.vault, activeNote);
-        await this.contextManager.reprocessMessageContext(
-          this.plugin.app,
-          userMessage.id,
-          this.messageRepo,
-          this.fileParserManager,
-          this.plugin.app.vault,
-          chainType,
-          false,
-          activeNote,
-          systemPrompt,
-          systemPromptIncludedFiles
-        );
-        // Re-fetch the LLM message with the newly created envelope
-        llmMessage = this.messageRepo.getLLMMessage(userMessage.id)!;
-      }
-
+      // Fresh instructions can change which template notes are deduplicated, so retries
+      // must rebuild context even when the original message already has an envelope.
+      // https://github.com/logancyang/obsidian-copilot/issues/3210
+      const chainType = getChainType();
+      const activeNote = this.plugin.app.workspace.getActiveFile();
+      const { processedPrompt: systemPrompt, includedFiles: systemPromptIncludedFiles } =
+        await this.getSystemPromptForMessage(chainType, this.plugin.app.vault, activeNote);
+      await this.contextManager.reprocessMessageContext(
+        this.plugin.app,
+        userMessage.id,
+        this.messageRepo,
+        this.fileParserManager,
+        this.plugin.app.vault,
+        chainType,
+        false,
+        activeNote,
+        systemPrompt,
+        systemPromptIncludedFiles
+      );
+      // Re-fetch the LLM message with the newly created envelope
+      llmMessage = this.messageRepo.getLLMMessage(userMessage.id)!;
       // Run the chain to regenerate the response
       const abortController = new AbortController();
       await this.chainManager.runChain(

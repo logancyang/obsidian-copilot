@@ -30,7 +30,7 @@ describe("ContextProcessor.processSelectedTextContexts", () => {
   });
 
   it("should return empty string when no selected text contexts", () => {
-    const result = processor.processSelectedTextContexts();
+    const result = processor.processSelectedTextContexts(mockSelectedTextContexts);
     expect(result).toBe("");
   });
 
@@ -47,7 +47,7 @@ describe("ContextProcessor.processSelectedTextContexts", () => {
 
     mockSelectedTextContexts.push(noteContext);
 
-    const result = processor.processSelectedTextContexts();
+    const result = processor.processSelectedTextContexts(mockSelectedTextContexts);
 
     expect(result).toContain(`<${SELECTED_TEXT_TAG}>`);
     expect(result).toContain(`</${SELECTED_TEXT_TAG}>`);
@@ -76,7 +76,7 @@ describe("ContextProcessor.processSelectedTextContexts", () => {
 
     mockSelectedTextContexts.push(webContext);
 
-    const result = processor.processSelectedTextContexts();
+    const result = processor.processSelectedTextContexts(mockSelectedTextContexts);
 
     expect(result).toContain(`<${WEB_SELECTED_TEXT_TAG}>`);
     expect(result).toContain(`</${WEB_SELECTED_TEXT_TAG}>`);
@@ -114,7 +114,7 @@ describe("ContextProcessor.processSelectedTextContexts", () => {
 
     mockSelectedTextContexts.push(noteContext, webContext);
 
-    const result = processor.processSelectedTextContexts();
+    const result = processor.processSelectedTextContexts(mockSelectedTextContexts);
 
     // Verify both context types are present
     expect(result).toContain(`<${SELECTED_TEXT_TAG}>`);
@@ -148,7 +148,7 @@ describe("ContextProcessor.processSelectedTextContexts", () => {
 
     mockSelectedTextContexts.push(noteContext);
 
-    const result = processor.processSelectedTextContexts();
+    const result = processor.processSelectedTextContexts(mockSelectedTextContexts);
 
     // Title and path should be escaped
     expect(result).toContain("<title>Test &lt;Note&gt;</title>");
@@ -166,7 +166,7 @@ describe("ContextProcessor.processSelectedTextContexts", () => {
 
     mockSelectedTextContexts.push(webContext);
 
-    const result = processor.processSelectedTextContexts();
+    const result = processor.processSelectedTextContexts(mockSelectedTextContexts);
 
     // Title and URL should be escaped
     expect(result).toContain("<title>Page &lt;Title&gt;</title>");

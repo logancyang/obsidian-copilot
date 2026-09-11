@@ -2,18 +2,16 @@
 
 Instructions are rules Copilot should keep following, such as your writing style, folder conventions, preferred formats, and safety boundaries.
 
-Agent Chat and Quick Chat use different instruction systems:
+Agent Chat and Quick Chat both use the vault-root `AGENTS.md` for your custom instructions.
 
-- **Agent Chat** reads `AGENTS.md` files that are shared across opencode, Claude, and Codex.
-- **Quick Chat** uses selectable system prompt files.
-
-Changing one does not change the other.
+- **Agent Chat** reads it when starting a session with opencode, Claude, or Codex.
+- **Quick Chat** reads the latest saved file for each request on desktop and mobile, unless you explicitly select a saved system prompt.
 
 ## Choose the right instruction tool
 
 | Use                          | Best for                                                      |
 | ---------------------------- | ------------------------------------------------------------- |
-| Vault `AGENTS.md`            | Rules every Agent Chat in a vault should follow               |
+| Vault `AGENTS.md`            | Default rules for Agent Chat and Quick Chat                   |
 | Project `AGENTS.md`          | More specific rules for one Project                           |
 | **Skill**                    | A reusable workflow with instructions and supporting files    |
 | **Copilot command**          | A short saved prompt or template you want to run again        |
@@ -22,9 +20,9 @@ Changing one does not change the other.
 
 Keep stable conventions in `AGENTS.md`. Use a [Skill](agent-mode-and-tools.md#skills-across-agents) when an agent needs a repeatable process. Use a [Copilot command](custom-commands.md) for a short reusable prompt.
 
-## Vault instructions for Agent Chat
+## Vault instructions
 
-Vault-wide instructions live in `AGENTS.md` at the root of your vault. They apply to new Agent Chats with opencode, Claude, and Codex.
+Vault-wide instructions live in `AGENTS.md` at the root of your vault. They apply to new Agent Chats with opencode, Claude, and Codex, and to Quick Chat by default.
 
 Open [**Settings → Copilot → Basic → Custom instructions**](settings.md#basic) and edit **Custom vault instructions**. Copilot saves the text to the vault-root file as you type. Select **Open AGENTS.md** to edit the same file as a normal note.
 
@@ -36,6 +34,8 @@ Good instructions are short and concrete:
 - Preserve existing frontmatter unless I ask you to change it.
 - Ask before deleting a note.
 ```
+
+Quick Chat picks up saved edits on the next request in the same conversation, including retries and edited messages. Clearing or deleting the file removes those custom instructions from subsequent requests. Copilot does not fall back to an old saved default prompt.
 
 Start a new Agent Chat after changing `AGENTS.md` so the selected backend reads the latest version.
 
@@ -60,9 +60,11 @@ Claude Code normally reads `CLAUDE.md`. To keep `AGENTS.md` as the shared source
 
 If `CLAUDE.md` already contains Claude-specific instructions, Copilot preserves them and adds the import. You do not need to copy shared rules into both files.
 
-## System prompts for Quick Chat
+## Optional Quick Chat overrides
 
-Quick Chat system prompts are Markdown files under:
+Use **Custom vault instructions** for your default instructions. No separate prompt file or selection is needed.
+
+If you already use saved Quick Chat system prompts, you can still select one for a conversation. These are Markdown files under:
 
 ```text
 <Copilot folder>/system-prompts/
@@ -70,9 +72,9 @@ Quick Chat system prompts are Markdown files under:
 
 Create a `.md` file in that folder. The filename becomes the prompt name, and the file body contains the instructions. Copilot refreshes the prompt list when you create, edit, rename, or delete a file.
 
-In Quick Chat, open **Chat Settings** and choose a **System Prompt**. Select **None (use built-in prompt)** to return to Copilot's default.
+In Quick Chat, open **Chat Settings** and choose a **System Prompt**. Select **Default (AGENTS.md)** to return to the vault instructions.
 
-The selected system prompt applies only to Quick Chat. It is not sent to opencode, Claude, or Codex. Agent Chat reads `AGENTS.md` instead.
+An explicitly selected system prompt replaces the vault instructions for that Quick Chat session. It does not change `AGENTS.md` or Agent Chat.
 
 ## Examples and next steps
 
