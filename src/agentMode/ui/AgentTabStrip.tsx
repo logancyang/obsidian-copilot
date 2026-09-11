@@ -17,7 +17,6 @@ import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManage
 import type { BackendDescriptor } from "@/agentMode/session/types";
 import { Loader2, MoreHorizontal, Plus, X } from "lucide-react";
 import React from "react";
-import { Notice } from "obsidian";
 
 interface Props {
   manager: AgentSessionManager;
@@ -191,12 +190,7 @@ export const AgentTabStrip: React.FC<Props> = ({ manager }) => {
 
   const handleClose = React.useCallback(
     (id: string) => {
-      // An explicit close must release the backend too, not leave an invisible session.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/429
-      manager.closeSession(id, { releaseBackend: true }).catch((e) => {
-        logError("[AgentMode] closeSession failed", e);
-        new Notice(e instanceof Error ? e.message : "Could not close session.");
-      });
+      manager.closeSession(id).catch((e) => logError("[AgentMode] closeSession failed", e));
     },
     [manager]
   );
