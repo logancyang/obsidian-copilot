@@ -26,16 +26,9 @@ Your choices survive restarts and skill refreshes, so unwanted built-ins stay di
 
 ![Your Skills and Built-in Skills in Copilot settings, with per-agent controls and copilot-youtube-transcript disabled](https://github.com/user-attachments/assets/3b5a42e1-51c6-499d-bbaa-db7bcaedde97)
 
-## Quick Chat follows your vault instructions
-
-Quick Chat now reads your vault-root **AGENTS.md** as its default instructions, the same file Agent Chat uses. Edit **Custom vault instructions** in Basic settings, and your next Quick Chat message uses the updated text. ([#3212](https://github.com/logancyang/obsidian-copilot/pull/3212), @zeroliu)
-
-Choosing a saved prompt under **System Prompt** still overrides the vault instructions, and **Reset** returns to AGENTS.md. If AGENTS.md is empty or missing, Quick Chat uses only its built-in instructions; the previous hidden default prompt no longer applies. ([#3212](https://github.com/logancyang/obsidian-copilot/pull/3212), @zeroliu)
-
-![Chat Settings with System Prompt set to Default (AGENTS.md)](https://github.com/user-attachments/assets/1f68a63d-eb14-441a-bd7d-801ecbd1b3ec)
-
 ## Enhancements
 
+- **Quick Chat follows your vault instructions.** With no saved prompt selected, Quick Chat uses your vault-root AGENTS.md by default, and a selected saved prompt still overrides it. ([#3212](https://github.com/logancyang/obsidian-copilot/pull/3212), @zeroliu)
 - **Know when a Copilot update is available.** Obsidian shows a notice once per new release at startup, with a **View release notes** button. ([#3181](https://github.com/logancyang/obsidian-copilot/pull/3181), @zeroliu)
 - **Send an image without filler text.** Agent Chat accepts image-only messages with Send or Enter when the selected model supports images. ([#3169](https://github.com/logancyang/obsidian-copilot/pull/3169), @brevilabs-agent-bot)
 - **Choose Quick Chat models on mobile.** Basic settings now includes the default-model picker and enabled-model list. ([#3166](https://github.com/logancyang/obsidian-copilot/pull/3166), @zeroliu)
