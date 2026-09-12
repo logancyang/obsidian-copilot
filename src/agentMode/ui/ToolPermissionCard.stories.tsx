@@ -1,3 +1,4 @@
+import { MULTI_HUNK_DIFF, WHITESPACE_DIFF, NEW_NOTE_DIFF } from "@/agentMode/ui/toolDiff.fixtures";
 import type { PermissionPrompt, SessionId } from "@/agentMode/session/types";
 import { ToolPermissionCard } from "@/agentMode/ui/ToolPermissionCard";
 import type { Meta, StoryObj } from "@/lib/story";
@@ -32,3 +33,15 @@ export default meta;
 
 /** The action footer has one top divider inside the card's outer border. */
 export const Default: StoryObj<ToolPermissionCardProps> = {};
+
+export const MultiHunkEdit: StoryObj<ToolPermissionCardProps> = {
+  args: { request: { ...request, toolCall: { ...request.toolCall, content: [MULTI_HUNK_DIFF] } } },
+};
+
+export const WhitespaceEdit: StoryObj<ToolPermissionCardProps> = {
+  args: { request: { ...request, toolCall: { ...request.toolCall, content: [WHITESPACE_DIFF] } } },
+};
+
+export const NewNote: StoryObj<ToolPermissionCardProps> = {
+  args: { request: { ...request, toolCall: { ...request.toolCall, content: [NEW_NOTE_DIFF] } } },
+};

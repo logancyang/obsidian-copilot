@@ -109,6 +109,8 @@ opencode supports **Default** and **Auto**. Claude supports **Default**, **Plan*
 
 When an action needs approval, Agent Chat displays a **Permission required** card with the proposed change or tool input. Choose one of the temporary or persistent allow or deny options offered by that agent. Stopping the turn cancels unanswered requests.
 
+When an agent supplies before-and-after file content, the permission card and completed action show the changed lines with three surrounding lines of context. Additions and deletions have `+` and `-` markers. In changed lines, leading and trailing spaces appear as `·`, and tabs as `→`, so Markdown indentation and line-break changes stay visible. Larger diffs scroll within the card, and a new note shows all of its added content.
+
 When an agent asks a set of questions, answer the current tab and select **Next**. On the final tab, **Submit** becomes available after every question has an answer. You can use the tabs to review or skip ahead; **Cancel** declines the entire request.
 
 Permission and question cards stay in a scrolling action area above the message box until you answer them, even while the response continues streaming.

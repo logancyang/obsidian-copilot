@@ -3,7 +3,7 @@ import { Loader2, Check, X } from "lucide-react";
 import type { ToolCallPart } from "@/agentMode/ui/agentTrail";
 import type { AgentToolStatus } from "@/agentMode/session/types";
 import { lookupToolSummary } from "@/agentMode/ui/toolSummaries";
-import { renderDiff } from "@/agentMode/ui/diffRender";
+import { ToolDiffPreview } from "@/agentMode/ui/ToolDiffPreview";
 import { getVaultBase } from "@/utils/vaultPath";
 import { openVaultPath } from "@/utils/openVaultPath";
 import { useApp } from "@/context";
@@ -82,9 +82,7 @@ export const ActionCard: React.FC<ActionCardProps> = ({ part, open, onToggle }) 
           // eslint-disable-next-line @eslint-react/no-array-index-key -- tool outputs are append-only; index is stable
           <div key={`diff-${i}-${o.path}`} className="tw-rounded tw-bg-secondary-alt tw-p-1">
             <p className="tw-font-mono tw-text-xs tw-text-muted">{o.path}</p>
-            <pre className="tw-max-h-40 tw-overflow-auto tw-whitespace-pre-wrap tw-text-xs">
-              {renderDiff(o.oldText, o.newText)}
-            </pre>
+            <ToolDiffPreview oldText={o.oldText} newText={o.newText} />
           </div>
         )
       )}

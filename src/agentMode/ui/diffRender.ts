@@ -1,16 +1,19 @@
+import { createTwoFilesPatch, OMIT_HEADERS } from "diff";
+
 /**
- * Render a tool-call diff as a single string with `- ` / `+ ` prefixes.
- * Intentionally minimal — used in the permission modal and inline tool-call
- * card. We don't pull in a full diff library; for an approval prompt the
- * side-by-side accuracy isn't worth the bundle hit.
+ * Render changed hunks with three context lines, preserving Markdown whitespace.
+ * @param oldText - Before snapshot, or null for a newly created file.
+ * @param newText - Complete proposed or completed after snapshot.
  */
 export function renderDiff(oldText: string | null, newText: string): string {
-  const lines: string[] = [];
-  if (oldText !== null) {
-    for (const l of oldText.split("\n")) lines.push(`- ${l}`);
-  }
-  for (const l of newText.split("\n")) lines.push(`+ ${l}`);
-  return lines.join("\n");
+  // Whole-file dumps hide small edits; trimmed comparisons hide Markdown hard breaks:
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/350
+  return (
+    createTwoFilesPatch("", "", oldText ?? "", newText, undefined, undefined, {
+      context: 3,
+      headerOptions: OMIT_HEADERS,
+    }).slice(0, -1) || "No changes"
+  );
 }
 
 /**
