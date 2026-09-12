@@ -48,3 +48,26 @@ export const Sizes: StoryObj<ButtonProps> = {
     </div>
   ),
 };
+
+/** Quiet and filled controls share the secondary surfaces used by cards and rails. */
+export const SecondarySurface: StoryObj<ButtonProps> = {
+  render: () => (
+    <div className="tw-flex tw-flex-wrap tw-gap-2 tw-rounded-md tw-bg-secondary tw-p-4">
+      {VARIANTS.map((variant) => (
+        <Button key={variant} variant={variant}>
+          {variant}
+        </Button>
+      ))}
+      <Button asChild>
+        <a href="#sign-in" onClick={(event) => event.preventDefault()}>
+          Open sign-in page
+        </a>
+      </Button>
+      <Button asChild variant="secondary">
+        <a href="#release-notes" onClick={(event) => event.preventDefault()}>
+          View on GitHub
+        </a>
+      </Button>
+    </div>
+  ),
+};

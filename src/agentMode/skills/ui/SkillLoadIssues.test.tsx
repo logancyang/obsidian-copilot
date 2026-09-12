@@ -99,9 +99,9 @@ describe("SkillLoadIssues", () => {
       expect(fixButton.classList.contains("tw-bg-secondary")).toBe(true);
       expect(fixButton.classList.contains("tw-bg-interactive-accent")).toBe(false);
       expect(openButton.classList.contains("tw-bg-transparent")).toBe(true);
-      expect(openButton.classList.contains("tw-text-faint")).toBe(true);
+      expect(openButton.classList.contains("tw-text-normal")).toBe(true);
       expect(revealButton.classList.contains("tw-bg-transparent")).toBe(true);
-      expect(revealButton.classList.contains("tw-text-faint")).toBe(true);
+      expect(revealButton.classList.contains("tw-text-normal")).toBe(true);
 
       fireEvent.click(fixButton);
       fireEvent.click(openButton);
