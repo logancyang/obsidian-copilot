@@ -12,4 +12,5 @@ const meta = {
 } satisfies Meta<AgentModeBannerProps>;
 export default meta;
 
+/** The empty Quick Chat invitation: one action heading with quieter supporting copy. */
 export const Default: StoryObj<AgentModeBannerProps> = {};
