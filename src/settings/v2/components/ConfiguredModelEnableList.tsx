@@ -4,6 +4,8 @@ import {
   type BackendDescriptor,
   type ModelEnableGroup,
 } from "@/agentMode";
+import { Button } from "@/components/ui/button";
+import { useTab } from "@/contexts/TabContext";
 import { logError } from "@/logger";
 import {
   backendsAtom,
@@ -20,6 +22,8 @@ import { buildModelEnableGroups, partitionCandidates } from "./configuredModelGr
 
 interface ConfiguredModelEnableListProps {
   descriptor: BackendDescriptor;
+  loading: boolean;
+  onConfigure: () => void;
 }
 
 /** Frozen empty fallback so an untouched backend's enabled set is a stable reference. */
@@ -42,8 +46,11 @@ const isOpencodeRoutableProvider = (
  */
 export const ConfiguredModelEnableList: React.FC<ConfiguredModelEnableListProps> = ({
   descriptor,
+  loading,
+  onConfigure,
 }) => {
   const api = useModelManagement();
+  const { setSelectedTab } = useTab();
   // A backend's id doubles as its model-management AgentType.
   const agentType = descriptor.id as AgentType;
 
@@ -95,19 +102,39 @@ export const ConfiguredModelEnableList: React.FC<ConfiguredModelEnableListProps>
     [api, agentType]
   );
 
-  const emptyState =
-    descriptor.id === "opencode" ? (
-      <span>
-        No models configured yet. Add a provider on the{" "}
-        <span className="tw-font-medium">Models (BYOK)</span> tab, or sign in to an opencode
-        subscription, to curate models here.
-      </span>
-    ) : (
-      <span>
-        No models reported yet. Sign in / install the {descriptor.displayName} CLI and reload, or
-        open a chat session with this agent.
-      </span>
-    );
+  const emptyState = (
+    <>
+      <div className="tw-font-medium tw-text-normal">
+        {isOpencode ? "No models configured" : "No models reported"}
+      </div>
+      <div>
+        {isOpencode
+          ? "Add a provider and models in BYOK settings to populate this list."
+          : `Check ${descriptor.displayName} setup and sign-in, then open a chat session to discover models.`}
+      </div>
+      <div className="tw-flex tw-flex-wrap tw-gap-2">
+        {isOpencode ? (
+          <Button
+            variant="secondary"
+            size="sm"
+            className="tw-h-auto tw-min-h-6 tw-max-w-full tw-whitespace-normal tw-text-left"
+            onClick={() => setSelectedTab("byok")}
+          >
+            Open provider settings
+          </Button>
+        ) : (
+          <Button
+            variant="secondary"
+            size="sm"
+            className="tw-h-auto tw-min-h-6 tw-max-w-full tw-whitespace-normal tw-text-left"
+            onClick={onConfigure}
+          >
+            Configure {descriptor.displayName}
+          </Button>
+        )}
+      </div>
+    </>
+  );
 
   return (
     <ModelEnableList
@@ -117,6 +144,7 @@ export const ConfiguredModelEnableList: React.FC<ConfiguredModelEnableListProps>
       onQueryChange={setQuery}
       searchPlaceholder={`Search ${descriptor.displayName} models…`}
       emptyState={emptyState}
+      loading={loading}
       // Only the first provider group starts expanded; the rest collapse so a
       // long multi-provider list (opencode) opens compact. A stable scalar, so
       // it doesn't churn the list's collapse state across renders.

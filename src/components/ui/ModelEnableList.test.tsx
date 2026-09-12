@@ -121,3 +121,21 @@ describe("ModelEnableList — default group expansion", () => {
     expect(groupState("Provider B")).toBe("closed");
   });
 });
+
+describe("ModelEnableList empty recovery", () => {
+  it("withholds configuration guidance while discovery is pending, then exposes recovery (https://github.com/Brevilabs/obsidian-copilot-private/issues/418)", () => {
+    const props = {
+      groups: [],
+      query: "",
+      onQueryChange: jest.fn(),
+      onToggle: jest.fn(),
+      emptyState: <button type="button">Configure agent</button>,
+    };
+    const { rerender } = render(<ModelEnableList {...props} loading />);
+    expect(screen.getByRole("status").textContent).toBe("Loading models…");
+    expect(screen.queryByRole("button", { name: "Configure agent" })).toBeNull();
+    rerender(<ModelEnableList {...props} loading={false} />);
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(screen.getByRole("button", { name: "Configure agent" })).not.toBeNull();
+  });
+});
