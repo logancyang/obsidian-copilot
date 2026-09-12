@@ -1,5 +1,62 @@
 # Release Notes
 
+# v4.0.8 - Live Relevant Notes in Agent Chat
+
+![Copilot 4.0.8: Find the notes that refine your questions, with an open notebook and an orange thread](https://github.com/user-attachments/assets/9ce36e3a-25a7-4ba3-8958-d640eb19d5d8)
+
+You start typing a question, and a note you had forgotten helps you ask a more specific one. With **Live** on, Relevant Notes now follows your Agent Chat draft and conversation, bringing related notes into view as you think. Read a suggestion, add it to your chat context, and use what you found to refine your prompt. ([#3152](https://github.com/logancyang/obsidian-copilot/pull/3152), [#3153](https://github.com/logancyang/obsidian-copilot/pull/3153), @zeroliu)
+
+## Refine your prompt as you write
+
+Turn on **Live** in Relevant Notes, then start typing a question in Agent Chat. Related notes appear as you write, reminding you of useful details you may have forgotten. ([#3152](https://github.com/logancyang/obsidian-copilot/pull/3152), [#3153](https://github.com/logancyang/obsidian-copilot/pull/3153), @zeroliu)
+
+See something useful? Read the note and click **Add to Chat**. Use what you find to make your question more specific before you send it. ([#3152](https://github.com/logancyang/obsidian-copilot/pull/3152), @zeroliu)
+
+![Live Relevant Notes suggests workshop notes as a prompt is typed, then the user reads and attaches notes and refines the question](https://github.com/user-attachments/assets/d1f5ceaf-7d34-4cab-8ebb-9113c3539a68)
+
+[Watch the full-resolution video](https://pub-d0d5db63b5e446cc848d32b65229d622.r2.dev/copilot/releases/4.0.8/relevant-notes-demo-20260910.mp4).
+
+Chat-based suggestions require a connected Miyo version that supports chat recommendations. Older Miyo versions keep editor-note suggestions; turning Live off also keeps Relevant Notes tied to the editor note. ([#3152](https://github.com/logancyang/obsidian-copilot/pull/3152), [#3153](https://github.com/logancyang/obsidian-copilot/pull/3153), @zeroliu)
+
+## Choose which built-in skills your agents use
+
+Open **Copilot settings → Skills** to see **Your Skills** and **Built-in Skills** separately. In a built-in skill's menu, choose **Disable skill** to turn it off for every agent, or use its agent buttons to choose which available agents can use it. ([#3172](https://github.com/logancyang/obsidian-copilot/pull/3172), [#3173](https://github.com/logancyang/obsidian-copilot/pull/3173), [#3174](https://github.com/logancyang/obsidian-copilot/pull/3174), @zeroliu)
+
+Your choices survive restarts and skill refreshes, so unwanted built-ins stay disabled. Use **View SKILL.md** to read the bundled instructions in a read-only preview. ([#3172](https://github.com/logancyang/obsidian-copilot/pull/3172), [#3173](https://github.com/logancyang/obsidian-copilot/pull/3173), [#3174](https://github.com/logancyang/obsidian-copilot/pull/3174), @zeroliu)
+
+![Your Skills and Built-in Skills in Copilot settings, with per-agent controls and copilot-youtube-transcript disabled](https://github.com/user-attachments/assets/3b5a42e1-51c6-499d-bbaa-db7bcaedde97)
+
+## Enhancements
+
+- **Quick Chat follows your vault instructions.** With no saved prompt selected, Quick Chat uses your vault-root AGENTS.md by default, and a selected saved prompt still overrides it. ([#3212](https://github.com/logancyang/obsidian-copilot/pull/3212), @zeroliu)
+- **Know when a Copilot update is available.** Obsidian shows a notice once per new release at startup, with a **View release notes** button. ([#3181](https://github.com/logancyang/obsidian-copilot/pull/3181), @zeroliu)
+- **Send an image without filler text.** Agent Chat accepts image-only messages with Send or Enter when the selected model supports images. ([#3169](https://github.com/logancyang/obsidian-copilot/pull/3169), @brevilabs-agent-bot)
+- **Choose Quick Chat models on mobile.** Basic settings now includes the default-model picker and enabled-model list. ([#3166](https://github.com/logancyang/obsidian-copilot/pull/3166), @zeroliu)
+- **Check whether your providers are reachable.** Opening BYOK or saving provider changes refreshes verification, with badges for missing keys, rejected credentials, and failed checks. ([#3164](https://github.com/logancyang/obsidian-copilot/pull/3164), @zeroliu)
+- **A consistent setup for every agent.** OpenCode now uses the same Configure UI as Claude and Codex in Copilot settings. ([#3162](https://github.com/logancyang/obsidian-copilot/pull/3162), @zeroliu)
+- **A quieter place to start writing.** Chat and instruction fields show fixed hints instead of continuously typing and erasing examples. ([#3170](https://github.com/logancyang/obsidian-copilot/pull/3170), @zeroliu)
+
+## Fixes
+
+- **Quick Chat no longer stops early at its tool-call limit.** Tool loops now run up to 32 steps, so longer vault tasks finish instead of halting after four. ([#3211](https://github.com/logancyang/obsidian-copilot/pull/3211), @logancyang)
+- **Uploaded images stay in saved chats.** Quick Chat and Agent Chat transcripts embed images beside their messages and save the files using your vault's attachment setting. ([#3165](https://github.com/logancyang/obsidian-copilot/pull/3165), @zeroliu)
+- **Reopened Quick Chats keep saving to the original note.** Continuing a renamed conversation preserves new turns in the same history entry. ([#3158](https://github.com/logancyang/obsidian-copilot/pull/3158), @zeroliu)
+- **Stop also clears queued follow-ups.** Sending a new message afterward keeps its timer and Stop button visible while that turn runs. ([#3167](https://github.com/logancyang/obsidian-copilot/pull/3167), @zeroliu)
+- **Less jumping when the iPhone keyboard opens.** Quick Chat no longer shifts farther than needed, and the phone sidebar avoids extra keyboard spacing. ([#3171](https://github.com/logancyang/obsidian-copilot/pull/3171), @zeroliu)
+- **Keyless LM Studio works in Quick Chat.** Endpoints configured without an API key no longer fail with a missing-credentials error. ([#3168](https://github.com/logancyang/obsidian-copilot/pull/3168), @brevilabs-agent-bot)
+- **Windows Codex detection finds custom npm installations.** Auto-detect recognizes supported adapters installed in custom directories on PATH. ([#3156](https://github.com/logancyang/obsidian-copilot/pull/3156), @brevilabs-agent-bot)
+- **Notes with large embedded images export without overflowing image validation.** Existing image formats and document limits stay the same. ([#3155](https://github.com/logancyang/obsidian-copilot/pull/3155), @brevilabs-agent-bot)
+- **New Agent Chat tabs check for Copilot updates again.** An open pane no longer keeps its first release result indefinitely. ([#3160](https://github.com/logancyang/obsidian-copilot/pull/3160), @zeroliu)
+- **Miyo setup no longer reports success for an unregistered vault.** If a folder name or overlap causes a conflict, Copilot verifies that this vault is registered before connecting. ([#3178](https://github.com/logancyang/obsidian-copilot/pull/3178), @brevilabs-agent-bot)
+- **Relevant Notes distinguishes a missing vault from a disconnected Miyo.** It names the unregistered vault and points you to local folder settings or the machine hosting Miyo. ([#3179](https://github.com/logancyang/obsidian-copilot/pull/3179), @brevilabs-agent-bot)
+
+## 🧰 Troubleshoot
+
+- If models are missing, navigate to Copilot settings -> Models tab and click "Refresh Built-in Models".
+- Please report any issue you see in the member channel!
+
+---
+
 # v4.0.7 - GPT-6 Astra, meet your notes
 
 ![GPT-6 Astra galaxy artwork with OpenAI and Copilot logos](https://github.com/user-attachments/assets/b801ff23-cc12-41c3-924e-0b70bec698bc)
