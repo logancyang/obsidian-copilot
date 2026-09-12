@@ -7,10 +7,7 @@ import {
 import type { UserSystemPrompt } from "@/system-prompts/type";
 import { OPENARTIFACTS_WORKSPACE_ROOT_ENV } from "@/openArtifacts/constants";
 import { buildAgentSystemPrompt } from "@/agentMode/backends/shared/agentSystemPrompt";
-import {
-  MIYO_SEARCH_FOLDER_ENV,
-  MIYO_SEARCH_SCOPE_ENV,
-} from "@/agentMode/skills/builtin/builtinSkills";
+import { MIYO_SEARCH_FOLDER_ENV, MIYO_SEARCH_SCOPE_ENV } from "@/builtinSkills/builtinSkills";
 import { detectBinary } from "@/utils/detectBinary";
 import { CodexBackend } from "./CodexBackend";
 import { resolveSupportedCodexAcpEntry } from "./codexVersion";

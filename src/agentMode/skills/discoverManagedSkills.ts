@@ -1,11 +1,18 @@
 import { logWarn } from "@/logger";
 import { basename, joinPosix } from "@/utils/pathUtils";
+import { getBuiltinSkillVersion } from "./builtin/builtinOwnership";
+import { ALL_MANAGED_SKILLS, RETIRED_BUILTIN_SKILLS } from "@/builtinSkills/builtinSkills";
 import { mapWithConcurrency } from "./concurrency";
 import { parseSkillFile, SkillFormatError } from "./skillFormat";
 import type { RejectedSkill, Skill, SkillDiscoveryResult } from "./types";
 
 /** Maximum concurrent SKILL.md reads during discovery. */
 const DISCOVERY_CONCURRENCY = 16;
+// Retired managed files remain owned during cleanup retries so discovery cannot
+// reactivate them as custom skills. https://github.com/logancyang/obsidian-copilot/issues/3022
+const BUILTIN_NAMES = new Set(
+  [...ALL_MANAGED_SKILLS, ...RETIRED_BUILTIN_SKILLS].map((skill) => skill.name)
+);
 
 /**
  * Minimal adapter the discovery walker depends on. Modelled after
@@ -107,6 +114,10 @@ export async function discoverManagedSkills(
       const fm = parsed.frontmatter;
 
       return {
+        // Only catalog identities with an actual metadata marker are owned. Copies and
+        // Markdown examples of the marker must remain visible as editable user skills.
+        // https://github.com/logancyang/obsidian-copilot/issues/3022
+        builtin: BUILTIN_NAMES.has(fm.name) && getBuiltinSkillVersion(content) !== null,
         name: fm.name,
         description: fm.description,
         filePath: absFile,

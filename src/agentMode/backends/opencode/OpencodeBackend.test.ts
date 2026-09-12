@@ -36,7 +36,7 @@ import {
   SELF_HOST_WEB_SEARCH_ENV,
   SELF_HOST_WEB_SEARCH_TOKEN_ENV,
   SELF_HOST_WEB_SEARCH_URL_ENV,
-} from "@/agentMode/skills/builtin/builtinSkills";
+} from "@/builtinSkills/builtinSkills";
 
 function makeSystemPrompt(title: string, content: string): UserSystemPrompt {
   return { title, content, createdMs: 0, modifiedMs: 0, lastUsedMs: 0 };

@@ -235,8 +235,7 @@ describe("builtinSkills", () => {
       const skill = BUILTIN_SKILLS.find((item) => item.name === "openartifacts-publish");
       expect(skill).toBeDefined();
       expect(skill!.version).toBe(2);
-      expect(skill!.retiredFiles).toEqual(["shared-publishing-rules.md"]);
-      expect(skill!.legacyName).toBe("symposium-publish");
+
       expect(skill!.files.map((file) => file.path)).toEqual([
         "themes/research-memo.md",
         "openartifacts-publish.sh",

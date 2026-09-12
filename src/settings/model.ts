@@ -1,4 +1,5 @@
 import { CustomModel, ProjectConfig } from "@/aiParams";
+import { ALL_MANAGED_SKILLS } from "@/builtinSkills/builtinSkills";
 import { getModelKeyFromModel } from "@/lib/model-key";
 import { atom, createStore, useAtomValue } from "jotai";
 import { v4 as uuidv4 } from "uuid";
@@ -317,6 +318,8 @@ export interface CopilotSettings {
        * action until the user opts out.
        */
       suppressMigrationConfirm?: boolean;
+      /** Saved opt-outs for bundled skills; files are derived from these choices. */
+      builtinPreferences?: Record<string, { disabled?: boolean; disabledAgents?: string[] }>;
     };
   };
   /**
@@ -1312,6 +1315,9 @@ function sanitizeAgentMode(raw: unknown): CopilotSettings["agentMode"] {
       ? skillsValidation.folder
       : DEFAULT_SETTINGS.agentMode.skills.folder,
     ...(suppressMigrationConfirm !== undefined ? { suppressMigrationConfirm } : {}),
+    ...(skillsRaw?.builtinPreferences !== undefined
+      ? { builtinPreferences: sanitizeBuiltinPreferences(skillsRaw.builtinPreferences) }
+      : {}),
   };
 
   return {
@@ -1326,6 +1332,39 @@ function sanitizeAgentMode(raw: unknown): CopilotSettings["agentMode"] {
     ...(claudeCli ? { claudeCli } : {}),
     ...(deviceProfiles ? { deviceProfiles } : {}),
   };
+}
+
+type BuiltinPreferences = NonNullable<CopilotSettings["agentMode"]["skills"]["builtinPreferences"]>;
+const EMPTY_BUILTIN_PREFERENCES: BuiltinPreferences = Object.freeze({});
+
+/**
+ * Keep only user opt-outs for skills in this release's bundled catalog.
+ * @param raw - Preferences read from storage or derived by a settings updater.
+ */
+export function sanitizeBuiltinPreferences(raw: unknown): BuiltinPreferences {
+  // Defaults need no records; removed skills must not leave stale settings behind.
+  // https://github.com/logancyang/obsidian-copilot/issues/3022
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return EMPTY_BUILTIN_PREFERENCES;
+  }
+  const preferences: BuiltinPreferences = {};
+  for (const { name } of ALL_MANAGED_SKILLS) {
+    const value = (raw as Record<string, unknown>)[name];
+    if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+    const pref = value as Record<string, unknown>;
+    // Keep opt-outs for agents absent on this device so sync cannot re-enable them.
+    // https://github.com/logancyang/obsidian-copilot/issues/3022
+    const disabledAgents = Array.isArray(pref.disabledAgents)
+      ? pref.disabledAgents.filter((agent): agent is string => typeof agent === "string")
+      : [];
+    if (pref.disabled === true || disabledAgents.length > 0) {
+      preferences[name] = {
+        ...(pref.disabled === true ? { disabled: true } : {}),
+        ...(disabledAgents.length > 0 ? { disabledAgents } : {}),
+      };
+    }
+  }
+  return Object.keys(preferences).length > 0 ? preferences : EMPTY_BUILTIN_PREFERENCES;
 }
 
 /**

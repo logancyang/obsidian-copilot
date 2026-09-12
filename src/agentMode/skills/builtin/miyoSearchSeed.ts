@@ -1,8 +1,9 @@
-import type { App } from "obsidian";
+import { FileSystemAdapter, type App } from "obsidian";
+import { isDesktopRuntime, requireNodeModule } from "@/utils/desktopRuntime";
 
 import { joinPosix } from "@/utils/pathUtils";
 
-import { MIYO_SEARCH_SKILL } from "./builtinSkills";
+import { MIYO_SEARCH_SKILL } from "@/builtinSkills/builtinSkills";
 import {
   type BuiltinSeedFs,
   inspectBuiltinSkill,
@@ -15,9 +16,9 @@ import {
  *
  * Both the background settings watcher (`agentMode/index.ts`) and the settings
  * UI must seed/prune the same skill through the same vault-adapter FS, so that
- * logic lives here once. Deliberately node-free (only `app.vault.adapter` +
- * pure string ops) so it can be imported directly — NOT via the agent-mode
- * barrel, which pulls in Node and would break the mobile bundle.
+ * logic lives here once. Node access is deferred and desktop-guarded so this
+ * module can be imported directly. The agent-mode barrel pulls in Node and
+ * would break the mobile bundle.
  */
 
 /** Outcome of an install attempt, read back from disk after the seed pass. */
@@ -37,8 +38,26 @@ export function buildBuiltinSeedFs(app: App): BuiltinSeedFs {
     read: (p) => adapter.read(p),
     write: (p, c) => adapter.write(p, c),
     mkdir: (p) => adapter.mkdir(p),
-    removeFile: (p) => adapter.remove(p),
-    rmRecursive: (p) => adapter.rmdir(p, true),
+    removeDir: async (p) => {
+      // A linked canonical directory belongs to its target; unlink it without
+      // walking into external files. https://github.com/logancyang/obsidian-copilot/issues/3022
+      if (adapter instanceof FileSystemAdapter && isDesktopRuntime()) {
+        const fs = requireNodeModule<typeof import("node:fs")>("fs");
+        if ((await fs.promises.lstat(adapter.getFullPath(p))).isSymbolicLink()) {
+          await adapter.rmdir(p, true);
+          return;
+        }
+      }
+      // Recursive deletion can remove SKILL.md before hitting an unreadable child.
+      // Keep ownership evidence until every child is gone so retries remain safe.
+      // https://github.com/logancyang/obsidian-copilot/issues/3022
+      const contents = await adapter.list(p);
+      for (const folder of contents.folders) await adapter.rmdir(folder, true);
+      for (const file of contents.files) {
+        if (file !== joinPosix(p, "SKILL.md")) await adapter.remove(file);
+      }
+      await adapter.rmdir(p, true);
+    },
   };
 }
 
@@ -93,28 +112,14 @@ export async function installMiyoSearchSkill(
 }
 
 /**
- * Remove the seeded `miyo-search` copy. Reports what really happened by checking
- * disk afterward, because {@link removeSeededBuiltin} swallows its errors and
- * returns `false` both when it deliberately kept a file and when a delete threw:
- * - `"removed"`   — nothing is left at the path (deleted, or already absent).
- * - `"collision"` — a markerless (user-authored) dir was kept by the guard.
- * - `"failed"`    — our marked copy is still on disk (the delete didn't take).
+ * Remove the managed copy without treating a partial deletion as success.
+ * @param app - Vault whose file adapter performs the removal.
+ * @param folder - Canonical skills root relative to the vault.
  */
 export async function removeMiyoSearchSkill(
   app: App,
   folder: string
 ): Promise<MiyoSearchRemoveResult> {
-  const fs = buildBuiltinSeedFs(app);
-  if (await removeSeededBuiltin(folder, MIYO_SEARCH_SKILL.name, fs)) return "removed";
-  // Not removed by the helper — classify from disk rather than assuming success.
-  switch (await inspectBuiltinSkill(folder, MIYO_SEARCH_SKILL.name, fs)) {
-    case "absent":
-      return "removed";
-    case "collision":
-      return "collision";
-    default:
-      // Still `"seeded"` (a swallowed delete error) or `"failed"` to read — the
-      // skill is effectively still there, so don't claim a clean removal.
-      return "failed";
-  }
+  const result = await removeSeededBuiltin(folder, MIYO_SEARCH_SKILL.name, buildBuiltinSeedFs(app));
+  return result === "absent" ? "removed" : result;
 }

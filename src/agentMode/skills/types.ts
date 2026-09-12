@@ -32,6 +32,8 @@ export type SkillLocation = { kind: "canonical" } | { kind: "project"; agentDirs
  * is required on the SKILL.md.
  */
 export interface Skill {
+  /** Canonical content owned by the bundled skill catalog. */
+  builtin?: boolean;
   /** Spec-validated skill name (matches parent dir; 1–64 chars; `^[a-z0-9]+(-[a-z0-9]+)*$`). */
   name: string;
   /** Spec-required description, 1–1024 chars. */

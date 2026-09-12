@@ -8,7 +8,7 @@ import {
   SELF_HOST_WEB_SEARCH_ENV,
   SELF_HOST_WEB_SEARCH_TOKEN_ENV,
   SELF_HOST_WEB_SEARCH_URL_ENV,
-} from "@/agentMode/skills/builtin/builtinSkills";
+} from "@/builtinSkills/builtinSkills";
 import { OPENARTIFACTS_WORKSPACE_ROOT_ENV } from "@/openArtifacts/constants";
 import {
   COPILOT_OBSIDIAN_CLI_ENV,

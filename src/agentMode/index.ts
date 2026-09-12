@@ -17,7 +17,7 @@ import { createNodeFileStorage } from "./session/nodeFileStorage";
 import { AgentSessionManager } from "./session/AgentSessionManager";
 import { seedCopilotDefaultModel } from "./session/copilotDefaultModel";
 import { SkillManager } from "./skills";
-import { planManagedBuiltins } from "./skills/builtin/builtinSkills";
+import { planManagedBuiltins } from "@/builtinSkills/builtinSkills";
 import { removeSeededBuiltin, seedBuiltinSkills } from "./skills/builtin/seedBuiltinSkills";
 import { buildBuiltinSeedFs } from "./skills/builtin/miyoSearchSeed";
 import {
