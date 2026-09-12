@@ -10,6 +10,7 @@ import {
 } from "@/commands/customCommandUtils";
 import { App, Editor, Plugin, TFile, Vault } from "obsidian";
 import { CustomCommandChatModal } from "@/commands/CustomCommandChatModal";
+import type CopilotPlugin from "@/main";
 import { debounce } from "@/utils/debounce";
 import { CustomCommand } from "@/commands/type";
 import {
@@ -241,6 +242,9 @@ export class CustomCommandRegister {
         new CustomCommandChatModal(this.plugin.app, {
           selectedText: editor.getSelection(),
           command: customCommand,
+          agentModelKey: () =>
+            (this.plugin as CopilotPlugin).agentSessionManager?.getActiveChatConfiguredModelId() ??
+            null,
         }).open();
         void CustomCommandManager.getInstance()
           .recordUsage(customCommand)

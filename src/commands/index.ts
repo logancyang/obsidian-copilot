@@ -413,7 +413,10 @@ export function registerCommands(plugin: CopilotPlugin, publish: PublishFile) {
 
   // Add command to apply a custom command
   addCommand(plugin, COMMAND_IDS.APPLY_CUSTOM_COMMAND, () => {
-    const modal = new ApplyCustomCommandModal(plugin.app);
+    const modal = new ApplyCustomCommandModal(
+      plugin.app,
+      () => plugin.agentSessionManager?.getActiveChatConfiguredModelId() ?? null
+    );
     modal.open();
   });
 

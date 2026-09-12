@@ -405,6 +405,10 @@ export class AgentSession {
    * `setSession*` responses.
    */
   private currentState: BackendState | null = null;
+  // A seeded selection is the only model identity available before a fresh
+  // session's backend state arrives, so inheritance can preserve a transient
+  // cross-backend pick during startup.
+  private pendingModelSelection: ModelSelection | null = null;
   private label: string | null = null;
   // Tracks who set the current label so an agent-pushed `session_info_update`
   // can't clobber a label the user explicitly chose via Rename.
@@ -527,6 +531,7 @@ export class AgentSession {
       this.cachedStatus = this.getStatus();
     } else {
       this.currentState = null;
+      this.pendingModelSelection = opts.defaultModelSelection ?? null;
       this.ready = this.initialize(opts);
     }
   }
@@ -579,6 +584,7 @@ export class AgentSession {
       logInfo(`[AgentMode] session ${resp.sessionId} ${modelLog}`);
       this.backendSessionId = resp.sessionId;
       this.currentState = seedSelectionIntoState(resp.state, defaultModelSelection);
+      this.pendingModelSelection = null;
       this.unregisterSessionHandler = this.backend.registerSessionHandler(resp.sessionId, (event) =>
         this.handleSessionEvent(event)
       );
@@ -598,6 +604,7 @@ export class AgentSession {
     } catch (err) {
       if (this.disposed) return;
       logWarn(`[AgentMode] session/new failed for ${this.internalId}`, err);
+      this.pendingModelSelection = null;
       this.startupFailed = true;
       this.recomputeStatusIfChanged();
       throw err instanceof Error ? err : new Error(err2String(err));
@@ -611,6 +618,14 @@ export class AgentSession {
    */
   getState(): BackendState | null {
     return this.currentState;
+  }
+
+  /**
+   * Return the transient model selection being applied while a fresh backend
+   * session has not reported its state yet.
+   */
+  getPendingModelSelection(): ModelSelection | null {
+    return this.pendingModelSelection;
   }
 
   /**
@@ -1369,6 +1384,7 @@ export class AgentSession {
   /** Detach from the backend. Does not cancel — call `cancel()` first. */
   async dispose(): Promise<void> {
     this.disposed = true;
+    this.pendingModelSelection = null;
     this.unregisterSessionHandler?.();
     this.unregisterSessionHandler = null;
     this.flushResolvers(this.pendingPlanResolvers);

@@ -2,13 +2,19 @@ import { App, FuzzySuggestModal, MarkdownView } from "obsidian";
 import { getCachedCustomCommands } from "@/commands/state";
 import { CustomCommand } from "@/commands/type";
 import { sortSlashCommands } from "@/commands/customCommandUtils";
-import { CustomCommandChatModal } from "@/commands/CustomCommandChatModal";
+import {
+  CustomCommandChatModal,
+  type AgentModelKeyResolver,
+} from "@/commands/CustomCommandChatModal";
 import { CustomCommandManager } from "@/commands/customCommandManager";
 
 export class ApplyCustomCommandModal extends FuzzySuggestModal<CustomCommand> {
   private commands: CustomCommand[];
 
-  constructor(app: App) {
+  constructor(
+    app: App,
+    private agentModelKey?: AgentModelKeyResolver
+  ) {
     super(app);
     this.setPlaceholder("Select a custom command to apply...");
 
@@ -60,6 +66,7 @@ export class ApplyCustomCommandModal extends FuzzySuggestModal<CustomCommand> {
     const modal = new CustomCommandChatModal(this.app, {
       selectedText,
       command,
+      agentModelKey: this.agentModelKey,
     });
     modal.open();
   }
