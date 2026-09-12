@@ -9,18 +9,23 @@ import * as React from "react";
 interface SetupStepsStoryProps {
   /** Command in the first step, so the overflow case can push a long one through. */
   installCommand: string;
+  authCommand?: string;
   /** Prompt convention for the platform whose commands the story renders. */
   shell?: CommandShell;
 }
 
 /** The two-step "don't have it yet" block the CLI dialogs compose. */
-const SetupStepsBlock: React.FC<SetupStepsStoryProps> = ({ installCommand, shell }) => (
+const SetupStepsBlock: React.FC<SetupStepsStoryProps> = ({
+  installCommand,
+  authCommand = "claude auth login --claudeai",
+  shell,
+}) => (
   <div className="tw-flex tw-flex-col tw-gap-4">
     <SetupStep index={1} title="Install it">
       <CommandBlock command={installCommand} shell={shell} />
     </SetupStep>
     <SetupStep index={2} title="Sign in">
-      <CommandBlock command="claude auth login --claudeai" shell={shell} />
+      <CommandBlock command={authCommand} shell={shell} />
       <p className="tw-my-0 tw-text-sm tw-text-muted">
         Copilot inherits whatever credentials the Claude Code CLI holds — there is no key to paste
         here.
@@ -40,11 +45,20 @@ export default meta;
 /** Copyable setup commands for a user-owned CLI. */
 export const CommandsOnly: StoryObj<SetupStepsStoryProps> = {};
 
-/** A one-liner installer that has to wrap without pushing Copy out of reach. */
+/** A one-liner installer that scrolls horizontally while Copy stays in reach. */
 export const LongCommand: StoryObj<SetupStepsStoryProps> = {
   args: {
     installCommand:
       "irm https://gist.githubusercontent.com/logancyang/7a87eb38d91015eac567521f8cc9c729/raw/install-claude-agent-mode-windows.ps1 | iex",
     shell: "powershell",
+  },
+};
+
+/** A sign-in command fixture with quoted macOS executable and profile paths. */
+export const LongPosixCommand: StoryObj<SetupStepsStoryProps> = {
+  args: {
+    authCommand:
+      "CLAUDE_CONFIG_DIR='/Users/Example/Library/Application Support/Claude profile' '/Applications/Claude Tools/claude' auth login --claudeai",
+    shell: "posix",
   },
 };
