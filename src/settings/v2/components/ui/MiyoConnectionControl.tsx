@@ -35,11 +35,13 @@ export const MiyoAvailabilityNotice: React.FC<MiyoAvailabilityNoticeProps> = ({
   if (available || checking) return null;
 
   return (
-    <div className="tw-flex tw-items-center tw-gap-2 tw-rounded-lg tw-border tw-border-solid tw-border-border tw-bg-secondary tw-px-3 tw-py-2.5 tw-text-xs tw-text-normal">
+    <div className="tw-flex tw-items-start tw-gap-2 tw-rounded-lg tw-border tw-border-solid tw-border-border tw-bg-secondary tw-px-3 tw-py-2.5 tw-text-left tw-text-xs tw-text-normal">
       <TriangleAlert className="tw-size-4 tw-shrink-0 tw-text-warning" />
-      {enabled
-        ? "Miyo is unavailable. Open it, then retry the connection above."
-        : "Connect to Miyo to configure these capabilities."}
+      <span className="tw-min-w-0 tw-flex-1">
+        {enabled
+          ? "Miyo is unavailable. Open it, then retry the connection above."
+          : "Connect to Miyo to configure these capabilities."}
+      </span>
     </div>
   );
 };
