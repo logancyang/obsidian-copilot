@@ -388,10 +388,6 @@ export class OpencodeBinaryManager extends ManagedBinaryManager<ProgressEvent, I
     return opencodeManagedDataDir(home);
   }
 
-  getPinnedVersion(): string {
-    return OPENCODE_PINNED_VERSION;
-  }
-
   /**
    * Full install pipeline: resolve target → fetch release metadata →
    * download → extract → atomic rename → persist settings. Idempotent when
