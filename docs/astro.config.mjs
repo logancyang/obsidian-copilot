@@ -25,7 +25,7 @@ const sidebar = [
   },
   {
     label: "Everyday tools",
-    items: [{ slug: "custom-commands" }, { slug: "chat-interface" }],
+    items: [{ slug: "custom-commands" }, { slug: "chat-interface" }, { slug: "relevant-notes" }],
   },
   {
     label: "Models, plans, and Miyo",
@@ -33,6 +33,7 @@ const sidebar = [
       { label: "Providers and BYOK", link: "/llm-providers/" },
       { label: "Model selection", link: "/models-and-parameters/" },
       { label: "Miyo and semantic search", link: "/vault-search-and-indexing/" },
+      { slug: "miyo-setup" },
       { label: "Copilot paid plans", link: "/copilot-plus-and-self-host/" },
     ],
   },

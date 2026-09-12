@@ -24,6 +24,7 @@ For most people, opencode is the best starting point. Copilot can install and ma
 
 - [Copilot Commands and Quick Ask](custom-commands.md) reuse prompts or work with selected text without leaving the editor.
 - [Quick Chat](chat-interface.md) handles lightweight conversations and is the main chat view on mobile, where Agent Chat is unavailable.
+- [Live Relevant Notes](relevant-notes.md) shows how to preview related notes, drag links into your writing, and add chat context.
 
 ## Models, plans, and Miyo
 
@@ -31,6 +32,7 @@ For most people, opencode is the best starting point. Copilot can install and ma
 - [Models, Effort, and Permissions](models-and-parameters.md) explains model selection, defaults, approval behavior, and reasoning effort.
 - [Miyo: Local-First Search and AI Ownership](vault-search-and-indexing.md) brings more powerful local-first search and AI ownership to your knowledge.
 - [Copilot Plans, Privacy, and Self-Hosting](copilot-plus-and-self-host.md) compares free and paid access, hosted features, privacy, and self-hosting.
+- [Connect Miyo with Copilot](miyo-setup.md) walks through setup with screenshots and short videos.
 
 ## Settings
 
