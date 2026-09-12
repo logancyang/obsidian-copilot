@@ -11,7 +11,6 @@ import { MODEL_SECRET_FIELDS, TOP_LEVEL_SECRET_FIELDS } from "@/services/setting
 import { isNotificationSoundId, type NotificationSoundId } from "@/utils/notificationSoundCatalog";
 import { type SortStrategy, isSortStrategy } from "@/utils/recentUsageManager";
 import {
-  AGENT_MAX_ITERATIONS_LIMIT,
   BUILTIN_CHAT_MODELS,
   DEFAULT_OPEN_AREA,
   DEFAULT_QA_EXCLUSIONS_SETTING,
@@ -190,7 +189,6 @@ export interface CopilotSettings {
   lexicalSearchRamLimit: number;
   /** Whether we have suggested built-in default commands to the user once. */
   suggestedDefaultCommands: boolean;
-  autonomousAgentMaxIterations: number;
   autonomousAgentEnabledToolIds: string[];
   /** Default reasoning effort for models that support it (GPT-5, O-series, etc.) */
   reasoningEffort: "minimal" | "low" | "medium" | "high";
@@ -1031,18 +1029,6 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   // Ensure enableCustomPromptTemplating has a default value
   if (typeof sanitizedSettings.enableCustomPromptTemplating !== "boolean") {
     sanitizedSettings.enableCustomPromptTemplating = DEFAULT_SETTINGS.enableCustomPromptTemplating;
-  }
-
-  // Ensure autonomousAgentMaxIterations has a valid value
-  const autonomousAgentMaxIterations = Number(settingsToSanitize.autonomousAgentMaxIterations);
-  if (
-    isNaN(autonomousAgentMaxIterations) ||
-    autonomousAgentMaxIterations < 4 ||
-    autonomousAgentMaxIterations > AGENT_MAX_ITERATIONS_LIMIT
-  ) {
-    sanitizedSettings.autonomousAgentMaxIterations = DEFAULT_SETTINGS.autonomousAgentMaxIterations;
-  } else {
-    sanitizedSettings.autonomousAgentMaxIterations = autonomousAgentMaxIterations;
   }
 
   // Ensure autonomousAgentEnabledToolIds is an array
