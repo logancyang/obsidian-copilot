@@ -26,8 +26,17 @@ Your choices survive restarts and skill refreshes, so unwanted built-ins stay di
 
 ![Your Skills and Built-in Skills in Copilot settings, with per-agent controls and copilot-youtube-transcript disabled](https://github.com/user-attachments/assets/3b5a42e1-51c6-499d-bbaa-db7bcaedde97)
 
+## Quick Chat follows your vault instructions
+
+Quick Chat now reads your vault-root **AGENTS.md** as its default instructions, the same file Agent Chat uses. Edit **Custom vault instructions** in Basic settings, and your next Quick Chat message uses the updated text. ([#3212](https://github.com/logancyang/obsidian-copilot/pull/3212), @zeroliu)
+
+Choosing a saved prompt under **System Prompt** still overrides the vault instructions, and **Reset** returns to AGENTS.md. If AGENTS.md is empty or missing, Quick Chat uses only its built-in instructions; the previous hidden default prompt no longer applies. ([#3212](https://github.com/logancyang/obsidian-copilot/pull/3212), @zeroliu)
+
+![Chat Settings with System Prompt set to Default (AGENTS.md)](https://github.com/user-attachments/assets/1f68a63d-eb14-441a-bd7d-801ecbd1b3ec)
+
 ## Enhancements
 
+- **Know when a Copilot update is available.** Obsidian shows a notice once per new release at startup, with a **View release notes** button. ([#3181](https://github.com/logancyang/obsidian-copilot/pull/3181), @zeroliu)
 - **Send an image without filler text.** Agent Chat accepts image-only messages with Send or Enter when the selected model supports images. ([#3169](https://github.com/logancyang/obsidian-copilot/pull/3169), @brevilabs-agent-bot)
 - **Choose Quick Chat models on mobile.** Basic settings now includes the default-model picker and enabled-model list. ([#3166](https://github.com/logancyang/obsidian-copilot/pull/3166), @zeroliu)
 - **Check whether your providers are reachable.** Opening BYOK or saving provider changes refreshes verification, with badges for missing keys, rejected credentials, and failed checks. ([#3164](https://github.com/logancyang/obsidian-copilot/pull/3164), @zeroliu)
@@ -36,6 +45,7 @@ Your choices survive restarts and skill refreshes, so unwanted built-ins stay di
 
 ## Fixes
 
+- **Quick Chat no longer stops early at its tool-call limit.** Tool loops now run up to 32 steps, so longer vault tasks finish instead of halting after four. ([#3211](https://github.com/logancyang/obsidian-copilot/pull/3211), @logancyang)
 - **Uploaded images stay in saved chats.** Quick Chat and Agent Chat transcripts embed images beside their messages and save the files using your vault's attachment setting. ([#3165](https://github.com/logancyang/obsidian-copilot/pull/3165), @zeroliu)
 - **Reopened Quick Chats keep saving to the original note.** Continuing a renamed conversation preserves new turns in the same history entry. ([#3158](https://github.com/logancyang/obsidian-copilot/pull/3158), @zeroliu)
 - **Stop also clears queued follow-ups.** Sending a new message afterward keeps its timer and Stop button visible while that turn runs. ([#3167](https://github.com/logancyang/obsidian-copilot/pull/3167), @zeroliu)
