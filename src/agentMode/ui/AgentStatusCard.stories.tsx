@@ -29,6 +29,7 @@ export const InstallAction: StoryObj<AgentStatusCardProps> = {
 
 export const IncompatibleWarning: StoryObj<AgentStatusCardProps> = {
   args: {
+    summary: "Very Long Local Agent Backend Name update required",
     tone: "warning",
     message:
       "Very Long Local Agent Backend Name 2.1.205 is not supported. Version 2.1.206 or newer is required.",
@@ -41,6 +42,7 @@ export const IncompatibleWarning: StoryObj<AgentStatusCardProps> = {
 
 export const LongErrorRetry: StoryObj<AgentStatusCardProps> = {
   args: {
+    summary: "Codex session error",
     tone: "error",
     message:
       "The agent could not start because its local connection closed before initialization completed. Check the backend configuration and try again.",
@@ -50,6 +52,7 @@ export const LongErrorRetry: StoryObj<AgentStatusCardProps> = {
 
 export const ManagedUpgradeRequired: StoryObj<AgentStatusCardProps> = {
   args: {
+    summary: "opencode update required",
     tone: "warning",
     message: "opencode v1.15.0 is not supported. Copilot requires opencode v1.16.0 or newer.",
     action: { label: "Upgrade", onClick: () => undefined },
@@ -58,6 +61,7 @@ export const ManagedUpgradeRequired: StoryObj<AgentStatusCardProps> = {
 
 export const ManagedUpgradeRunning: StoryObj<AgentStatusCardProps> = {
   args: {
+    summary: "Updating opencode…",
     tone: "warning",
     message: "Downloading opencode-darwin-arm64.zip 42%",
     action: { label: "Upgrading…", onClick: () => undefined, disabled: true },
@@ -66,6 +70,7 @@ export const ManagedUpgradeRunning: StoryObj<AgentStatusCardProps> = {
 
 export const ManagedUpgradeFailed: StoryObj<AgentStatusCardProps> = {
   args: {
+    summary: "opencode update failed",
     tone: "error",
     message: "GitHub API rate-limited. Retry after the limit resets.",
     action: { label: "Retry", onClick: () => undefined },
@@ -86,5 +91,15 @@ export const SignIn: StoryObj<AgentStatusCardProps> = {
   args: {
     message: "Codex not signed in",
     action: { label: "Sign in", onClick: () => undefined },
+  },
+};
+
+export const LongPathError: StoryObj<AgentStatusCardProps> = {
+  args: {
+    tone: "error",
+    summary: "Codex setup error",
+    message:
+      "Could not execute /Users/example/Library/Application Support/organization-workspace-with-an-unbroken-name/custom-agent-runtime/bin/codex-acp.\nCheck the configured binary path and executable permissions before trying again.\nEACCES: permission denied",
+    action: { label: "Configure Codex", onClick: () => undefined },
   },
 };
