@@ -63,18 +63,41 @@ describe("FanoutTurnView", () => {
   });
 
   it.each(["", "Partial summary"])(
-    "https://github.com/Brevilabs/obsidian-copilot-private/issues/219 shows the summary failure alongside any partial text: %s",
+    "https://github.com/Brevilabs/obsidian-copilot-private/issues/219 labels the failed summary incomplete and preserves partial text and completed answers (https://github.com/Brevilabs/obsidian-copilot-private/issues/425): %s",
     (partialText) => {
       const t = turn([answer("opencode", "done", "Successful answer")], partialText);
       t.summary.error = "Choose an explicit effort or update the Codex adapter.";
       renderView(t);
+      expect(screen.getByText("Summary incomplete")).toBeTruthy();
+      expect(
+        screen.getByText("Completed answers are available in the agent tabs above.")
+      ).toBeTruthy();
       expect(screen.getByText(t.summary.error)).toBeTruthy();
       expect(screen.queryByText("Summary unavailable")).toBeNull();
       if (partialText) expect(screen.getByTestId("agent-md").textContent).toBe(partialText);
       fireEvent.click(screen.getByRole("tab", { name: /opencode/ }));
       expect(screen.getByTestId("agent-md").textContent).toBe("Successful answer");
+      expect(screen.queryByText("Summary incomplete")).toBeNull();
+      fireEvent.click(screen.getByRole("tab", { name: "Summary" }));
+      expect(screen.getByText("Summary incomplete")).toBeTruthy();
+      if (partialText) expect(screen.getByTestId("agent-md").textContent).toBe(partialText);
     }
   );
+
+  it("does not promise completed answers when every agent failed or returned no text (https://github.com/Brevilabs/obsidian-copilot-private/issues/425)", () => {
+    const t = turn([
+      answer("opencode", "error", "Partial agent answer"),
+      answer("claude", "done", ""),
+    ]);
+    t.summary.error = "Summary failed.";
+    renderView(t);
+    expect(screen.getByText("Summary incomplete")).toBeTruthy();
+    expect(
+      screen.queryByText("Completed answers are available in the agent tabs above.")
+    ).toBeNull();
+    fireEvent.click(screen.getByRole("tab", { name: /opencode/ }));
+    expect(screen.getByTestId("agent-md").textContent).toBe("Partial agent answer");
+  });
 
   it("shows a pending placeholder when the summary has no text yet", () => {
     const t = turn([answer("opencode", "running")], "", "pending");

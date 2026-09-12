@@ -2,7 +2,7 @@ import { FanoutTurnView } from "@/agentMode/ui/FanoutTurnView";
 import { FANOUT_SUMMARY_OPTION } from "@/agentMode/ui/fanoutDropdown";
 import { useApp } from "@/context";
 import type { Meta, StoryObj } from "@/lib/story";
-import React from "react";
+import React, { useState } from "react";
 
 type Props = React.ComponentProps<typeof FanoutTurnView>;
 
@@ -15,18 +15,11 @@ export default meta;
 
 export const SummarySetupError: StoryObj<Props> = {
   render: function SummaryStory(args) {
-    return (
-      <FanoutTurnView
-        turn={args.turn!}
-        value={args.value!}
-        onSelect={args.onSelect!}
-        app={useApp()}
-      />
-    );
+    const [value, setValue] = useState(args.value ?? FANOUT_SUMMARY_OPTION);
+    return <FanoutTurnView turn={args.turn!} value={value} onSelect={setValue} app={useApp()} />;
   },
   args: {
     value: FANOUT_SUMMARY_OPTION,
-    onSelect: () => {},
     turn: {
       answers: {
         codex: { backendId: "codex", status: "done", text: "The notes support a weekly review." },
