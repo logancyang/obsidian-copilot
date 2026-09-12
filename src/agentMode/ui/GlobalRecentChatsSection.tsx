@@ -205,7 +205,7 @@ const RecentChatRow = memo(function RecentChatRow({
       role="button"
       tabIndex={0}
       className={cn(
-        "tw-group tw-flex tw-min-h-9 tw-cursor-pointer tw-items-center tw-gap-2 tw-rounded-md tw-px-2 tw-py-1.5",
+        "tw-group tw-flex tw-min-h-9 tw-cursor-pointer tw-items-start tw-gap-2 tw-rounded-md tw-px-2 tw-py-1.5",
         "tw-text-left tw-transition-colors hover:tw-bg-modifier-hover"
       )}
       onClick={() => onOpen(item.id)}
@@ -222,7 +222,10 @@ const RecentChatRow = memo(function RecentChatRow({
       }}
     >
       <ChatIconTile Icon={Icon} needsAttention={hasAttention} />
-      <RecentChatTitle title={item.title} />
+      <div className="tw-flex tw-min-w-0 tw-flex-1 tw-flex-col tw-gap-1">
+        <RecentChatTitle title={item.title} />
+        {projectName && <RecentChatProjectBadge name={projectName} />}
+      </div>
 
       {/* Relative time by default; a backgrounded running session shows an accent
           spinner in its place. The action cluster replaces either on hover or
@@ -231,7 +234,6 @@ const RecentChatRow = memo(function RecentChatRow({
           users (focusing the row reveals them, so Tab can move into them) —
           on hover alone they'd stay `display:none` and out of the tab order. */}
       <div className="tw-flex tw-shrink-0 tw-items-center tw-gap-1.5">
-        {projectName && <RecentChatProjectBadge name={projectName} />}
         {isRunning ? (
           <LoaderCircle
             className={cn(

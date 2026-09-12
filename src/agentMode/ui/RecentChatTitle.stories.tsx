@@ -24,13 +24,15 @@ const ChatRowFrame = ({
   time = "2h",
   ...props
 }: ChatRowFrameProps): React.ReactElement => (
-  <div className="tw-flex tw-min-h-9 tw-w-full tw-items-center tw-gap-2 tw-rounded-md tw-px-2 tw-py-1.5">
+  <div className="tw-flex tw-min-h-9 tw-w-full tw-items-start tw-gap-2 tw-rounded-md tw-px-2 tw-py-1.5">
     <span className="tw-flex tw-size-6 tw-shrink-0 tw-items-center tw-justify-center tw-rounded-md tw-bg-secondary tw-text-muted">
       <MessageCircle className="tw-size-4" />
     </span>
-    <RecentChatTitle title={title} {...props} />
-    <div className="tw-flex tw-shrink-0 tw-items-center tw-gap-1.5">
+    <div className="tw-flex tw-min-w-0 tw-flex-1 tw-flex-col tw-gap-1">
+      <RecentChatTitle title={title} {...props} />
       {projectName && <RecentChatProjectBadge name={projectName} />}
+    </div>
+    <div className="tw-flex tw-shrink-0 tw-items-center tw-gap-1.5">
       <span className="tw-shrink-0 tw-whitespace-nowrap tw-text-xs tw-text-muted">{time}</span>
     </div>
   </div>
@@ -43,7 +45,7 @@ const meta = {
 } satisfies Meta<ChatRowFrameProps>;
 export default meta;
 
-/** Project ownership remains visible in the right-aligned timestamp cluster. */
+/** Project ownership appears below the conversation title, apart from the timestamp. */
 export const ProjectBadge: StoryObj<ChatRowFrameProps> = {
   args: {
     title: PROJECT_TITLE,
@@ -52,7 +54,7 @@ export const ProjectBadge: StoryObj<ChatRowFrameProps> = {
   render: ({ title = PROJECT_TITLE, ...args }) => <ChatRowFrame title={title} {...args} />,
 };
 
-/** Long titles fill the space before a capped project badge and timestamp. */
+/** Same-prefix titles keep their distinguishing endings visible above long project names. */
 export const OverflowStress: StoryObj<ChatRowFrameProps> = {
   args: {
     title: OVERFLOW_TITLE,
@@ -61,8 +63,8 @@ export const OverflowStress: StoryObj<ChatRowFrameProps> = {
   render: ({ title = OVERFLOW_TITLE, projectName = OVERFLOW_PROJECT_NAME, ...args }) => (
     <div className="tw-flex tw-w-full tw-flex-col tw-divide-y tw-divide-border">
       <ChatRowFrame title={title} projectName={projectName} {...args} />
-      <ChatRowFrame title="Homepage copy" projectName={projectName} />
-      <ChatRowFrame title={title} projectName="Research" />
+      <ChatRowFrame title={`${title}: pricing and packaging`} projectName={projectName} />
+      <ChatRowFrame title={`${title}: navigation and onboarding`} projectName="Research" />
       <ChatRowFrame title={title} />
     </div>
   ),
