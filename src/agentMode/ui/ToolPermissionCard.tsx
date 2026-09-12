@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { extractDiffContents, formatAgentInput, renderDiff } from "@/agentMode/ui/diffRender";
 import type {
@@ -6,15 +7,20 @@ import type {
   PermissionOptionKind,
   PermissionPrompt,
 } from "@/agentMode/session/types";
-import { PERMISSION_OPTION_KINDS } from "@/agentMode/session/types";
 import { ShieldQuestion } from "lucide-react";
-import React, { useMemo, useState } from "react";
+import React, { useId, useMemo, useState } from "react";
 
 interface ToolPermissionCardProps {
   request: PermissionPrompt;
   onResolve: (toolCallId: string, optionId: string) => void;
 }
 
+const ACTION_ORDER: readonly PermissionOptionKind[] = [
+  "allow_once",
+  "reject_once",
+  "allow_always",
+  "reject_always",
+];
 const EMPTY_OPTION_NAMES: readonly string[] = Object.freeze([]);
 
 /**
@@ -31,6 +37,7 @@ const EMPTY_OPTION_NAMES: readonly string[] = Object.freeze([]);
  */
 export const ToolPermissionCard: React.FC<ToolPermissionCardProps> = ({ request, onResolve }) => {
   const { toolCall, options } = request;
+  const scopeId = useId();
   const [busy, setBusy] = useState(false);
   const orderedOptions = useMemo(() => sortOptions(options), [options]);
   const optionNames = useMemo(() => disambiguateOptionNames(orderedOptions), [orderedOptions]);
@@ -45,7 +52,7 @@ export const ToolPermissionCard: React.FC<ToolPermissionCardProps> = ({ request,
   };
 
   return (
-    <div className="tw-w-full tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-secondary">
+    <div className="tw-w-full tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-secondary tw-@container/permission-card">
       <div className="copilot-divider-b tw-flex tw-items-center tw-gap-2 tw-px-3 tw-py-2">
         <ShieldQuestion className="tw-size-4 tw-shrink-0 tw-text-accent" />
         <div className="tw-truncate tw-text-sm tw-font-medium">Permission required</div>
@@ -86,21 +93,47 @@ export const ToolPermissionCard: React.FC<ToolPermissionCardProps> = ({ request,
         ) : null}
       </div>
 
-      <div className="copilot-divider-t tw-flex tw-flex-wrap tw-items-center tw-justify-end tw-gap-2 tw-px-3 tw-py-2">
+      <div className="copilot-divider-t tw-grid tw-grid-cols-1 tw-gap-2 tw-px-3 tw-py-2 @sm/permission-card:tw-grid-cols-2">
         <TooltipProvider delayDuration={0}>
           {orderedOptions.map((option, index) => {
+            const persistent = option.kind === "allow_always" || option.kind === "reject_always";
+            const descriptionId = `${scopeId}-${index}`;
             const button = (
               <Button
                 key={option.optionId}
                 variant={variantForKind(option.kind)}
                 size="sm"
-                className="tw-h-auto tw-min-h-6 tw-min-w-0 tw-max-w-full tw-whitespace-normal"
+                className={cn(
+                  "tw-h-auto tw-min-w-0 tw-max-w-full tw-whitespace-normal",
+                  persistent ? "tw-min-h-6" : "tw-min-h-8"
+                )}
+                aria-describedby={persistent ? descriptionId : undefined}
                 disabled={busy}
                 onClick={() => choose(option.optionId)}
               >
                 <span className="tw-min-w-0 tw-break-all">{optionNames[index]}</span>
               </Button>
             );
+
+            // Persistent scope is backend-specific; do not imply a shared vault or
+            // session lifetime. https://github.com/Brevilabs/obsidian-copilot-private/issues/405
+            if (persistent) {
+              return (
+                <div
+                  key={option.optionId}
+                  className="tw-col-span-full tw-flex tw-min-w-0 tw-flex-col tw-items-start tw-gap-1 tw-pt-2"
+                >
+                  <p
+                    id={descriptionId}
+                    className="tw-m-0 tw-whitespace-pre-wrap tw-break-words tw-text-xs tw-text-muted"
+                  >
+                    {option.description ||
+                      "Applies beyond this request. The agent did not specify its scope."}
+                  </p>
+                  {button}
+                </div>
+              );
+            }
 
             if (!option.description) return button;
 
@@ -122,32 +155,14 @@ export const ToolPermissionCard: React.FC<ToolPermissionCardProps> = ({ request,
   );
 };
 
-/**
- * Map `PermissionOptionKind` to a Button variant. "Once" actions stay neutral
- * so neither answer feels pre-selected. "Always" actions get visual weight
- * (accent for allow, red for deny) — those are the choices the user should
- * think harder about, since they persist beyond this turn.
- */
-function variantForKind(kind: PermissionOptionKind): "default" | "secondary" | "destructive" {
-  switch (kind) {
-    case "allow_once":
-    case "reject_once":
-      return "secondary";
-    case "allow_always":
-      return "default";
-    case "reject_always":
-      return "destructive";
-  }
+/** Temporary approval is the primary action; persistent choices stay quiet. */
+function variantForKind(kind: PermissionOptionKind): "default" | "secondary" {
+  return kind === "allow_once" ? "default" : "secondary";
 }
 
-/**
- * Show allow_once first (the safe default), then allow_always, then reject
- * variants. Keeps the most-used action under the user's mouse.
- */
+/** Keep temporary decisions together in both visual and keyboard order. */
 function sortOptions(options: PermissionOption[]): PermissionOption[] {
-  return [...options].sort(
-    (a, b) => PERMISSION_OPTION_KINDS.indexOf(a.kind) - PERMISSION_OPTION_KINDS.indexOf(b.kind)
-  );
+  return [...options].sort((a, b) => ACTION_ORDER.indexOf(a.kind) - ACTION_ORDER.indexOf(b.kind));
 }
 
 function disambiguateOptionNames(options: PermissionOption[]): readonly string[] {
