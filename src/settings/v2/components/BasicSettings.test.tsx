@@ -69,6 +69,7 @@ jest.mock("@/utils/vaultPath", () => ({ getVaultBase: () => "/abs/vault" }));
 // Capture ConfirmModal construction so a test can fire its confirm callback.
 let capturedOnConfirm: (() => void) | null = null;
 let capturedConfirmButtonText = "";
+let capturedOnCancel: (() => void) | null = null;
 const modalCtor = jest.fn((onConfirm: () => void, confirmButtonText: string) => {
   capturedOnConfirm = onConfirm;
   capturedConfirmButtonText = confirmButtonText;
@@ -81,9 +82,12 @@ jest.mock("@/components/modals/ConfirmModal", () => ({
       onConfirm: () => void,
       _content: unknown,
       _title: string,
-      confirmButtonText: string
+      confirmButtonText: string,
+      _cancelButtonText: string,
+      onCancel?: () => void
     ) {
       modalCtor(onConfirm, confirmButtonText);
+      capturedOnCancel = onCancel ?? null;
     }
   },
 }));
@@ -92,6 +96,7 @@ describe("BasicSettings", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     capturedOnConfirm = null;
+    capturedOnCancel = null;
     capturedConfirmButtonText = "";
     settingsStore.set(settingsAtom, { ...DEFAULT_SETTINGS, copilotFolder: "copilot" });
     copilotRootContainsNotes.mockReturnValue(false);
@@ -191,11 +196,23 @@ describe("BasicSettings", () => {
     fireEvent.click(screen.getByRole("button", { name: "Apply Copilot folder" }));
 
     expect(modalCtor).toHaveBeenCalledTimes(1);
-    expect(capturedConfirmButtonText).toBe("Use folder");
+    expect(capturedConfirmButtonText).toBe("Change folder");
     expect(applyCopilotRootChange).not.toHaveBeenCalled();
 
     capturedOnConfirm?.();
     expect(applyCopilotRootChange).toHaveBeenCalledWith(expect.anything(), "existing");
+  });
+
+  it("cancels a folder change without applying it and restores the saved path (https://github.com/Brevilabs/obsidian-copilot-private/issues/409)", () => {
+    copilotRootContainsNotes.mockReturnValue(true);
+    render(<BasicSettings />);
+    fireEvent.change(screen.getByLabelText("Copilot folder"), { target: { value: "existing" } });
+    fireEvent.click(screen.getByRole("button", { name: "Apply Copilot folder" }));
+    expect(capturedOnCancel).not.toBeNull();
+    act(() => capturedOnCancel?.());
+    expect(applyCopilotRootChange).not.toHaveBeenCalled();
+    expect(screen.getByLabelText<HTMLInputElement>("Copilot folder").value).toBe("copilot");
+    expect(settingsStore.get(settingsAtom).copilotFolder).toBe("copilot");
   });
 
   it("still warns when the non-empty folder is a previously used Copilot root", () => {
@@ -211,7 +228,7 @@ describe("BasicSettings", () => {
 
     expect(copilotRootContainsNotes).toHaveBeenCalledWith(expect.anything(), "old-root");
     expect(modalCtor).toHaveBeenCalledTimes(1);
-    expect(capturedConfirmButtonText).toBe("Use folder");
+    expect(capturedConfirmButtonText).toBe("Change folder");
   });
 
   it("opens the confirm modal for a valid new root and applies the change on confirm", () => {

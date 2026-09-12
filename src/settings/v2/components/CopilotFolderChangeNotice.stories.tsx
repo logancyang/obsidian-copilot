@@ -21,3 +21,11 @@ export const EmptyFolder: StoryObj<CopilotFolderChangeNoticeProps> = {};
 export const FolderWithMarkdown: StoryObj<CopilotFolderChangeNoticeProps> = {
   args: { containsMarkdown: true },
 };
+
+export const LongFolderPaths: StoryObj<CopilotFolderChangeNoticeProps> = {
+  args: {
+    oldRoot: "Projects/Research/Archived Copilot Conversations and Saved Agent Context",
+    newRoot: "90 System/organization-workspace-with-a-long-unbroken-folder-name/copilot-data",
+    containsMarkdown: true,
+  },
+};
