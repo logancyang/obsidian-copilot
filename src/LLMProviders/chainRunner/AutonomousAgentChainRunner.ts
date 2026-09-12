@@ -594,7 +594,9 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
       applyCiCOrderingToLocalSearchResult,
     } = params;
 
-    const maxIterations = getSettings().autonomousAgentMaxIterations;
+    // Every installation gets the same bound, regardless of obsolete persisted limits.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/428
+    const maxIterations = 32;
     const collectedSources: AgentSource[] = [];
     const loopStartTime = Date.now();
 
