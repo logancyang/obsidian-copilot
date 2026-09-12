@@ -28,19 +28,17 @@ export const SkillLoadIssues: React.FC<SkillLoadIssuesProps> = ({ issues, onView
 
   return (
     <section
-      className="tw-flex tw-items-center tw-justify-between tw-gap-3 tw-rounded-sm tw-border tw-border-solid tw-p-3 tw-text-ui-smaller tw-bg-warning/10 tw-border-warning/40"
+      className="tw-flex tw-flex-col tw-items-start tw-gap-3 tw-rounded-sm tw-border tw-border-solid tw-p-3 tw-text-ui-smaller tw-bg-warning/10 tw-border-warning/40"
       role="alert"
       aria-label={title}
     >
-      <div className="tw-min-w-0">
+      <div className="tw-w-full tw-min-w-0">
         <strong className="tw-block tw-text-ui-small tw-text-warning">{title}</strong>
         <p className="tw-mx-0 tw-mb-0 tw-mt-0.5 tw-text-normal">The skills have format errors.</p>
       </div>
-      <div className="tw-flex tw-shrink-0 tw-gap-1">
-        <Button variant="secondary" size="sm" onClick={onViewDetails}>
-          View details
-        </Button>
-      </div>
+      <Button variant="secondary" size="sm" onClick={onViewDetails}>
+        View details
+      </Button>
     </section>
   );
 };
@@ -80,7 +78,7 @@ export const SkillLoadIssuesModalContent: React.FC<SkillLoadIssuesModalContentPr
             className="tw-border-x-0 tw-border-b-0 tw-border-t tw-border-solid tw-py-3 tw-border-warning/30"
             key={issue.location}
           >
-            <div className="tw-break-words tw-font-mono tw-text-ui-small tw-font-semibold tw-text-normal">
+            <div className="tw-select-text tw-font-mono tw-text-ui-small tw-font-semibold tw-text-normal [overflow-wrap:anywhere]">
               {issue.location}
             </div>
             <p className="tw-mx-0 tw-mb-0 tw-mt-1 tw-text-ui-smaller tw-text-muted">
@@ -93,16 +91,18 @@ export const SkillLoadIssuesModalContent: React.FC<SkillLoadIssuesModalContentPr
                 </code>
               </ClampedContent>
             )}
-            <div className="tw-mt-2 tw-flex tw-gap-1">
+            <div className="tw-mt-2 tw-flex tw-flex-col tw-items-start tw-gap-2">
               <Button variant="secondary" size="sm" onClick={() => runAction(issue.onFixWithAgent)}>
                 Fix with Agent
               </Button>
-              <Button variant="ghost2" size="sm" onClick={() => runAction(issue.onOpen)}>
-                Open SKILL.md
-              </Button>
-              <Button variant="ghost2" size="sm" onClick={() => runAction(issue.onReveal)}>
-                {issue.revealLabel}
-              </Button>
+              <div className="tw-flex tw-flex-wrap tw-gap-1">
+                <Button variant="ghost2" size="sm" onClick={() => runAction(issue.onOpen)}>
+                  Open SKILL.md
+                </Button>
+                <Button variant="ghost2" size="sm" onClick={() => runAction(issue.onReveal)}>
+                  {issue.revealLabel}
+                </Button>
+              </div>
             </div>
           </article>
         ))}
