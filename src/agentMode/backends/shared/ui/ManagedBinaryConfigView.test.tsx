@@ -79,6 +79,66 @@ const renderView = (
 
 describe("ManagedBinaryConfigView", () => {
   describe("ManagedBinaryConfigView()", () => {
+    it.each<Partial<ManagedBinaryConfigViewProps>>([
+      {},
+      { state: { kind: "checking", source: "managed" } },
+      { state: { kind: "ready", source: "managed" }, authStatus: null },
+      { state: { kind: "ready", source: "managed" }, authStatus: { signedIn: false } },
+      {
+        state: { kind: "ready", source: "managed" },
+        managed: { ...MANAGED, run: { kind: "running", label: "Downloading…" } },
+      },
+      { state: OUTDATED, upgradeRun: { kind: "running", label: "Updating…" } },
+    ])(
+      "keeps incomplete setup dismissible as Close for %j (https://github.com/Brevilabs/obsidian-copilot-private/issues/407)",
+      (overrides) => {
+        const onClose = jest.fn();
+        const { actions } = renderView({ ...overrides, onClose });
+        expect(screen.queryByRole("button", { name: "Done" })).toBeNull();
+        fireEvent.click(screen.getByRole("button", { name: "Close" }));
+        expect(onClose).toHaveBeenCalledTimes(1);
+        expect(actions.cancelInstall).not.toHaveBeenCalled();
+        expect(actions.uninstall).not.toHaveBeenCalled();
+      }
+    );
+
+    it.each([undefined, { signedIn: true }])(
+      "offers Done for a ready binary with satisfied or unnecessary authentication %j (https://github.com/Brevilabs/obsidian-copilot-private/issues/407)",
+      (authStatus) => {
+        const onClose = jest.fn();
+        renderView({
+          state: { kind: "ready", source: "managed" },
+          activeSource: "managed",
+          authStatus,
+          onClose,
+        });
+        expect(screen.queryByRole("button", { name: "Close" })).toBeNull();
+        fireEvent.click(screen.getByRole("button", { name: "Done" }));
+        expect(onClose).toHaveBeenCalledTimes(1);
+      }
+    );
+
+    it("shows Checking during non-cancellable configuration without preventing Close (https://github.com/Brevilabs/obsidian-copilot-private/issues/407)", () => {
+      const onClose = jest.fn();
+      renderView({
+        managed: { ...MANAGED, canCancel: false, run: { kind: "running", label: "Configuring…" } },
+        onClose,
+      });
+      expect(screen.queryByText("Not set up")).toBeNull();
+      expect(screen.getByText("Checking…")).toBeTruthy();
+      expect(screen.getByText("Configuring…")).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Close" }));
+      expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    it("shows Installing instead of a stale readiness badge while keeping upgrade warnings (https://github.com/Brevilabs/obsidian-copilot-private/issues/407)", () => {
+      renderView({ state: OUTDATED, upgradeRun: { kind: "running", label: "Updating…" } });
+      expect(screen.getByText("Installing…")).toBeTruthy();
+      expect(screen.queryByText("Upgrade required")).toBeNull();
+      expect(screen.getByRole("alert").textContent).toContain(OUTDATED.message);
+    });
+
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/398 discards detection after leaving the custom binary control", async () => {
       let finishDetection!: (path: string) => void;
       const actions = makeActions();
@@ -251,24 +311,27 @@ describe("ManagedBinaryConfigView", () => {
       expect(screen.getByRole("button", { name: "Download & install" })).toBeTruthy();
     });
 
-    it("renders the path field with Auto-detect and Apply when no custom path is set (https://github.com/Brevilabs/obsidian-copilot-private/issues/368)", async () => {
-      const { actions } = renderView({ source: "custom" });
+    it.each([null, "managed"] as const)(
+      "keeps path detection and Apply available with active source %s (https://github.com/Brevilabs/obsidian-copilot-private/issues/407)",
+      async (activeSource) => {
+        const { actions } = renderView({ source: "custom", activeSource });
 
-      const input = screen.getByPlaceholderText<HTMLInputElement>("/absolute/path/to/opencode");
-      expect(input.value).toBe("");
-      expect(screen.queryByRole("button", { name: "Clear" })).toBeNull();
+        const input = screen.getByPlaceholderText<HTMLInputElement>("/absolute/path/to/opencode");
+        expect(input.value).toBe("");
+        expect(screen.queryByRole("button", { name: "Clear" })).toBeNull();
 
-      fireEvent.change(input, { target: { value: "/usr/local/bin/opencode" } });
-      await act(async () => {
-        fireEvent.click(screen.getByRole("button", { name: "Apply" }));
-      });
-      expect(actions.saveCustomPath).toHaveBeenCalledWith("/usr/local/bin/opencode");
+        fireEvent.change(input, { target: { value: "/usr/local/bin/opencode" } });
+        await act(async () => {
+          fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+        });
+        expect(actions.saveCustomPath).toHaveBeenCalledWith("/usr/local/bin/opencode");
 
-      await act(async () => {
-        fireEvent.click(screen.getByRole("button", { name: "Auto-detect" }));
-      });
-      expect(actions.detectCustomPath).toHaveBeenCalledTimes(1);
-    });
+        await act(async () => {
+          fireEvent.click(screen.getByRole("button", { name: "Auto-detect" }));
+        });
+        expect(actions.detectCustomPath).toHaveBeenCalledTimes(1);
+      }
+    );
 
     it("offers Clear instead of Apply once a custom path is applied (https://github.com/Brevilabs/obsidian-copilot-private/issues/368)", async () => {
       const { actions } = renderView({

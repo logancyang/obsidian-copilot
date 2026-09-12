@@ -340,3 +340,12 @@ export const ManagedSignOutFailed: StoryObj<CodexConfigViewProps> = {
     auth: { ...meta.args.auth, status: { signedIn: true }, failed: true },
   },
 };
+
+/** Retained managed files remain maintenance after the active custom adapter is signed in. */
+export const RetainedManagedDownloadsReady: StoryObj<CodexConfigViewProps> = {
+  render: InteractiveConfigView,
+  args: {
+    ...RetainedManagedDownloads.args,
+    auth: { ...meta.args.auth, status: { signedIn: true, label: "user@example.com" } },
+  },
+};

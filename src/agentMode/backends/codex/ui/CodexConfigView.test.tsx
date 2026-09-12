@@ -53,6 +53,32 @@ const renderView = (overrides: Partial<CodexConfigViewProps> = {}) => {
 
 describe("CodexConfigView", () => {
   describe("CodexConfigView()", () => {
+    it("keeps dismissal separate from install and sign-in until Codex is ready (https://github.com/Brevilabs/obsidian-copilot-private/issues/407)", () => {
+      const { props, actions, rerender } = renderView();
+      const onSignIn = jest.fn();
+      expect(screen.getByRole("heading", { name: "Installation management" })).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Done" })).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Download & install" }));
+      expect(actions.install).toHaveBeenCalledTimes(1);
+      const installed = {
+        ...props,
+        state: { kind: "ready", source: "managed" } as const,
+        activeSource: "managed" as const,
+        auth: { ...props.auth, onSignIn },
+      };
+      rerender(<CodexConfigView {...installed} />);
+      fireEvent.click(screen.getByRole("button", { name: "Sign in with your browser" }));
+      expect(onSignIn).toHaveBeenCalledTimes(1);
+      fireEvent.click(screen.getByRole("button", { name: "Close" }));
+      expect(props.onClose).toHaveBeenCalledTimes(1);
+      rerender(
+        <CodexConfigView {...installed} auth={{ ...installed.auth, status: { signedIn: true } }} />
+      );
+      expect(screen.queryByRole("button", { name: "Close" })).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Done" }));
+      expect(props.onClose).toHaveBeenCalledTimes(2);
+    });
+
     it(`uses the same mutually exclusive source tabs as OpenCode without mutating the install: ${ISSUE}`, () => {
       const { actions, onSourceChange, rerender, props } = renderView();
       expect(screen.getByRole("radiogroup", { name: "codex-acp binary source" })).toBeTruthy();
@@ -169,7 +195,7 @@ describe("CodexConfigView", () => {
         managed: { ...MANAGED, run: { kind: "running", label: "Installing…", percent: 30 } },
       });
       expect(screen.getByRole("progressbar")).toBeTruthy();
-      expect(screen.getByText("Installing…")).toBeTruthy();
+      expect(screen.getAllByText("Installing…")).toHaveLength(2);
       expect(screen.getByRole<HTMLButtonElement>("radio", { name: "My own binary" }).disabled).toBe(
         true
       );

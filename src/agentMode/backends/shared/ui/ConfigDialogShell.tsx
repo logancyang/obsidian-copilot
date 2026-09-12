@@ -11,6 +11,8 @@ interface ConfigDialogShellProps {
   state: InstallState;
   /** Account status for auth-capable agents; null while probing. */
   authStatus?: BackendAuthStatus | null;
+  /** In-flight setup status; leaves the underlying readiness and warning intact. */
+  status?: React.ReactNode;
   /** Blocking-condition strip below the header — compose <ConfigWarningStrip>. */
   warning?: React.ReactNode;
   /** Ordered body sections — compose <ConfigSection> children. */
@@ -35,6 +37,7 @@ export const ConfigDialogShell: React.FC<ConfigDialogShellProps> = ({
   title,
   state,
   authStatus,
+  status,
   warning,
   children,
   footer,
@@ -45,7 +48,9 @@ export const ConfigDialogShell: React.FC<ConfigDialogShellProps> = ({
       <h3 className="tw-m-0 tw-text-ui-medium tw-font-semibold tw-leading-tight tw-text-normal">
         {title}
       </h3>
-      <ConfigStatusBadge state={state} authStatus={authStatus} />
+      {/* Operations must not show a stale Not set up or Ready badge.
+          https://github.com/Brevilabs/obsidian-copilot-private/issues/407 */}
+      {status ?? <ConfigStatusBadge state={state} authStatus={authStatus} />}
     </div>
     {(state.kind === "incompatible" || state.kind === "error") && warning && (
       <div className="tw-px-4 tw-pb-3">{warning}</div>

@@ -176,3 +176,9 @@ export const LongDestination: StoryObj<ManagedBinaryConfigViewProps> = {
     },
   },
 };
+
+/** A completed download still waits for the configured binary to pass its readiness probe. */
+export const CheckingInstallation: StoryObj<ManagedBinaryConfigViewProps> = {
+  render: InteractiveConfigView,
+  args: { state: { kind: "checking", source: "managed" }, activeSource: "managed" },
+};

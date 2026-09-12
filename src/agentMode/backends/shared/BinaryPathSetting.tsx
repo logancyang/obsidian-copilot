@@ -11,6 +11,8 @@ interface Props {
   binaryName: string;
   placeholder: string;
   initialPath: string;
+  /** Keep optional path maintenance quieter than the surrounding setup action. */
+  secondaryActions?: boolean;
   /** Whether `initialPath` is a saved override rather than a resolved default. */
   hasPersistedPath?: boolean;
   /** Optional hint surfaced when auto-detect finds nothing. */
@@ -50,6 +52,7 @@ export const BinaryPathSetting: React.FC<Props> = ({
   binaryName,
   placeholder,
   initialPath,
+  secondaryActions = false,
   hasPersistedPath = initialPath.trim() !== "",
   notFoundHint,
   onSave,
@@ -164,9 +167,11 @@ export const BinaryPathSetting: React.FC<Props> = ({
         >
           Auto-detect
         </Button>
+        {/* An existing installation leaves sign-in or Done as the setup action.
+            https://github.com/Brevilabs/obsidian-copilot-private/issues/407 */}
         {showClear ? (
           <Button
-            variant="destructive"
+            variant={secondaryActions ? "secondary" : "destructive"}
             size="default"
             onClick={safeAsyncHandler(clear)}
             disabled={busy}
@@ -175,7 +180,7 @@ export const BinaryPathSetting: React.FC<Props> = ({
           </Button>
         ) : showApply ? (
           <Button
-            variant="default"
+            variant={secondaryActions ? "secondary" : "default"}
             size="default"
             onClick={safeAsyncHandler(apply)}
             disabled={busy}
