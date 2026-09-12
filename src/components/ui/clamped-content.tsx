@@ -69,7 +69,7 @@ export const ClampedContent: React.FC<ClampedContentProps> = ({ collapsedClassNa
             size="fit"
             aria-controls={contentId}
             aria-expanded={isExpanded}
-            className="tw--ml-1 tw-py-1"
+            className="tw-px-0 tw-py-1 focus-visible:tw-ring-inset"
             onClick={() => setIsExpanded((expanded) => !expanded)}
           >
             {isExpanded ? "Show less" : "Show more"}
