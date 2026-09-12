@@ -1,6 +1,7 @@
+import { ToolDiffPreview } from "@/agentMode/ui/ToolDiffPreview";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { extractDiffContents, formatAgentInput, renderDiff } from "@/agentMode/ui/diffRender";
+import { extractDiffContents, formatAgentInput } from "@/agentMode/ui/diffRender";
 import type {
   PermissionOption,
   PermissionOptionKind,
@@ -70,9 +71,7 @@ export const ToolPermissionCard: React.FC<ToolPermissionCardProps> = ({ request,
                 className="tw-rounded tw-border tw-border-solid tw-border-border tw-p-2"
               >
                 <p className="tw-mb-1 tw-font-mono tw-text-xs tw-text-muted">{d.path}</p>
-                <pre className="tw-max-h-48 tw-overflow-auto tw-whitespace-pre-wrap tw-text-xs">
-                  {renderDiff(d.oldText, d.newText)}
-                </pre>
+                <ToolDiffPreview oldText={d.oldText} newText={d.newText} />
               </div>
             ))}
           </div>

@@ -1,3 +1,4 @@
+import { renderDiff } from "@/agentMode/ui/diffRender";
 import type { LucideIcon } from "lucide-react";
 import { Bot, MessageCircleQuestion } from "lucide-react";
 import { pickToolIcon } from "@/agentMode/ui/toolIcons";
@@ -211,10 +212,12 @@ function diffStats(part: ToolCallPart): { added: number; removed: number } {
   let removed = 0;
   for (const o of part.output ?? []) {
     if (o.type !== "diff") continue;
-    if (o.oldText !== null) {
-      removed += o.oldText.split("\n").length;
+    // Count the same changed lines shown in the review, not the complete snapshots:
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/350
+    for (const line of renderDiff(o.oldText, o.newText).split("\n")) {
+      if (line.startsWith("-")) removed++;
+      if (line.startsWith("+")) added++;
     }
-    added += o.newText.split("\n").length;
   }
   return { added, removed };
 }
