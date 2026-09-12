@@ -260,7 +260,7 @@ describe("AgentTrail", () => {
       turnStopReason: undefined,
     });
 
-    fireEvent.click(screen.getByRole("button", { name: /read 1 file/i }));
+    fireEvent.click(screen.getByRole("button", { name: /1 file read/i }));
 
     // The expanded member must report the same in-flight state the collapsed
     // live row did — not flip to a finished "Thought for" block.
@@ -287,7 +287,7 @@ describe("AgentTrail", () => {
         turnStopReason: undefined,
       });
 
-      expect(screen.getByText("Ran 1 command, read 1 file, thought for 18s")).toBeTruthy();
+      expect(screen.getByText("1 command · 1 file read · 18s thinking")).toBeTruthy();
       expect(screen.queryByText("Reasoning")).toBeNull();
     } finally {
       jest.useRealTimers();
@@ -325,8 +325,8 @@ describe("AgentTrail", () => {
     // Both runs around it stay folded into their own summary rows. The first
     // group's reasoning went unmeasured (the clock only runs at the live edge),
     // so its line names the tool work alone.
-    expect(screen.getByText("Ran 1 command, read 1 file")).toBeTruthy();
-    expect(screen.getByText("Ran 2 commands, read 1 file")).toBeTruthy();
+    expect(screen.getByText("1 command · 1 file read")).toBeTruthy();
+    expect(screen.getByText("2 commands · 1 file read")).toBeTruthy();
   });
 
   it("keeps a group the user opened open as more parts stream into it", () => {
@@ -336,7 +336,7 @@ describe("AgentTrail", () => {
       turnStopReason: undefined,
     });
 
-    fireEvent.click(screen.getByRole("button", { name: /read 1 file/i }));
+    fireEvent.click(screen.getByRole("button", { name: /1 file read/i }));
     expect(screen.getByText("Read notes/a.md")).toBeTruthy();
 
     rerenderTrail({
@@ -345,7 +345,7 @@ describe("AgentTrail", () => {
       turnStopReason: undefined,
     });
 
-    const grown = screen.getByRole("button", { name: /read 2 files/i });
+    const grown = screen.getByRole("button", { name: /2 files read/i });
     expect(grown.getAttribute("aria-expanded")).toBe("true");
     expect(screen.getByText("Read notes/b.md")).toBeTruthy();
   });
@@ -365,7 +365,7 @@ describe("AgentTrail", () => {
     fireEvent.click(screen.getByText('Explore · "Look around"'));
 
     expect(screen.getByText("2 tools")).toBeTruthy();
-    expect(screen.getByText("Ran 2 commands, read 1 file")).toBeTruthy();
+    expect(screen.getByText("2 commands · 1 file read")).toBeTruthy();
   });
 
   it("keeps an opened tool visible when streaming turns it into a group", () => {
@@ -388,7 +388,7 @@ describe("AgentTrail", () => {
       turnStopReason: undefined,
     });
 
-    const group = screen.getByRole("button", { name: /Ran 2 commands, read 1 file/ });
+    const group = screen.getByRole("button", { name: /2 commands · 1 file read/ });
     expect(group.getAttribute("aria-expanded")).toBe("true");
     expect(screen.getByText("file contents")).toBeTruthy();
 
@@ -413,10 +413,10 @@ describe("AgentTrail", () => {
       ],
     });
 
-    fireEvent.click(screen.getByRole("button", { name: /Ran 2 commands, read 1 file/ }));
+    fireEvent.click(screen.getByRole("button", { name: /2 commands · 1 file read/ }));
     fireEvent.click(screen.getByText('Explore · "Look around"'));
 
-    const groups = screen.getAllByRole("button", { name: /Ran 2 commands, read 1 file/ });
+    const groups = screen.getAllByRole("button", { name: /2 commands · 1 file read/ });
     expect(groups.map((group) => group.getAttribute("aria-expanded"))).toEqual(["true", "false"]);
   });
 

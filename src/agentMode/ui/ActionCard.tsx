@@ -41,7 +41,7 @@ export const ActionCard: React.FC<ActionCardProps> = ({ part, open, onToggle }) 
         targetPath ? (
           <a
             href="#"
-            className="tw-min-w-0 tw-truncate tw-text-inherit hover:tw-text-accent hover:tw-underline"
+            className="tw-min-w-0 tw-whitespace-normal tw-break-words tw-font-medium tw-text-normal hover:tw-text-accent hover:tw-underline"
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
@@ -81,7 +81,9 @@ export const ActionCard: React.FC<ActionCardProps> = ({ part, open, onToggle }) 
         ) : (
           // eslint-disable-next-line @eslint-react/no-array-index-key -- tool outputs are append-only; index is stable
           <div key={`diff-${i}-${o.path}`} className="tw-rounded tw-bg-secondary-alt tw-p-1">
-            <p className="tw-font-mono tw-text-xs tw-text-muted">{o.path}</p>
+            <p className="tw-break-all tw-font-mono tw-text-xs tw-font-medium tw-text-normal">
+              {o.path}
+            </p>
             <pre className="tw-max-h-40 tw-overflow-auto tw-whitespace-pre-wrap tw-text-xs">
               {renderDiff(o.oldText, o.newText)}
             </pre>
