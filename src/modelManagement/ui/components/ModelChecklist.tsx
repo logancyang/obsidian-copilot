@@ -155,11 +155,8 @@ export const ModelChecklist: React.FC<ModelChecklistProps> = ({
                 role="listitem"
                 data-testid={`model-row-${model.id}`}
                 className={cn(
-                  "tw-group tw-grid tw-cursor-pointer tw-items-center tw-gap-3 tw-px-3 tw-py-1.5 tw-text-sm",
+                  "tw-group tw-grid tw-cursor-pointer tw-grid-cols-[auto_minmax(0,1fr)_auto] tw-items-center tw-gap-3 tw-px-3 tw-py-1.5 tw-text-sm",
                   "hover:tw-bg-primary-alt/40",
-                  removable
-                    ? "tw-grid-cols-[auto_1fr_auto_auto_auto]"
-                    : "tw-grid-cols-[auto_1fr_auto_auto]",
                   isLastChecked && "copilot-divider-b"
                 )}
               >
@@ -167,22 +164,24 @@ export const ModelChecklist: React.FC<ModelChecklistProps> = ({
                   checked={checked}
                   onCheckedChange={(next) => onToggle(model.id, next === true)}
                 />
-                <span className="tw-flex tw-min-w-0 tw-items-center tw-gap-2">
-                  <span className="tw-truncate tw-text-normal">{model.displayName}</span>
-                  {model.isEmbedding && (
-                    <Badge variant="secondary" className="tw-shrink-0 tw-text-ui-smaller">
-                      Embedding
-                    </Badge>
-                  )}
-                  {hasCapabilityIcons(capabilities) && (
-                    <span className="tw-flex tw-shrink-0 tw-items-center tw-gap-0.5">
-                      <ModelCapabilityIcons capabilities={capabilities} iconSize={14} />
-                    </span>
-                  )}
-                </span>
-                <span className="tw-shrink-0 tw-text-xs tw-text-muted">{contextLabel}</span>
-                <span className="tw-w-20 tw-shrink-0 tw-text-right tw-text-xs tw-text-muted">
-                  {releaseLabel}
+                <span className="tw-flex tw-min-w-0 tw-flex-col tw-gap-1">
+                  <span className="tw-text-normal [overflow-wrap:anywhere]">
+                    {model.displayName}
+                  </span>
+                  <span className="tw-flex tw-flex-wrap tw-items-center tw-gap-x-2 tw-gap-y-1 tw-text-xs tw-text-muted">
+                    {model.isEmbedding && (
+                      <Badge variant="secondary" className="tw-shrink-0 tw-text-ui-smaller">
+                        Embedding
+                      </Badge>
+                    )}
+                    {hasCapabilityIcons(capabilities) && (
+                      <span className="tw-flex tw-shrink-0 tw-items-center tw-gap-0.5">
+                        <ModelCapabilityIcons capabilities={capabilities} iconSize={14} />
+                      </span>
+                    )}
+                    <span>{contextLabel}</span>
+                    <span>{releaseLabel}</span>
+                  </span>
                 </span>
                 {removable && (
                   <Button

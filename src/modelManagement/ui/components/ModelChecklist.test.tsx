@@ -116,16 +116,19 @@ describe("ModelChecklist", () => {
     expect(onAddId).not.toHaveBeenCalled();
   });
 
-  it("shows the X button only for custom ids and emits onRemoveId on click", () => {
+  it("removes only custom IDs without toggling selection (https://github.com/Brevilabs/obsidian-copilot-private/issues/408)", () => {
     const onRemoveId = jest.fn();
+    const onToggle = jest.fn();
     renderList({
       availableModels: [RICH, PLAIN],
       onRemoveId,
+      onToggle,
       customIds: new Set([PLAIN.id]),
     });
     expect(screen.queryByTestId(`model-row-remove-${RICH.id}`)).toBeNull();
     fireEvent.click(screen.getByTestId(`model-row-remove-${PLAIN.id}`));
     expect(onRemoveId).toHaveBeenCalledWith(PLAIN.id);
+    expect(onToggle).not.toHaveBeenCalled();
   });
 
   it("hides the X button on every row when customIds is omitted", () => {
