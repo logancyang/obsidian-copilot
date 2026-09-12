@@ -39,8 +39,8 @@ export const ToolDiffPreview: React.FC<ToolDiffPreviewProps> = ({ oldText, newTe
           <React.Fragment key={index}>
             <span
               className={cn(
-                line.startsWith("+") && "tw-bg-success tw-text-success",
-                line.startsWith("-") && "tw-bg-error tw-text-error",
+                line.startsWith("+") && "tw-bg-success tw-text-normal",
+                line.startsWith("-") && "tw-bg-error tw-text-normal",
                 line.startsWith("@@") && "tw-text-muted"
               )}
             >
