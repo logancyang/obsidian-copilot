@@ -173,6 +173,34 @@ describe("AskUserQuestionCard", () => {
       });
     });
 
+    it("updates progress while revisiting and editing answers without submitting early (https://github.com/Brevilabs/obsidian-copilot-private/issues/424)", () => {
+      const onResolve = jest.fn();
+      renderCard(makeRequest(NAVIGATION_QUESTIONS), onResolve);
+      expect(screen.getByText("Question 1 of 2 · 0 of 2 answered")).not.toBeNull();
+      fireEvent.click(screen.getByRole("radio", { name: "Current note" }));
+      expect(screen.getByRole("tab", { name: "Scope", description: "Answered" })).not.toBeNull();
+      fireEvent.click(nextButton());
+      expect(screen.getByText("Question 2 of 2 · 1 of 2 answered")).not.toBeNull();
+      fireEvent.click(screen.getByRole("radio", { name: "Summary" }));
+      fireEvent.click(screen.getByRole("tab", { name: "Scope" }));
+      expect(screen.getByRole<HTMLInputElement>("radio", { name: "Current note" }).checked).toBe(
+        true
+      );
+      fireEvent.click(getOtherControl("radio"));
+      expect(screen.getByText("Question 1 of 2 · 1 of 2 answered")).not.toBeNull();
+      expect(screen.queryByRole("tab", { name: "Scope", description: "Answered" })).toBeNull();
+      fireEvent.change(otherTextarea(), { target: { value: "  Open files  " } });
+      expect(screen.getByText("Question 1 of 2 · 2 of 2 answered")).not.toBeNull();
+      fireEvent.click(nextButton());
+      expect(screen.getByRole<HTMLInputElement>("radio", { name: "Summary" }).checked).toBe(true);
+      expect(onResolve).not.toHaveBeenCalled();
+      fireEvent.click(submitButton());
+      expect(onResolve).toHaveBeenCalledWith(REQUEST_ID, {
+        "Which scope?": "Open files",
+        "Which format?": "Summary",
+      });
+    });
+
     it("keeps final Submit disabled when a middle question was skipped (https://github.com/Brevilabs/obsidian-copilot-private/issues/117)", () => {
       const onResolve = jest.fn();
       const request = makeRequest([
