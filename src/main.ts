@@ -1,3 +1,4 @@
+import { startReleaseUpdateCheck } from "@/services/releaseUpdateNotice";
 import type { AgentSessionManager, SkillManager } from "@/agentMode";
 // Deep import (not the barrel): these run on the load path for every
 // platform, and the barrel pulls Node-only modules that crash mobile.
@@ -237,6 +238,16 @@ export default class CopilotPlugin extends Plugin {
         }
       })();
     });
+    // Startup notices remember their own last shown release; Agent Home dismissal
+    // is independent. Hydration and the save subscriber must precede this check.
+    this.register(
+      startReleaseUpdateCheck(
+        this.app,
+        this.manifest.version,
+        getSettings().lastShownStartupVersion,
+        (version) => updateSetting("lastShownStartupVersion", version)
+      )
+    );
     // One-time settings migrations. Runs after the persist subscriber is wired
     // (so every mutation is saved) and after createModelManagement, and before
     // agent/model-discovery init below — so migrated BYOK providers are present

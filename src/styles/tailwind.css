@@ -504,6 +504,17 @@ If your plugin does not need CSS, delete this file.
   box-shadow: 0 0 0 2px rgb(0 123 255 / 25%);
 }
 
+/* Obsidian Notice owns this native DOM outside React; inherit its theme-specific foreground. */
+.copilot-release-notice {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--size-4-2);
+  font-size: var(--font-ui-medium);
+  font-weight: var(--font-medium);
+  text-align: left;
+}
+
 .copilot-notice-container {
   display: flex;
   flex-direction: column;

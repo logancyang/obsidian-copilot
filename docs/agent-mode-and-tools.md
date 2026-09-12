@@ -83,7 +83,9 @@ An empty Agent Chat shows a fixed hint: "Ask anything • @ to add context • /
 
 Agent Chat groups consecutive tool calls and reasoning into a compact activity row. The row reports the total tool commands, distinct files read or edited, and recorded reasoning time. Open it to inspect every step.
 
-Copilot checks for the latest release whenever you create a new Agent Chat tab with **+**, so you can discover updates without reloading the plugin. When a newer Copilot release is available, the global Agent Chat home shows an update banner along the bottom of the pane. The banner stays above the home tabs when space is tight. Select **See what’s new** to read the release notes, or dismiss the banner for that release. Project homes and active conversations do not show it.
+Copilot checks for updates in the background when the plugin loads, including when Obsidian starts. If a newer version is available, a notice offers **View release notes** once per release. This is remembered separately from dismissing the Agent Chat home banner. You can keep using or close Obsidian while the check runs. Copilot reads the version from the published release’s manifest, and Settings and Agent Chat share that check.
+
+Copilot also checks for the latest release whenever you create a new Agent Chat tab with **+**, so you can discover updates without reloading the plugin. When a newer Copilot release is available, the global Agent Chat home shows an update banner along the bottom of the pane. The banner stays above the home tabs when space is tight. Select **See what’s new** to read the release notes, or dismiss the banner for that release. Project homes and active conversations do not show it.
 
 ## Models, effort, and permissions
 
@@ -154,7 +156,11 @@ Skills are reusable instruction packets built around a `SKILL.md` file. One Skil
 
 Shared Skills live under `<Copilot folder>/skills/`. Copilot links them into the native folders used by each agent: `.opencode/skills/`, `.claude/skills/`, and `.agents/skills/`. Skills already present in those native folders also appear in the settings list.
 
+The **Built-in Skills** table contains Copilot's bundled skills with read-only previews. Turn off a whole skill to remove its generated files, or turn off an individual agent to exclude it. These choices survive restarts and updates. Copilot generates built-in skills only when an available agent can use them. Setting up another agent enables eligible built-ins for that agent unless you previously opted out. Your own skills remain editable in **Your Skills**.
+
 Custom Skills and built-in Obsidian Skills are free. Active Plus access adds cloud-backed Skills for web research, PDF reading, YouTube transcripts, X posts, and OpenArtifacts.
+
+Built-in skill preferences record only your changes to the defaults. New skills use the defaults, and content updates keep your saved choices. Copilot fully manages built-in skill folders. Updating a built-in skill replaces its entire folder; removing it deletes the folder. Both operations remove any files you added inside it. Keep custom skills and files in separate folders. When a skill is retired, Copilot also clears its saved preferences. A renamed skill starts with fresh defaults. If file permissions prevent removal, Copilot reports the failure and keeps your disabled preference. After you restore access, Copilot retries cleanup when skills refresh or the plugin reloads.
 
 In Self-Host Mode with OpenCode selected, Agent Chat's built-in web-search Skill uses the search provider selected under **Settings → Copilot → Self-Host**. Provider credentials stay inside Obsidian rather than being passed to OpenCode, and the feature does not require Obsidian's command line interface. Copilot disables OpenCode's native web-search and web-fetch tools so they cannot bypass that route. Full-page web fetching is unavailable through OpenCode in Self-Host Mode because the supported search providers do not share a page-fetch interface; Agent Chat can still use the configured provider's search results.
 

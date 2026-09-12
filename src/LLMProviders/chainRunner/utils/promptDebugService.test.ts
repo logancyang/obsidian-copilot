@@ -1,6 +1,7 @@
 import { generatePromptDebugReportForAgent, resolveBasePrompt } from "./promptDebugService";
 import type ChainManager from "@/LLMProviders/chainManager";
 import { ModelAdapter, PromptSection } from "./modelAdapter";
+import { mockTFile } from "@/__tests__/mockObsidian";
 import { PromptDebugReport } from "./toolPromptDebugger";
 
 const createAdapter = () => ({
@@ -85,15 +86,22 @@ describe("promptDebugService", () => {
     expect(report.systemPrompt).toBeDefined();
   });
 
-  it("resolves base prompt using provided user memory manager", async () => {
-    const memoryPrompt = "<memory>data</memory>";
-    const chainManager = {
-      userMemoryManager: {
-        getUserMemoryPrompt: jest.fn().mockResolvedValue(memoryPrompt),
-      },
-    } as unknown as ChainManager;
+  describe("resolveBasePrompt()", () => {
+    it("resolves vault instructions with the provided user memory (https://github.com/logancyang/obsidian-copilot/issues/3210)", async () => {
+      const memoryPrompt = "<memory>data</memory>";
+      const file = mockTFile({ path: "AGENTS.md", basename: "AGENTS" });
+      const chainManager = {
+        app: {
+          vault: { getAbstractFileByPath: () => file, read: async () => "Cite vault notes." },
+        },
+        userMemoryManager: {
+          getUserMemoryPrompt: jest.fn().mockResolvedValue(memoryPrompt),
+        },
+      } as unknown as ChainManager;
 
-    const prompt = await resolveBasePrompt(chainManager);
-    expect(prompt).toContain(memoryPrompt);
+      const prompt = await resolveBasePrompt(chainManager);
+      expect(prompt).toContain(memoryPrompt);
+      expect(prompt).toContain("Cite vault notes.");
+    });
   });
 });

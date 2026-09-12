@@ -2,22 +2,9 @@ import { DEFAULT_SETTINGS } from "@/constants";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import React from "react";
 
-// The install/remove surface (the unit under test at the UI layer). Backed by a
-// real disk in production; mocked here so we assert how the toggle reacts to
-// each outcome without touching the vault.
-const installMiyoSearchSkill = jest.fn<Promise<string>, unknown[]>();
-const removeMiyoSearchSkill = jest.fn<Promise<string>, unknown[]>();
+const refreshSkills = jest.fn<Promise<{ ok: boolean; reconcileErrorCount?: number }>, unknown[]>();
 jest.mock("@/agentMode", () => ({
-  installMiyoSearchSkill: (...a: unknown[]) => installMiyoSearchSkill(...a),
-  removeMiyoSearchSkill: (...a: unknown[]) => removeMiyoSearchSkill(...a),
-}));
-
-// Skills folder derives from the configurable Copilot root. Mock the pure
-// deriver so a test can point the root anywhere and assert the toggle installs
-// to the derived path, without pulling in the real obsidian normalizePath.
-jest.mock("@/settings/copilotFolder", () => ({
-  deriveSkillsFolder: (s: { copilotFolder?: string }) =>
-    `${(s.copilotFolder || "copilot").replace(/\/+$/, "")}/skills`,
+  SkillManager: { getInstance: () => ({ refresh: refreshSkills }) },
 }));
 
 // Persisted-settings surface: capture writes and feed a controllable snapshot.
@@ -169,6 +156,7 @@ function deferred<T>() {
 describe("MiyoSettings", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    refreshSkills.mockResolvedValue({ ok: true });
     currentSettings = { ...DEFAULT_SETTINGS, enableMiyoSearchSkill: false };
     mockMiyoBackend = "available";
     mockRefreshBackend = "available";
@@ -283,119 +271,67 @@ describe("MiyoSettings", () => {
     expect(notifyMiyoIndexChanged).not.toHaveBeenCalled();
   });
 
-  it("installs the skill, commits the flag, and confirms with a Notice on enable", async () => {
-    installMiyoSearchSkill.mockResolvedValue("installed");
-    render(<MiyoSettings />);
+  describe("handleToggleSearchSkill()", () => {
+    it("saves the gate before using shared preference-aware reconciliation (https://github.com/logancyang/obsidian-copilot/issues/3022)", async () => {
+      refreshSkills.mockImplementation(async () => {
+        expect(updateSetting).toHaveBeenCalledWith("enableMiyoSearchSkill", true);
+        return { ok: true };
+      });
+      render(<MiyoSettings />);
+      fireEvent.click(toggle());
+      await waitFor(() => expect(refreshSkills).toHaveBeenCalledWith(true));
+      expect(NoticeMock).not.toHaveBeenCalled();
+    });
 
-    fireEvent.click(toggle());
+    it.each([{ ok: false }, { ok: true, reconcileErrorCount: 1 }])(
+      "restores the disabled Miyo gate after an enable failure %j (https://github.com/logancyang/obsidian-copilot/issues/3022)",
+      async (result) => {
+        refreshSkills.mockResolvedValue(result);
+        render(<MiyoSettings />);
+        fireEvent.click(toggle());
+        await waitFor(() =>
+          expect(updateSetting).toHaveBeenLastCalledWith("enableMiyoSearchSkill", false)
+        );
+        expect(updateSetting).toHaveBeenCalledWith("enableMiyoSearchSkill", true);
+      }
+    );
 
-    await waitFor(() => expect(installMiyoSearchSkill).toHaveBeenCalledTimes(1));
-    expect(updateSetting).toHaveBeenCalledWith("enableMiyoSearchSkill", true);
-    expect(NoticeMock).toHaveBeenCalledWith("Miyo search skill installed");
-  });
+    it("retains a disable preference and reports unsuccessful cleanup (https://github.com/logancyang/obsidian-copilot/issues/3022)", async () => {
+      currentSettings = { ...DEFAULT_SETTINGS, enableMiyoSearchSkill: true };
+      refreshSkills.mockResolvedValue({ ok: true, reconcileErrorCount: 1 });
+      render(<MiyoSettings />);
+      fireEvent.click(toggle());
+      await waitFor(() =>
+        expect(NoticeMock).toHaveBeenCalledWith(expect.stringContaining("preference saved"))
+      );
+      expect(updateSetting).toHaveBeenCalledWith("enableMiyoSearchSkill", false);
+      expect(updateSetting).not.toHaveBeenCalledWith("enableMiyoSearchSkill", true);
+    });
 
-  it("installs to the folder derived from a non-default Copilot root, not the retired field", async () => {
-    // Regression: a customized root must reach the derived skills folder. The
-    // retired agentMode.skills.folder no longer tracks the root, so installing
-    // against it would write to the wrong directory (and collide with the path
-    // the background seeder uses).
-    currentSettings = {
-      ...DEFAULT_SETTINGS,
-      enableMiyoSearchSkill: false,
-      copilotFolder: "team/copilot",
-      agentMode: {
-        ...DEFAULT_SETTINGS.agentMode,
-        skills: { ...DEFAULT_SETTINGS.agentMode.skills, folder: "copilot/skills" },
-      },
-    };
-    installMiyoSearchSkill.mockResolvedValue("installed");
-    render(<MiyoSettings />);
+    it("does not notify an unmounted tab after reconciliation (https://github.com/logancyang/obsidian-copilot/issues/3022)", async () => {
+      const gate = deferred<{ ok: boolean }>();
+      refreshSkills.mockReturnValue(gate.promise);
+      const { unmount } = render(<MiyoSettings />);
+      fireEvent.click(toggle());
+      await waitFor(() => expect(refreshSkills).toHaveBeenCalledTimes(1));
+      unmount();
+      await act(async () => {
+        gate.resolve({ ok: false });
+      });
+      expect(NoticeMock).not.toHaveBeenCalled();
+      expect(updateSetting).toHaveBeenLastCalledWith("enableMiyoSearchSkill", false);
+    });
 
-    fireEvent.click(toggle());
-
-    await waitFor(() => expect(installMiyoSearchSkill).toHaveBeenCalledTimes(1));
-    expect(installMiyoSearchSkill).toHaveBeenCalledWith(expect.anything(), "team/copilot/skills");
-  });
-
-  it("does NOT commit the flag on a collision, and explains why", async () => {
-    installMiyoSearchSkill.mockResolvedValue("collision");
-    render(<MiyoSettings />);
-
-    fireEvent.click(toggle());
-
-    await waitFor(() => expect(installMiyoSearchSkill).toHaveBeenCalledTimes(1));
-    // The user's same-named skill wins: never claim success, never persist true.
-    expect(updateSetting).not.toHaveBeenCalledWith("enableMiyoSearchSkill", true);
-    expect(NoticeMock).toHaveBeenCalledTimes(1);
-    expect(NoticeMock.mock.calls[0][0]).toMatch(/already exists/i);
-  });
-
-  it("leaves the flag off on a failed install", async () => {
-    installMiyoSearchSkill.mockResolvedValue("failed");
-    render(<MiyoSettings />);
-
-    fireEvent.click(toggle());
-
-    await waitFor(() => expect(installMiyoSearchSkill).toHaveBeenCalledTimes(1));
-    expect(updateSetting).not.toHaveBeenCalledWith("enableMiyoSearchSkill", true);
-  });
-
-  it("reconciles the flag to an installed skill even when the tab unmounts mid-op", async () => {
-    const gate = deferred<string>();
-    installMiyoSearchSkill.mockReturnValue(gate.promise);
-    const { unmount } = render(<MiyoSettings />);
-
-    fireEvent.click(toggle());
-    await waitFor(() => expect(installMiyoSearchSkill).toHaveBeenCalledTimes(1));
-
-    // Tab closes while the install is still writing to disk, then the disk op
-    // completes: the flag must still be persisted so disk and settings agree.
-    unmount();
-    gate.resolve("installed");
-
-    await waitFor(() => expect(updateSetting).toHaveBeenCalledWith("enableMiyoSearchSkill", true));
-    // UI work is suppressed after unmount — no Notice fires.
-    expect(NoticeMock).not.toHaveBeenCalled();
-  });
-
-  it("reconciles the flag to a removed skill even when the tab unmounts mid-op", async () => {
-    currentSettings = { ...DEFAULT_SETTINGS, enableMiyoSearchSkill: true };
-    const gate = deferred<string>();
-    removeMiyoSearchSkill.mockReturnValue(gate.promise);
-    const { unmount } = render(<MiyoSettings />);
-
-    fireEvent.click(toggle());
-    await waitFor(() => expect(removeMiyoSearchSkill).toHaveBeenCalledTimes(1));
-
-    unmount();
-    gate.resolve("removed");
-
-    await waitFor(() => expect(updateSetting).toHaveBeenCalledWith("enableMiyoSearchSkill", false));
-    expect(NoticeMock).not.toHaveBeenCalled();
-  });
-
-  it("removes the skill and clears the flag on disable", async () => {
-    currentSettings = { ...DEFAULT_SETTINGS, enableMiyoSearchSkill: true };
-    removeMiyoSearchSkill.mockResolvedValue("removed");
-    render(<MiyoSettings />);
-
-    fireEvent.click(toggle());
-
-    await waitFor(() => expect(removeMiyoSearchSkill).toHaveBeenCalledTimes(1));
-    expect(updateSetting).toHaveBeenCalledWith("enableMiyoSearchSkill", false);
-  });
-
-  it("keeps the flag ON when a disable fails to remove the skill", async () => {
-    currentSettings = { ...DEFAULT_SETTINGS, enableMiyoSearchSkill: true };
-    removeMiyoSearchSkill.mockResolvedValue("failed");
-    render(<MiyoSettings />);
-
-    fireEvent.click(toggle());
-
-    await waitFor(() => expect(removeMiyoSearchSkill).toHaveBeenCalledTimes(1));
-    // UI must not claim the skill is gone while it's still on disk.
-    expect(updateSetting).not.toHaveBeenCalledWith("enableMiyoSearchSkill", false);
-    expect(NoticeMock.mock.calls[0][0]).toMatch(/couldn't remove/i);
+    it("reports an unexpected reconciliation failure (https://github.com/logancyang/obsidian-copilot/issues/3022)", async () => {
+      refreshSkills.mockRejectedValue(new Error("unavailable"));
+      render(<MiyoSettings />);
+      fireEvent.click(toggle());
+      await waitFor(() =>
+        expect(NoticeMock).toHaveBeenCalledWith(
+          "Couldn't update the Miyo search skill. Please try again."
+        )
+      );
+    });
   });
 
   it("blocks ENABLING the skill while Miyo is disconnected (skill off)", async () => {
@@ -403,7 +339,6 @@ describe("MiyoSettings", () => {
     // reachable, so a disconnected + not-yet-enabled toggle is inert.
     mockMiyoBackend = "unavailable";
     currentSettings = { ...DEFAULT_SETTINGS, enableMiyoSearchSkill: false };
-    installMiyoSearchSkill.mockResolvedValue("installed");
     render(<MiyoSettings />);
 
     const control = toggle();
@@ -411,7 +346,7 @@ describe("MiyoSettings", () => {
     fireEvent.click(control);
 
     // Gated: no install runs, no settings write.
-    expect(installMiyoSearchSkill).not.toHaveBeenCalled();
+    expect(refreshSkills).not.toHaveBeenCalled();
     expect(updateSetting).not.toHaveBeenCalledWith("enableMiyoSearchSkill", true);
   });
 
@@ -421,14 +356,13 @@ describe("MiyoSettings", () => {
     // used to be inert whenever disconnected, stranding an installed skill).
     mockMiyoBackend = "unavailable";
     currentSettings = { ...DEFAULT_SETTINGS, enableMiyoSearchSkill: true };
-    removeMiyoSearchSkill.mockResolvedValue("removed");
     render(<MiyoSettings />);
 
     const control = toggle();
     expect(control.getAttribute("aria-disabled")).toBe("false");
     fireEvent.click(control);
 
-    await waitFor(() => expect(removeMiyoSearchSkill).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(refreshSkills).toHaveBeenCalledTimes(1));
     expect(updateSetting).toHaveBeenCalledWith("enableMiyoSearchSkill", false);
   });
 
@@ -439,13 +373,12 @@ describe("MiyoSettings", () => {
     // and force a reconnect. Regression guard for that bug.
     mockMiyoBackend = "stale";
     currentSettings = { ...DEFAULT_SETTINGS, enableMiyoSearchSkill: true };
-    removeMiyoSearchSkill.mockResolvedValue("removed");
     render(<MiyoSettings />);
 
     const control = toggle();
     expect(control.getAttribute("aria-disabled")).toBe("false");
     fireEvent.click(control);
-    await waitFor(() => expect(removeMiyoSearchSkill).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(refreshSkills).toHaveBeenCalledTimes(1));
   });
 
   describe("connection status and recovery", () => {

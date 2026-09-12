@@ -22,7 +22,6 @@ jest.mock("@/logger", () => ({
 // Mock state module
 jest.mock("@/system-prompts/state", () => ({
   isPendingFileWrite: jest.fn().mockReturnValue(false),
-  initializeSessionPromptFromDefault: jest.fn(),
   upsertCachedSystemPrompt: jest.fn(),
   deleteCachedSystemPrompt: jest.fn(),
   updateCachedSystemPrompts: jest.fn(),
@@ -88,16 +87,11 @@ describe("SystemPromptRegister", () => {
   });
 
   describe("initialize()", () => {
-    it("loads prompts before initializing the session selection", async () => {
+    it("loads saved prompts without selecting the hidden legacy default (https://github.com/logancyang/obsidian-copilot/issues/3210)", async () => {
       await register.initialize();
 
       expect(systemPromptUtils.loadAllSystemPrompts).toHaveBeenCalledWith(mockApp);
-      expect(state.initializeSessionPromptFromDefault).toHaveBeenCalledTimes(1);
-      expect(
-        (systemPromptUtils.loadAllSystemPrompts as jest.Mock).mock.invocationCallOrder[0]
-      ).toBeLessThan(
-        (state.initializeSessionPromptFromDefault as jest.Mock).mock.invocationCallOrder[0]
-      );
+      expect(state.setSelectedPromptTitle).not.toHaveBeenCalled();
     });
   });
 

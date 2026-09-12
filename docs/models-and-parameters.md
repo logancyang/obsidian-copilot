@@ -74,8 +74,9 @@ before editing, and **Auto** uses the selected agent's automatic permission
 behavior.
 
 Copilot V4 does not expose temperature, top-p, or similar tuning in these model
-lists. In Quick Chat, **Chat Settings** controls the session system prompt; it
-does not add Agent Chat effort or permission controls.
+lists. Quick Chat uses your vault-root `AGENTS.md` by default. **Chat Settings**
+can select a saved prompt for that session; it does not add Agent Chat effort
+or permission controls.
 
 ## Related
 

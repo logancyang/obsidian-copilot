@@ -13,7 +13,6 @@ import type {
 } from "@/modelManagement";
 import type { Skill } from "@/agentMode/skills";
 import {
-  setDefaultSystemPromptTitle,
   setDisableBuiltinSystemPrompt,
   setSelectedPromptTitle,
   updateCachedSystemPrompts,
@@ -37,7 +36,7 @@ import {
   SELF_HOST_WEB_SEARCH_ENV,
   SELF_HOST_WEB_SEARCH_TOKEN_ENV,
   SELF_HOST_WEB_SEARCH_URL_ENV,
-} from "@/agentMode/skills/builtin/builtinSkills";
+} from "@/builtinSkills/builtinSkills";
 
 function makeSystemPrompt(title: string, content: string): UserSystemPrompt {
   return { title, content, createdMs: 0, modifiedMs: 0, lastUsedMs: 0 };
@@ -47,7 +46,7 @@ function makeSystemPrompt(title: string, content: string): UserSystemPrompt {
 function resetPromptState(): void {
   setDisableBuiltinSystemPrompt(false);
   setSelectedPromptTitle("");
-  setDefaultSystemPromptTitle("");
+  updateSetting("defaultSystemPromptTitle", "");
   updateCachedSystemPrompts([]);
 }
 

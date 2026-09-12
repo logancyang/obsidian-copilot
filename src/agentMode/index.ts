@@ -2,7 +2,7 @@ import { type App, Platform } from "obsidian";
 import type CopilotPlugin from "@/main";
 import { logError } from "@/logger";
 import { getSettings, subscribeToSettingsChange, type CopilotSettings } from "@/settings/model";
-import { deriveSkillsFolder, getEffectiveSkillsFolder } from "@/settings/copilotFolder";
+import { deriveSkillsFolder } from "@/settings/copilotFolder";
 import { subscribeToSystemPromptChange } from "@/system-prompts/state";
 import { copilotAppDataDir, getVaultId } from "@/utils/appPaths";
 import { requireNodeModule } from "@/utils/desktopRuntime";
@@ -17,8 +17,14 @@ import { createNodeFileStorage } from "./session/nodeFileStorage";
 import { AgentSessionManager } from "./session/AgentSessionManager";
 import { seedCopilotDefaultModel } from "./session/copilotDefaultModel";
 import { SkillManager } from "./skills";
-import { planManagedBuiltins } from "./skills/builtin/builtinSkills";
-import { removeSeededBuiltin, seedBuiltinSkills } from "./skills/builtin/seedBuiltinSkills";
+import {
+  availableBuiltinAgents,
+  reconcileBuiltinSkills,
+} from "./skills/builtin/reconcileBuiltinSkills";
+import {
+  saveBuiltinPreferences,
+  type BuiltinPreferencesUpdate,
+} from "@/settings/builtinSkillPreferences";
 import { buildBuiltinSeedFs } from "./skills/builtin/miyoSearchSeed";
 import {
   createDefaultAskUserQuestionPrompter,
@@ -80,11 +86,6 @@ export {
 export { frameSink as acpFrameSink, setFrameSinkVaultBasePath } from "./session/debugSink";
 export { getManagedSkills, SkillManager, SkillsSettings, useManagedSkills } from "./skills";
 export type { Skill } from "./skills";
-// The `miyo-search` install/remove surface, re-exported for the settings UI —
-// host code must enter the agent-mode module through this barrel, not deep
-// `skills/*` imports (`boundaries/dependencies`).
-export { installMiyoSearchSkill, removeMiyoSearchSkill } from "./skills/builtin/miyoSearchSeed";
-
 /**
  * True when the platform supports Agent Mode. Agent Mode is always on, but
  * requires subprocess support, so this is always false on mobile.
@@ -176,7 +177,31 @@ function backendEnvOverridesKey(settings: CopilotSettings, backendId: BackendId)
 export function createAgentSessionManager(app: App, plugin: CopilotPlugin): AgentSessionManager {
   const os = requireNodeModule<typeof import("node:os")>("os");
   const path = requireNodeModule<typeof import("node:path")>("path");
-  const skillManager = SkillManager.initialize(app, collectAgentSkillsDirsProjectRel());
+  let lastAvailableSkillAgents: readonly string[] = [];
+  const availableSkillAgents = (): readonly string[] => {
+    const states = Object.fromEntries(
+      listBackendDescriptors()
+        .filter((descriptor) => descriptor.skillsProjectDir)
+        .map((descriptor) => [descriptor.id, descriptor.getInstallState(getSettings())])
+    );
+    lastAvailableSkillAgents = availableBuiltinAgents(states, lastAvailableSkillAgents);
+    return lastAvailableSkillAgents;
+  };
+  const saveSkillPreferences = (update: BuiltinPreferencesUpdate) =>
+    saveBuiltinPreferences(update, (data) => plugin.saveData(data));
+  const skillManager = SkillManager.initialize(app, collectAgentSkillsDirsProjectRel(), {
+    availableAgents: availableSkillAgents,
+    savePreferences: saveSkillPreferences,
+    prepare: async (folder) => {
+      await reconcileBuiltinSkills({
+        folder,
+        fs: buildBuiltinSeedFs(app),
+        settings: getSettings(),
+        availableAgents: availableSkillAgents(),
+        registeredAgents: Object.keys(collectAgentSkillsDirsProjectRel()),
+      });
+    },
+  });
   const preloader = new AgentModelPreloader(app, plugin, (id) => backendRegistry[id]);
   const persistenceManager = new AgentChatPersistenceManager(app);
   // Plugin-local (per-vault) record of resumable backend sessions, so recent
@@ -305,49 +330,10 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
         );
     }
   });
-  // Seed the plugin-shipped builtin skills into the canonical folder, then run
-  // discovery so the pass picks them up and fans them out to the agent dirs.
-  // Miyo vault search and Miyo document parsing are gated independently;
-  // `planManagedBuiltins` decides both what to write and what to remove, so no
-  // gate can be added without its prune (the cloud PDF skill Miyo documents
-  // replace is pruned this way). Discovery runs even when seeding fails so
-  // existing skills still reconcile.
-  //
-  // Passes are SERIALIZED through `seedChain`: a fast enable→disable (or a folder
-  // change landing mid-seed) would otherwise interleave writes and leave the
-  // Miyo skill on disk after a disable, since each pass' skill-set decision is
-  // taken before its first `await`. Chaining also makes each pass read the flag
-  // at its own execution time, so the last one to run reflects the final intent.
-  let seedChain: Promise<void> = Promise.resolve();
-  const seedManagedBuiltins = (folder: string): Promise<void> => {
-    seedChain = seedChain.then(async () => {
-      // Everything runs inside the guard — including the synchronous
-      // `buildBuiltinSeedFs`/`getSettings` reads — so this task can NEVER reject.
-      // A rejected `seedChain` would strand every later `.then(...)` pass, so the
-      // chain must stay resolved no matter what any single pass hits.
-      try {
-        const fs = buildBuiltinSeedFs(app);
-        const settings = getSettings();
-        const { seed, prune } = planManagedBuiltins({
-          search: settings.enableMiyoSearchSkill === true,
-          documents: settings.docProcessorBackend === "miyo",
-        });
-        await seedBuiltinSkills({ skillsFolderRelPath: folder, fs, skills: seed });
-        for (const name of prune) {
-          await removeSeededBuiltin(folder, name, fs);
-        }
-      } catch (e) {
-        logError("[Skills] builtin skill seeding failed", e);
-      }
-      // Always reconcile so existing skills fan out even when seeding failed.
-      // Separately guarded so a refresh error can't wedge the chain either.
-      try {
-        await skillManager.refresh();
-      } catch (e) {
-        logError("[Skills] skill refresh after seeding failed", e);
-      }
-    });
-    return seedChain;
+  // SkillManager serializes seeding with every discovery entry point, including settings UI
+  // refreshes. https://github.com/logancyang/obsidian-copilot/issues/3022
+  const seedManagedBuiltins = async (): Promise<void> => {
+    await skillManager.refresh(true);
   };
   subscribeToSettingsChange((prev, next) => {
     // The managed env injected at spawn (see `buildBuiltinSkillEnv`) changes with
@@ -391,7 +377,11 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
       prev.enableMiyo !== next.enableMiyo ||
       prev.miyoServerUrl !== next.miyoServerUrl ||
       prev.isPaidUser !== next.isPaidUser;
-    if (prevFolder !== nextFolder || miyoAvailabilityChanged) {
+    if (
+      prevFolder !== nextFolder ||
+      miyoAvailabilityChanged ||
+      prev.agentMode.skills.builtinPreferences !== next.agentMode.skills.builtinPreferences
+    ) {
       // Miyo availability also gates the `miyo-search` system-prompt steering
       // (see `buildAgentSystemPrompt`). codex/opencode bake the prompt at spawn,
       // so a mid-session flip needs a restart to apply. Chain the restart AFTER
@@ -402,7 +392,7 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
       // swallows its own errors and always refreshes, so this normally runs
       // after reconcile; `restartSystemPromptAffected` dedupes on the real prompt
       // key, so it's a no-op when the rebuilt prompt is unchanged.
-      void seedManagedBuiltins(nextFolder)
+      void seedManagedBuiltins()
         .then(() => {
           if (!miyoAvailabilityChanged) return;
           restartSystemPromptAffected();
@@ -434,8 +424,10 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
   // require its process to refresh, so unrelated saves do not churn backends.
   for (const descriptor of listBackendDescriptors()) {
     descriptor.subscribeInstallState(plugin, () => {
-      void manager
-        .onInstallStateChanged(descriptor.id)
+      // A first warm probe must see the newly installed skills, especially for backends
+      // that do not restart on skill changes. https://github.com/logancyang/obsidian-copilot/issues/3022
+      void seedManagedBuiltins()
+        .then(() => manager.onInstallStateChanged(descriptor.id))
         .catch((error) =>
           logError(`[AgentMode] install-state refresh failed: ${descriptor.id}`, error)
         );
@@ -444,7 +436,7 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
   // Seed plugin-shipped builtin skills into the canonical folder, THEN run
   // discovery so the first pass picks them up and fans them out to the agent
   // dirs. Non-blocking for plugin load.
-  void seedManagedBuiltins(getEffectiveSkillsFolder()).catch((error) => {
+  const initialSkillsReady = seedManagedBuiltins().catch((error) => {
     logError("[Skills] Initial discovery pass failed", error);
   });
   // Non-blocking — plugin load should not wait on disk reconcile.
@@ -463,7 +455,7 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
   // keeps them usable, so they load like any other.
   for (const descriptor of listBackendDescriptors()) {
     if (descriptor.getInstallState(settings).kind !== "ready") continue;
-    const promise = manager.preloadModels(descriptor.id);
+    const promise = initialSkillsReady.then(() => manager.preloadModels(descriptor.id));
     manager.registerPreload(
       descriptor.id,
       promise.catch((e) => {

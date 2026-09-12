@@ -1,4 +1,8 @@
 import {
+  installStateSignature,
+  useBackendInstallStates as useDescriptorInstallStates,
+} from "@/agentMode/session/useBackendInstallStates";
+import {
   backendRegistry,
   getActiveBackendDescriptor,
   listBackendDescriptors,
@@ -6,7 +10,6 @@ import {
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import type {
   BackendDescriptor,
-  BackendId,
   InstallState,
   ManagedInstallActionState,
 } from "@/agentMode/session/types";
@@ -14,30 +17,9 @@ import { useSettingsValue } from "@/settings/model";
 import React from "react";
 import type CopilotPlugin from "@/main";
 
-const EMPTY_BACKEND_INSTALL_STATES = Object.freeze({}) as Record<BackendId, InstallState>;
 const IDLE_MANAGED_INSTALL_ACTION_STATE = Object.freeze({
   kind: "idle" as const,
 }) satisfies ManagedInstallActionState;
-
-function installStateSignature(state: InstallState): string {
-  switch (state.kind) {
-    case "absent":
-      return "absent";
-    case "checking":
-    case "ready":
-      return `${state.kind}:${state.source}`;
-    case "incompatible":
-      return JSON.stringify([
-        state.kind,
-        state.source,
-        state.currentVersion,
-        state.minVersion,
-        state.message,
-      ]);
-    case "error":
-      return JSON.stringify([state.kind, state.message]);
-  }
-}
 
 function managedInstallActionStateSignature(state: ManagedInstallActionState): string {
   switch (state.kind) {
@@ -136,47 +118,8 @@ export function useManagedInstallActionState(
   }, [action, plugin, signature]);
 }
 
-/**
- * Same contract as `useBackendInstallState`, widened to every registered
- * backend at once, for surfaces that list all agents side by side. One store
- * subscription fans out to every descriptor and the snapshot is the joined
- * signature, so a descriptor that allocates a fresh state object per read still
- * cannot force a rerender — and the returned record keeps its identity until a
- * backend's readiness actually changes.
- * @param plugin - The plugin instance used to subscribe to backend-specific readiness changes.
- */
-export function useBackendInstallStates(plugin: CopilotPlugin): Record<BackendId, InstallState> {
-  const settings = useSettingsValue();
-  const subscribe = React.useCallback(
-    (listener: () => void) => {
-      const unsubscribes = listBackendDescriptors().map((descriptor) =>
-        descriptor.subscribeInstallState(plugin, listener)
-      );
-      return () => {
-        for (const unsubscribe of unsubscribes) unsubscribe();
-      };
-    },
-    [plugin]
-  );
-  const getSnapshot = React.useCallback(
-    () =>
-      listBackendDescriptors()
-        .map(
-          (descriptor) =>
-            `${descriptor.id}=${installStateSignature(descriptor.getInstallState(settings))}`
-        )
-        .join("|"),
-    [settings]
-  );
-  const signature = React.useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
-  return React.useMemo(() => {
-    void signature;
-    const descriptors = listBackendDescriptors();
-    if (descriptors.length === 0) return EMPTY_BACKEND_INSTALL_STATES;
-    const states = {} as Record<BackendId, InstallState>;
-    for (const descriptor of descriptors) {
-      states[descriptor.id] = descriptor.getInstallState(settings);
-    }
-    return states;
-  }, [settings, signature]);
+/** Observe readiness for every registered agent. */
+export function useBackendInstallStates(plugin: CopilotPlugin) {
+  const descriptors = React.useMemo(() => listBackendDescriptors(), []);
+  return useDescriptorInstallStates(plugin, descriptors);
 }

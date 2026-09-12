@@ -1,4 +1,8 @@
-import { refreshLatestVersion, useLatestVersion } from "@/hooks/useLatestVersion";
+import {
+  refreshLatestVersion,
+  requestLatestRelease,
+  useLatestVersion,
+} from "@/hooks/useLatestVersion";
 import { checkLatestVersion } from "@/utils";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import * as React from "react";
@@ -24,6 +28,23 @@ describe("useLatestVersion", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     refreshLatestVersion();
+  });
+  describe("requestLatestRelease()", () => {
+    it("shares the startup request with settings and chat consumers", async () => {
+      jest
+        .mocked(checkLatestVersion)
+        .mockResolvedValue({ error: null, release: RELEASE, version: RELEASE.version });
+      const startup = requestLatestRelease();
+      expect(requestLatestRelease()).toBe(startup);
+      render(<LatestVersionProbe />);
+      await act(async () => {
+        await expect(startup).resolves.toEqual(RELEASE);
+      });
+      await waitFor(() =>
+        expect(screen.getByRole("status").textContent).toContain(RELEASE.version)
+      );
+      expect(checkLatestVersion).toHaveBeenCalledTimes(1);
+    });
   });
   describe("useLatestVersion()", () => {
     it(`shares one release payload and request across remounted consumers for ${ISSUE_URL}`, async () => {

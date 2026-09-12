@@ -9,7 +9,7 @@ import {
 } from "@/LLMProviders/chainRunner/index";
 import { logError, logInfo } from "@/logger";
 import { getSettings, subscribeToSettingsChange } from "@/settings/model";
-import { getSystemPrompt } from "@/system-prompts/systemPromptBuilder";
+import { getEffectiveUserPrompt, getSystemPrompt } from "@/system-prompts/systemPromptBuilder";
 import { ChatMessage } from "@/types/message";
 import { isOSeriesModel } from "@/utils";
 import { resolveChatBackendModel, type ModelManagementApi } from "@/modelManagement";
@@ -186,7 +186,7 @@ export default class ChainManager {
       // https://github.com/langchain-ai/langchain/issues/28895
       if (isOSeriesModel(chatModel)) {
         effectivePrompt = ChatPromptTemplate.fromMessages([
-          [USER_SENDER, getSystemPrompt() || ""],
+          [USER_SENDER, getSystemPrompt(await getEffectiveUserPrompt(this.app))],
           effectivePrompt,
         ]);
       }
