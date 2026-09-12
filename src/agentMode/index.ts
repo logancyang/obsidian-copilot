@@ -177,8 +177,8 @@ function backendEnvOverridesKey(settings: CopilotSettings, backendId: BackendId)
 export function createAgentSessionManager(app: App, plugin: CopilotPlugin): AgentSessionManager {
   const os = requireNodeModule<typeof import("node:os")>("os");
   const path = requireNodeModule<typeof import("node:path")>("path");
-  let lastAvailableSkillAgents: string[] = [];
-  const availableSkillAgents = (): string[] => {
+  let lastAvailableSkillAgents: readonly string[] = [];
+  const availableSkillAgents = (): readonly string[] => {
     const states = Object.fromEntries(
       listBackendDescriptors()
         .filter((descriptor) => descriptor.skillsProjectDir)

@@ -88,7 +88,7 @@ export async function reconcileBuiltinSkills(options: ReconcileBuiltinOptions): 
   if (errors.length > 0) throw new Error(errors.join(" "));
 }
 
-const EMPTY_AVAILABLE_AGENTS = Object.freeze([]) as unknown as string[];
+const EMPTY_AVAILABLE_AGENTS = Object.freeze([]) as readonly string[];
 
 /**
  * Preserve installed skill files while a known agent undergoes a compatibility recheck.
@@ -98,7 +98,7 @@ const EMPTY_AVAILABLE_AGENTS = Object.freeze([]) as unknown as string[];
 export function availableBuiltinAgents(
   states: Readonly<Record<string, InstallState>>,
   previous: readonly string[]
-): string[] {
+): readonly string[] {
   // A transient check must not delete tools underneath an active turn; an unverified
   // first install still receives no files. https://github.com/logancyang/obsidian-copilot/issues/3022
   const available = Object.entries(states)
@@ -107,5 +107,11 @@ export function availableBuiltinAgents(
         state.kind === "ready" || (state.kind === "checking" && previous.includes(id))
     )
     .map(([id]) => id);
-  return available.length === 0 ? EMPTY_AVAILABLE_AGENTS : available;
+  if (available.length === 0) return EMPTY_AVAILABLE_AGENTS;
+  // Unchanged readiness must not redraw every skill after one preference changes.
+  // https://github.com/logancyang/obsidian-copilot/issues/3022
+  if (available.length === previous.length && available.every((id, i) => id === previous[i])) {
+    return previous;
+  }
+  return available;
 }

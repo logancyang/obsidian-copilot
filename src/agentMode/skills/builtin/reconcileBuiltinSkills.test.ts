@@ -62,6 +62,13 @@ function fixture(preferences?: BuiltinPreferences) {
 
 describe("reconcileBuiltinSkills", () => {
   describe("availableBuiltinAgents()", () => {
+    it("reuses the ready agent list when membership is unchanged https://github.com/logancyang/obsidian-copilot/issues/3022", () => {
+      const previous = ["claude"];
+      expect(
+        availableBuiltinAgents({ claude: { kind: "ready", source: "managed" } }, previous)
+      ).toBe(previous);
+    });
+
     it(`preserves a known ready agent during checking without enabling an unverified first install ${ISSUE}`, () => {
       expect(
         availableBuiltinAgents(

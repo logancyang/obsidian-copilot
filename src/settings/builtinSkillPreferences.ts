@@ -33,9 +33,14 @@ export async function saveBuiltinPreferences(
       const previous = getSettings();
       // Persist and activate the same sparse overrides so restoring defaults clears the record.
       // https://github.com/logancyang/obsidian-copilot/issues/3022
-      preferences = sanitizeBuiltinPreferences(
-        update(previous.agentMode.skills.builtinPreferences ?? EMPTY_PREFERENCES)
-      );
+      const current = previous.agentMode.skills.builtinPreferences ?? EMPTY_PREFERENCES;
+      const updated = update(current);
+      preferences = sanitizeBuiltinPreferences(updated);
+      // Untouched validated preferences retain their identity so other skill rows stay idle.
+      // https://github.com/logancyang/obsidian-copilot/issues/3022
+      for (const name of Object.keys(preferences)) {
+        if (current[name] && updated[name] === current[name]) preferences[name] = current[name];
+      }
       await persistSettingsWithinTransaction(
         {
           ...previous,
