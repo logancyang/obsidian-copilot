@@ -1,3 +1,6 @@
+import { useActiveWebTabState } from "@/components/chat-components/hooks/useActiveWebTabState";
+import { logError } from "@/logger";
+import type { WorkspaceLeaf } from "obsidian";
 import type { AgentChatMessage } from "@/agentMode/session/types";
 import type { AgentInputDraftControls } from "@/agentMode/ui/hooks/useAgentInputDrafts";
 import { useSelectedTextContexts, type ProjectConfig } from "@/aiParams";
@@ -29,6 +32,7 @@ export function useChatRelevantNotesContext(
 ): void {
   const store = getChatRelevantNotesStore(app);
   const activeFile = useActiveFile();
+  const { activeWebTabForMentions } = useActiveWebTabState();
   const [selections] = useSelectedTextContexts();
   const projectFiles = useMemo(() => {
     const { inclusions, exclusions } = getMatchingPatterns({
@@ -114,13 +118,59 @@ export function useChatRelevantNotesContext(
       0
     ) +
     (draft.includeActiveWebTab ? 1 : 0);
+  // Keep only available display identities: sent/queued image names are not retained.
+  // Their existing count remains, so the pane can honestly identify unnamed omissions.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/420
+  const skippedSources = [
+    ...draft.images.map((file) => ({
+      label: file.name,
+      reason: "Image attachments are not included in relevance requests",
+    })),
+    ...contexts.flatMap((context) =>
+      context.urls.map((url) => ({
+        label: url,
+        reason: "Web URLs are not included in relevance requests",
+      }))
+    ),
+    ...[
+      ...contexts.flatMap((context) => context.webTabs ?? []),
+      ...(draft.includeActiveWebTab && activeWebTabForMentions ? [activeWebTabForMentions] : []),
+    ].map((tab) => ({
+      label: tab.title ? `${tab.title} — ${tab.url}` : tab.url,
+      reason: "Web tabs are not included in relevance requests",
+    })),
+  ];
   // Equal retrieval content must keep its identity across streaming renders.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/383
-  const key = JSON.stringify({ id, request: snapshot, skippedAttachments });
+  const key = JSON.stringify({
+    id,
+    request: snapshot,
+    skippedAttachments,
+    ...(skippedSources.length ? { skippedSources } : {}),
+  });
   const { setContextNotes } = draft;
   const current = useMemo<ChatRelevantNotesContext>(
     () => ({
-      ...(JSON.parse(key) as Omit<ChatRelevantNotesContext, "addFile">),
+      ...(JSON.parse(key) as Omit<ChatRelevantNotesContext, "addFile" | "reviewContext">),
+      reviewContext: root
+        ? () => {
+            // Reveal the owning leaf before focus: the separate pane may live in another window.
+            // https://github.com/Brevilabs/obsidian-copilot-private/issues/420
+            let owner: WorkspaceLeaf | undefined;
+            app.workspace.iterateAllLeaves((leaf) => {
+              if (leaf.view.containerEl.contains(root)) owner = leaf;
+            });
+            if (!owner) return;
+            void Promise.resolve(app.workspace.revealLeaf(owner))
+              .then(() => {
+                const composer = root.querySelector<HTMLElement>("[data-chat-context-controls]");
+                root.ownerDocument.defaultView?.focus();
+                composer?.focus();
+                composer?.scrollIntoView({ block: "nearest" });
+              })
+              .catch((error) => logError("Failed to reveal chat context.", error));
+          }
+        : undefined,
       addFile: (path) => {
         const file = app.vault.getAbstractFileByPath(path);
         if (file instanceof TFile)
@@ -129,7 +179,7 @@ export function useChatRelevantNotesContext(
           );
       },
     }),
-    [key, app, setContextNotes]
+    [key, app, setContextNotes, root]
   );
   const currentRef = useRef(current);
   currentRef.current = current;

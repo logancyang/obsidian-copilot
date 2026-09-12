@@ -237,9 +237,16 @@ export type RelevantNotesSearchStatus =
   | "vault-not-registered"
   | "unavailable";
 
+/** Display-only identity and explanation; never sent back as retrieval input. */
+export interface SkippedRelevantSource {
+  label: string;
+  reason?: string;
+}
+
 export interface RelevantNotesStatusDetails {
   folderName?: string;
   skippedAttachments?: number;
+  skippedSources?: readonly SkippedRelevantSource[];
   errorMessage?: string;
   exclusionReason?: MiyoFileStatusReason;
   exclusionRule?: string;
@@ -316,6 +323,13 @@ export function isSameRelevantNotesResult(a: RelevantNotesResult, b: RelevantNot
   // Notice changes must render even when the recommendation rows stay the same.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/383
   if (a.details?.skippedAttachments !== b.details?.skippedAttachments) return false;
+  // A different skipped source matters even when its count and result rows stay the same.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/420
+  if (
+    JSON.stringify(a.details?.skippedSources ?? []) !==
+    JSON.stringify(b.details?.skippedSources ?? [])
+  )
+    return false;
   if (a.details?.errorMessage !== b.details?.errorMessage) return false;
   if (a.details?.exclusionReason !== b.details?.exclusionReason) return false;
   if (a.details?.exclusionRule !== b.details?.exclusionRule) return false;

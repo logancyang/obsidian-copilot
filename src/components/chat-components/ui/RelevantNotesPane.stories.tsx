@@ -35,6 +35,7 @@ const baseArgs: RelevantNotesPaneProps = {
     miyoDownloadUrl: createMiyoPageUrl("relevant_notes"),
     onOpenMiyoSettings: () => undefined,
     onRefresh: () => undefined,
+    onReviewContext: () => undefined,
     reviewIndexing: {
       destination: "miyo",
       onSelect: () => undefined,
@@ -54,7 +55,18 @@ export default meta;
 export const ConnectedScoredResults: StoryObj<RelevantNotesPaneProps> = {};
 
 export const SkippedChatAttachments: StoryObj<RelevantNotesPaneProps> = {
-  args: { details: { skippedAttachments: 2 } },
+  args: {
+    details: {
+      skippedAttachments: 2,
+      skippedSources: [
+        { label: "Sources/research.pdf", reason: "Not indexed in Miyo" },
+        {
+          label: "diagram.png",
+          reason: "Image attachments are not included in relevance requests",
+        },
+      ],
+    },
+  },
 };
 
 export const NoUsableChatContext: StoryObj<RelevantNotesPaneProps> = {
@@ -168,6 +180,25 @@ export const VaultNotRegisteredRemote: StoryObj<RelevantNotesPaneProps> = {
     actions: {
       ...baseArgs.actions,
       reviewIndexing: { ...baseArgs.actions.reviewIndexing, destination: "settings" },
+    },
+  },
+};
+
+export const LongSkippedSources: StoryObj<RelevantNotesPaneProps> = {
+  args: {
+    details: {
+      skippedAttachments: 3,
+      skippedSources: [
+        {
+          label:
+            "Research/Archived sources/Long-running workspace planning and research context/reference-document.pdf",
+          reason: "Outside this request's scope",
+        },
+        {
+          label:
+            "https://example.com/research/reference-with-a-long-unbroken-address-and-no-returned-explanation",
+        },
+      ],
     },
   },
 };

@@ -54,9 +54,8 @@ describe("RelevantNotesPane", () => {
 
     it("describes skipped sources without assuming an indexing failure (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", () => {
       render(<RelevantNotesPane {...BASE_PROPS} details={{ skippedAttachments: 1 }} />);
-      expect(
-        screen.getByText("Skipped attachments: 1. They aren't available for this request.")
-      ).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: "Skipped attachments: 1" }));
+      expect(screen.getByText("Names are unavailable for 1 skipped attachment.")).toBeTruthy();
     });
 
     it.each(["matches", "no-usable-context"] as const)(
@@ -68,6 +67,48 @@ describe("RelevantNotesPane", () => {
         expect(screen.getByText(/Skipped attachments: 2/)).toBeTruthy();
       }
     );
+
+    it("exposes available skipped identities and reasons while retaining usable results (https://github.com/Brevilabs/obsidian-copilot-private/issues/420)", () => {
+      render(
+        <RelevantNotesPane
+          {...BASE_PROPS}
+          noteRows={[
+            <button type="button" key="result">
+              Open related note
+            </button>,
+          ]}
+          details={{
+            skippedAttachments: 2,
+            skippedSources: [
+              { label: "Sources/Research draft.pdf", reason: "Not indexed in Miyo" },
+              { label: "Unexplained source" },
+            ],
+          }}
+        />
+      );
+      const disclosure = screen.getByRole("button", { name: "Skipped attachments: 2" });
+      expect(disclosure.getAttribute("aria-expanded")).toBe("false");
+      fireEvent.click(disclosure);
+      expect(screen.getByText("Sources/Research draft.pdf")).toBeTruthy();
+      expect(screen.getByText("Not indexed in Miyo")).toBeTruthy();
+      expect(screen.getByText("Reason not provided")).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Open related note" })).toBeTruthy();
+      fireEvent.click(disclosure);
+      expect(disclosure.getAttribute("aria-expanded")).toBe("false");
+    });
+
+    it("uses the owning chat's existing context controls for oversized requests (https://github.com/Brevilabs/obsidian-copilot-private/issues/420)", () => {
+      const review = jest.fn();
+      render(
+        <RelevantNotesPane
+          {...BASE_PROPS}
+          status="request-too-large"
+          actions={{ ...BASE_ACTIONS, onReviewContext: review }}
+        />
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Review chat context" }));
+      expect(review).toHaveBeenCalledTimes(1);
+    });
 
     it("omits notices without skipped sources (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", () => {
       render(<RelevantNotesPane {...BASE_PROPS} details={{ skippedAttachments: 0 }} />);

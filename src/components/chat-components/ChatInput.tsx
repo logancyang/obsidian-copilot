@@ -764,6 +764,9 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
           "tw-shadow-[0_0_10px_rgba(var(--color-red-rgb),0.18)] tw-border-red/60"
       )}
       ref={containerRef}
+      data-chat-context-controls
+      tabIndex={-1}
+      aria-label="Chat message and attachments"
     >
       {/* Two columns: the content stack, and (when provided) a structural
           accessory column. A column, not an overlay, so badges, images,
