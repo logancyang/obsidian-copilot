@@ -23,7 +23,10 @@ import { updateSetting, useSettingsValue, validateCopilotFolder } from "@/settin
 import { QuickChatPanel } from "@/settings/v2/components/QuickChatPanel";
 import { DesktopOnlySettingsPanel } from "@/settings/v2/components/DesktopOnlySettingsPanel";
 import { CopilotFolderChangeNotice } from "@/settings/v2/components/CopilotFolderChangeNotice";
-import { LegacyChatPromptsNotice } from "@/settings/v2/components/LegacyChatPromptsNotice";
+import {
+  LegacyChatPromptsNotice,
+  VAULT_INSTRUCTIONS_SECTION_ID,
+} from "@/settings/v2/components/LegacyChatPromptsNotice";
 import { PlusSettings } from "@/settings/v2/components/PlusSettings";
 import { VaultInstructionsSetting } from "@/settings/v2/components/VaultInstructionsSetting";
 import { formatDateTime } from "@/utils";
@@ -308,7 +311,13 @@ export const BasicSettings: React.FC = () => {
         </SettingItem>
       </SettingSection>
 
-      <SettingSection label="Custom instructions">
+      <SettingSection
+        label={
+          <span id={VAULT_INSTRUCTIONS_SECTION_ID} tabIndex={-1}>
+            Custom instructions
+          </span>
+        }
+      >
         <LegacyChatPromptsNotice />
         {vaultInstructions !== null && (
           <VaultInstructionsSetting

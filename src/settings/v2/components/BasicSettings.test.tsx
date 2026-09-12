@@ -5,6 +5,11 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { Notice } from "obsidian";
 import React from "react";
 
+jest.mock("@/contexts/TabContext", () => ({
+  // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the public hook
+  useTab: () => ({ setSelectedTab: jest.fn() }),
+}));
+
 // Stub the Plus banner to keep its dependency chain out of the test.
 jest.mock("@/settings/v2/components/PlusSettings", () => ({ PlusSettings: () => null }));
 
@@ -364,12 +369,12 @@ describe("BasicSettings", () => {
   it("points a user who saved Chat prompts at the folder still holding them", () => {
     systemPrompts.mockReturnValue([{ title: "Editor" }, { title: "Researcher" }]);
     render(<BasicSettings />);
-    expect(screen.getByText(/2 saved system prompts are/)).toBeTruthy();
+    expect(screen.getByText("Your saved prompts are still available")).toBeTruthy();
     expect(screen.getByText("copilot/system-prompts")).toBeTruthy();
   });
 
   it("says nothing about Chat prompts to a user who never saved one", () => {
     render(<BasicSettings />);
-    expect(screen.queryByText(/saved system prompt/)).toBeNull();
+    expect(screen.queryByText("Your saved prompts are still available")).toBeNull();
   });
 });
