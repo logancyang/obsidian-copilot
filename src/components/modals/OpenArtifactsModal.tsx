@@ -52,10 +52,16 @@ function actionLabel(action: OpenArtifactsAction): string {
   return `${action[0].toUpperCase()}${action.slice(1)}`;
 }
 
+const ACTION_LABELS: Record<OpenArtifactsAction, string> = {
+  publish: "Publish page",
+  update: "Update public page",
+  delete: "Unpublish page",
+};
+
 const WORKING_LABELS: Record<OpenArtifactsAction, string> = {
   publish: "Publishing…",
   update: "Updating…",
-  delete: "Deleting…",
+  delete: "Unpublishing…",
 };
 
 interface OpenArtifactsReceiptViewProps {
@@ -225,16 +231,16 @@ export function OpenArtifactsModalContent({
   }
 
   const heading = confirmationAction
-    ? `${actionLabel(confirmationAction)} “${fileName}”?`
+    ? `${ACTION_LABELS[confirmationAction]} “${fileName}”?`
     : `Manage “${fileName}”`;
   const description =
     confirmationAction === "delete"
-      ? "Yes withdraws the link and deletes OpenArtifacts’s stored copy. Previously fetched or cached copies cannot be recalled."
+      ? "Withdraws the public link and deletes OpenArtifacts’s stored copy. Your local note is kept. Previously fetched or cached copies cannot be recalled."
       : confirmationAction === "update"
-        ? "Yes replaces the current public page with this note’s latest content."
+        ? "Replaces the current public page with this note’s latest content."
         : confirmationAction === "publish"
-          ? "Yes makes this note available to anyone with the public link."
-          : "Choose whether to replace the current public page or withdraw it.";
+          ? "Makes this note available to anyone with the public link."
+          : "Update the public page from this note, or unpublish it. Your local note is kept.";
 
   return (
     <div className="tw-flex tw-flex-col tw-gap-4">
@@ -250,14 +256,14 @@ export function OpenArtifactsModalContent({
         {confirmationAction ? (
           <>
             <Button variant="secondary" onClick={onClose} disabled={working}>
-              No, cancel
+              Cancel
             </Button>
             <Button
               variant={confirmationAction === "delete" ? "destructive" : "default"}
               onClick={(event) => void runAction(confirmationAction, event.currentTarget.doc)}
               disabled={working}
             >
-              {working ? WORKING_LABELS[confirmationAction] : `Yes, ${confirmationAction}`}
+              {working ? WORKING_LABELS[confirmationAction] : ACTION_LABELS[confirmationAction]}
             </Button>
           </>
         ) : (
@@ -265,9 +271,9 @@ export function OpenArtifactsModalContent({
             <Button variant="secondary" onClick={onClose}>
               Cancel
             </Button>
-            <Button onClick={() => setConfirmationAction("update")}>Update</Button>
-            <Button variant="destructive" onClick={() => setConfirmationAction("delete")}>
-              Delete
+            <Button onClick={() => setConfirmationAction("update")}>{ACTION_LABELS.update}</Button>
+            <Button variant="secondary" onClick={() => setConfirmationAction("delete")}>
+              {ACTION_LABELS.delete}
             </Button>
           </>
         )}
