@@ -468,7 +468,9 @@ function SettingsTabStoryHost({
       <div className="modal-content">
         <div className="vertical-tabs">
           <div className="vertical-tab-content-container">
-            <div className="vertical-tab-content">{renderStoryContent(story)}</div>
+            <div className="vertical-tab-content copilot-settings-content">
+              {renderStoryContent(story)}
+            </div>
           </div>
         </div>
       </div>
