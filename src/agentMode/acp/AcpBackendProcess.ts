@@ -71,6 +71,7 @@ import {
  * handler instead of touching reset / probe / getter sites.
  */
 export type AcpCapability =
+  | "session/close"
   | "session/list"
   | "session/resume"
   | "session/load"
@@ -280,6 +281,11 @@ export class AcpBackendProcess implements BackendProcess {
           version: this.clientVersion,
         },
       });
+      // Closing a local chat must not claim to release resources on an unsupported agent.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/429
+      if (init.agentCapabilities?.sessionCapabilities?.close != null) {
+        this.capabilities.set("session/close", true);
+      }
       if (init.agentCapabilities?.sessionCapabilities?.list != null) {
         this.capabilities.set("session/list", true);
       }
@@ -513,6 +519,22 @@ export class AcpBackendProcess implements BackendProcess {
       sessionId,
       update: { sessionUpdate: "plan_usage_update", planUsage: this.planUsageFor(sessionId) },
     });
+  }
+
+  /**
+   * Release backend resources for one session while preserving the shared subprocess.
+   * @param params Identifies the live session to release.
+   */
+  async closeSession(params: { sessionId: SessionId }): Promise<void> {
+    await this.dispatchCapability(
+      "session/close",
+      (connection) => connection.closeSession(params),
+      {
+        mustBeAdvertised: true,
+      }
+    );
+    this.sessionWireState.delete(params.sessionId);
+    this.pendingUpdates.delete(params.sessionId);
   }
 
   async cancel(params: CancelInput): Promise<void> {

@@ -783,6 +783,12 @@ export interface BackendProcess {
   newSession(params: OpenSessionInput): Promise<OpenSessionOutput>;
   prompt(params: PromptInput): Promise<PromptOutput>;
   cancel(params: CancelInput): Promise<void>;
+  /**
+   * Release one live session without deleting its persisted history or stopping sibling sessions.
+   * Rejects when the backend cannot release it; callers must retain their live session on failure.
+   * @param params Identifies the live session whose resources should be released.
+   */
+  closeSession?(params: { sessionId: SessionId }): Promise<void>;
   setSessionModel(params: { sessionId: SessionId; modelId: string }): Promise<BackendState>;
   isSetSessionModelSupported(): boolean | null;
   setSessionMode(params: { sessionId: SessionId; modeId: string }): Promise<BackendState>;

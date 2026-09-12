@@ -35,6 +35,7 @@ import { getProjectContextSignature } from "@/projects/projectContextSignature";
 import { MethodUnsupportedError } from "@/agentMode/session/errors";
 import { buildCodexModeMapping } from "@/agentMode/backends/codex/codexModeMapping";
 import type {
+  BackendProcess,
   BackendDescriptor,
   BackendId,
   BackendModelCatalog,
@@ -143,6 +144,7 @@ function makeMockBackendProcess() {
     },
     isRunning: () => mockBackendIsRunning,
     shutdown: mockBackendShutdown,
+    closeSession: jest.fn(async (_params: { sessionId: string }) => undefined),
     // Stub the session-event surface so warm-adoption tests can construct
     // a real `AgentSession` via the state-options branch without throwing.
     registerSessionHandler: jest.fn(() => () => {}),
@@ -177,6 +179,7 @@ function makeMockSession(overrides: {
   chatInputId?: string;
   backendSessionId?: string;
   backendId: string;
+  backend?: BackendProcess;
   projectId?: string;
   ready?: Promise<void>;
 }): AgentSession {
@@ -199,6 +202,9 @@ function makeMockSession(overrides: {
     getStatus: () => status,
     store: { getDisplayMessages: () => displayMessages },
     cancel: mockSessionCancel,
+    backend: overrides.backend,
+    backendSessionId: sessionId,
+    releaseBackendSession: AgentSession.prototype.releaseBackendSession,
     dispose: mockSessionDispose,
     setModel: jest.fn(),
     setMode: jest.fn(),
@@ -246,6 +252,7 @@ const sessionCreateSpy = jest.spyOn(AgentSession, "start").mockImplementation((o
     internalId: opts.internalId,
     chatInputId: opts.chatInputId,
     backendId: opts.backendId,
+    backend: opts.backend,
     projectId: opts.projectId,
   })
 );
@@ -351,7 +358,8 @@ function modelCatalog(baseModelId: string): BackendModelCatalog {
 }
 
 function buildManager(
-  modelPreloaderOverrides: Partial<AgentModelPreloader> = {}
+  modelPreloaderOverrides: Partial<AgentModelPreloader> = {},
+  persistenceManager?: ConstructorParameters<typeof AgentSessionManager>[2]["persistenceManager"]
 ): AgentSessionManager {
   const descriptor = buildDescriptor();
   const modelPreloader = {
@@ -371,6 +379,7 @@ function buildManager(
     buildPlugin() as unknown as ConstructorParameters<typeof AgentSessionManager>[1],
     {
       permissionPrompter: jest.fn(),
+      persistenceManager,
       resolveDescriptor: (id) => (id === descriptor.id ? descriptor : undefined),
       modelPreloader: modelPreloader as unknown as ConstructorParameters<
         typeof AgentSessionManager
@@ -400,6 +409,109 @@ beforeEach(() => {
 
 describe("AgentSessionManager", () => {
   describe("AgentSessionManager", () => {
+    describe("getOpenChatIds()", () => {
+      it("includes idle and running conversations and removes released sessions for https://github.com/Brevilabs/obsidian-copilot-private/issues/429", async () => {
+        const mgr = buildManager();
+        const empty = mgr.getOpenChatIds();
+        expect(mgr.getOpenChatIds()).toBe(empty);
+        const idle = await mgr.createSession();
+        const running = await mgr.createSession();
+        getSessionTestHandle(running).setStatus("running");
+        const idleId = buildNativeChatId(idle.backendId, idle.getBackendSessionId()!);
+        const runningId = buildNativeChatId(running.backendId, running.getBackendSessionId()!);
+        expect(mgr.getOpenChatIds()).toEqual(new Set([idleId, runningId]));
+        await mgr.closeChatSession(idleId);
+        expect(mgr.getOpenChatIds()).toEqual(new Set([runningId]));
+      });
+    });
+
+    describe("closeChatSession()", () => {
+      it("closes by saved or stale native identity and retains the saved transcript for https://github.com/Brevilabs/obsidian-copilot-private/issues/429", async () => {
+        for (const useNativeId of [false, true]) {
+          const saved = new Map<string, unknown>();
+          const persistence = {
+            saveSession: jest.fn(async (messages: unknown) => {
+              saved.set("chats/research.md", messages);
+              return { path: "chats/research.md" };
+            }),
+          };
+          const mgr = buildManager(
+            {},
+            persistence as unknown as ConstructorParameters<
+              typeof AgentSessionManager
+            >[2]["persistenceManager"]
+          );
+          const session = await mgr.createSession();
+          getSessionTestHandle(session).setMessages([{ message: "Initial answer" }]);
+          await mgr.saveActiveSession();
+          const nativeId = buildNativeChatId(session.backendId, session.getBackendSessionId()!);
+          expect(mgr.getOpenChatIds()).toEqual(new Set([nativeId, "chats/research.md"]));
+          await mgr.closeChatSession(useNativeId ? nativeId : "chats/research.md");
+          expect(saved.get("chats/research.md")).toEqual([{ message: "Initial answer" }]);
+          expect(mgr.getOpenChatIds().size).toBe(0);
+          expect(mgr.getSessions()).toEqual([]);
+        }
+      });
+
+      it("releases only the selected backend session while preserving another active chat for https://github.com/Brevilabs/obsidian-copilot-private/issues/429", async () => {
+        const mgr = buildManager();
+        const selected = await mgr.createSession();
+        const sibling = await mgr.createSession();
+        const proc = mgr.getBackendProcess(selected.backendId)!;
+        const id = buildNativeChatId(selected.backendId, selected.getBackendSessionId()!);
+        await mgr.closeChatSession(id);
+        expect(proc.closeSession).toHaveBeenCalledWith({
+          sessionId: selected.getBackendSessionId(),
+        });
+        expect(mgr.getSessions()).toEqual([sibling]);
+        expect(mgr.getActiveSession()).toBe(sibling);
+        expect(proc.shutdown).not.toHaveBeenCalled();
+      });
+
+      it("keeps the chat open when backend release fails so the user can retry for https://github.com/Brevilabs/obsidian-copilot-private/issues/429", async () => {
+        const mgr = buildManager();
+        const session = await mgr.createSession();
+        const proc = mgr.getBackendProcess(session.backendId)!;
+        (proc.closeSession as jest.Mock).mockRejectedValueOnce(new Error("release failed"));
+        const id = buildNativeChatId(session.backendId, session.getBackendSessionId()!);
+        await expect(mgr.closeChatSession(id)).rejects.toThrow("release failed");
+        expect(mgr.getOpenChatIds().has(id)).toBe(true);
+        expect(mgr.getSessions()).toEqual([session]);
+        expect(mockSessionDispose).not.toHaveBeenCalled();
+      });
+
+      it("reports unsupported release without hiding the open chat for https://github.com/Brevilabs/obsidian-copilot-private/issues/429", async () => {
+        const mgr = buildManager();
+        const session = await mgr.createSession();
+        mgr.getBackendProcess(session.backendId)!.closeSession = undefined;
+        const id = buildNativeChatId(session.backendId, session.getBackendSessionId()!);
+        await expect(mgr.closeChatSession(id)).rejects.toThrow(/does not support closing/);
+        expect(mgr.getOpenChatIds().has(id)).toBe(true);
+      });
+
+      it("explains unsupported backend capabilities without hiding the open chat for https://github.com/Brevilabs/obsidian-copilot-private/issues/429", async () => {
+        const mgr = buildManager();
+        const session = await mgr.createSession();
+        const proc = mgr.getBackendProcess(session.backendId)!;
+        (proc.closeSession as jest.Mock).mockRejectedValueOnce(
+          new MethodUnsupportedError("session/close")
+        );
+        const id = buildNativeChatId(session.backendId, session.getBackendSessionId()!);
+        await expect(mgr.closeChatSession(id)).rejects.toThrow(
+          "This agent does not support closing individual sessions."
+        );
+        expect(mgr.getOpenChatIds().has(id)).toBe(true);
+      });
+
+      it("leaves sessions unchanged when a stale history row is already closed for https://github.com/Brevilabs/obsidian-copilot-private/issues/429", async () => {
+        const mgr = buildManager();
+        const session = await mgr.createSession();
+        await mgr.closeChatSession("missing.md");
+        expect(mgr.getSessions()).toEqual([session]);
+        expect(mockSessionCancel).not.toHaveBeenCalled();
+      });
+    });
+
     describe("createSession()", () => {
       it("creates a session and sets it as the active one", async () => {
         const mgr = buildManager();

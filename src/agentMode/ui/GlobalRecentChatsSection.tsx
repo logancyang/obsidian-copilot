@@ -1,3 +1,4 @@
+import { CloseSessionButton } from "@/components/chat-components/ui/OpenSessionControls";
 import { backendRegistry } from "@/agentMode/backends/registry";
 import { AgentHomePreviewList } from "@/agentMode/ui/AgentHomeSection";
 import { RecentChatProjectBadge, RecentChatTitle } from "@/agentMode/ui/RecentChatTitle";
@@ -59,6 +60,8 @@ interface GlobalRecentChatsSectionProps {
    * rows swap their relative-time chip for a spinner. Omitted means "none".
    */
   runningChatIds?: ReadonlySet<string>;
+  openChatIds?: ReadonlySet<string>;
+  onCloseSession?: (id: string) => Promise<void>;
   /**
    * Recent-list ids whose live session is flagging needs-attention. OR'd with
    * each item's baked-in `needsAttention` snapshot so the done-dot appears the
@@ -108,17 +111,17 @@ const ChatIconTile = memo(
   ({
     Icon,
     needsAttention,
+    isSessionOpen,
   }: {
     Icon: React.ComponentType<{ className?: string }>;
     needsAttention?: boolean;
+    isSessionOpen?: boolean;
   }) => (
-    <span
-      aria-hidden="true"
-      className="tw-flex tw-size-6 tw-shrink-0 tw-items-center tw-justify-center tw-rounded-md tw-bg-secondary tw-text-muted"
-    >
+    <span className="tw-flex tw-size-6 tw-shrink-0 tw-items-center tw-justify-center tw-rounded-md tw-bg-secondary tw-text-muted">
       <ChatIconWithAttention
         icon={Icon}
         needsAttention={needsAttention}
+        isSessionOpen={isSessionOpen}
         iconClassName="tw-size-4"
       />
     </span>
@@ -145,6 +148,8 @@ interface RecentChatRowProps {
   onOpenSourceFile: (id: string) => void;
   /** Whether this chat's backend turn is running in the background. */
   isRunning: boolean;
+  isSessionOpen: boolean;
+  onCloseSession?: (id: string) => Promise<void>;
   /** Snapshot ∪ live needs-attention — drives the icon tile's done-dot. */
   hasAttention: boolean;
 }
@@ -172,6 +177,8 @@ const RecentChatRow = memo(function RecentChatRow({
   canOpenSourceFile,
   onOpenSourceFile,
   isRunning,
+  isSessionOpen,
+  onCloseSession,
   hasAttention,
 }: RecentChatRowProps): React.ReactElement {
   const Icon = resolveChatIcon(item) ?? MessageCircle;
@@ -221,7 +228,7 @@ const RecentChatRow = memo(function RecentChatRow({
         }
       }}
     >
-      <ChatIconTile Icon={Icon} needsAttention={hasAttention} />
+      <ChatIconTile Icon={Icon} needsAttention={hasAttention} isSessionOpen={isSessionOpen} />
       <RecentChatTitle title={item.title} />
 
       {/* Relative time by default; a backgrounded running session shows an accent
@@ -278,6 +285,9 @@ const RecentChatRow = memo(function RecentChatRow({
             </>
           ) : (
             <>
+              {isSessionOpen && onCloseSession && (
+                <CloseSessionButton chatId={item.id} onCloseSession={onCloseSession} />
+              )}
               {canOpenSourceFile && (
                 <Button
                   size="sm"
@@ -346,6 +356,8 @@ export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
   onOpenSourceFile,
   onLoadHistory,
   runningChatIds,
+  openChatIds,
+  onCloseSession,
   attentionChatIds,
   projectNamesById,
   sortStrategy = "recent",
@@ -494,6 +506,8 @@ export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
                 canOpenSourceFile={!isNativeChatId(item.id)}
                 onOpenSourceFile={handleOpenSourceFile}
                 isRunning={runningChatIds?.has(item.id) ?? false}
+                isSessionOpen={openChatIds?.has(item.id) ?? false}
+                onCloseSession={onCloseSession}
                 hasAttention={!!item.needsAttention || (attentionChatIds?.has(item.id) ?? false)}
               />
             ))}
