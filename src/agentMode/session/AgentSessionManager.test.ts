@@ -402,6 +402,30 @@ beforeEach(() => {
   settingsChangeCallbacks.clear();
 });
 
+function setupSavedNoteTests() {
+  let originalSettings: ReturnType<jest.Mock["getMockImplementation"]>;
+  beforeEach(() => {
+    originalSettings = (mockedGetSettings as jest.Mock).getMockImplementation();
+    jest.useFakeTimers();
+    (mockedGetSettings as jest.Mock).mockReturnValue({
+      ...mockedGetSettings(),
+      autosaveChat: false,
+    });
+  });
+  afterEach(() => {
+    (mockedGetSettings as jest.Mock).mockImplementation(originalSettings);
+    jest.useRealTimers();
+  });
+}
+
+function savedNoteFixture() {
+  const saveSession = jest.fn(async () => ({ path: "chats/saved.md" }));
+  const mgr = buildManager({}, { saveSession } as unknown as ConstructorParameters<
+    typeof AgentSessionManager
+  >[2]["persistenceManager"]);
+  return { mgr, saveSession };
+}
+
 describe("AgentSessionManager", () => {
   describe("AgentSessionManager", () => {
     describe("createSession()", () => {
@@ -626,6 +650,108 @@ describe("AgentSessionManager", () => {
         } finally {
           recordSpy.mockRestore();
         }
+      });
+    });
+
+    describe("closeSession()", () => {
+      setupSavedNoteTests();
+      it("never writes an unsaved chat with autosave off for https://github.com/logancyang/obsidian-copilot/issues/3225", async () => {
+        const { mgr, saveSession } = savedNoteFixture();
+        const session = await mgr.createSession();
+        getSessionTestHandle(session).setMessages([{ message: "Unsaved turn" }], true);
+        await jest.advanceTimersByTimeAsync(2000);
+        await mgr.closeSession(session.internalId);
+        expect(saveSession).not.toHaveBeenCalled();
+        await mgr.shutdown();
+      });
+    });
+
+    describe("replaceSessionInPlace()", () => {
+      setupSavedNoteTests();
+      it("updates the manually saved file and drains later turns on New Chat with autosave off for https://github.com/logancyang/obsidian-copilot/issues/3225", async () => {
+        const { mgr, saveSession } = savedNoteFixture();
+        const session = await mgr.createSession();
+        const handle = getSessionTestHandle(session);
+        const first = [
+          { message: "Image question\n\n![](/image.png)" },
+          { message: "Image answer" },
+        ];
+        handle.setMessages(first, true);
+        await mgr.saveActiveSession();
+        const later = [...first, { message: "Later question" }, { message: "Later answer" }];
+        handle.setMessages(later, true);
+        await jest.advanceTimersByTimeAsync(2000);
+        expect(saveSession).toHaveBeenCalledTimes(2);
+        expect(saveSession).toHaveBeenLastCalledWith(
+          later,
+          session.backendId,
+          expect.objectContaining({ existingPath: "chats/saved.md" })
+        );
+        const final = [...later, { message: "Final question" }, { message: "Final answer" }];
+        handle.setMessages(final, true);
+        await mgr.replaceSessionInPlace(session.internalId);
+        await jest.advanceTimersByTimeAsync(0);
+        expect(saveSession).toHaveBeenCalledTimes(3);
+        expect(saveSession).toHaveBeenLastCalledWith(
+          final,
+          session.backendId,
+          expect.objectContaining({ existingPath: "chats/saved.md" })
+        );
+        await mgr.shutdown();
+      });
+    });
+
+    describe("saveActiveSession()", () => {
+      setupSavedNoteTests();
+      it("persists changes during the first manual save for https://github.com/logancyang/obsidian-copilot/issues/3225", async () => {
+        const { mgr, saveSession } = savedNoteFixture();
+        let finishSave!: (result: { path: string }) => void;
+        saveSession.mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              finishSave = resolve;
+            })
+        );
+        const session = await mgr.createSession();
+        const handle = getSessionTestHandle(session);
+        handle.setMessages([{ message: "Question" }, { message: "Partial answer" }], true);
+        const saving = mgr.saveActiveSession();
+        await jest.advanceTimersByTimeAsync(0);
+        expect(saveSession).toHaveBeenCalledTimes(1);
+        const completed = [{ message: "Question" }, { message: "Completed answer" }];
+        handle.setMessages(completed, true);
+        finishSave({ path: "chats/saved.md" });
+        await saving;
+        await jest.advanceTimersByTimeAsync(2000);
+        expect(saveSession).toHaveBeenCalledTimes(2);
+        expect(saveSession).toHaveBeenLastCalledWith(
+          completed,
+          session.backendId,
+          expect.objectContaining({ existingPath: "chats/saved.md" })
+        );
+        await mgr.shutdown();
+      });
+    });
+
+    describe("scheduleAutoSave()", () => {
+      setupSavedNoteTests();
+      it("still creates notes automatically with autosave on for https://github.com/logancyang/obsidian-copilot/issues/3225", async () => {
+        (mockedGetSettings as jest.Mock).mockReturnValue({
+          ...mockedGetSettings(),
+          autosaveChat: true,
+        });
+        const { mgr, saveSession } = savedNoteFixture();
+        const session = await mgr.createSession();
+        const messages = [{ message: "Automatically saved turn" }];
+        getSessionTestHandle(session).setMessages(messages, true);
+        await jest.advanceTimersByTimeAsync(2000);
+        expect(saveSession).toHaveBeenCalledTimes(1);
+        expect(saveSession).toHaveBeenCalledWith(
+          messages,
+          session.backendId,
+          expect.objectContaining({ existingPath: undefined })
+        );
+        await mgr.shutdown();
       });
     });
   });
@@ -3934,111 +4060,5 @@ describe("AgentSessionManager context-source dirty tracking", () => {
     expect(m.getProjectContextUpdates(session.internalId, PID)?.block).toContain(
       "<project_context_updates>"
     );
-  });
-});
-
-describe("AgentSessionManager saved-note updates", () => {
-  beforeEach(() => {
-    jest.useFakeTimers();
-    (mockedGetSettings as jest.Mock).mockReturnValue({
-      ...mockedGetSettings(),
-      autosaveChat: false,
-    });
-  });
-  afterEach(() => jest.useRealTimers());
-
-  function fixture() {
-    const saveSession = jest.fn(async () => ({ path: "chats/saved.md" }));
-    const mgr = buildManager({}, { saveSession } as unknown as ConstructorParameters<
-      typeof AgentSessionManager
-    >[2]["persistenceManager"]);
-    return { mgr, saveSession };
-  }
-
-  it("never writes an unsaved chat with autosave off for https://github.com/logancyang/obsidian-copilot/issues/3225", async () => {
-    const { mgr, saveSession } = fixture();
-    const session = await mgr.createSession();
-    getSessionTestHandle(session).setMessages([{ message: "Unsaved turn" }], true);
-    await jest.advanceTimersByTimeAsync(2000);
-    await mgr.closeSession(session.internalId);
-    expect(saveSession).not.toHaveBeenCalled();
-    await mgr.shutdown();
-  });
-
-  it("updates the manually saved file and drains later turns on New Chat with autosave off for https://github.com/logancyang/obsidian-copilot/issues/3225", async () => {
-    const { mgr, saveSession } = fixture();
-    const session = await mgr.createSession();
-    const handle = getSessionTestHandle(session);
-    const first = [{ message: "Image question\n\n![](/image.png)" }, { message: "Image answer" }];
-    handle.setMessages(first, true);
-    await mgr.saveActiveSession();
-    const later = [...first, { message: "Later question" }, { message: "Later answer" }];
-    handle.setMessages(later, true);
-    await jest.advanceTimersByTimeAsync(2000);
-    expect(saveSession).toHaveBeenCalledTimes(2);
-    expect(saveSession).toHaveBeenLastCalledWith(
-      later,
-      session.backendId,
-      expect.objectContaining({ existingPath: "chats/saved.md" })
-    );
-    const final = [...later, { message: "Final question" }, { message: "Final answer" }];
-    handle.setMessages(final, true);
-    await mgr.replaceSessionInPlace(session.internalId);
-    await jest.advanceTimersByTimeAsync(0);
-    expect(saveSession).toHaveBeenCalledTimes(3);
-    expect(saveSession).toHaveBeenLastCalledWith(
-      final,
-      session.backendId,
-      expect.objectContaining({ existingPath: "chats/saved.md" })
-    );
-    await mgr.shutdown();
-  });
-
-  it("persists changes during the first manual save for https://github.com/logancyang/obsidian-copilot/issues/3225", async () => {
-    const { mgr, saveSession } = fixture();
-    let finishSave!: (result: { path: string }) => void;
-    saveSession.mockImplementationOnce(
-      () =>
-        new Promise((resolve) => {
-          finishSave = resolve;
-        })
-    );
-    const session = await mgr.createSession();
-    const handle = getSessionTestHandle(session);
-    handle.setMessages([{ message: "Question" }, { message: "Partial answer" }], true);
-    const saving = mgr.saveActiveSession();
-    await jest.advanceTimersByTimeAsync(0);
-    expect(saveSession).toHaveBeenCalledTimes(1);
-    const completed = [{ message: "Question" }, { message: "Completed answer" }];
-    handle.setMessages(completed, true);
-    finishSave({ path: "chats/saved.md" });
-    await saving;
-    await jest.advanceTimersByTimeAsync(2000);
-    expect(saveSession).toHaveBeenCalledTimes(2);
-    expect(saveSession).toHaveBeenLastCalledWith(
-      completed,
-      session.backendId,
-      expect.objectContaining({ existingPath: "chats/saved.md" })
-    );
-    await mgr.shutdown();
-  });
-
-  it("still creates notes automatically with autosave on for https://github.com/logancyang/obsidian-copilot/issues/3225", async () => {
-    (mockedGetSettings as jest.Mock).mockReturnValue({
-      ...mockedGetSettings(),
-      autosaveChat: true,
-    });
-    const { mgr, saveSession } = fixture();
-    const session = await mgr.createSession();
-    const messages = [{ message: "Automatically saved turn" }];
-    getSessionTestHandle(session).setMessages(messages, true);
-    await jest.advanceTimersByTimeAsync(2000);
-    expect(saveSession).toHaveBeenCalledTimes(1);
-    expect(saveSession).toHaveBeenCalledWith(
-      messages,
-      session.backendId,
-      expect.objectContaining({ existingPath: undefined })
-    );
-    await mgr.shutdown();
   });
 });
