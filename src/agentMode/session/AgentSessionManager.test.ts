@@ -409,7 +409,7 @@ describe("AgentSessionManager", () => {
           sender: "user",
           timestamp: { display: "Saved time", fileName: "saved-time", epoch: 123 },
           isVisible: true,
-          message: "First question ![[photo.png]]",
+          message: "First question\n\n![[photo.png]]",
         },
       ];
       const transcript: AgentChatMessage[] = [
@@ -426,7 +426,8 @@ describe("AgentSessionManager", () => {
       function historyManager(
         backendId: BackendId,
         sessionId: string | undefined,
-        messages: AgentChatMessage[]
+        messages: AgentChatMessage[],
+        savedMessages = noteMessages
       ) {
         const backend = {
           ...makeMockBackendProcess(),
@@ -470,7 +471,7 @@ describe("AgentSessionManager", () => {
               loadFile: jest.fn(async () => ({
                 backendId,
                 sessionId,
-                messages: noteMessages,
+                messages: savedMessages,
                 projectId: GLOBAL_SCOPE,
               })),
             } as unknown as ConstructorParameters<
@@ -494,14 +495,19 @@ describe("AgentSessionManager", () => {
         }
       );
 
-      it("keeps mismatched backend history and warns without message contents for https://github.com/logancyang/obsidian-copilot/issues/3225", async () => {
+      it("keeps the note and warns once when only an earlier user message matches for https://github.com/logancyang/obsidian-copilot/issues/3225", async () => {
         jest.mocked(logWarn).mockClear();
-        const mismatched = [{ ...transcript[0], sender: "ai" }, transcript[1]];
-        const { manager, file } = historyManager("claude", "saved-session", mismatched);
+        const saved = [
+          ...noteMessages,
+          transcript[1],
+          { ...noteMessages[0], id: "final-question", message: "Unsynced final turn" },
+        ];
+        const { manager, file } = historyManager("claude", "saved-session", transcript, saved);
         const session = await manager.loadSessionFromHistory(file);
-        expect(session.store.getDisplayMessages()).toEqual(mismatched);
+        expect(session.store.getDisplayMessages()).toEqual(saved);
+        expect(logWarn).toHaveBeenCalledTimes(1);
         expect(logWarn).toHaveBeenCalledWith(
-          "[AgentMode] Saved note and backend transcript senders differ; displaying backend transcript."
+          "[AgentMode] Saved chat's final user turn is absent from backend history; keeping the saved note."
         );
         await manager.shutdown();
       });

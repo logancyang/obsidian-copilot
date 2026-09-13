@@ -1,8 +1,8 @@
 import type { AgentChatMessage } from "@/agentMode/session/types";
 
 /**
- * Keep saved images and timestamps that text-only backend replay cannot restore.
- * A mismatched sender prefix cannot safely be combined with the saved note.
+ * Anchor restored turns by user text, preserving saved images and note-only turns.
+ * Returning the note unchanged with a nonempty backend signals an unmatched final turn.
  * https://github.com/logancyang/obsidian-copilot/issues/3225
  * @param note Messages preserved in the saved Markdown note.
  * @param backend Messages restored by the backend.
@@ -11,12 +11,37 @@ export function mergeRestoredTranscript(
   note: AgentChatMessage[],
   backend: AgentChatMessage[]
 ): AgentChatMessage[] {
-  if (backend.length < note.length) return note;
-  if (note.some((message, index) => message.sender !== backend[index].sender)) return backend;
-  const prefix = note.map((message, index) =>
-    message.sender === "ai" && backend[index].message.length > message.message.length
-      ? { ...message, message: backend[index].message }
-      : message
-  );
-  return [...prefix, ...backend.slice(note.length)];
+  if (backend.length === 0) return note;
+  const norm = (text: string) =>
+    text
+      .replace(/^\s*!\[\[.*\]\]\s*$/gm, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  let u = note.length - 1;
+  while (u >= 0 && note[u].sender !== "user") u--;
+  let k = backend.length - 1;
+  while (
+    k >= 0 &&
+    (u < 0 || backend[k].sender !== "user" || norm(backend[k].message) !== norm(note[u].message))
+  )
+    k--;
+  if (k < 0) {
+    const backendUsers = new Set(
+      backend.filter((m) => m.sender === "user").map((m) => norm(m.message))
+    );
+    return note.some((m) => m.sender === "user" && backendUsers.has(norm(m.message)))
+      ? note
+      : [...note, ...backend];
+  }
+  const result = [...note];
+  const savedAnswer = note[u + 1];
+  const restoredAnswer = backend[k + 1];
+  if (
+    savedAnswer?.sender === "ai" &&
+    restoredAnswer?.sender === "ai" &&
+    restoredAnswer.message.length > savedAnswer.message.length
+  ) {
+    result[u + 1] = { ...savedAnswer, message: restoredAnswer.message };
+  }
+  return [...result, ...backend.slice(k + (note.length - u))];
 }

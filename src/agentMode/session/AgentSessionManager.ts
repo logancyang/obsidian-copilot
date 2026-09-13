@@ -2878,11 +2878,11 @@ export class AgentSessionManager {
     const restored = resumed
       ? mergeRestoredTranscript(loaded.messages, backendMessages)
       : loaded.messages;
-    // Only mismatched prefixes select the backend array unchanged.
+    // A nonempty backend with an unmatched final turn keeps the note unchanged.
     // https://github.com/logancyang/obsidian-copilot/issues/3225
-    if (restored === backendMessages && restored !== loaded.messages) {
+    if (resumed && backendMessages.length > 0 && restored === loaded.messages) {
       logWarn(
-        "[AgentMode] Saved note and backend transcript senders differ; displaying backend transcript."
+        "[AgentMode] Saved chat's final user turn is absent from backend history; keeping the saved note."
       );
     }
     session.loadDisplayMessages(restored);

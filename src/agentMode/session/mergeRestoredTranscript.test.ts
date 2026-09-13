@@ -9,7 +9,7 @@ describe("mergeRestoredTranscript", () => {
         sender: "user",
         timestamp: { display: "Saved time", fileName: "saved-time", epoch: 123 },
         isVisible: true,
-        message: "Describe this ![[photo.png]]",
+        message: "Describe   this\n\n![[photo.png]]",
       },
     ];
     const backend: AgentChatMessage[] = [
@@ -41,9 +41,25 @@ describe("mergeRestoredTranscript", () => {
         ]);
       }
     );
-    it("uses the backend transcript when prefix senders disagree for https://github.com/logancyang/obsidian-copilot/issues/3225", () => {
-      const mismatched = [{ ...backend[0], sender: "ai" }, backend[1]];
-      expect(mergeRestoredTranscript(note, mismatched)).toBe(mismatched);
+    it("appends normal turns after note-only fan-out turns for https://github.com/logancyang/obsidian-copilot/issues/3225", () => {
+      const fanout = [
+        { ...note[0], message: "Ask the team" },
+        { ...backend[1], message: "Team answer" },
+      ];
+      expect(mergeRestoredTranscript(fanout, backend)).toEqual([...fanout, ...backend]);
+    });
+    it("finds the last user anchor mid-transcript and appends only later turns for https://github.com/logancyang/obsidian-copilot/issues/3225", () => {
+      const earlier = [{ ...backend[0], message: "Earlier question" }, backend[1]];
+      const saved = [...note, backend[1]];
+      const later = [{ ...backend[0], message: "Later question" }, backend[1]];
+      expect(mergeRestoredTranscript(saved, [...earlier, ...backend, ...later])).toEqual([
+        ...saved,
+        ...later,
+      ]);
+    });
+    it("keeps the note when only an earlier user message matches for https://github.com/logancyang/obsidian-copilot/issues/3225", () => {
+      const saved = [...note, backend[1], { ...note[0], message: "Unsynced final turn" }];
+      expect(mergeRestoredTranscript(saved, backend)).toBe(saved);
     });
   });
 });
