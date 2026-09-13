@@ -1,4 +1,3 @@
-import { mergeRestoredTranscript } from "@/agentMode/session/mergeRestoredTranscript";
 import type { BackendState } from "@/agentMode/session/types";
 import { resolveEffort } from "@/lib/model-effort";
 import { logError, logInfo, logWarn } from "@/logger";
@@ -2858,34 +2857,17 @@ export class AgentSessionManager {
     // session. The throw points are all before a session activates, so no
     // already-active session in the target scope can be wrongly rolled back.
     let session: AgentSession;
-    let resumed: AgentSession | null = null;
     try {
-      resumed = loaded.sessionId
+      const resumed = loaded.sessionId
         ? await this.tryResumeSessionFromHistory(loaded.backendId, loaded.sessionId, projectId)
         : null;
       session = resumed ?? (await this.createSession(loaded.backendId, projectId));
-      // Saved notes may lag the backend transcript; preserve its latest turns.
-      // https://github.com/logancyang/obsidian-copilot/issues/3225
-      if (resumed && loaded.sessionId) {
-        await this.hydrateResumedTranscript(resumed, loaded.backendId, loaded.sessionId);
-      }
     } catch (err) {
       this.rollbackOptimisticScopeSwitch(previousActiveProjectId, scopeSeq);
       throw err;
     }
 
-    const backendMessages = session.store.getDisplayMessages();
-    const restored = resumed
-      ? mergeRestoredTranscript(loaded.messages, backendMessages)
-      : loaded.messages;
-    // A nonempty backend with an unmatched final turn keeps the note unchanged.
-    // https://github.com/logancyang/obsidian-copilot/issues/3225
-    if (resumed && backendMessages.length > 0 && restored === loaded.messages) {
-      logWarn(
-        "[AgentMode] Saved chat's final user turn is absent from backend history; keeping the saved note."
-      );
-    }
-    session.loadDisplayMessages(restored);
+    session.loadDisplayMessages(loaded.messages);
     session.seedSessionUsage(loaded.usage);
     if (loaded.label) session.setLabel(loaded.label);
     this.getSessionState(session.internalId).path = file.path;
@@ -3242,9 +3224,8 @@ export class AgentSessionManager {
     const index = this.opts.sessionIndex;
     if (!persistence && !index) return;
 
-    // The markdown auto-save is gated on `settings.autosaveChat` inside
-    // `scheduleAutoSave`; the index write-through is not — history must keep
-    // tracking the session even when the user opted out of markdown notes.
+    // New markdown notes follow `autosaveChat`; saved notes stay current.
+    // The index tracks sessions regardless of whether they have a note.
     const trigger = () => {
       this.scheduleAutoSave(session);
       this.scheduleIndexTouch(session);
@@ -3258,8 +3239,10 @@ export class AgentSessionManager {
   }
 
   private scheduleAutoSave(session: AgentSession): void {
-    if (!getSettings().autosaveChat) return;
     const state = this.getSessionState(session.internalId);
+    // Manual Save opts this chat into keeping its note current.
+    // https://github.com/logancyang/obsidian-copilot/issues/3225
+    if (!getSettings().autosaveChat && !state.path) return;
     if (state.timer) window.clearTimeout(state.timer);
     state.timer = window.setTimeout(() => {
       state.timer = undefined;

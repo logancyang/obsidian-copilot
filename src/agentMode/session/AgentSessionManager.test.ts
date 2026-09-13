@@ -6,7 +6,6 @@
 import { FileSystemAdapter, App, TFile } from "obsidian";
 import { join } from "node:path";
 import { waitFor } from "@testing-library/react";
-import { logWarn } from "@/logger";
 import { AgentSession } from "./AgentSession";
 import type { AgentModelPreloader } from "./AgentModelPreloader";
 import { buildNativeChatId } from "@/utils/nativeChatId";
@@ -36,7 +35,6 @@ import { getProjectContextSignature } from "@/projects/projectContextSignature";
 import { MethodUnsupportedError } from "@/agentMode/session/errors";
 import { buildCodexModeMapping } from "@/agentMode/backends/codex/codexModeMapping";
 import type {
-  AgentChatMessage,
   BackendDescriptor,
   BackendId,
   BackendModelCatalog,
@@ -161,7 +159,7 @@ interface MockSessionTestHandle {
     status: "starting" | "idle" | "running" | "awaiting_permission" | "error" | "closed"
   ): void;
   /** Seed the display messages so a manual save writes a file (and a path). */
-  setMessages(messages: { message: string }[]): void;
+  setMessages(messages: { message: string }[], notify?: boolean): void;
   /** Toggle whether the session reports user-visible messages (detach gating). */
   setHasUserVisibleMessages(value: boolean): void;
 }
@@ -188,6 +186,7 @@ function makeMockSession(overrides: {
   let displayMessages: { message: string }[] = [];
   let hasUserVisibleMessages = false;
   const listeners = new Set<{
+    onMessagesChanged?: () => void;
     onStatusChanged?: (s: typeof status) => void;
     onNeedsAttentionChanged?: (v: boolean) => void;
   }>();
@@ -233,8 +232,9 @@ function makeMockSession(overrides: {
       status = next;
       for (const l of listeners) l.onStatusChanged?.(next);
     },
-    setMessages: (messages) => {
+    setMessages: (messages, notify = false) => {
       displayMessages = messages;
+      if (notify) for (const l of listeners) l.onMessagesChanged?.();
     },
     setHasUserVisibleMessages: (value) => {
       hasUserVisibleMessages = value;
@@ -353,7 +353,8 @@ function modelCatalog(baseModelId: string): BackendModelCatalog {
 }
 
 function buildManager(
-  modelPreloaderOverrides: Partial<AgentModelPreloader> = {}
+  modelPreloaderOverrides: Partial<AgentModelPreloader> = {},
+  persistenceManager?: ConstructorParameters<typeof AgentSessionManager>[2]["persistenceManager"]
 ): AgentSessionManager {
   const descriptor = buildDescriptor();
   const modelPreloader = {
@@ -372,6 +373,7 @@ function buildManager(
     buildApp(),
     buildPlugin() as unknown as ConstructorParameters<typeof AgentSessionManager>[1],
     {
+      persistenceManager,
       permissionPrompter: jest.fn(),
       resolveDescriptor: (id) => (id === descriptor.id ? descriptor : undefined),
       modelPreloader: modelPreloader as unknown as ConstructorParameters<
@@ -402,143 +404,6 @@ beforeEach(() => {
 
 describe("AgentSessionManager", () => {
   describe("AgentSessionManager", () => {
-    describe("loadSessionFromHistory()", () => {
-      const noteMessages: AgentChatMessage[] = [
-        {
-          id: "question",
-          sender: "user",
-          timestamp: { display: "Saved time", fileName: "saved-time", epoch: 123 },
-          isVisible: true,
-          message: "First question\n\n![[photo.png]]",
-        },
-      ];
-      const transcript: AgentChatMessage[] = [
-        { ...noteMessages[0], timestamp: null, message: "First question" },
-        {
-          id: "answer",
-          sender: "ai",
-          timestamp: null,
-          isVisible: true,
-          message: "Latest backend answer",
-        },
-      ];
-
-      function historyManager(
-        backendId: BackendId,
-        sessionId: string | undefined,
-        messages: AgentChatMessage[],
-        savedMessages = noteMessages
-      ) {
-        const backend = {
-          ...makeMockBackendProcess(),
-          loadSession: jest.fn(async () => {
-            if (backendId === "claude") throw new MethodUnsupportedError("session/load");
-            return {
-              sessionId: "saved-session",
-              state: { model: null, mode: null },
-              transcript: messages,
-            };
-          }),
-          resumeSession: jest.fn(async () => ({
-            sessionId: "saved-session",
-            state: { model: null, mode: null },
-          })),
-          readPersistedTranscript: jest.fn(async () => messages),
-        };
-        const descriptor = {
-          ...buildDescriptor(),
-          id: backendId,
-          createBackendProcess: jest.fn(() => backend),
-        } as unknown as BackendDescriptor;
-        const manager = new AgentSessionManager(
-          buildApp(),
-          buildPlugin() as ConstructorParameters<typeof AgentSessionManager>[1],
-          {
-            permissionPrompter: jest.fn(),
-            resolveDescriptor: () => descriptor,
-            modelPreloader: {
-              getCachedModelCatalog: jest.fn(() => null),
-              getEffortCatalog: jest.fn(() => null),
-              preload: jest.fn(async () => undefined),
-              refresh: jest.fn(() => null),
-              subscribe: jest.fn(() => () => {}),
-              shutdown: jest.fn(),
-              clearCached: jest.fn(),
-              takeWarm: jest.fn(() => null),
-              getWarmProcs: jest.fn(() => []),
-            } as unknown as AgentModelPreloader,
-            persistenceManager: {
-              loadFile: jest.fn(async () => ({
-                backendId,
-                sessionId,
-                messages: savedMessages,
-                projectId: GLOBAL_SCOPE,
-              })),
-            } as unknown as ConstructorParameters<
-              typeof AgentSessionManager
-            >[2]["persistenceManager"],
-          }
-        );
-        const file = new (TFile as unknown as new (path: string) => TFile)("chats/saved.md");
-        return { manager, backend, file };
-      }
-
-      it.each(["claude", "opencode"] as const)(
-        "preserves saved image embeds and appends newer %s backend turns for https://github.com/logancyang/obsidian-copilot/issues/3225",
-        async (backendId) => {
-          const { manager, backend, file } = historyManager(backendId, "saved-session", transcript);
-          const session = await manager.loadSessionFromHistory(file);
-          expect(session.store.getDisplayMessages()).toEqual([...noteMessages, transcript[1]]);
-          if (backendId === "opencode")
-            expect(backend.readPersistedTranscript).not.toHaveBeenCalled();
-          await manager.shutdown();
-        }
-      );
-
-      it("keeps the note and warns once when only an earlier user message matches for https://github.com/logancyang/obsidian-copilot/issues/3225", async () => {
-        jest.mocked(logWarn).mockClear();
-        const saved = [
-          ...noteMessages,
-          transcript[1],
-          { ...noteMessages[0], id: "final-question", message: "Unsynced final turn" },
-        ];
-        const { manager, file } = historyManager("claude", "saved-session", transcript, saved);
-        const session = await manager.loadSessionFromHistory(file);
-        expect(session.store.getDisplayMessages()).toEqual(saved);
-        expect(logWarn).toHaveBeenCalledTimes(1);
-        expect(logWarn).toHaveBeenCalledWith(
-          "[AgentMode] Saved chat's final user turn is absent from backend history; keeping the saved note."
-        );
-        await manager.shutdown();
-      });
-
-      it("loads the note into a fresh session when its backend session ID is missing for https://github.com/logancyang/obsidian-copilot/issues/3225", async () => {
-        const { manager, backend, file } = historyManager("claude", undefined, transcript);
-        sessionCreateSpy.mockImplementationOnce((opts) => {
-          const session = makeMockSession({
-            internalId: opts.internalId,
-            backendId: opts.backendId,
-          });
-          session.loadDisplayMessages = (messages) =>
-            getSessionTestHandle(session).setMessages(messages);
-          session.seedSessionUsage = jest.fn();
-          return session;
-        });
-        const session = await manager.loadSessionFromHistory(file);
-        expect(session.store.getDisplayMessages()).toEqual(noteMessages);
-        expect(backend.resumeSession).not.toHaveBeenCalled();
-        expect(backend.readPersistedTranscript).not.toHaveBeenCalled();
-        await manager.shutdown();
-      });
-
-      it("loads the note when the resumed backend transcript is empty for https://github.com/logancyang/obsidian-copilot/issues/3225", async () => {
-        const { manager, file } = historyManager("claude", "saved-session", []);
-        const session = await manager.loadSessionFromHistory(file);
-        expect(session.store.getDisplayMessages()).toEqual(noteMessages);
-        await manager.shutdown();
-      });
-    });
-
     describe("createSession()", () => {
       it("creates a session and sets it as the active one", async () => {
         const mgr = buildManager();
@@ -4069,5 +3934,82 @@ describe("AgentSessionManager context-source dirty tracking", () => {
     expect(m.getProjectContextUpdates(session.internalId, PID)?.block).toContain(
       "<project_context_updates>"
     );
+  });
+});
+
+describe("AgentSessionManager saved-note updates", () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+    (mockedGetSettings as jest.Mock).mockReturnValue({
+      ...mockedGetSettings(),
+      autosaveChat: false,
+    });
+  });
+  afterEach(() => jest.useRealTimers());
+
+  function fixture() {
+    const saveSession = jest.fn(async () => ({ path: "chats/saved.md" }));
+    const mgr = buildManager({}, { saveSession } as unknown as ConstructorParameters<
+      typeof AgentSessionManager
+    >[2]["persistenceManager"]);
+    return { mgr, saveSession };
+  }
+
+  it("never writes an unsaved chat with autosave off for https://github.com/logancyang/obsidian-copilot/issues/3225", async () => {
+    const { mgr, saveSession } = fixture();
+    const session = await mgr.createSession();
+    getSessionTestHandle(session).setMessages([{ message: "Unsaved turn" }], true);
+    await jest.advanceTimersByTimeAsync(2000);
+    await mgr.closeSession(session.internalId);
+    expect(saveSession).not.toHaveBeenCalled();
+    await mgr.shutdown();
+  });
+
+  it("updates the manually saved file and drains later turns on New Chat with autosave off for https://github.com/logancyang/obsidian-copilot/issues/3225", async () => {
+    const { mgr, saveSession } = fixture();
+    const session = await mgr.createSession();
+    const handle = getSessionTestHandle(session);
+    const first = [{ message: "Image question\n\n![](/image.png)" }, { message: "Image answer" }];
+    handle.setMessages(first, true);
+    await mgr.saveActiveSession();
+    const later = [...first, { message: "Later question" }, { message: "Later answer" }];
+    handle.setMessages(later, true);
+    await jest.advanceTimersByTimeAsync(2000);
+    expect(saveSession).toHaveBeenCalledTimes(2);
+    expect(saveSession).toHaveBeenLastCalledWith(
+      later,
+      session.backendId,
+      expect.objectContaining({ existingPath: "chats/saved.md" })
+    );
+    const final = [...later, { message: "Final question" }, { message: "Final answer" }];
+    handle.setMessages(final, true);
+    await mgr.replaceSessionInPlace(session.internalId);
+    await jest.advanceTimersByTimeAsync(0);
+    expect(saveSession).toHaveBeenCalledTimes(3);
+    expect(saveSession).toHaveBeenLastCalledWith(
+      final,
+      session.backendId,
+      expect.objectContaining({ existingPath: "chats/saved.md" })
+    );
+    await mgr.shutdown();
+  });
+
+  it("still creates notes automatically with autosave on for https://github.com/logancyang/obsidian-copilot/issues/3225", async () => {
+    (mockedGetSettings as jest.Mock).mockReturnValue({
+      ...mockedGetSettings(),
+      autosaveChat: true,
+    });
+    const { mgr, saveSession } = fixture();
+    const session = await mgr.createSession();
+    const messages = [{ message: "Automatically saved turn" }];
+    getSessionTestHandle(session).setMessages(messages, true);
+    await jest.advanceTimersByTimeAsync(2000);
+    expect(saveSession).toHaveBeenCalledTimes(1);
+    expect(saveSession).toHaveBeenCalledWith(
+      messages,
+      session.backendId,
+      expect.objectContaining({ existingPath: undefined })
+    );
+    await mgr.shutdown();
   });
 });
