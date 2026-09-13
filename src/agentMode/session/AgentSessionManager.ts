@@ -3319,7 +3319,9 @@ export class AgentSessionManager {
       window.clearTimeout(state.timer);
       state.timer = undefined;
     }
-    return this.flushAutoSave(session);
+    const result = await this.flushAutoSave(session);
+    this.scheduleAutoSave(session);
+    return result;
   }
 
   private async flushAutoSave(session: AgentSession): Promise<{ path: string } | null> {

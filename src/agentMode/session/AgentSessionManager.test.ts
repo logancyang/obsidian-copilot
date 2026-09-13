@@ -3994,6 +3994,35 @@ describe("AgentSessionManager saved-note updates", () => {
     await mgr.shutdown();
   });
 
+  it("persists changes during the first manual save for https://github.com/logancyang/obsidian-copilot/issues/3225", async () => {
+    const { mgr, saveSession } = fixture();
+    let finishSave!: (result: { path: string }) => void;
+    saveSession.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishSave = resolve;
+        })
+    );
+    const session = await mgr.createSession();
+    const handle = getSessionTestHandle(session);
+    handle.setMessages([{ message: "Question" }, { message: "Partial answer" }], true);
+    const saving = mgr.saveActiveSession();
+    await jest.advanceTimersByTimeAsync(0);
+    expect(saveSession).toHaveBeenCalledTimes(1);
+    const completed = [{ message: "Question" }, { message: "Completed answer" }];
+    handle.setMessages(completed, true);
+    finishSave({ path: "chats/saved.md" });
+    await saving;
+    await jest.advanceTimersByTimeAsync(2000);
+    expect(saveSession).toHaveBeenCalledTimes(2);
+    expect(saveSession).toHaveBeenLastCalledWith(
+      completed,
+      session.backendId,
+      expect.objectContaining({ existingPath: "chats/saved.md" })
+    );
+    await mgr.shutdown();
+  });
+
   it("still creates notes automatically with autosave on for https://github.com/logancyang/obsidian-copilot/issues/3225", async () => {
     (mockedGetSettings as jest.Mock).mockReturnValue({
       ...mockedGetSettings(),
