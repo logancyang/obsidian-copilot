@@ -159,7 +159,7 @@ interface MockSessionTestHandle {
     status: "starting" | "idle" | "running" | "awaiting_permission" | "error" | "closed"
   ): void;
   /** Seed the display messages so a manual save writes a file (and a path). */
-  setMessages(messages: { message: string }[]): void;
+  setMessages(messages: { message: string }[], notify?: boolean): void;
   /** Toggle whether the session reports user-visible messages (detach gating). */
   setHasUserVisibleMessages(value: boolean): void;
 }
@@ -186,6 +186,7 @@ function makeMockSession(overrides: {
   let displayMessages: { message: string }[] = [];
   let hasUserVisibleMessages = false;
   const listeners = new Set<{
+    onMessagesChanged?: () => void;
     onStatusChanged?: (s: typeof status) => void;
     onNeedsAttentionChanged?: (v: boolean) => void;
   }>();
@@ -231,8 +232,9 @@ function makeMockSession(overrides: {
       status = next;
       for (const l of listeners) l.onStatusChanged?.(next);
     },
-    setMessages: (messages) => {
+    setMessages: (messages, notify = false) => {
       displayMessages = messages;
+      if (notify) for (const l of listeners) l.onMessagesChanged?.();
     },
     setHasUserVisibleMessages: (value) => {
       hasUserVisibleMessages = value;
@@ -351,7 +353,8 @@ function modelCatalog(baseModelId: string): BackendModelCatalog {
 }
 
 function buildManager(
-  modelPreloaderOverrides: Partial<AgentModelPreloader> = {}
+  modelPreloaderOverrides: Partial<AgentModelPreloader> = {},
+  persistenceManager?: ConstructorParameters<typeof AgentSessionManager>[2]["persistenceManager"]
 ): AgentSessionManager {
   const descriptor = buildDescriptor();
   const modelPreloader = {
@@ -370,6 +373,7 @@ function buildManager(
     buildApp(),
     buildPlugin() as unknown as ConstructorParameters<typeof AgentSessionManager>[1],
     {
+      persistenceManager,
       permissionPrompter: jest.fn(),
       resolveDescriptor: (id) => (id === descriptor.id ? descriptor : undefined),
       modelPreloader: modelPreloader as unknown as ConstructorParameters<
@@ -397,6 +401,30 @@ beforeEach(() => {
   // the manager built in the current test.
   settingsChangeCallbacks.clear();
 });
+
+function setupSavedNoteTests() {
+  let originalSettings: ReturnType<jest.Mock["getMockImplementation"]>;
+  beforeEach(() => {
+    originalSettings = (mockedGetSettings as jest.Mock).getMockImplementation();
+    jest.useFakeTimers();
+    (mockedGetSettings as jest.Mock).mockReturnValue({
+      ...mockedGetSettings(),
+      autosaveChat: false,
+    });
+  });
+  afterEach(() => {
+    (mockedGetSettings as jest.Mock).mockImplementation(originalSettings);
+    jest.useRealTimers();
+  });
+}
+
+function savedNoteFixture() {
+  const saveSession = jest.fn(async () => ({ path: "chats/saved.md" }));
+  const mgr = buildManager({}, { saveSession } as unknown as ConstructorParameters<
+    typeof AgentSessionManager
+  >[2]["persistenceManager"]);
+  return { mgr, saveSession };
+}
 
 describe("AgentSessionManager", () => {
   describe("AgentSessionManager", () => {
@@ -622,6 +650,108 @@ describe("AgentSessionManager", () => {
         } finally {
           recordSpy.mockRestore();
         }
+      });
+    });
+
+    describe("closeSession()", () => {
+      setupSavedNoteTests();
+      it("never writes an unsaved chat with autosave off for https://github.com/logancyang/obsidian-copilot/issues/3225", async () => {
+        const { mgr, saveSession } = savedNoteFixture();
+        const session = await mgr.createSession();
+        getSessionTestHandle(session).setMessages([{ message: "Unsaved turn" }], true);
+        await jest.advanceTimersByTimeAsync(2000);
+        await mgr.closeSession(session.internalId);
+        expect(saveSession).not.toHaveBeenCalled();
+        await mgr.shutdown();
+      });
+    });
+
+    describe("replaceSessionInPlace()", () => {
+      setupSavedNoteTests();
+      it("updates the manually saved file and drains later turns on New Chat with autosave off for https://github.com/logancyang/obsidian-copilot/issues/3225", async () => {
+        const { mgr, saveSession } = savedNoteFixture();
+        const session = await mgr.createSession();
+        const handle = getSessionTestHandle(session);
+        const first = [
+          { message: "Image question\n\n![](/image.png)" },
+          { message: "Image answer" },
+        ];
+        handle.setMessages(first, true);
+        await mgr.saveActiveSession();
+        const later = [...first, { message: "Later question" }, { message: "Later answer" }];
+        handle.setMessages(later, true);
+        await jest.advanceTimersByTimeAsync(2000);
+        expect(saveSession).toHaveBeenCalledTimes(2);
+        expect(saveSession).toHaveBeenLastCalledWith(
+          later,
+          session.backendId,
+          expect.objectContaining({ existingPath: "chats/saved.md" })
+        );
+        const final = [...later, { message: "Final question" }, { message: "Final answer" }];
+        handle.setMessages(final, true);
+        await mgr.replaceSessionInPlace(session.internalId);
+        await jest.advanceTimersByTimeAsync(0);
+        expect(saveSession).toHaveBeenCalledTimes(3);
+        expect(saveSession).toHaveBeenLastCalledWith(
+          final,
+          session.backendId,
+          expect.objectContaining({ existingPath: "chats/saved.md" })
+        );
+        await mgr.shutdown();
+      });
+    });
+
+    describe("saveActiveSession()", () => {
+      setupSavedNoteTests();
+      it("persists changes during the first manual save for https://github.com/logancyang/obsidian-copilot/issues/3225", async () => {
+        const { mgr, saveSession } = savedNoteFixture();
+        let finishSave!: (result: { path: string }) => void;
+        saveSession.mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              finishSave = resolve;
+            })
+        );
+        const session = await mgr.createSession();
+        const handle = getSessionTestHandle(session);
+        handle.setMessages([{ message: "Question" }, { message: "Partial answer" }], true);
+        const saving = mgr.saveActiveSession();
+        await jest.advanceTimersByTimeAsync(0);
+        expect(saveSession).toHaveBeenCalledTimes(1);
+        const completed = [{ message: "Question" }, { message: "Completed answer" }];
+        handle.setMessages(completed, true);
+        finishSave({ path: "chats/saved.md" });
+        await saving;
+        await jest.advanceTimersByTimeAsync(2000);
+        expect(saveSession).toHaveBeenCalledTimes(2);
+        expect(saveSession).toHaveBeenLastCalledWith(
+          completed,
+          session.backendId,
+          expect.objectContaining({ existingPath: "chats/saved.md" })
+        );
+        await mgr.shutdown();
+      });
+    });
+
+    describe("scheduleAutoSave()", () => {
+      setupSavedNoteTests();
+      it("still creates notes automatically with autosave on for https://github.com/logancyang/obsidian-copilot/issues/3225", async () => {
+        (mockedGetSettings as jest.Mock).mockReturnValue({
+          ...mockedGetSettings(),
+          autosaveChat: true,
+        });
+        const { mgr, saveSession } = savedNoteFixture();
+        const session = await mgr.createSession();
+        const messages = [{ message: "Automatically saved turn" }];
+        getSessionTestHandle(session).setMessages(messages, true);
+        await jest.advanceTimersByTimeAsync(2000);
+        expect(saveSession).toHaveBeenCalledTimes(1);
+        expect(saveSession).toHaveBeenCalledWith(
+          messages,
+          session.backendId,
+          expect.objectContaining({ existingPath: undefined })
+        );
+        await mgr.shutdown();
       });
     });
   });

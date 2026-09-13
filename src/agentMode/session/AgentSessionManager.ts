@@ -3224,9 +3224,8 @@ export class AgentSessionManager {
     const index = this.opts.sessionIndex;
     if (!persistence && !index) return;
 
-    // The markdown auto-save is gated on `settings.autosaveChat` inside
-    // `scheduleAutoSave`; the index write-through is not — history must keep
-    // tracking the session even when the user opted out of markdown notes.
+    // New markdown notes follow `autosaveChat`; saved notes stay current.
+    // The index tracks sessions regardless of whether they have a note.
     const trigger = () => {
       this.scheduleAutoSave(session);
       this.scheduleIndexTouch(session);
@@ -3240,8 +3239,10 @@ export class AgentSessionManager {
   }
 
   private scheduleAutoSave(session: AgentSession): void {
-    if (!getSettings().autosaveChat) return;
     const state = this.getSessionState(session.internalId);
+    // Manual Save opts this chat into keeping its note current.
+    // https://github.com/logancyang/obsidian-copilot/issues/3225
+    if (!getSettings().autosaveChat && !state.path) return;
     if (state.timer) window.clearTimeout(state.timer);
     state.timer = window.setTimeout(() => {
       state.timer = undefined;
@@ -3318,7 +3319,9 @@ export class AgentSessionManager {
       window.clearTimeout(state.timer);
       state.timer = undefined;
     }
-    return this.flushAutoSave(session);
+    const result = await this.flushAutoSave(session);
+    this.scheduleAutoSave(session);
+    return result;
   }
 
   private async flushAutoSave(session: AgentSession): Promise<{ path: string } | null> {
