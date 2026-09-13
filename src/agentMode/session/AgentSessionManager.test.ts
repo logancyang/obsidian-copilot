@@ -35,6 +35,7 @@ import { getProjectContextSignature } from "@/projects/projectContextSignature";
 import { MethodUnsupportedError } from "@/agentMode/session/errors";
 import { buildCodexModeMapping } from "@/agentMode/backends/codex/codexModeMapping";
 import type {
+  AgentChatMessage,
   BackendDescriptor,
   BackendId,
   BackendModelCatalog,
@@ -400,6 +401,125 @@ beforeEach(() => {
 
 describe("AgentSessionManager", () => {
   describe("AgentSessionManager", () => {
+    describe("loadSessionFromHistory()", () => {
+      const noteMessages: AgentChatMessage[] = [
+        {
+          id: "question",
+          sender: "user",
+          timestamp: null,
+          isVisible: true,
+          message: "First question",
+        },
+      ];
+      const transcript: AgentChatMessage[] = [
+        ...noteMessages,
+        {
+          id: "answer",
+          sender: "ai",
+          timestamp: null,
+          isVisible: true,
+          message: "Latest backend answer",
+        },
+      ];
+
+      function historyManager(
+        backendId: BackendId,
+        sessionId: string | undefined,
+        messages: AgentChatMessage[]
+      ) {
+        const backend = {
+          ...makeMockBackendProcess(),
+          loadSession: jest.fn(async () => {
+            if (backendId === "claude") throw new MethodUnsupportedError("session/load");
+            return {
+              sessionId: "saved-session",
+              state: { model: null, mode: null },
+              transcript: messages,
+            };
+          }),
+          resumeSession: jest.fn(async () => ({
+            sessionId: "saved-session",
+            state: { model: null, mode: null },
+          })),
+          readPersistedTranscript: jest.fn(async () => messages),
+        };
+        const descriptor = {
+          ...buildDescriptor(),
+          id: backendId,
+          createBackendProcess: jest.fn(() => backend),
+        } as unknown as BackendDescriptor;
+        const manager = new AgentSessionManager(
+          buildApp(),
+          buildPlugin() as ConstructorParameters<typeof AgentSessionManager>[1],
+          {
+            permissionPrompter: jest.fn(),
+            resolveDescriptor: () => descriptor,
+            modelPreloader: {
+              getCachedModelCatalog: jest.fn(() => null),
+              getEffortCatalog: jest.fn(() => null),
+              preload: jest.fn(async () => undefined),
+              refresh: jest.fn(() => null),
+              subscribe: jest.fn(() => () => {}),
+              shutdown: jest.fn(),
+              clearCached: jest.fn(),
+              takeWarm: jest.fn(() => null),
+              getWarmProcs: jest.fn(() => []),
+            } as unknown as AgentModelPreloader,
+            persistenceManager: {
+              loadFile: jest.fn(async () => ({
+                backendId,
+                sessionId,
+                messages: noteMessages,
+                projectId: GLOBAL_SCOPE,
+              })),
+            } as unknown as ConstructorParameters<
+              typeof AgentSessionManager
+            >[2]["persistenceManager"],
+          }
+        );
+        const file = new (TFile as unknown as new (path: string) => TFile)("chats/saved.md");
+        return { manager, backend, file };
+      }
+
+      it.each(["claude", "opencode"] as const)(
+        "keeps the complete %s backend transcript when the note is shorter for https://github.com/logancyang/obsidian-copilot/issues/3225",
+        async (backendId) => {
+          const { manager, backend, file } = historyManager(backendId, "saved-session", transcript);
+          const session = await manager.loadSessionFromHistory(file);
+          expect(session.store.getDisplayMessages()).toEqual(transcript);
+          if (backendId === "opencode")
+            expect(backend.readPersistedTranscript).not.toHaveBeenCalled();
+          await manager.shutdown();
+        }
+      );
+
+      it("loads the note into a fresh session when its backend session ID is missing for https://github.com/logancyang/obsidian-copilot/issues/3225", async () => {
+        const { manager, backend, file } = historyManager("claude", undefined, transcript);
+        sessionCreateSpy.mockImplementationOnce((opts) => {
+          const session = makeMockSession({
+            internalId: opts.internalId,
+            backendId: opts.backendId,
+          });
+          session.loadDisplayMessages = (messages) =>
+            getSessionTestHandle(session).setMessages(messages);
+          session.seedSessionUsage = jest.fn();
+          return session;
+        });
+        const session = await manager.loadSessionFromHistory(file);
+        expect(session.store.getDisplayMessages()).toEqual(noteMessages);
+        expect(backend.resumeSession).not.toHaveBeenCalled();
+        expect(backend.readPersistedTranscript).not.toHaveBeenCalled();
+        await manager.shutdown();
+      });
+
+      it("loads the note when the resumed backend transcript is empty for https://github.com/logancyang/obsidian-copilot/issues/3225", async () => {
+        const { manager, file } = historyManager("claude", "saved-session", []);
+        const session = await manager.loadSessionFromHistory(file);
+        expect(session.store.getDisplayMessages()).toEqual(noteMessages);
+        await manager.shutdown();
+      });
+    });
+
     describe("createSession()", () => {
       it("creates a session and sets it as the active one", async () => {
         const mgr = buildManager();

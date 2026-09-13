@@ -2857,17 +2857,27 @@ export class AgentSessionManager {
     // session. The throw points are all before a session activates, so no
     // already-active session in the target scope can be wrongly rolled back.
     let session: AgentSession;
+    let resumed: AgentSession | null = null;
     try {
-      const resumed = loaded.sessionId
+      resumed = loaded.sessionId
         ? await this.tryResumeSessionFromHistory(loaded.backendId, loaded.sessionId, projectId)
         : null;
       session = resumed ?? (await this.createSession(loaded.backendId, projectId));
+      // Saved notes may lag the backend transcript; preserve its latest turns.
+      // https://github.com/logancyang/obsidian-copilot/issues/3225
+      if (resumed && loaded.sessionId) {
+        await this.hydrateResumedTranscript(resumed, loaded.backendId, loaded.sessionId);
+      }
     } catch (err) {
       this.rollbackOptimisticScopeSwitch(previousActiveProjectId, scopeSeq);
       throw err;
     }
 
-    session.loadDisplayMessages(loaded.messages);
+    // A note is the fallback for an empty resumed transcript or a fresh session.
+    // https://github.com/logancyang/obsidian-copilot/issues/3225
+    if (!resumed || session.store.getDisplayMessages().length === 0) {
+      session.loadDisplayMessages(loaded.messages);
+    }
     session.seedSessionUsage(loaded.usage);
     if (loaded.label) session.setLabel(loaded.label);
     this.getSessionState(session.internalId).path = file.path;
