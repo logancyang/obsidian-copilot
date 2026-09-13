@@ -29,6 +29,8 @@ A note mention gives the agent the note's vault path so it can read the current 
 
 A new Agent Chat can start with an **Active Note** badge when that preference is enabled. Remove it when the current note is unrelated. You can add it again on any later turn.
 
+Active Note and selected text are separate attachments in Agent Chat and Quick Chat. You can include either one or both, even when the excerpt comes from the active note. Removing one badge leaves the other attached. Selection badges show the start of the selected text. Hover over a badge to see the full excerpt and its source.
+
 To attach an excerpt from a note:
 
 1. Select the text.

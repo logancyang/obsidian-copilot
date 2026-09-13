@@ -5,7 +5,8 @@ import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
 import type { AgentInputDraftControls } from "@/agentMode/ui/hooks/useAgentInputDrafts";
 import { useAgentInputDrafts } from "@/agentMode/ui/hooks/useAgentInputDrafts";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { Notice, type App } from "obsidian";
+import { Notice, TFile, type App } from "obsidian";
+import type { NoteSelectedTextContext, SelectedTextContext } from "@/types/message";
 import React from "react";
 
 // Mock factory names must match the real `use*` exports, so the no-hook `use`
@@ -65,10 +66,11 @@ jest.mock("@/components/chat-components/ChatInput", () => ({
 jest.mock("@/components/chat-components/hooks/useActiveWebTabState", () => ({
   useActiveWebTabState: () => ({ activeWebTabForMentions: undefined }),
 }));
+let mockSelectedTextContexts: SelectedTextContext[] = [];
 jest.mock("@/aiParams", () => ({
   clearSelectedTextContexts: jest.fn(),
   removeSelectedTextContext: jest.fn(),
-  useSelectedTextContexts: () => [[], jest.fn()],
+  useSelectedTextContexts: () => [mockSelectedTextContexts, jest.fn()],
 }));
 jest.mock("@/settings/model", () => ({
   getModelKeyFromModel: (model: { name: string; provider: string; _backendId?: string }) => {
@@ -174,7 +176,61 @@ function setupCancellation() {
 }
 
 describe("AgentChatInput", () => {
+  beforeEach(() => {
+    mockSelectedTextContexts = [];
+  });
   describe("handleSendMessage()", () => {
+    it.each([
+      {
+        scenario: "the active note and its selection together",
+        includeActiveNote: true,
+        includeSelection: true,
+      },
+      {
+        scenario: "the active note without a selection",
+        includeActiveNote: true,
+        includeSelection: false,
+      },
+      {
+        scenario: "a selection without the active note",
+        includeActiveNote: false,
+        includeSelection: true,
+      },
+    ])(
+      "sends $scenario as independent context https://github.com/Brevilabs/obsidian-copilot-private/issues/465",
+      async ({ includeActiveNote, includeSelection }) => {
+        const TFileConstructor = TFile as unknown as new (path: string) => TFile;
+        const note = new TFileConstructor("Research.md");
+        const selection: NoteSelectedTextContext = {
+          id: "research-excerpt",
+          sourceType: "note",
+          noteTitle: "Research",
+          notePath: note.path,
+          content: "Compare the interview findings.",
+          startLine: 3,
+          endLine: 3,
+        };
+        mockSelectedTextContexts = includeSelection ? [selection] : [];
+        const backend = {
+          sendMessage: jest.fn(() => ({ turn: Promise.resolve() })),
+        } as unknown as AgentChatBackend;
+        const app = {
+          workspace: { getActiveFile: () => note },
+        } as unknown as App;
+        renderInput(backend, makeDraft({ includeActiveNote }), { app });
+
+        fireEvent.click(screen.getByText("send"));
+
+        await waitFor(() => expect(backend.sendMessage).toHaveBeenCalledTimes(1));
+        expect(jest.mocked(backend.sendMessage).mock.calls[0][1]).toEqual({
+          notes: includeActiveNote ? [note] : [],
+          urls: [],
+          selectedTextContexts: includeSelection ? [selection] : undefined,
+          webTabs: undefined,
+        });
+      }
+    );
+
     it("sends text-only commands that expand to empty without an image-read error https://github.com/logancyang/obsidian-copilot/issues/2850", async () => {
       jest.mocked(expandCustomCommandPrefix).mockResolvedValueOnce({ text: "" });
       jest.mocked(Notice).mockClear();

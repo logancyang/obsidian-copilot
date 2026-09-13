@@ -142,9 +142,8 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
 
   const [selectedTextContexts] = useSelectedTextContexts();
 
-  // Any selection hides both active note and active web tab
+  // Active web tabs retain selection precedence.
   const hasAnySelection = selectedTextContexts.length > 0;
-  const effectiveIncludeActiveNote = includeActiveNote && !hasAnySelection;
   const effectiveIncludeActiveWebTab = includeActiveWebTab && !hasAnySelection;
 
   const { activeWebTabForMentions: currentActiveWebTab } = useActiveWebTabState();
@@ -284,7 +283,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
         displayText,
         context,
         currentChain,
-        effectiveIncludeActiveNote,
+        includeActiveNote,
         effectiveIncludeActiveWebTab,
         content.length > 0 ? content : undefined,
         safeSet.setLoadingMessage
@@ -432,7 +431,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
           messageToEdit.id!,
           newMessage,
           currentChain,
-          effectiveIncludeActiveNote
+          includeActiveNote
         );
 
         if (!success) {
@@ -487,7 +486,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
       chatHistory,
       chatUIState,
       currentChain,
-      effectiveIncludeActiveNote,
+      includeActiveNote,
       addMessage,
       chainManager,
       settings.debug,
