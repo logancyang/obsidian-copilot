@@ -138,43 +138,6 @@ describe("sanitizeSettings - autoAddActiveContentToContext migration", () => {
   });
 });
 
-describe("sanitizeSettings - autoAddSelectionToContext migration", () => {
-  it("should migrate from old autoIncludeTextSelection=true", () => {
-    const oldSettings = {
-      ...DEFAULT_SETTINGS,
-      autoAddSelectionToContext: undefined,
-      autoIncludeTextSelection: true,
-    } as unknown as CopilotSettings;
-
-    const sanitized = sanitizeSettings(oldSettings);
-
-    expect(sanitized.autoAddSelectionToContext).toBe(true);
-  });
-
-  it("should migrate from old autoIncludeTextSelection=false", () => {
-    const oldSettings = {
-      ...DEFAULT_SETTINGS,
-      autoAddSelectionToContext: undefined,
-      autoIncludeTextSelection: false,
-    } as unknown as CopilotSettings;
-
-    const sanitized = sanitizeSettings(oldSettings);
-
-    expect(sanitized.autoAddSelectionToContext).toBe(false);
-  });
-
-  it("should use default when no old setting exists", () => {
-    const newSettings = {
-      ...DEFAULT_SETTINGS,
-      autoAddSelectionToContext: undefined,
-    } as unknown as CopilotSettings;
-
-    const sanitized = sanitizeSettings(newSettings);
-
-    expect(sanitized.autoAddSelectionToContext).toBe(DEFAULT_SETTINGS.autoAddSelectionToContext);
-  });
-});
-
 describe("sanitizeSettings - agentMode shape migration", () => {
   it("creates a default agentMode slice when missing", () => {
     const sanitized = sanitizeSettings({

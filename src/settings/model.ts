@@ -206,9 +206,6 @@ export interface CopilotSettings {
   quickCommandModelKey: string | undefined;
   /** Last checkbox state for including note context in quick command */
   quickCommandIncludeNoteContext: boolean;
-  /** Automatically add text selections to chat context */
-  autoIncludeTextSelection: boolean;
-  autoAddSelectionToContext: boolean;
   /** Automatically accept file edits without showing preview confirmation */
   autoAcceptEdits: boolean;
   /** Preferred diff view mode: side-by-side or split */
@@ -1100,18 +1097,6 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
     typeof settingsToSanitize.quickCommandModelKey !== "string"
   ) {
     sanitizedSettings.quickCommandModelKey = DEFAULT_SETTINGS.quickCommandModelKey;
-  }
-
-  // Ensure autoAddSelectionToContext has a default value (migrate from old settings)
-  if (typeof sanitizedSettings.autoAddSelectionToContext !== "boolean") {
-    // Migration: check old setting first (autoIncludeTextSelection)
-    const oldTextSelection = (settingsToSanitize as unknown as Record<string, unknown>)
-      .autoIncludeTextSelection;
-    if (typeof oldTextSelection === "boolean") {
-      sanitizedSettings.autoAddSelectionToContext = oldTextSelection;
-    } else {
-      sanitizedSettings.autoAddSelectionToContext = DEFAULT_SETTINGS.autoAddSelectionToContext;
-    }
   }
 
   // Ensure autoAcceptEdits has a default value

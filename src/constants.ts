@@ -852,8 +852,6 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   enableSavedMemory: true,
   quickCommandModelKey: undefined,
   quickCommandIncludeNoteContext: true,
-  autoIncludeTextSelection: false,
-  autoAddSelectionToContext: false,
   autoAcceptEdits: false,
   diffViewMode: "split",
   userSystemPromptsFolder: DEFAULT_SYSTEM_PROMPTS_FOLDER,

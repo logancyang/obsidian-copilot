@@ -48,6 +48,21 @@ jest.mock("@/agentMode", () => ({
 }));
 
 import CopilotPlugin from "@/main";
+import { getSelectedTextContexts, setSelectedTextContexts } from "@/aiParams";
+import { DEFAULT_SETTINGS } from "@/constants";
+import { settingsAtom, settingsStore } from "@/settings/model";
+import type { WebSelectionTrackingOptions } from "@/services/webViewerService/webViewerServiceSelection";
+
+const mockStartSelectionTracker = jest.fn();
+const mockSelectionTrackerOptions = jest.fn();
+jest.mock("@/services/webViewerService/webViewerServiceSelection", () => ({
+  WebSelectionTracker: class {
+    constructor(options: WebSelectionTrackingOptions) {
+      mockSelectionTrackerOptions(options);
+    }
+    start = mockStartSelectionTracker;
+  },
+}));
 import { logError, logInfo, logWarn } from "@/logger";
 import { logFileManager } from "@/logFileManager";
 import { flushPersistence } from "@/services/settingsPersistence";
@@ -92,6 +107,64 @@ async function flushTeardown(): Promise<void> {
 
 describe("main", () => {
   describe("CopilotPlugin", () => {
+    describe("handleSelectionChange()", () => {
+      it("automatically attaches a note excerpt even when the retired preferences were saved as false", () => {
+        settingsStore.set(settingsAtom, {
+          ...DEFAULT_SETTINGS,
+          ...{ autoAddSelectionToContext: false, autoIncludeTextSelection: false },
+        });
+        setSelectedTextContexts([]);
+        const plugin = Object.create(CopilotPlugin.prototype) as CopilotPlugin;
+        Object.assign(plugin, {
+          app: {
+            workspace: {
+              getActiveViewOfType: () => ({
+                editor: {
+                  listSelections: () => [{ anchor: { line: 1, ch: 0 }, head: { line: 2, ch: 7 } }],
+                  getSelection: () => "An excerpt from the note.",
+                },
+              }),
+              getActiveFile: () => ({ path: "Research.md", basename: "Research" }),
+            },
+          },
+        });
+
+        plugin.handleSelectionChange();
+
+        expect(getSelectedTextContexts()).toEqual([
+          expect.objectContaining({
+            content: "An excerpt from the note.",
+            sourceType: "note",
+            notePath: "Research.md",
+            startLine: 2,
+            endLine: 3,
+          }),
+        ]);
+        setSelectedTextContexts([]);
+      });
+    });
+
+    describe("initWebSelectionWatcher()", () => {
+      it("enables desktop web selection tracking even when the retired preference was saved as false", () => {
+        settingsStore.set(settingsAtom, {
+          ...DEFAULT_SETTINGS,
+          ...{ autoAddSelectionToContext: false, autoIncludeTextSelection: false },
+        });
+        (isDesktopRuntime as jest.Mock).mockReturnValue(true);
+        const plugin = Object.create(CopilotPlugin.prototype) as CopilotPlugin;
+        Object.assign(plugin, { app: {} });
+
+        plugin.initWebSelectionWatcher();
+
+        const options = mockSelectionTrackerOptions.mock.calls.at(
+          -1
+        )![0] as WebSelectionTrackingOptions;
+        expect(options.isEnabled()).toBe(true);
+        expect(mockStartSelectionTracker).toHaveBeenCalled();
+        (isDesktopRuntime as jest.Mock).mockReturnValue(false);
+      });
+    });
+
     describe("onunload()", () => {
       beforeEach(() => {
         jest.clearAllMocks();
