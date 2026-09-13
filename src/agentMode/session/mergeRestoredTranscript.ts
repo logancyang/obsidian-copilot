@@ -11,7 +11,12 @@ export function mergeRestoredTranscript(
   note: AgentChatMessage[],
   backend: AgentChatMessage[]
 ): AgentChatMessage[] {
-  if (backend.length <= note.length) return note;
+  if (backend.length < note.length) return note;
   if (note.some((message, index) => message.sender !== backend[index].sender)) return backend;
-  return [...note, ...backend.slice(note.length)];
+  const prefix = note.map((message, index) =>
+    message.sender === "ai" && backend[index].message.length > message.message.length
+      ? { ...message, message: backend[index].message }
+      : message
+  );
+  return [...prefix, ...backend.slice(note.length)];
 }

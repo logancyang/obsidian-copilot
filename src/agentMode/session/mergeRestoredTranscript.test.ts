@@ -20,13 +20,27 @@ describe("mergeRestoredTranscript", () => {
     it.each([0, 1])(
       "keeps the saved note when the backend has %s messages for https://github.com/logancyang/obsidian-copilot/issues/3225",
       (length) => {
-        expect(mergeRestoredTranscript(note, backend.slice(0, length))).toBe(note);
+        expect(mergeRestoredTranscript(note, backend.slice(0, length))).toEqual(note);
       }
     );
     it("preserves image embeds and timestamps in a matching note prefix and appends newer turns for https://github.com/logancyang/obsidian-copilot/issues/3225", () => {
       expect(mergeRestoredTranscript(note, backend)).toEqual([note[0], backend[1]]);
       expect(note[0].message).toContain("![[photo.png]]");
     });
+    it.each([false, true])(
+      "completes a saved partial AI bubble with later turns=%s for https://github.com/logancyang/obsidian-copilot/issues/3225",
+      (withTail) => {
+        const partial = { ...backend[1], message: "Partial", timestamp: note[0].timestamp };
+        const saved = [note[0], partial];
+        const completed = { ...backend[1], message: "Partial answer completed" };
+        const tail = withTail ? [{ ...backend[0], id: "later", message: "Next question" }] : [];
+        expect(mergeRestoredTranscript(saved, [backend[0], completed, ...tail])).toEqual([
+          note[0],
+          { ...partial, message: completed.message },
+          ...tail,
+        ]);
+      }
+    );
     it("uses the backend transcript when prefix senders disagree for https://github.com/logancyang/obsidian-copilot/issues/3225", () => {
       const mismatched = [{ ...backend[0], sender: "ai" }, backend[1]];
       expect(mergeRestoredTranscript(note, mismatched)).toBe(mismatched);
