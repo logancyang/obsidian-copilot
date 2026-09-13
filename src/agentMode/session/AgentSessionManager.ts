@@ -1,3 +1,4 @@
+import { mergeRestoredTranscript } from "@/agentMode/session/mergeRestoredTranscript";
 import type { BackendState } from "@/agentMode/session/types";
 import { resolveEffort } from "@/lib/model-effort";
 import { logError, logInfo, logWarn } from "@/logger";
@@ -2873,11 +2874,18 @@ export class AgentSessionManager {
       throw err;
     }
 
-    // A note is the fallback for an empty resumed transcript or a fresh session.
+    const backendMessages = session.store.getDisplayMessages();
+    const restored = resumed
+      ? mergeRestoredTranscript(loaded.messages, backendMessages)
+      : loaded.messages;
+    // Only mismatched prefixes select the backend array unchanged.
     // https://github.com/logancyang/obsidian-copilot/issues/3225
-    if (!resumed || session.store.getDisplayMessages().length === 0) {
-      session.loadDisplayMessages(loaded.messages);
+    if (restored === backendMessages && restored !== loaded.messages) {
+      logWarn(
+        "[AgentMode] Saved note and backend transcript senders differ; displaying backend transcript."
+      );
     }
+    session.loadDisplayMessages(restored);
     session.seedSessionUsage(loaded.usage);
     if (loaded.label) session.setLabel(loaded.label);
     this.getSessionState(session.internalId).path = file.path;

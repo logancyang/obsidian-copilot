@@ -6,6 +6,7 @@
 import { FileSystemAdapter, App, TFile } from "obsidian";
 import { join } from "node:path";
 import { waitFor } from "@testing-library/react";
+import { logWarn } from "@/logger";
 import { AgentSession } from "./AgentSession";
 import type { AgentModelPreloader } from "./AgentModelPreloader";
 import { buildNativeChatId } from "@/utils/nativeChatId";
@@ -406,13 +407,13 @@ describe("AgentSessionManager", () => {
         {
           id: "question",
           sender: "user",
-          timestamp: null,
+          timestamp: { display: "Saved time", fileName: "saved-time", epoch: 123 },
           isVisible: true,
-          message: "First question",
+          message: "First question ![[photo.png]]",
         },
       ];
       const transcript: AgentChatMessage[] = [
-        ...noteMessages,
+        { ...noteMessages[0], timestamp: null, message: "First question" },
         {
           id: "answer",
           sender: "ai",
@@ -482,16 +483,28 @@ describe("AgentSessionManager", () => {
       }
 
       it.each(["claude", "opencode"] as const)(
-        "keeps the complete %s backend transcript when the note is shorter for https://github.com/logancyang/obsidian-copilot/issues/3225",
+        "preserves saved image embeds and appends newer %s backend turns for https://github.com/logancyang/obsidian-copilot/issues/3225",
         async (backendId) => {
           const { manager, backend, file } = historyManager(backendId, "saved-session", transcript);
           const session = await manager.loadSessionFromHistory(file);
-          expect(session.store.getDisplayMessages()).toEqual(transcript);
+          expect(session.store.getDisplayMessages()).toEqual([...noteMessages, transcript[1]]);
           if (backendId === "opencode")
             expect(backend.readPersistedTranscript).not.toHaveBeenCalled();
           await manager.shutdown();
         }
       );
+
+      it("keeps mismatched backend history and warns without message contents for https://github.com/logancyang/obsidian-copilot/issues/3225", async () => {
+        jest.mocked(logWarn).mockClear();
+        const mismatched = [{ ...transcript[0], sender: "ai" }, transcript[1]];
+        const { manager, file } = historyManager("claude", "saved-session", mismatched);
+        const session = await manager.loadSessionFromHistory(file);
+        expect(session.store.getDisplayMessages()).toEqual(mismatched);
+        expect(logWarn).toHaveBeenCalledWith(
+          "[AgentMode] Saved note and backend transcript senders differ; displaying backend transcript."
+        );
+        await manager.shutdown();
+      });
 
       it("loads the note into a fresh session when its backend session ID is missing for https://github.com/logancyang/obsidian-copilot/issues/3225", async () => {
         const { manager, backend, file } = historyManager("claude", undefined, transcript);
