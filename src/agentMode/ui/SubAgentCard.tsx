@@ -12,6 +12,15 @@ import {
 } from "@/agentMode/ui/toolSummaries";
 import { AgentActivityCard } from "@/components/chat-components/AgentActivityCard";
 
+const SUBAGENT_OUTCOMES = {
+  running: "Working",
+  completed: "Completed",
+  failed: "Failed",
+  cancelled: "Cancelled",
+  disconnected: "Disconnected · outcome unknown",
+  unavailable: "Limited activity · this adapter does not report child sessions",
+};
+
 interface SubAgentCardProps {
   parent: ToolCallPart;
   childNodes: GroupedTrailNode[];
@@ -42,10 +51,11 @@ export const SubAgentCard: React.FC<SubAgentCardProps> = ({
   const summary = lookupToolSummary(parent);
   const Icon = summary.icon;
   const line = summary.collapsedLine(parent);
-  const outcome = summary.outcome(parent);
+  const outcome = parent.subagent ? SUBAGENT_OUTCOMES[parent.subagent] : summary.outcome(parent);
   const childCounts = countChildren(childNodes);
   const inputPrompt = extractSubAgentInputPrompt(parent);
   const returnText = extractSubAgentReturnText(parent);
+  const isNativeTask = parent.subagent !== undefined && parent.subagent !== "unavailable";
 
   return (
     <AgentActivityCard
@@ -67,7 +77,7 @@ export const SubAgentCard: React.FC<SubAgentCardProps> = ({
             onClick={() => setPromptOpen((v) => !v)}
             role="button"
           >
-            <span className="tw-flex-1 tw-truncate">Prompt</span>
+            <span className="tw-flex-1 tw-truncate">{isNativeTask ? "Task" : "Prompt"}</span>
             {promptOpen ? (
               <ChevronDown className="tw-size-3" />
             ) : (
@@ -77,6 +87,11 @@ export const SubAgentCard: React.FC<SubAgentCardProps> = ({
           {promptOpen ? (
             <div className="tw-mt-1 tw-border-l-[2px] tw-border-border tw-pl-2">
               <AgentMarkdownText text={inputPrompt} app={app} />
+              {isNativeTask ? (
+                <div className="tw-mt-1 tw-text-xs tw-text-muted">
+                  The adapter reports this task description, not the full delegated prompt.
+                </div>
+              ) : null}
             </div>
           ) : null}
         </div>

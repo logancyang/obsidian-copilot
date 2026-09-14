@@ -15,6 +15,41 @@ const VALID_TODOS = [
 ];
 
 const testAcpNotificationToEvents = () => {
+  it("preserves native child identity and marks legacy collaboration/activity launches as limited (https://github.com/Brevilabs/obsidian-copilot-private/issues/467)", () => {
+    const tool = {
+      sessionUpdate: "tool_call",
+      toolCallId: "launch",
+      title: "Reader",
+      kind: "other",
+      rawInput: { prompt: "Read fixture" },
+    };
+    expect(
+      acpNotificationToEvents(
+        notification({
+          ...tool,
+          _meta: { copilot: { subagent: "running", parentToolCallId: "parent" } },
+        })
+      )[0].update
+    ).toMatchObject({
+      subagent: "running",
+      parentToolCallId: "parent",
+      rawInput: { prompt: "Read fixture" },
+    });
+    for (const codex of [
+      { collaboration: { tool: "spawnAgent" } },
+      { subagent: { activity: "started", threadId: "child", path: "/root/reader" } },
+    ]) {
+      expect(
+        acpNotificationToEvents(notification({ ...tool, _meta: { codex } }))[0].update
+      ).toMatchObject({ subagent: "unavailable" });
+    }
+    expect(
+      acpNotificationToEvents(
+        notification({ ...tool, _meta: { copilot: { subagent: "bogus", parentToolCallId: 42 } } })
+      )[0].update
+    ).toMatchObject({ subagent: undefined, parentToolCallId: undefined });
+  });
+
   it("drops a user message chunk instead of reporting it as a titleless session update", () => {
     // A backend may echo the prompt on every live turn. Translating it would reach
     // the unknown-discriminant fallback, which reports a titleless session

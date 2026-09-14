@@ -47,6 +47,7 @@ import type {
   ToolCallContent,
   ToolCallDelta,
   ToolCallSnapshot,
+  SubagentState,
 } from "@/agentMode/session/types";
 import { PERMISSION_OPTION_KINDS } from "@/agentMode/session/types";
 import { resolveToolName } from "@/agentMode/session/toolName";
@@ -206,6 +207,33 @@ function toolCallContentFromAcp(
   return out.length > 0 ? out : undefined;
 }
 
+// Preserve negotiated child identity, and identify older Codex launches without
+// inventing lifecycle or activity the adapter did not send.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/467
+function subagentFields(
+  call: ToolCall | ToolCallUpdate
+): Pick<ToolCallSnapshot, "subagent" | "parentToolCallId"> {
+  const normalized = call._meta?.copilot as
+    | { subagent?: unknown; parentToolCallId?: unknown }
+    | undefined;
+  const codex = call._meta?.codex as
+    | { collaboration?: { tool?: unknown }; subagent?: { activity?: unknown } }
+    | undefined;
+  const state = normalized?.subagent;
+  return {
+    parentToolCallId:
+      typeof normalized?.parentToolCallId === "string" ? normalized.parentToolCallId : undefined,
+    subagent:
+      typeof state === "string" &&
+      ["running", "completed", "failed", "cancelled", "disconnected"].includes(state)
+        ? (state as SubagentState)
+        : ["spawnAgent", "spawn_agent"].includes(String(codex?.collaboration?.tool)) ||
+            codex?.subagent?.activity === "started"
+          ? "unavailable"
+          : undefined,
+  };
+}
+
 function toolCallSnapshotFromAcp(
   call: ToolCall & { sessionUpdate?: "tool_call" }
 ): ToolCallSnapshot {
@@ -219,6 +247,7 @@ function toolCallSnapshotFromAcp(
     content: toolCallContentFromAcp(call.content),
     locations: call.locations?.map((l) => ({ path: l.path, line: l.line ?? undefined })),
     mcpServer,
+    ...subagentFields(call),
   };
 }
 
@@ -243,6 +272,7 @@ function toolCallDeltaFromAcp(
       locs.map((l) => ({ path: l.path, line: l.line ?? undefined }))
     ),
     mcpServer: resolved?.mcpServer,
+    ...subagentFields(upd),
   };
 }
 

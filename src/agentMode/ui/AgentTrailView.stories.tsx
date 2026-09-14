@@ -138,3 +138,44 @@ export const UnifiedCardStyles: StoryObj<AgentTrailProps> = {
 export const CompletedWithoutDuration: StoryObj<AgentTrailProps> = {
   render: () => <TrailDemo parts={UNIFIED_CARDS} showCompletedDuration={false} />,
 };
+
+/** Native child outcomes stay distinct; unsupported adapters disclose their limited detail. */
+export const SubagentOutcomes: StoryObj<AgentTrailProps> = {
+  render: () => (
+    <TrailDemo
+      parts={[
+        ...(
+          ["running", "completed", "failed", "cancelled", "disconnected", "unavailable"] as const
+        ).map((subagent) => ({
+          kind: "tool_call" as const,
+          id: subagent,
+          title: "Review fixture notes",
+          subagent,
+          status:
+            subagent === "running"
+              ? ("in_progress" as const)
+              : subagent === "completed" || subagent === "unavailable"
+                ? ("completed" as const)
+                : ("failed" as const),
+          input: {
+            description: "Review fixture notes",
+            task: "Read the fixture note and report its summary.",
+          },
+          output:
+            subagent === "completed"
+              ? [{ type: "text" as const, text: "The fixture describes the project milestones." }]
+              : undefined,
+        })),
+        {
+          kind: "tool_call",
+          id: "child-read",
+          title: "Read fixture",
+          status: "completed",
+          toolKind: "read",
+          parentToolCallId: "completed",
+          output: [{ type: "text", text: "Project milestones" }],
+        },
+      ]}
+    />
+  ),
+};
