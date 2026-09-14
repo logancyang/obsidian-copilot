@@ -9,7 +9,7 @@ export interface MiyoConnectionControlProps {
   status: CapabilityStatus;
   checking: boolean;
   remote: boolean;
-  connectLabel?: string;
+  hasPendingConnection?: boolean;
   onConnect: () => void;
   onDisconnect: () => void;
   onRetry: () => void;
@@ -53,15 +53,15 @@ export const MiyoConnectionControl: React.FC<MiyoConnectionControlProps> = ({
   status,
   checking,
   remote,
-  connectLabel = "Connect",
+  hasPendingConnection = false,
   onConnect,
   onDisconnect,
   onRetry,
 }) => {
   if (!enabled) {
     return (
-      <Button variant="secondary" size="sm" onClick={onConnect} disabled={checking}>
-        {checking ? "Connecting…" : connectLabel}
+      <Button variant="secondary" size="default" onClick={onConnect} disabled={checking}>
+        {checking ? "Connecting…" : "Connect"}
       </Button>
     );
   }
@@ -91,6 +91,13 @@ export const MiyoConnectionControl: React.FC<MiyoConnectionControlProps> = ({
         />
         {label}
       </span>
+      {/* Confirming a draft is separate from checking or disconnecting the active endpoint.
+          https://github.com/Brevilabs/obsidian-copilot-private/issues/466 */}
+      {hasPendingConnection && (
+        <Button variant="secondary" size="default" onClick={onConnect} disabled={checking}>
+          Connect
+        </Button>
+      )}
       {!checking && (
         <Button variant="secondary" size="sm" onClick={onRetry}>
           {connected ? "Check connection" : "Retry"}

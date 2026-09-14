@@ -22,12 +22,45 @@ function InteractiveConnection(args: Partial<MiyoConnectionPanelProps>) {
           status="unknown"
           remote={mode === "remote"}
           checking={false}
-          connectLabel={mode === "remote" ? "Save and connect" : "Connect"}
           onConnect={() => {}}
           onDisconnect={() => {}}
           onRetry={() => {}}
         />
       )}
+    </MiyoConnectionPanel>
+  );
+}
+function ConnectedDraft(args: Partial<MiyoConnectionPanelProps>) {
+  const [active, setActive] = React.useState({
+    mode: "remote" as "local" | "remote",
+    address: "http://miyo-home:8742",
+  });
+  const [mode, setMode] = React.useState(args.mode ?? active.mode);
+  const [address, setAddress] = React.useState(args.address ?? active.address);
+  const [enabled, setEnabled] = React.useState(true);
+  return (
+    <MiyoConnectionPanel
+      mode={mode}
+      address={address}
+      downloadUrl={createMiyoPageUrl("miyo_settings")}
+      onModeChange={setMode}
+      onAddressChange={setAddress}
+    >
+      <MiyoConnectionControl
+        enabled={enabled}
+        status="available"
+        remote={active.mode === "remote"}
+        checking={false}
+        hasPendingConnection={
+          mode !== active.mode || (mode === "remote" && address.trim() !== active.address)
+        }
+        onConnect={() => {
+          setActive({ mode, address: address.trim() });
+          setEnabled(true);
+        }}
+        onDisconnect={() => setEnabled(false)}
+        onRetry={() => {}}
+      />
     </MiyoConnectionPanel>
   );
 }
@@ -77,4 +110,13 @@ export const InvalidAddress: StoryObj<MiyoConnectionPanelProps> = {
     error: "Enter a valid HTTP or HTTPS server address, without embedded credentials.",
   },
   render: InteractiveConnection,
+};
+
+export const BrowsingLocalWhileConnectedRemote: StoryObj<MiyoConnectionPanelProps> = {
+  args: { mode: "local" },
+  render: ConnectedDraft,
+};
+export const EditingConnectedRemoteAddress: StoryObj<MiyoConnectionPanelProps> = {
+  args: { mode: "remote", address: "http://miyo-work:8742" },
+  render: ConnectedDraft,
 };

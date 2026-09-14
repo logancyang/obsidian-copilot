@@ -64,9 +64,6 @@ export function MiyoConnectionPanel({
             </label>
           ))}
         </div>
-        <div className="tw-text-xs tw-text-muted">
-          Use one connection at a time. Switching disconnects the current connection.
-        </div>
         {mode === "remote" ? (
           <div className="tw-space-y-2">
             <label htmlFor={`${groupId}-address`} className="tw-block tw-text-xs tw-font-medium">

@@ -54,6 +54,14 @@ describe("MiyoConnectionControl", () => {
       expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
     });
 
+    it("shows a draft confirmation alongside the active connection — https://github.com/Brevilabs/obsidian-copilot-private/issues/466", () => {
+      const props = renderControl({ hasPendingConnection: true });
+      expect(screen.getByRole("status").textContent).toContain("Connected · local");
+      fireEvent.click(screen.getByRole("button", { name: "Connect" }));
+      expect(props.onConnect).toHaveBeenCalledTimes(1);
+      expect(props.onDisconnect).not.toHaveBeenCalled();
+    });
+
     it(`keeps a stale remote snapshot visibly connected (${ISSUE_URL})`, () => {
       renderControl({ status: "stale", remote: true });
 

@@ -187,6 +187,18 @@ describe("MiyoSettings", () => {
   });
 
   describe("MiyoSettings()", () => {
+    it("shows Search scope only while Semantic search is enabled — https://github.com/Brevilabs/obsidian-copilot-private/issues/466", async () => {
+      render(<MiyoSettings />);
+      await act(async () => {});
+      expect(screen.queryByLabelText("Search scope")).toBeNull();
+      fireEvent.click(toggle());
+      expect(screen.getByLabelText("Search scope")).toBeTruthy();
+      await waitFor(() => expect(currentSettings.enableMiyoSearchSkill).toBe(true));
+      fireEvent.click(toggle());
+      expect(screen.queryByLabelText("Search scope")).toBeNull();
+      await waitFor(() => expect(currentSettings.enableMiyoSearchSkill).toBe(false));
+    });
+
     it("attributes the settings Download link and connection guide separately", async () => {
       mockReachable = false;
       render(<MiyoSettings />);
@@ -229,7 +241,7 @@ describe("MiyoSettings", () => {
       };
       mockRegistration = "unregistered";
       render(<MiyoSettings />);
-      fireEvent.click(await screen.findByRole("button", { name: "Save and connect" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Connect" }));
       await waitFor(() => expect(updateSetting).toHaveBeenCalledWith("enableMiyo", true));
       expect(mockProbeUrls).toContain("http://127.0.0.1:8742");
       expect(lastModalOptions).toBeNull();
@@ -247,7 +259,7 @@ describe("MiyoSettings", () => {
       };
       mockReachable = false;
       render(<MiyoSettings />);
-      fireEvent.click(await screen.findByRole("button", { name: "Save and connect" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Connect" }));
       expect((await screen.findByRole("alert")).textContent).toContain(
         "Couldn't connect to this server"
       );
@@ -256,7 +268,7 @@ describe("MiyoSettings", () => {
       expect(currentSettings.miyoServerUrl).toBe("http://remote:8742");
     });
 
-    it("disconnects on selection changes while preserving the remote address and feature preferences — https://github.com/Brevilabs/obsidian-copilot-private/issues/466", async () => {
+    it("keeps the active remote connection while browsing this computer and confirms only on Connect — https://github.com/Brevilabs/obsidian-copilot-private/issues/466", async () => {
       currentSettings = {
         ...currentSettings,
         enableMiyo: true,
@@ -267,8 +279,11 @@ describe("MiyoSettings", () => {
       };
       render(<MiyoSettings />);
       fireEvent.click(screen.getByRole("radio", { name: /This computer/ }));
-      expect(currentSettings.enableMiyo).toBe(false);
-      expect(currentSettings.miyoConnectionMode).toBe("local");
+      expect(currentSettings.enableMiyo).toBe(true);
+      expect(currentSettings.miyoConnectionMode).not.toBe("local");
+      expect(await screen.findByText("Connected · remote")).toBeTruthy();
+      expect(screen.getByText("Set up Relay on the Miyo host.")).toBeTruthy();
+      expect(screen.queryByText(/Switching disconnects/)).toBeNull();
       fireEvent.click(screen.getByRole("radio", { name: /Remote server/ }));
       expect(screen.getByLabelText<HTMLInputElement>("Server address").value).toBe(
         "http://remote:8742"
@@ -279,13 +294,62 @@ describe("MiyoSettings", () => {
         docProcessorBackend: "miyo",
       });
       expect(updateSetting).not.toHaveBeenCalledWith("miyoServerUrl", "");
+      expect(mockProbeUrls).toEqual([]);
+      fireEvent.click(screen.getByRole("radio", { name: /This computer/ }));
+      fireEvent.click(await screen.findByRole("button", { name: "Connect" }));
+      await waitFor(() => expect(mockProbeUrls).toContain(undefined));
+      expect(currentSettings.miyoConnectionMode).toBe("local");
+      expect(await screen.findByText("Connected · local")).toBeTruthy();
+    });
+
+    it("preserves local capabilities while drafting remote and changes the endpoint only on Connect — https://github.com/Brevilabs/obsidian-copilot-private/issues/466", async () => {
+      currentSettings = { ...currentSettings, enableMiyo: true, miyoConnectionMode: "local" };
+      render(<MiyoSettings />);
+      await screen.findByText("Connected · local");
+      fireEvent.click(screen.getByRole("radio", { name: /Remote server/ }));
+      fireEvent.change(screen.getByLabelText("Server address"), {
+        target: { value: "http://new:8742" },
+      });
+      expect(currentSettings.miyoConnectionMode).toBe("local");
+      expect(currentSettings.miyoServerUrl).toBe("");
+      expect(currentSettings.enableMiyo).toBe(true);
+      expect(screen.getByText("Connected · local")).toBeTruthy();
+      expect(screen.queryByText("Set up Relay on the Miyo host.")).toBeNull();
+      expect(toggle().hasAttribute("disabled")).toBe(false);
+      expect(mockProbeUrls).toEqual([]);
+      fireEvent.click(screen.getByRole("button", { name: "Connect" }));
+      await waitFor(() => expect(mockProbeUrls).toContain("http://new:8742"));
+      expect(currentSettings).toMatchObject({
+        miyoConnectionMode: "remote",
+        miyoServerUrl: "http://new:8742",
+        enableMiyo: true,
+      });
+      expect(await screen.findByText("Connected · remote")).toBeTruthy();
+    });
+
+    it("keeps a remote address edit as a draft and checks the active endpoint until Connect — https://github.com/Brevilabs/obsidian-copilot-private/issues/466", async () => {
+      currentSettings = { ...currentSettings, enableMiyo: true, miyoServerUrl: "http://old:8742" };
+      render(<MiyoSettings />);
+      await screen.findByText("Connected · remote");
+      fireEvent.change(screen.getByLabelText("Server address"), {
+        target: { value: "http://new:8742" },
+      });
+      expect(currentSettings.enableMiyo).toBe(true);
+      expect(currentSettings.miyoServerUrl).toBe("http://old:8742");
+      fireEvent.click(screen.getByRole("button", { name: "Check connection" }));
+      await waitFor(() => expect(mockProbeUrls).toContain("http://old:8742"));
+      await screen.findByText("Connected · remote");
+      expect(mockProbeUrls).not.toContain("http://new:8742");
+      fireEvent.click(screen.getByRole("button", { name: "Connect" }));
+      await waitFor(() => expect(mockProbeUrls).toContain("http://new:8742"));
+      expect(currentSettings.miyoServerUrl).toBe("http://new:8742");
     });
 
     it("rejects an empty remote draft before any local discovery request — https://github.com/Brevilabs/obsidian-copilot-private/issues/466", async () => {
       currentSettings.enableMiyo = false;
       render(<MiyoSettings />);
       fireEvent.click(screen.getByRole("radio", { name: /Remote server/ }));
-      fireEvent.click(await screen.findByRole("button", { name: "Save and connect" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Connect" }));
       expect((await screen.findByRole("alert")).textContent).toContain(
         "Enter a valid HTTP or HTTPS"
       );
@@ -308,7 +372,7 @@ describe("MiyoSettings", () => {
       expect(screen.getByLabelText<HTMLInputElement>("Server address").value).toBe(
         "http://synced:8742"
       );
-      fireEvent.click(await screen.findByRole("button", { name: "Save and connect" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Connect" }));
       await waitFor(() => expect(mockProbeUrls).toContain("http://synced:8742"));
       expect(mockProbeUrls).not.toContain("http://draft:8742");
     });
@@ -316,7 +380,7 @@ describe("MiyoSettings", () => {
     it("preserves a synced connection when an old enable check finishes late — https://github.com/Brevilabs/obsidian-copilot-private/issues/466", async () => {
       currentSettings = { ...currentSettings, enableMiyo: false, miyoServerUrl: "http://old:8742" };
       const { rerender } = render(<MiyoSettings />);
-      const connect = await screen.findByRole("button", { name: "Save and connect" });
+      const connect = await screen.findByRole("button", { name: "Connect" });
       const gate = deferred<{ backend: string }>();
       mockRefreshGate = gate.promise;
       fireEvent.click(connect);
@@ -333,7 +397,7 @@ describe("MiyoSettings", () => {
       expect(updateSetting).not.toHaveBeenCalledWith("enableMiyo", false);
     });
 
-    it("ignores a successful old server probe after switching to this computer — https://github.com/Brevilabs/obsidian-copilot-private/issues/466", async () => {
+    it("finishes a confirmed remote connection when the user browses this computer during its probe — https://github.com/Brevilabs/obsidian-copilot-private/issues/466", async () => {
       currentSettings = {
         ...currentSettings,
         enableMiyo: false,
@@ -342,11 +406,16 @@ describe("MiyoSettings", () => {
       const gate = deferred<boolean>();
       mockProbeGate = gate.promise;
       render(<MiyoSettings />);
-      fireEvent.click(await screen.findByRole("button", { name: "Save and connect" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Connect" }));
       await waitFor(() => expect(mockProbeUrls).toHaveLength(1));
       fireEvent.click(screen.getByRole("radio", { name: /This computer/ }));
       await act(async () => gate.resolve(true));
-      expect(updateSetting).not.toHaveBeenCalledWith("enableMiyo", true);
+      expect(updateSetting).toHaveBeenCalledWith("enableMiyo", true);
+      expect(currentSettings.miyoConnectionMode).toBe("remote");
+      expect(screen.getByRole<HTMLInputElement>("radio", { name: /This computer/ }).checked).toBe(
+        true
+      );
+      expect(await screen.findByText("Connected · remote")).toBeTruthy();
       expect(lastModalOptions).toBeNull();
     });
   });

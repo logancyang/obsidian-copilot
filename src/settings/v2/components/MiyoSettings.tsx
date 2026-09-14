@@ -34,7 +34,6 @@ import {
 } from "@/settings/v2/components/ui/MiyoConnectionControl";
 import { err2String } from "@/utils";
 import { getVaultBase } from "@/utils/vaultPath";
-import { CornerDownRight } from "lucide-react";
 import { Notice, Platform } from "obsidian";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 
@@ -84,23 +83,10 @@ interface CapabilityRowProps {
   title: React.ReactNode;
   description: React.ReactNode;
   control: React.ReactNode;
-  indented?: boolean;
 }
 
-const CapabilityRow: React.FC<CapabilityRowProps> = ({
-  title,
-  description,
-  control,
-  indented = false,
-}) => (
-  <div
-    className={cn(
-      "tw-flex tw-flex-col tw-items-start tw-justify-between tw-gap-4 tw-py-4 sm:tw-flex-row sm:tw-items-center",
-      // `!` so the indent beats the parent's `[&>*]:tw-px-4` (equal specificity,
-      // and px-4 is emitted later, which would otherwise cancel a plain pl-*).
-      indented && "!tw-pl-9"
-    )}
-  >
+const CapabilityRow: React.FC<CapabilityRowProps> = ({ title, description, control }) => (
+  <div className="tw-flex tw-flex-col tw-items-start tw-justify-between tw-gap-4 tw-py-4 sm:tw-flex-row sm:tw-items-center">
     <div className="tw-w-full tw-space-y-1.5 sm:tw-w-[300px]">
       <div className="tw-flex tw-items-center tw-gap-2 tw-text-sm tw-font-medium tw-leading-none">
         {title}
@@ -601,21 +587,11 @@ export const MiyoSettings: React.FC = () => {
     }
   }, []);
 
+  // Browsing options must leave the confirmed endpoint and in-flight connection intact.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/466
   const changeConnection = (nextMode: "local" | "remote", address = urlDraft) => {
-    connectAttemptRef.current += 1;
-    enableTxnRef.current += 1;
-    connectModalRef.current?.close();
     setConnectionError(null);
-    setVaultResult(null);
-    if (getSettings().enableMiyo) updateSetting("enableMiyo", false);
-    if (nextMode === "local" && getMiyoConnectionMode(getSettings()) !== "local")
-      updateSetting("miyoConnectionMode", "local");
-    const current = getSettings();
-    setDraft({
-      mode: nextMode,
-      address,
-      source: `${getMiyoConnectionMode(current)}:${current.miyoServerUrl}`,
-    });
+    setDraft({ mode: nextMode, address, source: settingsKey });
   };
 
   const saveAndConnect = async () => {
@@ -639,8 +615,12 @@ export const MiyoSettings: React.FC = () => {
       }
     }
     connectAttemptRef.current += 1;
+    enableTxnRef.current += 1;
+    connectModalRef.current?.close();
+    setVaultResult(null);
     MiyoServiceDiscovery.getInstance().invalidateLocalDiscovery();
     setSettings({
+      enableMiyo: false,
       miyoConnectionMode: mode,
       ...(mode === "remote" ? { miyoServerUrl: address } : {}),
     });
@@ -656,15 +636,15 @@ export const MiyoSettings: React.FC = () => {
   // Runtime safety is unaffected: capability routing uses
   // `isMiyoAvailableForCapability` (strict `=== "available"`), not this gate.
   const capabilitiesEnabled = status.backend === "available" || status.backend === "stale";
-  // Remote is the user's explicit selection, including a forwarded loopback URL.
+  // Status and host actions describe the confirmed connection, even while browsing options.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/466
-  const connectedRemote = mode === "remote";
+  const connectedRemote = activeMode === "remote";
+  const hasPendingConnection =
+    mode !== activeMode || (mode === "remote" && urlDraft.trim() !== activeUrl);
 
   return (
     <div className="tw-space-y-4">
-      <div className="tw-text-sm tw-text-muted">
-        Private context from your Miyo server. Unlimited, no credits.
-      </div>
+      <div className="tw-text-sm tw-text-muted">Private context from your Miyo server.</div>
 
       <MiyoConnectionPanel
         mode={mode}
@@ -690,13 +670,13 @@ export const MiyoSettings: React.FC = () => {
           status={status.backend}
           checking={refreshing}
           remote={connectedRemote}
-          connectLabel={connectedRemote ? "Save and connect" : "Connect"}
+          hasPendingConnection={hasPendingConnection}
           onConnect={() => void saveAndConnect()}
           onDisconnect={() => {
             setVaultResult(null);
             void handleDisconnect();
           }}
-          onRetry={() => void (connectedRemote ? saveAndConnect() : handleRetry())}
+          onRetry={() => void (connectedRemote ? handleConnect() : handleRetry())}
         />
       </MiyoConnectionPanel>
 
@@ -706,11 +686,6 @@ export const MiyoSettings: React.FC = () => {
           SettingSection's all-or-nothing `gated`. */}
       <div className="tw-space-y-2">
         <div className="tw-text-xs tw-font-semibold tw-text-muted">Powered by Miyo</div>
-        <div className="tw-text-sm tw-text-muted">
-          <span className="tw-font-semibold tw-text-normal">Plus</span> = Copilot cloud, uses
-          credits · <span className="tw-font-semibold tw-text-accent">Miyo</span> = your selected
-          server, no credits
-        </div>
 
         <MiyoAvailabilityNotice
           enabled={settings.enableMiyo}
@@ -776,31 +751,26 @@ export const MiyoSettings: React.FC = () => {
               )}
               aria-disabled={!capabilitiesEnabled}
             >
-              {/* Search scope — bound to `miyoSearchAll` (true omits folder_name so
-                  Miyo searches everything it has indexed). Gated on the connection so
-                  the control stays keyboard-inert while dimmed. */}
-              <CapabilityRow
-                indented
-                title={
-                  <span className="tw-flex tw-items-center tw-gap-1.5">
-                    <CornerDownRight className="tw-size-3 tw-text-faint" />
-                    Search scope
-                  </span>
-                }
-                description="Only the current vault, or everything Miyo has indexed."
-                control={
-                  <SegmentedControl
-                    aria-label="Search scope"
-                    options={[
-                      { label: "Current vault", value: "current" },
-                      { label: "Unrestricted", value: "unrestricted" },
-                    ]}
-                    value={settings.miyoSearchAll ? "unrestricted" : "current"}
-                    onChange={(value) => updateSetting("miyoSearchAll", value === "unrestricted")}
-                    disabled={!capabilitiesEnabled}
-                  />
-                }
-              />
+              {/* Scope only configures the enabled Semantic search skill.
+                  https://github.com/Brevilabs/obsidian-copilot-private/issues/466 */}
+              {(pendingSkillEnabled ?? settings.enableMiyoSearchSkill) && (
+                <CapabilityRow
+                  title="Search scope"
+                  description="Only the current vault, or everything Miyo has indexed."
+                  control={
+                    <SegmentedControl
+                      aria-label="Search scope"
+                      options={[
+                        { label: "Current vault", value: "current" },
+                        { label: "Unrestricted", value: "unrestricted" },
+                      ]}
+                      value={settings.miyoSearchAll ? "unrestricted" : "current"}
+                      onChange={(value) => updateSetting("miyoSearchAll", value === "unrestricted")}
+                      disabled={!capabilitiesEnabled}
+                    />
+                  }
+                />
+              )}
 
               {/* Search chat — chat-sync status from the Miyo health check. Its
                   deeplink button also takes `disabled` so the gate holds for
@@ -829,7 +799,16 @@ export const MiyoSettings: React.FC = () => {
             <div className="tw-px-4">
               <CapabilityRow
                 title="Document Processor"
-                description="Miyo processes PDF & EPUB. Other formats use Plus cloud."
+                description={
+                  <>
+                    Miyo processes PDF &amp; EPUB. Other formats use Plus cloud.
+                    <div className="tw-mt-1">
+                      <span className="tw-font-semibold tw-text-normal">Plus</span> = Copilot cloud,
+                      uses credits · <span className="tw-font-semibold tw-text-accent">Miyo</span> =
+                      your selected server, no credits
+                    </div>
+                  </>
+                }
                 control={
                   <SegmentedControl
                     aria-label="Document Processor backend"
