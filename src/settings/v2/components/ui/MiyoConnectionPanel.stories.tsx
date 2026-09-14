@@ -1,3 +1,4 @@
+import { Button } from "@/components/ui/button";
 import { createMiyoPageUrl } from "@/lib/miyoLinks";
 import type { Meta, StoryObj } from "@/lib/story";
 import React from "react";
@@ -17,15 +18,9 @@ function InteractiveConnection(args: Partial<MiyoConnectionPanelProps>) {
       onAddressChange={setAddress}
     >
       {args.children ?? (
-        <MiyoConnectionControl
-          enabled={false}
-          status="unknown"
-          remote={mode === "remote"}
-          checking={false}
-          onConnect={() => {}}
-          onDisconnect={() => {}}
-          onRetry={() => {}}
-        />
+        <Button variant="secondary" size="default">
+          Connect
+        </Button>
       )}
     </MiyoConnectionPanel>
   );
@@ -40,27 +35,36 @@ function ConnectedDraft(args: Partial<MiyoConnectionPanelProps>) {
   const [enabled, setEnabled] = React.useState(true);
   return (
     <MiyoConnectionPanel
+      connectionStatus={
+        <MiyoConnectionControl
+          enabled={enabled}
+          status="available"
+          remote={active.mode === "remote"}
+          checking={false}
+          onDisconnect={() => setEnabled(false)}
+          onRetry={() => {}}
+        />
+      }
       mode={mode}
       address={address}
       downloadUrl={createMiyoPageUrl("miyo_settings")}
       onModeChange={setMode}
       onAddressChange={setAddress}
     >
-      <MiyoConnectionControl
-        enabled={enabled}
-        status="available"
-        remote={active.mode === "remote"}
-        checking={false}
-        hasPendingConnection={
-          mode !== active.mode || (mode === "remote" && address.trim() !== active.address)
-        }
-        onConnect={() => {
-          setActive({ mode, address: address.trim() });
-          setEnabled(true);
-        }}
-        onDisconnect={() => setEnabled(false)}
-        onRetry={() => {}}
-      />
+      {(!enabled ||
+        mode !== active.mode ||
+        (mode === "remote" && address.trim() !== active.address)) && (
+        <Button
+          variant="secondary"
+          size="default"
+          onClick={() => {
+            setActive({ mode, address: address.trim() });
+            setEnabled(true);
+          }}
+        >
+          Connect
+        </Button>
+      )}
     </MiyoConnectionPanel>
   );
 }
@@ -80,13 +84,13 @@ export const ConnectedRemote: StoryObj<MiyoConnectionPanelProps> = {
     mode: "remote",
     address: "http://miyo-home:8742",
     message: "Current vault isn't confirmed on this server. Manage folders on the Miyo host.",
-    children: (
+    children: <></>,
+    connectionStatus: (
       <MiyoConnectionControl
         enabled
         status="available"
         remote
         checking={false}
-        onConnect={() => {}}
         onDisconnect={() => {}}
         onRetry={() => {}}
       />

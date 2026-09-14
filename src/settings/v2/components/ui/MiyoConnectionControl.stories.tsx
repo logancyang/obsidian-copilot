@@ -33,7 +33,6 @@ const meta = {
     status: "available",
     checking: false,
     remote: false,
-    onConnect: () => {},
     onDisconnect: () => {},
     onRetry: () => {},
   },

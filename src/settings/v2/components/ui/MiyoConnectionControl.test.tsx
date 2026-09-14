@@ -14,7 +14,6 @@ function renderControl(overrides: Partial<MiyoConnectionControlProps> = {}) {
     status: "available",
     checking: false,
     remote: false,
-    onConnect: jest.fn(),
     onDisconnect: jest.fn(),
     onRetry: jest.fn(),
     ...overrides,
@@ -25,13 +24,10 @@ function renderControl(overrides: Partial<MiyoConnectionControlProps> = {}) {
 
 describe("MiyoConnectionControl", () => {
   describe("MiyoConnectionControl()", () => {
-    it(`shows Connect and reports the action when Miyo was never enabled (${ISSUE_URL})`, () => {
-      const props = renderControl({ enabled: false, status: "unknown" });
-
-      fireEvent.click(screen.getByRole("button", { name: "Connect" }));
-
-      expect(props.onConnect).toHaveBeenCalledTimes(1);
+    it("shows no active connection toolbar while disconnected — https://github.com/Brevilabs/obsidian-copilot-private/issues/466", () => {
+      renderControl({ enabled: false, status: "unknown" });
       expect(screen.queryByRole("status")).toBeNull();
+      expect(screen.queryByRole("button")).toBeNull();
     });
 
     it(`shows checking instead of a cached connected state while a probe is running (${ISSUE_URL})`, () => {
@@ -54,14 +50,6 @@ describe("MiyoConnectionControl", () => {
       expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
     });
 
-    it("shows a draft confirmation alongside the active connection — https://github.com/Brevilabs/obsidian-copilot-private/issues/466", () => {
-      const props = renderControl({ hasPendingConnection: true });
-      expect(screen.getByRole("status").textContent).toContain("Connected · local");
-      fireEvent.click(screen.getByRole("button", { name: "Connect" }));
-      expect(props.onConnect).toHaveBeenCalledTimes(1);
-      expect(props.onDisconnect).not.toHaveBeenCalled();
-    });
-
     it(`keeps a stale remote snapshot visibly connected (${ISSUE_URL})`, () => {
       renderControl({ status: "stale", remote: true });
 
@@ -78,7 +66,6 @@ describe("MiyoConnectionControl", () => {
       expect(screen.getByRole("status").textContent).toContain("Unavailable");
       expect(props.onRetry).toHaveBeenCalledTimes(1);
       expect(props.onDisconnect).toHaveBeenCalledTimes(1);
-      expect(props.onConnect).not.toHaveBeenCalled();
     });
   });
 

@@ -1,3 +1,4 @@
+import { Button } from "@/components/ui/button";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { SettingSection } from "@/components/ui/setting-section";
 import { SettingSwitch } from "@/components/ui/setting-switch";
@@ -647,6 +648,19 @@ export const MiyoSettings: React.FC = () => {
       <div className="tw-text-sm tw-text-muted">Private context from your Miyo server.</div>
 
       <MiyoConnectionPanel
+        connectionStatus={
+          <MiyoConnectionControl
+            enabled={settings.enableMiyo}
+            status={status.backend}
+            checking={refreshing}
+            remote={connectedRemote}
+            onDisconnect={() => {
+              setVaultResult(null);
+              void handleDisconnect();
+            }}
+            onRetry={() => void (connectedRemote ? handleConnect() : handleRetry())}
+          />
+        }
         mode={mode}
         address={urlDraft}
         onModeChange={(next) => changeConnection(next)}
@@ -665,19 +679,18 @@ export const MiyoSettings: React.FC = () => {
             : undefined
         }
       >
-        <MiyoConnectionControl
-          enabled={settings.enableMiyo}
-          status={status.backend}
-          checking={refreshing}
-          remote={connectedRemote}
-          hasPendingConnection={hasPendingConnection}
-          onConnect={() => void saveAndConnect()}
-          onDisconnect={() => {
-            setVaultResult(null);
-            void handleDisconnect();
-          }}
-          onRetry={() => void (connectedRemote ? handleConnect() : handleRetry())}
-        />
+        {/* The card confirms draft choices; the shared toolbar acts on the active connection.
+            https://github.com/Brevilabs/obsidian-copilot-private/issues/466 */}
+        {(!settings.enableMiyo || hasPendingConnection) && (
+          <Button
+            variant="secondary"
+            size="default"
+            onClick={() => void saveAndConnect()}
+            disabled={refreshing}
+          >
+            {refreshing && !settings.enableMiyo ? "Connecting…" : "Connect"}
+          </Button>
+        )}
       </MiyoConnectionPanel>
 
       {/* Powered by Miyo — the capability block. Partial gating: the Miyo pickers /

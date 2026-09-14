@@ -29,7 +29,7 @@ Open **Settings → Copilot → Miyo** and choose one connection:
 
 Selecting a connection option or editing the address leaves the current connection running. Select **Connect** to apply the chosen connection. The saved remote address and feature preferences are retained. An incomplete address is not saved as an active endpoint. Existing remote configurations remain selected after an upgrade.
 
-A healthy connection shows **Connected · local** or **Connected · remote**. Select **Check connection** to check again. A remote connection can be healthy even if the current vault is not registered on that server; the message beneath the connection identifies that separately. Manage folders on the Miyo host to make this vault available for search. Copilot does not send this computer's filesystem path to register it remotely.
+The status and controls above the connection card apply to the active connection. A healthy connection shows **Connected · local** or **Connected · remote**. Select **Check connection** to check again, or **Disconnect** to turn it off. **Connect** inside the card applies your chosen option. A remote connection can be healthy even if the current vault is not registered on that server; the message beneath the connection identifies that separately. Manage folders on the Miyo host to make this vault available for search. Copilot does not send this computer's filesystem path to register it remotely.
 
 Turn on **Semantic search** under **Powered by Miyo** to use the agent Skill. For remote connections, manage chat sources and Relay on the Miyo host. The **External apps** Connector is separate from Copilot's connection and does not set its server address.
 

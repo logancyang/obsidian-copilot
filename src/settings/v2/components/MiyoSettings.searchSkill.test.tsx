@@ -282,6 +282,22 @@ describe("MiyoSettings", () => {
       expect(currentSettings.enableMiyo).toBe(true);
       expect(currentSettings.miyoConnectionMode).not.toBe("local");
       expect(await screen.findByText("Connected · remote")).toBeTruthy();
+      const connectionOptions = screen.getByRole("radiogroup", { name: "Miyo connection" });
+      for (const sharedControl of [
+        screen.getByRole("status"),
+        screen.getByRole("button", { name: "Check connection" }),
+        screen.getByRole("button", { name: "Disconnect" }),
+      ]) {
+        expect(
+          sharedControl.compareDocumentPosition(connectionOptions) &
+            Node.DOCUMENT_POSITION_FOLLOWING
+        ).toBeTruthy();
+      }
+      const connectButton = screen.getByRole("button", { name: "Connect" });
+      expect(
+        connectionOptions.compareDocumentPosition(connectButton) & Node.DOCUMENT_POSITION_FOLLOWING
+      ).toBeTruthy();
+      expect(screen.getByRole("status").parentElement!.contains(connectButton)).toBe(false);
       expect(screen.getByText("Set up Relay on the Miyo host.")).toBeTruthy();
       expect(screen.queryByText(/Switching disconnects/)).toBeNull();
       fireEvent.click(screen.getByRole("radio", { name: /Remote server/ }));
@@ -336,8 +352,15 @@ describe("MiyoSettings", () => {
       });
       expect(currentSettings.enableMiyo).toBe(true);
       expect(currentSettings.miyoServerUrl).toBe("http://old:8742");
+      const gate = deferred<boolean>();
+      mockProbeGate = gate.promise;
       fireEvent.click(screen.getByRole("button", { name: "Check connection" }));
       await waitFor(() => expect(mockProbeUrls).toContain("http://old:8742"));
+      expect(screen.getByRole<HTMLButtonElement>("button", { name: "Connect" }).disabled).toBe(
+        true
+      );
+      expect(screen.queryByRole("button", { name: "Connecting…" })).toBeNull();
+      await act(async () => gate.resolve(true));
       await screen.findByText("Connected · remote");
       expect(mockProbeUrls).not.toContain("http://new:8742");
       fireEvent.click(screen.getByRole("button", { name: "Connect" }));

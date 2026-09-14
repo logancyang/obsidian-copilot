@@ -9,6 +9,7 @@ export interface MiyoConnectionPanelProps {
   onModeChange: (mode: "local" | "remote") => void;
   onAddressChange: (address: string) => void;
   downloadUrl: string;
+  connectionStatus?: React.ReactNode;
   message?: string;
   error?: string;
   children: React.ReactNode;
@@ -21,13 +22,14 @@ export function MiyoConnectionPanel({
   onModeChange,
   onAddressChange,
   downloadUrl,
+  connectionStatus,
   message,
   error,
   children,
 }: MiyoConnectionPanelProps) {
   const groupId = React.useId();
   return (
-    <SettingSection label="Connection">
+    <SettingSection label="Connection" description={connectionStatus}>
       <div className="tw-space-y-3 tw-py-4">
         <div
           role="radiogroup"
