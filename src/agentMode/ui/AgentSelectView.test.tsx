@@ -126,10 +126,14 @@ describe("AgentSelectView", () => {
       ]);
     });
 
-    it("shows the footer note beside the call to action", () => {
+    it("shows the footer note above the call to action (https://github.com/Brevilabs/obsidian-copilot-private/issues/410)", () => {
       renderView({ footerNote: "Ready to go." });
 
-      expect(screen.getByText("Ready to go.")).toBeTruthy();
+      const note = screen.getByText("Ready to go.");
+      const action = screen.getByRole("button", { name: "Configure" });
+      expect(note.compareDocumentPosition(action) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(note.parentElement).toBe(action.parentElement);
+      expect(note.parentElement?.classList.contains("tw-flex-col")).toBe(true);
     });
 
     it("omits the footer note when the selected agent needs no attention", () => {

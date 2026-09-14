@@ -65,6 +65,12 @@ const Controlled: React.FC<{ groups: ModelEnableGroup[] }> = ({ groups }) => {
 const meta = {
   title: "Agent Mode/Model Enable List",
   component: ModelEnableList,
+  args: {
+    groups: [],
+    query: "",
+    onQueryChange: () => undefined,
+    onToggle: () => undefined,
+  },
   parameters: { gallery: { host: "settings-tab", layout: "padded" } },
 } satisfies Meta<ModelEnableListProps>;
 export default meta;

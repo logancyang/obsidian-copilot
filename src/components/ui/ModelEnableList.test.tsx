@@ -1,3 +1,5 @@
+import modelEnableStories, { LockedCopilotCatalog } from "@/components/ui/ModelEnableList.stories";
+import type { Meta } from "@/lib/story";
 import { ModelEnableList, type ModelEnableGroup } from "@/components/ui/ModelEnableList";
 import { fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
@@ -41,6 +43,26 @@ function renderList(props?: Partial<React.ComponentProps<typeof ModelEnableList>
 }
 
 describe("ModelEnableList — default group expansion", () => {
+  it("renders the locked gallery catalog with all required controlled props (https://github.com/Brevilabs/obsidian-copilot-private/issues/427)", () => {
+    type Props = React.ComponentProps<typeof ModelEnableList>;
+    // Match the gallery's meta + story merge so omitted required args cannot hide behind renderList defaults.
+    const args = {
+      ...(modelEnableStories as Meta<Props>).args,
+      ...LockedCopilotCatalog.args,
+    } as Props;
+    render(<ModelEnableList {...args} />);
+    expect(screen.getByText("Copilot Plus Flash")).not.toBeNull();
+    expect(screen.getByText("OpenRouter")).not.toBeNull();
+    const toggles = screen.getAllByRole("switch");
+    expect(toggles.map((toggle) => toggle.getAttribute("aria-disabled"))).toEqual([
+      "true",
+      "true",
+      "true",
+      "false",
+      "false",
+    ]);
+  });
+
   it("opens every group by default when no defaultOpenGroupKey is given", () => {
     renderList();
     expect(groupState("Provider A")).toBe("open");

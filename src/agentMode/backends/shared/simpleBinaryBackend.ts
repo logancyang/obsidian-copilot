@@ -3,8 +3,7 @@ import type CopilotPlugin from "@/main";
 import { AcpBackendProcess } from "@/agentMode/acp/AcpBackendProcess";
 import type { AcpBackend, AcpSpawnDescriptor } from "@/agentMode/acp/types";
 import { augmentPathForNodeShebang } from "@/agentMode/acp/nodeShebangPath";
-import type { BackendDescriptor, BackendProcess, InstallState } from "@/agentMode/session/types";
-import { requireNodeModule } from "@/utils/desktopRuntime";
+import type { BackendDescriptor, BackendProcess } from "@/agentMode/session/types";
 
 /**
  * Build a spawn descriptor for a backend whose only configuration is a
@@ -35,23 +34,6 @@ export function buildSimpleSpawnDescriptor(
       ...(envOverrides ?? {}),
     },
   };
-}
-
-/**
- * `InstallState` for a user-binary backend: `ready/custom` when the configured
- * path exists on disk, else `absent`. The existence check matters across synced
- * vaults — a second device can carry the path in settings without the binary
- * being installed locally (logancyang/obsidian-copilot-preview#123); reporting
- * `absent` shows the install prompt instead of failing the spawn cryptically.
- * `fileExists` is injected so the branch is unit-testable without disk.
- */
-export function binaryPathInstallState(
-  binaryPath: string | undefined,
-  fileExists: (path: string) => boolean = (p) =>
-    requireNodeModule<typeof import("node:fs")>("fs").existsSync(p)
-): InstallState {
-  if (!binaryPath || !fileExists(binaryPath)) return { kind: "absent" };
-  return { kind: "ready", source: "custom" };
 }
 
 /**
