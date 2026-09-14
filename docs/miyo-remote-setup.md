@@ -68,7 +68,9 @@ On every device where you use Copilot:
 
 Use **Remote server** with the **same URL on the host computer too**. This gives synced Copilot settings one consistent address and keeps every client pointed at the shared Miyo service.
 
-![Copilot in Atom dark showing Remote server connected, with the private address hidden](https://raw.githubusercontent.com/logancyang/obsidian-copilot/4d95be9c2fc65978ffda08cc6a66f184eebb1979/tutorial-media/remote-miyo/remote-connected.png)
+The animation shows where to paste your full URL and click **Connect**. The private address is hidden.
+
+![Copilot Remote server changes from Offline to Connected after clicking Connect, with the private address hidden](https://raw.githubusercontent.com/logancyang/obsidian-copilot/d68cde1889ed5ac48f8f03ce5e18c6530acd8185/tutorial-media/remote-miyo/remote-connect.gif)
 
 **Connected** means Copilot can reach the server. It does not mean every vault or note has been indexed. To add or repair indexed folders, open Miyo on the host; a remote client cannot register its own local folder on that host.
 
@@ -84,16 +86,13 @@ Open Agent Chat and ask about a note you know is indexed on the host. For exampl
 
 Check that the returned note is one you expected. **Unrestricted** searches everything Miyo has indexed; choose it only when that wider scope is what you want.
 
-The private address is hidden in the screenshot and video; use your own full HTTPS address. Pauses are shortened. The walkthrough starts with an instruction note summarizing commands that were run and verified on the host. It then shows the actual Copilot connection and a Claude search in Safe mode, approved with **Allow once**, returning **Better team meetings.md** and an excerpt.
+In this example, a Miyo search returns **Better team meetings.md** and the expected excerpt.
 
-<video controls muted playsinline preload="metadata" aria-label="Connect Copilot to remote Miyo through Tailscale and search an indexed note" style="width: 100%; height: auto;">
-  <source src="https://raw.githubusercontent.com/logancyang/obsidian-copilot/4d95be9c2fc65978ffda08cc6a66f184eebb1979/tutorial-media/remote-miyo/remote-miyo-walkthrough.mp4" type="video/mp4">
-  <a href="https://raw.githubusercontent.com/logancyang/obsidian-copilot/4d95be9c2fc65978ffda08cc6a66f184eebb1979/tutorial-media/remote-miyo/remote-miyo-walkthrough.mp4">Watch: Connect Copilot to remote Miyo and search an indexed note</a>
-</video>
+![Copilot Agent Chat showing the matching Better team meetings note and its excerpt](https://raw.githubusercontent.com/logancyang/obsidian-copilot/d68cde1889ed5ac48f8f03ce5e18c6530acd8185/tutorial-media/remote-miyo/remote-search-result.png)
 
 ### Tested setup
 
-The walkthrough uses the preview from [Copilot PR 3233](https://github.com/logancyang/obsidian-copilot/pull/3233), commit `b8bd0c47c9be9e5ad905de7d207d0db86661d611`, Miyo 0.2.23, and Obsidian 1.13.4 with Atom dark. On the earlier preview commit `38794e77`, a second isolated Obsidian profile on the same Mac also searched successfully after manually copying Copilot settings; its vault had the same name at a different disk location. That build retained the remote address and Current vault scope after restarting into Obsidian 1.13.7. This verifies two local profiles, not two physical devices or automatic settings synchronization.
+The captures use the preview from [Copilot PR 3233](https://github.com/logancyang/obsidian-copilot/pull/3233), commit `b8bd0c47c9be9e5ad905de7d207d0db86661d611`, Miyo 0.2.23, and Obsidian 1.13.4 with Atom dark. On the earlier preview commit `38794e77`, a second isolated Obsidian profile on the same Mac also searched successfully after manually copying Copilot settings; its vault had the same name at a different disk location. That build retained the remote address and Current vault scope after restarting into Obsidian 1.13.7. This verifies two local profiles, not two physical devices or automatic settings synchronization.
 
 ## If the connection or search fails
 
