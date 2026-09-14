@@ -15,6 +15,45 @@ const VALID_TODOS = [
 ];
 
 const testAcpNotificationToEvents = () => {
+  it("keeps raw child command output when the adapter omits content (https://github.com/Brevilabs/obsidian-copilot-private/issues/467)", () => {
+    const tool = {
+      sessionUpdate: "tool_call_update",
+      toolCallId: "child-read",
+      rawOutput: {
+        formatted_output: "# Fixture Alpha\n\nThe copper fox carries seven paper stars.",
+        exit_code: 0,
+      },
+      _meta: { copilot: { parentToolCallId: "child" } },
+    };
+    expect(acpNotificationToEvents(notification(tool))[0].update).toMatchObject({
+      content: [
+        { type: "content", content: { type: "text", text: tool.rawOutput.formatted_output } },
+      ],
+    });
+    expect(
+      acpNotificationToEvents(
+        notification({
+          ...tool,
+          content: [{ type: "content", content: { type: "text", text: "Authoritative content" } }],
+        })
+      )[0].update
+    ).toMatchObject({ content: [{ content: { text: "Authoritative content" } }] });
+    expect(
+      acpNotificationToEvents(notification({ ...tool, _meta: undefined }))[0].update
+    ).toMatchObject({ content: undefined });
+    expect(
+      acpNotificationToEvents(
+        notification({
+          sessionUpdate: "tool_call",
+          toolCallId: "old-launch",
+          title: "spawnAgent",
+          rawOutput: "Available result",
+          _meta: { codex: { collaboration: { tool: "spawnAgent" } } },
+        })
+      )[0].update
+    ).toMatchObject({ content: [{ content: { text: "Available result" } }] });
+  });
+
   it("preserves native child identity and marks legacy collaboration/activity launches as limited (https://github.com/Brevilabs/obsidian-copilot-private/issues/467)", () => {
     const tool = {
       sessionUpdate: "tool_call",

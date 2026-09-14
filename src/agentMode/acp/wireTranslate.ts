@@ -234,6 +234,19 @@ function subagentFields(
   };
 }
 
+// Child command completions may contain only Codex rawOutput, including on replay.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/467
+function toolCallContentForDisplay(call: ToolCall | ToolCallUpdate): ToolCallContent[] | undefined {
+  const content = toolCallContentFromAcp(call.content);
+  const child = subagentFields(call);
+  if (content || (!child.subagent && !child.parentToolCallId)) return content;
+  const output = call.rawOutput as { formatted_output?: unknown } | string | null | undefined;
+  const text = typeof output === "string" ? output : output?.formatted_output;
+  return typeof text === "string"
+    ? [{ type: "content", content: { type: "text", text } }]
+    : undefined;
+}
+
 function toolCallSnapshotFromAcp(
   call: ToolCall & { sessionUpdate?: "tool_call" }
 ): ToolCallSnapshot {
@@ -244,7 +257,7 @@ function toolCallSnapshotFromAcp(
     kind: toolKindFromAcp(call.kind),
     status: toolStatusFromAcp(call.status),
     rawInput: call.rawInput,
-    content: toolCallContentFromAcp(call.content),
+    content: toolCallContentForDisplay(call),
     locations: call.locations?.map((l) => ({ path: l.path, line: l.line ?? undefined })),
     mcpServer,
     ...subagentFields(call),
@@ -267,7 +280,7 @@ function toolCallDeltaFromAcp(
     kind: toolKindFromAcp(upd.kind ?? undefined),
     status: toolStatusFromAcp(upd.status as string | undefined),
     rawInput: upd.rawInput,
-    content: mapNullable(upd.content, toolCallContentFromAcp),
+    content: toolCallContentForDisplay(upd) ?? (upd.content === null ? null : undefined),
     locations: mapNullable(upd.locations, (locs) =>
       locs.map((l) => ({ path: l.path, line: l.line ?? undefined }))
     ),
@@ -465,7 +478,7 @@ export function acpPermissionRequestToPrompt(
       kind: toolKindFromAcp(call.kind ?? undefined),
       status: toolStatusFromAcp(call.status as string | undefined) ?? "pending",
       rawInput: call.rawInput,
-      content: toolCallContentFromAcp(call.content),
+      content: toolCallContentForDisplay(call),
       locations: call.locations?.map((l) => ({ path: l.path, line: l.line ?? undefined })),
     },
     options: req.options.map((option) => permissionOptionFromAcp(option, presentPermissionOption)),
