@@ -2,7 +2,7 @@
 
 Miyo is the companion app that powers Copilot's search by meaning. It replaces the old index inside the plugin, helping Copilot find relevant notes even when your question uses different words.
 
-This guide connects the Obsidian vault on your computer to Miyo and walks you through your first search.
+This guide connects the Obsidian vault on your computer to Miyo and walks you through your first search. To share one Miyo server across devices, see [remote Miyo setup with Tailscale](miyo-remote-setup.md).
 
 ## Before you start
 
