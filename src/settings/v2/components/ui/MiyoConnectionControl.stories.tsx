@@ -69,3 +69,28 @@ export const Unavailable: StoryObj<MiyoConnectionControlProps> = {
   args: { status: "unavailable" },
   render: renderAvailabilityState,
 };
+
+export const RemoteVaultNotRegistered: StoryObj<MiyoConnectionControlProps> = {
+  args: { remote: true },
+  render: (args) => (
+    <div className="tw-space-y-2">
+      <MiyoConnectionControl {...meta.args} {...args} />
+      <div className="tw-text-xs tw-text-muted">
+        Current vault isn't confirmed on this server. Manage folders on the Miyo host.
+      </div>
+    </div>
+  ),
+};
+
+export const RemoteConnectionFailed: StoryObj<MiyoConnectionControlProps> = {
+  args: { enabled: false, remote: true, status: "unavailable", connectLabel: "Save and connect" },
+  render: (args) => (
+    <div className="tw-space-y-2">
+      <MiyoConnectionControl {...meta.args} {...args} />
+      <div role="alert" className="tw-text-xs tw-text-error">
+        Couldn't connect to this server. Check the address, access, and that Miyo is running, then
+        retry.
+      </div>
+    </div>
+  ),
+};

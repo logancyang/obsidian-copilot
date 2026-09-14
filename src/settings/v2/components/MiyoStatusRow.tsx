@@ -45,6 +45,7 @@ export interface MiyoStatusRowProps {
   statusText: React.ReactNode;
   actionLabel: string;
   onAction: () => void;
+  remoteInstruction?: string;
   /** Disables the deeplink button (used when the row sits inside the connection gate). */
   disabled?: boolean;
 }
@@ -56,6 +57,7 @@ export const MiyoStatusRow: React.FC<MiyoStatusRowProps> = ({
   statusText,
   actionLabel,
   onAction,
+  remoteInstruction,
   disabled = false,
 }) => (
   // items-start (not center): the status sub-line makes the left column taller, and
@@ -77,9 +79,13 @@ export const MiyoStatusRow: React.FC<MiyoStatusRowProps> = ({
       </div>
     </div>
     <div className="tw-flex tw-w-full tw-flex-1 tw-items-center tw-gap-2 sm:tw-justify-end">
-      <Button variant="secondary" size="sm" onClick={onAction} disabled={disabled}>
-        {actionLabel} <ArrowUpRight className="tw-size-3.5" />
-      </Button>
+      {remoteInstruction ? (
+        <span className="tw-text-xs tw-text-muted">{remoteInstruction}</span>
+      ) : (
+        <Button variant="secondary" size="sm" onClick={onAction} disabled={disabled}>
+          {actionLabel} <ArrowUpRight className="tw-size-3.5" />
+        </Button>
+      )}
     </div>
   </div>
 );

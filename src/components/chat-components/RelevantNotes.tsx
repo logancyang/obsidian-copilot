@@ -12,10 +12,11 @@ import { cn } from "@/lib/utils";
 import { logError, logWarn } from "@/logger";
 import {
   getMiyoFolderName,
-  isLocalMiyoUrl,
+  getMiyoCustomUrl,
   MIYO_DEEPLINK_URL,
   shouldUseMiyo,
 } from "@/miyo/miyoUtils";
+import { getMiyoConnectionMode } from "@/miyo/miyoRuntimePolicy";
 import { useMiyoStatus } from "@/miyo/useMiyoStatus";
 import {
   findRelevantNotes,
@@ -249,7 +250,7 @@ export const RelevantNotes = memo(
     const chat = useChatRelevantNotes(
       app,
       liveUpdateEnabled,
-      JSON.stringify([settings.miyoServerUrl, miyoCredentialIdentity, miyoBackendAvailable])
+      JSON.stringify([getMiyoCustomUrl(settings), miyoCredentialIdentity, miyoBackendAvailable])
     );
     const {
       result: noteResult,
@@ -258,7 +259,7 @@ export const RelevantNotes = memo(
     } = useRelevantNotes({
       paused: !!chat.context,
       enableMiyo: settings.enableMiyo,
-      miyoServerUrl: settings.miyoServerUrl,
+      miyoServerUrl: getMiyoCustomUrl(settings),
       miyoBackendAvailable,
       miyoCredentialIdentity,
       liveUpdateEnabled: liveUpdateEnabled && !chat.context,
@@ -304,7 +305,9 @@ export const RelevantNotes = memo(
     // A local-app deeplink cannot configure the remote server used on mobile
     // or by an explicit remote endpoint, so those runtimes stay in Copilot.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
-    const canOpenMiyoApp = !Platform.isMobile && isLocalMiyoUrl(settings.miyoServerUrl);
+    // A saved remote address can remain while this computer is selected.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/466
+    const canOpenMiyoApp = !Platform.isMobile && getMiyoConnectionMode(settings) === "local";
     const miyoFolderUrl = `${MIYO_DEEPLINK_URL}open?tab=sources&folder=${encodeURIComponent(
       getMiyoFolderName(app)
     )}`;

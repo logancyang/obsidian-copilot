@@ -196,6 +196,14 @@ describe("builtinSkillEnv", () => {
   });
 
   describe("getBuiltinSkillEnvRestartPolicy()", () => {
+    it("refreshes the agent endpoint when connection mode changes with the saved URL unchanged — https://github.com/Brevilabs/obsidian-copilot-private/issues/466", () => {
+      const prev = {
+        miyoConnectionMode: "remote",
+        miyoServerUrl: "http://remote:8742",
+      } as ReturnType<typeof getSettings>;
+      const next = { ...prev, miyoConnectionMode: "local" } as ReturnType<typeof getSettings>;
+      expect(getBuiltinSkillEnvRestartPolicy(prev, next, "opencode")).toBe("deferred");
+    });
     it.each([
       ["isPaidUser", false, true],
       ["plusLicenseKey", "old", "new"],

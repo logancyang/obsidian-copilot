@@ -9,6 +9,7 @@ export interface MiyoConnectionControlProps {
   status: CapabilityStatus;
   checking: boolean;
   remote: boolean;
+  connectLabel?: string;
   onConnect: () => void;
   onDisconnect: () => void;
   onRetry: () => void;
@@ -38,7 +39,7 @@ export const MiyoAvailabilityNotice: React.FC<MiyoAvailabilityNoticeProps> = ({
     <div className="tw-flex tw-items-center tw-gap-2 tw-rounded-lg tw-border tw-border-solid tw-border-border tw-bg-secondary tw-px-3 tw-py-2.5 tw-text-xs tw-text-normal">
       <TriangleAlert className="tw-size-4 tw-shrink-0 tw-text-warning" />
       {enabled
-        ? "Miyo is unavailable. Open it, then retry the connection above."
+        ? "Miyo is unavailable. Check your server, then retry the connection above."
         : "Connect to Miyo to configure these capabilities."}
     </div>
   );
@@ -52,6 +53,7 @@ export const MiyoConnectionControl: React.FC<MiyoConnectionControlProps> = ({
   status,
   checking,
   remote,
+  connectLabel = "Connect",
   onConnect,
   onDisconnect,
   onRetry,
@@ -59,7 +61,7 @@ export const MiyoConnectionControl: React.FC<MiyoConnectionControlProps> = ({
   if (!enabled) {
     return (
       <Button variant="secondary" size="sm" onClick={onConnect} disabled={checking}>
-        {checking ? "Connecting…" : "Connect"}
+        {checking ? "Connecting…" : connectLabel}
       </Button>
     );
   }
@@ -76,10 +78,10 @@ export const MiyoConnectionControl: React.FC<MiyoConnectionControlProps> = ({
   // the enable flow again.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/356
   return (
-    <div className="tw-flex tw-flex-wrap tw-items-center tw-justify-end tw-gap-2">
+    <div className="tw-flex tw-w-full tw-flex-wrap tw-items-center tw-justify-end tw-gap-2">
       <span
         role="status"
-        className="tw-inline-flex tw-shrink-0 tw-items-center tw-gap-1.5 tw-rounded-full tw-bg-secondary tw-px-3 tw-py-1 tw-text-smallest tw-font-semibold tw-text-normal"
+        className="tw-mr-auto tw-inline-flex tw-shrink-0 tw-items-center tw-gap-1.5 tw-rounded-full tw-bg-secondary tw-px-3 tw-py-1 tw-text-smallest tw-font-semibold tw-text-normal"
       >
         <Circle
           className={cn(
@@ -89,9 +91,9 @@ export const MiyoConnectionControl: React.FC<MiyoConnectionControlProps> = ({
         />
         {label}
       </span>
-      {!checking && !connected && (
+      {!checking && (
         <Button variant="secondary" size="sm" onClick={onRetry}>
-          Retry
+          {connected ? "Check connection" : "Retry"}
         </Button>
       )}
       {!checking && (

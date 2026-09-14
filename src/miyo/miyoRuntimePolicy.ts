@@ -9,15 +9,19 @@ import { Platform } from "obsidian";
  * importing from `@/miyo/miyoUtils` unchanged.
  */
 
-/**
- * Return the user-configured Miyo server URL, or "" to fall back to local service discovery.
- * Uses `|| ""` to guard against undefined when loaded from older saved settings.
- *
- * @param settings - Current Copilot settings.
- * @returns Trimmed URL string like "http://192.168.1.10:8742", or "" when not configured.
+export function getMiyoConnectionMode(settings: CopilotSettings): "local" | "remote" {
+  // A legacy explicit URL must keep targeting that server, including loopback.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/466
+  return (
+    settings.miyoConnectionMode ?? ((settings.miyoServerUrl || "").trim() ? "remote" : "local")
+  );
+}
+
+/** Returns the active server override, leaving a saved remote URL unused in local mode.
+ * @param settings Current connection settings.
  */
 export function getMiyoCustomUrl(settings: CopilotSettings): string {
-  return (settings.miyoServerUrl || "").trim();
+  return getMiyoConnectionMode(settings) === "local" ? "" : (settings.miyoServerUrl || "").trim();
 }
 
 /**
@@ -34,7 +38,10 @@ export function getMiyoCustomUrl(settings: CopilotSettings): string {
  * @param settings - Current Copilot settings.
  */
 export function shouldUseMiyo(settings: CopilotSettings): boolean {
-  if (!settings.enableMiyo) {
+  if (
+    !settings.enableMiyo ||
+    (getMiyoConnectionMode(settings) === "remote" && !getMiyoCustomUrl(settings))
+  ) {
     return false;
   }
   return !Platform.isMobile || !!getMiyoCustomUrl(settings);
