@@ -412,6 +412,9 @@ export const MiyoSettings: React.FC = () => {
     const remote = getMiyoConnectionMode(target) === "remote";
     const superseded = () =>
       connectAttemptRef.current !== attempt ||
+      // A retry must not undo a disconnect from another settings instance or sync.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/466
+      (target.enableMiyo && !getSettings().enableMiyo) ||
       getMiyoConnectionMode(getSettings()) !== getMiyoConnectionMode(target) ||
       getMiyoCustomUrl(getSettings()) !== getMiyoCustomUrl(target) ||
       !mountedRef.current ||
