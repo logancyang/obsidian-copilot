@@ -1,5 +1,13 @@
 import React from "react";
-import { ExternalLink, FileText, Folder, Globe, Hash, CircleDashed } from "lucide-react";
+import {
+  ExternalLink,
+  FileText,
+  Folder,
+  Globe,
+  Hash,
+  CircleDashed,
+  TextSelect,
+} from "lucide-react";
 import { TFile } from "obsidian";
 import { TruncatedText } from "@/components/TruncatedText";
 import { getDomainFromUrl } from "@/utils";
@@ -239,21 +247,6 @@ export function ContextSelectedTextBadge({
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/465
   const normalizedContent = selectedText.content.replace(/\s+/g, " ").trim();
 
-  const selectionIcon = (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className="tw-size-3"
-    >
-      <path d="M2 18 7 6l5 12M4 14h6M16 4h4m-2 0v16m-2 0h4" />
-    </svg>
-  );
-
   const isWebSelection = isWebSelectedTextContext(selectedText);
   const location = isWebSelection
     ? "Selection"
@@ -269,7 +262,10 @@ export function ContextSelectedTextBadge({
   );
 
   return (
-    <ContextBadgeWrapper icon={selectionIcon} onRemove={onRemove}>
+    <ContextBadgeWrapper
+      icon={<TextSelect aria-hidden="true" className="tw-size-3" />}
+      onRemove={onRemove}
+    >
       <TruncatedText className="tw-max-w-40" tooltipContent={tooltipContent} alwaysShowTooltip>
         {normalizedContent}
       </TruncatedText>
