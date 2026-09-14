@@ -22,6 +22,7 @@ const SUBAGENT_OUTCOMES = {
 };
 
 interface SubAgentCardProps {
+  inactive?: boolean;
   parent: ToolCallPart;
   childNodes: GroupedTrailNode[];
   truncated?: boolean;
@@ -33,6 +34,7 @@ interface SubAgentCardProps {
 
 /**
  * Keeps delegated work attached to its launch so the prompt, progress, and report remain one traceable unit.
+ * @param inactive - Whether an ancestor ended without a final status for this child.
  * @param parent - The tool call that launched the delegated work.
  * @param childNodes - The nested activity produced by the delegated work.
  * @param truncated - Whether omitted activity should be disclosed to the user.
@@ -41,6 +43,7 @@ interface SubAgentCardProps {
  */
 export const SubAgentCard: React.FC<SubAgentCardProps> = ({
   parent,
+  inactive,
   childNodes,
   truncated,
   app,
@@ -51,7 +54,12 @@ export const SubAgentCard: React.FC<SubAgentCardProps> = ({
   const summary = lookupToolSummary(parent);
   const Icon = summary.icon;
   const line = summary.collapsedLine(parent);
-  const outcome = parent.subagent ? SUBAGENT_OUTCOMES[parent.subagent] : summary.outcome(parent);
+  const outcome =
+    inactive && parent.subagent === "running"
+      ? "No final child outcome reported"
+      : parent.subagent
+        ? SUBAGENT_OUTCOMES[parent.subagent]
+        : summary.outcome(parent);
   const childCounts = countChildren(childNodes);
   const inputPrompt = extractSubAgentInputPrompt(parent);
   const returnText = extractSubAgentReturnText(parent);
@@ -61,7 +69,7 @@ export const SubAgentCard: React.FC<SubAgentCardProps> = ({
     <AgentActivityCard
       icon={Icon}
       label={line}
-      trailing={<StatusBadge status={parent.status} />}
+      trailing={<StatusBadge status={parent.status} inactive={inactive} />}
       secondary={outcome}
       expandable
       open={open}

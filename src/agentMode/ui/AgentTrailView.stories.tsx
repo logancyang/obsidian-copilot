@@ -9,7 +9,7 @@ type AgentTrailProps = React.ComponentProps<typeof AgentTrail>;
 
 function tool(
   id: string,
-  vendorToolName: string,
+  vendorToolName: string | undefined,
   overrides: Partial<Extract<AgentMessagePart, { kind: "tool_call" }>> = {}
 ): AgentMessagePart {
   return {
@@ -146,35 +146,28 @@ export const SubagentOutcomes: StoryObj<AgentTrailProps> = {
       parts={[
         ...(
           ["running", "completed", "failed", "cancelled", "disconnected", "unavailable"] as const
-        ).map((subagent) => ({
-          kind: "tool_call" as const,
-          id: subagent,
-          title: "Review fixture notes",
-          subagent,
-          status:
-            subagent === "running"
-              ? ("in_progress" as const)
-              : subagent === "completed" || subagent === "unavailable"
-                ? ("completed" as const)
-                : ("failed" as const),
-          input: {
-            description: "Review fixture notes",
-            task: "Read the fixture note and report its summary.",
-          },
-          output:
-            subagent === "completed"
-              ? [{ type: "text" as const, text: "The fixture describes the project milestones." }]
-              : undefined,
-        })),
-        {
-          kind: "tool_call",
-          id: "child-read",
-          title: "Read fixture",
-          status: "completed",
+        ).map((subagent) =>
+          tool(subagent, undefined, {
+            subagent,
+            status:
+              subagent === "running"
+                ? "in_progress"
+                : subagent === "completed" || subagent === "unavailable"
+                  ? "completed"
+                  : "failed",
+            input: { description: "Read fixture note", task: "Delegated task for Fixture reader" },
+            output:
+              subagent === "completed"
+                ? [{ type: "text", text: "The fixture describes project milestones." }]
+                : undefined,
+          })
+        ),
+        tool("Read fixture", undefined, { toolKind: "read", parentToolCallId: "completed" }),
+        tool("Stopped read", undefined, {
           toolKind: "read",
-          parentToolCallId: "completed",
-          output: [{ type: "text", text: "Project milestones" }],
-        },
+          parentToolCallId: "cancelled",
+          status: "in_progress",
+        }),
       ]}
     />
   ),

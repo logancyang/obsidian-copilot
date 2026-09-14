@@ -39,6 +39,11 @@ const testAcpNotificationToEvents = () => {
       )[0].update
     ).toMatchObject({ content: [{ content: { text: "Authoritative content" } }] });
     expect(
+      acpNotificationToEvents(
+        notification({ ...tool, rawOutput: { output: "Function result" } })
+      )[0].update
+    ).toMatchObject({ content: [{ content: { text: "Function result" } }] });
+    expect(
       acpNotificationToEvents(notification({ ...tool, _meta: undefined }))[0].update
     ).toMatchObject({ content: undefined });
     expect(

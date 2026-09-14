@@ -147,6 +147,12 @@ describe("AcpSubagentRouter", () => {
         (state) => {
           const router = new AcpSubagentRouter();
           router.normalize(spawn("root", "child"));
+          router.normalize(
+            frame("child", {
+              sessionUpdate: "agent_message_chunk",
+              content: { type: "text", text: "Emitted child report" },
+            })
+          );
           const update = params(
             router.normalize(
               frame("root", {
@@ -158,6 +164,9 @@ describe("AcpSubagentRouter", () => {
           ).update;
           expect(update.status).toBe(state === "completed" ? "completed" : "failed");
           expect(update._meta.copilot.subagent).toBe(state);
+          expect(update).toMatchObject({
+            content: [{ content: { text: "Emitted child report" } }],
+          });
           expect(
             router.normalize(
               frame("child", {

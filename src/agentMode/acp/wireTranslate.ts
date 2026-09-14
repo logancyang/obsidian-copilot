@@ -240,8 +240,12 @@ function toolCallContentForDisplay(call: ToolCall | ToolCallUpdate): ToolCallCon
   const content = toolCallContentFromAcp(call.content);
   const child = subagentFields(call);
   if (content || (!child.subagent && !child.parentToolCallId)) return content;
-  const output = call.rawOutput as { formatted_output?: unknown } | string | null | undefined;
-  const text = typeof output === "string" ? output : output?.formatted_output;
+  const output = call.rawOutput as
+    | { formatted_output?: unknown; output?: unknown }
+    | string
+    | null
+    | undefined;
+  const text = typeof output === "string" ? output : (output?.formatted_output ?? output?.output);
   return typeof text === "string"
     ? [{ type: "content", content: { type: "text", text } }]
     : undefined;

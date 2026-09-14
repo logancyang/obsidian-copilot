@@ -372,6 +372,24 @@ describe("AgentTrail", () => {
     expect(screen.queryByText("Prompt")).toBeNull();
   });
 
+  it("shows unfinished tools as last reported activity when their parent ends (https://github.com/Brevilabs/obsidian-copilot-private/issues/467)", () => {
+    const pending = { ...READ_A, parentToolCallId: "child", status: "in_progress" as const };
+    const { container } = renderTrail({
+      parts: [
+        toolCall("child", {
+          subagent: "cancelled",
+          status: "failed",
+          input: { description: "Stopped reader" },
+        }),
+        pending,
+      ],
+    });
+    fireEvent.click(screen.getByText('Sub-agent · "Stopped reader"'));
+    expect(screen.getByText("Last reported")).toBeTruthy();
+    expect(container.querySelector(".tw-animate-spin")).toBeNull();
+    expect(pending.status).toBe("in_progress");
+  });
+
   it("groups a sub-agent's children too", () => {
     renderTrail({
       parts: [

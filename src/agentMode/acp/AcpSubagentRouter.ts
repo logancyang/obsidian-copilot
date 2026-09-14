@@ -116,6 +116,12 @@ export class AcpSubagentRouter {
         sessionUpdate: "tool_call_update",
         toolCallId: child.id,
         status: update.state === "completed" ? "completed" : "failed",
+        // The root may have stopped while this child finished; its terminal snapshot
+        // must carry the report even when interim display updates were suppressed.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/467
+        content: child.text
+          ? [{ type: "content", content: { type: "text", text: child.text } }]
+          : undefined,
         _meta: { copilot: { subagent: update.state } },
       });
     }
