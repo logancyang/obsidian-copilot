@@ -39,18 +39,19 @@ describe("ContextBadges", () => {
   describe("ContextSelectedTextBadge()", () => {
     it.each([
       { source: note, content: "Interview findings", label: "Interview findings" },
+      { source: note, content: "a".repeat(79) + "😀👩‍💻é", label: "a".repeat(79) + "😀👩‍💻é" },
       { source: web, content: "Interview findings", label: "Interview findings" },
       { source: note, content: "  First line\n\nsecond\tline  ", label: "First line second line" },
       { source: web, content: "  First line\n\nsecond\tline  ", label: "First line second line" },
       {
         source: note,
         content: "The selected passage starts here. ".repeat(4),
-        label: "The selected passage starts here. The selected passage starts here. The selected…",
+        label: "The selected passage starts here. ".repeat(4).trim(),
       },
       {
         source: web,
         content: "The selected passage starts here. ".repeat(4),
-        label: "The selected passage starts here. The selected passage starts here. The selected…",
+        label: "The selected passage starts here. ".repeat(4).trim(),
       },
     ])(
       "previews $source.sourceType excerpt '$label' instead of its source title - https://github.com/Brevilabs/obsidian-copilot-private/issues/465",

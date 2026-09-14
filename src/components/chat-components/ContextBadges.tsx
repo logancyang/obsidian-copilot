@@ -238,8 +238,6 @@ export function ContextSelectedTextBadge({
   // Excerpts need their own identity when shown beside the full source note.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/465
   const normalizedContent = selectedText.content.replace(/\s+/g, " ").trim();
-  const preview =
-    normalizedContent.length > 80 ? `${normalizedContent.slice(0, 80)}…` : normalizedContent;
 
   const selectionIcon = (
     <svg
@@ -273,7 +271,7 @@ export function ContextSelectedTextBadge({
   return (
     <ContextBadgeWrapper icon={selectionIcon} onRemove={onRemove}>
       <TruncatedText className="tw-max-w-40" tooltipContent={tooltipContent} alwaysShowTooltip>
-        {preview}
+        {normalizedContent}
       </TruncatedText>
       <span className="tw-text-xs tw-text-faint">{location}</span>
     </ContextBadgeWrapper>

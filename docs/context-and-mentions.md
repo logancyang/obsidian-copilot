@@ -67,6 +67,8 @@ One-turn attachments remain one-turn attachments inside a Project. Start a new P
 
 Quick Chat has a separate composer and context state. It can attach the active note and, on desktop, the active Web Viewer tab. Use **Add context** for a note, folder, web tab, or image. You can also type `[[Note title]]` for a note.
 
+Editing a sent Quick Chat message keeps its original attachments. Switching the active note or changing the composer attachments does not add them to the edited message.
+
 Quick Chat attachments apply to the next Quick Chat message. They do not become Agent Chat context, Project context, or `AGENTS.md` instructions.
 
 For vault-wide semantic search and AI history that you own outside the plugin, use [Miyo](vault-search-and-indexing.md). Miyo provides the local-first search path for Copilot V4.

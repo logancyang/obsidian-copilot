@@ -1,7 +1,7 @@
 import React from "react";
 import { ContextActiveNoteBadge, ContextSelectedTextBadge } from "./ContextBadges";
 import type { Meta, StoryObj } from "@/lib/story";
-import type { NoteSelectedTextContext } from "@/types/message";
+import type { NoteSelectedTextContext, SelectedTextContext } from "@/types/message";
 import { TFile } from "obsidian";
 
 const noteFixture: unknown = Object.create(TFile.prototype);
@@ -23,7 +23,7 @@ const selection: NoteSelectedTextContext = {
 };
 interface Props {
   includeActiveNote: boolean;
-  selectedTextContexts: NoteSelectedTextContext[];
+  selectedTextContexts: SelectedTextContext[];
 }
 
 function ContextAttachments({ includeActiveNote, selectedTextContexts }: Props) {
@@ -73,6 +73,21 @@ export const LongSelection: StoryObj<Props> = {
         ...selection,
         content:
           "Compare the interview findings with the survey results.\n\nWhich customer needs appear in both sources, and which still need more evidence?",
+      },
+    ],
+  },
+};
+
+export const WebSelection: StoryObj<Props> = {
+  args: {
+    includeActiveNote: false,
+    selectedTextContexts: [
+      {
+        id: "web-excerpt",
+        sourceType: "web",
+        title: "Interview guide",
+        url: "https://example.com/interviews",
+        content: "Ask participants to describe their most recent experience.",
       },
     ],
   },

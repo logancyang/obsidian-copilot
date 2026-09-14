@@ -132,7 +132,7 @@ describe("Chat", () => {
 
   describe("handleEdit()", () => {
     it.each([true, false])(
-      "preserves active-note inclusion %p when editing with selected text https://github.com/Brevilabs/obsidian-copilot-private/issues/465",
+      "does not attach the current note when editing with composer inclusion %p https://github.com/Brevilabs/obsidian-copilot-private/issues/465",
       async (includeActiveNote) => {
         const chatUIState = renderChat();
         if (!includeActiveNote) fireEvent.click(screen.getByText("Remove active note"));
@@ -144,7 +144,7 @@ describe("Chat", () => {
             "message-1",
             "Revised question",
             "llm_chain",
-            includeActiveNote
+            false
           )
         );
       }

@@ -427,11 +427,13 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
       }
 
       try {
+        // Inline edits retain stored attachments; the composer may refer to another note.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/465
         const success = await chatUIState.editMessage(
           messageToEdit.id!,
           newMessage,
           currentChain,
-          includeActiveNote
+          false
         );
 
         if (!success) {
@@ -486,7 +488,6 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
       chatHistory,
       chatUIState,
       currentChain,
-      includeActiveNote,
       addMessage,
       chainManager,
       settings.debug,

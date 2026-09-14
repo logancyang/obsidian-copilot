@@ -289,17 +289,11 @@ function MessageContext({ context }: { context: ChatMessage["context"] }) {
         </Tooltip>
       ))}
       {context.selectedTextContexts?.map((selectedText, index) => (
-        // eslint-disable-next-line @eslint-react/no-array-index-key -- context arrays may contain duplicates; index disambiguates same-id entries
-        <Tooltip key={`selectedText-${index}-${selectedText.id}`}>
-          <TooltipTrigger asChild>
-            <div>
-              <ContextSelectedTextBadge selectedText={selectedText} />
-            </div>
-          </TooltipTrigger>
-          <TooltipContent className="tw-max-w-sm tw-break-words">
-            {selectedText.sourceType === "web" ? selectedText.url : selectedText.notePath}
-          </TooltipContent>
-        </Tooltip>
+        <ContextSelectedTextBadge
+          // eslint-disable-next-line @eslint-react/no-array-index-key -- context arrays may contain duplicates; index disambiguates same-id entries
+          key={`selectedText-${index}-${selectedText.id}`}
+          selectedText={selectedText}
+        />
       ))}
     </div>
   );
