@@ -55,6 +55,7 @@ jest.mock("@/miyo/miyoStatusStore", () => ({
 let mockReachable = true;
 let mockProbeGate: Promise<boolean> | null = null;
 const mockProbeUrls: Array<string | undefined> = [];
+let mockRegistrationGate: Promise<"registered"> | null = null;
 let mockRegistration: "registered" | "unregistered" | "error" = "registered";
 // Bodies the register flow submitted, so a test can assert exactly which scope
 // fields reach Miyo.
@@ -67,7 +68,7 @@ jest.mock("@/miyo/MiyoClient", () => ({
       mockProbeUrls.push(url);
       return mockProbeGate ?? mockReachable;
     };
-    checkFolderRegistration = async () => mockRegistration;
+    checkFolderRegistration = async () => mockRegistrationGate ?? mockRegistration;
     addFolder = async (request: unknown, _overrideUrl?: string, beforeRequest?: () => void) => {
       if (expireLifecycleBeforeAddRequest) {
         mockLifecycleActive = false;
@@ -178,6 +179,7 @@ describe("MiyoSettings", () => {
     mockProbeGate = null;
     mockProbeUrls.length = 0;
     mockRegistration = "registered";
+    mockRegistrationGate = null;
     lastModalOptions = null;
     addFolderBodies.length = 0;
     mockIgnoreFilters = [];
@@ -187,6 +189,35 @@ describe("MiyoSettings", () => {
   });
 
   describe("MiyoSettings()", () => {
+    it.each(["reachability", "registration"])(
+      "keeps an external disconnect when a retry's %s check completes — https://github.com/Brevilabs/obsidian-copilot-private/issues/466",
+      async (phase) => {
+        mockReachable = false;
+        render(<MiyoSettings />);
+        fireEvent.click(await screen.findByText("Connect"));
+        await waitFor(() => expect(lastModalOptions?.onRetry).toBeDefined());
+        currentSettings = { ...currentSettings, enableMiyo: true };
+        mockReachable = true;
+        const probe = deferred<boolean>();
+        const registration = deferred<"registered">();
+        if (phase === "reachability") mockProbeGate = probe.promise;
+        else mockRegistrationGate = registration.promise;
+        let retry!: Promise<unknown>;
+        await act(async () => {
+          retry = lastModalOptions!.onRetry();
+        });
+        currentSettings = { ...currentSettings, enableMiyo: false };
+        updateSetting.mockClear();
+        await act(async () => {
+          probe.resolve(true);
+          registration.resolve("registered");
+          await retry;
+        });
+        expect(currentSettings.enableMiyo).toBe(false);
+        expect(updateSetting).not.toHaveBeenCalledWith("enableMiyo", true);
+      }
+    );
+
     it("attributes the settings Download link and connection guide separately", async () => {
       mockReachable = false;
       render(<MiyoSettings />);
