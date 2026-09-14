@@ -187,6 +187,40 @@ describe("MiyoSettings", () => {
   });
 
   describe("MiyoSettings()", () => {
+    it("shows an Offline badge on the saved option while disconnected and omits the intro and Tailscale hint — https://github.com/Brevilabs/obsidian-copilot-private/issues/466", async () => {
+      currentSettings = {
+        ...currentSettings,
+        enableMiyo: false,
+        miyoConnectionMode: "remote",
+        miyoServerUrl: "http://home:8742",
+      };
+      render(<MiyoSettings />);
+      await act(async () => {});
+      expect(screen.getByRole("status").textContent).toBe("Offline");
+      expect(screen.getByRole("status").closest("label")?.textContent).toContain("Remote server");
+      expect(screen.queryByText("Private context from your Miyo server.")).toBeNull();
+      expect(screen.queryByText(/Tailscale/)).toBeNull();
+      expect(screen.getByRole("button", { name: "Connect" })).toBeTruthy();
+    });
+
+    it("describes Document Processor using the selected backend — https://github.com/Brevilabs/obsidian-copilot-private/issues/466", async () => {
+      currentSettings.docProcessorBackend = "plus";
+      const { rerender } = render(<MiyoSettings />);
+      await act(async () => {});
+      expect(
+        screen.getByText("Use Copilot Cloud to process PDF, EPUB, and other formats.")
+      ).toBeTruthy();
+      expect(screen.queryByText(/uses credits/)).toBeNull();
+      currentSettings.docProcessorBackend = "miyo";
+      rerender(<MiyoSettings />);
+      expect(
+        screen.getByText("Miyo processes PDF and EPUB. Other formats use Copilot Cloud.")
+      ).toBeTruthy();
+      expect(
+        screen.queryByText("Use Copilot Cloud to process PDF, EPUB, and other formats.")
+      ).toBeNull();
+    });
+
     it("shows Search scope only while Semantic search is enabled — https://github.com/Brevilabs/obsidian-copilot-private/issues/466", async () => {
       render(<MiyoSettings />);
       await act(async () => {});
@@ -246,7 +280,8 @@ describe("MiyoSettings", () => {
       expect(mockProbeUrls).toContain("http://127.0.0.1:8742");
       expect(lastModalOptions).toBeNull();
       expect(addFolderBodies).toEqual([]);
-      expect(await screen.findByText(/Current vault isn't confirmed/)).toBeTruthy();
+      expect(await screen.findByText("Connected")).toBeTruthy();
+      expect(screen.queryByText(/Current vault isn't confirmed/)).toBeNull();
       expect(screen.queryByText("Current vault registered on this server.")).toBeNull();
       expect(screen.getByText("Set up Relay on the Miyo host.")).toBeTruthy();
     });
@@ -281,23 +316,11 @@ describe("MiyoSettings", () => {
       fireEvent.click(screen.getByRole("radio", { name: /This computer/ }));
       expect(currentSettings.enableMiyo).toBe(true);
       expect(currentSettings.miyoConnectionMode).not.toBe("local");
-      expect(await screen.findByText("Connected · remote")).toBeTruthy();
-      const connectionOptions = screen.getByRole("radiogroup", { name: "Miyo connection" });
-      for (const sharedControl of [
-        screen.getByRole("status"),
-        screen.getByRole("button", { name: "Check connection" }),
-        screen.getByRole("button", { name: "Disconnect" }),
-      ]) {
-        expect(
-          sharedControl.compareDocumentPosition(connectionOptions) &
-            Node.DOCUMENT_POSITION_FOLLOWING
-        ).toBeTruthy();
-      }
-      const connectButton = screen.getByRole("button", { name: "Connect" });
-      expect(
-        connectionOptions.compareDocumentPosition(connectButton) & Node.DOCUMENT_POSITION_FOLLOWING
-      ).toBeTruthy();
-      expect(screen.getByRole("status").parentElement!.contains(connectButton)).toBe(false);
+      expect(await screen.findByText("Connected")).toBeTruthy();
+      expect(screen.getByRole("status").closest("label")?.textContent).toContain("Remote server");
+      expect(screen.getByRole("button", { name: "Connect" })).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Check connection" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Disconnect" })).toBeNull();
       expect(screen.getByText("Set up Relay on the Miyo host.")).toBeTruthy();
       expect(screen.queryByText(/Switching disconnects/)).toBeNull();
       fireEvent.click(screen.getByRole("radio", { name: /Remote server/ }));
@@ -315,13 +338,13 @@ describe("MiyoSettings", () => {
       fireEvent.click(await screen.findByRole("button", { name: "Connect" }));
       await waitFor(() => expect(mockProbeUrls).toContain(undefined));
       expect(currentSettings.miyoConnectionMode).toBe("local");
-      expect(await screen.findByText("Connected · local")).toBeTruthy();
+      expect(await screen.findByText("Connected")).toBeTruthy();
     });
 
     it("preserves local capabilities while drafting remote and changes the endpoint only on Connect — https://github.com/Brevilabs/obsidian-copilot-private/issues/466", async () => {
       currentSettings = { ...currentSettings, enableMiyo: true, miyoConnectionMode: "local" };
       render(<MiyoSettings />);
-      await screen.findByText("Connected · local");
+      await screen.findByText("Connected");
       fireEvent.click(screen.getByRole("radio", { name: /Remote server/ }));
       fireEvent.change(screen.getByLabelText("Server address"), {
         target: { value: "http://new:8742" },
@@ -329,7 +352,10 @@ describe("MiyoSettings", () => {
       expect(currentSettings.miyoConnectionMode).toBe("local");
       expect(currentSettings.miyoServerUrl).toBe("");
       expect(currentSettings.enableMiyo).toBe(true);
-      expect(screen.getByText("Connected · local")).toBeTruthy();
+      expect(screen.getByText("Connected")).toBeTruthy();
+      expect(screen.getByRole("status").closest("label")?.textContent).toContain("This computer");
+      expect(screen.queryByRole("button", { name: "Check connection" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Disconnect" })).toBeNull();
       expect(screen.queryByText("Set up Relay on the Miyo host.")).toBeNull();
       expect(toggle().hasAttribute("disabled")).toBe(false);
       expect(mockProbeUrls).toEqual([]);
@@ -340,29 +366,22 @@ describe("MiyoSettings", () => {
         miyoServerUrl: "http://new:8742",
         enableMiyo: true,
       });
-      expect(await screen.findByText("Connected · remote")).toBeTruthy();
+      expect(await screen.findByText("Connected")).toBeTruthy();
     });
 
-    it("keeps a remote address edit as a draft and checks the active endpoint until Connect — https://github.com/Brevilabs/obsidian-copilot-private/issues/466", async () => {
+    it("shows only Connect for a changed remote address while keeping the badge on the active remote option — https://github.com/Brevilabs/obsidian-copilot-private/issues/466", async () => {
       currentSettings = { ...currentSettings, enableMiyo: true, miyoServerUrl: "http://old:8742" };
       render(<MiyoSettings />);
-      await screen.findByText("Connected · remote");
+      await screen.findByText("Connected");
       fireEvent.change(screen.getByLabelText("Server address"), {
         target: { value: "http://new:8742" },
       });
       expect(currentSettings.enableMiyo).toBe(true);
       expect(currentSettings.miyoServerUrl).toBe("http://old:8742");
-      const gate = deferred<boolean>();
-      mockProbeGate = gate.promise;
-      fireEvent.click(screen.getByRole("button", { name: "Check connection" }));
-      await waitFor(() => expect(mockProbeUrls).toContain("http://old:8742"));
-      expect(screen.getByRole<HTMLButtonElement>("button", { name: "Connect" }).disabled).toBe(
-        true
-      );
-      expect(screen.queryByRole("button", { name: "Connecting…" })).toBeNull();
-      await act(async () => gate.resolve(true));
-      await screen.findByText("Connected · remote");
-      expect(mockProbeUrls).not.toContain("http://new:8742");
+      expect(screen.getByRole("status").closest("label")?.textContent).toContain("Remote server");
+      expect(screen.queryByRole("button", { name: "Check connection" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Disconnect" })).toBeNull();
+      expect(mockProbeUrls).toEqual([]);
       fireEvent.click(screen.getByRole("button", { name: "Connect" }));
       await waitFor(() => expect(mockProbeUrls).toContain("http://new:8742"));
       expect(currentSettings.miyoServerUrl).toBe("http://new:8742");
@@ -428,7 +447,7 @@ describe("MiyoSettings", () => {
       };
       const gate = deferred<boolean>();
       mockProbeGate = gate.promise;
-      render(<MiyoSettings />);
+      const { rerender } = render(<MiyoSettings />);
       fireEvent.click(await screen.findByRole("button", { name: "Connect" }));
       await waitFor(() => expect(mockProbeUrls).toHaveLength(1));
       fireEvent.click(screen.getByRole("radio", { name: /This computer/ }));
@@ -438,7 +457,9 @@ describe("MiyoSettings", () => {
       expect(screen.getByRole<HTMLInputElement>("radio", { name: /This computer/ }).checked).toBe(
         true
       );
-      expect(await screen.findByText("Connected · remote")).toBeTruthy();
+      // The settings mock has no store subscription; publish the completed enable to this render.
+      rerender(<MiyoSettings />);
+      expect(await screen.findByText("Connected")).toBeTruthy();
       expect(lastModalOptions).toBeNull();
     });
   });
@@ -620,7 +641,7 @@ describe("MiyoSettings", () => {
   });
 
   describe("connection status and recovery", () => {
-    it("shows Retry and Disconnect when enabled Miyo is unavailable (https://github.com/Brevilabs/obsidian-copilot-private/issues/356)", async () => {
+    it("shows Offline with Check connection and Disconnect when enabled Miyo is unavailable (https://github.com/Brevilabs/obsidian-copilot-private/issues/356)", async () => {
       // Regression: the pill used to key on live health, so a stranded enableMiyo
       // (Miyo enabled, then it went offline) showed only "Connect" — while search
       // still routed to the dead backend with no way to turn it off. The pill now
@@ -629,10 +650,10 @@ describe("MiyoSettings", () => {
       currentSettings = { ...DEFAULT_SETTINGS, enableMiyo: true };
       render(<MiyoSettings />);
 
-      expect(await screen.findByRole("button", { name: "Retry" })).toBeTruthy();
+      expect(await screen.findByRole("button", { name: "Check connection" })).toBeTruthy();
       expect(screen.getByRole("button", { name: "Disconnect" })).toBeTruthy();
       expect(screen.queryByText("Connect")).toBeNull();
-      expect(screen.getByText("Unavailable")).toBeTruthy();
+      expect(screen.getByText("Offline")).toBeTruthy();
       expect(
         screen.getByText("Miyo is unavailable. Check your server, then retry the connection above.")
       ).toBeTruthy();
@@ -656,7 +677,7 @@ describe("MiyoSettings", () => {
       render(<MiyoSettings />);
 
       expect(screen.getByRole("status").textContent).toContain("Checking…");
-      expect(screen.queryByText(/Connected ·/)).toBeNull();
+      expect(screen.queryByText(/Connected/)).toBeNull();
       expect(
         screen.queryByText(
           "Miyo is unavailable. Check your server, then retry the connection above."
@@ -665,10 +686,10 @@ describe("MiyoSettings", () => {
 
       mockMiyoBackend = "available";
       gate.resolve({ backend: "available" });
-      await waitFor(() => expect(screen.getByRole("status").textContent).toContain("Connected ·"));
+      await waitFor(() => expect(screen.getByRole("status").textContent).toContain("Connected"));
     });
 
-    it("forces a status refresh without toggling enableMiyo when Retry succeeds (https://github.com/Brevilabs/obsidian-copilot-private/issues/356)", async () => {
+    it("forces a status refresh without toggling enableMiyo when Check connection succeeds (https://github.com/Brevilabs/obsidian-copilot-private/issues/356)", async () => {
       mockMiyoBackend = "unavailable";
       mockRefreshBackend = "available";
       currentSettings = { ...DEFAULT_SETTINGS, enableMiyo: true };
@@ -677,7 +698,7 @@ describe("MiyoSettings", () => {
       jest.mocked(refreshMiyoStatus).mockClear();
       updateSetting.mockClear();
 
-      fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+      fireEvent.click(screen.getByRole("button", { name: "Check connection" }));
 
       await waitFor(() => expect(refreshMiyoStatus).toHaveBeenCalledWith({ force: true }));
       expect(updateSetting).not.toHaveBeenCalledWith("enableMiyo", expect.anything());

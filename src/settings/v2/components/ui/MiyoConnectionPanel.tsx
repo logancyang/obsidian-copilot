@@ -1,3 +1,5 @@
+import { Badge } from "@/components/ui/badge";
+import type { CapabilityStatus } from "@/miyo/miyoStatusStore";
 import { Input } from "@/components/ui/input";
 import { SettingSection } from "@/components/ui/setting-section";
 import { cn } from "@/lib/utils";
@@ -9,8 +11,10 @@ export interface MiyoConnectionPanelProps {
   onModeChange: (mode: "local" | "remote") => void;
   onAddressChange: (address: string) => void;
   downloadUrl: string;
-  connectionStatus?: React.ReactNode;
-  message?: string;
+  activeMode: "local" | "remote";
+  enabled: boolean;
+  status: CapabilityStatus;
+  checking: boolean;
   error?: string;
   children: React.ReactNode;
 }
@@ -22,14 +26,18 @@ export function MiyoConnectionPanel({
   onModeChange,
   onAddressChange,
   downloadUrl,
-  connectionStatus,
-  message,
+  activeMode,
+  enabled,
+  status,
+  checking,
   error,
   children,
 }: MiyoConnectionPanelProps) {
   const groupId = React.useId();
+  const connected = enabled && (status === "available" || status === "stale");
+  const statusLabel = checking ? "Checking…" : connected ? "Connected" : "Offline";
   return (
-    <SettingSection label="Connection" description={connectionStatus}>
+    <SettingSection label="Connection">
       <div className="tw-space-y-3 tw-py-4">
         <div
           role="radiogroup"
@@ -40,28 +48,42 @@ export function MiyoConnectionPanel({
             <label
               key={value}
               className={cn(
-                "tw-flex tw-min-w-0 tw-flex-1 tw-basis-48 tw-cursor-pointer tw-items-start tw-gap-2 tw-rounded-lg tw-border tw-border-solid tw-p-3 focus-within:tw-ring-2 focus-within:tw-ring-ring",
+                "tw-min-w-0 tw-flex-1 tw-basis-48 tw-cursor-pointer tw-space-y-1 tw-rounded-lg tw-border tw-border-solid tw-p-3 focus-within:tw-ring-2 focus-within:tw-ring-ring",
                 mode === value
                   ? "tw-border-interactive-accent tw-bg-interactive-accent/10"
                   : "tw-border-border tw-bg-secondary"
               )}
             >
-              <input
-                type="radio"
-                name={groupId}
-                value={value}
-                checked={mode === value}
-                onChange={() => onModeChange(value)}
-              />
-              <span className="tw-space-y-1">
-                <span className="tw-block tw-text-sm tw-font-medium">
-                  {value === "local" ? "This computer" : "Remote server"}
+              <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-1.5">
+                <span className="tw-inline-flex tw-items-center tw-gap-2">
+                  <input
+                    type="radio"
+                    className="tw-m-0 tw-size-4 tw-shrink-0"
+                    name={groupId}
+                    value={value}
+                    checked={mode === value}
+                    onChange={() => onModeChange(value)}
+                  />
+                  <span className="tw-text-sm tw-font-medium">
+                    {value === "local" ? "This computer" : "Remote server"}
+                  </span>
                 </span>
-                <span className="tw-block tw-text-xs tw-text-muted">
-                  {value === "local"
-                    ? "Connect to Miyo running locally."
-                    : "Connect using a server address."}
-                </span>
+                {/* The badge belongs to the confirmed endpoint while another option is a draft.
+                    https://github.com/Brevilabs/obsidian-copilot-private/issues/466 */}
+                {activeMode === value && (
+                  <Badge
+                    role="status"
+                    variant={connected && !checking ? "success" : "secondary"}
+                    className="tw-px-1 tw-text-xs"
+                  >
+                    {statusLabel}
+                  </Badge>
+                )}
+              </div>
+              <span className="tw-block tw-text-xs tw-text-muted">
+                {value === "local"
+                  ? "Connect to Miyo running locally."
+                  : "Connect using a server address."}
               </span>
             </label>
           ))}
@@ -76,12 +98,8 @@ export function MiyoConnectionPanel({
               value={address}
               onChange={(event) => onAddressChange(event.target.value)}
               placeholder="http://miyo-home:8742"
-              aria-describedby={`${groupId}-hint`}
               aria-invalid={Boolean(error)}
             />
-            <div id={`${groupId}-hint`} className="tw-text-xs tw-text-muted">
-              Use the same Tailscale URL on both computers. No local installation needed.
-            </div>
           </div>
         ) : (
           <div className="tw-text-xs tw-text-muted">
@@ -102,7 +120,6 @@ export function MiyoConnectionPanel({
           </div>
         )}
         {children}
-        {message && <div className="tw-text-xs tw-text-muted">{message}</div>}
       </div>
     </SettingSection>
   );

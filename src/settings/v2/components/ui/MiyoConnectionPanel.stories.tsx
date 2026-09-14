@@ -6,57 +6,33 @@ import { MiyoConnectionControl } from "./MiyoConnectionControl";
 import { MiyoConnectionPanel, type MiyoConnectionPanelProps } from "./MiyoConnectionPanel";
 
 function InteractiveConnection(args: Partial<MiyoConnectionPanelProps>) {
-  const [mode, setMode] = React.useState(args.mode ?? "local");
-  const [address, setAddress] = React.useState(args.address ?? "");
-  return (
-    <MiyoConnectionPanel
-      {...args}
-      mode={mode}
-      address={address}
-      downloadUrl={createMiyoPageUrl("miyo_settings")}
-      onModeChange={setMode}
-      onAddressChange={setAddress}
-    >
-      {args.children ?? (
-        <Button variant="secondary" size="default">
-          Connect
-        </Button>
-      )}
-    </MiyoConnectionPanel>
-  );
-}
-function ConnectedDraft(args: Partial<MiyoConnectionPanelProps>) {
   const [active, setActive] = React.useState({
-    mode: "remote" as "local" | "remote",
+    mode: args.activeMode ?? args.mode ?? "local",
     address: "http://miyo-home:8742",
   });
   const [mode, setMode] = React.useState(args.mode ?? active.mode);
-  const [address, setAddress] = React.useState(args.address ?? active.address);
-  const [enabled, setEnabled] = React.useState(true);
+  const [address, setAddress] = React.useState(args.address ?? "");
+  const [enabled, setEnabled] = React.useState(args.enabled ?? false);
+  const checking = args.checking ?? false;
+  const hasDraft = mode !== active.mode || (mode === "remote" && address.trim() !== active.address);
   return (
     <MiyoConnectionPanel
-      connectionStatus={
-        <MiyoConnectionControl
-          enabled={enabled}
-          status="available"
-          remote={active.mode === "remote"}
-          checking={false}
-          onDisconnect={() => setEnabled(false)}
-          onRetry={() => {}}
-        />
-      }
+      {...args}
+      activeMode={active.mode}
+      enabled={enabled}
+      status={args.status ?? "available"}
+      checking={checking}
       mode={mode}
       address={address}
       downloadUrl={createMiyoPageUrl("miyo_settings")}
       onModeChange={setMode}
       onAddressChange={setAddress}
     >
-      {(!enabled ||
-        mode !== active.mode ||
-        (mode === "remote" && address.trim() !== active.address)) && (
+      {!enabled || hasDraft ? (
         <Button
           variant="secondary"
           size="default"
+          disabled={checking}
           onClick={() => {
             setActive({ mode, address: address.trim() });
             setEnabled(true);
@@ -64,6 +40,12 @@ function ConnectedDraft(args: Partial<MiyoConnectionPanelProps>) {
         >
           Connect
         </Button>
+      ) : (
+        <MiyoConnectionControl
+          checking={checking}
+          onDisconnect={() => setEnabled(false)}
+          onRetry={() => {}}
+        />
       )}
     </MiyoConnectionPanel>
   );
@@ -79,29 +61,19 @@ export const RemoteSetup: StoryObj<MiyoConnectionPanelProps> = {
   args: { mode: "remote" },
   render: InteractiveConnection,
 };
+export const ConnectedLocal: StoryObj<MiyoConnectionPanelProps> = {
+  args: { mode: "local", enabled: true },
+  render: InteractiveConnection,
+};
 export const ConnectedRemote: StoryObj<MiyoConnectionPanelProps> = {
-  args: {
-    mode: "remote",
-    address: "http://miyo-home:8742",
-    message: "Current vault isn't confirmed on this server. Manage folders on the Miyo host.",
-    children: <></>,
-    connectionStatus: (
-      <MiyoConnectionControl
-        enabled
-        status="available"
-        remote
-        checking={false}
-        onDisconnect={() => {}}
-        onRetry={() => {}}
-      />
-    ),
-  },
+  args: { mode: "remote", address: "http://miyo-home:8742", enabled: true },
   render: InteractiveConnection,
 };
 export const UnreachableRemote: StoryObj<MiyoConnectionPanelProps> = {
   args: {
     mode: "remote",
     address: "http://miyo-home:8742",
+    status: "unavailable",
     error:
       "Couldn't connect to this server. Check the address, access, and that Miyo is running, then retry.",
   },
@@ -115,12 +87,23 @@ export const InvalidAddress: StoryObj<MiyoConnectionPanelProps> = {
   },
   render: InteractiveConnection,
 };
-
 export const BrowsingLocalWhileConnectedRemote: StoryObj<MiyoConnectionPanelProps> = {
-  args: { mode: "local" },
-  render: ConnectedDraft,
+  args: { mode: "local", activeMode: "remote", address: "http://miyo-home:8742", enabled: true },
+  render: InteractiveConnection,
+};
+export const BrowsingRemoteWhileConnectedLocal: StoryObj<MiyoConnectionPanelProps> = {
+  args: { mode: "remote", activeMode: "local", enabled: true },
+  render: InteractiveConnection,
 };
 export const EditingConnectedRemoteAddress: StoryObj<MiyoConnectionPanelProps> = {
-  args: { mode: "remote", address: "http://miyo-work:8742" },
-  render: ConnectedDraft,
+  args: { mode: "remote", address: "http://miyo-work:8742", enabled: true },
+  render: InteractiveConnection,
+};
+export const Offline: StoryObj<MiyoConnectionPanelProps> = {
+  args: { enabled: true, status: "unavailable" },
+  render: InteractiveConnection,
+};
+export const Checking: StoryObj<MiyoConnectionPanelProps> = {
+  args: { enabled: true, status: "stale", checking: true },
+  render: InteractiveConnection,
 };

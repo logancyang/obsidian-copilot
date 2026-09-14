@@ -130,9 +130,6 @@ export const MiyoSettings: React.FC = () => {
     endpoint: string;
     message: string;
   } | null>(null);
-  const [vaultResult, setVaultResult] = useState<{ endpoint: string; message: string } | null>(
-    null
-  );
   // An enabled backend with no prior snapshot is about to run the mount check.
   // Start in checking so the first paint cannot flash a false Unavailable state.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/356
@@ -223,37 +220,11 @@ export const MiyoSettings: React.FC = () => {
     await refresh(true);
   }, [refresh]);
 
-  const recordVault = useCallback(
-    (registration: string, targetMode: "local" | "remote", url: string) => {
-      setVaultResult({
-        endpoint: `${targetMode}:${url}`,
-        message:
-          registration === "registered"
-            ? "Current vault registered on this server."
-            : targetMode === "remote"
-              ? "Current vault isn't confirmed on this server. Manage folders on the Miyo host."
-              : "",
-      });
-    },
-    []
-  );
-
-  // Recheck synced settings and discard replies about an endpoint no longer selected.
+  // Synced endpoint changes need a fresh health status before enabling its capabilities.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/466
   useEffect(() => {
-    let cancelled = false;
-    void refresh(false).then(async (available) => {
-      if (cancelled || !available || !settings.enableMiyo) return;
-      const registration = await new MiyoClient().checkFolderRegistration(
-        getMiyoFolderName(app),
-        activeUrl || undefined
-      );
-      if (!cancelled) recordVault(registration, activeMode, activeUrl);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [refresh, app, activeMode, activeUrl, settings.enableMiyo, recordVault]);
+    void refresh(false);
+  }, [refresh, activeMode, activeUrl, settings.enableMiyo]);
 
   // Direct reachability probe that BYPASSES the shouldUseMiyo gate. The status
   // store only probes once Miyo is enabled (its snapshot reflects the *effective*
@@ -458,7 +429,6 @@ export const MiyoSettings: React.FC = () => {
     if (superseded()) return "superseded";
     // Server reachability does not imply this vault exists on the remote host.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/466
-    recordVault(registration, getMiyoConnectionMode(target), getMiyoCustomUrl(target));
     if (registration === "error" && !remote) return "error";
     // Unregistered → hand off to the addVault modal for explicit confirmation
     // rather than silently registering the folder.
@@ -474,7 +444,7 @@ export const MiyoSettings: React.FC = () => {
     // Miyo may have dropped between registration and this refresh; only claim
     // "connected" when the backend is actually available now.
     return available ? "connected" : "unreachable";
-  }, [app, plugin, probeReachable, enableMiyoBackend, refresh, recordVault]);
+  }, [app, plugin, probeReachable, enableMiyoBackend, refresh]);
 
   // Wraps attemptConnection with the shared error affordance so both entry points
   // (Connect button, modal Retry) surface the same Notice on an indeterminate
@@ -618,7 +588,6 @@ export const MiyoSettings: React.FC = () => {
     connectAttemptRef.current += 1;
     enableTxnRef.current += 1;
     connectModalRef.current?.close();
-    setVaultResult(null);
     MiyoServiceDiscovery.getInstance().invalidateLocalDiscovery();
     setSettings({
       enableMiyo: false,
@@ -645,22 +614,11 @@ export const MiyoSettings: React.FC = () => {
 
   return (
     <div className="tw-space-y-4">
-      <div className="tw-text-sm tw-text-muted">Private context from your Miyo server.</div>
-
       <MiyoConnectionPanel
-        connectionStatus={
-          <MiyoConnectionControl
-            enabled={settings.enableMiyo}
-            status={status.backend}
-            checking={refreshing}
-            remote={connectedRemote}
-            onDisconnect={() => {
-              setVaultResult(null);
-              void handleDisconnect();
-            }}
-            onRetry={() => void (connectedRemote ? handleConnect() : handleRetry())}
-          />
-        }
+        activeMode={activeMode}
+        enabled={settings.enableMiyo}
+        status={status.backend}
+        checking={refreshing}
         mode={mode}
         address={urlDraft}
         onModeChange={(next) => changeConnection(next)}
@@ -669,19 +627,10 @@ export const MiyoSettings: React.FC = () => {
         error={
           connectionError?.endpoint === `${mode}:${urlDraft}` ? connectionError.message : undefined
         }
-        message={
-          settings.enableMiyo &&
-          capabilitiesEnabled &&
-          !refreshing &&
-          vaultResult?.endpoint ===
-            `${getMiyoConnectionMode(settings)}:${getMiyoCustomUrl(settings)}`
-            ? vaultResult.message
-            : undefined
-        }
       >
-        {/* The card confirms draft choices; the shared toolbar acts on the active connection.
+        {/* Browsing a draft exposes only its confirmation action, never another endpoint's controls.
             https://github.com/Brevilabs/obsidian-copilot-private/issues/466 */}
-        {(!settings.enableMiyo || hasPendingConnection) && (
+        {!settings.enableMiyo || hasPendingConnection ? (
           <Button
             variant="secondary"
             size="default"
@@ -690,6 +639,12 @@ export const MiyoSettings: React.FC = () => {
           >
             {refreshing && !settings.enableMiyo ? "Connecting…" : "Connect"}
           </Button>
+        ) : (
+          <MiyoConnectionControl
+            checking={refreshing}
+            onDisconnect={() => void handleDisconnect()}
+            onRetry={() => void (connectedRemote ? handleConnect() : handleRetry())}
+          />
         )}
       </MiyoConnectionPanel>
 
@@ -808,19 +763,15 @@ export const MiyoSettings: React.FC = () => {
                 recover from a fail-closed parse error (resolveDocProcessorBackend
                 surfaces "reconnect Miyo or switch to Plus"). The persisted field
                 is honored at the parse boundary; the picker only sets the
-                preference. */}
+                preference. The description follows this choice so it names the service that will process files.
+                https://github.com/Brevilabs/obsidian-copilot-private/issues/466 */}
             <div className="tw-px-4">
               <CapabilityRow
                 title="Document Processor"
                 description={
-                  <>
-                    Miyo processes PDF &amp; EPUB. Other formats use Plus cloud.
-                    <div className="tw-mt-1">
-                      <span className="tw-font-semibold tw-text-normal">Plus</span> = Copilot cloud,
-                      uses credits · <span className="tw-font-semibold tw-text-accent">Miyo</span> =
-                      your selected server, no credits
-                    </div>
-                  </>
+                  settings.docProcessorBackend === "plus"
+                    ? "Use Copilot Cloud to process PDF, EPUB, and other formats."
+                    : "Miyo processes PDF and EPUB. Other formats use Copilot Cloud."
                 }
                 control={
                   <SegmentedControl
