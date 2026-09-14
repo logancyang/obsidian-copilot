@@ -79,7 +79,7 @@ describe("AgentModeStatus", () => {
       expect(screen.queryByRole("button")).toBeNull();
     });
 
-    it("renders the actionable backend boot error instead of a generic retry label", () => {
+    it("renders the actionable backend boot error instead of a generic retry label (https://github.com/Brevilabs/obsidian-copilot-private/issues/410)", () => {
       const error =
         "Claude Code 2.1.205 is not supported. Copilot requires Claude Code 2.1.206 or newer. Update Claude Code with: npm install -g @anthropic-ai/claude-code";
       const manager = {
@@ -99,7 +99,7 @@ describe("AgentModeStatus", () => {
       expect(screen.queryByText("Error — click Retry")).toBeNull();
     });
 
-    it("opens Claude configuration instead of retrying an incompatible version", () => {
+    it("opens Claude configuration instead of retrying an incompatible version (https://github.com/Brevilabs/obsidian-copilot-private/issues/410)", () => {
       const message =
         "Claude Code 2.1.205 is not supported. Copilot requires Claude Code 2.1.206 or newer.";
       installState = {
@@ -125,7 +125,7 @@ describe("AgentModeStatus", () => {
       expect(descriptor.openInstallUI).toHaveBeenCalledWith(plugin);
     });
 
-    it("runs an available upgrade once and disables the action while it is busy", () => {
+    it("runs an available upgrade once and disables the action while it is busy (https://github.com/Brevilabs/obsidian-copilot-private/issues/410)", () => {
       installState = {
         kind: "incompatible",
         source: "managed",
@@ -153,6 +153,7 @@ describe("AgentModeStatus", () => {
       expect(screen.getByRole("button", { name: "Upgrading…" }).hasAttribute("disabled")).toBe(
         true
       );
+      expect(screen.getByText("Updating Claude…")).toBeTruthy();
       expect(screen.getByText("Downloading… 50%")).toBeTruthy();
 
       managedInstallState = { kind: "error", message: "npm unavailable" };

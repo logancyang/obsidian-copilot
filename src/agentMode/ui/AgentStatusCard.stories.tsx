@@ -99,7 +99,7 @@ export const LongPathError: StoryObj<AgentStatusCardProps> = {
     tone: "error",
     summary: "Codex setup error",
     message:
-      "Could not execute /Users/example/Library/Application Support/organization-workspace-with-an-unbroken-name/custom-agent-runtime/bin/codex-acp.\nCheck the configured binary path and executable permissions before trying again.\nEACCES: permission denied",
+      "Could not execute C:\\Users\\example\\AppData\\Local\\organizationworkspacewithaverylongunbrokenidentifier012345678901234567890123456789\\customagentruntime\\codex-acp.exe.\nCheck the configured binary path and executable permissions before trying again.\nEACCES: permission denied",
     action: { label: "Configure Codex", onClick: () => undefined },
   },
 };
