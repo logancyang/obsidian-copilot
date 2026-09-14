@@ -234,7 +234,7 @@ describe("MiyoSettings", () => {
       expect(mockProbeUrls).toContain("http://127.0.0.1:8742");
       expect(lastModalOptions).toBeNull();
       expect(addFolderBodies).toEqual([]);
-      expect(screen.getByText(/Current vault isn't confirmed/)).toBeTruthy();
+      expect(await screen.findByText(/Current vault isn't confirmed/)).toBeTruthy();
       expect(screen.queryByText("Current vault registered on this server.")).toBeNull();
       expect(screen.getByText("Set up Relay on the Miyo host.")).toBeTruthy();
     });
