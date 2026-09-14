@@ -1,9 +1,13 @@
 import { Button } from "@/components/ui/button";
 import { SettingItem } from "@/components/ui/setting-item";
 import { SettingSection } from "@/components/ui/setting-section";
+import { SettingSwitch } from "@/components/ui/setting-switch";
 import React from "react";
 
 export interface DebuggingSupportSectionProps {
+  /** Whether console logging of chat activity is on. */
+  debug: boolean;
+  onDebugChange: (checked: boolean) => void;
   /** Whether full Agent Mode frames are written to disk. */
   frameLogEnabled: boolean;
   onFrameLogChange: (checked: boolean) => void;
@@ -12,21 +16,22 @@ export interface DebuggingSupportSectionProps {
    * component knowing whether the platform has a filesystem at all.
    */
   frameLogPath: string;
-  onReportIssue: React.MouseEventHandler<HTMLButtonElement>;
+  onReportIssue: () => void;
   onOpenFrameLog: React.MouseEventHandler<HTMLButtonElement>;
   onClearFrameLog: React.MouseEventHandler<HTMLButtonElement>;
 }
 
 /**
- * The Advanced tab's "Agent Mode debugging" section: the report entry point and
- * the activity log a report can carry.
+ * The Advanced tab's "Debugging & support" section: the report entry point and
+ * the two logs a report can carry.
  *
- * Presentational on purpose — it takes the switch value and the four actions
- * rather than reading settings or touching the sink itself, so the section's
- * states can be rendered in the gallery without standing up a settings context
- * or a desktop runtime.
+ * Presentational on purpose — it takes the two switch values and the four
+ * actions rather than reading settings itself, so the section's states can be
+ * rendered in the gallery without standing up a settings context.
  */
 export const DebuggingSupportSection: React.FC<DebuggingSupportSectionProps> = ({
+  debug,
+  onDebugChange,
   frameLogEnabled,
   onFrameLogChange,
   frameLogPath,
@@ -34,34 +39,35 @@ export const DebuggingSupportSection: React.FC<DebuggingSupportSectionProps> = (
   onOpenFrameLog,
   onClearFrameLog,
 }) => (
-  <SettingSection
-    label="Agent Mode debugging"
-    description="Tools for diagnosing Agent Mode problems, separate from the regular Copilot chat logs above."
-  >
+  // The report flow is the one settings entry point for collecting and reviewing
+  // diagnostic logs; it attaches the regular chat log itself. The command-palette
+  // "Copilot: Create log file" stays for anyone who wants that log as a vault note.
+  <SettingSection label="Debugging & support">
     <SettingItem
       type="custom"
-      title="Report an Issue"
-      description="Bundles a screenshot of the Agent Mode chat pane and a recent activity log into a folder, then opens a prefilled GitHub issue for you to attach them to."
+      title="Report an issue"
+      description="Walks you through collecting a screenshot and recent logs, packs them into a single zip you can review, uploads it privately, and opens a prefilled GitHub issue with the report ID already in it."
     >
-      <Button variant="secondary" size="sm" onClick={onReportIssue}>
-        Report an Issue
+      <Button variant="default" size="sm" onClick={onReportIssue}>
+        Report an issue
       </Button>
     </SettingItem>
 
     <SettingItem
       type="switch"
-      title="Keep an Agent Mode activity log"
-      description="Records the behind-the-scenes messages between Copilot and the agent so the Report an Issue button always has recent activity to attach. Stored on this device only, outside your vault, and can include your prompts and note contents in plain text. On by default; turn off to stop logging."
-      checked={frameLogEnabled}
-      onCheckedChange={onFrameLogChange}
+      title="Debug Mode"
+      description="Logs Copilot chat activity to the developer console (View → Toggle Developer Tools), and pre-selects the chat log when you report an issue."
+      checked={debug}
+      onCheckedChange={onDebugChange}
     />
 
     <SettingItem
       type="custom"
-      title="Agent Mode activity log file"
-      description={`Open or clear the log file on disk (${frameLogPath}).`}
+      title="Agent Mode activity log"
+      description={`Records the behind-the-scenes messages between Copilot and the agent so a report always has recent activity to attach. Stored on this device only, outside your vault (${frameLogPath}), and can include your prompts and note contents in plain text.`}
     >
-      <div className="tw-flex tw-gap-2">
+      <div className="tw-flex tw-items-center tw-gap-2">
+        <SettingSwitch checked={frameLogEnabled} onCheckedChange={onFrameLogChange} />
         <Button variant="secondary" size="sm" onClick={onOpenFrameLog}>
           Open
         </Button>

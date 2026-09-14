@@ -16,7 +16,8 @@ interface RedactionRule {
   /**
    * Replacement text, or a function returning it. A function lets a rule match
    * a broad candidate and then decide, which is how the email rule stays linear
-   * (see `runHoldsAddress`).
+   * (see `runHoldsAddress`). A function rule is applied by `replaceEachRun`
+   * rather than by `String.prototype.replace`, for the memory reason given there.
    */
   replacement: string | ((match: string) => string);
 }
@@ -75,10 +76,47 @@ function runHoldsAddress(run: string): boolean {
  * not tail punctuation it retries from every interior position and rescans the
  * remainder each time — quadratic, and measurably so: 4.2 s for a 100k run.
  */
-function redactAddressRun(run: string): string {
+export function redactAddressRun(run: string): string {
   let end = run.length;
   while (end > 0 && TAIL_CHARS.includes(run[end - 1])) end--;
   return runHoldsAddress(run.slice(0, end)) ? `<email>${run.slice(end)}` : run;
+}
+
+/**
+ * `text.replace(pattern, replacement)` for a function replacement, with the same
+ * output, built so an unchanged run leaves nothing behind. A report redacts a log
+ * whole — up to 64 MiB — and the run pattern matches nearly every token in it, so
+ * what `replace` retains per match becomes the dominant transient allocation:
+ * V8 collects every match of a global pattern before it calls the replacement
+ * once, then keeps a piece for each gap and each result until the join. Measured
+ * on a 64 MiB JSON log, that peaks over 1 GiB of RSS in the renderer. Here a
+ * match lives only until the replacement has judged it, and a run that comes
+ * back unchanged extends the pending gap instead of becoming a piece, so the
+ * pieces held at once number the redactions, not the tokens — and a log with
+ * nothing to redact is returned as is, with no copy at all.
+ * (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)
+ *
+ * @param pattern A global pattern that cannot match the empty string, or the
+ *   scan would not advance.
+ * @param replacement Returns the run itself, by identity, to leave it untouched.
+ */
+function replaceEachRun(
+  text: string,
+  pattern: RegExp,
+  replacement: (match: string) => string
+): string {
+  const pieces: string[] = [];
+  let gapStart = 0;
+  pattern.lastIndex = 0;
+  for (let match = pattern.exec(text); match !== null; match = pattern.exec(text)) {
+    const replaced = replacement(match[0]);
+    if (replaced === match[0]) continue;
+    pieces.push(text.slice(gapStart, match.index), replaced);
+    gapStart = pattern.lastIndex;
+  }
+  if (pieces.length === 0) return text;
+  pieces.push(text.slice(gapStart));
+  return pieces.join("");
 }
 
 // Order matters only in that a path/email match should not be re-touched by a
@@ -160,14 +198,11 @@ const RULES: RedactionRule[] = [
 
 /** Return `text` with private data replaced by visible markers. */
 export function redactLogText(text: string): string {
-  // The two branches are the same call: `replace` is overloaded on the
-  // replacement rather than taking a union, so the type has to be narrowed
-  // before it will resolve.
   return RULES.reduce(
     (acc, rule) =>
       typeof rule.replacement === "string"
         ? acc.replace(rule.pattern, rule.replacement)
-        : acc.replace(rule.pattern, rule.replacement),
+        : replaceEachRun(acc, rule.pattern, rule.replacement),
     text
   );
 }

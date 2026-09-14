@@ -1,34 +1,65 @@
 /**
- * Assembles a self-contained Agent Mode bug-report bundle on disk (note,
- * screenshot, frame log, optional opencode log) and builds a prefilled GitHub
- * issue URL. GitHub can't attach binaries via a URL, so the files are written
- * to a folder the caller reveals in the OS file manager and the user drag-drops
- * into the issue.
- *
- * Pure of singletons: the Node runtime is injectable so the assembler is
- * unit-testable without touching the real filesystem.
- *
- * The frame and opencode logs are redacted (see `redactLog`) before they are
- * written into the bundle — they are never copied verbatim, because they carry
- * absolute home paths and may carry tokens or emails.
+ * Assembles a bug-report bundle in memory and builds the prefilled GitHub issue
+ * URLs it can be filed with. The disk is reached only through the injected
+ * `readTail`, so assembly is testable without a filesystem and the caller alone
+ * decides where the zip goes. Every requested source is listed with its actual
+ * outcome, so the review page and `report.md` say what landed in the bundle, not
+ * what was ticked. Every free-text input — log bodies, description, title, failure
+ * and unavailable reasons — passes `redactLogText` on its way in; caller-composed
+ * text (environment, attachment names) carries nothing to redact. Redaction is best
+ * effort, which is why the flow shows the bundle before it goes anywhere; only the
+ * issue URL opens in a browser unreviewed.
  */
 
-import { redactLogText } from "./redactLog";
-import { requireNodeModule } from "./desktopRuntime";
+import { err2String } from "@/errorFormat";
+import { formatBytes } from "@/utils/formatBytes";
+import { type ReportUploadAttempt } from "@/utils/reportUpload";
+import { zipSync } from "fflate";
+import { v4 as uuidv4 } from "uuid";
+import { redactLogText } from "@/utils/redactLog";
+import { requireNodeModule } from "@/utils/desktopRuntime";
+import {
+  MIN_LOG_TAIL_BYTES,
+  TRUNCATION_NOTE_RESERVE_BYTES,
+  byteLength,
+  encodeText,
+  headOfText,
+  readTailFrom,
+  tailOfText,
+  withTruncationNote,
+} from "@/utils/logTail";
 
 /**
- * End-user reports go to the PUBLIC repo. The private `obsidian-copilot-preview`
- * repo is for internal triage/BRAT only and must never receive user issues
- * (users can't see it, and routing them there would lose the report).
+ * End-user reports go to the PUBLIC repo: users cannot see the private
+ * `obsidian-copilot-preview` repo, so routing them there would lose the report.
  */
 const REPORT_REPO = "logancyang/obsidian-copilot";
 const SCREENSHOT_NAME = "screenshot.png";
-// GitHub's issue attachment allowlist rejects `.ndjson`, so the bundled frame
-// log gets a trailing `.txt` (an allowed type) while keeping `.ndjson` in the
-// name as a format hint. Content is unchanged: one JSON object per line.
-const FRAME_LOG_NAME = "acp-frames.ndjson.txt";
-const OPENCODE_LOG_NAME = "opencode.log";
 const REPORT_NOTE_NAME = "report.md";
+const SCREENSHOT_SOURCE_ID = "screenshot";
+const REPORT_NOTE_SOURCE_ID = "report";
+
+/**
+ * Both destinations — the report endpoint and GitHub's issue-attachment limit on
+ * the manual path — reject anything above 25 MB; STOREd, so the budget maps 1:1 onto the zip.
+ */
+const MAX_BUNDLE_BYTES = 24 * 1024 * 1024;
+/** The shared 25 MB ceiling, checked on the packed zip: its headers sit on top of the budget. */
+const GITHUB_ATTACHMENT_LIMIT_BYTES = 25 * 1024 * 1024;
+
+/** Longest description kept: the textarea is unbounded, and the head is the part worth keeping. */
+const MAX_NOTE_BYTES = 64 * 1024;
+/** Headroom for `report.md`, which must always fit: the capped note plus the fixed sections. */
+const REPORT_NOTE_RESERVE_BYTES = MAX_NOTE_BYTES + 8 * 1024;
+/** Cap on one failure reason: filesystem errors are unbounded and eat report.md's headroom. */
+const MAX_REASON_BYTES = 1024;
+/**
+ * Largest log a report reads, and it reads it whole: redaction equals redacting
+ * the whole file only when the whole file is what it sees, so a larger log is
+ * left out. The activity log rotates at 50 MiB, so this admits every log the
+ * plugin writes and bounds memory only for third-party logs.
+ */
+export const MAX_REDACTABLE_LOG_BYTES = 64 * 1024 * 1024;
 
 export interface ReportEnvInfo {
   pluginVersion: string;
@@ -37,99 +68,273 @@ export interface ReportEnvInfo {
   activeBackend: string;
 }
 
+/**
+ * One log the user opted into. `path` (read from disk) and `text` (in memory)
+ * are alternatives; with neither set, the bundle lists it as not included with `unavailableReason`.
+ */
+export interface ReportLogRequest {
+  /** Stable id echoed back on the matching result. */
+  id: string;
+  /** Entry name inside the zip; two sources sharing a name pack as one entry. */
+  name: string;
+  path?: string;
+  text?: string;
+  /** Shown to the user when neither `path` nor `text` is available. */
+  unavailableReason?: string;
+}
+
 export interface ReportInput {
+  /** Unique id of this preparation; the zip is named after it. */
+  bundleId: string;
   /** Free-text description the user typed in the modal. */
   note: string;
   env: ReportEnvInfo;
-  /** PNG bytes of the captured view, or null when capture was unavailable. */
-  screenshotPng: Uint8Array | null;
-  /** Absolute path to the current Agent Mode frame log, if any. */
-  frameLogPath: string | null;
-  /** Absolute path to the latest opencode log, included only when provided. */
-  opencodeLogPath: string | null;
-  /** Root dir bundles are written under (one timestamped subfolder per report). */
-  reportsRootDir: string;
-  /** Pre-formatted timestamp (e.g. `20260615-101500`) used for the subfolder. */
-  timestamp: string;
-}
-
-export interface AssembledReport {
-  /** Absolute path to the created bundle folder. */
-  folderPath: string;
-  /** Basenames of the files written into the folder. */
-  files: string[];
-  /** Prefilled GitHub "new issue" URL for the user to open. */
-  issueUrl: string;
-}
-
-export interface ReportRuntime {
-  join: (...parts: string[]) => string;
-  mkdir: (path: string, opts: { recursive: boolean }) => Promise<void>;
-  writeFile: (path: string, data: string | Uint8Array) => Promise<void>;
-  readFile: (path: string) => Promise<string>;
+  /**
+   * PNG bytes of the captured view. Leave it undefined when the screenshot
+   * source was never offered or selected, so the bundle lists no screenshot at
+   * all; pass null when a capture was requested but produced nothing, so the
+   * bundle lists the screenshot as not included.
+   */
+  screenshotPng?: Uint8Array | null;
+  /** Logs the user opted into, in the order they should appear in the bundle. */
+  logs: ReportLogRequest[];
 }
 
 /**
- * Write the report bundle to `<reportsRootDir>/report-<timestamp>/` and return
- * its path, the file basenames written, and a prefilled issue URL. Best-effort
- * per file: a missing/unreadable frame or opencode log is skipped rather than
- * failing the whole report.
+ * One line of the manifest the review page shows and `report.md` lists. The
+ * assembler settles this list before packing; nothing downstream re-derives it
+ * from the user's selection.
  */
-export async function assembleReportBundle(
+export interface AttachmentResult {
+  /** Matches the requesting source's id. */
+  id: string;
+  /** Entry name inside the zip. */
+  name: string;
+  /** Bytes packed for this source; 0 when `included` is false. */
+  bytes: number;
+  included: boolean;
+  /** Why a source is absent ("empty", "failed: …"), or what was done to fit it. */
+  note?: string;
+}
+
+/**
+ * Title and body of the GitHub issue prefill, before truncation. The body is the
+ * packed `report.md` itself, so the issue and the bundle can never drift apart.
+ */
+export interface ReportIssueDraft {
+  title: string;
+  body: string;
+}
+
+export interface ReportBundle {
+  zip: Uint8Array;
+  /** `copilot-report-<bundleId>.zip`, for whoever writes or uploads the zip. */
+  zipName: string;
+  /** Packed bytes and the idempotency key minted with them: a retry re-sends this exact pair. */
+  uploadAttempt: ReportUploadAttempt;
+  issueDraft: ReportIssueDraft;
+  /** One entry per source in bundle order, `report.md` first. */
+  attachments: AttachmentResult[];
+}
+
+export interface ReportRuntime {
+  /**
+   * The last `maxBytes` bytes of a file decoded to text, a leading partial UTF-8
+   * character trimmed so `text` re-encodes to at most `maxBytes`. `totalBytes` is
+   * the file's full size; 0 means nothing was read. Rejects when the file cannot be read.
+   */
+  readTail: (path: string, maxBytes: number) => Promise<{ text: string; totalBytes: number }>;
+}
+
+/** What one source contributes: its manifest line, and the bytes to pack if any. */
+interface SourceEntry {
+  result: AttachmentResult;
+  bytes?: Uint8Array;
+}
+
+/**
+ * Build the whole report in memory: settle every source against the budget,
+ * write `report.md` from the settled list, pack one zip and mint its upload
+ * attempt. The budget is spent in a fixed order — `report.md`'s reserve, the
+ * screenshot, then the logs in request order — so what a source gets depends
+ * only on what precedes it. A source that does not fit is listed as not
+ * included; only `report.md` outgrowing its reserve or the zip outgrowing the
+ * shared limit throws, since neither leaves anything sendable.
+ *
+ * @param input What the user asked to send.
+ * @param runtime Injected so assembly can be exercised without a filesystem.
+ */
+export async function buildReportBundle(
   input: ReportInput,
   runtime: ReportRuntime = getNodeReportRuntime()
-): Promise<AssembledReport> {
-  const folderPath = runtime.join(input.reportsRootDir, `report-${input.timestamp}`);
-  await runtime.mkdir(folderPath, { recursive: true });
+): Promise<ReportBundle> {
+  let remainingBytes = MAX_BUNDLE_BYTES - REPORT_NOTE_RESERVE_BYTES;
+  // Null-prototype: the keys are source basenames, and on a plain object one
+  // named `__proto__` would land somewhere other than the map that gets packed.
+  const entries: Record<string, Uint8Array> = Object.create(null);
+  const attachments: AttachmentResult[] = [];
+  const admit = ({ result, bytes }: SourceEntry) => {
+    attachments.push(result);
+    if (!bytes) return;
+    entries[result.name] = bytes;
+    remainingBytes -= bytes.length;
+  };
 
-  const files: string[] = [];
+  // An unselected screenshot has no line to show: listing it as "not captured"
+  // would tell the user a capture they never asked for went wrong
+  // (https://github.com/Brevilabs/obsidian-copilot-private/issues/202).
+  if (input.screenshotPng !== undefined)
+    admit(screenshotEntry(input.screenshotPng, remainingBytes));
+  for (const log of input.logs) admit(await logEntry(log, remainingBytes, runtime));
 
-  if (input.screenshotPng && input.screenshotPng.length > 0) {
-    try {
-      await runtime.writeFile(runtime.join(folderPath, SCREENSHOT_NAME), input.screenshotPng);
-      files.push(SCREENSHOT_NAME);
-    } catch {
-      // Screenshot is optional; keep going without it.
-    }
+  const markdown = buildReportMarkdown(input, attachments);
+  const noteBytes = encodeText(markdown);
+  // The sources were budgeted with this reserve set aside, so overshooting it
+  // can push the bundle over the limit; `logs` is unbounded, so enough failures
+  // add up (https://github.com/Brevilabs/obsidian-copilot-private/issues/202).
+  if (noteBytes.length > REPORT_NOTE_RESERVE_BYTES) {
+    throw new Error(
+      `The report summary came out ${formatBytes(noteBytes.length)}, over the ` +
+        `${formatBytes(REPORT_NOTE_RESERVE_BYTES)} set aside for it. Include fewer sources.`
+    );
   }
+  entries[REPORT_NOTE_NAME] = noteBytes;
+  attachments.unshift({
+    id: REPORT_NOTE_SOURCE_ID,
+    name: REPORT_NOTE_NAME,
+    bytes: noteBytes.length,
+    included: true,
+  });
 
-  // Logs are read, redacted, and written — never copied verbatim. They contain
-  // absolute home paths, and can contain tokens or emails, none of which may
-  // leave the machine in a bug report.
-  for (const log of [
-    { path: input.frameLogPath, name: FRAME_LOG_NAME },
-    { path: input.opencodeLogPath, name: OPENCODE_LOG_NAME },
-  ]) {
-    if (!log.path) continue;
-    try {
-      const redacted = redactLogText(await runtime.readFile(log.path));
-      await runtime.writeFile(runtime.join(folderPath, log.name), redacted);
-      files.push(log.name);
-    } catch {
-      // A log may not exist yet (frame logging just enabled) or be unreadable;
-      // skip it rather than failing the whole report.
-    }
+  // STOREd (`level: 0`) so the packed size stays equal to the sum the budget
+  // already measured; nothing compression could win is worth a worker's lifecycle.
+  const zip = zipSync(entries, { level: 0 });
+  if (zip.length > GITHUB_ATTACHMENT_LIMIT_BYTES) {
+    throw new Error(describeOversizedZip(zip.length, attachments));
   }
-
-  const noteMarkdown = buildReportMarkdown(input, files);
-  await runtime.writeFile(runtime.join(folderPath, REPORT_NOTE_NAME), noteMarkdown);
-  files.unshift(REPORT_NOTE_NAME);
 
   return {
-    folderPath,
-    files,
-    issueUrl: buildReportIssueUrl(input, files),
+    zip,
+    zipName: `copilot-report-${input.bundleId}.zip`,
+    // Bytes and idempotency key are minted together, here and nowhere else: the
+    // key names exactly these bytes to the server, so a retry re-sends the pair.
+    uploadAttempt: { body: exactArrayBuffer(zip), idempotencyKey: uuidv4() },
+    issueDraft: { title: issueTitle(input.note), body: markdown },
+    attachments,
   };
 }
 
-/** Markdown report body, mirrored both into `report.md` and the issue prefill. */
-export function buildReportMarkdown(input: ReportInput, attachedFiles: string[]): string {
-  const note = input.note.trim() || "_No description provided._";
-  const attachments = attachedFiles.length > 0 ? attachedFiles : ["(none captured)"];
+function screenshotEntry(png: Uint8Array | null, remainingBytes: number): SourceEntry {
+  const base = { id: SCREENSHOT_SOURCE_ID, name: SCREENSHOT_NAME } as const;
+  if (!png || png.length === 0)
+    return { result: { ...base, bytes: 0, included: false, note: "no screenshot was captured" } };
+  // A screenshot cannot be trimmed the way a log can, so one that does not fit
+  // is left out rather than failing the bundle: the logs it would displace are
+  // usually the more diagnostic half
+  // (https://github.com/Brevilabs/obsidian-copilot-private/issues/202).
+  if (png.length > remainingBytes) {
+    const note = `screenshot is ${formatBytes(png.length)}, over the ${formatBytes(remainingBytes)} left`;
+    return { result: { ...base, bytes: 0, included: false, note } };
+  }
+  return { result: { ...base, bytes: png.length, included: true }, bytes: png };
+}
+
+async function logEntry(
+  log: ReportLogRequest,
+  remainingBytes: number,
+  runtime: ReportRuntime
+): Promise<SourceEntry> {
+  const leftOut = (note: string): SourceEntry => ({
+    result: { id: log.id, name: log.name, bytes: 0, included: false, note },
+  });
+  const tooBig = (size: number, limit: string) =>
+    leftOut(`log is ${formatBytes(size)}, over the ${limit}`);
+  const emptyTail = () => leftOut("newest entry alone is larger than the room left");
+  // The banner's room comes out of the tail that carries one, so a log that fits
+  // whole keeps every byte; a tail is cut at a byte offset, so its first line is dropped.
+  const room = remainingBytes - TRUNCATION_NOTE_RESERVE_BYTES;
+  const cutToFit = (text: string) => tailOfText(text, room).text.replace(/^[^\n]*\n?/, "");
+
+  // Caller-supplied text, and this is its last stop before the zip: same treatment as a failure.
+  if (log.path == null && log.text == null)
+    return leftOut(describeReason(log.unavailableReason ?? "not found"));
+
+  try {
+    const raw =
+      log.path != null
+        ? await runtime.readTail(log.path, MAX_REDACTABLE_LOG_BYTES)
+        : tailOfText(log.text ?? "", MAX_REDACTABLE_LOG_BYTES);
+    if (raw.totalBytes === 0) return leftOut("empty");
+    // A log read in part cannot be redacted: the part left out may hold the key
+    // that names a value inside it (https://github.com/Brevilabs/obsidian-copilot-private/issues/202).
+    if (raw.totalBytes > MAX_REDACTABLE_LOG_BYTES)
+      return tooBig(raw.totalBytes, `${formatBytes(MAX_REDACTABLE_LOG_BYTES)} a report can redact`);
+    // Read whole, redacted whole, then cut: the only order equal to full-text
+    // redaction. A key can sit any distance ahead of its value — the previous
+    // line, above a lone separator, or heading a run of bare `secret=` lines that
+    // pair up from wherever the text starts — so a read opening after it packs the
+    // value plain or shifts the pairing so a later one does. Every pair was seen
+    // together here, so cutting redacted text exposes nothing
+    // (https://github.com/Brevilabs/obsidian-copilot-private/issues/202).
+    const redacted = redactLogText(raw.text);
+    const redactedBytes = byteLength(redacted); // rewrites can lengthen it
+    const truncated = redactedBytes > remainingBytes;
+    // The floor rejects a useless *tail*, not a small log: one that fits whole is
+    // often the most diagnostic attachment. Its note names the redacted size, the
+    // one that did not fit (https://github.com/Brevilabs/obsidian-copilot-private/issues/202).
+    if (truncated && remainingBytes < MIN_LOG_TAIL_BYTES)
+      return tooBig(redactedBytes, `${formatBytes(remainingBytes)} left`);
+    // No later measure: `whole` fits `room`, the banner its reserve: under budget by construction.
+    const whole = truncated ? cutToFit(redacted) : redacted;
+    // Nothing under the dropped fragment: a banner over an empty entry helps nobody.
+    if (truncated && whole.trim() === "") return emptyTail();
+    const bytes = encodeText(truncated ? withTruncationNote(whole, raw.totalBytes) : whole);
+
+    // Names only the original size: the packed `bytes` can exceed it, banner and rewrites in.
+    const note = truncated
+      ? `truncated to the newest entries of ${formatBytes(raw.totalBytes)}`
+      : undefined;
+    return {
+      result: { id: log.id, name: log.name, bytes: bytes.length, included: true, note },
+      bytes,
+    };
+  } catch (err) {
+    // A fresh install has the activity log enabled before anything is written to
+    // it, so the first report meets a file that does not exist yet: a missing
+    // log, not a read failure (https://github.com/Brevilabs/obsidian-copilot-private/issues/202).
+    if ((err as { code?: unknown } | null)?.code === "ENOENT") return leftOut("not found");
+    return leftOut(`failed: ${describeReason(err2String(err))}`);
+  }
+}
+
+/**
+ * Issue title cut from the description's first line. Redacted before it is cut: a
+ * cut through a secret can hide it from the pattern that would have caught it
+ * whole. No "[Agent Mode]" prefix on either title: the flow is reachable from
+ * the general settings, so the prefix would mislabel plain-chat reports.
+ */
+function issueTitle(note: string): string {
+  const firstLine = redactLogText(note)
+    .split("\n")
+    .map((line) => line.trim())
+    .find((line) => line.length > 0);
+  return firstLine ? firstLine.slice(0, 80).trim() : "Copilot issue report";
+}
+
+/**
+ * Markdown report body, mirrored both into `report.md` and the issue prefill.
+ *
+ * @param input The description and environment the user is reporting from.
+ * @param attachments Every source in bundle order, left-out ones included, so
+ *   the note says what is missing as well as what is there.
+ */
+export function buildReportMarkdown(input: ReportInput, attachments: AttachmentResult[]): string {
+  // `report.md` never lists itself: a reader holding it already knows it is there.
+  const listed = attachments.filter((a) => a.id !== REPORT_NOTE_SOURCE_ID);
   return [
     "## What went wrong",
     "",
-    note,
+    describeNote(input.note),
     "",
     "## Environment",
     "",
@@ -140,41 +345,51 @@ export function buildReportMarkdown(input: ReportInput, attachedFiles: string[])
     "",
     "## Attached files",
     "",
-    ...attachments.map((f) => `- ${f}`),
+    ...(listed.length > 0 ? listed.map(describeAttachment) : ["- (none captured)"]),
     "",
-    "> These files were saved to the bundle folder that just opened. Drag them",
-    "> into the GitHub issue to attach them.",
+    // Says where the files are, not what to do with them: the flow tells the
+    // user how the zip reaches the issue.
+    "> These files are bundled in the zip Copilot prepared for this report.",
     "",
   ].join("\n");
 }
 
+function describeAttachment({ name, included, note }: AttachmentResult): string {
+  if (included) return note ? `- ${name} — ${note}` : `- ${name}`;
+  return `- ${name} — not included${note ? `: ${note}` : ""}`;
+}
+
 /**
- * `shell.openExternal` silently rejects URLs over ~2081 chars on Windows, which
- * would skip opening the issue page while the caller still reports success. Cap
- * the assembled URL well under that so the page always opens; the full report
- * already lives in `report.md` on disk for the user to paste in.
+ * `shell.openExternal` silently rejects URLs over ~2081 chars on Windows while the
+ * caller still reports success; what the body cannot carry is still in `report.md`.
  */
 const MAX_ISSUE_URL_LENGTH = 1800;
+/** Appended when the issue body has to be cut; the zip holds the full `report.md` either way. */
 const BODY_TRUNCATION_NOTE =
-  "\n\n_…report truncated. The full report is saved as `report.md` in the bundle " +
-  "folder that just opened — paste it here._";
+  "\n\n_…report truncated. The full report is `report.md` inside the report zip._";
 
 /**
- * Build a prefilled GitHub "new issue" URL. The body carries the note and
- * environment; the saved files must be drag-dropped by the user since a URL
- * cannot upload binaries. The body is truncated when needed to keep the URL
- * within `MAX_ISSUE_URL_LENGTH`.
+ * Assemble a GitHub "new issue" URL, shrinking the body (never the prefix) until
+ * it fits under `MAX_ISSUE_URL_LENGTH`.
+ *
+ * @param prefix Goes before `body` and survives truncation intact, for what
+ *   the reader must see even when the note is cut short.
  */
-export function buildReportIssueUrl(input: ReportInput, attachedFiles: string[]): string {
-  const firstLine = input.note.trim().split("\n")[0]?.slice(0, 80).trim();
-  const title = firstLine ? `[Agent Mode] ${firstLine}` : "[Agent Mode] Issue report";
-  const body = buildReportMarkdown(input, attachedFiles);
+function buildIssueUrl(title: string, prefix: string, body: string): string {
   const base = `https://github.com/${REPORT_REPO}/issues/new?`;
-
   const build = (b: string) =>
-    base + new URLSearchParams({ title, body: b, labels: "bug" }).toString();
+    base + new URLSearchParams({ title, body: prefix + b, labels: "bug" }).toString();
 
   if (build(body).length <= MAX_ISSUE_URL_LENGTH) return build(body);
+
+  // The prefix (and, once truncated, the note) are the floor: if even an
+  // empty body doesn't fit under them, no amount of shrinking `body` helps.
+  if (build(BODY_TRUNCATION_NOTE).length > MAX_ISSUE_URL_LENGTH) {
+    throw new Error(
+      `The GitHub issue link came out longer than the ${MAX_ISSUE_URL_LENGTH}-character ` +
+        "limit on its own — nothing left to truncate."
+    );
+  }
 
   // URL-encoding expands characters non-linearly, so shrink the kept slice
   // until the fully-encoded URL fits rather than estimating a byte budget.
@@ -187,15 +402,99 @@ export function buildReportIssueUrl(input: ReportInput, attachedFiles: string[])
   return truncated;
 }
 
-function getNodeReportRuntime(): ReportRuntime {
+/**
+ * Prefilled "new issue" URL with no reference to the bundle, for when the user
+ * attaches the zip by hand.
+ *
+ * @param draft The title and body cut from the user's own description.
+ */
+export function buildManualIssueUrl(draft: ReportIssueDraft): string {
+  return buildIssueUrl(draft.title, "", draft.body);
+}
+
+/**
+ * Prefilled "new issue" URL whose body opens with the uploaded report's id, in a
+ * prefix truncation can never reach. An id and not a link: the issue is public,
+ * and a URL that fetched the bundle would hand the user's logs to every reader.
+ *
+ * @param draft The title and body cut from the user's own description.
+ * @param reportId Identifies the stored bundle; the one thing the body must
+ *   keep however far it is cut.
+ */
+export function buildLinkedReportIssueUrl(draft: ReportIssueDraft, reportId: string): string {
+  return buildIssueUrl(draft.title, `**Copilot report ID:** \`${reportId}\`\n\n`, draft.body);
+}
+
+/**
+ * The `ArrayBuffer` holding exactly `bytes`: the slice branch guards against a
+ * view into a larger pooled buffer, whose siblings' bytes must never be uploaded.
+ */
+function exactArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  if (bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength)
+    return bytes.buffer as ArrayBuffer;
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+}
+
+/**
+ * Explain an over-limit zip in terms the user can act on: name the heaviest
+ * source they may drop, since `report.md` is mandatory and the total alone leaves them guessing.
+ */
+function describeOversizedZip(zippedBytes: number, attachments: AttachmentResult[]): string {
+  const opener =
+    `The report zip came out ${formatBytes(zippedBytes)}, over GitHub's ` +
+    `${formatBytes(GITHUB_ATTACHMENT_LIMIT_BYTES)} attachment limit. `;
+  let largest: AttachmentResult | null = null;
+  for (const attachment of attachments) {
+    if (!attachment.included || attachment.id === REPORT_NOTE_SOURCE_ID) continue;
+    if (!largest || attachment.bytes > largest.bytes) largest = attachment;
+  }
+  if (!largest) return `${opener}Include fewer sources and prepare it again.`;
+  return (
+    `${opener}The biggest one it can drop is ${largest.name} at ` +
+    `${formatBytes(largest.bytes)} uncompressed — uncheck that first, then anything ` +
+    "else you can spare, and prepare the report again."
+  );
+}
+
+/**
+ * The user's description as it goes into the report, redacted and then capped:
+ * redaction runs first because rewriting text changes its length, and the cut
+ * is announced so no reader mistakes the kept head for the whole thing.
+ */
+function describeNote(note: string): string {
+  const redacted = redactLogText(note.trim());
+  if (!redacted) return "_No description provided._";
+  const { text, totalBytes } = headOfText(redacted, MAX_NOTE_BYTES);
+  if (totalBytes <= MAX_NOTE_BYTES) return redacted;
+  return (
+    `${text}\n\n_…description truncated: only the first ${formatBytes(byteLength(text))} of ` +
+    `${formatBytes(totalBytes)} was kept so the report stays under GitHub's upload limit._`
+  );
+}
+
+/**
+ * A reason bound for `report.md`: a filesystem error is unbounded and quotes the user's own path.
+ */
+function describeReason(reason: string): string {
+  const oneLine = redactLogText(reason).replace(/\s+/g, " ").trim();
+  const { text, totalBytes } = headOfText(oneLine, MAX_REASON_BYTES);
+  return totalBytes > MAX_REASON_BYTES ? `${text}…` : text;
+}
+
+/**
+ * The runtime `buildReportBundle` uses by default: tails are read straight off
+ * the desktop filesystem. Exported so a caller can sample a log the same way before building.
+ */
+export function getNodeReportRuntime(): ReportRuntime {
   const fs = requireNodeModule<typeof import("node:fs/promises")>("fs/promises");
-  const path = requireNodeModule<typeof import("node:path")>("path");
   return {
-    join: (...parts: string[]) => path.join(...parts),
-    mkdir: async (p, opts) => {
-      await fs.mkdir(p, opts);
+    readTail: async (p, maxBytes) => {
+      const handle = await fs.open(p, "r");
+      try {
+        return await readTailFrom(handle, maxBytes);
+      } finally {
+        await handle.close();
+      }
     },
-    writeFile: (p, data) => fs.writeFile(p, data),
-    readFile: (p) => fs.readFile(p, "utf8"),
   };
 }

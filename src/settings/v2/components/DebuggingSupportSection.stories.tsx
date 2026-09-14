@@ -7,11 +7,16 @@ import {
 const FRAME_LOG_PATH = "/var/folders/t2/obsidian-copilot/acp-frames/3f9a1c/acp-frames.ndjson";
 
 const meta = {
-  title: "Settings/Agent Mode Debugging Section",
+  title: "Settings/Debugging & Support Section",
   component: DebuggingSupportSection,
+  // The production defaults (`DEFAULT_SETTINGS.debug` and
+  // `DEFAULT_SETTINGS.agentMode.debugFullFrames`): the activity log records
+  // from the first launch, Debug Mode waits to be turned on.
   args: {
-    frameLogEnabled: false,
+    debug: false,
+    frameLogEnabled: true,
     frameLogPath: FRAME_LOG_PATH,
+    onDebugChange: () => {},
     onFrameLogChange: () => {},
     onReportIssue: () => {},
     onOpenFrameLog: () => {},
@@ -21,12 +26,17 @@ const meta = {
 } satisfies Meta<DebuggingSupportSectionProps>;
 export default meta;
 
-/** Logging turned off, with reporting still offered. */
-export const Default: StoryObj<DebuggingSupportSectionProps> = {};
+/** How the section looks on a fresh install: the activity log already recording, Debug Mode off. */
+export const FreshInstall: StoryObj<DebuggingSupportSectionProps> = {};
 
-/** Recording, which is the state a user is asked to reproduce a bug in. */
-export const LogEnabled: StoryObj<DebuggingSupportSectionProps> = {
-  args: { frameLogEnabled: true },
+/** Activity log turned off — the report dialog will list it as unavailable rather than pre-selected. */
+export const ActivityLogOff: StoryObj<DebuggingSupportSectionProps> = {
+  args: { frameLogEnabled: false },
+};
+
+/** Both logs recording, which is the state a user is asked to reproduce a bug in. */
+export const BothLogsOn: StoryObj<DebuggingSupportSectionProps> = {
+  args: { debug: true, frameLogEnabled: true },
 };
 
 /**
@@ -38,12 +48,13 @@ export const DesktopOnlyPath: StoryObj<DebuggingSupportSectionProps> = {
 };
 
 /**
- * The longest path this section can be handed. It sits inside a description
- * that has to keep wrapping as prose — narrow the canvas with the gallery's
- * width toolbar to see where it stops doing so.
+ * The longest path this section can be handed. The switch and its two buttons
+ * share a row with it, so a path that does not wrap is what pushes them out of
+ * the pane first — narrow the canvas with the gallery's width toolbar to see it.
  */
 export const LongFrameLogPath: StoryObj<DebuggingSupportSectionProps> = {
   args: {
+    debug: true,
     frameLogEnabled: true,
     frameLogPath: `${FRAME_LOG_PATH.replace(".ndjson", "")}-with-an-unusually-long-vault-name.ndjson`,
   },

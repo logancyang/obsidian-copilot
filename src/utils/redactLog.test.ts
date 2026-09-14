@@ -1,4 +1,4 @@
-import { redactLogText } from "@/utils/redactLog";
+import { redactAddressRun, redactLogText } from "@/utils/redactLog";
 
 describe("redactLog", () => {
   describe("redactLogText()", () => {
@@ -85,6 +85,40 @@ describe("redactLog", () => {
       const run = `a@${".".repeat(100_000)}a`;
       expect(redactLogText(run)).toBe(run);
       expect(Date.now() - started).toBeLessThan(1000);
+    });
+
+    it("applies the email rule to exactly the output String.prototype.replace gives it, run for run (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", () => {
+      // The email rule is applied by a scan rather than by `replace`, so the
+      // callback replace it stands in for is the oracle. The fixture carries
+      // nothing another rule would touch, so the two outputs can differ only
+      // where the scan does: a run at each end of the text, runs glued by
+      // address characters, handles opening with `@`, runs the rule leaves
+      // alone, runs of tail punctuation only, and non-ASCII neighbours that end
+      // a run without joining it.
+      const fixture = [
+        "first@start.io opens the text, then plain words and a version pkg@1.2.3-rc,",
+        "glued a@b.com.c@d.com, a fediverse @alice@mastodon.social handle, and @@foo@bar.com;",
+        "unicode neighbours: éa@b.co, 名字x@y.org中, 🎉z@w.dev🎉, dots... and dashes --- alone,",
+        "no-address runs like 12.5%, a@b, @scope, @@@@, then a full stop after last@end.com.",
+        "",
+        "an empty line above, and the text ends on an address: end@of.text",
+      ].join("\n");
+      const oracle = fixture.replace(/[A-Za-z0-9._%+@-]+/g, redactAddressRun);
+
+      expect(redactLogText(fixture)).toBe(oracle);
+      // The oracle itself did what the fixture was built to make it do.
+      expect(oracle.startsWith("<email> opens the text")).toBe(true);
+      expect(oracle.endsWith("ends on an address: <email>")).toBe(true);
+      expect(oracle).toContain("glued <email>, a fediverse <email> handle, and <email>;");
+      expect(oracle).toContain(
+        "neighbours: é<email>, 名字<email>中, 🎉<email>🎉, dots... and dashes ---"
+      );
+      expect(oracle).toContain("like 12.5%, a@b, @scope, @@@@, then a full stop after <email>.");
+      // Nothing to redact: the text comes back unchanged, end to end.
+      expect(redactLogText("pkg@1.2.3-rc, 12.5%, a@b, @scope ---")).toBe(
+        "pkg@1.2.3-rc, 12.5%, a@b, @scope ---"
+      );
+      expect(redactLogText("")).toBe("");
     });
 
     it("replaces provider API keys by their recognizable prefix", () => {
@@ -177,6 +211,34 @@ describe("redactLog", () => {
     it("is idempotent — re-redacting already-redacted text is a no-op", () => {
       const once = redactLogText("/Users/chaoyang/x and sk-abcdef0123456789");
       expect(redactLogText(once)).toBe(once);
+    });
+  });
+
+  describe("redactAddressRun()", () => {
+    it("replaces a run that is a plain address with the email marker", () => {
+      expect(redactAddressRun("alice@example.com")).toBe("<email>");
+    });
+
+    it("keeps trailing punctuation the run swallowed after the marker", () => {
+      // Only characters the run pattern admits can trail an address, so these
+      // are the tails the function can actually be handed.
+      expect(redactAddressRun("alice@example.com.")).toBe("<email>.");
+      expect(redactAddressRun("alice@example.com--")).toBe("<email>--");
+      expect(redactAddressRun("alice@example.com@")).toBe("<email>@");
+    });
+
+    it("replaces a fediverse-style handle that opens with @", () => {
+      expect(redactAddressRun("@alice@mastodon.social")).toBe("<email>");
+    });
+
+    it("returns a run that holds no address unchanged, so the scan can skip it by identity", () => {
+      for (const run of ["pkg@1.2.3-rc", "12.5%", "a@b", "...", "@scope"]) {
+        expect(redactAddressRun(run)).toBe(run);
+      }
+    });
+
+    it("replaces a run of two addresses glued by an address character as one whole", () => {
+      expect(redactAddressRun("a@b.com.c@d.com")).toBe("<email>");
     });
   });
 });

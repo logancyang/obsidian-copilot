@@ -5,8 +5,6 @@ import { SettingSection } from "@/components/ui/setting-section";
 import { DebuggingSupportSection } from "@/settings/v2/components/DebuggingSupportSection";
 import { LegacyChatPromptsNotice } from "@/settings/v2/components/LegacyChatPromptsNotice";
 import { useApp } from "@/context";
-import { logFileManager } from "@/logFileManager";
-import { flushRecordedPromptPayloadToLog } from "@/LLMProviders/chainRunner/utils/promptPayloadRecorder";
 import { getCopilotSaveData } from "@/settings/copilotSaveData";
 import { KeychainService } from "@/services/keychainService";
 import {
@@ -29,6 +27,8 @@ import { Notice } from "obsidian";
 import React, { useCallback, useEffect, useState } from "react";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
+import { getReportInstallId } from "@/utils/reportInstallId";
+import { createReportUploader } from "@/utils/reportUpload.brevilabs";
 
 const DESKTOP_UNAVAILABLE_FRAME_LOG_PATH = "(Agent Mode frame logs are desktop-only)";
 
@@ -52,35 +52,6 @@ export const AdvancedSettings: React.FC = () => {
       cancelled = true;
     };
   }, []);
-
-  const handleOpenFrameLog = safeAsyncHandler(async () => {
-    if (!isDesktopRuntime()) {
-      new Notice("Agent Mode frame logs are available on desktop only.");
-      return;
-    }
-    try {
-      const { acpFrameSink } = await import("@/agentMode");
-      await acpFrameSink.open();
-      setFrameLogPath(acpFrameSink.getPath());
-    } catch {
-      new Notice("Failed to open Agent Mode frame log.");
-    }
-  });
-
-  const handleClearFrameLog = safeAsyncHandler(async () => {
-    if (!isDesktopRuntime()) {
-      new Notice("Agent Mode frame logs are available on desktop only.");
-      return;
-    }
-    try {
-      const { acpFrameSink } = await import("@/agentMode");
-      await acpFrameSink.clear();
-      setFrameLogPath(acpFrameSink.getPath());
-      new Notice("Agent Mode frame log cleared.");
-    } catch {
-      new Notice("Failed to clear Agent Mode frame log.");
-    }
-  });
 
   const keychainAvailable = KeychainService.getInstance().isAvailable();
   const keychainAppearsEmpty = keychainAvailable && !hasPersistedSecrets(settings);
@@ -111,15 +82,24 @@ export const AdvancedSettings: React.FC = () => {
       const activeBackend =
         copilotPlugin?.agentSessionManager?.getActiveSession?.()?.backendId ??
         settings.agentMode.activeBackend;
+      // One version for the environment block and the uploader alike. The
+      // "unknown" sentinel is fine to *display* in report.md, and deliberately
+      // handled at the other end of the wire: the adapter refuses to upload
+      // under it, so it can never reach the endpoint (which rejects it).
+      const pluginVersion = copilotPlugin?.manifest?.version ?? "unknown";
       new ReportIssueModal({
         app,
         activeBackend,
-        pluginVersion: copilotPlugin?.manifest?.version ?? "unknown",
-        // Resolve at capture time so we can close this Settings window and
-        // reveal the agent pane first — the screenshot should be the chat
-        // surface, not the settings dialog. Null when no agent pane is open.
+        pluginVersion,
+        // Side-effect free, because this runs while the form is still up: it
+        // only reports whether there is a pane to photograph, so the modal can
+        // grey the option out instead of promising a shot it cannot take.
+        canCaptureTarget: () => app.workspace.getLeavesOfType(CHAT_AGENT_VIEWTYPE).length > 0,
+        // Resolve at capture time so the agent pane is revealed first — the
+        // screenshot should be the chat surface. Null when no agent pane is
+        // open. Whether Settings also has to go is the modal's call, not this
+        // one's: it depends on which window each of them ended up in.
         resolveCaptureTarget: () => {
-          (app as unknown as { setting: { close: () => void } }).setting.close();
           const leaf = app.workspace.getLeavesOfType(CHAT_AGENT_VIEWTYPE)[0];
           if (!leaf) return null;
           app.workspace.revealLeaf(leaf);
@@ -129,9 +109,48 @@ export const AdvancedSettings: React.FC = () => {
           };
           return view.contentEl ?? view.containerEl ?? null;
         },
+        dismissSettings: () => {
+          (app as unknown as { setting: { close: () => void } }).setting.close();
+        },
+        // `installId` is a getter, resolved on the upload click rather than
+        // here: its failure mode (unusable localStorage) should surface on the
+        // action that needs it, as a refusal to upload — not break the modal.
+        uploader: createReportUploader({
+          installId: getReportInstallId,
+          clientVersion: pluginVersion,
+        }),
       }).open();
     })();
   }, [app, settings.agentMode.activeBackend]);
+
+  const handleOpenFrameLog = useCallback(async () => {
+    if (!isDesktopRuntime()) {
+      new Notice("Agent Mode frame logs are available on desktop only.");
+      return;
+    }
+    try {
+      const { acpFrameSink } = await import("@/agentMode");
+      await acpFrameSink.open();
+      setFrameLogPath(acpFrameSink.getPath());
+    } catch {
+      new Notice("Failed to open Agent Mode frame log.");
+    }
+  }, []);
+
+  const handleClearFrameLog = useCallback(async () => {
+    if (!isDesktopRuntime()) {
+      new Notice("Agent Mode frame logs are available on desktop only.");
+      return;
+    }
+    try {
+      const { acpFrameSink } = await import("@/agentMode");
+      await acpFrameSink.clear();
+      setFrameLogPath(acpFrameSink.getPath());
+      new Notice("Agent Mode frame log cleared.");
+    } catch {
+      new Notice("Failed to clear Agent Mode frame log.");
+    }
+  }, []);
 
   const handleForgetAllSecrets = useCallback(async () => {
     if (forgetting) return;
@@ -245,37 +264,11 @@ export const AdvancedSettings: React.FC = () => {
             </Button>
           </div>
         </SettingItem>
-
-        <SettingItem
-          type="switch"
-          title="Debug Mode"
-          description="Logs Copilot chat activity to the developer console (View → Toggle Developer Tools). For troubleshooting the regular chat — Agent Mode has its own log below."
-          checked={settings.debug}
-          onCheckedChange={(checked) => updateSetting("debug", checked)}
-        />
-
-        <SettingItem
-          type="custom"
-          title="Create Log File"
-          description={`Save and open the regular Copilot chat log (${logFileManager.getLogPath()}) to share when reporting a chat issue. Agent Mode issues are handled by the "Report an Issue" button in the agent pane instead.`}
-        >
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => {
-              void (async () => {
-                await flushRecordedPromptPayloadToLog();
-                await logFileManager.flush();
-                await logFileManager.openLogFile();
-              })();
-            }}
-          >
-            Create Log File
-          </Button>
-        </SettingItem>
       </SettingSection>
 
       <DebuggingSupportSection
+        debug={settings.debug}
+        onDebugChange={(checked) => updateSetting("debug", checked)}
         frameLogEnabled={settings.agentMode.debugFullFrames}
         onFrameLogChange={(checked) => {
           setSettings((cur) => ({
@@ -284,8 +277,8 @@ export const AdvancedSettings: React.FC = () => {
         }}
         frameLogPath={frameLogPath}
         onReportIssue={handleReportIssue}
-        onOpenFrameLog={handleOpenFrameLog}
-        onClearFrameLog={handleClearFrameLog}
+        onOpenFrameLog={safeAsyncHandler(handleOpenFrameLog)}
+        onClearFrameLog={safeAsyncHandler(handleClearFrameLog)}
       />
     </div>
   );
