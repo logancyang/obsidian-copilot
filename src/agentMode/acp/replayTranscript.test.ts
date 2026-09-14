@@ -1,3 +1,4 @@
+import { AcpSubagentRouter } from "./AcpSubagentRouter";
 import { AI_SENDER, USER_SENDER } from "@/constants";
 import type { SessionNotification } from "@agentclientprotocol/sdk";
 import {
@@ -35,6 +36,64 @@ function replay(
 
 describe("replayTranscript", () => {
   describe("consumeReplayUpdate()", () => {
+    it("restores native child tools and reports beside the complete parent answer across later turns (https://github.com/Brevilabs/obsidian-copilot-private/issues/467)", () => {
+      const router = new AcpSubagentRouter();
+      const state = createReplayTranscriptState();
+      const feed = (sessionId: string, update: Record<string, unknown>) => {
+        for (const frame of router.normalize({
+          jsonrpc: "2.0",
+          method: "session/update",
+          params: { sessionId, update },
+        })) {
+          consumeReplayUpdate(state, (frame as { params: SessionNotification }).params.update);
+        }
+      };
+      feed("root", chunk("user_message_chunk", "Read fixtures"));
+      feed("root", chunk("agent_message_chunk", "Before. "));
+      feed("root", {
+        sessionUpdate: "subagent_spawned",
+        subagentSessionId: "child",
+        name: "Reader",
+        task: "Read fixture",
+        capabilities: {},
+      });
+      feed("child", {
+        sessionUpdate: "tool_call",
+        toolCallId: "read",
+        title: "Read note",
+        status: "completed",
+      });
+      feed("root", chunk("agent_message_chunk", "After."));
+      feed("root", chunk("user_message_chunk", "Next question"));
+      feed("child", chunk("agent_message_chunk", "Child report"));
+      feed("root", {
+        sessionUpdate: "subagent_state_update",
+        subagentSessionId: "child",
+        state: "completed",
+      });
+      const messages = finishReplayTranscript(state)!;
+      expect(messages.map((m) => m.message)).toEqual([
+        "Read fixtures",
+        "Before. After.",
+        "Next question",
+      ]);
+      expect(messages[1].parts).toEqual([
+        { kind: "text", text: "Before. " },
+        expect.objectContaining({
+          kind: "tool_call",
+          subagent: "completed",
+          output: [{ type: "text", text: "Child report" }],
+        }),
+        expect.objectContaining({
+          kind: "tool_call",
+          title: "Read note",
+          parentToolCallId: expect.any(String),
+        }),
+        { kind: "text", text: "After." },
+      ]);
+      expect(messages[2].parts).toBeUndefined();
+    });
+
     it("claims conversation chunks and leaves session-level updates to the caller", () => {
       const state = createReplayTranscriptState();
       expect(consumeReplayUpdate(state, chunk("user_message_chunk", "hi"))).toBe(true);

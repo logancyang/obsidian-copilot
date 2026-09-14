@@ -1,3 +1,4 @@
+import { toolCallToPart, mergeToolCallUpdate } from "@/agentMode/session/toolCallParts";
 import { AI_SENDER, USER_SENDER, WEB_SELECTED_TEXT_TAG } from "@/constants";
 import { logInfo, logWarn } from "@/logger";
 import { AgentMessageStore } from "@/agentMode/session/AgentMessageStore";
@@ -8,7 +9,6 @@ import {
   AgentPlanEntry,
   AgentQuestionAnswers,
   AgentTodoListEntry,
-  AgentToolCallOutput,
   AskUserQuestionPrompt,
   BackendDescriptor,
   BackendId,
@@ -31,9 +31,6 @@ import {
   PlanUsage,
   SessionUsage,
   StopReason,
-  ToolCallContent,
-  ToolCallDelta,
-  ToolCallSnapshot,
 } from "@/agentMode/session/types";
 import {
   isNoteSelectedTextContext,
@@ -76,16 +73,6 @@ export type RunFanoutTurn = (input: FanoutRunInput) => Promise<FanoutTurn>;
  * "placeholder is not a real title" rule.
  */
 export const DEFAULT_TITLE_PREFIX = "New session";
-/**
- * Memory backstop for tool output kept in long-lived React state — NOT a
- * display cap. At ~256KB it sits far above any realistic command/search/file
- * result (the chat renders output collapsed in a scrollable box, so normal and
- * large outputs show in full), and only a runaway multi-hundred-KB blob is
- * trimmed to stop the message store from holding it for the whole session. The
- * agent's own context always receives the full output regardless.
- */
-const MAX_TOOL_OUTPUT_TEXT_CHARS = 256_000;
-
 // ACP prompt results can arrive before the last session/update frames. Require
 // a quiet interval after a cancelled backing prompt settles before dispatching
 // a follow-up on the same session.
@@ -2354,26 +2341,6 @@ function extractText(content: PromptContent): string {
   return "";
 }
 
-function toolCallToPart(
-  call: ToolCallSnapshot & { sessionUpdate?: "tool_call" }
-): AgentMessagePart {
-  return {
-    kind: "tool_call",
-    id: call.toolCallId,
-    title: call.title,
-    toolKind: call.kind,
-    status: call.status ?? "pending",
-    input: call.rawInput,
-    output: extractToolCallOutputs(call.content),
-    locations: call.locations?.map((l) => ({ path: l.path, line: l.line ?? undefined })),
-    vendorToolName: call.vendorToolName,
-    mcpServer: call.mcpServer,
-    parentToolCallId: call.parentToolCallId,
-    subagent: call.subagent,
-    progress: call.progress,
-  };
-}
-
 /**
  * Detect whether a tool_call / tool_call_update represents the agent's
  * plan-finalization signal. Returns the parsed payload (`plan`, optional
@@ -2401,78 +2368,6 @@ function derivePlanTitleFromMarkdown(md: string): string {
   return "Plan proposal";
 }
 
-function mergeToolCallUpdate(
-  existing: AgentMessagePart | undefined,
-  upd: ToolCallDelta & { sessionUpdate?: "tool_call_update" }
-): AgentMessagePart {
-  const base: AgentMessagePart =
-    existing && existing.kind === "tool_call"
-      ? existing
-      : {
-          kind: "tool_call",
-          id: upd.toolCallId,
-          title: upd.title ?? "Tool call",
-          status: "pending",
-        };
-  if (base.kind !== "tool_call") return base;
-  return {
-    ...base,
-    title: upd.title ?? base.title,
-    toolKind: upd.kind ?? base.toolKind,
-    status: upd.status ?? base.status,
-    input: upd.rawInput !== undefined ? upd.rawInput : base.input,
-    output:
-      upd.content !== undefined && upd.content !== null
-        ? extractToolCallOutputs(upd.content)
-        : base.output,
-    locations:
-      upd.locations !== undefined && upd.locations !== null
-        ? upd.locations.map((l) => ({ path: l.path, line: l.line ?? undefined }))
-        : base.locations,
-    vendorToolName: upd.vendorToolName ?? base.vendorToolName,
-    mcpServer: upd.mcpServer ?? base.mcpServer,
-    parentToolCallId: upd.parentToolCallId ?? base.parentToolCallId,
-    subagent: upd.subagent ?? base.subagent,
-    progress: upd.progress === undefined ? base.progress : { ...base.progress, ...upd.progress },
-  };
-}
-
-function extractToolCallOutputs(
-  content: ToolCallContent[] | null | undefined
-): AgentToolCallOutput[] | undefined {
-  if (!content) return undefined;
-  const outputs: AgentToolCallOutput[] = [];
-  for (const item of content) {
-    if (item.type === "content" && item.content.type === "text") {
-      outputs.push(capToolOutputText(item.content.text));
-    } else if (item.type === "diff") {
-      outputs.push({
-        type: "diff",
-        path: item.path,
-        oldText: item.oldText ?? null,
-        newText: item.newText,
-      });
-    }
-  }
-  return outputs.length > 0 ? outputs : undefined;
-}
-
-/**
- * Pass tool-output text through untouched unless it exceeds the runaway
- * backstop ({@link MAX_TOOL_OUTPUT_TEXT_CHARS}). The marker is explicit that
- * only the *display* copy is trimmed and the agent still got everything, so a
- * user never reads it as lost data.
- */
-function capToolOutputText(text: string): AgentToolCallOutput {
-  if (text.length <= MAX_TOOL_OUTPUT_TEXT_CHARS) return { type: "text", text };
-  const omitted = text.length - MAX_TOOL_OUTPUT_TEXT_CHARS;
-  return {
-    type: "text",
-    text:
-      text.slice(0, MAX_TOOL_OUTPUT_TEXT_CHARS) +
-      `\n\n[Display trimmed: ${omitted.toLocaleString()} more characters. The agent received the full output.]`,
-  };
-}
 /**
  * Pick the first option matching one of the given kinds (in order) and return
  * a `selected` decision. Falls back to `cancelled` (spec-safe no-decision)

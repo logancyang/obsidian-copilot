@@ -2867,7 +2867,25 @@ export class AgentSessionManager {
       throw err;
     }
 
-    session.loadDisplayMessages(loaded.messages);
+    // Keep saved text/metadata authoritative. Restore child trails only when the
+    // complete native conversation matches, so edited notes are never overwritten.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/467
+    const replayed = session.store.getDisplayMessages();
+    const sameConversation =
+      replayed.length === loaded.messages.length &&
+      replayed.every(
+        (message, index) =>
+          message.sender === loaded.messages[index].sender &&
+          message.message.trim() === loaded.messages[index].message
+      );
+    session.loadDisplayMessages(
+      loaded.messages.map((message, index) =>
+        sameConversation &&
+        replayed[index].parts?.some((part) => part.kind === "tool_call" && part.subagent)
+          ? { ...message, parts: replayed[index].parts }
+          : message
+      )
+    );
     session.seedSessionUsage(loaded.usage);
     if (loaded.label) session.setLabel(loaded.label);
     this.getSessionState(session.internalId).path = file.path;
