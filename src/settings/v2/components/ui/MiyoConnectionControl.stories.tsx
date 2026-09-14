@@ -94,3 +94,10 @@ export const RemoteConnectionFailed: StoryObj<MiyoConnectionControlProps> = {
     </div>
   ),
 };
+
+export const UnavailableInCenteredParent: StoryObj<MiyoConnectionControlProps> = {
+  args: { status: "unavailable" },
+  render: (args) => (
+    <div className="tw-text-center">{renderAvailabilityState({ ...meta.args, ...args })}</div>
+  ),
+};

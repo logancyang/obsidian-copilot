@@ -32,3 +32,30 @@ export default meta;
 
 /** The action footer has one top divider inside the card's outer border. */
 export const Default: StoryObj<ToolPermissionCardProps> = {};
+
+export const MultipleFiles: StoryObj<ToolPermissionCardProps> = {
+  args: {
+    request: {
+      ...request,
+      toolCall: {
+        ...request.toolCall,
+        title: "Update the launch brief and project roadmap",
+        kind: "edit",
+        content: [
+          {
+            type: "diff",
+            path: "Projects/Launch brief.md",
+            oldText: "Draft review",
+            newText: "Review the launch brief on Friday.",
+          },
+          {
+            type: "diff",
+            path: "Projects/Roadmap.md",
+            oldText: "Launch planning",
+            newText: "Schedule the launch review.",
+          },
+        ],
+      },
+    },
+  },
+};

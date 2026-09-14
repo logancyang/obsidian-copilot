@@ -1,3 +1,4 @@
+import { Button } from "@/components/ui/button";
 import { createMiyoPageUrl } from "@/lib/miyoLinks";
 import {
   RelevantNotesPane,
@@ -5,7 +6,7 @@ import {
 } from "@/components/chat-components/ui/RelevantNotesPane";
 import type { Meta, StoryObj } from "@/lib/story";
 import { FileInput, FileOutput } from "lucide-react";
-import React from "react";
+import React, { useState } from "react";
 
 function NoteRows(): React.ReactNode[] {
   return [
@@ -169,5 +170,33 @@ export const VaultNotRegisteredRemote: StoryObj<RelevantNotesPaneProps> = {
       ...baseArgs.actions,
       reviewIndexing: { ...baseArgs.actions.reviewIndexing, destination: "settings" },
     },
+  },
+};
+
+/** A manual replay of loading, failure, empty results and recovery; no requests are made. */
+export const StateTransitions: StoryObj<RelevantNotesPaneProps> = {
+  render: function StateTransitionsStory() {
+    const states = ["loading", "request-error", "no-matches", "matches"] as const;
+    const [index, setIndex] = useState(0);
+    const status = states[index];
+    return (
+      <div className="tw-flex tw-h-full tw-min-h-0 tw-flex-col tw-gap-2">
+        <Button
+          variant="secondary"
+          size="sm"
+          className="tw-self-start"
+          onClick={() => setIndex((value) => (value + 1) % states.length)}
+        >
+          Next state
+        </Button>
+        <div className="tw-min-h-0 tw-flex-1">
+          <RelevantNotesPane
+            {...baseArgs}
+            status={status}
+            noteRows={status === "matches" ? baseArgs.noteRows : []}
+          />
+        </div>
+      </div>
+    );
   },
 };

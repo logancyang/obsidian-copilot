@@ -113,7 +113,8 @@ export const CodexError: StoryObj<AgentSelectViewProps> = {
       {
         ...CODEX,
         status: "error",
-        statusMessage: "Could not read the Codex binary at /usr/local/bin/codex-acp.",
+        statusMessage:
+          "Could not read the Codex binary at C:\\Users\\example\\AppData\\Local\\organizationworkspacewithaverylongunbrokenidentifier012345678901234567890123456789\\customagentruntime\\codex-acp.exe.",
       },
     ],
     selectedId: "codex",

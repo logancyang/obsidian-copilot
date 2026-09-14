@@ -78,6 +78,36 @@ describe("AgentHomeShelf", () => {
       expect(screen.queryByText("CHATS BODY")).not.toBeNull();
     });
 
+    it("restores the remembered Relevant Notes tab after temporary pane suppression — https://github.com/Brevilabs/obsidian-copilot-private/issues/468", () => {
+      const relevantNotes: AgentHomeShelfSection = {
+        id: "relevant-notes",
+        icon: <span />,
+        title: "Relevant Notes",
+        renderBody: () => <div>RELEVANT NOTES BODY</div>,
+      };
+      const onSectionSelect = jest.fn();
+      const shelf = (sections: AgentHomeShelfSection[]) => (
+        <TooltipProvider>
+          <AgentHomeShelf
+            sections={sections}
+            activeSectionId="relevant-notes"
+            onSectionSelect={onSectionSelect}
+          />
+        </TooltipProvider>
+      );
+      const { rerender } = render(shelf([chats, relevantNotes]));
+      expect(screen.queryByText("RELEVANT NOTES BODY")).not.toBeNull();
+
+      rerender(shelf([chats]));
+      expect(screen.queryByText("RELEVANT NOTES BODY")).toBeNull();
+      expect(screen.queryByText("CHATS BODY")).not.toBeNull();
+
+      rerender(shelf([chats, relevantNotes]));
+      expect(screen.queryByText("RELEVANT NOTES BODY")).not.toBeNull();
+      expect(screen.queryByText("CHATS BODY")).toBeNull();
+      expect(onSectionSelect).not.toHaveBeenCalled();
+    });
+
     it("reports controlled clicks without switching sections until the parent updates", () => {
       const onSectionSelect = jest.fn();
       renderShelf([chats, projectsEnabled], { activeSectionId: "chats", onSectionSelect });
