@@ -68,7 +68,7 @@ On every device where you use Copilot:
 
 Use **Remote server** with the **same URL on the host computer too**. This gives synced Copilot settings one consistent address and keeps every client pointed at the shared Miyo service.
 
-![Copilot in Atom dark showing Remote server connected, with the private address hidden](https://raw.githubusercontent.com/logancyang/obsidian-copilot/3e1b6d562efbb646e25f87798e403cc3d284ce20/tutorial-media/remote-miyo/remote-connected.png)
+![Copilot in Atom dark showing Remote server connected, with the private address hidden](https://raw.githubusercontent.com/logancyang/obsidian-copilot/4d95be9c2fc65978ffda08cc6a66f184eebb1979/tutorial-media/remote-miyo/remote-connected.png)
 
 **Connected** means Copilot can reach the server. It does not mean every vault or note has been indexed. To add or repair indexed folders, open Miyo on the host; a remote client cannot register its own local folder on that host.
 
@@ -87,8 +87,8 @@ Check that the returned note is one you expected. **Unrestricted** searches ever
 The private address is hidden in the screenshot and video; use your own full HTTPS address. Pauses are shortened. The walkthrough starts with an instruction note summarizing commands that were run and verified on the host. It then shows the actual Copilot connection and a Claude search in Safe mode, approved with **Allow once**, returning **Better team meetings.md** and an excerpt.
 
 <video controls muted playsinline preload="metadata" aria-label="Connect Copilot to remote Miyo through Tailscale and search an indexed note" style="width: 100%; height: auto;">
-  <source src="https://raw.githubusercontent.com/logancyang/obsidian-copilot/3e1b6d562efbb646e25f87798e403cc3d284ce20/tutorial-media/remote-miyo/remote-miyo-walkthrough.mp4" type="video/mp4">
-  <a href="https://raw.githubusercontent.com/logancyang/obsidian-copilot/3e1b6d562efbb646e25f87798e403cc3d284ce20/tutorial-media/remote-miyo/remote-miyo-walkthrough.mp4">Watch: Connect Copilot to remote Miyo and search an indexed note</a>
+  <source src="https://raw.githubusercontent.com/logancyang/obsidian-copilot/4d95be9c2fc65978ffda08cc6a66f184eebb1979/tutorial-media/remote-miyo/remote-miyo-walkthrough.mp4" type="video/mp4">
+  <a href="https://raw.githubusercontent.com/logancyang/obsidian-copilot/4d95be9c2fc65978ffda08cc6a66f184eebb1979/tutorial-media/remote-miyo/remote-miyo-walkthrough.mp4">Watch: Connect Copilot to remote Miyo and search an indexed note</a>
 </video>
 
 ### Tested setup
