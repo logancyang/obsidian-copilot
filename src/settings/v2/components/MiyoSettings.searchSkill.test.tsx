@@ -252,10 +252,11 @@ describe("MiyoSettings", () => {
         "Couldn't connect to this server"
       );
       expect(lastModalOptions).toBeNull();
+      expect(screen.queryByRole("link", { name: "Download" })).toBeNull();
       expect(currentSettings.miyoServerUrl).toBe("http://remote:8742");
     });
 
-    it("disconnects when clearing the address while preserving the saved remote address and feature preferences — https://github.com/Brevilabs/obsidian-copilot-private/issues/466", async () => {
+    it("disconnects on selection changes while preserving the remote address and feature preferences — https://github.com/Brevilabs/obsidian-copilot-private/issues/466", async () => {
       currentSettings = {
         ...currentSettings,
         enableMiyo: true,
@@ -265,13 +266,10 @@ describe("MiyoSettings", () => {
         docProcessorBackend: "miyo",
       };
       render(<MiyoSettings />);
-      fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
-      fireEvent.change(screen.getByLabelText("Server address"), { target: { value: "" } });
+      fireEvent.click(screen.getByRole("radio", { name: /This computer/ }));
       expect(currentSettings.enableMiyo).toBe(false);
       expect(currentSettings.miyoConnectionMode).toBe("local");
-      fireEvent.change(screen.getByLabelText("Server address"), {
-        target: { value: "http://remote:8742" },
-      });
+      fireEvent.click(screen.getByRole("radio", { name: /Remote server/ }));
       expect(screen.getByLabelText<HTMLInputElement>("Server address").value).toBe(
         "http://remote:8742"
       );
@@ -283,11 +281,10 @@ describe("MiyoSettings", () => {
       expect(updateSetting).not.toHaveBeenCalledWith("miyoServerUrl", "");
     });
 
-    it("rejects a malformed remote draft before any local discovery request — https://github.com/Brevilabs/obsidian-copilot-private/issues/466", async () => {
+    it("rejects an empty remote draft before any local discovery request — https://github.com/Brevilabs/obsidian-copilot-private/issues/466", async () => {
       currentSettings.enableMiyo = false;
       render(<MiyoSettings />);
-      fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
-      fireEvent.change(screen.getByLabelText("Server address"), { target: { value: "miyo-home" } });
+      fireEvent.click(screen.getByRole("radio", { name: /Remote server/ }));
       fireEvent.click(await screen.findByRole("button", { name: "Save and connect" }));
       expect((await screen.findByRole("alert")).textContent).toContain(
         "Enter a valid HTTP or HTTPS"
@@ -299,7 +296,6 @@ describe("MiyoSettings", () => {
     it("shows externally synced settings instead of applying a stale draft on connect — https://github.com/Brevilabs/obsidian-copilot-private/issues/466", async () => {
       currentSettings = { ...currentSettings, enableMiyo: false, miyoServerUrl: "http://old:8742" };
       const { rerender } = render(<MiyoSettings />);
-      fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
       fireEvent.change(screen.getByLabelText("Server address"), {
         target: { value: "http://draft:8742" },
       });
@@ -348,8 +344,7 @@ describe("MiyoSettings", () => {
       render(<MiyoSettings />);
       fireEvent.click(await screen.findByRole("button", { name: "Save and connect" }));
       await waitFor(() => expect(mockProbeUrls).toHaveLength(1));
-      fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
-      fireEvent.change(screen.getByLabelText("Server address"), { target: { value: "" } });
+      fireEvent.click(screen.getByRole("radio", { name: /This computer/ }));
       await act(async () => gate.resolve(true));
       expect(updateSetting).not.toHaveBeenCalledWith("enableMiyo", true);
       expect(lastModalOptions).toBeNull();

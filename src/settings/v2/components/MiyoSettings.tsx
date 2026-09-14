@@ -1,6 +1,3 @@
-import { Input } from "@/components/ui/input";
-import { SettingDisclosure } from "@/components/ui/setting-disclosure";
-import { SettingItem } from "@/components/ui/setting-item";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { SettingSection } from "@/components/ui/setting-section";
 import { SettingSwitch } from "@/components/ui/setting-switch";
@@ -20,6 +17,7 @@ import {
   MIYO_CONNECT_DEEPLINK_URL,
 } from "@/miyo/miyoUtils";
 import { getMiyoConnectionMode } from "@/miyo/miyoRuntimePolicy";
+import { MiyoConnectionPanel } from "@/settings/v2/components/ui/MiyoConnectionPanel";
 import { useMiyoStatus } from "@/miyo/useMiyoStatus";
 import { notifyMiyoIndexChanged } from "@/miyo/miyoIndex";
 import { extractAppIgnoreSettings, getSystemExcludedFolders } from "@/search/searchUtils";
@@ -36,7 +34,7 @@ import {
 } from "@/settings/v2/components/ui/MiyoConnectionControl";
 import { err2String } from "@/utils";
 import { getVaultBase } from "@/utils/vaultPath";
-import { ArrowUpRight, CornerDownRight } from "lucide-react";
+import { CornerDownRight } from "lucide-react";
 import { Notice, Platform } from "obsidian";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 
@@ -130,7 +128,6 @@ export const MiyoSettings: React.FC = () => {
 
   // An incomplete address is a draft, never an active local-discovery fallback.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/466
-  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [draft, setDraft] = useState<{
     mode: "local" | "remote";
     address: string;
@@ -141,7 +138,7 @@ export const MiyoSettings: React.FC = () => {
   const settingsKey = `${activeMode}:${settings.miyoServerUrl}`;
   const currentDraft = draft?.source === settingsKey ? draft : null;
   const mode = currentDraft?.mode ?? activeMode;
-  const urlDraft = currentDraft?.address ?? activeUrl;
+  const urlDraft = currentDraft?.address ?? settings.miyoServerUrl;
   const [connectionError, setConnectionError] = useState<{
     endpoint: string;
     message: string;
@@ -669,99 +666,39 @@ export const MiyoSettings: React.FC = () => {
         Private context from your Miyo server. Unlimited, no credits.
       </div>
 
-      {/* Connection */}
-      <SettingSection label="Connection">
-        <CapabilityRow
-          title="Miyo"
-          description={
-            <span>
-              Connect to Miyo on this computer or use a server address under Advanced. Need the
-              local app?{" "}
-              <a
-                href={createMiyoPageUrl("miyo_settings")}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="tw-inline-flex tw-items-center tw-gap-0.5 tw-text-accent"
-              >
-                Download <ArrowUpRight className="tw-size-3.5" />
-              </a>
-            </span>
-          }
-          control={
-            <MiyoConnectionControl
-              enabled={settings.enableMiyo}
-              status={status.backend}
-              checking={refreshing}
-              remote={connectedRemote}
-              connectLabel={connectedRemote ? "Save and connect" : "Connect"}
-              onConnect={() => void saveAndConnect()}
-              onDisconnect={() => void handleDisconnect()}
-              onRetry={() => void (connectedRemote ? saveAndConnect() : handleRetry())}
-            />
-          }
+      <MiyoConnectionPanel
+        mode={mode}
+        address={urlDraft}
+        onModeChange={(next) => changeConnection(next)}
+        onAddressChange={(address) => changeConnection(mode, address)}
+        downloadUrl={createMiyoPageUrl("miyo_settings")}
+        error={
+          connectionError?.endpoint === `${mode}:${urlDraft}` ? connectionError.message : undefined
+        }
+        message={
+          settings.enableMiyo &&
+          capabilitiesEnabled &&
+          !refreshing &&
+          vaultResult?.endpoint ===
+            `${getMiyoConnectionMode(settings)}:${getMiyoCustomUrl(settings)}`
+            ? vaultResult.message
+            : undefined
+        }
+      >
+        <MiyoConnectionControl
+          enabled={settings.enableMiyo}
+          status={status.backend}
+          checking={refreshing}
+          remote={connectedRemote}
+          connectLabel={connectedRemote ? "Save and connect" : "Connect"}
+          onConnect={() => void saveAndConnect()}
+          onDisconnect={() => {
+            setVaultResult(null);
+            void handleDisconnect();
+          }}
+          onRetry={() => void (connectedRemote ? saveAndConnect() : handleRetry())}
         />
-        <div className="tw-space-y-2 tw-py-2 tw-text-xs">
-          {connectionError?.endpoint === `${mode}:${urlDraft}` && (
-            <div role="alert" className="tw-text-error">
-              {connectionError.message}
-            </div>
-          )}
-          {settings.enableMiyo &&
-            capabilitiesEnabled &&
-            !refreshing &&
-            vaultResult?.endpoint === `${activeMode}:${activeUrl}` && (
-              <div className="tw-text-muted">{vaultResult.message}</div>
-            )}
-        </div>
-
-        {/* Connector — relay status from the Miyo health check. Lives in
-            Connection (not the gated block) because it's a connection affordance:
-            gating it behind "connected" would deadlock setup. */}
-        <MiyoStatusRow
-          title={
-            <>
-              Connector <RelayTag />
-            </>
-          }
-          description="Let ChatGPT / Claude read-write your local files and vault from the cloud."
-          status={status.connector}
-          statusText={connectorStatusText(status.connector)}
-          actionLabel="Set up in Miyo"
-          remoteInstruction={connectedRemote ? "Set up Relay on the Miyo host." : undefined}
-          onAction={() => window.open(MIYO_CONNECT_DEEPLINK_URL, "_blank")}
-        />
-
-        {/* Advanced — the remote Miyo URL is an escape hatch, tucked away by default. */}
-        <div>
-          <SettingDisclosure open={advancedOpen} onClick={() => setAdvancedOpen((open) => !open)} />
-
-          {advancedOpen && (
-            <div className="tw-pb-2">
-              {/* Standard setting row (label/description left, control right) —
-                  the input is controlled + commits on blur, so it uses
-                  SettingItem's `custom` slot rather than the debounced text mode. */}
-              <SettingItem
-                type="custom"
-                title="Remote Miyo server (advanced)"
-                description="Leave blank for local discovery, or enter a remote server address. Select Connect above to save and check it."
-              >
-                <Input
-                  value={urlDraft}
-                  onChange={(event) =>
-                    changeConnection(
-                      event.target.value.trim() ? "remote" : "local",
-                      event.target.value
-                    )
-                  }
-                  aria-label="Server address"
-                  placeholder="Leave blank for local discovery"
-                  className="tw-w-full sm:tw-w-[260px]"
-                />
-              </SettingItem>
-            </div>
-          )}
-        </div>
-      </SettingSection>
+      </MiyoConnectionPanel>
 
       {/* Powered by Miyo — the capability block. Partial gating: the Miyo pickers /
           status dim when disconnected, but the Document Processor output path stays
@@ -909,6 +846,21 @@ export const MiyoSettings: React.FC = () => {
           </div>
         </div>
       </div>
+      <SettingSection label="External apps">
+        <MiyoStatusRow
+          title={
+            <>
+              Connector <RelayTag />
+            </>
+          }
+          description="Let ChatGPT / Claude access files through Miyo. Separate from Copilot’s connection above."
+          status={status.connector}
+          statusText={connectorStatusText(status.connector)}
+          actionLabel="Set up in Miyo"
+          remoteInstruction={connectedRemote ? "Set up Relay on the Miyo host." : undefined}
+          onAction={() => window.open(MIYO_CONNECT_DEEPLINK_URL, "_blank")}
+        />
+      </SettingSection>
     </div>
   );
 };
