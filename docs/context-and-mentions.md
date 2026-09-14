@@ -37,6 +37,8 @@ To attach an excerpt from a note:
 
 For text selected in the Web Viewer, run **Add web selection to chat context**. Copilot sends the selected excerpt instead of also attaching the full active web tab.
 
+Selected text in note editors is automatically added to chat context. On desktop, this also works with Web Viewer selections. Review or remove the selection badge before sending.
+
 ## Mention other agents
 
 With active Plus access, type `@`, open **Agents**, and select one or more other installed agents. Each mentioned agent receives the same question, that turn's attachments, and a bounded slice of the visible conversation. The current agent summarizes their answers and does not automatically answer separately.
