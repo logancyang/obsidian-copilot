@@ -369,7 +369,7 @@ export class MiyoClient {
     let response: Awaited<ReturnType<typeof requestUrl>>;
     try {
       const baseUrl = await this.resolveBaseUrl(overrideUrl);
-      const url = new URL("/v0/folder", baseUrl);
+      const url = this.buildUrl(baseUrl, "/v0/folder");
       const headers = await this.buildHeaders();
       const body = JSON.stringify(request);
       // Last point at which this registration can still be called off: once
@@ -462,7 +462,7 @@ export class MiyoClient {
       if (!baseUrl) {
         return "error";
       }
-      const url = new URL("/v0/folder", baseUrl);
+      const url = this.buildUrl(baseUrl, "/v0/folder");
       url.searchParams.set("path", folderName);
       const response = await requestUrl({
         url: url.toString(),
@@ -729,6 +729,17 @@ export class MiyoClient {
     return headers;
   }
 
+  private buildUrl(baseUrl: string, path: string): URL {
+    // Reverse proxies can mount Miyo below a path; root-relative resolution
+    // would send requests to another service on the same host.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/466
+    const url = new URL(baseUrl);
+    url.pathname = `${url.pathname.replace(/\/+$/, "")}${path}`;
+    url.search = "";
+    url.hash = "";
+    return url;
+  }
+
   /**
    * Execute a JSON request to the Miyo API.
    *
@@ -747,7 +758,7 @@ export class MiyoClient {
       query?: Record<string, string | number | boolean | undefined>;
     }
   ): Promise<T> {
-    const url = new URL(path, baseUrl);
+    const url = this.buildUrl(baseUrl, path);
     if (options.query) {
       Object.entries(options.query).forEach(([key, value]) => {
         if (value !== undefined && value !== null) {

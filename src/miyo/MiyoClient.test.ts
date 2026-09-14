@@ -429,6 +429,19 @@ describe("MiyoClient", () => {
   });
 
   describe("checkFolderRegistration", () => {
+    it("checks registration under the proxy path and encodes the folder query (https://github.com/Brevilabs/obsidian-copilot-private/issues/466)", async () => {
+      mockResolveBaseUrl.mockResolvedValue("https://host.example/gateway/search/");
+      mockedRequestUrl.mockResolvedValue({ status: 200 } as RequestUrlResponse);
+      await expect(new MiyoClient().checkFolderRegistration("Shared & Notes")).resolves.toBe(
+        "registered"
+      );
+      expect(mockedRequestUrl).toHaveBeenCalledWith(
+        expect.objectContaining({
+          url: "https://host.example/gateway/search/v0/folder?path=Shared+%26+Notes",
+          method: "GET",
+        })
+      );
+    });
     it("returns 'registered' on HTTP 200 and queries /v0/folder with the folder path", async () => {
       mockedRequestUrl.mockResolvedValue({
         status: 200,
@@ -544,6 +557,19 @@ describe("MiyoClient", () => {
   });
 
   describe("addFolder()", () => {
+    it("registers a folder under the proxy path (https://github.com/Brevilabs/obsidian-copilot-private/issues/466)", async () => {
+      mockResolveBaseUrl.mockResolvedValue("https://host.example/gateway/search");
+      const folder = { path: "/vault", name: "Vault" };
+      mockedRequestUrl.mockResolvedValue({ status: 201, json: folder } as RequestUrlResponse);
+      await expect(new MiyoClient().addFolder({ path: "/vault" })).resolves.toEqual(folder);
+      expect(mockedRequestUrl).toHaveBeenCalledWith(
+        expect.objectContaining({
+          url: "https://host.example/gateway/search/v0/folder",
+          method: "POST",
+          body: JSON.stringify({ path: "/vault" }),
+        })
+      );
+    });
     beforeEach(() => mockedRequestUrl.mockReset());
     it("POSTs the request to /v0/folder and returns the created record on 201", async () => {
       const folderRecord = { path: "/Users/me/vault", exclude_folders: ["copilot"] };
@@ -745,6 +771,24 @@ describe("MiyoClient", () => {
   });
 
   describe("fetchHealth()", () => {
+    it.each(["", "/", "/gateway/search", "/gateway/search/"])(
+      "returns health through the configured base path %s (https://github.com/Brevilabs/obsidian-copilot-private/issues/466)",
+      async (prefix) => {
+        const baseUrl = `https://host.example${prefix}`;
+        mockResolveBaseUrl.mockResolvedValue(baseUrl);
+        mockedRequestUrl.mockResolvedValue({
+          status: 200,
+          json: { status: "ok" },
+        } as RequestUrlResponse);
+        await expect(new MiyoClient().fetchHealth(baseUrl)).resolves.toEqual({ status: "ok" });
+        expect(mockedRequestUrl).toHaveBeenCalledWith(
+          expect.objectContaining({
+            url: `https://host.example${prefix.replace(/\/$/, "")}/v0/health`,
+            method: "GET",
+          })
+        );
+      }
+    );
     it("resolves null once the probe timeout elapses when the request never responds", async () => {
       jest.useFakeTimers();
       try {
