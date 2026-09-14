@@ -1,5 +1,5 @@
 import React from "react";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import ChatSingleMessage, {
   normalizeFootnoteRendering,
 } from "@/components/chat-components/ChatSingleMessage";
@@ -84,138 +84,140 @@ const { __renderMock: renderMarkdownMock } = jest.requireMock<{
 // block rule and rendered as literal "&lt;/div&gt;" text.
 // ---------------------------------------------------------------------------
 
-describe("think block rendering — closing tags are not consumed by indented code blocks", () => {
-  const createAppStub = (): App =>
-    ({
-      workspace: { getActiveFile: jest.fn(() => null) },
-      metadataCache: { getFirstLinkpathDest: jest.fn(() => null) },
-    }) as unknown as App;
+describe("ChatSingleMessage", () => {
+  // Separate rendering groups keep markdown-capture instrumentation isolated from DOM assertions.
+  describe("ChatSingleMessage() markdown rendering", () => {
+    const createAppStub = (): App =>
+      ({
+        workspace: { getActiveFile: jest.fn(() => null) },
+        metadataCache: { getFirstLinkpathDest: jest.fn(() => null) },
+      }) as unknown as App;
 
-  const baseAiMessage: ChatMessage = {
-    id: "ai-1",
-    sender: "AI",
-    message: "",
-    isVisible: true,
-    timestamp: null,
-  };
+    const baseAiMessage: ChatMessage = {
+      id: "ai-1",
+      sender: "AI",
+      message: "",
+      isVisible: true,
+      timestamp: null,
+    };
 
-  beforeEach(() => {
-    renderMarkdownMock.mockReset();
-    renderMarkdownMock.mockResolvedValue(undefined);
-  });
+    beforeEach(() => {
+      renderMarkdownMock.mockReset();
+      renderMarkdownMock.mockResolvedValue(undefined);
+    });
 
-  beforeAll(() => {
-    (window as unknown as Record<string, unknown>).activeDocument = window.document;
-  });
+    beforeAll(() => {
+      (window as unknown as Record<string, unknown>).activeDocument = window.document;
+    });
 
-  /**
-   * Asserts that no line in the rendered markdown matches:
-   *   <4+ spaces><any content></div>  or  <4+ spaces><any content></details>
-   * Such a pattern means the closing tag is inside a code block and will be
-   * escaped by the markdown renderer.
-   */
-  function assertNoClosingTagOnIndentedLine(capturedMarkdown: string[]) {
-    for (const md of capturedMarkdown) {
-      for (const line of md.split("\n")) {
-        if (/^ {4}/.test(line)) {
-          expect(line).not.toContain("</div>");
-          expect(line).not.toContain("</details>");
+    /**
+     * Asserts that no line in the rendered markdown matches:
+     *   <4+ spaces><any content></div>  or  <4+ spaces><any content></details>
+     * Such a pattern means the closing tag is inside a code block and will be
+     * escaped by the markdown renderer.
+     */
+    function assertNoClosingTagOnIndentedLine(capturedMarkdown: string[]) {
+      for (const md of capturedMarkdown) {
+        for (const line of md.split("\n")) {
+          if (/^ {4}/.test(line)) {
+            expect(line).not.toContain("</div>");
+            expect(line).not.toContain("</details>");
+          }
         }
       }
     }
-  }
 
-  it("does not place </div> on a 4-space-indented line (non-streaming, think block)", async () => {
-    const thinkContent =
-      "Planning my response:\n    *   Be helpful and direct.\n    *   Answer clearly.";
-    const messageText = `<think>${thinkContent}</think>Here is my answer.`;
+    it("does not place </div> on a 4-space-indented line (non-streaming, think block)", async () => {
+      const thinkContent =
+        "Planning my response:\n    *   Be helpful and direct.\n    *   Answer clearly.";
+      const messageText = `<think>${thinkContent}</think>Here is my answer.`;
 
-    const capturedMarkdown: string[] = [];
-    renderMarkdownMock.mockImplementation(async (_app: unknown, md: string, el: HTMLElement) => {
-      capturedMarkdown.push(md);
-      el.textContent = "rendered";
+      const capturedMarkdown: string[] = [];
+      renderMarkdownMock.mockImplementation(async (_app: unknown, md: string, el: HTMLElement) => {
+        capturedMarkdown.push(md);
+        el.textContent = "rendered";
+      });
+
+      render(
+        <TooltipProvider>
+          <ChatSingleMessage
+            message={{ ...baseAiMessage, message: messageText }}
+            app={createAppStub()}
+            isStreaming={false}
+            onDelete={() => {}}
+          />
+        </TooltipProvider>
+      );
+
+      await waitFor(() => expect(renderMarkdownMock).toHaveBeenCalled());
+
+      assertNoClosingTagOnIndentedLine(capturedMarkdown);
     });
 
-    render(
-      <TooltipProvider>
-        <ChatSingleMessage
-          message={{ ...baseAiMessage, message: messageText }}
-          app={createAppStub()}
-          isStreaming={false}
-          onDelete={() => {}}
-        />
-      </TooltipProvider>
-    );
+    it("does not place </div> on a 4-space-indented line (streaming, complete think block)", async () => {
+      const thinkContent = "Thinking:\n    1.  First step.\n    2.  Second step.";
+      const messageText = `<think>${thinkContent}</think>Response text.`;
 
-    await waitFor(() => expect(renderMarkdownMock).toHaveBeenCalled());
+      const capturedMarkdown: string[] = [];
+      renderMarkdownMock.mockImplementation(async (_app: unknown, md: string, el: HTMLElement) => {
+        capturedMarkdown.push(md);
+        el.textContent = "rendered";
+      });
 
-    assertNoClosingTagOnIndentedLine(capturedMarkdown);
-  });
+      render(
+        <TooltipProvider>
+          <ChatSingleMessage
+            message={{ ...baseAiMessage, message: messageText }}
+            app={createAppStub()}
+            isStreaming={true}
+            onDelete={() => {}}
+          />
+        </TooltipProvider>
+      );
 
-  it("does not place </div> on a 4-space-indented line (streaming, complete think block)", async () => {
-    const thinkContent = "Thinking:\n    1.  First step.\n    2.  Second step.";
-    const messageText = `<think>${thinkContent}</think>Response text.`;
+      await waitFor(() => expect(renderMarkdownMock).toHaveBeenCalled());
 
-    const capturedMarkdown: string[] = [];
-    renderMarkdownMock.mockImplementation(async (_app: unknown, md: string, el: HTMLElement) => {
-      capturedMarkdown.push(md);
-      el.textContent = "rendered";
+      assertNoClosingTagOnIndentedLine(capturedMarkdown);
     });
 
-    render(
-      <TooltipProvider>
-        <ChatSingleMessage
-          message={{ ...baseAiMessage, message: messageText }}
-          app={createAppStub()}
-          isStreaming={true}
-          onDelete={() => {}}
-        />
-      </TooltipProvider>
-    );
+    it("does not place </div> on a 4-space-indented line (streaming, unclosed think block)", async () => {
+      // Simulates mid-stream: the </think> closing tag has not arrived yet.
+      const messageText = "<think>Thinking:\n    *   Still streaming.";
 
-    await waitFor(() => expect(renderMarkdownMock).toHaveBeenCalled());
+      const capturedMarkdown: string[] = [];
+      renderMarkdownMock.mockImplementation(async (_app: unknown, md: string, el: HTMLElement) => {
+        capturedMarkdown.push(md);
+        el.textContent = "rendered";
+      });
 
-    assertNoClosingTagOnIndentedLine(capturedMarkdown);
+      render(
+        <TooltipProvider>
+          <ChatSingleMessage
+            message={{ ...baseAiMessage, message: messageText }}
+            app={createAppStub()}
+            isStreaming={true}
+            onDelete={() => {}}
+          />
+        </TooltipProvider>
+      );
+
+      await waitFor(() => expect(renderMarkdownMock).toHaveBeenCalled());
+
+      assertNoClosingTagOnIndentedLine(capturedMarkdown);
+    });
   });
 
-  it("does not place </div> on a 4-space-indented line (streaming, unclosed think block)", async () => {
-    // Simulates mid-stream: the </think> closing tag has not arrived yet.
-    const messageText = "<think>Thinking:\n    *   Still streaming.";
-
-    const capturedMarkdown: string[] = [];
-    renderMarkdownMock.mockImplementation(async (_app: unknown, md: string, el: HTMLElement) => {
-      capturedMarkdown.push(md);
-      el.textContent = "rendered";
+  describe("normalizeFootnoteRendering()", () => {
+    beforeEach(() => {
+      renderMarkdownMock.mockReset();
+      renderMarkdownMock.mockResolvedValue(undefined);
     });
 
-    render(
-      <TooltipProvider>
-        <ChatSingleMessage
-          message={{ ...baseAiMessage, message: messageText }}
-          app={createAppStub()}
-          isStreaming={true}
-          onDelete={() => {}}
-        />
-      </TooltipProvider>
-    );
-
-    await waitFor(() => expect(renderMarkdownMock).toHaveBeenCalled());
-
-    assertNoClosingTagOnIndentedLine(capturedMarkdown);
-  });
-});
-
-describe("normalizeFootnoteRendering", () => {
-  beforeEach(() => {
-    renderMarkdownMock.mockReset();
-    renderMarkdownMock.mockResolvedValue(undefined);
-  });
-
-  it("removes separator and backref while preserving non-footnote elements", () => {
-    const container = window.document.createElement("div");
-    container.append(
-      ...new DOMParser().parseFromString(
-        `
+    it("removes separator and backref while preserving non-footnote elements", () => {
+      const container = window.document.createElement("div");
+      container.append(
+        ...new DOMParser().parseFromString(
+          `
       <div>
         <p>Body <sup><a href="#fn-1">1-1</a></sup></p>
         <hr class="content-separator" />
@@ -229,128 +231,171 @@ describe("normalizeFootnoteRendering", () => {
         </div>
       </div>
     `,
-        "text/html"
-      ).body.children
-    );
+          "text/html"
+        ).body.children
+      );
 
-    normalizeFootnoteRendering(container);
+      normalizeFootnoteRendering(container);
 
-    expect(container.querySelector(".footnotes hr")).toBeNull();
-    expect(container.querySelector(".footnote-backref")).toBeNull();
-    expect(container.querySelector(".content-separator")).not.toBeNull();
-    expect(container.querySelector('a[href="#fn-1"]')?.textContent).toBe("1");
-  });
+      expect(container.querySelector(".footnotes hr")).toBeNull();
+      expect(container.querySelector(".footnote-backref")).toBeNull();
+      expect(container.querySelector(".content-separator")).not.toBeNull();
+      expect(container.querySelector('a[href="#fn-1"]')?.textContent).toBe("1");
+    });
 
-  it("leaves non-numeric footnote references untouched", () => {
-    const container = window.document.createElement("div");
-    container.append(
-      ...new DOMParser().parseFromString(
-        `
+    it("leaves non-numeric footnote references untouched", () => {
+      const container = window.document.createElement("div");
+      container.append(
+        ...new DOMParser().parseFromString(
+          `
       <p>Body <sup><a href="#fn-note">Note-A</a></sup></p>
       <a class="footnote-backref" href="#ref">↩</a>
     `,
-        "text/html"
-      ).body.children
+          "text/html"
+        ).body.children
+      );
+
+      normalizeFootnoteRendering(container);
+
+      expect(container.querySelector('a[href="#fn-note"]')?.textContent).toBe("Note-A");
+      expect(container.querySelector(".footnote-backref")).toBeNull();
+    });
+  });
+
+  function stubContentDimensions(scrollHeightPx: number, clientHeightPx: number): () => void {
+    const originalScrollHeight = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      "scrollHeight"
     );
-
-    normalizeFootnoteRendering(container);
-
-    expect(container.querySelector('a[href="#fn-note"]')?.textContent).toBe("Note-A");
-    expect(container.querySelector(".footnote-backref")).toBeNull();
-  });
-});
-
-function stubContentDimensions(scrollHeightPx: number, clientHeightPx: number): () => void {
-  const originalScrollHeight = Object.getOwnPropertyDescriptor(
-    HTMLElement.prototype,
-    "scrollHeight"
-  );
-  const originalClientHeight = Object.getOwnPropertyDescriptor(
-    HTMLElement.prototype,
-    "clientHeight"
-  );
-  Object.defineProperty(HTMLElement.prototype, "scrollHeight", {
-    configurable: true,
-    get: () => scrollHeightPx,
-  });
-  Object.defineProperty(HTMLElement.prototype, "clientHeight", {
-    configurable: true,
-    get: () => clientHeightPx,
-  });
-  return () => {
-    if (originalScrollHeight) {
-      Object.defineProperty(HTMLElement.prototype, "scrollHeight", originalScrollHeight);
-    } else {
-      Reflect.deleteProperty(HTMLElement.prototype, "scrollHeight");
-    }
-    if (originalClientHeight) {
-      Object.defineProperty(HTMLElement.prototype, "clientHeight", originalClientHeight);
-    } else {
-      Reflect.deleteProperty(HTMLElement.prototype, "clientHeight");
-    }
-  };
-}
-
-describe("ChatSingleMessage", () => {
-  const baseMessage: ChatMessage = {
-    id: "message-1",
-    message: "Test message",
-    sender: "assistant",
-    timestamp: { epoch: Date.now(), display: "now", fileName: "now" },
-    isVisible: true,
-  };
-
-  const createAppStub = (): App =>
-    ({
-      workspace: {
-        getActiveFile: jest.fn(() => null),
-        getMostRecentLeaf: jest.fn(() => null),
-        getLeaf: jest.fn(() => null),
-      },
-      metadataCache: {
-        getFirstLinkpathDest: jest.fn(() => null),
-      },
-    }) as unknown as App;
-
-  beforeEach(() => {
-    renderMarkdownMock.mockReset();
-    renderMarkdownMock.mockResolvedValue(undefined);
-  });
-
-  beforeAll(() => {
-    (window as unknown as Record<string, unknown>).activeDocument = window.document;
-  });
-
-  it("renders a truncated response as an ordinary message, with no card offering a setting to raise (https://github.com/logancyang/obsidian-copilot-preview/issues/312)", async () => {
-    const { container } = render(
-      <TooltipProvider>
-        <ChatSingleMessage
-          message={{
-            ...baseMessage,
-            message: "The coastline is famously hard to",
-            responseMetadata: { wasTruncated: true, tokenUsage: { outputTokens: 20000 } },
-          }}
-          app={createAppStub()}
-          isStreaming={false}
-          onDelete={() => {}}
-        />
-      </TooltipProvider>
+    const originalClientHeight = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      "clientHeight"
     );
+    Object.defineProperty(HTMLElement.prototype, "scrollHeight", {
+      configurable: true,
+      get: () => scrollHeightPx,
+    });
+    Object.defineProperty(HTMLElement.prototype, "clientHeight", {
+      configurable: true,
+      get: () => clientHeightPx,
+    });
+    return () => {
+      if (originalScrollHeight) {
+        Object.defineProperty(HTMLElement.prototype, "scrollHeight", originalScrollHeight);
+      } else {
+        Reflect.deleteProperty(HTMLElement.prototype, "scrollHeight");
+      }
+      if (originalClientHeight) {
+        Object.defineProperty(HTMLElement.prototype, "clientHeight", originalClientHeight);
+      } else {
+        Reflect.deleteProperty(HTMLElement.prototype, "clientHeight");
+      }
+    };
+  }
 
-    await waitFor(() => expect(renderMarkdownMock).toHaveBeenCalled());
+  describe("ChatSingleMessage() DOM rendering", () => {
+    const baseMessage: ChatMessage = {
+      id: "message-1",
+      message: "Test message",
+      sender: "assistant",
+      timestamp: { epoch: Date.now(), display: "now", fileName: "now" },
+      isVisible: true,
+    };
 
-    expect(container.querySelector(".message-segment")).toBeTruthy();
-    expect(container.textContent).not.toContain("Response Truncated");
-    expect(container.textContent).not.toContain("Open Model Settings");
-    expect(container.textContent).not.toContain("Token Limit");
-  });
+    const createAppStub = (): App =>
+      ({
+        workspace: {
+          getActiveFile: jest.fn(() => null),
+          getMostRecentLeaf: jest.fn(() => null),
+          getLeaf: jest.fn(() => null),
+        },
+        metadataCache: {
+          getFirstLinkpathDest: jest.fn(() => null),
+        },
+      }) as unknown as App;
 
-  it("normalizes rendered footnotes for assistant messages", async () => {
-    renderMarkdownMock.mockImplementation(
-      async (_app: unknown, _markdown: string, el: HTMLElement) => {
-        el.append(
-          ...new DOMParser().parseFromString(
-            `
+    beforeEach(() => {
+      renderMarkdownMock.mockReset();
+      renderMarkdownMock.mockResolvedValue(undefined);
+    });
+
+    beforeAll(() => {
+      (window as unknown as Record<string, unknown>).activeDocument = window.document;
+    });
+
+    describe("MessageContext()", () => {
+      it.each(["note", "web"] as const)(
+        "shows one full-excerpt tooltip for a sent %s selection https://github.com/Brevilabs/obsidian-copilot-private/issues/465",
+        async (sourceType) => {
+          const source =
+            sourceType === "note"
+              ? {
+                  sourceType,
+                  notePath: "Research.md",
+                  noteTitle: "Research",
+                  startLine: 2,
+                  endLine: 2,
+                }
+              : { sourceType, url: "https://example.com/research", title: "Research" };
+          render(
+            <TooltipProvider delayDuration={0}>
+              <ChatSingleMessage
+                message={{
+                  ...baseMessage,
+                  context: {
+                    notes: [],
+                    urls: [],
+                    selectedTextContexts: [
+                      { ...source, id: "excerpt", content: "Interview findings" },
+                    ],
+                  },
+                }}
+                app={createAppStub()}
+                isStreaming={false}
+                onDelete={() => {}}
+              />
+            </TooltipProvider>
+          );
+          fireEvent.focus(screen.getByText("Interview findings"));
+          await waitFor(() => expect(screen.getAllByRole("tooltip")).toHaveLength(1));
+          expect(screen.getByRole("tooltip").textContent).toContain("Interview findings");
+          expect(screen.getByRole("tooltip").textContent).toContain(
+            sourceType === "note" ? "Research.md" : "https://example.com/research"
+          );
+        }
+      );
+    });
+
+    it("renders a truncated response as an ordinary message, with no card offering a setting to raise (https://github.com/logancyang/obsidian-copilot-preview/issues/312)", async () => {
+      const { container } = render(
+        <TooltipProvider>
+          <ChatSingleMessage
+            message={{
+              ...baseMessage,
+              message: "The coastline is famously hard to",
+              responseMetadata: { wasTruncated: true, tokenUsage: { outputTokens: 20000 } },
+            }}
+            app={createAppStub()}
+            isStreaming={false}
+            onDelete={() => {}}
+          />
+        </TooltipProvider>
+      );
+
+      await waitFor(() => expect(renderMarkdownMock).toHaveBeenCalled());
+
+      expect(container.querySelector(".message-segment")).toBeTruthy();
+      expect(container.textContent).not.toContain("Response Truncated");
+      expect(container.textContent).not.toContain("Open Model Settings");
+      expect(container.textContent).not.toContain("Token Limit");
+    });
+
+    it("normalizes rendered footnotes for assistant messages", async () => {
+      renderMarkdownMock.mockImplementation(
+        async (_app: unknown, _markdown: string, el: HTMLElement) => {
+          el.append(
+            ...new DOMParser().parseFromString(
+              `
         <p>Example <sup><a href="#fn-2">2-1</a></sup></p>
         <hr class="content-hr" />
         <div class="footnotes">
@@ -362,150 +407,157 @@ describe("ChatSingleMessage", () => {
           </ol>
         </div>
       `,
-            "text/html"
-          ).body.children
-        );
-      }
-    );
-
-    const { container } = render(
-      <TooltipProvider>
-        <ChatSingleMessage
-          message={baseMessage}
-          app={createAppStub()}
-          isStreaming={false}
-          onDelete={() => {}}
-        />
-      </TooltipProvider>
-    );
-
-    await waitFor(() => expect(renderMarkdownMock).toHaveBeenCalled());
-
-    const messageSegment = container.querySelector(".message-segment");
-    expect(messageSegment).toBeTruthy();
-    expect(messageSegment?.querySelector(".footnotes hr")).toBeNull();
-    expect(messageSegment?.querySelector(".footnote-backref")).toBeNull();
-    expect(messageSegment?.querySelector(".content-hr")).not.toBeNull();
-    expect(messageSegment?.querySelector('a[href="#fn-2"]')?.textContent).toBe("2");
-  });
-
-  it("marks rendered text segments with markdown-rendered for native reading-view styling", async () => {
-    const { container } = render(
-      <TooltipProvider>
-        <ChatSingleMessage
-          message={baseMessage}
-          app={createAppStub()}
-          isStreaming={false}
-          onDelete={() => {}}
-        />
-      </TooltipProvider>
-    );
-
-    await waitFor(() => expect(renderMarkdownMock).toHaveBeenCalled());
-
-    const messageSegment = container.querySelector(".message-segment");
-    expect(messageSegment).toBeTruthy();
-    expect(messageSegment?.classList.contains("markdown-rendered")).toBe(true);
-  });
-
-  it("shows supplied Agent Mode metadata instead of the timestamp in the response footer", async () => {
-    const timestamp = "2026/08/07 20:31:10";
-    const { rerender } = render(
-      <TooltipProvider>
-        <ChatSingleMessage
-          message={{ ...baseMessage, timestamp: { epoch: 1, display: timestamp, fileName: "now" } }}
-          app={createAppStub()}
-          isStreaming={false}
-          footerStart={<span>Worked for 24s</span>}
-        />
-      </TooltipProvider>
-    );
-
-    await waitFor(() => expect(renderMarkdownMock).toHaveBeenCalled());
-
-    const duration = screen.getByText("Worked for 24s");
-    const footer = duration.closest(".tw-justify-between");
-    expect(footer?.classList.contains("tw-items-center")).toBe(true);
-    expect(footer?.contains(screen.getByTitle("Copy"))).toBe(true);
-    expect(screen.queryByText(timestamp)).toBeNull();
-
-    rerender(
-      <TooltipProvider>
-        <ChatSingleMessage
-          message={{ ...baseMessage, timestamp: { epoch: 1, display: timestamp, fileName: "now" } }}
-          app={createAppStub()}
-          isStreaming={false}
-        />
-      </TooltipProvider>
-    );
-    expect(screen.getByText(timestamp)).toBeTruthy();
-  });
-  it("collapses an oversized user message behind a Show more control (https://github.com/Brevilabs/obsidian-copilot-private/issues/151)", () => {
-    const restoreContentHeight = stubContentDimensions(2000, 240);
-
-    try {
-      render(
-        <TooltipProvider>
-          <ChatSingleMessage
-            message={{ ...baseMessage, sender: "user", message: "A very long pasted prompt" }}
-            app={createAppStub()}
-            isStreaming={false}
-          />
-        </TooltipProvider>
+              "text/html"
+            ).body.children
+          );
+        }
       );
 
-      expect(screen.getByTestId("clamped-content").classList.contains("tw-max-h-[12lh]")).toBe(
-        true
-      );
-      expect(screen.getByRole("button", { name: /show more/i })).toBeTruthy();
-      // The body stays mounted so Copy and text selection still see it all.
-      expect(screen.getByText("A very long pasted prompt")).toBeTruthy();
-    } finally {
-      restoreContentHeight();
-    }
-  });
-
-  it("leaves a short user message without an expand control (https://github.com/Brevilabs/obsidian-copilot-private/issues/151)", () => {
-    const restoreContentHeight = stubContentDimensions(40, 40);
-
-    try {
-      render(
+      const { container } = render(
         <TooltipProvider>
           <ChatSingleMessage
-            message={{ ...baseMessage, sender: "user", message: "Hi" }}
+            message={baseMessage}
             app={createAppStub()}
             isStreaming={false}
-          />
-        </TooltipProvider>
-      );
-
-      expect(screen.getByTestId("clamped-content").getAttribute("style")).toBeNull();
-      expect(screen.queryByRole("button", { name: /show more/i })).toBeNull();
-    } finally {
-      restoreContentHeight();
-    }
-  });
-
-  it("never collapses an assistant message, whose trail owns its own folding (https://github.com/Brevilabs/obsidian-copilot-private/issues/151)", async () => {
-    const restoreContentHeight = stubContentDimensions(2000, 240);
-
-    try {
-      render(
-        <TooltipProvider>
-          <ChatSingleMessage
-            message={{ ...baseMessage, message: "A very long answer" }}
-            app={createAppStub()}
-            isStreaming={false}
+            onDelete={() => {}}
           />
         </TooltipProvider>
       );
 
       await waitFor(() => expect(renderMarkdownMock).toHaveBeenCalled());
 
-      expect(screen.queryByTestId("clamped-content")).toBeNull();
-      expect(screen.queryByRole("button", { name: /show more/i })).toBeNull();
-    } finally {
-      restoreContentHeight();
-    }
+      const messageSegment = container.querySelector(".message-segment");
+      expect(messageSegment).toBeTruthy();
+      expect(messageSegment?.querySelector(".footnotes hr")).toBeNull();
+      expect(messageSegment?.querySelector(".footnote-backref")).toBeNull();
+      expect(messageSegment?.querySelector(".content-hr")).not.toBeNull();
+      expect(messageSegment?.querySelector('a[href="#fn-2"]')?.textContent).toBe("2");
+    });
+
+    it("marks rendered text segments with markdown-rendered for native reading-view styling", async () => {
+      const { container } = render(
+        <TooltipProvider>
+          <ChatSingleMessage
+            message={baseMessage}
+            app={createAppStub()}
+            isStreaming={false}
+            onDelete={() => {}}
+          />
+        </TooltipProvider>
+      );
+
+      await waitFor(() => expect(renderMarkdownMock).toHaveBeenCalled());
+
+      const messageSegment = container.querySelector(".message-segment");
+      expect(messageSegment).toBeTruthy();
+      expect(messageSegment?.classList.contains("markdown-rendered")).toBe(true);
+    });
+
+    it("shows supplied Agent Mode metadata instead of the timestamp in the response footer", async () => {
+      const timestamp = "2026/08/07 20:31:10";
+      const { rerender } = render(
+        <TooltipProvider>
+          <ChatSingleMessage
+            message={{
+              ...baseMessage,
+              timestamp: { epoch: 1, display: timestamp, fileName: "now" },
+            }}
+            app={createAppStub()}
+            isStreaming={false}
+            footerStart={<span>Worked for 24s</span>}
+          />
+        </TooltipProvider>
+      );
+
+      await waitFor(() => expect(renderMarkdownMock).toHaveBeenCalled());
+
+      const duration = screen.getByText("Worked for 24s");
+      const footer = duration.closest(".tw-justify-between");
+      expect(footer?.classList.contains("tw-items-center")).toBe(true);
+      expect(footer?.contains(screen.getByTitle("Copy"))).toBe(true);
+      expect(screen.queryByText(timestamp)).toBeNull();
+
+      rerender(
+        <TooltipProvider>
+          <ChatSingleMessage
+            message={{
+              ...baseMessage,
+              timestamp: { epoch: 1, display: timestamp, fileName: "now" },
+            }}
+            app={createAppStub()}
+            isStreaming={false}
+          />
+        </TooltipProvider>
+      );
+      expect(screen.getByText(timestamp)).toBeTruthy();
+    });
+    it("collapses an oversized user message behind a Show more control (https://github.com/Brevilabs/obsidian-copilot-private/issues/151)", () => {
+      const restoreContentHeight = stubContentDimensions(2000, 240);
+
+      try {
+        render(
+          <TooltipProvider>
+            <ChatSingleMessage
+              message={{ ...baseMessage, sender: "user", message: "A very long pasted prompt" }}
+              app={createAppStub()}
+              isStreaming={false}
+            />
+          </TooltipProvider>
+        );
+
+        expect(screen.getByTestId("clamped-content").classList.contains("tw-max-h-[12lh]")).toBe(
+          true
+        );
+        expect(screen.getByRole("button", { name: /show more/i })).toBeTruthy();
+        // The body stays mounted so Copy and text selection still see it all.
+        expect(screen.getByText("A very long pasted prompt")).toBeTruthy();
+      } finally {
+        restoreContentHeight();
+      }
+    });
+
+    it("leaves a short user message without an expand control (https://github.com/Brevilabs/obsidian-copilot-private/issues/151)", () => {
+      const restoreContentHeight = stubContentDimensions(40, 40);
+
+      try {
+        render(
+          <TooltipProvider>
+            <ChatSingleMessage
+              message={{ ...baseMessage, sender: "user", message: "Hi" }}
+              app={createAppStub()}
+              isStreaming={false}
+            />
+          </TooltipProvider>
+        );
+
+        expect(screen.getByTestId("clamped-content").getAttribute("style")).toBeNull();
+        expect(screen.queryByRole("button", { name: /show more/i })).toBeNull();
+      } finally {
+        restoreContentHeight();
+      }
+    });
+
+    it("never collapses an assistant message, whose trail owns its own folding (https://github.com/Brevilabs/obsidian-copilot-private/issues/151)", async () => {
+      const restoreContentHeight = stubContentDimensions(2000, 240);
+
+      try {
+        render(
+          <TooltipProvider>
+            <ChatSingleMessage
+              message={{ ...baseMessage, message: "A very long answer" }}
+              app={createAppStub()}
+              isStreaming={false}
+            />
+          </TooltipProvider>
+        );
+
+        await waitFor(() => expect(renderMarkdownMock).toHaveBeenCalled());
+
+        expect(screen.queryByTestId("clamped-content")).toBeNull();
+        expect(screen.queryByRole("button", { name: /show more/i })).toBeNull();
+      } finally {
+        restoreContentHeight();
+      }
+    });
   });
 });

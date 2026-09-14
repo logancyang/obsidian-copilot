@@ -1,12 +1,14 @@
 // This suite keeps the real envelope engine and selected-text formatter; the L2 and
 // parsing suites mock those collaborators to isolate their separate contracts.
 import { PromptContextEnvelope } from "@/context/PromptContextTypes";
-import { App } from "obsidian";
+import { App, TFile, Vault } from "obsidian";
 import { ChainType } from "@/chainType";
 import { ContextManager } from "@/core/ContextManager";
 import { MessageRepository } from "@/core/MessageRepository";
 import { FileParserManager } from "@/tools/FileParserManager";
 import { ChatMessage, SelectedTextContext } from "@/types/message";
+
+const TFileConstructor = TFile as unknown as new (path: string) => TFile;
 
 const mockComposerSelection: SelectedTextContext[] = [
   {
@@ -29,7 +31,18 @@ jest.mock("@/contextProcessor", () => {
   return {
     ContextProcessor: {
       getInstance: () => ({
-        processContextNotes: async () => "",
+        processContextNotes: async (
+          _paths: Set<string>,
+          _parser: FileParserManager,
+          _vault: Vault,
+          notes: TFile[]
+        ) =>
+          notes
+            .map(
+              (note) =>
+                `<note_context><title>Stored note</title><path>${note.path}</path><content>Stored note contents</content></note_context>`
+            )
+            .join("\n"),
         processContextWebTabs: async () => "",
         processSelectedTextContexts: actual.ContextProcessor.prototype.processSelectedTextContexts,
       }),
@@ -40,7 +53,7 @@ jest.mock("@/contextProcessor", () => {
 describe("ContextManager", () => {
   describe("ContextManager", () => {
     describe("reprocessMessageContext()", () => {
-      it("preserves the message selection instead of substituting unsent composer text on retry (https://github.com/logancyang/obsidian-copilot/issues/3210)", async () => {
+      it("preserves stored notes and selection after the workspace note changes https://github.com/Brevilabs/obsidian-copilot-private/issues/465", async () => {
         const message: ChatMessage = {
           id: "user-1",
           sender: "user",
@@ -48,7 +61,7 @@ describe("ContextManager", () => {
           timestamp: null,
           isVisible: true,
           context: {
-            notes: [],
+            notes: [new TFileConstructor("Original note.md")],
             urls: [],
             selectedTextContexts: [
               {
@@ -76,11 +89,13 @@ describe("ContextManager", () => {
           app.vault,
           ChainType.LLM_CHAIN,
           false,
-          null,
+          new TFileConstructor("Unrelated active note.md"),
           "Updated vault instructions"
         );
         const envelope = updateProcessedText.mock.calls[0][2] as PromptContextEnvelope;
         expect(envelope.serializedText).toContain("Original selection A");
+        expect(envelope.serializedText).toContain("Original note.md");
+        expect(envelope.serializedText).not.toContain("Unrelated active note.md");
         expect(envelope.serializedText).not.toContain("Unsent selection B");
         expect(envelope.layers.find((layer) => layer.id === "L1_SYSTEM")?.text).toBe(
           "Updated vault instructions"

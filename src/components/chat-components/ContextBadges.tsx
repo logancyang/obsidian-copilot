@@ -1,5 +1,13 @@
 import React from "react";
-import { ExternalLink, FileText, Folder, Globe, Hash, CircleDashed } from "lucide-react";
+import {
+  ExternalLink,
+  FileText,
+  Folder,
+  Globe,
+  Hash,
+  CircleDashed,
+  TextSelect,
+} from "lucide-react";
 import { TFile } from "obsidian";
 import { TruncatedText } from "@/components/TruncatedText";
 import { getDomainFromUrl } from "@/utils";
@@ -235,42 +243,33 @@ export function ContextSelectedTextBadge({
   selectedText,
   onRemove,
 }: ContextSelectedTextBadgeProps) {
-  // Handle web selected text
-  if (isWebSelectedTextContext(selectedText)) {
-    const domain = getDomainFromUrl(selectedText.url);
-    const tooltipContent = <div className="tw-text-left">{selectedText.url}</div>;
+  // Excerpts need their own identity when shown beside the full source note.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/465
+  const normalizedContent = selectedText.content.replace(/\s+/g, " ").trim();
 
-    return (
-      <ContextBadgeWrapper
-        icon={<FaviconOrGlobe faviconUrl={selectedText.faviconUrl} />}
-        onRemove={onRemove}
-      >
-        <TruncatedText className="tw-max-w-40" tooltipContent={tooltipContent} alwaysShowTooltip>
-          {selectedText.title || domain}
-        </TruncatedText>
-        <span className="tw-text-xs tw-text-faint">Selection</span>
-      </ContextBadgeWrapper>
-    );
-  }
-
-  // Handle note selected text (default)
-  const lineRange =
-    selectedText.startLine === selectedText.endLine
+  const isWebSelection = isWebSelectedTextContext(selectedText);
+  const location = isWebSelection
+    ? "Selection"
+    : selectedText.startLine === selectedText.endLine
       ? `L${selectedText.startLine}`
       : `L${selectedText.startLine}-${selectedText.endLine}`;
-
+  const source = isWebSelection ? selectedText.url : `${selectedText.notePath} (${location})`;
   const tooltipContent = (
-    <div className="tw-text-left">
-      {selectedText.notePath} ({lineRange})
+    <div className="tw-max-h-60 tw-overflow-y-auto tw-text-left">
+      <div className="tw-whitespace-pre-wrap">{selectedText.content}</div>
+      <div className="tw-text-faint">{source}</div>
     </div>
   );
 
   return (
-    <ContextBadgeWrapper icon={<FileText className="tw-size-3" />} onRemove={onRemove}>
+    <ContextBadgeWrapper
+      icon={<TextSelect aria-hidden="true" className="tw-size-3" />}
+      onRemove={onRemove}
+    >
       <TruncatedText className="tw-max-w-40" tooltipContent={tooltipContent} alwaysShowTooltip>
-        {selectedText.noteTitle}
+        {normalizedContent}
       </TruncatedText>
-      <span className="tw-text-xs tw-text-faint">{lineRange}</span>
+      <span className="tw-text-xs tw-text-faint">{location}</span>
     </ContextBadgeWrapper>
   );
 }

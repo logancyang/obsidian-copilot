@@ -105,10 +105,12 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
   // Defensive dedupe for web tabs (by URL) using shared normalization policy
   const uniqueWebTabs = React.useMemo(() => mergeWebTabContexts(contextWebTabs), [contextWebTabs]);
 
-  // Any selection hides both active note and active web tab
+  // Active web tabs retain selection precedence.
   const hasAnySelection = selectedTextContexts.length > 0;
 
-  const activeNoteVisible = includeActiveNote && !hasAnySelection && Boolean(currentActiveFile);
+  // Removing an excerpt must not change whether the full note is attached.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/465
+  const activeNoteVisible = includeActiveNote && Boolean(currentActiveFile);
   const activeWebTabVisible =
     includeActiveWebTab && !hasAnySelection && Boolean(activeWebTab) && isDesktopRuntime();
 
