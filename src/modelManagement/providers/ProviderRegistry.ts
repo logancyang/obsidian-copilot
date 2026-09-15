@@ -278,15 +278,12 @@ export class ProviderRegistry {
     const keychain = KeychainService.getInstance(this.#app);
     const keychainId =
       row.apiKeyKeychainId ?? providerKeychainId(keychain.getVaultId(), providerId);
-    // Re-registering a provider with the key it already has is not a change,
-    // and announcing it as one restarts every backend that bakes provider
-    // config into its spawn (opencode) — tearing down the user's live session
-    // to rebuild an identical config. Callers re-register on a schedule they
-    // don't control: Plus reconciliation replays the license key on every
-    // sign-in and every plugin load. Compare against the stored secret rather
-    // than the pointer, because a same-id rotation is exactly the case the
-    // pointer cannot see. A dangling pointer reads back null, never equals a
-    // real key, and so still writes — which is how it repairs itself.
+    // Re-registering with the key already stored is not a change, and emitting
+    // one restarts every backend that bakes provider config into its spawn
+    // (Plus reconciliation replays the license key on every sign-in and load).
+    // Compare the stored secret, not the pointer: a same-id rotation is what
+    // the pointer cannot see, and a dangling pointer reads back null, so it
+    // still writes and repairs itself.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/472
     if (row.apiKeyKeychainId === keychainId && keychain.getSecretById(keychainId) === apiKey) {
       return;

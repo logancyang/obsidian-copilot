@@ -82,12 +82,10 @@ export const AgentModeChat: React.FC<Props> = ({
     descriptor.openInstallUI(plugin);
   }, [descriptor, plugin]);
 
-  // Compose drafts are owned here rather than in `AgentHome` because AgentHome
-  // is conditional: a backend restart closes the old session before its
-  // replacement exists, and for a user with one agent that leaves no active
-  // session at all, unmounting AgentHome and destroying its draft state. This
-  // component stays mounted across that window, so the user's unsent message
-  // survives it. `activeChatInputId` is null for exactly that gap.
+  // Compose drafts live here rather than in `AgentHome`: a backend restart
+  // closes the old session before its replacement exists, and AgentHome
+  // unmounts while there is no active session. This component stays mounted
+  // across that gap, during which `activeChatInputId` is null.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/473
   const activeChatInputId = manager?.getActiveSession()?.chatInputId ?? null;
   const liveChatInputIds = manager?.getLiveChatInputIds() ?? EMPTY_CHAT_INPUT_IDS;

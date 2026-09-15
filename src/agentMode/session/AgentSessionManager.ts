@@ -358,13 +358,10 @@ export class AgentSessionManager {
   private readonly restartingBackends = new Set<BackendId>();
   /**
    * Chat inputs whose session is mid-replacement during a backend restart.
-   *
-   * A restart has to close the old session before the new process exists, so
-   * for that window the chat input belongs to no session at all. Composer
-   * drafts are stored per chat input and pruned against the live set, so
-   * without this the user's unsent message is collected in the gap and the
-   * replacement — which deliberately reuses the same id — comes back empty.
-   * https://github.com/Brevilabs/obsidian-copilot-private/issues/473
+   * Composer drafts are keyed by chat input and pruned against the live set,
+   * and the restart closes the old session before its replacement (which
+   * reuses the id) exists, so without this the unsent message is collected in
+   * that gap. https://github.com/Brevilabs/obsidian-copilot-private/issues/473
    */
   private readonly retainedChatInputIds = new Set<string>();
   private readonly preloader: AgentModelPreloader;
@@ -2710,19 +2707,14 @@ export class AgentSessionManager {
   }
 
   /**
-   * Every chat input that per-chat-input UI state (the composer draft) should
-   * be kept for. This is the session list plus the inputs whose session is
-   * mid-replacement during a backend restart, which belong to no session for
-   * that window but are about to get one.
-   *
-   * Callers prune against this rather than against `getSessions()`, so the
-   * restart gap does not read as "this chat input is gone".
+   * Chat inputs that per-chat-input UI state (the composer draft) must be kept
+   * for: every session's, plus those mid-replacement during a backend restart.
+   * Prune against this rather than against `getSessions()`.
    * https://github.com/Brevilabs/obsidian-copilot-private/issues/473
    */
   getLiveChatInputIds(): readonly string[] {
-    const ids = new Set<string>();
+    const ids = new Set(this.retainedChatInputIds);
     for (const session of this.sessions.values()) ids.add(session.chatInputId);
-    for (const id of this.retainedChatInputIds) ids.add(id);
     return ids.size === 0 ? EMPTY_CHAT_INPUT_IDS : Array.from(ids);
   }
 
@@ -3723,33 +3715,18 @@ export class AgentSessionManager {
         if (shouldCreateReplacement && !this.disposed) {
           await probe;
           // The replacement inherits the REPLACED session's scope (captured
-          // above as `replacementProjectId`), not the current active scope.
-          // It also inherits its `chatInputId`. Composer drafts are stored per
-          // chat input, so a freshly minted id reads as a different composer
-          // and the user's unsent message is gone. Restarts are involuntary —
-          // saving an API key or installing a skill triggers one — and the
-          // busy-session deferral does not cover this, since someone typing
-          // with no turn in flight is not busy.
+          // above as `replacementProjectId`) and its `chatInputId`, so the
+          // composer draft keyed by that id survives the restart.
           // https://github.com/Brevilabs/obsidian-copilot-private/issues/473
           await this.createSession(backendId, replacementProjectId, undefined, retainedChatInputId);
         }
       }
-      this.notify();
     } finally {
       this.restartingBackends.delete(backendId);
-      // Released after the replacement exists (or after the restart gave up on
-      // creating one), so the draft is never stranded against an id no session
-      // will ever claim. Notify when nothing claimed it: the `try` block's own
-      // notify is skipped when the preload or the create threw, and without one
-      // here the released id stays in the last published live set and its draft
-      // is never collected.
-      if (retainedChatInputId) {
-        this.retainedChatInputIds.delete(retainedChatInputId);
-        const claimed = Array.from(this.sessions.values()).some(
-          (session) => session.chatInputId === retainedChatInputId
-        );
-        if (!claimed) this.notify();
-      }
+      if (retainedChatInputId) this.retainedChatInputIds.delete(retainedChatInputId);
+      // Published after the release so a restart that threw still lets the
+      // draft store collect an id no session claimed.
+      this.notify();
     }
     // Drain any restart requests that landed while we were running. Clear the
     // entry BEFORE re-invoking so the recursion can't loop forever — a fresh
