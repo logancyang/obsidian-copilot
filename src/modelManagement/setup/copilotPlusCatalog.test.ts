@@ -118,6 +118,14 @@ describe("copilotPlusCatalog", () => {
       ["a null entry", { data: [null] }],
       ["a non-string id, which must not throw past the caller's fallback", { data: [{ id: 123 }] }],
       ["a present but unreadable context window", { data: [{ id: "ok", context_length: "huge" }] }],
+      [
+        "a non-string label, which must not throw past the caller's fallback",
+        { data: [{ id: "ok", label: 42 }] },
+      ],
+      [
+        "a non-string description, which must not throw past the caller's fallback",
+        { data: [{ id: "ok", description: { text: "nope" } }] },
+      ],
     ])(
       "rejects %s outright, because a half-read lineup reconciles as a mass withdrawal (https://github.com/Brevilabs/obsidian-copilot-private/issues/319)",
       (_case, payload) => {
