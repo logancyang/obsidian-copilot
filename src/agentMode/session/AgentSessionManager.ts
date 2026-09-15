@@ -364,6 +364,13 @@ export class AgentSessionManager {
    * that gap. https://github.com/Brevilabs/obsidian-copilot-private/issues/473
    */
   private readonly retainedChatInputIds = new Set<string>();
+  /**
+   * Backends already warned about a saved default that is no longer offered.
+   * The read that discovers it runs on every session create and every default
+   * re-apply, so without this the user gets the same notice repeatedly.
+   * https://github.com/Brevilabs/obsidian-copilot-private/issues/474
+   */
+  private readonly warnedMissingDefaults = new Set<BackendId>();
   private readonly preloader: AgentModelPreloader;
   /**
    * Per-backend preload status. The chat UI gates its first render on the
@@ -2119,12 +2126,52 @@ export class AgentSessionManager {
     this.notify();
   }
 
-  /** Read the user's sticky model preference for `backendId`, or `null` if none. */
+  /**
+   * Read the user's sticky model preference for `backendId`, or `null` if none
+   * or if the model it names is no longer offered.
+   *
+   * A saved default outlives the model it points at: Copilot Plus withdraws a
+   * model from its published lineup, or a provider is deleted, and the removal
+   * cascade clears the enabled-model lists without touching this preference.
+   * Handing that stale selection to a session does not fail loudly — the
+   * backend rejects it and the session quietly keeps whatever model the agent
+   * picked for itself, so prompts go somewhere the user never chose.
+   *
+   * The preference is filtered rather than deleted, so a model that is only
+   * temporarily absent — an offline launch, a provider briefly removed — comes
+   * back as the default once it is offered again.
+   * https://github.com/Brevilabs/obsidian-copilot-private/issues/474
+   */
   getDefaultSelection(backendId: BackendId): ModelSelection | null {
     const backends = getSettings().agentMode?.backends as
       | Record<string, { defaultModel?: ModelSelection | null } | undefined>
       | undefined;
-    return backends?.[backendId]?.defaultModel ?? null;
+    const saved = backends?.[backendId]?.defaultModel ?? null;
+    if (!saved) return null;
+
+    const offered = this.opts.resolveDescriptor(backendId)?.getEnabledModelEntries?.(getSettings());
+    // An empty or absent list cannot tell "the saved model was removed" apart
+    // from "this backend publishes no curated list at all", and clearing a
+    // working preference on the second reading would be worse than keeping a
+    // stale one.
+    if (!offered || offered.length === 0) return saved;
+    if (offered.some((entry) => entry.baseModelId === saved.baseModelId)) return saved;
+
+    this.warnDefaultNoLongerOffered(backendId, saved.baseModelId);
+    return null;
+  }
+
+  /**
+   * Tell the user once per backend that their saved model is gone, since the
+   * session silently starting on a different one is the whole failure here.
+   */
+  private warnDefaultNoLongerOffered(backendId: BackendId, baseModelId: string): void {
+    if (this.warnedMissingDefaults.has(backendId)) return;
+    this.warnedMissingDefaults.add(backendId);
+    const agent = this.resolveDescriptor(backendId).displayName;
+    const model = baseModelId.split("/").pop() || baseModelId;
+    logInfo(`[AgentMode] ${backendId} default model ${baseModelId} is no longer offered`);
+    new Notice(`${agent} no longer offers ${model}. Pick a model to make it your default again.`);
   }
 
   private repairDefaultEffort(backendId: BackendId, state: BackendState | null): void {
