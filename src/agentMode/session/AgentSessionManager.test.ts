@@ -179,8 +179,11 @@ function makeMockSession(overrides: {
   backendId: string;
   projectId?: string;
   ready?: Promise<void>;
+  label?: string;
 }): AgentSession {
   const sessionId = overrides.backendSessionId ?? `backend-${nextBackendSessionId++}`;
+  let label: string | null = overrides.label ?? null;
+  let labelSource: "user" | "agent" | null = overrides.label ? "agent" : null;
   let status: "starting" | "idle" | "running" | "awaiting_permission" | "error" | "closed" = "idle";
   let needsAttention = false;
   let displayMessages: { message: string }[] = [];
@@ -204,7 +207,12 @@ function makeMockSession(overrides: {
     setModel: jest.fn(),
     setMode: jest.fn(),
     setConfigOption: jest.fn(),
-    getLabel: () => null,
+    getLabel: () => label,
+    getLabelSource: () => labelSource,
+    restoreLabel: (next: string, source: "user" | "agent") => {
+      label = next;
+      labelSource = source;
+    },
     setLabel: jest.fn(),
     getSessionUsage: () => null,
     subscribe: (l: Parameters<typeof listeners.add>[0]) => {
@@ -1736,6 +1744,99 @@ describe("AgentSessionManager.applyHeldConfigChange", () => {
     expect(mockBackendShutdown).toHaveBeenCalledTimes(1);
     expect(mgr.isBackendRestartPending("opencode")).toBe(false);
     expect(mgr.hasHeldConfigChange("opencode")).toBe(false);
+  });
+});
+
+describe("AgentSessionManager restart session resume", () => {
+  /** Manager whose backend can replay a session, as every real backend can. */
+  function buildManagerWithReplay(backendOverrides: Record<string, unknown>): AgentSessionManager {
+    const backend = { ...makeMockBackendProcess(), ...backendOverrides };
+    const descriptor = {
+      ...buildDescriptor(),
+      getInstallState: jest.fn(() => ({ kind: "ready" })),
+      createBackendProcess: jest.fn(() => backend),
+    } as unknown as BackendDescriptor;
+    return new AgentSessionManager(
+      buildApp(),
+      buildPlugin() as unknown as ConstructorParameters<typeof AgentSessionManager>[1],
+      {
+        permissionPrompter: jest.fn(),
+        resolveDescriptor: (id) => (id === descriptor.id ? descriptor : undefined),
+        modelPreloader: {
+          getCachedModelCatalog: jest.fn(() => null),
+          getEffortCatalog: jest.fn(() => null),
+          preload: jest.fn(async () => undefined),
+          refresh: jest.fn(() => null),
+          subscribe: jest.fn(() => () => {}),
+          shutdown: jest.fn(),
+          clearCached: jest.fn(),
+          takeWarm: jest.fn(() => null),
+          getWarmProcs: jest.fn(() => []),
+        } as unknown as ConstructorParameters<typeof AgentSessionManager>[2]["modelPreloader"],
+      }
+    );
+  }
+
+  it("brings the replaced tab back on its own conversation (https://github.com/Brevilabs/obsidian-copilot-private/issues/475)", async () => {
+    const loadSession = jest.fn(async ({ sessionId }: { sessionId: string }) => ({
+      sessionId,
+      state: { model: null, mode: null },
+    }));
+    const mgr = buildManagerWithReplay({ loadSession });
+    const first = await mgr.createSession();
+    const backendSessionId = first.getBackendSessionId();
+    const chatInputId = first.chatInputId;
+
+    await mgr.restartBackend("opencode", "managed skills changed");
+
+    // The process died, not the conversation: the backend keeps it in its own
+    // store, so the replacement resumes it rather than opening a blank chat
+    // where the user's work was.
+    expect(loadSession).toHaveBeenCalledWith(
+      expect.objectContaining({ sessionId: backendSessionId })
+    );
+    const replacement = mgr.getActiveSession();
+    expect(replacement).not.toBe(first);
+    expect(replacement?.getBackendSessionId()).toBe(backendSessionId);
+    expect(replacement?.chatInputId).toBe(chatInputId);
+    expect(mgr.getSessions()).toHaveLength(1);
+  });
+
+  it("keeps the replaced tab's title across the restart (https://github.com/Brevilabs/obsidian-copilot-private/issues/475)", async () => {
+    const mgr = buildManagerWithReplay({
+      loadSession: jest.fn(async ({ sessionId }: { sessionId: string }) => ({
+        sessionId,
+        state: { model: null, mode: null },
+      })),
+    });
+    const first = await mgr.createSession();
+    first.restoreLabel("Refactor the importer", "user");
+
+    await mgr.restartBackend("opencode", "managed skills changed");
+
+    expect(mgr.getActiveSession()?.getLabel()).toBe("Refactor the importer");
+  });
+
+  it("opens a fresh chat when the backend cannot replay the conversation", async () => {
+    const mgr = buildManagerWithReplay({
+      loadSession: jest.fn(async () => {
+        throw new MethodUnsupportedError("session/load");
+      }),
+      resumeSession: jest.fn(async () => {
+        throw new MethodUnsupportedError("session/resume");
+      }),
+    });
+    const first = await mgr.createSession();
+    const chatInputId = first.chatInputId;
+
+    await mgr.restartBackend("opencode", "managed skills changed");
+
+    const replacement = mgr.getActiveSession();
+    expect(replacement).not.toBe(first);
+    expect(replacement?.getBackendSessionId()).not.toBe(first.getBackendSessionId());
+    // The draft still has to survive the fallback.
+    expect(replacement?.chatInputId).toBe(chatInputId);
+    expect(mgr.getSessions()).toHaveLength(1);
   });
 });
 

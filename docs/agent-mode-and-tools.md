@@ -170,7 +170,7 @@ On Windows, creating the folder links may require **Developer Mode** or administ
 
 Agents read their configuration when they start: API keys, enabled models, instructions, and skills. A change you make while a chat is open does not reach the agent already running. Agent Chat says so with a **config has changed** notice and a **Reload** action, and the chat keeps working in the meantime.
 
-Choose **Reload** when you want the change to take effect. The agent restarts, the current conversation closes, and a fresh one opens in the same tab; anything you had typed but not sent is kept. The conversation itself stays available under Recent Chats. During a running turn the reload waits for that turn to finish.
+Choose **Reload** when you want the change to take effect. The agent restarts and picks your conversation back up where it was, with its history and anything you had typed but not sent. During a running turn the reload waits for that turn to finish. If the agent cannot reopen the conversation, the tab starts a fresh chat and the old one remains under Recent Chats.
 
 Two changes never wait. Narrowing Miyo's **Search scope** and turning on Self-Host Mode both restart the agent straight away, so no later step in the conversation can search or browse outside the new boundary.
 
