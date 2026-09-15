@@ -29,7 +29,6 @@ import {
   buildAgentSystemPrompt,
   COPILOT_PROMPT_BASE,
 } from "@/agentMode/backends/shared/agentSystemPrompt";
-import { CopilotPlusUsageReader } from "@/agentMode/backends/shared/copilotPlusUsage";
 import {
   MIYO_SEARCH_FOLDER_ENV,
   MIYO_SEARCH_SCOPE_ENV,
@@ -161,7 +160,6 @@ function makeDeps(args: {
   resolved: EnabledBackendEntry[];
   keys?: Record<string, string | null>;
   /** Published effort levels keyed by wire id; a missing key answers null. */
-  efforts?: Record<string, readonly string[] | null>;
 }): OpencodeModelDeps {
   const keys = args.keys ?? {};
   return {
@@ -175,9 +173,6 @@ function makeDeps(args: {
       url: "http://127.0.0.1:1234/search",
       token: "session-token",
     }),
-    ...(args.efforts
-      ? { getReasoningEfforts: async (id: string) => args.efforts?.[id] ?? null }
-      : {}),
   };
 }
 
@@ -194,10 +189,17 @@ function makePlusProvider(): Provider {
   );
 }
 
-/** A Copilot Plus reasoning model, as `COPILOT_PLUS_MODELS` snapshots it. */
-function makePlusReasoningModel(wireId: string): ConfiguredModel {
+/**
+ * A Copilot Plus reasoning model, as the catalog reconcile persists it.
+ *
+ * @param efforts - Levels the service published for it. Omit for a row whose
+ *   levels are unknown, which is what a service too old to publish them leaves
+ *   behind.
+ */
+function makePlusReasoningModel(wireId: string, efforts?: readonly string[]): ConfiguredModel {
   const model = makeModel("p-plus", wireId);
   model.info.reasoning = true;
+  if (efforts) model.info.reasoningEfforts = efforts;
   return model;
 }
 
@@ -689,11 +691,10 @@ describe("buildOpencodeConfig — provider/model injection", () => {
     // low/medium/high plus its own per-model special cases — which offers levels that
     // are synonyms of one another and misses levels the model has. The disables are
     // what removes an inferred level, since config variants merge over the guess.
-    const model = makePlusReasoningModel("copilot-plus-flash");
+    const model = makePlusReasoningModel("copilot-plus-flash", ["high", "max"]);
     const deps = makeDeps({
       resolved: [okEntry(makePlusProvider(), model)],
       keys: { "p-plus": "plus-token-123" },
-      efforts: { "copilot-plus-flash": ["high", "max"] },
     });
 
     const cfg = (await buildOpencodeConfig(getSettings(), deps)) as {
@@ -719,9 +720,8 @@ describe("buildOpencodeConfig — provider/model injection", () => {
     // flag is what makes the control disappear. A menu whose every entry does nothing
     // is worse than no menu.
     const deps = makeDeps({
-      resolved: [okEntry(makePlusProvider(), makePlusReasoningModel("honors-no-level"))],
+      resolved: [okEntry(makePlusProvider(), makePlusReasoningModel("honors-no-level", []))],
       keys: { "p-plus": "plus-token-123" },
-      efforts: { "honors-no-level": [] },
     });
 
     const cfg = (await buildOpencodeConfig(getSettings(), deps)) as {
@@ -731,13 +731,13 @@ describe("buildOpencodeConfig — provider/model injection", () => {
     expect(cfg.provider["copilot-plus"].models?.["honors-no-level"]).toEqual({});
   });
 
-  it("keeps the inferred menu when the published levels cannot be read (https://github.com/logancyang/obsidian-copilot/issues/2917)", async () => {
-    // A service too old to publish them, or one transient outage. Either way an
-    // imperfect menu beats dropping a control that works.
+  it("keeps the inferred menu when the published levels are unknown (https://github.com/logancyang/obsidian-copilot/issues/2917)", async () => {
+    // A row cached before the service published levels, or one reconciled from a
+    // response that could not be read. Either way an imperfect menu beats
+    // dropping a control that works.
     const deps = makeDeps({
       resolved: [okEntry(makePlusProvider(), makePlusReasoningModel("copilot-plus-flash"))],
       keys: { "p-plus": "plus-token-123" },
-      efforts: { "copilot-plus-flash": null },
     });
 
     const cfg = (await buildOpencodeConfig(getSettings(), deps)) as {
@@ -749,22 +749,23 @@ describe("buildOpencodeConfig — provider/model injection", () => {
     });
   });
 
-  it("never declares effort levels for a BYOK model, which has none published", async () => {
+  it("never declares effort levels for a BYOK model, even when its row carries some", async () => {
+    // Only Copilot Plus publishes levels. A BYOK row that happens to carry them
+    // must still keep opencode's own inference, since nothing vouches for them.
     const provider = makeProvider("p-anthropic", { kind: "byok", catalogProviderId: "anthropic" });
     const model = makeModel("p-anthropic", "copilot-plus-flash");
     model.info.reasoning = true;
-    const getReasoningEfforts = jest.fn(async () => ["none", "low"]);
-    const deps = {
-      ...makeDeps({ resolved: [okEntry(provider, model)], keys: { "p-anthropic": "anth-123" } }),
-      getReasoningEfforts,
-    };
+    model.info.reasoningEfforts = ["none", "low"];
+    const deps = makeDeps({
+      resolved: [okEntry(provider, model)],
+      keys: { "p-anthropic": "anth-123" },
+    });
 
     const cfg = (await buildOpencodeConfig(getSettings(), deps)) as {
       provider: Record<string, { models?: Record<string, Record<string, unknown>> }>;
     };
 
     expect(cfg.provider.anthropic.models?.["copilot-plus-flash"]).toEqual({ reasoning: true });
-    expect(getReasoningEfforts).not.toHaveBeenCalled();
   });
 
   it("skips Copilot Plus when its provisioned relay token is unavailable (https://github.com/logancyang/obsidian-copilot/issues/2895)", async () => {
@@ -1337,9 +1338,8 @@ describe("OpencodeBackend.buildSpawnDescriptor", () => {
   });
 
   it("skips building the generated config when an override replaces it (https://github.com/logancyang/obsidian-copilot/issues/2917)", async () => {
-    // The override wins wholesale, so building a config would only spend a Copilot Plus
-    // catalog read on JSON that is thrown away — and an unreachable models host makes
-    // that read wait out its deadline before every spawn.
+    // The override wins wholesale, so building a config would only be work
+    // thrown away.
     updateSetting("agentMode", {
       byok: {},
       activeBackend: "opencode",
@@ -1355,10 +1355,6 @@ describe("OpencodeBackend.buildSpawnDescriptor", () => {
         },
       },
     });
-    const readReasoningEfforts = jest.spyOn(
-      CopilotPlusUsageReader.prototype,
-      "readReasoningEfforts"
-    );
     const resolveEnabled = jest.fn(() => [
       okEntry(makePlusProvider(), makePlusReasoningModel("copilot-plus-flash")),
     ]);
@@ -1371,8 +1367,6 @@ describe("OpencodeBackend.buildSpawnDescriptor", () => {
 
     expect(desc.env.OPENCODE_CONFIG_CONTENT).toBe('{"model":"custom"}');
     expect(resolveEnabled).not.toHaveBeenCalled();
-    expect(readReasoningEfforts).not.toHaveBeenCalled();
-    readReasoningEfforts.mockRestore();
   });
 
   it("does not warn about the override when no cacheRoot is resolved", async () => {

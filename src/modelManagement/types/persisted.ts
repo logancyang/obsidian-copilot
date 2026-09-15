@@ -155,3 +155,19 @@ export interface BackendConfig {
   /** Each entry is a `ConfiguredModel.configuredModelId`. */
   enabledModels: string[];
 }
+
+/**
+ * The Copilot Plus lineup as the models endpoint last published it, persisted
+ * so nothing has to wait on that endpoint to know which models exist.
+ *
+ * This is a cache of a service-owned fact, not user state: it is rewritten
+ * wholesale whenever the published lineup differs, and carries no preference
+ * the user could lose.
+ * https://github.com/Brevilabs/obsidian-copilot-private/issues/319
+ */
+export interface PersistedCopilotPlusCatalog {
+  /** Every model the service serves, in the order it published them. */
+  models: ModelInfo[];
+  /** Wire ids a fresh sign-in switches on; the rest ship available-but-off. */
+  defaultEnabledIds: string[];
+}

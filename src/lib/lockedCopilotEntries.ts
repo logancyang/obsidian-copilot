@@ -1,7 +1,7 @@
 import type { ModelSelectorEntry } from "@/components/ui/ModelSelector";
 import { ChatModelProviders } from "@/constants";
+import type { ModelInfo } from "@/modelManagement";
 import type { CopilotSettings } from "@/settings/model";
-import { COPILOT_PLUS_DEFAULT_ENABLED_MODELS, COPILOT_PLUS_MODELS } from "@/modelManagement";
 
 /** See AGENTS.md → "Referential stability". */
 const EMPTY_ENTRIES: readonly ModelSelectorEntry[] = Object.freeze([]);
@@ -11,15 +11,25 @@ const LICENSE_REQUIRED = "Copilot license required";
 /**
  * The lineup previewed to a user without a license: exactly the models a
  * license switches on, so the preview and the outcome match — activate, and
- * these three rows lose their locks in place rather than being replaced by a
+ * these rows lose their locks in place rather than being replaced by a
  * different set.
  *
- * Showing all eight would bury the user's own models: the picker is 288px tall,
- * so a full lineup pushes the checkmark on their current model below the fold.
+ * Narrowed to that subset rather than the whole lineup because the picker is
+ * 288px tall: every extra row pushes the checkmark on the user's current model
+ * closer to the fold.
+ *
+ * Read from the cached catalog, so a model the service withdrew stops being
+ * advertised and one it added starts being advertised without a plugin
+ * release. Empty before the first successful fetch, which renders as no
+ * preview rather than a stale one.
+ * https://github.com/Brevilabs/obsidian-copilot-private/issues/319
+ *
+ * @param catalog - Caller-owned cached lineup, from `settings.copilotPlusCatalog`.
  */
-const PREVIEWED_MODELS = COPILOT_PLUS_MODELS.filter((model) =>
-  COPILOT_PLUS_DEFAULT_ENABLED_MODELS.includes(model.id)
-);
+function previewedModels(catalog: CopilotSettings["copilotPlusCatalog"]): readonly ModelInfo[] {
+  const defaultEnabled = new Set(catalog.defaultEnabledIds);
+  return catalog.models.filter((model) => defaultEnabled.has(model.id));
+}
 
 /**
  * Whether a surface should advertise the lineup — true exactly when no Copilot
@@ -50,16 +60,21 @@ export function shouldPreviewCopilotModels(providers: CopilotSettings["providers
  * picker built from settings alone has nothing Copilot to show and the user has
  * no way to learn the models exist.
  *
+ * @param catalog - Caller-owned cached Plus lineup, from
+ *   `settings.copilotPlusCatalog`. Passed in rather than read here so the
+ *   rows re-render when a fresh lineup lands.
  * @param opts.group - Section header to file the rows under, for pickers that
  *   group by agent. Omit for a flat picker.
  * @param opts.backendId - Backend the rows belong to, which keeps their picker
  *   keys distinct when several agents each preview the same model.
  */
 export function lockedCopilotEntries(
+  catalog: CopilotSettings["copilotPlusCatalog"],
   opts: { group?: string; backendId?: string } = {}
 ): readonly ModelSelectorEntry[] {
-  if (PREVIEWED_MODELS.length === 0) return EMPTY_ENTRIES;
-  return PREVIEWED_MODELS.map((model) => ({
+  const previewed = previewedModels(catalog);
+  if (previewed.length === 0) return EMPTY_ENTRIES;
+  return previewed.map((model) => ({
     name: model.id,
     provider: ChatModelProviders.COPILOT_PLUS,
     displayName: model.displayName || model.id,

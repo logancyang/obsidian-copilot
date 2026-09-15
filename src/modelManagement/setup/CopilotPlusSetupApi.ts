@@ -38,8 +38,13 @@ export interface RegisterPlusProviderInput {
   apiKey?: string;
   /** Authoritative list of currently-available Plus models. Existing
    *  ConfiguredModel rows under the Plus provider are diff-reconciled
-   *  against this list (add new, update changed, remove gone). */
-  models: readonly ModelInfo[];
+   *  against this list (add new, update changed, remove gone).
+   *
+   *  Omit it to register the provider and leave its model set exactly as it
+   *  is. That is how an unreadable models endpoint is handled: reconciling
+   *  against a list we could not read would delete every model the user has.
+   *  https://github.com/Brevilabs/obsidian-copilot-private/issues/319 */
+  models?: readonly ModelInfo[];
   /** Defaults to `BYOK_DEFAULT_AUTO_ENROLL` (= chat + opencode). */
   autoEnrollIn?: readonly BackendType[];
   /** Wire ids (`ModelInfo.id`) eligible for default auto-enrollment. When
@@ -123,12 +128,14 @@ export class CopilotPlusSetupApi {
       await this.#providers.setApiKey(providerId, input.apiKey);
     }
 
-    const configuredModelIds = await this.#reconcileModels(
-      providerId,
-      input.models,
-      input.autoEnrollIn ?? BYOK_DEFAULT_AUTO_ENROLL,
-      input.autoEnrollModelIds
-    );
+    const configuredModelIds = input.models
+      ? await this.#reconcileModels(
+          providerId,
+          input.models,
+          input.autoEnrollIn ?? BYOK_DEFAULT_AUTO_ENROLL,
+          input.autoEnrollModelIds
+        )
+      : this.#models.listByProvider(providerId).map((m) => m.configuredModelId);
 
     return { providerId, configuredModelIds };
   }
@@ -207,6 +214,8 @@ export class CopilotPlusSetupApi {
         current.info.description !== info.description ||
         current.info.toolCall !== info.toolCall ||
         current.info.reasoning !== info.reasoning ||
+        JSON.stringify(current.info.reasoningEfforts) !== JSON.stringify(info.reasoningEfforts) ||
+        JSON.stringify(current.info.limits) !== JSON.stringify(info.limits) ||
         JSON.stringify(current.info.modalities) !== JSON.stringify(info.modalities)
       ) {
         await this.#models.update(current.configuredModelId, {
@@ -215,6 +224,8 @@ export class CopilotPlusSetupApi {
             description: info.description,
             toolCall: info.toolCall,
             reasoning: info.reasoning,
+            reasoningEfforts: info.reasoningEfforts,
+            limits: info.limits,
             modalities: info.modalities,
           },
         });
