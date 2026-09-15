@@ -701,6 +701,64 @@ describe("AgentSessionManager", () => {
       });
     });
 
+    describe("loadSessionFromHistory()", () => {
+      setupSavedNoteTests();
+      it.each([
+        { native: true, edited: false },
+        { native: false, edited: false },
+        { native: true, edited: true },
+      ])(
+        "restores matching child trails but preserves saved text and user edits ($native/$edited) (https://github.com/Brevilabs/obsidian-copilot-private/issues/467)",
+        async ({ native, edited }) => {
+          const saved = [
+            {
+              id: "saved",
+              sender: "ai",
+              message: edited ? "User-edited answer" : "Saved answer",
+              isVisible: true,
+              timestamp: null,
+            },
+          ];
+          let sessionId: string | null = null;
+          const loadFile = jest.fn(async () => ({
+            backendId: "opencode",
+            sessionId,
+            projectId: GLOBAL_SCOPE,
+            messages: saved,
+          }));
+          const mgr = buildManager({}, { loadFile } as unknown as ConstructorParameters<
+            typeof AgentSessionManager
+          >[2]["persistenceManager"]);
+          const session = await mgr.createSession();
+          sessionId = session.getBackendSessionId();
+          const parts = [
+            {
+              kind: "tool_call",
+              id: "child",
+              subagent: "completed",
+              title: "Reader",
+              status: "completed",
+            },
+          ];
+          const replayed = [
+            { sender: "ai", message: "Saved answer\n", parts: native ? parts : undefined },
+          ];
+          getSessionTestHandle(session).setMessages(replayed);
+          session.loadDisplayMessages = jest.fn();
+          session.seedSessionUsage = jest.fn();
+          expect(
+            await mgr.loadSessionFromHistory(
+              new (TFile as unknown as new (path: string) => TFile)("chats/saved.md")
+            )
+          ).toBe(session);
+          expect(session.loadDisplayMessages).toHaveBeenCalledWith(
+            native && !edited ? [{ ...saved[0], parts }] : saved
+          );
+          await mgr.shutdown();
+        }
+      );
+    });
+
     describe("saveActiveSession()", () => {
       setupSavedNoteTests();
       it("persists changes during the first manual save for https://github.com/logancyang/obsidian-copilot/issues/3225", async () => {

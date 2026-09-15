@@ -196,3 +196,5 @@ Image-only messages appear as "Image attachment" in the queue. Sessions with onl
 Codex subagents appear as expandable activity cards when the installed Codex adapter supports child sessions. Expand a card to see its task description, reported tool activity, and returned text. Each child stays attached to its own launch, including when several run at once.
 
 The task description is what the adapter supplies; it may be a short label rather than the full delegated prompt. Completed, failed, cancelled, and disconnected outcomes remain distinct. A disconnected card has an unknown outcome. Older adapters show limited activity instead of details they do not report.
+
+When reopening a Codex chat, Copilot restores child activity from the adapter’s recorded history when available. Saved Markdown text and timestamps remain authoritative. Child activity is attached only when the recorded conversation matches that text, so edits to a saved chat are preserved. The Markdown file cannot supply tool activity if the original agent history is unavailable.

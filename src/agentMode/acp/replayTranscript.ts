@@ -1,7 +1,9 @@
 import { AI_SENDER, USER_SENDER } from "@/constants";
 import type { SessionNotification } from "@agentclientprotocol/sdk";
 import { stripUserMessageWrapper } from "@/agentMode/session/promptEnvelope";
-import type { AgentChatMessage } from "@/agentMode/session/types";
+import { toolCallToPart, mergeToolCallUpdate } from "@/agentMode/session/toolCallParts";
+import { acpNotificationToEvents } from "./wireTranslate";
+import type { AgentChatMessage, AgentMessagePart } from "@/agentMode/session/types";
 
 /**
  * In-progress reconstruction of a replayed conversation.
@@ -18,7 +20,12 @@ export interface ReplayTranscriptState {
    * `wireId` is the backend's message id and is tracked for user messages only —
    * see the boundary rule on {@link consumeReplayUpdate}.
    */
-  current: { sender: string; wireId: string | undefined; text: string } | null;
+  current: {
+    sender: string;
+    wireId: string | undefined;
+    text: string;
+    parts: AgentMessagePart[];
+  } | null;
 }
 
 export function createReplayTranscriptState(): ReplayTranscriptState {
@@ -28,12 +35,10 @@ export function createReplayTranscriptState(): ReplayTranscriptState {
 /**
  * Feed one replayed `session/update` into `state`.
  *
- * Only user and assistant text is rebuilt. Thoughts and tool activity are
- * consumed and dropped so a reopened chat matches what the Claude and markdown
- * loaders restore — `parseClaudeTranscript` documents the same sender+text
- * contract, and the trail UI takes over an assistant message's whole body as
- * soon as it carries any parts, so partial tool restoration would hide the
- * answer text itself.
+ * Rebuild conversation text and negotiated child-session activity. Other tools,
+ * thoughts and plans remain display-only live activity. Native child trails
+ * retain every surrounding assistant text chunk, because the trail renderer
+ * owns the whole answer as soon as a message has parts.
  *
  * DESIGN NOTE — the boundary rule is deliberately asymmetric, because the two
  * senders map onto ACP's `messageId` differently.
@@ -71,6 +76,9 @@ export function consumeReplayUpdate(
   state: ReplayTranscriptState,
   update: SessionNotification["update"]
 ): boolean {
+  // Native children must survive reopening, without replaying tools into live handlers.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/467
+  if (replaySubagentTool(state, update)) return true;
   let sender: string;
   // Tracked for user chunks only; assistant ids never move a boundary.
   let wireId: string | undefined;
@@ -103,7 +111,7 @@ export function consumeReplayUpdate(
   }
 
   if (startsNewMessage(state.current, sender, wireId)) flushCurrent(state);
-  const current = (state.current ??= { sender, wireId, text: "" });
+  const current = (state.current ??= { sender, wireId, text: "", parts: [] });
   // Only conversation text is rebuilt; dropping the rest is also what keeps it
   // away from the live handler, where a replayed `plan` (or the `todowrite`
   // tool call opencode synthesizes one from) would overwrite the resumed
@@ -114,7 +122,12 @@ export function consumeReplayUpdate(
     update.sessionUpdate === "agent_message_chunk"
   ) {
     const { content } = update;
-    if (content?.type === "text") current.text += content.text;
+    if (content?.type === "text") {
+      current.text += content.text;
+      const last = current.parts[current.parts.length - 1];
+      if (last?.kind === "text") last.text += content.text;
+      else current.parts.push({ kind: "text", text: content.text });
+    }
   }
   return true;
 }
@@ -157,16 +170,57 @@ function flushCurrent(state: ReplayTranscriptState): void {
     current.sender === USER_SENDER ? stripUserMessageWrapper(current.text) : current.text;
   // A turn whose chunks carried only whitespace leaves nothing worth a bubble,
   // the same case `parseClaudeTranscript` skips when a record has no text.
-  if (!message.trim()) return;
+  const hasSubagents = current.parts.some((part) => part.kind === "tool_call" && part.subagent);
+  if (!message.trim() && !hasSubagents) return;
   state.messages.push({
     // Positional like the Claude loader's `claude-loaded-N`: this is a display
     // identity, unrelated to any id the backend put on the wire.
     id: `acp-loaded-${state.messages.length}`,
     sender: current.sender,
     message,
+    ...(hasSubagents ? { parts: current.parts } : {}),
     isVisible: true,
     // The replay carries no original send time, and stamping "now" would show
     // every restored message as if it had just been sent.
     timestamp: null,
   });
+}
+
+function replaySubagentTool(
+  state: ReplayTranscriptState,
+  update: SessionNotification["update"]
+): boolean {
+  if (update.sessionUpdate !== "tool_call" && update.sessionUpdate !== "tool_call_update")
+    return false;
+  const normalized = update._meta?.copilot as
+    | { subagent?: unknown; parentToolCallId?: unknown }
+    | undefined;
+  const owns = (parts: AgentMessagePart[] | undefined) =>
+    parts?.some(
+      (part) =>
+        part.kind === "tool_call" &&
+        (part.id === update.toolCallId || part.id === normalized?.parentToolCallId)
+    );
+  let parts = owns(state.current?.parts)
+    ? state.current!.parts
+    : state.messages.find((message) => owns(message.parts))?.parts;
+  if (!parts && !normalized?.subagent && !normalized?.parentToolCallId) return false;
+  if (!parts) {
+    if (state.current?.sender !== AI_SENDER) flushCurrent(state);
+    state.current ??= { sender: AI_SENDER, wireId: undefined, text: "", parts: [] };
+    parts = state.current.parts;
+  }
+  const event = acpNotificationToEvents({ sessionId: "replay", update })[0]?.update;
+  if (event?.sessionUpdate !== "tool_call" && event?.sessionUpdate !== "tool_call_update")
+    return true;
+  const index = parts.findIndex(
+    (part) => part.kind === "tool_call" && part.id === event.toolCallId
+  );
+  const part =
+    event.sessionUpdate === "tool_call"
+      ? toolCallToPart(event)
+      : mergeToolCallUpdate(parts[index], event);
+  if (index < 0) parts.push(part);
+  else parts[index] = part;
+  return true;
 }
