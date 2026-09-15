@@ -3206,7 +3206,8 @@ export class AgentSessionManager {
   private async tryResumeSessionFromHistory(
     backendId: BackendId,
     sessionId: SessionId,
-    projectId: ProjectScopeId
+    projectId: ProjectScopeId,
+    chatInputId?: string
   ): Promise<AgentSession | null> {
     const existing = this.findLiveSession(backendId, sessionId);
     if (existing) return existing;
@@ -3215,7 +3216,12 @@ export class AgentSessionManager {
     const inFlight = this.resumedSessionPromiseById.get(key);
     if (inFlight) return inFlight;
 
-    const resume = this.resumeSessionFromHistory(backendId, sessionId, projectId).finally(() => {
+    const resume = this.resumeSessionFromHistory(
+      backendId,
+      sessionId,
+      projectId,
+      chatInputId
+    ).finally(() => {
       if (this.resumedSessionPromiseById.get(key) === resume) {
         this.resumedSessionPromiseById.delete(key);
       }
@@ -3224,10 +3230,16 @@ export class AgentSessionManager {
     return resume;
   }
 
+  /**
+   * @param chatInputId Composer the resumed session should keep owning. Set
+   *   only when an on-screen chat is being rebuilt in place (a backend
+   *   restart); a resume opened from history mints its own.
+   */
   private async resumeSessionFromHistory(
     backendId: BackendId,
     sessionId: SessionId,
-    projectId: ProjectScopeId
+    projectId: ProjectScopeId,
+    chatInputId?: string
   ): Promise<AgentSession | null> {
     // Same instruction ensure as `createSession` — a resumed session still derives its cwd
     // from the scope, so the backend needs the file present before cwd is read.
@@ -3335,6 +3347,7 @@ export class AgentSessionManager {
       backend,
       backendSessionId: resumeResult.sessionId,
       internalId,
+      chatInputId,
       backendId,
       projectId,
       initialState: resumeResult.state,
@@ -3803,6 +3816,57 @@ export class AgentSessionManager {
     }
   }
 
+  /**
+   * Put the restarted backend's replaced tab back the way the user left it:
+   * same conversation, same composer, same title.
+   *
+   * A restart kills the process, not the conversation — backends keep their
+   * sessions in their own on-disk store, which is how Recent Chats reopens one
+   * after a plugin reload. Resuming through that same path means the user gets
+   * their transcript and the agent's context back, instead of a blank chat
+   * where their work used to be. That matters most for the Reload the chat
+   * offers: an action the user takes deliberately must not cost them the
+   * conversation they were having.
+   *
+   * Falls back to a fresh session when there is nothing to resume (the chat
+   * never reached the backend) or the backend cannot replay it.
+   * https://github.com/Brevilabs/obsidian-copilot-private/issues/475
+   *
+   * @param chatInputId Composer of the replaced tab, so its draft survives.
+   * @param resumableSessionId Backend session id the replaced tab was bound to.
+   * @param label Replaced tab's title, reapplied when the resume comes back untitled.
+   * @param labelSource Whether that title was the user's or the agent's.
+   */
+  private async rebuildReplacedSession(
+    backendId: BackendId,
+    projectId: ProjectScopeId,
+    chatInputId: string | undefined,
+    resumableSessionId: SessionId | undefined,
+    label: string | null,
+    labelSource: "user" | "agent" | null
+  ): Promise<void> {
+    if (resumableSessionId) {
+      const resumed = await this.tryResumeSessionFromHistory(
+        backendId,
+        resumableSessionId,
+        projectId,
+        chatInputId
+      ).catch((e) => {
+        logWarn(`[AgentMode] resume after ${backendId} restart failed`, e);
+        return null;
+      });
+      if (resumed) {
+        // Claude returns no transcript from `resumeSession`; ACP replays its
+        // own during `loadSession`, so this is a no-op there.
+        await this.hydrateResumedTranscript(resumed, backendId, resumableSessionId);
+        if (label && !resumed.getLabel()) resumed.restoreLabel(label, labelSource ?? "agent");
+        this.setActiveSession(resumed.internalId);
+        return;
+      }
+    }
+    await this.createSession(backendId, projectId, undefined, chatInputId);
+  }
+
   /** Immediately tear down `backendId` and replace the active affected tab. */
   private async restartBackendNow(
     backendId: BackendId,
@@ -3854,6 +3918,15 @@ export class AgentSessionManager {
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/473
       retainedChatInputId = shouldCreateReplacement ? replacedSession?.chatInputId : undefined;
       if (retainedChatInputId) this.retainedChatInputIds.add(retainedChatInputId);
+      // The conversation itself lives in the backend's own session store, which
+      // outlives the process, so the replacement resumes it rather than opening
+      // an empty chat. Captured before the close loop disposes the session.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/475
+      const resumableSessionId = shouldCreateReplacement
+        ? (replacedSession?.getBackendSessionId() ?? undefined)
+        : undefined;
+      const replacedLabel = replacedSession?.getLabel() ?? null;
+      const replacedLabelSource = replacedSession?.getLabelSource() ?? null;
       for (const session of affected) {
         await this.closeSession(session.internalId);
       }
@@ -3878,7 +3951,14 @@ export class AgentSessionManager {
           // above as `replacementProjectId`) and its `chatInputId`, so the
           // composer draft keyed by that id survives the restart.
           // https://github.com/Brevilabs/obsidian-copilot-private/issues/473
-          await this.createSession(backendId, replacementProjectId, undefined, retainedChatInputId);
+          await this.rebuildReplacedSession(
+            backendId,
+            replacementProjectId,
+            retainedChatInputId,
+            resumableSessionId,
+            replacedLabel,
+            replacedLabelSource
+          );
         }
       }
     } finally {
