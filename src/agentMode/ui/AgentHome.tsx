@@ -365,12 +365,18 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   }, [modePickerOverride]);
 
   // Stable list of live chat-input ids so the draft store's pruning and memo
-  // don't churn on every manager notify (getSessions() returns a fresh array).
+  // don't churn on every manager notify (the manager returns a fresh array).
   // The "\0" delimiter (matching useAgentInputDrafts' own signature key) can't
   // appear in an id, so distinct id sets always produce distinct keys.
-  const sessions = manager.getSessions();
-  const liveKey = sessions.map((s) => s.chatInputId).join("\0");
-  const liveChatInputIds = useMemo(() => sessions.map((s) => s.chatInputId), [liveKey]); // eslint-disable-line react-hooks/exhaustive-deps -- liveKey is the stable signature for the freshly allocated sessions list
+  //
+  // The manager owns this list rather than it being derived from the session
+  // list, because a backend restart leaves a chat input owned by no session
+  // until its replacement exists, and pruning through that window would
+  // discard the user's unsent message.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/473
+  const liveIds = manager.getLiveChatInputIds();
+  const liveKey = liveIds.join("\0");
+  const liveChatInputIds = useMemo(() => liveIds, [liveKey]); // eslint-disable-line react-hooks/exhaustive-deps -- liveKey is the stable signature for the freshly allocated ids list
   // Per-chat-input compose drafts live in the shell (the common owner) so the
   // active turn's `loading` (transcript spinner) and the drop overlay's drag
   // state can be read directly here, instead of being mirrored up from the

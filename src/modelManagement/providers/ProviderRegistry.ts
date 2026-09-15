@@ -266,7 +266,8 @@ export class ProviderRegistry {
 
   /** Generates a fresh `apiKeyKeychainId` if the provider doesn't
    *  yet have one; persists the row. Re-calling with a different key
-   *  rotates in place (same keychain id, new value). */
+   *  rotates in place (same keychain id, new value). Re-calling with the
+   *  key already stored does nothing at all. */
   async setApiKey(providerId: string, apiKey: string): Promise<void> {
     const row = getSettings().providers[providerId];
     if (!row) {
@@ -277,6 +278,19 @@ export class ProviderRegistry {
     const keychain = KeychainService.getInstance(this.#app);
     const keychainId =
       row.apiKeyKeychainId ?? providerKeychainId(keychain.getVaultId(), providerId);
+    // Re-registering a provider with the key it already has is not a change,
+    // and announcing it as one restarts every backend that bakes provider
+    // config into its spawn (opencode) — tearing down the user's live session
+    // to rebuild an identical config. Callers re-register on a schedule they
+    // don't control: Plus reconciliation replays the license key on every
+    // sign-in and every plugin load. Compare against the stored secret rather
+    // than the pointer, because a same-id rotation is exactly the case the
+    // pointer cannot see. A dangling pointer reads back null, never equals a
+    // real key, and so still writes — which is how it repairs itself.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/472
+    if (row.apiKeyKeychainId === keychainId && keychain.getSecretById(keychainId) === apiKey) {
+      return;
+    }
     // Persist the row's pointer BEFORE writing to the keychain so a
     // crash (or a keychain write that throws) between the two leaves a
     // recoverable dangling pointer (empty keychain → getApiKey returns

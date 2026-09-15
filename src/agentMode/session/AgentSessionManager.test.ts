@@ -1203,6 +1203,39 @@ describe("AgentSessionManager.restartBackend", () => {
     expect(mgr.getActiveSession()?.backendId).toBe("opencode");
   });
 
+  it("gives the replacement the replaced session's chat input so the composer draft survives (https://github.com/Brevilabs/obsidian-copilot-private/issues/473)", async () => {
+    const mgr = buildManager();
+    const first = await mgr.createSession();
+    const chatInputId = first.chatInputId;
+
+    await mgr.restartBackend("opencode", "byok key saved");
+
+    expect(mgr.getActiveSession()).not.toBe(first);
+    expect(mgr.getActiveSession()?.chatInputId).toBe(chatInputId);
+  });
+
+  it("reports the replaced chat input as live while no session owns it (https://github.com/Brevilabs/obsidian-copilot-private/issues/473)", async () => {
+    // The draft store prunes against the live set on every notify, and the
+    // restart closes the old session well before the new one exists. Sampling
+    // from inside the re-probe catches that window: `preload` runs after the
+    // close loop and before the replacement is created.
+    const liveDuringGap: string[][] = [];
+    const mgr = buildManager({
+      preload: jest.fn(async () => {
+        liveDuringGap.push([...mgr.getLiveChatInputIds()]);
+      }) as unknown as AgentModelPreloader["preload"],
+    });
+    const first = await mgr.createSession();
+    const chatInputId = first.chatInputId;
+
+    await mgr.restartBackend("opencode", "byok key saved");
+
+    expect(liveDuringGap.at(-1)).toContain(chatInputId);
+    // Once the replacement owns it again it is reported exactly once, so the
+    // retained entry cannot outlive the restart that claimed it.
+    expect(mgr.getLiveChatInputIds()).toEqual([chatInputId]);
+  });
+
   it("re-probes before creating the replacement so the effort catalog is rebuilt", async () => {
     // The active tab is on this backend, so the restart creates a replacement
     // session. `restartBackendNow` cleared the probe-owned model and effort
