@@ -1629,6 +1629,116 @@ describe("AgentSessionManager.restartBackend", () => {
   });
 });
 
+describe("AgentSessionManager.noteSpawnConfigChanged", () => {
+  it("keeps an open session alive and holds the restart for the user (https://github.com/Brevilabs/obsidian-copilot-private/issues/475)", async () => {
+    const mgr = buildManager();
+    const session = await mgr.createSession();
+
+    await mgr.noteSpawnConfigChanged("opencode", "managed skills changed");
+
+    expect(mockBackendShutdown).not.toHaveBeenCalled();
+    expect(mgr.getActiveSession()).toBe(session);
+    expect(mgr.hasHeldConfigChange("opencode")).toBe(true);
+  });
+
+  it("restarts straight away when no session is open on the backend", async () => {
+    const mgr = buildManager();
+    const session = await mgr.createSession();
+    await mgr.closeSession(session.internalId);
+
+    await mgr.noteSpawnConfigChanged("opencode", "byok key saved");
+
+    expect(mockBackendShutdown).toHaveBeenCalledTimes(1);
+    expect(mgr.hasHeldConfigChange("opencode")).toBe(false);
+  });
+
+  it("refreshes a warm probe that no session has adopted", async () => {
+    const refresh = jest.fn(() => Promise.resolve());
+    const mgr = buildManager({ refresh });
+
+    await mgr.noteSpawnConfigChanged("opencode", "byok key saved");
+
+    expect(refresh).toHaveBeenCalledWith("opencode");
+    expect(mgr.hasHeldConfigChange("opencode")).toBe(false);
+  });
+
+  it("reports one held change however many times config changes", async () => {
+    const mgr = buildManager();
+    await mgr.createSession();
+    const listener = jest.fn();
+    mgr.subscribe(listener);
+
+    await mgr.noteSpawnConfigChanged("opencode", "managed skills changed");
+    await mgr.noteSpawnConfigChanged("opencode", "provider config changed");
+
+    // A second change to an already-held backend says nothing new on screen,
+    // and a BYOK save alone fires several emits in a row.
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(mgr.hasHeldConfigChange("opencode")).toBe(true);
+  });
+
+  it("leaves a privacy-boundary restart free to run immediately", async () => {
+    const mgr = buildManager();
+    await mgr.createSession();
+
+    await mgr.noteSpawnConfigChanged("opencode", "managed skills changed");
+    await mgr.restartBackend("opencode", "Miyo Search scope changed", { deferWhileBusy: false });
+
+    // The restart rebuilt spawn config from current settings, so the held
+    // change has already landed and the chat must stop offering a Reload.
+    expect(mockBackendShutdown).toHaveBeenCalledTimes(1);
+    expect(mgr.hasHeldConfigChange("opencode")).toBe(false);
+  });
+});
+
+describe("AgentSessionManager.applyHeldConfigChange", () => {
+  it("restarts the backend and clears the offer (https://github.com/Brevilabs/obsidian-copilot-private/issues/475)", async () => {
+    const mgr = buildManager();
+    const first = await mgr.createSession();
+    await mgr.noteSpawnConfigChanged("opencode", "managed skills changed");
+
+    await mgr.applyHeldConfigChange("opencode");
+
+    expect(mockBackendShutdown).toHaveBeenCalledTimes(1);
+    expect(mgr.getActiveSession()).not.toBe(first);
+    expect(mgr.getActiveSession()?.backendId).toBe("opencode");
+    expect(mgr.hasHeldConfigChange("opencode")).toBe(false);
+  });
+
+  it("does nothing when the backend has no held change", async () => {
+    const mgr = buildManager();
+    await mgr.createSession();
+
+    await mgr.applyHeldConfigChange("opencode");
+
+    expect(mockBackendShutdown).not.toHaveBeenCalled();
+  });
+
+  it("reports the restart as pending until a running turn releases it (https://github.com/Brevilabs/obsidian-copilot-private/issues/475)", async () => {
+    const mgr = buildManager();
+    const first = await mgr.createSession();
+    await mgr.noteSpawnConfigChanged("opencode", "managed skills changed");
+    getSessionTestHandle(first).setStatus("running");
+    const listener = jest.fn();
+    mgr.subscribe(listener);
+
+    await mgr.applyHeldConfigChange("opencode");
+
+    // The turn keeps its agent, and the chat can say the reload is under way
+    // instead of leaving its action looking inert.
+    expect(mockBackendShutdown).not.toHaveBeenCalled();
+    expect(mgr.isBackendRestartPending("opencode")).toBe(true);
+    expect(listener).toHaveBeenCalled();
+
+    getSessionTestHandle(first).setStatus("idle");
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+
+    expect(mockBackendShutdown).toHaveBeenCalledTimes(1);
+    expect(mgr.isBackendRestartPending("opencode")).toBe(false);
+    expect(mgr.hasHeldConfigChange("opencode")).toBe(false);
+  });
+});
+
 describe("AgentSessionManager attention tracking", () => {
   it("flags a backgrounded session that finishes a turn", async () => {
     const mgr = buildManager();

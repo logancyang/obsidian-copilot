@@ -166,6 +166,14 @@ In Self-Host Mode with OpenCode selected, Agent Chat's built-in web-search Skill
 
 On Windows, creating the folder links may require **Developer Mode** or administrator access. If a sync service replaces a link, toggle that Skill off and on for the affected agent to recreate it.
 
+## Applying a settings change
+
+Agents read their configuration when they start: API keys, enabled models, instructions, and skills. A change you make while a chat is open does not reach the agent already running. Agent Chat says so with a **config has changed** notice and a **Reload** action, and the chat keeps working in the meantime.
+
+Choose **Reload** when you want the change to take effect. The agent restarts, the current conversation closes, and a fresh one opens in the same tab; anything you had typed but not sent is kept. The conversation itself stays available under Recent Chats. During a running turn the reload waits for that turn to finish.
+
+Two changes never wait. Narrowing Miyo's **Search scope** and turning on Self-Host Mode both restart the agent straight away, so no later step in the conversation can search or browse outside the new boundary.
+
 ## Related
 
 - [Getting Started](getting-started.md)
