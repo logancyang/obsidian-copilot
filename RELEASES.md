@@ -2,7 +2,7 @@
 
 # v4.0.9 - Use remote Miyo in Copilot
 
-![Miyo settings showing This computer and Remote server, the active connection badge, and server address controls](https://raw.githubusercontent.com/logancyang/obsidian-copilot/dc6872a67fabe620583cee97e840da3278a5f31d/release-media/4.0.9/miyo.png)
+![Miyo settings showing This computer and Remote server, the active connection badge, and server address controls](https://raw.githubusercontent.com/logancyang/obsidian-copilot/2425c85c99d466506d2a810ed97f6bc7e1fd7d67/release-media/4.0.9/miyo-dark-atom.png)
 
 Keep your notes indexed on one computer and connect to that Miyo server from Copilot on another. The new Miyo settings make it easier to choose your server and check the connection, and a new tutorial walks you through remote setup. ([#3232](https://github.com/logancyang/obsidian-copilot/pull/3232), [#3233](https://github.com/logancyang/obsidian-copilot/pull/3233), [#3241](https://github.com/logancyang/obsidian-copilot/pull/3241), @brevilabs-agent-bot)
 
@@ -14,7 +14,7 @@ Follow the [remote Miyo tutorial](https://docs.obsidiancopilot.com/miyo-remote-s
 
 Select a passage in your note, then ask Agent Chat to explain it, rewrite it, or help you develop the idea. Your selection appears as its own context badge, so you can see the excerpt you are asking about alongside the current note and remove either badge when you do not need it. ([#3228](https://github.com/logancyang/obsidian-copilot/pull/3228), [#3230](https://github.com/logancyang/obsidian-copilot/pull/3230), @zeroliu)
 
-![Selected passage in a note behind the Agent Chat composer, with the matching selected-text context badge highlighted](https://raw.githubusercontent.com/logancyang/obsidian-copilot/d64d4040373465b1b84f61ed1153884c5037b3aa/release-media/4.0.9/selected-context-stacked.png)
+![Selected passage in a note behind the Agent Chat composer, with the matching selected-text context badge highlighted](https://raw.githubusercontent.com/logancyang/obsidian-copilot/2425c85c99d466506d2a810ed97f6bc7e1fd7d67/release-media/4.0.9/selected-context-dark-atom.png)
 
 ## ✨ More improvements
 
