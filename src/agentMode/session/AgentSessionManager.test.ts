@@ -706,12 +706,15 @@ describe("AgentSessionManager", () => {
        * A manager whose opencode descriptor offers exactly `offered`, with the
        * given sticky default saved.
        *
-       * @param offered - Wire ids the backend's curated list currently contains,
-       *   or undefined for a backend that publishes no list at all.
+       * @param offered - The backend's curated list, in order: a bare wire id is
+       *   an entry whose key is present, an object spells out a credential state,
+       *   and undefined is a backend that publishes no list at all.
        * @param saved - The persisted sticky selection, if any.
        */
       function buildManagerWithOffered(
-        offered: readonly string[] | undefined,
+        offered:
+          | readonly (string | { baseModelId: string; credentialState: "ok" | "missing_key" })[]
+          | undefined,
         saved: { baseModelId: string; effort: string | null } | null
       ): AgentSessionManager {
         const descriptor = {
@@ -719,7 +722,11 @@ describe("AgentSessionManager", () => {
           ...(offered
             ? {
                 getEnabledModelEntries: () =>
-                  offered.map((baseModelId) => ({ baseModelId, name: baseModelId })),
+                  offered.map((entry) =>
+                    typeof entry === "string"
+                      ? { baseModelId: entry, name: entry, credentialState: "ok" }
+                      : { ...entry, name: entry.baseModelId }
+                  ),
               }
             : {}),
         } as unknown as BackendDescriptor;
@@ -792,15 +799,61 @@ describe("AgentSessionManager", () => {
         ).toEqual(saved);
       });
 
-      it("filters a saved model the backend no longer offers, so no prompt goes to the agent's own fallback (https://github.com/Brevilabs/obsidian-copilot-private/issues/474)", () => {
+      it("seeds the first enabled model when the saved one is no longer offered, so no prompt goes to the agent's own fallback (https://github.com/Brevilabs/obsidian-copilot-private/issues/474)", () => {
         // The backend rejects the stale selection and the session quietly keeps
         // whatever model the agent picked, which is the silent failure this stops.
+        // Seeding nothing reproduces it: the agent's own default owes nothing to
+        // the enabled list.
+        const mgr = buildManagerWithOffered(["copilot-plus/flash", "copilot-plus/glm-5.2"], {
+          baseModelId: "copilot-plus/minimax-m2.7",
+          effort: "high",
+        });
+
+        expect(mgr.getSeedSelection("opencode")).toEqual({
+          baseModelId: "copilot-plus/flash",
+          effort: null,
+        });
+      });
+
+      it("skips an enabled model whose provider key is missing (https://github.com/Brevilabs/obsidian-copilot-private/issues/474)", () => {
+        // A flagged entry stays in the enabled list but the backend rejects it,
+        // so seeding it fails exactly like the withdrawn default.
+        const mgr = buildManagerWithOffered(
+          [{ baseModelId: "byok/gpt-5.6", credentialState: "missing_key" }, "copilot-plus/flash"],
+          { baseModelId: "copilot-plus/minimax-m2.7", effort: null }
+        );
+
+        expect(mgr.getSeedSelection("opencode")).toEqual({
+          baseModelId: "copilot-plus/flash",
+          effort: null,
+        });
+      });
+
+      it("returns null when every enabled model is missing its provider key (https://github.com/Brevilabs/obsidian-copilot-private/issues/474)", () => {
+        // Nothing enabled is routable, so the agent's own default is the only
+        // thing left to start on and the notice must say so.
+        const mgr = buildManagerWithOffered(
+          [{ baseModelId: "byok/gpt-5.6", credentialState: "missing_key" }],
+          { baseModelId: "copilot-plus/minimax-m2.7", effort: null }
+        );
+
+        expect(mgr.getSeedSelection("opencode")).toBeNull();
+        expect((Notice as unknown as jest.Mock).mock.calls.at(-1)?.[0]).toContain(
+          "Pick a model to make it your default again"
+        );
+      });
+
+      it("names the model new chats fall back to (https://github.com/Brevilabs/obsidian-copilot-private/issues/474)", () => {
         const mgr = buildManagerWithOffered(["copilot-plus/flash"], {
           baseModelId: "copilot-plus/minimax-m2.7",
           effort: null,
         });
 
-        expect(mgr.getSeedSelection("opencode")).toBeNull();
+        mgr.getSeedSelection("opencode");
+
+        expect((Notice as unknown as jest.Mock).mock.calls.at(-1)?.[0]).toContain(
+          "copilot-plus/flash"
+        );
       });
 
       it("names the withdrawn model once, not on every read (https://github.com/Brevilabs/obsidian-copilot-private/issues/474)", () => {
@@ -851,12 +904,12 @@ describe("AgentSessionManager", () => {
       );
 
       it("applies the saved selection again once its model is offered once more", () => {
-        // Filtered rather than deleted, so an offline launch or a briefly removed
-        // provider does not cost the user their preference.
+        // Stood in for rather than deleted, so an offline launch or a briefly
+        // removed provider does not cost the user their preference.
         const saved = { baseModelId: "copilot-plus/glm-5.2", effort: null };
         expect(
           buildManagerWithOffered(["copilot-plus/flash"], saved).getSeedSelection("opencode")
-        ).toBeNull();
+        ).toEqual({ baseModelId: "copilot-plus/flash", effort: null });
 
         expect(
           buildManagerWithOffered(
@@ -868,12 +921,15 @@ describe("AgentSessionManager", () => {
 
       it("leaves the saved preference on disk so settings can still clear it (https://github.com/Brevilabs/obsidian-copilot-private/issues/474)", () => {
         // `AgentDefaultModelSetting` renders from `getDefaultSelection`, and a
-        // preference whose model was disabled must stay visible there. Filtering it
-        // out of that read too would strand the user with no way to clear it.
+        // preference whose model was disabled must stay visible there. Standing in
+        // for it on that read too would strand the user with no way to clear it.
         const saved = { baseModelId: "copilot-plus/minimax-m2.7", effort: null };
         const mgr = buildManagerWithOffered(["copilot-plus/flash"], saved);
 
-        expect(mgr.getSeedSelection("opencode")).toBeNull();
+        expect(mgr.getSeedSelection("opencode")).toEqual({
+          baseModelId: "copilot-plus/flash",
+          effort: null,
+        });
         expect(mgr.getDefaultSelection("opencode")).toEqual(saved);
       });
     });
