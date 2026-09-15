@@ -272,6 +272,32 @@ describe("copilotPlusSync", () => {
       }
     });
 
+    it("abandons a read still in flight when the user signs out, so removal never waits out the deadline (https://github.com/Brevilabs/obsidian-copilot-private/issues/319)", async () => {
+      // The caller chains the unregister behind whatever read is in flight, so
+      // waiting a stalled one out would keep a revoked license's provider and
+      // its keychain credential registered for the rest of the deadline.
+      jest.useFakeTimers();
+      try {
+        const { api, registerPlusProvider } = makeApi();
+        signedIn();
+        setSettings({
+          copilotPlusCatalog: {
+            models: [{ id: "cached-model", displayName: "Cached" }],
+            defaultEnabledIds: ["cached-model"],
+          },
+        });
+        const sync = syncCopilotPlusProvider(api, true, "token", () => new Promise(() => {}));
+
+        setSettings({ isPaidUser: false, plusLicenseKey: "" });
+        // No timer is advanced: the sign-out alone has to settle the read.
+        await sync;
+
+        expect(registerPlusProvider).not.toHaveBeenCalled();
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
     it("does not register after the user signed out during the lineup read (https://github.com/Brevilabs/obsidian-copilot-private/issues/319)", async () => {
       // The endpoint read is the only await between the caller's decision and
       // the write. Registering on a stale argument would restore a revoked

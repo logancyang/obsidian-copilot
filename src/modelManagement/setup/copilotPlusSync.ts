@@ -22,7 +22,12 @@ import { logError, logInfo } from "@/logger";
 import type { ModelManagementApi } from "@/modelManagement/createModelManagement";
 import { readCopilotPlusCatalog } from "@/modelManagement/setup/copilotPlusCatalog";
 import type { ModelInfo } from "@/modelManagement/types/catalog";
-import { getSettings, setSettings, type CopilotSettings } from "@/settings/model";
+import {
+  getSettings,
+  setSettings,
+  subscribeToSettingsChange,
+  type CopilotSettings,
+} from "@/settings/model";
 
 /** Reads the public models endpoint. Injected so the sync stays unit-testable. */
 export type CopilotPlusModelsFetcher = () => Promise<BrevilabsModelsResponse | null>;
@@ -61,11 +66,11 @@ function sameLineup(a: readonly ModelInfo[], b: readonly ModelInfo[]): boolean {
  * Upper bound on one lineup read.
  *
  * Nothing waits on this to start, so the deadline is not there to protect
- * startup. It bounds the caller's serialized queue: a sign-out is chained
- * behind whatever sync is in flight, and `requestUrl` enforces no timeout of
- * its own, so a hung connection would otherwise hold a revoked license
- * registered for as long as the OS takes to give up. Giving up early costs one
- * refresh of a cache that is already good.
+ * startup. It bounds the caller's serialized queue: every sync is chained
+ * behind whatever read is in flight, and `requestUrl` enforces no timeout of
+ * its own, so a hung connection would otherwise block the queue for as long as
+ * the OS takes to give up. Giving up early costs one refresh of a cache that is
+ * already good.
  */
 const LINEUP_TIMEOUT_MS = 10_000;
 
@@ -89,15 +94,33 @@ function delay(ms: number): Promise<void> {
   });
 }
 
-/** Resolve with null if `promise` has not settled within `ms`. */
-function withDeadline<T>(promise: Promise<T | null>, ms: number): Promise<T | null> {
+/**
+ * Resolve with the read's result, or with null as soon as the read stops
+ * mattering — the deadline passes, or the user's Plus state moves on.
+ *
+ * Abandoning on a state change is what keeps sign-out immediate. The caller
+ * serializes these, so the unregister is chained behind whatever read is in
+ * flight; waiting the read out would leave a revoked license's provider and its
+ * keychain credential registered for the rest of the deadline.
+ * https://github.com/Brevilabs/obsidian-copilot-private/issues/319
+ *
+ * @param read - The in-flight endpoint read.
+ * @param stillWanted - Whether its result is still the one the caller asked for.
+ */
+function readWithin<T>(read: Promise<T | null>, stillWanted: () => boolean): Promise<T | null> {
   return new Promise((resolve) => {
-    const timer = window.setTimeout(() => resolve(null), ms);
+    let timer = 0;
+    let unsubscribe = (): void => {};
     const settle = (value: T | null) => {
       window.clearTimeout(timer);
+      unsubscribe();
       resolve(value);
     };
-    promise.then(settle, () => settle(null));
+    timer = window.setTimeout(() => settle(null), LINEUP_TIMEOUT_MS);
+    unsubscribe = subscribeToSettingsChange(() => {
+      if (!stillWanted()) settle(null);
+    });
+    read.then(settle, () => settle(null));
   });
 }
 
@@ -111,6 +134,8 @@ function withDeadline<T>(promise: Promise<T | null>, ms: number): Promise<T | nu
  * lineup must therefore be completely silent.
  *
  * @param fetchModels - Reader for the public models endpoint.
+ * @param stillWanted - Whether the Plus state this read was started for still
+ *   holds; false abandons the read rather than making a sign-out wait for it.
  * @returns The lineup now in the cache, or null when the response was
  *   unreadable and the previous snapshot stands.
  */
@@ -121,13 +146,11 @@ async function refreshCachedLineup(
   const attempts = getSettings().copilotPlusCatalog.models.length === 0 ? COLD_START_ATTEMPTS : 1;
   let catalog = null as ReturnType<typeof readCopilotPlusCatalog>;
   for (let attempt = 0; attempt < attempts && !catalog; attempt++) {
-    if (attempt > 0) {
-      await delay(COLD_START_BACKOFF_MS);
-      // Abandon the moment the user's Plus state moves on, so a sign-out is
-      // never held behind a retry sequence it can no longer benefit from.
-      if (!stillWanted()) return null;
-    }
-    catalog = readCopilotPlusCatalog(await withDeadline(fetchModels(), LINEUP_TIMEOUT_MS));
+    if (attempt > 0) await delay(COLD_START_BACKOFF_MS);
+    catalog = readCopilotPlusCatalog(await readWithin(fetchModels(), stillWanted));
+    // Abandon the moment the user's Plus state moves on, so a sign-out is
+    // never held behind a retry sequence it can no longer benefit from.
+    if (!catalog && !stillWanted()) return null;
   }
   if (!catalog) {
     logInfo("[modelManagement] Copilot Plus lineup unreadable; keeping the cached one");
@@ -153,8 +176,9 @@ async function refreshCachedLineup(
  * models against the published lineup. Best-effort: a failure is logged, not
  * thrown, since this runs as background reconciliation off a settings change.
  *
- * Sign-out is not allowed to wait on the network — the endpoint read happens
- * only on the signed-in path, so revoking access is immediate.
+ * Sign-out is not allowed to wait on the network: the endpoint read happens
+ * only on the signed-in path, and a read already in flight is abandoned the
+ * moment the Plus state changes, so revoking access is immediate.
  *
  * `licenseKey` is already hydrated from Obsidian Keychain by the settings
  * persistence boundary.
