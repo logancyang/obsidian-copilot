@@ -107,8 +107,8 @@ Use **Advanced → Debugging & support → Report an issue** for any Copilot pro
 ### Filing a report
 
 1. **Describe what went wrong, and tick what to include.** The sources on offer are a screenshot of the Agent Chat pane (only while one is open), the **Agent Mode activity log**, the regular Copilot chat log, and the opencode log when opencode is your backend. Anything you tick that turns out to have nothing to collect is listed on the next page with the reason, so you never have to guess whether it was gathered.
-2. **Let Copilot prepare the report.** It briefly hides the dialog to photograph the pane behind it, reads and cleans the logs you asked for, and packs everything into one zip on your own computer — the zip is the only file it writes.
-3. **Review what was packed, then upload.** Copilot lists what actually went into the zip, source by source, with the finished file's size and, beside anything skipped or failed, the reason. **Show zip** opens the file in your file manager if you want to look inside. Uploading is a separate click — **Upload & open issue** — and nothing leaves your machine until you press it. **Cancel** here deletes the zip.
+2. **Let Copilot prepare the report.** The review page shows **Preparing report…** until the zip is ready. Copilot briefly hides the dialog to photograph the pane behind it, reads and cleans the logs you asked for, and packs everything into one zip on your own computer — the zip is the only file it writes.
+3. **Review what was packed, then upload.** Copilot lists what actually went into the zip, source by source, with the finished file's size and, beside anything skipped or failed, the reason. **Show zip** opens the file in your file manager if you want to look inside. Uploading is a separate click — **Upload & open issue** — and nothing leaves your machine until you press it. **Cancel** here deletes the zip unless you have already chosen **Open issue anyway**.
 4. **Finish the issue in your browser.** As soon as the upload lands, Copilot opens a prefilled GitHub issue with the report ID already in the body, closes the dialog, and shows a short notice. If your browser could not be opened, the notice carries the report ID and a link to the issue page instead. Nothing is filed until you press Submit in your browser.
 
 ### What gets sent, and what does not
@@ -129,12 +129,12 @@ It is the reference a maintainer looks your report up by. It is not a link, not 
 
 An uploaded report is stored privately and deleted automatically after 60 days. The report ID is in the issue you filed; copy it somewhere else if you may need it after that.
 
-That deletion covers the uploaded copy only. The zip on your own computer is yours; Copilot leaves it alone after an upload, so delete it yourself when you are done with it.
+That deletion covers the uploaded copy only. The zip on your own computer is yours; Copilot leaves it alone after an upload or after you choose **Open issue anyway**, so delete it yourself when you are done with it.
 
 ### If the upload fails
 
 - **Retry first.** **Retry upload** re-sends the very same file, and it cannot leave you with two copies stored: if the first attempt quietly did land, the retry returns that same report rather than storing another. The error text starts with **Upload failed (HTTP …)** when the server refused the file and says the outcome is unconfirmed when no answer came back; either way a retry is safe.
-- **The manual path is always open.** The zip is still on your computer. Use **Show zip** to find it and **Open issue anyway** to file the report by hand — that issue carries no report ID, so attach the zip to it yourself.
+- **The manual path is always open.** The zip is still on your computer. Use **Show zip** to find it and **Open issue anyway** to file the report by hand — that issue carries no report ID, so attach the zip to it yourself. After choosing **Open issue anyway**, you can close the Copilot dialog without losing the zip, even if your browser did not open.
 - **Closing the dialog does not stop an upload.** It finishes in the background; when it lands, a notice shows the report ID and a link to the issue page, and the zip stays where it was.
 - **If uploads are turned away because too many were sent recently,** wait a while and try again, or file it by hand. On a shared or office network it may not have been your own uploads that used up the limit.
 

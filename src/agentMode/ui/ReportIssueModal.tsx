@@ -22,7 +22,6 @@ import { Root } from "react-dom/client";
 import {
   ReportIssueFlow,
   type PreparedReport,
-  type PrepareStep,
   type ReportSourceId,
   type ReportSourceOption,
   type UploadOutcome,
@@ -185,7 +184,7 @@ export async function openIssuePageWith(
  */
 export class ReportIssueModal extends Modal {
   private root: Root | null = null;
-  /** The zip on the review page, until it is uploaded or discarded. */
+  /** The zip on the review page, until it is handed off or discarded. */
   private prepared: PreparedReport | null = null;
   private uploading = false;
 
@@ -213,7 +212,7 @@ export class ReportIssueModal extends Modal {
     this.root.render(
       <ReportIssueFlow
         sources={this.buildSources()}
-        prepare={(note, selected, onStep) => this.prepare(note, selected, onStep)}
+        prepare={(note, selected) => this.prepare(note, selected)}
         upload={(report) => this.upload(report)}
         discardReport={(report) => this.discard(report)}
         onCancel={() => this.close()}
@@ -241,7 +240,11 @@ export class ReportIssueModal extends Modal {
    * close that follows it do not both reach for the same directory.
    */
   private discard(report: PreparedReport): Promise<void> {
-    if (this.prepared === report) this.prepared = null;
+    // A manual handoff releases ownership even while the dialog stays open;
+    // Cancel must not delete the attachment the user is about to send
+    // (https://github.com/Brevilabs/obsidian-copilot-private/issues/202).
+    if (this.prepared !== report) return Promise.resolve();
+    this.prepared = null;
     return discardReport(report);
   }
 
@@ -287,8 +290,7 @@ export class ReportIssueModal extends Modal {
 
   private async prepare(
     note: string,
-    selected: ReadonlySet<ReportSourceId>,
-    onStep: (step: PrepareStep) => void
+    selected: ReadonlySet<ReportSourceId>
   ): Promise<PreparedReport> {
     // Two absences the manifest tells apart: `undefined` for a screenshot never
     // selected, which gets no line at all, and `null` for one selected but not
@@ -307,13 +309,11 @@ export class ReportIssueModal extends Modal {
         logWarn("[ReportIssue] the screenshot failed; the report goes without it:", err);
       }
     }
-    onStep("screenshot");
 
     const logs: ReportLogRequest[] = [];
     if (selected.has("activityLog")) logs.push(await activityLogRequest());
     if (selected.has("chatLog")) logs.push(await chatLogRequest());
     if (selected.has("opencodeLog")) logs.push(await opencodeLogRequest());
-    onStep("logs");
 
     const bundle = await buildReportBundle(
       {
@@ -346,7 +346,6 @@ export class ReportIssueModal extends Modal {
       await discardReport({ zipDir });
       throw err;
     }
-    onStep("zip");
 
     logInfo(
       `[ReportIssue] bundle ready at ${zipPath} (${formatBytes(bundle.uploadAttempt.body.byteLength)})`
@@ -412,6 +411,10 @@ export class ReportIssueModal extends Modal {
 
   /** "Open issue anyway": the no-ID page for a report the user attaches by hand. */
   private async openIssuePage(url: string): Promise<void> {
+    // The browser or fallback link hands the zip to the user. Release it before
+    // waiting so closing the dialog cannot remove their manual attachment
+    // (https://github.com/Brevilabs/obsidian-copilot-private/issues/202).
+    this.prepared = null;
     if (!(await openIssuePageWith(getElectronShell(), url))) {
       this.issueLinkNotice("Copilot could not open your browser.", url);
     }
@@ -458,7 +461,7 @@ async function activityLogRequest(): Promise<ReportLogRequest> {
   // The sink both owns the location and vouches for it, so a path it will not
   // stand behind is one this report must not read, let alone upload. Asking it
   // also settles the write queue on the way — it answers from the same chain
-  // the appends run on — so the tail read later includes the failure the user
+  // the appends run on — so the log read later includes the failure the user
   // is reporting rather than whatever had already reached disk.
   const path = await frameSink.getValidatedPath();
   return path === null
