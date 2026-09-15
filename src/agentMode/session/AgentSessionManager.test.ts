@@ -179,8 +179,11 @@ function makeMockSession(overrides: {
   backendId: string;
   projectId?: string;
   ready?: Promise<void>;
+  label?: string;
 }): AgentSession {
   const sessionId = overrides.backendSessionId ?? `backend-${nextBackendSessionId++}`;
+  let label: string | null = overrides.label ?? null;
+  let labelSource: "user" | "agent" | null = overrides.label ? "agent" : null;
   let status: "starting" | "idle" | "running" | "awaiting_permission" | "error" | "closed" = "idle";
   let needsAttention = false;
   let displayMessages: { message: string }[] = [];
@@ -204,7 +207,12 @@ function makeMockSession(overrides: {
     setModel: jest.fn(),
     setMode: jest.fn(),
     setConfigOption: jest.fn(),
-    getLabel: () => null,
+    getLabel: () => label,
+    getLabelSource: () => labelSource,
+    restoreLabel: (next: string, source: "user" | "agent") => {
+      label = next;
+      labelSource = source;
+    },
     setLabel: jest.fn(),
     getSessionUsage: () => null,
     subscribe: (l: Parameters<typeof listeners.add>[0]) => {
@@ -1626,6 +1634,209 @@ describe("AgentSessionManager.restartBackend", () => {
     await new Promise((resolve) => window.setTimeout(resolve, 0));
 
     expect(mockBackendShutdown).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("AgentSessionManager.noteSpawnConfigChanged", () => {
+  it("keeps an open session alive and holds the restart for the user (https://github.com/Brevilabs/obsidian-copilot-private/issues/475)", async () => {
+    const mgr = buildManager();
+    const session = await mgr.createSession();
+
+    await mgr.noteSpawnConfigChanged("opencode", "managed skills changed");
+
+    expect(mockBackendShutdown).not.toHaveBeenCalled();
+    expect(mgr.getActiveSession()).toBe(session);
+    expect(mgr.hasHeldConfigChange("opencode")).toBe(true);
+  });
+
+  it("restarts straight away when no session is open on the backend", async () => {
+    const mgr = buildManager();
+    const session = await mgr.createSession();
+    await mgr.closeSession(session.internalId);
+
+    await mgr.noteSpawnConfigChanged("opencode", "byok key saved");
+
+    expect(mockBackendShutdown).toHaveBeenCalledTimes(1);
+    expect(mgr.hasHeldConfigChange("opencode")).toBe(false);
+  });
+
+  it("refreshes a warm probe that no session has adopted", async () => {
+    const refresh = jest.fn(() => Promise.resolve());
+    const mgr = buildManager({ refresh });
+
+    await mgr.noteSpawnConfigChanged("opencode", "byok key saved");
+
+    expect(refresh).toHaveBeenCalledWith("opencode");
+    expect(mgr.hasHeldConfigChange("opencode")).toBe(false);
+  });
+
+  it("reports one held change however many times config changes", async () => {
+    const mgr = buildManager();
+    await mgr.createSession();
+    const listener = jest.fn();
+    mgr.subscribe(listener);
+
+    await mgr.noteSpawnConfigChanged("opencode", "managed skills changed");
+    await mgr.noteSpawnConfigChanged("opencode", "provider config changed");
+
+    // A second change to an already-held backend says nothing new on screen,
+    // and a BYOK save alone fires several emits in a row.
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(mgr.hasHeldConfigChange("opencode")).toBe(true);
+  });
+
+  it("leaves a privacy-boundary restart free to run immediately", async () => {
+    const mgr = buildManager();
+    await mgr.createSession();
+
+    await mgr.noteSpawnConfigChanged("opencode", "managed skills changed");
+    await mgr.restartBackend("opencode", "Miyo Search scope changed", { deferWhileBusy: false });
+
+    // The restart rebuilt spawn config from current settings, so the held
+    // change has already landed and the chat must stop offering a Reload.
+    expect(mockBackendShutdown).toHaveBeenCalledTimes(1);
+    expect(mgr.hasHeldConfigChange("opencode")).toBe(false);
+  });
+});
+
+describe("AgentSessionManager.applyHeldConfigChange", () => {
+  it("restarts the backend and clears the offer (https://github.com/Brevilabs/obsidian-copilot-private/issues/475)", async () => {
+    const mgr = buildManager();
+    const first = await mgr.createSession();
+    await mgr.noteSpawnConfigChanged("opencode", "managed skills changed");
+
+    await mgr.applyHeldConfigChange("opencode");
+
+    expect(mockBackendShutdown).toHaveBeenCalledTimes(1);
+    expect(mgr.getActiveSession()).not.toBe(first);
+    expect(mgr.getActiveSession()?.backendId).toBe("opencode");
+    expect(mgr.hasHeldConfigChange("opencode")).toBe(false);
+  });
+
+  it("does nothing when the backend has no held change", async () => {
+    const mgr = buildManager();
+    await mgr.createSession();
+
+    await mgr.applyHeldConfigChange("opencode");
+
+    expect(mockBackendShutdown).not.toHaveBeenCalled();
+  });
+
+  it("reports the restart as pending until a running turn releases it (https://github.com/Brevilabs/obsidian-copilot-private/issues/475)", async () => {
+    const mgr = buildManager();
+    const first = await mgr.createSession();
+    await mgr.noteSpawnConfigChanged("opencode", "managed skills changed");
+    getSessionTestHandle(first).setStatus("running");
+    const listener = jest.fn();
+    mgr.subscribe(listener);
+
+    await mgr.applyHeldConfigChange("opencode");
+
+    // The turn keeps its agent, and the chat can say the reload is under way
+    // instead of leaving its action looking inert.
+    expect(mockBackendShutdown).not.toHaveBeenCalled();
+    expect(mgr.isBackendRestartPending("opencode")).toBe(true);
+    expect(listener).toHaveBeenCalled();
+
+    getSessionTestHandle(first).setStatus("idle");
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+
+    expect(mockBackendShutdown).toHaveBeenCalledTimes(1);
+    expect(mgr.isBackendRestartPending("opencode")).toBe(false);
+    expect(mgr.hasHeldConfigChange("opencode")).toBe(false);
+  });
+});
+
+describe("AgentSessionManager restart session resume", () => {
+  /** Manager whose backend can replay a session, as every real backend can. */
+  function buildManagerWithReplay(backendOverrides: Record<string, unknown>): AgentSessionManager {
+    const backend = { ...makeMockBackendProcess(), ...backendOverrides };
+    const descriptor = {
+      ...buildDescriptor(),
+      getInstallState: jest.fn(() => ({ kind: "ready" })),
+      createBackendProcess: jest.fn(() => backend),
+    } as unknown as BackendDescriptor;
+    return new AgentSessionManager(
+      buildApp(),
+      buildPlugin() as unknown as ConstructorParameters<typeof AgentSessionManager>[1],
+      {
+        permissionPrompter: jest.fn(),
+        resolveDescriptor: (id) => (id === descriptor.id ? descriptor : undefined),
+        modelPreloader: {
+          getCachedModelCatalog: jest.fn(() => null),
+          getEffortCatalog: jest.fn(() => null),
+          preload: jest.fn(async () => undefined),
+          refresh: jest.fn(() => null),
+          subscribe: jest.fn(() => () => {}),
+          shutdown: jest.fn(),
+          clearCached: jest.fn(),
+          takeWarm: jest.fn(() => null),
+          getWarmProcs: jest.fn(() => []),
+        } as unknown as ConstructorParameters<typeof AgentSessionManager>[2]["modelPreloader"],
+      }
+    );
+  }
+
+  it("brings the replaced tab back on its own conversation (https://github.com/Brevilabs/obsidian-copilot-private/issues/475)", async () => {
+    const loadSession = jest.fn(async ({ sessionId }: { sessionId: string }) => ({
+      sessionId,
+      state: { model: null, mode: null },
+    }));
+    const mgr = buildManagerWithReplay({ loadSession });
+    const first = await mgr.createSession();
+    const backendSessionId = first.getBackendSessionId();
+    const chatInputId = first.chatInputId;
+
+    await mgr.restartBackend("opencode", "managed skills changed");
+
+    // The process died, not the conversation: the backend keeps it in its own
+    // store, so the replacement resumes it rather than opening a blank chat
+    // where the user's work was.
+    expect(loadSession).toHaveBeenCalledWith(
+      expect.objectContaining({ sessionId: backendSessionId })
+    );
+    const replacement = mgr.getActiveSession();
+    expect(replacement).not.toBe(first);
+    expect(replacement?.getBackendSessionId()).toBe(backendSessionId);
+    expect(replacement?.chatInputId).toBe(chatInputId);
+    expect(mgr.getSessions()).toHaveLength(1);
+  });
+
+  it("keeps the replaced tab's title across the restart (https://github.com/Brevilabs/obsidian-copilot-private/issues/475)", async () => {
+    const mgr = buildManagerWithReplay({
+      loadSession: jest.fn(async ({ sessionId }: { sessionId: string }) => ({
+        sessionId,
+        state: { model: null, mode: null },
+      })),
+    });
+    const first = await mgr.createSession();
+    first.restoreLabel("Refactor the importer", "user");
+
+    await mgr.restartBackend("opencode", "managed skills changed");
+
+    expect(mgr.getActiveSession()?.getLabel()).toBe("Refactor the importer");
+  });
+
+  it("opens a fresh chat when the backend cannot replay the conversation", async () => {
+    const mgr = buildManagerWithReplay({
+      loadSession: jest.fn(async () => {
+        throw new MethodUnsupportedError("session/load");
+      }),
+      resumeSession: jest.fn(async () => {
+        throw new MethodUnsupportedError("session/resume");
+      }),
+    });
+    const first = await mgr.createSession();
+    const chatInputId = first.chatInputId;
+
+    await mgr.restartBackend("opencode", "managed skills changed");
+
+    const replacement = mgr.getActiveSession();
+    expect(replacement).not.toBe(first);
+    expect(replacement?.getBackendSessionId()).not.toBe(first.getBackendSessionId());
+    // The draft still has to survive the fallback.
+    expect(replacement?.chatInputId).toBe(chatInputId);
+    expect(mgr.getSessions()).toHaveLength(1);
   });
 });
 

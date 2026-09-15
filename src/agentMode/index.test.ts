@@ -97,6 +97,7 @@ const mockRefresh = jest.fn<Promise<unknown>, unknown[]>();
 const mockManager = {
   preloadModels: jest.fn(async () => {}),
   restartBackend: jest.fn(async (_id: string, _reason: string) => {}),
+  noteSpawnConfigChanged: jest.fn(async (_id: string, _reason: string) => {}),
   registerPreload: jest.fn<void, [string, Promise<void>]>(),
   onInstallStateChanged: jest.fn(async (_id: string) => {}),
 };
@@ -200,12 +201,15 @@ describe("agentMode", () => {
         settingsWith({ reasoning: true, reasoningEfforts: ["none", "medium", "high"] })
       );
 
-      expect(mockManager.restartBackend).toHaveBeenCalledTimes(1);
-      expect(mockManager.restartBackend).toHaveBeenCalledWith("opencode", "model metadata changed");
+      expect(mockManager.noteSpawnConfigChanged).toHaveBeenCalledTimes(1);
+      expect(mockManager.noteSpawnConfigChanged).toHaveBeenCalledWith(
+        "opencode",
+        "model metadata changed"
+      );
     });
 
     it(`leaves a running agent alone when only a model's display metadata changes ${LINEUP_ISSUE}`, () => {
-      // A restart closes the user's session, which a reworded description is
+      // The agent is asked to reload for this, which a reworded description is
       // not worth: the spawn config never carries it.
       createAgentSessionManager({} as App, plugin);
 
@@ -214,6 +218,7 @@ describe("agentMode", () => {
         settingsWith({ reasoning: true, description: "A frontier open-weight model." })
       );
 
+      expect(mockManager.noteSpawnConfigChanged).not.toHaveBeenCalled();
       expect(mockManager.restartBackend).not.toHaveBeenCalled();
     });
 
