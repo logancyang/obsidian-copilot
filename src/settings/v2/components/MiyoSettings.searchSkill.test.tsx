@@ -240,7 +240,7 @@ describe("MiyoSettings", () => {
       expect(screen.queryByLabelText("Search scope")).toBeNull();
       await waitFor(() => expect(currentSettings.enableMiyoSearchSkill).toBe(false));
     });
-    it("hides the agent search skill row on mobile, where Agent mode cannot run", async () => {
+    it("hides the agent search skill row on mobile, where Agent mode cannot run — https://github.com/Brevilabs/obsidian-copilot-private/issues/471", async () => {
       mockOnDesktop.mockReturnValue(false);
       currentSettings = { ...currentSettings, enableMiyoSearchSkill: true };
       render(<MiyoSettings />);
@@ -249,7 +249,7 @@ describe("MiyoSettings", () => {
       expect(screen.queryByText("Semantic search for agents")).toBeNull();
     });
 
-    it("offers only a remote connection on mobile without persisting the fallback over the synced mode", async () => {
+    it("offers only a remote connection on mobile without persisting the fallback over the synced mode — https://github.com/Brevilabs/obsidian-copilot-private/issues/471", async () => {
       mockOnDesktop.mockReturnValue(false);
       currentSettings = { ...currentSettings, miyoConnectionMode: "local", miyoServerUrl: "" };
       render(<MiyoSettings />);

@@ -3,6 +3,7 @@ import React from "react";
 import { MiyoConnectionPanel, type MiyoConnectionPanelProps } from "./MiyoConnectionPanel";
 
 const ISSUE_URL = "https://github.com/Brevilabs/obsidian-copilot-private/issues/466";
+const ISSUE_471 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/471";
 
 function renderPanel(overrides: Partial<MiyoConnectionPanelProps> = {}) {
   const props: MiyoConnectionPanelProps = {
@@ -61,7 +62,7 @@ describe("MiyoConnectionPanel", () => {
       expect(screen.queryByText("Connected")).toBeNull();
     });
 
-    it("disables the local option and drops its badge where no local Miyo can be reached", () => {
+    it(`disables the local option and drops its badge where no local Miyo can be reached (${ISSUE_471})`, () => {
       renderPanel({ mode: "remote", activeMode: "local", localSupported: false });
       const local = screen.getByRole<HTMLInputElement>("radio", { name: /^Local/ });
       expect(local.disabled).toBe(true);

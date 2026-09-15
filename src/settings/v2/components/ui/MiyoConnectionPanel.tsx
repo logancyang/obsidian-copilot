@@ -18,6 +18,8 @@ export interface MiyoConnectionPanelProps {
   /**
    * Whether a Miyo on this device can be reached at all. False on mobile, where
    * service discovery has no equivalent, so Local can only ever fail to connect.
+   * Offering it there sends the user into a Connect that cannot succeed.
+   * https://github.com/Brevilabs/obsidian-copilot-private/issues/471
    */
   localSupported?: boolean;
   error?: string;

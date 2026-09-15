@@ -123,7 +123,10 @@ export const MiyoSettings: React.FC = () => {
   } | null>(null);
   // Two Miyo controls are desktop-only for different reasons: local discovery
   // has no mobile equivalent (MiyoServiceDiscovery resolves to null off the
-  // desktop runtime), and the search skill only runs inside Agent mode.
+  // desktop runtime), and the search skill only runs inside Agent mode. Offering
+  // either on a phone yields a Connect that cannot succeed and a switch that
+  // cannot do anything.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/471
   const onDesktop = isDesktopRuntime();
   const activeMode = getMiyoConnectionMode(settings);
   const activeUrl = getMiyoCustomUrl(settings);
@@ -132,6 +135,7 @@ export const MiyoSettings: React.FC = () => {
   // `miyoConnectionMode` is a synced setting, so a desktop in local mode hands
   // its phone a mode that can never connect. Fall back to remote for DISPLAY
   // only; the platform fact must never be persisted back into the shared value.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/471
   const mode = currentDraft?.mode ?? (onDesktop ? activeMode : "remote");
   const urlDraft = currentDraft?.address ?? settings.miyoServerUrl;
   const [connectionError, setConnectionError] = useState<{
@@ -691,7 +695,8 @@ export const MiyoSettings: React.FC = () => {
                 Miyo went offline must still be able to turn it off. So the gate
                 keys on "can this action run": always usable when already enabled
                 (to allow turn-off), else gated on `capabilitiesEnabled` (to allow
-                turn-on). */}
+                turn-on).
+                https://github.com/Brevilabs/obsidian-copilot-private/issues/471 */}
             {onDesktop && (
               <div
                 className={cn(

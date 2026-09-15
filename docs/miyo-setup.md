@@ -73,9 +73,7 @@ Return to **Settings → Copilot → Miyo** and turn on **Semantic search for ag
 
 This gives your Copilot agents access to Miyo search. Keep **Search scope** on **Current vault** if you only want results from the vault you are using.
 
-:::note[On mobile]
-This switch is desktop-only, because Agent Chat does not run on mobile. A phone or tablet also cannot reach a Miyo running on itself: connect it to a Miyo on your computer with the [remote setup guide](miyo-remote-setup.md), and Copilot Plus chat and Relevant Notes will use that server.
-:::
+This switch is desktop-only. A phone or tablet connects to a Miyo on your computer with the [remote setup guide](miyo-remote-setup.md).
 
 ![Semantic search switch and Current vault search scope highlighted in Copilot settings](https://pub-d0d5db63b5e446cc848d32b65229d622.r2.dev/copilot/2026-09/miyo-semantic-search-highlight-af74bfad26c5.png)
 
