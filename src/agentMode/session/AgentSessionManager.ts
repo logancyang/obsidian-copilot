@@ -150,6 +150,8 @@ const EMPTY_HISTORY_ITEMS = Object.freeze([]) as unknown as ChatHistoryItem[];
 //     the surface) plus the convention that no caller mutates the result — consumers only
 //     `.has()`, read `.size`, and iterate.
 const EMPTY_RECENT_CHAT_IDS: ReadonlySet<string> = new Set();
+/** See AGENTS.md → "Referential stability". */
+const EMPTY_CHAT_INPUT_IDS: readonly string[] = Object.freeze([]);
 
 // Delivery-cursor seed for a resumed session: BEHIND any real content epoch
 // (which starts at 0), so its first send always emits the coarse freshness note
@@ -2721,7 +2723,7 @@ export class AgentSessionManager {
     const ids = new Set<string>();
     for (const session of this.sessions.values()) ids.add(session.chatInputId);
     for (const id of this.retainedChatInputIds) ids.add(id);
-    return Array.from(ids);
+    return ids.size === 0 ? EMPTY_CHAT_INPUT_IDS : Array.from(ids);
   }
 
   /**
@@ -3737,8 +3739,17 @@ export class AgentSessionManager {
       this.restartingBackends.delete(backendId);
       // Released after the replacement exists (or after the restart gave up on
       // creating one), so the draft is never stranded against an id no session
-      // will ever claim.
-      if (retainedChatInputId) this.retainedChatInputIds.delete(retainedChatInputId);
+      // will ever claim. Notify when nothing claimed it: the `try` block's own
+      // notify is skipped when the preload or the create threw, and without one
+      // here the released id stays in the last published live set and its draft
+      // is never collected.
+      if (retainedChatInputId) {
+        this.retainedChatInputIds.delete(retainedChatInputId);
+        const claimed = Array.from(this.sessions.values()).some(
+          (session) => session.chatInputId === retainedChatInputId
+        );
+        if (!claimed) this.notify();
+      }
     }
     // Drain any restart requests that landed while we were running. Clear the
     // entry BEFORE re-invoking so the recursion can't loop forever — a fresh
