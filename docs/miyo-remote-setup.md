@@ -27,7 +27,7 @@ Read the number beside `"port"`. On other systems, open the file at the correspo
 | Windows     | `%LOCALAPPDATA%\Miyo\service.json`; if absent, check `%APPDATA%\Miyo\service.json` |
 | Linux       | `~/.config/Miyo/service.json`                                                      |
 
-If the file is missing, open Miyo and wait for its server to start. In the recorded example, the port is **18742**, so its target is `http://127.0.0.1:18742`.
+If the file is missing, open Miyo and wait for its server to start.
 
 The command below uses **8742 as an example**. Replace it with the port your running Miyo server actually uses.
 
