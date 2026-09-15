@@ -877,6 +877,50 @@ describe("model", () => {
     });
   });
 
+  describe("sanitizeSettings()", () => {
+    it.each([
+      ["a missing cache, as every pre-upgrade data.json has", undefined],
+      ["a non-object cache", "nope"],
+      ["a cache whose models are not a list", { models: "nope", defaultEnabledIds: [] }],
+      ["a model entry that is null", { models: [null], defaultEnabledIds: [] }],
+      [
+        "a model entry with no id",
+        { models: [{ displayName: "Nameless" }], defaultEnabledIds: [] },
+      ],
+      [
+        "a model entry with a non-string id",
+        { models: [{ id: 7, displayName: "Seven" }], defaultEnabledIds: [] },
+      ],
+      [
+        "a non-string default-enabled id",
+        { models: [{ id: "a", displayName: "A" }], defaultEnabledIds: [7] },
+      ],
+    ])(
+      "replaces %s with an empty Copilot Plus lineup (https://github.com/Brevilabs/obsidian-copilot-private/issues/319)",
+      (_case, copilotPlusCatalog) => {
+        // Consumers dereference `model.id` straight out of this array, so a
+        // synced or hand-edited data.json must not be able to crash a picker.
+        const out = sanitizeSettings({
+          ...DEFAULT_SETTINGS,
+          copilotPlusCatalog,
+        } as unknown as CopilotSettings);
+
+        expect(out.copilotPlusCatalog).toEqual({ models: [], defaultEnabledIds: [] });
+      }
+    );
+
+    it("keeps a well-formed cached Copilot Plus lineup", () => {
+      const copilotPlusCatalog = {
+        models: [{ id: "glm-5.2", displayName: "GLM-5.2" }],
+        defaultEnabledIds: ["glm-5.2"],
+      };
+
+      const out = sanitizeSettings({ ...DEFAULT_SETTINGS, copilotPlusCatalog });
+
+      expect(out.copilotPlusCatalog).toEqual(copilotPlusCatalog);
+    });
+  });
+
   describe("resetSettings()", () => {
     it("preserves historical roots and folds in the pre-reset active root", () => {
       settingsStore.set(settingsAtom, {
@@ -891,6 +935,21 @@ describe("model", () => {
       expect(after.copilotFolder).toBe(DEFAULT_SETTINGS.copilotFolder);
       // Legacy + historical + pre-reset active root all survive the reset.
       expect(new Set(after.copilotRootHistory)).toEqual(new Set(["copilot", "ai", "team-ai"]));
+    });
+
+    it("preserves the cached Copilot Plus lineup, which a reset does not re-fetch (https://github.com/Brevilabs/obsidian-copilot-private/issues/319)", () => {
+      // Reset keeps the Plus provider and its configured models but does not
+      // trigger a re-sync, so clearing this cache would leave those still-usable
+      // models with no context window for the rest of the session.
+      const catalog = {
+        models: [{ id: "glm-5.2", displayName: "GLM-5.2", limits: { context: 262144 } }],
+        defaultEnabledIds: ["glm-5.2"],
+      };
+      settingsStore.set(settingsAtom, { ...DEFAULT_SETTINGS, copilotPlusCatalog: catalog });
+
+      resetSettings();
+
+      expect(settingsStore.get(settingsAtom).copilotPlusCatalog).toEqual(catalog);
     });
 
     it("preserves providers with keychain credentials (https://github.com/logancyang/obsidian-copilot-preview/issues/259)", () => {

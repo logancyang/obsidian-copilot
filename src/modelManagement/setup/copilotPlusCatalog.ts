@@ -74,7 +74,13 @@ function parseReasoningEfforts(raw: unknown): readonly string[] | undefined {
 
 /** One catalog entry as a `ModelInfo`, or null when it carries no usable id. */
 function toModelInfo(entry: BrevilabsModelEntry): ModelInfo | null {
-  const id = entry.id?.trim();
+  // The payload is untrusted JSON, so the declared `string` is a hope rather
+  // than a guarantee. A non-string id would throw out of `trim()` and escape to
+  // the caller's outer catch, skipping the unreadable-response fallback that is
+  // supposed to keep a signed-in user's provider registered.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/319
+  if (typeof entry.id !== "string") return null;
+  const id = entry.id.trim();
   if (!id) return null;
 
   const model: ModelInfo = {
@@ -99,6 +105,19 @@ function toModelInfo(entry: BrevilabsModelEntry): ModelInfo | null {
 }
 
 /**
+ * Whether an entry publishes a context window we could not read.
+ *
+ * Absent is fine — plenty of metadata is optional. Present but unreadable is
+ * not: the reconcile writes `limits` from this snapshot, so accepting the entry
+ * would replace a known window with nothing and leave the context meter
+ * unsizable. The lineup is rejected instead, which keeps the last good one.
+ * https://github.com/Brevilabs/obsidian-copilot-private/issues/319
+ */
+function hasUnreadableContextLength(entry: BrevilabsModelEntry): boolean {
+  return entry.context_length !== undefined && parseContextLength(entry.context_length) === null;
+}
+
+/**
  * The lineup a models-endpoint response describes, or null when it cannot be
  * read as one.
  *
@@ -119,6 +138,7 @@ export function readCopilotPlusCatalog(
   const seen = new Set<string>();
   for (const entry of response.data) {
     if (!entry || typeof entry !== "object") return null;
+    if (hasUnreadableContextLength(entry)) return null;
     const model = toModelInfo(entry);
     if (!model || seen.has(model.id)) return null;
     seen.add(model.id);

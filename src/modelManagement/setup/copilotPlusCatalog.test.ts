@@ -116,12 +116,22 @@ describe("copilotPlusCatalog", () => {
       ["an entry with a blank id", { data: [{ id: "   " }] }],
       ["a duplicated id", { data: [{ id: "dup" }, { id: "dup" }] }],
       ["a null entry", { data: [null] }],
+      ["a non-string id, which must not throw past the caller's fallback", { data: [{ id: 123 }] }],
+      ["a present but unreadable context window", { data: [{ id: "ok", context_length: "huge" }] }],
     ])(
       "rejects %s outright, because a half-read lineup reconciles as a mass withdrawal (https://github.com/Brevilabs/obsidian-copilot-private/issues/319)",
       (_case, payload) => {
         expect(readCopilotPlusCatalog(payload as BrevilabsModelsResponse | null)).toBeNull();
       }
     );
+
+    it("accepts an entry that publishes no context window at all", () => {
+      // Absent metadata is ordinary; only a present-but-unreadable value is a
+      // signal that the response cannot be trusted to reconcile against.
+      const catalog = readCopilotPlusCatalog({ data: [{ id: "no-window" }] });
+
+      expect(catalog!.models[0].limits).toBeUndefined();
+    });
 
     it("preserves the order the service published", () => {
       const catalog = readCopilotPlusCatalog({

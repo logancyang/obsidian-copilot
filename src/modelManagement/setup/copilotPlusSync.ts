@@ -69,6 +69,26 @@ function sameLineup(a: readonly ModelInfo[], b: readonly ModelInfo[]): boolean {
  */
 const LINEUP_TIMEOUT_MS = 10_000;
 
+/**
+ * Attempts allowed when there is no cached lineup to fall back on.
+ *
+ * Every other caller can degrade to the cache, so one failed read costs them
+ * nothing. A first sign-in has no cache: giving up there leaves someone who has
+ * just paid with a registered provider and no models, and nothing re-syncs
+ * until they reload. Retrying is bounded and abandoned the moment the user's
+ * Plus state changes, so a sign-out never waits on more than one read.
+ * https://github.com/Brevilabs/obsidian-copilot-private/issues/319
+ */
+const COLD_START_ATTEMPTS = 3;
+const COLD_START_BACKOFF_MS = 2_000;
+
+/** Resolve after `ms`. */
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+}
+
 /** Resolve with null if `promise` has not settled within `ms`. */
 function withDeadline<T>(promise: Promise<T | null>, ms: number): Promise<T | null> {
   return new Promise((resolve) => {
@@ -95,9 +115,20 @@ function withDeadline<T>(promise: Promise<T | null>, ms: number): Promise<T | nu
  *   unreadable and the previous snapshot stands.
  */
 async function refreshCachedLineup(
-  fetchModels: CopilotPlusModelsFetcher
+  fetchModels: CopilotPlusModelsFetcher,
+  stillWanted: () => boolean
 ): Promise<{ models: readonly ModelInfo[]; defaultEnabledIds: readonly string[] } | null> {
-  const catalog = readCopilotPlusCatalog(await withDeadline(fetchModels(), LINEUP_TIMEOUT_MS));
+  const attempts = getSettings().copilotPlusCatalog.models.length === 0 ? COLD_START_ATTEMPTS : 1;
+  let catalog = null as ReturnType<typeof readCopilotPlusCatalog>;
+  for (let attempt = 0; attempt < attempts && !catalog; attempt++) {
+    if (attempt > 0) {
+      await delay(COLD_START_BACKOFF_MS);
+      // Abandon the moment the user's Plus state moves on, so a sign-out is
+      // never held behind a retry sequence it can no longer benefit from.
+      if (!stillWanted()) return null;
+    }
+    catalog = readCopilotPlusCatalog(await withDeadline(fetchModels(), LINEUP_TIMEOUT_MS));
+  }
   if (!catalog) {
     logInfo("[modelManagement] Copilot Plus lineup unreadable; keeping the cached one");
     return null;
@@ -144,7 +175,23 @@ export async function syncCopilotPlusProvider(
       await api.setup.copilotPlus.unregisterPlusProvider();
       return;
     }
-    const catalog = await refreshCachedLineup(fetchModels);
+    const plusStateUnchanged = (): boolean => {
+      const now = getSettings();
+      return now.isPaidUser === true && now.plusLicenseKey === licenseKey;
+    };
+    const catalog = await refreshCachedLineup(fetchModels, plusStateUnchanged);
+    // The endpoint read is the only await between the caller's decision and
+    // this write, and a lot can happen across it: the user signs out, rotates
+    // their key, or disables and re-enables the plugin. Registering on the
+    // strength of a stale argument would restore a revoked license's provider
+    // and its keychain credential after sign-out.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/319
+    if (!plusStateUnchanged()) {
+      logInfo(
+        "[modelManagement] Copilot Plus state changed during the lineup read; not registering"
+      );
+      return;
+    }
     await api.setup.copilotPlus.registerPlusProvider({
       providerType: "openai-compatible",
       displayName: "Copilot",

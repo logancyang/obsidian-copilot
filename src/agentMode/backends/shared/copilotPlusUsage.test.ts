@@ -23,6 +23,8 @@ describe("copilotPlusUsage", () => {
     mockGetUsage.mockReset();
     mockGetModels.mockReset();
     resetSettings();
+    // `resetSettings` deliberately preserves this cache in production.
+    setSettings({ copilotPlusCatalog: { models: [], defaultEnabledIds: [] } });
   });
 
   describe("planUsageFromCopilotPlusUsage()", () => {
@@ -135,7 +137,7 @@ describe("copilotPlusUsage", () => {
       });
 
       it("answers null for every model before the first lineup has been cached", async () => {
-        resetSettings();
+        setSettings({ copilotPlusCatalog: { models: [], defaultEnabledIds: [] } });
 
         await expect(
           new CopilotPlusUsageReader().readContextWindow("gemini-3-pro")
