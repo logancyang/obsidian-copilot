@@ -1,16 +1,9 @@
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
-import type { CapabilityStatus } from "@/miyo/miyoStatusStore";
-import { Circle, TriangleAlert } from "lucide-react";
+import { TriangleAlert } from "lucide-react";
 import React from "react";
 
 export interface MiyoConnectionControlProps {
-  enabled: boolean;
-  status: CapabilityStatus;
   checking: boolean;
-  remote: boolean;
-  connectLabel?: string;
-  onConnect: () => void;
   onDisconnect: () => void;
   onRetry: () => void;
 }
@@ -47,62 +40,30 @@ export const MiyoAvailabilityNotice: React.FC<MiyoAvailabilityNoticeProps> = ({
   );
 };
 
-/**
- * Shows Miyo connection intent and reachability without reading plugin state.
- */
+/** Actions for the selected active connection; endpoint status belongs to its option. */
 export const MiyoConnectionControl: React.FC<MiyoConnectionControlProps> = ({
-  enabled,
-  status,
   checking,
-  remote,
-  connectLabel = "Connect",
-  onConnect,
   onDisconnect,
   onRetry,
-}) => {
-  if (!enabled) {
-    return (
-      <Button variant="secondary" size="sm" onClick={onConnect} disabled={checking}>
-        {checking ? "Connecting…" : connectLabel}
-      </Button>
-    );
-  }
-
-  const connected = status === "available" || status === "stale";
-  const label = checking
-    ? "Checking…"
-    : connected
-      ? `Connected · ${remote ? "remote" : "local"}`
-      : "Unavailable";
-
-  // Connection intent survives a failed health check. Keep both recovery paths
-  // visible so a user can retry the same endpoint or disconnect without running
-  // the enable flow again.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/356
-  return (
-    <div className="tw-flex tw-w-full tw-flex-wrap tw-items-center tw-justify-end tw-gap-2">
-      <span
-        role="status"
-        className="tw-mr-auto tw-inline-flex tw-shrink-0 tw-items-center tw-gap-1.5 tw-rounded-full tw-bg-secondary tw-px-3 tw-py-1 tw-text-smallest tw-font-semibold tw-text-normal"
-      >
-        <Circle
-          className={cn(
-            "tw-size-1.5 tw-shrink-0 tw-fill-current",
-            checking ? "tw-text-muted" : connected ? "tw-text-success" : "tw-text-warning"
-          )}
-        />
-        {label}
-      </span>
-      {!checking && (
-        <Button variant="secondary" size="sm" onClick={onRetry}>
-          {connected ? "Check connection" : "Retry"}
-        </Button>
-      )}
-      {!checking && (
-        <Button variant="secondary" size="sm" onClick={onDisconnect}>
-          Disconnect
-        </Button>
-      )}
-    </div>
-  );
-};
+}) => (
+  <div className="tw-flex tw-w-full tw-flex-wrap tw-items-center tw-justify-end tw-gap-2">
+    <Button
+      variant="secondary"
+      size="sm"
+      className="tw-shadow-none"
+      onClick={onRetry}
+      disabled={checking}
+    >
+      Check connection
+    </Button>
+    <Button
+      variant="secondary"
+      size="sm"
+      className="tw-shadow-none"
+      onClick={onDisconnect}
+      disabled={checking}
+    >
+      Disconnect
+    </Button>
+  </div>
+);
