@@ -48,6 +48,21 @@ export function deriveConversationsFolder(settings: FolderSettings): string {
   return deriveSubfolder(settings, COPILOT_SUBFOLDER.conversations);
 }
 
+/**
+ * Derive the store for images embedded in saved chats. Copilot keeps its own
+ * attachments instead of writing into the vault's shared attachment folder,
+ * which users curate for their own media. Nesting the store inside the
+ * conversations folder means the images travel, and are discarded, with the
+ * transcripts that embed them.
+ *
+ * @param conversationsFolder - Conversations folder the save already resolved,
+ *   so one operation cannot separate a transcript from its images when the
+ *   Copilot root changes mid-save.
+ */
+export function deriveConversationAttachmentsFolder(conversationsFolder: string): string {
+  return normalizePath(`${conversationsFolder}/attachments`);
+}
+
 /** Derive the custom-commands folder from a settings snapshot. */
 export function deriveCustomPromptsFolder(settings: FolderSettings): string {
   return deriveSubfolder(settings, COPILOT_SUBFOLDER.customPrompts);

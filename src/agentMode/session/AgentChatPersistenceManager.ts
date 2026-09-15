@@ -168,7 +168,7 @@ export class AgentChatPersistenceManager {
       const preparedMessages = await prepareChatImagesForSave(
         this.app,
         messages,
-        preferredFileName
+        conversationsFolder
       );
       const chatContent = this.formatChatContent(preparedMessages);
 
