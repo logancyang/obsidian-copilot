@@ -52,7 +52,14 @@ export interface AgentInputDraft {
 }
 
 interface UseAgentInputDraftsArgs {
-  activeChatInputId: string;
+  /**
+   * Chat input whose draft the returned controls read and write, or null when
+   * no chat input is on screen — during a backend restart the old session is
+   * closed before its replacement exists. Reads fall back to an empty draft and
+   * writes are dropped, while stored drafts are left alone.
+   * https://github.com/Brevilabs/obsidian-copilot-private/issues/473
+   */
+  activeChatInputId: string | null;
   /** Logical ids of all live chat inputs; drafts for ids not here are pruned. */
   liveChatInputIds: readonly string[];
   /** Seed for a fresh draft's include-active-note toggle (the user setting). */
@@ -136,8 +143,10 @@ export function useAgentInputDrafts({
   );
 
   const updateActive = useCallback(
-    (updater: (draft: AgentInputDraft) => AgentInputDraft) =>
-      updateDraft(activeChatInputId, updater),
+    (updater: (draft: AgentInputDraft) => AgentInputDraft) => {
+      if (!activeChatInputId) return;
+      updateDraft(activeChatInputId, updater);
+    },
     [activeChatInputId, updateDraft]
   );
 
@@ -219,7 +228,7 @@ export function useAgentInputDrafts({
     [updateActive]
   );
 
-  const active = drafts[activeChatInputId];
+  const active = activeChatInputId ? drafts[activeChatInputId] : undefined;
   const fields = useMemo<AgentInputDraft>(
     () =>
       active ?? {

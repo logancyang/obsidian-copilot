@@ -1,4 +1,5 @@
 import {
+  type AgentInputDraftControls,
   type QueuedAgentMessage,
   useAgentInputDrafts,
 } from "@/agentMode/ui/hooks/useAgentInputDrafts";
@@ -132,6 +133,27 @@ describe("useAgentInputDrafts", () => {
     // Loading and the queue belong to the in-flight turn, not the compose box.
     expect(result.current.loading).toBe(true);
     expect(result.current.queue.map((q) => q.id)).toEqual(["q1"]);
+  });
+
+  it("keeps stored drafts while no chat input is active, so a restart gap costs nothing (https://github.com/Brevilabs/obsidian-copilot-private/issues/473)", () => {
+    // A backend restart closes the old session before its replacement exists,
+    // so for that window the surface has no active chat input at all.
+    const { result, rerender } = renderHook<AgentInputDraftControls, { active: string | null }>(
+      ({ active }) =>
+        useAgentInputDrafts({
+          activeChatInputId: active,
+          liveChatInputIds: ["a"],
+          defaultIncludeActiveNote: false,
+        }),
+      { initialProps: { active: "a" } }
+    );
+    act(() => result.current.setInput("half-written question"));
+
+    rerender({ active: null });
+    expect(result.current.input).toBe("");
+
+    rerender({ active: "a" });
+    expect(result.current.input).toBe("half-written question");
   });
 
   it("prunes a draft once its session is no longer live", () => {
