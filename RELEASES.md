@@ -1,5 +1,39 @@
 # Release Notes
 
+# v4.0.9 - Use remote Miyo in Copilot
+
+![Latest Miyo settings showing the connected Local server, Remote server setup, and Semantic search for agents](https://raw.githubusercontent.com/logancyang/obsidian-copilot/5a7041a3268eef309d4763147ac7d472efeb0e82/release-media/4.0.9/miyo-dark-atom.png)
+
+Keep your notes indexed on one computer and connect to that Miyo server from Copilot on another. The new Miyo settings make it easier to choose your server and check the connection, and a new tutorial walks you through remote setup. ([#3232](https://github.com/logancyang/obsidian-copilot/pull/3232), [#3233](https://github.com/logancyang/obsidian-copilot/pull/3233), [#3241](https://github.com/logancyang/obsidian-copilot/pull/3241), @brevilabs-agent-bot)
+
+Open **Copilot settings → Miyo**, choose **Remote server**, enter your server address, and click **Connect**. The **Connected** badge shows which server you are using, so you can check another connection option without switching away from it. ([#3232](https://github.com/logancyang/obsidian-copilot/pull/3232), [#3233](https://github.com/logancyang/obsidian-copilot/pull/3233), @brevilabs-agent-bot)
+
+Follow the [remote Miyo tutorial](https://docs.obsidiancopilot.com/miyo-remote-setup/) to set up a shared host through Tailscale. It covers the host and desktop-client requirements, the address to use on each device, and how to check your setup. ([#3241](https://github.com/logancyang/obsidian-copilot/pull/3241), @brevilabs-agent-bot)
+
+## 📝 Add selected text to Agent Chat
+
+Select a passage in your note, then ask Agent Chat to explain it, rewrite it, or help you develop the idea. Your selection appears as its own context badge, so you can see the excerpt you are asking about alongside the current note and remove either badge when you do not need it. ([#3228](https://github.com/logancyang/obsidian-copilot/pull/3228), [#3230](https://github.com/logancyang/obsidian-copilot/pull/3230), @zeroliu)
+
+![Selected passage in a note behind the Agent Chat composer, with the matching selected-text context badge highlighted](https://raw.githubusercontent.com/logancyang/obsidian-copilot/2425c85c99d466506d2a810ed97f6bc7e1fd7d67/release-media/4.0.9/selected-context-dark-atom.png)
+
+## ✨ More improvements
+
+- On desktop, review the contents of a bug-report bundle before choosing to upload it and open the issue. ([#3238](https://github.com/logancyang/obsidian-copilot/pull/3238), [#3244](https://github.com/logancyang/obsidian-copilot/pull/3244), @Emt-lin, @logancyang)
+- Get started with the new [Miyo setup guide](https://docs.obsidiancopilot.com/miyo-setup/) and [Relevant Notes guide](https://docs.obsidiancopilot.com/relevant-notes/). ([#3220](https://github.com/logancyang/obsidian-copilot/pull/3220), @zeroliu)
+- Clearer chat prompts and recovery messages make the next action easier to find. ([#3201](https://github.com/logancyang/obsidian-copilot/pull/3201), [#3188](https://github.com/logancyang/obsidian-copilot/pull/3188), [#3189](https://github.com/logancyang/obsidian-copilot/pull/3189), @brevilabs-agent-bot)
+
+## 🛠️ Bug Fixes
+
+- Manually saved Agent Chats keep recording new turns when Autosave is off. ([#3226](https://github.com/logancyang/obsidian-copilot/pull/3226), @logancyang)
+- Relevant Notes remains available in chat when its separate panes are hidden. ([#3237](https://github.com/logancyang/obsidian-copilot/pull/3237), @brevilabs-agent-bot)
+
+## 🧰 Troubleshoot
+
+- If models are missing, navigate to Copilot settings -> Models tab and click "Refresh Built-in Models".
+- Please report any issue you see in the member channel!
+
+---
+
 # v4.0.8 - Live Relevant Notes in Agent Chat
 
 ![Copilot 4.0.8: Find the notes that refine your questions, with an open notebook and an orange thread](https://github.com/user-attachments/assets/9ce36e3a-25a7-4ba3-8958-d640eb19d5d8)
