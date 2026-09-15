@@ -1,118 +1,31 @@
 /**
- * Reconciles the Copilot Plus provider with the user's current Plus state.
+ * Reconciles the Copilot Plus provider with the user's current Plus state and
+ * with the lineup the models service publishes.
  *
- * Plus has no model-list endpoint, so the model set is a hardcoded snapshot
- * (`COPILOT_PLUS_MODELS`). `syncCopilotPlusProvider` is the single bridge the
- * plugin host calls on Plus sign-in / sign-out (and once on load): it
- * registers the Plus provider when signed in (with a key) and unregisters it
- * otherwise. Both `register`/`unregister` are idempotent, so calling this on
- * every relevant settings change is safe.
+ * `syncCopilotPlusProvider` is the single bridge the plugin host calls on Plus
+ * sign-in / sign-out and once on load: it registers the Plus provider when
+ * signed in (with a key) and unregisters it otherwise.
+ *
+ * The models endpoint is the authority for which models exist, but it is never
+ * on the startup path. Everything that needs the lineup reads the cached
+ * snapshot in `settings.copilotPlusCatalog`, so an agent starts on last-known-
+ * good models at once and a slow or unreachable service costs nothing. A
+ * response that matches the cache writes nothing, which is what keeps a routine
+ * reload from restarting a running agent; a response that differs writes once
+ * and the agent refreshes then.
+ * https://github.com/Brevilabs/obsidian-copilot-private/issues/319
  */
 
-import { BREVILABS_MODELS_BASE_URL, ChatModels } from "@/constants";
-import { logError } from "@/logger";
+import { BrevilabsClient, type BrevilabsModelsResponse } from "@/LLMProviders/brevilabsClient";
+import { BREVILABS_MODELS_BASE_URL } from "@/constants";
+import { logError, logInfo } from "@/logger";
 import type { ModelManagementApi } from "@/modelManagement/createModelManagement";
+import { readCopilotPlusCatalog } from "@/modelManagement/setup/copilotPlusCatalog";
 import type { ModelInfo } from "@/modelManagement/types/catalog";
-import type { CopilotSettings } from "@/settings/model";
+import { getSettings, setSettings, type CopilotSettings } from "@/settings/model";
 
-/**
- * The Copilot Plus models the brevilabs relay exposes. Hardcoded — there's no
- * relay catalog to fetch, so this mirrors the curated public lineup served by
- * `models.brevilabs.com/v1/models`. Wire ids must match what the relay accepts;
- * opencode routes them as `copilot-plus/<id>` (see `mapProviderToOpencodeId`).
- *
- * `COPILOT_PLUS_DEFAULT_ENABLED_MODELS` names the few enabled by default; the
- * rest ship available-but-off in the chat + opencode pickers for the user to
- * toggle on.
- *
- * `reasoning: true` marks the models the relay accepts an effort level for (it
- * matches the models service's `supports_reasoning`). The chat + agent pickers
- * read this (via `configuredModelToCustomModel` → `ModelCapability.REASONING`)
- * to surface the effort selector. These models do NOT reason unless the user
- * picks an effort, so flash stays fast by default. Kimi K2.6 (Azure) is the one
- * model without effort support, so it's left unflagged.
- */
-export const COPILOT_PLUS_MODELS: readonly ModelInfo[] = Object.freeze([
-  {
-    id: ChatModels.COPILOT_PLUS_FLASH,
-    displayName: "Copilot Plus Flash",
-    description: "The default model: fastest responses and the most quota.",
-    toolCall: true,
-    reasoning: true,
-    modalities: { input: ["text", "image"], output: ["text"] },
-  },
-  {
-    id: ChatModels.COPILOT_PLUS_KIMI_K2_6,
-    displayName: "Kimi K2.6",
-    description: "Good for long-running reasoning tasks.",
-    toolCall: true,
-    modalities: { input: ["text"], output: ["text"] },
-  },
-  {
-    id: ChatModels.COPILOT_PLUS_GLM_5_2,
-    displayName: "GLM-5.2",
-    description: "A long-horizon frontier open model that beats some of the best closed models.",
-    toolCall: true,
-    reasoning: true,
-    modalities: { input: ["text"], output: ["text"] },
-  },
-  {
-    id: ChatModels.COPILOT_PLUS_KIMI_K2_7_CODE,
-    displayName: "Kimi K2.7 Code",
-    description: "Optimized for coding tasks.",
-    toolCall: true,
-    reasoning: true,
-    modalities: { input: ["text", "image"], output: ["text"] },
-  },
-  {
-    id: ChatModels.COPILOT_PLUS_DEEPSEEK_V4_PRO,
-    displayName: "DeepSeek V4 Pro",
-    description: "A top-tier model for the hardest reasoning and agentic tasks.",
-    toolCall: true,
-    reasoning: true,
-    modalities: { input: ["text"], output: ["text"] },
-  },
-  {
-    id: ChatModels.COPILOT_PLUS_DEEPSEEK_V4_FLASH_0731,
-    displayName: "DeepSeek V4 Flash 0731",
-    description: "The newest DeepSeek V4 Flash snapshot: fast, cheap, and broadly capable.",
-    toolCall: true,
-    reasoning: true,
-    modalities: { input: ["text"], output: ["text"] },
-  },
-  {
-    id: ChatModels.COPILOT_PLUS_MIMO_V2_5,
-    displayName: "MiMo V2.5",
-    description: "Cost-effective and capable for everyday use.",
-    toolCall: true,
-    reasoning: true,
-    modalities: { input: ["text"], output: ["text"] },
-  },
-  {
-    id: ChatModels.COPILOT_PLUS_MINIMAX_M2_7,
-    displayName: "MiniMax M2.7",
-    description: "A compact, efficient model for lightweight tasks.",
-    toolCall: true,
-    reasoning: true,
-    modalities: { input: ["text"], output: ["text"] },
-  },
-]);
-
-/**
- * Wire ids auto-enrolled (toggled on) by default when the Plus provider is
- * registered. Everything else in `COPILOT_PLUS_MODELS` is added but left
- * unenrolled, so users opt into the extra models themselves. Passed to
- * `registerPlusProvider` as `autoEnrollModelIds`.
- *
- * Three models are enabled by default to give users immediate access to
- * representative capabilities: fastest responses (Flash), top-tier reasoning
- * (DeepSeek V4 Pro), and long-horizon frontier open model (GLM-5.2).
- */
-export const COPILOT_PLUS_DEFAULT_ENABLED_MODELS: readonly string[] = Object.freeze([
-  ChatModels.COPILOT_PLUS_FLASH,
-  ChatModels.COPILOT_PLUS_DEEPSEEK_V4_PRO,
-  ChatModels.COPILOT_PLUS_GLM_5_2,
-]);
+/** Reads the public models endpoint. Injected so the sync stays unit-testable. */
+export type CopilotPlusModelsFetcher = () => Promise<BrevilabsModelsResponse | null>;
 
 /**
  * Whether a settings change requires re-reconciling the Plus provider:
@@ -139,32 +52,109 @@ export function plusSyncNeeded(
   );
 }
 
+/** Whether two lineups describe the same models with the same metadata. */
+function sameLineup(a: readonly ModelInfo[], b: readonly ModelInfo[]): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
 /**
- * Register or unregister the Plus provider to match Plus state. Best-effort:
- * a failure is logged, not thrown, since this runs as background reconciliation
- * off a settings change.
+ * Upper bound on one lineup read.
+ *
+ * Nothing waits on this to start, so the deadline is not there to protect
+ * startup. It bounds the caller's serialized queue: a sign-out is chained
+ * behind whatever sync is in flight, and `requestUrl` enforces no timeout of
+ * its own, so a hung connection would otherwise hold a revoked license
+ * registered for as long as the OS takes to give up. Giving up early costs one
+ * refresh of a cache that is already good.
+ */
+const LINEUP_TIMEOUT_MS = 10_000;
+
+/** Resolve with null if `promise` has not settled within `ms`. */
+function withDeadline<T>(promise: Promise<T | null>, ms: number): Promise<T | null> {
+  return new Promise((resolve) => {
+    const timer = window.setTimeout(() => resolve(null), ms);
+    const settle = (value: T | null) => {
+      window.clearTimeout(timer);
+      resolve(value);
+    };
+    promise.then(settle, () => settle(null));
+  });
+}
+
+/**
+ * Refresh the cached lineup from the models endpoint.
+ *
+ * Writing only on a real difference is load-bearing rather than an
+ * optimization: every consumer of this cache is rebuilt from a settings
+ * change, and for the OpenCode agent that rebuild means restarting the
+ * subprocess and replacing the user's session. A reload that finds the same
+ * lineup must therefore be completely silent.
+ *
+ * @param fetchModels - Reader for the public models endpoint.
+ * @returns The lineup now in the cache, or null when the response was
+ *   unreadable and the previous snapshot stands.
+ */
+async function refreshCachedLineup(
+  fetchModels: CopilotPlusModelsFetcher
+): Promise<{ models: readonly ModelInfo[]; defaultEnabledIds: readonly string[] } | null> {
+  const catalog = readCopilotPlusCatalog(await withDeadline(fetchModels(), LINEUP_TIMEOUT_MS));
+  if (!catalog) {
+    logInfo("[modelManagement] Copilot Plus lineup unreadable; keeping the cached one");
+    return null;
+  }
+  const cached = getSettings().copilotPlusCatalog;
+  if (
+    !sameLineup(cached.models, catalog.models) ||
+    cached.defaultEnabledIds.join("\0") !== catalog.defaultEnabledIds.join("\0")
+  ) {
+    setSettings({
+      copilotPlusCatalog: {
+        models: [...catalog.models],
+        defaultEnabledIds: [...catalog.defaultEnabledIds],
+      },
+    });
+  }
+  return catalog;
+}
+
+/**
+ * Register or unregister the Plus provider to match Plus state, reconciling its
+ * models against the published lineup. Best-effort: a failure is logged, not
+ * thrown, since this runs as background reconciliation off a settings change.
+ *
+ * Sign-out is not allowed to wait on the network — the endpoint read happens
+ * only on the signed-in path, so revoking access is immediate.
  *
  * `licenseKey` is already hydrated from Obsidian Keychain by the settings
  * persistence boundary.
+ *
+ * @param api - Model-management instance owned by the current plugin lifecycle.
+ * @param isPaidUser - Whether the user currently holds a license.
+ * @param licenseKey - The Plus relay token, absent when signed out.
+ * @param fetchModels - Reader for the public models endpoint.
  */
 export async function syncCopilotPlusProvider(
   api: ModelManagementApi,
   isPaidUser: boolean,
-  licenseKey: string | undefined
+  licenseKey: string | undefined,
+  fetchModels: CopilotPlusModelsFetcher = () => BrevilabsClient.getInstance().getModels()
 ): Promise<void> {
   try {
-    if (isPaidUser && licenseKey) {
-      await api.setup.copilotPlus.registerPlusProvider({
-        providerType: "openai-compatible",
-        displayName: "Copilot",
-        baseUrl: BREVILABS_MODELS_BASE_URL,
-        apiKey: licenseKey,
-        models: COPILOT_PLUS_MODELS,
-        autoEnrollModelIds: COPILOT_PLUS_DEFAULT_ENABLED_MODELS,
-      });
-    } else {
+    if (!isPaidUser || !licenseKey) {
       await api.setup.copilotPlus.unregisterPlusProvider();
+      return;
     }
+    const catalog = await refreshCachedLineup(fetchModels);
+    await api.setup.copilotPlus.registerPlusProvider({
+      providerType: "openai-compatible",
+      displayName: "Copilot",
+      baseUrl: BREVILABS_MODELS_BASE_URL,
+      apiKey: licenseKey,
+      // An unreadable response leaves the persisted rows untouched rather than
+      // reconciling against nothing, which would read as the service having
+      // withdrawn every model and delete the user's whole lineup offline.
+      ...(catalog ? { models: catalog.models, autoEnrollModelIds: catalog.defaultEnabledIds } : {}),
+    });
   } catch (err) {
     logError("[modelManagement] Copilot Plus provider sync failed", err);
   }

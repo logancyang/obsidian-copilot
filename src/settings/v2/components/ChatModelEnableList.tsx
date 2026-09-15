@@ -40,9 +40,10 @@ export const ChatModelEnableList: React.FC = () => {
     [configuredModels, providers, enabledIds]
   );
 
-  // The locked Copilot group is an opencode-list feature, so the last argument
-  // never reaches it: this list is where a user curates chat models they can run,
-  // and the Quick Chat picker is where the lineup gets advertised.
+  // The locked Copilot group is an opencode-list feature, so `false` here keeps
+  // it out and the catalog it would advertise is never read: this list is where
+  // a user curates chat models they can run, and the Quick Chat picker is where
+  // the lineup gets advertised.
   const groups = React.useMemo<ModelEnableGroup[]>(
     () => buildModelEnableGroups(partition, false, query, false),
     [partition, query]

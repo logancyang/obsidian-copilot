@@ -3,11 +3,17 @@
 import type { ModelEnableGroup, ModelEnableRow } from "@/components/ui/ModelEnableList";
 import { isOpencodeZenWireId } from "@/utils/opencodeModelId";
 import {
-  COPILOT_PLUS_MODELS,
   capabilitiesFromConfiguredInfo,
   type ConfiguredModel,
+  type PersistedCopilotPlusCatalog,
   type Provider,
 } from "@/modelManagement";
+
+/** See AGENTS.md → "Referential stability". */
+const EMPTY_PLUS_CATALOG: PersistedCopilotPlusCatalog = Object.freeze({
+  models: Object.freeze([]),
+  defaultEnabledIds: Object.freeze([]),
+}) as unknown as PersistedCopilotPlusCatalog;
 
 /** One candidate model joined to its provider, plus current enabled state. */
 export interface Candidate {
@@ -176,12 +182,17 @@ interface OriginGroup {
  *   answers it because only it can see the provider rows — and the answer is not
  *   inferable from the groups built here, since registering the provider and
  *   reconciling its models are separate writes.
+ * @param copilotPlusCatalog - Cached Plus lineup the locked group advertises,
+ *   from `settings.copilotPlusCatalog`. Empty before the first successful
+ *   fetch, which renders as no locked group rather than a stale one. Omit it
+ *   on a list that never advertises the lineup.
  */
 export function buildModelEnableGroups(
   partition: CandidatePartition,
   isOpencode: boolean,
   query: string,
-  copilotProviderMissing: boolean
+  copilotProviderMissing: boolean,
+  copilotPlusCatalog: PersistedCopilotPlusCatalog = EMPTY_PLUS_CATALOG
 ): ModelEnableGroup[] {
   const q = query.trim().toLowerCase();
   const out: OriginGroup[] = [];
@@ -229,16 +240,18 @@ export function buildModelEnableGroups(
   // ability to act on it. Only opencode can route these models, and only its
   // list mixes in non-agent providers at all.
   if (isOpencode && copilotProviderMissing) {
-    const rows = COPILOT_PLUS_MODELS.map(
-      (model): ModelEnableRow => ({
-        id: `__locked_copilot__${model.id}`,
-        label: model.displayName || model.id,
-        description: model.description,
-        wireId: model.id,
-        enabled: false,
-        locked: true,
-      })
-    ).filter((row) => rowMatches(row, q));
+    const rows = copilotPlusCatalog.models
+      .map(
+        (model): ModelEnableRow => ({
+          id: `__locked_copilot__${model.id}`,
+          label: model.displayName || model.id,
+          description: model.description,
+          wireId: model.id,
+          enabled: false,
+          locked: true,
+        })
+      )
+      .filter((row) => rowMatches(row, q));
     if (rows.length > 0) {
       out.push({
         group: { key: "locked:copilot-plus", label: "Copilot", rows },
