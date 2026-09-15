@@ -52,9 +52,20 @@ function response(): BrevilabsModelsResponse {
   };
 }
 
+/** Long enough for every backoff and deadline in a cold-start retry sequence. */
+const COLD_START_TOTAL_MS = 60_000;
+
+/** Put the settings store in the signed-in state the sync is called for. */
+function signedIn(licenseKey = "token"): void {
+  setSettings({ isPaidUser: true, plusLicenseKey: licenseKey });
+}
+
 describe("copilotPlusSync", () => {
   beforeEach(() => {
     resetSettings();
+    // `resetSettings` deliberately preserves this cache in production, so a
+    // clean slate has to ask for one.
+    setSettings({ copilotPlusCatalog: { models: [], defaultEnabledIds: [] } });
   });
 
   describe("plusSyncNeeded()", () => {
@@ -83,6 +94,7 @@ describe("copilotPlusSync", () => {
   describe("syncCopilotPlusProvider()", () => {
     it("registers with the Keychain-hydrated token and the published lineup", async () => {
       const { api, registerPlusProvider, unregisterPlusProvider } = makeApi();
+      signedIn("hydrated-token");
 
       await syncCopilotPlusProvider(api, true, "hydrated-token", async () => response());
 
@@ -95,6 +107,7 @@ describe("copilotPlusSync", () => {
 
     it("caches the published lineup so later startups need no request", async () => {
       const { api } = makeApi();
+      signedIn();
 
       await syncCopilotPlusProvider(api, true, "token", async () => response());
 
@@ -130,6 +143,7 @@ describe("copilotPlusSync", () => {
       // OpenCode that means restarting the subprocess and replacing the user's
       // session. A reload that finds the same lineup must write nothing.
       const { api } = makeApi();
+      signedIn();
       await syncCopilotPlusProvider(api, true, "token", async () => response());
       const afterFirst = getSettings().copilotPlusCatalog;
 
@@ -140,6 +154,7 @@ describe("copilotPlusSync", () => {
 
     it("rewrites the cache when the service adds or withdraws a model", async () => {
       const { api } = makeApi();
+      signedIn();
       await syncCopilotPlusProvider(api, true, "token", async () => response());
 
       const withdrawn = response();
@@ -162,6 +177,7 @@ describe("copilotPlusSync", () => {
         // Reconciling against a lineup we could not read would delete every
         // Plus model the user has, which is what an offline launch would do.
         const { api, registerPlusProvider } = makeApi();
+        signedIn();
         setSettings({
           copilotPlusCatalog: {
             models: [{ id: "cached-model", displayName: "Cached" }],
@@ -194,8 +210,98 @@ describe("copilotPlusSync", () => {
       }
     );
 
+    it("retries a failed read when there is no cached lineup to fall back on (https://github.com/Brevilabs/obsidian-copilot-private/issues/319)", async () => {
+      // A first sign-in has no cache, so giving up on one failed read would
+      // leave someone who has just paid with a provider and no models.
+      jest.useFakeTimers();
+      try {
+        const { api, registerPlusProvider } = makeApi();
+        signedIn();
+        const fetchModels = jest
+          .fn<Promise<BrevilabsModelsResponse | null>, []>()
+          .mockResolvedValueOnce(null)
+          .mockResolvedValueOnce(null)
+          .mockResolvedValue(response());
+
+        const sync = syncCopilotPlusProvider(api, true, "token", fetchModels);
+        // Two backoffs plus each attempt's deadline timer.
+        await jest.advanceTimersByTimeAsync(COLD_START_TOTAL_MS);
+        await sync;
+
+        expect(fetchModels).toHaveBeenCalledTimes(3);
+        expect(registerPlusProvider.mock.calls[0][0].models).toHaveLength(2);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it("does not retry when a cached lineup can carry the session (https://github.com/Brevilabs/obsidian-copilot-private/issues/319)", async () => {
+      const { api } = makeApi();
+      signedIn();
+      setSettings({
+        copilotPlusCatalog: {
+          models: [{ id: "cached-model", displayName: "Cached" }],
+          defaultEnabledIds: ["cached-model"],
+        },
+      });
+      const fetchModels = jest.fn(async () => null);
+
+      await syncCopilotPlusProvider(api, true, "token", fetchModels);
+
+      expect(fetchModels).toHaveBeenCalledTimes(1);
+    });
+
+    it("abandons the retry sequence once the user signs out (https://github.com/Brevilabs/obsidian-copilot-private/issues/319)", async () => {
+      jest.useFakeTimers();
+      try {
+        const { api, registerPlusProvider } = makeApi();
+        signedIn();
+        const fetchModels = jest.fn(async () => {
+          setSettings({ isPaidUser: false, plusLicenseKey: "" });
+          return null;
+        });
+
+        const sync = syncCopilotPlusProvider(api, true, "token", fetchModels);
+        await jest.advanceTimersByTimeAsync(10_000);
+        await sync;
+
+        expect(fetchModels).toHaveBeenCalledTimes(1);
+        expect(registerPlusProvider).not.toHaveBeenCalled();
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it("does not register after the user signed out during the lineup read (https://github.com/Brevilabs/obsidian-copilot-private/issues/319)", async () => {
+      // The endpoint read is the only await between the caller's decision and
+      // the write. Registering on a stale argument would restore a revoked
+      // license's provider and its keychain credential after sign-out.
+      const { api, registerPlusProvider } = makeApi();
+      signedIn();
+
+      await syncCopilotPlusProvider(api, true, "token", async () => {
+        setSettings({ isPaidUser: false, plusLicenseKey: "" });
+        return response();
+      });
+
+      expect(registerPlusProvider).not.toHaveBeenCalled();
+    });
+
+    it("does not register a key the user has since rotated away from (https://github.com/Brevilabs/obsidian-copilot-private/issues/319)", async () => {
+      const { api, registerPlusProvider } = makeApi();
+      signedIn("old-key");
+
+      await syncCopilotPlusProvider(api, true, "old-key", async () => {
+        setSettings({ plusLicenseKey: "new-key" });
+        return response();
+      });
+
+      expect(registerPlusProvider).not.toHaveBeenCalled();
+    });
+
     it("contains background reconciliation failures", async () => {
       const { api, registerPlusProvider } = makeApi();
+      signedIn("hydrated-token");
       registerPlusProvider.mockRejectedValueOnce(new Error("boom"));
 
       await expect(
@@ -209,9 +315,10 @@ describe("copilotPlusSync", () => {
       jest.useFakeTimers();
       try {
         const { api, registerPlusProvider } = makeApi();
+        signedIn();
         const sync = syncCopilotPlusProvider(api, true, "token", () => new Promise(() => {}));
 
-        await jest.advanceTimersByTimeAsync(10_000);
+        await jest.advanceTimersByTimeAsync(COLD_START_TOTAL_MS);
         await sync;
 
         expect(registerPlusProvider.mock.calls[0][0].models).toBeUndefined();
@@ -225,6 +332,13 @@ describe("copilotPlusSync", () => {
       // on. Abandoning registration would leave a licensed user with no Plus
       // provider until they next got a network.
       const { api, registerPlusProvider } = makeApi();
+      signedIn();
+      setSettings({
+        copilotPlusCatalog: {
+          models: [{ id: "cached-model", displayName: "Cached" }],
+          defaultEnabledIds: ["cached-model"],
+        },
+      });
 
       await expect(
         syncCopilotPlusProvider(api, true, "token", async () => {

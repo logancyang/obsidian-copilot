@@ -875,6 +875,13 @@ export function resetSettings(): void {
       current.configuredModels,
       preservedProviderIds
     ),
+    // A cache of what the service publishes, carrying no user preference, and
+    // reset deliberately keeps the Plus provider and its configured models. A
+    // reset does not re-sync (`plusSyncNeeded` stays false when `isPaidUser` is
+    // preserved), so clearing this would leave those still-usable models with
+    // no context window for the rest of the session.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/319
+    copilotPlusCatalog: current.copilotPlusCatalog ?? EMPTY_COPILOT_PLUS_CATALOG,
     copilotRootHistory: preservedRootHistory,
   };
   setSettings(defaultSettingsWithBuiltIns);
@@ -1229,13 +1236,26 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   // Absent on every data.json written before the lineup was cached, so the
   // first load after upgrading lands here rather than on a crash.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/319
+  // Absent on every data.json written before the lineup was cached, and
+  // arbitrary on a synced or hand-edited one. Consumers dereference `model.id`
+  // straight out of this array, so the array being array-shaped is not enough —
+  // a single malformed entry would crash the pickers.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/319
   const cachedCatalog = sanitizedSettings.copilotPlusCatalog;
-  if (
-    !cachedCatalog ||
-    typeof cachedCatalog !== "object" ||
-    !Array.isArray(cachedCatalog.models) ||
-    !Array.isArray(cachedCatalog.defaultEnabledIds)
-  ) {
+  const catalogIsUsable =
+    !!cachedCatalog &&
+    typeof cachedCatalog === "object" &&
+    Array.isArray(cachedCatalog.models) &&
+    Array.isArray(cachedCatalog.defaultEnabledIds) &&
+    cachedCatalog.models.every(
+      (model) =>
+        !!model &&
+        typeof model === "object" &&
+        typeof model.id === "string" &&
+        typeof model.displayName === "string"
+    ) &&
+    cachedCatalog.defaultEnabledIds.every((id) => typeof id === "string");
+  if (!catalogIsUsable) {
     sanitizedSettings.copilotPlusCatalog = EMPTY_COPILOT_PLUS_CATALOG;
   }
   if (
