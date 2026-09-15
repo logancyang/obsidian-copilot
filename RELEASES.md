@@ -2,7 +2,7 @@
 
 # v4.0.9 - Use remote Miyo in Copilot
 
-![Miyo settings showing This computer and Remote server, the active connection badge, and server address controls](https://raw.githubusercontent.com/logancyang/obsidian-copilot/2425c85c99d466506d2a810ed97f6bc7e1fd7d67/release-media/4.0.9/miyo-dark-atom.png)
+![Latest Miyo settings showing the connected Local server, Remote server setup, and Semantic search for agents](https://raw.githubusercontent.com/logancyang/obsidian-copilot/5a7041a3268eef309d4763147ac7d472efeb0e82/release-media/4.0.9/miyo-dark-atom.png)
 
 Keep your notes indexed on one computer and connect to that Miyo server from Copilot on another. The new Miyo settings make it easier to choose your server and check the connection, and a new tutorial walks you through remote setup. ([#3232](https://github.com/logancyang/obsidian-copilot/pull/3232), [#3233](https://github.com/logancyang/obsidian-copilot/pull/3233), [#3241](https://github.com/logancyang/obsidian-copilot/pull/3241), @brevilabs-agent-bot)
 
