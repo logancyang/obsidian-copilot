@@ -1,5 +1,6 @@
 import {
   COPILOT_SUBFOLDER,
+  deriveConversationAttachmentsFolder,
   deriveConversationsFolder,
   deriveCustomPromptsFolder,
   deriveMemoryFolder,
@@ -61,6 +62,20 @@ describe("copilotFolder", () => {
     it("falls back to the default root when the configured root is blank", () => {
       expect(deriveConversationsFolder(settingsWithRoot("  "))).toBe(
         "copilot/copilot-conversations"
+      );
+    });
+  });
+
+  describe("deriveConversationAttachmentsFolder()", () => {
+    it("nests the attachment store inside the conversations folder it is given", () => {
+      expect(deriveConversationAttachmentsFolder("copilot/copilot-conversations")).toBe(
+        "copilot/copilot-conversations/attachments"
+      );
+    });
+
+    it("follows a relocated Copilot root through the conversations folder", () => {
+      expect(deriveConversationAttachmentsFolder("team/ai/copilot-conversations")).toBe(
+        "team/ai/copilot-conversations/attachments"
       );
     });
   });

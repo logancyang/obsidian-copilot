@@ -103,7 +103,7 @@ export class ChatPersistenceManager {
       const preparedMessages = await prepareChatImagesForSave(
         this.app,
         messages,
-        preferredFileName
+        conversationsFolder
       );
       const chatContent = this.formatChatContent(preparedMessages);
 
