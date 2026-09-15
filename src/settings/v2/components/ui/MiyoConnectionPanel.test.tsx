@@ -3,6 +3,7 @@ import React from "react";
 import { MiyoConnectionPanel, type MiyoConnectionPanelProps } from "./MiyoConnectionPanel";
 
 const ISSUE_URL = "https://github.com/Brevilabs/obsidian-copilot-private/issues/466";
+const ISSUE_471 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/471";
 
 function renderPanel(overrides: Partial<MiyoConnectionPanelProps> = {}) {
   const props: MiyoConnectionPanelProps = {
@@ -27,7 +28,7 @@ describe("MiyoConnectionPanel", () => {
     it(`attaches Connected to the active local title while browsing remote (${ISSUE_URL})`, () => {
       renderPanel({ mode: "remote" });
       expect(screen.getByRole("status").textContent).toBe("Connected");
-      expect(screen.getByRole("status").closest("label")?.textContent).toContain("This computer");
+      expect(screen.getByRole("status").closest("label")?.textContent).toContain("Local");
       expect(screen.getByRole<HTMLInputElement>("radio", { name: /Remote server/ }).checked).toBe(
         true
       );
@@ -61,6 +62,17 @@ describe("MiyoConnectionPanel", () => {
       expect(screen.queryByText("Connected")).toBeNull();
     });
 
+    it(`disables the local option and drops its badge where no local Miyo can be reached (${ISSUE_471})`, () => {
+      renderPanel({ mode: "remote", activeMode: "local", localSupported: false });
+      const local = screen.getByRole<HTMLInputElement>("radio", { name: /^Local/ });
+      expect(local.disabled).toBe(true);
+      expect(
+        screen.getByText("Needs Miyo running on this device. Use Remote server instead.")
+      ).toBeTruthy();
+      expect(screen.queryByRole("status")).toBeNull();
+      expect(screen.queryByRole("link", { name: "Download" })).toBeNull();
+    });
+
     it(`reports address edits without persisting or changing the active badge (${ISSUE_URL})`, () => {
       const props = renderPanel({
         mode: "remote",
@@ -71,7 +83,7 @@ describe("MiyoConnectionPanel", () => {
         target: { value: "http://work:8742" },
       });
       expect(props.onAddressChange).toHaveBeenCalledWith("http://work:8742");
-      expect(screen.getByRole("status").closest("label")?.textContent).toContain("This computer");
+      expect(screen.getByRole("status").closest("label")?.textContent).toContain("Local");
       expect(screen.getByRole("alert").textContent).toBe("Enter a valid address.");
     });
   });
