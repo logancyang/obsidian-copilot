@@ -123,6 +123,19 @@ class LogFileManager {
     // Intentionally do not flush automatically.
   }
 
+  /**
+   * Snapshot the buffered chat log as text for out-of-band export (the bug
+   * report bundle). Deliberately separate from `openLogFile()`: that path is a
+   * user-facing action that creates the vault note, opens a tab, and appends a
+   * settings dump, none of which may happen when a background flow just needs
+   * the log contents. Returns "" when nothing has been logged yet, which the
+   * caller reports as a skipped attachment rather than an empty file.
+   */
+  exportLogText(): string {
+    if (this.buffer.length === 0) return "";
+    return this.buffer.join("\n") + "\n";
+  }
+
   async flush(): Promise<void> {
     const app = this.app;
     if (!app?.vault?.adapter) return;
