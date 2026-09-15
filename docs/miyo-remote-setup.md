@@ -61,10 +61,10 @@ Use the address printed for **your** host. Keep both Miyo and Tailscale running 
 
 ## 3. Connect Copilot on each device
 
-On every device where you use Copilot:
+On every device where you use Copilot, including phones and tablets:
 
 1. Open **Settings → Copilot → Miyo**.
-2. Select **Remote server**.
+2. Select **Remote server**. On mobile this is the only option; **Local** is disabled there, because Copilot cannot discover a Miyo server on the device itself.
 3. Paste the full HTTPS address, including **`/miyo`**, into **Server address**.
 4. Click **Connect** and look for **Connected** on the Remote server card.
 
@@ -80,7 +80,9 @@ The highlighted areas show the Remote server selection and server address. The p
 
 ## 4. Check a search
 
-In Copilot's Miyo settings, turn on **Semantic search**. Keep **Search scope → Current vault** when searching the vault open in Obsidian.
+In Copilot's Miyo settings, turn on **Semantic search for agents**. Keep **Search scope → Current vault** when searching the vault open in Obsidian.
+
+On mobile, that switch is not shown: it installs an Agent Chat Skill, and Agent Chat is desktop-only. A connected phone or tablet uses the same remote Miyo through Copilot Plus chat and Relevant Notes, so check the search there instead of in Agent Chat.
 
 ![Semantic search enabled and Current vault selected, with both settings highlighted](https://raw.githubusercontent.com/logancyang/obsidian-copilot/14d33de58ed71cc69b82493bfd4f3cc0b593b70a/tutorial-media/remote-miyo/remote-search-settings-highlight.svg)
 

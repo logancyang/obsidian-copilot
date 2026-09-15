@@ -15,6 +15,11 @@ export interface MiyoConnectionPanelProps {
   enabled: boolean;
   status: CapabilityStatus;
   checking: boolean;
+  /**
+   * Whether a Miyo on this device can be reached at all. False on mobile, where
+   * service discovery has no equivalent, so Local can only ever fail to connect.
+   */
+  localSupported?: boolean;
   error?: string;
   children: React.ReactNode;
 }
@@ -30,6 +35,7 @@ export function MiyoConnectionPanel({
   enabled,
   status,
   checking,
+  localSupported = true,
   error,
   children,
 }: MiyoConnectionPanelProps) {
@@ -44,49 +50,57 @@ export function MiyoConnectionPanel({
           aria-label="Miyo connection"
           className="tw-flex tw-flex-wrap tw-gap-3"
         >
-          {(["local", "remote"] as const).map((value) => (
-            <label
-              key={value}
-              className={cn(
-                "tw-min-w-0 tw-flex-1 tw-basis-48 tw-cursor-pointer tw-space-y-1 tw-rounded-lg tw-border tw-border-solid tw-p-3 focus-within:tw-ring-2 focus-within:tw-ring-ring",
-                mode === value
-                  ? "tw-border-interactive-accent tw-bg-interactive-accent/10"
-                  : "tw-border-border tw-bg-secondary"
-              )}
-            >
-              <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-1.5">
-                <span className="tw-inline-flex tw-items-center tw-gap-2">
-                  <input
-                    type="radio"
-                    className="tw-m-0 tw-size-4 tw-shrink-0"
-                    name={groupId}
-                    value={value}
-                    checked={mode === value}
-                    onChange={() => onModeChange(value)}
-                  />
-                  <span className="tw-text-sm tw-font-medium">
-                    {value === "local" ? "This computer" : "Remote server"}
-                  </span>
-                </span>
-                {/* The badge belongs to the confirmed endpoint while another option is a draft.
-                    https://github.com/Brevilabs/obsidian-copilot-private/issues/466 */}
-                {activeMode === value && (
-                  <Badge
-                    role="status"
-                    variant={connected && !checking ? "success" : "secondary"}
-                    className="tw-px-1 tw-text-xs"
-                  >
-                    {statusLabel}
-                  </Badge>
+          {(["local", "remote"] as const).map((value) => {
+            const unavailable = value === "local" && !localSupported;
+            return (
+              <label
+                key={value}
+                className={cn(
+                  "tw-min-w-0 tw-flex-1 tw-basis-48 tw-space-y-1 tw-rounded-lg tw-border tw-border-solid tw-p-3 focus-within:tw-ring-2 focus-within:tw-ring-ring",
+                  unavailable ? "tw-cursor-not-allowed tw-opacity-45" : "tw-cursor-pointer",
+                  mode === value
+                    ? "tw-border-interactive-accent tw-bg-interactive-accent/10"
+                    : "tw-border-border tw-bg-secondary"
                 )}
-              </div>
-              <span className="tw-block tw-text-xs tw-text-muted">
-                {value === "local"
-                  ? "Connect to Miyo running locally."
-                  : "Connect using a server address."}
-              </span>
-            </label>
-          ))}
+                aria-disabled={unavailable}
+              >
+                <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-1.5">
+                  <span className="tw-inline-flex tw-items-center tw-gap-2">
+                    <input
+                      type="radio"
+                      className="tw-m-0 tw-size-4 tw-shrink-0"
+                      name={groupId}
+                      value={value}
+                      checked={mode === value}
+                      disabled={unavailable}
+                      onChange={() => onModeChange(value)}
+                    />
+                    <span className="tw-text-sm tw-font-medium">
+                      {value === "local" ? "Local" : "Remote server"}
+                    </span>
+                  </span>
+                  {/* The badge belongs to the confirmed endpoint while another option is a draft.
+                      https://github.com/Brevilabs/obsidian-copilot-private/issues/466 */}
+                  {activeMode === value && !unavailable && (
+                    <Badge
+                      role="status"
+                      variant={connected && !checking ? "success" : "secondary"}
+                      className="tw-px-1 tw-text-xs"
+                    >
+                      {statusLabel}
+                    </Badge>
+                  )}
+                </div>
+                <span className="tw-block tw-text-xs tw-text-muted">
+                  {value === "remote"
+                    ? "Connect using a server address."
+                    : unavailable
+                      ? "Needs Miyo running on this device. Use Remote server instead."
+                      : "Connect to Miyo running locally."}
+                </span>
+              </label>
+            );
+          })}
         </div>
         {mode === "remote" ? (
           <div className="tw-space-y-2">

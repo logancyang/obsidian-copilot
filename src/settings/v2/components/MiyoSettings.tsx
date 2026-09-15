@@ -34,8 +34,9 @@ import {
   MiyoConnectionControl,
 } from "@/settings/v2/components/ui/MiyoConnectionControl";
 import { err2String } from "@/utils";
+import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { getVaultBase } from "@/utils/vaultPath";
-import { Notice, Platform } from "obsidian";
+import { Notice } from "obsidian";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 
 /** Accent-tinted "Relay" chip shown next to the Connector (the paid relay plan). */
@@ -120,11 +121,18 @@ export const MiyoSettings: React.FC = () => {
     address: string;
     source: string;
   } | null>(null);
+  // Two Miyo controls are desktop-only for different reasons: local discovery
+  // has no mobile equivalent (MiyoServiceDiscovery resolves to null off the
+  // desktop runtime), and the search skill only runs inside Agent mode.
+  const onDesktop = isDesktopRuntime();
   const activeMode = getMiyoConnectionMode(settings);
   const activeUrl = getMiyoCustomUrl(settings);
   const settingsKey = `${activeMode}:${settings.miyoServerUrl}`;
   const currentDraft = draft?.source === settingsKey ? draft : null;
-  const mode = currentDraft?.mode ?? activeMode;
+  // `miyoConnectionMode` is a synced setting, so a desktop in local mode hands
+  // its phone a mode that can never connect. Fall back to remote for DISPLAY
+  // only; the platform fact must never be persisted back into the shared value.
+  const mode = currentDraft?.mode ?? (onDesktop ? activeMode : "remote");
   const urlDraft = currentDraft?.address ?? settings.miyoServerUrl;
   const [connectionError, setConnectionError] = useState<{
     endpoint: string;
@@ -609,6 +617,7 @@ export const MiyoSettings: React.FC = () => {
   // Runtime safety is unaffected: capability routing uses
   // `isMiyoAvailableForCapability` (strict `=== "available"`), not this gate.
   const capabilitiesEnabled = status.backend === "available" || status.backend === "stale";
+  const skillToggleUsable = settings.enableMiyoSearchSkill || capabilitiesEnabled;
   // Status and host actions describe the confirmed connection, even while browsing options.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/466
   const connectedRemote = activeMode === "remote";
@@ -624,6 +633,7 @@ export const MiyoSettings: React.FC = () => {
         checking={refreshing}
         mode={mode}
         address={urlDraft}
+        localSupported={onDesktop}
         onModeChange={(next) => changeConnection(next)}
         onAddressChange={(address) => changeConnection(mode, address)}
         downloadUrl={createMiyoPageUrl("miyo_settings")}
@@ -666,46 +676,44 @@ export const MiyoSettings: React.FC = () => {
 
         <div className="tw-overflow-hidden tw-rounded-xl tw-border tw-border-solid tw-border-border tw-bg-primary tw-shadow-sm">
           {/* The card is split by connection dependency. The outer `tw-divide-y`
-              draws the rule between the always-on Semantic search row and the
+              draws the rule between the Semantic search row and the
               connection-gated group below it. */}
           <div className="tw-divide-y tw-divide-border">
             {/* Semantic search — installs/removes the `miyo-search` agent skill
-                (path B). ENABLING is connection-gated (the skill only has any
-                effect once Miyo is reachable), but DISABLING an already-installed
-                skill must stay available even offline: removal is a local vault
-                file operation that doesn't depend on Miyo's health, and a user
-                whose Miyo went offline must still be able to turn it off. So the
-                gate keys on "can this action run": always usable when already
-                enabled (to allow turn-off), else gated on `capabilitiesEnabled`
-                (to allow turn-on). Desktop-only (agents + skills are
-                desktop-gated). */}
-            {(() => {
-              const skillToggleUsable = settings.enableMiyoSearchSkill || capabilitiesEnabled;
-              return (
-                <div
-                  className={cn(
-                    "tw-px-4",
-                    !skillToggleUsable && "tw-pointer-events-none tw-opacity-45"
-                  )}
-                  aria-disabled={!skillToggleUsable}
-                >
-                  <CapabilityRow
-                    title="Semantic search"
-                    description="Understands meaning, not just keywords — finds related notes with Miyo."
-                    control={
-                      <SettingSwitch
-                        checked={pendingSkillEnabled ?? settings.enableMiyoSearchSkill}
-                        onCheckedChange={(next) => void handleToggleSearchSkill(next)}
-                        disabled={
-                          Platform.isMobile || !skillToggleUsable || pendingSkillEnabled !== null
-                        }
-                        aria-label="Enable Miyo semantic search skill"
-                      />
-                    }
-                  />
-                </div>
-              );
-            })()}
+                (path B). Desktop-only, and hidden rather than disabled off the
+                desktop runtime: the skill only runs inside Agent mode, which
+                mobile does not have, so on a phone the row could only ever be a
+                dead control describing a feature that isn't there.
+                ENABLING is connection-gated (the skill only has any effect once
+                Miyo is reachable), but DISABLING an already-installed skill must
+                stay available even offline: removal is a local vault file
+                operation that doesn't depend on Miyo's health, and a user whose
+                Miyo went offline must still be able to turn it off. So the gate
+                keys on "can this action run": always usable when already enabled
+                (to allow turn-off), else gated on `capabilitiesEnabled` (to allow
+                turn-on). */}
+            {onDesktop && (
+              <div
+                className={cn(
+                  "tw-px-4",
+                  !skillToggleUsable && "tw-pointer-events-none tw-opacity-45"
+                )}
+                aria-disabled={!skillToggleUsable}
+              >
+                <CapabilityRow
+                  title="Semantic search for agents"
+                  description="Lets Copilot agents find notes by meaning, not just keywords, through Miyo."
+                  control={
+                    <SettingSwitch
+                      checked={pendingSkillEnabled ?? settings.enableMiyoSearchSkill}
+                      onCheckedChange={(next) => void handleToggleSearchSkill(next)}
+                      disabled={!skillToggleUsable || pendingSkillEnabled !== null}
+                      aria-label="Enable Miyo semantic search skill"
+                    />
+                  }
+                />
+              </div>
+            )}
 
             {/* Connection-gated group. DESIGN NOTE — the gate is layered: the
                 wrapper's pointer-events-none + opacity is only the visual/mouse
