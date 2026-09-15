@@ -193,8 +193,20 @@ export interface UsageResponse {
 export interface BrevilabsModelEntry {
   id?: string;
   label?: string;
+  /** One-line capability blurb shown beside the model in every picker. */
+  description?: string;
   /** Input context window as a display string: `1M`, `256K`. */
   context_length?: string;
+  /** Whether the model accepts image input. */
+  supports_images?: boolean;
+  /** Whether the model accepts tool calls. */
+  supports_tools?: boolean;
+  /** Whether the model reasons at all. Orthogonal to `reasoning_efforts`: a
+   *  model can reason without exposing a level to choose between. */
+  supports_reasoning?: boolean;
+  /** Whether a fresh sign-in should switch this model on. The rest of the
+   *  lineup is created available-but-off for the user to enable. */
+  default_enabled?: boolean;
   /**
    * Thinking-effort levels this model distinguishes, ascending. Empty means the model
    * honors none of them. Absent from services older than the field, which is why the

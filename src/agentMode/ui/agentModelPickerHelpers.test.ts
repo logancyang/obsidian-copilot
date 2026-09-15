@@ -185,7 +185,18 @@ function makeManager(opts: {
   } as unknown as AgentSessionManager;
 }
 
-const emptySettings = { providers: {} } as unknown as CopilotSettings;
+const emptySettings = {
+  providers: {},
+  // The lineup the locked preview advertises, as the catalog cache holds it.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/319
+  copilotPlusCatalog: {
+    models: [
+      { id: "copilot-plus-flash", displayName: "Copilot Plus Flash" },
+      { id: "glm-5.2", displayName: "GLM-5.2" },
+    ],
+    defaultEnabledIds: ["copilot-plus-flash", "glm-5.2"],
+  },
+} as unknown as CopilotSettings;
 
 function claudeWithInstallState(installState: InstallState): BackendDescriptor {
   return {

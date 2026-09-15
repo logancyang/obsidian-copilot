@@ -26,6 +26,7 @@ import type {
   BackendConfig,
   BackendType,
   ConfiguredModel,
+  PersistedCopilotPlusCatalog,
   Provider,
   ProviderOrigin,
 } from "@/modelManagement/types/persisted";
@@ -49,6 +50,11 @@ export const configuredModelsAtom = atom<readonly ConfiguredModel[]>(
 
 export const backendsAtom = atom<Readonly<Partial<Record<BackendType, BackendConfig>>>>(
   (get) => get(settingsAtom).backends
+);
+
+/** Cached Copilot Plus lineup, so surfaces re-render when a fresh one lands. */
+export const copilotPlusCatalogAtom = atom<Readonly<PersistedCopilotPlusCatalog>>(
+  (get) => get(settingsAtom).copilotPlusCatalog
 );
 
 /** Self-Host Mode toggle, isolated so the picker view recomputes only when the
