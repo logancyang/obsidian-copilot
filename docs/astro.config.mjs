@@ -63,6 +63,7 @@ export default defineConfig({
   integrations: [
     starlight({
       title: "Copilot for Obsidian",
+      markdown: { processedDirs: ["."] },
       favicon: "/favicon.svg",
       logo: {
         dark: "./src/assets/copilot-mark-cream.svg",

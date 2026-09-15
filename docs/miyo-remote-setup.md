@@ -39,7 +39,11 @@ On the **Miyo host only**, open a terminal and run:
 tailscale serve --bg --https=443 --set-path=/miyo http://127.0.0.1:8742
 ```
 
-Tailscale Serve forwards requests from `/miyo` on the host's HTTPS address to its local Miyo server. If Tailscale asks you to enable HTTPS, follow the link it prints, then run the command again. See the [Tailscale Serve reference](https://tailscale.com/docs/reference/tailscale-cli/serve) for its requirements.
+Tailscale Serve forwards requests from `/miyo` on the host's HTTPS address to its local Miyo server.
+
+:::note[Enable HTTPS]
+If Tailscale asks you to enable HTTPS, follow the link it prints, then run the command again. See the [Tailscale Serve reference](https://tailscale.com/docs/reference/tailscale-cli/serve) for its requirements.
+:::
 
 Check the resulting address:
 
@@ -53,7 +57,7 @@ Copy the HTTPS address and include **`/miyo`**. For example:
 https://your-miyo-host.your-tailnet.ts.net/miyo
 ```
 
-Use the address printed for **your** host. Keep both Miyo and Tailscale running there. You only configure Serve on this host.
+Use the address printed for **your** host. Keep both Miyo and Tailscale running there. Run the `tailscale serve` command only on the computer running Miyo. On your other devices, connect to Tailscale and use that computer's HTTPS address in Copilot.
 
 ## 3. Connect Copilot on each device
 
@@ -66,15 +70,19 @@ On every device where you use Copilot:
 
 Use **Remote server** with the **same URL on the host computer too**. This gives synced Copilot settings one consistent address and keeps every client pointed at the shared Miyo service.
 
-The animation shows where to paste your full URL and click **Connect**. The private address is hidden.
+The highlighted areas show the Remote server selection and server address. The private address is hidden.
 
-![Copilot Remote server changes from Offline to Connected after clicking Connect, with the private address hidden](https://raw.githubusercontent.com/logancyang/obsidian-copilot/d68cde1889ed5ac48f8f03ce5e18c6530acd8185/tutorial-media/remote-miyo/remote-connect.gif)
+![Remote server and the masked server address highlighted in Copilot Miyo settings](https://raw.githubusercontent.com/logancyang/obsidian-copilot/14d33de58ed71cc69b82493bfd4f3cc0b593b70a/tutorial-media/remote-miyo/remote-connection-highlight.svg)
 
+:::note[Connection and indexing]
 **Connected** means Copilot can reach the server. It does not mean every vault or note has been indexed. To add or repair indexed folders, open Miyo on the host; a remote client cannot register its own local folder on that host.
+:::
 
 ## 4. Check a search
 
 In Copilot's Miyo settings, turn on **Semantic search**. Keep **Search scope → Current vault** when searching the vault open in Obsidian.
+
+![Semantic search enabled and Current vault selected, with both settings highlighted](https://raw.githubusercontent.com/logancyang/obsidian-copilot/14d33de58ed71cc69b82493bfd4f3cc0b593b70a/tutorial-media/remote-miyo/remote-search-settings-highlight.svg)
 
 For Current vault searches, the vault's name must match the folder name registered in Miyo. Notes must also use the same paths within that folder. The vault's full disk location may differ between devices. A note returned by Miyo must exist in the client's vault to open there.
 
@@ -87,10 +95,6 @@ Check that the returned note is one you expected. **Unrestricted** searches ever
 In this example, a Miyo search returns **Better team meetings.md** and the expected excerpt.
 
 ![Copilot Agent Chat showing the matching Better team meetings note and its excerpt](https://raw.githubusercontent.com/logancyang/obsidian-copilot/d68cde1889ed5ac48f8f03ce5e18c6530acd8185/tutorial-media/remote-miyo/remote-search-result.png)
-
-### Tested setup
-
-The captures use [Copilot commit b8bd0c47](https://github.com/logancyang/obsidian-copilot/commit/b8bd0c47c9be9e5ad905de7d207d0db86661d611), Miyo 0.2.23, and Obsidian 1.13.4 with Atom dark. On the earlier commit `38794e77`, a second isolated Obsidian profile on the same Mac also searched successfully after manually copying Copilot settings; its vault had the same name at a different disk location. That build retained the remote address and Current vault scope after restarting into Obsidian 1.13.7. This verifies two local profiles, not two physical devices or automatic settings synchronization.
 
 ## If the connection or search fails
 
