@@ -113,6 +113,34 @@ describe("AgentTabStrip", () => {
   });
 
   describe("AgentTabStrip()", () => {
+    it("preserves tab close without requesting backend release for https://github.com/Brevilabs/obsidian-copilot-private/issues/429", async () => {
+      const session = {
+        internalId: "existing",
+        backendId: "test",
+        subscribe: () => () => {},
+        getLabel: () => "Existing chat",
+        getStatus: () => "idle",
+        getNeedsAttention: () => false,
+      };
+      const manager = {
+        subscribe: () => () => {},
+        getSessionsForScope: () => [session],
+        getActiveProjectId: () => null,
+        getActiveSession: () => session,
+        getIsStarting: () => false,
+        closeSession: jest.fn(async () => {}),
+      };
+      render(
+        React.createElement(
+          TooltipProvider,
+          null,
+          React.createElement(AgentTabStrip, { manager: manager as unknown as AgentSessionManager })
+        )
+      );
+      fireEvent.click(screen.getByRole("button", { name: /Close/ }));
+      await waitFor(() => expect(manager.closeSession).toHaveBeenCalledWith("existing"));
+    });
+
     it("refreshes releases after the new-session button creates a tab for https://github.com/Brevilabs/obsidian-copilot-private/issues/317", async () => {
       const session = {
         internalId: "existing",

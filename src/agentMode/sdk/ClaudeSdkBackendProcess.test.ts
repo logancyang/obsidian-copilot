@@ -292,10 +292,81 @@ describe("ClaudeSdkBackendProcess", () => {
     });
   });
 
+  describe("closeSession()", () => {
+    function makeBackend() {
+      return new ClaudeSdkBackendProcess({
+        pathToClaudeCodeExecutable: "/usr/local/bin/claude",
+        app: { vault: {} } as unknown as import("obsidian").App,
+        clientVersion: "1.2.3",
+        descriptor: fakeDescriptor(),
+      });
+    }
+
+    it("removes an idle session while another session remains usable https://github.com/Brevilabs/obsidian-copilot-private/issues/429", async () => {
+      const backend = makeBackend();
+      const closed = await backend.newSession({ cwd: "/vault" });
+      const sibling = await backend.newSession({ cwd: "/vault" });
+      await backend.closeSession({ sessionId: closed.sessionId });
+      await expect(
+        backend.setSessionModel({ sessionId: closed.sessionId, modelId: "claude-sonnet-4" })
+      ).rejects.toThrow("Unknown session");
+      await expect(
+        backend.setSessionModel({ sessionId: sibling.sessionId, modelId: "claude-sonnet-4" })
+      ).resolves.toBeDefined();
+    });
+
+    it("terminates only the closing session's active query https://github.com/Brevilabs/obsidian-copilot-private/issues/429", async () => {
+      const backend = makeBackend();
+      const first = await backend.newSession({ cwd: "/vault" });
+      const sibling = await backend.newSession({ cwd: "/vault" });
+      const a = makeControlledQuery();
+      const b = makeControlledQuery();
+      const closeA = jest.fn(a.finish);
+      const closeB = jest.fn(b.finish);
+      queryMock
+        .mockReset()
+        .mockReturnValueOnce(Object.assign(a.query, { close: closeA }))
+        .mockReturnValueOnce(Object.assign(b.query, { close: closeB }));
+      const pendingA = backend.prompt({ sessionId: first.sessionId, prompt: [] });
+      const pendingB = backend.prompt({ sessionId: sibling.sessionId, prompt: [] });
+      await flushMicrotasks();
+      await backend.closeSession({ sessionId: first.sessionId });
+      expect(closeA).toHaveBeenCalledTimes(1);
+      expect(closeB).not.toHaveBeenCalled();
+      b.finish();
+      await Promise.all([pendingA, pendingB]);
+      await expect(backend.prompt({ sessionId: first.sessionId, prompt: [] })).rejects.toThrow(
+        "Unknown session"
+      );
+    });
+  });
+
   describe("prompt()", () => {
     beforeEach(() => {
       queryMock.mockReset();
       createSdkMcpServerMock.mockClear();
+    });
+
+    it("does not start a query when its session closes during environment preparation https://github.com/Brevilabs/obsidian-copilot-private/issues/429", async () => {
+      let finishEnvironment!: (env: Record<string, string>) => void;
+      const environment = new Promise<Record<string, string>>((resolve) => {
+        finishEnvironment = resolve;
+      });
+      const backend = new ClaudeSdkBackendProcess({
+        pathToClaudeCodeExecutable: "/usr/local/bin/claude",
+        app: { vault: {} } as unknown as import("obsidian").App,
+        clientVersion: "1.2.3",
+        descriptor: fakeDescriptor(),
+        getManagedEnv: () => environment,
+      });
+      const { sessionId } = await backend.newSession({ cwd: "/vault" });
+      queryMock.mockImplementation(() => makeQuery([resultMessage()]));
+      const pending = backend.prompt({ sessionId, prompt: [] });
+      await flushMicrotasks();
+      await backend.closeSession({ sessionId });
+      finishEnvironment({});
+      await expect(pending).resolves.toEqual({ stopReason: "cancelled" });
+      expect(getPromptQueryCalls()).toHaveLength(0);
     });
 
     it("translates SDK text deltas to agent_message_chunk and resolves with end_turn", async () => {

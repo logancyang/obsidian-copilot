@@ -26,6 +26,7 @@ import { ProjectPickerList } from "@/agentMode/ui/ProjectPickerList";
 import { RelevantNotesShelfPanel } from "@/agentMode/ui/RelevantNotesShelfPanel";
 import { useRelevantNotesPaneOpen } from "@/agentMode/ui/useRelevantNotesPaneOpen";
 import { useAgentChatRuntimeState } from "@/agentMode/ui/hooks/useAgentChatRuntimeState";
+import { useManagerSetSnapshot } from "@/agentMode/ui/hooks/useManagerSetSnapshot";
 import { useAgentHistoryControls } from "@/agentMode/ui/hooks/useAgentHistoryControls";
 import { useAgentInputDrafts } from "@/agentMode/ui/hooks/useAgentInputDrafts";
 import { useAttentionChatIds } from "@/agentMode/ui/hooks/useAttentionChatIds";
@@ -253,6 +254,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     loadChat: handleLoadChat,
     updateChatTitle: handleUpdateChatTitle,
     deleteChat: handleDeleteChat,
+    closeSession: handleCloseSession,
     openSourceFile: handleOpenSourceFile,
   } = useAgentHistoryControls(manager, plugin, activeProjectId);
 
@@ -268,6 +270,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   // running in the background (the session keeps streaming when its tab is
   // parked), and a live done-dot the moment that turn finishes. Shared by both
   // the global and per-project landing shelves.
+  const openChatIds = useManagerSetSnapshot(manager, (m) => m.getOpenChatIds());
   const runningChatIds = useRunningChatIds(manager);
   const attentionChatIds = useAttentionChatIds(manager);
 
@@ -570,6 +573,8 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
             onLoadChat={handleLoadChat}
             onUpdateTitle={handleUpdateChatTitle}
             onDeleteChat={handleDeleteChat}
+            onCloseSession={handleCloseSession}
+            openChatIds={openChatIds}
             onOpenSourceFile={handleOpenSourceFile}
             onLoadHistory={handleLoadChatHistorySafely}
             runningChatIds={runningChatIds}
@@ -629,6 +634,8 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       handleDeleteChat,
       handleOpenSourceFile,
       handleLoadChatHistorySafely,
+      openChatIds,
+      handleCloseSession,
       runningChatIds,
       attentionChatIds,
       isRelevantNotesPaneOpen,
@@ -662,6 +669,8 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
             onLoadChat={handleLoadChat}
             onUpdateTitle={handleUpdateChatTitle}
             onDeleteChat={handleDeleteChat}
+            onCloseSession={handleCloseSession}
+            openChatIds={openChatIds}
             onOpenSourceFile={handleOpenSourceFile}
             onLoadHistory={handleLoadChatHistorySafely}
             runningChatIds={runningChatIds}
@@ -691,6 +700,8 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       handleDeleteChat,
       handleOpenSourceFile,
       handleLoadChatHistorySafely,
+      openChatIds,
+      handleCloseSession,
       runningChatIds,
       attentionChatIds,
       settings.chatHistorySortStrategy,
@@ -979,6 +990,8 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                       onLoadChat={handleLoadChat}
                       onUpdateChatTitle={handleUpdateChatTitle}
                       onDeleteChat={handleDeleteChat}
+                      onCloseSession={handleCloseSession}
+                      openChatIds={openChatIds}
                       onOpenSourceFile={handleOpenSourceFile}
                       usageMeter={<AgentContextMeter backend={backend} />}
                       showMultiAgentUpsell
