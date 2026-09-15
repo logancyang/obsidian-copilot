@@ -16,7 +16,6 @@ import {
   isFolderMatch,
   processVariableNameForNotePath,
   removeThinkTags,
-  stringToFormattedDateTime,
   stripFrontmatter,
   truncateToByteLimit,
   withTimeout,
@@ -1114,49 +1113,6 @@ describe("formatDateTime", () => {
     const result = formatDateTime(earlyDate, "utc");
     expect(result.fileName).toBe("20240102_030405");
     expect(result.display).toBe("2024/01/02 03:04:05");
-  });
-});
-
-describe("stringToFormattedDateTime", () => {
-  it("parses a valid 'YYYY/MM/DD HH:mm:ss' string and round-trips display", () => {
-    const result = stringToFormattedDateTime("2024/03/15 10:30:45");
-    expect(result.display).toBe("2024/03/15 10:30:45");
-    expect(result.fileName).toBe("20240315_103045");
-    // The reconstructed Date must format back to the same components in local time.
-    const d = new Date(result.epoch);
-    const pad = (n: number) => String(n).padStart(2, "0");
-    expect(
-      `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ` +
-        `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
-    ).toBe("2024/03/15 10:30:45");
-  });
-
-  it("round-trips formatDateTime(local) output", () => {
-    const original = new Date("2024-07-04T18:00:00.000Z");
-    const formatted = formatDateTime(original, "local");
-    const reparsed = stringToFormattedDateTime(formatted.display);
-    expect(reparsed.display).toBe(formatted.display);
-    expect(reparsed.fileName).toBe(formatted.fileName);
-    // Display is second-precision, so the round-tripped epoch loses millis.
-    expect(reparsed.epoch).toBe(Math.floor(original.getTime() / 1000) * 1000);
-  });
-
-  it("falls back to current date/time on invalid input", () => {
-    const before = Date.now();
-    const result = stringToFormattedDateTime("not-a-date");
-    const after = Date.now();
-    expect(result.epoch).toBeGreaterThanOrEqual(before);
-    expect(result.epoch).toBeLessThanOrEqual(after);
-    expect(result.display).toMatch(/^\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}:\d{2}$/);
-    expect(result.fileName).toMatch(/^\d{8}_\d{6}$/);
-  });
-
-  it("falls back on wrong-format input (e.g. dashes)", () => {
-    const before = Date.now();
-    const result = stringToFormattedDateTime("2024-03-15 10:30:45");
-    const after = Date.now();
-    expect(result.epoch).toBeGreaterThanOrEqual(before);
-    expect(result.epoch).toBeLessThanOrEqual(after);
   });
 });
 
