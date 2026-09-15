@@ -161,6 +161,8 @@ export interface CopilotSettings {
   /** API key for the self-host mode backend (if required) */
   /** Custom Miyo server URL, e.g. "http://192.168.1.10:8742" (empty = use local service discovery) */
   miyoServerUrl: string;
+  /** Selected connection; absent in legacy settings, where a URL selected the server. */
+  miyoConnectionMode?: "local" | "remote";
   /** Which provider to use for self-host web search */
   selfHostSearchProvider: SelfHostSearchProvider;
   /** Firecrawl API key for self-host web search */
@@ -997,6 +999,13 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   // Ensure miyoServerUrl has a default value
   if (typeof sanitizedSettings.miyoServerUrl !== "string") {
     sanitizedSettings.miyoServerUrl = DEFAULT_SETTINGS.miyoServerUrl;
+  }
+  // Preserve existing explicit URLs when introducing the connection selector.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/466
+  if (!["local", "remote"].includes(sanitizedSettings.miyoConnectionMode || "")) {
+    sanitizedSettings.miyoConnectionMode = sanitizedSettings.miyoServerUrl.trim()
+      ? "remote"
+      : "local";
   }
 
   // Ensure selfHostSearchProvider is a valid value

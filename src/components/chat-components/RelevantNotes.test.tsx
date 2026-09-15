@@ -35,6 +35,7 @@ const mockApp = {
 const mockUpdateSetting = jest.fn();
 let mockSettings = {
   enableMiyo: true,
+  miyoConnectionMode: undefined as "local" | "remote" | undefined,
   miyoServerUrl: "",
   plusLicenseKey: "old-license",
   relevantNotesLiveUpdate: true,
@@ -122,6 +123,7 @@ describe("RelevantNotes", () => {
     (Platform as { isMobile: boolean }).isMobile = false;
     mockSettings = {
       enableMiyo: true,
+      miyoConnectionMode: undefined as "local" | "remote" | undefined,
       miyoServerUrl: "",
       plusLicenseKey: "old-license",
       relevantNotesLiveUpdate: true,
@@ -441,6 +443,20 @@ describe("RelevantNotes", () => {
 
     it.each([
       { runtime: "local", isMobile: false, miyoServerUrl: "", local: true },
+      {
+        runtime: "local with retained remote address",
+        isMobile: false,
+        miyoServerUrl: "http://saved:8742",
+        miyoConnectionMode: "local" as const,
+        local: true,
+      },
+      {
+        runtime: "remote through loopback",
+        isMobile: false,
+        miyoServerUrl: "http://127.0.0.1:8742",
+        miyoConnectionMode: "remote" as const,
+        local: false,
+      },
       { runtime: "mobile", isMobile: true, miyoServerUrl: "http://127.0.0.1:8742", local: false },
       {
         runtime: "remote",
@@ -449,10 +465,10 @@ describe("RelevantNotes", () => {
         local: false,
       },
     ])(
-      "opens the appropriate $runtime recovery destination for an unregistered vault (https://github.com/Brevilabs/obsidian-copilot-private/issues/401)",
-      async ({ isMobile, miyoServerUrl, local }) => {
+      "opens the appropriate $runtime recovery destination for an unregistered vault (https://github.com/Brevilabs/obsidian-copilot-private/issues/466)",
+      async ({ isMobile, miyoServerUrl, miyoConnectionMode, local }) => {
         (Platform as { isMobile: boolean }).isMobile = isMobile;
-        mockSettings = { ...mockSettings, miyoServerUrl };
+        mockSettings = { ...mockSettings, miyoServerUrl, miyoConnectionMode };
         mockFindRelevantNotes.mockResolvedValue({
           notes: [],
           status: "vault-not-registered",

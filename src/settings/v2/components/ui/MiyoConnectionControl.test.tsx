@@ -10,11 +10,7 @@ const ISSUE_URL = "https://github.com/Brevilabs/obsidian-copilot-private/issues/
 
 function renderControl(overrides: Partial<MiyoConnectionControlProps> = {}) {
   const props: MiyoConnectionControlProps = {
-    enabled: true,
-    status: "available",
     checking: false,
-    remote: false,
-    onConnect: jest.fn(),
     onDisconnect: jest.fn(),
     onRetry: jest.fn(),
     ...overrides,
@@ -25,52 +21,23 @@ function renderControl(overrides: Partial<MiyoConnectionControlProps> = {}) {
 
 describe("MiyoConnectionControl", () => {
   describe("MiyoConnectionControl()", () => {
-    it(`shows Connect and reports the action when Miyo was never enabled (${ISSUE_URL})`, () => {
-      const props = renderControl({ enabled: false, status: "unknown" });
-
-      fireEvent.click(screen.getByRole("button", { name: "Connect" }));
-
-      expect(props.onConnect).toHaveBeenCalledTimes(1);
+    it("checks and disconnects the selected active connection — https://github.com/Brevilabs/obsidian-copilot-private/issues/466", () => {
+      const props = renderControl();
+      fireEvent.click(screen.getByRole("button", { name: "Check connection" }));
+      fireEvent.click(screen.getByRole("button", { name: "Disconnect" }));
+      expect(props.onRetry).toHaveBeenCalledTimes(1);
+      expect(props.onDisconnect).toHaveBeenCalledTimes(1);
       expect(screen.queryByRole("status")).toBeNull();
     });
 
-    it(`shows checking instead of a cached connected state while a probe is running (${ISSUE_URL})`, () => {
-      const props = renderControl({ checking: true, status: "available" });
-
-      expect(screen.getByRole("status").textContent).toContain("Checking…");
-      expect(screen.queryByText(/Connected/)).toBeNull();
-      expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
-      expect(screen.queryByRole("button", { name: "Disconnect" })).toBeNull();
+    it("disables connection actions while its check is pending — https://github.com/Brevilabs/obsidian-copilot-private/issues/466", () => {
+      const props = renderControl({ checking: true });
+      for (const button of screen.getAllByRole<HTMLButtonElement>("button")) {
+        expect(button.disabled).toBe(true);
+        fireEvent.click(button);
+      }
       expect(props.onRetry).not.toHaveBeenCalled();
-    });
-
-    it(`shows a healthy local connection and lets the user disconnect (${ISSUE_URL})`, () => {
-      const props = renderControl();
-
-      fireEvent.click(screen.getByRole("button", { name: "Disconnect" }));
-
-      expect(screen.getByRole("status").textContent).toContain("Connected · local");
-      expect(props.onDisconnect).toHaveBeenCalledTimes(1);
-      expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
-    });
-
-    it(`keeps a stale remote snapshot visibly connected (${ISSUE_URL})`, () => {
-      renderControl({ status: "stale", remote: true });
-
-      expect(screen.getByRole("status").textContent).toContain("Connected · remote");
-      expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
-    });
-
-    it(`offers Retry beside Disconnect when enabled Miyo is unavailable (${ISSUE_URL})`, () => {
-      const props = renderControl({ status: "unavailable" });
-
-      fireEvent.click(screen.getByRole("button", { name: "Retry" }));
-      fireEvent.click(screen.getByRole("button", { name: "Disconnect" }));
-
-      expect(screen.getByRole("status").textContent).toContain("Unavailable");
-      expect(props.onRetry).toHaveBeenCalledTimes(1);
-      expect(props.onDisconnect).toHaveBeenCalledTimes(1);
-      expect(props.onConnect).not.toHaveBeenCalled();
+      expect(props.onDisconnect).not.toHaveBeenCalled();
     });
   });
 

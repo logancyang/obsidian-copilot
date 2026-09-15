@@ -151,6 +151,7 @@ export function getBuiltinSkillEnvRestartPolicy(
   const ordinaryEnvChanged =
     prev.isPaidUser !== next.isPaidUser ||
     prev.plusLicenseKey !== next.plusLicenseKey ||
+    prev.miyoConnectionMode !== next.miyoConnectionMode ||
     prev.miyoServerUrl !== next.miyoServerUrl;
   const selfHostRoutingChanged =
     backendId === "opencode" && prev.enableSelfHostMode !== next.enableSelfHostMode;

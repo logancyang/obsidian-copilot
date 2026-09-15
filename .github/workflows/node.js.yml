@@ -38,6 +38,8 @@ jobs:
       - run: npm run gallery:build
       - run: npm run test:mobile-load
       - run: npm test
+      - name: Verify PR size labels
+        run: node --test scripts/pr-size.test.mjs
 
   docs:
     runs-on: ubuntu-latest

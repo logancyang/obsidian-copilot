@@ -1,0 +1,71 @@
+name: PR size
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, edited, ready_for_review]
+
+permissions:
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: pr-size-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    steps:
+      # Read PR metadata only. Never check out or execute code from the PR.
+      - uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        with:
+          script: |
+            const repo = context.repo;
+            const issue_number = context.issue.number;
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              ...repo, pull_number: issue_number, per_page: 100,
+            });
+            // Count production additions + deletions, including deleted files.
+            // Docs, build tooling, lockfiles and generated root bundles are outside src/.
+            const production = files.filter(({ filename }) =>
+              filename.startsWith('src/') &&
+              !/\.(stories|test|spec)\./.test(filename) &&
+              !/(^|\/)(__tests__|__mocks__|__fixtures__|fixtures)(\/|$)/.test(filename)
+            );
+            const changes = production.reduce((sum, file) => sum + file.additions + file.deletions, 0);
+            const sizes = [
+              ['size/XS', 50, 'c2e0c6'],
+              ['size/S', 100, '7bd88f'],
+              ['size/M', 300, 'fbca04'],
+              ['size/L', 500, 'f9a03f'],
+              ['size/XL', Infinity, 'd73a4a'],
+            ];
+            // GitHub caps the files API at 3,000 files. Treat truncated diffs as XL
+            // instead of advertising a potentially incomplete count as a small PR.
+            const { data: pr } = await github.rest.pulls.get({ ...repo, pull_number: issue_number });
+            const [label, , color] = pr.changed_files > files.length
+              ? sizes[sizes.length - 1]
+              : sizes.find(([, limit]) => changes < limit);
+            const labels = await github.paginate(github.rest.issues.listLabelsForRepo, {
+              ...repo, per_page: 100,
+            });
+            if (!labels.some(({ name }) => name === label)) {
+              try {
+                await github.rest.issues.createLabel({ ...repo, name: label, color });
+              } catch (error) {
+                // Another PR can create the same label concurrently.
+                if (error.status !== 422 || !error.response?.data?.errors?.some(
+                  ({ code }) => code === 'already_exists'
+                )) throw error;
+              }
+            }
+            await github.rest.issues.addLabels({ ...repo, issue_number, labels: [label] });
+            const current = await github.paginate(github.rest.issues.listLabelsOnIssue, {
+              ...repo, issue_number, per_page: 100,
+            });
+            for (const { name } of current) {
+              if (name !== label && sizes.some(([size]) => size === name)) {
+                await github.rest.issues.removeLabel({ ...repo, issue_number, name });
+              }
+            }
+            core.info(`${label}: ${changes} production lines changed across ${production.length} files`);

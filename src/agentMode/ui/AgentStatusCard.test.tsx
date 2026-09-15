@@ -40,6 +40,29 @@ describe("AgentStatusCard", () => {
       expect(screen.getByText("Claude could not start").className).toContain("tw-text-normal");
     });
 
+    it("keeps exact recovery details visible below a caller-owned summary (https://github.com/Brevilabs/obsidian-copilot-private/issues/410)", () => {
+      const message =
+        "Could not execute /Users/example/Agent Runtime/bin/codex-acp.\nCheck the configured binary path and retry.\nEACCES: permission denied";
+      const onClick = jest.fn();
+      render(
+        <AgentStatusCard
+          tone="error"
+          summary="Codex setup error"
+          message={message}
+          action={{ label: "Configure Codex", onClick }}
+        />
+      );
+      const summary = screen.getByText("Codex setup error");
+      const details = screen.getByText(message, { normalizer: (text) => text });
+      expect(details.textContent).toBe(message);
+      expect(details.closest("details")).toBeNull();
+      expect(
+        summary.compareDocumentPosition(details) & Node.DOCUMENT_POSITION_FOLLOWING
+      ).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: "Configure Codex" }));
+      expect(onClick).toHaveBeenCalledTimes(1);
+    });
+
     it("keeps a busy action disabled", () => {
       render(
         <AgentStatusCard
