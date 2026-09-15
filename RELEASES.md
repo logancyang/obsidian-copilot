@@ -14,7 +14,7 @@ Follow the [remote Miyo tutorial](https://docs.obsidiancopilot.com/miyo-remote-s
 
 Select a passage in your note, then ask Agent Chat to explain it, rewrite it, or help you develop the idea. Your selection appears as its own context badge, so you can see the excerpt you are asking about alongside the current note and remove either badge when you do not need it. ([#3228](https://github.com/logancyang/obsidian-copilot/pull/3228), [#3230](https://github.com/logancyang/obsidian-copilot/pull/3230), @zeroliu)
 
-![Close-up of selecting a passage, followed by its context badge appearing in Agent Chat](https://raw.githubusercontent.com/logancyang/obsidian-copilot/3670a3ef038b3c3f461aafecba0cb389820f73c6/release-media/4.0.9/context-demo-focused.gif)
+![Selected passage in a note behind the Agent Chat composer, with the matching selected-text context badge highlighted](https://raw.githubusercontent.com/logancyang/obsidian-copilot/d64d4040373465b1b84f61ed1153884c5037b3aa/release-media/4.0.9/selected-context-stacked.png)
 
 ## ✨ More improvements
 
