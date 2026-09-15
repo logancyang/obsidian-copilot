@@ -1,7 +1,7 @@
 import { Input } from "@/components/ui/input";
-import { SegmentedControl } from "@/components/ui/segmented-control";
 import { SettingDisclosure } from "@/components/ui/setting-disclosure";
 import { SettingItem } from "@/components/ui/setting-item";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import { SettingSection } from "@/components/ui/setting-section";
 import { SettingSwitch } from "@/components/ui/setting-switch";
 import { createMiyoPageUrl } from "@/lib/miyoLinks";
@@ -19,10 +19,11 @@ import {
   MIYO_CHATS_DEEPLINK_URL,
   MIYO_CONNECT_DEEPLINK_URL,
 } from "@/miyo/miyoUtils";
+import { getMiyoConnectionMode } from "@/miyo/miyoRuntimePolicy";
 import { useMiyoStatus } from "@/miyo/useMiyoStatus";
 import { notifyMiyoIndexChanged } from "@/miyo/miyoIndex";
 import { extractAppIgnoreSettings, getSystemExcludedFolders } from "@/search/searchUtils";
-import { getSettings, updateSetting, useSettingsValue } from "@/settings/model";
+import { getSettings, setSettings, updateSetting, useSettingsValue } from "@/settings/model";
 import {
   type ConnectOutcome,
   type ConnectStep,
@@ -127,9 +128,27 @@ export const MiyoSettings: React.FC = () => {
   const settings = useSettingsValue();
   const status = useMiyoStatus();
 
-  // Draft + blur commit so we persist once on blur, not on every keystroke.
-  const [urlDraft, setUrlDraft] = useState(settings.miyoServerUrl || "");
+  // An incomplete address is a draft, never an active local-discovery fallback.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/466
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [draft, setDraft] = useState<{
+    mode: "local" | "remote";
+    address: string;
+    source: string;
+  } | null>(null);
+  const activeMode = getMiyoConnectionMode(settings);
+  const activeUrl = getMiyoCustomUrl(settings);
+  const settingsKey = `${activeMode}:${settings.miyoServerUrl}`;
+  const currentDraft = draft?.source === settingsKey ? draft : null;
+  const mode = currentDraft?.mode ?? activeMode;
+  const urlDraft = currentDraft?.address ?? activeUrl;
+  const [connectionError, setConnectionError] = useState<{
+    endpoint: string;
+    message: string;
+  } | null>(null);
+  const [vaultResult, setVaultResult] = useState<{ endpoint: string; message: string } | null>(
+    null
+  );
   // An enabled backend with no prior snapshot is about to run the mount check.
   // Start in checking so the first paint cannot flash a false Unavailable state.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/356
@@ -220,11 +239,37 @@ export const MiyoSettings: React.FC = () => {
     await refresh(true);
   }, [refresh]);
 
-  // Refresh on mount so an already-running Miyo shows Connected without a click.
-  // TTL-gated inside the store, so re-mounting the tab won't spam health checks.
+  const recordVault = useCallback(
+    (registration: string, targetMode: "local" | "remote", url: string) => {
+      setVaultResult({
+        endpoint: `${targetMode}:${url}`,
+        message:
+          registration === "registered"
+            ? "Current vault registered on this server."
+            : targetMode === "remote"
+              ? "Current vault isn't confirmed on this server. Manage folders on the Miyo host."
+              : "",
+      });
+    },
+    []
+  );
+
+  // Recheck synced settings and discard replies about an endpoint no longer selected.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/466
   useEffect(() => {
-    void refresh(false);
-  }, [refresh]);
+    let cancelled = false;
+    void refresh(false).then(async (available) => {
+      if (cancelled || !available || !settings.enableMiyo) return;
+      const registration = await new MiyoClient().checkFolderRegistration(
+        getMiyoFolderName(app),
+        activeUrl || undefined
+      );
+      if (!cancelled) recordVault(registration, activeMode, activeUrl);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [refresh, app, activeMode, activeUrl, settings.enableMiyo, recordVault]);
 
   // Direct reachability probe that BYPASSES the shouldUseMiyo gate. The status
   // store only probes once Miyo is enabled (its snapshot reflects the *effective*
@@ -234,11 +279,13 @@ export const MiyoSettings: React.FC = () => {
   const probeReachable = useCallback(async () => {
     beginBusy();
     try {
-      return await new MiyoClient().isBackendAvailable(getMiyoCustomUrl(settings) || undefined);
+      return await new MiyoClient().isBackendAvailable(
+        getMiyoCustomUrl(getSettings()) || undefined
+      );
     } finally {
       endBusy();
     }
-  }, [settings, beginBusy, endBusy]);
+  }, [beginBusy, endBusy]);
 
   // Enable Miyo, then refresh the store so the pill flips to Connected.
   //
@@ -267,16 +314,24 @@ export const MiyoSettings: React.FC = () => {
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/284
       if (superseded()) return false;
       const txn = (enableTxnRef.current += 1);
-      const prevEnableMiyo = settings.enableMiyo;
+      const before = getSettings();
+      const prevEnableMiyo = before.enableMiyo;
       updateSetting("enableMiyo", true);
       const available = await refresh(true);
-      const stillOwner = enableTxnRef.current === txn;
+      // A synced endpoint or disable also ends this optimistic transaction.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/466
+      const current = getSettings();
+      const stillOwner =
+        enableTxnRef.current === txn &&
+        current.enableMiyo &&
+        getMiyoConnectionMode(current) === getMiyoConnectionMode(before) &&
+        getMiyoCustomUrl(current) === getMiyoCustomUrl(before);
       if (stillOwner && (!available || superseded())) {
         updateSetting("enableMiyo", prevEnableMiyo);
       }
       return available;
     },
-    [settings.enableMiyo, refresh]
+    [refresh]
   );
 
   // Register this vault with Miyo when it isn't known yet, so Connect adds it for
@@ -290,8 +345,8 @@ export const MiyoSettings: React.FC = () => {
   // whose absolute vault path we can resolve. Remote Miyo / mobile (no
   // FileSystemAdapter) can't, so the addVault modal guides them to the deeplink.
   const canAutoAddVault = useCallback((): boolean => {
-    return Boolean(getVaultBase(app)) && isLocalMiyoUrl(getMiyoCustomUrl(settings));
-  }, [app, settings]);
+    return Boolean(getVaultBase(app)) && getMiyoConnectionMode(getSettings()) === "local";
+  }, [app]);
 
   // Register this vault with Miyo (POST /v0/folder) on explicit user confirmation
   // from the addVault modal, then enable + report so the modal can close. Returns
@@ -313,7 +368,11 @@ export const MiyoSettings: React.FC = () => {
     const currentSettings = getSettings();
     const customUrl = getMiyoCustomUrl(currentSettings);
     const vaultBase = getVaultBase(app);
-    if (!vaultBase || !isLocalMiyoUrl(customUrl)) {
+    if (
+      !vaultBase ||
+      getMiyoConnectionMode(currentSettings) === "remote" ||
+      !isLocalMiyoUrl(customUrl)
+    ) {
       return "manual";
     }
     const attempt = (connectAttemptRef.current += 1);
@@ -394,24 +453,35 @@ export const MiyoSettings: React.FC = () => {
   // newer attempt owns the outcome.
   const attemptConnection = useCallback(async (): Promise<ConnectOutcome | "superseded"> => {
     const attempt = (connectAttemptRef.current += 1);
+    const target = getSettings();
+    const remote = getMiyoConnectionMode(target) === "remote";
     const superseded = () =>
       connectAttemptRef.current !== attempt ||
+      // A retry must not undo a disconnect from another settings instance or sync.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/466
+      (target.enableMiyo && !getSettings().enableMiyo) ||
+      getMiyoConnectionMode(getSettings()) !== getMiyoConnectionMode(target) ||
+      getMiyoCustomUrl(getSettings()) !== getMiyoCustomUrl(target) ||
       !mountedRef.current ||
       !plugin.isPluginLifecycleActive();
 
-    const reachable = await probeReachable();
+    let reachable = await probeReachable();
+    if (!reachable && target.enableMiyo) reachable = await refresh(true);
     if (superseded()) return "superseded";
     if (!reachable) return "unreachable";
 
     const registration = await new MiyoClient().checkFolderRegistration(
       getMiyoFolderName(app),
-      getMiyoCustomUrl(settings) || undefined
+      getMiyoCustomUrl(target) || undefined
     );
     if (superseded()) return "superseded";
-    if (registration === "error") return "error";
+    // Server reachability does not imply this vault exists on the remote host.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/466
+    recordVault(registration, getMiyoConnectionMode(target), getMiyoCustomUrl(target));
+    if (registration === "error" && !remote) return "error";
     // Unregistered → hand off to the addVault modal for explicit confirmation
     // rather than silently registering the folder.
-    if (registration === "unregistered") return "needs-add";
+    if (registration === "unregistered" && !remote) return "needs-add";
 
     // Registered → enable. The lifecycle guard prevents a cancel, unmount, or
     // plugin unload from flipping enableMiyo on.
@@ -423,7 +493,7 @@ export const MiyoSettings: React.FC = () => {
     // Miyo may have dropped between registration and this refresh; only claim
     // "connected" when the backend is actually available now.
     return available ? "connected" : "unreachable";
-  }, [app, plugin, settings, probeReachable, enableMiyoBackend]);
+  }, [app, plugin, probeReachable, enableMiyoBackend, refresh, recordVault]);
 
   // Wraps attemptConnection with the shared error affordance so both entry points
   // (Connect button, modal Retry) surface the same Notice on an indeterminate
@@ -468,13 +538,21 @@ export const MiyoSettings: React.FC = () => {
     [app, canAutoAddVault, handleEvaluate, registerVault]
   );
 
-  // Connect: probe + registration check now. Registered → enabled inline, no
-  // modal. Unregistered → the addVault modal to confirm registration (one-click
-  // local, or deeplink guidance for remote/mobile); unreachable → the guide to
-  // start Miyo; error → Notice (already shown).
+  // Local setup can open the app; remote setup stays here with host instructions.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/466
   const handleConnect = useCallback(async () => {
+    setConnectionError(null);
     const outcome = await handleEvaluate();
     if (!mountedRef.current) return;
+    if (getMiyoConnectionMode(getSettings()) === "remote") {
+      if (outcome === "unreachable")
+        setConnectionError({
+          endpoint: `remote:${getSettings().miyoServerUrl}`,
+          message:
+            "Couldn't connect to this server. Check the address, access, and that Miyo is running, then retry.",
+        });
+      return;
+    }
     if (outcome === "needs-add") {
       openConnectModal("addVault");
     } else if (outcome === "unreachable") {
@@ -487,6 +565,7 @@ export const MiyoSettings: React.FC = () => {
   // store's subscription invalidates the snapshot; refresh(true) then reflects
   // the disconnected state.
   const handleDisconnect = useCallback(async () => {
+    enableTxnRef.current += 1;
     // Invalidate any in-flight connect attempt so a late-resolving probe can't
     // re-enable Miyo right after the user turned it off.
     connectAttemptRef.current += 1;
@@ -528,20 +607,52 @@ export const MiyoSettings: React.FC = () => {
     }
   }, []);
 
-  const commitUrl = useCallback(() => {
-    const trimmed = urlDraft.trim();
-    if (trimmed === (settings.miyoServerUrl || "")) {
-      // URL unchanged on blur — don't persist or re-probe.
-      return;
-    }
-    // The endpoint changed: invalidate any in-flight attempt bound to the old URL
-    // so it can't enable Miyo against a stale target.
+  const changeConnection = (nextMode: "local" | "remote", address = urlDraft) => {
     connectAttemptRef.current += 1;
-    // Persisting the URL invalidates the store's cache (via its settings
-    // subscription), so force a fresh probe against the new endpoint.
-    updateSetting("miyoServerUrl", trimmed);
-    void refresh(true);
-  }, [urlDraft, settings.miyoServerUrl, refresh]);
+    enableTxnRef.current += 1;
+    connectModalRef.current?.close();
+    setConnectionError(null);
+    setVaultResult(null);
+    if (getSettings().enableMiyo) updateSetting("enableMiyo", false);
+    if (nextMode === "local" && getMiyoConnectionMode(getSettings()) !== "local")
+      updateSetting("miyoConnectionMode", "local");
+    const current = getSettings();
+    setDraft({
+      mode: nextMode,
+      address,
+      source: `${getMiyoConnectionMode(current)}:${current.miyoServerUrl}`,
+    });
+  };
+
+  const saveAndConnect = async () => {
+    const address = urlDraft.trim();
+    if (mode === "remote") {
+      try {
+        const url = new URL(address);
+        if (
+          !["http:", "https:"].includes(url.protocol) ||
+          !url.hostname ||
+          url.username ||
+          url.password
+        )
+          throw new Error("Invalid server address");
+      } catch {
+        setConnectionError({
+          endpoint: `${mode}:${urlDraft}`,
+          message: "Enter a valid HTTP or HTTPS server address, without embedded credentials.",
+        });
+        return;
+      }
+    }
+    connectAttemptRef.current += 1;
+    MiyoServiceDiscovery.getInstance().invalidateLocalDiscovery();
+    setSettings({
+      miyoConnectionMode: mode,
+      ...(mode === "remote" ? { miyoServerUrl: address } : {}),
+    });
+    setDraft(null);
+    await handleConnect();
+  };
 
   // `stale` counts as still-connected for the UI gate: it means "was available,
   // snapshot just aged past the TTL", not "confirmed disconnected". The store
@@ -551,16 +662,14 @@ export const MiyoSettings: React.FC = () => {
   // Runtime safety is unaffected: capability routing uses
   // `isMiyoAvailableForCapability` (strict `=== "available"`), not this gate.
   const capabilitiesEnabled = status.backend === "available" || status.backend === "stale";
-  // "remote" only when the endpoint points off this machine. An empty URL (local
-  // discovery) and an explicit localhost/127.0.0.1/[::1] URL are all local, so
-  // derive the label from the same `isLocalMiyoUrl` the auto-register path uses
-  // rather than "any non-empty URL", which mislabels an explicit localhost.
-  const connectedRemote = !isLocalMiyoUrl(getMiyoCustomUrl(settings));
+  // Remote is the user's explicit selection, including a forwarded loopback URL.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/466
+  const connectedRemote = mode === "remote";
 
   return (
     <div className="tw-space-y-4">
       <div className="tw-text-sm tw-text-muted">
-        Local, private context that stays on your machine — unlimited, no credits.
+        Private context from your Miyo server. Unlimited, no credits.
       </div>
 
       {/* Connection */}
@@ -569,7 +678,8 @@ export const MiyoSettings: React.FC = () => {
           title="Miyo"
           description={
             <span>
-              Runs locally and connects automatically. Don&apos;t have Miyo yet?{" "}
+              Connect to Miyo on this computer or use a server address under Advanced. Need the
+              local app?{" "}
               <a
                 href={createMiyoPageUrl("miyo_settings")}
                 target="_blank"
@@ -586,12 +696,26 @@ export const MiyoSettings: React.FC = () => {
               status={status.backend}
               checking={refreshing}
               remote={connectedRemote}
-              onConnect={() => void handleConnect()}
+              connectLabel={connectedRemote ? "Save and connect" : "Connect"}
+              onConnect={() => void saveAndConnect()}
               onDisconnect={() => void handleDisconnect()}
-              onRetry={() => void handleRetry()}
+              onRetry={() => void (connectedRemote ? saveAndConnect() : handleRetry())}
             />
           }
         />
+        <div className="tw-space-y-2 tw-py-2 tw-text-xs">
+          {connectionError?.endpoint === `${mode}:${urlDraft}` && (
+            <div role="alert" className="tw-text-error">
+              {connectionError.message}
+            </div>
+          )}
+          {settings.enableMiyo &&
+            capabilitiesEnabled &&
+            !refreshing &&
+            vaultResult?.endpoint === `${activeMode}:${activeUrl}` && (
+              <div className="tw-text-muted">{vaultResult.message}</div>
+            )}
+        </div>
 
         {/* Connector — relay status from the Miyo health check. Lives in
             Connection (not the gated block) because it's a connection affordance:
@@ -606,6 +730,7 @@ export const MiyoSettings: React.FC = () => {
           status={status.connector}
           statusText={connectorStatusText(status.connector)}
           actionLabel="Set up in Miyo"
+          remoteInstruction={connectedRemote ? "Set up Relay on the Miyo host." : undefined}
           onAction={() => window.open(MIYO_CONNECT_DEEPLINK_URL, "_blank")}
         />
 
@@ -621,12 +746,17 @@ export const MiyoSettings: React.FC = () => {
               <SettingItem
                 type="custom"
                 title="Remote Miyo server (advanced)"
-                description="Leave blank for local discovery, or point at a remote Miyo instance. The Connector above uses this endpoint."
+                description="Leave blank for local discovery, or enter a remote server address. Select Connect above to save and check it."
               >
                 <Input
                   value={urlDraft}
-                  onChange={(event) => setUrlDraft(event.target.value)}
-                  onBlur={commitUrl}
+                  onChange={(event) =>
+                    changeConnection(
+                      event.target.value.trim() ? "remote" : "local",
+                      event.target.value
+                    )
+                  }
+                  aria-label="Server address"
                   placeholder="Leave blank for local discovery"
                   className="tw-w-full sm:tw-w-[260px]"
                 />
@@ -644,8 +774,8 @@ export const MiyoSettings: React.FC = () => {
         <div className="tw-text-xs tw-font-semibold tw-text-muted">Powered by Miyo</div>
         <div className="tw-text-sm tw-text-muted">
           <span className="tw-font-semibold tw-text-normal">Plus</span> = Copilot cloud, uses
-          credits · <span className="tw-font-semibold tw-text-accent">Miyo</span> = local,
-          unlimited, on your machine
+          credits · <span className="tw-font-semibold tw-text-accent">Miyo</span> = your selected
+          server, no credits
         </div>
 
         <MiyoAvailabilityNotice
@@ -681,7 +811,7 @@ export const MiyoSettings: React.FC = () => {
                 >
                   <CapabilityRow
                     title="Semantic search"
-                    description="Understands meaning, not just keywords — finds related notes on-device."
+                    description="Understands meaning, not just keywords — finds related notes with Miyo."
                     control={
                       <SettingSwitch
                         checked={pendingSkillEnabled ?? settings.enableMiyoSearchSkill}
@@ -743,10 +873,13 @@ export const MiyoSettings: React.FC = () => {
                   keyboard users, not just pointer. */}
               <MiyoStatusRow
                 title="Search chat"
-                description="Search your ChatGPT / Claude chats locally. Set up chat sources and indexing in Miyo."
+                description="Search your ChatGPT / Claude chats indexed by Miyo."
                 status={status.chatSync}
                 statusText={chatSyncStatusText(status.chatSync)}
                 actionLabel="Manage in Miyo"
+                remoteInstruction={
+                  connectedRemote ? "Manage chat sources on the Miyo host." : undefined
+                }
                 onAction={() => window.open(MIYO_CHATS_DEEPLINK_URL, "_blank")}
                 disabled={!capabilitiesEnabled}
               />
@@ -762,7 +895,7 @@ export const MiyoSettings: React.FC = () => {
             <div className="tw-px-4">
               <CapabilityRow
                 title="Document Processor"
-                description="Processes PDF & EPUB locally via Miyo; other formats use Plus cloud."
+                description="Miyo processes PDF & EPUB. Other formats use Plus cloud."
                 control={
                   <SegmentedControl
                     aria-label="Document Processor backend"

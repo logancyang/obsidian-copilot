@@ -22,15 +22,18 @@ You can ask naturally, such as “Find everything I have written about memory co
 
 ## Connect Miyo
 
-1. Download and open Miyo from [miyo.md](https://miyo.md).
-2. Open **Settings → Copilot → Miyo**.
-3. Select **Connect**. Copilot discovers a local Miyo automatically.
-4. If prompted, register the current vault with Miyo.
-5. Turn on **Semantic search** under **Powered by Miyo**.
+Open **Settings → Copilot → Miyo**:
 
-A healthy local connection shows **Connected · local**. If you run Miyo on another computer or server, expand the advanced connection row and enter its address. The status then shows **Connected · remote**.
+- For a local connection, download and open Miyo, select **Connect**, and register the current vault if prompted.
+- For a remote connection, expand **Advanced** and enter its server address, such as `http://miyo-home:8742`. Use the same Tailscale URL on your computers and select **Save and connect** above. You do not need Miyo installed on the computer running Copilot.
 
-The remote option changes the privacy boundary: indexing and search requests go to the Miyo server you entered instead of staying on the current computer.
+Editing the address disconnects the current connection. Clear the address and select **Connect** to return to local discovery. The saved remote address and feature preferences are retained. An incomplete address is not saved as an active endpoint. Existing remote configurations remain selected after an upgrade.
+
+A healthy connection shows **Connected · local** or **Connected · remote**. Select **Check connection** to check again. A remote connection can be healthy even if the current vault is not registered on that server; the message beneath the connection identifies that separately. Manage folders on the Miyo host to make this vault available for search. Copilot does not send this computer's filesystem path to register it remotely.
+
+Turn on **Semantic search** under **Powered by Miyo** to use the agent Skill. For remote connections, manage chat sources and Relay on the Miyo host. The Connector is separate from Copilot's connection and does not set its server address.
+
+Indexing and search requests go to your selected Miyo server. **Disconnect** disables Copilot's Miyo backend; installed agent Skills keep their separate feature preferences.
 
 ## What Miyo availability means
 

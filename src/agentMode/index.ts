@@ -375,6 +375,7 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
       prev.enableMiyoSearchSkill !== next.enableMiyoSearchSkill ||
       prev.docProcessorBackend !== next.docProcessorBackend ||
       prev.enableMiyo !== next.enableMiyo ||
+      prev.miyoConnectionMode !== next.miyoConnectionMode ||
       prev.miyoServerUrl !== next.miyoServerUrl ||
       prev.isPaidUser !== next.isPaidUser;
     if (
