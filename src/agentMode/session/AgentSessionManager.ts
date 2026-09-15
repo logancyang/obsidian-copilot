@@ -357,6 +357,14 @@ export class AgentSessionManager {
   >();
   private readonly restartingBackends = new Set<BackendId>();
   /**
+   * Backends running with spawn config the user has since changed, mapped to
+   * the accumulated reasons. Applying the change means restarting, which closes
+   * every session on that backend, so it waits for the user's word rather than
+   * taking the open chat away mid-thought.
+   * https://github.com/Brevilabs/obsidian-copilot-private/issues/475
+   */
+  private readonly heldConfigChanges = new Map<BackendId, string>();
+  /**
    * Chat inputs whose session is mid-replacement during a backend restart.
    *
    * A restart has to close the old session before the new process exists, so
@@ -2387,10 +2395,88 @@ export class AgentSessionManager {
         immediate: prev?.immediate ?? false,
       });
       logInfo(`[AgentMode] deferred ${backendId} backend restart: ${reason}`);
+      // The chat's Reload action reports a queued restart as in progress, so
+      // publish the queue entry rather than leaving the button looking inert.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/475
+      this.notify();
       return true;
     }
     await this.restartBackendNow(backendId, reason, options?.deferWhileBusy === false);
     return true;
+  }
+
+  /**
+   * Record that `backendId`'s spawn-time configuration changed.
+   *
+   * A running process keeps the configuration it was spawned with, so the
+   * change only lands on a restart — and a restart closes every session on that
+   * backend. The triggers are routine and often fire from outside the chat the
+   * user is looking at: an agent writing a skill file, a BYOK key saved, a
+   * model enabled. Restarting on the spot swaps the conversation out
+   * mid-thought, so the change is held while a session exists to lose, and the
+   * chat offers it as a Reload the user takes when convenient.
+   *
+   * With no session on the backend the restart costs the user nothing, so it
+   * runs straight away. That branch also covers the warm probe, which the
+   * preloader owns and no session has adopted.
+   *
+   * Callers that must apply *now* — a tightened privacy boundary, a binary that
+   * is gone — call `restartBackend` directly.
+   * https://github.com/Brevilabs/obsidian-copilot-private/issues/475
+   *
+   * @param backendId Backend whose spawn-time configuration is now stale.
+   * @param reason Diagnostic reason, carried through to the eventual restart.
+   */
+  async noteSpawnConfigChanged(backendId: BackendId, reason: string): Promise<void> {
+    if (this.disposed) return;
+    // A session being created right now is about to own this backend, so wait
+    // for it before deciding whether anything would be disturbed.
+    const inflight = this.starting.get(backendId);
+    if (inflight) await inflight.catch(() => undefined);
+    if (this.disposed) return;
+    if (!this.hasSessionOn(backendId)) {
+      await this.restartBackend(backendId, reason);
+      return;
+    }
+    const prev = this.heldConfigChanges.get(backendId);
+    this.heldConfigChanges.set(backendId, prev ? `${prev}; ${reason}` : reason);
+    logInfo(`[AgentMode] holding ${backendId} backend restart: ${reason}`);
+    // A second change to an already-held backend says nothing new on screen.
+    if (prev === undefined) this.notify();
+  }
+
+  /** Whether `backendId` is running on configuration the user has since changed. */
+  hasHeldConfigChange(backendId: BackendId): boolean {
+    return this.heldConfigChanges.has(backendId);
+  }
+
+  /**
+   * Whether a restart of `backendId` is running or queued behind a turn. The
+   * chat's Reload action reads this to report progress: a reload taken during
+   * a turn only lands when that turn ends, and an action that looked inert
+   * until then would read as broken.
+   * https://github.com/Brevilabs/obsidian-copilot-private/issues/475
+   */
+  isBackendRestartPending(backendId: BackendId): boolean {
+    return this.restartingBackends.has(backendId) || this.pendingBackendRestarts.has(backendId);
+  }
+
+  /**
+   * Apply the configuration change held for `backendId` — the chat's Reload
+   * action. This performs the restart `noteSpawnConfigChanged` declined to
+   * perform on its own, replacing the active session. A busy backend still
+   * finishes its turn first, so the banner stays up until the restart lands.
+   * https://github.com/Brevilabs/obsidian-copilot-private/issues/475
+   */
+  async applyHeldConfigChange(backendId: BackendId): Promise<void> {
+    const reason = this.heldConfigChanges.get(backendId);
+    if (reason === undefined) return;
+    await this.restartBackend(backendId, reason);
+  }
+
+  /** Whether any pooled session runs on `backendId`. */
+  private hasSessionOn(backendId: BackendId): boolean {
+    return Array.from(this.sessions.values()).some((s) => s.backendId === backendId);
   }
 
   /**
@@ -3763,6 +3849,11 @@ export class AgentSessionManager {
     const proc = this.backends.get(backendId);
     if (!proc) return;
     this.restartingBackends.add(backendId);
+    // Every restart rebuilds spawn config from current settings, so nothing is
+    // held once one runs — including restarts this hold never asked for, such
+    // as a tightened privacy boundary or a binary that changed underneath.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/475
+    this.heldConfigChanges.delete(backendId);
     logInfo(`[AgentMode] restarting ${backendId} backend: ${reason}`);
     // Declared out here so the `finally` can release it however the restart ends.
     let retainedChatInputId: string | undefined;

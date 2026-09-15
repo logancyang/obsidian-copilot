@@ -103,3 +103,19 @@ export const LongPathError: StoryObj<AgentStatusCardProps> = {
     action: { label: "Configure Codex", onClick: () => undefined },
   },
 };
+
+export const ConfigChangedReload: StoryObj<AgentStatusCardProps> = {
+  args: {
+    layout: "row",
+    message: "opencode config has changed",
+    action: { label: "Reload", onClick: () => undefined },
+  },
+};
+
+export const ConfigChangedReloading: StoryObj<AgentStatusCardProps> = {
+  args: {
+    layout: "row",
+    message: "Very Long Local Agent Backend Name config has changed",
+    action: { label: "Reloading…", onClick: () => undefined, disabled: true },
+  },
+};
