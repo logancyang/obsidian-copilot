@@ -2142,8 +2142,8 @@ export class AgentSessionManager {
   }
 
   /**
-   * The sticky preference to start a session on, or `null` when it names a
-   * model the backend no longer offers.
+   * The model to start a session on: the sticky preference, or an enabled
+   * stand-in when that preference names a model the backend no longer offers.
    *
    * A saved default outlives the model it points at: Copilot Plus withdraws a
    * model from its published lineup, or a provider is deleted, and the removal
@@ -2152,7 +2152,7 @@ export class AgentSessionManager {
    * and the session quietly keeps whatever model the agent picked for itself,
    * so prompts go somewhere the user never chose.
    *
-   * Filtering here rather than in {@link getDefaultSelection} keeps the saved
+   * Substituting here rather than in {@link getDefaultSelection} keeps the saved
    * value on disk and visible in settings, so it is still clearable and still
    * applies again if the model returns.
    * https://github.com/Brevilabs/obsidian-copilot-private/issues/474
@@ -2169,8 +2169,15 @@ export class AgentSessionManager {
     if (!offered || offered.length === 0) return saved;
     if (offered.some((entry) => entry.baseModelId === saved.baseModelId)) return saved;
 
-    this.warnDefaultNoLongerOffered(backendId, saved.baseModelId);
-    return null;
+    // Naming a replacement beats seeding nothing: an empty seed hands the
+    // choice to the agent, whose own default owes nothing to Copilot's enabled
+    // list and lands outside it in practice. Entries flagged for a missing key
+    // are skipped because the backend would reject them the same way it rejects
+    // the withdrawn default. Effort is left unset so the model's own default
+    // level applies rather than a level carried over from a different model.
+    const replacement = offered.find((entry) => entry.credentialState === "ok");
+    this.warnDefaultNoLongerOffered(backendId, saved.baseModelId, replacement?.name);
+    return replacement ? { baseModelId: replacement.baseModelId, effort: null } : null;
   }
 
   /**
@@ -2179,15 +2186,27 @@ export class AgentSessionManager {
    *
    * Keyed by the model as well as the backend: a user who replaces a withdrawn
    * default and then loses the replacement too must hear about the second one.
+   *
+   * @param replacementName - Display name of the enabled model new chats now
+   *   start on, or undefined when no enabled model is routable and the agent's
+   *   own default takes over.
    */
-  private warnDefaultNoLongerOffered(backendId: BackendId, baseModelId: string): void {
+  private warnDefaultNoLongerOffered(
+    backendId: BackendId,
+    baseModelId: string,
+    replacementName?: string
+  ): void {
     const key = `${backendId}:${baseModelId}`;
     if (this.warnedMissingDefaults.has(key)) return;
     this.warnedMissingDefaults.add(key);
     const agent = this.resolveDescriptor(backendId).displayName;
     const model = baseModelId.split("/").pop() || baseModelId;
     logInfo(`[AgentMode] ${backendId} default model ${baseModelId} is no longer offered`);
-    new Notice(`${agent} no longer offers ${model}. Pick a model to make it your default again.`);
+    new Notice(
+      replacementName
+        ? `${agent} no longer offers ${model}. New chats use ${replacementName} until you pick a new default.`
+        : `${agent} no longer offers ${model}. Pick a model to make it your default again.`
+    );
   }
 
   private repairDefaultEffort(backendId: BackendId, state: BackendState | null): void {
