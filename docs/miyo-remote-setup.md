@@ -2,13 +2,11 @@
 
 Run Miyo on one computer and connect Copilot on your other devices to that same server through Tailscale. The host keeps the index and answers searches; each client uses the same HTTPS address.
 
-**Preview feature:** This guide uses the **This computer / Remote server** connection choices from the upcoming Copilot update. They are not yet in a released version. The screenshots and recording use that preview with the Atom theme.
-
 ## Before you start
 
 - Choose a host computer that can stay awake with Miyo running. Add the folders you want to search and let indexing finish. The [local Miyo setup guide](miyo-setup.md) explains folder registration and indexing.
 - Install [Tailscale](https://tailscale.com/download) on **every participating device**, including the Miyo host, and connect them to the same Tailscale network. Your network's access rules must allow clients to reach the host.
-- Use a Copilot build with the **Remote server** choice on each client. For Miyo searches in Agent Chat, install the [Miyo desktop app](https://www.miyo.md/) on each desktop client too: Copilot uses its local command-line tool to contact the remote server. Only the host needs to run the server and maintain an index.
+- Use Copilot on each client. For Miyo searches in Agent Chat, install the [Miyo desktop app](https://www.miyo.md/) on each desktop client too: Copilot uses its local command-line tool to contact the remote server. Only the host needs to run the server and maintain an index.
 
 Tailscale gives the devices a private connection. It does not copy your notes or synchronize Miyo indexes. Keep your vault files synchronized separately if you want the same notes available in Obsidian on each device.
 
@@ -92,7 +90,7 @@ In this example, a Miyo search returns **Better team meetings.md** and the expec
 
 ### Tested setup
 
-The captures use the preview from [Copilot PR 3233](https://github.com/logancyang/obsidian-copilot/pull/3233), commit `b8bd0c47c9be9e5ad905de7d207d0db86661d611`, Miyo 0.2.23, and Obsidian 1.13.4 with Atom dark. On the earlier preview commit `38794e77`, a second isolated Obsidian profile on the same Mac also searched successfully after manually copying Copilot settings; its vault had the same name at a different disk location. That build retained the remote address and Current vault scope after restarting into Obsidian 1.13.7. This verifies two local profiles, not two physical devices or automatic settings synchronization.
+The captures use [Copilot commit b8bd0c47](https://github.com/logancyang/obsidian-copilot/commit/b8bd0c47c9be9e5ad905de7d207d0db86661d611), Miyo 0.2.23, and Obsidian 1.13.4 with Atom dark. On the earlier commit `38794e77`, a second isolated Obsidian profile on the same Mac also searched successfully after manually copying Copilot settings; its vault had the same name at a different disk location. That build retained the remote address and Current vault scope after restarting into Obsidian 1.13.7. This verifies two local profiles, not two physical devices or automatic settings synchronization.
 
 ## If the connection or search fails
 
