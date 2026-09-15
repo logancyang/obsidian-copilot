@@ -1,7 +1,6 @@
 import {
   ReportIssueFlow,
   type PreparedReport,
-  type PrepareStep,
   type ReportIssueFlowProps,
   type ReportSourceId,
   type UploadOutcome,
@@ -155,38 +154,13 @@ describe("ReportIssueFlow", () => {
 
         submit();
         // No separate progress screen to flash: the review page is up at once,
-        // with the stage ticks standing in for the manifest.
+        // with one preparing message until the manifest arrives.
         expect(screen.getByText("Report contents")).toBeTruthy();
+        expect(screen.getByRole("status").textContent).toBe("Preparing report…");
 
         await awaitPrepared();
+        expect(screen.queryByRole("status")).toBeNull();
         expect(screen.getByText("4.0 KB")).toBeTruthy();
-      });
-
-      it("ticks off each preparation step as prepare reports it", () => {
-        let advance: (step: PrepareStep) => void = () => {};
-        const prepare = jest.fn(
-          (
-            _note: string,
-            _selected: ReadonlySet<ReportSourceId>,
-            onStep: (s: PrepareStep) => void
-          ) =>
-            new Promise<PreparedReport>(() => {
-              advance = onStep;
-            })
-        );
-        const { container } = renderFlow({ prepare });
-        submit();
-
-        const stepStates = () =>
-          Array.from(container.querySelectorAll("[data-step]")).map((li) =>
-            li.getAttribute("data-state")
-          );
-        expect(stepStates()).toEqual(["pending", "pending", "pending"]);
-        act(() => advance("screenshot"));
-        expect(stepStates()).toEqual(["done", "pending", "pending"]);
-        act(() => advance("logs"));
-        act(() => advance("zip"));
-        expect(stepStates()).toEqual(["done", "done", "done"]);
       });
 
       it("holds Upload until the report exists and does not upload until clicked", async () => {

@@ -99,15 +99,14 @@ const CHAINED_KEYS_LOG = (() => {
   return "password=\n" + rest + filler(WINDOWED_READ_BYTES - rest.length);
 })();
 
-/** A runtime whose `readTail` serves the given files and rejects for any other path. */
+/** A runtime whose `readLog` serves the given files and rejects for any other path. */
 function runtimeWith(files: Record<string, string>): ReportRuntime {
   return {
-    readTail: async (p, maxBytes) => {
+    readLog: async (p, maxBytes) => {
       const content = files[p];
       if (content === undefined) throw new Error(`ENOENT: ${p}`);
       const encoded = encode(content);
-      const tail = encoded.subarray(Math.max(0, encoded.length - maxBytes));
-      return { text: decode(tail), totalBytes: encoded.length };
+      return { text: encoded.length > maxBytes ? "" : content, totalBytes: encoded.length };
     },
   };
 }
@@ -115,12 +114,12 @@ function runtimeWith(files: Record<string, string>): ReportRuntime {
 const runtime = runtimeWith({ [ACTIVITY_PATH]: SECRET_LOG, [OPENCODE_PATH]: SECRET_LOG });
 
 const rejecting = (err: Error): ReportRuntime => ({
-  readTail: () => Promise.reject(err),
+  readLog: () => Promise.reject(err),
 });
 
-/** The base runtime with `readTail` swapped out for the activity log alone. */
-const forActivityLog = (readTail: ReportRuntime["readTail"]): ReportRuntime => ({
-  readTail: (p, max) => (p === ACTIVITY_PATH ? readTail(p, max) : runtime.readTail(p, max)),
+/** The base runtime with `readLog` swapped out for the activity log alone. */
+const forActivityLog = (readLog: ReportRuntime["readLog"]): ReportRuntime => ({
+  readLog: (p, max) => (p === ACTIVITY_PATH ? readLog(p, max) : runtime.readLog(p, max)),
 });
 
 const baseInput: ReportInput = {
@@ -367,37 +366,37 @@ describe("issueReport", () => {
     it.each([
       {
         outcome: `not found when its file does not exist yet, as on a fresh install (${ISSUE_URL})`,
-        readTail: () =>
+        readLog: () =>
           Promise.reject(Object.assign(new Error("ENOENT: no such file"), { code: "ENOENT" })),
         note: "not found",
       },
       {
         outcome: `empty when the read returns nothing, instead of a zero-byte entry (${ISSUE_URL})`,
-        readTail: async () => ({ text: "", totalBytes: 0 }),
+        readLog: async () => ({ text: "", totalBytes: 0 }),
         note: "empty",
       },
       {
         outcome: `failed with the reason when the read rejects (${ISSUE_URL})`,
-        readTail: () => Promise.reject(new Error("EIO: rotated away")),
+        readLog: () => Promise.reject(new Error("EIO: rotated away")),
         note: "failed: EIO: rotated away",
       },
       {
         outcome:
           "failed with the reason redacted and flattened, so a failing path cannot name the user",
-        readTail: () =>
+        readLog: () =>
           Promise.reject(new Error("EACCES: open '/Users/alice/Library/acp.ndjson'\nretry later")),
         // One line, because it lands inside a markdown bullet list.
         note: "failed: EACCES: open '/Users/<user>/Library/acp.ndjson' retry later",
       },
       {
         outcome: "failed with a runaway reason capped, so it cannot eat the report budget",
-        readTail: () => Promise.reject(new Error("x".repeat(50_000))),
+        readLog: () => Promise.reject(new Error("x".repeat(50_000))),
         note: `failed: ${"x".repeat(1024)}…`,
       },
     ])(
       "records the activity log as $outcome, and still packs the rest",
-      async ({ readTail, note }) => {
-        const bundle = await build({}, forActivityLog(readTail));
+      async ({ readLog, note }) => {
+        const bundle = await build({}, forActivityLog(readLog));
 
         expect(attachment(bundle, "activityLog")).toMatchObject({
           included: false,
@@ -556,18 +555,18 @@ describe("issueReport", () => {
     it(`reads a log whole, up to the ceiling, rather than a window around the budget (${ISSUE_URL})`, async () => {
       // Redaction pairs a value with a key that can be any distance ahead of
       // it, so only a read that starts where the file does sees every pair.
-      const readTail = jest.fn(runtime.readTail);
+      const readLog = jest.fn(runtime.readLog);
 
-      await packedLog({ path: ACTIVITY_PATH }, TAILABLE_BUDGET_BYTES, { readTail });
+      await packedLog({ path: ACTIVITY_PATH }, TAILABLE_BUDGET_BYTES, { readLog });
 
-      expect(readTail).toHaveBeenCalledWith(ACTIVITY_PATH, MAX_REDACTABLE_LOG_BYTES);
+      expect(readLog).toHaveBeenCalledWith(ACTIVITY_PATH, MAX_REDACTABLE_LOG_BYTES);
     });
 
     it(`packs a log exactly at the redaction ceiling and leaves one byte over it out (${ISSUE_URL})`, async () => {
       // Sizes are the runtime's word; the text is a stand-in, since the point
       // is where the ceiling sits and not what 64 MiB of log redacts to.
       const sized = (totalBytes: number) => ({
-        readTail: async () => ({ text: SECRET_LOG, totalBytes }),
+        readLog: async () => ({ text: SECRET_LOG, totalBytes }),
       });
 
       const atCeiling = await packedLog(
@@ -616,7 +615,7 @@ describe("issueReport", () => {
         source: { path: ACTIVITY_PATH },
         budget: TAILABLE_BUDGET_BYTES,
         rt: {
-          readTail: async () => ({ text: "x".repeat(2 * TAILABLE_BUDGET_BYTES), totalBytes: 16 }),
+          readLog: async () => ({ text: "x".repeat(2 * TAILABLE_BUDGET_BYTES), totalBytes: 16 }),
         },
         note: "newest entry alone is larger than the room left",
       },
@@ -626,7 +625,7 @@ describe("issueReport", () => {
         behaviour: `a log over the size a report can redact whole (${ISSUE_URL})`,
         source: { path: ACTIVITY_PATH },
         budget: TAILABLE_BUDGET_BYTES,
-        rt: { readTail: async () => ({ text: SECRET_LOG, totalBytes: 100 * 1024 * 1024 }) },
+        rt: { readLog: async () => ({ text: SECRET_LOG, totalBytes: 100 * 1024 * 1024 }) },
         note: "log is 100.0 MB, over the 64.0 MB a report can redact",
       },
       {
@@ -881,12 +880,12 @@ describe("issueReport", () => {
       await fs.rm(dir, { recursive: true, force: true });
     });
 
-    it("reads the newest bytes of a real file and reports its full size", async () => {
+    it("reads the complete snapshot of a real file at the limit", async () => {
       const file = path.join(dir, "activity.log");
       await fs.writeFile(file, "hello world");
 
-      await expect(getNodeReportRuntime().readTail(file, 5)).resolves.toEqual({
-        text: "world",
+      await expect(getNodeReportRuntime().readLog(file, 11)).resolves.toEqual({
+        text: "hello world",
         totalBytes: 11,
       });
     });
@@ -894,7 +893,7 @@ describe("issueReport", () => {
     it("rejects when the file cannot be opened", async () => {
       const missing = path.join(dir, "missing.log");
 
-      await expect(getNodeReportRuntime().readTail(missing, 5)).rejects.toThrow(/ENOENT/);
+      await expect(getNodeReportRuntime().readLog(missing, 5)).rejects.toThrow(/ENOENT/);
     });
   });
 });

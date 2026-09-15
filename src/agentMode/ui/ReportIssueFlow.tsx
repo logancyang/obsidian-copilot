@@ -13,15 +13,7 @@ import { cn } from "@/lib/utils";
 import { formatBytes } from "@/utils/formatBytes";
 import { type AttachmentResult, type ReportIssueDraft } from "@/utils/issueReport";
 import { type ReportUploadAttempt } from "@/utils/reportUpload";
-import {
-  AlertTriangle,
-  Check,
-  CircleSlash,
-  FileArchive,
-  Loader2,
-  X,
-  type LucideIcon,
-} from "lucide-react";
+import { AlertTriangle, Check, FileArchive, Loader2, X, type LucideIcon } from "lucide-react";
 import React from "react";
 
 /** The optional attachments the user can opt into, keyed for stable rendering. */
@@ -35,7 +27,6 @@ export interface ReportSourceOption {
   defaultChecked: boolean;
 }
 
-export type PrepareStep = "screenshot" | "logs" | "zip";
 type ReportPhase = "details" | "review";
 
 export interface PreparedReport {
@@ -66,16 +57,13 @@ export type UploadOutcome =
 
 export interface ReportIssueFlowProps {
   sources: ReportSourceOption[];
-  prepare: (
-    note: string,
-    selected: ReadonlySet<ReportSourceId>,
-    onStep: (step: PrepareStep) => void
-  ) => Promise<PreparedReport>;
+  prepare: (note: string, selected: ReadonlySet<ReportSourceId>) => Promise<PreparedReport>;
   upload: (report: PreparedReport) => Promise<UploadOutcome>;
   /**
    * Delete a zip nobody will send: the user cancelled on the review page, or a
    * report finished preparing after the dialog was gone. Cleanup failures are
-   * the host's to log; this never rejects.
+   * the host's to log; this never rejects. A manual handoff releases the zip
+   * from cleanup, even if the user later cancels.
    */
   discardReport: (report: PreparedReport) => Promise<void>;
   onCancel: () => void;
@@ -89,18 +77,6 @@ export interface ReportIssueFlowProps {
   /** Reveal the zip in the OS file manager for "Show zip". */
   revealFile: (path: string) => void;
 }
-
-/**
- * The stages of `prepare`, in order. Labels name the stage, never a product:
- * the screenshot stage runs even when the user did not ask for one and a log
- * source can come back empty, so only the manifest may say what the zip
- * actually contains. A tick here means "this stage finished", nothing more.
- */
-const PREPARE_STEPS: Array<{ id: PrepareStep; label: string }> = [
-  { id: "screenshot", label: "Screenshot" },
-  { id: "logs", label: "Logs" },
-  { id: "zip", label: "Single zip file" },
-];
 
 /**
  * Whether the component is still on screen. `prepare` and `upload` cannot be
@@ -125,20 +101,15 @@ export function ReportIssueFlow(props: ReportIssueFlowProps) {
   const [selected, setSelected] = React.useState<Set<ReportSourceId>>(
     () => new Set(sources.filter((s) => s.defaultChecked).map((s) => s.id))
   );
-  const [completedSteps, setCompletedSteps] = React.useState<Set<PrepareStep>>(() => new Set());
   const [report, setReport] = React.useState<PreparedReport | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const mountedRef = useMountedRef();
 
   const handlePrepare = async () => {
     setError(null);
-    setCompletedSteps(new Set());
     setPhase("review");
     try {
-      const result = await prepare(note, selected, (step) => {
-        if (!mountedRef.current) return;
-        setCompletedSteps((done) => new Set(done).add(step));
-      });
+      const result = await prepare(note, selected);
       if (!mountedRef.current) {
         // Nobody will ever upload this zip, and it is plaintext prompts and
         // note contents sitting in the OS temp folder with no UI left to name it
@@ -184,7 +155,6 @@ export function ReportIssueFlow(props: ReportIssueFlowProps) {
       ) : (
         <ReviewPage
           report={report}
-          completed={completedSteps}
           upload={props.upload}
           onUploaded={props.onUploaded}
           openIssuePage={props.openIssuePage}
@@ -283,7 +253,7 @@ interface ManifestRowProps extends React.LiHTMLAttributes<HTMLLIElement> {
   note?: string;
 }
 
-/** One row of the manifest, used for stage ticks and packed files alike. */
+/** One attachment in the completed report manifest. */
 function ManifestRow({ tone, icon: Icon, name, size, note, ...liProps }: ManifestRowProps) {
   return (
     <li {...liProps} className="tw-flex tw-items-start tw-gap-2">
@@ -314,8 +284,6 @@ function ManifestRow({ tone, icon: Icon, name, size, note, ...liProps }: Manifes
 interface ReviewPageProps {
   /** Null until prepare lands; the page fills in rather than swapping. */
   report: PreparedReport | null;
-  /** Stages `prepare` has finished, shown in place of the manifest until then. */
-  completed: ReadonlySet<PrepareStep>;
   upload: (report: PreparedReport) => Promise<UploadOutcome>;
   onUploaded: (outcome: { reportId: string; issueUrl: string }) => void;
   openIssuePage: (url: string) => void;
@@ -331,7 +299,6 @@ type UploadState = "idle" | "uploading" | { failed: string };
 
 function ReviewPage({
   report,
-  completed,
   upload,
   onUploaded,
   openIssuePage,
@@ -366,44 +333,30 @@ function ReviewPage({
     <>
       <div className="tw-flex tw-flex-col tw-gap-2">
         <span className="tw-text-sm tw-font-medium">Report contents</span>
-        {/* One slot for both states: the stage ticks while preparing, then what
-            the zip actually holds. Keeping the slot in place is what stops a
-            fast prepare from flashing a progress view in and back out. */}
-        <ul className="tw-m-0 tw-flex tw-list-none tw-flex-col tw-gap-1 tw-p-0 tw-text-sm">
-          {report
-            ? [
-                ...report.attachments.map((attachment) => (
-                  <ManifestRow
-                    key={attachment.id}
-                    tone={attachment.included ? "success" : "muted"}
-                    icon={attachment.included ? Check : X}
-                    name={attachment.name}
-                    size={attachment.included ? formatBytes(attachment.bytes) : undefined}
-                    note={attachment.note}
-                  />
-                )),
-                <ManifestRow
-                  key="zip"
-                  tone="success"
-                  icon={FileArchive}
-                  name={report.zipName}
-                  size={formatBytes(report.uploadAttempt.body.byteLength)}
-                />,
-              ]
-            : PREPARE_STEPS.map((step) => {
-                const done = completed.has(step.id);
-                return (
-                  <ManifestRow
-                    key={step.id}
-                    data-step={step.id}
-                    data-state={done ? "done" : "pending"}
-                    tone={done ? "success" : "muted"}
-                    icon={done ? Check : CircleSlash}
-                    name={step.label}
-                  />
-                );
-              })}
-        </ul>
+        {report ? (
+          <ul className="tw-m-0 tw-flex tw-list-none tw-flex-col tw-gap-1 tw-p-0 tw-text-sm">
+            {report.attachments.map((attachment) => (
+              <ManifestRow
+                key={attachment.id}
+                tone={attachment.included ? "success" : "muted"}
+                icon={attachment.included ? Check : X}
+                name={attachment.name}
+                size={attachment.included ? formatBytes(attachment.bytes) : undefined}
+                note={attachment.note}
+              />
+            ))}
+            <ManifestRow
+              tone="success"
+              icon={FileArchive}
+              name={report.zipName}
+              size={formatBytes(report.uploadAttempt.body.byteLength)}
+            />
+          </ul>
+        ) : (
+          <span role="status" className="tw-text-sm tw-text-muted">
+            Preparing report…
+          </span>
+        )}
       </div>
 
       {failure !== null && (

@@ -1,7 +1,7 @@
 /**
  * Assembles a bug-report bundle in memory and builds the prefilled GitHub issue
  * URLs it can be filed with. The disk is reached only through the injected
- * `readTail`, so assembly is testable without a filesystem and the caller alone
+ * `readLog`, so assembly is testable without a filesystem and the caller alone
  * decides where the zip goes. Every requested source is listed with its actual
  * outcome, so the review page and `report.md` say what landed in the bundle, not
  * what was ticked. Every free-text input — log bodies, description, title, failure
@@ -24,7 +24,7 @@ import {
   byteLength,
   encodeText,
   headOfText,
-  readTailFrom,
+  readLogFrom,
   tailOfText,
   withTruncationNote,
 } from "@/utils/logTail";
@@ -139,11 +139,11 @@ export interface ReportBundle {
 
 export interface ReportRuntime {
   /**
-   * The last `maxBytes` bytes of a file decoded to text, a leading partial UTF-8
-   * character trimmed so `text` re-encodes to at most `maxBytes`. `totalBytes` is
-   * the file's full size; 0 means nothing was read. Rejects when the file cannot be read.
+   * Complete file snapshot decoded to text, or empty text with its size when
+   * it exceeds `maxBytes`. Zero total bytes means an empty file. Rejects when
+   * the file cannot be read.
    */
-  readTail: (path: string, maxBytes: number) => Promise<{ text: string; totalBytes: number }>;
+  readLog: (path: string, maxBytes: number) => Promise<{ text: string; totalBytes: number }>;
 }
 
 /** What one source contributes: its manifest line, and the bytes to pack if any. */
@@ -262,7 +262,7 @@ async function logEntry(
   try {
     const raw =
       log.path != null
-        ? await runtime.readTail(log.path, MAX_REDACTABLE_LOG_BYTES)
+        ? await runtime.readLog(log.path, MAX_REDACTABLE_LOG_BYTES)
         : tailOfText(log.text ?? "", MAX_REDACTABLE_LOG_BYTES);
     if (raw.totalBytes === 0) return leftOut("empty");
     // A log read in part cannot be redacted: the part left out may hold the key
@@ -482,16 +482,16 @@ function describeReason(reason: string): string {
 }
 
 /**
- * The runtime `buildReportBundle` uses by default: tails are read straight off
+ * The runtime `buildReportBundle` uses by default: bounded logs are read from
  * the desktop filesystem. Exported so a caller can sample a log the same way before building.
  */
 export function getNodeReportRuntime(): ReportRuntime {
   const fs = requireNodeModule<typeof import("node:fs/promises")>("fs/promises");
   return {
-    readTail: async (p, maxBytes) => {
+    readLog: async (p, maxBytes) => {
       const handle = await fs.open(p, "r");
       try {
-        return await readTailFrom(handle, maxBytes);
+        return await readLogFrom(handle, maxBytes);
       } finally {
         await handle.close();
       }

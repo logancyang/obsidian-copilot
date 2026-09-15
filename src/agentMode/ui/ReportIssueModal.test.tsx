@@ -7,7 +7,6 @@ import {
 } from "@/agentMode/ui/ReportIssueModal";
 import type {
   PreparedReport,
-  PrepareStep,
   ReportSourceId,
   ReportSourceOption,
   UploadOutcome,
@@ -294,11 +293,7 @@ describe("ReportIssueModal", () => {
       onOpen(): void;
       onClose(): void;
       buildSources(): ReportSourceOption[];
-      prepare(
-        note: string,
-        selected: ReadonlySet<ReportSourceId>,
-        onStep: (step: PrepareStep) => void
-      ): Promise<PreparedReport>;
+      prepare(note: string, selected: ReadonlySet<ReportSourceId>): Promise<PreparedReport>;
       upload(report: PreparedReport): Promise<UploadOutcome>;
       discard(report: PreparedReport): Promise<void>;
       onUploaded(outcome: { reportId: string; issueUrl: string }): Promise<void>;
@@ -378,10 +373,7 @@ describe("ReportIssueModal", () => {
         }
       });
 
-      const prepare = (
-        selected: ReadonlySet<ReportSourceId>,
-        onStep: (step: PrepareStep) => void = () => {}
-      ) =>
+      const prepare = (selected: ReadonlySet<ReportSourceId>) =>
         modalWith({
           params: {
             resolveCaptureTarget: () => null,
@@ -390,7 +382,7 @@ describe("ReportIssueModal", () => {
             activeBackend: "claude",
           },
         })
-          .prepare("it broke\n\nwhile typing", selected, onStep)
+          .prepare("it broke\n\nwhile typing", selected)
           .then((report) => {
             created.push(report.zipDir);
             return report;
@@ -414,14 +406,6 @@ describe("ReportIssueModal", () => {
         expect(report.manualIssueUrl).toContain("title=it+broke");
         expect(report.attachments.map((a) => a.name)).toContain("report.md");
         expect(report.uploadAttempt.idempotencyKey).not.toBe("");
-      });
-
-      it("reports the three stages in order, ending with the zip on disk", async () => {
-        const steps: PrepareStep[] = [];
-
-        await prepare(new Set(), (step) => steps.push(step));
-
-        expect(steps).toEqual(["screenshot", "logs", "zip"]);
       });
 
       it("removes the directory and rethrows when the zip cannot be written (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", async () => {
@@ -604,6 +588,31 @@ describe("ReportIssueModal", () => {
     });
 
     describe("openIssuePage()", () => {
+      it.each(["resolved", "rejected", "pending"])(
+        "preserves the manually handed-off zip through Cancel and close with a %s browser call (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)",
+        async (browserState) => {
+          let finish: () => void = () => {};
+          if (browserState === "rejected") openExternal.mockRejectedValue(new Error("no handler"));
+          if (browserState === "pending") {
+            openExternal.mockImplementation(
+              () =>
+                new Promise<void>((resolve) => {
+                  finish = resolve;
+                })
+            );
+          }
+          const modal = modalWith({ prepared });
+          const opening = modal.openIssuePage(prepared.manualIssueUrl);
+
+          await modal.discard(prepared);
+          modal.onClose();
+          finish();
+          await opening;
+
+          expect(rm).not.toHaveBeenCalled();
+        }
+      );
+
       it("says nothing when the browser takes the manual issue page", async () => {
         await modalWith({}).openIssuePage(prepared.manualIssueUrl);
 

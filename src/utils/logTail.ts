@@ -1,6 +1,6 @@
 /**
  * Cuts text and bytes to a byte budget on UTF-8 character boundaries: the head
- * or tail of an in-memory string, the tail of an open file, and the banner that
+ * or tail of an in-memory string, a bounded complete file, and the banner that
  * marks a shortened log. Nothing here knows what a budget is for — the caller
  * decides how much room a slice gets and what to do when it falls short.
  */
@@ -18,8 +18,7 @@ export const TRUNCATION_NOTE_RESERVE_BYTES = 256;
 export const MIN_LOG_TAIL_BYTES = 64 * 1024;
 
 /**
- * Byte-accurate tail of an in-memory log, mirroring what `readTailFrom` does
- * for a file so both sources obey the same budget. Slicing by bytes rather than
+ * Byte-accurate tail of an in-memory log. Slicing by bytes rather than
  * characters matters: note contents are often non-ASCII, where one character
  * costs up to four bytes and a character-based cap would blow the budget.
  */
@@ -90,10 +89,10 @@ export function byteLength(text: string): number {
 }
 
 /**
- * The subset of an open file handle `readTailFrom` needs, so the tail logic can
+ * The subset of an open file handle `readLogFrom` needs, so bounded reads can
  * be exercised without a real filesystem.
  */
-export interface TailReadable {
+export interface LogReadable {
   stat: () => Promise<{ size: number }>;
   read: (
     buffer: Uint8Array,
@@ -104,34 +103,33 @@ export interface TailReadable {
 }
 
 /**
- * Read at most `maxBytes` from the end of an open file, positionally, so only
- * the newest part of a large log is ever loaded. The loop guards against a
- * short read, which `read` may return at any time, and only what was read is
- * decoded: decoding the whole buffer would turn its unfilled remainder into NUL
- * characters inside a log the user is told is genuine.
+ * Read the complete log snapshot if it fits the redaction limit. An oversized
+ * file returns only its size so the caller can explain why it was omitted.
  *
  * @param handle Open file to read from; the caller owns closing it.
- * @param maxBytes Ceiling on how much of the tail to keep.
+ * @param maxBytes Largest complete log the caller can safely process.
  */
-export async function readTailFrom(
-  handle: TailReadable,
+export async function readLogFrom(
+  handle: LogReadable,
   maxBytes: number
 ): Promise<{ text: string; totalBytes: number }> {
   const { size } = await handle.stat();
-  const start = Math.max(0, size - maxBytes);
-  const length = size - start;
-  if (length <= 0) return { text: "", totalBytes: size };
+  // Redaction needs the whole log. Skip oversized files before allocating or
+  // reading bytes that cannot be used, and bound growth to this snapshot
+  // (https://github.com/Brevilabs/obsidian-copilot-private/issues/202).
+  if (size > maxBytes || size === 0) return { text: "", totalBytes: size };
 
-  const buffer = new Uint8Array(length);
+  const buffer = new Uint8Array(size);
   let filled = 0;
-  while (filled < length) {
-    const { bytesRead } = await handle.read(buffer, filled, length - filled, start + filled);
+  // A short read is not EOF; a concurrent truncation can end the snapshot early.
+  while (filled < size) {
+    const { bytesRead } = await handle.read(buffer, filled, size - filled, filled);
     if (bytesRead <= 0) break;
     filled += bytesRead;
   }
-  // Reading nothing means the file shrank past `start` between the `stat` and
-  // the read. Reporting 0 rather than the stale `size` is what was actually
-  // read, so the caller lists the source as empty instead of packing a
-  // truncation banner over nothing.
-  return { text: decodeTail(buffer.subarray(0, filled)), totalBytes: filled === 0 ? 0 : size };
+  // Decode only actual bytes so a shrinking log cannot gain NUL padding.
+  return {
+    text: new TextDecoder().decode(buffer.subarray(0, filled)),
+    totalBytes: filled === 0 ? 0 : size,
+  };
 }

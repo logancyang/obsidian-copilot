@@ -129,7 +129,7 @@ export const Details: StoryObj<ReportIssueFlowProps> = {
 
 /**
  * Review page mid-prepare. There is no separate progress screen — the page is
- * up from the first frame with the stage ticks standing in for the manifest.
+ * up from the first frame with a preparing message until the manifest arrives.
  */
 export const Preparing: StoryObj<ReportIssueFlowProps> = {
   render: () => <AtStep steps={[PREPARE]} props={{ prepare: () => pending<PreparedReport>() }} />,

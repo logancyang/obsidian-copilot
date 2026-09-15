@@ -4,10 +4,10 @@ import {
   decodeTail,
   encodeText,
   headOfText,
-  readTailFrom,
+  readLogFrom,
   tailOfText,
   withTruncationNote,
-  type TailReadable,
+  type LogReadable,
 } from "@/utils/logTail";
 
 const encode = (text: string) => new TextEncoder().encode(text);
@@ -18,7 +18,7 @@ const encode = (text: string) => new TextEncoder().encode(text);
  * stands in for a file that shrank after it was measured.
  */
 function fakeHandle(content: Uint8Array, chunkSize = content.length, size = content.length) {
-  const handle: TailReadable = {
+  const handle: LogReadable = {
     stat: async () => ({ size }),
     read: async (buffer, offset, length, position) => {
       const available = Math.max(0, content.length - position);
@@ -97,45 +97,46 @@ describe("logTail", () => {
     });
   });
 
-  describe("readTailFrom()", () => {
-    it("keeps reading until the requested tail is filled rather than trusting one read", async () => {
-      const content = encode("hello world");
-
-      await expect(readTailFrom(fakeHandle(content, 3), 5)).resolves.toEqual({
-        text: "world",
+  describe("readLogFrom()", () => {
+    it("reads a complete UTF-8 log at the byte limit across short reads", async () => {
+      const content = encode("hello 😀");
+      await expect(readLogFrom(fakeHandle(content, 3), content.length)).resolves.toEqual({
+        text: "hello 😀",
         totalBytes: content.length,
       });
     });
 
-    it("decodes only what was actually read when the file shrank after being sized", async () => {
-      const content = encode("abcdefghij");
-      const result = await readTailFrom(fakeHandle(content, content.length, 20), 20);
+    it("skips an oversized file before reading or allocating its contents (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", async () => {
+      const handle = { stat: async () => ({ size: Number.MAX_SAFE_INTEGER }), read: jest.fn() };
+      await expect(readLogFrom(handle, 64 * 1024 * 1024)).resolves.toEqual({
+        text: "",
+        totalBytes: Number.MAX_SAFE_INTEGER,
+      });
+      expect(handle.read).not.toHaveBeenCalled();
+    });
 
-      // The unfilled remainder of the buffer is NUL, which must not be bundled
-      // as if the log contained it.
-      expect(result.text).toBe("abcdefghij");
-      expect(result.text).not.toContain("\u0000");
-      expect(result.totalBytes).toBe(20);
+    it("does not include bytes appended after the file was sized (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", async () => {
+      await expect(readLogFrom(fakeHandle(encode("start appended"), 3, 5), 20)).resolves.toEqual({
+        text: "start",
+        totalBytes: 5,
+      });
+    });
+
+    it("decodes only the bytes read when a file shrinks (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", async () => {
+      await expect(readLogFrom(fakeHandle(encode("survivor"), 3, 20), 20)).resolves.toEqual({
+        text: "survivor",
+        totalBytes: 20,
+      });
     });
 
     it.each([
-      ["a file with nothing in it", fakeHandle(new Uint8Array()), 1024],
-      // Sized at 100 with a 50-byte cap, so the read starts at byte 50; the file
-      // has since rotated down to 8 bytes, leaving that start past its new EOF.
-      [
-        "a file truncated past the start it planned to read from",
-        fakeHandle(encode("survivor"), 8, 100),
-        50,
-      ],
-    ])("returns an empty tail of zero total bytes for %s", async (_case, handle, maxBytes) => {
-      await expect(readTailFrom(handle, maxBytes)).resolves.toEqual({ text: "", totalBytes: 0 });
-    });
-
-    it("skips a half character at the cut so the tail never starts with a replacement glyph", async () => {
-      // 6 bytes back lands two bytes into the middle emoji.
-      const result = await readTailFrom(fakeHandle(encode("😀😀😀")), 6);
-
-      expect(result.text).toBe("😀");
-    });
+      ["an empty file", fakeHandle(new Uint8Array())],
+      ["a file emptied after sizing", fakeHandle(new Uint8Array(), 3, 20)],
+    ])(
+      "reports zero bytes for %s (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)",
+      async (_case, handle) => {
+        await expect(readLogFrom(handle, 20)).resolves.toEqual({ text: "", totalBytes: 0 });
+      }
+    );
   });
 });
