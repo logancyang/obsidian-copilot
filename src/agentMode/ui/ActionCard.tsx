@@ -10,12 +10,13 @@ import { useApp } from "@/context";
 import { AgentActivityCard } from "@/components/chat-components/AgentActivityCard";
 
 interface ActionCardProps {
+  inactive?: boolean;
   part: ToolCallPart;
   open: boolean;
   onToggle: () => void;
 }
 
-export const ActionCard: React.FC<ActionCardProps> = ({ part, open, onToggle }) => {
+export const ActionCard: React.FC<ActionCardProps> = ({ part, open, onToggle, inactive }) => {
   const app = useApp();
   const summary = lookupToolSummary(part);
   // `vaultBase` is stable for the plugin lifetime, but `getVaultBase` is
@@ -58,7 +59,7 @@ export const ActionCard: React.FC<ActionCardProps> = ({ part, open, onToggle }) 
           <span className="tw-truncate">{line}</span>
         )
       }
-      trailing={<StatusBadge status={part.status} />}
+      trailing={<StatusBadge status={part.status} inactive={inactive} />}
       expandable={expandable}
       open={open}
       onToggle={onToggle}
@@ -93,10 +94,13 @@ export const ActionCard: React.FC<ActionCardProps> = ({ part, open, onToggle }) 
 };
 
 interface StatusBadgeProps {
+  inactive?: boolean;
   status: AgentToolStatus;
 }
 
-export const StatusBadge: React.FC<StatusBadgeProps> = ({ status }) => {
+export const StatusBadge: React.FC<StatusBadgeProps> = ({ status, inactive }) => {
+  if (inactive && (status === "in_progress" || status === "pending"))
+    return <span className="tw-text-xs tw-text-muted">Last reported</span>;
   if (status === "in_progress" || status === "pending") {
     return <Loader2 className="tw-size-3 tw-shrink-0 tw-animate-spin tw-text-loading" />;
   }

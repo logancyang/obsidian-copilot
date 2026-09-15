@@ -40,6 +40,7 @@ import type {
   SessionUsage,
 } from "@/agentMode/session/types";
 import { wrapStreamsForDebug } from "./debugTap";
+import { AcpSubagentRouter } from "./AcpSubagentRouter";
 import { AcpBackend } from "./types";
 import {
   withoutExpiredWindows,
@@ -173,6 +174,7 @@ export class AcpBackendProcess implements BackendProcess {
   // Capping it would truncate exactly the long histories this exists to
   // restore, and no measurement suggests the size is a problem. If a future
   // review flags this again, point them at this note.
+  private readonly subagents = new AcpSubagentRouter();
   private readonly loadSessionCollectors = new Map<SessionId, ReplayTranscriptState>();
   /**
    * Last plan-cap snapshot read from the backend.
@@ -245,6 +247,7 @@ export class AcpBackendProcess implements BackendProcess {
       this.todoToolCallIdsBySession.clear();
       this.sawLiveUsage.clear();
       this.loadSessionCollectors.clear();
+      this.subagents.clear();
       this.permissionPrompter = null;
       this.capabilities.clear();
       // Dropped rather than kept: a backend that starts again may be pointed at
@@ -262,7 +265,7 @@ export class AcpBackendProcess implements BackendProcess {
       }
     });
 
-    const stream = ndJsonStream(stdin, stdout);
+    const stream = this.subagents.wrap(ndJsonStream(stdin, stdout));
     const client = new VaultClient(this.app, {
       onSessionUpdate: (sessionId, update) => this.routeSessionUpdate(sessionId, update),
       requestPermission: (req) => this.handlePermission(req),
@@ -274,6 +277,10 @@ export class AcpBackendProcess implements BackendProcess {
         protocolVersion: PROTOCOL_VERSION,
         clientCapabilities: {
           fs: { readTextFile: true, writeTextFile: true },
+          // Draft ACP subagents; the metadata fallback survives released SDK schemas.
+          // https://github.com/Brevilabs/obsidian-copilot-private/issues/467
+          ...{ subagents: {} },
+          _meta: { jetbrains: { air: { version: 1, capabilities: ["nativeSubagentSessions"] } } },
         },
         clientInfo: {
           name: COPILOT_CLIENT_NAME,
@@ -368,6 +375,7 @@ export class AcpBackendProcess implements BackendProcess {
         // Teardown (not per-turn): the handler is unregistered only when the
         // AgentSession disposes, so drop this session's per-session trackers too.
         this.todoToolCallIdsBySession.delete(sessionId);
+        this.subagents.clear(sessionId);
         this.sawLiveUsage.delete(sessionId);
       }
     };
@@ -691,6 +699,7 @@ export class AcpBackendProcess implements BackendProcess {
     const sessionId = params.sessionId;
     // Installed before the request goes out: the agent replays the conversation
     // while it is in flight, so a collector added afterwards would miss it.
+    this.subagents.clear(sessionId);
     const collector = createReplayTranscriptState();
     this.loadSessionCollectors.set(sessionId, collector);
 
@@ -746,6 +755,7 @@ export class AcpBackendProcess implements BackendProcess {
     this.sessionWireState.clear();
     this.todoToolCallIdsBySession.clear();
     this.loadSessionCollectors.clear();
+    this.subagents.clear();
     this.sawLiveUsage.clear();
     this.permissionPrompter = null;
     this.capabilities.clear();

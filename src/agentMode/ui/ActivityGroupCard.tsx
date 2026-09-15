@@ -9,6 +9,7 @@ import { pickToolIcon } from "@/agentMode/ui/toolIcons";
 import { AgentActivityCard } from "@/components/chat-components/AgentActivityCard";
 
 export interface ActivityGroupCardProps {
+  inactive?: boolean;
   group: ActivityGroupNode;
   /**
    * Live elapsed time for the trailing reasoning span. Completed spans keep
@@ -43,6 +44,7 @@ export interface ActivityGroupCardProps {
  */
 export const ActivityGroupCard: React.FC<ActivityGroupCardProps> = ({
   group,
+  inactive,
   thinkingMs,
   open,
   onToggle,
@@ -64,12 +66,12 @@ export const ActivityGroupCard: React.FC<ActivityGroupCardProps> = ({
           {summary.failed > 0 ? (
             <span className="tw-shrink-0 tw-text-xs tw-text-muted">{summary.failed} failed</span>
           ) : null}
-          {isProcessing ? (
+          {isProcessing && !inactive ? (
             <Loader2 className="tw-size-3 tw-shrink-0 tw-animate-spin tw-text-loading" />
           ) : null}
         </>
       }
-      secondary={!open ? liveStep : undefined}
+      secondary={inactive && isProcessing ? "Last reported activity" : !open ? liveStep : undefined}
       expandable
       open={open}
       onToggle={onToggle}

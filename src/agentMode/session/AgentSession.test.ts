@@ -1376,6 +1376,101 @@ describe("AgentSession.sendPrompt", () => {
     }
   });
 
+  it.each(["completed", "cancelled", "failed", "disconnected"] as const)(
+    "settles a known child's reported %s outcome after Stop without adding prose (https://github.com/Brevilabs/obsidian-copilot-private/issues/467)",
+    async (subagent) => {
+      const mock = makeMockBackend();
+      let finish!: (value: { stopReason: "cancelled" }) => void;
+      mock.prompt.mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            finish = resolve;
+          })
+      );
+      const session = new AgentSession({
+        backend: mock.asBackend,
+        backendSessionId: "acp-1",
+        internalId: "internal-1",
+        backendId: "codex",
+      });
+      const turn = session.sendPrompt("Read fixture");
+      mock.emit({
+        sessionId: "acp-1",
+        update: {
+          sessionUpdate: "tool_call",
+          toolCallId: "child",
+          title: "Reader",
+          subagent: "running",
+          status: "in_progress",
+        },
+      });
+      await session.cancel();
+      await turn.turn;
+      mock.emit({
+        sessionId: "acp-1",
+        update: {
+          sessionUpdate: "tool_call_update",
+          toolCallId: "child",
+          subagent,
+          status: subagent === "completed" ? "completed" : "failed",
+        },
+      });
+      expect(
+        session.store.getDisplayMessages().find((m) => m.sender === AI_SENDER)?.parts?.[0]
+      ).toMatchObject({
+        id: "child",
+        subagent,
+        status: subagent === "completed" ? "completed" : "failed",
+      });
+      finish({ stopReason: "cancelled" });
+    }
+  );
+
+  it("attaches a late new child tool to its launch during a later prompt (https://github.com/Brevilabs/obsidian-copilot-private/issues/467)", async () => {
+    const mock = makeMockBackend();
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "codex",
+    });
+    const first = session.sendPrompt("Delegate");
+    mock.emit({
+      sessionId: "acp-1",
+      update: {
+        sessionUpdate: "tool_call",
+        toolCallId: "child",
+        title: "Reader",
+        subagent: "running",
+        status: "in_progress",
+      },
+    });
+    await first.turn;
+    let finish!: (value: { stopReason: "end_turn" }) => void;
+    mock.prompt.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        })
+    );
+    const second = session.sendPrompt("Another task");
+    mock.emit({
+      sessionId: "acp-1",
+      update: {
+        sessionUpdate: "tool_call",
+        toolCallId: "child-read",
+        parentToolCallId: "child",
+        title: "Read fixture",
+        status: "completed",
+      },
+    });
+    const messages = session.store.getDisplayMessages().filter((m) => m.sender === AI_SENDER);
+    expect(messages[0].parts?.[1]).toMatchObject({ id: "child-read", parentToolCallId: "child" });
+    expect(messages[1].parts ?? []).toEqual([]);
+    finish({ stopReason: "end_turn" });
+    await second.turn;
+  });
+
   it("merges partial tool progress", async () => {
     const mock = makeMockBackend();
     let resolvePrompt: ((v: { stopReason: "end_turn" }) => void) | null = null;
