@@ -34,6 +34,7 @@ const sidebar = [
       { label: "Model selection", link: "/models-and-parameters/" },
       { label: "Miyo and semantic search", link: "/vault-search-and-indexing/" },
       { slug: "miyo-setup" },
+      { slug: "miyo-remote-setup" },
       { label: "Copilot paid plans", link: "/copilot-plus-and-self-host/" },
     ],
   },
@@ -62,6 +63,7 @@ export default defineConfig({
   integrations: [
     starlight({
       title: "Copilot for Obsidian",
+      markdown: { processedDirs: ["."] },
       favicon: "/favicon.svg",
       logo: {
         dark: "./src/assets/copilot-mark-cream.svg",

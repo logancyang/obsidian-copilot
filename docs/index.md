@@ -33,6 +33,7 @@ For most people, opencode is the best starting point. Copilot can install and ma
 - [Miyo: Local-First Search and AI Ownership](vault-search-and-indexing.md) brings more powerful local-first search and AI ownership to your knowledge.
 - [Copilot Plans, Privacy, and Self-Hosting](copilot-plus-and-self-host.md) compares free and paid access, hosted features, privacy, and self-hosting.
 - [Connect Miyo with Copilot](miyo-setup.md) walks through setup with screenshots and short videos.
+- [Use one Miyo server from several devices](miyo-remote-setup.md) connects Copilot to a shared host through Tailscale.
 
 ## Settings
 
