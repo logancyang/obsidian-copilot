@@ -5,6 +5,7 @@ import * as SliderPrimitive from "@radix-ui/react-slider";
 import { Button } from "@/components/ui/button";
 import { FreeModelWarningIcon } from "@/components/ui/FreeModelWarningIcon";
 import { LicenseRequiredIcon } from "@/components/ui/LicenseRequiredIcon";
+import { MODEL_PICKER_PRICING_URL } from "@/components/ui/model-pricing-links";
 import { SelfHostCloudWarningIcon } from "@/components/ui/SelfHostCloudWarningIcon";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ModelDisplay } from "@/components/ui/model-display";
@@ -228,11 +229,12 @@ export function ModelEffortPicker({ override, className }: ModelEffortPickerProp
       >
         <div className="tw-max-h-72 tw-overflow-y-auto tw-py-1" role="listbox" aria-label="Model">
           {models.map((entry) => {
+            const Row = entry._needsLicense ? "a" : "div";
             const key = getModelKeyFromModel(entry);
             const disabledReason = entry._disabledReason;
             const itemDisabled = Boolean(disabledReason);
-            // A locked Copilot row says why through its lock icon; repeating the
-            // reason per row would print the same sentence down the whole group.
+            // A locked Copilot row says why through its lock icon, so the
+            // right-side label would only print that sentence twice.
             const rightLabel = entry._needsLicense ? null : (disabledReason ?? null);
             const isHighlight = key === highlightKey;
             const isActive = key === draftModelKey;
@@ -249,16 +251,43 @@ export function ModelEffortPicker({ override, className }: ModelEffortPickerProp
                     {entry._group}
                   </div>
                 )}
-                <div
-                  role="option"
-                  aria-selected={isActive}
-                  aria-disabled={itemDisabled || undefined}
+                <Row
+                  href={entry._needsLicense ? MODEL_PICKER_PRICING_URL : undefined}
+                  target={entry._needsLicense ? "_blank" : undefined}
+                  rel={entry._needsLicense ? "noopener noreferrer" : undefined}
+                  role={entry._needsLicense ? undefined : "option"}
+                  aria-selected={entry._needsLicense ? undefined : isActive}
+                  aria-disabled={(!entry._needsLicense && itemDisabled) || undefined}
                   className={cn(
                     "tw-flex tw-cursor-pointer tw-items-center tw-justify-between tw-gap-3 tw-px-3 tw-py-1.5 tw-text-sm",
                     isHighlight && !itemDisabled && "tw-bg-interactive-hover",
-                    itemDisabled && "tw-cursor-not-allowed tw-opacity-50"
+                    itemDisabled && "tw-opacity-50",
+                    itemDisabled && !entry._needsLicense && "tw-cursor-not-allowed",
+                    entry._needsLicense &&
+                      "tw-text-normal tw-no-underline hover:tw-bg-interactive-hover hover:tw-text-normal hover:tw-no-underline focus-visible:tw-bg-interactive-hover"
                   )}
+                  // Native Enter must follow the link, not draft the highlighted model;
+                  // other keys must reach Radix's focus loop and dismissal handlers.
+                  // https://github.com/Brevilabs/obsidian-copilot-private/issues/476
+                  onKeyDown={
+                    entry._needsLicense
+                      ? (event) => {
+                          if (event.key === "Enter") event.stopPropagation();
+                        }
+                      : undefined
+                  }
+                  onAuxClick={(event) => {
+                    // Middle-click follows the pricing link without firing onClick; discard its draft too.
+                    // https://github.com/Brevilabs/obsidian-copilot-private/issues/476
+                    if (entry._needsLicense && event.button === 1) setOpen(false);
+                  }}
                   onClick={() => {
+                    // Visiting pricing must discard pending model/effort edits, not commit on dismiss.
+                    // https://github.com/Brevilabs/obsidian-copilot-private/issues/476
+                    if (entry._needsLicense) {
+                      setOpen(false);
+                      return;
+                    }
                     if (itemDisabled) return;
                     pickDraft(key);
                   }}
@@ -288,7 +317,7 @@ export function ModelEffortPicker({ override, className }: ModelEffortPickerProp
                   {rightLabel && (
                     <span className="tw-shrink-0 tw-text-xs tw-text-faint">{rightLabel}</span>
                   )}
-                </div>
+                </Row>
               </React.Fragment>
             );
           })}

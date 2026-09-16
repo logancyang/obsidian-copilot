@@ -56,7 +56,11 @@ const meta = {
   parameters: { gallery: { host: "settings-tab", layout: "padded" } },
 } satisfies Meta<MiyoConnectionPanelProps>;
 export default meta;
-export const ThisComputer: StoryObj<MiyoConnectionPanelProps> = { render: InteractiveConnection };
+export const LocalSetup: StoryObj<MiyoConnectionPanelProps> = { render: InteractiveConnection };
+export const MobileWithoutLocalMiyo: StoryObj<MiyoConnectionPanelProps> = {
+  args: { mode: "remote", activeMode: "local", localSupported: false },
+  render: InteractiveConnection,
+};
 export const RemoteSetup: StoryObj<MiyoConnectionPanelProps> = {
   args: { mode: "remote" },
   render: InteractiveConnection,

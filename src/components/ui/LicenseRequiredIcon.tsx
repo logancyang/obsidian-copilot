@@ -8,7 +8,7 @@ const LICENSE_REQUIRED = "Copilot license required";
 /**
  * Small lock icon shown beside a Copilot model a user cannot run yet, so the
  * lineup is discoverable before anyone pays for it. The row it sits on is
- * already greyed and non-selectable; this is what says why.
+ * unavailable for selection; activating the row opens pricing.
  *
  * Parallels {@link FreeModelWarningIcon}: same Radix `HelpTooltip` with
  * `delayDuration={0}` for instant hover, and no `aria-label` (that makes
@@ -19,23 +19,14 @@ const LICENSE_REQUIRED = "Copilot license required";
 export function LicenseRequiredIcon({ className }: { className?: string }) {
   return (
     <span
-      // Stop the click from reaching the surrounding row.
-      onClick={(e) => e.stopPropagation()}
-      className={cn(
-        // The lock always sits on a row that is disabled — and a disabled
-        // `DropdownMenuItem` sets `pointer-events: none`, which every descendant
-        // inherits. Without this reset the tooltip can never be hovered, leaving
-        // the row greyed with nothing to say why.
-        "tw-pointer-events-auto tw-flex tw-shrink-0 tw-items-center tw-text-muted",
-        className
-      )}
+      // Let clicks reach the row's pricing action, including taps on the tooltip.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/476
+      className={cn("tw-flex tw-shrink-0 tw-items-center tw-text-muted", className)}
     >
       <HelpTooltip content={LICENSE_REQUIRED} side="top" delayDuration={0}>
         <Lock className="tw-size-3.5" />
       </HelpTooltip>
-      {/* A hover tooltip reaches pointer users only, and the row is disabled, so
-          nothing in it can take focus. Carrying the reason as hidden text folds
-          it into the row's accessible name instead. */}
+      {/* Include the license requirement in the row's accessible name. */}
       <span className="tw-sr-only">{LICENSE_REQUIRED}</span>
     </span>
   );

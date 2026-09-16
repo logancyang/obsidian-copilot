@@ -63,7 +63,7 @@ Use **Chat History** to search saved conversations, reopen one, rename it, open 
 
 **Autosave Chat as Markdown** is enabled by default. Copilot saves after each user message and response under `<Copilot folder>/copilot-conversations/`. If autosave is off, use **Save Chat as Note** in the top bar. Change autosave and **Conversation Filename Template** under **Settings → Copilot → Basic → Saving conversations**.
 
-Uploaded images are embedded in saved conversation notes. Copilot stores the image files using your vault attachment setting and reuses them when the conversation is saved again.
+Uploaded images are embedded in saved conversation notes. Copilot stores the image files under `<Copilot folder>/copilot-conversations/attachments/`, not in your vault attachment folder, and reuses them when the conversation is saved again.
 
 ## Chat settings
 

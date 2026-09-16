@@ -1,7 +1,8 @@
+import { deriveConversationAttachmentsFolder } from "@/settings/copilotFolder";
 import { arrayBufferToBase64, base64ToArrayBuffer } from "@/utils/base64";
 import { sha256 } from "@/utils/hash";
 import { isFileAlreadyExistsError } from "@/utils/vaultAdapterUtils";
-import { normalizePath, type App, type Vault } from "obsidian";
+import { type App } from "obsidian";
 
 const IMAGE_EXTENSIONS = new Map([
   ["jpeg", "jpg"],
@@ -16,10 +17,6 @@ interface MessageWithImages {
   content?: unknown[];
 }
 
-interface AttachmentVault extends Vault {
-  getConfig(key: "attachmentFolderPath"): string;
-}
-
 /**
  * Persist uploaded images before a transcript is written, returning message
  * copies with vault embeds while leaving the live conversation untouched.
@@ -27,15 +24,21 @@ interface AttachmentVault extends Vault {
  *
  * @param app - The vault in which the conversation is being saved.
  * @param messages - Display messages, including their uploaded image data URLs.
- * @param notePath - Destination transcript path, even when the note does not exist yet.
+ * @param conversationsFolder - Conversations folder this save resolved; the
+ *   Copilot-owned attachment store is derived from it.
  */
 export async function prepareChatImagesForSave<T extends MessageWithImages>(
   app: App,
   messages: T[],
-  notePath: string
+  conversationsFolder: string
 ): Promise<T[]> {
   const prepared: T[] = [];
-  const parentPath = notePath.slice(0, Math.max(0, notePath.lastIndexOf("/")));
+  const folder = deriveConversationAttachmentsFolder(conversationsFolder);
+  // A Copilot root may be hidden (e.g. `.copilot`), and hidden folders are
+  // absent from the vault cache, so those reads and writes go through the
+  // adapter: https://github.com/logancyang/obsidian-copilot/issues/2900
+  const hidden = folder.split("/").some((part) => part.startsWith("."));
+  const prefix = `${folder}/`;
 
   for (const message of messages) {
     const embeds: string[] = [];
@@ -76,18 +79,6 @@ export async function prepareChatImagesForSave<T extends MessageWithImages>(
       }
       const name = `copilot-image-${sha256(base64)}`;
 
-      // Obsidian's attachment allocator uses cached folders and cannot allocate
-      // inside hidden chat roots. Resolve the same vault setting through the adapter.
-      // https://github.com/logancyang/obsidian-copilot/issues/2900
-      const setting = (app.vault as AttachmentVault).getConfig("attachmentFolderPath");
-      const folder = normalizePath(
-        setting === "." || setting === "./"
-          ? parentPath
-          : setting.startsWith("./")
-            ? `${parentPath}/${setting.slice(2)}`
-            : setting
-      ).replace(/^\/+|\/+$/g, "");
-      const hidden = folder.split("/").some((part) => part.startsWith("."));
       let current = "";
       for (const part of folder.split("/").filter(Boolean)) {
         current = current ? `${current}/${part}` : part;
@@ -96,13 +87,12 @@ export async function prepareChatImagesForSave<T extends MessageWithImages>(
             if (hidden) await app.vault.adapter.mkdir(current);
             else await app.vault.createFolder(current);
           } catch (error) {
-            // Concurrent saves may create the shared attachment folder first.
+            // Concurrent saves may create the attachment folder first.
             // https://github.com/logancyang/obsidian-copilot/issues/2900
             if (!isFileAlreadyExistsError(error)) throw error;
           }
         }
       }
-      const prefix = folder ? `${folder}/` : "";
       let path = `${prefix}${name}.${extension}`;
       let suffix = 1;
       while (await app.vault.adapter.exists(path)) {

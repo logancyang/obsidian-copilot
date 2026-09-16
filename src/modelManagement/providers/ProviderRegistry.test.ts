@@ -63,6 +63,7 @@ const anthropicStub: ProviderAdapter = {
 describe("ProviderRegistry", () => {
   describe("ProviderRegistry", () => {
     let app: App;
+    let secrets: SecretStore;
     let adapters: ProviderAdapterRegistry;
     let registry: ProviderRegistry;
 
@@ -72,6 +73,7 @@ describe("ProviderRegistry", () => {
       KeychainService.resetInstance();
       const fake = makeFakeApp();
       app = fake.app;
+      secrets = fake.secrets;
       // Eager init so subsequent KeychainService.getInstance() calls inside
       // the registry hit the same singleton.
       KeychainService.getInstance(app);
@@ -215,6 +217,24 @@ describe("ProviderRegistry", () => {
         expect(registry.get(id)!.apiKeyKeychainId).toBe(firstKeychainId);
         expect(await registry.getApiKey(id)).toBe("sk-rotated");
       });
+
+      it("re-writes a key whose keychain entry went missing behind a live pointer (https://github.com/Brevilabs/obsidian-copilot-private/issues/472)", async () => {
+        const id = await registry.add({
+          providerType: "anthropic",
+          displayName: "A",
+          origin: { kind: "byok" },
+        });
+        await registry.setApiKey(id, "sk-live");
+        const keychainId = registry.get(id)!.apiKeyKeychainId!;
+
+        // The row still points at the entry, but the secret behind it is gone.
+        // Reading that back as "unchanged" would leave the provider permanently
+        // unauthenticated with no way to repair itself.
+        secrets.delete(keychainId);
+
+        await registry.setApiKey(id, "sk-live");
+        expect(await registry.getApiKey(id)).toBe("sk-live");
+      });
     });
 
     describe("getApiKey()", () => {
@@ -346,7 +366,7 @@ describe("ProviderRegistry", () => {
     });
 
     describe("subscribe()", () => {
-      it("fires on add/update/remove and on every setApiKey (including key rotation)", async () => {
+      it("identifies the changed provider on add/update/remove and key changes (https://github.com/Brevilabs/obsidian-copilot-private/issues/475)", async () => {
         const listener = jest.fn();
         const unsubscribe = registry.subscribe(listener);
 
@@ -376,6 +396,7 @@ describe("ProviderRegistry", () => {
 
         await registry.remove(id);
         expect(listener).toHaveBeenCalledTimes(6);
+        expect(listener.mock.calls).toEqual(Array.from({ length: 6 }, () => [id]));
 
         unsubscribe();
         await registry.add({
@@ -384,6 +405,26 @@ describe("ProviderRegistry", () => {
           origin: { kind: "byok" },
         });
         expect(listener).toHaveBeenCalledTimes(6);
+      });
+
+      it("stays silent when a provider is re-registered with the key it already has (https://github.com/Brevilabs/obsidian-copilot-private/issues/472)", async () => {
+        const id = await registry.add({
+          providerType: "anthropic",
+          displayName: "A",
+          origin: { kind: "byok" },
+        });
+        await registry.setApiKey(id, "sk-same");
+
+        const listener = jest.fn();
+        registry.subscribe(listener);
+
+        await registry.setApiKey(id, "sk-same");
+
+        // Announcing this as a change restarts every backend that bakes
+        // provider config into its spawn, tearing down a live Agent session to
+        // rebuild an identical config.
+        expect(listener).not.toHaveBeenCalled();
+        expect(await registry.getApiKey(id)).toBe("sk-same");
       });
 
       it("does not notify Agent consumers for a Quick Chat-only CORS update (https://github.com/logancyang/obsidian-copilot-preview/issues/313)", async () => {

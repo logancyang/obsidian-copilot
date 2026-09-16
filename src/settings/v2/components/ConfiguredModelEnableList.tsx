@@ -8,6 +8,7 @@ import { logError } from "@/logger";
 import {
   backendsAtom,
   configuredModelsAtom,
+  copilotPlusCatalogAtom,
   providersAtom,
   useModelManagement,
   type AgentType,
@@ -79,10 +80,18 @@ export const ConfiguredModelEnableList: React.FC<ConfiguredModelEnableListProps>
   // the provider with nothing under it, and that user must not be shown a locked
   // group telling them a license is required.
   const copilotProviderMissing = shouldPreviewCopilotModels(providers);
+  const copilotPlusCatalog = useAtomValue(copilotPlusCatalogAtom, { store: settingsStore });
 
   const groups = React.useMemo<ModelEnableGroup[]>(
-    () => buildModelEnableGroups(partition, isOpencode, query, copilotProviderMissing),
-    [partition, isOpencode, query, copilotProviderMissing]
+    () =>
+      buildModelEnableGroups(
+        partition,
+        isOpencode,
+        query,
+        copilotProviderMissing,
+        copilotPlusCatalog
+      ),
+    [partition, isOpencode, query, copilotProviderMissing, copilotPlusCatalog]
   );
 
   const handleToggle = React.useCallback(

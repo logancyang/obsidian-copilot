@@ -7,9 +7,14 @@ import {
   useBackendInstallState,
   useSessionBackendDescriptor,
 } from "@/agentMode/ui/useBackendDescriptor";
+import { useAgentInputDrafts } from "@/agentMode/ui/hooks/useAgentInputDrafts";
 import type CopilotPlugin from "@/main";
 import { logError } from "@/logger";
+import { useSettingsValue } from "@/settings/model";
 import React from "react";
+
+/** See AGENTS.md → "Referential stability". */
+const EMPTY_CHAT_INPUT_IDS: readonly string[] = Object.freeze([]);
 
 interface Props {
   plugin: CopilotPlugin;
@@ -31,6 +36,7 @@ export const AgentModeChat: React.FC<Props> = ({
   const manager = plugin.agentSessionManager;
   const descriptor = useSessionBackendDescriptor(manager);
   const installState = useBackendInstallState(descriptor, plugin);
+  const settings = useSettingsValue();
   const [tick, setTick] = React.useState(0);
 
   React.useEffect(() => {
@@ -76,6 +82,19 @@ export const AgentModeChat: React.FC<Props> = ({
     descriptor.openInstallUI(plugin);
   }, [descriptor, plugin]);
 
+  // Compose drafts live here rather than in `AgentHome`: a backend restart
+  // closes the old session before its replacement exists, and AgentHome
+  // unmounts while there is no active session. This component stays mounted
+  // across that gap, during which `activeChatInputId` is null.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/473
+  const activeChatInputId = manager?.getActiveSession()?.chatInputId ?? null;
+  const liveChatInputIds = manager?.getLiveChatInputIds() ?? EMPTY_CHAT_INPUT_IDS;
+  const draft = useAgentInputDrafts({
+    activeChatInputId,
+    liveChatInputIds,
+    defaultIncludeActiveNote: settings.autoAddActiveContentToContext === true,
+  });
+
   if (!manager) return null;
 
   // Render a loading placeholder until plugin-load preload settles. This
@@ -100,6 +119,7 @@ export const AgentModeChat: React.FC<Props> = ({
         backend={backend}
         sessionId={activeSession.internalId}
         chatInputId={activeSession.chatInputId}
+        draft={draft}
         manager={manager}
         plugin={plugin}
         onSaveChat={onSaveChat}

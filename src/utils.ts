@@ -365,19 +365,6 @@ export async function ensureFolderExists(vault: Vault, folderPath: string): Prom
   }
 }
 
-export function stringToFormattedDateTime(timestamp: string): FormattedDateTime {
-  const date = DateTime.fromFormat(timestamp, "yyyy/MM/dd HH:mm:ss");
-  if (!date.isValid) {
-    // If the string is not in the expected format, return current date/time
-    return formatDateTime(new Date());
-  }
-  return {
-    fileName: date.toFormat("yyyyMMdd_HHmmss"),
-    display: date.toFormat("yyyy/MM/dd HH:mm:ss"),
-    epoch: date.toMillis(),
-  };
-}
-
 /**
  * Check if a file has a text-readable extension (md, canvas, base).
  */

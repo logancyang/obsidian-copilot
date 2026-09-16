@@ -24,6 +24,11 @@ Lite, Plus, and included Supporter access can provide Copilot-hosted models.
 You do not need an API key from an AI provider. Enter your license under
 **Settings → Copilot → Basic → Copilot License**, then select **Apply**.
 
+Without a license, Copilot models appear with a lock. Click a locked row or its
+lock icon in a model picker or model settings to open the
+[pricing page](https://obsidiancopilot.com/pricing). This does not select or
+enable a model; a license is still required to use it.
+
 Licensed models can appear in both places:
 
 - **Basic → Agents → Quick Chat** for regular Copilot chat on desktop, or **Basic → Quick Chat models** on mobile.

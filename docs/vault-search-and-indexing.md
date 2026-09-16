@@ -24,7 +24,7 @@ You can ask naturally, such as “Find everything I have written about memory co
 
 Open **Settings → Copilot → Miyo** and choose one connection:
 
-- **This computer** discovers Miyo locally. Download and open Miyo, select **Connect**, and register the current vault if prompted.
+- **Local** discovers Miyo on this device. Download and open Miyo, select **Connect**, and register the current vault if prompted. On mobile this option is disabled, because Copilot cannot discover a Miyo server on a phone or tablet.
 - **Remote server** connects using a server address such as `http://miyo-home:8742`. Enter the same Tailscale URL on your computers and select **Connect**. You do not need Miyo installed on the computer running Copilot.
 
 Selecting a connection option or editing the address leaves the current connection running. Select **Connect** to apply the chosen connection. The saved remote address and feature preferences are retained. An incomplete address is not saved as an active endpoint. Existing remote configurations remain selected after an upgrade.
@@ -33,7 +33,7 @@ The badge beside the saved connection option shows **Connected**, **Checking…*
 
 A remote server can be connected without the current vault being registered there. Manage folders on the Miyo host to make this vault available for search. Copilot does not send this computer's filesystem path to register it remotely.
 
-Turn on **Semantic search** under **Powered by Miyo** to use the agent Skill. For remote connections, manage chat sources and Relay on the Miyo host. The **External apps** Connector is separate from Copilot's connection and does not set its server address.
+Turn on **Semantic search for agents** under **Powered by Miyo** to install the agent Skill. The switch appears on desktop only, since Agent Chat does not run on mobile; a connected mobile device still uses Miyo for Copilot Plus chat search and Relevant Notes. For remote connections, manage chat sources and Relay on the Miyo host. The **External apps** Connector is separate from Copilot's connection and does not set its server address.
 
 Indexing and search requests go to your selected Miyo server. **Disconnect** disables Copilot's Miyo backend; installed agent Skills keep their separate feature preferences.
 
@@ -122,7 +122,7 @@ Copilot uses Miyo’s recommendation API for related notes. Older Miyo installat
 
 - **Unavailable:** open Miyo, return to **Settings → Copilot → Miyo**, and retry. Check the remote server address if you configured one.
 - **Register this vault:** register the folder in Miyo, then connect again.
-- **Semantic search is missing:** confirm the connection is healthy and turn on **Semantic search**. Copilot installs the shared Miyo skill for opencode, Claude, and Codex.
+- **Semantic search is missing:** confirm the connection is healthy and turn on **Semantic search for agents**. Copilot installs the shared Miyo skill for opencode, Claude, and Codex.
 - **New notes are missing:** run **Refresh Miyo index** from the command palette. Indexing progress is shown in Miyo.
 - **Relevant Notes has no semantic results:** Read the card for the active note's Miyo state. **No semantic matches yet** means Miyo found no related notes. The other cards distinguish an empty note, indexing work, an indexing error, and a Miyo folder filter. Older Miyo builds use the less specific **This note isn't indexed in Miyo** card. None of these states shows link-only or backlink-only rows.
 - **Agent Chat Miyo document processing fails:** install Miyo on this computer so its local CLI is available, or switch **Document Processor** to **Plus**. A remote Miyo search connection does not provide the local CLI Agent Chat needs.

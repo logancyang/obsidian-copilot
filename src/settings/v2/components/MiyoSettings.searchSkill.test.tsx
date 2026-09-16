@@ -140,6 +140,11 @@ jest.mock("@/contexts/PluginContext", () => ({
 jest.mock("@/plusUtils", () => ({ createPlusPageUrl: () => "https://example.com" }));
 jest.mock("@/utils/vaultPath", () => ({ getVaultBase: () => "/vault" }));
 
+// Platform gate for the desktop-only controls. Default desktop; the mobile
+// cases flip it to prove the phone never sees a control it cannot use.
+const mockOnDesktop = jest.fn<boolean, []>().mockReturnValue(true);
+jest.mock("@/utils/desktopRuntime", () => ({ isDesktopRuntime: () => mockOnDesktop() }));
+
 const NoticeMock = jest.fn();
 jest.mock("obsidian", () => ({
   Notice: class {
@@ -183,6 +188,7 @@ describe("MiyoSettings", () => {
     lastModalOptions = null;
     addFolderBodies.length = 0;
     mockIgnoreFilters = [];
+    mockOnDesktop.mockReturnValue(true);
     mockLifecycleActive = true;
     expireLifecycleBeforeAddRequest = false;
     addFolderError = null;
@@ -234,6 +240,31 @@ describe("MiyoSettings", () => {
       expect(screen.queryByLabelText("Search scope")).toBeNull();
       await waitFor(() => expect(currentSettings.enableMiyoSearchSkill).toBe(false));
     });
+    it("hides the agent search skill row on mobile, where Agent mode cannot run — https://github.com/Brevilabs/obsidian-copilot-private/issues/471", async () => {
+      mockOnDesktop.mockReturnValue(false);
+      currentSettings = { ...currentSettings, enableMiyoSearchSkill: true };
+      render(<MiyoSettings />);
+      await act(async () => {});
+      expect(screen.queryByLabelText("Enable Miyo semantic search skill")).toBeNull();
+      expect(screen.queryByText("Semantic search for agents")).toBeNull();
+    });
+
+    it("offers only a remote connection on mobile without persisting the fallback over the synced mode — https://github.com/Brevilabs/obsidian-copilot-private/issues/471", async () => {
+      mockOnDesktop.mockReturnValue(false);
+      currentSettings = { ...currentSettings, miyoConnectionMode: "local", miyoServerUrl: "" };
+      render(<MiyoSettings />);
+      await act(async () => {});
+      const local = screen.getByRole<HTMLInputElement>("radio", { name: /^Local/ });
+      expect(local.disabled).toBe(true);
+      expect(local.checked).toBe(false);
+      expect(screen.getByRole<HTMLInputElement>("radio", { name: /^Remote server/ }).checked).toBe(
+        true
+      );
+      expect(screen.getByLabelText("Server address")).toBeTruthy();
+      expect(currentSettings.miyoConnectionMode).toBe("local");
+      expect(updateSetting).not.toHaveBeenCalledWith("miyoConnectionMode", expect.anything());
+    });
+
     it.each(["reachability", "registration"])(
       "keeps an external disconnect when a retry's %s check completes — https://github.com/Brevilabs/obsidian-copilot-private/issues/466",
       async (phase) => {
@@ -343,7 +374,7 @@ describe("MiyoSettings", () => {
         docProcessorBackend: "miyo",
       };
       render(<MiyoSettings />);
-      fireEvent.click(screen.getByRole("radio", { name: /This computer/ }));
+      fireEvent.click(screen.getByRole("radio", { name: /Local/ }));
       expect(currentSettings.enableMiyo).toBe(true);
       expect(currentSettings.miyoConnectionMode).not.toBe("local");
       expect(await screen.findByText("Connected")).toBeTruthy();
@@ -364,7 +395,7 @@ describe("MiyoSettings", () => {
       });
       expect(updateSetting).not.toHaveBeenCalledWith("miyoServerUrl", "");
       expect(mockProbeUrls).toEqual([]);
-      fireEvent.click(screen.getByRole("radio", { name: /This computer/ }));
+      fireEvent.click(screen.getByRole("radio", { name: /Local/ }));
       fireEvent.click(await screen.findByRole("button", { name: "Connect" }));
       await waitFor(() => expect(mockProbeUrls).toContain(undefined));
       expect(currentSettings.miyoConnectionMode).toBe("local");
@@ -383,7 +414,7 @@ describe("MiyoSettings", () => {
       expect(currentSettings.miyoServerUrl).toBe("");
       expect(currentSettings.enableMiyo).toBe(true);
       expect(screen.getByText("Connected")).toBeTruthy();
-      expect(screen.getByRole("status").closest("label")?.textContent).toContain("This computer");
+      expect(screen.getByRole("status").closest("label")?.textContent).toContain("Local");
       expect(screen.queryByRole("button", { name: "Check connection" })).toBeNull();
       expect(screen.queryByRole("button", { name: "Disconnect" })).toBeNull();
       expect(screen.queryByText("Set up Relay on the Miyo host.")).toBeNull();
@@ -480,13 +511,11 @@ describe("MiyoSettings", () => {
       const { rerender } = render(<MiyoSettings />);
       fireEvent.click(await screen.findByRole("button", { name: "Connect" }));
       await waitFor(() => expect(mockProbeUrls).toHaveLength(1));
-      fireEvent.click(screen.getByRole("radio", { name: /This computer/ }));
+      fireEvent.click(screen.getByRole("radio", { name: /Local/ }));
       await act(async () => gate.resolve(true));
       expect(updateSetting).toHaveBeenCalledWith("enableMiyo", true);
       expect(currentSettings.miyoConnectionMode).toBe("remote");
-      expect(screen.getByRole<HTMLInputElement>("radio", { name: /This computer/ }).checked).toBe(
-        true
-      );
+      expect(screen.getByRole<HTMLInputElement>("radio", { name: /Local/ }).checked).toBe(true);
       // The settings mock has no store subscription; publish the completed enable to this render.
       rerender(<MiyoSettings />);
       expect(await screen.findByText("Connected")).toBeTruthy();

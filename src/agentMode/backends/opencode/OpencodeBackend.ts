@@ -75,13 +75,6 @@ export interface OpencodeModelDeps {
   getCacheRoot?: () => string | undefined;
   /** Starts or reuses the owning plugin lifecycle's provider-credential-free channel. */
   getSelfHostWebSearchChannel?: () => Promise<Readonly<SelfHostWebSearchAgentChannel>>;
-  /**
-   * Resolves the thinking-effort levels the Copilot Plus service publishes for a bare
-   * Plus model id, or null when they cannot be read. Injected so the config builder
-   * never reaches for the catalog itself. When omitted, no model gets a declared level
-   * set and opencode falls back to inferring one, which is the behavior this replaces.
-   */
-  getReasoningEfforts?: (modelId: string) => Promise<readonly string[] | null>;
 }
 
 /**
@@ -155,21 +148,10 @@ export class OpencodeBackend implements AcpBackend {
     const configOverride = envOverrides.OPENCODE_CONFIG_CONTENT;
     delete envOverrides.OPENCODE_CONFIG_CONTENT;
     // Resolve the override before building anything: it replaces the generated config
-    // wholesale, so building one spends a Copilot Plus catalog read on JSON that is then
-    // thrown away — and an unreachable models host makes that read wait out its deadline
-    // before every spawn. https://github.com/logancyang/obsidian-copilot/issues/2917
+    // wholesale, so building one is work thrown away.
+    // https://github.com/logancyang/obsidian-copilot/issues/2917
     let configContent =
-      configOverride ??
-      JSON.stringify(
-        await buildOpencodeConfig(
-          settings,
-          {
-            ...this.#deps,
-            getReasoningEfforts: (modelId) => this.#copilotPlus.readReasoningEfforts(modelId),
-          },
-          cacheRoot
-        )
-      );
+      configOverride ?? JSON.stringify(await buildOpencodeConfig(settings, this.#deps, cacheRoot));
     if (settings.enableSelfHostMode === true && configOverride !== undefined) {
       // An explicit config override must not reopen agent-native web tools while
       // Self-Host mode promises that queries stay on the configured route.
@@ -417,15 +399,12 @@ export async function buildOpencodeConfig(
     // OpenAI-compatible providers, so without this it defaults to non-reasoning and
     // the effort picker shows "na". Mirrors the modalities injection above.
     if (info.reasoning) {
-      // Copilot Plus publishes the levels each of its models really has; a BYOK model
-      // has no such list and keeps opencode's own inference. Null means the catalog
-      // could not be read, which must not be mistaken for "no levels" — dropping a
-      // working control over a transient outage is worse than an imperfect menu.
+      // Copilot Plus publishes the levels each model really has, carried on the
+      // persisted row by the catalog reconcile so the spawn never waits on the
+      // service; a BYOK model has no list and keeps opencode's own inference.
+      // Undefined means no list is known, which must not be read as "no levels".
       // https://github.com/logancyang/obsidian-copilot/issues/2917
-      const published =
-        origin.kind === "copilot-plus"
-          ? ((await deps.getReasoningEfforts?.(info.id)) ?? null)
-          : null;
+      const published = origin.kind === "copilot-plus" ? (info.reasoningEfforts ?? null) : null;
       // A model that honors no level gets no control at all: opencode builds the menu
       // only for models it is told reason, so leaving `reasoning` unset is how the
       // menu disappears rather than showing entries that do nothing.

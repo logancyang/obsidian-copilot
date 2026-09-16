@@ -21,8 +21,9 @@ interface Props {
 }
 
 /**
- * Leads users from Agent Mode failures to the relevant recovery action without adding noise to healthy sessions.
- * @param manager - The session manager that exposes startup failures and retry behavior.
+ * Leads users from Agent Mode failures to the relevant recovery action, and from a held
+ * configuration change to the reload that applies it, without adding noise to healthy sessions.
+ * @param manager - The session manager that exposes startup failures, held config changes, and retry behavior.
  * @param plugin - The plugin instance needed to run backend recovery actions.
  * @param onInstallClick - The action to start setup when the selected backend is absent.
  */
@@ -32,12 +33,25 @@ export const AgentModeStatus: React.FC<Props> = ({ manager, plugin, onInstallCli
   const managedInstall = useManagedInstallActionState(descriptor, plugin);
   const auth = useBackendAuthState(descriptor);
 
-  // Re-render on manager notify so `lastError` flips are picked up.
+  // Re-render on manager notify so `lastError` and held-config flips are picked up.
   const [, setTick] = React.useState(0);
   React.useEffect(() => {
     if (!manager) return;
     return manager.subscribe(() => setTick((v) => v + 1));
   }, [manager]);
+
+  const heldConfigChange = manager?.hasHeldConfigChange(descriptor.id) ?? false;
+  // A reload waits for a running turn to finish, so read the queued restart
+  // rather than the click: the action then reports progress for exactly as
+  // long as the restart is actually outstanding.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/475
+  const reloading = manager?.isBackendRestartPending(descriptor.id) ?? false;
+
+  const handleReload = React.useCallback(() => {
+    manager?.applyHeldConfigChange(descriptor.id).catch((e) => {
+      logError("[AgentMode] reload after config change failed", e);
+    });
+  }, [manager, descriptor.id]);
 
   const handleUpgrade = React.useCallback(() => {
     const action = descriptor.managedInstall;
@@ -143,11 +157,33 @@ export const AgentModeStatus: React.FC<Props> = ({ manager, plugin, onInstallCli
 
   const bootError = manager.getLastError();
   if (!bootError) {
-    return null;
+    // Settings the running agent was spawned with have changed since. Applying
+    // them restarts the backend and replaces this conversation, so the manager
+    // holds the restart and the choice of when to take it belongs here. A boot
+    // error keeps its recovery action, which also applies any held config.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/475
+    if (!heldConfigChange) return null;
+    return (
+      <AgentStatusCard
+        layout="row"
+        message={`${descriptor.displayName} config has changed`}
+        action={{
+          label: reloading ? "Reloading…" : "Reload",
+          disabled: reloading,
+          onClick: handleReload,
+        }}
+      />
+    );
   }
 
   const handleRetry = (): void => {
-    manager.getOrCreateActiveSession().catch((e) => {
+    // A failed session may remain active after startup rejects. Apply corrected
+    // settings before retrying so that session cannot mask the new config.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/475
+    const retry = heldConfigChange
+      ? manager.applyHeldConfigChange(descriptor.id)
+      : manager.getOrCreateActiveSession();
+    retry.catch((e) => {
       logError("[AgentMode] retry failed", e);
     });
   };

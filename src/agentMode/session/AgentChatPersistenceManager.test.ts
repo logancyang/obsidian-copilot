@@ -24,6 +24,7 @@ jest.mock("@/settings/model", () => ({
 }));
 jest.mock("@/settings/copilotFolder", () => ({
   getEffectiveConversationsFolder: jest.fn(() => "test-folder"),
+  deriveConversationAttachmentsFolder: jest.fn((folder: string) => `${folder}/attachments`),
 }));
 jest.mock("@/utils", () => ({
   ensureFolderExists: jest.fn(async () => {}),

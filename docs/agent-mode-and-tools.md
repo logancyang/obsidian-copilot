@@ -130,7 +130,7 @@ You can send an image without adding text, for example when the agent asks for a
 
 Attachments apply to the next message. For instructions and context that should be reused, create a [Project](projects.md) or add rules to [`AGENTS.md`](system-prompts.md). See [Context and Mentions](context-and-mentions.md) for every context option.
 
-Uploaded images are embedded in saved conversation notes. Copilot stores the image files using your vault attachment setting and reuses them when the conversation is saved again.
+Uploaded images are embedded in saved conversation notes. Copilot stores the image files under `<Copilot folder>/copilot-conversations/attachments/`, not in your vault attachment folder, and reuses them when the conversation is saved again.
 
 Type `/` to insert an enabled Skill or [Copilot command](custom-commands.md). For a quick question or rewrite beside the current selection, use [Quick Ask](custom-commands.md#quick-ask).
 
@@ -165,6 +165,16 @@ Built-in skill preferences record only your changes to the defaults. New skills 
 In Self-Host Mode with OpenCode selected, Agent Chat's built-in web-search Skill uses the search provider selected under **Settings → Copilot → Self-Host**. Provider credentials stay inside Obsidian rather than being passed to OpenCode, and the feature does not require Obsidian's command line interface. Copilot disables OpenCode's native web-search and web-fetch tools so they cannot bypass that route. Full-page web fetching is unavailable through OpenCode in Self-Host Mode because the supported search providers do not share a page-fetch interface; Agent Chat can still use the configured provider's search results.
 
 On Windows, creating the folder links may require **Developer Mode** or administrator access. If a sync service replaces a link, toggle that Skill off and on for the affected agent to recreate it.
+
+## Applying a settings change
+
+Agents read their configuration when they start: API keys, enabled models, instructions, and skills. A change you make while a chat is open does not reach the agent already running. Agent Chat says so with a **config has changed** notice and a **Reload** action, and the chat keeps working in the meantime.
+
+The notice names the agent that needs to reload. Changing Claude's enabled models does not ask you to reload OpenCode. Settings an agent can apply without restarting do not need a reload notice.
+
+Choose **Reload** when you want the change to take effect. The agent restarts and reopens every chat using that agent, keeping each chat’s history and anything you had typed but not sent. During a running turn the reload waits for that turn to finish. If the agent cannot reopen a conversation, that tab starts a fresh chat and the old one remains under Recent Chats. If a chat failed to start, correct its settings and choose **Retry** to apply them.
+
+Two changes never wait. Narrowing Miyo's **Search scope** and turning on Self-Host Mode both restart the agent straight away, so no later step in the conversation can search or browse outside the new boundary.
 
 ## Related
 
