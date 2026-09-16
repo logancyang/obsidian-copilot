@@ -365,9 +365,8 @@ export class AgentSessionManager {
    */
   private readonly retainedChatInputIds = new Set<string>();
   /**
-   * `backendId:baseModelId` pairs already warned about. The read that discovers
-   * them runs on every session create and every default re-apply, so without
-   * this the user gets the same notice repeatedly.
+   * `backendId:baseModelId` pairs already warned about, since the read that
+   * discovers them runs on every session create and default re-apply.
    * https://github.com/Brevilabs/obsidian-copilot-private/issues/474
    */
   private readonly warnedMissingDefaults = new Set<string>();
@@ -2145,16 +2144,12 @@ export class AgentSessionManager {
    * The model to start a session on: the sticky preference, or an enabled
    * stand-in when that preference names a model the backend no longer offers.
    *
-   * A saved default outlives the model it points at: Copilot Plus withdraws a
-   * model from its published lineup, or a provider is deleted, and the removal
-   * cascade clears the enabled-model lists without touching this preference.
-   * Seeding that stale selection does not fail loudly — the backend rejects it
-   * and the session quietly keeps whatever model the agent picked for itself,
-   * so prompts go somewhere the user never chose.
-   *
-   * Substituting here rather than in {@link getDefaultSelection} keeps the saved
-   * value on disk and visible in settings, so it is still clearable and still
-   * applies again if the model returns.
+   * A saved default outlives its model (Copilot Plus withdraws it, or its
+   * provider is deleted) because the removal cascade never touches this
+   * preference. Seeding the stale selection does not fail loudly: the backend
+   * rejects it and the session keeps whatever model the agent picked for
+   * itself. Substituting here rather than in {@link getDefaultSelection} keeps
+   * the saved value visible in settings and applying again if the model returns.
    * https://github.com/Brevilabs/obsidian-copilot-private/issues/474
    */
   getSeedSelection(backendId: BackendId): ModelSelection | null {
@@ -2162,19 +2157,15 @@ export class AgentSessionManager {
     if (!saved) return null;
 
     const offered = this.opts.resolveDescriptor(backendId)?.getEnabledModelEntries?.(getSettings());
-    // An empty list is not evidence that the saved model is gone. Copilot's
-    // enabled list curates which models a picker offers; an agent-native model
-    // stays routable whether or not it appears there, so an uncurated backend
-    // must keep applying the user's choice.
+    // An empty list is not evidence the saved model is gone: an agent-native
+    // model stays routable whether or not Copilot's enabled list curates it.
     if (!offered || offered.length === 0) return saved;
     if (offered.some((entry) => entry.baseModelId === saved.baseModelId)) return saved;
 
-    // Naming a replacement beats seeding nothing: an empty seed hands the
-    // choice to the agent, whose own default owes nothing to Copilot's enabled
-    // list and lands outside it in practice. Entries flagged for a missing key
-    // are skipped because the backend would reject them the same way it rejects
-    // the withdrawn default. Effort is left unset so the model's own default
-    // level applies rather than a level carried over from a different model.
+    // Naming a replacement beats seeding nothing, since the agent's own default
+    // lands outside the enabled list in practice. Missing-key entries would be
+    // rejected like the withdrawn default; effort is left unset so the model's
+    // own default level applies.
     const replacement = offered.find((entry) => entry.credentialState === "ok");
     this.warnDefaultNoLongerOffered(backendId, saved.baseModelId, replacement?.name);
     return replacement ? { baseModelId: replacement.baseModelId, effort: null } : null;
@@ -2184,12 +2175,8 @@ export class AgentSessionManager {
    * Tell the user once per withdrawn model that it is gone, since the session
    * silently starting on a different one is the whole failure here.
    *
-   * Keyed by the model as well as the backend: a user who replaces a withdrawn
-   * default and then loses the replacement too must hear about the second one.
-   *
    * @param replacementName - Display name of the enabled model new chats now
-   *   start on, or undefined when no enabled model is routable and the agent's
-   *   own default takes over.
+   *   start on, or undefined when the agent's own default takes over.
    */
   private warnDefaultNoLongerOffered(
     backendId: BackendId,
