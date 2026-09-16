@@ -150,6 +150,8 @@ const EMPTY_HISTORY_ITEMS = Object.freeze([]) as unknown as ChatHistoryItem[];
 //     the surface) plus the convention that no caller mutates the result — consumers only
 //     `.has()`, read `.size`, and iterate.
 const EMPTY_RECENT_CHAT_IDS: ReadonlySet<string> = new Set();
+/** See AGENTS.md → "Referential stability". */
+const EMPTY_CHAT_INPUT_IDS: readonly string[] = Object.freeze([]);
 
 // Delivery-cursor seed for a resumed session: BEHIND any real content epoch
 // (which starts at 0), so its first send always emits the coarse freshness note
@@ -354,6 +356,14 @@ export class AgentSessionManager {
     { reason: string; immediate: boolean }
   >();
   private readonly restartingBackends = new Set<BackendId>();
+  /**
+   * Chat inputs whose session is mid-replacement during a backend restart.
+   * Composer drafts are keyed by chat input and pruned against the live set,
+   * and the restart closes the old session before its replacement (which
+   * reuses the id) exists, so without this the unsent message is collected in
+   * that gap. https://github.com/Brevilabs/obsidian-copilot-private/issues/473
+   */
+  private readonly retainedChatInputIds = new Set<string>();
   private readonly preloader: AgentModelPreloader;
   /**
    * Per-backend preload status. The chat UI gates its first render on the
@@ -2697,6 +2707,18 @@ export class AgentSessionManager {
   }
 
   /**
+   * Chat inputs that per-chat-input UI state (the composer draft) must be kept
+   * for: every session's, plus those mid-replacement during a backend restart.
+   * Prune against this rather than against `getSessions()`.
+   * https://github.com/Brevilabs/obsidian-copilot-private/issues/473
+   */
+  getLiveChatInputIds(): readonly string[] {
+    const ids = new Set(this.retainedChatInputIds);
+    for (const session of this.sessions.values()) ids.add(session.chatInputId);
+    return ids.size === 0 ? EMPTY_CHAT_INPUT_IDS : Array.from(ids);
+  }
+
+  /**
    * Subscribe to lifecycle changes (session created/closed/active changed/
    * label changed, backend exit, isStarting/lastError flips). Also fires when a
    * session enters or leaves `running` (so the recent-list spinner can follow).
@@ -3652,6 +3674,8 @@ export class AgentSessionManager {
     if (!proc) return;
     this.restartingBackends.add(backendId);
     logInfo(`[AgentMode] restarting ${backendId} backend: ${reason}`);
+    // Declared out here so the `finally` can release it however the restart ends.
+    let retainedChatInputId: string | undefined;
     try {
       const affected = Array.from(this.sessions.values()).filter((s) => s.backendId === backendId);
       // Don't respawn a replacement for a backend that is no longer installed
@@ -3665,6 +3689,11 @@ export class AgentSessionManager {
       // The replacement must inherit the REPLACED session's scope, not the
       // current active scope — captured before the close loop repoints `active`.
       const replacementProjectId = replacedSession?.projectId ?? this.activeProjectId;
+      // Claim the chat input before closing its session so per-chat-input UI
+      // state is never pruned in the window where no session owns it.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/473
+      retainedChatInputId = shouldCreateReplacement ? replacedSession?.chatInputId : undefined;
+      if (retainedChatInputId) this.retainedChatInputIds.add(retainedChatInputId);
       for (const session of affected) {
         await this.closeSession(session.internalId);
       }
@@ -3686,13 +3715,18 @@ export class AgentSessionManager {
         if (shouldCreateReplacement && !this.disposed) {
           await probe;
           // The replacement inherits the REPLACED session's scope (captured
-          // above as `replacementProjectId`), not the current active scope.
-          await this.createSession(backendId, replacementProjectId);
+          // above as `replacementProjectId`) and its `chatInputId`, so the
+          // composer draft keyed by that id survives the restart.
+          // https://github.com/Brevilabs/obsidian-copilot-private/issues/473
+          await this.createSession(backendId, replacementProjectId, undefined, retainedChatInputId);
         }
       }
-      this.notify();
     } finally {
       this.restartingBackends.delete(backendId);
+      if (retainedChatInputId) this.retainedChatInputIds.delete(retainedChatInputId);
+      // Published after the release so a restart that threw still lets the
+      // draft store collect an id no session claimed.
+      this.notify();
     }
     // Drain any restart requests that landed while we were running. Clear the
     // entry BEFORE re-invoking so the recursion can't loop forever — a fresh

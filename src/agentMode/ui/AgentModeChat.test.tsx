@@ -4,7 +4,7 @@ import type { AgentSession } from "@/agentMode/session/AgentSession";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import type { InstallState } from "@/agentMode/session/types";
 import type CopilotPlugin from "@/main";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import React from "react";
 
 // Readiness of the backend the pane would run, swapped per test. Declared with
@@ -29,7 +29,13 @@ jest.mock("@/agentMode/ui/useBackendDescriptor", () => ({
 
 // Heavy children are irrelevant to the guards under test — render markers so
 // the no-session fallback's branch is observable without their real trees.
-jest.mock("@/agentMode/ui/AgentHome", () => ({ AgentHome: () => null }));
+let mockLastDraft: { input: string; setInput: (v: string) => void } | null = null;
+jest.mock("@/agentMode/ui/AgentHome", () => ({
+  AgentHome: (props: { draft: { input: string; setInput: (v: string) => void } }) => {
+    mockLastDraft = props.draft;
+    return <div data-testid="agent-home">{props.draft.input}</div>;
+  },
+}));
 jest.mock("@/agentMode/ui/AgentModeStatus", () => ({
   AgentModeStatus: () => <div data-testid="status-card" />,
 }));
@@ -68,6 +74,7 @@ function makeManager({
     getLastError: jest.fn(() => lastError),
     getActiveSession: jest.fn(() => null),
     getActiveChatUIState: jest.fn(() => null),
+    getLiveChatInputIds: jest.fn(() => []),
     getOrCreateActiveSession,
   } as unknown as AgentSessionManager & { getOrCreateActiveSession: jest.Mock };
   return { manager, getOrCreateActiveSession };
@@ -97,6 +104,49 @@ describe("AgentModeChat", () => {
   afterEach(() => {
     mockManagedInstall = undefined;
     mockInstallState = { kind: "ready", source: "custom" };
+    mockLastDraft = null;
+  });
+
+  describe("compose draft ownership", () => {
+    it("keeps the unsent message across a restart that leaves no active session (https://github.com/Brevilabs/obsidian-copilot-private/issues/473)", () => {
+      // A backend restart closes the session before its replacement exists. With
+      // the draft store inside AgentHome, that gap unmounts the component and
+      // destroys the text the user had typed but not sent.
+      const active = { internalId: "s-1", chatInputId: "chat-1" } as unknown as AgentSession;
+      const { manager } = makeManager({
+        activeProjectId: GLOBAL_SCOPE,
+        scopeSessions: [active],
+        poolSessions: [active],
+      });
+      const getActiveSession = manager.getActiveSession as jest.Mock;
+      const getActiveChatUIState = manager.getActiveChatUIState as jest.Mock;
+      const getLiveChatInputIds = manager.getLiveChatInputIds as jest.Mock;
+      getActiveSession.mockReturnValue(active);
+      getActiveChatUIState.mockReturnValue({});
+      getLiveChatInputIds.mockReturnValue(["chat-1"]);
+
+      const { rerender } = renderChat(manager);
+      act(() => mockLastDraft!.setInput("half-written question"));
+      expect(screen.getByTestId("agent-home").textContent).toBe("half-written question");
+
+      // The restart gap: no active session, but the manager still vouches for
+      // the chat input, so the draft must not be pruned.
+      getActiveSession.mockReturnValue(null);
+      getActiveChatUIState.mockReturnValue(null);
+      const plugin = { app: {}, agentSessionManager: manager } as unknown as CopilotPlugin;
+      rerender(
+        <AgentModeChat plugin={plugin} onSaveChat={() => {}} updateUserMessageHistory={() => {}} />
+      );
+      expect(screen.queryByTestId("agent-home")).toBeNull();
+
+      // The replacement session reuses the same chat input.
+      getActiveSession.mockReturnValue(active);
+      getActiveChatUIState.mockReturnValue({});
+      rerender(
+        <AgentModeChat plugin={plugin} onSaveChat={() => {}} updateUserMessageHistory={() => {}} />
+      );
+      expect(screen.getByTestId("agent-home").textContent).toBe("half-written question");
+    });
   });
 
   it("https://github.com/Brevilabs/obsidian-copilot-private/issues/368 keeps a cold-start managed upgrade on the shared status card", () => {

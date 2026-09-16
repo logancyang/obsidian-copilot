@@ -27,7 +27,7 @@ import { RelevantNotesShelfPanel } from "@/agentMode/ui/RelevantNotesShelfPanel"
 import { useRelevantNotesPaneOpen } from "@/agentMode/ui/useRelevantNotesPaneOpen";
 import { useAgentChatRuntimeState } from "@/agentMode/ui/hooks/useAgentChatRuntimeState";
 import { useAgentHistoryControls } from "@/agentMode/ui/hooks/useAgentHistoryControls";
-import { useAgentInputDrafts } from "@/agentMode/ui/hooks/useAgentInputDrafts";
+import type { AgentInputDraftControls } from "@/agentMode/ui/hooks/useAgentInputDrafts";
 import { useAttentionChatIds } from "@/agentMode/ui/hooks/useAttentionChatIds";
 import { useRunningChatIds } from "@/agentMode/ui/hooks/useRunningChatIds";
 import { useChatInputAutoFocus } from "@/agentMode/ui/hooks/useChatInputAutoFocus";
@@ -66,6 +66,13 @@ interface AgentHomeProps {
   sessionId: string;
   /** Logical identity of the active chat input surface. */
   chatInputId: string;
+  /**
+   * Compose draft for `chatInputId`. Owned by `AgentModeChat` because this
+   * component unmounts whenever there is no active session, which a backend
+   * restart causes mid-replacement.
+   * https://github.com/Brevilabs/obsidian-copilot-private/issues/473
+   */
+  draft: AgentInputDraftControls;
   manager: AgentSessionManager;
   plugin: CopilotPlugin;
   onSaveChat: (saveAsNote: () => Promise<void>) => void;
@@ -76,8 +83,9 @@ const EMPTY_PROJECT_NAMES_BY_ID: Readonly<Record<string, string>> = Object.freez
 
 /**
  * Agent Mode home surface for an active session. Persistent across tab switches
- * (the tab strip swaps `sessionId`/`backend` props), so input drafts live here
- * and are selected by the active session's logical `chatInputId`.
+ * (the tab strip swaps `sessionId`/`backend` props), so switching tabs swaps the
+ * active draft rather than discarding input. The draft store itself lives in
+ * `AgentModeChat`, which outlives this component's no-session gaps.
  *
  * Derives a per-session view state across three surfaces: a session with no
  * user-visible messages is a landing — global (no project scope: top-anchored
@@ -92,6 +100,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   backend,
   sessionId,
   chatInputId,
+  draft,
   manager,
   plugin,
   onSaveChat,
@@ -364,24 +373,6 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     if (next.value !== value) onChange(next.value);
   }, [modePickerOverride]);
 
-  // Stable list of live chat-input ids so the draft store's pruning and memo
-  // don't churn on every manager notify (getSessions() returns a fresh array).
-  // The "\0" delimiter (matching useAgentInputDrafts' own signature key) can't
-  // appear in an id, so distinct id sets always produce distinct keys.
-  const sessions = manager.getSessions();
-  const liveKey = sessions.map((s) => s.chatInputId).join("\0");
-  const liveChatInputIds = useMemo(() => sessions.map((s) => s.chatInputId), [liveKey]); // eslint-disable-line react-hooks/exhaustive-deps -- liveKey is the stable signature for the freshly allocated sessions list
-  // Per-chat-input compose drafts live in the shell (the common owner) so the
-  // active turn's `loading` (transcript spinner) and the drop overlay's drag
-  // state can be read directly here, instead of being mirrored up from the
-  // composer via effect callbacks. The hook returns a referentially stable
-  // controls object, so passing it down to the memoized AgentChatInput doesn't
-  // re-render the composer on per-token stream updates.
-  const draft = useAgentInputDrafts({
-    activeChatInputId: chatInputId,
-    liveChatInputIds,
-    defaultIncludeActiveNote: settings.autoAddActiveContentToContext === true,
-  });
   const setDraftInput = draft.setInput;
   useChatRelevantNotesContext(app, rootEl, chatInputId, draft, messages, activeProject);
 
