@@ -6,7 +6,13 @@ import { v4 as uuidv4 } from "uuid";
 
 import type { CopilotMode, ModelSelection } from "@/agentMode";
 import { ChainType } from "@/chainType";
-import type { BackendConfig, BackendType, ConfiguredModel, Provider } from "@/modelManagement";
+import type {
+  BackendConfig,
+  BackendType,
+  ConfiguredModel,
+  PersistedCopilotPlusCatalog,
+  Provider,
+} from "@/modelManagement";
 import { MODEL_SECRET_FIELDS, TOP_LEVEL_SECRET_FIELDS } from "@/services/settingsSecretTransforms";
 import { isNotificationSoundId, type NotificationSoundId } from "@/utils/notificationSoundCatalog";
 import { type SortStrategy, isSortStrategy } from "@/utils/recentUsageManager";
@@ -325,6 +331,14 @@ export interface CopilotSettings {
   providers: Record<string, Provider>;
   configuredModels: ConfiguredModel[];
   backends: Partial<Record<BackendType, BackendConfig>>;
+  /**
+   * Last Copilot Plus lineup the models endpoint published, cached so startup
+   * never waits on that request. `models` is empty until the first successful
+   * read. One value because the lineup and which of it a license switches on
+   * are published together and must not disagree.
+   * https://github.com/Brevilabs/obsidian-copilot-private/issues/319
+   */
+  copilotPlusCatalog: PersistedCopilotPlusCatalog;
 }
 
 export type SelfHostSearchProvider = "firecrawl" | "perplexity" | "parallel" | "exa";
@@ -448,6 +462,10 @@ export const settingsAtom = atom<CopilotSettings>(DEFAULT_SETTINGS);
 const EMPTY_PROVIDERS = Object.freeze({}) as unknown as Record<string, Provider>;
 const EMPTY_CONFIGURED_MODELS = Object.freeze([]) as unknown as ConfiguredModel[];
 const EMPTY_BACKENDS = Object.freeze({}) as unknown as Partial<Record<BackendType, BackendConfig>>;
+const EMPTY_COPILOT_PLUS_CATALOG = Object.freeze({
+  models: Object.freeze([]),
+  defaultEnabledIds: Object.freeze([]),
+}) as unknown as PersistedCopilotPlusCatalog;
 
 /** Frozen fallback for an empty {@link CopilotSettings.copilotRootHistory}. */
 const EMPTY_COPILOT_ROOT_HISTORY = Object.freeze([]) as unknown as string[];
@@ -853,6 +871,11 @@ export function resetSettings(): void {
       current.configuredModels,
       preservedProviderIds
     ),
+    // Reset keeps the Plus provider and its models without re-syncing
+    // (`plusSyncNeeded` stays false), so clearing this cache would leave those
+    // models with no context window for the rest of the session.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/319
+    copilotPlusCatalog: current.copilotPlusCatalog ?? EMPTY_COPILOT_PLUS_CATALOG,
     copilotRootHistory: preservedRootHistory,
   };
   setSettings(defaultSettingsWithBuiltIns);
@@ -1203,6 +1226,27 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   }
   if (!Array.isArray(sanitizedSettings.configuredModels)) {
     sanitizedSettings.configuredModels = EMPTY_CONFIGURED_MODELS;
+  }
+  // Absent on every data.json written before the lineup was cached, and
+  // arbitrary on a synced or hand-edited one. Consumers dereference `model.id`
+  // straight out of this array, so one malformed entry would crash the pickers.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/319
+  const cachedCatalog = sanitizedSettings.copilotPlusCatalog;
+  const catalogIsUsable =
+    !!cachedCatalog &&
+    typeof cachedCatalog === "object" &&
+    Array.isArray(cachedCatalog.models) &&
+    Array.isArray(cachedCatalog.defaultEnabledIds) &&
+    cachedCatalog.models.every(
+      (model) =>
+        !!model &&
+        typeof model === "object" &&
+        typeof model.id === "string" &&
+        typeof model.displayName === "string"
+    ) &&
+    cachedCatalog.defaultEnabledIds.every((id) => typeof id === "string");
+  if (!catalogIsUsable) {
+    sanitizedSettings.copilotPlusCatalog = EMPTY_COPILOT_PLUS_CATALOG;
   }
   if (
     !sanitizedSettings.backends ||

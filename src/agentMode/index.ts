@@ -158,6 +158,26 @@ function backendEnvOverridesKey(settings: CopilotSettings, backendId: BackendId)
 }
 
 /**
+ * Dedup key over the model metadata subprocess backends bake into their spawn
+ * config: capabilities and published effort levels, not display strings.
+ * Order-independent, so a rewrite that only reorders the rows reads as
+ * unchanged.
+ */
+function spawnModelMetadataKey(settings: CopilotSettings): string {
+  return settings.configuredModels
+    .map((model) =>
+      JSON.stringify([
+        model.configuredModelId,
+        model.info.reasoning,
+        model.info.reasoningEfforts,
+        model.info.modalities,
+      ])
+    )
+    .sort()
+    .join("\n");
+}
+
+/**
  * Single seam between the plugin host (`main.ts`) and Agent Mode. Initialises
  * the SkillManager singleton, wires the default permission prompter into a
  * fresh `AgentSessionManager`, kicks off every registered backend
@@ -282,6 +302,17 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
   plugin.modelManagement.backendConfigRegistry.subscribe(() =>
     restartProviderAffected("backend enabled models changed")
   );
+  // A model's capabilities (modalities, reasoning, effort variants) are baked
+  // into that same spawn config. The Plus lineup reconcile refreshes them on a
+  // row that stays enabled, which touches neither registry above, so without
+  // this a running agent keeps offering an effort level the service withdrew.
+  // Keyed on the fields the spawn config reads, so a changed description never
+  // costs the user their session.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/319
+  subscribeToSettingsChange((prev, next) => {
+    if (spawnModelMetadataKey(prev) === spawnModelMetadataKey(next)) return;
+    restartProviderAffected("model metadata changed");
+  });
   // The composed Agent Mode built-in prompt is baked into opencode/codex
   // spawn-time config and shared across sessions. Restart the opted-in backends
   // when its effective content changes; Claude re-reads it per `newSession()`.

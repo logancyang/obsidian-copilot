@@ -53,6 +53,14 @@ export interface ModelInfo {
   modalities?: { input?: string[]; output?: string[] };
   limits?: { context?: number; output?: number; input?: number };
   reasoning?: boolean;
+  /**
+   * Thinking-effort levels this model distinguishes, ascending, when its
+   * source publishes them (only the Copilot Plus catalog does today). Absent
+   * means unknown, so the consumer infers its own menu; empty means the model
+   * honors none and gets no effort control.
+   * https://github.com/Brevilabs/obsidian-copilot-private/issues/319
+   */
+  reasoningEfforts?: readonly string[];
   toolCall?: boolean;
   /** True when the catalog `family` marks this as an embedding model. */
   isEmbedding?: boolean;

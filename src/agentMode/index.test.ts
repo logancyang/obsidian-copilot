@@ -1,5 +1,6 @@
 import type { App } from "obsidian";
 import type CopilotPlugin from "@/main";
+import type { CopilotSettings } from "@/settings/model";
 import type { InstallState } from "./session/types";
 import type { BuiltinSkillRuntime } from "./skills/SkillManager";
 import { createAgentSessionManager } from "./index";
@@ -9,7 +10,10 @@ jest.mock("@/constants", () => ({}));
 jest.mock("@/logger", () => ({ logError: jest.fn() }));
 jest.mock("@/settings/model", () => ({
   getSettings: () => ({ agentMode: { skills: {} } }),
-  subscribeToSettingsChange: jest.fn(),
+  subscribeToSettingsChange: (callback: SettingsSubscriber) => {
+    mockSettingsSubscribers.push(callback);
+    return () => {};
+  },
 }));
 jest.mock("@/settings/copilotFolder", () => ({ deriveSkillsFolder: () => "copilot/skills" }));
 jest.mock("@/settings/builtinSkillPreferences", () => ({ saveBuiltinPreferences: jest.fn() }));
@@ -73,12 +77,17 @@ jest.mock("./backends/shared/ui/AgentBackendHeader", () => ({}));
 jest.mock("./session/useBackendAuthState", () => ({}));
 
 const ISSUE = "https://github.com/logancyang/obsidian-copilot/issues/3022";
+const LINEUP_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/319";
+type SettingsSubscriber = (prev: CopilotSettings, next: CopilotSettings) => void;
+const mockSettingsSubscribers: SettingsSubscriber[] = [];
 let mockRuntime: BuiltinSkillRuntime;
 const mockStates: Record<string, InstallState> = {};
 const mockInstallListeners: Record<string, () => void> = {};
 const mockDescriptors = ["claude", "opencode"].map((id) => ({
   id,
   skillsProjectDir: `.${id}/skills`,
+  // Only subprocess backends bake provider and model config into their spawn.
+  restartOnProviderConfigChange: id === "opencode",
   getInstallState: () => mockStates[id],
   subscribeInstallState: (_plugin: unknown, listener: () => void) => {
     mockInstallListeners[id] = listener;
@@ -87,6 +96,7 @@ const mockDescriptors = ["claude", "opencode"].map((id) => ({
 const mockRefresh = jest.fn<Promise<unknown>, unknown[]>();
 const mockManager = {
   preloadModels: jest.fn(async () => {}),
+  restartBackend: jest.fn(async (_id: string, _reason: string) => {}),
   registerPreload: jest.fn<void, [string, Promise<void>]>(),
   onInstallStateChanged: jest.fn(async (_id: string) => {}),
 };
@@ -97,6 +107,26 @@ const plugin = {
   },
 } as unknown as CopilotPlugin;
 const reconcile = jest.mocked(reconcileBuiltinSkills);
+/** Settings holding one configured model whose `info` carries `overrides`. */
+function settingsWith(overrides: Record<string, unknown>): CopilotSettings {
+  return {
+    agentMode: { skills: {} },
+    configuredModels: [
+      {
+        configuredModelId: "configured-1",
+        providerId: "plus",
+        configuredAt: 0,
+        info: { id: "glm-5.2", displayName: "GLM-5.2", ...overrides },
+      },
+    ],
+  } as unknown as CopilotSettings;
+}
+
+/** Drive every settings subscriber the way the settings store would. */
+function emitSettingsChange(prev: CopilotSettings, next: CopilotSettings): void {
+  for (const subscriber of mockSettingsSubscribers) subscriber(prev, next);
+}
+
 function deferred() {
   let resolve!: () => void;
   const promise = new Promise<void>((done) => {
@@ -113,6 +143,7 @@ describe("agentMode", () => {
       mockStates.opencode = { kind: "absent" };
       reconcile.mockResolvedValue(undefined);
       mockRefresh.mockImplementation(() => mockRuntime.prepare("copilot/skills"));
+      mockSettingsSubscribers.length = 0;
     });
 
     it(`waits for initial skill reconciliation before preloading ready agents ${ISSUE}`, async () => {
@@ -156,6 +187,34 @@ describe("agentMode", () => {
       gate.resolve();
       await handled.promise;
       expect(mockManager.onInstallStateChanged).toHaveBeenCalledWith("opencode");
+    });
+
+    it(`refreshes a spawn-config backend when a model's published effort levels change ${LINEUP_ISSUE}`, () => {
+      // The Plus lineup reconcile rewrites the row in place, so no provider or
+      // enabled-list emission fires; without this the live agent keeps offering
+      // an effort level the service has withdrawn.
+      createAgentSessionManager({} as App, plugin);
+
+      emitSettingsChange(
+        settingsWith({ reasoning: true, reasoningEfforts: ["none", "low", "high"] }),
+        settingsWith({ reasoning: true, reasoningEfforts: ["none", "medium", "high"] })
+      );
+
+      expect(mockManager.restartBackend).toHaveBeenCalledTimes(1);
+      expect(mockManager.restartBackend).toHaveBeenCalledWith("opencode", "model metadata changed");
+    });
+
+    it(`leaves a running agent alone when only a model's display metadata changes ${LINEUP_ISSUE}`, () => {
+      // A restart closes the user's session, which a reworded description is
+      // not worth: the spawn config never carries it.
+      createAgentSessionManager({} as App, plugin);
+
+      emitSettingsChange(
+        settingsWith({ reasoning: true, description: "A frontier open model." }),
+        settingsWith({ reasoning: true, description: "A frontier open-weight model." })
+      );
+
+      expect(mockManager.restartBackend).not.toHaveBeenCalled();
     });
 
     it(`retains only previously ready agents during compatibility checks ${ISSUE}`, async () => {

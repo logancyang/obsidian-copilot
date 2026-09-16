@@ -381,7 +381,10 @@ export function buildPickerEntries(
       entries.splice(
         sectionStart,
         0,
-        ...lockedCopilotEntries({ group: descriptor.displayName, backendId: descriptor.id })
+        ...lockedCopilotEntries(settings.copilotPlusCatalog, {
+          group: descriptor.displayName,
+          backendId: descriptor.id,
+        })
       );
     }
   }
