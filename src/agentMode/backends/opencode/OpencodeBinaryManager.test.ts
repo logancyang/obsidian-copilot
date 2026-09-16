@@ -77,9 +77,14 @@ import {
 } from "./OpencodeBinaryManager";
 
 describe("isOpencodeVersionOutdated", () => {
-  it("requires the ACP cancellation fix shipped in 1.16.0", () => {
+  it("requires the managed release target, including for persisted 1.18.16 installs (https://github.com/Brevilabs/obsidian-copilot-private/issues/480)", () => {
+    expect(OPENCODE_MIN_ACP_VERSION).toBe(OPENCODE_PINNED_VERSION);
     expect(isOpencodeVersionOutdated("1.15.13")).toBe(true);
-    expect(isOpencodeVersionOutdated("1.16.0")).toBe(false);
+    expect(isOpencodeVersionOutdated("1.18.16")).toBe(true);
+    expect(isOpencodeVersionOutdated(OPENCODE_PINNED_VERSION)).toBe(false);
+    expect(isOpencodeVersionOutdated(`${OPENCODE_PINNED_VERSION}-beta.1`)).toBe(true);
+    expect(isOpencodeVersionOutdated("1.19.0")).toBe(false);
+    expect(isOpencodeVersionOutdated("1.19.0-beta.1")).toBe(false);
   });
 });
 
@@ -234,6 +239,28 @@ describe("computeInstallState", () => {
 
 describe("OpencodeBinaryManager", () => {
   describe("toOpencodeInstallState()", () => {
+    it.each(["managed", "custom", undefined] as const)(
+      "classifies current, newer, and old persisted installs with source %s against the release floor (https://github.com/Brevilabs/obsidian-copilot-private/issues/480)",
+      (binarySource) => {
+        for (const version of [OPENCODE_PINNED_VERSION, "1.19.0", "1.18.16"]) {
+          const state = computeInstallState(
+            { binaryPath: "/p", binaryVersion: version, binarySource },
+            () => true
+          );
+          expect(toOpencodeInstallState(state)).toEqual(
+            version === "1.18.16"
+              ? {
+                  kind: "incompatible",
+                  source: binarySource ?? "managed",
+                  currentVersion: version,
+                  minVersion: OPENCODE_PINNED_VERSION,
+                  message: `opencode v${version} is not supported. Copilot requires opencode v${OPENCODE_PINNED_VERSION} or newer.`,
+                }
+              : { kind: "ready", source: binarySource ?? "managed" }
+          );
+        }
+      }
+    );
     it("maps absent and supported installs to backend readiness", () => {
       expect(toOpencodeInstallState({ kind: "absent" })).toEqual({ kind: "absent" });
       expect(

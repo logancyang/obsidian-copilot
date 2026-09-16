@@ -48,9 +48,13 @@ The model controls shared by installed agents behave as follows:
 | **Search models and model switches** | Dynamic                                   | Controls which reported, BYOK, or Copilot-hosted models appear in that agent's model picker. A missing-key label means the model is known but cannot run until its provider key is set.                                                                                                                                                                          |
 | **Environment variables**            | No rows                                   | Select **Add variable** to pass a name and value only to that agent process; use the trash button to remove a row. Names must be valid environment variable identifiers. Values are used literally, so `~` is not expanded. Do not treat this editor as a secret manager.                                                                                        |
 
+If opencode or Codex ACP is below the supported version, saved enabled models remain visible and selectable, but cannot run requests. The agent's Settings tab and Agent Chat show a warning with **Configure**, which opens the existing configuration dialog without starting an upgrade. Choose a managed upgrade/download there, or update your custom installation yourself and select **Apply** or **Auto-detect**. Shared installation progress and errors remain visible in Chat and Settings; open **Configure** to retry a failed installation. Copilot does not upgrade automatically or poll for the latest upstream agent release.
+
 #### opencode
 
 Copilot can install and manage opencode for you. It can route Copilot-hosted models, supported BYOK providers, local OpenAI-compatible endpoints, and models reported by opencode.
+
+Both managed and custom installations require opencode **1.18.31 or newer**. The managed download is pinned to **1.18.31** in this Copilot release.
 
 When opencode is absent:
 
@@ -60,11 +64,11 @@ When opencode is absent:
 
 The **Configure opencode** dialog has these controls:
 
-| Control                                      | Default                               | What it does                                                                                                                                                                                                                                                      |
-| -------------------------------------------- | ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Managed by Copilot**                       | Selected when no source is configured | Shows the platform, pinned version, and destination. Use **Download & install** for first setup, **Reinstall** to replace the managed copy, and **Uninstall** to remove every Copilot-downloaded opencode binary. Uninstall keeps your custom path and BYOK keys. |
-| **My own binary**                            | Off                                   | Enter an absolute path, then use **Apply**, or select **Auto-detect**. **Clear** forgets the custom path. Applying a valid path switches the active source and removes unused Copilot-managed downloads.                                                          |
-| **Upgrade to latest / Run opencode upgrade** | Shown when an update is needed        | A managed source downloads the current supported build. A custom source runs opencode's own upgrade command.                                                                                                                                                      |
+| Control                                      | Default                               | What it does                                                                                                                                                                                                                                                                     |
+| -------------------------------------------- | ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Managed by Copilot**                       | Selected when no source is configured | Shows the platform, pinned version, and destination. Use **Download & install** for first setup, **Reinstall** to replace the managed copy, and **Uninstall** to remove every Copilot-downloaded opencode binary. Uninstall keeps your custom path and BYOK keys.                |
+| **My own binary**                            | Off                                   | Enter an absolute path, then use **Apply**, or select **Auto-detect**. **Clear** forgets the custom path. Applying a valid path switches the active source and removes unused Copilot-managed downloads.                                                                         |
+| **Upgrade to latest / Run opencode upgrade** | Shown when an update is needed        | **Upgrade to latest** downloads Copilot's pinned managed build, not the latest upstream release. **Run opencode upgrade** explicitly runs a custom binary's own upgrade command. You can instead update the custom installation yourself, then use **Apply** or **Auto-detect**. |
 
 After installation, choose the **Default model**, **Default effort**, model switches, and optional environment variables such as `XDG_CONFIG_HOME` or `HTTPS_PROXY`. Copilot-hosted models require an eligible Copilot license. BYOK and local models do not.
 
@@ -91,7 +95,7 @@ The Claude settings card also includes:
 
 #### Codex
 
-Codex uses the `codex-acp` adapter and the login held by the Codex CLI. It does not use an OpenAI API key from the BYOK tab. Managed downloads are pinned to adapter version **1.12.0** in this Copilot release. **0.0.45** is the minimum supported version for an existing or manually installed adapter. See [Codex installation details](agent-mode-and-tools.md#codex).
+Codex uses the `codex-acp` adapter and the login held by the Codex CLI. It does not use an OpenAI API key from the BYOK tab. Both managed and custom installations require adapter version **1.12.0 or newer**. Managed downloads are pinned to **1.12.0** in this Copilot release. This requirement applies to the adapter, not its Codex CLI dependency. See [Codex installation details](agent-mode-and-tools.md#codex) for native bundle and npm requirements.
 
 Select **Configure** to open these controls:
 
@@ -109,7 +113,7 @@ The Configure dialog uses the same **Managed by Copilot** and **My own binary** 
 
 Codex and Claude share an **Authentication** section. The badge beside its heading shows the current sign-in state. When signed out, choose **Sign in with your browser** or use the displayed terminal command. After signing in, the section shows the account label when the CLI provides one and offers **Sign out** so you can sign in with another account. Sign-out uses the selected CLI profile; environment-provided API keys must be removed from the environment separately.
 
-If a Copilot update pins a different managed adapter, the Codex row shows **Update**. Its progress, failure message, and **Retry** action are shared with the alert in Agent Chat. A custom binary remains usable and is never changed automatically.
+For an outdated adapter, select **Configure** from the warning, then choose **Upgrade** for a managed installation or **Download & install** to switch to one. To keep a custom installation, update it yourself and use **Apply** or **Auto-detect**. Copilot does not update custom Codex binaries.
 
 See [Agent Chat](agent-mode-and-tools.md) for setup, permissions, projects, multi-agent answers, and normal use.
 

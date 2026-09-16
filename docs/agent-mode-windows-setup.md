@@ -13,7 +13,7 @@ The managed installation does not require a PowerShell command or PATH changes.
 
 If opencode is already installed, open **Configure**, choose **My own binary**, then select **Auto-detect** or enter the absolute path to `opencode.exe` and select **Apply**.
 
-If Copilot reports that your opencode version is unsupported, update opencode and run detection again.
+Copilot requires opencode **1.18.31 or newer** for both managed and custom installations; the managed download is **1.18.31**. If your version is too old, select **Configure** in Chat or Settings. Choose the managed upgrade/download, or update your custom installation yourself and select **Apply** or **Auto-detect**. See [Update an outdated agent](agent-mode-and-tools.md#update-an-outdated-agent).
 
 ## 2. Connect Claude Code
 
@@ -35,12 +35,14 @@ Copilot uses Claude Code's credentials. Do not add an Anthropic API key to this 
 
 ## 3. Connect Codex
 
-For manual installations, the Codex backend needs `@agentclientprotocol/codex-acp` 0.0.45 or newer. This is the minimum supported adapter version; managed downloads are pinned to 1.12.0 in this Copilot release and use Windows `tar.exe` to extract ZIP files. See [Codex installation details](agent-mode-and-tools.md#codex). The package includes a compatible Codex CLI; the older `@zed-industries/codex-acp` adapter is not supported.
+The Codex backend requires ACP adapter version **1.12.0 or newer** for both managed and custom installations. Managed downloads are pinned to **1.12.0** in this Copilot release and use Windows `tar.exe` to extract ZIP files. The native bundle includes a compatible Codex CLI and needs no Node.js installation. A custom npm installation of `@agentclientprotocol/codex-acp` must also be **1.12.0 or newer** and requires Node.js. See [Codex installation details](agent-mode-and-tools.md#codex). The older `@zed-industries/codex-acp` adapter is not supported.
 
 1. Open **Settings → Copilot → Basic → Agents → Codex** and select **Configure**.
 2. Under **Managed by Copilot**, choose **Download & install**. Copilot downloads a verified native adapter and its Codex runtime. You do not need Node.js or npm.
 3. Click **Sign in** and complete authentication in your browser. If the browser does not open, click **Open sign-in page**. Return to Obsidian to see the signed-in status.
-4. To use your own supported adapter, choose **My own binary** and Auto-detect it or enter its path. Copilot keeps your binary and credentials when you uninstall managed downloads.
+4. To use your own supported adapter, choose **My own binary** and select **Auto-detect**, or enter its path and select **Apply**. Use `codex-acp.exe` for a native bundle, keeping its companion files in place, or the package's `dist\index.js` for an npm installation. Copilot keeps your binary and credentials when you uninstall managed downloads.
+
+An outdated adapter shows a warning in Chat and Settings. Select **Configure** to choose a managed upgrade/download, or update your custom adapter yourself and select **Apply** or **Auto-detect**. Saved enabled models remain selectable but cannot run until updated. Progress and errors stay visible; opening Configure does not start an upgrade.
 
 You can also choose **Sign in to Codex** on the Agent Chat status card. For terminal login, run your configured adapter with `cli login` using the same `CODEX_HOME` as Copilot.
 

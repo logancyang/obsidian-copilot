@@ -12,14 +12,12 @@ const meta = {
     installState: {
       kind: "incompatible",
       source: "managed",
-      currentVersion: "1.0.0",
-      minVersion: "2.0.0",
-      message: "Upgrade opencode to the supported version.",
+      currentVersion: "1.18.16",
+      minVersion: "1.18.31",
+      message: "opencode v1.18.16 is not supported. Copilot requires opencode v1.18.31 or newer.",
     },
     managedInstall: { kind: "idle" },
-    canUpdate: true,
-    resolvedPath: "~/.obsidian-copilot/opencode/1.0.0/opencode",
-    onUpdate: () => {},
+    resolvedPath: "~/.obsidian-copilot/opencode/1.18.16/opencode",
     onConfigure: () => {},
   },
   parameters: { gallery: { host: "settings-tab", layout: "padded" } },
@@ -28,11 +26,23 @@ export default meta;
 export const NotInstalled: StoryObj<AgentBackendHeaderProps> = {
   args: {
     installState: { kind: "absent" },
-    canUpdate: false,
     resolvedPath: null,
   },
 };
 export const Upgrade: StoryObj<AgentBackendHeaderProps> = {};
+export const OutdatedCodex: StoryObj<AgentBackendHeaderProps> = {
+  args: {
+    displayName: "Codex",
+    installState: {
+      kind: "incompatible",
+      source: "custom",
+      currentVersion: "1.10.0",
+      minVersion: "1.12.0",
+      message: "Codex v1.10.0 is not supported. Copilot requires Codex v1.12.0 or newer.",
+    },
+    resolvedPath: "~/.local/bin/codex-acp",
+  },
+};
 export const Running: StoryObj<AgentBackendHeaderProps> = {
   args: { managedInstall: { kind: "running", label: "Downloading opencode.zip (42%)" } },
 };
@@ -53,7 +63,6 @@ export const SignInRequired: StoryObj<AgentBackendHeaderProps> = {
     displayName: "Codex",
     installState: { kind: "ready", source: "managed" },
     authStatus: { signedIn: false },
-    canUpdate: false,
     resolvedPath: null,
   },
 };
@@ -84,7 +93,6 @@ export const InstalledPaths: StoryObj<AgentBackendHeaderProps> = {
           {...backend}
           installState={{ kind: "ready", source: "managed" }}
           authStatus={{ signedIn: true }}
-          canUpdate={false}
         />
       ))}
     </>

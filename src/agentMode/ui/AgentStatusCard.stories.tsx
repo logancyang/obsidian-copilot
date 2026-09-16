@@ -54,8 +54,8 @@ export const ManagedUpgradeRequired: StoryObj<AgentStatusCardProps> = {
   args: {
     summary: "opencode update required",
     tone: "warning",
-    message: "opencode v1.15.0 is not supported. Copilot requires opencode v1.16.0 or newer.",
-    action: { label: "Upgrade", onClick: () => undefined },
+    message: "opencode v1.18.16 is not supported. Copilot requires opencode v1.18.31 or newer.",
+    action: { label: "Configure opencode", onClick: () => undefined },
   },
 };
 
@@ -64,7 +64,7 @@ export const ManagedUpgradeRunning: StoryObj<AgentStatusCardProps> = {
     summary: "Updating opencode…",
     tone: "warning",
     message: "Downloading opencode-darwin-arm64.zip 42%",
-    action: { label: "Upgrading…", onClick: () => undefined, disabled: true },
+    action: { label: "Configure opencode", onClick: () => undefined },
   },
 };
 
@@ -73,7 +73,16 @@ export const ManagedUpgradeFailed: StoryObj<AgentStatusCardProps> = {
     summary: "opencode update failed",
     tone: "error",
     message: "GitHub API rate-limited. Retry after the limit resets.",
-    action: { label: "Retry", onClick: () => undefined },
+    action: { label: "Configure opencode", onClick: () => undefined },
+  },
+};
+
+export const OutdatedCodex: StoryObj<AgentStatusCardProps> = {
+  args: {
+    summary: "Codex update required",
+    tone: "warning",
+    message: "Codex v1.10.0 is not supported. Copilot requires Codex v1.12.0 or newer.",
+    action: { label: "Configure Codex", onClick: () => undefined },
   },
 };
 

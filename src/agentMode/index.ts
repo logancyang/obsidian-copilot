@@ -485,10 +485,10 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
   // require its process to refresh, so unrelated saves do not churn backends.
   for (const descriptor of listBackendDescriptors()) {
     descriptor.subscribeInstallState(plugin, () => {
-      // A first warm probe must see the newly installed skills, especially for backends
-      // that do not restart on skill changes. https://github.com/logancyang/obsidian-copilot/issues/3022
-      void seedManagedBuiltins()
-        .then(() => manager.onInstallStateChanged(descriptor.id))
+      // Install preparation and recovery share the manager's ordered startup pipeline.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/480
+      void manager
+        .onInstallStateChanged(descriptor.id, seedManagedBuiltins)
         .catch((error) =>
           logError(`[AgentMode] install-state refresh failed: ${descriptor.id}`, error)
         );

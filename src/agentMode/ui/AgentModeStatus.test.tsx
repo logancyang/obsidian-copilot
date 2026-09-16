@@ -129,44 +129,50 @@ describe("AgentModeStatus", () => {
       expect(descriptor.openInstallUI).toHaveBeenCalledWith(plugin);
     });
 
-    it("runs an available upgrade once and disables the action while it is busy (https://github.com/Brevilabs/obsidian-copilot-private/issues/410)", () => {
-      installState = {
-        kind: "incompatible",
-        source: "managed",
-        currentVersion: "2.1.205",
-        minVersion: "2.1.206",
-        message: "Claude must be upgraded.",
-      };
-      const run = jest.fn(() => new Promise<void>(() => undefined));
-      descriptor = {
-        ...descriptor,
-        managedInstall: {
-          getState: jest.fn(() => managedInstallState),
-          subscribe: jest.fn(() => () => {}),
-          run,
-        },
-      };
-      const plugin = { app: {} } as unknown as CopilotPlugin;
+    it.each(["opencode", "Codex"])(
+      "opens %s configuration without installing and retains access through progress and failure (https://github.com/Brevilabs/obsidian-copilot-private/issues/480)",
+      (displayName) => {
+        installState = {
+          kind: "incompatible",
+          source: "managed",
+          currentVersion: "2.1.205",
+          minVersion: "2.1.206",
+          message: "Claude must be upgraded.",
+        };
+        const run = jest.fn(() => new Promise<void>(() => undefined));
+        descriptor = {
+          ...descriptor,
+          displayName,
+          managedInstall: {
+            getState: jest.fn(() => managedInstallState),
+            subscribe: jest.fn(() => () => {}),
+            run,
+          },
+        };
+        const plugin = { app: {} } as unknown as CopilotPlugin;
 
-      const { rerender } = render(<AgentModeStatus plugin={plugin} onInstallClick={jest.fn()} />);
+        const { rerender } = render(<AgentModeStatus plugin={plugin} onInstallClick={jest.fn()} />);
 
-      fireEvent.click(screen.getByRole("button", { name: "Upgrade" }));
-      expect(run).toHaveBeenCalledWith(plugin);
-      managedInstallState = { kind: "running", label: "Downloading… 50%" };
-      rerender(<AgentModeStatus plugin={plugin} onInstallClick={jest.fn()} />);
-      expect(screen.getByRole("button", { name: "Upgrading…" }).hasAttribute("disabled")).toBe(
-        true
-      );
-      expect(screen.getByText("Updating Claude…")).toBeTruthy();
-      expect(screen.getByText("Downloading… 50%")).toBeTruthy();
+        fireEvent.click(screen.getByRole("button", { name: `Configure ${displayName}` }));
+        expect(descriptor.openInstallUI).toHaveBeenCalledWith(plugin);
+        expect(run).not.toHaveBeenCalled();
+        managedInstallState = { kind: "running", label: "Downloading… 50%" };
+        rerender(<AgentModeStatus plugin={plugin} onInstallClick={jest.fn()} />);
+        expect(
+          screen.getByRole("button", { name: `Configure ${displayName}` }).hasAttribute("disabled")
+        ).toBe(false);
+        expect(screen.getByText(`Updating ${displayName}…`)).toBeTruthy();
+        expect(screen.getByText("Downloading… 50%")).toBeTruthy();
 
-      managedInstallState = { kind: "error", message: "npm unavailable" };
-      rerender(<AgentModeStatus plugin={plugin} onInstallClick={jest.fn()} />);
-      expect(screen.getByText("Claude update failed")).toBeTruthy();
-      expect(screen.getByText("npm unavailable")).toBeTruthy();
-      fireEvent.click(screen.getByRole("button", { name: "Retry" }));
-      expect(run).toHaveBeenCalledTimes(2);
-    });
+        managedInstallState = { kind: "error", message: "npm unavailable" };
+        rerender(<AgentModeStatus plugin={plugin} onInstallClick={jest.fn()} />);
+        expect(screen.getByText(`${displayName} update failed`)).toBeTruthy();
+        expect(screen.getByText("npm unavailable")).toBeTruthy();
+        fireEvent.click(screen.getByRole("button", { name: `Configure ${displayName}` }));
+        expect(descriptor.openInstallUI).toHaveBeenCalledTimes(2);
+        expect(run).not.toHaveBeenCalled();
+      }
+    );
 
     it("keeps the full setup error and its Configure action under a state-based summary (https://github.com/Brevilabs/obsidian-copilot-private/issues/410)", () => {
       const message =

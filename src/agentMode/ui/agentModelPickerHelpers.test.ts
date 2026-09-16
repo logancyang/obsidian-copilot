@@ -4,6 +4,8 @@ import {
   buildEffortOptionsByModelKey,
   buildEffortSibling,
   buildModelOnChange,
+  buildCommitSelection,
+  buildAgentModelPicker,
   buildPickerEntries,
   collectModelActiveContext,
   synthesizeAgentEntry,
@@ -173,6 +175,7 @@ function makeManager(opts: {
 }): AgentSessionManager {
   return {
     getCachedModelCatalog: (id: string) => opts.catalogById?.[id] ?? null,
+    deferRecoverySelection: jest.fn(() => false),
     getPreloadStatus: (id: string) => opts.preloadStatusById?.[id] ?? "absent",
     getEffortCatalog: (id: string) => opts.effortCatalogById?.[id] ?? null,
     getDefaultSelection: (id: string) => opts.defaultSelectionById?.[id] ?? null,
@@ -714,22 +717,52 @@ describe("buildPickerEntries", () => {
     expect(entries.map((entry) => entry._disabledReason)).toEqual(["Not set up"]);
   });
 
-  it("marks rows of a backend whose binary is too old", () => {
-    const { entries } = buildPickerEntries(
-      managerWithSonnet(),
-      [
-        claudeWithInstallState({
-          kind: "incompatible",
-          source: "custom",
-          currentVersion: "2.1.205",
-          minVersion: "2.1.206",
-          message: "too old",
-        }),
+  it("keeps outdated saved models selectable without preload on cold startup or another fresh chat (https://github.com/Brevilabs/obsidian-copilot-private/issues/480)", () => {
+    for (const activeBackendId of [null, "opencode"]) {
+      const { entries } = buildPickerEntries(
+        makeManager({}),
+        [
+          claudeWithInstallState({
+            kind: "incompatible",
+            source: "custom",
+            currentVersion: "2.1.205",
+            minVersion: "2.1.206",
+            message: "too old",
+          }),
+        ],
+        { ...noSessionContext(), activeBackendId },
+        emptySettings
+      );
+      expect(entries.map((entry) => entry.name)).toEqual(["sonnet"]);
+      expect(entries.map((entry) => entry._disabledReason)).toEqual([undefined]);
+    }
+  });
+
+  it("keeps upgrade recovery selectable even when a saved model also lacks credentials (https://github.com/Brevilabs/obsidian-copilot-private/issues/480)", () => {
+    const descriptor = {
+      ...claudeWithInstallState({
+        kind: "incompatible",
+        source: "custom",
+        currentVersion: "1",
+        minVersion: "2",
+        message: "Upgrade required",
+      }),
+      getEnabledModelEntries: () => [
+        {
+          baseModelId: "saved-model",
+          name: "Saved model",
+          credentialState: "missing_key" as const,
+        },
       ],
+    };
+    const { entries } = buildPickerEntries(
+      makeManager({}),
+      [descriptor],
       noSessionContext(),
       emptySettings
     );
-    expect(entries.map((entry) => entry._disabledReason)).toEqual(["Update required"]);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]._disabledReason).toBeUndefined();
   });
 
   it("marks rows of a backend whose readiness check failed", () => {
@@ -958,6 +991,20 @@ describe("buildEffortSibling", () => {
 // ---- buildModelOnChange ----
 
 describe("buildModelOnChange", () => {
+  it("hands an incompatible pick to recovery without starting a session (https://github.com/Brevilabs/obsidian-copilot-private/issues/480)", () => {
+    const manager = makeManager({
+      defaultSelectionById: { codex: { baseModelId: "old", effort: "high" } },
+    });
+    (manager.deferRecoverySelection as jest.Mock).mockReturnValue(true);
+    const entry = synthesizeAgentEntry("chosen", "Chosen", makeDescriptor("codex"));
+    buildModelOnChange(manager, noSessionContext(), [entry])(getModelKeyFromModel(entry));
+    expect(manager.deferRecoverySelection).toHaveBeenCalledWith("codex", {
+      baseModelId: "chosen",
+      effort: "high",
+    });
+    expect(manager.createSession).not.toHaveBeenCalled();
+    expect(manager.applySelection).not.toHaveBeenCalled();
+  });
   function pickerEntry(backendId: string, baseModelId: string) {
     return {
       name: baseModelId,
@@ -1051,6 +1098,67 @@ describe("buildModelOnChange", () => {
 });
 
 // ---- buildEffortOptionsByModelKey ----
+
+describe("buildAgentModelPicker()", () => {
+  it("shows the pending backend, model, and effort instead of the preserved source selection (https://github.com/Brevilabs/obsidian-copilot-private/issues/480)", () => {
+    const manager = makeManager({});
+    Object.assign(manager, {
+      getActiveSession: () => null,
+      getActiveChatUIState: () => null,
+      getRecoverySelection: () => ({
+        backendId: "codex",
+        selection: { baseModelId: "saved", effort: "high" },
+      }),
+    });
+    const picker = buildAgentModelPicker({
+      manager,
+      descriptors: [makeDescriptor("codex")],
+      settings: emptySettings,
+    })!;
+    expect(picker.value).toBe(
+      getModelKeyFromModel(synthesizeAgentEntry("saved", "saved", makeDescriptor("codex")))
+    );
+    expect(picker.effort?.value).toBe("high");
+    expect(picker.models.find((m) => getModelKeyFromModel(m) === picker.value)?._backendId).toBe(
+      "codex"
+    );
+  });
+});
+
+describe("buildCommitSelection()", () => {
+  it("seeds a normal cross-agent selection without persisting its model default", async () => {
+    const manager = makeManager({});
+    const entry = synthesizeAgentEntry("chosen", "Chosen", makeDescriptor("codex"));
+    buildCommitSelection(
+      manager,
+      noSessionContext(),
+      [entry],
+      jest.fn()
+    )(getModelKeyFromModel(entry), "high");
+    await Promise.resolve();
+    expect(manager.createSession).toHaveBeenCalledWith("codex", undefined, {
+      baseModelId: "chosen",
+      effort: "high",
+    });
+    expect(manager.persistDefaultSelection).not.toHaveBeenCalled();
+  });
+  it("retains an incompatible atomic model/effort pick without replacing the source session (https://github.com/Brevilabs/obsidian-copilot-private/issues/480)", () => {
+    const manager = makeManager({});
+    (manager.deferRecoverySelection as jest.Mock).mockReturnValue(true);
+    const entry = synthesizeAgentEntry("chosen", "Chosen", makeDescriptor("codex"));
+    const ctx = {
+      ...noSessionContext(),
+      activeSession: { internalId: "source", backendId: "claude" } as AgentSession,
+    };
+    buildCommitSelection(manager, ctx, [entry], jest.fn())(getModelKeyFromModel(entry), "high");
+    expect(manager.deferRecoverySelection).toHaveBeenCalledWith("codex", {
+      baseModelId: "chosen",
+      effort: "high",
+    });
+    expect(manager.replaceSessionInPlace).not.toHaveBeenCalled();
+    expect(manager.applySelection).not.toHaveBeenCalled();
+  });
+});
 
 describe("buildEffortOptionsByModelKey", () => {
   const ACTIVE = "github-copilot/gpt-5.4";
@@ -1174,7 +1282,7 @@ describe("buildPickerEntries — persisted capability propagation", () => {
 });
 
 describe("backendReadinessReason()", () => {
-  it("labels each state a user must fix before the backend can run", () => {
+  it("labels missing or broken setup but leaves upgrade recovery selectable (https://github.com/Brevilabs/obsidian-copilot-private/issues/480)", () => {
     expect(backendReadinessReason({ kind: "absent" })).toBe("Not set up");
     expect(
       backendReadinessReason({
@@ -1184,7 +1292,7 @@ describe("backendReadinessReason()", () => {
         minVersion: "2.0.0",
         message: "too old",
       })
-    ).toBe("Update required");
+    ).toBeUndefined();
     expect(backendReadinessReason({ kind: "error", message: "boom" })).toBe("Setup error");
   });
 

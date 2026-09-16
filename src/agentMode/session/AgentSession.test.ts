@@ -110,12 +110,18 @@ function makeMockBackend(): MockBackend {
 
 /** Descriptor stub for a backend that summarizes its own titles (opencode). */
 function summarizingDescriptor(): BackendDescriptor {
-  return { summarizesSessionTitle: true } as unknown as BackendDescriptor;
+  return {
+    getInstallState: () => ({ kind: "ready" }),
+    summarizesSessionTitle: true,
+  } as unknown as BackendDescriptor;
 }
 
 /** Descriptor stub for a backend that does NOT summarize (codex, Claude Code). */
 function nonSummarizingDescriptor(): BackendDescriptor {
-  return { summarizesSessionTitle: false } as unknown as BackendDescriptor;
+  return {
+    getInstallState: () => ({ kind: "ready" }),
+    summarizesSessionTitle: false,
+  } as unknown as BackendDescriptor;
 }
 
 describe("buildPromptBlocks", () => {
@@ -787,6 +793,30 @@ describe("buildUserDisplayContent", () => {
 });
 
 describe("AgentSession.sendPrompt", () => {
+  it("rejects a send without changing history when readiness becomes incompatible (https://github.com/Brevilabs/obsidian-copilot-private/issues/480)", async () => {
+    const mock = makeMockBackend();
+    const descriptor = {
+      getInstallState: jest.fn(() => ({ kind: "ready" })),
+    } as unknown as BackendDescriptor;
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "test-agent",
+      getDescriptor: () => descriptor,
+    });
+    await session.sendPrompt("first message").turn;
+    const messages = session.store.getDisplayMessages();
+    mock.prompt.mockClear();
+    (descriptor.getInstallState as jest.Mock).mockReturnValue({
+      kind: "incompatible",
+      message: "Upgrade required",
+    });
+
+    expect(() => session.sendPrompt("keep this draft")).toThrow("Upgrade required");
+    expect(mock.prompt).not.toHaveBeenCalled();
+    expect(session.store.getDisplayMessages()).toEqual(messages);
+  });
   it("appends user + placeholder synchronously and resolves on stopReason", async () => {
     const mock = makeMockBackend();
     const session = new AgentSession({
@@ -2036,6 +2066,32 @@ describe("AgentSession fan-out follow-up continuity", () => {
 });
 
 describe("AgentSession.create (via start)", () => {
+  it("does not open a backend session when readiness becomes incompatible during context loading (https://github.com/Brevilabs/obsidian-copilot-private/issues/480)", async () => {
+    const mock = makeMockBackend();
+    const descriptor = {
+      getInstallState: jest.fn(() => ({ kind: "ready" })),
+    } as unknown as BackendDescriptor;
+    let release!: (result: { additionalDirectories: string[] }) => void;
+    const contextReady = new Promise<{ additionalDirectories: string[] }>((resolve) => {
+      release = resolve;
+    });
+    const session = AgentSession.start({
+      backend: mock.asBackend,
+      cwd: "/vault",
+      internalId: "starting",
+      backendId: "test-agent",
+      getDescriptor: () => descriptor,
+      contextReady,
+    });
+    (descriptor.getInstallState as jest.Mock).mockReturnValue({
+      kind: "incompatible",
+      message: "Upgrade required",
+    });
+    release({ additionalDirectories: [] });
+    await expect(session.ready).rejects.toThrow("Upgrade required");
+    expect(mock.newSession).not.toHaveBeenCalled();
+    expect(mock.prompt).not.toHaveBeenCalled();
+  });
   it("captures `state.model` from newSession and exposes via getState", async () => {
     const mock = makeMockBackend();
     const stateWithModel: BackendState = {
@@ -2674,6 +2730,7 @@ function makeWireOnlyDescriptor(): BackendDescriptor {
   };
   return {
     wire,
+    getInstallState: () => ({ kind: "ready" }),
     // Suffix-style backend: effort rides in the wire id, so applying the
     // encoded selection through the model channel is sufficient.
     applySelection: (
@@ -2699,6 +2756,7 @@ function makeConfigOptionDescriptor(): BackendDescriptor {
   };
   return {
     wire,
+    getInstallState: () => ({ kind: "ready" }),
     applySelection: async (
       session: AgentSession,
       selection: { baseModelId: string; effort: string | null },
@@ -2843,6 +2901,7 @@ function makeDescriptorWireWithoutEffort(): BackendDescriptor {
   };
   return {
     wire,
+    getInstallState: () => ({ kind: "ready" }),
     // Claude-style: effort lives outside the wire id, so the model channel
     // carries only the base id and effort goes through setConfigOption.
     applySelection: async (
@@ -3728,6 +3787,7 @@ describe("AgentSession plan proposal lifecycle", () => {
         ({
           isPlanModePlanFilePath: (absolutePath: string) =>
             absolutePath === "/Users/test/.claude/plans/plan.md",
+          getInstallState: () => ({ kind: "ready" }),
         }) as unknown as BackendDescriptor,
     });
     const { turn } = session.sendPrompt("plan something");

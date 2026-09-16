@@ -20,6 +20,8 @@ A one-agent chat can work without a Copilot license when you bring your own mode
 
 opencode is the most flexible choice because it can use Copilot-hosted, BYOK, and local models.
 
+Copilot requires opencode **1.18.31 or newer** for both managed and custom installations. The managed download is pinned to **1.18.31** in this Copilot release.
+
 1. In the **opencode** tab, open **Configure**, choose **Managed by Copilot**, then click **Download & install**.
 2. If you already installed it, choose **My own binary** in **Configure**, then select **Auto-detect** or enter the absolute path and click **Apply**.
 3. Enable the models you want to see and choose a **Default model**.
@@ -45,7 +47,7 @@ Claude models and billing come from your Claude Code account. Models added under
 
 ### Codex
 
-The Codex backend uses `@agentclientprotocol/codex-acp`, which includes a compatible Codex CLI:
+The Codex backend uses the `codex-acp` adapter with a compatible Codex CLI. Copilot requires adapter version **1.12.0 or newer** for both managed and custom installations.
 
 Managed Codex downloads are pinned to `codex-acp` **1.12.0** in this Copilot release. Copilot uses the system `tar -xf` command to unpack the runtime on all supported desktop platforms:
 
@@ -57,7 +59,7 @@ Managed Codex downloads are pinned to `codex-acp` **1.12.0** in this Copilot rel
 
 The archive format and extraction command are separate: bsdtar can unpack ZIP files, while GNU tar does not support ZIP. See [bsdtar's supported formats](https://github.com/libarchive/libarchive/blob/master/tar/bsdtar.1) and [Windows tar documentation](https://learn.microsoft.com/en-us/windows/tar/). Windows includes `tar.exe` starting with Windows 10 version 1803. If installation reports that `tar` is missing, install it and retry; on macOS or Windows, use bsdtar so ZIP extraction works.
 
-For an existing or manually installed `@agentclientprotocol/codex-acp` adapter, **0.0.45 is the minimum supported version**, not the managed download version. Both numbers refer to the ACP adapter version; the bundled Codex CLI has its own version.
+For a custom installation, use a supported native bundle or `@agentclientprotocol/codex-acp` **1.12.0 or newer** from npm. The npm package requires Node.js and installs the Codex CLI as a dependency; it is not the managed native bundle. The version requirement applies to the ACP adapter, not the Codex CLI. An npm adapter below **1.12.0** is unsupported even if its Codex CLI is newer. Keep a native bundle's runtime and metadata beside its executable rather than copying the executable alone.
 
 1. Open **Basic → Agents → Codex → Configure**.
 2. Choose **Download & install** under **Managed by Copilot**. Copilot downloads Codex and its runtime, verifies the download, and keeps your current installation until the replacement is ready. You do not need Node.js or npm.
@@ -71,9 +73,21 @@ You can also choose **Sign in** on the Agent Chat status card. For terminal logi
 
 Switching to your own Codex binary removes unused managed downloads. Your custom binary and account credentials remain on your computer. Cancel is available during downloads; configuration changes finish before another action can start.
 
-When the plugin's managed version changes, Agent Chat and Settings show the same **Upgrade** action and shared progress or **Retry** state. The older `@zed-industries/codex-acp` package is not supported. Copilot uses the login stored by the bundled Codex CLI. Models added under **BYOK** do not join the Codex model list.
+The older `@zed-industries/codex-acp` package is not supported. Copilot uses the login stored by the adapter's Codex CLI. Models added under **BYOK** do not join the Codex model list.
 
 For Windows-specific installation help, see [Windows setup for Agent Chat](agent-mode-windows-setup.md).
+
+### Update an outdated agent
+
+For opencode and Codex ACP, the minimum supported version matches the managed download version in this Copilot release. Newer versions are also accepted. Copilot checks against that requirement, not the latest upstream release, and does not poll upstream for agent updates.
+
+If an installed agent is too old, Agent Chat and **Settings → Copilot → Basic → Agents** show a warning. Saved enabled models remain visible and selectable, but the agent cannot run requests until updated.
+
+1. Select **Configure** in the warning to open the agent's configuration dialog. Opening it does not start an upgrade.
+2. For **Managed by Copilot**, choose the upgrade action or **Download & install** to install Copilot's pinned version.
+3. For **My own binary**, update your installation yourself, then use **Apply** or **Auto-detect** to validate it again. You can also choose a managed download instead.
+
+Chat and Settings keep shared installation progress and errors visible. If an installation fails, open **Configure**, resolve the reported problem, and retry there. Copilot does not upgrade agents automatically.
 
 ### Start a chat
 
@@ -197,6 +211,6 @@ Copilot also includes **research-memo** as an optional theme. For a named theme,
 
 ### Upgrading an agent
 
-When an installed agent needs a supported version, Basic → Agents and Agent Chat offer **Upgrade** if Copilot can upgrade that installation. Both show the same progress, including upgrades started in Configure. If an upgrade fails, use **Retry**. A failed custom-path selection is reported in Configure and does not turn the upgrade action into a path-validation retry.
+For minimum versions and the **Configure** upgrade flow, see [Update an outdated agent](#update-an-outdated-agent). A failed custom-path selection is reported in Configure; correct the path and use **Apply** or **Auto-detect** again.
 
 Image-only messages appear as "Image attachment" in the queue. Sessions with only images use the same fallback title in tabs and Recent Chats until a text or agent-generated title is available.
