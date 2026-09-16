@@ -60,6 +60,20 @@ function signedIn(licenseKey = "token"): void {
   setSettings({ isPaidUser: true, plusLicenseKey: licenseKey });
 }
 
+/** An endpoint read the test resolves by hand, to hold a sync at that read. */
+function deferredRead() {
+  let resolve: (value: BrevilabsModelsResponse | null) => void = () => {};
+  const read = new Promise<BrevilabsModelsResponse | null>((settle) => {
+    resolve = settle;
+  });
+  return { read: () => read, resolve };
+}
+
+/** Let the queued work run so a sync reaches its pending endpoint read. */
+function flush(): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, 0));
+}
+
 describe("copilotPlusSync", () => {
   beforeEach(() => {
     resetSettings();
@@ -196,19 +210,83 @@ describe("copilotPlusSync", () => {
       { isPaidUser: false, licenseKey: "hydrated-token" },
       { isPaidUser: true, licenseKey: "" },
     ])(
-      "unregisters without reading the endpoint when paid state or credential is missing",
+      "unregisters the provider and registers nothing when paid state or credential is missing",
       async ({ isPaidUser, licenseKey }) => {
-        // Revoking access must not wait on the network.
         const { api, registerPlusProvider, unregisterPlusProvider } = makeApi();
-        const fetchModels = jest.fn(async () => response());
 
-        await syncCopilotPlusProvider(api, isPaidUser, licenseKey, fetchModels);
+        await syncCopilotPlusProvider(api, isPaidUser, licenseKey, async () => response());
 
-        expect(fetchModels).not.toHaveBeenCalled();
         expect(registerPlusProvider).not.toHaveBeenCalled();
         expect(unregisterPlusProvider).toHaveBeenCalledTimes(1);
       }
     );
+
+    it("caches the lineup for an install that has never signed in, with removal already done before the read (https://github.com/Brevilabs/obsidian-copilot-private/issues/476)", async () => {
+      // The locked "Copilot license required" rows render from this cache, so
+      // an install that never signs in has nothing to advertise without it.
+      // Revoking access still must not wait on the network, so the read is in
+      // flight only after the unregister has resolved.
+      const { api, registerPlusProvider, unregisterPlusProvider } = makeApi();
+      const pending = deferredRead();
+      const fetchModels = jest.fn(pending.read);
+
+      const sync = syncCopilotPlusProvider(api, false, "", fetchModels);
+      await flush();
+
+      expect(unregisterPlusProvider).toHaveBeenCalledTimes(1);
+      expect(fetchModels).toHaveBeenCalledTimes(1);
+      expect(getSettings().copilotPlusCatalog.models).toEqual([]);
+
+      pending.resolve(response());
+      await sync;
+
+      expect(getSettings().copilotPlusCatalog.models.map((m) => m.id)).toEqual([
+        "copilot-plus-flash",
+        "glm-5.2",
+      ]);
+      expect(registerPlusProvider).not.toHaveBeenCalled();
+    });
+
+    it("leaves the cache untouched when an unlicensed read matches it (https://github.com/Brevilabs/obsidian-copilot-private/issues/476)", async () => {
+      const { api } = makeApi();
+      await syncCopilotPlusProvider(api, false, "", async () => response());
+      const afterFirst = getSettings().copilotPlusCatalog;
+
+      await syncCopilotPlusProvider(api, false, "", async () => response());
+
+      expect(getSettings().copilotPlusCatalog).toBe(afterFirst);
+    });
+
+    it("keeps the cached lineup when an unlicensed read is unreadable (https://github.com/Brevilabs/obsidian-copilot-private/issues/476)", async () => {
+      const { api } = makeApi();
+      setSettings({
+        copilotPlusCatalog: {
+          models: [{ id: "cached-model", displayName: "Cached" }],
+          defaultEnabledIds: ["cached-model"],
+        },
+      });
+      const fetchModels = jest.fn(async () => null);
+
+      await syncCopilotPlusProvider(api, false, "", fetchModels);
+
+      expect(fetchModels).toHaveBeenCalledTimes(1);
+      expect(getSettings().copilotPlusCatalog.models.map((m) => m.id)).toEqual(["cached-model"]);
+    });
+
+    it("abandons an unlicensed read once the user signs in, so the licensed sync is the only writer (https://github.com/Brevilabs/obsidian-copilot-private/issues/476)", async () => {
+      const { api } = makeApi();
+      const pending = deferredRead();
+
+      const sync = syncCopilotPlusProvider(api, false, "", pending.read);
+      await flush();
+      // No timer is advanced: the sign-in alone has to settle the read.
+      signedIn();
+      await sync;
+      pending.resolve(response());
+      await flush();
+
+      expect(getSettings().copilotPlusCatalog.models).toEqual([]);
+    });
 
     it("retries a failed read when there is no cached lineup to fall back on (https://github.com/Brevilabs/obsidian-copilot-private/issues/319)", async () => {
       // A first sign-in has no cache, so giving up on one failed read would
