@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ModelDisplay } from "@/components/ui/model-display";
 import { LicenseRequiredIcon } from "@/components/ui/LicenseRequiredIcon";
+import { MODEL_PICKER_PRICING_URL } from "@/components/ui/model-pricing-links";
 import { SelfHostCloudWarningIcon } from "@/components/ui/SelfHostCloudWarningIcon";
 import { checkModelApiKey, err2String } from "@/lib/model-display-utils";
 import type { ModelApiKeySettings } from "@/lib/model-display-utils";
@@ -64,7 +65,7 @@ export type ModelSelectorEntry = CustomModel & {
    * lineup is discoverable before they buy. The row renders a lock icon +
    * tooltip beside the name and suppresses the right-side `_disabledReason`
    * label, which would otherwise repeat the same sentence down the whole group.
-   * Always paired with a `_disabledReason` — that is what disables the row.
+   * Activation opens pricing rather than selecting the unavailable model.
    */
   _needsLicense?: boolean;
 };
@@ -162,9 +163,19 @@ export function ModelSelector({
                 </DropdownMenuLabel>
               )}
               <DropdownMenuItem
-                disabled={itemDisabled}
+                disabled={itemDisabled && !model._needsLicense}
                 title={disabledReason ?? undefined}
                 onSelect={(event) => {
+                  // Locked models offer plans, never a model switch.
+                  // https://github.com/Brevilabs/obsidian-copilot-private/issues/476
+                  if (model._needsLicense) {
+                    (event.currentTarget as HTMLElement).win.open(
+                      MODEL_PICKER_PRICING_URL,
+                      "_blank",
+                      "noopener,noreferrer"
+                    );
+                    return;
+                  }
                   if (itemDisabled) {
                     event.preventDefault();
                     return;
@@ -185,7 +196,10 @@ export function ModelSelector({
                     }
                   }
                 }}
-                className={itemDisabled ? "tw-cursor-not-allowed tw-opacity-50" : ""}
+                className={cn(
+                  itemDisabled && "tw-opacity-50",
+                  itemDisabled && !model._needsLicense && "tw-cursor-not-allowed"
+                )}
               >
                 <div className="tw-min-w-0">
                   <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-1">

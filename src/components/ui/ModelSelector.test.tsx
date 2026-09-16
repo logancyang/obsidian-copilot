@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import React from "react";
 import { ModelSelector } from "./ModelSelector";
 import type { ModelSelectorEntry } from "./ModelSelector";
@@ -14,10 +14,6 @@ jest.mock("@/components/ui/SelfHostCloudWarningIcon", () => ({
   },
 }));
 
-jest.mock("@/components/ui/LicenseRequiredIcon", () => ({
-  LicenseRequiredIcon: () => <span data-testid="license-lock" />,
-}));
-
 const model = (over: Partial<ModelSelectorEntry>): ModelSelectorEntry => ({
   name: "gpt-5",
   provider: "openai",
@@ -29,7 +25,57 @@ describe("ModelSelector", () => {
   describe("ModelSelector()", () => {
     beforeEach(() => {
       cloudWarningProps.length = 0;
+      jest.spyOn(window, "open").mockImplementation(() => null);
     });
+    afterEach(() => jest.restoreAllMocks());
+
+    it("selects an available model", async () => {
+      const onChange = jest.fn();
+      render(<ModelSelector value="" onChange={onChange} models={[model({})]} />);
+      fireEvent.keyDown(screen.getByRole("button"), { key: "Enter" });
+      fireEvent.click(await screen.findByRole("menuitem", { name: /gpt-5/ }));
+      expect(onChange).toHaveBeenCalledWith("gpt-5|openai");
+      expect(window.open).not.toHaveBeenCalled();
+    });
+
+    it.each(["row", "icon", "Enter", " "])(
+      "opens picker pricing from a locked %s without selecting it (https://github.com/Brevilabs/obsidian-copilot-private/issues/476)",
+      async (action) => {
+        const onChange = jest.fn();
+        render(
+          <ModelSelector
+            value="gpt-5|openai"
+            onChange={onChange}
+            models={[
+              model({}),
+              model({
+                name: "locked",
+                _needsLicense: true,
+                _disabledReason: "Copilot license required",
+              }),
+            ]}
+          />
+        );
+        fireEvent.keyDown(screen.getByRole("button"), { key: "Enter" });
+        const row = await screen.findByRole("menuitem", { name: /locked/ });
+        if (action === "row") fireEvent.click(row);
+        else if (action === "icon")
+          fireEvent.click(
+            within(row).getByText("Copilot license required").parentElement!.querySelector("svg")!
+          );
+        else {
+          act(() => row.focus());
+          fireEvent.keyDown(row, { key: action });
+        }
+        expect(window.open).toHaveBeenCalledTimes(1);
+        expect(window.open).toHaveBeenCalledWith(
+          "https://obsidiancopilot.com/pricing?utm_source=obsidian-copilot&utm_medium=model-picker-lock",
+          "_blank",
+          "noopener,noreferrer"
+        );
+        expect(onChange).not.toHaveBeenCalled();
+      }
+    );
 
     it("shows the cloud-egress warning on the collapsed trigger when the current model needs it", () => {
       const cloud = model({ _needsSelfHostWarning: true });
@@ -57,9 +103,9 @@ describe("ModelSelector", () => {
       render(<ModelSelector value="gpt-5|openai" onChange={jest.fn()} models={[locked]} />);
       fireEvent.keyDown(screen.getByRole("button"), { key: "Enter" });
 
-      expect(await screen.findByTestId("license-lock")).toBeTruthy();
+      expect(await screen.findByText("Copilot license required")).toBeTruthy();
       // The lock carries the reason; a per-row label would repeat it down the group.
-      expect(screen.queryByText("Copilot license required")).toBeNull();
+      expect(screen.getAllByText("Copilot license required")).toHaveLength(1);
     });
 
     it("renders a row's subtitle under its name and keeps it off the collapsed trigger", async () => {
@@ -82,10 +128,17 @@ describe("ModelSelector", () => {
 
     it("keeps the right-side reason for a row disabled for any other cause", async () => {
       const needsKey = model({ _disabledReason: "Add API key" });
-      render(<ModelSelector value="gpt-5|openai" onChange={jest.fn()} models={[needsKey]} />);
+      const onChange = jest.fn();
+      render(<ModelSelector value="gpt-5|openai" onChange={onChange} models={[needsKey]} />);
       fireEvent.keyDown(screen.getByRole("button"), { key: "Enter" });
 
       expect(await screen.findByText("Add API key")).toBeTruthy();
+      const row = screen.getByRole("menuitem");
+      fireEvent.click(row);
+      fireEvent.keyDown(row, { key: "Enter" });
+      expect(row.getAttribute("aria-disabled")).toBe("true");
+      expect(onChange).not.toHaveBeenCalled();
+      expect(window.open).not.toHaveBeenCalled();
     });
   });
 });

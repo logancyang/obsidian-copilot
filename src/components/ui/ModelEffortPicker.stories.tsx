@@ -50,3 +50,29 @@ export const NoEffortControl: StoryObj<Props> = {
     },
   },
 };
+
+/**
+ * Click a locked row or lock, or Tab to the row and press Enter, to open pricing
+ * with model-picker-lock attribution. Drafting another model or effort first
+ * must not commit that change when pricing opens. Reopen to check the selection.
+ */
+export const Unlicensed: StoryObj<Props> = {
+  args: {
+    override: {
+      ...ConcreteEffort.args.override,
+      models: [
+        {
+          name: "copilot-plus-flash",
+          displayName: "Copilot Plus Flash",
+          provider: "copilot-plus",
+          enabled: true,
+          _needsLicense: true,
+          _disabledReason: "Copilot license required",
+          _subtitle: "The default model: fastest responses and the most quota.",
+        },
+        ...ConcreteEffort.args.override.models,
+        { name: "local", displayName: "Local model", provider: "ollama", enabled: true },
+      ],
+    },
+  },
+};
