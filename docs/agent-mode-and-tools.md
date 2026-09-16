@@ -47,7 +47,7 @@ Claude models and billing come from your Claude Code account. Models added under
 
 The Codex backend uses `@agentclientprotocol/codex-acp`, which includes a compatible Codex CLI:
 
-Managed Codex downloads are pinned to `codex-acp` **1.10.0** in this Copilot release. Copilot uses the system `tar -xf` command to unpack the runtime on all supported desktop platforms:
+Managed Codex downloads are pinned to `codex-acp` **1.12.0** in this Copilot release. Copilot uses the system `tar -xf` command to unpack the runtime on all supported desktop platforms:
 
 | Platform | Download format | Extraction                                                         |
 | -------- | --------------- | ------------------------------------------------------------------ |
