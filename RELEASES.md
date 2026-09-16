@@ -10,6 +10,22 @@ Open **Copilot settings → Miyo**, choose **Remote server**, enter your server 
 
 Follow the [remote Miyo tutorial](https://docs.obsidiancopilot.com/miyo-remote-setup/) to set up a shared host through Tailscale. It covers the host and desktop-client requirements, the address to use on each device, and how to check your setup. ([#3241](https://github.com/logancyang/obsidian-copilot/pull/3241), @brevilabs-agent-bot)
 
+## Report issues without assembling attachments
+
+On desktop, open **Copilot settings → Advanced → Report an issue**, describe the problem, and choose which attachments to include. **Prepare report** packs them into one ZIP and shows what was included or could not be collected. ([#3238](https://github.com/logancyang/obsidian-copilot/pull/3238), [#3244](https://github.com/logancyang/obsidian-copilot/pull/3244), @Emt-lin, @logancyang)
+
+Review the contents before choosing **Upload & open issue**. The bundle is uploaded privately, and GitHub opens a prefilled issue with its report ID, ready for you to submit. ([#3238](https://github.com/logancyang/obsidian-copilot/pull/3238), @Emt-lin)
+
+![Describe an issue, choose attachments, and review the prepared report before uploading](https://github.com/user-attachments/assets/b15cc010-f69b-428e-a569-51b2c4911aa3)
+
+## Copilot Plus update
+
+The paid plan adds **GLM-5.3-Flash**, **DeepSeek V4.1 Flash**, and **MiniMax M3** to the model lineup. **MiniMax M2.7** is no longer available; GLM-5.2 and DeepSeek V4 Flash 0731 remain available alongside the additions. ([Model catalog](https://models.brevilabs.com/v1/models), [#3253](https://github.com/logancyang/obsidian-copilot/pull/3253), @zeroliu)
+
+The Plus model list now refreshes from the service in the background, so future lineup updates no longer require a plugin update. Your existing model enable/disable choices are preserved. ([#3253](https://github.com/logancyang/obsidian-copilot/pull/3253), @zeroliu)
+
+If your saved Agent default is no longer available and another enabled model has credentials, new chats use that model and tell you about the switch. You can also preview Plus models before signing in, with locked entries that link to plan details. ([#3254](https://github.com/logancyang/obsidian-copilot/pull/3254), [#3257](https://github.com/logancyang/obsidian-copilot/pull/3257), @zeroliu)
+
 ## 📝 Add selected text to Agent Chat
 
 Select a passage in your note, then ask Agent Chat to explain it, rewrite it, or help you develop the idea. Your selection appears as its own context badge, so you can see the excerpt you are asking about alongside the current note and remove either badge when you do not need it. ([#3228](https://github.com/logancyang/obsidian-copilot/pull/3228), [#3230](https://github.com/logancyang/obsidian-copilot/pull/3230), @zeroliu)
@@ -18,12 +34,13 @@ Select a passage in your note, then ask Agent Chat to explain it, rewrite it, or
 
 ## ✨ More improvements
 
-- On desktop, review the contents of a bug-report bundle before choosing to upload it and open the issue. ([#3238](https://github.com/logancyang/obsidian-copilot/pull/3238), [#3244](https://github.com/logancyang/obsidian-copilot/pull/3244), @Emt-lin, @logancyang)
+- Routine agent configuration changes offer **Reload** instead of restarting an open conversation automatically, letting a running turn finish first. Privacy changes still apply immediately. ([#3256](https://github.com/logancyang/obsidian-copilot/pull/3256), @zeroliu)
 - Get started with the new [Miyo setup guide](https://docs.obsidiancopilot.com/miyo-setup/) and [Relevant Notes guide](https://docs.obsidiancopilot.com/relevant-notes/). ([#3220](https://github.com/logancyang/obsidian-copilot/pull/3220), @zeroliu)
 - Clearer chat prompts and recovery messages make the next action easier to find. ([#3201](https://github.com/logancyang/obsidian-copilot/pull/3201), [#3188](https://github.com/logancyang/obsidian-copilot/pull/3188), [#3189](https://github.com/logancyang/obsidian-copilot/pull/3189), @brevilabs-agent-bot)
 
 ## 🛠️ Bug Fixes
 
+- Unchanged provider syncs no longer trigger an agent refresh, and unsent drafts survive backend restarts. ([#3252](https://github.com/logancyang/obsidian-copilot/pull/3252), @zeroliu)
 - Manually saved Agent Chats keep recording new turns when Autosave is off. ([#3226](https://github.com/logancyang/obsidian-copilot/pull/3226), @logancyang)
 - Relevant Notes remains available in chat when its separate panes are hidden. ([#3237](https://github.com/logancyang/obsidian-copilot/pull/3237), @brevilabs-agent-bot)
 
