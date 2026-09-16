@@ -12,12 +12,12 @@ const meta = {
     installState: {
       kind: "incompatible",
       source: "managed",
-      currentVersion: "1.15.0",
-      minVersion: "1.16.0",
-      message: "opencode v1.15.0 is not supported. Copilot requires opencode v1.16.0 or newer.",
+      currentVersion: "1.18.16",
+      minVersion: "1.18.31",
+      message: "opencode v1.18.16 is not supported. Copilot requires opencode v1.18.31 or newer.",
     },
     managedInstall: { kind: "idle" },
-    resolvedPath: "~/.obsidian-copilot/opencode/1.15.0/opencode",
+    resolvedPath: "~/.obsidian-copilot/opencode/1.18.16/opencode",
     onConfigure: () => {},
   },
   parameters: { gallery: { host: "settings-tab", layout: "padded" } },
@@ -36,11 +36,11 @@ export const OutdatedCodex: StoryObj<AgentBackendHeaderProps> = {
     installState: {
       kind: "incompatible",
       source: "managed",
-      currentVersion: "1.9.0",
-      minVersion: "1.10.0",
-      message: "Codex adapter 1.9.0 does not match this Copilot release (1.10.0).",
+      currentVersion: "1.10.0",
+      minVersion: "1.12.0",
+      message: "Codex adapter 1.10.0 does not match this Copilot release (1.12.0).",
     },
-    resolvedPath: "~/.obsidian-copilot/codex/1.9.0/codex-acp",
+    resolvedPath: "~/.obsidian-copilot/codex/1.10.0/codex-acp",
   },
 };
 export const Running: StoryObj<AgentBackendHeaderProps> = {

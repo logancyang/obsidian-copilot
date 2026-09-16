@@ -54,7 +54,7 @@ export const ManagedUpgradeRequired: StoryObj<AgentStatusCardProps> = {
   args: {
     summary: "opencode update required",
     tone: "warning",
-    message: "opencode v1.15.0 is not supported. Copilot requires opencode v1.16.0 or newer.",
+    message: "opencode v1.18.16 is not supported. Copilot requires opencode v1.18.31 or newer.",
     action: { label: "Configure opencode", onClick: () => undefined },
   },
 };
@@ -81,7 +81,7 @@ export const OutdatedCodex: StoryObj<AgentStatusCardProps> = {
   args: {
     summary: "Codex update required",
     tone: "warning",
-    message: "Codex adapter 1.9.0 does not match this Copilot release (1.10.0).",
+    message: "Codex adapter 1.10.0 does not match this Copilot release (1.12.0).",
     action: { label: "Configure Codex", onClick: () => undefined },
   },
 };
