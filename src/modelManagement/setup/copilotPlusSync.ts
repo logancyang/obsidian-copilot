@@ -120,7 +120,15 @@ async function refreshCachedLineup(
   const attempts = getSettings().copilotPlusCatalog.models.length === 0 ? COLD_START_ATTEMPTS : 1;
   let catalog: CopilotPlusCatalog | null = null;
   for (let attempt = 0; attempt < attempts && !catalog; attempt++) {
-    if (attempt > 0) await delay(COLD_START_BACKOFF_MS);
+    if (attempt > 0) {
+      await delay(COLD_START_BACKOFF_MS);
+      // A Plus state change during the backoff has already fired, so the next
+      // read's subscription would never see it: without this the abandoned
+      // sync starts another request and holds the caller's serialized queue
+      // for the whole deadline.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/476
+      if (!stillWanted()) return null;
+    }
     catalog = readCopilotPlusCatalog(await readWithin(fetchModels(), stillWanted));
     if (!catalog && !stillWanted()) return null;
   }

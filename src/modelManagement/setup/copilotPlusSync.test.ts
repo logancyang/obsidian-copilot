@@ -77,9 +77,15 @@ function flush(): Promise<void> {
 describe("copilotPlusSync", () => {
   beforeEach(() => {
     resetSettings();
-    // `resetSettings` deliberately preserves this cache in production, so a
-    // clean slate has to ask for one.
-    setSettings({ copilotPlusCatalog: { models: [], defaultEnabledIds: [] } });
+    // `resetSettings` deliberately preserves the Plus state and this cache in
+    // production, so a clean slate has to ask for one. Cancellation is read
+    // from the store, not from the arguments, so an unlicensed case left on a
+    // previous case's signed-in store would never exercise a signed-out sync.
+    setSettings({
+      isPaidUser: false,
+      plusLicenseKey: "",
+      copilotPlusCatalog: { models: [], defaultEnabledIds: [] },
+    });
   });
 
   describe("plusSyncNeeded()", () => {
@@ -286,6 +292,31 @@ describe("copilotPlusSync", () => {
       await flush();
 
       expect(getSettings().copilotPlusCatalog.models).toEqual([]);
+    });
+
+    it("starts no retry when the user signs in during the unlicensed backoff (https://github.com/Brevilabs/obsidian-copilot-private/issues/476)", async () => {
+      // The sign-in lands before the retry's read can subscribe to it, so an
+      // unchecked retry issues another request and holds the caller's
+      // serialized sync queue for the whole deadline, with the licensed
+      // reconcile waiting behind it.
+      jest.useFakeTimers();
+      try {
+        const { api } = makeApi();
+        const fetchModels = jest.fn(async () => null);
+
+        const sync = syncCopilotPlusProvider(api, false, "", fetchModels);
+        await jest.advanceTimersByTimeAsync(0);
+        expect(fetchModels).toHaveBeenCalledTimes(1);
+
+        signedIn();
+        // Only the backoff: the retry must be abandoned, not deadline-expired.
+        await jest.advanceTimersByTimeAsync(2_000);
+
+        expect(fetchModels).toHaveBeenCalledTimes(1);
+        await sync;
+      } finally {
+        jest.useRealTimers();
+      }
     });
 
     it("retries a failed read when there is no cached lineup to fall back on (https://github.com/Brevilabs/obsidian-copilot-private/issues/319)", async () => {
