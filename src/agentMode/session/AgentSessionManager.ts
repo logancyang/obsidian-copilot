@@ -2392,20 +2392,14 @@ export class AgentSessionManager {
   /**
    * Record that `backendId`'s spawn-time configuration changed.
    *
-   * A running process keeps the configuration it was spawned with, so the
-   * change only lands on a restart — and a restart closes every session on that
-   * backend. The triggers are routine and often fire from outside the chat the
-   * user is looking at: an agent writing a skill file, a BYOK key saved, a
-   * model enabled. Restarting on the spot swaps the conversation out
-   * mid-thought, so the change is held while a session exists to lose, and the
-   * chat offers it as a Reload the user takes when convenient.
-   *
-   * With no session on the backend the restart costs the user nothing, so it
-   * runs straight away. That branch also covers the warm probe, which the
-   * preloader owns and no session has adopted.
-   *
-   * Callers that must apply *now* — a tightened privacy boundary, a binary that
-   * is gone — call `restartBackend` directly.
+   * A running process keeps the config it was spawned with, so the change only
+   * lands on a restart, which closes every session on the backend. The triggers
+   * are routine and often fire from outside the chat the user is looking at (an
+   * agent writing a skill file, a BYOK key saved), so the change is held while a
+   * session exists to lose and the chat offers it as a Reload. With no session
+   * the restart costs nothing and runs straight away; that also covers the warm
+   * probe. Callers that must apply now — a tightened privacy boundary, a missing
+   * binary — call `restartBackend` directly.
    * https://github.com/Brevilabs/obsidian-copilot-private/issues/475
    *
    * @param backendId Backend whose spawn-time configuration is now stale.
@@ -3820,16 +3814,12 @@ export class AgentSessionManager {
    * Put the restarted backend's replaced tab back the way the user left it:
    * same conversation, same composer, same title.
    *
-   * A restart kills the process, not the conversation — backends keep their
-   * sessions in their own on-disk store, which is how Recent Chats reopens one
-   * after a plugin reload. Resuming through that same path means the user gets
-   * their transcript and the agent's context back, instead of a blank chat
-   * where their work used to be. That matters most for the Reload the chat
-   * offers: an action the user takes deliberately must not cost them the
-   * conversation they were having.
-   *
-   * Falls back to a fresh session when there is nothing to resume (the chat
-   * never reached the backend) or the backend cannot replay it.
+   * A restart kills the process, not the conversation: backends keep their
+   * sessions in their own on-disk store (the same path Recent Chats reopens),
+   * so resuming through it returns the transcript and the agent's context
+   * rather than a blank chat. Falls back to a fresh session when there is
+   * nothing to resume (the chat never reached the backend) or the backend
+   * cannot replay it.
    * https://github.com/Brevilabs/obsidian-copilot-private/issues/475
    *
    * @param chatInputId Composer of the replaced tab, so its draft survives.
