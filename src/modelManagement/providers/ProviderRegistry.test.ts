@@ -366,7 +366,7 @@ describe("ProviderRegistry", () => {
     });
 
     describe("subscribe()", () => {
-      it("fires on add/update/remove and on a setApiKey that changes the key", async () => {
+      it("identifies the changed provider on add/update/remove and key changes (https://github.com/Brevilabs/obsidian-copilot-private/issues/475)", async () => {
         const listener = jest.fn();
         const unsubscribe = registry.subscribe(listener);
 
@@ -396,6 +396,7 @@ describe("ProviderRegistry", () => {
 
         await registry.remove(id);
         expect(listener).toHaveBeenCalledTimes(6);
+        expect(listener.mock.calls).toEqual(Array.from({ length: 6 }, () => [id]));
 
         unsubscribe();
         await registry.add({

@@ -76,24 +76,25 @@ export class ProviderRegistry {
   // `subscribeToSettingsChange`, but `setApiKey` only writes settings when
   // the keychain id rotates — a same-id key change is invisible there. A
   // dedicated emitter keeps both signals on one channel for consumers.
-  readonly #listeners = new Set<() => void>();
+  readonly #listeners = new Set<(providerId: string) => void>();
 
   constructor(app: App, adapters: ProviderAdapterRegistry) {
     this.#app = app;
     this.#adapters = adapters;
   }
 
-  /** Subscribe to provider/key mutations. Returns unsubscribe. Fires after
-   *  the change has been persisted (settings + keychain). */
-  subscribe(listener: () => void): () => void {
+  /** Subscribe to provider/key mutations after persistence, including same-ID key rotations.
+   * @param listener - Receives the affected provider ID, including after removal.
+   */
+  subscribe(listener: (providerId: string) => void): () => void {
     this.#listeners.add(listener);
     return () => this.#listeners.delete(listener);
   }
 
-  #emit(): void {
+  #emit(providerId: string): void {
     for (const listener of [...this.#listeners]) {
       try {
-        listener();
+        listener(providerId);
       } catch (err) {
         logError("[modelManagement] ProviderRegistry listener threw", err);
       }
@@ -150,7 +151,7 @@ export class ProviderRegistry {
     setSettings((cur) => ({
       providers: { ...cur.providers, [providerId]: row },
     }));
-    this.#emit();
+    this.#emit(providerId);
     return providerId;
   }
 
@@ -204,7 +205,7 @@ export class ProviderRegistry {
     setSettings((cur) => ({
       providers: { ...cur.providers, [providerId]: next },
     }));
-    if (affectsAgentProviderConfig) this.#emit();
+    if (affectsAgentProviderConfig) this.#emit(providerId);
   }
 
   /** Internal: writes `apiKeyKeychainId` on the row. Bypasses the public
@@ -247,7 +248,7 @@ export class ProviderRegistry {
       delete next[providerId];
       return { providers: next };
     });
-    this.#emit();
+    this.#emit(providerId);
   }
 
   // -------------------------------------------------------------------------
@@ -297,7 +298,7 @@ export class ProviderRegistry {
       this.#setApiKeyKeychainId(providerId, keychainId);
     }
     keychain.setSecretById(keychainId, apiKey);
-    this.#emit();
+    this.#emit(providerId);
   }
 
   /** Drops the keychain entry and clears `apiKeyKeychainId` on the row. */
@@ -311,7 +312,7 @@ export class ProviderRegistry {
         logError(`[modelManagement] ProviderRegistry.clearApiKey: failed to delete keychain`, err);
       }
       this.#setApiKeyKeychainId(providerId, null);
-      this.#emit();
+      this.#emit(providerId);
     }
   }
 

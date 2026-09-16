@@ -357,6 +357,14 @@ export class AgentSessionManager {
   >();
   private readonly restartingBackends = new Set<BackendId>();
   /**
+   * Backends running with spawn config the user has since changed, mapped to
+   * the accumulated reasons. Applying the change means restarting, which closes
+   * every session on that backend, so it waits for the user's word rather than
+   * taking the open chat away mid-thought.
+   * https://github.com/Brevilabs/obsidian-copilot-private/issues/475
+   */
+  private readonly heldConfigChanges = new Map<BackendId, string>();
+  /**
    * Chat inputs whose session is mid-replacement during a backend restart.
    * Composer drafts are keyed by chat input and pruned against the live set,
    * and the restart closes the old session before its replacement (which
@@ -2371,10 +2379,82 @@ export class AgentSessionManager {
         immediate: prev?.immediate ?? false,
       });
       logInfo(`[AgentMode] deferred ${backendId} backend restart: ${reason}`);
+      // The chat's Reload action reports a queued restart as in progress, so
+      // publish the queue entry rather than leaving the button looking inert.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/475
+      this.notify();
       return true;
     }
     await this.restartBackendNow(backendId, reason, options?.deferWhileBusy === false);
     return true;
+  }
+
+  /**
+   * Record that `backendId`'s spawn-time configuration changed.
+   *
+   * A running process keeps the config it was spawned with, so the change only
+   * lands on a restart, which closes every session on the backend. The triggers
+   * are routine and often fire from outside the chat the user is looking at (an
+   * agent writing a skill file, a BYOK key saved), so the change is held while a
+   * session exists to lose and the chat offers it as a Reload. With no session
+   * the restart costs nothing and runs straight away; that also covers the warm
+   * probe. Callers that must apply now — a tightened privacy boundary, a missing
+   * binary — call `restartBackend` directly.
+   * https://github.com/Brevilabs/obsidian-copilot-private/issues/475
+   *
+   * @param backendId Backend whose spawn-time configuration is now stale.
+   * @param reason Diagnostic reason, carried through to the eventual restart.
+   */
+  async noteSpawnConfigChanged(backendId: BackendId, reason: string): Promise<void> {
+    if (this.disposed) return;
+    // A session being created right now is about to own this backend, so wait
+    // for it before deciding whether anything would be disturbed.
+    const inflight = this.starting.get(backendId);
+    if (inflight) await inflight.catch(() => undefined);
+    if (this.disposed) return;
+    if (!this.hasSessionOn(backendId)) {
+      await this.restartBackend(backendId, reason);
+      return;
+    }
+    const prev = this.heldConfigChanges.get(backendId);
+    this.heldConfigChanges.set(backendId, prev ? `${prev}; ${reason}` : reason);
+    logInfo(`[AgentMode] holding ${backendId} backend restart: ${reason}`);
+    // A second change to an already-held backend says nothing new on screen.
+    if (prev === undefined) this.notify();
+  }
+
+  /** Whether `backendId` is running on configuration the user has since changed. */
+  hasHeldConfigChange(backendId: BackendId): boolean {
+    return this.heldConfigChanges.has(backendId);
+  }
+
+  /**
+   * Whether a restart of `backendId` is running or queued behind a turn. The
+   * chat's Reload action reads this to report progress: a reload taken during
+   * a turn only lands when that turn ends, and an action that looked inert
+   * until then would read as broken.
+   * https://github.com/Brevilabs/obsidian-copilot-private/issues/475
+   */
+  isBackendRestartPending(backendId: BackendId): boolean {
+    return this.restartingBackends.has(backendId) || this.pendingBackendRestarts.has(backendId);
+  }
+
+  /**
+   * Apply the configuration change held for `backendId` — the chat's Reload
+   * action. This performs the restart `noteSpawnConfigChanged` declined to
+   * perform on its own, replacing the active session. A busy backend still
+   * finishes its turn first, so the banner stays up until the restart lands.
+   * https://github.com/Brevilabs/obsidian-copilot-private/issues/475
+   */
+  async applyHeldConfigChange(backendId: BackendId): Promise<void> {
+    const reason = this.heldConfigChanges.get(backendId);
+    if (reason === undefined) return;
+    await this.restartBackend(backendId, reason);
+  }
+
+  /** Whether any pooled session runs on `backendId`. */
+  private hasSessionOn(backendId: BackendId): boolean {
+    return Array.from(this.sessions.values()).some((s) => s.backendId === backendId);
   }
 
   /**
@@ -3120,7 +3200,8 @@ export class AgentSessionManager {
   private async tryResumeSessionFromHistory(
     backendId: BackendId,
     sessionId: SessionId,
-    projectId: ProjectScopeId
+    projectId: ProjectScopeId,
+    chatInputId?: string
   ): Promise<AgentSession | null> {
     const existing = this.findLiveSession(backendId, sessionId);
     if (existing) return existing;
@@ -3129,7 +3210,12 @@ export class AgentSessionManager {
     const inFlight = this.resumedSessionPromiseById.get(key);
     if (inFlight) return inFlight;
 
-    const resume = this.resumeSessionFromHistory(backendId, sessionId, projectId).finally(() => {
+    const resume = this.resumeSessionFromHistory(
+      backendId,
+      sessionId,
+      projectId,
+      chatInputId
+    ).finally(() => {
       if (this.resumedSessionPromiseById.get(key) === resume) {
         this.resumedSessionPromiseById.delete(key);
       }
@@ -3138,10 +3224,16 @@ export class AgentSessionManager {
     return resume;
   }
 
+  /**
+   * @param chatInputId Composer the resumed session should keep owning. Set
+   *   only when an on-screen chat is being rebuilt in place (a backend
+   *   restart); a resume opened from history mints its own.
+   */
   private async resumeSessionFromHistory(
     backendId: BackendId,
     sessionId: SessionId,
-    projectId: ProjectScopeId
+    projectId: ProjectScopeId,
+    chatInputId?: string
   ): Promise<AgentSession | null> {
     // Same instruction ensure as `createSession` — a resumed session still derives its cwd
     // from the scope, so the backend needs the file present before cwd is read.
@@ -3249,6 +3341,7 @@ export class AgentSessionManager {
       backend,
       backendSessionId: resumeResult.sessionId,
       internalId,
+      chatInputId,
       backendId,
       projectId,
       initialState: resumeResult.state,
@@ -3644,7 +3737,12 @@ export class AgentSessionManager {
       // are now unusable (their backend session ids are dead) — but other
       // backends keep running. Preserving message history across crashes
       // is M5.
-      if (this.backends.get(backendId) === proc) this.backends.delete(backendId);
+      if (this.backends.get(backendId) === proc) {
+        this.backends.delete(backendId);
+        // Retry spawns from current settings; a dead generation has no config left to apply.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/475
+        this.heldConfigChanges.delete(backendId);
+      }
       const dead = Array.from(this.sessions.values()).filter((s) => s.backendId === backendId);
       if (dead.length === 0) return;
       for (const s of dead) {
@@ -3717,7 +3815,56 @@ export class AgentSessionManager {
     }
   }
 
-  /** Immediately tear down `backendId` and replace the active affected tab. */
+  /**
+   * Put the restarted backend's replaced tab back the way the user left it:
+   * same conversation, same composer, same title.
+   *
+   * A restart kills the process, not the conversation: backends keep their
+   * sessions in their own on-disk store (the same path Recent Chats reopens),
+   * so resuming through it returns the transcript and the agent's context
+   * rather than a blank chat. Falls back to a fresh session when there is
+   * nothing to resume (the chat never reached the backend) or the backend
+   * cannot replay it.
+   * https://github.com/Brevilabs/obsidian-copilot-private/issues/475
+   *
+   * @param backendId Agent whose process was restarted.
+   * @param projectId Scope the replaced tab belongs to.
+   * @param chatInputId Composer of the replaced tab, so its draft survives.
+   * @param resumableSessionId Backend session id the replaced tab was bound to.
+   * @param label Replaced tab's title, reapplied when the resume comes back untitled.
+   * @param labelSource Whether that title was the user's or the agent's.
+   */
+  private async rebuildReplacedSession(
+    backendId: BackendId,
+    projectId: ProjectScopeId,
+    chatInputId: string | undefined,
+    resumableSessionId: SessionId | undefined,
+    label: string | null,
+    labelSource: "user" | "agent" | null
+  ): Promise<AgentSession> {
+    if (resumableSessionId) {
+      const resumed = await this.tryResumeSessionFromHistory(
+        backendId,
+        resumableSessionId,
+        projectId,
+        chatInputId
+      ).catch((e) => {
+        logWarn(`[AgentMode] resume after ${backendId} restart failed`, e);
+        return null;
+      });
+      if (resumed) {
+        // Claude returns no transcript from `resumeSession`; ACP replays its
+        // own during `loadSession`, so this is a no-op there.
+        await this.hydrateResumedTranscript(resumed, backendId, resumableSessionId);
+        if (label && !resumed.getLabel()) resumed.restoreLabel(label, labelSource ?? "agent");
+        this.setActiveSession(resumed.internalId);
+        return resumed;
+      }
+    }
+    return this.createSession(backendId, projectId, undefined, chatInputId);
+  }
+
+  /** Immediately tear down `backendId` and rebuild its tabs with their composers. */
   private async restartBackendNow(
     backendId: BackendId,
     reason: string,
@@ -3742,27 +3889,36 @@ export class AgentSessionManager {
     const proc = this.backends.get(backendId);
     if (!proc) return;
     this.restartingBackends.add(backendId);
+    // Every restart rebuilds spawn config from current settings, so nothing is
+    // held once one runs — including restarts this hold never asked for, such
+    // as a tightened privacy boundary or a binary that changed underneath.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/475
+    this.heldConfigChanges.delete(backendId);
     logInfo(`[AgentMode] restarting ${backendId} backend: ${reason}`);
     // Declared out here so the `finally` can release it however the restart ends.
-    let retainedChatInputId: string | undefined;
+    const retainedChatInputIds: string[] = [];
     try {
       const affected = Array.from(this.sessions.values()).filter((s) => s.backendId === backendId);
-      // Don't respawn a replacement for a backend that is no longer installed
-      // (e.g. its custom path was just cleared) — the spawn would fail. The
-      // affected sessions are still closed; the tab falls back to its
-      // needs-setup state. `restartBackendNow` is otherwise only reached for an
-      // installed backend, so this is a no-op for the normal restart path.
-      const replacedSession = affected.find((s) => s.internalId === this.activeSessionId);
-      const shouldCreateReplacement =
-        this.isBackendInstalled(backendId) && affected.length > 0 && replacedSession !== undefined;
-      // The replacement must inherit the REPLACED session's scope, not the
-      // current active scope — captured before the close loop repoints `active`.
-      const replacementProjectId = replacedSession?.projectId ?? this.activeProjectId;
-      // Claim the chat input before closing its session so per-chat-input UI
-      // state is never pruned in the window where no session owns it.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/473
-      retainedChatInputId = shouldCreateReplacement ? replacedSession?.chatInputId : undefined;
-      if (retainedChatInputId) this.retainedChatInputIds.add(retainedChatInputId);
+      const activeSessionId = this.activeSessionId;
+      const activeProjectId = this.activeProjectId;
+      // Every affected composer must stay owned across the gap, including tabs
+      // outside the active scope, or the draft store prunes their unsent text.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/475
+      const replacements = this.isBackendInstalled(backendId)
+        ? affected.map((session) => ({
+            internalId: session.internalId,
+            projectId: session.projectId,
+            chatInputId: session.chatInputId,
+            resumableSessionId: session.getBackendSessionId() ?? undefined,
+            label: session.getLabel(),
+            labelSource: session.getLabelSource(),
+            detached: this.detachedFromTabIds.has(session.internalId),
+          }))
+        : [];
+      for (const replacement of replacements) {
+        retainedChatInputIds.push(replacement.chatInputId);
+        this.retainedChatInputIds.add(replacement.chatInputId);
+      }
       for (const session of affected) {
         await this.closeSession(session.internalId);
       }
@@ -3775,24 +3931,35 @@ export class AgentSessionManager {
       if (!this.disposed && this.isBackendInstalled(backendId)) {
         // Spawn config (enabled models, keys, prompt, skills) is rebuilt on
         // every restart, and the picker's catalog and per-model effort catalog
-        // are both probe-owned, so always re-probe. When a tab on this backend
-        // is active, await the probe and let the replacement adopt its warm
-        // proc: one spawn, and the per-model switch flicker stays on the
-        // throwaway probe session instead of the user's.
+        // are both probe-owned, so always re-probe. Rebuilt tabs adopt the warm
+        // process so model-discovery switches stay on the throwaway probe.
         const probe = this.preloader.preload(backendId);
         this.registerPreload(backendId, probe);
-        if (shouldCreateReplacement && !this.disposed) {
+        if (replacements.length > 0 && !this.disposed) {
           await probe;
-          // The replacement inherits the REPLACED session's scope (captured
-          // above as `replacementProjectId`) and its `chatInputId`, so the
-          // composer draft keyed by that id survives the restart.
-          // https://github.com/Brevilabs/obsidian-copilot-private/issues/473
-          await this.createSession(backendId, replacementProjectId, undefined, retainedChatInputId);
+          let selectedId = activeSessionId;
+          for (const replacement of replacements) {
+            const rebuilt = await this.rebuildReplacedSession(
+              backendId,
+              replacement.projectId,
+              replacement.chatInputId,
+              replacement.resumableSessionId,
+              replacement.label,
+              replacement.labelSource
+            );
+            if (replacement.detached) this.detachedFromTabIds.add(rebuilt.internalId);
+            if (replacement.internalId === activeSessionId) selectedId = rebuilt.internalId;
+          }
+          if (selectedId) this.setActiveSession(selectedId);
+          else {
+            this.activeSessionId = null;
+            this.activeProjectId = activeProjectId;
+          }
         }
       }
     } finally {
       this.restartingBackends.delete(backendId);
-      if (retainedChatInputId) this.retainedChatInputIds.delete(retainedChatInputId);
+      for (const id of retainedChatInputIds) this.retainedChatInputIds.delete(id);
       // Published after the release so a restart that threw still lets the
       // draft store collect an id no session claimed.
       this.notify();
