@@ -64,7 +64,7 @@ export type ModelSelectorEntry = CustomModel & {
    * `true` for a Copilot model the user has no license to run, shown so the
    * lineup is discoverable before they buy. The row renders a lock icon +
    * tooltip beside the name and suppresses the right-side `_disabledReason`
-   * label, which would otherwise repeat the same sentence down the whole group.
+   * label, which would otherwise print that same sentence twice.
    * Activation opens pricing rather than selecting the unavailable model.
    */
   _needsLicense?: boolean;
@@ -144,8 +144,8 @@ export function ModelSelector({
             ? checkModelApiKey(model, apiKeySettings).hasApiKey
             : true;
           const itemDisabled = Boolean(disabledReason) || !hasApiKey;
-          // A locked Copilot row says why through its lock icon; repeating the
-          // reason per row would print the same sentence down the whole group.
+          // A locked Copilot row says why through its lock icon, so the
+          // right-side label would only print that sentence twice.
           const rightLabel = model._needsLicense
             ? null
             : (disabledReason ?? (!hasApiKey ? "Needs API key" : null));

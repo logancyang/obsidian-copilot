@@ -233,8 +233,8 @@ export function ModelEffortPicker({ override, className }: ModelEffortPickerProp
             const key = getModelKeyFromModel(entry);
             const disabledReason = entry._disabledReason;
             const itemDisabled = Boolean(disabledReason);
-            // A locked Copilot row says why through its lock icon; repeating the
-            // reason per row would print the same sentence down the whole group.
+            // A locked Copilot row says why through its lock icon, so the
+            // right-side label would only print that sentence twice.
             const rightLabel = entry._needsLicense ? null : (disabledReason ?? null);
             const isHighlight = key === highlightKey;
             const isActive = key === draftModelKey;

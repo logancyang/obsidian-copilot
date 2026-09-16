@@ -44,13 +44,12 @@ describe("lockedCopilotEntries", () => {
   });
 
   describe("lockedCopilotEntries()", () => {
-    it("previews exactly the models a license switches on, in lineup order", () => {
-      const previewed = lockedCopilotEntries(CATALOG).map((entry) => entry.name);
-
-      expect(previewed).toEqual(["copilot-plus-flash", "glm-5.2"]);
-      // Narrowing to that subset is the point: a full lineup would push the
-      // user's own models past the fold of a 288px picker.
-      expect(previewed.length).toBeLessThan(CATALOG.models.length);
+    it("previews only the default Copilot model, so the offer costs one picker row", () => {
+      // Every extra row pushes the checkmark on the user's own model toward the
+      // fold of a 288px picker, and one row makes the offer just as well.
+      expect(lockedCopilotEntries(CATALOG).map((entry) => entry.name)).toEqual([
+        "copilot-plus-flash",
+      ]);
     });
 
     it("advertises nothing before the first lineup has been cached (https://github.com/Brevilabs/obsidian-copilot-private/issues/319)", () => {
@@ -59,47 +58,51 @@ describe("lockedCopilotEntries", () => {
       expect(lockedCopilotEntries(EMPTY_CATALOG)).toEqual([]);
     });
 
-    it("follows the cached lineup, so a withdrawn model stops being advertised (https://github.com/Brevilabs/obsidian-copilot-private/issues/319)", () => {
+    it("falls back to the first model a license switches on when the lineup no longer carries the default (https://github.com/Brevilabs/obsidian-copilot-private/issues/319)", () => {
       const withdrawn: CopilotSettings["copilotPlusCatalog"] = {
-        models: CATALOG.models.filter((model) => model.id !== "glm-5.2"),
+        models: CATALOG.models.filter((model) => model.id !== "copilot-plus-flash"),
         defaultEnabledIds: CATALOG.defaultEnabledIds,
       };
 
-      expect(lockedCopilotEntries(withdrawn).map((entry) => entry.name)).toEqual([
-        "copilot-plus-flash",
-      ]);
+      expect(lockedCopilotEntries(withdrawn).map((entry) => entry.name)).toEqual(["glm-5.2"]);
     });
 
-    it("marks every row as needing a license and as non-selectable", () => {
-      const entries = lockedCopilotEntries(CATALOG);
+    it("never previews a model a license leaves switched off", () => {
+      const noneEnabled: CopilotSettings["copilotPlusCatalog"] = {
+        models: CATALOG.models,
+        defaultEnabledIds: [],
+      };
 
-      expect(entries.length).toBeGreaterThan(0);
-      for (const entry of entries) {
-        expect(entry._needsLicense).toBe(true);
-        // `_disabledReason` is what actually disables the row; the lock explains it.
-        expect(entry._disabledReason).toBe("Copilot license required");
-        expect(entry.enabled).toBe(true);
-      }
+      expect(lockedCopilotEntries(noneEnabled)).toEqual([]);
     });
 
-    it("carries each model's display name and description so the row says what it is for", () => {
-      const flash = lockedCopilotEntries(CATALOG)[0];
+    it("marks the row as needing a license and as non-selectable", () => {
+      const [row] = lockedCopilotEntries(CATALOG);
 
-      expect(flash.displayName).toBe("Copilot Plus Flash");
-      expect(flash._subtitle).toBe("The default.");
+      expect(row._needsLicense).toBe(true);
+      // `_disabledReason` is what actually disables the row; the lock explains it.
+      expect(row._disabledReason).toBe("Copilot license required");
+      expect(row.enabled).toBe(true);
     });
 
-    it("files rows under a group and backend when one is given, and leaves them flat otherwise", () => {
-      const grouped = lockedCopilotEntries(CATALOG, {
+    it("carries the model's display name and description so the row says what it is for", () => {
+      const [row] = lockedCopilotEntries(CATALOG);
+
+      expect(row.displayName).toBe("Copilot Plus Flash");
+      expect(row._subtitle).toBe("The default.");
+    });
+
+    it("files the row under a group and backend when one is given, and leaves it flat otherwise", () => {
+      const [grouped] = lockedCopilotEntries(CATALOG, {
         group: "OpenCode",
         backendId: "opencode",
       });
-      const flat = lockedCopilotEntries(CATALOG);
+      const [flat] = lockedCopilotEntries(CATALOG);
 
-      expect(grouped.every((entry) => entry._group === "OpenCode")).toBe(true);
-      expect(grouped.every((entry) => entry._backendId === "opencode")).toBe(true);
-      expect(flat.every((entry) => entry._group === undefined)).toBe(true);
-      expect(flat.every((entry) => entry._backendId === undefined)).toBe(true);
+      expect(grouped._group).toBe("OpenCode");
+      expect(grouped._backendId).toBe("opencode");
+      expect(flat._group).toBeUndefined();
+      expect(flat._backendId).toBeUndefined();
     });
   });
 });
