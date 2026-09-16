@@ -120,7 +120,15 @@ async function refreshCachedLineup(
   const attempts = getSettings().copilotPlusCatalog.models.length === 0 ? COLD_START_ATTEMPTS : 1;
   let catalog: CopilotPlusCatalog | null = null;
   for (let attempt = 0; attempt < attempts && !catalog; attempt++) {
-    if (attempt > 0) await delay(COLD_START_BACKOFF_MS);
+    if (attempt > 0) {
+      await delay(COLD_START_BACKOFF_MS);
+      // A Plus state change during the backoff has already fired, so the next
+      // read's subscription would never see it: without this the abandoned
+      // sync starts another request and holds the caller's serialized queue
+      // for the whole deadline.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/476
+      if (!stillWanted()) return null;
+    }
     catalog = readCopilotPlusCatalog(await readWithin(fetchModels(), stillWanted));
     if (!catalog && !stillWanted()) return null;
   }
@@ -147,8 +155,8 @@ async function refreshCachedLineup(
  * Register or unregister the Plus provider to match Plus state, reconciling its
  * models against the published lineup. Best-effort: a failure is logged, not
  * thrown, since this runs as background reconciliation off a settings change.
- * The endpoint read happens only on the signed-in path, so sign-out never
- * waits on the network.
+ * Both paths refresh the cached lineup, and the signed-out one removes the
+ * provider first, so revoking access never waits on the network.
  *
  * `licenseKey` is already hydrated from Obsidian Keychain by the settings
  * persistence boundary.
@@ -167,6 +175,18 @@ export async function syncCopilotPlusProvider(
   try {
     if (!isPaidUser || !licenseKey) {
       await api.setup.copilotPlus.unregisterPlusProvider();
+      // The locked "Copilot license required" rows render from the same cache,
+      // so an install that never signs in has to read the (public) endpoint
+      // itself or it never learns the Plus models exist. Removal above is
+      // already done, so nothing here delays a sign-out, and the read abandons
+      // itself the moment a sign-in makes the licensed sync the authority.
+      // The cold-start retry carries over because it fires only on an empty
+      // cache, which on this path is exactly the install with no preview.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/476
+      await refreshCachedLineup(fetchModels, () => {
+        const now = getSettings();
+        return !now.isPaidUser || !now.plusLicenseKey;
+      });
       return;
     }
     const plusStateUnchanged = (): boolean => {

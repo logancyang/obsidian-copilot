@@ -91,7 +91,9 @@ export const Empty: StoryObj<ModelEnableListProps> = {
 /**
  * No license: the Copilot group is synthesized rather than absent, in the same
  * highlighted first position a licensed user's group occupies. Every row carries
- * a lock and a disabled toggle — the group is an advertisement, not a control.
+ * a lock and an inert toggle indicator. Click anywhere on a row, including the
+ * lock or toggle area, or Tab to it and press Enter to open pricing with
+ * model-settings-lock attribution. No model becomes enabled.
  */
 export const LockedCopilotCatalog: StoryObj<ModelEnableListProps> = {
   args: {

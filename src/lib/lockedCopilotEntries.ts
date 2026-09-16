@@ -1,6 +1,7 @@
 import type { ModelSelectorEntry } from "@/components/ui/ModelSelector";
 import { ChatModelProviders } from "@/constants";
 import type { ModelInfo } from "@/modelManagement";
+import { DEFAULT_COPILOT_PLUS_CHAT_MODEL } from "@/plusUtils";
 import type { CopilotSettings } from "@/settings/model";
 
 /** See AGENTS.md → "Referential stability". */
@@ -9,22 +10,25 @@ const EMPTY_ENTRIES: readonly ModelSelectorEntry[] = Object.freeze([]);
 const LICENSE_REQUIRED = "Copilot license required";
 
 /**
- * The lineup previewed to a user without a license: exactly the models a
- * license switches on, so the preview and the outcome match — activate, and
- * these rows lose their locks in place rather than being replaced by a
- * different set.
+ * The one model previewed to a user without a license: the model a license
+ * would land them on, so the preview and the outcome match — activate, and this
+ * row loses its lock in place rather than being replaced by a different one.
+ * Falls back to whatever a license switches on first when the lineup no longer
+ * carries the default, since an offer naming some model beats no offer.
  *
- * Narrowed to that subset because the picker is 288px tall: every extra row
- * pushes the checkmark on the user's current model closer to the fold. Empty
- * before the first successful catalog fetch, which renders as no preview
- * rather than a stale one.
+ * A single row because the picker is 288px tall: every extra one pushes the
+ * checkmark on the user's current model closer to the fold, and one row states
+ * the offer as well as a list does. Undefined before the first successful
+ * catalog fetch, which renders as no preview rather than a stale one.
  * https://github.com/Brevilabs/obsidian-copilot-private/issues/319
  *
  * @param catalog - Caller-owned cached lineup, from `settings.copilotPlusCatalog`.
  */
-function previewedModels(catalog: CopilotSettings["copilotPlusCatalog"]): readonly ModelInfo[] {
+function previewedModel(catalog: CopilotSettings["copilotPlusCatalog"]): ModelInfo | undefined {
   const defaultEnabled = new Set(catalog.defaultEnabledIds);
-  return catalog.models.filter((model) => defaultEnabled.has(model.id));
+  const switchedOn = catalog.models.filter((model) => defaultEnabled.has(model.id));
+  const defaultId = String(DEFAULT_COPILOT_PLUS_CHAT_MODEL);
+  return switchedOn.find((model) => model.id === defaultId) ?? switchedOn[0];
 }
 
 /**
@@ -47,41 +51,45 @@ export function shouldPreviewCopilotModels(providers: CopilotSettings["providers
 }
 
 /**
- * Non-selectable rows advertising the Copilot models a license would unlock.
+ * The non-selectable row advertising a Copilot model a license would unlock,
+ * as a list so a caller can splice it in and an uncached lineup contributes
+ * nothing.
  *
- * These exist only for the duration of a render — they are never `Provider` or
- * `ConfiguredModel` rows, so nothing can select, enroll, or default to one, and
- * a licensed user never sees them (the real models are there instead). That
+ * It exists only for the duration of a render — it is never a `Provider` or
+ * `ConfiguredModel` row, so nothing can select, enroll, or default to it, and a
+ * licensed user never sees it (the real models are there instead). That
  * separation is the point: without a license the provider is unregistered, so a
  * picker built from settings alone has nothing Copilot to show and the user has
  * no way to learn the models exist.
  *
  * @param catalog - Caller-owned cached Plus lineup, from
  *   `settings.copilotPlusCatalog`. Passed in rather than read here so the
- *   rows re-render when a fresh lineup lands.
- * @param opts.group - Section header to file the rows under, for pickers that
+ *   row re-renders when a fresh lineup lands.
+ * @param opts.group - Section header to file the row under, for pickers that
  *   group by agent. Omit for a flat picker.
- * @param opts.backendId - Backend the rows belong to, which keeps their picker
- *   keys distinct when several agents each preview the same model.
+ * @param opts.backendId - Backend the row belongs to, which keeps its picker
+ *   key distinct when several agents each preview the same model.
  */
 export function lockedCopilotEntries(
   catalog: CopilotSettings["copilotPlusCatalog"],
   opts: { group?: string; backendId?: string } = {}
 ): readonly ModelSelectorEntry[] {
-  const previewed = previewedModels(catalog);
-  if (previewed.length === 0) return EMPTY_ENTRIES;
-  return previewed.map((model) => ({
-    name: model.id,
-    provider: ChatModelProviders.COPILOT_PLUS,
-    displayName: model.displayName || model.id,
-    enabled: true,
-    isBuiltIn: false,
-    // `_disabledReason` is what disables the row; the lock icon is what explains
-    // it, so the same sentence serves as the native title fallback.
-    _disabledReason: LICENSE_REQUIRED,
-    _needsLicense: true,
-    _subtitle: model.description,
-    _group: opts.group,
-    _backendId: opts.backendId,
-  }));
+  const previewed = previewedModel(catalog);
+  if (!previewed) return EMPTY_ENTRIES;
+  return [
+    {
+      name: previewed.id,
+      provider: ChatModelProviders.COPILOT_PLUS,
+      displayName: previewed.displayName || previewed.id,
+      enabled: true,
+      isBuiltIn: false,
+      // `_disabledReason` is what disables the row; the lock icon is what explains
+      // it, so the same sentence serves as the native title fallback.
+      _disabledReason: LICENSE_REQUIRED,
+      _needsLicense: true,
+      _subtitle: previewed.description,
+      _group: opts.group,
+      _backendId: opts.backendId,
+    },
+  ];
 }

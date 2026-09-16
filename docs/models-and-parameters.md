@@ -46,6 +46,11 @@ agent may also appear switched off until you enable them.
 
 ## Choose a model while chatting
 
+Locked Copilot models link to the pricing page rather than selecting a model.
+You can click the row or lock icon, or activate the row with the keyboard.
+Opening pricing from the model-and-effort picker discards any pending changes
+in that picker and keeps your current model and effort.
+
 In **Agent Chat**, the model picker is grouped by agent. Before the first message in
 an empty session, choosing a model from another installed agent switches that
 session to the other agent. After the conversation has started, the picker
