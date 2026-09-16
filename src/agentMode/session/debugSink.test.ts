@@ -327,10 +327,16 @@ describe("debugSink", () => {
       it("returns null rather than throwing when the temp root cannot be trusted (https://github.com/logancyang/obsidian-copilot-preview/issues/250)", async () => {
         // World-writable with no sticky bit, which `validateTempRoot` refuses.
         // A caller assembling a report needs an answer, not an exception.
-        const runtime = makeRuntime("/tmp", 0o0777);
-        const sink = new FrameSink({ runtime, vaultBasePath: "/vault" });
+        const platform = Object.getOwnPropertyDescriptor(process, "platform")!;
+        Object.defineProperty(process, "platform", { value: "linux" });
+        try {
+          const runtime = makeRuntime("/tmp", 0o0777);
+          const sink = new FrameSink({ runtime, vaultBasePath: "/vault" });
 
-        await expect(sink.getValidatedPath()).resolves.toBeNull();
+          await expect(sink.getValidatedPath()).resolves.toBeNull();
+        } finally {
+          Object.defineProperty(process, "platform", platform);
+        }
       });
 
       it("resolves only once frames queued before the call have landed in the log", async () => {
