@@ -158,16 +158,28 @@ function backendEnvOverridesKey(settings: CopilotSettings, backendId: BackendId)
 }
 
 /**
- * Dedup key over the model metadata subprocess backends bake into their spawn
- * config: capabilities and published effort levels, not display strings.
+ * Dedup key over enabled models injected into subprocess spawn config:
+ * routing identity, capabilities and published effort levels, not display strings.
  * Order-independent, so a rewrite that only reorders the rows reads as
  * unchanged.
  */
-function spawnModelMetadataKey(settings: CopilotSettings): string {
+function spawnModelConfigKey(
+  settings: CopilotSettings,
+  backendId: keyof CopilotSettings["backends"]
+): string {
+  const enabled = new Set(settings.backends[backendId]?.enabledModels);
   return settings.configuredModels
+    .filter((model) => {
+      const provider = settings.providers[model.providerId];
+      // Native catalogs belong to the agent; their picker toggles do not change
+      // injected config. https://github.com/Brevilabs/obsidian-copilot-private/issues/475
+      return enabled.has(model.configuredModelId) && provider && provider.origin.kind !== "agent";
+    })
     .map((model) =>
       JSON.stringify([
         model.configuredModelId,
+        model.providerId,
+        model.info.id,
         model.info.reasoning,
         model.info.reasoningEfforts,
         model.info.modalities,
@@ -289,33 +301,45 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
   // down: a running backend folds rapid restarts via the manager's restart
   // queue, and a warm preload probe folds them via `preloader.refresh` — both
   // re-read the *final* config once the burst settles, so no debounce here.
-  const refreshProviderAffected = (reason: string): void => {
-    for (const descriptor of listBackendDescriptors()) {
-      if (!descriptor.restartOnProviderConfigChange) continue;
+  for (const descriptor of listBackendDescriptors()) {
+    if (!descriptor.restartOnProviderConfigChange) continue;
+    const backendId = descriptor.id as keyof CopilotSettings["backends"];
+    const refresh = (reason: string): void => {
       void manager
         .noteSpawnConfigChanged(descriptor.id, reason)
         .catch((error) =>
           logError(`[AgentMode] restart after ${reason} failed: ${descriptor.id}`, error)
         );
-    }
-  };
-  plugin.modelManagement.providerRegistry.subscribe(() =>
-    refreshProviderAffected("provider config changed")
-  );
-  plugin.modelManagement.backendConfigRegistry.subscribe(() =>
-    refreshProviderAffected("backend enabled models changed")
-  );
-  // A model's capabilities (modalities, reasoning, effort variants) are baked
-  // into that same spawn config. The Plus lineup reconcile refreshes them on a
-  // row that stays enabled, which touches neither registry above, so without
-  // this a running agent keeps offering an effort level the service withdrew.
-  // Keyed on the fields the spawn config reads, so a changed description never
-  // costs the user their session.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/319
-  subscribeToSettingsChange((prev, next) => {
-    if (spawnModelMetadataKey(prev) === spawnModelMetadataKey(next)) return;
-    refreshProviderAffected("model metadata changed");
-  });
+    };
+    plugin.modelManagement.providerRegistry.subscribe((providerId) => {
+      const settings = getSettings();
+      const provider = settings.providers[providerId];
+      const enabled = new Set(settings.backends[backendId]?.enabledModels);
+      // A different agent's setup or an unused BYOK provider cannot change this
+      // process. Key rotations still notify even when settings are unchanged.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/475
+      if (
+        provider &&
+        provider.origin.kind !== "agent" &&
+        settings.configuredModels.some(
+          (model) => model.providerId === providerId && enabled.has(model.configuredModelId)
+        )
+      ) {
+        refresh("provider config changed");
+      }
+    });
+    subscribeToSettingsChange((prev, next) => {
+      // Other agents' model toggles and catalog discoveries must not offer a
+      // reload for this backend. Only its own enabled models feed its config.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/475
+      if (spawnModelConfigKey(prev, backendId) !== spawnModelConfigKey(next, backendId)) {
+        // Lineup reconciliation can change capabilities without changing the
+        // enabled list, withdrawing an effort level the running agent offers.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/319
+        refresh("model config changed");
+      }
+    });
+  }
   // The composed Agent Mode built-in prompt is baked into opencode/codex
   // spawn-time config and shared across sessions. Restart the opted-in backends
   // when its effective content changes; Claude re-reads it per `newSession()`.
