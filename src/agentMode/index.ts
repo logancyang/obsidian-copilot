@@ -302,16 +302,13 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
   plugin.modelManagement.backendConfigRegistry.subscribe(() =>
     restartProviderAffected("backend enabled models changed")
   );
-  // A model's own capabilities are baked into that same spawn config —
-  // opencode reads a model's modalities, reasoning support, and effort variants
-  // as `injected ?? models.dev-catalog ?? default`, all at spawn time. The
-  // Copilot Plus lineup reconcile refreshes them on a row that stays enabled,
-  // which touches neither registry above, so without this a running agent keeps
-  // offering an effort level the service has since withdrawn and the turn fails
-  // on it (the failure #2915 fixed, arrived at from the other direction).
+  // A model's capabilities (modalities, reasoning, effort variants) are baked
+  // into that same spawn config. The Plus lineup reconcile refreshes them on a
+  // row that stays enabled, which touches neither registry above, so without
+  // this a running agent keeps offering an effort level the service withdrew.
+  // Keyed on the fields the spawn config reads, so a changed description never
+  // costs the user their session.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/319
-  // Keyed on the fields the spawn config actually reads, so a changed
-  // description or display name never costs the user their session.
   subscribeToSettingsChange((prev, next) => {
     if (spawnModelMetadataKey(prev) === spawnModelMetadataKey(next)) return;
     restartProviderAffected("model metadata changed");

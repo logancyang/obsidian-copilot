@@ -1,16 +1,12 @@
 /**
- * Reads the Copilot Plus lineup published at `models.brevilabs.com/v1/models`.
- *
- * That endpoint is the only authority for which Plus models exist. A client
- * that carries its own list drifts the moment the service adds or withdraws a
- * model: withdrawn models stay selectable and fail at turn time, and new ones
- * stay invisible until the next plugin release.
+ * Reads the Copilot Plus lineup published at `models.brevilabs.com/v1/models`,
+ * the only authority for which Plus models exist. A client-side list drifts the
+ * moment the service adds or withdraws a model.
  * https://github.com/Brevilabs/obsidian-copilot-private/issues/319
  *
- * Parsing is deliberately all-or-nothing. A half-read response would reconcile
- * as "the service withdrew everything it didn't send", so anything that isn't
- * a well-formed lineup is reported as unreadable and the last good snapshot
- * stands.
+ * Parsing is all-or-nothing: a half-read response would reconcile as "the
+ * service withdrew everything it didn't send", so anything that is not a
+ * well-formed lineup reads as unreadable and the last good snapshot stands.
  */
 
 import type { BrevilabsModelEntry, BrevilabsModelsResponse } from "@/LLMProviders/brevilabsClient";
@@ -35,9 +31,8 @@ export interface CopilotPlusCatalog {
  * 262,144-token one, both rounded for display. Reading them as powers of ten
  * would put every context meter about 5% off.
  *
- * @param display - The published label, which is a string on a well-formed
- *   response but is accepted as unknown so a malformed one is rejected here
- *   rather than by a cast at the call site.
+ * @param display - The published label, accepted as unknown so a malformed
+ *   payload is rejected here rather than by a cast at the call site.
  */
 export function parseContextLength(display: unknown): number | null {
   if (typeof display !== "string") return null;
@@ -54,13 +49,10 @@ export function parseContextLength(display: unknown): number | null {
 
 /**
  * Effort levels a published list contains, or undefined when the field is
- * absent or unusable.
- *
- * An empty list is a real answer — the model honors no level, so its consumer
- * should offer no control — and is kept distinct from the absent case. A list
- * that arrived with entries but none usable is malformed, not a model without
- * levels; reading it as the latter would delete a working effort menu on the
- * strength of garbage.
+ * absent or unusable. An empty list is a real answer (the model honors no
+ * level, so offer no control) and stays distinct from the absent case; a list
+ * with entries but none usable is malformed, and reading it as "no levels"
+ * would delete a working effort menu on the strength of garbage.
  */
 function parseReasoningEfforts(raw: unknown): readonly string[] | undefined {
   if (!Array.isArray(raw)) return undefined;
@@ -72,21 +64,27 @@ function parseReasoningEfforts(raw: unknown): readonly string[] | undefined {
   return levels.length > 0 ? Object.freeze(levels) : undefined;
 }
 
-/** One catalog entry as a `ModelInfo`, or null when it carries no usable id. */
+/**
+ * One catalog entry as a `ModelInfo`, or null when it cannot be read as one:
+ * no usable id, or optional metadata that is present but unreadable.
+ *
+ * Present-but-unreadable rejects the entry rather than dropping the field. The
+ * payload is untrusted, so a declared string can arrive as a number and throw
+ * out of `trim()` past the unreadable-response fallback; and the reconcile
+ * writes `limits` from this snapshot, so an unparseable context window would
+ * erase a known one. Both cases must leave the last good lineup standing.
+ * https://github.com/Brevilabs/obsidian-copilot-private/issues/319
+ */
 function toModelInfo(entry: BrevilabsModelEntry): ModelInfo | null {
-  // A non-string id is not a model. The remaining text fields are guarded by
-  // `hasUnreadableMetadata` before this runs, so the `trim()` calls below
-  // cannot throw past the unreadable-response fallback.
-  if (typeof entry.id !== "string") return null;
-  const id = entry.id.trim();
-  if (!id) return null;
+  const { id, label, description, context_length } = entry;
+  if (typeof id !== "string" || !id.trim()) return null;
+  if (label !== undefined && typeof label !== "string") return null;
+  if (description !== undefined && typeof description !== "string") return null;
+  const context = context_length === undefined ? undefined : parseContextLength(context_length);
+  if (context === null) return null;
 
-  const model: ModelInfo = {
-    id,
-    displayName: entry.label?.trim() || id,
-  };
-  const description = entry.description?.trim();
-  if (description) model.description = description;
+  const model: ModelInfo = { id: id.trim(), displayName: label?.trim() || id.trim() };
+  if (description?.trim()) model.description = description.trim();
   if (typeof entry.supports_tools === "boolean") model.toolCall = entry.supports_tools;
   if (typeof entry.supports_reasoning === "boolean") model.reasoning = entry.supports_reasoning;
   const efforts = parseReasoningEfforts(entry.reasoning_efforts);
@@ -97,44 +95,15 @@ function toModelInfo(entry: BrevilabsModelEntry): ModelInfo | null {
       output: ["text"],
     };
   }
-  const context = parseContextLength(entry.context_length);
-  if (context !== null) model.limits = { context };
+  if (context !== undefined) model.limits = { context };
   return model;
 }
 
 /**
- * Whether an entry publishes metadata we could not read.
- *
- * Absent is fine — every one of these fields is optional. Present but
- * unreadable is not, for two separate reasons. The payload is untrusted JSON,
- * so a declared `string` is a hope rather than a guarantee: `trim()` on a
- * number throws out of the parser and escapes to the caller's outer catch,
- * skipping the unreadable-response fallback that is supposed to keep a
- * signed-in user's provider registered. And the reconcile writes `limits` from
- * this snapshot, so a context window we cannot parse would replace a known one
- * with nothing and leave the context meter unsizable. Rejecting the lineup
- * keeps the last good one in both cases.
- * https://github.com/Brevilabs/obsidian-copilot-private/issues/319
- */
-function hasUnreadableMetadata(entry: BrevilabsModelEntry): boolean {
-  const unreadableText = (value: unknown): boolean =>
-    value !== undefined && typeof value !== "string";
-  return (
-    unreadableText(entry.label) ||
-    unreadableText(entry.description) ||
-    (entry.context_length !== undefined && parseContextLength(entry.context_length) === null)
-  );
-}
-
-/**
  * The lineup a models-endpoint response describes, or null when it cannot be
- * read as one.
- *
- * Null covers every shape a caller must not reconcile against: a failed
- * request, a non-list payload, an entry with no id, an entry whose metadata
- * arrived as the wrong type, a duplicate id, and an empty lineup. All of them
- * would otherwise be indistinguishable from the service having withdrawn
- * models it still serves.
+ * read as one: a failed request, a non-list payload, an unreadable entry, a
+ * duplicate id, or an empty lineup. Each would otherwise be indistinguishable
+ * from the service having withdrawn models it still serves.
  *
  * @param response - Parsed endpoint body, or null when the request failed.
  */
@@ -148,7 +117,6 @@ export function readCopilotPlusCatalog(
   const seen = new Set<string>();
   for (const entry of response.data) {
     if (!entry || typeof entry !== "object") return null;
-    if (hasUnreadableMetadata(entry)) return null;
     const model = toModelInfo(entry);
     if (!model || seen.has(model.id)) return null;
     seen.add(model.id);

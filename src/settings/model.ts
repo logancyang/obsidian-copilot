@@ -332,14 +332,10 @@ export interface CopilotSettings {
   configuredModels: ConfiguredModel[];
   backends: Partial<Record<BackendType, BackendConfig>>;
   /**
-   * Last Copilot Plus lineup the models endpoint published.
-   *
-   * Cached so startup never waits on that request: pickers, the unlicensed
-   * preview, and the OpenCode spawn config all read this, and a fresh response
-   * only rewrites it when the lineup actually differs. `models` is empty until
-   * the first successful read, which is the only state where no Plus models
-   * are known. Held as one value because the lineup and which of it a license
-   * switches on are published together and must not disagree.
+   * Last Copilot Plus lineup the models endpoint published, cached so startup
+   * never waits on that request. `models` is empty until the first successful
+   * read. One value because the lineup and which of it a license switches on
+   * are published together and must not disagree.
    * https://github.com/Brevilabs/obsidian-copilot-private/issues/319
    */
   copilotPlusCatalog: PersistedCopilotPlusCatalog;
@@ -875,11 +871,9 @@ export function resetSettings(): void {
       current.configuredModels,
       preservedProviderIds
     ),
-    // A cache of what the service publishes, carrying no user preference, and
-    // reset deliberately keeps the Plus provider and its configured models. A
-    // reset does not re-sync (`plusSyncNeeded` stays false when `isPaidUser` is
-    // preserved), so clearing this would leave those still-usable models with
-    // no context window for the rest of the session.
+    // Reset keeps the Plus provider and its models without re-syncing
+    // (`plusSyncNeeded` stays false), so clearing this cache would leave those
+    // models with no context window for the rest of the session.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/319
     copilotPlusCatalog: current.copilotPlusCatalog ?? EMPTY_COPILOT_PLUS_CATALOG,
     copilotRootHistory: preservedRootHistory,
@@ -1233,13 +1227,9 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   if (!Array.isArray(sanitizedSettings.configuredModels)) {
     sanitizedSettings.configuredModels = EMPTY_CONFIGURED_MODELS;
   }
-  // Absent on every data.json written before the lineup was cached, so the
-  // first load after upgrading lands here rather than on a crash.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/319
   // Absent on every data.json written before the lineup was cached, and
   // arbitrary on a synced or hand-edited one. Consumers dereference `model.id`
-  // straight out of this array, so the array being array-shaped is not enough —
-  // a single malformed entry would crash the pickers.
+  // straight out of this array, so one malformed entry would crash the pickers.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/319
   const cachedCatalog = sanitizedSettings.copilotPlusCatalog;
   const catalogIsUsable =

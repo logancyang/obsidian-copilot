@@ -209,11 +209,8 @@ export default class CopilotPlugin extends Plugin {
     // safe. Serialized through `plusSyncChain` so a fast
     // sign-out→sign-in (each its own settings change) settles in issue order,
     // not in whichever overlapping reconcile happens to finish last.
-    //
-    // This now reads the public models endpoint, so it can take as long as the
-    // network does. Nothing below awaits it: every consumer of the Plus lineup
-    // reads the cached snapshot, so the agent and the pickers come up on
-    // last-known-good models while this settles in the background.
+    // Reads the public models endpoint, and nothing below awaits it: every
+    // consumer of the Plus lineup reads the cached snapshot.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/319
     let plusSyncChain: Promise<void> = Promise.resolve();
     const syncPlus = (isPaidUser: boolean | undefined, licenseKey: string): void => {

@@ -399,12 +399,10 @@ export async function buildOpencodeConfig(
     // OpenAI-compatible providers, so without this it defaults to non-reasoning and
     // the effort picker shows "na". Mirrors the modalities injection above.
     if (info.reasoning) {
-      // Copilot Plus publishes the levels each of its models really has, carried on
-      // the persisted row by the catalog reconcile; a BYOK model has no such list and
-      // keeps opencode's own inference. Undefined means no list is known, which must
-      // not be mistaken for "no levels" — dropping a working control is worse than an
-      // imperfect menu. Reading the row rather than the service is what keeps a slow
-      // models host off the spawn path entirely.
+      // Copilot Plus publishes the levels each model really has, carried on the
+      // persisted row by the catalog reconcile so the spawn never waits on the
+      // service; a BYOK model has no list and keeps opencode's own inference.
+      // Undefined means no list is known, which must not be read as "no levels".
       // https://github.com/logancyang/obsidian-copilot/issues/2917
       const published = origin.kind === "copilot-plus" ? (info.reasoningEfforts ?? null) : null;
       // A model that honors no level gets no control at all: opencode builds the menu

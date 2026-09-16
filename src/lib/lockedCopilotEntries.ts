@@ -14,14 +14,10 @@ const LICENSE_REQUIRED = "Copilot license required";
  * these rows lose their locks in place rather than being replaced by a
  * different set.
  *
- * Narrowed to that subset rather than the whole lineup because the picker is
- * 288px tall: every extra row pushes the checkmark on the user's current model
- * closer to the fold.
- *
- * Read from the cached catalog, so a model the service withdrew stops being
- * advertised and one it added starts being advertised without a plugin
- * release. Empty before the first successful fetch, which renders as no
- * preview rather than a stale one.
+ * Narrowed to that subset because the picker is 288px tall: every extra row
+ * pushes the checkmark on the user's current model closer to the fold. Empty
+ * before the first successful catalog fetch, which renders as no preview
+ * rather than a stale one.
  * https://github.com/Brevilabs/obsidian-copilot-private/issues/319
  *
  * @param catalog - Caller-owned cached lineup, from `settings.copilotPlusCatalog`.

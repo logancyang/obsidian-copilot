@@ -55,12 +55,9 @@ export interface ModelInfo {
   reasoning?: boolean;
   /**
    * Thinking-effort levels this model distinguishes, ascending, when its
-   * source publishes them. Absent means "unknown", which is not the same as
-   * the empty list: a model that publishes no levels honors none and should
-   * be offered no effort control, while a model whose levels could not be
-   * read keeps whatever menu its consumer would infer on its own.
-   *
-   * Only the Copilot Plus catalog publishes this today; `models.dev` does not.
+   * source publishes them (only the Copilot Plus catalog does today). Absent
+   * means unknown, so the consumer infers its own menu; empty means the model
+   * honors none and gets no effort control.
    * https://github.com/Brevilabs/obsidian-copilot-private/issues/319
    */
   reasoningEfforts?: readonly string[];
