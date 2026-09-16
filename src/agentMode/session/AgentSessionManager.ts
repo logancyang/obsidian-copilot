@@ -364,6 +364,12 @@ export class AgentSessionManager {
    * that gap. https://github.com/Brevilabs/obsidian-copilot-private/issues/473
    */
   private readonly retainedChatInputIds = new Set<string>();
+  /**
+   * `backendId:baseModelId` pairs already warned about, since the read that
+   * discovers them runs on every session create and default re-apply.
+   * https://github.com/Brevilabs/obsidian-copilot-private/issues/474
+   */
+  private readonly warnedMissingDefaults = new Set<string>();
   private readonly preloader: AgentModelPreloader;
   /**
    * Per-backend preload status. The chat UI gates its first render on the
@@ -482,7 +488,7 @@ export class AgentSessionManager {
       .then(() => session.ready)
       .then(() => {
         if (session.getStatus() === "closed") return;
-        const target = this.getDefaultSelection(backendId);
+        const target = this.getSeedSelection(backendId);
         if (!target) return;
         return descriptor
           .applySelection(session, target)
@@ -517,7 +523,7 @@ export class AgentSessionManager {
       },
       // An absent preference leaves the fan-out sub-session on the model its
       // own session/new reports; catalog ordering carries no default meaning.
-      getDefaultSelection: (backendId) => this.getDefaultSelection(backendId),
+      getDefaultSelection: (backendId) => this.getSeedSelection(backendId),
       onSelectionApplied: (backendId, state) => this.repairDefaultEffort(backendId, state),
       getDisplayName: (backendId) => this.resolveDescriptor(backendId).displayName,
       // DESIGN NOTE: fan-out sub-sessions intentionally run at the vault root,
@@ -1291,7 +1297,7 @@ export class AgentSessionManager {
     // An absent preference means "Agent default": let session/new report the
     // backend's actual selection. Catalog ordering describes choices, not a
     // default, so only explicit transient or persisted selections are applied.
-    const resolvedSeed = seedSelection ?? this.getDefaultSelection(resolvedId) ?? undefined;
+    const resolvedSeed = seedSelection ?? this.getSeedSelection(resolvedId) ?? undefined;
 
     // A new chat must always start from a brand-new backend session. When a
     // warm preload probe is available we reuse its already-spawned and
@@ -2119,12 +2125,75 @@ export class AgentSessionManager {
     this.notify();
   }
 
-  /** Read the user's sticky model preference for `backendId`, or `null` if none. */
+  /**
+   * Read the user's sticky model preference for `backendId`, exactly as saved.
+   *
+   * Deliberately unfiltered: the settings control renders from this, and a
+   * preference whose model was later disabled must stay visible there so the
+   * user can clear or replace it. Session startup uses {@link getSeedSelection}
+   * instead, which is where an unavailable model must not be applied.
+   */
   getDefaultSelection(backendId: BackendId): ModelSelection | null {
     const backends = getSettings().agentMode?.backends as
       | Record<string, { defaultModel?: ModelSelection | null } | undefined>
       | undefined;
     return backends?.[backendId]?.defaultModel ?? null;
+  }
+
+  /**
+   * The model to start a session on: the sticky preference, or an enabled
+   * stand-in when that preference names a model the backend no longer offers.
+   *
+   * A saved default outlives its model (Copilot Plus withdraws it, or its
+   * provider is deleted) because the removal cascade never touches this
+   * preference. Seeding the stale selection does not fail loudly: the backend
+   * rejects it and the session keeps whatever model the agent picked for
+   * itself. Substituting here rather than in {@link getDefaultSelection} keeps
+   * the saved value visible in settings and applying again if the model returns.
+   * https://github.com/Brevilabs/obsidian-copilot-private/issues/474
+   */
+  getSeedSelection(backendId: BackendId): ModelSelection | null {
+    const saved = this.getDefaultSelection(backendId);
+    if (!saved) return null;
+
+    const offered = this.opts.resolveDescriptor(backendId)?.getEnabledModelEntries?.(getSettings());
+    // An empty list is not evidence the saved model is gone: an agent-native
+    // model stays routable whether or not Copilot's enabled list curates it.
+    if (!offered || offered.length === 0) return saved;
+    if (offered.some((entry) => entry.baseModelId === saved.baseModelId)) return saved;
+
+    // Naming a replacement beats seeding nothing, since the agent's own default
+    // lands outside the enabled list in practice. Missing-key entries would be
+    // rejected like the withdrawn default; effort is left unset so the model's
+    // own default level applies.
+    const replacement = offered.find((entry) => entry.credentialState === "ok");
+    this.warnDefaultNoLongerOffered(backendId, saved.baseModelId, replacement?.name);
+    return replacement ? { baseModelId: replacement.baseModelId, effort: null } : null;
+  }
+
+  /**
+   * Tell the user once per withdrawn model that it is gone, since the session
+   * silently starting on a different one is the whole failure here.
+   *
+   * @param replacementName - Display name of the enabled model new chats now
+   *   start on, or undefined when the agent's own default takes over.
+   */
+  private warnDefaultNoLongerOffered(
+    backendId: BackendId,
+    baseModelId: string,
+    replacementName?: string
+  ): void {
+    const key = `${backendId}:${baseModelId}`;
+    if (this.warnedMissingDefaults.has(key)) return;
+    this.warnedMissingDefaults.add(key);
+    const agent = this.resolveDescriptor(backendId).displayName;
+    const model = baseModelId.split("/").pop() || baseModelId;
+    logInfo(`[AgentMode] ${backendId} default model ${baseModelId} is no longer offered`);
+    new Notice(
+      replacementName
+        ? `${agent} no longer offers ${model}. New chats use ${replacementName} until you pick a new default.`
+        : `${agent} no longer offers ${model}. Pick a model to make it your default again.`
+    );
   }
 
   private repairDefaultEffort(backendId: BackendId, state: BackendState | null): void {
