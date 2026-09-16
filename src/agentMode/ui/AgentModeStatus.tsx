@@ -160,7 +160,7 @@ export const AgentModeStatus: React.FC<Props> = ({ manager, plugin, onInstallCli
     // Settings the running agent was spawned with have changed since. Applying
     // them restarts the backend and replaces this conversation, so the manager
     // holds the restart and the choice of when to take it belongs here. A boot
-    // error outranks it: a session that cannot start has nothing to protect.
+    // error keeps its recovery action, which also applies any held config.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/475
     if (!heldConfigChange) return null;
     return (
@@ -177,7 +177,13 @@ export const AgentModeStatus: React.FC<Props> = ({ manager, plugin, onInstallCli
   }
 
   const handleRetry = (): void => {
-    manager.getOrCreateActiveSession().catch((e) => {
+    // A failed session may remain active after startup rejects. Apply corrected
+    // settings before retrying so that session cannot mask the new config.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/475
+    const retry = heldConfigChange
+      ? manager.applyHeldConfigChange(descriptor.id)
+      : manager.getOrCreateActiveSession();
+    retry.catch((e) => {
       logError("[AgentMode] retry failed", e);
     });
   };

@@ -244,14 +244,14 @@ describe("AgentModeStatus", () => {
       expect(action.hasAttribute("disabled")).toBe(true);
     });
 
-    it("keeps a session error ahead of a held config change", () => {
+    it("Retry applies corrected config when a failed session has a held change (https://github.com/Brevilabs/obsidian-copilot-private/issues/475)", () => {
       const manager = {
         subscribe: jest.fn(() => () => {}),
         getLastError: jest.fn(() => "Claude backend exited unexpectedly."),
         getOrCreateActiveSession: jest.fn().mockResolvedValue({}),
         hasHeldConfigChange: jest.fn(() => true),
         isBackendRestartPending: jest.fn(() => false),
-        applyHeldConfigChange: jest.fn(),
+        applyHeldConfigChange: jest.fn().mockResolvedValue(undefined),
       } as unknown as AgentSessionManager;
       const plugin = { app: {} } as unknown as CopilotPlugin;
 
@@ -259,6 +259,9 @@ describe("AgentModeStatus", () => {
 
       expect(screen.getByText("Claude session error")).toBeTruthy();
       expect(screen.queryByRole("button", { name: "Reload" })).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+      expect(manager.applyHeldConfigChange).toHaveBeenCalledWith("claude");
+      expect(manager.getOrCreateActiveSession).not.toHaveBeenCalled();
     });
   });
 });
