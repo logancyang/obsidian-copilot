@@ -4,6 +4,7 @@ import { FanoutMessageCard } from "@/agentMode/ui/FanoutMessageCard";
 import { PlanProposalCard } from "@/agentMode/ui/PlanProposalCard";
 import { ToolPermissionCard } from "@/agentMode/ui/ToolPermissionCard";
 import { AgentTurnDurationIndicator } from "@/agentMode/ui/AgentTurnDurationIndicator";
+import { AgentMemoryNoticeLine } from "@/agentMode/ui/AgentMemoryNoticeLine";
 import ChatSingleMessage from "@/components/chat-components/ChatSingleMessage";
 import { ChatTranscriptViewport } from "@/components/chat-components/ui/ChatTranscriptViewport";
 import { USER_SENDER } from "@/constants";
@@ -11,6 +12,7 @@ import { useChatScrolling } from "@/hooks/useChatScrolling";
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
 import type {
   AgentChatMessage,
+  AgentMemoryNotice,
   AskUserQuestionPrompt,
   CurrentPlan,
   PermissionPrompt,
@@ -28,6 +30,13 @@ interface AgentChatMessagesProps {
   pendingAskUserQuestions: AskUserQuestionPrompt[];
   chatBackend: AgentChatBackend;
   isLoading: boolean;
+  /**
+   * The agent's memory trust line, shown below the last turn, or null when the
+   * agent has written nothing since the user last spoke.
+   */
+  memoryNotice?: AgentMemoryNotice | null;
+  /** Open the memory file the notice points at. */
+  onOpenMemory?: (memoryPath: string) => void;
 }
 
 function toChatMessageView(m: AgentChatMessage): ChatMessage {
@@ -156,6 +165,8 @@ const AgentChatMessages = memo(
     pendingAskUserQuestions,
     chatBackend,
     isLoading,
+    memoryNotice,
+    onOpenMemory,
   }: AgentChatMessagesProps) => {
     const visible = useMemo(() => messages.filter((m) => m.isVisible), [messages]);
     const adapted = useMemo(() => visible.map(toChatMessageView), [visible]);
@@ -224,6 +235,12 @@ const AgentChatMessages = memo(
             );
           })}
           {inlinePlanCard}
+          {memoryNotice ? (
+            <AgentMemoryNoticeLine
+              agentName={memoryNotice.agentName}
+              onOpen={() => onOpenMemory?.(memoryNotice.memoryPath)}
+            />
+          ) : null}
         </ChatTranscriptViewport>
         {pendingActionId ? (
           <div

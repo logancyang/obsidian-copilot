@@ -1,6 +1,7 @@
 import type { MessageContext } from "@/types/message";
 import type {
   AgentChatMessage,
+  AgentMemoryNotice,
   AgentQuestionAnswers,
   AgentTodoListEntry,
   AskUserQuestionPrompt,
@@ -26,6 +27,8 @@ export interface AgentChatBackend {
   deleteMessage(id: string): Promise<boolean>;
   clearMessages(): void;
   getMessages(): AgentChatMessage[];
+
+  getMemoryNotice(): AgentMemoryNotice | null;
 
   isStarting(): boolean;
   isTurnInFlight(): boolean;

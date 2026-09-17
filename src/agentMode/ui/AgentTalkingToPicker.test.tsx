@@ -104,5 +104,72 @@ describe("AgentTalkingToPicker", () => {
 
       expect(onSelect).toHaveBeenCalledWith("jennifer");
     });
+
+    it("offers the current agent's memory file to open and to clear (CUSTOM_AGENTS.md §5)", () => {
+      const onOpenMemory = jest.fn();
+      const onClearMemory = jest.fn();
+      render(
+        <AgentTalkingToPicker
+          entries={[BUILTIN_AGENT, JENNIFER]}
+          selectedSlug="jennifer"
+          onSelect={jest.fn()}
+          onOpenMemory={onOpenMemory}
+          onClearMemory={onClearMemory}
+        />
+      );
+      fireEvent.pointerDown(screen.getByRole("button", { name: "Talking to Jennifer" }), {
+        button: 0,
+        ctrlKey: false,
+      });
+
+      fireEvent.click(screen.getByText("Open memory"));
+      expect(onOpenMemory).toHaveBeenCalledWith("jennifer");
+
+      fireEvent.pointerDown(screen.getByRole("button", { name: "Talking to Jennifer" }), {
+        button: 0,
+        ctrlKey: false,
+      });
+      fireEvent.click(screen.getByText("Clear memory"));
+      expect(onClearMemory).toHaveBeenCalledWith("jennifer");
+    });
+
+    it("offers no memory actions for Copilot, which keeps none", () => {
+      render(
+        <AgentTalkingToPicker
+          entries={[BUILTIN_AGENT, JENNIFER]}
+          selectedSlug={BUILTIN_AGENT.slug}
+          onSelect={jest.fn()}
+          onOpenMemory={jest.fn()}
+        />
+      );
+
+      fireEvent.pointerDown(screen.getByRole("button", { name: "Talking to Copilot" }), {
+        button: 0,
+        ctrlKey: false,
+      });
+
+      expect(screen.queryByText("Open memory")).toBeNull();
+    });
+
+    it("offers no memory actions for an agent whose memory toggle is off (CUSTOM_AGENTS.md §7)", () => {
+      const off = toAgentEntry(
+        customAgent({ slug: "vancat", name: "Vancat", memoryEnabled: false })
+      );
+      render(
+        <AgentTalkingToPicker
+          entries={[BUILTIN_AGENT, off]}
+          selectedSlug="vancat"
+          onSelect={jest.fn()}
+          onOpenMemory={jest.fn()}
+        />
+      );
+
+      fireEvent.pointerDown(screen.getByRole("button", { name: "Talking to Vancat" }), {
+        button: 0,
+        ctrlKey: false,
+      });
+
+      expect(screen.queryByText("Open memory")).toBeNull();
+    });
   });
 });

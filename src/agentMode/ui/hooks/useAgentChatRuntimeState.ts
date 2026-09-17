@@ -1,6 +1,7 @@
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
 import type {
   AgentChatMessage,
+  AgentMemoryNotice,
   AgentTodoListEntry,
   AskUserQuestionPrompt,
   CurrentPlan,
@@ -17,6 +18,7 @@ export interface AgentChatRuntimeState {
   currentTodoList: AgentTodoListEntry[] | null;
   pendingToolPermissions: PermissionPrompt[];
   pendingAskUserQuestions: AskUserQuestionPrompt[];
+  memoryNotice: AgentMemoryNotice | null;
 }
 
 interface BackendRuntimeSnapshot {
@@ -36,6 +38,7 @@ function readBackendRuntimeSnapshot(backend: AgentChatBackend): BackendRuntimeSn
       currentTodoList: backend.getCurrentTodoList(),
       pendingToolPermissions: backend.getPendingToolPermissions(),
       pendingAskUserQuestions: backend.getPendingAskUserQuestions(),
+      memoryNotice: backend.getMemoryNotice(),
     },
   };
 }

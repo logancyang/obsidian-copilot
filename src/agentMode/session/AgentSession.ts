@@ -38,6 +38,7 @@ import {
   ToolCallContent,
   ToolCallDelta,
   ToolCallSnapshot,
+  AgentMemoryNotice,
 } from "@/agentMode/session/types";
 import {
   isNoteSelectedTextContext,
@@ -167,6 +168,8 @@ export class AgentSession {
   private readonly contextReady: Promise<ContextMaterializationResult> | null;
   private projectContextBlock: string | null = null;
   private sessionAgent: SessionAgent = COPILOT_SESSION_AGENT;
+  private memorizedThroughTurn = 0;
+  private memoryNotice: AgentMemoryNotice | null = null;
   private firstPromptSent = false;
   private readonly getDescriptor: (() => BackendDescriptor | undefined) | null;
   private readonly runFanoutTurn: RunFanoutTurn | null;
@@ -556,6 +559,25 @@ export class AgentSession {
     return this.sessionAgent;
   }
 
+  getMemorizedThroughTurn(): number {
+    return this.memorizedThroughTurn;
+  }
+
+  setMemorizedThroughTurn(count: number): void {
+    if (!Number.isFinite(count) || count <= this.memorizedThroughTurn) return;
+    this.memorizedThroughTurn = Math.floor(count);
+  }
+
+  getMemoryNotice(): AgentMemoryNotice | null {
+    return this.memoryNotice;
+  }
+
+  setMemoryNotice(notice: AgentMemoryNotice | null): void {
+    if (this.memoryNotice === notice) return;
+    this.memoryNotice = notice;
+    this.notifyMessages();
+  }
+
   setAgent(agent: SessionAgent): void {
     if (agent.slug === this.sessionAgent.slug && agent.name === this.sessionAgent.name) return;
     this.sessionAgent = agent;
@@ -633,6 +655,9 @@ export class AgentSession {
       content: buildUserDisplayContent(displayText, promptContent),
     };
     const userMessageId = this.store.addMessage(userMessage);
+    // The line reports on a conversation that had ended; a new turn resumes it,
+    // so the line comes down rather than floating above the fresh exchange.
+    this.memoryNotice = null;
 
     const turnStartedAtMs = Date.now();
     const placeholder: NewAgentChatMessage = {

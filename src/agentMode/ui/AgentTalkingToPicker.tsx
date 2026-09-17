@@ -4,10 +4,11 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import { Check, ChevronDown } from "lucide-react";
+import { BookOpen, Check, ChevronDown, Eraser } from "lucide-react";
 import React from "react";
 
 export interface AgentTalkingToPickerProps {
@@ -22,6 +23,10 @@ export interface AgentTalkingToPickerProps {
    * a moment ago without waiting for a reload.
    */
   onOpen?: () => void;
+  /** Open the selected agent's `MEMORY.md`. */
+  onOpenMemory?: (slug: string) => void;
+  /** Reset the selected agent's `MEMORY.md` to its empty skeleton. */
+  onClearMemory?: (slug: string) => void;
   /** Portal container, so the menu stays in the right window in a popout. */
   container?: HTMLElement | null;
   className?: string;
@@ -41,11 +46,17 @@ export const AgentTalkingToPicker: React.FC<AgentTalkingToPickerProps> = ({
   selectedSlug,
   onSelect,
   onOpen,
+  onOpenMemory,
+  onClearMemory,
   container,
   className,
 }) => {
   const selected = entries.find((entry) => entry.slug === selectedSlug) ?? entries[0];
   if (!selected) return null;
+  // Copilot keeps no memory, and neither does an agent whose toggle is off, so
+  // neither offers a file to open or clear.
+  const memorySlug =
+    selected.kind === "custom" && selected.agent.memoryEnabled ? selected.slug : null;
 
   return (
     <DropdownMenu
@@ -91,6 +102,25 @@ export const AgentTalkingToPicker: React.FC<AgentTalkingToPickerProps> = ({
             )}
           </DropdownMenuItem>
         ))}
+        {memorySlug && (
+          <>
+            <DropdownMenuLabel className="tw-text-muted">{selected.name}</DropdownMenuLabel>
+            <DropdownMenuItem
+              className="tw-gap-2.5 tw-text-ui-small"
+              onSelect={() => onOpenMemory?.(memorySlug)}
+            >
+              <BookOpen className="tw-size-3.5" aria-hidden="true" />
+              Open memory
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className="tw-gap-2.5 tw-text-ui-small"
+              onSelect={() => onClearMemory?.(memorySlug)}
+            >
+              <Eraser className="tw-size-3.5" aria-hidden="true" />
+              Clear memory
+            </DropdownMenuItem>
+          </>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );

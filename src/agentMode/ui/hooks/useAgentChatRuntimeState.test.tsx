@@ -44,6 +44,7 @@ function makeFakeBackend(initial: Partial<FakeBackendState> = {}) {
     isTurnInFlight: () => state.isTurnInFlight,
     hasPendingPlanPermission: () => state.hasPendingPlanPermission,
     getCurrentPlan: () => state.currentPlan,
+    getMemoryNotice: () => null,
     getCurrentTodoList: () => state.currentTodoList ?? null,
     getPendingToolPermissions: () => state.pendingToolPermissions,
     getPendingAskUserQuestions: () => state.pendingAskUserQuestions,

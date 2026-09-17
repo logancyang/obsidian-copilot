@@ -51,6 +51,12 @@ function parseUsageJson(raw: unknown): SessionUsage | undefined {
   return undefined;
 }
 
+function parsePositiveInt(raw: unknown): number | undefined {
+  const value = typeof raw === "number" ? raw : Number(typeof raw === "string" ? raw.trim() : NaN);
+  if (!Number.isFinite(value) || value <= 0) return undefined;
+  return Math.floor(value);
+}
+
 export interface LoadedAgentChat {
   messages: AgentChatMessage[];
   backendId: BackendId;
@@ -67,6 +73,14 @@ export interface LoadedAgentChat {
    * See `designdocs/CUSTOM_AGENTS.md` §8.
    */
   agentSlug?: string;
+  /**
+   * How many transcript messages this chat's agent has already folded into its
+   * memory file, so reopening and continuing the chat memorizes only what is
+   * new. Absent (and omitted on save) when nothing has been memorized, which is
+   * every chat written before agents existed.
+   * See `designdocs/CUSTOM_AGENTS.md` §5 and §8.
+   */
+  memorizedThroughTurn?: number;
 }
 
 interface ExistingMeta {
@@ -77,6 +91,7 @@ interface ExistingMeta {
   projectId?: string;
   usage?: SessionUsage;
   agentSlug?: string;
+  memorizedThroughTurn?: number;
 }
 
 export class AgentChatPersistenceManager {
@@ -110,6 +125,11 @@ export class AgentChatPersistenceManager {
        * Copilot, which writes no field at all.
        */
       agentSlug?: string | null;
+      /**
+       * Transcript messages already covered by the agent's memory file. Omit or
+       * pass 0 for a chat that has never been memorized, which writes no field.
+       */
+      memorizedThroughTurn?: number;
     }
   ): Promise<{ path: string } | null> {
     if (messages.length === 0) return null;
@@ -160,6 +180,9 @@ export class AgentChatPersistenceManager {
         // Round-trip the persisted slug when the caller doesn't re-supply it,
         // so an autosave can never quietly demote a persona chat to Copilot.
         agentSlug: options?.agentSlug ?? existingMeta.agentSlug,
+        // Round-trip the persisted marker the same way, so an autosave that
+        // does not re-supply it cannot make the agent re-read memorized turns.
+        memorizedThroughTurn: options?.memorizedThroughTurn ?? existingMeta.memorizedThroughTurn,
       });
 
       if (existingFile && isInVaultCache(this.app, existingFile.path)) {
@@ -226,12 +249,23 @@ export class AgentChatPersistenceManager {
     const projectId = frontmatter.projectId?.trim() || GLOBAL_SCOPE;
     const usage = parseUsageJson(frontmatter.usage);
     const agentSlug = frontmatter.agentSlug?.trim() || undefined;
+    const memorizedThroughTurn = parsePositiveInt(frontmatter.memorizedThroughTurn);
     const messages = this.parseChatBody(body);
 
     logInfo(
       `[AgentChatPersistenceManager] Loaded ${messages.length} messages from ${file.path} (backend=${backendId}, sessionId=${sessionId ?? "none"}, projectId=${projectId})`
     );
-    return { messages, backendId, topic, label, sessionId, projectId, usage, agentSlug };
+    return {
+      messages,
+      backendId,
+      topic,
+      label,
+      sessionId,
+      projectId,
+      usage,
+      agentSlug,
+      memorizedThroughTurn,
+    };
   }
 
   async getAgentChatHistoryFiles(): Promise<TFile[]> {
@@ -275,6 +309,7 @@ export class AgentChatPersistenceManager {
         projectId: coerceProjectId(cached.projectId),
         usage: parseUsageJson(cached.usage),
         agentSlug: typeof cached.agentSlug === "string" ? cached.agentSlug : undefined,
+        memorizedThroughTurn: parsePositiveInt(cached.memorizedThroughTurn),
       };
     }
     try {
@@ -289,6 +324,7 @@ export class AgentChatPersistenceManager {
         projectId: coerceProjectId(fm.projectId),
         usage: parseUsageJson(fm.usage),
         agentSlug: typeof fm.agentSlug === "string" ? fm.agentSlug : undefined,
+        memorizedThroughTurn: parsePositiveInt(fm.memorizedThroughTurn),
       };
     } catch {
       return {};
@@ -462,6 +498,7 @@ export class AgentChatPersistenceManager {
     projectId?: string;
     usage?: SessionUsage;
     agentSlug?: string | null;
+    memorizedThroughTurn?: number;
   }): string {
     const lines: string[] = [
       "---",
@@ -477,6 +514,11 @@ export class AgentChatPersistenceManager {
     // Omitted for the built-in Copilot, so a chat with no persona stays
     // byte-identical to one saved before agents existed.
     if (args.agentSlug) lines.push(`agentSlug: "${escapeYamlString(args.agentSlug)}"`);
+    // Omitted when zero, so a chat whose agent has memorized nothing stays
+    // byte-identical to one saved before the field existed.
+    if (args.memorizedThroughTurn) {
+      lines.push(`memorizedThroughTurn: ${args.memorizedThroughTurn}`);
+    }
     if (args.topic) lines.push(`topic: "${escapeYamlString(args.topic)}"`);
     if (args.label) lines.push(`agentLabel: "${escapeYamlString(args.label)}"`);
     if (args.modelKey) lines.push(`modelKey: "${escapeYamlString(args.modelKey)}"`);

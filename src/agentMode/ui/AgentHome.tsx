@@ -59,6 +59,7 @@ import { getSettings, settingsStore, updateSetting, useSettingsValue } from "@/s
 import { useAtomValue } from "jotai";
 import { FileSearch, Files, Folder, MessageSquare } from "lucide-react";
 import { Notice } from "obsidian";
+import { openVaultPath } from "@/utils/openVaultPath";
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
 
@@ -104,8 +105,14 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     currentTodoList,
     pendingToolPermissions,
     pendingAskUserQuestions,
+    memoryNotice,
   } = useAgentChatRuntimeState(backend);
   const isLoading = draft.loading || isTurnInFlight;
+
+  const handleOpenMemory = useCallback(
+    (memoryPath: string) => openVaultPath(app, memoryPath, { newLeaf: true }),
+    [app]
+  );
 
   const [rootEl, setRootEl] = useState<HTMLDivElement | null>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
@@ -272,7 +279,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   // Who the next new chat will be held with. Orthogonal to the scope above: the
   // picker changes the answerer, never the working directory or the chat list.
   // See `designdocs/CUSTOM_AGENTS.md` §3.
-  const talkingTo = useAgentTalkingTo(manager);
+  const talkingTo = useAgentTalkingTo(manager, app);
 
   const modelPickerOverride = useAgentModelPicker(manager, plugin);
   const modePickerOverride = useAgentModePicker(manager);
@@ -601,6 +608,8 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
           selectedSlug={talkingTo.selectedSlug}
           onSelect={talkingTo.select}
           onOpen={talkingTo.refresh}
+          onOpenMemory={talkingTo.openMemory}
+          onClearMemory={talkingTo.clearMemory}
           container={rootEl}
         />
       </div>
@@ -714,6 +723,8 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                       pendingAskUserQuestions={pendingAskUserQuestions}
                       chatBackend={backend}
                       isLoading={isLoading}
+                      memoryNotice={memoryNotice}
+                      onOpenMemory={handleOpenMemory}
                     />
                     <AgentChatControls
                       onCopyChatLink={
