@@ -1,7 +1,7 @@
-import { ModelEffortPicker } from "@/components/ui/ModelEffortPicker";
+import { AgentPickerList, ModelEffortPicker } from "@/components/ui/ModelEffortPicker";
 import type { Meta, StoryObj } from "@/lib/story";
 import type { AgentPickerRow } from "@/components/ui/ModelEffortPicker";
-import type { ComponentProps } from "react";
+import React, { type ComponentProps } from "react";
 
 type Props = ComponentProps<typeof ModelEffortPicker>;
 const meta = {
@@ -161,18 +161,11 @@ const agentOverride = (rows: AgentPickerRow[], selectedSlug: string): Props["ove
   agents: { rows, selectedSlug, onSelect: () => undefined, onOpen: () => undefined },
 });
 
-export const AgentSectionCopilotOnly: StoryObj<Props> = {
+export const AgentSelectRow: StoryObj<Props> = {
   args: { defaultOpen: true, override: agentOverride([COPILOT_ROW], "copilot") },
 };
 
-export const AgentSectionWithAgents: StoryObj<Props> = {
-  args: {
-    defaultOpen: true,
-    override: agentOverride([COPILOT_ROW, JENNIFER_ROW, VANCAT_ROW], "copilot"),
-  },
-};
-
-export const AgentSectionPinnedAgent: StoryObj<Props> = {
+export const AgentSelectRowPinnedAgent: StoryObj<Props> = {
   args: {
     defaultOpen: true,
     override: {
@@ -186,11 +179,75 @@ export const AgentSectionPinnedAgent: StoryObj<Props> = {
   },
 };
 
-export const AgentSectionLongDescription: StoryObj<Props> = {
-  args: {
-    defaultOpen: true,
-    override: agentOverride(
-      [
+const teamOf = (count: number): AgentPickerRow[] =>
+  Array.from({ length: count }, (_, i) => ({
+    slug: `agent-${i + 1}`,
+    name: `Agent ${i + 1}`,
+    icon: "🟦",
+    description: `Stands in for the ${i + 1}th agent a real team would hold.`,
+    modelKey: null,
+    effort: null,
+  }));
+
+export const AgentListTwoAgents: StoryObj<Props> = {
+  render: () => (
+    <AgentPickerList
+      rows={[COPILOT_ROW, JENNIFER_ROW, VANCAT_ROW]}
+      selectedSlug="copilot"
+      highlightSlug="jennifer"
+      onPick={() => undefined}
+    />
+  ),
+};
+
+export const AgentListSixAgents: StoryObj<Props> = {
+  render: () => (
+    <AgentPickerList
+      rows={[COPILOT_ROW, JENNIFER_ROW, VANCAT_ROW, ...teamOf(3)]}
+      selectedSlug="vancat"
+      onPick={() => undefined}
+    />
+  ),
+};
+
+export const AgentListSearchable: StoryObj<Props> = {
+  render: () => (
+    <AgentPickerList
+      rows={[COPILOT_ROW, JENNIFER_ROW, VANCAT_ROW, ...teamOf(9)]}
+      selectedSlug="copilot"
+      search={{ query: "", onChange: () => undefined }}
+      onPick={() => undefined}
+    />
+  ),
+};
+
+export const AgentListSearchFiltered: StoryObj<Props> = {
+  render: () => (
+    <AgentPickerList
+      rows={[JENNIFER_ROW]}
+      selectedSlug="copilot"
+      highlightSlug="jennifer"
+      search={{ query: "jen", onChange: () => undefined }}
+      onPick={() => undefined}
+    />
+  ),
+};
+
+export const AgentListNoMatch: StoryObj<Props> = {
+  render: () => (
+    <AgentPickerList
+      rows={[]}
+      selectedSlug="copilot"
+      search={{ query: "zzz", onChange: () => undefined }}
+      onPick={() => undefined}
+    />
+  ),
+};
+
+export const AgentListLongDescription: StoryObj<Props> = {
+  render: () => (
+    <AgentPickerList
+      rows={[
         COPILOT_ROW,
         {
           ...JENNIFER_ROW,
@@ -200,8 +257,9 @@ export const AgentSectionLongDescription: StoryObj<Props> = {
           description:
             "Reads every draft twice, argues for the reader over the author, and will not let a vague claim past without a citation, a cut, or a fight.",
         },
-      ],
-      "the-long-winded-developmental-editor"
-    ),
-  },
+      ]}
+      selectedSlug="the-long-winded-developmental-editor"
+      onPick={() => undefined}
+    />
+  ),
 };
