@@ -1944,15 +1944,24 @@ export class AgentSessionManager {
       agents.length === 0
         ? BUILTIN_ONLY_AGENT_ENTRIES
         : [BUILTIN_AGENT, ...agents.map(toAgentEntry)];
+    // Pins are compared alongside the display fields because the model picker's
+    // Agent section resolves each row's model and effort from them: an agent
+    // re-pinned in Settings has to reach the open picker, not just a renamed one
+    // (`designdocs/CUSTOM_AGENTS.md` §3).
     const unchanged =
       entries.length === this.agentEntries.length &&
       entries.every((entry, i) => {
         const before = this.agentEntries[i];
+        const pins = entry.kind === "custom" ? entry.agent : null;
+        const pinsBefore = before.kind === "custom" ? before.agent : null;
         return (
           entry.slug === before.slug &&
           entry.name === before.name &&
           entry.icon === before.icon &&
-          entry.description === before.description
+          entry.description === before.description &&
+          pins?.backendId === pinsBefore?.backendId &&
+          pins?.modelId === pinsBefore?.modelId &&
+          pins?.effort === pinsBefore?.effort
         );
       });
     this.agentRoster = agents.length === 0 ? EMPTY_CUSTOM_AGENTS : agents;

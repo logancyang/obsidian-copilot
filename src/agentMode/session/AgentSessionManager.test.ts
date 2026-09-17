@@ -4743,6 +4743,24 @@ describe("AgentSessionManager talking-to selection", () => {
     });
   });
 
+  it("republishes the roster when an agent's pins change, since the picker resolves rows from them", async () => {
+    // Found live: re-pinning Jennifer in Settings left the open model picker
+    // applying her old model and effort (`designdocs/CUSTOM_AGENTS.md` §3).
+    // A fresh record each read, as a re-read of the folder really produces.
+    const roster = [jennifer({ modelId: "opus", effort: "max" })];
+    const manager = buildManager({}, undefined, buildAgentFiles(roster));
+    await manager.refreshAgents();
+
+    roster[0] = jennifer({ modelId: null, effort: null });
+    await manager.refreshAgents();
+
+    const entry = manager.getAgentEntries()[1];
+    expect(entry.kind === "custom" && entry.agent).toMatchObject({
+      modelId: null,
+      effort: null,
+    });
+  });
+
   it("applies a new selection to the next new chat and to chats with no message yet", async () => {
     // The rule from `designdocs/CUSTOM_AGENTS.md` §3: a conversation already in
     // character keeps its agent; an untouched one follows the picker.
