@@ -243,11 +243,15 @@ describe("AgentChatMessages", () => {
 
     it("drops that headroom when a memory trust line follows, so the line sits under the turn that ended", () => {
       const { container } = renderMessages([assistantMessage("answer", 100_000)], false, {
-        memoryNotice: { agentName: "Jennifer", memoryPath: "copilot/agents/jennifer/MEMORY.md" },
+        memoryNotice: {
+          kind: "flush" as const,
+          agentName: "Jennifer",
+          path: "copilot/agents/jennifer/memory/2026-09-17.md",
+        },
       });
 
       expect(lastMessageBlock(container).style.minHeight).toBe("auto");
-      expect(screen.getByText("Jennifer updated their memory")).not.toBeNull();
+      expect(screen.getByText("Jennifer added to today's notes")).not.toBeNull();
     });
   });
 });

@@ -112,6 +112,7 @@ const mockManager = {
   noteSpawnConfigChanged: jest.fn(async (_id: string, _reason: string) => {}),
   registerPreload: jest.fn<void, [string, Promise<void>]>(),
   onInstallStateChanged: jest.fn(async (_id: string) => {}),
+  consolidateStaleAgentsOnLoad: jest.fn(async () => {}),
 };
 let plugin: CopilotPlugin;
 const reconcile = jest.mocked(reconcileBuiltinSkills);

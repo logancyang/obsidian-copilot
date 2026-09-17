@@ -4,6 +4,10 @@ import {
   getAgentFilePath,
   getAgentFolderPath,
   getAgentMemoryPath,
+  formatAgentDailyNoteLink,
+  getAgentDailyNotePath,
+  getAgentMemoryFolderPath,
+  parseAgentDailyNoteDate,
 } from "@/agents/agentPaths";
 
 describe("agentPaths", () => {
@@ -76,6 +80,42 @@ describe("agentPaths", () => {
       expect(getAgentMemoryPath("team/ai/agents", "vancat")).toBe(
         "team/ai/agents/vancat/MEMORY.md"
       );
+    });
+  });
+
+  describe("getAgentMemoryFolderPath()", () => {
+    it("puts the daily notes in a `memory` folder inside the agent's own folder", () => {
+      expect(getAgentMemoryFolderPath("copilot/agents", "jennifer")).toBe(
+        "copilot/agents/jennifer/memory"
+      );
+    });
+  });
+
+  describe("getAgentDailyNotePath()", () => {
+    it("names one day's note after the day it records", () => {
+      expect(getAgentDailyNotePath("copilot/agents", "jennifer", "2026-09-17")).toBe(
+        "copilot/agents/jennifer/memory/2026-09-17.md"
+      );
+    });
+  });
+
+  describe("parseAgentDailyNoteDate()", () => {
+    it("reads the day out of a daily note's file name", () => {
+      expect(parseAgentDailyNoteDate("2026-09-17.md")).toBe("2026-09-17");
+    });
+
+    // designdocs/CUSTOM_AGENTS.md §5: `memory/` is an ordinary vault folder, so
+    // a note the user put there themselves is not read as the agent's memory.
+    it("ignores a file whose name is not a day", () => {
+      expect(parseAgentDailyNoteDate("scratch.md")).toBeNull();
+      expect(parseAgentDailyNoteDate("2026-09-17.txt")).toBeNull();
+      expect(parseAgentDailyNoteDate("2026-09-17 draft.md")).toBeNull();
+    });
+  });
+
+  describe("formatAgentDailyNoteLink()", () => {
+    it("anchors an entry to its source day, relative to the agent's folder", () => {
+      expect(formatAgentDailyNoteLink("2026-09-17")).toBe("[[memory/2026-09-17]]");
     });
   });
 });

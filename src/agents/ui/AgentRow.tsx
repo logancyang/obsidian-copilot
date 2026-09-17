@@ -7,7 +7,16 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import { BookOpen, Edit3, Eraser, FolderSearch, MoreVertical, Trash2 } from "lucide-react";
+import {
+  BookOpen,
+  Edit3,
+  Eraser,
+  FolderSearch,
+  Layers,
+  MoreVertical,
+  NotebookPen,
+  Trash2,
+} from "lucide-react";
 import React from "react";
 
 /** What one row needs to render, already formatted by the container. */
@@ -38,6 +47,8 @@ export interface AgentRowProps {
   onEdit: () => void;
   onOpenFolder: () => void;
   onOpenMemory: () => void;
+  onOpenTodaysNotes: () => void;
+  onConsolidateMemory: () => void;
   onClearMemory: () => void;
   onDelete: () => void;
   /**
@@ -55,6 +66,8 @@ export const AgentRow: React.FC<AgentRowProps> = ({
   onEdit,
   onOpenFolder,
   onOpenMemory,
+  onOpenTodaysNotes,
+  onConsolidateMemory,
   onClearMemory,
   onDelete,
   containerRef,
@@ -149,6 +162,14 @@ export const AgentRow: React.FC<AgentRowProps> = ({
           <DropdownMenuItem className="tw-gap-2.5 tw-text-ui-small" onSelect={onOpenMemory}>
             <BookOpen className="tw-size-3.5" aria-hidden="true" />
             Open memory
+          </DropdownMenuItem>
+          <DropdownMenuItem className="tw-gap-2.5 tw-text-ui-small" onSelect={onOpenTodaysNotes}>
+            <NotebookPen className="tw-size-3.5" aria-hidden="true" />
+            Open today&apos;s notes
+          </DropdownMenuItem>
+          <DropdownMenuItem className="tw-gap-2.5 tw-text-ui-small" onSelect={onConsolidateMemory}>
+            <Layers className="tw-size-3.5" aria-hidden="true" />
+            Consolidate memory now
           </DropdownMenuItem>
           <DropdownMenuItem className="tw-gap-2.5 tw-text-ui-small" onSelect={onClearMemory}>
             <Eraser className="tw-size-3.5" aria-hidden="true" />

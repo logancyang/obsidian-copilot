@@ -276,6 +276,12 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     agentFileManager: new AgentFileManager(app),
   });
   managerRef = manager;
+  // Catch up on any agent whose memory went unconsolidated across a restart.
+  // Fire-and-forget: it talks to a backend, and plugin load must not wait for a
+  // model (`designdocs/CUSTOM_AGENTS.md` §5, "Consolidation").
+  void manager
+    .consolidateStaleAgentsOnLoad()
+    .catch((error) => logError("[Agents] Load-time consolidation failed", error));
   // Skill-set changes reach the affected backend when its descriptor opts in
   // via `restartOnManagedSkillsChange`, so native skill command caches stay
   // fresh. `noteSpawnConfigChanged` holds the restart behind the chat's Reload

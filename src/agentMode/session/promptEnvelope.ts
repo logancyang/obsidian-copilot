@@ -43,30 +43,47 @@ export function stripUserMessageWrapper(content: string): string {
     .replace(/\n$/, "");
 }
 
+/** One labeled section of the memory an agent brings to a turn. */
+export interface AgentMemorySection {
+  /** What this text is — `MEMORY.md`, or the day a note records. */
+  label: string;
+  text: string;
+}
+
 /**
- * The memory file an agent brings to a conversation.
+ * The memory an agent brings to a turn: its curated core plus the two most
+ * recent days of notes.
  *
- * `modifiedAtMs` dates the `updated` attribute, which tells the model how old
- * what it "remembers" is — a three-month-old note about an ongoing draft should
- * be weighed differently from yesterday's.
+ * `modifiedAtMs` is the newest of those files, and dates the `updated`
+ * attribute, which tells the model how old what it "remembers" is — a
+ * three-month-old note about an ongoing draft should be weighed differently
+ * from yesterday's.
  */
 export interface AgentMemorySource {
-  text: string;
+  sections: readonly AgentMemorySection[];
   modifiedAtMs: number;
 }
 
-/** Everything the persona blocks are rendered from. */
+/** Where an agent writes what it learns mid-turn, named in its persona block. */
+export interface AgentMemoryWriteTargets {
+  /** Vault-relative path of today's daily note, which the agent appends to. */
+  dailyNotePath: string;
+  /** Vault-relative `memory/` folder, which the agent reads older days from. */
+  memoryFolderPath: string;
+}
+
+/** Everything the `<agent_persona>` block is rendered from. */
 export interface AgentPersonaSource {
-  /** Agent display name, used as the `name` attribute of both blocks. */
+  /** Agent display name, used as the `name` attribute. */
   name: string;
   /** Body of `agent.md` — the standing instructions that are the persona. */
   instructions: string;
   /**
-   * Contents of `MEMORY.md`, or null when the agent's memory toggle is off or
-   * the file is absent. Absent memory emits no block at all, so the model is
-   * never told it remembers nothing.
+   * Where this agent may write, or null when it cannot: a read-only fan-out
+   * sub-session has no write tool, so telling it to keep notes would only
+   * produce a refusal (`designdocs/CUSTOM_AGENTS.md` §5).
    */
-  memory?: AgentMemorySource | null;
+  writeTargets?: AgentMemoryWriteTargets | null;
 }
 
 /** `YYYY-MM-DD` in the user's own timezone — the `updated` attribute's format. */
@@ -84,8 +101,30 @@ function escapeAttribute(value: string): string {
 }
 
 /**
- * Render the `<agent_persona>` and `<agent_memory>` blocks a custom agent's
- * chat carries in its FIRST user message, beside `<project_context>`.
+ * The standing note-keeping instruction an agent that can write carries inside
+ * its persona block.
+ *
+ * It names today's note rather than the folder because an agent given a folder
+ * has to decide a file name, and two agents deciding differently would break
+ * the one thing consolidation depends on: that a day of work is one dated file.
+ * See `designdocs/CUSTOM_AGENTS.md` §5 ("Daily notes").
+ */
+function buildNoteKeepingInstruction(targets: AgentMemoryWriteTargets): string {
+  return [
+    "## Keeping your own notes",
+    `When you learn something about this user worth keeping, append a bullet to ` +
+      `\`${targets.dailyNotePath}\` with your file tools. Create it if it is not ` +
+      `there. These are your notes to yourself, not a transcript.`,
+    `Your older notes are in \`${targets.memoryFolderPath}\`, one file per day. ` +
+      `Read them when a question reaches back further than what you were given.`,
+    "Never edit your MEMORY.md. It is rewritten from these notes by a separate " +
+      "pass, and an edit of yours would be overwritten.",
+  ].join("\n");
+}
+
+/**
+ * Render the `<agent_persona>` block a custom agent's chat carries in its FIRST
+ * user message, beside `<project_context>`.
  *
  * Persona and memory are user data, so they cannot ride the product prompt:
  * that string is a provider cache prefix and has to stay byte-identical across
@@ -95,24 +134,47 @@ function escapeAttribute(value: string): string {
  * message is past the cache wall and reaches all three backends identically.
  * See `designdocs/CUSTOM_AGENTS.md` §4 ("How the persona reaches the model").
  *
- * @param source - The agent's name, instructions, and optional memory file.
- * @returns The blocks, or null when the agent contributes neither — a named
- *   agent with an empty `agent.md` body and no memory says nothing the model
- *   can act on, so it sends nothing rather than an empty tag pair.
+ * @param source - The agent's name, instructions, and where it may write.
+ * @returns The block, or null when the agent contributes nothing — a named
+ *   agent with an empty `agent.md` body and nowhere to write says nothing the
+ *   model can act on, so it sends nothing rather than an empty tag pair.
  */
-export function buildAgentPersonaBlocks(source: AgentPersonaSource): string | null {
+export function buildAgentPersonaBlock(source: AgentPersonaSource): string | null {
   const name = source.name.trim();
   const instructions = source.instructions.trim();
-  const memory = source.memory ?? null;
-  const memoryText = memory?.text.trim() ?? "";
-  if (!name || (!instructions && !memoryText)) return null;
+  const targets = source.writeTargets ?? null;
+  if (!name || (!instructions && !targets)) return null;
+  const body = [instructions, targets ? buildNoteKeepingInstruction(targets) : ""]
+    .filter((part) => part.length > 0)
+    .join("\n\n");
+  return `<agent_persona name="${escapeAttribute(name)}">\n${body}\n</agent_persona>`;
+}
 
-  const attrName = escapeAttribute(name);
-  const blocks = [`<agent_persona name="${attrName}">\n${instructions}\n</agent_persona>`];
-  if (memory && memoryText) {
-    const updated = formatMemoryDate(memory.modifiedAtMs);
-    const updatedAttr = updated ? ` updated="${updated}"` : "";
-    blocks.push(`<agent_memory name="${attrName}"${updatedAttr}>\n${memoryText}\n</agent_memory>`);
-  }
-  return blocks.join("\n\n");
+/**
+ * Render the `<agent_memory>` block carrying what the agent already knows.
+ *
+ * Unlike the persona, this is re-sent whenever the files behind it change, so
+ * a long chat sees what the agent wrote down during it rather than only what it
+ * knew when the chat opened (`designdocs/CUSTOM_AGENTS.md` §5, "Reading").
+ * Sections are labeled because the curated core and a raw day of notes carry
+ * different weight, and the model cannot tell them apart otherwise.
+ *
+ * @param name - Agent display name, used as the `name` attribute.
+ * @param memory - The core and recent notes, or null when the agent has none.
+ * @returns The block, or null when there is nothing to recall — an empty block
+ *   would tell the model it remembers nothing, which is worse than silence.
+ */
+export function buildAgentMemoryBlock(
+  name: string,
+  memory: AgentMemorySource | null
+): string | null {
+  const attrName = name.trim();
+  const sections = (memory?.sections ?? [])
+    .map((section) => ({ label: section.label.trim(), text: section.text.trim() }))
+    .filter((section) => section.text.length > 0);
+  if (!attrName || sections.length === 0) return null;
+  const updated = formatMemoryDate(memory!.modifiedAtMs);
+  const updatedAttr = updated ? ` updated="${updated}"` : "";
+  const body = sections.map((section) => `## ${section.label}\n${section.text}`).join("\n\n");
+  return `<agent_memory name="${escapeAttribute(attrName)}"${updatedAttr}>\n${body}\n</agent_memory>`;
 }

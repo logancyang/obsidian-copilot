@@ -7,13 +7,18 @@ type AgentMemoryNoticeLineProps = React.ComponentProps<typeof AgentMemoryNoticeL
 const meta = {
   title: "Agent Mode/Memory Notice Line",
   component: AgentMemoryNoticeLine,
-  args: { agentName: "Jennifer", onOpen: () => {} },
+  args: { kind: "flush", agentName: "Jennifer", onOpen: () => {} },
   parameters: { gallery: { host: "leaf", layout: "padded" } },
 } satisfies Meta<AgentMemoryNoticeLineProps>;
 export default meta;
 
-/** What the chat shows once the agent has rewritten its file: one line, no modal. */
-export const AfterAnUpdate: StoryObj<AgentMemoryNoticeLineProps> = {};
+/** What the chat shows once the agent has jotted the turn down: one line, no modal. */
+export const AfterAFlush: StoryObj<AgentMemoryNoticeLineProps> = {};
+
+/** After the background pass rebuilt the curated file the agent carries everywhere. */
+export const AfterAConsolidation: StoryObj<AgentMemoryNoticeLineProps> = {
+  args: { kind: "consolidation" },
+};
 
 /** A long agent name truncates rather than pushing the open link out of reach. */
 export const LongAgentName: StoryObj<AgentMemoryNoticeLineProps> = {
@@ -27,7 +32,7 @@ export const BelowTheLastTurn: StoryObj<AgentMemoryNoticeLineProps> = {
       <div className="tw-px-3 tw-text-ui-small tw-text-normal">
         Understood — the hydrogen section is out, and I will show edits as a diff from now on.
       </div>
-      <AgentMemoryNoticeLine agentName="Jennifer" onOpen={() => {}} />
+      <AgentMemoryNoticeLine kind="flush" agentName="Jennifer" onOpen={() => {}} />
     </div>
   ),
 };

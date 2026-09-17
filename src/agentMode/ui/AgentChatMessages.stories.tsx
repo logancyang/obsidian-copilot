@@ -188,7 +188,11 @@ export const MemoryTrustLine: StoryObj<AgentChatMessagesProps> = {
         turnDurationMs: 4100,
       },
     ],
-    memoryNotice: { agentName: "Jennifer", memoryPath: "copilot/agents/jennifer/MEMORY.md" },
+    memoryNotice: {
+      kind: "flush",
+      agentName: "Jennifer",
+      path: "copilot/agents/jennifer/memory/2026-09-17.md",
+    },
   },
   render: (props) => <QueuedActionsDemo {...actionRailArgs} {...props} />,
 };

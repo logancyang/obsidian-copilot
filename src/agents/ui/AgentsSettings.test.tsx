@@ -2,7 +2,7 @@ import type { AgentDraft, AgentRecord } from "@/agents/types";
 import { AgentsSettings } from "@/agents/ui/AgentsSettings";
 import { AppContext } from "@/context";
 import { PluginProvider } from "@/contexts/PluginContext";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { App } from "obsidian";
 import React from "react";
 
@@ -90,6 +90,23 @@ jest.mock("@/agents/ui/AgentDeleteConfirmModal", () => ({
     open = jest.fn();
   },
 }));
+// Same stand-in for the clear-memory confirm, which takes the notes folder.
+let confirmClear: (() => void | Promise<void>) | null = null;
+let clearConfirmArgs: { name: string; memoryFolderPath: string } | null = null;
+jest.mock("@/agents/ui/AgentClearMemoryConfirmModal", () => ({
+  AgentClearMemoryConfirmModal: class {
+    constructor(
+      _app: unknown,
+      name: string,
+      memoryFolderPath: string,
+      onConfirm: () => void | Promise<void>
+    ) {
+      clearConfirmArgs = { name, memoryFolderPath };
+      confirmClear = onConfirm;
+    }
+    open = jest.fn();
+  },
+}));
 
 beforeAll(() => {
   (window as unknown as { activeDocument: Document }).activeDocument = window.document;
@@ -120,6 +137,7 @@ function makeRecord(overrides: Partial<AgentRecord["agent"]> = {}): AgentRecord 
     folderPath: `copilot/agents/${slug}`,
     filePath: `copilot/agents/${slug}/agent.md`,
     memoryPath: `copilot/agents/${slug}/MEMORY.md`,
+    memoryFolderPath: `copilot/agents/${slug}/memory`,
     memoryBytes: 2662,
   };
 }
@@ -151,6 +169,8 @@ describe("AgentsSettings", () => {
     jest.clearAllMocks();
     confirmDelete = null;
     confirmArgs = null;
+    confirmClear = null;
+    clearConfirmArgs = null;
     selfHostMode = false;
     listAgents.mockResolvedValue([]);
   });
@@ -308,7 +328,23 @@ describe("AgentsSettings", () => {
     });
   });
 
-  it("clears the memory file and refreshes the reported size", async () => {
+  it("names the daily-notes folder before clearing, because clearing takes it too (CUSTOM_AGENTS.md §5)", async () => {
+    listAgents.mockResolvedValue([makeRecord()]);
+    renderPanel();
+
+    fireEvent.pointerDown(await screen.findByLabelText("More actions for Jennifer"), {
+      button: 0,
+    });
+    fireEvent.click(screen.getByText("Clear memory"));
+
+    expect(clearConfirmArgs).toEqual({
+      name: "Jennifer",
+      memoryFolderPath: "copilot/agents/jennifer/memory",
+    });
+    expect(clearMemory).not.toHaveBeenCalled();
+  });
+
+  it("clears the memory file and refreshes the reported size once confirmed", async () => {
     listAgents.mockResolvedValue([makeRecord()]);
     clearMemory.mockResolvedValue(undefined);
     renderPanel();
@@ -317,6 +353,9 @@ describe("AgentsSettings", () => {
       button: 0,
     });
     fireEvent.click(screen.getByText("Clear memory"));
+    await act(async () => {
+      await confirmClear?.();
+    });
 
     await waitFor(() => expect(clearMemory).toHaveBeenCalledWith("jennifer"));
     expect(listAgents).toHaveBeenCalledTimes(2);

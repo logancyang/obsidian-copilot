@@ -698,6 +698,16 @@ describe("searchUtils", () => {
       expect(filter("copilot/agents/jennifer/MEMORY.md")).toBe(false);
     });
 
+    // designdocs/CUSTOM_AGENTS.md §5: the daily notes an agent writes during
+    // work sit one level deeper, under `memory/`. They are the rawest record of
+    // what the user said, so retrieval must not surface them either.
+    it("keeps an agent's daily notes out of indexing and search", () => {
+      (settingsModel.getSettings as jest.Mock).mockReturnValue(agentSettings);
+      const note = "copilot/agents/jennifer/memory/2026-09-17.md";
+      expect(shouldIndexFile(window.app, createTestFile(note), null, null)).toBe(false);
+      expect(createCopilotPatternFilter(window.app)(note)).toBe(false);
+    });
+
     it("excludes them under a custom Copilot root as well", () => {
       (settingsModel.getSettings as jest.Mock).mockReturnValue({
         ...agentSettings,

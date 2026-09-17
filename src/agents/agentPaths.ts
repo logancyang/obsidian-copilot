@@ -1,4 +1,8 @@
-import { AGENT_FILE_NAME, AGENT_MEMORY_FILE_NAME } from "@/agents/constants";
+import {
+  AGENT_FILE_NAME,
+  AGENT_MEMORY_FILE_NAME,
+  AGENT_MEMORY_FOLDER_NAME,
+} from "@/agents/constants";
 import { BUILTIN_AGENT_SLUG } from "@/agents/types";
 import { normalizePath } from "obsidian";
 
@@ -74,4 +78,49 @@ export function getAgentFilePath(agentsFolder: string, slug: string): string {
 /** Vault-relative path of one agent's `MEMORY.md`. */
 export function getAgentMemoryPath(agentsFolder: string, slug: string): string {
   return normalizePath(`${getAgentFolderPath(agentsFolder, slug)}/${AGENT_MEMORY_FILE_NAME}`);
+}
+
+/** Vault-relative folder of one agent's daily notes, `<agent>/memory`. */
+export function getAgentMemoryFolderPath(agentsFolder: string, slug: string): string {
+  return normalizePath(`${getAgentFolderPath(agentsFolder, slug)}/${AGENT_MEMORY_FOLDER_NAME}`);
+}
+
+/**
+ * Vault-relative path of one agent's daily note for `date`.
+ *
+ * @param date - Day the note records, as `YYYY-MM-DD`.
+ */
+export function getAgentDailyNotePath(agentsFolder: string, slug: string, date: string): string {
+  return normalizePath(`${getAgentMemoryFolderPath(agentsFolder, slug)}/${date}.md`);
+}
+
+/** A daily note's file name: the date it records, and nothing else. */
+const DAILY_NOTE_FILE_NAME = /^(\d{4}-\d{2}-\d{2})\.md$/;
+
+/**
+ * The day a file in the `memory/` folder records, or null when its name is not
+ * a date.
+ *
+ * The folder is an ordinary vault folder, so the user may keep their own notes
+ * beside the dated ones; anything unnamed is left alone rather than read as
+ * memory (`designdocs/CUSTOM_AGENTS.md` §5).
+ *
+ * @param fileName - File name with its extension, as the vault reports it.
+ */
+export function parseAgentDailyNoteDate(fileName: string): string | null {
+  const match = DAILY_NOTE_FILE_NAME.exec(fileName);
+  return match ? match[1] : null;
+}
+
+/**
+ * The wikilink a consolidated `MEMORY.md` entry cites its source day with, so a
+ * user can trace any fact back to the day it was learned.
+ *
+ * Relative to the agent's own folder, which is where `MEMORY.md` sits, so the
+ * link resolves when the note is opened (`designdocs/CUSTOM_AGENTS.md` §5).
+ *
+ * @param date - Day the entry came from, as `YYYY-MM-DD`.
+ */
+export function formatAgentDailyNoteLink(date: string): string {
+  return `[[${AGENT_MEMORY_FOLDER_NAME}/${date}]]`;
 }

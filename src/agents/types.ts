@@ -40,6 +40,8 @@ export interface AgentRecord {
   filePath: string;
   /** Vault-relative path of `MEMORY.md`. */
   memoryPath: string;
+  /** Vault-relative `memory/` folder holding the agent's daily notes. */
+  memoryFolderPath: string;
   /** Size of `MEMORY.md` in bytes; 0 when the file is absent. */
   memoryBytes: number;
 }

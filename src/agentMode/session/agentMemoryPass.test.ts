@@ -1,9 +1,8 @@
 import type { AgentFileManager } from "@/agents/AgentFileManager";
-import { AGENT_MEMORY_HEADINGS } from "@/agents/agentFile";
 import type { CustomAgent } from "@/agents/types";
 import {
   buildFanoutMemoryTranscript,
-  runAgentMemoryPass,
+  runAgentMemoryFlush,
 } from "@/agentMode/session/agentMemoryPass";
 import type { ReadOnlySubSessionRunner } from "@/agentMode/session/readOnlySubSession";
 import type { AgentChatMessage } from "@/agentMode/session/types";
@@ -24,14 +23,6 @@ const JENNIFER: CustomAgent = {
   instructions: "You are Jennifer.",
 };
 
-function memoryFile(entry = "- (2026-09-10) Writes a weekly newsletter."): string {
-  return [
-    "# Jennifer's memory",
-    "",
-    ...AGENT_MEMORY_HEADINGS.flatMap((heading) => [`## ${heading}`, entry, ""]),
-  ].join("\n");
-}
-
 const TRANSCRIPT: AgentChatMessage[] = [
   {
     id: "u1",
@@ -46,19 +37,20 @@ const TRANSCRIPT: AgentChatMessage[] = [
 interface Harness {
   files: AgentFileManager;
   subSessions: ReadOnlySubSessionRunner;
-  written: { slug: string; text: string }[];
+  appended: { slug: string; date: string; section: string }[];
   prompts: string[];
   backends: string[];
 }
 
-function buildHarness(options: {
-  agent?: CustomAgent | null;
-  stored?: string | null;
-  answer?: string;
-  fail?: Error;
-  outcome?: "done" | "aborted";
-}): Harness {
-  const written: { slug: string; text: string }[] = [];
+function buildHarness(
+  options: {
+    agent?: CustomAgent | null;
+    answer?: string;
+    fail?: Error;
+    outcome?: "done" | "aborted";
+  } = {}
+): Harness {
+  const appended: { slug: string; date: string; section: string }[] = [];
   const prompts: string[] = [];
   const backends: string[] = [];
   const agent = options.agent === undefined ? JENNIFER : options.agent;
@@ -70,18 +62,14 @@ function buildHarness(options: {
             folderPath: `copilot/agents/${agent.slug}`,
             filePath: `copilot/agents/${agent.slug}/agent.md`,
             memoryPath: `copilot/agents/${agent.slug}/MEMORY.md`,
+            memoryFolderPath: `copilot/agents/${agent.slug}/memory`,
             memoryBytes: 10,
           }
         : null
     ),
-    readMemoryDocument: jest.fn(async () =>
-      options.stored === null || options.stored === undefined
-        ? null
-        : { text: options.stored, modifiedAtMs: 0 }
-    ),
-    writeMemory: jest.fn(async (slug: string, text: string) => {
-      written.push({ slug, text });
-      return `copilot/agents/${slug}/MEMORY.md`;
+    appendDailyNote: jest.fn(async (slug: string, date: string, section: string) => {
+      appended.push({ slug, date, section });
+      return `copilot/agents/${slug}/memory/${date}.md`;
     }),
   } as unknown as AgentFileManager;
 
@@ -95,54 +83,57 @@ function buildHarness(options: {
         backends.push(request.backendId);
         prompts.push(request.prompt[0].text);
         if (options.fail) throw options.fail;
-        request.onText(options.answer ?? memoryFile("- (2026-09-17) Cut hydrogen."));
+        request.onText(options.answer ?? "- Wants the hydrogen section cut.");
         return options.outcome ?? "done";
       }
     ),
   } as unknown as ReadOnlySubSessionRunner;
 
-  return { files, subSessions, written, prompts, backends };
+  return { files, subSessions, appended, prompts, backends };
 }
 
-function run(harness: Harness, overrides: Partial<Parameters<typeof runAgentMemoryPass>[1]> = {}) {
-  return runAgentMemoryPass(
+/** 2026-09-17 09:40 local, so the note's name and heading are timezone-independent. */
+const FLUSHED_AT = new Date(2026, 8, 17, 9, 40, 0);
+
+function run(harness: Harness, overrides: Partial<Parameters<typeof runAgentMemoryFlush>[1]> = {}) {
+  return runAgentMemoryFlush(
     { files: harness.files, subSessions: harness.subSessions },
     {
       agentSlug: "jennifer",
       sessionBackendId: "claude",
       messages: TRANSCRIPT,
+      chatTitle: "Newsletter rename",
       signal: new AbortController().signal,
+      now: FLUSHED_AT,
       ...overrides,
     }
   );
 }
 
 describe("agentMemoryPass", () => {
-  describe("runAgentMemoryPass()", () => {
-    it("writes the file the agent returned and reports who wrote it", async () => {
-      const harness = buildHarness({ stored: memoryFile() });
+  describe("runAgentMemoryFlush()", () => {
+    it("appends the bullets under a heading naming the time and the chat (CUSTOM_AGENTS.md §5)", async () => {
+      const harness = buildHarness();
 
       const outcome = await run(harness);
 
       expect(outcome).toEqual({
         status: "written",
         agentName: "Jennifer",
-        memoryPath: "copilot/agents/jennifer/MEMORY.md",
+        notePath: "copilot/agents/jennifer/memory/2026-09-17.md",
+        date: "2026-09-17",
       });
-      expect(harness.written).toHaveLength(1);
-      expect(harness.written[0].text).toContain("Cut hydrogen.");
+      expect(harness.appended).toEqual([
+        {
+          slug: "jennifer",
+          date: "2026-09-17",
+          section: "## 09:40 Newsletter rename\n\n- Wants the hydrogen section cut.\n",
+        },
+      ]);
     });
 
-    it("reads MEMORY.md from disk at pass time, so a user's own edit is the baseline (CUSTOM_AGENTS.md §5)", async () => {
-      const harness = buildHarness({ stored: memoryFile("- (2026-09-16) Edited by hand.") });
-
-      await run(harness);
-
-      expect(harness.prompts[0]).toContain("Edited by hand.");
-    });
-
-    it("frames the transcript as a finished conversation rather than a question to answer", async () => {
-      const harness = buildHarness({ stored: memoryFile() });
+    it("frames the transcript as something to read rather than a question to answer", async () => {
+      const harness = buildHarness();
 
       await run(harness);
 
@@ -152,10 +143,7 @@ describe("agentMemoryPass", () => {
     });
 
     it("runs on the agent's pinned backend when it has one", async () => {
-      const harness = buildHarness({
-        agent: { ...JENNIFER, backendId: "codex" },
-        stored: memoryFile(),
-      });
+      const harness = buildHarness({ agent: { ...JENNIFER, backendId: "codex" } });
 
       await run(harness);
 
@@ -163,7 +151,7 @@ describe("agentMemoryPass", () => {
     });
 
     it("runs on the chat's own backend when the agent pins none", async () => {
-      const harness = buildHarness({ stored: memoryFile() });
+      const harness = buildHarness();
 
       await run(harness);
 
@@ -177,51 +165,44 @@ describe("agentMemoryPass", () => {
       expect(harness.subSessions.run).not.toHaveBeenCalled();
     });
 
-    it("skips an agent whose memory toggle is off, writing and reading nothing (CUSTOM_AGENTS.md §7)", async () => {
+    it("skips an agent whose memory toggle is off, writing nothing (CUSTOM_AGENTS.md §7)", async () => {
       const harness = buildHarness({ agent: { ...JENNIFER, memoryEnabled: false } });
 
       expect(await run(harness)).toEqual({ status: "skipped", reason: "memory-off" });
-      expect(harness.files.readMemoryDocument).not.toHaveBeenCalled();
-      expect(harness.written).toHaveLength(0);
+      expect(harness.appended).toHaveLength(0);
     });
 
     it("skips a conversation with no renderable turns", async () => {
-      const harness = buildHarness({ stored: memoryFile() });
+      const harness = buildHarness();
 
       expect(await run(harness, { messages: [] })).toEqual({
         status: "skipped",
         reason: "no-turns",
       });
+      expect(harness.appended).toHaveLength(0);
     });
 
-    it("starts from the empty skeleton when the memory file was deleted by hand", async () => {
-      const harness = buildHarness({ stored: null });
+    // designdocs/CUSTOM_AGENTS.md §5: a day of notes should read as the
+    // conversations that mattered, not as one heading per exchange.
+    it("leaves no heading behind when the conversation taught the agent nothing", async () => {
+      const harness = buildHarness({ answer: "NOTHING" });
 
-      await run(harness);
-
-      expect(harness.prompts[0]).toContain("# Jennifer's memory");
-      for (const heading of AGENT_MEMORY_HEADINGS) expect(harness.prompts[0]).toContain(heading);
-    });
-
-    it("keeps the old file when the answer fails the safety rails (CUSTOM_AGENTS.md §5)", async () => {
-      const harness = buildHarness({ stored: memoryFile(), answer: "  " });
-
-      expect(await run(harness)).toEqual({ status: "rejected", reason: "empty" });
-      expect(harness.written).toHaveLength(0);
+      expect(await run(harness)).toEqual({ status: "skipped", reason: "nothing-to-keep" });
+      expect(harness.appended).toHaveLength(0);
     });
 
     it("reports a backend failure as an outcome rather than throwing at the boundary", async () => {
-      const harness = buildHarness({ stored: memoryFile(), fail: new Error("backend down") });
+      const harness = buildHarness({ fail: new Error("backend down") });
 
       expect(await run(harness)).toMatchObject({ status: "failed" });
-      expect(harness.written).toHaveLength(0);
+      expect(harness.appended).toHaveLength(0);
     });
 
     it("writes nothing when the sub-session was aborted mid-answer", async () => {
-      const harness = buildHarness({ stored: memoryFile(), outcome: "aborted" });
+      const harness = buildHarness({ outcome: "aborted" });
 
       expect(await run(harness)).toMatchObject({ status: "failed" });
-      expect(harness.written).toHaveLength(0);
+      expect(harness.appended).toHaveLength(0);
     });
   });
 

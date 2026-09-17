@@ -1,4 +1,8 @@
-import { buildAgentPersonaBlocks, stripUserMessageWrapper } from "./promptEnvelope";
+import {
+  buildAgentMemoryBlock,
+  buildAgentPersonaBlock,
+  stripUserMessageWrapper,
+} from "./promptEnvelope";
 
 describe("promptEnvelope", () => {
   describe("stripUserMessageWrapper()", () => {
@@ -66,89 +70,136 @@ describe("promptEnvelope", () => {
     });
   });
 
-  describe("buildAgentPersonaBlocks()", () => {
-    // The two blocks are the whole of how a persona reaches the model; see
+  describe("buildAgentPersonaBlock()", () => {
+    // The persona block is how an identity reaches the model; see
     // `designdocs/CUSTOM_AGENTS.md` §4 ("How the persona reaches the model").
     const JENNIFER = {
       name: "Jennifer",
       instructions: "You are Jennifer, a developmental editor.",
     };
-    // 2026-09-14T15:00:00 local, so the rendered day is timezone-independent.
-    const MEMORY_MODIFIED_MS = new Date(2026, 8, 14, 15, 0, 0).getTime();
+    const TARGETS = {
+      dailyNotePath: "copilot/agents/jennifer/memory/2026-09-17.md",
+      memoryFolderPath: "copilot/agents/jennifer/memory",
+    };
 
-    it("emits the persona block alone when the agent has no memory to carry", () => {
-      expect(buildAgentPersonaBlocks(JENNIFER)).toBe(
+    it("emits the standing instructions alone when the agent cannot write", () => {
+      expect(buildAgentPersonaBlock(JENNIFER)).toBe(
         '<agent_persona name="Jennifer">\nYou are Jennifer, a developmental editor.\n</agent_persona>'
       );
     });
 
-    it("emits the memory block after the persona, dated by the file's last write", () => {
-      const blocks = buildAgentPersonaBlocks({
-        ...JENNIFER,
-        memory: {
-          text: "## About the user\n\n- Writes a climate newsletter.",
-          modifiedAtMs: MEMORY_MODIFIED_MS,
-        },
-      });
+    // designdocs/CUSTOM_AGENTS.md §5: the agent appends to today's note with
+    // its own file tools, and consolidation owns MEMORY.md.
+    it("names today's note and the folder, and forbids editing MEMORY.md, when it can write", () => {
+      const block = buildAgentPersonaBlock({ ...JENNIFER, writeTargets: TARGETS });
 
-      expect(blocks).toBe(
-        '<agent_persona name="Jennifer">\nYou are Jennifer, a developmental editor.\n</agent_persona>\n\n' +
-          '<agent_memory name="Jennifer" updated="2026-09-14">\n' +
-          "## About the user\n\n- Writes a climate newsletter.\n</agent_memory>"
+      expect(block).toContain("You are Jennifer, a developmental editor.");
+      expect(block).toContain("copilot/agents/jennifer/memory/2026-09-17.md");
+      expect(block).toContain("copilot/agents/jennifer/memory`");
+      expect(block).toContain("Never edit your MEMORY.md.");
+    });
+
+    // designdocs/CUSTOM_AGENTS.md §5: a read-only fan-out sub-session has no
+    // file tools, so a note-keeping instruction could only produce a refusal.
+    it("says nothing about notes for a read-only answerer", () => {
+      expect(buildAgentPersonaBlock({ ...JENNIFER, writeTargets: null })).not.toContain(
+        "Keeping your own notes"
       );
     });
 
-    it("omits the memory block when the agent's memory toggle is off", () => {
-      // The caller passes null for a memory-disabled agent, so the model is
-      // never handed an empty notebook to reason about.
-      expect(buildAgentPersonaBlocks({ ...JENNIFER, memory: null })).not.toContain("<agent_memory");
-    });
-
-    it("omits the memory block when MEMORY.md is missing or holds only whitespace", () => {
-      const blocks = buildAgentPersonaBlocks({
-        ...JENNIFER,
-        memory: { text: "   \n\n", modifiedAtMs: MEMORY_MODIFIED_MS },
-      });
-
-      expect(blocks).toBe(
-        '<agent_persona name="Jennifer">\nYou are Jennifer, a developmental editor.\n</agent_persona>'
-      );
-    });
-
-    it("carries memory even when the agent's instructions body is empty", () => {
-      const blocks = buildAgentPersonaBlocks({
+    it("still carries the note-keeping instruction when the instructions body is empty", () => {
+      const block = buildAgentPersonaBlock({
         name: "Jennifer",
         instructions: "",
-        memory: { text: "- knows the newsletter", modifiedAtMs: MEMORY_MODIFIED_MS },
+        writeTargets: TARGETS,
       });
 
-      expect(blocks).toContain('<agent_persona name="Jennifer">');
-      expect(blocks).toContain("- knows the newsletter");
+      expect(block).toContain('<agent_persona name="Jennifer">');
+      expect(block).toContain("Keeping your own notes");
     });
 
-    it("returns null for an agent that contributes neither instructions nor memory", () => {
-      expect(buildAgentPersonaBlocks({ name: "Jennifer", instructions: "  " })).toBeNull();
+    it("returns null for an agent that contributes neither instructions nor a place to write", () => {
+      expect(buildAgentPersonaBlock({ name: "Jennifer", instructions: "  " })).toBeNull();
     });
 
     it("returns null when no agent is named, which is how the built-in Copilot sends nothing", () => {
-      expect(buildAgentPersonaBlocks({ name: "", instructions: "anything" })).toBeNull();
+      expect(buildAgentPersonaBlock({ name: "", instructions: "anything" })).toBeNull();
     });
 
     it("escapes a double quote in the agent name so it cannot break the attribute", () => {
-      const blocks = buildAgentPersonaBlocks({ name: 'Jen "The Knife"', instructions: "cut it" });
+      const block = buildAgentPersonaBlock({ name: 'Jen "The Knife"', instructions: "cut it" });
 
-      expect(blocks).toBe(
+      expect(block).toBe(
         '<agent_persona name="Jen &quot;The Knife&quot;">\ncut it\n</agent_persona>'
       );
     });
+  });
 
-    it("omits the updated attribute when the memory file carries no usable timestamp", () => {
-      const blocks = buildAgentPersonaBlocks({
-        ...JENNIFER,
-        memory: { text: "- something", modifiedAtMs: Number.NaN },
+  describe("buildAgentMemoryBlock()", () => {
+    // 2026-09-14T15:00:00 local, so the rendered day is timezone-independent.
+    const MEMORY_MODIFIED_MS = new Date(2026, 8, 14, 15, 0, 0).getTime();
+
+    // designdocs/CUSTOM_AGENTS.md §5: the block carries the curated core plus
+    // today's and yesterday's notes, each labeled so the model can weigh them.
+    it("labels each section and dates the block by the newest file it read", () => {
+      const block = buildAgentMemoryBlock("Jennifer", {
+        sections: [
+          { label: "MEMORY.md", text: "## About the user\n\n- Writes a climate newsletter." },
+          { label: "Your notes from 2026-09-14", text: "- Renamed the newsletter." },
+        ],
+        modifiedAtMs: MEMORY_MODIFIED_MS,
       });
 
-      expect(blocks).toContain('<agent_memory name="Jennifer">');
+      expect(block).toBe(
+        '<agent_memory name="Jennifer" updated="2026-09-14">\n' +
+          "## MEMORY.md\n## About the user\n\n- Writes a climate newsletter.\n\n" +
+          "## Your notes from 2026-09-14\n- Renamed the newsletter.\n</agent_memory>"
+      );
+    });
+
+    it("drops a section whose file held only whitespace", () => {
+      const block = buildAgentMemoryBlock("Jennifer", {
+        sections: [
+          { label: "MEMORY.md", text: "- something" },
+          { label: "Your notes from 2026-09-14", text: "   \n\n" },
+        ],
+        modifiedAtMs: MEMORY_MODIFIED_MS,
+      });
+
+      expect(block).toContain("- something");
+      expect(block).not.toContain("Your notes from");
+    });
+
+    it("returns null when the agent has nothing to recall, rather than an empty notebook", () => {
+      expect(buildAgentMemoryBlock("Jennifer", null)).toBeNull();
+      expect(buildAgentMemoryBlock("Jennifer", { sections: [], modifiedAtMs: 0 })).toBeNull();
+    });
+
+    it("returns null when no agent is named, which is how the built-in Copilot sends nothing", () => {
+      expect(
+        buildAgentMemoryBlock("", {
+          sections: [{ label: "MEMORY.md", text: "x" }],
+          modifiedAtMs: 0,
+        })
+      ).toBeNull();
+    });
+
+    it("escapes a double quote in the agent name so it cannot break the attribute", () => {
+      const block = buildAgentMemoryBlock('Jen "The Knife"', {
+        sections: [{ label: "MEMORY.md", text: "x" }],
+        modifiedAtMs: MEMORY_MODIFIED_MS,
+      });
+
+      expect(block).toContain('<agent_memory name="Jen &quot;The Knife&quot;"');
+    });
+
+    it("omits the updated attribute when no file carried a usable timestamp", () => {
+      const block = buildAgentMemoryBlock("Jennifer", {
+        sections: [{ label: "MEMORY.md", text: "- something" }],
+        modifiedAtMs: Number.NaN,
+      });
+
+      expect(block).toContain('<agent_memory name="Jennifer">');
     });
   });
 });

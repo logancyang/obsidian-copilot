@@ -1,10 +1,10 @@
 import type { AgentFileManager } from "@/agents/AgentFileManager";
-import { buildAgentMemorySkeleton } from "@/agents/agentFile";
 import {
-  buildAgentMemoryPrompt,
-  reviewMemoryUpdate,
-  type MemoryUpdateRejection,
+  buildAgentMemoryFlushPrompt,
+  formatMemoryEntryDate,
+  parseMemoryFlushBullets,
 } from "@/agents/agentMemory";
+import { buildDailyNoteSection } from "@/agents/agentMemoryFile";
 import {
   buildConversationHistoryBlock,
   FANOUT_HISTORY_MAX_CHARS,
@@ -17,33 +17,35 @@ import { err2String, formatDateTime } from "@/utils";
 import { v4 as uuidv4 } from "uuid";
 
 /**
- * Framing the agent reads the ended conversation under. The fan-out default
- * tells the reader to answer the question that follows; there is no question
- * here, only a file to rewrite.
+ * Framing the agent reads the conversation under. The fan-out default tells the
+ * reader to answer the question that follows; there is no question here, only
+ * notes to take.
  */
 const MEMORY_TRANSCRIPT_HEADER =
-  "This is the conversation you have just finished with the user, in order. " +
+  "This is the conversation you have been having with the user, in order. " +
   "Read it for what is worth remembering; do not reply to it.";
 
-/** One conversation's worth of work for one agent's memory file. */
-export interface AgentMemoryPassRequest {
-  /** Agent whose `MEMORY.md` is being updated. */
+/** One stretch of conversation to fold into one agent's daily note. */
+export interface AgentMemoryFlushRequest {
+  /** Agent whose daily note is being appended to. */
   agentSlug: string;
   /** Backend the conversation ran on, used when the agent pins none of its own. */
   sessionBackendId: BackendId;
-  /** The turns since the agent last memorized, in transcript order. */
+  /** The turns since the agent last flushed, in transcript order. */
   messages: readonly AgentChatMessage[];
+  /** Chat title, which names the heading the bullets land under. */
+  chatTitle: string;
   /** Aborts the sub-session; the pass then reports `failed`. */
   signal: AbortSignal;
+  /** Clock, passed in so the note and heading a flush writes are testable. */
+  now?: Date;
 }
 
-/** What a finished pass did, so the caller can decide what to persist and show. */
-export type AgentMemoryPassOutcome =
-  | { status: "written"; agentName: string; memoryPath: string }
-  /** Nothing to do: not an agent with memory, or nothing new to memorize. */
-  | { status: "skipped"; reason: "no-agent" | "memory-off" | "no-turns" }
-  /** The safety rails refused what came back; the old file stands. */
-  | { status: "rejected"; reason: MemoryUpdateRejection }
+/** What a finished flush did, so the caller can decide what to persist and show. */
+export type AgentMemoryFlushOutcome =
+  | { status: "written"; agentName: string; notePath: string; date: string }
+  /** Nothing to do: not an agent with memory, nothing new, or nothing worth keeping. */
+  | { status: "skipped"; reason: "no-agent" | "memory-off" | "no-turns" | "nothing-to-keep" }
   | { status: "failed"; error: string };
 
 /** Collaborators the pass drives; injected so it is testable without a backend. */
@@ -53,24 +55,25 @@ export interface AgentMemoryPassDeps {
 }
 
 /**
- * Run one agent's memory update after a conversation with it has ended.
+ * Fold one stretch of conversation into its agent's daily note.
  *
- * The agent rewrites its own file, but never holds the pen: the pass runs in a
- * fresh read-only sub-session with no write tool, and the plugin writes what
- * comes back only once the safety rails accept it. `MEMORY.md` is re-read from
- * disk here rather than reused from the session, so a user's own edit is the
- * baseline the agent revises. See `designdocs/CUSTOM_AGENTS.md` §5 ("Memory").
+ * The agent decides what is worth keeping, but never holds the pen: the pass
+ * runs in a fresh read-only sub-session with no write tool, and the plugin
+ * appends what comes back. It returns bullets rather than a file because the
+ * note it lands in is shared with the agent's own in-turn writes and with
+ * every other conversation of that day — only consolidation rewrites anything
+ * whole. See `designdocs/CUSTOM_AGENTS.md` §5 ("Daily notes").
  *
  * Never throws: a backend failure is an outcome, because the caller is a
- * conversation boundary that must go on regardless.
+ * conversation boundary or an idle timer that must go on regardless.
  *
  * @param deps - The agent folder reader and the sub-session runner.
  * @param request - Which agent, on which backend, over which turns.
  */
-export async function runAgentMemoryPass(
+export async function runAgentMemoryFlush(
   deps: AgentMemoryPassDeps,
-  request: AgentMemoryPassRequest
-): Promise<AgentMemoryPassOutcome> {
+  request: AgentMemoryFlushRequest
+): Promise<AgentMemoryFlushOutcome> {
   try {
     const record = await deps.files.readAgent(request.agentSlug);
     // A chat outlives the agent it was held with, so a deleted agent is a
@@ -86,17 +89,7 @@ export async function runAgentMemoryPass(
     );
     if (!transcript) return { status: "skipped", reason: "no-turns" };
 
-    const stored = await deps.files.readMemoryDocument(agent.slug);
-    // A hand-deleted memory file leaves the agent with the skeleton it started
-    // life with, so the pass always has the fixed headings to revise.
-    const currentMemory = stored?.text.trim() || buildAgentMemorySkeleton(agent.name);
-
-    const prompt = buildAgentMemoryPrompt({
-      agentName: agent.name,
-      currentMemory,
-      transcript,
-      today: new Date(),
-    });
+    const prompt = buildAgentMemoryFlushPrompt({ agentName: agent.name, transcript });
 
     let returned = "";
     const outcome = await deps.subSessions.run({
@@ -107,23 +100,24 @@ export async function runAgentMemoryPass(
         returned += text;
       },
     });
-    if (outcome === "aborted") return { status: "failed", error: "Memory update was cancelled." };
+    if (outcome === "aborted") return { status: "failed", error: "Memory flush was cancelled." };
 
-    const review = reviewMemoryUpdate(currentMemory, returned);
-    if (!review.accepted) {
-      // Logged, never shown: the file is unchanged, so there is nothing the
-      // user could act on (`designdocs/CUSTOM_AGENTS.md` §5, "Safety rails").
-      logWarn(
-        `[Agents] Rejected a memory update for "${agent.slug}" (${review.reason}); keeping the existing file`
-      );
-      return { status: "rejected", reason: review.reason };
-    }
+    const bullets = parseMemoryFlushBullets(returned);
+    // A conversation that taught the agent nothing leaves no heading behind, so
+    // a day of notes reads as the days that mattered.
+    if (bullets.length === 0) return { status: "skipped", reason: "nothing-to-keep" };
 
-    const memoryPath = await deps.files.writeMemory(agent.slug, review.text);
-    logInfo(`[Agents] Updated memory at ${memoryPath}`);
-    return { status: "written", agentName: agent.name, memoryPath };
+    const at = request.now ?? new Date();
+    const date = formatMemoryEntryDate(at);
+    const notePath = await deps.files.appendDailyNote(
+      agent.slug,
+      date,
+      buildDailyNoteSection({ at, chatTitle: request.chatTitle, bullets })
+    );
+    logInfo(`[Agents] Appended ${bullets.length} note(s) to ${notePath}`);
+    return { status: "written", agentName: agent.name, notePath, date };
   } catch (error) {
-    logWarn(`[Agents] Memory update failed for "${request.agentSlug}"`, error);
+    logWarn(`[Agents] Memory flush failed for "${request.agentSlug}"`, error);
     return { status: "failed", error: err2String(error) };
   }
 }

@@ -1,3 +1,8 @@
+import {
+  AGENT_MEMORY_CONSOLIDATION_IDLE_MS,
+  AGENT_MEMORY_FLUSH_IDLE_MS,
+} from "@/agentMode/session/agentMemoryScheduler";
+import { formatMemoryEntryDate } from "@/agents/agentMemory";
 /**
  * Pool-semantics tests for AgentSessionManager. The shared backend
  * subprocess and the AgentSession factory are mocked so we can exercise
@@ -54,14 +59,24 @@ jest.mock("@/logger", () => ({
   logError: jest.fn(),
 }));
 
-// The pass itself is covered in `agentMemoryPass.test.ts`; here we test what the
-// manager does around it — when it starts one, and what it records afterwards.
+// The passes themselves are covered in `agentMemoryPass.test.ts` and
+// `agentMemoryConsolidation.test.ts`; here we test what the manager does around
+// them — when it starts one, and what it records afterwards.
 jest.mock("./agentMemoryPass", () => ({
   ...jest.requireActual("./agentMemoryPass"),
-  runAgentMemoryPass: jest.fn(),
+  runAgentMemoryFlush: jest.fn(),
 }));
-const mockRunAgentMemoryPass = jest.requireMock("./agentMemoryPass")
-  .runAgentMemoryPass as jest.Mock;
+const mockRunAgentMemoryFlush = jest.requireMock("./agentMemoryPass")
+  .runAgentMemoryFlush as jest.Mock;
+jest.mock("./agentMemoryConsolidation", () => ({
+  ...jest.requireActual("./agentMemoryConsolidation"),
+  runAgentMemoryConsolidation: jest.fn(),
+  hasUnconsolidatedNotes: jest.fn(),
+}));
+const mockRunConsolidation = jest.requireMock("./agentMemoryConsolidation")
+  .runAgentMemoryConsolidation as jest.Mock;
+const mockHasUnconsolidatedNotes = jest.requireMock("./agentMemoryConsolidation")
+  .hasUnconsolidatedNotes as jest.Mock;
 
 jest.mock("@/utils/vaultAdapterUtils", () => ({
   ...jest.requireActual("@/utils/vaultAdapterUtils"),
@@ -208,6 +223,7 @@ function makeMockSession(overrides: {
     name: string;
     icon: string;
     personaBlock: string | null;
+    memory: { block: string; fingerprint: string } | null;
   } = COPILOT_SESSION_AGENT;
   let labelSource: "user" | "agent" | null = overrides.label ? "agent" : null;
   let status: "starting" | "idle" | "running" | "awaiting_permission" | "error" | "closed" = "idle";
@@ -220,7 +236,9 @@ function makeMockSession(overrides: {
     onNeedsAttentionChanged?: (v: boolean) => void;
   }>();
   let memorizedThroughTurn = 0;
-  let memoryNotice: { agentName: string; memoryPath: string } | null = null;
+  type FakeMemoryNotice = { kind: string; agentName: string; path: string };
+  let memoryNotice: FakeMemoryNotice | null = null;
+  let pendingMemoryNotice: FakeMemoryNotice | null = null;
   const session = {
     internalId: overrides.internalId,
     chatInputId: overrides.chatInputId ?? overrides.internalId,
@@ -255,6 +273,17 @@ function makeMockSession(overrides: {
     getMemoryNotice: () => memoryNotice,
     setMemoryNotice: (next: unknown) => {
       memoryNotice = next as typeof memoryNotice;
+    },
+    setAgentMemory: (next: unknown) => {
+      sessionAgent = { ...sessionAgent, memory: next as typeof sessionAgent.memory };
+    },
+    setPendingMemoryNotice: (next: unknown) => {
+      pendingMemoryNotice = next as typeof memoryNotice;
+    },
+    promotePendingMemoryNotice: () => {
+      if (!pendingMemoryNotice) return;
+      memoryNotice = pendingMemoryNotice;
+      pendingMemoryNotice = null;
     },
     loadDisplayMessages: (messages: { message: string }[]) => {
       displayMessages = messages;
@@ -455,8 +484,12 @@ beforeEach(() => {
   // subscriptions linger; clear them so emitSettingsChange only reaches
   // the manager built in the current test.
   settingsChangeCallbacks.clear();
-  mockRunAgentMemoryPass.mockReset();
-  mockRunAgentMemoryPass.mockResolvedValue({ status: "skipped", reason: "no-turns" });
+  mockRunAgentMemoryFlush.mockReset();
+  mockRunAgentMemoryFlush.mockResolvedValue({ status: "skipped", reason: "no-turns" });
+  mockRunConsolidation.mockReset();
+  mockRunConsolidation.mockResolvedValue({ status: "skipped", reason: "no-new-notes" });
+  mockHasUnconsolidatedNotes.mockReset();
+  mockHasUnconsolidatedNotes.mockResolvedValue(false);
   mockPatchFrontmatter.mockClear();
 });
 
@@ -4682,29 +4715,36 @@ describe("AgentSessionManager context-source dirty tracking", () => {
 describe("AgentSessionManager talking-to selection", () => {
   /** An agent folder reader over a fixed roster, standing in for the vault. */
   function buildAgentFiles(agents: CustomAgent[], memory = "## About the user\n\n- knows things") {
+    const record = (agent: CustomAgent) => ({
+      agent,
+      folderPath: `copilot/agents/${agent.slug}`,
+      filePath: `copilot/agents/${agent.slug}/agent.md`,
+      memoryPath: `copilot/agents/${agent.slug}/MEMORY.md`,
+      memoryFolderPath: `copilot/agents/${agent.slug}/memory`,
+      memoryBytes: memory.length,
+    });
     return {
-      listAgents: jest.fn(async () =>
-        agents.map((agent) => ({
-          agent,
-          folderPath: `copilot/agents/${agent.slug}`,
-          filePath: `copilot/agents/${agent.slug}/agent.md`,
-          memoryPath: `copilot/agents/${agent.slug}/MEMORY.md`,
-          memoryBytes: memory.length,
-        }))
-      ),
+      listAgents: jest.fn(async () => agents.map(record)),
       readAgent: jest.fn(async (slug: string) => {
         const agent = agents.find((candidate) => candidate.slug === slug);
-        return agent
-          ? {
-              agent,
-              folderPath: `copilot/agents/${slug}`,
-              filePath: `copilot/agents/${slug}/agent.md`,
-              memoryPath: `copilot/agents/${slug}/MEMORY.md`,
-              memoryBytes: memory.length,
-            }
-          : null;
+        return agent ? record(agent) : null;
       }),
-      readMemoryDocument: jest.fn(async () => ({ text: memory, modifiedAtMs: 1_700_000_000_000 })),
+      readMemoryDocument: jest.fn(async () => ({
+        text: memory,
+        body: memory,
+        consolidatedThrough: null,
+        modifiedAtMs: 1_700_000_000_000,
+        hash: `hash-${memory.length}`,
+      })),
+      readDailyNote: jest.fn(async () => null),
+      listDailyNoteDates: jest.fn(() => []),
+      readDailyNotesAfter: jest.fn(async () => []),
+      appendDailyNote: jest.fn(
+        async (slug: string, date: string) => `copilot/agents/${slug}/memory/${date}.md`
+      ),
+      writeConsolidatedMemory: jest.fn(async () => "written"),
+      getDailyNotePath: (slug: string, date: string) => `copilot/agents/${slug}/memory/${date}.md`,
+      getMemoryFolderPath: (slug: string) => `copilot/agents/${slug}/memory`,
     } as unknown as ConstructorParameters<typeof AgentSessionManager>[2]["agentFileManager"];
   }
 
@@ -4777,18 +4817,18 @@ describe("AgentSessionManager talking-to selection", () => {
     expect(next.getAgent().slug).toBe("jennifer");
   });
 
-  it("carries the agent's persona and memory into the new chat's first prompt", async () => {
+  it("carries the agent's persona and what it remembers into the new chat", async () => {
     const manager = buildManager({}, undefined, buildAgentFiles([jennifer()]));
     await manager.setSelectedAgent("jennifer");
 
-    const persona = (await manager.createSession()).getAgent().personaBlock;
+    const agent = (await manager.createSession()).getAgent();
 
-    expect(persona).toContain('<agent_persona name="Jennifer">');
-    expect(persona).toContain("You are Jennifer, a developmental editor.");
-    expect(persona).toContain('<agent_memory name="Jennifer"');
+    expect(agent.personaBlock).toContain('<agent_persona name="Jennifer">');
+    expect(agent.personaBlock).toContain("You are Jennifer, a developmental editor.");
+    expect(agent.memory?.block).toContain('<agent_memory name="Jennifer"');
   });
 
-  it("sends no memory block for an agent whose memory toggle is off", async () => {
+  it("carries no memory for an agent whose memory toggle is off", async () => {
     const manager = buildManager(
       {},
       undefined,
@@ -4796,10 +4836,10 @@ describe("AgentSessionManager talking-to selection", () => {
     );
     await manager.setSelectedAgent("jennifer");
 
-    const persona = (await manager.createSession()).getAgent().personaBlock;
+    const agent = (await manager.createSession()).getAgent();
 
-    expect(persona).toContain("<agent_persona");
-    expect(persona).not.toContain("<agent_memory");
+    expect(agent.personaBlock).toContain("<agent_persona");
+    expect(agent.memory).toBeNull();
   });
 
   it("opens a new chat on the model the agent pinned", async () => {
@@ -4926,22 +4966,23 @@ describe("AgentSessionManager talking-to selection", () => {
     const WROTE = {
       status: "written",
       agentName: "Jennifer",
-      memoryPath: "copilot/agents/jennifer/MEMORY.md",
+      notePath: "copilot/agents/jennifer/memory/2026-09-17.md",
+      date: "2026-09-17",
     };
 
-    it("updates memory when the user opens a new chat (CUSTOM_AGENTS.md §5)", async () => {
+    it("flushes to the daily note when the user opens a new chat (CUSTOM_AGENTS.md §5)", async () => {
       const { manager } = await buildAgentChat();
 
       await manager.createSession();
 
-      await waitFor(() => expect(mockRunAgentMemoryPass).toHaveBeenCalledTimes(1));
-      expect(mockRunAgentMemoryPass.mock.calls[0][1]).toMatchObject({
+      await waitFor(() => expect(mockRunAgentMemoryFlush).toHaveBeenCalledTimes(1));
+      expect(mockRunAgentMemoryFlush.mock.calls[0][1]).toMatchObject({
         agentSlug: "jennifer",
         messages: [{ message: "hello" }],
       });
     });
 
-    it("updates memory when the user switches to another chat tab (CUSTOM_AGENTS.md §5)", async () => {
+    it("flushes when the user switches to another chat tab (CUSTOM_AGENTS.md §5)", async () => {
       const manager = buildManager({}, undefined, buildAgentFiles([jennifer()]));
       await manager.setSelectedAgent("jennifer");
       const chat = await manager.createSession();
@@ -4951,62 +4992,62 @@ describe("AgentSessionManager talking-to selection", () => {
 
       manager.setActiveSession(other.internalId);
 
-      await waitFor(() => expect(mockRunAgentMemoryPass).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(mockRunAgentMemoryFlush).toHaveBeenCalledTimes(1));
     });
 
-    it("updates memory when the chat is closed (CUSTOM_AGENTS.md §5)", async () => {
+    it("flushes when the chat is closed (CUSTOM_AGENTS.md §5)", async () => {
       const { manager, chat } = await buildAgentChat();
 
       await manager.closeSession(chat.internalId);
 
-      await waitFor(() => expect(mockRunAgentMemoryPass).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(mockRunAgentMemoryFlush).toHaveBeenCalledTimes(1));
     });
 
-    it("updates memory for every open chat when the plugin unloads (CUSTOM_AGENTS.md §5)", async () => {
+    it("flushes every open chat when the plugin unloads (CUSTOM_AGENTS.md §5)", async () => {
       const { manager } = await buildAgentChat();
 
       await manager.shutdown();
 
-      await waitFor(() => expect(mockRunAgentMemoryPass).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(mockRunAgentMemoryFlush).toHaveBeenCalledTimes(1));
     });
 
-    it("never updates memory for a chat with the built-in Copilot", async () => {
+    it("never flushes a chat with the built-in Copilot", async () => {
       const manager = buildManager({}, undefined, buildAgentFiles([jennifer()]));
       const chat = await manager.createSession();
       getSessionTestHandle(chat).setMessages([{ message: "hello" }]);
 
       await manager.closeSession(chat.internalId);
 
-      expect(mockRunAgentMemoryPass).not.toHaveBeenCalled();
+      expect(mockRunAgentMemoryFlush).not.toHaveBeenCalled();
     });
 
-    it("never updates memory for an empty chat", async () => {
+    it("never flushes an empty chat", async () => {
       const { manager, chat } = await buildAgentChat({ messages: [] });
 
       await manager.closeSession(chat.internalId);
 
-      expect(mockRunAgentMemoryPass).not.toHaveBeenCalled();
+      expect(mockRunAgentMemoryFlush).not.toHaveBeenCalled();
     });
 
-    it("never updates memory when nothing was said since the last update", async () => {
+    it("never flushes when nothing was said since the last one", async () => {
       const { manager, chat } = await buildAgentChat();
-      mockRunAgentMemoryPass.mockResolvedValue(WROTE);
+      mockRunAgentMemoryFlush.mockResolvedValue(WROTE);
       await manager.closeSession(chat.internalId);
       await waitFor(() => expect(chat.getMemorizedThroughTurn()).toBe(1));
-      mockRunAgentMemoryPass.mockClear();
+      mockRunAgentMemoryFlush.mockClear();
 
       expect(manager.updateMemoryNow(chat.internalId)).toBe(false);
-      expect(mockRunAgentMemoryPass).not.toHaveBeenCalled();
+      expect(mockRunAgentMemoryFlush).not.toHaveBeenCalled();
     });
 
-    it("feeds only the turns added since the last update", async () => {
+    it("feeds only the turns added since the last flush", async () => {
       const { manager, chat } = await buildAgentChat();
       chat.setMemorizedThroughTurn(1);
       getSessionTestHandle(chat).setMessages([{ message: "hello" }, { message: "and then this" }]);
 
       expect(manager.updateMemoryNow(chat.internalId)).toBe(true);
-      await waitFor(() => expect(mockRunAgentMemoryPass).toHaveBeenCalledTimes(1));
-      expect(mockRunAgentMemoryPass.mock.calls[0][1].messages).toEqual([
+      await waitFor(() => expect(mockRunAgentMemoryFlush).toHaveBeenCalledTimes(1));
+      expect(mockRunAgentMemoryFlush.mock.calls[0][1].messages).toEqual([
         { message: "and then this" },
       ]);
     });
@@ -5014,7 +5055,7 @@ describe("AgentSessionManager talking-to selection", () => {
     it("runs one pass per chat at a time, so a boundary during a pass starts no second one", async () => {
       const { manager, chat } = await buildAgentChat();
       let release: () => void = () => undefined;
-      mockRunAgentMemoryPass.mockReturnValue(
+      mockRunAgentMemoryFlush.mockReturnValue(
         new Promise((resolve) => {
           release = () => resolve({ status: "skipped", reason: "no-turns" });
         })
@@ -5024,7 +5065,7 @@ describe("AgentSessionManager talking-to selection", () => {
       expect(manager.updateMemoryNow(chat.internalId)).toBe(false);
       await manager.closeSession(chat.internalId);
 
-      expect(mockRunAgentMemoryPass).toHaveBeenCalledTimes(1);
+      expect(mockRunAgentMemoryFlush).toHaveBeenCalledTimes(1);
       release();
     });
 
@@ -5034,69 +5075,76 @@ describe("AgentSessionManager talking-to selection", () => {
 
       await manager.replaceSessionInPlace(chat.internalId, "opencode");
 
-      expect(mockRunAgentMemoryPass).not.toHaveBeenCalled();
+      expect(mockRunAgentMemoryFlush).not.toHaveBeenCalled();
     });
 
     it("shows the trust line and advances the marker once a write lands (CUSTOM_AGENTS.md §5)", async () => {
       const { manager, chat } = await buildAgentChat();
-      mockRunAgentMemoryPass.mockResolvedValue(WROTE);
+      mockRunAgentMemoryFlush.mockResolvedValue(WROTE);
 
       manager.updateMemoryNow(chat.internalId);
 
       await waitFor(() =>
         expect(chat.getMemoryNotice()).toEqual({
+          kind: "flush",
           agentName: "Jennifer",
-          memoryPath: "copilot/agents/jennifer/MEMORY.md",
+          path: "copilot/agents/jennifer/memory/2026-09-17.md",
         })
       );
       expect(chat.getMemorizedThroughTurn()).toBe(1);
     });
 
-    it("gives a chat that has not spoken yet the memory just written (CUSTOM_AGENTS.md §5)", async () => {
+    // designdocs/CUSTOM_AGENTS.md §5 ("Reading"): a chat re-sends what its agent
+    // knows whenever the files change, so a chat mid-conversation gets this too.
+    it("re-reads what the agent knows into every open chat with it once a flush lands", async () => {
       const files = buildAgentFiles([jennifer()]);
       const manager = buildManager({}, undefined, files);
       await manager.setSelectedAgent("jennifer");
       const chat = await manager.createSession();
       getSessionTestHandle(chat).setMessages([{ message: "hello" }]);
-      const landing = await manager.createSession();
-      // Creating the landing is itself a boundary; let its pass settle so the
-      // one-pass-per-chat guard is clear before the explicit update below.
-      await waitFor(() => expect(mockRunAgentMemoryPass).toHaveBeenCalledTimes(1));
-      expect(landing.getAgent().personaBlock).toContain("knows things");
-      // The pass rewrote the file on disk; the re-bind must pick that up.
+      const other = await manager.createSession();
+      getSessionTestHandle(other).setHasUserVisibleMessages(true);
+      // Creating the second chat is itself a boundary; let its pass settle so
+      // the one-pass-per-chat guard is clear before the explicit flush below.
+      await waitFor(() => expect(mockRunAgentMemoryFlush).toHaveBeenCalledTimes(1));
+      expect(other.getAgent().memory?.block).toContain("knows things");
+      // The flush appended to the note on disk; the refresh must pick that up.
       (files as unknown as { readMemoryDocument: jest.Mock }).readMemoryDocument.mockResolvedValue({
         text: "## About the user\n\n- cut the hydrogen section",
+        body: "## About the user\n\n- cut the hydrogen section",
+        consolidatedThrough: null,
         modifiedAtMs: 1_700_000_100_000,
+        hash: "hash-after",
       });
-      mockRunAgentMemoryPass.mockResolvedValue(WROTE);
+      mockRunAgentMemoryFlush.mockResolvedValue(WROTE);
 
       expect(manager.updateMemoryNow(chat.internalId)).toBe(true);
 
       await waitFor(() =>
-        expect(landing.getAgent().personaBlock).toContain("cut the hydrogen section")
+        expect(other.getAgent().memory?.block).toContain("cut the hydrogen section")
       );
     });
 
-    it("leaves a chat already in conversation on the memory it opened with", async () => {
+    it("leaves the marker alone when the pass failed, so the same turns are re-read", async () => {
       const { manager, chat } = await buildAgentChat();
-      getSessionTestHandle(chat).setHasUserVisibleMessages(true);
-      const opened = chat.getAgent();
-      mockRunAgentMemoryPass.mockResolvedValue(WROTE);
+      mockRunAgentMemoryFlush.mockResolvedValue({ status: "failed", error: "backend down" });
+
+      manager.updateMemoryNow(chat.internalId);
+
+      await waitFor(() => expect(mockRunAgentMemoryFlush).toHaveBeenCalledTimes(1));
+      expect(chat.getMemorizedThroughTurn()).toBe(0);
+      expect(chat.getMemoryNotice()).toBeNull();
+    });
+
+    // A conversation the agent judged not worth keeping is still covered, so
+    // re-reading it would only spend a model on the same answer.
+    it("advances the marker but shows no line when nothing was worth keeping", async () => {
+      const { manager, chat } = await buildAgentChat();
+      mockRunAgentMemoryFlush.mockResolvedValue({ status: "skipped", reason: "nothing-to-keep" });
 
       manager.updateMemoryNow(chat.internalId);
 
       await waitFor(() => expect(chat.getMemorizedThroughTurn()).toBe(1));
-      expect(chat.getAgent()).toBe(opened);
-    });
-
-    it("leaves the marker alone when the pass wrote nothing, so the same turns are re-read", async () => {
-      const { manager, chat } = await buildAgentChat();
-      mockRunAgentMemoryPass.mockResolvedValue({ status: "rejected", reason: "shrank" });
-
-      manager.updateMemoryNow(chat.internalId);
-
-      await waitFor(() => expect(mockRunAgentMemoryPass).toHaveBeenCalledTimes(1));
-      expect(chat.getMemorizedThroughTurn()).toBe(0);
       expect(chat.getMemoryNotice()).toBeNull();
     });
 
@@ -5126,7 +5174,7 @@ describe("AgentSessionManager talking-to selection", () => {
       getSessionTestHandle(chat).setMessages([{ message: "hello" }]);
       await manager.saveActiveSession();
       let land: () => void = () => undefined;
-      mockRunAgentMemoryPass.mockReturnValue(
+      mockRunAgentMemoryFlush.mockReturnValue(
         new Promise((resolve) => {
           land = () => resolve(WROTE);
         })
@@ -5140,6 +5188,172 @@ describe("AgentSessionManager talking-to selection", () => {
           memorizedThroughTurn: 1,
         })
       );
+    });
+
+    it("names the chat in the heading its notes land under (CUSTOM_AGENTS.md §5)", async () => {
+      const manager = buildManager({}, undefined, buildAgentFiles([jennifer()]));
+      await manager.setSelectedAgent("jennifer");
+      const chat = await manager.createSession();
+      chat.restoreLabel("Newsletter rename", "agent");
+      getSessionTestHandle(chat).setMessages([{ message: "hello" }]);
+
+      manager.updateMemoryNow(chat.internalId);
+
+      await waitFor(() => expect(mockRunAgentMemoryFlush).toHaveBeenCalledTimes(1));
+      expect(mockRunAgentMemoryFlush.mock.calls[0][1].chatTitle).toBe("Newsletter rename");
+    });
+
+    // designdocs/CUSTOM_AGENTS.md §5: a chat that stays open is flushed after
+    // two minutes idle, without waiting for a conversation boundary.
+    it("flushes a chat that has sat idle since its turn ended", async () => {
+      jest.useFakeTimers();
+      try {
+        const manager = buildManager({}, undefined, buildAgentFiles([jennifer()]));
+        await manager.setSelectedAgent("jennifer");
+        const chat = await manager.createSession();
+        getSessionTestHandle(chat).setMessages([{ message: "hello" }]);
+
+        getSessionTestHandle(chat).setStatus("running");
+        getSessionTestHandle(chat).setStatus("idle");
+        expect(mockRunAgentMemoryFlush).not.toHaveBeenCalled();
+
+        jest.advanceTimersByTime(AGENT_MEMORY_FLUSH_IDLE_MS);
+
+        expect(mockRunAgentMemoryFlush).toHaveBeenCalledTimes(1);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it("consolidates every agent with unfolded notes once the plugin has been idle", async () => {
+      jest.useFakeTimers();
+      try {
+        const manager = buildManager({}, undefined, buildAgentFiles([jennifer()]));
+        await manager.setSelectedAgent("jennifer");
+        const chat = await manager.createSession();
+        mockHasUnconsolidatedNotes.mockResolvedValue(true);
+
+        getSessionTestHandle(chat).setStatus("running");
+        getSessionTestHandle(chat).setStatus("idle");
+        jest.advanceTimersByTime(AGENT_MEMORY_CONSOLIDATION_IDLE_MS);
+        await jest.runAllTimersAsync();
+
+        expect(mockRunConsolidation).toHaveBeenCalledTimes(1);
+        expect(mockRunConsolidation.mock.calls[0][1].agentSlug).toBe("jennifer");
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it("leaves an agent with nothing new alone when the idle sweep runs", async () => {
+      const manager = buildManager({}, undefined, buildAgentFiles([jennifer()]));
+
+      await (
+        manager as unknown as { consolidateIdleAgents(): Promise<void> }
+      ).consolidateIdleAgents();
+
+      expect(mockRunConsolidation).not.toHaveBeenCalled();
+    });
+
+    it("consolidates on the user's say-so without first checking for new notes", async () => {
+      const manager = buildManager({}, undefined, buildAgentFiles([jennifer()]));
+
+      await manager.consolidateMemoryNow("jennifer");
+
+      expect(mockHasUnconsolidatedNotes).not.toHaveBeenCalled();
+      expect(mockRunConsolidation).toHaveBeenCalledTimes(1);
+    });
+
+    it("runs one consolidation per agent at a time (CUSTOM_AGENTS.md §5)", async () => {
+      const manager = buildManager({}, undefined, buildAgentFiles([jennifer()]));
+      let land: () => void = () => undefined;
+      mockRunConsolidation.mockReturnValue(
+        new Promise((resolve) => {
+          land = () => resolve({ status: "skipped", reason: "no-new-notes" });
+        })
+      );
+
+      const first = manager.consolidateMemoryNow("jennifer");
+      const second = await manager.consolidateMemoryNow("jennifer");
+
+      expect(second).toEqual({ status: "skipped", reason: "no-new-notes" });
+      expect(mockRunConsolidation).toHaveBeenCalledTimes(1);
+      land();
+      await first;
+    });
+
+    // designdocs/CUSTOM_AGENTS.md §5: a consolidation lands in the background,
+    // so its line waits for that chat's next turn.
+    it("holds the consolidation trust line until a chat's next turn ends", async () => {
+      const manager = buildManager({}, undefined, buildAgentFiles([jennifer()]));
+      await manager.setSelectedAgent("jennifer");
+      const chat = await manager.createSession();
+      mockRunConsolidation.mockResolvedValue({
+        status: "written",
+        agentName: "Jennifer",
+        memoryPath: "copilot/agents/jennifer/MEMORY.md",
+        consolidatedThrough: "2026-09-17",
+      });
+
+      await manager.consolidateMemoryNow("jennifer");
+      expect(chat.getMemoryNotice()).toBeNull();
+
+      getSessionTestHandle(chat).setStatus("running");
+      getSessionTestHandle(chat).setStatus("idle");
+
+      expect(chat.getMemoryNotice()).toEqual({
+        kind: "consolidation",
+        agentName: "Jennifer",
+        path: "copilot/agents/jennifer/MEMORY.md",
+      });
+    });
+
+    describe("consolidateStaleAgentsOnLoad()", () => {
+      it("catches up on an agent whose last consolidation is more than a day old", async () => {
+        const files = buildAgentFiles([jennifer()]);
+        const manager = buildManager({}, undefined, files);
+        mockHasUnconsolidatedNotes.mockResolvedValue(true);
+        (
+          files as unknown as { readMemoryDocument: jest.Mock }
+        ).readMemoryDocument.mockResolvedValue({
+          body: "",
+          consolidatedThrough: "2020-01-01",
+          modifiedAtMs: 0,
+          hash: "h",
+          text: "",
+        });
+
+        await manager.consolidateStaleAgentsOnLoad();
+
+        expect(mockRunConsolidation).toHaveBeenCalledTimes(1);
+      });
+
+      it("leaves a recently consolidated agent for the idle window instead", async () => {
+        const files = buildAgentFiles([jennifer()]);
+        const manager = buildManager({}, undefined, files);
+        mockHasUnconsolidatedNotes.mockResolvedValue(true);
+        (
+          files as unknown as { readMemoryDocument: jest.Mock }
+        ).readMemoryDocument.mockResolvedValue({
+          body: "",
+          consolidatedThrough: formatMemoryEntryDate(new Date()),
+          modifiedAtMs: 0,
+          hash: "h",
+          text: "",
+        });
+
+        await manager.consolidateStaleAgentsOnLoad();
+
+        expect(mockRunConsolidation).not.toHaveBeenCalled();
+      });
+
+      it("leaves an agent with no new notes alone however old its marker is", async () => {
+        const manager = buildManager({}, undefined, buildAgentFiles([jennifer()]));
+
+        await manager.consolidateStaleAgentsOnLoad();
+
+        expect(mockRunConsolidation).not.toHaveBeenCalled();
+      });
     });
 
     it("persists the marker with the chat, and omits it before anything is memorized", async () => {
@@ -5258,6 +5472,7 @@ describe("AgentSessionManager talking-to selection", () => {
         name: "Jennifer",
         icon: "",
         personaBlock: null,
+        memory: null,
       });
     });
 
@@ -5375,19 +5590,22 @@ describe("AgentSessionManager talking-to selection", () => {
       // designdocs/CUSTOM_AGENTS.md §6 — being consulted is a conversation too.
       const manager = buildManager({}, undefined, buildAgentFiles([jennifer(), vancat()]));
       stubOrchestrator((slug) => `${slug} answered`);
-      mockRunAgentMemoryPass.mockResolvedValue({ status: "skipped", reason: "no-turns" });
+      mockRunAgentMemoryFlush.mockResolvedValue({ status: "skipped", reason: "no-turns" });
 
       await manager.runFanoutTurn(request(["jennifer", "vancat"]));
 
-      await waitFor(() => expect(mockRunAgentMemoryPass).toHaveBeenCalledTimes(2));
-      expect(mockRunAgentMemoryPass.mock.calls.map((call) => call[1].agentSlug)).toEqual([
+      await waitFor(() => expect(mockRunAgentMemoryFlush).toHaveBeenCalledTimes(2));
+      expect(mockRunAgentMemoryFlush.mock.calls.map((call) => call[1].agentSlug)).toEqual([
         "jennifer",
         "vancat",
       ]);
-      expect(mockRunAgentMemoryPass.mock.calls[0][1].messages).toEqual([
+      expect(mockRunAgentMemoryFlush.mock.calls[0][1].messages).toEqual([
         expect.objectContaining({ sender: "user", message: "which title is better?" }),
         expect.objectContaining({ sender: "ai", message: "jennifer answered" }),
       ]);
+      // A fan-out turn belongs to the asking chat, so the answerer's note files
+      // it under a heading of its own (`designdocs/CUSTOM_AGENTS.md` §6).
+      expect(mockRunAgentMemoryFlush.mock.calls[0][1].chatTitle).toBe("Asked in passing");
     });
 
     it("skips the memory pass for an agent whose memory is off, one that is gone, and one that did not answer", async () => {
@@ -5401,7 +5619,7 @@ describe("AgentSessionManager talking-to selection", () => {
       await manager.runFanoutTurn(request(["jennifer", "vancat", "ghost"]));
 
       await new Promise((resolve) => window.setTimeout(resolve, 0));
-      expect(mockRunAgentMemoryPass).not.toHaveBeenCalled();
+      expect(mockRunAgentMemoryFlush).not.toHaveBeenCalled();
     });
 
     it("never advances the chat's memorized-through marker for a fan-out answer", async () => {
@@ -5411,7 +5629,7 @@ describe("AgentSessionManager talking-to selection", () => {
       await manager.setSelectedAgent("jennifer");
       const chat = await manager.createSession();
       stubOrchestrator(() => "an answer");
-      mockRunAgentMemoryPass.mockResolvedValue({
+      mockRunAgentMemoryFlush.mockResolvedValue({
         status: "written",
         agentName: "Jennifer",
         memoryPath: "copilot/agents/jennifer/MEMORY.md",
@@ -5419,7 +5637,7 @@ describe("AgentSessionManager talking-to selection", () => {
 
       await manager.runFanoutTurn(request(["jennifer"]));
 
-      await waitFor(() => expect(mockRunAgentMemoryPass).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(mockRunAgentMemoryFlush).toHaveBeenCalledTimes(1));
       expect(chat.getMemorizedThroughTurn()).toBe(0);
     });
   });

@@ -2,7 +2,11 @@ import { AI_SENDER, USER_SENDER, WEB_SELECTED_TEXT_TAG } from "@/constants";
 import { logInfo, logWarn } from "@/logger";
 import { AgentMessageStore } from "@/agentMode/session/AgentMessageStore";
 import { GLOBAL_SCOPE, type ProjectScopeId } from "@/agentMode/session/scope";
-import { COPILOT_SESSION_AGENT, type SessionAgent } from "@/agentMode/session/sessionAgent";
+import {
+  COPILOT_SESSION_AGENT,
+  type AgentMemoryInjection,
+  type SessionAgent,
+} from "@/agentMode/session/sessionAgent";
 import {
   AgentChatMessage,
   AgentMessagePart,
@@ -338,12 +342,19 @@ export class AgentSession {
   // the chat is still empty. Its persona blocks ride the FIRST user prompt,
   // beside `<project_context>` (see `designdocs/CUSTOM_AGENTS.md` §3 and §4).
   private sessionAgent: SessionAgent = COPILOT_SESSION_AGENT;
+  // Fingerprint of the memory this chat has already sent. A turn re-sends the
+  // block only when it no longer matches (`designdocs/CUSTOM_AGENTS.md` §5).
+  private injectedMemoryFingerprint: string | null = null;
   // Transcript messages already folded into the agent's memory file. Seeded
   // from the chat's `memorizedThroughTurn` frontmatter on load; 0 for a chat
   // that has never been memorized, including every chat saved before agents.
   private memorizedThroughTurn = 0;
   // Live-only trust line for the most recent memory write. See `setMemoryNotice`.
   private memoryNotice: AgentMemoryNotice | null = null;
+  // A consolidation that landed in the background, waiting for this chat's next
+  // turn to end so the line appears under that turn rather than under whatever
+  // exchange happened to be on screen. See `setPendingMemoryNotice`.
+  private pendingMemoryNotice: AgentMemoryNotice | null = null;
   // Flips true once the first user prompt has been built, so the project-context
   // block is injected exactly once at the head of the conversation.
   private firstPromptSent = false;
@@ -891,6 +902,46 @@ export class AgentSession {
   }
 
   /**
+   * Hand this chat the agent's current memory, as the manager last read it.
+   *
+   * Called after every turn and after every memory write rather than at bind
+   * time only, because the files change under an open chat: the agent writes
+   * notes during a turn, and consolidation rewrites the core in the background.
+   *
+   * @param memory - The rendered block and its fingerprint, or null when the
+   *   agent has no memory to bring.
+   */
+  setAgentMemory(memory: AgentMemoryInjection | null): void {
+    if (memory?.fingerprint === this.sessionAgent.memory?.fingerprint) return;
+    this.sessionAgent = { ...this.sessionAgent, memory };
+  }
+
+  /**
+   * The `<agent_memory>` block for the turn about to be sent, or null when this
+   * chat has already sent exactly this memory.
+   *
+   * Consuming: the fingerprint is recorded here, so a turn that goes out with
+   * the block does not send it again unchanged.
+   */
+  private takeAgentMemoryBlock(): string | null {
+    const memory = this.sessionAgent.memory;
+    if (!memory || memory.fingerprint === this.injectedMemoryFingerprint) return null;
+    this.injectedMemoryFingerprint = memory.fingerprint;
+    return memory.block;
+  }
+
+  /**
+   * Persona and memory for the fan-out summary sub-session, which is a fresh
+   * session and so has to be told both from scratch.
+   */
+  private buildSummarizerPersonaBlock(): string | null {
+    const parts = [this.sessionAgent.personaBlock, this.sessionAgent.memory?.block].filter(
+      (part): part is string => Boolean(part)
+    );
+    return parts.length > 0 ? parts.join("\n\n") : null;
+  }
+
+  /**
    * The "<agent> updated their memory" line shown at the foot of the chat, or
    * null when nothing has been written since the user last spoke.
    */
@@ -913,6 +964,28 @@ export class AgentSession {
   }
 
   /**
+   * Hold a trust line until this chat's next turn ends.
+   *
+   * A consolidation rewrites the agent's memory in the background, possibly
+   * while this chat sits idle mid-conversation. Showing the line at once would
+   * attach it to an exchange it says nothing about, so it waits for a turn of
+   * its own (`designdocs/CUSTOM_AGENTS.md` §5, "Trust surface").
+   *
+   * @param notice - What to show once this chat speaks again.
+   */
+  setPendingMemoryNotice(notice: AgentMemoryNotice): void {
+    this.pendingMemoryNotice = notice;
+  }
+
+  /** Show a held trust line, because a turn has just ended. */
+  promotePendingMemoryNotice(): void {
+    const notice = this.pendingMemoryNotice;
+    if (!notice) return;
+    this.pendingMemoryNotice = null;
+    this.setMemoryNotice(notice);
+  }
+
+  /**
    * Bind this chat to an agent. Callers own the rule about when this is
    * allowed: the manager reassigns only chats that have not sent a message yet,
    * because a conversation already in character cannot change who it is with
@@ -928,10 +1001,14 @@ export class AgentSession {
     if (
       agent.slug === this.sessionAgent.slug &&
       agent.name === this.sessionAgent.name &&
-      agent.personaBlock === this.sessionAgent.personaBlock
+      agent.personaBlock === this.sessionAgent.personaBlock &&
+      agent.memory?.fingerprint === this.sessionAgent.memory?.fingerprint
     ) {
       return;
     }
+    // A different agent has a different notebook; nothing sent so far speaks
+    // for it, so the next turn re-sends whatever this one remembers.
+    if (agent.slug !== this.sessionAgent.slug) this.injectedMemoryFingerprint = null;
     this.sessionAgent = agent;
     // The tab renders the agent beside the title, so the label listeners are
     // the ones that need to repaint.
@@ -1181,6 +1258,13 @@ export class AgentSession {
       // prior-turn block so the backend regains continuity. Empty buffer → `null`
       // → unchanged prompt. Cleared only after `backend.prompt()` resolves below,
       // so a thrown prompt preserves the buffer for the next turn.
+      // Memory, unlike the persona, rides EVERY turn whose files have changed
+      // since the last one: an agent that wrote a note mid-chat, or whose
+      // memory was consolidated in the background, has to be able to say so in
+      // the same conversation (`designdocs/CUSTOM_AGENTS.md` §5, "Reading").
+      // Taken here rather than beside the persona so a fan-out turn, which
+      // never reaches the visible backend, does not mark it as sent.
+      const agentMemoryBlock = this.takeAgentMemoryBlock();
       const leadingContextBlock = buildPriorFanoutContextBlock(this.pendingFanoutContext);
       const promptBlocks = buildPromptBlocks(
         displayText,
@@ -1190,7 +1274,8 @@ export class AgentSession {
         projectContextBlock,
         leadingContextBlock,
         projectContextUpdatesBlock,
-        agentPersonaBlock
+        agentPersonaBlock,
+        agentMemoryBlock
       );
 
       const req: PromptInput = {
@@ -1355,7 +1440,9 @@ export class AgentSession {
       // An agent that pins no backend answers on this chat's, and this chat's
       // own agent writes the summary in its own voice.
       sessionBackendId: this.backendId,
-      summarizerPersonaBlock: this.sessionAgent.personaBlock,
+      // The summary is written by this chat's own agent in a fresh sub-session,
+      // so it carries what that agent knows as well as who it is.
+      summarizerPersonaBlock: this.buildSummarizerPersonaBlock(),
       prompt: withReadOnlyPreamble(promptBlocks),
       // The raw question fed to the summary. Distinct from `prompt`, which carries
       // the read-only preamble + context.
@@ -2323,7 +2410,8 @@ export function buildPromptBlocks(
   projectContextBlock?: string | null,
   leadingContextBlock?: string | null,
   projectContextUpdatesBlock?: string | null,
-  agentPersonaBlock?: string | null
+  agentPersonaBlock?: string | null,
+  agentMemoryBlock?: string | null
 ): PromptContent[] {
   // Context sections precede the user message: the agent's persona + memory
   // blocks (first user prompt only), the project-context block (first
@@ -2334,8 +2422,10 @@ export function buildPromptBlocks(
   // live web-tab content. Web tab/selection blocks reuse the legacy `<web_*>` tags
   // so the model reads the same shapes it does in the non-agent chat.
   const sections = [
-    // Identity first: who the model is answering as frames everything after it.
+    // Identity first: who the model is answering as frames everything after it,
+    // then what it already knows about the person it is answering.
     agentPersonaBlock?.trim() || null,
+    agentMemoryBlock?.trim() || null,
     projectContextBlock?.trim() || null,
     projectContextUpdatesBlock?.trim() || null,
     leadingContextBlock?.trim() || null,

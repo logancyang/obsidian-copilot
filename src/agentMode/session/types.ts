@@ -924,13 +924,21 @@ export interface AgentChatMessage {
 export type NewAgentChatMessage = Omit<AgentChatMessage, "id"> & { id?: string };
 
 /**
- * The one quiet line a chat shows after its agent has rewritten its memory
- * file: who updated it, and where the file is so the user can go read what was
- * written about them. See `designdocs/CUSTOM_AGENTS.md` §5 ("Trust surface").
+ * Which memory pass a trust line reports on. The two are worth telling apart:
+ * a flush is what the agent just learned from this conversation, while a
+ * consolidation is a rewrite of everything it carries.
+ */
+export type AgentMemoryNoticeKind = "flush" | "consolidation";
+
+/**
+ * The one quiet line a chat shows after its agent has written memory: what
+ * happened, and where the file is so the user can go read what was written
+ * about them. See `designdocs/CUSTOM_AGENTS.md` §5 ("Trust surface").
  */
 export interface AgentMemoryNotice {
+  kind: AgentMemoryNoticeKind;
   /** Agent display name, as the line names it. */
   agentName: string;
-  /** Vault-relative path of the `MEMORY.md` that was written. */
-  memoryPath: string;
+  /** Vault-relative path of the note or file that was written. */
+  path: string;
 }

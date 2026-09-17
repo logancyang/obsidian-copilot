@@ -1,3 +1,4 @@
+import type { SessionAgent } from "@/agentMode/session/sessionAgent";
 import { resolveEffort } from "@/lib/model-effort";
 import { OpencodeBackendDescriptor } from "@/agentMode/backends/opencode/descriptor";
 import { AI_SENDER, USER_SENDER } from "@/constants";
@@ -432,6 +433,135 @@ describe("AgentSession.restoreLabel", () => {
       update: { sessionUpdate: "session_info_update", title: "Agent title" },
     });
     expect(session.getLabel()).toBe("My rename");
+  });
+});
+
+describe("AgentSession agent memory", () => {
+  const JENNIFER: SessionAgent = {
+    slug: "jennifer",
+    name: "Jennifer",
+    icon: "🪶",
+    personaBlock: '<agent_persona name="Jennifer">You are Jennifer.</agent_persona>',
+    memory: {
+      block: '<agent_memory name="Jennifer">knows the newsletter</agent_memory>',
+      fingerprint: "fp-1",
+    },
+  };
+
+  function makeSession(mock: ReturnType<typeof makeMockBackend>) {
+    return new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "opencode",
+    });
+  }
+
+  function promptText(mock: ReturnType<typeof makeMockBackend>, call: number): string {
+    const input = mock.prompt.mock.calls[call][0] as { prompt: Array<{ text?: string }> };
+    return input.prompt[0].text ?? "";
+  }
+
+  it("sends the persona and what the agent knows on the first turn", async () => {
+    const mock = makeMockBackend();
+    const session = makeSession(mock);
+    session.setAgent(JENNIFER);
+
+    await session.sendPrompt("hi").turn;
+
+    expect(promptText(mock, 0)).toContain("<agent_persona");
+    expect(promptText(mock, 0)).toContain("knows the newsletter");
+  });
+
+  // designdocs/CUSTOM_AGENTS.md §5 ("Reading"): the persona is conversation-level
+  // context, but memory changes under an open chat and is re-sent when it does.
+  it("repeats neither block on a later turn while the memory files are unchanged", async () => {
+    const mock = makeMockBackend();
+    const session = makeSession(mock);
+    session.setAgent(JENNIFER);
+
+    await session.sendPrompt("hi").turn;
+    await session.sendPrompt("again").turn;
+
+    expect(promptText(mock, 1)).not.toContain("<agent_persona");
+    expect(promptText(mock, 1)).not.toContain("<agent_memory");
+  });
+
+  it("prepends a fresh memory block, and only that, once the files have changed", async () => {
+    const mock = makeMockBackend();
+    const session = makeSession(mock);
+    session.setAgent(JENNIFER);
+    await session.sendPrompt("hi").turn;
+
+    session.setAgentMemory({
+      block: '<agent_memory name="Jennifer">renamed to Grid Notes Weekly</agent_memory>',
+      fingerprint: "fp-2",
+    });
+    await session.sendPrompt("and now").turn;
+
+    expect(promptText(mock, 1)).toContain("renamed to Grid Notes Weekly");
+    expect(promptText(mock, 1)).not.toContain("<agent_persona");
+  });
+
+  it("sends nothing extra when a refresh found the same files as last time", async () => {
+    const mock = makeMockBackend();
+    const session = makeSession(mock);
+    session.setAgent(JENNIFER);
+    await session.sendPrompt("hi").turn;
+
+    session.setAgentMemory({ ...JENNIFER.memory!, fingerprint: "fp-1" });
+    await session.sendPrompt("again").turn;
+
+    expect(promptText(mock, 1)).not.toContain("<agent_memory");
+  });
+
+  it("sends no memory block for an agent whose memory is off", async () => {
+    const mock = makeMockBackend();
+    const session = makeSession(mock);
+    session.setAgent({ ...JENNIFER, memory: null });
+
+    await session.sendPrompt("hi").turn;
+
+    expect(promptText(mock, 0)).toContain("<agent_persona");
+    expect(promptText(mock, 0)).not.toContain("<agent_memory");
+  });
+
+  it("sends neither block for a chat whose agent was deleted (CUSTOM_AGENTS.md §1)", async () => {
+    const mock = makeMockBackend();
+    const session = makeSession(mock);
+    session.setAgent({ slug: "gone", name: "Gone", icon: "", personaBlock: null, memory: null });
+
+    await session.sendPrompt("hi").turn;
+
+    expect(promptText(mock, 0)).not.toContain("<agent_persona");
+    expect(promptText(mock, 0)).not.toContain("<agent_memory");
+  });
+
+  describe("promotePendingMemoryNotice()", () => {
+    // designdocs/CUSTOM_AGENTS.md §5 ("Trust surface"): a consolidation lands in
+    // the background, so its line waits for a turn of its own.
+    it("shows a held line only once a turn has ended", () => {
+      const session = makeSession(makeMockBackend());
+      const notice = {
+        kind: "consolidation" as const,
+        agentName: "Jennifer",
+        path: "copilot/agents/jennifer/MEMORY.md",
+      };
+
+      session.setPendingMemoryNotice(notice);
+      expect(session.getMemoryNotice()).toBeNull();
+
+      session.promotePendingMemoryNotice();
+      expect(session.getMemoryNotice()).toEqual(notice);
+    });
+
+    it("does nothing when no line is waiting", () => {
+      const session = makeSession(makeMockBackend());
+
+      session.promotePendingMemoryNotice();
+
+      expect(session.getMemoryNotice()).toBeNull();
+    });
   });
 });
 
@@ -1882,7 +2012,13 @@ describe("AgentSession fan-out paywall (send-boundary entitlement)", () => {
     await session.sendPrompt("hi").turn;
     // Only the chat's OWN persona @-ed -> collapses to single-agent; also no gate.
     // designdocs/CUSTOM_AGENTS.md §6.
-    session.setAgent({ slug: "jennifer", name: "Jennifer", icon: "🪶", personaBlock: null });
+    session.setAgent({
+      slug: "jennifer",
+      name: "Jennifer",
+      icon: "🪶",
+      personaBlock: null,
+      memory: null,
+    });
     await session.sendPrompt("hi again", undefined, undefined, ["jennifer"]).turn;
 
     expect(mockedEnsure).not.toHaveBeenCalled();
