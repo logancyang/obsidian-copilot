@@ -38,6 +38,35 @@ describe("FilesChangedCard", () => {
     expect(within(header).getByText("−7")).toBeTruthy();
   });
 
+  it("collapses to one unheaded row when the turn changed a single file, keeping its name, folder, badge and counts", () => {
+    renderCard([
+      change("projects/Alpha/Project brief.md", {
+        status: "created",
+        before: null,
+        additions: 30,
+        deletions: 0,
+      }),
+    ]);
+
+    expect(screen.queryByText(/Files changed/)).toBeNull();
+    const rows = screen.getAllByRole("button");
+    expect(rows).toHaveLength(1);
+    expect(within(rows[0]).getByText("Project brief.md")).toBeTruthy();
+    expect(within(rows[0]).getByText("projects/Alpha")).toBeTruthy();
+    expect(within(rows[0]).getByText("new")).toBeTruthy();
+    expect(within(rows[0]).getByText("+30")).toBeTruthy();
+    expect(within(rows[0]).getByText("−0")).toBeTruthy();
+  });
+
+  it("opens the single file's diff when the collapsed card is clicked", () => {
+    const target = change("notes/alpha.md");
+    const { onOpen } = renderCard([target]);
+
+    fireEvent.click(screen.getByRole("button", { name: /alpha\.md/ }));
+
+    expect(onOpen).toHaveBeenCalledWith(target);
+  });
+
   it("orders rows by vault path rather than by the order the agent touched them", () => {
     renderCard([change("notes/zeta.md"), change("alpha.md"), change("notes/beta.md")]);
 

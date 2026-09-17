@@ -129,11 +129,20 @@ describe("AgentTrail", () => {
     deletions: 1,
   };
 
-  it("lists the files the finished turn changed", () => {
+  it("shows the one file a finished turn changed as a single unheaded card", () => {
     renderTrail({ fileChanges: [EDITED_NOTE] });
 
-    expect(screen.getByText("Files changed (1)")).toBeTruthy();
+    expect(screen.queryByText(/Files changed/)).toBeNull();
     expect(screen.getByRole("button", { name: /alpha\.md/ })).toBeTruthy();
+  });
+
+  it("lists the files under a Files changed header when a finished turn changed several", () => {
+    renderTrail({
+      fileChanges: [EDITED_NOTE, { ...EDITED_NOTE, path: "notes/diff-demo/beta.md" }],
+    });
+
+    expect(screen.getByText("Files changed (2)")).toBeTruthy();
+    expect(screen.getAllByRole("button", { name: /\.md/ })).toHaveLength(2);
   });
 
   it("hands the clicked file to the caller so it can open the diff", () => {

@@ -26,9 +26,19 @@ const meta = {
 } satisfies Meta<FilesChangedCardProps>;
 export default meta;
 
-/** The commonest turn: the agent revised one note. */
+/** The commonest turn: the agent revised one note. No header, the file is the card. */
 export const SingleFile: StoryObj<FilesChangedCardProps> = {
   args: { changes: [change("projects/Alpha/Project brief.md", 30, 2)] },
+};
+
+/** A single note at the vault root has no folder line, so the card is one line tall. */
+export const SingleFileAtRoot: StoryObj<FilesChangedCardProps> = {
+  args: { changes: [change("README.md", 4, 1)] },
+};
+
+/** A single new note carries its badge between the name and the counts. */
+export const SingleFileCreated: StoryObj<FilesChangedCardProps> = {
+  args: { changes: [change("Meeting 2026-09-16.md", 12, 0, "created")] },
 };
 
 /** A nested note, a new note, and a note the agent only trimmed. */
