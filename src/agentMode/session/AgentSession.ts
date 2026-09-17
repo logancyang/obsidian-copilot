@@ -55,6 +55,7 @@ import {
   buildPriorFanoutContextBlock,
   FANOUT_HISTORY_MAX_CHARS,
   FANOUT_READONLY_PREAMBLE,
+  isDirectAnswerTurn,
   renderFanoutComposite,
   serializeFanoutComposite,
   type FanoutTurn,
@@ -1287,9 +1288,7 @@ export class AgentSession {
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/481
     const hasAnswerText = Object.values(turn.answers).some((a) => a.text.trim().length > 0);
     const hasContent =
-      turn.summary.text.trim().length > 0 ||
-      hasAnswerText ||
-      Object.keys(turn.answers).length === 1;
+      turn.summary.text.trim().length > 0 || hasAnswerText || isDirectAnswerTurn(turn);
     if (hasContent) {
       const composite = serializeFanoutComposite(turn, (id) => this.displayNameFor(id));
       this.store.appendAgentText(placeholderId, composite);

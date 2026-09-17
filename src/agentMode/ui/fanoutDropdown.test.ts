@@ -80,16 +80,6 @@ describe("buildFanoutOptions", () => {
     expect(options.map((option) => option.value)).toEqual([FANOUT_SUMMARY_OPTION, "claude"]);
   });
 
-  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/481 preserves a failed Summary on a one-agent turn", () => {
-    const t = turn([answer("claude", "done", "Claude answer")]);
-    t.summary.error = "Summary failed";
-
-    expect(buildFanoutOptions(t).map((option) => option.value)).toEqual([
-      FANOUT_SUMMARY_OPTION,
-      "claude",
-    ]);
-  });
-
   it("lists the summary first then each agent in slot order, resolving name/icon and live state", () => {
     const t = turn([
       answer("opencode", "done", "main answer"),

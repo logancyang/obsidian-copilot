@@ -1,8 +1,9 @@
 import { backendRegistry } from "@/agentMode/backends/registry";
-import type {
-  AgentAnswer,
-  AgentAnswerStatus,
-  FanoutTurn,
+import {
+  isDirectAnswerTurn,
+  type AgentAnswer,
+  type AgentAnswerStatus,
+  type FanoutTurn,
 } from "@/agentMode/session/fanout/fanoutTypes";
 import type { AgentBrand, BackendId } from "@/agentMode/session/types";
 
@@ -91,19 +92,6 @@ function brandFor(backendId: BackendId): { displayName: string; Icon?: AgentBran
  */
 export function fanoutDisplayName(backendId: BackendId): string {
   return brandFor(backendId).displayName;
-}
-
-/**
- * A one-answer turn is direct only when no summary was produced. Older saved
- * one-answer turns may already contain a summary and must keep exposing it.
- * https://github.com/Brevilabs/obsidian-copilot-private/issues/481
- */
-function isDirectAnswerTurn(turn: FanoutTurn): boolean {
-  return (
-    Object.keys(turn.answers).length === 1 &&
-    turn.summary.text.trim().length === 0 &&
-    turn.summary.error === undefined
-  );
 }
 
 /**

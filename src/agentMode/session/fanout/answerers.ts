@@ -5,10 +5,11 @@ export const EMPTY_ANSWERERS: ReadonlyArray<BackendId> = Object.freeze([]);
 
 /**
  * Resolve the agents that should ANSWER a turn from the user's `@`-mentions: the
- * deduped, installed mentions ONLY. The main agent is NOT auto-included — it is
- * the separate summarizer, answering only when itself mentioned. Order is stable
- * (the pill sync plugin reports them sorted by backend id). Pure and UI-free so
- * the composer and the session layer share one source of truth — see {@link isFanout}.
+ * deduped, installed mentions ONLY. The main agent is NOT auto-included — it
+ * summarizes multiple answerers and answers only when itself mentioned. Order
+ * is stable (the pill sync plugin reports them sorted by backend id). Pure and
+ * UI-free so the composer and session layer share one source of truth — see
+ * {@link isFanout}.
  */
 export function resolveAnswerers(args: {
   mentionedAgentIds: ReadonlyArray<BackendId>;
@@ -29,8 +30,8 @@ export function resolveAnswerers(args: {
 /**
  * Whether a resolved answerer set actually fans out. True for any non-empty set
  * EXCEPT the degenerate `[main]` (only the user's own agent), which collapses to
- * the normal single-agent path so the main agent isn't asked to both answer and
- * summarize the same backend. Callers gate the `mentionedAgents` emission on this.
+ * the normal single-agent path so the main agent isn't routed through an
+ * ephemeral sub-session. Callers gate the `mentionedAgents` emission on this.
  */
 export function isFanout(answerers: ReadonlyArray<BackendId>, mainAgentId: BackendId): boolean {
   if (answerers.length === 0) return false;

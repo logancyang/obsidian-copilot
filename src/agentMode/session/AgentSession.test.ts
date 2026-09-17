@@ -1615,6 +1615,7 @@ describe("AgentSession fan-out branching", () => {
     expect(response?.message).toContain('id="claude"');
     expect(response?.message).toContain('status="error"');
     expect(response?.message).toContain('error="backend boom"');
+    expect(mock.prompt).not.toHaveBeenCalled();
   });
 
   it("dispatches to the fan-out runner (not backend.prompt) when >1 agent", async () => {
@@ -1649,8 +1650,8 @@ describe("AgentSession fan-out branching", () => {
     // Every agent received the identical prompt blocks, led by the read-only
     // QA preamble (the universal "answer only, no writes" instruction).
     expect(runFanoutTurn.mock.calls[0][0].agents).toEqual(["opencode", "claude"]);
-    // The summarizer is ALWAYS the session's own main agent (here it is also one
-    // of the answerers because it was explicitly `@`-mentioned).
+    // Multi-answer turns use the session's own main agent as the summarizer (here
+    // it is also an answerer because it was explicitly `@`-mentioned).
     expect(runFanoutTurn.mock.calls[0][0].mainAgent).toBe("opencode");
     const fanoutPrompt = runFanoutTurn.mock.calls[0][0].prompt[0] as { type: "text"; text: string };
     expect(fanoutPrompt.text).toContain("read-only");

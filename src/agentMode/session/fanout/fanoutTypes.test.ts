@@ -7,6 +7,8 @@ import {
   buildSummaryUserPrompt,
   EMPTY_PENDING_FANOUT_CONTEXT,
   FANOUT_HISTORY_MAX_CHARS,
+  FANOUT_PERSISTED_ANSWER_MAX_CHARS,
+  isDirectAnswerTurn,
   isVaultWriteToolKind,
   parseFanoutComposite,
   renderFanoutComposite,
@@ -24,6 +26,30 @@ const histMsg = (sender: string, message: string): AgentChatMessage => ({
 });
 
 const upper = (id: string) => id.toUpperCase();
+
+describe("isDirectAnswerTurn", () => {
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/481 identifies only a sole answer without a generated summary", () => {
+    const direct: FanoutTurn = {
+      answers: { claude: { backendId: "claude", status: "done", text: "answer" } },
+      summary: { status: "done", text: "" },
+    };
+    const summarized: FanoutTurn = {
+      ...direct,
+      summary: { status: "done", text: "existing summary" },
+    };
+    const multi: FanoutTurn = {
+      answers: {
+        ...direct.answers,
+        codex: { backendId: "codex", status: "done", text: "second answer" },
+      },
+      summary: { status: "done", text: "" },
+    };
+
+    expect(isDirectAnswerTurn(direct)).toBe(true);
+    expect(isDirectAnswerTurn(summarized)).toBe(false);
+    expect(isDirectAnswerTurn(multi)).toBe(false);
+  });
+});
 
 describe("isVaultWriteToolKind", () => {
   it("denies vault-mutating tool kinds", () => {
@@ -225,6 +251,23 @@ describe("serializeFanoutComposite / parseFanoutComposite", () => {
     expect(Object.keys(parsed.answers)).toEqual(["opencode", "codex"]);
     expect(parsed.answers.opencode).toMatchObject({ status: "done", text: "opencode says X" });
     expect(parsed.answers.codex).toMatchObject({ status: "done", text: "codex says Y" });
+  });
+
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/481 persists a direct answer uncapped while retaining the multi-agent cap", () => {
+    const longAnswer = "x".repeat(FANOUT_PERSISTED_ANSWER_MAX_CHARS + 1);
+    const direct: FanoutTurn = {
+      answers: { claude: { backendId: "claude", status: "done", text: longAnswer } },
+      summary: { status: "done", text: "" },
+    };
+    const multi = multiTurn();
+    multi.answers.opencode.text = longAnswer;
+
+    expect(parseFanoutComposite(serializeFanoutComposite(direct, name))?.answers.claude.text).toBe(
+      longAnswer
+    );
+    expect(
+      parseFanoutComposite(serializeFanoutComposite(multi, name))?.answers.opencode.text
+    ).toContain("[answer truncated]");
   });
 
   it("losslessly round-trips an answer that literally contains the marker prefix and escape sentinel", () => {

@@ -69,7 +69,8 @@ function textChunkOf(event: SessionEvent): string | null {
 export interface FanoutRunInput {
   /**
    * The `@`-mentioned installed answerers (deduped). Each gets an answer slot.
-   * Decoupled from {@link mainAgent}: the summarizer answers only if itself mentioned.
+   * Decoupled from {@link mainAgent}: the multi-answer summarizer answers only
+   * if itself mentioned.
    */
   agents: ReadonlyArray<BackendId>;
   /**

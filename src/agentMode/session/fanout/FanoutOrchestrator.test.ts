@@ -173,10 +173,10 @@ const flushPastGrace = () =>
   new Promise((r) => window.setTimeout(r, FANOUT_TRAILING_CHUNK_GRACE_MS + 20));
 
 /**
- * Build a `run` input with sensible defaults: `mainAgent` (the summarizer)
- * defaults to the first agent for the common case where the main agent is also
- * an answerer, but it is decoupled from `agents` — tests override it to a
- * backend that is NOT an answerer. `originalPromptText` is a fixed question.
+ * Build a `run` input with sensible defaults: `mainAgent` (the multi-answer
+ * summarizer) defaults to the first agent for the common case where the main
+ * agent is also an answerer, but it is decoupled from `agents` — tests override
+ * it to a backend that is NOT an answerer. `originalPromptText` is fixed.
  */
 function runInput(
   agents: BackendId[],
@@ -206,16 +206,23 @@ describe("FanoutOrchestrator", () => {
   describe("FanoutOrchestrator", () => {
     describe("run()", () => {
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/481 returns one mentioned agent's answer without dispatching a summary", async () => {
-        const { host, procs } = makeHost({ claude: { sessionId: "s-claude" } });
+        const { host, procs } = makeHost({
+          claude: { sessionId: "s-claude" },
+          opencode: { sessionId: "s-opencode" },
+        });
         const proc = procs.get("claude")!;
         jest.mocked(proc.proc.prompt).mockImplementation(async () => {
           proc.emit(textChunk("s-claude", "Claude answered directly"));
           return { stopReason: "end_turn" };
         });
 
-        const turn = await new FanoutOrchestrator(host).run(runInput(["claude"]));
+        const turn = await new FanoutOrchestrator(host).run(
+          runInput(["claude"], { mainAgent: "opencode" })
+        );
 
         expect(proc.proc.prompt).toHaveBeenCalledTimes(1);
+        expect(procs.get("opencode")!.proc.newSession).not.toHaveBeenCalled();
+        expect(procs.get("opencode")!.proc.prompt).not.toHaveBeenCalled();
         expect(turn.answers.claude).toMatchObject({
           status: "done",
           text: "Claude answered directly",
