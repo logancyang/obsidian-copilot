@@ -1,13 +1,15 @@
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
 import type {
   AgentChatMessage,
+  TurnFileChange,
   AskUserQuestionPrompt,
   CurrentPlan,
   PermissionPrompt,
 } from "@/agentMode/session/types";
 import AgentChatMessages from "@/agentMode/ui/AgentChatMessages";
 import { AI_SENDER } from "@/constants";
-import { act, render, screen } from "@testing-library/react";
+import { openTurnDiff } from "@/agentMode/ui/TurnDiffView";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
 
 type AgentChatMessagesProps = React.ComponentProps<typeof AgentChatMessages>;
@@ -38,10 +40,28 @@ jest.mock("@/components/chat-components/ChatSingleMessage", () => ({
 }));
 
 jest.mock("@/agentMode/ui/AgentTrailView", () => ({
-  AgentTrail: ({ timestamp }: { timestamp?: string }) => (
-    <div data-testid="agent-trail-timestamp">{timestamp}</div>
+  AgentTrail: ({
+    timestamp,
+    fileChanges,
+    onOpenFileChange,
+  }: {
+    timestamp?: string;
+    fileChanges?: TurnFileChange[];
+    onOpenFileChange?: (change: TurnFileChange) => void;
+  }) => (
+    <div data-testid="agent-trail-timestamp">
+      {timestamp}
+      {/* Stands in for the Files changed card's row click. */}
+      {fileChanges?.map((change) => (
+        <button key={change.path} type="button" onClick={() => onOpenFileChange?.(change)}>
+          {change.path}
+        </button>
+      ))}
+    </div>
   ),
 }));
+
+jest.mock("@/agentMode/ui/TurnDiffView", () => ({ openTurnDiff: jest.fn() }));
 
 jest.mock("@/agentMode/ui/ToolPermissionCard", () => ({
   ToolPermissionCard: ({ request }: { request: PermissionPrompt }) => (
@@ -177,6 +197,33 @@ describe("AgentChatMessages", () => {
       );
 
       expect(screen.getByTestId("agent-trail-timestamp").textContent).toBe(timestamp);
+    });
+
+    it("opens the clicked file's diff against the turn that changed it", () => {
+      const app = {} as never;
+      const fileChange: TurnFileChange = {
+        path: "notes/diff-demo/alpha.md",
+        status: "modified",
+        before: "The quick brown fox.\n",
+        after: "The quick red fox.\n",
+        additions: 1,
+        deletions: 1,
+      };
+      renderMessages(
+        [
+          assistantMessage("answer-1", 62_000, {
+            parts: [{ kind: "thought", text: "Revise the note." }],
+            turnStopReason: "end_turn",
+            fileChanges: [fileChange],
+          }),
+        ],
+        false,
+        { app }
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: "notes/diff-demo/alpha.md" }));
+
+      expect(openTurnDiff).toHaveBeenCalledWith(app, fileChange, "answer-1");
     });
 
     it("shows questions before permissions and reveals a permission after questions clear for https://github.com/logancyang/obsidian-copilot/issues/2948", () => {

@@ -46,7 +46,7 @@ interface AgentTrailProps {
   onOpenFileChange?: (change: TurnFileChange) => void;
 }
 
-/** Placeholder until the diff tab exists to receive the click. */
+/** A trail rendered outside a chat has nowhere to open a diff; the card still reports the changes. */
 const noopOpenFileChange = () => {};
 
 export const AgentTrail: React.FC<AgentTrailProps> = ({

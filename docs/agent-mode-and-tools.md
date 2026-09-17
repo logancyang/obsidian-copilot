@@ -134,6 +134,14 @@ Uploaded images are embedded in saved conversation notes. Copilot stores the ima
 
 Type `/` to insert an enabled Skill or [Copilot command](custom-commands.md). For a quick question or rewrite beside the current selection, use [Quick Ask](custom-commands.md#quick-ask).
 
+## Review what a turn changed
+
+When a turn finishes after the agent has edited your vault, a **Files changed** card closes that turn. It lists one row per note, with the number of added and removed lines, and a **new** or **deleted** badge for notes the agent created or removed. The card totals the changes in its header and scrolls when a turn touched many files.
+
+Select a row to open that note's before and after as a single tab. Removed text is struck through, added text is highlighted, and everything else reads as the note normally does, so you can see the exact wording the agent changed without leaving Obsidian. The tab is read-only and never writes to your vault; use **Open note** in its header to open the note itself and edit it there. Files that are not notes, such as canvases, are shown as a plain line-by-line comparison.
+
+Selecting the same row again returns you to the tab that is already open. This review is part of the current session only: closing Obsidian or reloading the plugin drops the cards and the diff tabs, and earlier turns show no card when you reopen a saved conversation.
+
 ## Multi-agent answers
 
 With active Plus access, type `@`, open **Agents**, and mention one or more other installed agents in the same prompt. Copilot sends the same question, that turn's attachments, and a bounded slice of the visible conversation to each mentioned agent. With one other agent mentioned, only that agent responds and its answer is shown directly. With two or more, they answer in parallel and the current agent summarizes their answers without producing a separate answer of its own.

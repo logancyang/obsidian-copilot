@@ -3,6 +3,7 @@ import { AskUserQuestionCard } from "@/agentMode/ui/AskUserQuestionCard";
 import { FanoutMessageCard } from "@/agentMode/ui/FanoutMessageCard";
 import { PlanProposalCard } from "@/agentMode/ui/PlanProposalCard";
 import { ToolPermissionCard } from "@/agentMode/ui/ToolPermissionCard";
+import { openTurnDiff } from "@/agentMode/ui/TurnDiffView";
 import { AgentTurnDurationIndicator } from "@/agentMode/ui/AgentTurnDurationIndicator";
 import ChatSingleMessage from "@/components/chat-components/ChatSingleMessage";
 import { USER_SENDER } from "@/constants";
@@ -176,6 +177,7 @@ const AgentChatMessages = memo(
                       app={app}
                       turnStopReason={message.turnStopReason}
                       fileChanges={message.fileChanges}
+                      onOpenFileChange={(change) => void openTurnDiff(app, change, message.id)}
                     />
                   </div>
                 ) : (

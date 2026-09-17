@@ -2,12 +2,7 @@ import React, { useMemo } from "react";
 import { FileDiff, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { TurnFileChange } from "@/agentMode/session/types";
-
-/**
- * U+2212 MINUS SIGN. The ASCII hyphen is narrower than the plus sign even in a
- * tabular font, so it would knock the two count columns out of alignment.
- */
-const MINUS_SIGN = "−";
+import { FileChangeCounts, FileChangeStatusBadge } from "@/agentMode/ui/FileChangeSummary";
 
 export interface FilesChangedCardProps {
   /** Every file the turn changed, in any order; the card sorts them by path. */
@@ -42,7 +37,7 @@ export const FilesChangedCard: React.FC<FilesChangedCardProps> = ({ changes, onO
         <span className="tw-min-w-0 tw-flex-1 tw-truncate tw-text-sm tw-font-medium">
           Files changed ({rows.length})
         </span>
-        <ChangeCounts additions={totals.additions} deletions={totals.deletions} />
+        <FileChangeCounts additions={totals.additions} deletions={totals.deletions} />
       </div>
       {/* 11rem — five rows' worth of height. A ten-file turn must not push the
           composer off screen, so the rows scroll inside the card instead. */}
@@ -82,8 +77,8 @@ const FileRow: React.FC<FileRowProps> = ({ change, onOpen }) => {
         <span className="tw-flex tw-w-full tw-items-center tw-gap-1.5">
           <FileText className="tw-size-3.5 tw-shrink-0 tw-text-muted" />
           <span className="tw-min-w-0 tw-flex-1 tw-truncate tw-text-sm">{basename}</span>
-          <StatusBadge status={change.status} />
-          <ChangeCounts additions={change.additions} deletions={change.deletions} />
+          <FileChangeStatusBadge status={change.status} />
+          <FileChangeCounts additions={change.additions} deletions={change.deletions} />
         </span>
         {/* Indented past the file icon (icon 14px + gap 6px) so the folder hangs
             under the basename rather than under the icon. */}
@@ -92,48 +87,5 @@ const FileRow: React.FC<FileRowProps> = ({ change, onOpen }) => {
         ) : null}
       </button>
     </li>
-  );
-};
-
-interface ChangeCountsProps {
-  additions: number;
-  deletions: number;
-}
-
-const ChangeCounts: React.FC<ChangeCountsProps> = ({ additions, deletions }) => (
-  <span className="tw-flex tw-shrink-0 tw-items-center tw-gap-1.5 tw-text-xs tw-tabular-nums">
-    {/* A `ch` floor keeps both columns aligned down the card without pinning a
-        pixel width to one font size; longer counts push the column out together. */}
-    <span
-      className={cn(
-        "tw-min-w-[4ch] tw-text-right",
-        additions > 0 ? "tw-text-success" : "tw-text-muted"
-      )}
-    >
-      +{additions}
-    </span>
-    <span
-      className={cn(
-        "tw-min-w-[4ch] tw-text-right",
-        deletions > 0 ? "tw-text-error" : "tw-text-muted"
-      )}
-    >
-      {MINUS_SIGN}
-      {deletions}
-    </span>
-  </span>
-);
-
-/**
- * Names the two lifecycle states the counts alone cannot tell apart: a created
- * file and a file emptied to nothing both read as a one-sided count. The badge
- * stays neutral so the green and red counts keep carrying the row's color.
- */
-const StatusBadge: React.FC<{ status: TurnFileChange["status"] }> = ({ status }) => {
-  if (status === "modified") return null;
-  return (
-    <span className="tw-shrink-0 tw-rounded-sm tw-border tw-border-solid tw-border-border tw-bg-secondary tw-px-1 tw-text-xs tw-text-muted">
-      {status === "created" ? "new" : "deleted"}
-    </span>
   );
 };
