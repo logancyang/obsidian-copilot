@@ -1,5 +1,6 @@
 import { ModelEffortPicker } from "@/components/ui/ModelEffortPicker";
 import type { Meta, StoryObj } from "@/lib/story";
+import type { AgentPickerRow } from "@/components/ui/ModelEffortPicker";
 import type { ComponentProps } from "react";
 
 type Props = ComponentProps<typeof ModelEffortPicker>;
@@ -103,5 +104,104 @@ export const CustomEndpointLabels: StoryObj<Props> = {
       effort: undefined,
       effortOptionsByModelKey: {},
     },
+  },
+};
+const COPILOT_ROW: AgentPickerRow = {
+  slug: "copilot",
+  name: "Copilot",
+  icon: "✦",
+  description: "Your vault instructions, no persona, no memory.",
+  modelKey: null,
+  effort: null,
+};
+
+const JENNIFER_ROW: AgentPickerRow = {
+  slug: "jennifer",
+  name: "Jennifer",
+  icon: "🪶",
+  description: "Skeptical editor. Cuts fluff, argues for the reader.",
+  modelKey: "example|agent",
+  effort: "high",
+};
+
+const VANCAT_ROW: AgentPickerRow = {
+  slug: "vancat",
+  name: "Vancat",
+  icon: "🐈",
+  description: "Research partner. Finds the paper you half-remember.",
+  modelKey: null,
+  effort: null,
+};
+
+const agentOverride = (rows: AgentPickerRow[], selectedSlug: string): Props["override"] => ({
+  ...ConcreteEffort.args.override,
+  models: [
+    {
+      name: "example",
+      displayName: "Sonnet 4.6",
+      provider: "agent",
+      enabled: true,
+      _group: "Claude Code",
+      _backendId: "claude",
+      _subtitle: "Balanced speed and depth for everyday work.",
+    },
+    {
+      name: "other",
+      displayName: "Opus 4.4",
+      provider: "agent",
+      enabled: true,
+      _group: "Claude Code",
+      _backendId: "claude",
+    },
+  ],
+  effortOptionsByModelKey: {
+    ...ConcreteEffort.args.override.effortOptionsByModelKey,
+    "other|agent": ConcreteEffort.args.override.effortOptionsByModelKey["example|agent"],
+  },
+  agents: { rows, selectedSlug, onSelect: () => undefined, onOpen: () => undefined },
+});
+
+export const AgentSectionCopilotOnly: StoryObj<Props> = {
+  args: { defaultOpen: true, override: agentOverride([COPILOT_ROW], "copilot") },
+};
+
+export const AgentSectionWithAgents: StoryObj<Props> = {
+  args: {
+    defaultOpen: true,
+    override: agentOverride([COPILOT_ROW, JENNIFER_ROW, VANCAT_ROW], "copilot"),
+  },
+};
+
+export const AgentSectionPinnedAgent: StoryObj<Props> = {
+  args: {
+    defaultOpen: true,
+    override: {
+      ...agentOverride(
+        [COPILOT_ROW, { ...JENNIFER_ROW, modelKey: "other|agent" }, VANCAT_ROW],
+        "jennifer"
+      ),
+      value: "other|agent",
+      effort: { ...ConcreteEffort.args.override.effort, value: "high" },
+    },
+  },
+};
+
+export const AgentSectionLongDescription: StoryObj<Props> = {
+  args: {
+    defaultOpen: true,
+    override: agentOverride(
+      [
+        COPILOT_ROW,
+        {
+          ...JENNIFER_ROW,
+          slug: "the-long-winded-developmental-editor",
+          name: "The Long-Winded Developmental Editor",
+          icon: "📝",
+          description:
+            "Reads every draft twice, argues for the reader over the author, and will not let a vague claim past without a citation, a cut, or a fight.",
+        },
+      ],
+      "the-long-winded-developmental-editor"
+    ),
   },
 };

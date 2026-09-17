@@ -30,6 +30,12 @@ const mockDescriptors = [
   },
 ] as unknown as BackendDescriptor[];
 const plugin = {} as CopilotPlugin;
+const talkingTo = {
+  entries: [],
+  selectedSlug: "copilot",
+  select: jest.fn(),
+  refresh: jest.fn(),
+};
 
 jest.mock("@/settings/model", () => ({
   useSettingsValue: jest.fn().mockReturnValue({}),
@@ -106,7 +112,7 @@ describe("useAgentModelPicker", () => {
         getModelCacheSignature: () => catalogSignal,
       } as unknown as AgentSessionManager;
 
-      const { result } = renderHook(() => useAgentModelPicker(manager, plugin));
+      const { result } = renderHook(() => useAgentModelPicker(manager, plugin, talkingTo));
       expect(result.current?.value).toBe("first:catalog-one:ready");
 
       state = stateWithModel("second");

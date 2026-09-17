@@ -1,13 +1,15 @@
-import { sortEffortOptions } from "@/lib/model-effort";
 import { Notice } from "obsidian";
 import { logError } from "@/logger";
 import type { ModelCapability } from "@/constants";
+import type { AgentEntry } from "@/agents/types";
+import type { AgentPickerRow } from "@/components/ui/ModelEffortPicker";
 import type { ModelSelectorEntry } from "@/components/ui/ModelSelector";
 import { lockedCopilotEntries, shouldPreviewCopilotModels } from "@/lib/lockedCopilotEntries";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
 import type { AgentChatUIState } from "@/agentMode/session/AgentChatUIState";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import { MethodUnsupportedError } from "@/agentMode/session/errors";
+import { resolveEffortOptions } from "@/agentMode/session/effortOptions";
 import { backendNeedsSelfHostWarning, backendRegistry } from "@/agentMode/backends/registry";
 import { getModelKeyFromModel } from "@/settings/model";
 import type { CopilotSettings } from "@/settings/model";
@@ -21,9 +23,8 @@ import type {
   ModelEntry,
   ModelState,
 } from "@/agentMode/session/types";
+import type { AgentTalkingTo } from "./useAgentTalkingTo";
 import type { AgentModelPickerOverride } from "./useAgentModelPicker";
-
-export const EMPTY_EFFORT_OPTIONS = Object.freeze([]) as unknown as EffortOption[];
 
 export const MISSING_KEY_LABEL = "Add API key";
 
@@ -401,21 +402,7 @@ export function buildEffortOptionsByModelKey(
   return out;
 }
 
-export function resolveEffortOptions(
-  manager: AgentSessionManager,
-  backendId: BackendId,
-  baseModelId: string
-): EffortOption[] {
-  const models = manager.getCachedModelCatalog(backendId)?.availableModels ?? null;
-  const found = models?.find((m) => m.baseModelId === baseModelId);
-  const reported = found?.effortOptions ?? [];
-  if (reported.length > 0) return sortEffortOptions(reported);
-  return sortEffortOptions(
-    manager.getEffortCatalog(backendId)?.[baseModelId] ?? EMPTY_EFFORT_OPTIONS
-  );
-}
-
-function buildCommitSelection(
+export function buildCommitSelection(
   manager: AgentSessionManager,
   ctx: ModelActiveContext,
   entries: ModelSelectorEntry[],
@@ -457,12 +444,41 @@ function buildCommitSelection(
   };
 }
 
+export function buildAgentPickerRows(
+  entries: ModelSelectorEntry[],
+  agentEntries: readonly AgentEntry[],
+  activeBackendId: BackendId | null
+): AgentPickerRow[] {
+  return agentEntries.map((entry) => {
+    const pins = entry.kind === "custom" ? entry.agent : null;
+    const backendId = pins?.backendId ?? activeBackendId;
+    const match =
+      pins?.modelId && backendId
+        ? entries.find(
+            (candidate) =>
+              candidate._backendId === backendId &&
+              !candidate._disabledReason &&
+              resolveBaseModelId(candidate) === pins.modelId
+          )
+        : undefined;
+    return {
+      slug: entry.slug,
+      name: entry.name,
+      icon: entry.icon,
+      description: entry.description,
+      modelKey: match ? getModelKeyFromModel(match) : null,
+      effort: pins?.effort ?? null,
+    };
+  });
+}
+
 export function buildAgentModelPicker(args: {
   manager: AgentSessionManager | null;
   descriptors: BackendDescriptor[];
   settings: CopilotSettings;
+  talkingTo: AgentTalkingTo;
 }): AgentModelPickerOverride | null {
-  const { manager, descriptors, settings } = args;
+  const { manager, descriptors, settings, talkingTo } = args;
   if (!manager) return null;
   const ctx = collectModelActiveContext(manager);
   const { entries, valueKey } = buildPickerEntries(manager, descriptors, ctx, settings);
@@ -475,5 +491,11 @@ export function buildAgentModelPicker(args: {
     effortOptionsByModelKey: buildEffortOptionsByModelKey(manager, entries),
     onChange,
     commitSelection: buildCommitSelection(manager, ctx, entries, onChange),
+    agents: {
+      rows: buildAgentPickerRows(entries, talkingTo.entries, ctx.activeBackendId),
+      selectedSlug: talkingTo.selectedSlug,
+      onSelect: talkingTo.select,
+      onOpen: talkingTo.refresh,
+    },
   };
 }

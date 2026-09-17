@@ -8,7 +8,7 @@ import {
   type FanoutOption,
   type FanoutOptionValue,
 } from "@/agentMode/ui/fanoutDropdown";
-import { AgentGlyph } from "@/agents/ui/AgentGlyph";
+import { AgentGlyph } from "@/components/ui/AgentGlyph";
 import { CopilotSpinner } from "@/components/chat-components/CopilotSpinner";
 import { cn } from "@/lib/utils";
 import type { FanoutTurn } from "@/agentMode/session/fanout/fanoutTypes";

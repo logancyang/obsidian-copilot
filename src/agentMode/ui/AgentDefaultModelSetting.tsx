@@ -6,11 +6,8 @@ import React, { useSyncExternalStore } from "react";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import type { BackendDescriptor, EnabledModelEntry } from "@/agentMode/session/types";
 import { AgentDefaultEffortSetting } from "@/agentMode/ui/AgentDefaultEffortSetting";
-import {
-  EMPTY_EFFORT_OPTIONS,
-  MISSING_KEY_LABEL,
-  resolveEffortOptions,
-} from "./agentModelPickerHelpers";
+import { EMPTY_EFFORT_OPTIONS, resolveEffortOptions } from "@/agentMode/session/effortOptions";
+import { MISSING_KEY_LABEL } from "./agentModelPickerHelpers";
 import { useManagerSubscribe } from "./useManagerSubscribe";
 
 interface Props {
