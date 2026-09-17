@@ -7,7 +7,7 @@ import {
   NodeKey,
 } from "lexical";
 import React from "react";
-import { AgentGlyph } from "@/agents/ui/AgentGlyph";
+import { AgentGlyph } from "@/components/ui/AgentGlyph";
 import { BasePillNode, SerializedBasePillNode } from "./BasePillNode";
 import { PillBadge } from "./PillBadge";
 

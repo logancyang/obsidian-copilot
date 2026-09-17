@@ -9,8 +9,8 @@ export interface AgentGlyphProps {
 
 /**
  * An agent's emoji in a fixed box, so every surface that names an agent — the
- * talking-to picker, the `@` typeahead, the composer pill, a fan-out answer tab
- * — keeps one leading width whether the agent set an icon or not.
+ * model picker's Agent section, the `@` typeahead, the composer pill, a fan-out
+ * answer tab — keeps one leading width whether the agent set an icon or not.
  */
 export const AgentGlyph: React.FC<AgentGlyphProps> = ({ icon, className }) => (
   <span

@@ -1,6 +1,7 @@
 import {
   appendBackendSection,
   backendReadinessReason,
+  buildAgentPickerRows,
   buildEffortOptionsByModelKey,
   buildEffortSibling,
   buildModelOnChange,
@@ -25,6 +26,7 @@ import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManage
 import type { AgentSession } from "@/agentMode/session/AgentSession";
 import type { AgentChatUIState } from "@/agentMode/session/AgentChatUIState";
 import type { CopilotSettings } from "@/settings/model";
+import { BUILTIN_AGENT, type AgentEntry, type CustomAgent } from "@/agents/types";
 
 type ModelCatalog = NonNullable<ReturnType<AgentSessionManager["getCachedModelCatalog"]>>;
 
@@ -1193,5 +1195,92 @@ describe("backendReadinessReason()", () => {
     // Transient: labelling a backend "not set up" for the moment a version probe
     // takes would be wrong more often than right.
     expect(backendReadinessReason({ kind: "checking", source: "custom" })).toBeUndefined();
+  });
+});
+
+describe("buildAgentPickerRows()", () => {
+  const descriptor = { id: "claude", displayName: "Claude Code" } as BackendDescriptor;
+  const other = { id: "opencode", displayName: "OpenCode" } as BackendDescriptor;
+  const entries = [
+    synthesizeAgentEntry("sonnet", "Sonnet", descriptor),
+    synthesizeAgentEntry("opus", "Opus", descriptor),
+    synthesizeAgentEntry("grok", "Grok", other),
+  ];
+
+  function agent(pins: Partial<CustomAgent>): AgentEntry {
+    return {
+      kind: "custom",
+      slug: "jennifer",
+      name: "Jennifer",
+      description: "Skeptical editor.",
+      icon: "🪶",
+      agent: {
+        slug: "jennifer",
+        name: "Jennifer",
+        description: "Skeptical editor.",
+        icon: "🪶",
+        backendId: null,
+        modelId: null,
+        effort: null,
+        memoryEnabled: true,
+        created: "2026-09-16T10:00:00Z",
+        instructions: "",
+        ...pins,
+      },
+    };
+  }
+
+  it("offers the built-in Copilot as a row that pins nothing", () => {
+    expect(buildAgentPickerRows(entries, [BUILTIN_AGENT], "claude")).toEqual([
+      {
+        slug: "copilot",
+        name: "Copilot",
+        icon: BUILTIN_AGENT.icon,
+        description: BUILTIN_AGENT.description,
+        modelKey: null,
+        effort: null,
+      },
+    ]);
+  });
+
+  it("points an agent's model pin at the row for the backend it pinned", () => {
+    const rows = buildAgentPickerRows(
+      entries,
+      [agent({ backendId: "claude", modelId: "opus", effort: "high" })],
+      "opencode"
+    );
+    expect(rows[0]).toMatchObject({
+      modelKey: getModelKeyFromModel(entries[1]),
+      effort: "high",
+    });
+  });
+
+  it("resolves an agent that pinned no backend against the one the chat runs on", () => {
+    const rows = buildAgentPickerRows(entries, [agent({ modelId: "grok" })], "opencode");
+    expect(rows[0].modelKey).toBe(getModelKeyFromModel(entries[2]));
+  });
+
+  it("carries an effort-only pin with no model row of its own", () => {
+    const rows = buildAgentPickerRows(entries, [agent({ effort: "low" })], "claude");
+    expect(rows[0]).toMatchObject({ modelKey: null, effort: "low" });
+  });
+
+  it("names no model row for a pin this picker is not offering, so the pick leaves the selection alone", () => {
+    const rows = buildAgentPickerRows(
+      entries,
+      [agent({ backendId: "claude", modelId: "retired-model" })],
+      "claude"
+    );
+    expect(rows[0].modelKey).toBeNull();
+  });
+
+  it("names no model row for a pin whose row cannot be selected", () => {
+    const disabled = [{ ...entries[0], _disabledReason: "Add API key" }];
+    const rows = buildAgentPickerRows(
+      disabled,
+      [agent({ backendId: "claude", modelId: "sonnet" })],
+      "claude"
+    );
+    expect(rows[0].modelKey).toBeNull();
   });
 });

@@ -9,7 +9,6 @@ import { AgentLandingStack } from "@/agentMode/ui/AgentLandingStack";
 import { CreateProjectPanel } from "@/agentMode/ui/CreateProjectPanel";
 import { AgentModeStatus } from "@/agentMode/ui/AgentModeStatus";
 import { AgentProjectHeader } from "@/agentMode/ui/AgentProjectHeader";
-import { AgentTalkingToPicker } from "@/agentMode/ui/AgentTalkingToPicker";
 import { listMentionableAgents } from "@/agentMode/ui/mentionedAgents";
 import { BUILTIN_AGENT_SLUG } from "@/agents/types";
 import { openCopilotSettings } from "@/settings/openSettings";
@@ -376,11 +375,12 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   }, [isOrphanedProject]);
 
   // Who the next new chat will be held with. Orthogonal to the scope above: the
-  // picker changes the answerer, never the working directory or the chat list.
-  // See `designdocs/CUSTOM_AGENTS.md` §3.
-  const talkingTo = useAgentTalkingTo(manager, app);
+  // choice changes the answerer, never the working directory or the chat list.
+  // It is made in the composer's model picker, which is where the pins it
+  // carries land. See `designdocs/CUSTOM_AGENTS.md` §3.
+  const talkingTo = useAgentTalkingTo(manager);
 
-  const modelPickerOverride = useAgentModelPicker(manager, plugin);
+  const modelPickerOverride = useAgentModelPicker(manager, plugin, talkingTo);
   const modePickerOverride = useAgentModePicker(manager);
 
   const handleCycleMode = useCallback(() => {
@@ -825,22 +825,6 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
 
   return (
     <div ref={setRootEl} className="tw-flex tw-size-full tw-flex-col tw-overflow-hidden">
-      {/* The "talking to" picker is the first row of the header in BOTH scopes:
-          who answers is independent of where the chat runs, so it keeps its
-          place when the project row below opens and closes. */}
-      <div className="tw-flex tw-w-full tw-shrink-0 tw-items-center tw-px-2 tw-pt-1.5">
-        <AgentTalkingToPicker
-          entries={talkingTo.entries}
-          selectedSlug={talkingTo.selectedSlug}
-          onSelect={talkingTo.select}
-          onOpen={talkingTo.refresh}
-          onOpenMemory={talkingTo.openMemory}
-          onClearMemory={talkingTo.clearMemory}
-          // The header sits OUTSIDE chatContainerRef, so the menu portals into
-          // the AgentHome root for popout correctness.
-          container={rootEl}
-        />
-      </div>
       {/* Project header sits ABOVE the tab strip: a project scope is just the
           global layout (tab strip → landing/conversation) with the project
           header prepended on top. It spans BOTH the project landing and the

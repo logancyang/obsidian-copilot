@@ -1,13 +1,15 @@
-import { sortEffortOptions } from "@/lib/model-effort";
 import { Notice } from "obsidian";
 import { logError } from "@/logger";
 import type { ModelCapability } from "@/constants";
+import type { AgentEntry } from "@/agents/types";
+import type { AgentPickerRow } from "@/components/ui/ModelEffortPicker";
 import type { ModelSelectorEntry } from "@/components/ui/ModelSelector";
 import { lockedCopilotEntries, shouldPreviewCopilotModels } from "@/lib/lockedCopilotEntries";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
 import type { AgentChatUIState } from "@/agentMode/session/AgentChatUIState";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import { MethodUnsupportedError } from "@/agentMode/session/errors";
+import { resolveEffortOptions } from "@/agentMode/session/effortOptions";
 import { backendNeedsSelfHostWarning, backendRegistry } from "@/agentMode/backends/registry";
 import { getModelKeyFromModel } from "@/settings/model";
 import type { CopilotSettings } from "@/settings/model";
@@ -21,10 +23,8 @@ import type {
   ModelEntry,
   ModelState,
 } from "@/agentMode/session/types";
+import type { AgentTalkingTo } from "./useAgentTalkingTo";
 import type { AgentModelPickerOverride } from "./useAgentModelPicker";
-
-/** Frozen empty effort list — referential stability for the "no effort" case. */
-export const EMPTY_EFFORT_OPTIONS = Object.freeze([]) as unknown as EffortOption[];
 
 /**
  * Right-side flag for an enabled model whose provider has no API key. Shared
@@ -565,25 +565,6 @@ export function buildEffortOptionsByModelKey(
 }
 
 /**
- * Effort options for one (backend, model). Prefer options carried by shared
- * model discovery, then fall back to the preloader's per-model effort
- * prefetch. Returns `EMPTY_EFFORT_OPTIONS` when the model has none.
- */
-export function resolveEffortOptions(
-  manager: AgentSessionManager,
-  backendId: BackendId,
-  baseModelId: string
-): EffortOption[] {
-  const models = manager.getCachedModelCatalog(backendId)?.availableModels ?? null;
-  const found = models?.find((m) => m.baseModelId === baseModelId);
-  const reported = found?.effortOptions ?? [];
-  if (reported.length > 0) return sortEffortOptions(reported);
-  return sortEffortOptions(
-    manager.getEffortCatalog(backendId)?.[baseModelId] ?? EMPTY_EFFORT_OPTIONS
-  );
-}
-
-/**
  * Build the atomic `(model, effort)` commit callback used by the merged
  * picker. Same-backend picks push both fields through `applySelection` in
  * one call. Cross-backend picks seed a fresh session on the target with
@@ -633,14 +614,59 @@ export function buildCommitSelection(
 }
 
 /**
+ * Project the talking-to roster onto the popover's Agent section, resolving each
+ * agent's pins to the very rows this picker is offering: the pick then lands as
+ * an ordinary model + effort draft and commits through the same path a manual
+ * pick does (`designdocs/CUSTOM_AGENTS.md` §3).
+ *
+ * An agent whose pinned model this picker is not offering — a backend hidden
+ * because the chat already has history, or a model since disabled — carries no
+ * model key, so picking it leaves the selection where the user put it rather
+ * than drafting a row that is not there.
+ *
+ * @param entries - Picker rows already built for every visible backend.
+ * @param agentEntries - Copilot plus every agent on disk, in roster order.
+ * @param activeBackendId - Backend the chat runs on, which an agent that pinned
+ *   no backend of its own has its model pin resolved against.
+ */
+export function buildAgentPickerRows(
+  entries: ModelSelectorEntry[],
+  agentEntries: readonly AgentEntry[],
+  activeBackendId: BackendId | null
+): AgentPickerRow[] {
+  return agentEntries.map((entry) => {
+    const pins = entry.kind === "custom" ? entry.agent : null;
+    const backendId = pins?.backendId ?? activeBackendId;
+    const match =
+      pins?.modelId && backendId
+        ? entries.find(
+            (candidate) =>
+              candidate._backendId === backendId &&
+              !candidate._disabledReason &&
+              resolveBaseModelId(candidate) === pins.modelId
+          )
+        : undefined;
+    return {
+      slug: entry.slug,
+      name: entry.name,
+      icon: entry.icon,
+      description: entry.description,
+      modelKey: match ? getModelKeyFromModel(match) : null,
+      effort: pins?.effort ?? null,
+    };
+  });
+}
+
+/**
  * Outer orchestrator — builds the full model+effort `AgentModelPickerOverride`.
  */
 export function buildAgentModelPicker(args: {
   manager: AgentSessionManager | null;
   descriptors: BackendDescriptor[];
   settings: CopilotSettings;
+  talkingTo: AgentTalkingTo;
 }): AgentModelPickerOverride | null {
-  const { manager, descriptors, settings } = args;
+  const { manager, descriptors, settings, talkingTo } = args;
   if (!manager) return null;
   const ctx = collectModelActiveContext(manager);
   const { entries, valueKey } = buildPickerEntries(manager, descriptors, ctx, settings);
@@ -653,5 +679,11 @@ export function buildAgentModelPicker(args: {
     effortOptionsByModelKey: buildEffortOptionsByModelKey(manager, entries),
     onChange,
     commitSelection: buildCommitSelection(manager, ctx, entries, onChange),
+    agents: {
+      rows: buildAgentPickerRows(entries, talkingTo.entries, ctx.activeBackendId),
+      selectedSlug: talkingTo.selectedSlug,
+      onSelect: talkingTo.select,
+      onOpen: talkingTo.refresh,
+    },
   };
 }

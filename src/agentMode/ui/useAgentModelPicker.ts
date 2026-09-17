@@ -6,7 +6,9 @@ import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManage
 import { modelStateSignature } from "@/agentMode/session/translateBackendState";
 import type { BackendDescriptor } from "@/agentMode/session/types";
 import { useBackendInstallStates } from "@/agentMode/ui/useBackendDescriptor";
+import type { AgentPickerSection } from "@/components/ui/ModelEffortPicker";
 import { buildAgentModelPicker } from "./agentModelPickerHelpers";
+import type { AgentTalkingTo } from "./useAgentTalkingTo";
 import { useManagerSubscribe } from "./useManagerSubscribe";
 import type CopilotPlugin from "@/main";
 
@@ -39,6 +41,12 @@ export interface AgentModelPickerOverride {
    * Neither path writes to the saved default.
    */
   commitSelection?: (modelKey: string, effort: string | null) => void;
+  /**
+   * The Agent section at the top of the popover. Picking an agent applies its
+   * pinned model and effort to the same draft a manual pick writes, so the
+   * sections below follow at once (`designdocs/CUSTOM_AGENTS.md` §3).
+   */
+  agents?: AgentPickerSection;
 }
 
 /**
@@ -79,8 +87,9 @@ function useAgentModelSignal(
 }
 
 /**
- * Build the `modelPickerOverride` for `ChatInput` — one grouped section per
- * registered backend, plus an optional effort sibling for the active model.
+ * Build the `modelPickerOverride` for `ChatInput` — the Agent section, then one
+ * grouped section per registered backend, plus an optional effort sibling for
+ * the active model.
  * Once the active session has any user-visible messages, non-active backend
  * sections are hidden so picks can't muddle history; cross-backend picks on
  * an empty tab swap the tab for a fresh session on the target backend.
@@ -89,7 +98,8 @@ function useAgentModelSignal(
  */
 export function useAgentModelPicker(
   manager: AgentSessionManager | null,
-  plugin: CopilotPlugin
+  plugin: CopilotPlugin,
+  talkingTo: AgentTalkingTo
 ): AgentModelPickerOverride | null {
   const settings = useSettingsValue();
   // Every registered backend shows in the picker; Self-Host Mode marks cloud
@@ -103,6 +113,6 @@ export function useAgentModelPicker(
     // descriptors directly after either external store reports a change.
     void signal;
     void installStates;
-    return buildAgentModelPicker({ manager, descriptors, settings });
-  }, [manager, descriptors, settings, signal, installStates]);
+    return buildAgentModelPicker({ manager, descriptors, settings, talkingTo });
+  }, [manager, descriptors, settings, signal, installStates, talkingTo]);
 }

@@ -17,7 +17,7 @@ import {
   NO_AGENT_MENTIONS,
 } from "./useAtMentionCategories";
 import { getEffectiveCustomPromptsFolder } from "@/settings/copilotFolder";
-import { AgentGlyph } from "@/agents/ui/AgentGlyph";
+import { AgentGlyph } from "@/components/ui/AgentGlyph";
 
 /**
  * Key of the row a user with no agents gets in place of a mention list. Selecting

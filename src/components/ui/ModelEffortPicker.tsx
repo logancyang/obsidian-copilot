@@ -10,8 +10,40 @@ import { SelfHostCloudWarningIcon } from "@/components/ui/SelfHostCloudWarningIc
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ModelDisplay } from "@/components/ui/model-display";
 import type { ModelSelectorEntry } from "@/components/ui/ModelSelector";
+import { AgentGlyph } from "@/components/ui/AgentGlyph";
 import { getModelKeyFromModel } from "@/lib/model-key";
 import { cn } from "@/lib/utils";
+
+/** One agent the chat can be held with, and what picking it selects. */
+export interface AgentPickerRow {
+  slug: string;
+  name: string;
+  /** Emoji or letter; empty for an agent that set none. */
+  icon: string;
+  description: string;
+  /**
+   * Model row this agent pins, as a `getModelKeyFromModel` key, or null when it
+   * pins none (or pins one this picker is not offering) and the drafted model
+   * should be left where the user put it.
+   */
+  modelKey: string | null;
+  /** Effort this agent pins, or null to leave the drafted effort alone. */
+  effort: string | null;
+}
+
+/**
+ * The Agent section at the top of the popover: who answers, chosen right above
+ * what they answer on (`designdocs/CUSTOM_AGENTS.md` §3).
+ */
+export interface AgentPickerSection {
+  /** The built-in Copilot first, then every agent on disk. */
+  rows: readonly AgentPickerRow[];
+  selectedSlug: string;
+  /** Talk to this agent from the next chat on. */
+  onSelect: (slug: string) => void;
+  /** Called as the popover opens, so an agent created a moment ago is listed. */
+  onOpen?: () => void;
+}
 
 export interface ModelEffortPickerOverride {
   models: ModelSelectorEntry[];
@@ -32,12 +64,27 @@ export interface ModelEffortPickerOverride {
   };
   effortOptionsByModelKey: Record<string, { label: string; value: string | null }[]>;
   commitSelection: (modelKey: string, effort: string | null) => void;
+  /** Agent Mode only: the Agent section above the model and effort sections. */
+  agents?: AgentPickerSection;
 }
 
 interface ModelEffortPickerProps {
   override: ModelEffortPickerOverride;
   className?: string;
+  /** Opens the popover on mount, so a story can show the list it holds. */
+  defaultOpen?: boolean;
 }
+
+/** Section heading above a group of rows, shared by the Agent and model groups. */
+const GROUP_HEADING_CLASS = "tw-px-3 tw-pb-1 tw-pt-2 tw-text-xs tw-uppercase tw-tracking-wide";
+
+/** One selectable row, shared by the Agent and model groups so both align. */
+const ROW_CLASS =
+  "tw-flex tw-cursor-pointer tw-items-center tw-justify-between tw-gap-3 tw-px-3 tw-py-1.5 tw-text-sm";
+
+/** The fixed leading column every row reserves for its ✓ / › marker. */
+const MARKER_CLASS =
+  "tw-flex tw-w-3 tw-shrink-0 tw-items-center tw-justify-center tw-text-xs tw-text-muted";
 
 interface EffortOpt {
   label: string;
@@ -49,10 +96,11 @@ interface EffortOpt {
  * path swaps the active session mid-interaction, which would collapse the
  * popover before the user could pick an effort.
  */
-export function ModelEffortPicker({ override, className }: ModelEffortPickerProps) {
-  const { models, value, effort, effortOptionsByModelKey, commitSelection, disabled } = override;
+export function ModelEffortPicker({ override, className, defaultOpen }: ModelEffortPickerProps) {
+  const { models, value, effort, effortOptionsByModelKey, commitSelection, disabled, agents } =
+    override;
 
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen ?? false);
   const [highlightKey, setHighlightKey] = useState<string | null>(null);
   const [draftModelKey, setDraftModelKey] = useState<string | null>(null);
   const [draftEffort, setDraftEffort] = useState<string | null>(null);
@@ -74,12 +122,18 @@ export function ModelEffortPicker({ override, className }: ModelEffortPickerProp
   const currentEffortLabel = effort?.options.find((o) => o.value === effort.value)?.label ?? null;
   const activeEffortValue = effort?.value ?? null;
 
-  // Initialize the draft + highlight on open. Re-running on `value`
-  // changes is fine: while the popover is open the parent shouldn't
-  // change `value` (commits are deferred), so this effectively only fires
-  // on open.
+  // Initialize the draft + highlight on open, once. Picking an agent tells the
+  // session manager at once, which re-renders this picker with fresh props; a
+  // re-seed on those would throw away the pinned model and effort the pick had
+  // just drafted (`designdocs/CUSTOM_AGENTS.md` §3).
+  const seededRef = useRef(false);
   useEffect(() => {
-    if (open) {
+    if (!open) {
+      seededRef.current = false;
+      return;
+    }
+    if (!seededRef.current) {
+      seededRef.current = true;
       /* eslint-disable @eslint-react/hooks-extra/no-direct-set-state-in-use-effect -- seed the editable draft from props when the popover opens; drafts are committed on close, so this can't be pure derived state */
       const initial = value && enabledKeys.includes(value) ? value : (enabledKeys[0] ?? null);
       setHighlightKey(initial);
@@ -125,6 +179,22 @@ export function ModelEffortPicker({ override, className }: ModelEffortPickerProp
     [effortOptionsByModelKey, draftEffort, value, activeEffortValue]
   );
 
+  // Picking an agent applies its pins to the draft immediately, so the model and
+  // effort sections show what this agent will actually run on before the popover
+  // is dismissed (`designdocs/CUSTOM_AGENTS.md` §3). An agent with no pins
+  // leaves both where the user left them.
+  const pickAgent = useCallback(
+    (row: AgentPickerRow) => {
+      agents?.onSelect(row.slug);
+      if (row.modelKey) pickDraft(row.modelKey);
+      if (row.effort !== null) {
+        const key = row.modelKey ?? draftModelKey;
+        setDraftEffort(resolveEffort(row.effort, key ? (effortOptionsByModelKey[key] ?? []) : []));
+      }
+    },
+    [agents, pickDraft, draftModelKey, effortOptionsByModelKey]
+  );
+
   const stepDraftEffort = useCallback(
     (delta: 1 | -1) => {
       if (draftOptions.length === 0) return;
@@ -168,6 +238,9 @@ export function ModelEffortPicker({ override, className }: ModelEffortPickerProp
 
   const handleOpenChange = (next: boolean) => {
     if (next) {
+      // The roster is read from the vault, so an agent created in Settings a
+      // moment ago is listed without waiting for a reload.
+      agents?.onOpen?.();
       setOpen(true);
       return;
     }
@@ -227,100 +300,143 @@ export function ModelEffortPicker({ override, className }: ModelEffortPickerProp
         sideOffset={4}
         onKeyDown={handleKeyDown}
       >
-        <div className="tw-max-h-72 tw-overflow-y-auto tw-py-1" role="listbox" aria-label="Model">
-          {models.map((entry) => {
-            const Row = entry._needsLicense ? "a" : "div";
-            const key = getModelKeyFromModel(entry);
-            const disabledReason = entry._disabledReason;
-            const itemDisabled = Boolean(disabledReason);
-            // A locked Copilot row says why through its lock icon, so the
-            // right-side label would only print that sentence twice.
-            const rightLabel = entry._needsLicense ? null : (disabledReason ?? null);
-            const isHighlight = key === highlightKey;
-            const isActive = key === draftModelKey;
-            const showHeader = entry._group !== undefined && entry._group !== lastGroup;
-            const headerKey = `__group__${entry._group}__${key}`;
-            lastGroup = entry._group;
-            return (
-              <React.Fragment key={key}>
-                {showHeader && (
-                  <div
-                    key={headerKey}
-                    className="tw-px-3 tw-pb-1 tw-pt-2 tw-text-xs tw-uppercase tw-tracking-wide tw-text-faint"
-                  >
-                    {entry._group}
-                  </div>
-                )}
-                <Row
-                  href={entry._needsLicense ? MODEL_PICKER_PRICING_URL : undefined}
-                  target={entry._needsLicense ? "_blank" : undefined}
-                  rel={entry._needsLicense ? "noopener noreferrer" : undefined}
-                  role={entry._needsLicense ? undefined : "option"}
-                  aria-selected={entry._needsLicense ? undefined : isActive}
-                  aria-disabled={(!entry._needsLicense && itemDisabled) || undefined}
-                  className={cn(
-                    "tw-flex tw-cursor-pointer tw-items-center tw-justify-between tw-gap-3 tw-px-3 tw-py-1.5 tw-text-sm",
-                    isHighlight && !itemDisabled && "tw-bg-interactive-hover",
-                    itemDisabled && "tw-opacity-50",
-                    itemDisabled && !entry._needsLicense && "tw-cursor-not-allowed",
-                    entry._needsLicense &&
-                      "tw-text-normal tw-no-underline hover:tw-bg-interactive-hover hover:tw-text-normal hover:tw-no-underline focus-visible:tw-bg-interactive-hover"
-                  )}
-                  // Native Enter must follow the link, not draft the highlighted model;
-                  // other keys must reach Radix's focus loop and dismissal handlers.
-                  // https://github.com/Brevilabs/obsidian-copilot-private/issues/476
-                  onKeyDown={
-                    entry._needsLicense
-                      ? (event) => {
-                          if (event.key === "Enter") event.stopPropagation();
-                        }
-                      : undefined
-                  }
-                  onAuxClick={(event) => {
-                    // Middle-click follows the pricing link without firing onClick; discard its draft too.
-                    // https://github.com/Brevilabs/obsidian-copilot-private/issues/476
-                    if (entry._needsLicense && event.button === 1) setOpen(false);
-                  }}
-                  onClick={() => {
-                    // Visiting pricing must discard pending model/effort edits, not commit on dismiss.
-                    // https://github.com/Brevilabs/obsidian-copilot-private/issues/476
-                    if (entry._needsLicense) {
-                      setOpen(false);
-                      return;
-                    }
-                    if (itemDisabled) return;
-                    pickDraft(key);
-                  }}
-                  title={disabledReason ?? undefined}
-                >
-                  <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-2">
-                    <span
-                      className="tw-flex tw-w-3 tw-shrink-0 tw-items-center tw-justify-center tw-text-xs tw-text-muted"
-                      aria-hidden
+        <div className="tw-max-h-72 tw-overflow-y-auto tw-py-1">
+          {agents && (
+            <>
+              <div role="listbox" aria-label="Agent">
+                <div className={cn(GROUP_HEADING_CLASS, "tw-text-faint")}>Agent</div>
+                {agents.rows.map((row) => {
+                  const isSelected = row.slug === agents.selectedSlug;
+                  return (
+                    <div
+                      key={row.slug}
+                      role="option"
+                      aria-selected={isSelected}
+                      // Top-aligned: a description that wraps must not drag the
+                      // agent's face down to the middle of the block its name heads.
+                      className={cn(ROW_CLASS, "tw-items-start")}
+                      onClick={() => pickAgent(row)}
                     >
-                      {isActive ? "✓" : isHighlight ? "›" : ""}
-                    </span>
-                    <div className="tw-min-w-0">
-                      <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-1">
-                        <ModelDisplay model={entry} iconSize={12} />
-                        {entry._needsLicense && <LicenseRequiredIcon />}
-                        {entry._isFree && <FreeModelWarningIcon />}
-                        {entry._needsSelfHostWarning && <SelfHostCloudWarningIcon />}
-                      </div>
-                      {entry._subtitle && (
-                        <div className="tw-truncate tw-text-xs tw-text-muted">
-                          {entry._subtitle}
+                      <div className="tw-flex tw-min-w-0 tw-items-start tw-gap-2">
+                        <span className={cn(MARKER_CLASS, "tw-h-5")} aria-hidden>
+                          {isSelected ? "✓" : ""}
+                        </span>
+                        <AgentGlyph icon={row.icon} className="tw-h-5" />
+                        <div className="tw-min-w-0">
+                          <div className="tw-truncate tw-text-normal">{row.name}</div>
+                          {row.description && (
+                            // Wrapped, not truncated: the description is the whole
+                            // basis on which the user picks one agent over another,
+                            // and at this width a one-line clamp cut every real
+                            // description mid-word.
+                            <div
+                              className="tw-line-clamp-2 tw-text-xs tw-text-muted"
+                              title={row.description}
+                            >
+                              {row.description}
+                            </div>
+                          )}
                         </div>
-                      )}
+                      </div>
                     </div>
-                  </div>
-                  {rightLabel && (
-                    <span className="tw-shrink-0 tw-text-xs tw-text-faint">{rightLabel}</span>
+                  );
+                })}
+              </div>
+              <div
+                role="separator"
+                className="tw-my-1 tw-border-0 tw-border-t tw-border-solid tw-border-border"
+              />
+            </>
+          )}
+          <div role="listbox" aria-label="Model">
+            {models.map((entry) => {
+              const Row = entry._needsLicense ? "a" : "div";
+              const key = getModelKeyFromModel(entry);
+              const disabledReason = entry._disabledReason;
+              const itemDisabled = Boolean(disabledReason);
+              // A locked Copilot row says why through its lock icon, so the
+              // right-side label would only print that sentence twice.
+              const rightLabel = entry._needsLicense ? null : (disabledReason ?? null);
+              const isHighlight = key === highlightKey;
+              const isActive = key === draftModelKey;
+              const showHeader = entry._group !== undefined && entry._group !== lastGroup;
+              const headerKey = `__group__${entry._group}__${key}`;
+              lastGroup = entry._group;
+              return (
+                <React.Fragment key={key}>
+                  {showHeader && (
+                    <div key={headerKey} className={cn(GROUP_HEADING_CLASS, "tw-text-faint")}>
+                      {entry._group}
+                    </div>
                   )}
-                </Row>
-              </React.Fragment>
-            );
-          })}
+                  <Row
+                    href={entry._needsLicense ? MODEL_PICKER_PRICING_URL : undefined}
+                    target={entry._needsLicense ? "_blank" : undefined}
+                    rel={entry._needsLicense ? "noopener noreferrer" : undefined}
+                    role={entry._needsLicense ? undefined : "option"}
+                    aria-selected={entry._needsLicense ? undefined : isActive}
+                    aria-disabled={(!entry._needsLicense && itemDisabled) || undefined}
+                    className={cn(
+                      ROW_CLASS,
+                      isHighlight && !itemDisabled && "tw-bg-interactive-hover",
+                      itemDisabled && "tw-opacity-50",
+                      itemDisabled && !entry._needsLicense && "tw-cursor-not-allowed",
+                      entry._needsLicense &&
+                        "tw-text-normal tw-no-underline hover:tw-bg-interactive-hover hover:tw-text-normal hover:tw-no-underline focus-visible:tw-bg-interactive-hover"
+                    )}
+                    // Native Enter must follow the link, not draft the highlighted model;
+                    // other keys must reach Radix's focus loop and dismissal handlers.
+                    // https://github.com/Brevilabs/obsidian-copilot-private/issues/476
+                    onKeyDown={
+                      entry._needsLicense
+                        ? (event) => {
+                            if (event.key === "Enter") event.stopPropagation();
+                          }
+                        : undefined
+                    }
+                    onAuxClick={(event) => {
+                      // Middle-click follows the pricing link without firing onClick; discard its draft too.
+                      // https://github.com/Brevilabs/obsidian-copilot-private/issues/476
+                      if (entry._needsLicense && event.button === 1) setOpen(false);
+                    }}
+                    onClick={() => {
+                      // Visiting pricing must discard pending model/effort edits, not commit on dismiss.
+                      // https://github.com/Brevilabs/obsidian-copilot-private/issues/476
+                      if (entry._needsLicense) {
+                        setOpen(false);
+                        return;
+                      }
+                      if (itemDisabled) return;
+                      pickDraft(key);
+                    }}
+                    title={disabledReason ?? undefined}
+                  >
+                    <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-2">
+                      <span className={MARKER_CLASS} aria-hidden>
+                        {isActive ? "✓" : isHighlight ? "›" : ""}
+                      </span>
+                      <div className="tw-min-w-0">
+                        <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-1">
+                          <ModelDisplay model={entry} iconSize={12} />
+                          {entry._needsLicense && <LicenseRequiredIcon />}
+                          {entry._isFree && <FreeModelWarningIcon />}
+                          {entry._needsSelfHostWarning && <SelfHostCloudWarningIcon />}
+                        </div>
+                        {entry._subtitle && (
+                          <div className="tw-truncate tw-text-xs tw-text-muted">
+                            {entry._subtitle}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    {rightLabel && (
+                      <span className="tw-shrink-0 tw-text-xs tw-text-faint">{rightLabel}</span>
+                    )}
+                  </Row>
+                </React.Fragment>
+              );
+            })}
+          </div>
         </div>
         {/* Effort stepper for the drafted model — commit fires on popover close. */}
         <div className="tw-border-0 tw-border-t tw-border-solid tw-border-border tw-bg-secondary tw-px-3 tw-py-2">

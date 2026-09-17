@@ -2225,23 +2225,6 @@ export class AgentSessionManager {
     return this.beginMemoryPass(session) !== null;
   }
 
-  /**
-   * Vault-relative path of one agent's `MEMORY.md`, or null when the agent is
-   * gone. Lets the chat's agent popover open the file the user is trusting the
-   * agent to keep.
-   *
-   * @param slug - Agent whose memory file is wanted.
-   */
-  async resolveAgentMemoryPath(slug: string): Promise<string | null> {
-    const record = await this.opts.agentFileManager?.readAgent(slug);
-    return record?.memoryPath ?? null;
-  }
-
-  /** Reset one agent's `MEMORY.md` to its empty skeleton. */
-  async clearAgentMemory(slug: string): Promise<void> {
-    await this.opts.agentFileManager?.clearMemory(slug);
-  }
-
   getActiveProjectId(): ProjectScopeId {
     return this.activeProjectId;
   }

@@ -183,5 +183,142 @@ describe("ModelEffortPicker", () => {
       fireEvent.keyDown(await screen.findByRole("dialog"), { key: "Escape" });
       expect(onChange).not.toHaveBeenCalled();
     });
+
+    describe("Agent section", () => {
+      const COPILOT = {
+        slug: "copilot",
+        name: "Copilot",
+        icon: "\u2726",
+        description: "Your vault instructions, no persona, no memory.",
+        modelKey: null,
+        effort: null,
+      };
+      const agentModels = [
+        { name: "model", provider: "agent", enabled: true },
+        { name: "other", provider: "agent", enabled: true },
+      ];
+      const effortByKey = { "model|agent": options, "other|agent": options };
+
+      function renderWithAgents(
+        rows: { slug: string; modelKey: string | null; effort: string | null }[],
+        handlers: {
+          onSelect?: jest.Mock;
+          onOpen?: jest.Mock;
+          commitSelection?: jest.Mock;
+          onEffortChange?: jest.Mock;
+        } = {}
+      ) {
+        render(
+          <ModelEffortPicker
+            override={{
+              models: agentModels,
+              value: "model|agent",
+              effort: {
+                options,
+                value: "high",
+                onChange: handlers.onEffortChange ?? jest.fn(),
+              },
+              effortOptionsByModelKey: effortByKey,
+              commitSelection: handlers.commitSelection ?? jest.fn(),
+              agents: {
+                rows: rows.map((row) => ({
+                  name: row.slug,
+                  icon: "\ud83e\udeb6",
+                  description: `${row.slug} description`,
+                  ...row,
+                })),
+                selectedSlug: "copilot",
+                onSelect: handlers.onSelect ?? jest.fn(),
+                onOpen: handlers.onOpen,
+              },
+            }}
+          />
+        );
+        fireEvent.click(screen.getByTitle("Model \u00b7 effort"));
+      }
+
+      it("lists the roster above the model group, with the selected agent checked", async () => {
+        renderWithAgents([COPILOT, { slug: "jennifer", modelKey: null, effort: null }]);
+
+        const agentBox = await screen.findByRole("listbox", { name: "Agent" });
+        const modelBox = screen.getByRole("listbox", { name: "Model" });
+        expect(
+          agentBox.compareDocumentPosition(modelBox) & Node.DOCUMENT_POSITION_FOLLOWING
+        ).toBeTruthy();
+        const section = within(agentBox);
+        expect(section.getAllByRole("option").map((row) => row.textContent)).toEqual([
+          "\u2713\u2726CopilotYour vault instructions, no persona, no memory.",
+          "\ud83e\udeb6jenniferjennifer description",
+        ]);
+      });
+
+      it("re-reads the roster as the popover opens, so an agent just created is offered", () => {
+        const onOpen = jest.fn();
+        renderWithAgents([COPILOT], { onOpen });
+
+        expect(onOpen).toHaveBeenCalledTimes(1);
+      });
+
+      it("drafts the pinned model and effort of the agent picked, and commits both on dismiss (designdocs/CUSTOM_AGENTS.md \u00a73)", async () => {
+        const onSelect = jest.fn();
+        const commitSelection = jest.fn();
+        renderWithAgents([COPILOT, { slug: "jennifer", modelKey: "other|agent", effort: "low" }], {
+          onSelect,
+          commitSelection,
+        });
+
+        fireEvent.click(await screen.findByRole("option", { name: /jennifer/ }));
+
+        expect(onSelect).toHaveBeenCalledWith("jennifer");
+        // The effort section follows the pick at once, before any dismissal.
+        expect(screen.getByText("low")).toBeTruthy();
+        fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+        expect(commitSelection).toHaveBeenCalledWith("other|agent", "low");
+      });
+
+      it("leaves the model and effort where the user left them for an agent that pins neither", async () => {
+        const commitSelection = jest.fn();
+        const onEffortChange = jest.fn();
+        renderWithAgents([COPILOT, { slug: "vancat", modelKey: null, effort: null }], {
+          commitSelection,
+          onEffortChange,
+        });
+
+        fireEvent.click(await screen.findByRole("option", { name: /vancat/ }));
+        fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+
+        expect(commitSelection).not.toHaveBeenCalled();
+        expect(onEffortChange).not.toHaveBeenCalled();
+      });
+
+      it("applies an effort-only pin to the model already drafted", async () => {
+        const onEffortChange = jest.fn();
+        renderWithAgents([COPILOT, { slug: "vancat", modelKey: null, effort: "low" }], {
+          onEffortChange,
+        });
+
+        fireEvent.click(await screen.findByRole("option", { name: /vancat/ }));
+        fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+
+        expect(onEffortChange).toHaveBeenCalledWith("low");
+      });
+
+      it("offers no Agent section at all when the caller supplies none, as Quick Chat does", async () => {
+        render(
+          <ModelEffortPicker
+            override={{
+              models: agentModels,
+              value: "model|agent",
+              effortOptionsByModelKey: effortByKey,
+              commitSelection: jest.fn(),
+            }}
+          />
+        );
+        fireEvent.click(screen.getByTitle("Model \u00b7 effort"));
+
+        await screen.findByRole("listbox", { name: "Model" });
+        expect(screen.queryByRole("listbox", { name: "Agent" })).toBeNull();
+      });
+    });
   });
 });
