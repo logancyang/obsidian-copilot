@@ -121,18 +121,22 @@ const TurnDiffPane: React.FC<TurnDiffPaneProps> = ({ state }) => {
           >
             {state.path}
           </span>
-          <FileChangeCounts additions={state.additions} deletions={state.deletions} />
+          {/* Badge then counts, the order the card's rows use, so the same file
+              reads the same way on both surfaces. */}
           <FileChangeStatusBadge status={state.status} />
+          <FileChangeCounts additions={state.additions} deletions={state.deletions} />
           {/* A deleted file has nothing left to open, and routing its path
               through the vault would offer to create a note in its place. */}
           {state.status === "deleted" ? null : (
             <Button
               variant="link"
               size="sm"
+              // The wide left margin keeps the action off the counts, which
+              // would otherwise read as a third number in the same group.
               // Preflight is off and Obsidian's theme-scoped `button` rules
               // outrank plain utilities, so the fill, the border, the chrome
               // and the text color all need `!` for this to read as a link.
-              className="!tw-h-auto tw-shrink-0 !tw-border-0 !tw-bg-transparent !tw-px-0 !tw-text-accent !tw-shadow-none"
+              className="tw-ml-2 !tw-h-auto tw-shrink-0 !tw-border-0 !tw-bg-transparent !tw-px-0 !tw-text-accent !tw-shadow-none"
               onClick={() => openVaultPath(app, state.path, { newLeaf: true })}
             >
               Open note
