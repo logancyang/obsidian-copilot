@@ -149,7 +149,7 @@ function makeHost(
   const readOnlyUnregistered: string[] = [];
   const excludedFromHistory: Array<{ backendId: BackendId; sessionId: string }> = [];
   const host: FanoutHost = {
-    ensureBackendForFanout: async (backendId) => ({
+    ensureBackendForSubSession: async (backendId) => ({
       proc: procs.get(backendId)!.proc,
       descriptor: descriptors.get(backendId)!,
     }),
@@ -414,7 +414,7 @@ describe("FanoutOrchestrator", () => {
         });
         const proc = procs.get("codex")!.proc;
         configureCodex(proc);
-        host.ensureBackendForFanout = async (backendId) =>
+        host.ensureBackendForSubSession = async (backendId) =>
           backendId === "codex"
             ? { proc, descriptor: CodexBackendDescriptor }
             : {
@@ -446,7 +446,10 @@ describe("FanoutOrchestrator", () => {
         const { host, procs } = makeHost({ codex: { sessionId: "s-codex" } });
         const proc = procs.get("codex")!.proc;
         configureCodex(proc);
-        host.ensureBackendForFanout = async () => ({ proc, descriptor: CodexBackendDescriptor });
+        host.ensureBackendForSubSession = async () => ({
+          proc,
+          descriptor: CodexBackendDescriptor,
+        });
         host.getDefaultSelection = () => ({ baseModelId: "example", effort: null });
         jest.mocked(proc.setSessionConfigOption).mockRejectedValue(new Error("Model unavailable"));
         const result = await new FanoutOrchestrator(host).run(runInput(["codex"]));
@@ -463,7 +466,7 @@ describe("FanoutOrchestrator", () => {
         });
         const proc = procs.get("codex")!.proc;
         configureCodex(proc);
-        host.ensureBackendForFanout = async (backendId) =>
+        host.ensureBackendForSubSession = async (backendId) =>
           backendId === "codex"
             ? { proc, descriptor: CodexBackendDescriptor }
             : {
@@ -520,7 +523,7 @@ describe("FanoutOrchestrator", () => {
           },
           mode: null,
         };
-        host.ensureBackendForFanout = async (backendId) =>
+        host.ensureBackendForSubSession = async (backendId) =>
           backendId === "opencode"
             ? { proc, descriptor: opencodeEnabling(["provider/model"]) }
             : {
@@ -591,7 +594,7 @@ describe("FanoutOrchestrator", () => {
             },
             mode: null,
           };
-          host.ensureBackendForFanout = async () => ({
+          host.ensureBackendForSubSession = async () => ({
             proc,
             descriptor: opencodeEnabling(["provider/new"]),
           });
@@ -630,7 +633,7 @@ describe("FanoutOrchestrator", () => {
           },
           mode: null,
         });
-        host.ensureBackendForFanout = async () => ({
+        host.ensureBackendForSubSession = async () => ({
           proc: mock.proc,
           descriptor: opencodeEnabling(["provider/enabled"]),
         });
@@ -667,7 +670,7 @@ describe("FanoutOrchestrator", () => {
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 fails an OpenCode slot without prompting when the user enabled no model, rather than running OpenCode's own", async () => {
         const { host, procs } = makeHost({ opencode: { sessionId: "s-opencode" } });
         const mock = procs.get("opencode")!;
-        host.ensureBackendForFanout = async () => ({
+        host.ensureBackendForSubSession = async () => ({
           proc: mock.proc,
           descriptor: opencodeEnabling([]),
         });
@@ -704,7 +707,10 @@ describe("FanoutOrchestrator", () => {
         const { host, procs } = makeHost({ claude: { sessionId: "s-claude" } });
         const proc = procs.get("claude")!.proc;
         const modelId = "claude-sonnet-4-5";
-        host.ensureBackendForFanout = async () => ({ proc, descriptor: ClaudeBackendDescriptor });
+        host.ensureBackendForSubSession = async () => ({
+          proc,
+          descriptor: ClaudeBackendDescriptor,
+        });
         host.getDefaultSelection = () => ({ baseModelId: modelId, effort: "high" });
         const effortOption = ClaudeBackendDescriptor.wire.effortConfigFor?.(modelId);
         expect(effortOption).toBeTruthy();

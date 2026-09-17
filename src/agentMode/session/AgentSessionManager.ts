@@ -363,7 +363,7 @@ export class AgentSessionManager {
 
   private createFanoutHost(): FanoutHost {
     return {
-      ensureBackendForFanout: async (backendId) => {
+      ensureBackendForSubSession: async (backendId) => {
         const descriptor = this.resolveDescriptor(backendId);
         const proc = await this.ensureBackend(backendId, descriptor);
         return { proc, descriptor };

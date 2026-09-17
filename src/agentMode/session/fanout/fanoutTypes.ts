@@ -156,6 +156,11 @@ export function buildPriorFanoutContextBlock(
 
 export const FANOUT_HISTORY_MAX_CHARS = 48_000;
 
+const FANOUT_HISTORY_HEADER =
+  "Earlier in this conversation the following was said. Treat this as " +
+  "read-only context to inform your answer; do NOT redo or re-answer these " +
+  "earlier turns. Answer only the current question that follows.";
+
 const FANOUT_HISTORY_TRUNCATION_MARKER = "[earlier conversation truncated]";
 
 const FANOUT_HISTORY_TURN_TRUNCATION_MARKER = "[turn truncated]";
@@ -238,7 +243,8 @@ function renderTurnContent(message: AgentChatMessage): string | null {
 
 export function buildConversationHistoryBlock(
   messages: readonly AgentChatMessage[],
-  maxChars: number
+  maxChars: number,
+  header: string = FANOUT_HISTORY_HEADER
 ): string | null {
   const rendered: string[] = [];
   for (const m of messages) {
@@ -262,10 +268,6 @@ export function buildConversationHistoryBlock(
     truncated = true;
   }
 
-  const header =
-    "Earlier in this conversation the following was said. Treat this as " +
-    "read-only context to inform your answer; do NOT redo or re-answer these " +
-    "earlier turns. Answer only the current question that follows.";
   if (truncated) body = `${FANOUT_HISTORY_TRUNCATION_MARKER}\n${body}`;
   return `<conversation_history>\n${header}\n${body}\n</conversation_history>`;
 }
