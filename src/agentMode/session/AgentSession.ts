@@ -2,6 +2,7 @@ import { AI_SENDER, USER_SENDER, WEB_SELECTED_TEXT_TAG } from "@/constants";
 import { logInfo, logWarn } from "@/logger";
 import { AgentMessageStore } from "@/agentMode/session/AgentMessageStore";
 import { GLOBAL_SCOPE, type ProjectScopeId } from "@/agentMode/session/scope";
+import { COPILOT_SESSION_AGENT, type SessionAgent } from "@/agentMode/session/sessionAgent";
 import {
   AgentChatMessage,
   AgentMessagePart,
@@ -165,6 +166,7 @@ export class AgentSession {
   private readonly cwd: string | null;
   private readonly contextReady: Promise<ContextMaterializationResult> | null;
   private projectContextBlock: string | null = null;
+  private sessionAgent: SessionAgent = COPILOT_SESSION_AGENT;
   private firstPromptSent = false;
   private readonly getDescriptor: (() => BackendDescriptor | undefined) | null;
   private readonly runFanoutTurn: RunFanoutTurn | null;
@@ -550,6 +552,16 @@ export class AgentSession {
     return this.label;
   }
 
+  getAgent(): SessionAgent {
+    return this.sessionAgent;
+  }
+
+  setAgent(agent: SessionAgent): void {
+    if (agent.slug === this.sessionAgent.slug && agent.name === this.sessionAgent.name) return;
+    this.sessionAgent = agent;
+    this.notifyLabelChanged();
+  }
+
   getLabelSource(): "user" | "agent" | null {
     return this.labelSource;
   }
@@ -682,6 +694,7 @@ export class AgentSession {
       }
       const isFirstTurn = !this.firstPromptSent;
       const projectContextBlock = isFirstTurn ? this.projectContextBlock : null;
+      const agentPersonaBlock = isFirstTurn ? this.sessionAgent.personaBlock : null;
       const projectContextUpdates = this.getProjectContextUpdatesFn?.() ?? null;
       const projectContextUpdatesBlock = projectContextUpdates?.block ?? null;
 
@@ -710,7 +723,8 @@ export class AgentSession {
           webTabBlock,
           projectContextBlock,
           historyBlock,
-          projectContextUpdatesBlock
+          projectContextUpdatesBlock,
+          agentPersonaBlock
         );
         return await this.runFanoutPath(placeholderId, displayText, promptBlocks, turnStartedAtMs);
       }
@@ -723,7 +737,8 @@ export class AgentSession {
         webTabBlock,
         projectContextBlock,
         leadingContextBlock,
-        projectContextUpdatesBlock
+        projectContextUpdatesBlock,
+        agentPersonaBlock
       );
 
       const req: PromptInput = {
@@ -1650,9 +1665,12 @@ export function buildPromptBlocks(
   webTabBlock?: string,
   projectContextBlock?: string | null,
   leadingContextBlock?: string | null,
-  projectContextUpdatesBlock?: string | null
+  projectContextUpdatesBlock?: string | null,
+  agentPersonaBlock?: string | null
 ): PromptContent[] {
   const sections = [
+    // Identity first: who the model is answering as frames everything after it.
+    agentPersonaBlock?.trim() || null,
     projectContextBlock?.trim() || null,
     projectContextUpdatesBlock?.trim() || null,
     leadingContextBlock?.trim() || null,

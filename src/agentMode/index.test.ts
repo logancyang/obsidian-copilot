@@ -41,6 +41,7 @@ jest.mock("./backends/registry", () => ({
   backendRegistry: {},
   listBackendDescriptors: () => mockDescriptors,
 }));
+jest.mock("@/agents/AgentFileManager", () => ({ AgentFileManager: jest.fn() }));
 jest.mock("./session/AgentChatPersistenceManager", () => ({
   AgentChatPersistenceManager: jest.fn(),
 }));

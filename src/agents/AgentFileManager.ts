@@ -72,10 +72,22 @@ export class AgentFileManager {
     return this.readRecord(this.agentsFolder(), slug);
   }
 
-  /** The raw text of an agent's `MEMORY.md`, or an empty string when absent. */
-  public async readMemory(slug: string): Promise<string> {
+  /**
+   * An agent's `MEMORY.md` with the time it was last written, or null when the
+   * file is absent (a hand-deleted one, or an agent whose folder predates it).
+   *
+   * The timestamp travels with the text because a conversation is told how old
+   * the agent's recollection is, not just what it says — see the
+   * `<agent_memory updated="…">` block in `designdocs/CUSTOM_AGENTS.md` §4.
+   *
+   * @param slug - Identity of the agent whose memory is read.
+   */
+  public async readMemoryDocument(
+    slug: string
+  ): Promise<{ text: string; modifiedAtMs: number } | null> {
     const file = this.vault.getAbstractFileByPath(getAgentMemoryPath(this.agentsFolder(), slug));
-    return file instanceof TFile ? await this.vault.read(file) : "";
+    if (!(file instanceof TFile)) return null;
+    return { text: await this.vault.read(file), modifiedAtMs: file.stat.mtime };
   }
 
   /**

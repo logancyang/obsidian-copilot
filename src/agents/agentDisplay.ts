@@ -14,3 +14,22 @@ export function formatMemorySize(bytes: number): string {
   if (kb < 1024) return `${kb.toFixed(1)} KB`;
   return `${(kb / 1024).toFixed(1)} MB`;
 }
+
+/**
+ * Name to show for a chat whose agent no longer exists.
+ *
+ * A chat persists only its slug, so a deleted agent leaves nothing but the
+ * folder name it had. The chat still has to open and still has to say who it
+ * was held with, so the slug is turned back into something readable and shown
+ * as a plain label while the conversation runs as the default assistant. See
+ * `designdocs/CUSTOM_AGENTS.md` §1 and §8.
+ *
+ * @param slug - Slug persisted on the chat.
+ */
+export function formatMissingAgentLabel(slug: string): string {
+  return slug
+    .split("-")
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}

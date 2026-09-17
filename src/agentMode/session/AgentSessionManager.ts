@@ -43,6 +43,15 @@ import { buildNativeChatId, parseNativeChatId } from "@/utils/nativeChatId";
 import { CHAT_AGENT_VIEWTYPE } from "@/constants";
 import { playNotificationSound } from "@/utils/notificationSound";
 import type { AgentSessionIndex } from "./AgentSessionIndex";
+import type { AgentFileManager } from "@/agents/AgentFileManager";
+import { BUILTIN_AGENT, BUILTIN_AGENT_SLUG, toAgentEntry } from "@/agents/types";
+import type { AgentEntry, CustomAgent } from "@/agents/types";
+import {
+  COPILOT_SESSION_AGENT,
+  loadSessionAgent,
+  missingSessionAgent,
+  type SessionAgent,
+} from "./sessionAgent";
 import {
   deriveChatTitleFromMessages,
   mergeChatHistoryItems,
@@ -129,6 +138,10 @@ const EMPTY_SESSIONS = Object.freeze([]) as unknown as AgentSession[];
 const EMPTY_HISTORY_ITEMS = Object.freeze([]) as unknown as ChatHistoryItem[];
 const EMPTY_RECENT_CHAT_IDS: ReadonlySet<string> = new Set();
 const EMPTY_CHAT_INPUT_IDS: readonly string[] = Object.freeze([]);
+/** The picker's list before any agent exists: the built-in entry alone. */
+const BUILTIN_ONLY_AGENT_ENTRIES: readonly AgentEntry[] = Object.freeze([BUILTIN_AGENT]);
+/** See AGENTS.md → "Referential stability". */
+const EMPTY_CUSTOM_AGENTS: readonly CustomAgent[] = Object.freeze([]);
 
 const RESUMED_SESSION_BEHIND_EPOCH = -1;
 
@@ -184,6 +197,14 @@ export interface AgentSessionManagerOptions {
   beforeBackendStart?: (id: BackendId) => Promise<void>;
   persistenceManager?: AgentChatPersistenceManager;
   sessionIndex?: AgentSessionIndex;
+  /**
+   * Reader for `copilot/agents/`, used to resolve the agent a chat is talking
+   * to and to load its persona and memory. Optional only so legacy callers
+   * (tests) can omit it; production wiring always supplies one via the barrel
+   * in `agentMode/index.ts`. Without it every chat runs as the built-in
+   * Copilot, and a chat that names an agent shows the name as a plain label.
+   */
+  agentFileManager?: AgentFileManager;
 }
 
 export class AgentSessionManager {
@@ -254,6 +275,9 @@ export class AgentSessionManager {
   private readonly readOnlyFanoutSessions = new Set<SessionId>();
   private readonly defaultApplyChains = new Map<string, Promise<void>>();
   private readonly fanoutOrchestrator: FanoutOrchestrator;
+  private selectedAgentSlug: string = BUILTIN_AGENT_SLUG;
+  private agentRoster: readonly CustomAgent[] = EMPTY_CUSTOM_AGENTS;
+  private agentEntries: readonly AgentEntry[] = BUILTIN_ONLY_AGENT_ENTRIES;
   private readonly settingsUnsub: () => void;
 
   private getSessionState(internalId: string) {
@@ -470,6 +494,11 @@ export class AgentSessionManager {
     if (!persistence && !index) return EMPTY_HISTORY_ITEMS;
 
     const liveAttentionPaths = this.collectLiveAttentionPaths();
+    // Rows show the agent's icon before the title, which needs the roster the
+    // slugs resolve against (`designdocs/CUSTOM_AGENTS.md` §8). Refreshing here
+    // also keeps the talking-to picker current whenever the landing reloads.
+    await this.refreshAgents();
+    const iconBySlug = new Map(this.agentRoster.map((agent) => [agent.slug, agent.icon]));
 
     let files: TFile[] = [];
     let markdownEntries: MarkdownChatEntry[] = [];
@@ -479,12 +508,19 @@ export class AgentSessionManager {
       markdownEntries = await Promise.all(
         files.map(async (file) => {
           const ref = await this.readSessionRefFromFile(file.path);
-          const item = fileToHistoryItem(this.app, file, tracker);
-          return {
-            item: liveAttentionPaths.has(item.id) ? { ...item, needsAttention: true } : item,
-            backendId: ref?.backendId,
-            sessionId: ref?.sessionId,
-          };
+          const base = fileToHistoryItem(this.app, file, tracker);
+          // A slug with no icon (or none left, its agent deleted) simply gets no
+          // glyph; the row falls back to the backend brand icon it always had.
+          const agentIcon = ref?.agentSlug ? iconBySlug.get(ref.agentSlug) : undefined;
+          const item =
+            liveAttentionPaths.has(base.id) || agentIcon
+              ? {
+                  ...base,
+                  ...(liveAttentionPaths.has(base.id) ? { needsAttention: true } : {}),
+                  ...(agentIcon ? { agentIcon } : {}),
+                }
+              : base;
+          return { item, backendId: ref?.backendId, sessionId: ref?.sessionId };
         })
       );
     }
@@ -652,7 +688,7 @@ export class AgentSessionManager {
 
   private async readSessionRefFromFile(
     fileId: string
-  ): Promise<{ backendId: BackendId; sessionId: string } | null> {
+  ): Promise<{ backendId: BackendId; sessionId: string; agentSlug?: string } | null> {
     let fm: Record<string, unknown> | undefined;
     const file = this.app.vault.getAbstractFileByPath(fileId);
     if (file instanceof TFile) {
@@ -668,7 +704,8 @@ export class AgentSessionManager {
     const backendId = typeof fm?.backendId === "string" ? fm.backendId.trim() : "";
     const sessionId = typeof fm?.sessionId === "string" ? fm.sessionId.trim() : "";
     if (!backendId || !sessionId) return null;
-    return { backendId, sessionId };
+    const agentSlug = typeof fm?.agentSlug === "string" ? fm.agentSlug.trim() : "";
+    return { backendId, sessionId, agentSlug: agentSlug || undefined };
   }
 
   private async refreshNativeSessionsFromBackends(): Promise<void> {
@@ -807,17 +844,28 @@ export class AgentSessionManager {
     backendId?: BackendId,
     projectId: ProjectScopeId = this.activeProjectId,
     seedSelection?: ModelSelection,
-    chatInputId?: string
+    chatInputId?: string,
+    sessionAgent?: SessionAgent
   ): Promise<AgentSession> {
     if (this.disposed) {
       throw new Error("AgentSessionManager has been shut down");
     }
 
-    const requestedId = backendId ?? getSettings().agentMode?.activeBackend ?? "opencode";
+    const bound = sessionAgent ? null : await this.bindSessionAgent(this.selectedAgentSlug);
+    const agent = sessionAgent ?? bound?.agent ?? COPILOT_SESSION_AGENT;
+    const pinned = bound?.source ?? null;
+    const pinnedBackendId = backendId ? undefined : pinned?.backendId;
+    const requestedId =
+      backendId ?? pinnedBackendId ?? getSettings().agentMode?.activeBackend ?? "opencode";
     const resolvedId = this.opts.resolveDescriptor(requestedId) ? requestedId : "opencode";
     const errorSeqAtStart = this.lastErrorSeq;
     const descriptor = this.resolveDescriptor(resolvedId);
-    const resolvedSeed = seedSelection ?? this.getSeedSelection(resolvedId) ?? undefined;
+    const pinnedSelection =
+      pinned?.modelId && (!pinned.backendId || pinned.backendId === resolvedId)
+        ? { baseModelId: pinned.modelId, effort: null }
+        : undefined;
+    const resolvedSeed =
+      seedSelection ?? pinnedSelection ?? this.getSeedSelection(resolvedId) ?? undefined;
     if (!resolvedSeed && descriptor.routesCopilotModels) {
       const message = `Enable a model for ${descriptor.displayName} in Copilot's model settings to start a chat.`;
       this.setLastError(message);
@@ -893,6 +941,7 @@ export class AgentSessionManager {
           }
         : {}),
     });
+    session.setAgent(agent);
     this.sessions.set(session.internalId, session);
     this.chatUIStates.set(session.internalId, new AgentChatUIState(session));
     if (landingCaptureSignature) {
@@ -1174,6 +1223,79 @@ export class AgentSessionManager {
       failedSources: [...others, ...failures.map(toFailedItem)],
     });
     return true;
+  }
+
+  async refreshAgents(): Promise<void> {
+    const files = this.opts.agentFileManager;
+    if (!files) return;
+    let agents: readonly CustomAgent[];
+    try {
+      agents = (await files.listAgents()).map((record) => record.agent);
+    } catch (error) {
+      logWarn("[Agents] Could not list agents", error);
+      return;
+    }
+    const entries: readonly AgentEntry[] =
+      agents.length === 0
+        ? BUILTIN_ONLY_AGENT_ENTRIES
+        : [BUILTIN_AGENT, ...agents.map(toAgentEntry)];
+    const unchanged =
+      entries.length === this.agentEntries.length &&
+      entries.every((entry, i) => {
+        const before = this.agentEntries[i];
+        return (
+          entry.slug === before.slug &&
+          entry.name === before.name &&
+          entry.icon === before.icon &&
+          entry.description === before.description
+        );
+      });
+    this.agentRoster = agents.length === 0 ? EMPTY_CUSTOM_AGENTS : agents;
+    if (unchanged) return;
+    this.agentEntries = entries;
+    if (!entries.some((entry) => entry.slug === this.selectedAgentSlug)) {
+      this.selectedAgentSlug = BUILTIN_AGENT_SLUG;
+    }
+    this.notify();
+  }
+
+  getAgentEntries(): readonly AgentEntry[] {
+    return this.agentEntries;
+  }
+
+  getSelectedAgentSlug(): string {
+    return this.selectedAgentSlug;
+  }
+
+  async setSelectedAgent(slug: string): Promise<void> {
+    this.selectedAgentSlug = slug || BUILTIN_AGENT_SLUG;
+    const agent = await this.resolveSessionAgent(this.selectedAgentSlug);
+    for (const session of this.sessions.values()) {
+      if (session.getStatus() === "closed") continue;
+      if (session.hasUserVisibleMessages()) continue;
+      session.setAgent(agent);
+    }
+    this.notify();
+  }
+
+  private async bindSessionAgent(
+    slug: string | null | undefined
+  ): Promise<{ agent: SessionAgent; source: CustomAgent | null }> {
+    if (!slug || slug === BUILTIN_AGENT_SLUG) return { agent: COPILOT_SESSION_AGENT, source: null };
+    const files = this.opts.agentFileManager;
+    if (!files) return { agent: missingSessionAgent(slug), source: null };
+    try {
+      const record = await files.readAgent(slug);
+      if (!record) return { agent: missingSessionAgent(slug), source: null };
+      return { agent: await loadSessionAgent(files, record.agent), source: record.agent };
+    } catch (error) {
+      logWarn(`[Agents] Could not read agent "${slug}"`, error);
+      return { agent: missingSessionAgent(slug), source: null };
+    }
+  }
+
+  private async resolveSessionAgent(slug: string | null | undefined): Promise<SessionAgent> {
+    return (await this.bindSessionAgent(slug)).agent;
   }
 
   getActiveProjectId(): ProjectScopeId {
@@ -1817,7 +1939,8 @@ export class AgentSessionManager {
       backendId,
       replacedProjectId,
       options.seedSelection,
-      chatInputId
+      chatInputId,
+      replaced?.getAgent()
     );
     if (oldIdx >= 0) {
       this.moveMapEntry(this.sessions, created.internalId, oldIdx);
@@ -2018,17 +2141,21 @@ export class AgentSessionManager {
     const previousActiveProjectId = this.activeProjectId;
     const scopeSeq = this.setActiveScope(projectId);
 
+    const agent = await this.resolveSessionAgent(loaded.agentSlug);
     let session: AgentSession;
     try {
       const resumed = loaded.sessionId
         ? await this.tryResumeSessionFromHistory(loaded.backendId, loaded.sessionId, projectId)
         : null;
-      session = resumed ?? (await this.createSession(loaded.backendId, projectId));
+      session =
+        resumed ??
+        (await this.createSession(loaded.backendId, projectId, undefined, undefined, agent));
     } catch (err) {
       this.rollbackOptimisticScopeSwitch(previousActiveProjectId, scopeSeq);
       throw err;
     }
 
+    session.setAgent(agent);
     session.loadDisplayMessages(loaded.messages);
     session.seedSessionUsage(loaded.usage);
     if (loaded.label) session.setLabel(loaded.label);
@@ -2431,6 +2558,8 @@ export class AgentSessionManager {
       sessionId,
       projectId: session.projectId,
       usage: usage ?? undefined,
+      // Null for the built-in Copilot, which writes no frontmatter field.
+      agentSlug: session.getAgent().slug,
     });
     if (result) {
       state.source = this.app.vault.getAbstractFileByPath(result.path) ?? result;
@@ -2667,6 +2796,7 @@ export class AgentSessionManager {
     resumableSessionId: SessionId | undefined,
     label: string | null,
     labelSource: "user" | "agent" | null,
+    agent: SessionAgent,
     carriedSelection?: ModelSelection
   ): Promise<AgentSession> {
     // A model-setting change can trigger this restart, so validate the carried
@@ -2687,13 +2817,14 @@ export class AgentSessionManager {
         return null;
       });
       if (resumed) {
+        resumed.setAgent(agent);
         await this.hydrateResumedTranscript(resumed, backendId, resumableSessionId);
         if (label && !resumed.getLabel()) resumed.restoreLabel(label, labelSource ?? "agent");
         this.setActiveSession(resumed.internalId);
         return resumed;
       }
     }
-    return this.createSession(backendId, projectId, seedSelection, chatInputId);
+    return this.createSession(backendId, projectId, seedSelection, chatInputId, agent);
   }
 
   private async restartBackendNow(
@@ -2740,6 +2871,7 @@ export class AgentSessionManager {
             // The displayed selection is otherwise lost when the process restarts.
             // https://github.com/logancyang/obsidian-copilot/issues/3319
             seedSelection: session.getState()?.model?.current,
+            agent: session.getAgent(),
             detached: this.detachedFromTabIds.has(session.internalId),
             recoveryMessages:
               session.getStatus() === "error" ? session.store.getDisplayMessages() : undefined,
@@ -2772,6 +2904,7 @@ export class AgentSessionManager {
               replacement.resumableSessionId,
               replacement.label,
               replacement.labelSource,
+              replacement.agent,
               replacement.seedSelection
             );
             // A fresh fallback has no backend history for these messages;

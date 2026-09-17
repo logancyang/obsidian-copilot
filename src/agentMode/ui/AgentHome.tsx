@@ -9,6 +9,8 @@ import { AgentLandingStack } from "@/agentMode/ui/AgentLandingStack";
 import { CreateProjectPanel } from "@/agentMode/ui/CreateProjectPanel";
 import { AgentModeStatus } from "@/agentMode/ui/AgentModeStatus";
 import { AgentProjectHeader } from "@/agentMode/ui/AgentProjectHeader";
+import { AgentTalkingToPicker } from "@/agentMode/ui/AgentTalkingToPicker";
+import { useAgentTalkingTo } from "@/agentMode/ui/useAgentTalkingTo";
 import { ProjectInfoPopover } from "@/agentMode/ui/ProjectInfoPopover";
 import { AgentTabStrip } from "@/agentMode/ui/AgentTabStrip";
 import { AgentWelcomeCard } from "@/agentMode/ui/AgentWelcomeCard";
@@ -266,6 +268,11 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   useEffect(() => {
     if (isOrphanedProject) new Notice("This project no longer exists.");
   }, [isOrphanedProject]);
+
+  // Who the next new chat will be held with. Orthogonal to the scope above: the
+  // picker changes the answerer, never the working directory or the chat list.
+  // See `designdocs/CUSTOM_AGENTS.md` §3.
+  const talkingTo = useAgentTalkingTo(manager);
 
   const modelPickerOverride = useAgentModelPicker(manager, plugin);
   const modePickerOverride = useAgentModePicker(manager);
@@ -588,6 +595,15 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
 
   return (
     <div ref={setRootEl} className="tw-flex tw-size-full tw-flex-col tw-overflow-hidden">
+      <div className="tw-flex tw-w-full tw-shrink-0 tw-items-center tw-px-2 tw-pt-1.5">
+        <AgentTalkingToPicker
+          entries={talkingTo.entries}
+          selectedSlug={talkingTo.selectedSlug}
+          onSelect={talkingTo.select}
+          onOpen={talkingTo.refresh}
+          container={rootEl}
+        />
+      </div>
       <div
         className={cn(
           "tw-grid tw-shrink-0 tw-transition-[grid-template-rows,opacity] tw-duration-200 tw-ease-out motion-reduce:tw-transition-none",
