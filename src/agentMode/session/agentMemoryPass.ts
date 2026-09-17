@@ -11,8 +11,10 @@ import {
 } from "@/agentMode/session/fanout/fanoutTypes";
 import type { ReadOnlySubSessionRunner } from "@/agentMode/session/readOnlySubSession";
 import type { AgentChatMessage, BackendId } from "@/agentMode/session/types";
+import { AI_SENDER, USER_SENDER } from "@/constants";
 import { logInfo, logWarn } from "@/logger";
-import { err2String } from "@/utils";
+import { err2String, formatDateTime } from "@/utils";
+import { v4 as uuidv4 } from "uuid";
 
 /**
  * Framing the agent reads the ended conversation under. The fan-out default
@@ -124,4 +126,35 @@ export async function runAgentMemoryPass(
     logWarn(`[Agents] Memory update failed for "${request.agentSlug}"`, error);
     return { status: "failed", error: err2String(error) };
   }
+}
+
+/**
+ * The two-message transcript one agent's fan-out answer is memorized from: the
+ * user's question and that agent's own answer, and nothing else.
+ *
+ * An agent consulted in a fan-out turn read only those two things — not the
+ * other agents' answers and not the summary — so feeding it any more would have
+ * it remember words it never saw (`designdocs/CUSTOM_AGENTS.md` §6).
+ *
+ * @param question - The user's prompt, as the turn sent it.
+ * @param answer - What this agent replied.
+ */
+export function buildFanoutMemoryTranscript(question: string, answer: string): AgentChatMessage[] {
+  const timestamp = formatDateTime(new Date());
+  return [
+    {
+      id: uuidv4(),
+      sender: USER_SENDER,
+      timestamp,
+      isVisible: true,
+      message: question,
+    },
+    {
+      id: uuidv4(),
+      sender: AI_SENDER,
+      timestamp,
+      isVisible: true,
+      message: answer,
+    },
+  ];
 }

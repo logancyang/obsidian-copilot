@@ -10,7 +10,7 @@ export interface QueuedAgentMessage {
   context?: MessageContext;
   queueReason?: "context" | "busy";
   promptContent?: PromptContent[];
-  mentionedAgents?: ReadonlyArray<BackendId>;
+  mentionedAgents?: ReadonlyArray<string>;
 }
 
 export interface AgentInputDraft {

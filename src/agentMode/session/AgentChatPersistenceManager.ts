@@ -336,9 +336,7 @@ export class AgentChatPersistenceManager {
       .map((m) => {
         const ts = m.timestamp ? m.timestamp.display : "Unknown time";
         const body =
-          m.message.length === 0 && m.fanout
-            ? serializeFanoutComposite(m.fanout, (id) => id)
-            : m.message;
+          m.message.length === 0 && m.fanout ? serializeFanoutComposite(m.fanout) : m.message;
         return `**${m.sender}**: ${body}\n[Timestamp: ${ts}]`;
       })
       .join("\n\n");

@@ -53,14 +53,15 @@ import { deriveChatTitleFromMessages } from "@/agentMode/session/chatHistoryMerg
 import { ContextProcessor } from "@/contextProcessor";
 import type { ContextMaterializationResult } from "@/context/projectContextMaterializer";
 import { escapeXml } from "@/LLMProviders/chainRunner/utils/xmlParsing";
-import type { FanoutRunInput } from "@/agentMode/session/fanout/FanoutOrchestrator";
-import { isFanout } from "@/agentMode/session/fanout/answerers";
+import type { FanoutTurnRequest } from "@/agentMode/session/fanout/FanoutOrchestrator";
+import { EMPTY_ANSWERERS, isFanout } from "@/agentMode/session/fanout/answerers";
 import {
   buildConversationHistoryBlock,
   buildPriorFanoutContextBlock,
   FANOUT_HISTORY_MAX_CHARS,
   FANOUT_READONLY_PREAMBLE,
   isDirectAnswerTurn,
+  prependPromptText,
   renderFanoutComposite,
   serializeFanoutComposite,
   type FanoutTurn,
@@ -76,7 +77,7 @@ import {
 } from "@/agentMode/session/enabledModelSelection";
 import { replayPersistedMode } from "@/agentMode/session/replayPersistedMode";
 
-export type RunFanoutTurn = (input: FanoutRunInput) => Promise<FanoutTurn>;
+export type RunFanoutTurn = (request: FanoutTurnRequest) => Promise<FanoutTurn>;
 
 export const DEFAULT_TITLE_PREFIX = "New session";
 const MAX_TOOL_OUTPUT_TEXT_CHARS = 256_000;
@@ -84,7 +85,6 @@ const CANCELLED_TURN_QUIET_MS = 1_000;
 const EMPTY_PERMISSIONS: PermissionPrompt[] = [];
 const EMPTY_QUESTIONS: AskUserQuestionPrompt[] = [];
 const EMPTY_ANSWERS: AgentQuestionAnswers = Object.freeze({});
-const EMPTY_BACKEND_IDS: ReadonlyArray<BackendId> = Object.freeze([]);
 const EMPTY_ADDITIONAL_DIRECTORIES: string[] = Object.freeze([]) as unknown as string[];
 
 export type AgentSessionStatus =
@@ -181,7 +181,7 @@ export class AgentSession {
   private startupFailed = false;
   private startupSettled = false;
   private lastTurnError = false;
-  private lastMentionedAgents: ReadonlyArray<BackendId> = EMPTY_BACKEND_IDS;
+  private lastMentionedAgents: ReadonlyArray<string> = EMPTY_ANSWERERS;
   private pendingFanoutContext: PendingFanoutContext[] = [];
   private placeholderId: string | null = null;
   private currentTurnHadRoutedToolActivity = false;
@@ -639,7 +639,7 @@ export class AgentSession {
     displayText: string,
     context?: MessageContext,
     promptContent?: PromptContent[],
-    mentionedAgents?: ReadonlyArray<BackendId>
+    mentionedAgents?: ReadonlyArray<string>
   ): { userMessageId: string; turn: Promise<StopReason> } {
     const status = this.getStatus();
     if (status === "starting") {
@@ -683,7 +683,7 @@ export class AgentSession {
     }
 
     this.lastMentionedAgents =
-      mentionedAgents && mentionedAgents.length > 0 ? mentionedAgents : EMPTY_BACKEND_IDS;
+      mentionedAgents && mentionedAgents.length > 0 ? mentionedAgents : EMPTY_ANSWERERS;
 
     this.abortController = new AbortController();
     this.lastTurnError = false;
@@ -691,6 +691,10 @@ export class AgentSession {
 
     const turn = this.runTurn(displayText, userMessageId, context, turnStartedAtMs, promptContent);
     return { userMessageId, turn };
+  }
+
+  getLastMentionedAgents(): ReadonlyArray<string> {
+    return this.lastMentionedAgents;
   }
 
   private async runTurn(
@@ -731,7 +735,7 @@ export class AgentSession {
 
       if (
         this.runFanoutTurn &&
-        isFanout(this.lastMentionedAgents, this.backendId) &&
+        isFanout(this.lastMentionedAgents, this.sessionAgent.slug) &&
         placeholderId
       ) {
         if (!(await this.ensureMultiAgentEntitlement())) {
@@ -747,6 +751,9 @@ export class AgentSession {
           this.priorDisplayMessages(userMessageId, placeholderId),
           FANOUT_HISTORY_MAX_CHARS
         );
+        // No persona block here: this prompt is SHARED, and each answerer leads
+        // it with its own persona and memory. The chat's own persona rides the
+        // summary instead (`designdocs/CUSTOM_AGENTS.md` §6).
         const promptBlocks = buildPromptBlocks(
           displayText,
           context,
@@ -754,8 +761,7 @@ export class AgentSession {
           webTabBlock,
           projectContextBlock,
           historyBlock,
-          projectContextUpdatesBlock,
-          agentPersonaBlock
+          projectContextUpdatesBlock
         );
         return await this.runFanoutPath(placeholderId, displayText, promptBlocks, turnStartedAtMs);
       }
@@ -887,9 +893,10 @@ export class AgentSession {
     turnStartedAtMs: number
   ): Promise<StopReason> {
     const signal = this.abortController?.signal ?? new AbortController().signal;
-    const input: FanoutRunInput = {
-      agents: this.lastMentionedAgents,
-      mainAgent: this.backendId,
+    const request: FanoutTurnRequest = {
+      agentSlugs: this.lastMentionedAgents,
+      sessionBackendId: this.backendId,
+      summarizerPersonaBlock: this.sessionAgent.personaBlock,
       prompt: withReadOnlyPreamble(promptBlocks),
       originalPromptText,
       signal,
@@ -898,7 +905,7 @@ export class AgentSession {
         this.scheduleNotifyMessages();
       },
     };
-    const turn = await this.runFanoutTurn!(input);
+    const turn = await this.runFanoutTurn!(request);
     this.store.setFanout(placeholderId, turn);
 
     const stopReason: StopReason = signal.aborted ? "cancelled" : "end_turn";
@@ -912,14 +919,14 @@ export class AgentSession {
     const hasContent =
       turn.summary.text.trim().length > 0 || hasAnswerText || isDirectAnswerTurn(turn);
     if (hasContent) {
-      const composite = serializeFanoutComposite(turn, (id) => this.displayNameFor(id));
+      const composite = serializeFanoutComposite(turn);
       this.store.appendAgentText(placeholderId, composite);
       const summaryText = turn.summary.text.trim();
       const replay =
         turn.summary.complete && summaryText.length > 0
           ? summaryText
           : hasAnswerText
-            ? renderFanoutComposite(turn, (id) => this.displayNameFor(id))
+            ? renderFanoutComposite(turn)
             : "";
       if (replay) {
         this.pendingFanoutContext.push({ question: originalPromptText, summary: replay });
@@ -1719,12 +1726,7 @@ export function buildPromptBlocks(
 }
 
 export function withReadOnlyPreamble(blocks: PromptContent[]): PromptContent[] {
-  const i = blocks.findIndex((b) => b.type === "text");
-  if (i === -1) return [{ type: "text", text: FANOUT_READONLY_PREAMBLE }, ...blocks];
-  const block = blocks[i] as Extract<PromptContent, { type: "text" }>;
-  const out = blocks.slice();
-  out[i] = { type: "text", text: `${FANOUT_READONLY_PREAMBLE}\n\n${block.text}` };
-  return out;
+  return prependPromptText(blocks, FANOUT_READONLY_PREAMBLE);
 }
 
 async function serializeWebTabContext(context: MessageContext | undefined): Promise<string> {

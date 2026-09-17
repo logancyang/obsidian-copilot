@@ -24,12 +24,19 @@ import { FanoutTurnView } from "@/agentMode/ui/FanoutTurnView";
 import { defaultFanoutOption, type FanoutOptionValue } from "@/agentMode/ui/fanoutDropdown";
 
 function answer(
-  backendId: string,
+  agentSlug: string,
   status: AgentAnswerStatus,
   text = "",
   error?: string
 ): AgentAnswer {
-  return { backendId, status, text, error };
+  return {
+    agentSlug,
+    name: agentSlug[0].toUpperCase() + agentSlug.slice(1),
+    icon: "🪶",
+    status,
+    text,
+    error,
+  };
 }
 
 function turn(
@@ -38,7 +45,7 @@ function turn(
   summaryStatus: FanoutTurn["summary"]["status"] = "done"
 ): FanoutTurn {
   const map: Record<string, AgentAnswer> = {};
-  for (const a of answers) map[a.backendId] = a;
+  for (const a of answers) map[a.agentSlug] = a;
   return { answers: map, summary: { status: summaryStatus, text: summaryText } };
 }
 
@@ -75,7 +82,7 @@ describe("FanoutTurnView", () => {
       expect(screen.getByText(t.summary.error)).toBeTruthy();
       expect(screen.queryByText("Summary unavailable")).toBeNull();
       if (partialText) expect(screen.getByTestId("agent-md").textContent).toBe(partialText);
-      fireEvent.click(screen.getByRole("tab", { name: /opencode/ }));
+      fireEvent.click(screen.getByRole("tab", { name: /Opencode/ }));
       expect(screen.getByTestId("agent-md").textContent).toBe("Successful answer");
     }
   );
@@ -94,14 +101,14 @@ describe("FanoutTurnView", () => {
     );
     renderView(t);
     expect(screen.getByTestId("agent-md").textContent).toBe("the narrative summary");
-    fireEvent.click(screen.getByRole("tab", { name: /opencode/ }));
+    fireEvent.click(screen.getByRole("tab", { name: /Opencode/ }));
     expect(screen.getByTestId("agent-md").textContent).toBe("OPENCODE_BODY");
   });
 
   it("shows 'did not answer' (not 'Thinking…') for a finished slot with no text", () => {
     const t = turn([answer("opencode", "done", "")], "the narrative summary");
     renderView(t);
-    fireEvent.click(screen.getByRole("tab", { name: /opencode/ }));
+    fireEvent.click(screen.getByRole("tab", { name: /Opencode/ }));
     expect(screen.getByText(/did not answer/i)).toBeTruthy();
     expect(screen.queryByText(/Thinking/i)).toBeNull();
   });

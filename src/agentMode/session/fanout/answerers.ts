@@ -1,25 +1,24 @@
-import type { BackendId } from "@/agentMode/session/types";
-
-export const EMPTY_ANSWERERS: ReadonlyArray<BackendId> = Object.freeze([]);
+export const EMPTY_ANSWERERS: ReadonlyArray<string> = Object.freeze([]);
 
 export function resolveAnswerers(args: {
-  mentionedAgentIds: ReadonlyArray<BackendId>;
-  installedAgentIds: ReadonlySet<BackendId>;
-}): ReadonlyArray<BackendId> {
-  const { mentionedAgentIds, installedAgentIds } = args;
-  const answerers: BackendId[] = [];
-  const seen = new Set<BackendId>();
-  for (const id of mentionedAgentIds) {
-    if (seen.has(id)) continue;
-    if (!installedAgentIds.has(id)) continue;
-    seen.add(id);
-    answerers.push(id);
+  mentionedSlugs: ReadonlyArray<string>;
+  knownSlugs: ReadonlySet<string>;
+}): ReadonlyArray<string> {
+  const { mentionedSlugs, knownSlugs } = args;
+  const answerers: string[] = [];
+  const seen = new Set<string>();
+  for (const slug of mentionedSlugs) {
+    if (seen.has(slug)) continue;
+    if (!knownSlugs.has(slug)) continue;
+    seen.add(slug);
+    answerers.push(slug);
   }
   return answerers.length > 0 ? answerers : EMPTY_ANSWERERS;
 }
 
-export function isFanout(answerers: ReadonlyArray<BackendId>, mainAgentId: BackendId): boolean {
+export function isFanout(answerers: ReadonlyArray<string>, ownAgentSlug: string | null): boolean {
   if (answerers.length === 0) return false;
-  if (answerers.length === 1 && answerers[0] === mainAgentId) return false;
+  if (answerers.length === 1 && ownAgentSlug !== null && answerers[0] === ownAgentSlug)
+    return false;
   return true;
 }

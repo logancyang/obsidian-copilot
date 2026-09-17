@@ -19,7 +19,7 @@ import { getSettings } from "@/settings/model";
 import { ContextProcessor } from "@/contextProcessor";
 import { GLOBAL_SCOPE } from "./scope";
 import { AuthRequiredError, MethodUnsupportedError } from "./errors";
-import type { FanoutRunInput } from "./fanout/FanoutOrchestrator";
+import type { FanoutTurnRequest } from "./fanout/FanoutOrchestrator";
 import { FANOUT_READONLY_PREAMBLE, type FanoutTurn } from "./fanout/fanoutTypes";
 import type {
   AgentToolCallOutput,
@@ -1694,8 +1694,8 @@ describe("AgentSession", () => {
         const BOTH_AGENTS = ["opencode", "claude"];
 
         const fanoutRunner = (turn: FanoutTurn) =>
-          jest.fn(async (input: FanoutRunInput): Promise<FanoutTurn> => {
-            input.onChange(turn);
+          jest.fn(async (request: FanoutTurnRequest): Promise<FanoutTurn> => {
+            request.onChange(turn);
             return turn;
           });
 
@@ -1704,8 +1704,20 @@ describe("AgentSession", () => {
           summary: FanoutTurn["summary"] = { status: "done", text: "summary" }
         ): FanoutTurn => ({
           answers: {
-            opencode: { backendId: "opencode", status: "done", text: answers[0] },
-            claude: { backendId: "claude", status: "done", text: answers[1] },
+            opencode: {
+              agentSlug: "opencode",
+              name: "Opencode",
+              icon: "",
+              status: "done",
+              text: answers[0],
+            },
+            claude: {
+              agentSlug: "claude",
+              name: "Claude",
+              icon: "",
+              status: "done",
+              text: answers[1],
+            },
           },
           summary,
         });
@@ -1739,8 +1751,9 @@ describe("AgentSession", () => {
           expect(mockedUpgradePrompt).not.toHaveBeenCalled();
           expect(runFanoutTurn).toHaveBeenCalledTimes(1);
           expect(mock.prompt).not.toHaveBeenCalled();
-          expect(runFanoutTurn.mock.calls[0][0].agents).toEqual(BOTH_AGENTS);
-          expect(runFanoutTurn.mock.calls[0][0].mainAgent).toBe("opencode");
+          expect(runFanoutTurn.mock.calls[0][0].agentSlugs).toEqual(BOTH_AGENTS);
+          expect(runFanoutTurn.mock.calls[0][0].sessionBackendId).toBe("opencode");
+          expect(runFanoutTurn.mock.calls[0][0].summarizerPersonaBlock).toBeNull();
           expect(fanoutPromptText(runFanoutTurn)).toContain("read-only");
           expect(fanoutPromptText(runFanoutTurn)).toContain("review");
           expect(aiMessage(session)?.fanout?.answers.claude.text).toBe("claude answer");
@@ -1770,7 +1783,14 @@ describe("AgentSession", () => {
           const mock = makeMockBackend();
           const runFanoutTurn = fanoutRunner({
             answers: {
-              claude: { backendId: "claude", status: "error", text: "", error: "backend boom" },
+              claude: {
+                agentSlug: "claude",
+                name: "Claude",
+                icon: "",
+                status: "error",
+                text: "",
+                error: "backend boom",
+              },
             },
             summary: { status: "done", text: "" },
           });
@@ -1805,13 +1825,14 @@ describe("AgentSession", () => {
           expect(placeholder?.fanout).toBeUndefined();
         });
 
-        it("skips the entitlement gate when no other agent is mentioned", async () => {
+        it("skips the entitlement gate when no agent other than the chat's own is mentioned", async () => {
           const mock = makeMockBackend();
           const runFanoutTurn = jest.fn();
           const session = makeSession(mock, { runFanoutTurn });
 
           await session.sendPrompt("hi").turn;
-          await session.sendPrompt("hi again", undefined, undefined, ["opencode"]).turn;
+          session.setAgent({ slug: "jennifer", name: "Jennifer", icon: "🪶", personaBlock: null });
+          await session.sendPrompt("hi again", undefined, undefined, ["jennifer"]).turn;
 
           expect(mockedEnsure).not.toHaveBeenCalled();
           expect(runFanoutTurn).not.toHaveBeenCalled();

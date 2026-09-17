@@ -45,8 +45,9 @@ import { playNotificationSound } from "@/utils/notificationSound";
 import type { AgentSessionIndex } from "./AgentSessionIndex";
 import type { AgentFileManager } from "@/agents/AgentFileManager";
 import { BUILTIN_AGENT, BUILTIN_AGENT_SLUG, toAgentEntry } from "@/agents/types";
+import { formatMissingAgentLabel } from "@/agents/agentDisplay";
 import type { AgentEntry, CustomAgent } from "@/agents/types";
-import { runAgentMemoryPass } from "./agentMemoryPass";
+import { buildFanoutMemoryTranscript, runAgentMemoryPass } from "./agentMemoryPass";
 import { ReadOnlySubSessionRunner } from "./readOnlySubSession";
 import {
   COPILOT_SESSION_AGENT,
@@ -65,9 +66,9 @@ import { applyModeSpec } from "./modeApply";
 import {
   FanoutOrchestrator,
   type FanoutHost,
-  type FanoutRunInput,
+  type FanoutTurnRequest,
 } from "./fanout/FanoutOrchestrator";
-import type { FanoutTurn } from "./fanout/fanoutTypes";
+import type { FanoutAnswerer, FanoutTurn } from "./fanout/fanoutTypes";
 import { modelCatalogSignature } from "./translateBackendState";
 import { GLOBAL_SCOPE, type ProjectScopeId } from "./scope";
 import {
@@ -366,8 +367,43 @@ export class AgentSessionManager {
     return this.readOnlyFanoutSessions.has(backendSessionId);
   }
 
-  runFanoutTurn(input: FanoutRunInput): Promise<FanoutTurn> {
-    return this.fanoutOrchestrator.run(input);
+  async runFanoutTurn(request: FanoutTurnRequest): Promise<FanoutTurn> {
+    const { agentSlugs, ...context } = request;
+    const answerers = await Promise.all(agentSlugs.map((slug) => this.resolveFanoutAnswerer(slug)));
+    const turn = await this.fanoutOrchestrator.run({ ...context, answerers });
+    this.beginFanoutMemoryPasses(answerers, turn, request);
+    return turn;
+  }
+
+  private async resolveFanoutAnswerer(slug: string): Promise<FanoutAnswerer> {
+    const gone: FanoutAnswerer = {
+      slug,
+      name: formatMissingAgentLabel(slug),
+      icon: "",
+      backendId: null,
+      personaBlock: null,
+      memoryEnabled: false,
+      missing: true,
+    };
+    const files = this.opts.agentFileManager;
+    if (!files) return gone;
+    try {
+      const record = await files.readAgent(slug);
+      if (!record) return gone;
+      const { agent } = record;
+      const session = await loadSessionAgent(files, agent);
+      return {
+        slug,
+        name: agent.name,
+        icon: agent.icon,
+        backendId: agent.backendId,
+        personaBlock: session.personaBlock,
+        memoryEnabled: agent.memoryEnabled,
+      };
+    } catch (error) {
+      logWarn(`[Agents] Could not read agent "${slug}" for a fan-out turn`, error);
+      return gone;
+    }
   }
 
   private createFanoutHost(): FanoutHost {
@@ -379,7 +415,6 @@ export class AgentSessionManager {
       },
       getDefaultSelection: (backendId) => this.getSeedSelection(backendId),
       onSelectionApplied: (backendId, state) => this.repairDefaultEffort(backendId, state),
-      getDisplayName: (backendId) => this.resolveDescriptor(backendId).displayName,
       getCwd: () => {
         const adapter = this.app.vault.adapter;
         return adapter instanceof FileSystemAdapter ? adapter.getBasePath() : null;
@@ -938,7 +973,7 @@ export class AgentSessionManager {
       defaultModelSelection: resolvedSeed,
       defaultMode: this.getDefaultMode(resolvedId),
       getDescriptor: () => this.opts.resolveDescriptor(resolvedId),
-      runFanoutTurn: (input) => this.runFanoutTurn(input),
+      runFanoutTurn: (request) => this.runFanoutTurn(request),
       getDisplayName: (backendId) => this.resolveDescriptor(backendId).displayName,
       getApp: () => this.app,
       contextReady,
@@ -1367,6 +1402,57 @@ export class AgentSessionManager {
       })
       .finally(() => this.memoryPassesInFlight.delete(internalId));
     return pass;
+  }
+
+  /**
+   * Fold a finished fan-out turn into the memory of every agent that answered
+   * it, because being consulted is a conversation with that agent too
+   * (`designdocs/CUSTOM_AGENTS.md` §6).
+   *
+   * Fire-and-forget: the turn is already on screen and the user has moved on,
+   * so nothing here is awaited and nothing here can fail the turn. An agent
+   * whose memory is off, whose folder is gone, or who produced no answer is
+   * skipped. The chat's own `memorizedThroughTurn` marker is deliberately
+   * untouched — a fan-out answer is the agent's conversation, not the chat's.
+   *
+   * @param answerers - The agents as the turn resolved them.
+   * @param turn - The settled turn, read for each agent's own answer.
+   * @param context - The question asked and the chat's backend, which an agent
+   *   that pins none of its own runs its memory pass on.
+   */
+  private beginFanoutMemoryPasses(
+    answerers: ReadonlyArray<FanoutAnswerer>,
+    turn: FanoutTurn,
+    context: { originalPromptText: string; sessionBackendId: BackendId }
+  ): void {
+    const files = this.opts.agentFileManager;
+    if (!files) return;
+    for (const answerer of answerers) {
+      if (answerer.missing || !answerer.memoryEnabled) continue;
+      const slot = turn.answers[answerer.slug];
+      if (!slot || slot.status !== "done") continue;
+      const answer = slot.text.trim();
+      if (!answer) continue;
+      const key = `fanout:${answerer.slug}`;
+      if (this.memoryPassesInFlight.has(key)) continue;
+      this.memoryPassesInFlight.add(key);
+      void runAgentMemoryPass(
+        { files, subSessions: this.subSessions },
+        {
+          agentSlug: answerer.slug,
+          sessionBackendId: answerer.backendId ?? context.sessionBackendId,
+          messages: buildFanoutMemoryTranscript(context.originalPromptText, answer),
+          // Nothing cancels a memory pass: the turn it reports on has already
+          // finished, and the pass bounds itself with its own deadline.
+          signal: new AbortController().signal,
+        }
+      )
+        .then((outcome) => {
+          if (outcome.status !== "written") return;
+          void this.rebindUnstartedChats(answerer.slug);
+        })
+        .finally(() => this.memoryPassesInFlight.delete(key));
+    }
   }
 
   /**
@@ -2585,7 +2671,7 @@ export class AgentSessionManager {
       defaultMode: this.getDefaultMode(backendId),
       cwd,
       getDescriptor: () => this.opts.resolveDescriptor(backendId),
-      runFanoutTurn: (input) => this.runFanoutTurn(input),
+      runFanoutTurn: (request) => this.runFanoutTurn(request),
       getDisplayName: (id) => this.resolveDescriptor(id).displayName,
       getApp: () => this.app,
       ...(projectId !== GLOBAL_SCOPE

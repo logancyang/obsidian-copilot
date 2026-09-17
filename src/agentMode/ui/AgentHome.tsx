@@ -10,6 +10,9 @@ import { CreateProjectPanel } from "@/agentMode/ui/CreateProjectPanel";
 import { AgentModeStatus } from "@/agentMode/ui/AgentModeStatus";
 import { AgentProjectHeader } from "@/agentMode/ui/AgentProjectHeader";
 import { AgentTalkingToPicker } from "@/agentMode/ui/AgentTalkingToPicker";
+import { listMentionableAgents } from "@/agentMode/ui/mentionedAgents";
+import { BUILTIN_AGENT_SLUG } from "@/agents/types";
+import { openCopilotSettings } from "@/settings/openSettings";
 import { useAgentTalkingTo } from "@/agentMode/ui/useAgentTalkingTo";
 import { ProjectInfoPopover } from "@/agentMode/ui/ProjectInfoPopover";
 import { AgentTabStrip } from "@/agentMode/ui/AgentTabStrip";
@@ -363,8 +366,16 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   }
   const projectPlacement = placementRef.current;
 
-  const mainAgentId =
-    manager.getActiveSession()?.backendId ?? manager.getStartingBackendId() ?? null;
+  const ownAgentSlug =
+    manager.getActiveSession()?.getAgent().slug ??
+    (talkingTo.selectedSlug === BUILTIN_AGENT_SLUG ? null : talkingTo.selectedSlug);
+  const mentionableAgents = useMemo(
+    () => listMentionableAgents(talkingTo.entries),
+    [talkingTo.entries]
+  );
+  const handleCreateAgent = useCallback(() => {
+    openCopilotSettings(app, rootEl?.win ?? window, "agents");
+  }, [app, rootEl]);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps -- sessionId intentionally re-rolls the otherwise argument-free greeting factory
   const greeting = useMemo(() => pickRandomGreeting(), [sessionId]);
@@ -564,7 +575,9 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       chatInputId={chatInputId}
       draft={draft}
       app={app}
-      mainAgentId={mainAgentId}
+      ownAgentSlug={ownAgentSlug}
+      mentionableAgents={mentionableAgents}
+      onCreateAgent={handleCreateAgent}
       updateUserMessageHistory={updateUserMessageHistory}
       isStarting={isStarting}
       isLoading={isLoading}

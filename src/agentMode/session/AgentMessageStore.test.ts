@@ -25,8 +25,14 @@ describe("AgentMessageStore", () => {
 
   const liveTurn = (summaryText = "the summary"): FanoutTurn => ({
     answers: {
-      opencode: { backendId: "opencode", status: "done", text: "opencode answer" },
-      codex: { backendId: "codex", status: "done", text: "codex answer" },
+      opencode: {
+        agentSlug: "opencode",
+        name: "Opencode",
+        icon: "",
+        status: "done",
+        text: "opencode answer",
+      },
+      codex: { agentSlug: "codex", name: "Codex", icon: "", status: "done", text: "codex answer" },
     },
     summary: { status: "done", text: summaryText },
   });
@@ -413,7 +419,7 @@ describe("AgentMessageStore", () => {
 
     it("rebuilds fanout from an assistant composite but not a user or plain body", () => {
       const store = new AgentMessageStore();
-      const body = serializeFanoutComposite(liveTurn("loaded summary"), (x) => x.toUpperCase());
+      const body = serializeFanoutComposite(liveTurn("loaded summary"));
       store.loadMessages([
         { id: "u1", sender: USER_SENDER, message: body, timestamp: null, isVisible: true },
         { id: "a1", sender: AI_SENDER, message: body, timestamp: null, isVisible: true },

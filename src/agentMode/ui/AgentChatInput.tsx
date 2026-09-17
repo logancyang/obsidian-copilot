@@ -16,20 +16,18 @@ import ChatInput, {
   type ChatInputHandle,
   type ChatInputProps,
 } from "@/components/chat-components/ChatInput";
-import { EMPTY_AGENT_MENTION_BRANDS } from "@/components/chat-components/hooks/useAtMentionCategories";
+import {
+  NO_AGENT_MENTIONS,
+  type AgentMentionEntry,
+  type AgentMentionState,
+} from "@/components/chat-components/hooks/useAtMentionCategories";
 import { useActiveWebTabState } from "@/components/chat-components/hooks/useActiveWebTabState";
 import { ACTIVE_WEB_TAB_MARKER, EVENT_NAMES } from "@/constants";
 import { useCanUseMultiAgent } from "@/plusUtils";
 import { EventTargetContext } from "@/context";
 import { logError, logWarn } from "@/logger";
-import {
-  isFanout,
-  resolveAnswerers,
-  useInstalledAgentBrands,
-} from "@/agentMode/ui/mentionedAgents";
-import type { BackendId } from "@/agentMode/session/types";
+import { isFanout, resolveAnswerers } from "@/agentMode/ui/mentionedAgents";
 import type CopilotPlugin from "@/main";
-import { getCloudAgentIds } from "@/agentMode/backends/registry";
 import { buildWebTabsWithActiveSnapshot } from "@/services/webViewerService/activeWebTabSnapshot";
 import {
   isNoteSelectedTextContext,
@@ -53,7 +51,9 @@ interface AgentChatInputProps {
   chatInputId: string;
   draft: AgentInputDraftControls;
   app: App;
-  mainAgentId: BackendId | null;
+  ownAgentSlug: string | null;
+  mentionableAgents: ReadonlyArray<AgentMentionEntry>;
+  onCreateAgent: () => void;
   updateUserMessageHistory: (newMessage: string) => void;
   isStarting: boolean;
   isLoading: boolean;
@@ -144,7 +144,9 @@ export const AgentChatInput = memo(function AgentChatInput({
   chatInputId,
   draft,
   app,
-  mainAgentId,
+  ownAgentSlug,
+  mentionableAgents,
+  onCreateAgent,
   updateUserMessageHistory,
   isStarting,
   isLoading: loading,
@@ -169,15 +171,20 @@ export const AgentChatInput = memo(function AgentChatInput({
 
   const canUseMultiAgent = useCanUseMultiAgent();
 
-  const installedAgentBrands = useInstalledAgentBrands(plugin);
-  const agentBrands = canUseMultiAgent ? installedAgentBrands : EMPTY_AGENT_MENTION_BRANDS;
-  const installedAgentIds = useMemo(
-    () => new Set(installedAgentBrands.map((b) => b.id)),
-    [installedAgentBrands]
+  const agentMentions = useMemo<AgentMentionState>(
+    () =>
+      canUseMultiAgent
+        ? { entries: mentionableAgents, enabled: true, onCreateAgent }
+        : NO_AGENT_MENTIONS,
+    [canUseMultiAgent, mentionableAgents, onCreateAgent]
+  );
+  const knownAgentSlugs = useMemo(
+    () => new Set(mentionableAgents.map((agent) => agent.slug)),
+    [mentionableAgents]
   );
   const mentionedAgentIdsRef = useRef<string[]>([]);
-  const handleMentionedAgentsChange = useCallback((backendIds: string[]) => {
-    mentionedAgentIdsRef.current = backendIds;
+  const handleMentionedAgentsChange = useCallback((slugs: string[]) => {
+    mentionedAgentIdsRef.current = slugs;
   }, []);
 
   const {
@@ -308,14 +315,11 @@ export const AgentChatInput = memo(function AgentChatInput({
         return;
       }
 
-      let mentionedAgents: ReadonlyArray<BackendId> | undefined;
-      if (mainAgentId) {
-        const answerers = resolveAnswerers({
-          mentionedAgentIds: mentionedAgentIdsRef.current,
-          installedAgentIds,
-        });
-        if (isFanout(answerers, mainAgentId)) mentionedAgents = answerers;
-      }
+      const answerers = resolveAnswerers({
+        mentionedSlugs: mentionedAgentIdsRef.current,
+        knownSlugs: knownAgentSlugs,
+      });
+      const mentionedAgents = isFanout(answerers, ownAgentSlug) ? answerers : undefined;
 
       mentionedAgentIdsRef.current = [];
       resetCompose();
@@ -369,8 +373,8 @@ export const AgentChatInput = memo(function AgentChatInput({
       resetCompose,
       runSend,
       setQueuedMessages,
-      mainAgentId,
-      installedAgentIds,
+      ownAgentSlug,
+      knownAgentSlugs,
     ]
   );
 
@@ -455,8 +459,7 @@ export const AgentChatInput = memo(function AgentChatInput({
           modePickerOverride={modePickerOverride ?? undefined}
           selectedTextContexts={selectedTextContexts}
           onRemoveSelectedText={removeSelectedTextContext}
-          agentBrands={agentBrands}
-          cloudAgentIds={getCloudAgentIds()}
+          agentMentions={agentMentions}
           onMentionedAgentsChange={handleMentionedAgentsChange}
           topRightAccessory={contextStatusIndicator}
         />

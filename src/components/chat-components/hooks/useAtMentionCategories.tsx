@@ -1,7 +1,7 @@
 import React, { useMemo } from "react";
 import { TFile, TFolder } from "obsidian";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
-import { FileText, Wrench, Folder, Globe, Image, Bot } from "lucide-react";
+import { FileText, Wrench, Folder, Globe, Image, Users } from "lucide-react";
 import { TypeaheadOption } from "@/components/chat-components/TypeaheadMenuContent";
 import type { WebTabContext } from "@/types/message";
 
@@ -19,16 +19,29 @@ export interface AtMentionOption extends TypeaheadOption {
   category: AtMentionCategory;
   data: TFile | string | TFolder | WebTabContext;
   isAction?: boolean;
+  /** Emoji the inserted pill wears — set on agent rows, which have no icon component. */
+  pillIcon?: string;
 }
 
-export interface AgentMentionBrand {
-  readonly id: string;
-  readonly displayName: string;
-  readonly Icon: React.ComponentType<{ className?: string }>;
-  readonly needsSelfHostWarning?: boolean;
+export interface AgentMentionEntry {
+  readonly slug: string;
+  readonly name: string;
+  readonly description: string;
+  readonly icon: string;
 }
 
-export const EMPTY_AGENT_MENTION_BRANDS: ReadonlyArray<AgentMentionBrand> = Object.freeze([]);
+export const EMPTY_AGENT_MENTIONS: ReadonlyArray<AgentMentionEntry> = Object.freeze([]);
+
+export interface AgentMentionState {
+  readonly entries: ReadonlyArray<AgentMentionEntry>;
+  readonly enabled: boolean;
+  readonly onCreateAgent?: () => void;
+}
+
+export const NO_AGENT_MENTIONS: AgentMentionState = Object.freeze({
+  entries: EMPTY_AGENT_MENTIONS,
+  enabled: false,
+});
 
 export interface CategoryOption extends TypeaheadOption {
   category: AtMentionCategory;
@@ -39,9 +52,9 @@ export interface CategoryOption extends TypeaheadOption {
 const AGENTS_CATEGORY: CategoryOption = {
   key: "agents",
   title: "Agents",
-  subtitle: "Ask another coding agent this turn",
+  subtitle: "Ask one of your agents this turn",
   category: "agents",
-  icon: <Bot className="tw-size-4" />,
+  icon: <Users className="tw-size-4" />,
 };
 
 const CATEGORY_OPTIONS: CategoryOption[] = [
