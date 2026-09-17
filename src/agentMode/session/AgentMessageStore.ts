@@ -10,6 +10,7 @@ import {
   AgentToolCallOutput,
   NewAgentChatMessage,
   StopReason,
+  TurnFileChange,
 } from "@/agentMode/session/types";
 import { USER_SENDER } from "@/constants";
 import { FormattedDateTime, MessageContext } from "@/types/message";
@@ -40,6 +41,9 @@ interface StoredAgentMessage {
   // Live per-agent fan-out state. In-memory only; the persisted body carries the
   // composite that reconstructs it on load.
   fanout?: FanoutTurn;
+  // Files this turn changed. In-memory only: the persisted chat carries sender +
+  // text, so a reopened chat has none and `loadMessages` must not restore any.
+  fileChanges?: TurnFileChange[];
   // Bumped on every in-place mutation of this message so `getDisplayMessages`
   // can cache the adapted view and only re-adapt when the version moves. The
   // streaming append paths mutate `parts`/`displayText` in place (same array
@@ -335,6 +339,22 @@ export class AgentMessageStore {
   }
 
   /**
+   * Publish the files a finished turn changed onto its assistant message, so the
+   * trail can offer them for review. Replaces any previously published list.
+   * Returns false when the message is missing.
+   *
+   * @param id - Assistant message that owns the turn.
+   * @param changes - One entry per file the turn left in a different state.
+   */
+  setFileChanges(id: string, changes: TurnFileChange[]): boolean {
+    const msg = this.messages.find((m) => m.id === id);
+    if (!msg) return false;
+    msg.fileChanges = changes;
+    this.touch(msg);
+    return true;
+  }
+
+  /**
    * Append text to a message body. Used to stream `agent_message_chunk`
    * updates into the placeholder assistant message. Returns false if the
    * target message is missing (the session was likely reset mid-turn).
@@ -604,6 +624,7 @@ export class AgentMessageStore {
       parts: m.parts,
       turnStopReason: m.turnStopReason,
       turnDurationMs: m.turnDurationMs,
+      ...(m.fileChanges ? { fileChanges: m.fileChanges } : {}),
       // Snapshot so each adapted view carries a fresh reference; the orchestrator
       // mutates one turn in place, so the same reference would freeze the dropdown.
       ...(m.fanout ? { fanout: snapshotFanoutTurn(m.fanout) } : {}),

@@ -5,6 +5,7 @@ import { GLOBAL_SCOPE, type ProjectScopeId } from "@/agentMode/session/scope";
 import {
   AgentChatMessage,
   AgentMessagePart,
+  AgentToolKind,
   AgentPlanEntry,
   AgentQuestionAnswers,
   AgentTodoListEntry,
@@ -34,6 +35,7 @@ import {
   ToolCallContent,
   ToolCallDelta,
   ToolCallSnapshot,
+  TurnFileChange,
 } from "@/agentMode/session/types";
 import {
   isNoteSelectedTextContext,
@@ -42,8 +44,15 @@ import {
 } from "@/types/message";
 import { err2String, formatDateTime } from "@/utils";
 import { ensureMultiAgentEntitlement, showMultiAgentUpgradePrompt } from "@/plusUtils";
-import type { App } from "obsidian";
+import type { App, DataAdapter } from "obsidian";
 import { MethodUnsupportedError } from "@/agentMode/session/errors";
+import {
+  diffTargetPaths,
+  editTargetPaths,
+  isCapturableVaultPath,
+} from "@/agentMode/session/editTargets";
+import { buildTurnFileChange } from "@/agentMode/session/turnFileChanges";
+import { getVaultBase, toVaultRelative } from "@/utils/vaultPath";
 import { deriveChatTitleFromMessages } from "@/agentMode/session/chatHistoryMerge";
 import { ContextProcessor } from "@/contextProcessor";
 import type { ContextMaterializationResult } from "@/context/projectContextMaterializer";
@@ -104,6 +113,27 @@ const EMPTY_BACKEND_IDS: ReadonlyArray<BackendId> = Object.freeze([]);
 // Shared "no extra roots" array so a session created without project context
 // keeps a stable reference (no fresh `[]` allocation per construction).
 const EMPTY_ADDITIONAL_DIRECTORIES: string[] = Object.freeze([]) as unknown as string[];
+
+/**
+ * One file's pre-turn state while its turn is still running. `before` starts as
+ * "file absent" and is filled by whichever source wins: the vault read issued
+ * when the edit was announced, or the pre-edit content the tool result reported
+ * — `reported` marks the latter so a late-resolving read cannot overwrite it.
+ */
+interface TurnSnapshot {
+  before: string | null;
+  reported: boolean;
+  read: Promise<void>;
+}
+
+/** A vault file's text, or null when it does not exist or cannot be read. */
+async function readVaultText(adapter: DataAdapter, path: string): Promise<string | null> {
+  try {
+    return await adapter.read(path);
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Optimistically swap `state.model.current.baseModelId` for the persisted
@@ -373,6 +403,13 @@ export class AgentSession {
   // keep the QA context. LIVE-ONLY — never persisted.
   private pendingFanoutContext: PendingFanoutContext[] = [];
   private placeholderId: string | null = null;
+  // Pre-turn content of every vault file an edit-kind tool call named this turn,
+  // keyed by vault-relative path. Reset at the start of each turn; consumed when
+  // the turn ends to produce that turn's `TurnFileChange[]`.
+  private turnTouched = new Map<string, TurnSnapshot>();
+  // Paths each tool call snapshotted, so a Claude tool result's `originalFile`
+  // can only replace a snapshot its own call took.
+  private turnSnapshotPathsByToolCall = new Map<string, Set<string>>();
   // A task update routed to an earlier turn still counts as activity consumed
   // by the current backend prompt, even though it adds nothing to this turn's
   // placeholder.
@@ -977,6 +1014,8 @@ export class AgentSession {
     this.placeholderId = this.store.addMessage(placeholder);
     this.currentMessageIds = new Set();
     this.currentTurnHadRoutedToolActivity = false;
+    this.turnTouched = new Map();
+    this.turnSnapshotPathsByToolCall = new Map();
     this.notifyMessages();
 
     // Backends without a title summarizer (codex, Claude Code) have no usable
@@ -1172,6 +1211,10 @@ export class AgentSession {
         );
         this.store.markMessageError(placeholderId, message);
       }
+      // Publish before the turn is marked complete so the finished turn is never
+      // rendered without the changes it produced. A cancelled turn still reports
+      // what landed before the user stopped it.
+      if (placeholderId) await this.finalizeTurnFileChanges(placeholderId);
       if (
         placeholderId &&
         this.store.markTurnComplete(placeholderId, resp.stopReason, Date.now() - turnStartedAtMs)
@@ -1307,6 +1350,7 @@ export class AgentSession {
         this.pendingFanoutContext.push({ question: originalPromptText, summary: replay });
       }
     }
+    await this.finalizeTurnFileChanges(placeholderId);
     if (this.store.markTurnComplete(placeholderId, stopReason, Date.now() - turnStartedAtMs)) {
       this.notifyMessages();
     }
@@ -1859,6 +1903,7 @@ export class AgentSession {
 
     switch (update.sessionUpdate) {
       case "tool_call": {
+        this.snapshotEditTargets(update, update.kind);
         const exitPlan = tryReadExitPlanModeCall({
           kind: update.kind,
           rawInput: update.rawInput,
@@ -1883,6 +1928,13 @@ export class AgentSession {
         if (targetMessageId !== placeholderId) this.currentTurnHadRoutedToolActivity = true;
         const existing = this.findToolCallPart(targetMessageId, update.toolCallId);
         const merged = mergeToolCallUpdate(existing, update);
+        // An update normally omits the kind the opening `tool_call` declared, so
+        // take it from the call this update belongs to.
+        this.snapshotEditTargets(
+          update,
+          update.kind ?? (merged.kind === "tool_call" ? merged.toolKind : undefined)
+        );
+        this.applyReportedPreEditContent(update);
         if (merged.kind === "tool_call") {
           const exitPlan = tryReadExitPlanModeCall({
             kind: update.kind ?? merged.toolKind,
@@ -1936,6 +1988,114 @@ export class AgentSession {
     if (!placeholderId) return null;
     if (messageId) this.currentMessageIds.add(messageId);
     return placeholderId;
+  }
+
+  /** The vault adapter this session reads file snapshots through, or null on mobile / in tests. */
+  private vaultAdapter(): DataAdapter | null {
+    return this.getApp?.()?.vault?.adapter ?? null;
+  }
+
+  /**
+   * Record the pre-turn content of every vault file an edit-kind tool call
+   * names. The read is issued the moment the call is announced, which is before
+   * the agent's write lands for every out-of-process backend; the in-process
+   * backend closes the remaining race by reporting the original content itself
+   * (see {@link applyReportedPreEditContent}). A file already snapshotted this
+   * turn keeps its first snapshot, so repeated edits to one file still compare
+   * against how the turn found it.
+   *
+   * @param update - The tool call or tool-call update announcing the edit.
+   * @param kind - Effective tool kind, taken from the opening call when an update omits it.
+   */
+  private snapshotEditTargets(
+    update: ToolCallSnapshot | ToolCallDelta,
+    kind: AgentToolKind | undefined
+  ): void {
+    if (kind !== "edit") return;
+    const app = this.getApp?.();
+    const adapter = this.vaultAdapter();
+    if (!app || !adapter) return;
+    const vaultBase = getVaultBase(app);
+    const reportedDiffs = new Map<string, { oldText: string | null; newText: string }>();
+    for (const item of update.content ?? []) {
+      if (item.type === "diff") {
+        reportedDiffs.set(toVaultRelative(item.path, vaultBase), {
+          oldText: item.oldText ?? null,
+          newText: item.newText,
+        });
+      }
+    }
+    const paths = editTargetPaths(
+      {
+        locations: update.locations,
+        input: update.rawInput,
+        diffPaths: diffTargetPaths(update.content),
+      },
+      vaultBase
+    );
+    for (const path of paths) {
+      if (!isCapturableVaultPath(path)) continue;
+      let owned = this.turnSnapshotPathsByToolCall.get(update.toolCallId);
+      if (!owned) {
+        owned = new Set();
+        this.turnSnapshotPathsByToolCall.set(update.toolCallId, owned);
+      }
+      owned.add(path);
+      if (this.turnTouched.has(path)) continue;
+      const snapshot: TurnSnapshot = { before: null, reported: false, read: Promise.resolve() };
+      this.turnTouched.set(path, snapshot);
+      const reported = reportedDiffs.get(path);
+      snapshot.read = readVaultText(adapter, path).then((text) => {
+        if (snapshot.reported) return;
+        // A diff whose new side IS the file as it now stands describes the whole
+        // file, so its old side is the true pre-edit content — the only way back
+        // for a backend (codex) that writes before it announces the call, where
+        // the read above already observes the finished file.
+        snapshot.before = reported && reported.newText === text ? reported.oldText : text;
+      });
+    }
+  }
+
+  /**
+   * Replace a snapshot with the pre-edit content the tool result itself
+   * reported. The in-process backend can write the file before this session's
+   * own read resolves, in which case the snapshot holds post-write content;
+   * the reported original is authoritative. Only applied to a call that
+   * targeted exactly one file, so the content can be attributed to a path.
+   */
+  private applyReportedPreEditContent(update: ToolCallDelta): void {
+    const raw = update.rawOutput as { originalFile?: unknown } | null | undefined;
+    const originalFile = raw?.originalFile;
+    if (typeof originalFile !== "string") return;
+    const owned = this.turnSnapshotPathsByToolCall.get(update.toolCallId);
+    if (!owned || owned.size !== 1) return;
+    const [path] = owned;
+    const snapshot = this.turnTouched.get(path);
+    if (!snapshot) return;
+    snapshot.before = originalFile;
+    snapshot.reported = true;
+  }
+
+  /**
+   * Close the turn's capture: read each touched file's end state, drop the
+   * files the turn left unchanged, and publish the rest on the turn's message.
+   * The turn is the review boundary, so a file edited by several tool calls
+   * yields one entry comparing how the turn found the file with how it left it.
+   */
+  private async finalizeTurnFileChanges(messageId: string): Promise<void> {
+    const touched = this.turnTouched;
+    this.turnTouched = new Map();
+    this.turnSnapshotPathsByToolCall = new Map();
+    const adapter = this.vaultAdapter();
+    if (touched.size === 0 || !adapter) return;
+    await Promise.all([...touched.values()].map((snapshot) => snapshot.read));
+    const changes: TurnFileChange[] = [];
+    for (const [path, snapshot] of touched) {
+      const change = buildTurnFileChange(path, snapshot.before, await readVaultText(adapter, path));
+      if (change) changes.push(change);
+    }
+    if (changes.length === 0) return;
+    if (this.store.setFileChanges(messageId, changes)) this.notifyMessages();
   }
 
   private findToolCallPart(messageId: string, toolCallId: string): AgentMessagePart | undefined {
