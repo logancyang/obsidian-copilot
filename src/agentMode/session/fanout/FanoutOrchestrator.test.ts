@@ -142,7 +142,7 @@ function makeHost(
   const readOnlyUnregistered: string[] = [];
   const excludedFromHistory: Array<{ backendId: BackendId; sessionId: string }> = [];
   const host: FanoutHost = {
-    ensureBackendForFanout: async (backendId) => ({
+    ensureBackendForSubSession: async (backendId) => ({
       proc: procs.get(backendId)!.proc,
       descriptor: descriptors.get(backendId)!,
     }),
@@ -236,7 +236,7 @@ describe("FanoutOrchestrator", () => {
           claude: { sessionId: "s-claude" },
         });
         const proc = procs.get("codex")!.proc;
-        host.ensureBackendForFanout = async (backendId) =>
+        host.ensureBackendForSubSession = async (backendId) =>
           backendId === "codex"
             ? { proc, descriptor: CodexBackendDescriptor }
             : {
@@ -261,7 +261,10 @@ describe("FanoutOrchestrator", () => {
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/219 reports an unsupported model-only switch rather than running fan-out on a different model", async () => {
         const { host, procs } = makeHost({ codex: { sessionId: "s-codex" } });
         const proc = procs.get("codex")!.proc;
-        host.ensureBackendForFanout = async () => ({ proc, descriptor: CodexBackendDescriptor });
+        host.ensureBackendForSubSession = async () => ({
+          proc,
+          descriptor: CodexBackendDescriptor,
+        });
         host.getDefaultSelection = () => ({ baseModelId: "example", effort: null });
         const result = await new FanoutOrchestrator(host).run(runInput(["codex"]));
         expect(result.answers.codex.status).toBe("error");
@@ -276,7 +279,7 @@ describe("FanoutOrchestrator", () => {
           claude: { sessionId: "s-claude" },
         });
         const proc = procs.get("codex")!.proc;
-        host.ensureBackendForFanout = async (backendId) =>
+        host.ensureBackendForSubSession = async (backendId) =>
           backendId === "codex"
             ? { proc, descriptor: CodexBackendDescriptor }
             : {
@@ -330,7 +333,7 @@ describe("FanoutOrchestrator", () => {
           },
           mode: null,
         };
-        host.ensureBackendForFanout = async (backendId) =>
+        host.ensureBackendForSubSession = async (backendId) =>
           backendId === "opencode"
             ? { proc, descriptor: OpencodeBackendDescriptor }
             : {
@@ -401,7 +404,7 @@ describe("FanoutOrchestrator", () => {
             },
             mode: null,
           };
-          host.ensureBackendForFanout = async () => ({
+          host.ensureBackendForSubSession = async () => ({
             proc,
             descriptor: OpencodeBackendDescriptor,
           });
@@ -428,7 +431,10 @@ describe("FanoutOrchestrator", () => {
         const { host, procs } = makeHost({ claude: { sessionId: "s-claude" } });
         const proc = procs.get("claude")!.proc;
         const modelId = "claude-sonnet-4-5";
-        host.ensureBackendForFanout = async () => ({ proc, descriptor: ClaudeBackendDescriptor });
+        host.ensureBackendForSubSession = async () => ({
+          proc,
+          descriptor: ClaudeBackendDescriptor,
+        });
         host.getDefaultSelection = () => ({ baseModelId: modelId, effort: "high" });
         // The real descriptor uses its SDK catalog's effort option.
         const effortOption = ClaudeBackendDescriptor.wire.effortConfigFor?.(modelId);
