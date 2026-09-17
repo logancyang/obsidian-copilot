@@ -136,15 +136,17 @@ Type `/` to insert an enabled Skill or [Copilot command](custom-commands.md). Fo
 
 ## Multi-agent answers
 
-With active Plus access, type `@`, open **Agents**, and mention one or more other installed agents in the same prompt. Copilot sends the same question, that turn's attachments, and a bounded slice of the visible conversation to each mentioned agent. With one other agent mentioned, only that agent responds and its answer is shown directly. With two or more, they answer in parallel and the current agent summarizes their answers without producing a separate answer of its own.
+With active Plus access, type `@`, open **Agents**, and mention one or more of your agents in the same prompt. Copilot sends the same question, that turn's attachments, and a bounded slice of the visible conversation to each mentioned agent, along with that agent's own instructions and memory, so it answers in character. With one agent mentioned, only that agent responds and its answer is shown directly. With two or more, they answer in parallel and the agent your chat is with summarizes their answers without producing a separate answer of its own.
 
-This is useful for research, second opinions, and reviews. Mentioning only the current agent behaves like a normal turn.
+This is useful for research, second opinions, and reviews. Mentioning only the agent your chat is already with behaves like a normal turn. If you have not created an agent yet, the **Agents** group offers a row that opens Settings so you can make one.
 
-Each answer appears in its own tab. A direct one-agent turn shows only that agent. A turn with two or more answerers opens with **Summary** first. If one answerer fails in a multi-agent turn, Copilot keeps the successful answers and summarizes what completed.
+Each answer appears in its own tab, labeled with that agent's icon and name. A direct one-agent turn shows only that agent. A turn with two or more answerers opens with **Summary** first. If one answerer fails in a multi-agent turn, Copilot keeps the successful answers and summarizes what completed.
+
+An agent that answers this way remembers the exchange afterwards, the same as a conversation held with it directly. It is given the question and its own answer only, never the other agents' answers or the summary.
 
 Multi-agent answers are designed for read-only research, not edits. Copilot denies explicit vault edit, delete, and move tools, along with tools it cannot classify. Retrieval Skills can still run their own scripts under the agent's permissions, so multi-agent answers are not a security sandbox. Use only trusted Skills, and use a regular single-agent turn when you want files changed.
 
-The default model and effort saved for each mentioned agent are used for its answer. If a multi-agent summary fails, its tab shows the error and any partial summary; the individual answers remain available. If an agent is not installed or ready, configure it before adding it to the prompt.
+Each mentioned agent answers on the backend it pins, or on the chat's own backend if it pins none, using the default model and effort saved for that backend. If a multi-agent summary fails, its tab shows the error and any partial summary; the individual answers remain available. An agent you delete while its mention is still in the composer reports that it is gone instead of answering.
 
 ## Skills across agents
 

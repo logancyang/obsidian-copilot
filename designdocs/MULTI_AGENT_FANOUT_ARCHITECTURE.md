@@ -1,21 +1,22 @@
 # Multi-Agent Per-Turn QA (Fan-Out) Architecture
 
-How one `@agent`-mentioned chat turn routes directly to one coding agent or fans
+How one `@agent`-mentioned chat turn routes directly to one custom agent or fans
 out to several in parallel, renders as one assistant message, preserves agent
 identity across reloads, and is gated to paid users.
-Landed in PR #2628 (`v4-preview`).
+Landed in PR #2628 (`v4-preview`); an answerer is a custom agent rather than a
+backend brand (`designdocs/CUSTOM_AGENTS.md` §6).
 
 ## What it does
 
 ```mermaid
 flowchart TD
-    U["@-mention turn (e.g. '@opencode @codex compare X')"] --> G{paid?}
+    U["@-mention turn (e.g. '@Jennifer @Vancat compare X')"] --> G{paid?}
     G -- no --> P[upgrade prompt, no fan-out]
-    G -- yes --> A["answerers = @-mentioned installed set<br/>(main agent only if explicitly @-ed)"]
-    A --> AN["each answerer runs in a FRESH read-only<br/>sub-session, in parallel, with a timeout"]
+    G -- yes --> A["answerers = @-mentioned agents<br/>(the chat's own agent only if explicitly @-ed)"]
+    A --> AN["each answerer runs in a FRESH read-only sub-session<br/>on the backend it pinned, in parallel, with a timeout"]
     AN --> C{"one answerer?"}
     C -- yes --> D["show that agent's answer directly"]
-    C -- no --> S["main agent summarizes over the answers"]
+    C -- no --> S["the chat's own agent summarizes over the answers"]
     D --> M1["one assistant message holds the live FanoutTurn<br/>→ agent-only view"]
     S --> M2["one assistant message holds the live FanoutTurn<br/>→ Summary-first segmented dropdown"]
     M1 --> SAVE["persist the composite as the message body<br/>(markdown + HTML-comment markers); no new on-disk field"]
@@ -23,15 +24,18 @@ flowchart TD
 ```
 
 Each mentioned agent answers the same question independently in an ephemeral
-read-only sub-session. One answerer is shown directly. With two or more, the
-session's own agent writes a narrative summary and the message opens with a
-Summary-first tab row switching between the summary and each full answer.
+read-only sub-session, its own `<agent_persona>` and `<agent_memory>` blocks
+leading the shared prompt. One answerer is shown directly. With two or more, the
+chat's own agent writes a narrative summary and the message opens with a
+Summary-first tab row switching between the summary and each full answer. After
+the turn, each agent that answered folds the question and its own answer into
+its memory file.
 
 ## Modules
 
 | Stage              | Module                                                    | Responsibility                                                        |
 | ------------------ | --------------------------------------------------------- | --------------------------------------------------------------------- |
-| Routing            | `fanout/answerers.ts`                                     | `resolveAnswerers` / `isFanout`: `@`-mentions → answerer list. Pure.  |
+| Routing            | `fanout/answerers.ts`                                     | `resolveAnswerers` / `isFanout`: `@`-mentions → agent slugs. Pure.    |
 | Entitlement        | `plusUtils.ts`                                            | `canUseMultiAgent` (sync) + `ensureMultiAgentEntitlement` (re-check). |
 | Orchestration      | `fanout/FanoutOrchestrator.ts`                            | Per-agent sub-sessions, timeouts, cancel, then multi-answer summary.  |
 | Turn data + format | `fanout/fanoutTypes.ts`                                   | Types, serialize/parse/render composite, history budgeting.           |
@@ -41,9 +45,12 @@ Summary-first tab row switching between the summary and each full answer.
 
 ## Key decisions
 
-- **One non-main answerer responds directly.** With two or more answerers, the
-  main agent summarizes and does not also answer unless it is `@`-mentioned. A
-  lone `@main` mention collapses to the normal single-agent path.
+- **One answerer responds directly.** With two or more answerers, the chat's own
+  agent summarizes and does not also answer unless it is `@`-mentioned. A lone
+  mention of the chat's own persona collapses to the normal single-agent path.
+- **The slot carries its own label.** Each answer holds the agent's name and
+  icon, so a reloaded turn labels its tabs without a roster lookup and a
+  composite written before agents replaced backend brands still renders.
 - **One message object** holds the live `FanoutTurn` (`message.fanout`, in-memory
   only); the dropdown, whole-response copy/insert, and reload all read it.
 - **Backward-compatible persistence.** The finished turn is serialized AS the

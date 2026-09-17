@@ -43,11 +43,11 @@ Selected text in note editors is automatically added to chat context. On desktop
 
 ## Mention other agents
 
-With active Plus access, type `@`, open **Agents**, and select one or more other installed agents. Each mentioned agent receives the same question, that turn's attachments, and a bounded slice of the visible conversation. With one other agent mentioned, only that agent responds and its answer is shown directly. With two or more, the current agent summarizes their answers without automatically answering separately.
+With active Plus access, type `@`, open **Agents**, and select one or more of your agents. Each mentioned agent receives the same question, that turn's attachments, and a bounded slice of the visible conversation, plus its own instructions and memory. With one agent mentioned, only that agent responds and its answer is shown directly. With two or more, the agent your chat is with summarizes their answers without automatically answering separately.
 
-Multi-agent answers are designed for read-only research, second opinions, and review, but retrieval Skills can still run trusted scripts under an agent's permissions. They are not a security sandbox. Use a normal single-agent turn when you want files changed. Mentioning only the current agent behaves like a normal turn.
+Multi-agent answers are designed for read-only research, second opinions, and review, but retrieval Skills can still run trusted scripts under an agent's permissions. They are not a security sandbox. Use a normal single-agent turn when you want files changed. Mentioning only the agent your chat is already with behaves like a normal turn.
 
-Agent mentions select opencode, Claude, or Codex. They are different from note, folder, and web context mentions. See [Multi-agent answers](agent-mode-and-tools.md#multi-agent-answers) for permissions and model behavior.
+Agent mentions select the agents you created. They are different from note, folder, and web context mentions. See [Multi-agent answers](agent-mode-and-tools.md#multi-agent-answers) for permissions and model behavior.
 
 ## Reuse context with Projects
 

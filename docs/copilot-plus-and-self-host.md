@@ -50,7 +50,7 @@ Your own BYOK, Claude, Codex, local model, Commands, Projects, Quick Ask, and cu
 
 Plus includes everything in Lite with a higher hosted-model allowance. It also unlocks the full Copilot service layer:
 
-- **Multi-agent answers** that ask installed agents in parallel and have the current agent summarize their findings.
+- **Multi-agent answers** that ask several of your agents in parallel and have the agent your chat is with summarize their findings.
 - **Premium web and PDF tools** for research and document understanding.
 - Built-in **YouTube and X capture Skills**.
 - **OpenArtifacts publishing** for supported outputs.
