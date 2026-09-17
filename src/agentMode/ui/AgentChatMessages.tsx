@@ -175,6 +175,7 @@ const AgentChatMessages = memo(
                       timestamp={message.timestamp?.display}
                       app={app}
                       turnStopReason={message.turnStopReason}
+                      fileChanges={message.fileChanges}
                     />
                   </div>
                 ) : (
