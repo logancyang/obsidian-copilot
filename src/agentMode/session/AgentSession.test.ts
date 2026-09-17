@@ -4631,7 +4631,9 @@ describe("AgentSession file-change capture", () => {
     ]);
   });
 
-  it("keeps its own snapshot when the reported diff covers only part of the file", async () => {
+  it("keeps its own snapshot when the reported edit cannot be undone", async () => {
+    // A rejected or failed call still reports the arguments it was given; its
+    // new text never reached the file, so the snapshot is the only evidence.
     const vault = makeVault({ "notes/a.md": "one\ntwo\n" });
     const mock = makeMockBackend();
     mock.prompt.mockImplementation(async () => {
@@ -4643,7 +4645,11 @@ describe("AgentSession file-change capture", () => {
           title: "Edit",
           kind: "edit",
           status: "in_progress",
-          content: [{ type: "diff", path: "/vault/notes/a.md", oldText: "TWO", newText: "two" }],
+          rawInput: {
+            file_path: "/vault/notes/a.md",
+            old_string: "two",
+            new_string: "never written",
+          },
         },
       });
       await Promise.resolve();
@@ -4716,32 +4722,6 @@ describe("AgentSession file-change capture", () => {
     expect(vault.adapter.read).not.toHaveBeenCalled();
   });
 
-  it("ignores tool calls that are not edits", async () => {
-    const vault = makeVault({ "notes/a.md": "one\n" });
-    const mock = makeMockBackend();
-    mock.prompt.mockImplementation(async () => {
-      mock.emit({
-        sessionId: "acp-1",
-        update: {
-          sessionUpdate: "tool_call",
-          toolCallId: "t1",
-          title: "Read",
-          kind: "read",
-          status: "in_progress",
-          rawInput: { file_path: "/vault/notes/a.md" },
-        },
-      });
-      await Promise.resolve();
-      return { stopReason: "end_turn" as const };
-    });
-    const session = makeSession(mock, vault.app);
-
-    await session.sendPrompt("read it").turn;
-
-    expect(fileChangesOf(session)).toBeUndefined();
-    expect(vault.adapter.read).not.toHaveBeenCalled();
-  });
-
   it("still reports what landed when the user cancels the turn", async () => {
     const vault = makeVault({ "notes/a.md": "one\n" });
     const mock = makeMockBackend();
@@ -4799,5 +4779,224 @@ describe("AgentSession file-change capture", () => {
     await session.sendPrompt("edit it").turn;
 
     expect(fileChangesOf(session)).toBeUndefined();
+  });
+
+  it("recovers the pre-turn content from the substitution an edit tool reports", async () => {
+    // opencode writes the file before it announces the call, so the snapshot
+    // read below already sees the finished file.
+    const vault = makeVault({ "notes/a.md": "# Beta\n\n- cerulean\n- amber\n" });
+    const mock = makeMockBackend();
+    mock.prompt.mockImplementation(async () => {
+      mock.emit({
+        sessionId: "acp-1",
+        update: {
+          sessionUpdate: "tool_call",
+          toolCallId: "t1",
+          title: "edit",
+          kind: "edit",
+          status: "pending",
+        },
+      });
+      mock.emit({
+        sessionId: "acp-1",
+        update: {
+          sessionUpdate: "tool_call_update",
+          toolCallId: "t1",
+          kind: "edit",
+          status: "in_progress",
+          locations: [{ path: "/vault/notes/a.md" }],
+          rawInput: {
+            filePath: "/vault/notes/a.md",
+            oldString: "- one\n- two",
+            newString: "- cerulean\n- amber",
+          },
+        },
+      });
+      await Promise.resolve();
+      return { stopReason: "end_turn" as const };
+    });
+    const session = makeSession(mock, vault.app);
+
+    await session.sendPrompt("edit it").turn;
+
+    expect(fileChangesOf(session)).toMatchObject([
+      {
+        path: "notes/a.md",
+        status: "modified",
+        before: "# Beta\n\n- one\n- two\n",
+        after: "# Beta\n\n- cerulean\n- amber\n",
+      },
+    ]);
+  });
+
+  it("undoes every reported edit when the turn rewrote one file several times", async () => {
+    const vault = makeVault({ "notes/a.md": "one THREE\n" });
+    const mock = makeMockBackend();
+    const editUpdate = (toolCallId: string, oldString: string, newString: string) => ({
+      sessionId: "acp-1",
+      update: {
+        sessionUpdate: "tool_call_update" as const,
+        toolCallId,
+        kind: "edit" as const,
+        status: "in_progress" as const,
+        locations: [{ path: "/vault/notes/a.md" }],
+        rawInput: { filePath: "/vault/notes/a.md", oldString, newString },
+      },
+    });
+    mock.prompt.mockImplementation(async () => {
+      mock.emit(editUpdate("t1", "two", "TWO"));
+      mock.emit(editUpdate("t2", "TWO", "THREE"));
+      await Promise.resolve();
+      return { stopReason: "end_turn" as const };
+    });
+    const session = makeSession(mock, vault.app);
+
+    await session.sendPrompt("edit it twice").turn;
+
+    expect(fileChangesOf(session)).toMatchObject([
+      { path: "notes/a.md", before: "one two\n", after: "one THREE\n" },
+    ]);
+  });
+
+  it("falls back to the content the file had when the turn first read it", async () => {
+    // A write tool reports only what it wrote, so nothing can be undone; the
+    // snapshot taken when the agent read the file is the remaining evidence.
+    const vault = makeVault({ "notes/a.md": "before the turn\n" });
+    const mock = makeMockBackend();
+    mock.prompt.mockImplementation(async () => {
+      mock.emit({
+        sessionId: "acp-1",
+        update: {
+          sessionUpdate: "tool_call_update",
+          toolCallId: "t1",
+          kind: "read",
+          status: "in_progress",
+          locations: [{ path: "/vault/notes/a.md" }],
+        },
+      });
+      await Promise.resolve();
+      vault.files.set("notes/a.md", "written by the agent\n");
+      mock.emit({
+        sessionId: "acp-1",
+        update: {
+          sessionUpdate: "tool_call_update",
+          toolCallId: "t2",
+          kind: "edit",
+          status: "in_progress",
+          locations: [{ path: "/vault/notes/a.md" }],
+          rawInput: { filePath: "/vault/notes/a.md", content: "written by the agent\n" },
+        },
+      });
+      await Promise.resolve();
+      return { stopReason: "end_turn" as const };
+    });
+    const session = makeSession(mock, vault.app);
+
+    await session.sendPrompt("rewrite it").turn;
+
+    expect(fileChangesOf(session)).toMatchObject([
+      { path: "notes/a.md", before: "before the turn\n", after: "written by the agent\n" },
+    ]);
+  });
+
+  it("leaves a file the turn only read out of the reported changes", async () => {
+    const vault = makeVault({ "notes/a.md": "unchanged\n" });
+    const mock = makeMockBackend();
+    mock.prompt.mockImplementation(async () => {
+      mock.emit({
+        sessionId: "acp-1",
+        update: {
+          sessionUpdate: "tool_call",
+          toolCallId: "t1",
+          title: "Read",
+          kind: "read",
+          status: "in_progress",
+          locations: [{ path: "/vault/notes/a.md" }],
+        },
+      });
+      await Promise.resolve();
+      vault.files.set("notes/a.md", "changed by someone else\n");
+      return { stopReason: "end_turn" as const };
+    });
+    const session = makeSession(mock, vault.app);
+
+    await session.sendPrompt("read it").turn;
+
+    expect(fileChangesOf(session)).toBeUndefined();
+  });
+
+  it("snapshots as soon as a permission request names the file it wants to edit", async () => {
+    const vault = makeVault({ "notes/a.md": "before the turn\n" });
+    const mock = makeMockBackend();
+    mock.prompt.mockImplementation(async () => {
+      void session.handleToolPermission({
+        sessionId: "acp-1",
+        toolCall: {
+          toolCallId: "t1",
+          title: "write",
+          kind: "edit",
+          locations: [{ path: "/vault/notes/a.md" }],
+        },
+        options: [{ optionId: "once", name: "Allow once", kind: "allow_once" }],
+      });
+      await Promise.resolve();
+      vault.files.set("notes/a.md", "written by the agent\n");
+      mock.emit({
+        sessionId: "acp-1",
+        update: {
+          sessionUpdate: "tool_call",
+          toolCallId: "t1",
+          title: "write",
+          kind: "edit",
+          status: "in_progress",
+          locations: [{ path: "/vault/notes/a.md" }],
+        },
+      });
+      await Promise.resolve();
+      return { stopReason: "end_turn" as const };
+    });
+    const session = makeSession(mock, vault.app);
+
+    await session.sendPrompt("write it").turn;
+
+    expect(fileChangesOf(session)).toMatchObject([
+      { path: "notes/a.md", before: "before the turn\n", after: "written by the agent\n" },
+    ]);
+  });
+
+  it("keeps the pre-turn original when a later edit to the same file reports its own", async () => {
+    const vault = makeVault({ "notes/a.md": "third\n" });
+    const mock = makeMockBackend();
+    mock.prompt.mockImplementation(async () => {
+      mock.emit(editCall("t1", "/vault/notes/a.md"));
+      mock.emit({
+        sessionId: "acp-1",
+        update: {
+          sessionUpdate: "tool_call_update",
+          toolCallId: "t1",
+          status: "completed",
+          rawOutput: { originalFile: "first\n" },
+        } as never,
+      });
+      mock.emit(editCall("t2", "/vault/notes/a.md"));
+      mock.emit({
+        sessionId: "acp-1",
+        update: {
+          sessionUpdate: "tool_call_update",
+          toolCallId: "t2",
+          status: "completed",
+          rawOutput: { originalFile: "second\n" },
+        } as never,
+      });
+      await Promise.resolve();
+      return { stopReason: "end_turn" as const };
+    });
+    const session = makeSession(mock, vault.app);
+
+    await session.sendPrompt("edit it twice").turn;
+
+    expect(fileChangesOf(session)).toMatchObject([
+      { path: "notes/a.md", before: "first\n", after: "third\n" },
+    ]);
   });
 });
