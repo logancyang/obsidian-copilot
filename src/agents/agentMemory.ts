@@ -37,6 +37,20 @@ export function formatMemoryEntryDate(date: Date): string {
   return `${date.getFullYear()}-${month}-${day}`;
 }
 
+/**
+ * The calendar day before `date`, both written as `YYYY-MM-DD`.
+ *
+ * Steps the calendar rather than subtracting hours, so a month or year
+ * boundary lands on the day the notes are actually named after.
+ *
+ * @param date - Day to step back from.
+ */
+export function previousMemoryDay(date: string): string {
+  const stepped = new Date(`${date}T00:00:00`);
+  stepped.setDate(stepped.getDate() - 1);
+  return formatMemoryEntryDate(stepped);
+}
+
 /** Everything the flush prompt is rendered from. */
 export interface AgentMemoryFlushPromptSource {
   /** Agent display name — the pass is addressed to the agent as itself. */

@@ -2,6 +2,8 @@ import { buildAgentMemorySkeleton } from "@/agents/agentFile";
 import {
   boundConsolidationNotes,
   buildAgentMemoryConsolidationPrompt,
+  formatMemoryEntryDate,
+  previousMemoryDay,
   reviewMemoryUpdate,
   type MemoryUpdateRejection,
 } from "@/agents/agentMemory";
@@ -67,9 +69,10 @@ export async function runAgentMemoryConsolidation(
     const currentMemory = stored?.body.trim() || buildAgentMemorySkeleton(agent.name);
     const expectedHash = stored?.hash ?? null;
 
+    const today = formatMemoryEntryDate(request.now ?? new Date());
     const pending = await deps.files.readDailyNotesAfter(
       agent.slug,
-      stored?.consolidatedThrough ?? null
+      readNotesAfter(stored?.consolidatedThrough ?? null, today)
     );
     if (pending.length === 0) return { status: "skipped", reason: "no-new-notes" };
     // The marker advances to the newest note that EXISTS, not the newest one
@@ -133,6 +136,24 @@ export async function runAgentMemoryConsolidation(
 }
 
 /**
+ * The day consolidation reads forward from, which is not always the marker.
+ *
+ * `consolidated-through` records the last day folded in, but a day still being
+ * written to is never finished: after the first consolidation of the day, a
+ * second conversation's notes would otherwise sit unread until tomorrow. So a
+ * marker that has reached today reads as the day before, and today's note is
+ * folded in again — the prompt already merges what it has seen before.
+ * See `designdocs/CUSTOM_AGENTS.md` §5 ("Consolidation").
+ *
+ * @param consolidatedThrough - Marker from `MEMORY.md`, or null when never run.
+ * @param today - Today's date as `YYYY-MM-DD`.
+ */
+export function readNotesAfter(consolidatedThrough: string | null, today: string): string | null {
+  if (!consolidatedThrough) return null;
+  return consolidatedThrough >= today ? previousMemoryDay(today) : consolidatedThrough;
+}
+
+/**
  * Whether this agent has a daily note its `MEMORY.md` has not folded in yet —
  * the condition every automatic consolidation trigger is gated on.
  *
@@ -150,6 +171,13 @@ export async function hasUnconsolidatedNotes(
   const dates = files.listDailyNoteDates(slug);
   if (dates.length === 0) return false;
   const stored = await files.readMemoryDocument(slug);
-  const through = stored?.consolidatedThrough ?? null;
-  return !through || dates[dates.length - 1] > through;
+  if (!stored?.consolidatedThrough) return true;
+  const newestDate = dates[dates.length - 1];
+  if (newestDate > stored.consolidatedThrough) return true;
+  // The marker has reached the newest day, but that day may have been appended
+  // to since the core was written. A note newer than `MEMORY.md` is work the
+  // core has not seen; anything older is already in it, so an idle plugin does
+  // not consolidate the same day over and over.
+  const newest = await files.readDailyNote(slug, newestDate);
+  return newest !== null && newest.modifiedAtMs > stored.modifiedAtMs;
 }

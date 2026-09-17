@@ -4,6 +4,7 @@ import { AGENT_MEMORY_HEADINGS } from "@/agents/agentFile";
 import type { CustomAgent } from "@/agents/types";
 import {
   hasUnconsolidatedNotes,
+  readNotesAfter,
   runAgentMemoryConsolidation,
 } from "@/agentMode/session/agentMemoryConsolidation";
 import type { ReadOnlySubSessionRunner } from "@/agentMode/session/readOnlySubSession";
@@ -78,6 +79,7 @@ function buildHarness(
       stored ? { text: stored.body, modifiedAtMs: 0, ...stored } : null
     ),
     readDailyNotesAfter: jest.fn(async () => notes),
+    readDailyNote: jest.fn(async () => null),
     writeConsolidatedMemory: jest.fn(
       async (
         _slug: string,
@@ -242,11 +244,37 @@ describe("agentMemoryConsolidation", () => {
     });
   });
 
+  describe("readNotesAfter()", () => {
+    it("reads every day when the agent has never consolidated", () => {
+      expect(readNotesAfter(null, "2026-09-17")).toBeNull();
+    });
+
+    it("reads forward from the marker while it is behind today", () => {
+      expect(readNotesAfter("2026-09-15", "2026-09-17")).toBe("2026-09-15");
+    });
+
+    it("steps back a day once the marker has reached today, since today is unfinished", () => {
+      expect(readNotesAfter("2026-09-17", "2026-09-17")).toBe("2026-09-16");
+    });
+
+    it("steps the calendar across a month boundary rather than subtracting hours", () => {
+      expect(readNotesAfter("2026-09-01", "2026-09-01")).toBe("2026-08-31");
+    });
+  });
+
   describe("hasUnconsolidatedNotes()", () => {
-    function files(dates: string[], consolidatedThrough: string | null): AgentFileManager {
+    function files(
+      dates: string[],
+      consolidatedThrough: string | null,
+      mtimes: { memory?: number; note?: number } = {}
+    ): AgentFileManager {
       return {
         listDailyNoteDates: () => dates,
-        readMemoryDocument: async () => ({ consolidatedThrough }),
+        readMemoryDocument: async () => ({
+          consolidatedThrough,
+          modifiedAtMs: mtimes.memory ?? 2000,
+        }),
+        readDailyNote: async () => ({ modifiedAtMs: mtimes.note ?? 1000 }),
       } as unknown as AgentFileManager;
     }
 
@@ -260,10 +288,18 @@ describe("agentMemoryConsolidation", () => {
       expect(await hasUnconsolidatedNotes(files(["2026-09-17"], null), "jennifer")).toBe(true);
     });
 
-    it("is false when every note has already been folded in", async () => {
+    it("is false when every note is older than the core that folded it in", async () => {
       expect(await hasUnconsolidatedNotes(files(["2026-09-17"], "2026-09-17"), "jennifer")).toBe(
         false
       );
+    });
+
+    // Otherwise a second conversation on an already-consolidated day would
+    // never reach MEMORY.md (`designdocs/CUSTOM_AGENTS.md` §5).
+    it("is true when today's note was appended to after the core was written", async () => {
+      const appendedSince = files(["2026-09-17"], "2026-09-17", { memory: 1000, note: 2000 });
+
+      expect(await hasUnconsolidatedNotes(appendedSince, "jennifer")).toBe(true);
     });
 
     it("is false for an agent that has never written a note", async () => {
