@@ -59,6 +59,7 @@ import { getSettings, settingsStore, updateSetting, useSettingsValue } from "@/s
 import { useAtomValue } from "jotai";
 import { FileSearch, Files, Folder, MessageSquare } from "lucide-react";
 import { Notice } from "obsidian";
+import { openVaultPath } from "@/utils/openVaultPath";
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
 
@@ -148,7 +149,15 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     currentTodoList,
     pendingToolPermissions,
     pendingAskUserQuestions,
+    memoryNotice,
   } = useAgentChatRuntimeState(backend);
+
+  // The trust line's open link. A new leaf so reading what the agent wrote
+  // never takes the chat's place.
+  const handleOpenMemory = useCallback(
+    (memoryPath: string) => openVaultPath(app, memoryPath, { newLeaf: true }),
+    [app]
+  );
 
   // Whole-surface root — the portal container for header-anchored overlays
   // (the project-info popover), which live OUTSIDE chatContainerRef. Held in
@@ -366,7 +375,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   // Who the next new chat will be held with. Orthogonal to the scope above: the
   // picker changes the answerer, never the working directory or the chat list.
   // See `designdocs/CUSTOM_AGENTS.md` §3.
-  const talkingTo = useAgentTalkingTo(manager);
+  const talkingTo = useAgentTalkingTo(manager, app);
 
   const modelPickerOverride = useAgentModelPicker(manager, plugin);
   const modePickerOverride = useAgentModePicker(manager);
@@ -813,6 +822,8 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
           selectedSlug={talkingTo.selectedSlug}
           onSelect={talkingTo.select}
           onOpen={talkingTo.refresh}
+          onOpenMemory={talkingTo.openMemory}
+          onClearMemory={talkingTo.clearMemory}
           // The header sits OUTSIDE chatContainerRef, so the menu portals into
           // the AgentHome root for popout correctness.
           container={rootEl}
@@ -982,6 +993,8 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                       pendingAskUserQuestions={pendingAskUserQuestions}
                       chatBackend={backend}
                       isLoading={draft.loading}
+                      memoryNotice={memoryNotice}
+                      onOpenMemory={handleOpenMemory}
                     />
                     <AgentChatControls
                       onNewChat={handleNewChat}

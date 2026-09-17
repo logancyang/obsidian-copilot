@@ -167,6 +167,29 @@ export class AgentFileManager {
   }
 
   /**
+   * Replace an agent's `MEMORY.md` with `text`, creating the file when the user
+   * deleted it. Returns the vault-relative path that was written.
+   *
+   * The agent decides what its memory says, but never writes it: the memory
+   * pass runs without a write tool and hands the file back as text, so this is
+   * the only place an agent's own recollection reaches disk. See
+   * `designdocs/CUSTOM_AGENTS.md` §5 ("Memory").
+   *
+   * @param slug - Identity of the agent whose memory is written.
+   * @param text - Full new contents of the file.
+   */
+  public async writeMemory(slug: string, text: string): Promise<string> {
+    const memoryPath = getAgentMemoryPath(this.agentsFolder(), slug);
+    const file = this.vault.getAbstractFileByPath(memoryPath);
+    if (file instanceof TFile) {
+      await this.vault.modify(file, text);
+    } else {
+      await this.vault.create(memoryPath, text);
+    }
+    return memoryPath;
+  }
+
+  /**
    * Reset an agent's `MEMORY.md` to the empty skeleton, recreating the file if
    * the user deleted it, so "Clear memory" always leaves a file the agent can
    * append to next time.

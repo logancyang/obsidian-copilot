@@ -297,6 +297,29 @@ describe("AgentFileManager", () => {
     });
   });
 
+  describe("writeMemory()", () => {
+    it("replaces the memory file with what the agent returned and reports the path", async () => {
+      const { manager, vault } = buildManager();
+      vault.seedAgent("jennifer", { name: "Jennifer" }, "- old note\n");
+
+      const path = await manager.writeMemory("jennifer", "# Jennifer's memory\n\n- new note\n");
+
+      expect(path).toBe("copilot/agents/jennifer/MEMORY.md");
+      expect(vault.files.get(path)).toContain("new note");
+      expect(vault.files.get(path)).not.toContain("old note");
+    });
+
+    it("recreates the memory file when the user had deleted it", async () => {
+      const { manager, vault } = buildManager();
+      vault.seedAgent("jennifer", { name: "Jennifer" });
+      vault.files.delete("copilot/agents/jennifer/MEMORY.md");
+
+      await manager.writeMemory("jennifer", "# Jennifer's memory\n");
+
+      expect(vault.files.get("copilot/agents/jennifer/MEMORY.md")).toContain("Jennifer's memory");
+    });
+  });
+
   describe("clearMemory()", () => {
     it("replaces the memory file with the empty skeleton", async () => {
       const { manager, vault } = buildManager();

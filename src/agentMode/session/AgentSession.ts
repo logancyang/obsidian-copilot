@@ -35,6 +35,7 @@ import {
   ToolCallContent,
   ToolCallDelta,
   ToolCallSnapshot,
+  AgentMemoryNotice,
 } from "@/agentMode/session/types";
 import {
   isNoteSelectedTextContext,
@@ -343,6 +344,12 @@ export class AgentSession {
   // the chat is still empty. Its persona blocks ride the FIRST user prompt,
   // beside `<project_context>` (see `designdocs/CUSTOM_AGENTS.md` §3 and §4).
   private sessionAgent: SessionAgent = COPILOT_SESSION_AGENT;
+  // Transcript messages already folded into the agent's memory file. Seeded
+  // from the chat's `memorizedThroughTurn` frontmatter on load; 0 for a chat
+  // that has never been memorized, including every chat saved before agents.
+  private memorizedThroughTurn = 0;
+  // Live-only trust line for the most recent memory write. See `setMemoryNotice`.
+  private memoryNotice: AgentMemoryNotice | null = null;
   // Flips true once the first user prompt has been built, so the project-context
   // block is injected exactly once at the head of the conversation.
   private firstPromptSent = false;
@@ -871,6 +878,49 @@ export class AgentSession {
   }
 
   /**
+   * How many transcript messages this chat's agent has already folded into its
+   * memory file. Persisted as `memorizedThroughTurn`, so re-opening a chat and
+   * carrying on feeds only what is new (`designdocs/CUSTOM_AGENTS.md` §5).
+   */
+  getMemorizedThroughTurn(): number {
+    return this.memorizedThroughTurn;
+  }
+
+  /**
+   * Record that the transcript is memorized up to `count` messages. Advanced
+   * only by a memory pass that actually wrote, so an abandoned or rejected pass
+   * leaves the same turns to be re-read next time.
+   *
+   * @param count - Number of transcript messages now covered by the memory file.
+   */
+  setMemorizedThroughTurn(count: number): void {
+    if (!Number.isFinite(count) || count <= this.memorizedThroughTurn) return;
+    this.memorizedThroughTurn = Math.floor(count);
+  }
+
+  /**
+   * The "<agent> updated their memory" line shown at the foot of the chat, or
+   * null when nothing has been written since the user last spoke.
+   */
+  getMemoryNotice(): AgentMemoryNotice | null {
+    return this.memoryNotice;
+  }
+
+  /**
+   * Show, or clear, the memory trust line. Deliberately ephemeral: the pass
+   * runs after the chat's final save, and the durable record of what the agent
+   * learned is `MEMORY.md` itself, so the line lives only as long as the open
+   * session (`designdocs/CUSTOM_AGENTS.md` §5, "Trust surface").
+   *
+   * @param notice - What to show, or null to take the line down.
+   */
+  setMemoryNotice(notice: AgentMemoryNotice | null): void {
+    if (this.memoryNotice === notice) return;
+    this.memoryNotice = notice;
+    this.notifyMessages();
+  }
+
+  /**
    * Bind this chat to an agent. Callers own the rule about when this is
    * allowed: the manager reassigns only chats that have not sent a message yet,
    * because a conversation already in character cannot change who it is with
@@ -992,6 +1042,9 @@ export class AgentSession {
       content: buildUserDisplayContent(displayText, promptContent),
     };
     const userMessageId = this.store.addMessage(userMessage);
+    // The line reports on a conversation that had ended; a new turn resumes it,
+    // so the line comes down rather than floating above the fresh exchange.
+    this.memoryNotice = null;
 
     const turnStartedAtMs = Date.now();
     const placeholder: NewAgentChatMessage = {

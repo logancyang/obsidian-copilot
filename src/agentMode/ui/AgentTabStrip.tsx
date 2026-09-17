@@ -16,6 +16,7 @@ import type { AgentSession, AgentSessionStatus } from "@/agentMode/session/Agent
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import type { BackendDescriptor } from "@/agentMode/session/types";
 import { Loader2, MoreHorizontal, Plus, X } from "lucide-react";
+import { Notice } from "obsidian";
 import React from "react";
 
 interface Props {
@@ -116,6 +117,8 @@ function useSessionDisplay(session: AgentSession) {
     label,
     needsAttention: session.getNeedsAttention(),
     descriptor,
+    // Only a chat held with a named agent has a memory file to update.
+    hasAgentMemory: agent.slug !== null,
     agentIcon: agent.slug ? agent.icon : "",
     displayLabel: label ?? (agent.slug ? agent.name : (descriptor?.displayName ?? "Session")),
     tooltipLabel: agent.slug
@@ -197,6 +200,16 @@ export const AgentTabStrip: React.FC<Props> = ({ manager }) => {
       .catch((e) => logError("[AgentMode] createSession failed", e));
   }, [manager]);
 
+  // "Update memory now" for users who don't want to wait for the chat to end
+  // (`designdocs/CUSTOM_AGENTS.md` §5). A chat with nothing new since its last
+  // update is a no-op, which is why nothing is reported on the false branch.
+  const handleUpdateMemory = React.useCallback(
+    (id: string) => {
+      if (manager.updateMemoryNow(id)) new Notice("Updating memory…");
+    },
+    [manager]
+  );
+
   const handleClose = React.useCallback(
     (id: string) => {
       manager.closeSession(id).catch((e) => logError("[AgentMode] closeSession failed", e));
@@ -220,6 +233,7 @@ export const AgentTabStrip: React.FC<Props> = ({ manager }) => {
             isRenaming={renamingId === session.internalId}
             onActivate={() => manager.setActiveSession(session.internalId)}
             onClose={() => handleClose(session.internalId)}
+            onUpdateMemory={() => handleUpdateMemory(session.internalId)}
             onStartRename={() => setRenamingId(session.internalId)}
             onSubmitRename={(label) => {
               manager.renameSession(session.internalId, label);
@@ -262,6 +276,7 @@ interface TabProps {
   isRenaming: boolean;
   onActivate: () => void;
   onClose: () => void;
+  onUpdateMemory: () => void;
   onStartRename: () => void;
   onSubmitRename: (label: string) => void;
   onCancelRename: () => void;
@@ -273,12 +288,21 @@ const SessionTab: React.FC<TabProps> = ({
   isRenaming,
   onActivate,
   onClose,
+  onUpdateMemory,
   onStartRename,
   onSubmitRename,
   onCancelRename,
 }) => {
-  const { status, label, needsAttention, descriptor, agentIcon, displayLabel, tooltipLabel } =
-    useSessionDisplay(session);
+  const {
+    status,
+    label,
+    needsAttention,
+    descriptor,
+    hasAgentMemory,
+    agentIcon,
+    displayLabel,
+    tooltipLabel,
+  } = useSessionDisplay(session);
 
   const [menuOpen, setMenuOpen] = React.useState(false);
 
@@ -343,8 +367,11 @@ const SessionTab: React.FC<TabProps> = ({
           </TruncatedText>
         </div>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="tw-w-32">
+      <DropdownMenuContent align="start" className="tw-w-44">
         <DropdownMenuItem onSelect={onStartRename}>Rename</DropdownMenuItem>
+        {hasAgentMemory && (
+          <DropdownMenuItem onSelect={onUpdateMemory}>Update memory now</DropdownMenuItem>
+        )}
         <DropdownMenuItem onSelect={onClose}>Close</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

@@ -1,6 +1,7 @@
 import type { MessageContext } from "@/types/message";
 import type {
   AgentChatMessage,
+  AgentMemoryNotice,
   AgentQuestionAnswers,
   AgentTodoListEntry,
   AskUserQuestionPrompt,
@@ -45,6 +46,14 @@ export interface AgentChatBackend {
   deleteMessage(id: string): Promise<boolean>;
   clearMessages(): void;
   getMessages(): AgentChatMessage[];
+
+  /**
+   * The "<agent> updated their memory" line for the most recent memory write,
+   * or `null` when there is nothing to report. Live-only — it belongs to the
+   * open session, not to the saved transcript
+   * (`designdocs/CUSTOM_AGENTS.md` §5).
+   */
+  getMemoryNotice(): AgentMemoryNotice | null;
 
   /** True while ACP `session/new` is still in flight. Send is gated on this. */
   isStarting(): boolean;

@@ -32,7 +32,7 @@ import type {
 import { err2String } from "@/utils";
 import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
 import { fileToHistoryItem, readChatPathProjectId } from "@/utils/chatHistoryUtils";
-import { readFrontmatterViaAdapter } from "@/utils/vaultAdapterUtils";
+import { patchFrontmatter, readFrontmatterViaAdapter } from "@/utils/vaultAdapterUtils";
 import { App, FileSystemAdapter, Notice, Platform, TFile } from "obsidian";
 import { v4 as uuidv4 } from "uuid";
 import { AgentSession, ATTENTION_TRIGGER_STATUSES, DEFAULT_TITLE_PREFIX } from "./AgentSession";
@@ -45,6 +45,8 @@ import type { AgentSessionIndex } from "./AgentSessionIndex";
 import type { AgentFileManager } from "@/agents/AgentFileManager";
 import { BUILTIN_AGENT, BUILTIN_AGENT_SLUG, toAgentEntry } from "@/agents/types";
 import type { AgentEntry, CustomAgent } from "@/agents/types";
+import { runAgentMemoryPass } from "./agentMemoryPass";
+import { ReadOnlySubSessionRunner } from "./readOnlySubSession";
 import {
   COPILOT_SESSION_AGENT,
   loadSessionAgent,
@@ -281,6 +283,13 @@ export interface AgentSessionManagerOptions {
  * never imports a specific backend class. The permission prompter is
  * injected so this file stays out of the UI layer.
  */
+/**
+ * How long plugin unload waits for in-flight agent memory passes. Short on
+ * purpose: unload must not hold the app open for a model, and an unfinished
+ * pass is retried at the start of the next conversation.
+ */
+const MEMORY_PASS_UNLOAD_GRACE_MS = 10_000;
+
 export class AgentSessionManager {
   private backends = new Map<BackendId, BackendProcess>();
   private starting = new Map<BackendId, Promise<BackendProcess>>();
@@ -439,6 +448,17 @@ export class AgentSessionManager {
   // the final settings value always wins.
   private readonly defaultApplyChains = new Map<string, Promise<void>>();
   private readonly fanoutOrchestrator: FanoutOrchestrator;
+  /** Ephemeral read-only runs that are not fan-out — today, the memory pass. */
+  private readonly subSessions: ReadOnlySubSessionRunner;
+  // Chats with a memory pass in flight, keyed by internal session id. One pass
+  // per chat at a time: a second boundary firing while the first is still
+  // talking to the backend is dropped rather than queued, because the running
+  // pass already covers everything said so far.
+  private readonly memoryPassesInFlight = new Set<string>();
+  // Sessions being closed only to be re-created (a backend switch, a restart).
+  // Their conversation carries on in the replacement, so closing them is not a
+  // conversation boundary and must not start a memory pass.
+  private readonly continuingSessionIds = new Set<string>();
   // Who the user is talking to. Applies to the next new chat and to any chat
   // that has not sent a message yet; a chat with messages keeps the agent it
   // started with. See `designdocs/CUSTOM_AGENTS.md` §3.
@@ -471,7 +491,9 @@ export class AgentSessionManager {
       throw new Error("AgentSessionManager is desktop only");
     }
     this.preloader = opts.modelPreloader;
-    this.fanoutOrchestrator = new FanoutOrchestrator(this.createFanoutHost());
+    const fanoutHost = this.createFanoutHost();
+    this.fanoutOrchestrator = new FanoutOrchestrator(fanoutHost);
+    this.subSessions = new ReadOnlySubSessionRunner(fanoutHost);
     this.settingsUnsub = subscribeToSettingsChange((prev, next) =>
       this.onDefaultSelectionsChanged(prev, next)
     );
@@ -555,7 +577,7 @@ export class AgentSessionManager {
   /** Narrow backend seam the {@link FanoutOrchestrator} drives. */
   private createFanoutHost(): FanoutHost {
     return {
-      ensureBackendForFanout: async (backendId) => {
+      ensureBackendForSubSession: async (backendId) => {
         const descriptor = this.resolveDescriptor(backendId);
         const proc = await this.ensureBackend(backendId, descriptor);
         return { proc, descriptor };
@@ -1435,6 +1457,7 @@ export class AgentSessionManager {
     // activeProjectId`).
     this.lastActiveByScope.set(projectId, session.internalId);
     if (projectId === this.activeProjectId) {
+      this.endConversationOfActiveSession(session);
       this.activeSessionId = session.internalId;
     }
     this.attachAutoSave(session);
@@ -1944,6 +1967,140 @@ export class AgentSessionManager {
   /** {@link bindSessionAgent} for callers that need only the session-side view. */
   private async resolveSessionAgent(slug: string | null | undefined): Promise<SessionAgent> {
     return (await this.bindSessionAgent(slug)).agent;
+  }
+
+  /**
+   * Start this chat's agent memory update, because the conversation has ended.
+   *
+   * Everything the pass needs is captured synchronously, so a chat that is
+   * closed, replaced, or navigated away from while the backend is still
+   * thinking still gets its memory written. Returns the pass, so a caller that
+   * genuinely has to wait (plugin unload) can, or null when there is nothing to
+   * do: a chat with the built-in Copilot, one with no new turns since its last
+   * update, or one whose pass is still running.
+   *
+   * See `designdocs/CUSTOM_AGENTS.md` §5 ("When it updates").
+   *
+   * @param session - The chat whose conversation just ended.
+   */
+  private beginMemoryPass(session: AgentSession): Promise<void> | null {
+    const files = this.opts.agentFileManager;
+    // A chat with the built-in Copilot has no memory file to write.
+    if (!files || !session.getAgent().slug) return null;
+    const internalId = session.internalId;
+    if (this.memoryPassesInFlight.has(internalId)) return null;
+
+    const messages = session.store.getDisplayMessages();
+    const newTurns = messages.slice(session.getMemorizedThroughTurn());
+    if (newTurns.length === 0) return null;
+
+    const agentSlug = session.getAgent().slug!;
+    const sessionBackendId = session.backendId;
+    const throughTurn = messages.length;
+    // The chat may be gone before the pass lands; its note is then the only
+    // place the marker can still be recorded.
+    const notePath = this.sessionState.get(internalId)?.path;
+
+    this.memoryPassesInFlight.add(internalId);
+    const pass = runAgentMemoryPass(
+      { files, subSessions: this.subSessions },
+      {
+        agentSlug,
+        sessionBackendId,
+        messages: newTurns,
+        // Nothing cancels a memory pass: the boundary that started it has
+        // already happened, and the pass bounds itself with its own deadline.
+        signal: new AbortController().signal,
+      }
+    )
+      .then((outcome) => {
+        // Only a completed write advances the marker, so an abandoned or
+        // rejected pass leaves the same turns to be re-read next time.
+        if (outcome.status !== "written") return;
+        this.recordMemoryWrite(
+          internalId,
+          throughTurn,
+          notePath,
+          outcome.agentName,
+          outcome.memoryPath
+        );
+      })
+      .finally(() => this.memoryPassesInFlight.delete(internalId));
+    return pass;
+  }
+
+  /**
+   * Land a finished memory write: advance the chat's marker, show its trust
+   * line, and get the marker to disk. A chat that was closed while the pass ran
+   * has no session left to tell, so its saved note is patched directly.
+   */
+  private recordMemoryWrite(
+    internalId: string,
+    throughTurn: number,
+    notePath: string | undefined,
+    agentName: string,
+    memoryPath: string
+  ): void {
+    const session = this.sessions.get(internalId);
+    if (session) {
+      session.setMemorizedThroughTurn(throughTurn);
+      session.setMemoryNotice({ agentName, memoryPath });
+      this.scheduleAutoSave(session);
+      this.notify();
+      return;
+    }
+    if (!notePath) return;
+    void patchFrontmatter(this.app, notePath, { memorizedThroughTurn: throughTurn }).catch(
+      (error: unknown) =>
+        logWarn(`[Agents] Could not record memorizedThroughTurn on ${notePath}`, error)
+    );
+  }
+
+  /**
+   * End the conversation of whichever chat is active right now, because
+   * `incoming` is about to take its place — the user started a new chat or
+   * switched to another tab (`designdocs/CUSTOM_AGENTS.md` §5).
+   */
+  private endConversationOfActiveSession(incoming: AgentSession): void {
+    const activeId = this.activeSessionId;
+    if (!activeId || activeId === incoming.internalId) return;
+    // A chat mid-replacement is interrupted, not ended; its replacement carries
+    // the same conversation on.
+    if (this.continuingSessionIds.has(activeId)) return;
+    const leaving = this.sessions.get(activeId);
+    if (leaving) void this.beginMemoryPass(leaving);
+  }
+
+  /**
+   * Run the memory pass for one chat on the user's say-so, from the chat menu's
+   * "Update memory now". Same pass as a conversation boundary, same guards —
+   * an empty chat, a chat with nothing new since the last update, and a chat
+   * already mid-pass all do nothing (`designdocs/CUSTOM_AGENTS.md` §5).
+   *
+   * @param internalId - The chat to update memory for.
+   * @returns True when a pass was started.
+   */
+  updateMemoryNow(internalId: string): boolean {
+    const session = this.sessions.get(internalId);
+    if (!session) return false;
+    return this.beginMemoryPass(session) !== null;
+  }
+
+  /**
+   * Vault-relative path of one agent's `MEMORY.md`, or null when the agent is
+   * gone. Lets the chat's agent popover open the file the user is trusting the
+   * agent to keep.
+   *
+   * @param slug - Agent whose memory file is wanted.
+   */
+  async resolveAgentMemoryPath(slug: string): Promise<string | null> {
+    const record = await this.opts.agentFileManager?.readAgent(slug);
+    return record?.memoryPath ?? null;
+  }
+
+  /** Reset one agent's `MEMORY.md` to its empty skeleton. */
+  async clearAgentMemory(slug: string): Promise<void> {
+    await this.opts.agentFileManager?.clearMemory(slug);
   }
 
   getActiveProjectId(): ProjectScopeId {
@@ -2818,6 +2975,9 @@ export class AgentSessionManager {
   async closeSession(id: string): Promise<void> {
     const session = this.sessions.get(id);
     if (!session) return;
+    // Closing a chat ends its conversation — unless the close is half of a
+    // replacement, in which case the same conversation continues next door.
+    if (!this.continuingSessionIds.delete(id)) void this.beginMemoryPass(session);
     const closedScope = session.projectId;
     // Capture the closed tab's index WITHIN ITS SCOPE before delete so the
     // neighbour pick stays in-scope (never jumps the user to another project).
@@ -2874,6 +3034,7 @@ export class AgentSessionManager {
     const session = this.sessions.get(id);
     if (!session) return;
     if (this.activeSessionId === id) return;
+    this.endConversationOfActiveSession(session);
     if (session.projectId !== this.activeProjectId) {
       this.setActiveScope(session.projectId);
     }
@@ -2931,13 +3092,23 @@ export class AgentSessionManager {
     const replaced = this.sessions.get(oldId);
     const replacedProjectId = replaced?.projectId ?? this.activeProjectId;
     const chatInputId = options.preserveChatInput ? replaced?.chatInputId : undefined;
-    const created = await this.createSession(
-      backendId,
-      replacedProjectId,
-      options.seedSelection,
-      chatInputId,
-      replaced?.getAgent()
-    );
+    // Marked before the replacement is created, because creating it is itself a
+    // conversation boundary for whatever is active — which is usually the very
+    // chat being replaced.
+    this.continuingSessionIds.add(oldId);
+    let created: AgentSession;
+    try {
+      created = await this.createSession(
+        backendId,
+        replacedProjectId,
+        options.seedSelection,
+        chatInputId,
+        replaced?.getAgent()
+      );
+    } catch (error) {
+      this.continuingSessionIds.delete(oldId);
+      throw error;
+    }
     if (oldIdx >= 0) {
       this.moveMapEntry(this.sessions, created.internalId, oldIdx);
       this.moveMapEntry(this.chatUIStates, created.internalId, oldIdx);
@@ -3096,6 +3267,21 @@ export class AgentSessionManager {
     );
 
     const allSessions = Array.from(this.sessions.values());
+    // Unloading ends every open conversation, so each agent chat gets its memory
+    // pass. The passes talk to backends this method is about to tear down, so
+    // unload waits — but only briefly, because the user is closing the app and a
+    // pass can take a model's own sweet time. A pass abandoned here costs
+    // nothing: `memorizedThroughTurn` advances only on a completed write, so the
+    // same turns are memorized at the start of the next conversation.
+    const memoryPasses = allSessions
+      .map((session) => this.beginMemoryPass(session))
+      .filter((pass): pass is Promise<void> => pass !== null);
+    if (memoryPasses.length > 0) {
+      await Promise.race([
+        Promise.allSettled(memoryPasses),
+        new Promise((resolve) => window.setTimeout(resolve, MEMORY_PASS_UNLOAD_GRACE_MS)),
+      ]);
+    }
     // Drain pending auto-saves for every session before disposing — same
     // reasoning as `closeSession`. Done before the per-session unsubscribe so
     // the timers don't fire with a half-disposed session.
@@ -3228,6 +3414,11 @@ export class AgentSessionManager {
     session.setAgent(agent);
     session.loadDisplayMessages(loaded.messages);
     session.seedSessionUsage(loaded.usage);
+    // Absent for every chat saved before agents (and for one that has never been
+    // memorized), which then memorizes its whole transcript on its next boundary.
+    if (loaded.memorizedThroughTurn) {
+      session.setMemorizedThroughTurn(loaded.memorizedThroughTurn);
+    }
     if (loaded.label) session.setLabel(loaded.label);
     this.getSessionState(session.internalId).path = file.path;
     if (loaded.sessionId) {
@@ -3724,9 +3915,12 @@ export class AgentSessionManager {
       : "";
     // Fold in the usage `updatedAt` so a turn that only changed token usage
     // (message text/label/sessionId all unchanged) still writes through.
+    // Fold in the memory marker so a pass that only advanced it still writes
+    // through — the transcript itself is unchanged when a conversation ends.
+    const memorizedThroughTurn = session.getMemorizedThroughTurn();
     const signature = `${label ?? ""}-${sessionId ?? ""}-${messages.length}-${
       last?.message ?? ""
-    }-${fanoutSig}-${usage?.updatedAt ?? ""}`;
+    }-${fanoutSig}-${usage?.updatedAt ?? ""}-${memorizedThroughTurn}`;
     const state = this.getSessionState(session.internalId);
     if (state.signature === signature) {
       return state.path ? { path: state.path } : null;
@@ -3742,6 +3936,7 @@ export class AgentSessionManager {
       usage: usage ?? undefined,
       // Null for the built-in Copilot, which writes no frontmatter field.
       agentSlug: session.getAgent().slug,
+      memorizedThroughTurn,
     });
     if (result) {
       state.path = result.path;
@@ -4114,6 +4309,9 @@ export class AgentSessionManager {
         this.retainedChatInputIds.add(replacement.chatInputId);
       }
       for (const session of affected) {
+        // A restart rebuilds these tabs on the far side, so their conversations
+        // are interrupted, not ended.
+        this.continuingSessionIds.add(session.internalId);
         await this.closeSession(session.internalId);
       }
       await proc.shutdown();

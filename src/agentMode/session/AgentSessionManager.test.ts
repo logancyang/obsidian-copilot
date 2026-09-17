@@ -52,6 +52,19 @@ jest.mock("@/logger", () => ({
   logError: jest.fn(),
 }));
 
+// The pass itself is covered in `agentMemoryPass.test.ts`; here we test what the
+// manager does around it — when it starts one, and what it records afterwards.
+jest.mock("./agentMemoryPass", () => ({ runAgentMemoryPass: jest.fn() }));
+const mockRunAgentMemoryPass = jest.requireMock("./agentMemoryPass")
+  .runAgentMemoryPass as jest.Mock;
+
+jest.mock("@/utils/vaultAdapterUtils", () => ({
+  ...jest.requireActual("@/utils/vaultAdapterUtils"),
+  patchFrontmatter: jest.fn(async () => undefined),
+}));
+const mockPatchFrontmatter = jest.requireMock("@/utils/vaultAdapterUtils")
+  .patchFrontmatter as jest.Mock;
+
 // Captured `subscribeToSettingsChange` callbacks, so a test can drive a
 // settings change and assert the manager's reaction.
 const settingsChangeCallbacks = new Set<
@@ -201,6 +214,8 @@ function makeMockSession(overrides: {
     onStatusChanged?: (s: typeof status) => void;
     onNeedsAttentionChanged?: (v: boolean) => void;
   }>();
+  let memorizedThroughTurn = 0;
+  let memoryNotice: { agentName: string; memoryPath: string } | null = null;
   const session = {
     internalId: overrides.internalId,
     chatInputId: overrides.chatInputId ?? overrides.internalId,
@@ -228,6 +243,14 @@ function makeMockSession(overrides: {
     setLabel: jest.fn(),
     getSessionUsage: () => null,
     seedSessionUsage: jest.fn(),
+    getMemorizedThroughTurn: () => memorizedThroughTurn,
+    setMemorizedThroughTurn: (count: number) => {
+      memorizedThroughTurn = count;
+    },
+    getMemoryNotice: () => memoryNotice,
+    setMemoryNotice: (next: unknown) => {
+      memoryNotice = next as typeof memoryNotice;
+    },
     loadDisplayMessages: (messages: { message: string }[]) => {
       displayMessages = messages;
       hasUserVisibleMessages = messages.length > 0;
@@ -427,6 +450,9 @@ beforeEach(() => {
   // subscriptions linger; clear them so emitSettingsChange only reaches
   // the manager built in the current test.
   settingsChangeCallbacks.clear();
+  mockRunAgentMemoryPass.mockReset();
+  mockRunAgentMemoryPass.mockResolvedValue({ status: "skipped", reason: "no-turns" });
+  mockPatchFrontmatter.mockClear();
 });
 
 function setupSavedNoteTests() {
@@ -4807,6 +4833,232 @@ describe("AgentSessionManager talking-to selection", () => {
     await manager.refreshAgents();
 
     expect(manager.getSelectedAgentSlug()).toBe(BUILTIN_AGENT_SLUG);
+  });
+
+  describe("self-maintained memory", () => {
+    /** A manager with one agent, plus a chat with it that has said something. */
+    async function buildAgentChat(options: { messages?: { message: string }[] } = {}) {
+      const manager = buildManager({}, undefined, buildAgentFiles([jennifer()]));
+      await manager.setSelectedAgent("jennifer");
+      const chat = await manager.createSession();
+      getSessionTestHandle(chat).setMessages(options.messages ?? [{ message: "hello" }]);
+      return { manager, chat };
+    }
+
+    const WROTE = {
+      status: "written",
+      agentName: "Jennifer",
+      memoryPath: "copilot/agents/jennifer/MEMORY.md",
+    };
+
+    it("updates memory when the user opens a new chat (CUSTOM_AGENTS.md §5)", async () => {
+      const { manager } = await buildAgentChat();
+
+      await manager.createSession();
+
+      await waitFor(() => expect(mockRunAgentMemoryPass).toHaveBeenCalledTimes(1));
+      expect(mockRunAgentMemoryPass.mock.calls[0][1]).toMatchObject({
+        agentSlug: "jennifer",
+        messages: [{ message: "hello" }],
+      });
+    });
+
+    it("updates memory when the user switches to another chat tab (CUSTOM_AGENTS.md §5)", async () => {
+      const manager = buildManager({}, undefined, buildAgentFiles([jennifer()]));
+      await manager.setSelectedAgent("jennifer");
+      const chat = await manager.createSession();
+      const other = await manager.createSession();
+      getSessionTestHandle(chat).setMessages([{ message: "hello" }]);
+      manager.setActiveSession(chat.internalId);
+
+      manager.setActiveSession(other.internalId);
+
+      await waitFor(() => expect(mockRunAgentMemoryPass).toHaveBeenCalledTimes(1));
+    });
+
+    it("updates memory when the chat is closed (CUSTOM_AGENTS.md §5)", async () => {
+      const { manager, chat } = await buildAgentChat();
+
+      await manager.closeSession(chat.internalId);
+
+      await waitFor(() => expect(mockRunAgentMemoryPass).toHaveBeenCalledTimes(1));
+    });
+
+    it("updates memory for every open chat when the plugin unloads (CUSTOM_AGENTS.md §5)", async () => {
+      const { manager } = await buildAgentChat();
+
+      await manager.shutdown();
+
+      await waitFor(() => expect(mockRunAgentMemoryPass).toHaveBeenCalledTimes(1));
+    });
+
+    it("never updates memory for a chat with the built-in Copilot", async () => {
+      const manager = buildManager({}, undefined, buildAgentFiles([jennifer()]));
+      const chat = await manager.createSession();
+      getSessionTestHandle(chat).setMessages([{ message: "hello" }]);
+
+      await manager.closeSession(chat.internalId);
+
+      expect(mockRunAgentMemoryPass).not.toHaveBeenCalled();
+    });
+
+    it("never updates memory for an empty chat", async () => {
+      const { manager, chat } = await buildAgentChat({ messages: [] });
+
+      await manager.closeSession(chat.internalId);
+
+      expect(mockRunAgentMemoryPass).not.toHaveBeenCalled();
+    });
+
+    it("never updates memory when nothing was said since the last update", async () => {
+      const { manager, chat } = await buildAgentChat();
+      mockRunAgentMemoryPass.mockResolvedValue(WROTE);
+      await manager.closeSession(chat.internalId);
+      await waitFor(() => expect(chat.getMemorizedThroughTurn()).toBe(1));
+      mockRunAgentMemoryPass.mockClear();
+
+      expect(manager.updateMemoryNow(chat.internalId)).toBe(false);
+      expect(mockRunAgentMemoryPass).not.toHaveBeenCalled();
+    });
+
+    it("feeds only the turns added since the last update", async () => {
+      const { manager, chat } = await buildAgentChat();
+      chat.setMemorizedThroughTurn(1);
+      getSessionTestHandle(chat).setMessages([{ message: "hello" }, { message: "and then this" }]);
+
+      expect(manager.updateMemoryNow(chat.internalId)).toBe(true);
+      await waitFor(() => expect(mockRunAgentMemoryPass).toHaveBeenCalledTimes(1));
+      expect(mockRunAgentMemoryPass.mock.calls[0][1].messages).toEqual([
+        { message: "and then this" },
+      ]);
+    });
+
+    it("runs one pass per chat at a time, so a boundary during a pass starts no second one", async () => {
+      const { manager, chat } = await buildAgentChat();
+      let release: () => void = () => undefined;
+      mockRunAgentMemoryPass.mockReturnValue(
+        new Promise((resolve) => {
+          release = () => resolve({ status: "skipped", reason: "no-turns" });
+        })
+      );
+
+      expect(manager.updateMemoryNow(chat.internalId)).toBe(true);
+      expect(manager.updateMemoryNow(chat.internalId)).toBe(false);
+      await manager.closeSession(chat.internalId);
+
+      expect(mockRunAgentMemoryPass).toHaveBeenCalledTimes(1);
+      release();
+    });
+
+    it("treats a backend switch as an interruption, not the end of the conversation", async () => {
+      const { manager, chat } = await buildAgentChat();
+      getSessionTestHandle(chat).setHasUserVisibleMessages(true);
+
+      await manager.replaceSessionInPlace(chat.internalId, "opencode");
+
+      expect(mockRunAgentMemoryPass).not.toHaveBeenCalled();
+    });
+
+    it("shows the trust line and advances the marker once a write lands (CUSTOM_AGENTS.md §5)", async () => {
+      const { manager, chat } = await buildAgentChat();
+      mockRunAgentMemoryPass.mockResolvedValue(WROTE);
+
+      manager.updateMemoryNow(chat.internalId);
+
+      await waitFor(() =>
+        expect(chat.getMemoryNotice()).toEqual({
+          agentName: "Jennifer",
+          memoryPath: "copilot/agents/jennifer/MEMORY.md",
+        })
+      );
+      expect(chat.getMemorizedThroughTurn()).toBe(1);
+    });
+
+    it("leaves the marker alone when the pass wrote nothing, so the same turns are re-read", async () => {
+      const { manager, chat } = await buildAgentChat();
+      mockRunAgentMemoryPass.mockResolvedValue({ status: "rejected", reason: "shrank" });
+
+      manager.updateMemoryNow(chat.internalId);
+
+      await waitFor(() => expect(mockRunAgentMemoryPass).toHaveBeenCalledTimes(1));
+      expect(chat.getMemorizedThroughTurn()).toBe(0);
+      expect(chat.getMemoryNotice()).toBeNull();
+    });
+
+    it("records the marker on the saved note when the chat closed before the pass landed", async () => {
+      const persistence = {
+        saveSession: jest.fn(
+          async (
+            _messages: unknown,
+            _backendId: string,
+            _options?: { memorizedThroughTurn?: number }
+          ) => ({ path: "chats/agent__x.md" })
+        ),
+        loadFile: jest.fn(),
+        getAgentChatHistoryFiles: jest.fn(async () => []),
+        updateTopic: jest.fn(),
+        deleteFile: jest.fn(),
+      };
+      const manager = buildManager(
+        {},
+        persistence as unknown as ConstructorParameters<
+          typeof AgentSessionManager
+        >[2]["persistenceManager"],
+        buildAgentFiles([jennifer()])
+      );
+      await manager.setSelectedAgent("jennifer");
+      const chat = await manager.createSession();
+      getSessionTestHandle(chat).setMessages([{ message: "hello" }]);
+      await manager.saveActiveSession();
+      let land: () => void = () => undefined;
+      mockRunAgentMemoryPass.mockReturnValue(
+        new Promise((resolve) => {
+          land = () => resolve(WROTE);
+        })
+      );
+
+      await manager.closeSession(chat.internalId);
+      land();
+
+      await waitFor(() =>
+        expect(mockPatchFrontmatter).toHaveBeenCalledWith(expect.anything(), "chats/agent__x.md", {
+          memorizedThroughTurn: 1,
+        })
+      );
+    });
+
+    it("persists the marker with the chat, and omits it before anything is memorized", async () => {
+      const persistence = {
+        saveSession: jest.fn(
+          async (
+            _messages: unknown,
+            _backendId: string,
+            _options?: { memorizedThroughTurn?: number }
+          ) => ({ path: "chats/agent__x.md" })
+        ),
+        loadFile: jest.fn(),
+        getAgentChatHistoryFiles: jest.fn(async () => []),
+        updateTopic: jest.fn(),
+        deleteFile: jest.fn(),
+      };
+      const manager = buildManager(
+        {},
+        persistence as unknown as ConstructorParameters<
+          typeof AgentSessionManager
+        >[2]["persistenceManager"],
+        buildAgentFiles([jennifer()])
+      );
+      await manager.setSelectedAgent("jennifer");
+      const chat = await manager.createSession();
+      getSessionTestHandle(chat).setMessages([{ message: "hello" }]);
+      await manager.saveActiveSession();
+      expect(persistence.saveSession.mock.calls[0][2]).toMatchObject({ memorizedThroughTurn: 0 });
+
+      chat.setMemorizedThroughTurn(1);
+      await manager.saveActiveSession();
+
+      expect(persistence.saveSession.mock.calls[1][2]).toMatchObject({ memorizedThroughTurn: 1 });
+    });
   });
 
   describe("chat persistence", () => {

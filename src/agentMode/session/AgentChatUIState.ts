@@ -3,6 +3,7 @@ import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
 import type {
   AgentChatMessage,
+  AgentMemoryNotice,
   AgentQuestionAnswers,
   AgentTodoListEntry,
   AskUserQuestionPrompt,
@@ -108,6 +109,10 @@ export class AgentChatUIState implements AgentChatBackend {
 
   getMessages(): AgentChatMessage[] {
     return this.session.store.getDisplayMessages();
+  }
+
+  getMemoryNotice(): AgentMemoryNotice | null {
+    return this.session.getMemoryNotice();
   }
 
   isStarting(): boolean {

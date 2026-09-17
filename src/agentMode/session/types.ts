@@ -928,3 +928,15 @@ export interface AgentChatMessage {
 
 /** Creation shape — id is assigned by the store if absent. */
 export type NewAgentChatMessage = Omit<AgentChatMessage, "id"> & { id?: string };
+
+/**
+ * The one quiet line a chat shows after its agent has rewritten its memory
+ * file: who updated it, and where the file is so the user can go read what was
+ * written about them. See `designdocs/CUSTOM_AGENTS.md` §5 ("Trust surface").
+ */
+export interface AgentMemoryNotice {
+  /** Agent display name, as the line names it. */
+  agentName: string;
+  /** Vault-relative path of the `MEMORY.md` that was written. */
+  memoryPath: string;
+}
