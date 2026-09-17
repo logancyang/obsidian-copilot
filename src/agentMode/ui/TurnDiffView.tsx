@@ -1,7 +1,6 @@
 import type { TurnFileChange } from "@/agentMode/session/types";
-import { FileChangeCounts, FileChangeStatusBadge } from "@/agentMode/ui/FileChangeSummary";
 import { RenderedDiff } from "@/agentMode/ui/renderedDiff";
-import { Button } from "@/components/ui/button";
+import { TurnDiffHeader } from "@/agentMode/ui/TurnDiffHeader";
 import { useApp } from "@/context";
 import { openVaultPath } from "@/utils/openVaultPath";
 import { mountPluginViewRoot, type PluginViewRootHandle } from "@/utils/react/mountPluginViewRoot";
@@ -111,39 +110,21 @@ const TurnDiffPane: React.FC<TurnDiffPaneProps> = ({ state }) => {
   const app = useApp();
   return (
     <div className="tw-flex tw-h-full tw-flex-col">
-      {/* Both rows carry the reading view's own margins and line width, so the
-          header sits directly above the text it describes. */}
-      <div className="copilot-divider-b tw-px-[var(--file-margins)] tw-py-2">
-        <div className="tw-mx-auto tw-flex tw-max-w-[var(--file-line-width)] tw-items-center tw-gap-2">
-          <span
-            title={state.path}
-            className="tw-min-w-0 tw-flex-1 tw-truncate tw-text-sm tw-text-muted"
-          >
-            {state.path}
-          </span>
-          {/* Badge then counts, the order the card's rows use, so the same file
-              reads the same way on both surfaces. */}
-          <FileChangeStatusBadge status={state.status} />
-          <FileChangeCounts additions={state.additions} deletions={state.deletions} />
-          {/* A deleted file has nothing left to open, and routing its path
-              through the vault would offer to create a note in its place. */}
-          {state.status === "deleted" ? null : (
-            <Button
-              variant="link"
-              size="sm"
-              // The wide left margin keeps the action off the counts, which
-              // would otherwise read as a third number in the same group.
-              // Preflight is off and Obsidian's theme-scoped `button` rules
-              // outrank plain utilities, so the fill, the border, the chrome
-              // and the text color all need `!` for this to read as a link.
-              className="tw-ml-2 !tw-h-auto tw-shrink-0 !tw-border-0 !tw-bg-transparent !tw-px-0 !tw-text-accent !tw-shadow-none"
-              onClick={() => openVaultPath(app, state.path, { newLeaf: true })}
-            >
-              Open note
-            </Button>
-          )}
-        </div>
-      </div>
+      {/* The header carries the reading view's own margins and line width, so
+          it sits directly above the text it describes. */}
+      <TurnDiffHeader
+        path={state.path}
+        status={state.status}
+        additions={state.additions}
+        deletions={state.deletions}
+        // A deleted file has nothing left to open, and routing its path through
+        // the vault would offer to create a note in its place.
+        onOpenNote={
+          state.status === "deleted"
+            ? undefined
+            : () => openVaultPath(app, state.path, { newLeaf: true })
+        }
+      />
       <div className="tw-flex-1 tw-overflow-y-auto tw-p-[var(--file-margins)]">
         <div className="markdown-rendered tw-mx-auto tw-max-w-[var(--file-line-width)]">
           <RenderedDiff before={state.before} after={state.after} path={state.path} />

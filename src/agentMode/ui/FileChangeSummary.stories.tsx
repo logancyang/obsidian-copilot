@@ -1,9 +1,5 @@
 import type { Meta, StoryObj } from "@/lib/story";
-import {
-  FileChangeCounts,
-  FileChangeStatusBadge,
-  type FileChangeCountsProps,
-} from "@/agentMode/ui/FileChangeSummary";
+import { FileChangeCounts, type FileChangeCountsProps } from "@/agentMode/ui/FileChangeSummary";
 import React from "react";
 
 const meta = {
@@ -36,26 +32,6 @@ export const CountColumns: StoryObj<FileChangeCountsProps> = {
             notes/diff-demo/note.md
           </span>
           <FileChangeCounts {...counts} />
-        </div>
-      ))}
-    </div>
-  ),
-};
-
-/** The header row of the diff tab: path, counts, badge. */
-export const HeaderRow: StoryObj<FileChangeCountsProps> = {
-  render: () => (
-    <div className="tw-flex tw-flex-col tw-gap-1">
-      {(["modified", "created", "deleted"] as const).map((status) => (
-        <div
-          key={status}
-          className="copilot-divider-b tw-flex tw-items-center tw-gap-2 tw-px-3 tw-py-2"
-        >
-          <span className="tw-min-w-0 tw-flex-1 tw-truncate tw-text-sm tw-text-muted">
-            notes/diff-demo/alpha.md
-          </span>
-          <FileChangeCounts additions={status === "deleted" ? 0 : 12} deletions={4} />
-          <FileChangeStatusBadge status={status} />
         </div>
       ))}
     </div>
