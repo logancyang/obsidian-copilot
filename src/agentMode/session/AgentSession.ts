@@ -579,7 +579,13 @@ export class AgentSession {
   }
 
   setAgent(agent: SessionAgent): void {
-    if (agent.slug === this.sessionAgent.slug && agent.name === this.sessionAgent.name) return;
+    if (
+      agent.slug === this.sessionAgent.slug &&
+      agent.name === this.sessionAgent.name &&
+      agent.personaBlock === this.sessionAgent.personaBlock
+    ) {
+      return;
+    }
     this.sessionAgent = agent;
     this.notifyLabelChanged();
   }
