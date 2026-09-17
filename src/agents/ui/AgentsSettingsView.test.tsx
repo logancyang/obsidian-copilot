@@ -181,9 +181,9 @@ describe("AgentsSettingsView", () => {
     expect(screen.getByRole("button", { name: "Open in editor" })).toBeTruthy();
   });
 
-  it("prompts the user to pick an agent while the editor pane is idle", () => {
+  it("shows only the roster until an agent is opened", () => {
     renderView({ agents: [JENNIFER] });
-    expect(screen.getByText(/Select an agent to edit it/)).toBeTruthy();
+    expect(screen.queryByRole("region", { name: "Agent editor" })).toBeNull();
   });
 
   it("routes every row-menu action to the selected agent", () => {
