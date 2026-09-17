@@ -66,6 +66,20 @@ describe("agentStateForAnswer", () => {
 });
 
 describe("buildFanoutOptions", () => {
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/481 omits Summary when exactly one agent answered", () => {
+    const options = buildFanoutOptions(turn([answer("claude", "done", "Claude answer")]));
+
+    expect(options.map((option) => option.value)).toEqual(["claude"]);
+  });
+
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/481 preserves Summary for a saved one-agent turn that already has one", () => {
+    const options = buildFanoutOptions(
+      turn([answer("claude", "done", "Claude answer")], "Existing summary")
+    );
+
+    expect(options.map((option) => option.value)).toEqual([FANOUT_SUMMARY_OPTION, "claude"]);
+  });
+
   it("lists the summary first then each agent in slot order, resolving name/icon and live state", () => {
     const t = turn([
       answer("opencode", "done", "main answer"),
@@ -100,6 +114,18 @@ describe("buildFanoutOptions", () => {
 });
 
 describe("defaultFanoutOption", () => {
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/481 selects the sole mentioned agent directly", () => {
+    const t = turn([answer("claude", "done", "Claude answer")]);
+
+    expect(defaultFanoutOption(t)).toBe("claude");
+  });
+
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/481 defaults to an existing summary in a saved one-agent turn", () => {
+    const t = turn([answer("claude", "done", "Claude answer")], "Existing summary");
+
+    expect(defaultFanoutOption(t)).toBe(FANOUT_SUMMARY_OPTION);
+  });
+
   it("defaults to the summary (summary-first, D8)", () => {
     const t = turn([answer("opencode", "done", "a"), answer("claude", "done", "b")]);
     expect(defaultFanoutOption(t)).toBe(FANOUT_SUMMARY_OPTION);

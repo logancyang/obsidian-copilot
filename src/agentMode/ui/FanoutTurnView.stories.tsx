@@ -41,6 +41,24 @@ export const SummarySetupError: StoryObj<Props> = {
   },
 };
 
+export const SingleAgentAnswer: StoryObj<Props> = {
+  render: SummarySetupError.render,
+  args: {
+    value: "claude",
+    onSelect: () => {},
+    turn: {
+      answers: {
+        claude: {
+          backendId: "claude",
+          status: "done",
+          text: "The active note supports a weekly review with three concrete follow-ups.",
+        },
+      },
+      summary: { status: "done", text: "" },
+    },
+  },
+};
+
 export const PartialSummaryError: StoryObj<Props> = {
   render: SummarySetupError.render,
   args: {

@@ -43,7 +43,7 @@ Selected text in note editors is automatically added to chat context. On desktop
 
 ## Mention other agents
 
-With active Plus access, type `@`, open **Agents**, and select one or more other installed agents. Each mentioned agent receives the same question, that turn's attachments, and a bounded slice of the visible conversation. The current agent summarizes their answers and does not automatically answer separately.
+With active Plus access, type `@`, open **Agents**, and select one or more other installed agents. Each mentioned agent receives the same question, that turn's attachments, and a bounded slice of the visible conversation. With one other agent mentioned, only that agent responds and its answer is shown directly. With two or more, the current agent summarizes their answers without automatically answering separately.
 
 Multi-agent answers are designed for read-only research, second opinions, and review, but retrieval Skills can still run trusted scripts under an agent's permissions. They are not a security sandbox. Use a normal single-agent turn when you want files changed. Mentioning only the current agent behaves like a normal turn.
 

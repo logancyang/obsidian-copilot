@@ -1,8 +1,8 @@
 # Multi-Agent Per-Turn QA (Fan-Out) Architecture
 
-How one `@agent`-mentioned chat turn fans out to several coding agents in
-parallel, gets summarized by the session's own agent, renders as a single
-switchable assistant message, persists losslessly, and is gated to paid users.
+How one `@agent`-mentioned chat turn routes directly to one coding agent or fans
+out to several in parallel, renders as one assistant message, preserves agent
+identity across reloads, and is gated to paid users.
 Landed in PR #2628 (`v4-preview`).
 
 ## What it does
@@ -13,15 +13,19 @@ flowchart TD
     G -- no --> P[upgrade prompt, no fan-out]
     G -- yes --> A["answerers = @-mentioned installed set<br/>(main agent only if explicitly @-ed)"]
     A --> AN["each answerer runs in a FRESH read-only<br/>sub-session, in parallel, with a timeout"]
-    AN --> S["main agent ALWAYS summarizes over the answers"]
-    S --> M["one assistant message holds the live FanoutTurn<br/>→ Summary-first segmented dropdown"]
-    M --> SAVE["persist the composite as the message body<br/>(markdown + HTML-comment markers); no new on-disk field"]
+    AN --> C{"one answerer?"}
+    C -- yes --> D["show that agent's answer directly"]
+    C -- no --> S["main agent summarizes over the answers"]
+    D --> M1["one assistant message holds the live FanoutTurn<br/>→ agent-only view"]
+    S --> M2["one assistant message holds the live FanoutTurn<br/>→ Summary-first segmented dropdown"]
+    M1 --> SAVE["persist the composite as the message body<br/>(markdown + HTML-comment markers); no new on-disk field"]
+    M2 --> SAVE
 ```
 
 Each mentioned agent answers the same question independently in an ephemeral
-read-only sub-session; the session's own agent then writes a narrative summary
-over those answers. The turn renders as one assistant message with a
-Summary-first tab row switching between the summary and each agent's full answer.
+read-only sub-session. One answerer is shown directly. With two or more, the
+session's own agent writes a narrative summary and the message opens with a
+Summary-first tab row switching between the summary and each full answer.
 
 ## Modules
 
@@ -29,16 +33,17 @@ Summary-first tab row switching between the summary and each agent's full answer
 | ------------------ | --------------------------------------------------------- | --------------------------------------------------------------------- |
 | Routing            | `fanout/answerers.ts`                                     | `resolveAnswerers` / `isFanout`: `@`-mentions → answerer list. Pure.  |
 | Entitlement        | `plusUtils.ts`                                            | `canUseMultiAgent` (sync) + `ensureMultiAgentEntitlement` (re-check). |
-| Orchestration      | `fanout/FanoutOrchestrator.ts`                            | Per-agent sub-sessions, timeouts, cancel, then the summary pass.      |
+| Orchestration      | `fanout/FanoutOrchestrator.ts`                            | Per-agent sub-sessions, timeouts, cancel, then multi-answer summary.  |
 | Turn data + format | `fanout/fanoutTypes.ts`                                   | Types, serialize/parse/render composite, history budgeting.           |
 | Live state         | `AgentMessageStore` (`setFanout`)                         | Holds `message.fanout`; bumps a version per streamed tick.            |
-| Render             | `FanoutMessageCard` + `FanoutTurnView` + `fanoutDropdown` | Segmented tabs, Summary-first, per-tab live status, 2-tier copy.      |
+| Render             | `FanoutMessageCard` + `FanoutTurnView` + `fanoutDropdown` | Direct or Summary-first tabs, per-tab live status, 2-tier copy.       |
 | Persistence        | `AgentChatPersistenceManager` + serializer                | The composite markdown body IS the saved form; no schema change.      |
 
 ## Key decisions
 
-- **Main agent summarizes, does not also answer** unless it is itself
-  `@`-mentioned. A lone `@main` mention collapses to the normal single-agent path.
+- **One non-main answerer responds directly.** With two or more answerers, the
+  main agent summarizes and does not also answer unless it is `@`-mentioned. A
+  lone `@main` mention collapses to the normal single-agent path.
 - **One message object** holds the live `FanoutTurn` (`message.fanout`, in-memory
   only); the dropdown, whole-response copy/insert, and reload all read it.
 - **Backward-compatible persistence.** The finished turn is serialized AS the
@@ -46,8 +51,9 @@ Summary-first tab row switching between the summary and each agent's full answer
   renderer; a marker-less body parses to `null` and renders unchanged). Literal
   `<!--copilot:` in answer text is escaped on write, restored on read.
 - **Isolation + caps.** Each answerer runs read-only (writes/exec auto-denied via
-  `permissionPrompter`), with a per-agent timeout and char caps bounding both the
-  summary prompt input and the persisted transcript.
+  `permissionPrompter`) with a per-agent timeout. Supporting answers in a
+  summarized turn are capped in the prompt and persisted transcript; a direct
+  sole answer persists uncapped as the response of record.
 - **Two-layer paywall.** Free users get no `@agent` typeahead; if a pill is still
   present, the send boundary re-verifies entitlement (paying users skip the
   network call) and blocks with an upgrade prompt otherwise.
@@ -68,7 +74,8 @@ Captured for follow-up; intentionally not in the v1 PR to keep it merge-focused:
 
 - Move "prepare / own / clean up an ephemeral read-only backend session" into a
   single host primitive (`openReadOnlySubSession`) so the orchestrator only runs
-  prompts, races timeout/cancel, and summarizes. Reduces lifecycle coupling.
+  prompts, races timeout/cancel, and summarizes multi-answer turns. Reduces
+  lifecycle coupling.
 - Split `fanoutTypes.ts` by responsibility (composite, prompt, history) for
   auditability (not a line reduction).
 - Model the summary as one explicit status (`pending|streaming|done|error|cancelled`)

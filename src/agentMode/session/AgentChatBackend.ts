@@ -32,7 +32,8 @@ export interface AgentChatBackend {
    * may not include the main agent). Present only when the turn fans out; absent
    * for the single-agent path (no qualifying mentions, or only the main agent
    * `@`-ed). Consumed by the fan-out orchestration via
-   * `AgentSession.getLastMentionedAgents()`; the main agent summarizes separately.
+   * `AgentSession.getLastMentionedAgents()`; the main agent summarizes only when
+   * there are multiple answerers.
    */
   sendMessage(
     text: string,
