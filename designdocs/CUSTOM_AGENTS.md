@@ -159,9 +159,10 @@ because the first user message is already past the cache wall, and keeps the
 envelope builder as the single place persona injection happens. The product
 prompt gains one short, constant paragraph telling the model that when an
 `<agent_persona>` block is present it should adopt that identity and treat
-`<agent_memory>` as things it already knows, and that both take precedence over
-the generic assistant framing but not over safety or tool policy. That paragraph
-is constant, so it does not break the cache rule.
+`<agent_memory>` as things it already knows, that the block it was given is the
+only memory that is its own, and that both take precedence over the generic
+assistant framing but not over safety or tool policy. That paragraph is
+constant, so it does not break the cache rule.
 
 If `agent.md` sets a backend or model, a new chat with that agent opens on that
 backend and model. Otherwise the session's current selection is used. Switching
@@ -285,7 +286,9 @@ A new tab, **Agents**, after Skills. Desktop-only panel like Skills. Layout
 mirrors the Skills tab: a list with search on the left, an editor on the right.
 
 List row: icon, name, description, backend badge if pinned, memory size, and
-a `⋯` menu with Edit, Open folder, Open memory, Clear memory, Delete.
+a `⋯` menu with Edit, Open folder, Open memory, Clear memory, Delete. A pin to a
+backend that cannot be self-hosted also carries the cloud-egress marker the
+model pickers use, but only while Self-Host Mode is on.
 
 Editor fields:
 
@@ -341,6 +344,20 @@ boundary.
   once at upgrade) is warranted, or whether the empty-state row is enough.
 - **Agent count.** No cap in v1. If the typeahead gets crowded, group brands
   and agents under separate headings.
+- **One agent reading another's memory.** A fan-out sub-session runs with the
+  vault as its working directory and the harness's own file tools, so every
+  agent's `MEMORY.md` is a readable note. The persona paragraph tells the model
+  that the `<agent_memory>` block is the only memory that is its own and that
+  other personas' files are not to be opened, which is an instruction rather
+  than a boundary. Enforcing it properly means restricting the sub-session's
+  reads, which none of the three harnesses expose per-path today.
+- **Cloud egress for a pinned agent.** The Agents roster marks an agent pinned
+  to a backend that cannot be self-hosted while Self-Host Mode is on, because
+  the session's model picker does not speak for that pin. An agent with no pin
+  answers on the session's backend, which the model picker already marks, so
+  nothing is marked twice. There is no marker at the moment of sending; if that
+  turns out to matter, the composer would need to resolve each mentioned
+  agent's effective backend, which it deliberately does not know today.
 
 ## Where an implementer starts
 
