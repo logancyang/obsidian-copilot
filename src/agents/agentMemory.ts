@@ -82,17 +82,21 @@ export function buildAgentMemoryFlushPrompt(source: AgentMemoryFlushPromptSource
     `## What was said\n${source.transcript.trim()}`,
     [
       "## What to write down",
-      "- One bullet per thing worth keeping, each a single line that stands on its own.",
-      "- Record only what is worth knowing next time: who the user is, their " +
-        "preferences, their standing requests, open threads, and decisions they " +
-        "made. Never retell the conversation.",
+      "- First, one bullet saying what this conversation was about: what the " +
+        "user asked for and what you did or answered, in one line. Every " +
+        "conversation gets this bullet, so that you can later say what the two " +
+        "of you talked about today.",
+      "- Then one bullet per thing worth keeping, each a single line that stands " +
+        "on its own: who the user is, their preferences, their standing " +
+        "requests, open threads, and decisions they made. Never retell the " +
+        "conversation turn by turn.",
       "- Say what changed when this conversation overturned something you " +
         "believed, so the correction is on the record.",
       "- Leave out anything you would not want to read back weeks from now.",
     ].join("\n"),
     `Reply with the bullets and nothing else: no heading, no preamble, no code ` +
-      `fences. If nothing in this conversation is worth keeping, reply with the ` +
-      `single word ${MEMORY_FLUSH_NOTHING}.`,
+      `fences. Only when the user said nothing of substance, a greeting or a ` +
+      `test message, reply with the single word ${MEMORY_FLUSH_NOTHING}.`,
   ].join("\n\n");
 }
 

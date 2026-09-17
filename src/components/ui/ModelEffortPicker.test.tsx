@@ -140,6 +140,28 @@ describe("ModelEffortPicker", () => {
       }
     );
 
+    it("paints the row under the pointer as highlighted and leaves it when the pointer moves on", async () => {
+      render(
+        <ModelEffortPicker
+          override={{
+            models: [...models, { name: "other", provider: "agent", enabled: true }],
+            value: "model|agent",
+            effortOptionsByModelKey: {},
+            commitSelection: jest.fn(),
+          }}
+        />
+      );
+      fireEvent.click(screen.getByTitle("Model · effort"));
+      await screen.findByRole("option", { name: /other/ });
+
+      const [first, second] = screen.getAllByRole("option");
+      fireEvent.pointerMove(second);
+      expect(second.className).toContain("tw-bg-interactive-hover");
+      expect(first.className).not.toContain("tw-bg-interactive-hover");
+      fireEvent.pointerMove(first);
+      expect(second.className).not.toContain("tw-bg-interactive-hover");
+    });
+
     it("keeps models disabled for other reasons unavailable", async () => {
       const commitSelection = jest.fn();
       render(
@@ -581,6 +603,26 @@ describe("ModelEffortPicker", () => {
       expect(jennifer.getAttribute("aria-selected")).toBe("true");
       expect(jennifer.className).toContain("tw-bg-interactive-accent-hsl/10");
       expect(jennifer.className).not.toContain("tw-bg-interactive-hover");
+    });
+
+    it("moves the highlight onto the row the pointer is over, so hovering and arrowing paint the same row", () => {
+      const onHighlight = jest.fn();
+      render(
+        <AgentPickerList
+          rows={[row, { ...row, slug: "vancat", name: "Vancat" }]}
+          selectedSlug="jennifer"
+          highlightSlug="jennifer"
+          onPick={jest.fn()}
+          onHighlight={onHighlight}
+        />
+      );
+
+      const [jennifer, vancat] = screen.getAllByRole("option");
+      fireEvent.pointerMove(vancat);
+      expect(onHighlight).toHaveBeenCalledWith(expect.objectContaining({ slug: "vancat" }));
+      // The row already highlighted reports nothing, so a still pointer never re-renders.
+      fireEvent.pointerMove(jennifer);
+      expect(onHighlight).toHaveBeenCalledTimes(1);
     });
 
     it("omits the search field when the caller supplies none", () => {

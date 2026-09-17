@@ -134,6 +134,11 @@ interface AgentPickerListProps {
   /** Search field above the rows; present only past {@link AGENT_SEARCH_THRESHOLD}. */
   search?: { query: string; onChange: (query: string) => void };
   onPick: (row: AgentPickerRow) => void;
+  /**
+   * The pointer moved onto a row. The keyboard highlight follows it, the way a
+   * menu's does, so hovering and arrowing never paint two rows at once.
+   */
+  onHighlight?: (row: AgentPickerRow) => void;
 }
 
 /**
@@ -144,6 +149,7 @@ interface AgentPickerListProps {
  */
 export const AgentPickerList: React.FC<AgentPickerListProps> = ({
   rows,
+  onHighlight,
   selectedSlug,
   highlightSlug,
   search,
@@ -195,6 +201,9 @@ export const AgentPickerList: React.FC<AgentPickerListProps> = ({
                   "tw-items-start",
                   isSelected ? SELECTED_ROW_BG : isHighlight && HIGHLIGHT_ROW_BG
                 )}
+                onPointerMove={() => {
+                  if (!isHighlight) onHighlight?.(row);
+                }}
                 onClick={() => onPick(row)}
               >
                 <div className="tw-flex tw-min-w-0 tw-items-start tw-gap-2">
@@ -333,6 +342,7 @@ function AgentPickerSelect({ section, onPick }: AgentPickerSelectProps) {
             section.rows.length > AGENT_SEARCH_THRESHOLD ? { query, onChange: setQuery } : undefined
           }
           onPick={choose}
+          onHighlight={(row) => setHighlightSlug(row.slug)}
         />
       </PopoverContent>
     </Popover>
@@ -610,6 +620,11 @@ export function ModelEffortPicker({ override, className, defaultOpen }: ModelEff
                           }
                         : undefined
                     }
+                    onPointerMove={() => {
+                      // Hover moves the highlight, so the mouse and the arrow keys
+                      // paint the same single row.
+                      if (!isHighlight && !itemDisabled) setHighlightKey(key);
+                    }}
                     onAuxClick={(event) => {
                       // Middle-click follows the pricing link without firing onClick; discard its draft too.
                       // https://github.com/Brevilabs/obsidian-copilot-private/issues/476
