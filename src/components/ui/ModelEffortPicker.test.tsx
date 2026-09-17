@@ -270,6 +270,9 @@ describe("ModelEffortPicker", () => {
         const row = await screen.findByRole("combobox", { name: "Agent" });
         expect(row.textContent).toBe("✦Copilot");
         expect(screen.queryByRole("listbox", { name: "Agent" })).toBeNull();
+        // The glyph leads the row: no column is reserved for a check this row
+        // can never carry, so the agent starts where a model row's ✓ does.
+        expect(row.querySelectorAll("[aria-hidden]")).toHaveLength(1);
         const modelBox = screen.getByRole("listbox", { name: "Model" });
         expect(
           row.compareDocumentPosition(modelBox) & Node.DOCUMENT_POSITION_FOLLOWING
@@ -299,6 +302,17 @@ describe("ModelEffortPicker", () => {
         expect(body.childElementCount).toBe(childrenBefore);
         expect(body.contains(list.getAllByRole("option")[0])).toBe(false);
         expect(screen.getByRole("listbox", { name: "Model" }).parentElement).toBe(body);
+      });
+
+      it("opens the roster scrolled to the current agent, however far down the roster it sits", async () => {
+        const scrollIntoView = jest.fn();
+        Element.prototype.scrollIntoView = scrollIntoView;
+        renderWithAgents(roster(11));
+
+        const list = await openRoster();
+
+        expect(scrollIntoView).toHaveBeenCalled();
+        expect(scrollIntoView.mock.instances[0]).toBe(list.getAllByRole("option")[0]);
       });
 
       it("re-reads the roster as the popover opens, so an agent just created is offered", () => {

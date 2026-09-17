@@ -108,7 +108,7 @@ const GROUP_HEADING_CLASS = "tw-px-3 tw-pb-1 tw-pt-2 tw-text-xs tw-uppercase tw-
 const ROW_CLASS =
   "tw-flex tw-cursor-pointer tw-items-center tw-justify-between tw-gap-3 tw-px-3 tw-py-1.5 tw-text-sm";
 
-/** The fixed leading column every row reserves for its ✓ / › marker. */
+/** The fixed leading column a list row reserves for its ✓ / › marker. */
 const MARKER_CLASS =
   "tw-flex tw-w-3 tw-shrink-0 tw-items-center tw-justify-center tw-text-xs tw-text-muted";
 
@@ -135,63 +135,83 @@ export const AgentPickerList: React.FC<AgentPickerListProps> = ({
   highlightSlug,
   search,
   onPick,
-}) => (
-  <>
-    {search && (
-      <div className="tw-border-0 tw-border-b tw-border-solid tw-border-border tw-p-1">
-        <SearchBar
-          value={search.query}
-          onChange={search.onChange}
-          placeholder="Search agents..."
-          inputClassName="!tw-h-7"
-        />
-      </div>
-    )}
-    <div role="listbox" aria-label="Agent" className="tw-max-h-64 tw-overflow-y-auto tw-py-1">
-      {rows.length === 0 ? (
-        <div className="tw-px-3 tw-py-1.5 tw-text-xs tw-text-muted">No matching agents</div>
-      ) : (
-        rows.map((row) => {
-          const isSelected = row.slug === selectedSlug;
-          const isHighlight = row.slug === highlightSlug;
-          return (
-            <div
-              key={row.slug}
-              role="option"
-              aria-selected={isSelected}
-              data-highlighted={isHighlight || undefined}
-              // Top-aligned: a description that wraps must not drag the agent's
-              // face down to the middle of the block its name heads.
-              className={cn(ROW_CLASS, "tw-items-start", isHighlight && "tw-bg-interactive-hover")}
-              onClick={() => onPick(row)}
-            >
-              <div className="tw-flex tw-min-w-0 tw-items-start tw-gap-2">
-                <span className={cn(MARKER_CLASS, "tw-h-5")} aria-hidden>
-                  {isSelected ? "✓" : ""}
-                </span>
-                <AgentGlyph icon={row.icon} className="tw-h-5" />
-                <div className="tw-min-w-0">
-                  <div className="tw-truncate tw-text-normal">{row.name}</div>
-                  {row.description && (
-                    // Wrapped, not truncated: the description is the whole basis
-                    // on which the user picks one agent over another, and at this
-                    // width a one-line clamp cut every real description mid-word.
-                    <div
-                      className="tw-line-clamp-2 tw-text-xs tw-text-muted"
-                      title={row.description}
-                    >
-                      {row.description}
-                    </div>
-                  )}
+}) => {
+  const listRef = useRef<HTMLDivElement>(null);
+  // Keep the highlighted row in view: past six agents the list scrolls, so an
+  // arrow press that moved the highlight below the fold would read as dead, and
+  // a list opened on an agent far down it would open on strangers.
+  useEffect(() => {
+    listRef.current
+      ?.querySelector<HTMLElement>('[data-highlighted="true"]')
+      ?.scrollIntoView?.({ block: "nearest" });
+  }, [highlightSlug]);
+  return (
+    <>
+      {search && (
+        <div className="tw-border-0 tw-border-b tw-border-solid tw-border-border tw-p-1">
+          <SearchBar
+            value={search.query}
+            onChange={search.onChange}
+            placeholder="Search agents..."
+            inputClassName="!tw-h-7"
+          />
+        </div>
+      )}
+      <div
+        ref={listRef}
+        role="listbox"
+        aria-label="Agent"
+        className="tw-max-h-64 tw-overflow-y-auto tw-py-1"
+      >
+        {rows.length === 0 ? (
+          <div className="tw-px-3 tw-py-1.5 tw-text-xs tw-text-muted">No matching agents</div>
+        ) : (
+          rows.map((row) => {
+            const isSelected = row.slug === selectedSlug;
+            const isHighlight = row.slug === highlightSlug;
+            return (
+              <div
+                key={row.slug}
+                role="option"
+                aria-selected={isSelected}
+                data-highlighted={isHighlight || undefined}
+                // Top-aligned: a description that wraps must not drag the agent's
+                // face down to the middle of the block its name heads.
+                className={cn(
+                  ROW_CLASS,
+                  "tw-items-start",
+                  isHighlight && "tw-bg-interactive-hover"
+                )}
+                onClick={() => onPick(row)}
+              >
+                <div className="tw-flex tw-min-w-0 tw-items-start tw-gap-2">
+                  <span className={cn(MARKER_CLASS, "tw-h-5")} aria-hidden>
+                    {isSelected ? "✓" : ""}
+                  </span>
+                  <AgentGlyph icon={row.icon} className="tw-h-5" />
+                  <div className="tw-min-w-0">
+                    <div className="tw-truncate tw-text-normal">{row.name}</div>
+                    {row.description && (
+                      // Wrapped, not truncated: the description is the whole basis
+                      // on which the user picks one agent over another, and at this
+                      // width a one-line clamp cut every real description mid-word.
+                      <div
+                        className="tw-line-clamp-2 tw-text-xs tw-text-muted"
+                        title={row.description}
+                      >
+                        {row.description}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          );
-        })
-      )}
-    </div>
-  </>
-);
+            );
+          })
+        )}
+      </div>
+    </>
+  );
+};
 
 AgentPickerList.displayName = "AgentPickerList";
 
@@ -213,7 +233,6 @@ function AgentPickerSelect({ section, onPick }: AgentPickerSelectProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [highlightSlug, setHighlightSlug] = useState<string | null>(null);
-  const contentRef = useRef<HTMLDivElement>(null);
 
   const current = section.rows.find((row) => row.slug === section.selectedSlug) ?? section.rows[0];
   const visible = useMemo(() => filterAgentRows(section.rows, query), [section.rows, query]);
@@ -221,14 +240,6 @@ function AgentPickerSelect({ section, onPick }: AgentPickerSelectProps) {
     0,
     visible.findIndex((row) => row.slug === highlightSlug)
   );
-
-  // Keep the keyboard's row in view: past six agents the list scrolls, and an
-  // arrow press that moved the highlight below the fold would read as dead.
-  useEffect(() => {
-    contentRef.current
-      ?.querySelector<HTMLElement>('[data-highlighted="true"]')
-      ?.scrollIntoView?.({ block: "nearest" });
-  }, [highlightSlug]);
 
   const choose = useCallback(
     (row: AgentPickerRow) => {
@@ -285,8 +296,10 @@ function AgentPickerSelect({ section, onPick }: AgentPickerSelectProps) {
             handleOpenChange(true);
           }}
         >
+          {/* No marker column: nothing in this row can ever be checked, so
+              reserving one would indent the agent past where every other row's
+              leading content starts. */}
           <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-2">
-            <span className={MARKER_CLASS} aria-hidden />
             <AgentGlyph icon={current.icon} />
             <span className="tw-truncate tw-text-normal">{current.name}</span>
           </div>
@@ -294,7 +307,6 @@ function AgentPickerSelect({ section, onPick }: AgentPickerSelectProps) {
         </div>
       </PopoverTrigger>
       <PopoverContent
-        ref={contentRef}
         className="tw-w-[300px] tw-overflow-hidden tw-p-0"
         side="right"
         align="start"
