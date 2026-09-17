@@ -234,7 +234,7 @@ describe("builtinSkills", () => {
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/394 publishes over HTTPS with the injected license key and never touches the Obsidian CLI", () => {
       const skill = BUILTIN_SKILLS.find((item) => item.name === "openartifacts-publish");
       expect(skill).toBeDefined();
-      expect(skill!.version).toBe(3);
+      expect(skill!.version).toBe(4);
 
       expect(skill!.files.map((file) => file.path)).toEqual([
         "themes/research-memo.md",
@@ -294,21 +294,33 @@ describe("builtinSkills", () => {
       );
     });
 
-    it("https://github.com/logancyang/obsidian-copilot/issues/3196 gives published notes a filename-derived visible title without duplicating an equivalent opening H1", () => {
+    it("https://github.com/logancyang/obsidian-copilot/issues/3196 formats filename-derived page titles in title case without duplicating an equivalent opening H1", () => {
       const skill = BUILTIN_SKILLS.find((item) => item.name === "openartifacts-publish");
       expect(skill).toBeDefined();
 
       const md = skill!.skillMd;
       expect(md).toContain("Use the note's file name without `.md` as its page title");
+      expect(md).toMatch(/Convert the filename-derived title to\s+title case/);
       expect(md).toMatch(/both the HTML\s+`<title>` and a visible `<h1>`/);
       expect(md).toContain("above the rendered note body");
-      expect(md).toContain("already starts with an equivalent `<h1>`");
+      expect(md).toMatch(/already starts with an\s+equivalent `<h1>`/);
       expect(md).toContain("do not add another heading");
       expect(md).toMatch(/Preserve all remaining note\s+content/);
-      expect(md).toContain("do not edit the source Markdown to add the heading");
+      expect(md).toMatch(/do not edit the\s+source Markdown to add the heading/);
       expect(md).toContain("same complete HTML file");
-      expect(md).toContain("wrap naturally on narrow screens");
+      expect(md).toMatch(/wrap\s+naturally on narrow screens/);
       expect(md).toContain("Never truncate the title");
+    });
+
+    it("https://github.com/logancyang/obsidian-copilot/issues/3196 honors an explicit no-title request by omitting the added H1", () => {
+      const skill = BUILTIN_SKILLS.find((item) => item.name === "openartifacts-publish");
+      expect(skill).toBeDefined();
+
+      const md = skill!.skillMd;
+      expect(md).toMatch(/If the user explicitly asks for no\s+title/);
+      expect(md).toContain("do not add the `<h1>`");
+      expect(md).toContain("Keep the HTML `<title>` as browser metadata");
+      expect(md).toMatch(/preserve any\s+authored opening heading as note content/);
     });
   });
 

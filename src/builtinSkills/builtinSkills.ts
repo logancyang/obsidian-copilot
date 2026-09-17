@@ -589,7 +589,7 @@ const FETCH_X = relaySkill({
   scriptFile: "fetch-x.sh",
 });
 
-const OPENARTIFACTS_PUBLISH_VERSION = 3;
+const OPENARTIFACTS_PUBLISH_VERSION = 4;
 const OPENARTIFACTS_PUBLISH_USAGE = "openartifacts-publish";
 /** Where the wrapper sends requests unless a test or self-host points it elsewhere. */
 const OPENARTIFACTS_API_HOST_ENV = "OPENARTIFACTS_API_HOST";
@@ -639,14 +639,17 @@ the directory if needed. Preserve the note's content; render Obsidian-specific s
 as wikilinks, callouts, embeds, Mermaid, and Bases into static HTML or SVG. CSS, scripts,
 and external resources are allowed and are published unchanged.
 
-Use the note's file name without \`.md\` as its page title. Put that title in both the HTML
-\`<title>\` and a visible \`<h1>\` above the rendered note body. If the rendered note body
-already starts with an equivalent \`<h1>\` containing the same visible title text, use that
-heading as the page-body title and do not add another heading. Preserve all remaining note
-content below it, and do not edit the source Markdown to add the heading. Keep normal text
-wrapping on the \`<h1>\` so long titles wrap naturally on narrow screens. Never truncate the title,
-hide its overflow, or apply single-line or ellipsis styling. The review and publish steps must
-use this same complete HTML file so its title and body match in preview and after publishing.
+Use the note's file name without \`.md\` as its page title. Convert the filename-derived title to
+title case while preserving recognizable acronyms and proper names. Put that title in both the HTML
+\`<title>\` and a visible \`<h1>\` above the rendered note body. If the user explicitly asks for no
+title, do not add the \`<h1>\`. Keep the HTML \`<title>\` as browser metadata, and preserve any
+authored opening heading as note content. Otherwise, if the rendered note body already starts with an
+equivalent \`<h1>\` containing the same visible title text, use that heading as the page-body title
+and do not add another heading. Preserve all remaining note content below it, and do not edit the
+source Markdown to add the heading. Keep normal text wrapping on the \`<h1>\` so long titles wrap
+naturally on narrow screens. Never truncate the title, hide its overflow, or apply single-line or
+ellipsis styling. The review and publish steps must use this same complete HTML file so its title
+and body match in preview and after publishing.
 
 Themes are optional. For a named theme, check
 \`$${OPENARTIFACTS_WORKSPACE_ROOT_ENV}/${OPENARTIFACTS_THEMES_DIR}/<name>.md\`, then
