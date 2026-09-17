@@ -55,7 +55,7 @@ export interface FileChangeStatusBadgeProps {
 export const FileChangeStatusBadge: React.FC<FileChangeStatusBadgeProps> = ({ status }) => {
   if (status === "modified") return null;
   return (
-    <span className="tw-shrink-0 tw-rounded-sm tw-border tw-border-solid tw-border-border tw-bg-secondary tw-px-1 tw-text-xs tw-text-muted">
+    <span className="tw-shrink-0 tw-rounded-sm tw-border tw-border-solid tw-border-border tw-bg-secondary-alt tw-px-1 tw-text-xs tw-text-muted">
       {status === "created" ? "new" : "deleted"}
     </span>
   );

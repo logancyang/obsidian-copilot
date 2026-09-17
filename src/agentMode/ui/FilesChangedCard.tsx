@@ -31,7 +31,7 @@ export const FilesChangedCard: React.FC<FilesChangedCardProps> = ({ changes, onO
   );
 
   return (
-    <div className="tw-my-1 tw-w-full tw-overflow-hidden tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-secondary-alt">
+    <div className="tw-my-1 tw-w-full tw-overflow-hidden tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-secondary">
       <div className="copilot-divider-b tw-flex tw-items-center tw-gap-1.5 tw-px-3 tw-py-2">
         <FileDiff className="tw-size-3.5 tw-shrink-0 tw-text-muted" />
         <span className="tw-min-w-0 tw-flex-1 tw-truncate tw-text-sm tw-font-medium">
