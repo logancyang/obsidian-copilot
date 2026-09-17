@@ -189,6 +189,14 @@ describe("agentSystemPrompt", () => {
       expect(COPILOT_AGENT_PERSONA_POLICY).not.toMatch(/Jennifer/);
     });
 
+    it("confines an agent to its own memory block so a consulted agent cannot recite another's file", () => {
+      // A fan-out sub-session runs with the vault as its working directory, so
+      // every agent's MEMORY.md is a readable note. Nothing but this sentence
+      // stops one agent from answering out of another's recollection.
+      expect(COPILOT_AGENT_PERSONA_POLICY).toMatch(/only memory that is yours/i);
+      expect(COPILOT_AGENT_PERSONA_POLICY).toMatch(/do not open them/i);
+    });
+
     it("subordinates a persona to safety and tool policy, not to the generic framing", () => {
       expect(COPILOT_AGENT_PERSONA_POLICY).toMatch(/the block wins/i);
       expect(COPILOT_AGENT_PERSONA_POLICY).toMatch(/neither block overrides your safety/i);

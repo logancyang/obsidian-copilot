@@ -113,11 +113,13 @@ const AgentChatMessages = memo(
         >
           {visible.map((message, index) => {
             const isLastMessage = index === visible.length - 1;
-            // A plan remains part of the transcript, so it supplies tail
-            // content. Blocking actions live in their own rail and do not
-            // change the transcript's scroll headroom.
+            // A plan card and the memory trust line both follow the transcript,
+            // so either one supplies the tail content the headroom exists to
+            // fake. Keeping the headroom as well would strand that content a
+            // pane-height below the turn it belongs to. Blocking actions live in
+            // their own rail and do not change the transcript's scroll headroom.
             const shouldApplyMinHeight =
-              isLastMessage && message.sender !== USER_SENDER && !showPlanCard;
+              isLastMessage && message.sender !== USER_SENDER && !showPlanCard && !memoryNotice;
             const adaptedMessage = adapted[index];
             // When an assistant message has structured parts, the trail owns
             // its entire body — `text` parts already cover streamed prose, so

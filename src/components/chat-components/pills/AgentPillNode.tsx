@@ -87,10 +87,10 @@ export class AgentPillNode extends BasePillNode {
   }
 
   /**
-   * Contribute nothing to the serialized text. The backend id is pure routing
+   * Contribute nothing to the serialized text. The slug is pure routing
    * metadata (the mention feeds `mentionedAgents` structurally via the sync
-   * plugin); emitting it here would leak the raw id into the prompt. The visible
-   * pill comes from `decorate()`.
+   * plugin); emitting it here would leak the folder name into the prompt. The
+   * visible pill comes from `decorate()`.
    */
   getTextContent(): string {
     return "";

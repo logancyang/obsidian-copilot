@@ -138,7 +138,7 @@ export function useAtMentionSearch(
         {
           key: CREATE_AGENT_OPTION_KEY,
           title: "Create an agent",
-          subtitle: "Give an agent a name, a voice, and a memory",
+          subtitle: "Set one up in Settings",
           category: "agents",
           data: "",
           content: undefined,

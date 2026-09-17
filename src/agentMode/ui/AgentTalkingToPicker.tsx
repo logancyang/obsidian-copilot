@@ -72,8 +72,14 @@ export const AgentTalkingToPicker: React.FC<AgentTalkingToPickerProps> = ({
           aria-label={`Talking to ${selected.name}`}
           title={`Talking to ${selected.name}`}
           // A fixed height, so swapping Copilot for a named agent never nudges
-          // the header; min-w-0 + truncate keep a long name inside a narrow pane.
-          className={cn("tw-h-7 tw-min-w-0 tw-justify-start tw-text-muted", className)}
+          // the header. The padding and gap are the session tab's, so the agent
+          // and the tab below it share one leading column. `max-w-full` plus
+          // `min-w-0` keep a long name truncating inside a narrow pane whatever
+          // the host row is.
+          className={cn(
+            "tw-h-7 tw-min-w-0 tw-max-w-full tw-justify-start tw-gap-1.5 tw-px-2 tw-text-muted",
+            className
+          )}
         >
           <AgentGlyph icon={selected.icon} />
           <span className="tw-min-w-0 tw-truncate tw-text-ui-small tw-font-medium">

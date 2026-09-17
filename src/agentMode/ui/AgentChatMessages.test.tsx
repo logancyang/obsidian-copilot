@@ -15,7 +15,8 @@ type AgentChatMessagesProps = React.ComponentProps<typeof AgentChatMessages>;
 jest.mock("@/hooks/useChatScrolling", () => ({
   // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook; name must match the export
   useChatScrolling: () => ({
-    containerMinHeight: 0,
+    // Non-zero so the scroll headroom the last turn reserves is observable.
+    containerMinHeight: 480,
     scrollContainerCallbackRef: jest.fn(),
     getMessageKey: (message: { id: string }) => message.id,
   }),
@@ -124,6 +125,13 @@ function renderMessages(
   return { ...render(<AgentChatMessages {...props} />), props };
 }
 
+/** The wrapper around the transcript's last message — the block that carries
+ *  the scroll headroom. */
+function lastMessageBlock(container: HTMLElement): HTMLElement {
+  const blocks = container.querySelectorAll<HTMLElement>("[data-message-key]");
+  return blocks[blocks.length - 1];
+}
+
 describe("AgentChatMessages", () => {
   describe("AgentChatMessages()", () => {
     beforeEach(() => {
@@ -225,6 +233,21 @@ describe("AgentChatMessages", () => {
 
       expect(screen.getByTestId("chat-messages").textContent).toContain("Plan plan-1");
       expect(screen.queryByTestId("agent-action-rail")).toBeNull();
+    });
+
+    it("reserves scroll headroom under the last turn when nothing follows the transcript", () => {
+      const { container } = renderMessages([assistantMessage("answer", 100_000)], false);
+
+      expect(lastMessageBlock(container).style.minHeight).toBe("480px");
+    });
+
+    it("drops that headroom when a memory trust line follows, so the line sits under the turn that ended", () => {
+      const { container } = renderMessages([assistantMessage("answer", 100_000)], false, {
+        memoryNotice: { agentName: "Jennifer", memoryPath: "copilot/agents/jennifer/MEMORY.md" },
+      });
+
+      expect(lastMessageBlock(container).style.minHeight).toBe("auto");
+      expect(screen.getByText("Jennifer updated their memory")).not.toBeNull();
     });
   });
 });
