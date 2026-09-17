@@ -1,5 +1,5 @@
 // __mocks__/obsidian.js
-import { parse as parseYamlString } from "yaml";
+import { parse as parseYamlString, stringify as stringifyYamlValue } from "yaml";
 
 // Per-test overrides set via the exported `__setRequestUrlImpl` helper.
 // Default: empty success response. Tests that exercise network paths should
@@ -72,6 +72,9 @@ module.exports = {
   normalizePath: (p) => String(p).replace(/\\\\/g, "/").replace(/\/+/g, "/"),
   parseYaml: jest.fn().mockImplementation((content) => {
     return parseYamlString(content);
+  }),
+  stringifyYaml: jest.fn().mockImplementation((value) => {
+    return stringifyYamlValue(value);
   }),
   Modal: class Modal {
     constructor(app) {

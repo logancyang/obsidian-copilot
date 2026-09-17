@@ -668,6 +668,49 @@ describe("searchUtils", () => {
     });
   });
 
+  describe("agent persona and memory files", () => {
+    // designdocs/CUSTOM_AGENTS.md §1: `agent.md` and `MEMORY.md` are excluded
+    // from retrieval and semantic search the same way AGENTS.md is, because the
+    // agent already receives them. They inherit the always-on Copilot-root
+    // exclusion — the agents folder derives from that root — so this pins the
+    // outcome rather than a second mechanism.
+    const agentSettings = {
+      qaInclusions: "",
+      qaExclusions: "",
+      copilotFolder: "copilot",
+      copilotRootHistory: ["copilot"],
+    };
+
+    it("keeps an agent's instructions and memory out of indexing", () => {
+      (settingsModel.getSettings as jest.Mock).mockReturnValue(agentSettings);
+      expect(
+        shouldIndexFile(window.app, createTestFile("copilot/agents/jennifer/agent.md"), null, null)
+      ).toBe(false);
+      expect(
+        shouldIndexFile(window.app, createTestFile("copilot/agents/jennifer/MEMORY.md"), null, null)
+      ).toBe(false);
+    });
+
+    it("keeps them out of query-time search results too", () => {
+      (settingsModel.getSettings as jest.Mock).mockReturnValue(agentSettings);
+      const filter = createCopilotPatternFilter(window.app);
+      expect(filter("copilot/agents/jennifer/agent.md")).toBe(false);
+      expect(filter("copilot/agents/jennifer/MEMORY.md")).toBe(false);
+    });
+
+    it("excludes them under a custom Copilot root as well", () => {
+      (settingsModel.getSettings as jest.Mock).mockReturnValue({
+        ...agentSettings,
+        copilotFolder: "team-ai",
+        copilotRootHistory: ["team-ai"],
+      });
+      const filter = createCopilotPatternFilter(window.app);
+      expect(filter("team-ai/agents/jennifer/MEMORY.md")).toBe(false);
+      // A user note that merely happens to be called MEMORY.md still indexes.
+      expect(filter("notes/MEMORY.md")).toBe(true);
+    });
+  });
+
   describe("createCopilotPatternFilter", () => {
     it("excludes the active and historical roots even with no user patterns", () => {
       (settingsModel.getSettings as jest.Mock).mockReturnValue({

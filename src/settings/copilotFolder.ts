@@ -17,6 +17,7 @@ export const COPILOT_SUBFOLDER = Object.freeze({
   skills: "skills",
   memory: "memory",
   projects: "projects",
+  agents: "agents",
 } as const);
 
 /** Settings shape the derivation helpers depend on. */
@@ -86,6 +87,11 @@ export function deriveMemoryFolder(settings: FolderSettings): string {
 /** Derive the projects folder from a settings snapshot. */
 export function deriveProjectsFolder(settings: FolderSettings): string {
   return deriveSubfolder(settings, COPILOT_SUBFOLDER.projects);
+}
+
+/** Derive the custom-agents folder from a settings snapshot. */
+export function deriveAgentsFolder(settings: FolderSettings): string {
+  return deriveSubfolder(settings, COPILOT_SUBFOLDER.agents);
 }
 
 /**
@@ -158,6 +164,11 @@ export function getEffectiveProjectsFolder(): string {
   return deriveProjectsFolder(getSettings());
 }
 
+/** Effective custom-agents folder derived from the current global settings. */
+export function getEffectiveAgentsFolder(): string {
+  return deriveAgentsFolder(getSettings());
+}
+
 /**
  * Pre-create every derived Copilot sub-folder under the current root so the
  * locations the relocation/change-root notices point at already exist when the
@@ -182,6 +193,7 @@ export async function ensureCopilotSubfolders(
     deriveSkillsFolder,
     deriveMemoryFolder,
     deriveProjectsFolder,
+    deriveAgentsFolder,
   ];
   for (const derive of derivers) {
     const folder = derive(settings);

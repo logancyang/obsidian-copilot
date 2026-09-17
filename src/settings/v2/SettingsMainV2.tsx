@@ -10,7 +10,7 @@ import { resetSettings } from "@/settings/model";
 import { COPILOT_SETTINGS_TAB_IDS, type CopilotSettingsTabId } from "@/settings/settingsTabs";
 import { useSkillLoadErrorCount } from "@/settings/skillLoadErrorState";
 import { CommandSettings } from "@/settings/v2/components/CommandSettings";
-import { Cog, Command, Cpu, ShieldCheck, Sigma, Sparkle, Wrench } from "lucide-react";
+import { Cog, Command, Cpu, ShieldCheck, Sigma, Sparkle, Users, Wrench } from "lucide-react";
 import React from "react";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { AdvancedSettings } from "./components/AdvancedSettings";
@@ -32,6 +32,10 @@ const LazySkillsSettings = React.lazy(() =>
   import("@/agentMode").then((module) => ({ default: module.SkillsSettings }))
 );
 
+const LazyAgentsSettings = React.lazy(() =>
+  import("@/agents").then((module) => ({ default: module.AgentsSettings }))
+);
+
 const SkillsSettingsPanel: React.FC = () => {
   // Gate before the dynamic import: on mobile the `@/agentMode` barrel pulls in
   // Node-only modules that throw while being evaluated, so the desktop check
@@ -46,6 +50,20 @@ const SkillsSettingsPanel: React.FC = () => {
   );
 };
 
+const AgentsSettingsPanel: React.FC = () => {
+  // Same gate as Skills, and for the same reason: `@/agents` reaches the agent
+  // backend registry through `@/agentMode`, whose module graph throws on mobile
+  // while it evaluates. The check has to precede the dynamic import.
+  if (!isDesktopRuntime()) {
+    return <DesktopOnlySettingsPanel message="Agents are available on desktop." />;
+  }
+  return (
+    <React.Suspense fallback={null}>
+      <LazyAgentsSettings />
+    </React.Suspense>
+  );
+};
+
 // tab icons
 const icons: Record<CopilotSettingsTabId, JSX.Element> = {
   basic: <Cog className="tw-size-5" />,
@@ -54,6 +72,7 @@ const icons: Record<CopilotSettingsTabId, JSX.Element> = {
   selfhost: <ShieldCheck className="tw-size-5" />,
   command: <Command className="tw-size-5" />,
   skills: <Sparkle className="tw-size-5" />,
+  agents: <Users className="tw-size-5" />,
   advanced: <Wrench className="tw-size-5" />,
 };
 
@@ -65,6 +84,7 @@ const components: Record<CopilotSettingsTabId, React.FC> = {
   selfhost: () => <SelfHostSettings />,
   command: () => <CommandSettings />,
   skills: SkillsSettingsPanel,
+  agents: AgentsSettingsPanel,
   advanced: () => <AdvancedSettings />,
 };
 
@@ -77,6 +97,7 @@ const TAB_LABELS: Record<CopilotSettingsTabId, string> = {
   selfhost: "Self-Host",
   command: "Command",
   skills: "Skills",
+  agents: "Agents",
   advanced: "Advanced",
 };
 

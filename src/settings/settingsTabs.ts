@@ -3,6 +3,7 @@ export const COPILOT_SETTINGS_TAB_IDS = [
   "byok",
   "miyo",
   "skills",
+  "agents",
   "command",
   "selfhost",
   "advanced",
