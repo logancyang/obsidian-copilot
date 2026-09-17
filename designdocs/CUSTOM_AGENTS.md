@@ -120,23 +120,18 @@ else, so the feature is invisible until they create an agent.
 
 ### 3. Choosing who you are talking to
 
-The agent is chosen inside the model picker popover in the chat composer,
-not from a separate control. The popover opens with an **Agent** section at
-the top holding one select row: the current agent's icon and name, the
-built-in **Copilot** by default, with a chevron. Activating the row opens a
-nested list of Copilot and every custom agent with icon, name, and
-description, the current one shown with the selected row color rather than a
-marker column, and a search field once there are more than six entries. The
-model list below follows the same rule: no marker column, the selected model
-carries the selected row color. Choosing an entry closes the list and updates the
-row; the model and effort sections below never move. A divider follows the
-Agent section, and below it sit today's model and effort sections unchanged.
-People are expected to keep five to ten agents, so the roster never renders
-inline in the popover.
+The agent is chosen from its own picker in the chat composer's bottom row,
+between the Add Context button and the model picker. The trigger shows only
+the current agent's icon and name, **Copilot** by default, so the user can
+always see who is handling the chat and can change it in one click. Clicking
+it opens a list of Copilot and every custom agent with icon, name, and
+description, the current one shown with the selected row color, and a search
+field once there are more than six entries. The model picker is the model
+picker: it lists models and effort only and carries no agent section.
 
-Picking an agent that pins a backend, model, or effort switches the model and
-effort sections to those values at once, so the composer's trigger reflects
-what the agent will actually run on. An agent with no pins leaves the current
+Picking an agent that pins a backend, model, or effort switches the model
+picker to those values at once, so its trigger reflects what the agent will
+actually run on. An agent with no pins leaves the current
 model and effort alone. The user can still change model or effort after
 picking an agent; the pins are a starting point, not a lock.
 
@@ -279,10 +274,13 @@ table of contents, that the linked daily note holds the rest of that
 conversation's bullets, and that the chat note itself holds the transcript, so
 the agent opens them with its file tools only when a question reaches back.
 
-Long chats refresh per turn: before each user message is sent, if `MEMORY.md`
-or any daily note in the index window changed since the last injection, a
-fresh `<agent_memory>` block is prepended to that message. The persona block
-names the `memory/` folder so the agent can read any day on demand.
+Long chats refresh per turn: before each user message is sent, if the block the
+agent would be given now differs from the one this chat last sent — a
+consolidated core, or a conversation the index did not carry yet — a fresh
+`<agent_memory>` block is prepended to that message. A bullet added below a
+conversation's first one is not in the block and so does not re-send it; it sits
+on disk, where the index says it is. The persona block names the `memory/`
+folder so the agent can read any day on demand.
 
 **Trust surface.** After a flush lands, the chat shows one quiet line under
 the turn, "Jennifer added to today's notes", with an open link to the daily
@@ -473,3 +471,4 @@ together.
 | M8  | **Agent select row in the model picker.** Replace the inline agent roster in the popover with one select row (current agent's icon and name, chevron) that opens a nested list of Copilot and all agents with icon, name, description, checkmark, and a search field past six entries. Choosing closes the list; model and effort sections stay fixed; pins still apply as in M6. Stories for two, six, and twelve agents; tests for the select, search, and keyboard path. E2E with twelve agents in the vault.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | done (6a4d58c8, a43bfc83; the roster is a second popover, so the model and effort sections gain no children and move no pixels as it opens, and the row reserves no column for a check it can never carry)                                                                        |
 | M9  | **Selection by color, not by marker.** Remove the checkmark column from the nested agent list and from the model list in the popover; the selected entry uses the design system's selected-row background and text color, and rows start at the popover's leading content edge. Stories and tests updated. E2E measures the leading-content x of agent rows, model rows, and the select row as equal.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | done (f0da7334; each list's current row takes the accent tint instead of a ✓, and every row starts 13px in from its popover's edge)                                                                                                                                               |
 | M10 | **Conversation index instead of whole daily notes.** The memory block carries `MEMORY.md` plus an index of the last fourteen days' conversations (date, time, title, the summary bullet, a link to the daily note), newest first, capped at forty lines, with a sentence telling the agent where the full notes and transcripts live. Whole daily notes are no longer injected. Per-turn refresh keys on the index window. Tests for the index builder (cap, ordering, days without notes, headings without bullets) and the refresh fingerprint; the tab-A-to-tab-B recall scenario passes through the index.                                                                                                                                                                                                                                                                                                                                                                                                                        | pending                                                                                                                                                                                                                                                                           |
+| M11 | **Standalone agent picker in the composer.** Remove the Agent section from the model picker popover; the model picker lists models and effort only. Add an agent picker trigger between the Add Context button and the model picker showing the current agent's icon and name (Copilot by default); one click opens the existing agent list (icon, name, description, selected color, search past six) as its own popover. Choosing applies pins to the model picker as before. Stories for the trigger (Copilot, named agent, narrow) and the open list; tests for open, choose, pins, and that the model popover has no agent rows. E2E: one click to see and switch the agent; model picker unchanged.                                                                                                                                                                                                                                                                                                                             | pending                                                                                                                                                                                                                                                                           |
