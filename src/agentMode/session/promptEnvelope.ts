@@ -159,11 +159,26 @@ export function buildAgentPersonaBlock(source: AgentPersonaSource): string | nul
  * Sections are labeled because the curated core and a raw day of notes carry
  * different weight, and the model cannot tell them apart otherwise.
  *
+ * The block leads with which of the two wins, because the core is the longer
+ * and more confident-sounding text while the notes are the newer one: without
+ * being told, a model asked what was decided today answers from the summary
+ * and reports the day's own decision as still open.
+ *
  * @param name - Agent display name, used as the `name` attribute.
  * @param memory - The core and recent notes, or null when the agent has none.
  * @returns The block, or null when there is nothing to recall — an empty block
  *   would tell the model it remembers nothing, which is worse than silence.
  */
+/**
+ * The one line inside `<agent_memory>` that ranks its sections. See
+ * {@link buildAgentMemoryBlock}.
+ */
+const MEMORY_PRECEDENCE_NOTE =
+  "This is your own recollection of this user. The dated notes below are the " +
+  "most recent thing you know and are written in your own hand; where they " +
+  "differ from your consolidated summary, the notes are right and the summary " +
+  "has not caught up yet.";
+
 export function buildAgentMemoryBlock(
   name: string,
   memory: AgentMemorySource | null
@@ -176,5 +191,8 @@ export function buildAgentMemoryBlock(
   const updated = formatMemoryDate(memory!.modifiedAtMs);
   const updatedAttr = updated ? ` updated="${updated}"` : "";
   const body = sections.map((section) => `## ${section.label}\n${section.text}`).join("\n\n");
-  return `<agent_memory name="${escapeAttribute(attrName)}"${updatedAttr}>\n${body}\n</agent_memory>`;
+  return (
+    `<agent_memory name="${escapeAttribute(attrName)}"${updatedAttr}>\n` +
+    `${MEMORY_PRECEDENCE_NOTE}\n\n${body}\n</agent_memory>`
+  );
 }

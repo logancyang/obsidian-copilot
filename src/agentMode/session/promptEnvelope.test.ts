@@ -150,11 +150,22 @@ describe("promptEnvelope", () => {
         modifiedAtMs: MEMORY_MODIFIED_MS,
       });
 
-      expect(block).toBe(
-        '<agent_memory name="Jennifer" updated="2026-09-14">\n' +
-          "## MEMORY.md\n## About the user\n\n- Writes a climate newsletter.\n\n" +
-          "## Your notes from 2026-09-14\n- Renamed the newsletter.\n</agent_memory>"
-      );
+      expect(block).toContain('<agent_memory name="Jennifer" updated="2026-09-14">');
+      expect(block).toContain("## MEMORY.md\n## About the user\n\n- Writes a climate newsletter.");
+      expect(block).toContain("## Your notes from 2026-09-14\n- Renamed the newsletter.");
+      expect(block?.endsWith("</agent_memory>")).toBe(true);
+    });
+
+    // A model asked what was decided today otherwise answers from the longer,
+    // more confident-sounding summary and reports the day's own decision as
+    // still open (`designdocs/CUSTOM_AGENTS.md` §5, "Reading").
+    it("says the dated notes outrank the consolidated summary where they differ", () => {
+      const block = buildAgentMemoryBlock("Jennifer", {
+        sections: [{ label: "MEMORY.md", text: "- something" }],
+        modifiedAtMs: MEMORY_MODIFIED_MS,
+      });
+
+      expect(block).toContain("the notes are right and the summary has not caught up yet");
     });
 
     it("drops a section whose file held only whitespace", () => {
