@@ -27,15 +27,15 @@ export interface AgentsSettingsViewProps {
   actions: AgentRowActions;
   /** Slug currently open in the editor, or null while creating or idle. */
   selectedSlug: string | null;
-  /** The open editor, or null when the right pane is idle. */
+  /** The open editor, or null when no agent is being created or edited. */
   editor: AgentEditorProps | null;
   containerRef?: React.RefObject<HTMLElement>;
 }
 
 /**
- * The Agents settings tab: the searchable roster on the left, the agent being
- * edited on the right. Presentational — every value and callback comes from the
- * container, so the gallery can render each state from fixtures.
+ * The Agents settings tab: a searchable roster, with the agent being created or
+ * edited opened beneath it. Presentational — every value and callback comes from
+ * the container, so the gallery can render each state from fixtures.
  */
 export const AgentsSettingsView: React.FC<AgentsSettingsViewProps> = ({
   agentsFolder,
@@ -97,12 +97,12 @@ export const AgentsSettingsView: React.FC<AgentsSettingsViewProps> = ({
             <AgentsEmptyPlaceholder folder={agentsFolder} />
           </div>
         ) : (
-          <div className="tw-mt-4 tw-flex tw-flex-col tw-gap-4 md:tw-flex-row md:tw-items-start">
-            <div
-              role="region"
-              aria-label="Your agents"
-              className="tw-flex tw-min-w-0 tw-flex-1 tw-flex-col tw-gap-1.5"
-            >
+          // The roster and the open agent stack rather than sitting side by
+          // side: Obsidian caps this panel's width well below what a list plus a
+          // 380px editor column needs, and splitting it there squeezes every row
+          // down to its first few words.
+          <div className="tw-mt-4 tw-flex tw-flex-col tw-gap-4">
+            <div role="region" aria-label="Your agents" className="tw-flex tw-flex-col tw-gap-1.5">
               {visible.length === 0 ? (
                 <div className="tw-rounded-sm tw-border tw-border-dashed tw-border-border tw-bg-primary tw-px-3 tw-py-6 tw-text-center tw-text-ui-smaller tw-text-muted">
                   {agents.length === 0
@@ -126,22 +126,18 @@ export const AgentsSettingsView: React.FC<AgentsSettingsViewProps> = ({
                 ))
               )}
             </div>
-            <div
-              role="region"
-              aria-label="Agent editor"
-              className={cn(
-                "tw-w-full tw-shrink-0 tw-rounded-md tw-border tw-border-solid tw-border-border",
-                "tw-bg-primary tw-p-3.5 md:tw-w-[380px]"
-              )}
-            >
-              {editor === null ? (
-                <div className="tw-py-6 tw-text-center tw-text-ui-smaller tw-text-faint">
-                  Select an agent to edit it, or create a new one.
-                </div>
-              ) : (
+            {editor !== null && (
+              <div
+                role="region"
+                aria-label="Agent editor"
+                className={cn(
+                  "tw-rounded-md tw-border tw-border-solid tw-border-border",
+                  "tw-bg-primary tw-p-3.5"
+                )}
+              >
                 <AgentEditor {...editor} />
-              )}
-            </div>
+              </div>
+            )}
           </div>
         )}
       </section>

@@ -42,9 +42,8 @@ export interface AgentEditorProps {
 }
 
 /**
- * The right-hand pane of the Agents tab: the whole of an agent's `agent.md`,
- * as a form. Presentational — the container owns the draft, validation
- * outcome, and persistence.
+ * The whole of an agent's `agent.md` as a form. Presentational — the container
+ * owns the draft, the validation outcome, and persistence.
  */
 export const AgentEditor: React.FC<AgentEditorProps> = ({
   mode,
@@ -118,7 +117,7 @@ export const AgentEditor: React.FC<AgentEditorProps> = ({
         <Textarea
           value={draft.instructions}
           onChange={(event) => onChange({ instructions: event.target.value })}
-          placeholder="You are Jennifer, a developmental editor. You care about the reader more than the author…"
+          placeholder="How this agent should behave, in its own standing voice…"
           aria-label="Instructions"
           className="tw-min-h-[160px] tw-w-full"
         />
