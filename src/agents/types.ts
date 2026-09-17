@@ -79,7 +79,7 @@ export const BUILTIN_AGENT: BuiltinAgentEntry = Object.freeze({
   kind: "builtin",
   slug: BUILTIN_AGENT_SLUG,
   name: "Copilot",
-  description: "The default assistant. Your vault instructions, no persona, no memory.",
+  description: "Your vault instructions, no persona, no memory.",
   icon: "✦",
 });
 

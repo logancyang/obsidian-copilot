@@ -62,6 +62,26 @@ describe("AgentTalkingToPicker", () => {
       expect(screen.getByRole("button", { name: "Talking to Jennifer" })).toBeTruthy();
     });
 
+    it("shows a description in full rather than cutting it off mid-word", () => {
+      // The description is the only thing distinguishing two agents in this
+      // menu, so it wraps; the menu itself scrolls (CUSTOM_AGENTS.md §3).
+      render(
+        <AgentTalkingToPicker
+          entries={[BUILTIN_AGENT, JENNIFER]}
+          selectedSlug="jennifer"
+          onSelect={jest.fn()}
+        />
+      );
+      fireEvent.pointerDown(screen.getByRole("button", { name: "Talking to Jennifer" }), {
+        button: 0,
+        ctrlKey: false,
+      });
+
+      const description = screen.getByText(JENNIFER.description);
+      expect(description.className).toContain("tw-line-clamp-2");
+      expect(description.className).not.toContain("tw-truncate");
+    });
+
     it("falls back to the first entry when the selected agent is gone", () => {
       // A delete can land while the header is mounted; the trigger must not
       // render empty. `designdocs/CUSTOM_AGENTS.md` §1.

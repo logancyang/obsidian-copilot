@@ -94,12 +94,21 @@ export const AgentTalkingToPicker: React.FC<AgentTalkingToPickerProps> = ({
         className="tw-max-h-64 tw-w-64 tw-overflow-y-auto"
       >
         {entries.map((entry) => (
-          <DropdownMenuItem key={entry.slug} onSelect={() => onSelect(entry.slug)}>
+          // Top-aligned: a description that wraps must not drag the agent's
+          // face down to the middle of the block its name heads.
+          <DropdownMenuItem
+            key={entry.slug}
+            className="tw-items-start"
+            onSelect={() => onSelect(entry.slug)}
+          >
             <AgentGlyph icon={entry.icon} />
             <div className="tw-min-w-0 tw-flex-1">
               <div className="tw-truncate tw-text-ui-small tw-text-normal">{entry.name}</div>
               {entry.description && (
-                <div className="tw-truncate tw-text-xs tw-text-muted" title={entry.description}>
+                // Wrapped, not truncated: the description is the whole basis on
+                // which the user picks one agent over another, and at this menu's
+                // width a one-line clamp cut every real description mid-word.
+                <div className="tw-line-clamp-2 tw-text-xs tw-text-muted" title={entry.description}>
                   {entry.description}
                 </div>
               )}
