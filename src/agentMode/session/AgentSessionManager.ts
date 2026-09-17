@@ -1365,6 +1365,12 @@ export class AgentSessionManager {
     return this.selectedAgentSlug;
   }
 
+  getTalkingToSlug(): string {
+    const session = this.getActiveSession();
+    if (!session) return this.selectedAgentSlug;
+    return session.getAgent().slug ?? BUILTIN_AGENT_SLUG;
+  }
+
   async setSelectedAgent(slug: string): Promise<void> {
     this.selectedAgentSlug = slug || BUILTIN_AGENT_SLUG;
     const agent = await this.resolveSessionAgent(this.selectedAgentSlug);

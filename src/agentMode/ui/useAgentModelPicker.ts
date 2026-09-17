@@ -6,7 +6,7 @@ import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManage
 import { modelStateSignature } from "@/agentMode/session/translateBackendState";
 import type { BackendDescriptor } from "@/agentMode/session/types";
 import { useBackendInstallStates } from "@/agentMode/ui/useBackendDescriptor";
-import type { AgentPickerSection } from "@/components/ui/ModelEffortPicker";
+import type { AgentPickerSection } from "@/components/ui/AgentPicker";
 import { buildAgentModelPicker } from "./agentModelPickerHelpers";
 import type { AgentTalkingTo } from "./useAgentTalkingTo";
 import { useManagerSubscribe } from "./useManagerSubscribe";
@@ -26,11 +26,12 @@ export interface AgentModelPickerOverride {
   effortOptionsByModelKey?: Record<string, { label: string; value: string | null }[]>;
   commitSelection?: (modelKey: string, effort: string | null) => void;
   /**
-   * The Agent section at the top of the popover. Picking an agent applies its
-   * pinned model and effort to the same draft a manual pick writes, so the
-   * sections below follow at once (`designdocs/CUSTOM_AGENTS.md` §3).
+   * The composer's agent picker, which stands beside the model picker rather
+   * than inside it. Built here because an agent's pins only mean something
+   * against these very model rows, and picking one commits through the same
+   * `commitSelection` a hand pick uses (`designdocs/CUSTOM_AGENTS.md` §3).
    */
-  agents?: AgentPickerSection;
+  agentPicker?: AgentPickerSection;
 }
 
 function useAgentModelSignal(

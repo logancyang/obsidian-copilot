@@ -35,7 +35,8 @@ import { ContextControl } from "./ContextControl";
 import { AddContextButton } from "./AddContextButton";
 import { openImagePicker } from "./openImagePicker";
 import { shouldShowAtMentionTools } from "./hooks/useAtMentionCategories";
-import { ModelEffortPicker, type AgentPickerSection } from "@/components/ui/ModelEffortPicker";
+import { ModelEffortPicker } from "@/components/ui/ModelEffortPicker";
+import { AgentPicker, type AgentPickerSection } from "@/components/ui/AgentPicker";
 import { ModePicker } from "@/components/ui/ModePicker";
 import { $removePillsByPath } from "./pills/NotePillNode";
 import { $removeActiveNotePills } from "./pills/ActiveNotePillNode";
@@ -94,12 +95,8 @@ export interface ChatInputProps {
     };
     effortOptionsByModelKey?: Record<string, { label: string; value: string | null }[]>;
     commitSelection?: (modelKey: string, effort: string | null) => void;
-    /**
-     * Agent Mode only: the Agent section the merged popover opens with, so who
-     * answers is chosen right above what they answer on.
-     */
-    agents?: AgentPickerSection;
   };
+  agentPicker?: AgentPickerSection;
   modePickerOverride?: {
     options: { label: string; value: CopilotMode }[];
     value: CopilotMode | null;
@@ -172,6 +169,7 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
     setSelectedImages,
     disableModelSwitch,
     modelPickerOverride,
+    agentPicker,
     modePickerOverride,
     selectedTextContexts,
     onRemoveSelectedText,
@@ -740,6 +738,7 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
               lexicalEditorRef={lexicalEditorRef}
             />
           )}
+          {agentPicker && <AgentPicker section={agentPicker} />}
           {modelPickerOverride?.effortOptionsByModelKey && modelPickerOverride.commitSelection ? (
             <ModelEffortPicker
               override={{
@@ -749,7 +748,6 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
                 effort: modelPickerOverride.effort,
                 effortOptionsByModelKey: modelPickerOverride.effortOptionsByModelKey,
                 commitSelection: modelPickerOverride.commitSelection,
-                agents: modelPickerOverride.agents,
               }}
               className="tw-min-w-0 tw-max-w-full tw-truncate"
             />
