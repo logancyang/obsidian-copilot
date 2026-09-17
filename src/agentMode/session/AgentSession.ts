@@ -926,10 +926,20 @@ export class AgentSession {
    * because a conversation already in character cannot change who it is with
    * (`designdocs/CUSTOM_AGENTS.md` §3).
    *
+   * The persona blocks are part of the identity compared here, not just the
+   * name: an agent that has just rewritten its memory is the same agent with
+   * something new to bring, and a chat that has not spoken yet should carry it.
+   *
    * @param agent - Resolved agent, or {@link COPILOT_SESSION_AGENT} for the default.
    */
   setAgent(agent: SessionAgent): void {
-    if (agent.slug === this.sessionAgent.slug && agent.name === this.sessionAgent.name) return;
+    if (
+      agent.slug === this.sessionAgent.slug &&
+      agent.name === this.sessionAgent.name &&
+      agent.personaBlock === this.sessionAgent.personaBlock
+    ) {
+      return;
+    }
     this.sessionAgent = agent;
     // The tab renders the agent beside the title, so the label listeners are
     // the ones that need to repaint.

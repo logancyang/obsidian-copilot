@@ -2024,6 +2024,7 @@ export class AgentSessionManager {
           outcome.agentName,
           outcome.memoryPath
         );
+        void this.rebindUnstartedChats(agentSlug);
       })
       .finally(() => this.memoryPassesInFlight.delete(internalId));
     return pass;
@@ -2069,6 +2070,32 @@ export class AgentSessionManager {
     if (this.continuingSessionIds.has(activeId)) return;
     const leaving = this.sessions.get(activeId);
     if (leaving) void this.beginMemoryPass(leaving);
+  }
+
+  /**
+   * Re-read `slug`'s files into every open chat with it that has not sent a
+   * message yet, so a chat the user is about to type in carries the memory that
+   * was just written rather than the copy it opened with.
+   *
+   * Memory is read when a chat is BOUND to its agent, because the blocks ride
+   * that chat's first user message and there is nowhere later to put them. A
+   * write therefore re-binds exactly the chats that have not spoken; a chat
+   * already in conversation keeps what it opened with, since its blocks are in
+   * a message the backend has already read (`designdocs/CUSTOM_AGENTS.md` §5).
+   */
+  private async rebindUnstartedChats(slug: string): Promise<void> {
+    const unstarted = () =>
+      Array.from(this.sessions.values()).filter(
+        (session) =>
+          session.getStatus() !== "closed" &&
+          session.getAgent().slug === slug &&
+          !session.hasUserVisibleMessages()
+      );
+    if (unstarted().length === 0) return;
+    const agent = await this.resolveSessionAgent(slug);
+    // Re-filtered after the read: a chat can have spoken, or closed, while the
+    // agent folder was being read.
+    for (const session of unstarted()) session.setAgent(agent);
   }
 
   /**

@@ -4974,6 +4974,43 @@ describe("AgentSessionManager talking-to selection", () => {
       expect(chat.getMemorizedThroughTurn()).toBe(1);
     });
 
+    it("gives a chat that has not spoken yet the memory just written (CUSTOM_AGENTS.md §5)", async () => {
+      const files = buildAgentFiles([jennifer()]);
+      const manager = buildManager({}, undefined, files);
+      await manager.setSelectedAgent("jennifer");
+      const chat = await manager.createSession();
+      getSessionTestHandle(chat).setMessages([{ message: "hello" }]);
+      const landing = await manager.createSession();
+      // Creating the landing is itself a boundary; let its pass settle so the
+      // one-pass-per-chat guard is clear before the explicit update below.
+      await waitFor(() => expect(mockRunAgentMemoryPass).toHaveBeenCalledTimes(1));
+      expect(landing.getAgent().personaBlock).toContain("knows things");
+      // The pass rewrote the file on disk; the re-bind must pick that up.
+      (files as unknown as { readMemoryDocument: jest.Mock }).readMemoryDocument.mockResolvedValue({
+        text: "## About the user\n\n- cut the hydrogen section",
+        modifiedAtMs: 1_700_000_100_000,
+      });
+      mockRunAgentMemoryPass.mockResolvedValue(WROTE);
+
+      expect(manager.updateMemoryNow(chat.internalId)).toBe(true);
+
+      await waitFor(() =>
+        expect(landing.getAgent().personaBlock).toContain("cut the hydrogen section")
+      );
+    });
+
+    it("leaves a chat already in conversation on the memory it opened with", async () => {
+      const { manager, chat } = await buildAgentChat();
+      getSessionTestHandle(chat).setHasUserVisibleMessages(true);
+      const opened = chat.getAgent();
+      mockRunAgentMemoryPass.mockResolvedValue(WROTE);
+
+      manager.updateMemoryNow(chat.internalId);
+
+      await waitFor(() => expect(chat.getMemorizedThroughTurn()).toBe(1));
+      expect(chat.getAgent()).toBe(opened);
+    });
+
     it("leaves the marker alone when the pass wrote nothing, so the same turns are re-read", async () => {
       const { manager, chat } = await buildAgentChat();
       mockRunAgentMemoryPass.mockResolvedValue({ status: "rejected", reason: "shrank" });
