@@ -1,6 +1,7 @@
 import { AGENT_MEMORY_HEADINGS, buildAgentMemorySkeleton } from "@/agents/agentFile";
 import {
   AGENT_MEMORY_MAX_CHARS,
+  previousMemoryDay,
   boundConsolidationNotes,
   buildAgentMemoryConsolidationPrompt,
   buildAgentMemoryFlushPrompt,
@@ -22,6 +23,17 @@ describe("agentMemory", () => {
   describe("formatMemoryEntryDate()", () => {
     it("renders a local date as YYYY-MM-DD with zero padding", () => {
       expect(formatMemoryEntryDate(new Date(2026, 8, 3))).toBe("2026-09-03");
+    });
+  });
+
+  describe("previousMemoryDay()", () => {
+    it("steps back one calendar day", () => {
+      expect(previousMemoryDay("2026-09-17")).toBe("2026-09-16");
+    });
+
+    it("steps across a month and a year boundary rather than subtracting hours", () => {
+      expect(previousMemoryDay("2026-09-01")).toBe("2026-08-31");
+      expect(previousMemoryDay("2026-01-01")).toBe("2025-12-31");
     });
   });
 
