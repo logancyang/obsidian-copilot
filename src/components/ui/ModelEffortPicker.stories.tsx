@@ -210,6 +210,17 @@ export const AgentListSixAgents: StoryObj<Props> = {
   ),
 };
 
+export const AgentListHighlightOnSelected: StoryObj<Props> = {
+  render: () => (
+    <AgentPickerList
+      rows={[COPILOT_ROW, JENNIFER_ROW, VANCAT_ROW]}
+      selectedSlug="jennifer"
+      highlightSlug="jennifer"
+      onPick={() => undefined}
+    />
+  ),
+};
+
 export const AgentListSearchable: StoryObj<Props> = {
   render: () => (
     <AgentPickerList
