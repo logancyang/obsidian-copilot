@@ -1,7 +1,7 @@
-import { ModelEffortPicker } from "@/components/ui/ModelEffortPicker";
+import { AgentPickerList, ModelEffortPicker } from "@/components/ui/ModelEffortPicker";
 import type { Meta, StoryObj } from "@/lib/story";
 import type { AgentPickerRow } from "@/components/ui/ModelEffortPicker";
-import type { ComponentProps } from "react";
+import React, { type ComponentProps } from "react";
 
 type Props = ComponentProps<typeof ModelEffortPicker>;
 const meta = {
@@ -135,23 +135,16 @@ const agentOverride = (rows: AgentPickerRow[], selectedSlug: string): Props["ove
 });
 
 /** A vault with no agents yet: one quiet row the user can ignore until they make one. */
-export const AgentSectionCopilotOnly: StoryObj<Props> = {
+export const AgentSelectRow: StoryObj<Props> = {
   args: { defaultOpen: true, override: agentOverride([COPILOT_ROW], "copilot") },
-};
-
-/** Every agent on disk, with the description the user picks between them on. */
-export const AgentSectionWithAgents: StoryObj<Props> = {
-  args: {
-    defaultOpen: true,
-    override: agentOverride([COPILOT_ROW, JENNIFER_ROW, VANCAT_ROW], "copilot"),
-  },
 };
 
 /**
  * Jennifer pins Opus at high effort, so picking her moved the model and effort
- * sections below onto her pins (`designdocs/CUSTOM_AGENTS.md` §3).
+ * sections below onto her pins, and the select row now reads as her
+ * (`designdocs/CUSTOM_AGENTS.md` §3).
  */
-export const AgentSectionPinnedAgent: StoryObj<Props> = {
+export const AgentSelectRowPinnedAgent: StoryObj<Props> = {
   args: {
     defaultOpen: true,
     override: {
@@ -165,12 +158,82 @@ export const AgentSectionPinnedAgent: StoryObj<Props> = {
   },
 };
 
-/** A description longer than the popover is wide wraps to two lines, then clamps. */
-export const AgentSectionLongDescription: StoryObj<Props> = {
-  args: {
-    defaultOpen: true,
-    override: agentOverride(
-      [
+/** Filler agents, so the roster can be seen at the sizes real teams reach. */
+const teamOf = (count: number): AgentPickerRow[] =>
+  Array.from({ length: count }, (_, i) => ({
+    slug: `agent-${i + 1}`,
+    name: `Agent ${i + 1}`,
+    icon: "🟦",
+    description: `Stands in for the ${i + 1}th agent a real team would hold.`,
+    modelKey: null,
+    effort: null,
+  }));
+
+/** The roster the select row opens onto, as a vault with two agents holds it. */
+export const AgentListTwoAgents: StoryObj<Props> = {
+  render: () => (
+    <AgentPickerList
+      rows={[COPILOT_ROW, JENNIFER_ROW, VANCAT_ROW]}
+      selectedSlug="copilot"
+      highlightSlug="jennifer"
+      onPick={() => undefined}
+    />
+  ),
+};
+
+/** Six entries: the largest roster that still reads without a search field. */
+export const AgentListSixAgents: StoryObj<Props> = {
+  render: () => (
+    <AgentPickerList
+      rows={[COPILOT_ROW, JENNIFER_ROW, VANCAT_ROW, ...teamOf(3)]}
+      selectedSlug="vancat"
+      onPick={() => undefined}
+    />
+  ),
+};
+
+/** Twelve entries: past six the list scrolls, so a search field heads it. */
+export const AgentListSearchable: StoryObj<Props> = {
+  render: () => (
+    <AgentPickerList
+      rows={[COPILOT_ROW, JENNIFER_ROW, VANCAT_ROW, ...teamOf(9)]}
+      selectedSlug="copilot"
+      search={{ query: "", onChange: () => undefined }}
+      onPick={() => undefined}
+    />
+  ),
+};
+
+/** The same twelve, narrowed to the one agent the query names. */
+export const AgentListSearchFiltered: StoryObj<Props> = {
+  render: () => (
+    <AgentPickerList
+      rows={[JENNIFER_ROW]}
+      selectedSlug="copilot"
+      highlightSlug="jennifer"
+      search={{ query: "jen", onChange: () => undefined }}
+      onPick={() => undefined}
+    />
+  ),
+};
+
+/** A query nobody matches still says so, instead of showing an empty box. */
+export const AgentListNoMatch: StoryObj<Props> = {
+  render: () => (
+    <AgentPickerList
+      rows={[]}
+      selectedSlug="copilot"
+      search={{ query: "zzz", onChange: () => undefined }}
+      onPick={() => undefined}
+    />
+  ),
+};
+
+/** A description longer than the list is wide wraps to two lines, then clamps. */
+export const AgentListLongDescription: StoryObj<Props> = {
+  render: () => (
+    <AgentPickerList
+      rows={[
         COPILOT_ROW,
         {
           ...JENNIFER_ROW,
@@ -180,8 +243,9 @@ export const AgentSectionLongDescription: StoryObj<Props> = {
           description:
             "Reads every draft twice, argues for the reader over the author, and will not let a vague claim past without a citation, a cut, or a fight.",
         },
-      ],
-      "the-long-winded-developmental-editor"
-    ),
-  },
+      ]}
+      selectedSlug="the-long-winded-developmental-editor"
+      onPick={() => undefined}
+    />
+  ),
 };

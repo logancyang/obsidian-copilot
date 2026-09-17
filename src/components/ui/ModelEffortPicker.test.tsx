@@ -1,6 +1,6 @@
 import { act, createEvent, fireEvent, render, screen, within } from "@testing-library/react";
 import React from "react";
-import { ModelEffortPicker } from "./ModelEffortPicker";
+import { AgentPickerList, filterAgentRows, ModelEffortPicker } from "./ModelEffortPicker";
 
 const models = [{ name: "model", provider: "agent", enabled: true }];
 const options = ["high", "low"].map((value) => ({ value, label: value }));
@@ -188,7 +188,7 @@ describe("ModelEffortPicker", () => {
       const COPILOT = {
         slug: "copilot",
         name: "Copilot",
-        icon: "\u2726",
+        icon: "✦",
         description: "Your vault instructions, no persona, no memory.",
         modelKey: null,
         effort: null,
@@ -208,48 +208,97 @@ describe("ModelEffortPicker", () => {
           onEffortChange?: jest.Mock;
         } = {}
       ) {
-        render(
-          <ModelEffortPicker
-            override={{
-              models: agentModels,
-              value: "model|agent",
-              effort: {
-                options,
-                value: "high",
-                onChange: handlers.onEffortChange ?? jest.fn(),
-              },
-              effortOptionsByModelKey: effortByKey,
-              commitSelection: handlers.commitSelection ?? jest.fn(),
-              agents: {
-                rows: rows.map((row) => ({
-                  name: row.slug,
-                  icon: "\ud83e\udeb6",
-                  description: `${row.slug} description`,
-                  ...row,
-                })),
-                selectedSlug: "copilot",
-                onSelect: handlers.onSelect ?? jest.fn(),
-                onOpen: handlers.onOpen,
-              },
-            }}
-          />
-        );
-        fireEvent.click(screen.getByTitle("Model \u00b7 effort"));
+        // Selection is caller-owned state in production too: the session manager
+        // takes the pick and re-renders the picker with the new selectedSlug.
+        const Harness = () => {
+          const [selectedSlug, setSelectedSlug] = React.useState("copilot");
+          return (
+            <ModelEffortPicker
+              override={{
+                models: agentModels,
+                value: "model|agent",
+                effort: {
+                  options,
+                  value: "high",
+                  onChange: handlers.onEffortChange ?? jest.fn(),
+                },
+                effortOptionsByModelKey: effortByKey,
+                commitSelection: handlers.commitSelection ?? jest.fn(),
+                agents: {
+                  rows: rows.map((row) => ({
+                    name: row.slug,
+                    icon: "🪶",
+                    description: `${row.slug} description`,
+                    ...row,
+                  })),
+                  selectedSlug,
+                  onSelect: (slug: string) => {
+                    setSelectedSlug(slug);
+                    handlers.onSelect?.(slug);
+                  },
+                  onOpen: handlers.onOpen,
+                },
+              }}
+            />
+          );
+        };
+        render(<Harness />);
+        fireEvent.click(screen.getByTitle("Model · effort"));
       }
 
-      it("lists the roster above the model group, with the selected agent checked", async () => {
+      /** Open the nested roster from the Agent section's select row. */
+      async function openRoster() {
+        fireEvent.click(await screen.findByRole("combobox", { name: "Agent" }));
+        return within(await screen.findByRole("listbox", { name: "Agent" }));
+      }
+
+      /** A roster of `count` agents after Copilot, all unpinned. */
+      function roster(count: number) {
+        return [
+          COPILOT,
+          ...Array.from({ length: count }, (_, i) => ({
+            slug: `agent-${i + 1}`,
+            modelKey: null,
+            effort: null,
+          })),
+        ];
+      }
+
+      it("shows the current agent as one row above the model group, with no roster inline (designdocs/CUSTOM_AGENTS.md §3)", async () => {
         renderWithAgents([COPILOT, { slug: "jennifer", modelKey: null, effort: null }]);
 
-        const agentBox = await screen.findByRole("listbox", { name: "Agent" });
+        const row = await screen.findByRole("combobox", { name: "Agent" });
+        expect(row.textContent).toBe("✦Copilot");
+        expect(screen.queryByRole("listbox", { name: "Agent" })).toBeNull();
         const modelBox = screen.getByRole("listbox", { name: "Model" });
         expect(
-          agentBox.compareDocumentPosition(modelBox) & Node.DOCUMENT_POSITION_FOLLOWING
+          row.compareDocumentPosition(modelBox) & Node.DOCUMENT_POSITION_FOLLOWING
         ).toBeTruthy();
-        const section = within(agentBox);
-        expect(section.getAllByRole("option").map((row) => row.textContent)).toEqual([
-          "\u2713\u2726CopilotYour vault instructions, no persona, no memory.",
-          "\ud83e\udeb6jenniferjennifer description",
+      });
+
+      it("opens the whole roster on the row, with the current agent checked", async () => {
+        renderWithAgents([COPILOT, { slug: "jennifer", modelKey: null, effort: null }]);
+
+        const list = await openRoster();
+        expect(list.getAllByRole("option").map((row) => row.textContent)).toEqual([
+          "✓✦CopilotYour vault instructions, no persona, no memory.",
+          "🪶jenniferjennifer description",
         ]);
+        expect(screen.getByRole("combobox", { name: "Agent" }).getAttribute("aria-expanded")).toBe(
+          "true"
+        );
+      });
+
+      it("leaves the model and effort sections where they are when the roster opens (designdocs/CUSTOM_AGENTS.md §3)", async () => {
+        renderWithAgents(roster(11));
+
+        const body = screen.getByRole("listbox", { name: "Model" }).parentElement!;
+        const childrenBefore = body.childElementCount;
+        const list = await openRoster();
+
+        expect(body.childElementCount).toBe(childrenBefore);
+        expect(body.contains(list.getAllByRole("option")[0])).toBe(false);
+        expect(screen.getByRole("listbox", { name: "Model" }).parentElement).toBe(body);
       });
 
       it("re-reads the roster as the popover opens, so an agent just created is offered", () => {
@@ -259,7 +308,31 @@ describe("ModelEffortPicker", () => {
         expect(onOpen).toHaveBeenCalledTimes(1);
       });
 
-      it("drafts the pinned model and effort of the agent picked, and commits both on dismiss (designdocs/CUSTOM_AGENTS.md \u00a73)", async () => {
+      it("closes the roster and updates the row when an agent is chosen", async () => {
+        renderWithAgents([COPILOT, { slug: "jennifer", modelKey: null, effort: null }]);
+
+        const list = await openRoster();
+        fireEvent.click(list.getByRole("option", { name: /jennifer/ }));
+
+        expect(screen.queryByRole("listbox", { name: "Agent" })).toBeNull();
+        expect(screen.getByRole("combobox", { name: "Agent" }).textContent).toBe("🪶jennifer");
+      });
+
+      it("closes only the roster on Escape, leaving the popover and its model group open (designdocs/CUSTOM_AGENTS.md §3)", async () => {
+        const commitSelection = jest.fn();
+        renderWithAgents([COPILOT, { slug: "jennifer", modelKey: null, effort: null }], {
+          commitSelection,
+        });
+
+        const list = await openRoster();
+        fireEvent.keyDown(list.getAllByRole("option")[0], { key: "Escape" });
+
+        expect(screen.queryByRole("listbox", { name: "Agent" })).toBeNull();
+        expect(screen.getByRole("listbox", { name: "Model" })).toBeTruthy();
+        expect(commitSelection).not.toHaveBeenCalled();
+      });
+
+      it("drafts the pinned model and effort of the agent picked, and commits both on dismiss (designdocs/CUSTOM_AGENTS.md §3)", async () => {
         const onSelect = jest.fn();
         const commitSelection = jest.fn();
         renderWithAgents([COPILOT, { slug: "jennifer", modelKey: "other|agent", effort: "low" }], {
@@ -267,7 +340,8 @@ describe("ModelEffortPicker", () => {
           commitSelection,
         });
 
-        fireEvent.click(await screen.findByRole("option", { name: /jennifer/ }));
+        const list = await openRoster();
+        fireEvent.click(list.getByRole("option", { name: /jennifer/ }));
 
         expect(onSelect).toHaveBeenCalledWith("jennifer");
         // The effort section follows the pick at once, before any dismissal.
@@ -284,7 +358,8 @@ describe("ModelEffortPicker", () => {
           onEffortChange,
         });
 
-        fireEvent.click(await screen.findByRole("option", { name: /vancat/ }));
+        const list = await openRoster();
+        fireEvent.click(list.getByRole("option", { name: /vancat/ }));
         fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
 
         expect(commitSelection).not.toHaveBeenCalled();
@@ -297,10 +372,77 @@ describe("ModelEffortPicker", () => {
           onEffortChange,
         });
 
-        fireEvent.click(await screen.findByRole("option", { name: /vancat/ }));
+        const list = await openRoster();
+        fireEvent.click(list.getByRole("option", { name: /vancat/ }));
         fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
 
         expect(onEffortChange).toHaveBeenCalledWith("low");
+      });
+
+      it.each([
+        [6, false],
+        [7, true],
+      ])(
+        "offers a search field for a roster of %i entries: %p (designdocs/CUSTOM_AGENTS.md §3)",
+        async (count, expected) => {
+          renderWithAgents(roster(count - 1));
+
+          await openRoster();
+
+          expect(Boolean(screen.queryByPlaceholderText("Search agents..."))).toBe(expected);
+        }
+      );
+
+      it("narrows the roster to the agents whose name or description matches the search", async () => {
+        renderWithAgents([...roster(6), { slug: "jennifer", modelKey: null, effort: null }]);
+
+        const list = await openRoster();
+        fireEvent.change(screen.getByPlaceholderText("Search agents..."), {
+          target: { value: "JENNIFER desc" },
+        });
+
+        expect(list.getAllByRole("option").map((row) => row.textContent)).toEqual([
+          "🪶jenniferjennifer description",
+        ]);
+      });
+
+      it("says so when the search matches nobody", async () => {
+        renderWithAgents(roster(7));
+
+        await openRoster();
+        fireEvent.change(screen.getByPlaceholderText("Search agents..."), {
+          target: { value: "nobody" },
+        });
+
+        expect(screen.getByText("No matching agents")).toBeTruthy();
+      });
+
+      it("moves through the roster with the arrow keys and picks with Enter, leaving the model draft alone", async () => {
+        const onSelect = jest.fn();
+        const commitSelection = jest.fn();
+        renderWithAgents([COPILOT, { slug: "jennifer", modelKey: null, effort: null }], {
+          onSelect,
+          commitSelection,
+        });
+
+        const list = await openRoster();
+        const roster0 = list.getAllByRole("option")[0];
+        fireEvent.keyDown(roster0, { key: "ArrowDown" });
+        fireEvent.keyDown(roster0, { key: "Enter" });
+
+        expect(onSelect).toHaveBeenCalledWith("jennifer");
+        expect(screen.queryByRole("listbox", { name: "Agent" })).toBeNull();
+        fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+        // Enter reached the roster only: the model group never re-drafted.
+        expect(commitSelection).not.toHaveBeenCalled();
+      });
+
+      it("opens the roster from the keyboard when the select row is activated", async () => {
+        renderWithAgents([COPILOT, { slug: "jennifer", modelKey: null, effort: null }]);
+
+        fireEvent.keyDown(await screen.findByRole("combobox", { name: "Agent" }), { key: "Enter" });
+
+        expect(await screen.findByRole("listbox", { name: "Agent" })).toBeTruthy();
       });
 
       it("offers no Agent section at all when the caller supplies none, as Quick Chat does", async () => {
@@ -314,11 +456,94 @@ describe("ModelEffortPicker", () => {
             }}
           />
         );
-        fireEvent.click(screen.getByTitle("Model \u00b7 effort"));
+        fireEvent.click(screen.getByTitle("Model · effort"));
 
         await screen.findByRole("listbox", { name: "Model" });
-        expect(screen.queryByRole("listbox", { name: "Agent" })).toBeNull();
+        expect(screen.queryByRole("combobox", { name: "Agent" })).toBeNull();
       });
+    });
+  });
+
+  describe("filterAgentRows()", () => {
+    const rows = [
+      {
+        slug: "copilot",
+        name: "Copilot",
+        icon: "✦",
+        description: "No persona, no memory.",
+        modelKey: null,
+        effort: null,
+      },
+      {
+        slug: "jennifer",
+        name: "Jennifer",
+        icon: "🪶",
+        description: "Skeptical editor.",
+        modelKey: null,
+        effort: null,
+      },
+    ];
+
+    it("returns the roster untouched, and by the same reference, for a blank query", () => {
+      expect(filterAgentRows(rows, "   ")).toBe(rows);
+    });
+
+    it.each([
+      ["name", "jenn"],
+      ["name in another case", "JENNIFER"],
+      ["description", "skeptical"],
+    ])("matches on %s", (_label, query) => {
+      expect(filterAgentRows(rows, query).map((row) => row.slug)).toEqual(["jennifer"]);
+    });
+
+    it("returns nothing when neither name nor description matches", () => {
+      expect(filterAgentRows(rows, "vancat")).toEqual([]);
+    });
+  });
+
+  describe("AgentPickerList()", () => {
+    const row = {
+      slug: "jennifer",
+      name: "Jennifer",
+      icon: "🪶",
+      description: "Skeptical editor.",
+      modelKey: null,
+      effort: null,
+    };
+
+    it("checks the selected agent and hovers the highlighted one", () => {
+      render(
+        <AgentPickerList
+          rows={[row, { ...row, slug: "vancat", name: "Vancat" }]}
+          selectedSlug="jennifer"
+          highlightSlug="vancat"
+          onPick={jest.fn()}
+        />
+      );
+
+      const [jennifer, vancat] = screen.getAllByRole("option");
+      expect(jennifer.getAttribute("aria-selected")).toBe("true");
+      expect(vancat.getAttribute("data-highlighted")).toBe("true");
+    });
+
+    it("omits the search field when the caller supplies none", () => {
+      render(<AgentPickerList rows={[row]} selectedSlug="jennifer" onPick={jest.fn()} />);
+
+      expect(screen.queryByPlaceholderText("Search agents...")).toBeNull();
+    });
+
+    it("reports an empty roster rather than an empty box", () => {
+      render(
+        <AgentPickerList
+          rows={[]}
+          selectedSlug="jennifer"
+          search={{ query: "zz", onChange: jest.fn() }}
+          onPick={jest.fn()}
+        />
+      );
+
+      expect(screen.getByText("No matching agents")).toBeTruthy();
+      expect(screen.queryAllByRole("option")).toEqual([]);
     });
   });
 });
