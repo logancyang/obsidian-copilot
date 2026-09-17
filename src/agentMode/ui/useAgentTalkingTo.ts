@@ -7,7 +7,7 @@ import { useCallback, useEffect, useSyncExternalStore } from "react";
 export interface AgentTalkingTo {
   /** The built-in Copilot first, then every agent on disk. */
   entries: readonly AgentEntry[];
-  /** Slug of the entry the picker shows. */
+  /** Slug of the entry the picker shows: the chat in front of the user's agent. */
   selectedSlug: string;
   /** Talk to another agent from now on. */
   select: (slug: string) => void;
@@ -16,8 +16,8 @@ export interface AgentTalkingTo {
 }
 
 /**
- * Live view of who the chat is talking to, for the Agent section at the top of
- * the composer's model picker (`designdocs/CUSTOM_AGENTS.md` §3).
+ * Live view of who the chat is talking to, for the composer's agent picker
+ * (`designdocs/CUSTOM_AGENTS.md` §3).
  *
  * The manager owns the selection because it is the thing that binds a chat to
  * an agent when one is created; this hook only renders it and refreshes the
@@ -29,7 +29,7 @@ export interface AgentTalkingTo {
 export function useAgentTalkingTo(manager: AgentSessionManager): AgentTalkingTo {
   const subscribe = useManagerSubscribe(manager);
   const entries = useSyncExternalStore(subscribe, () => manager.getAgentEntries());
-  const selectedSlug = useSyncExternalStore(subscribe, () => manager.getSelectedAgentSlug());
+  const selectedSlug = useSyncExternalStore(subscribe, () => manager.getTalkingToSlug());
 
   const refresh = useCallback(() => {
     manager.refreshAgents().catch((error) => logError("[Agents] refresh failed", error));

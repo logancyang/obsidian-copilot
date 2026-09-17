@@ -376,8 +376,8 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
 
   // Who the next new chat will be held with. Orthogonal to the scope above: the
   // choice changes the answerer, never the working directory or the chat list.
-  // It is made in the composer's model picker, which is where the pins it
-  // carries land. See `designdocs/CUSTOM_AGENTS.md` §3.
+  // It is made in the composer's own agent picker, beside the model picker the
+  // pins it carries land in. See `designdocs/CUSTOM_AGENTS.md` §3.
   const talkingTo = useAgentTalkingTo(manager);
 
   const modelPickerOverride = useAgentModelPicker(manager, plugin, talkingTo);
@@ -787,6 +787,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       isStarting={isStarting}
       hasPendingPlanPermission={hasPendingPlanPermission}
       modelPickerOverride={modelPickerOverride ?? undefined}
+      agentPicker={modelPickerOverride?.agentPicker}
       modePickerOverride={modePickerOverride ?? undefined}
       onCycleMode={handleCycleMode}
       activeProjectId={activeProjectId}

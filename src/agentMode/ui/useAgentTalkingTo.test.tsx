@@ -14,7 +14,7 @@ function buildManager(overrides: Partial<Record<string, unknown>> = {}) {
   const listeners = new Set<() => void>();
   const manager = {
     getAgentEntries: () => ENTRIES,
-    getSelectedAgentSlug: () => selectedSlug,
+    getTalkingToSlug: () => selectedSlug,
     setSelectedAgent: jest.fn(async (slug: string) => {
       selectedSlug = slug;
       for (const listener of listeners) listener();
@@ -43,7 +43,7 @@ describe("useAgentTalkingTo", () => {
       expect(manager.refreshAgents).toHaveBeenCalledTimes(1);
     });
 
-    it("reports the manager's selection and publishes a new one", async () => {
+    it("names whoever the manager says the chat in front of the user is held with, and publishes a new pick", async () => {
       const manager = buildManager();
       const { result } = renderHook(() => useAgentTalkingTo(manager));
       expect(result.current.selectedSlug).toBe(BUILTIN_AGENT.slug);
@@ -55,7 +55,7 @@ describe("useAgentTalkingTo", () => {
     });
 
     it("survives a failed folder read instead of tearing down the composer", async () => {
-      // The roster feeds the composer's model picker, so a vault read that
+      // The roster feeds the composer's agent picker, so a vault read that
       // throws must leave it rendered on the last roster it had.
       const manager = buildManager({
         refreshAgents: jest.fn(async () => {

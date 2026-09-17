@@ -2,7 +2,7 @@ import { Notice } from "obsidian";
 import { logError } from "@/logger";
 import type { ModelCapability } from "@/constants";
 import type { AgentEntry } from "@/agents/types";
-import type { AgentPickerRow } from "@/components/ui/ModelEffortPicker";
+import type { AgentPickerRow } from "@/components/ui/AgentPicker";
 import type { ModelSelectorEntry } from "@/components/ui/ModelSelector";
 import { lockedCopilotEntries, shouldPreviewCopilotModels } from "@/lib/lockedCopilotEntries";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
@@ -10,6 +10,7 @@ import type { AgentChatUIState } from "@/agentMode/session/AgentChatUIState";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import { MethodUnsupportedError } from "@/agentMode/session/errors";
 import { resolveEffortOptions } from "@/agentMode/session/effortOptions";
+import { resolveEffort } from "@/lib/model-effort";
 import { backendNeedsSelfHostWarning, backendRegistry } from "@/agentMode/backends/registry";
 import { getModelKeyFromModel } from "@/settings/model";
 import type { CopilotSettings } from "@/settings/model";
@@ -614,17 +615,17 @@ export function buildCommitSelection(
 }
 
 /**
- * Project the talking-to roster onto the popover's Agent section, resolving each
- * agent's pins to the very rows this picker is offering: the pick then lands as
- * an ordinary model + effort draft and commits through the same path a manual
- * pick does (`designdocs/CUSTOM_AGENTS.md` §3).
+ * Project the talking-to roster onto the composer's agent picker, resolving each
+ * agent's pins to the very rows the model picker is offering: the pick then
+ * commits through the same path a manual model pick does
+ * (`designdocs/CUSTOM_AGENTS.md` §3).
  *
  * An agent whose pinned model this picker is not offering — a backend hidden
  * because the chat already has history, or a model since disabled — carries no
  * model key, so picking it leaves the selection where the user put it rather
  * than drafting a row that is not there.
  *
- * @param entries - Picker rows already built for every visible backend.
+ * @param entries - Model picker rows already built for every visible backend.
  * @param agentEntries - Copilot plus every agent on disk, in roster order.
  * @param activeBackendId - Backend the chat runs on, which an agent that pinned
  *   no backend of its own has its model pin resolved against.
@@ -657,6 +658,41 @@ export function buildAgentPickerRows(
   });
 }
 
+/** What the model picker must be changed to because of the agent just picked. */
+export interface AgentPinCommit {
+  /** Model row to switch to, or null when only the effort moves. */
+  modelKey: string | null;
+  effort: string | null;
+}
+
+/**
+ * The model-picker change an agent's pins ask for, or null when they ask for
+ * nothing (`designdocs/CUSTOM_AGENTS.md` §3). Resolving this before touching the
+ * session is what keeps an unpinned agent from disturbing a model the user chose
+ * by hand, and keeps a pin that names the model already showing from committing
+ * a selection that is already in force.
+ *
+ * @param row - The agent picked, carrying the model key and effort it pins.
+ * @param current - What the model picker shows now, plus the effort catalog an
+ *   effort pin has to be legal in for the model it lands on.
+ */
+export function resolveAgentPinCommit(
+  row: AgentPickerRow,
+  current: {
+    modelKey: string;
+    effort: string | null;
+    effortOptionsByModelKey: Record<string, EffortOption[]>;
+  }
+): AgentPinCommit | null {
+  const targetKey = row.modelKey ?? current.modelKey;
+  const options = current.effortOptionsByModelKey[targetKey] ?? [];
+  // An agent that pins no effort keeps the one on screen, as far as the model it
+  // lands on advertises it; a model with no matching level falls to its lowest.
+  const effort = resolveEffort(row.effort ?? current.effort, options);
+  if (targetKey === current.modelKey && effort === current.effort) return null;
+  return { modelKey: row.modelKey, effort };
+}
+
 /**
  * Outer orchestrator — builds the full model+effort `AgentModelPickerOverride`.
  */
@@ -671,19 +707,34 @@ export function buildAgentModelPicker(args: {
   const ctx = collectModelActiveContext(manager);
   const { entries, valueKey } = buildPickerEntries(manager, descriptors, ctx, settings);
   const onChange = buildModelOnChange(manager, ctx, entries);
+  const effort = buildEffortSibling(manager, ctx);
+  const effortOptionsByModelKey = buildEffortOptionsByModelKey(manager, entries);
+  const commitSelection = buildCommitSelection(manager, ctx, entries, onChange);
   return {
     models: entries,
     value: valueKey,
     disabled: false,
-    effort: buildEffortSibling(manager, ctx),
-    effortOptionsByModelKey: buildEffortOptionsByModelKey(manager, entries),
+    effort,
+    effortOptionsByModelKey,
     onChange,
-    commitSelection: buildCommitSelection(manager, ctx, entries, onChange),
-    agents: {
+    commitSelection,
+    agentPicker: {
       rows: buildAgentPickerRows(entries, talkingTo.entries, ctx.activeBackendId),
       selectedSlug: talkingTo.selectedSlug,
-      onSelect: talkingTo.select,
       onOpen: talkingTo.refresh,
+      onSelect: (row) => {
+        talkingTo.select(row.slug);
+        const commit = resolveAgentPinCommit(row, {
+          modelKey: valueKey,
+          effort: effort?.value ?? null,
+          effortOptionsByModelKey,
+        });
+        if (!commit) return;
+        // A pinned model goes through the same atomic commit a hand pick uses;
+        // an effort-only pin rides the model already selected.
+        if (commit.modelKey) commitSelection(commit.modelKey, commit.effort);
+        else effort?.onChange(commit.effort);
+      },
     },
   };
 }

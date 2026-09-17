@@ -72,6 +72,8 @@ interface AgentChatInputProps {
   isStarting: boolean;
   hasPendingPlanPermission: boolean;
   modelPickerOverride: ChatInputProps["modelPickerOverride"];
+  /** Roster for the composer's agent picker (`designdocs/CUSTOM_AGENTS.md` §3). */
+  agentPicker: ChatInputProps["agentPicker"];
   modePickerOverride: ChatInputProps["modePickerOverride"];
   onCycleMode: () => void;
   /**
@@ -188,6 +190,7 @@ export const AgentChatInput = memo(function AgentChatInput({
   isStarting,
   hasPendingPlanPermission,
   modelPickerOverride,
+  agentPicker,
   modePickerOverride,
   onCycleMode,
   activeProjectId,
@@ -591,6 +594,7 @@ export const AgentChatInput = memo(function AgentChatInput({
           setSelectedImages={setSelectedImages}
           disableModelSwitch={!modelPickerOverride}
           modelPickerOverride={modelPickerOverride ?? undefined}
+          agentPicker={agentPicker}
           modePickerOverride={modePickerOverride ?? undefined}
           selectedTextContexts={selectedTextContexts}
           onRemoveSelectedText={removeSelectedTextContext}

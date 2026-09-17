@@ -1,6 +1,6 @@
 import { resolveEffort } from "@/lib/model-effort";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import * as SliderPrimitive from "@radix-ui/react-slider";
 import { Button } from "@/components/ui/button";
 import { FreeModelWarningIcon } from "@/components/ui/FreeModelWarningIcon";
@@ -9,67 +9,15 @@ import { MODEL_PICKER_PRICING_URL } from "@/components/ui/model-pricing-links";
 import { SelfHostCloudWarningIcon } from "@/components/ui/SelfHostCloudWarningIcon";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ModelDisplay } from "@/components/ui/model-display";
+import {
+  HIGHLIGHT_ROW_BG,
+  ROW_CLASS,
+  SELECTED_ROW_BG,
+  SELECTED_ROW_NAME,
+} from "@/components/ui/picker-rows";
 import type { ModelSelectorEntry } from "@/components/ui/ModelSelector";
-import { AgentGlyph } from "@/components/ui/AgentGlyph";
-import { SearchBar } from "@/components/ui/SearchBar";
 import { getModelKeyFromModel } from "@/lib/model-key";
 import { cn } from "@/lib/utils";
-
-/** One agent the chat can be held with, and what picking it selects. */
-export interface AgentPickerRow {
-  slug: string;
-  name: string;
-  /** Emoji or letter; empty for an agent that set none. */
-  icon: string;
-  description: string;
-  /**
-   * Model row this agent pins, as a `getModelKeyFromModel` key, or null when it
-   * pins none (or pins one this picker is not offering) and the drafted model
-   * should be left where the user put it.
-   */
-  modelKey: string | null;
-  /** Effort this agent pins, or null to leave the drafted effort alone. */
-  effort: string | null;
-}
-
-/**
- * The Agent section at the top of the popover: who answers, chosen right above
- * what they answer on (`designdocs/CUSTOM_AGENTS.md` §3).
- */
-export interface AgentPickerSection {
-  /** The built-in Copilot first, then every agent on disk. */
-  rows: readonly AgentPickerRow[];
-  selectedSlug: string;
-  /** Talk to this agent from the next chat on. */
-  onSelect: (slug: string) => void;
-  /** Called as the popover opens, so an agent created a moment ago is listed. */
-  onOpen?: () => void;
-}
-
-/**
- * Roster size past which the nested list grows a search field. A team of this
- * many still reads at a glance; beyond it, scanning costs more than typing
- * (`designdocs/CUSTOM_AGENTS.md` §3).
- */
-const AGENT_SEARCH_THRESHOLD = 6;
-
-/**
- * The agents whose name or description matches `query`, case-insensitively.
- * Description is searched alongside name because it is what one agent in a team
- * is told apart from another by, and it is what the user was reading when they
- * decided to search.
- */
-export function filterAgentRows(
-  rows: readonly AgentPickerRow[],
-  query: string
-): readonly AgentPickerRow[] {
-  const needle = query.trim().toLowerCase();
-  if (!needle) return rows;
-  return rows.filter(
-    (row) =>
-      row.name.toLowerCase().includes(needle) || row.description.toLowerCase().includes(needle)
-  );
-}
 
 export interface ModelEffortPickerOverride {
   models: ModelSelectorEntry[];
@@ -90,8 +38,6 @@ export interface ModelEffortPickerOverride {
   };
   effortOptionsByModelKey: Record<string, { label: string; value: string | null }[]>;
   commitSelection: (modelKey: string, effort: string | null) => void;
-  /** Agent Mode only: the Agent section above the model and effort sections. */
-  agents?: AgentPickerSection;
 }
 
 interface ModelEffortPickerProps {
@@ -101,253 +47,8 @@ interface ModelEffortPickerProps {
   defaultOpen?: boolean;
 }
 
-/** Section heading above a group of rows, shared by the Agent and model groups. */
+/** Section heading above a group of model rows. */
 const GROUP_HEADING_CLASS = "tw-px-3 tw-pb-1 tw-pt-2 tw-text-xs tw-uppercase tw-tracking-wide";
-
-/** One selectable row, shared by the Agent and model groups so both align. */
-const ROW_CLASS =
-  "tw-flex tw-cursor-pointer tw-items-center tw-justify-between tw-gap-3 tw-px-3 tw-py-1.5 tw-text-sm";
-
-/*
- * Selection is color, not a marker column (`designdocs/CUSTOM_AGENTS.md` §3).
- * The row holding the current choice takes the accent tint an active fan-out
- * tab and the effort footer's active step already wear, and weights its name.
- * The name keeps the normal text color: a theme is free to pick an accent
- * bright enough that accent-on-tint falls under 4.5:1, and Atom's light theme
- * does, at 2.7:1.
- *
- * A row gets exactly one background — two background utilities would leave the
- * winner to stylesheet order — and the tint wins over the keyboard highlight,
- * because both lists open with the keyboard already on the current row and
- * that row has to read as the current one.
- */
-const SELECTED_ROW_BG = "tw-bg-interactive-accent-hsl/10";
-const SELECTED_ROW_NAME = "tw-font-medium";
-const HIGHLIGHT_ROW_BG = "tw-bg-interactive-hover";
-
-interface AgentPickerListProps {
-  /** Rows to draw, already narrowed by {@link filterAgentRows}. */
-  rows: readonly AgentPickerRow[];
-  selectedSlug: string;
-  /** Row the keyboard is on, drawn as hovered so Enter's target is visible. */
-  highlightSlug?: string | null;
-  /** Search field above the rows; present only past {@link AGENT_SEARCH_THRESHOLD}. */
-  search?: { query: string; onChange: (query: string) => void };
-  onPick: (row: AgentPickerRow) => void;
-  /**
-   * The pointer moved onto a row. The keyboard highlight follows it, the way a
-   * menu's does, so hovering and arrowing never paint two rows at once.
-   */
-  onHighlight?: (row: AgentPickerRow) => void;
-}
-
-/**
- * The roster itself: everyone the chat could be held with, each with the glyph,
- * name, and description the choice is made on, the current one tinted. Pure
- * presentation — the caller owns the query, the highlight, and what picking a
- * row does.
- */
-export const AgentPickerList: React.FC<AgentPickerListProps> = ({
-  rows,
-  onHighlight,
-  selectedSlug,
-  highlightSlug,
-  search,
-  onPick,
-}) => {
-  const listRef = useRef<HTMLDivElement>(null);
-  // Keep the highlighted row in view: past six agents the list scrolls, so an
-  // arrow press that moved the highlight below the fold would read as dead, and
-  // a list opened on an agent far down it would open on strangers.
-  useEffect(() => {
-    listRef.current
-      ?.querySelector<HTMLElement>('[data-highlighted="true"]')
-      ?.scrollIntoView?.({ block: "nearest" });
-  }, [highlightSlug]);
-  return (
-    <>
-      {search && (
-        <div className="tw-border-0 tw-border-b tw-border-solid tw-border-border tw-p-1">
-          <SearchBar
-            value={search.query}
-            onChange={search.onChange}
-            placeholder="Search agents..."
-            inputClassName="!tw-h-7"
-          />
-        </div>
-      )}
-      <div
-        ref={listRef}
-        role="listbox"
-        aria-label="Agent"
-        className="tw-max-h-64 tw-overflow-y-auto tw-py-1"
-      >
-        {rows.length === 0 ? (
-          <div className="tw-px-3 tw-py-1.5 tw-text-xs tw-text-muted">No matching agents</div>
-        ) : (
-          rows.map((row) => {
-            const isSelected = row.slug === selectedSlug;
-            const isHighlight = row.slug === highlightSlug;
-            return (
-              <div
-                key={row.slug}
-                role="option"
-                aria-selected={isSelected}
-                data-highlighted={isHighlight || undefined}
-                // Top-aligned: a description that wraps must not drag the agent's
-                // face down to the middle of the block its name heads.
-                className={cn(
-                  ROW_CLASS,
-                  "tw-items-start",
-                  isSelected ? SELECTED_ROW_BG : isHighlight && HIGHLIGHT_ROW_BG
-                )}
-                onPointerMove={() => {
-                  if (!isHighlight) onHighlight?.(row);
-                }}
-                onClick={() => onPick(row)}
-              >
-                <div className="tw-flex tw-min-w-0 tw-items-start tw-gap-2">
-                  <AgentGlyph icon={row.icon} className="tw-h-5" />
-                  <div className="tw-min-w-0">
-                    <div
-                      className={cn("tw-truncate tw-text-normal", isSelected && SELECTED_ROW_NAME)}
-                    >
-                      {row.name}
-                    </div>
-                    {row.description && (
-                      // Wrapped, not truncated: the description is the whole basis
-                      // on which the user picks one agent over another, and at this
-                      // width a one-line clamp cut every real description mid-word.
-                      <div
-                        className="tw-line-clamp-2 tw-text-xs tw-text-muted"
-                        title={row.description}
-                      >
-                        {row.description}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            );
-          })
-        )}
-      </div>
-    </>
-  );
-};
-
-AgentPickerList.displayName = "AgentPickerList";
-
-interface AgentPickerSelectProps {
-  section: AgentPickerSection;
-  /** Apply this agent's pins to the drafted model and effort. */
-  onPick: (row: AgentPickerRow) => void;
-}
-
-/**
- * The Agent section's single row — the current agent's glyph and name, with a
- * chevron — opening the roster as a second popover anchored to it
- * (`designdocs/CUSTOM_AGENTS.md` §3). A nested popover rather than an inline
- * expansion because a team of five to ten rendered in place would bury the
- * model and effort sections and move them under the user every time the list
- * opened.
- */
-function AgentPickerSelect({ section, onPick }: AgentPickerSelectProps) {
-  const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState("");
-  const [highlightSlug, setHighlightSlug] = useState<string | null>(null);
-
-  const current = section.rows.find((row) => row.slug === section.selectedSlug) ?? section.rows[0];
-  const visible = useMemo(() => filterAgentRows(section.rows, query), [section.rows, query]);
-  const highlightIndex = Math.max(
-    0,
-    visible.findIndex((row) => row.slug === highlightSlug)
-  );
-
-  const choose = useCallback(
-    (row: AgentPickerRow) => {
-      onPick(row);
-      setOpen(false);
-    },
-    [onPick]
-  );
-
-  const handleOpenChange = (next: boolean) => {
-    if (next) {
-      setQuery("");
-      setHighlightSlug(section.selectedSlug);
-    }
-    setOpen(next);
-  };
-
-  // Arrows and Enter are the model list's keys too, and this popover renders
-  // inside it, so every key this list consumes must stop there. Escape is left
-  // alone: Radix dismisses only the topmost layer, which is this list.
-  const handleListKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    if (visible.length === 0) return;
-    switch (event.key) {
-      case "ArrowDown":
-        setHighlightSlug(visible[(highlightIndex + 1) % visible.length].slug);
-        break;
-      case "ArrowUp":
-        setHighlightSlug(visible[(highlightIndex - 1 + visible.length) % visible.length].slug);
-        break;
-      case "Enter":
-        choose(visible[highlightIndex]);
-        break;
-      default:
-        return;
-    }
-    event.preventDefault();
-    event.stopPropagation();
-  };
-
-  return (
-    <Popover open={open} onOpenChange={handleOpenChange}>
-      <PopoverTrigger asChild>
-        <div
-          role="combobox"
-          aria-label="Agent"
-          aria-expanded={open}
-          aria-haspopup="listbox"
-          tabIndex={0}
-          className={cn(ROW_CLASS, "hover:tw-bg-interactive-hover")}
-          onKeyDown={(event) => {
-            if (event.key !== "Enter" && event.key !== " ") return;
-            event.preventDefault();
-            event.stopPropagation();
-            handleOpenChange(true);
-          }}
-        >
-          <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-2">
-            <AgentGlyph icon={current.icon} />
-            <span className="tw-truncate tw-text-normal">{current.name}</span>
-          </div>
-          <ChevronRight className="tw-size-4 tw-shrink-0 tw-text-muted" />
-        </div>
-      </PopoverTrigger>
-      <PopoverContent
-        className="tw-w-[300px] tw-overflow-hidden tw-p-0"
-        side="right"
-        align="start"
-        sideOffset={8}
-        collisionPadding={8}
-        onKeyDown={handleListKeyDown}
-      >
-        <AgentPickerList
-          rows={visible}
-          selectedSlug={section.selectedSlug}
-          highlightSlug={highlightSlug}
-          search={
-            section.rows.length > AGENT_SEARCH_THRESHOLD ? { query, onChange: setQuery } : undefined
-          }
-          onPick={choose}
-          onHighlight={(row) => setHighlightSlug(row.slug)}
-        />
-      </PopoverContent>
-    </Popover>
-  );
-}
 
 interface EffortOpt {
   label: string;
@@ -360,8 +61,7 @@ interface EffortOpt {
  * popover before the user could pick an effort.
  */
 export function ModelEffortPicker({ override, className, defaultOpen }: ModelEffortPickerProps) {
-  const { models, value, effort, effortOptionsByModelKey, commitSelection, disabled, agents } =
-    override;
+  const { models, value, effort, effortOptionsByModelKey, commitSelection, disabled } = override;
 
   const [open, setOpen] = useState(defaultOpen ?? false);
   const [highlightKey, setHighlightKey] = useState<string | null>(null);
@@ -385,18 +85,12 @@ export function ModelEffortPicker({ override, className, defaultOpen }: ModelEff
   const currentEffortLabel = effort?.options.find((o) => o.value === effort.value)?.label ?? null;
   const activeEffortValue = effort?.value ?? null;
 
-  // Initialize the draft + highlight on open, once. Picking an agent tells the
-  // session manager at once, which re-renders this picker with fresh props; a
-  // re-seed on those would throw away the pinned model and effort the pick had
-  // just drafted (`designdocs/CUSTOM_AGENTS.md` §3).
-  const seededRef = useRef(false);
+  // Initialize the draft + highlight on open. Re-running on `value`
+  // changes is fine: while the popover is open the parent shouldn't
+  // change `value` (commits are deferred), so this effectively only fires
+  // on open.
   useEffect(() => {
-    if (!open) {
-      seededRef.current = false;
-      return;
-    }
-    if (!seededRef.current) {
-      seededRef.current = true;
+    if (open) {
       /* eslint-disable @eslint-react/hooks-extra/no-direct-set-state-in-use-effect -- seed the editable draft from props when the popover opens; drafts are committed on close, so this can't be pure derived state */
       const initial = value && enabledKeys.includes(value) ? value : (enabledKeys[0] ?? null);
       setHighlightKey(initial);
@@ -442,22 +136,6 @@ export function ModelEffortPicker({ override, className, defaultOpen }: ModelEff
     [effortOptionsByModelKey, draftEffort, value, activeEffortValue]
   );
 
-  // Picking an agent applies its pins to the draft immediately, so the model and
-  // effort sections show what this agent will actually run on before the popover
-  // is dismissed (`designdocs/CUSTOM_AGENTS.md` §3). An agent with no pins
-  // leaves both where the user left them.
-  const pickAgent = useCallback(
-    (row: AgentPickerRow) => {
-      agents?.onSelect(row.slug);
-      if (row.modelKey) pickDraft(row.modelKey);
-      if (row.effort !== null) {
-        const key = row.modelKey ?? draftModelKey;
-        setDraftEffort(resolveEffort(row.effort, key ? (effortOptionsByModelKey[key] ?? []) : []));
-      }
-    },
-    [agents, pickDraft, draftModelKey, effortOptionsByModelKey]
-  );
-
   const stepDraftEffort = useCallback(
     (delta: 1 | -1) => {
       if (draftOptions.length === 0) return;
@@ -501,9 +179,6 @@ export function ModelEffortPicker({ override, className, defaultOpen }: ModelEff
 
   const handleOpenChange = (next: boolean) => {
     if (next) {
-      // The roster is read from the vault, so an agent created in Settings a
-      // moment ago is listed without waiting for a reload.
-      agents?.onOpen?.();
       setOpen(true);
       return;
     }
@@ -564,16 +239,6 @@ export function ModelEffortPicker({ override, className, defaultOpen }: ModelEff
         onKeyDown={handleKeyDown}
       >
         <div className="tw-max-h-72 tw-overflow-y-auto tw-py-1">
-          {agents && (
-            <>
-              <div className={cn(GROUP_HEADING_CLASS, "tw-text-faint")}>Agent</div>
-              <AgentPickerSelect section={agents} onPick={pickAgent} />
-              <div
-                role="separator"
-                className="tw-my-1 tw-border-0 tw-border-t tw-border-solid tw-border-border"
-              />
-            </>
-          )}
           <div role="listbox" aria-label="Model">
             {models.map((entry) => {
               const Row = entry._needsLicense ? "a" : "div";

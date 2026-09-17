@@ -4941,6 +4941,24 @@ describe("AgentSessionManager talking-to selection", () => {
     expect(replacement.getAgent().slug).toBe("jennifer");
   });
 
+  it("names the chat in front of the user's agent, not the last agent picked (designdocs/CUSTOM_AGENTS.md §3)", async () => {
+    const manager = buildManager({}, undefined, buildAgentFiles([jennifer()]));
+    await manager.setSelectedAgent("jennifer");
+    const jenniferChat = await manager.createSession();
+    getSessionTestHandle(jenniferChat).setHasUserVisibleMessages(true);
+    await manager.setSelectedAgent(BUILTIN_AGENT_SLUG);
+    const copilotChat = await manager.createSession();
+    getSessionTestHandle(copilotChat).setHasUserVisibleMessages(true);
+
+    // Reopening the older chat must say who is answering it, the way its tab does.
+    manager.setActiveSession(jenniferChat.internalId);
+    expect(manager.getTalkingToSlug()).toBe("jennifer");
+    expect(manager.getSelectedAgentSlug()).toBe(BUILTIN_AGENT_SLUG);
+
+    manager.setActiveSession(copilotChat.internalId);
+    expect(manager.getTalkingToSlug()).toBe(BUILTIN_AGENT_SLUG);
+  });
+
   it("drops a selection whose agent the user has since deleted", async () => {
     const files = buildAgentFiles([jennifer()]);
     const manager = buildManager({}, undefined, files);

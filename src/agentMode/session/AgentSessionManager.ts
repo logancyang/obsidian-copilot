@@ -2016,9 +2016,22 @@ export class AgentSessionManager {
     return this.agentEntries;
   }
 
-  /** Slug the picker shows; {@link BUILTIN_AGENT_SLUG} means the default assistant. */
+  /** Slug the next new chat opens on; {@link BUILTIN_AGENT_SLUG} means the default assistant. */
   getSelectedAgentSlug(): string {
     return this.selectedAgentSlug;
+  }
+
+  /**
+   * Who the composer's agent picker names: the agent the chat in front of the
+   * user is held with, or, with no chat open, whoever the next one will be held
+   * with. A chat keeps the agent it started with, so one reopened from Recent
+   * Chats says who is answering *it* rather than who was picked last
+   * (`designdocs/CUSTOM_AGENTS.md` §3).
+   */
+  getTalkingToSlug(): string {
+    const session = this.getActiveSession();
+    if (!session) return this.selectedAgentSlug;
+    return session.getAgent().slug ?? BUILTIN_AGENT_SLUG;
   }
 
   /**

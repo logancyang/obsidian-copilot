@@ -6,7 +6,9 @@ import {
   buildEffortSibling,
   buildModelOnChange,
   buildPickerEntries,
+  buildAgentModelPicker,
   collectModelActiveContext,
+  resolveAgentPinCommit,
   synthesizeAgentEntry,
 } from "./agentModelPickerHelpers";
 import { ModelCapability } from "@/constants";
@@ -1282,5 +1284,191 @@ describe("buildAgentPickerRows()", () => {
       "claude"
     );
     expect(rows[0].modelKey).toBeNull();
+  });
+});
+
+describe("resolveAgentPinCommit()", () => {
+  const options: EffortOption[] = [
+    { value: "low", label: "Low" },
+    { value: "high", label: "High" },
+  ];
+  const current = {
+    modelKey: "sonnet|agent",
+    effort: "high" as string | null,
+    effortOptionsByModelKey: { "sonnet|agent": options, "opus|agent": options },
+  };
+
+  function row(pins: { modelKey?: string | null; effort?: string | null }) {
+    return {
+      slug: "jennifer",
+      name: "Jennifer",
+      icon: "🪶",
+      description: "Skeptical editor.",
+      modelKey: null,
+      effort: null,
+      ...pins,
+    };
+  }
+
+  it("switches to the model and effort an agent pins together", () => {
+    expect(resolveAgentPinCommit(row({ modelKey: "opus|agent", effort: "low" }), current)).toEqual({
+      modelKey: "opus|agent",
+      effort: "low",
+    });
+  });
+
+  it("carries the effort on screen onto the model a pin names, when that model offers it", () => {
+    expect(resolveAgentPinCommit(row({ modelKey: "opus|agent" }), current)).toEqual({
+      modelKey: "opus|agent",
+      effort: "high",
+    });
+  });
+
+  it("falls to the pinned model's lowest effort when it does not offer the one on screen", () => {
+    expect(
+      resolveAgentPinCommit(row({ modelKey: "opus|agent" }), {
+        ...current,
+        effortOptionsByModelKey: { ...current.effortOptionsByModelKey, "opus|agent": [options[1]] },
+      })
+    ).toEqual({ modelKey: "opus|agent", effort: "high" });
+  });
+
+  it("drops the effort for a pinned model that has no effort dimension at all", () => {
+    expect(resolveAgentPinCommit(row({ modelKey: "haiku|agent", effort: "low" }), current)).toEqual(
+      { modelKey: "haiku|agent", effort: null }
+    );
+  });
+
+  it("hangs an effort-only pin on the model already selected", () => {
+    expect(resolveAgentPinCommit(row({ effort: "low" }), current)).toEqual({
+      modelKey: null,
+      effort: "low",
+    });
+  });
+
+  it("asks for nothing for an agent that pins neither, so a hand-picked model stands", () => {
+    expect(resolveAgentPinCommit(row({}), current)).toBeNull();
+  });
+
+  it("asks for nothing when the pins name the model and effort already in force", () => {
+    expect(
+      resolveAgentPinCommit(row({ modelKey: "sonnet|agent", effort: "high" }), current)
+    ).toBeNull();
+  });
+});
+
+describe("buildAgentModelPicker()", () => {
+  const EFFORTS: EffortOption[] = [
+    { value: "low", label: "Low" },
+    { value: "high", label: "High" },
+  ];
+
+  function modelWithEffort(baseModelId: string): ModelEntry {
+    return { baseModelId, name: baseModelId, provider: null, effortOptions: EFFORTS };
+  }
+
+  function setup(agents: AgentEntry[]) {
+    const applySelection = jest.fn().mockResolvedValue(undefined);
+    const state: BackendState = {
+      model: {
+        current: { baseModelId: "sonnet", effort: "low" },
+        availableModels: [modelWithEffort("sonnet"), modelWithEffort("opus")],
+        apply: { kind: "setModel" },
+      },
+      mode: null,
+    };
+    const manager = {
+      ...makeManager({
+        applySelection,
+        catalogById: { claude: makeCatalog([modelWithEffort("sonnet"), modelWithEffort("opus")]) },
+        preloadStatusById: { claude: "ready" },
+      }),
+      getActiveSession: () => ({
+        internalId: "s1",
+        backendId: "claude",
+        getState: () => state,
+        hasUserVisibleMessages: () => false,
+      }),
+      getActiveChatUIState: () => makeUIState({ canSwitchModel: true, canSwitchEffort: true }),
+    } as unknown as AgentSessionManager;
+    const select = jest.fn();
+    const descriptor = {
+      ...makeDescriptor("claude"),
+      getEnabledModelEntries: () => [
+        { baseModelId: "sonnet", name: "Sonnet", credentialState: "ok" as const },
+        { baseModelId: "opus", name: "Opus", credentialState: "ok" as const },
+      ],
+    };
+    const override = buildAgentModelPicker({
+      manager,
+      descriptors: [descriptor],
+      settings: emptySettings,
+      talkingTo: {
+        entries: [BUILTIN_AGENT, ...agents],
+        selectedSlug: "copilot",
+        select,
+        refresh: jest.fn(),
+      },
+    });
+    return { override: override!, applySelection, select };
+  }
+
+  function pinned(slug: string, pins: Partial<CustomAgent>): AgentEntry {
+    return {
+      kind: "custom",
+      slug,
+      name: slug,
+      description: `${slug} description`,
+      icon: "🪶",
+      agent: {
+        slug,
+        name: slug,
+        description: `${slug} description`,
+        icon: "🪶",
+        backendId: null,
+        modelId: null,
+        effort: null,
+        memoryEnabled: true,
+        created: "2026-09-16T10:00:00Z",
+        instructions: "",
+        ...pins,
+      },
+    };
+  }
+
+  it("offers Copilot first and every agent after it, for the composer's own picker", () => {
+    const { override } = setup([pinned("jennifer", {})]);
+
+    expect(override.agentPicker?.rows.map((row) => row.slug)).toEqual(["copilot", "jennifer"]);
+    expect(override.agentPicker?.selectedSlug).toBe("copilot");
+  });
+
+  it("switches the model picker onto the pins of the agent chosen (designdocs/CUSTOM_AGENTS.md §3)", () => {
+    const { override, applySelection, select } = setup([
+      pinned("ben", { modelId: "opus", effort: "high" }),
+    ]);
+
+    const ben = override.agentPicker!.rows[1];
+    override.agentPicker!.onSelect(ben);
+
+    expect(select).toHaveBeenCalledWith("ben");
+    expect(applySelection).toHaveBeenCalledWith({ baseModelId: "opus", effort: "high" });
+  });
+
+  it("applies an effort-only pin to the model already selected", () => {
+    const { override, applySelection } = setup([pinned("dom", { effort: "high" })]);
+
+    override.agentPicker!.onSelect(override.agentPicker!.rows[1]);
+
+    expect(applySelection).toHaveBeenCalledWith({ effort: "high" }, { expectBackendId: "claude" });
+  });
+
+  it("leaves the model and effort alone for an agent that pins neither", () => {
+    const { override, applySelection, select } = setup([pinned("jennifer", {})]);
+
+    override.agentPicker!.onSelect(override.agentPicker!.rows[1]);
+
+    expect(select).toHaveBeenCalledWith("jennifer");
+    expect(applySelection).not.toHaveBeenCalled();
   });
 });

@@ -29,7 +29,8 @@ import { ContextControl } from "./ContextControl";
 import { AddContextButton } from "./AddContextButton";
 import { openImagePicker } from "./openImagePicker";
 import { shouldShowAtMentionTools } from "./hooks/useAtMentionCategories";
-import { ModelEffortPicker, type AgentPickerSection } from "@/components/ui/ModelEffortPicker";
+import { ModelEffortPicker } from "@/components/ui/ModelEffortPicker";
+import { AgentPicker, type AgentPickerSection } from "@/components/ui/AgentPicker";
 import { ModePicker } from "@/components/ui/ModePicker";
 import { $removePillsByPath } from "./pills/NotePillNode";
 import { $removeActiveNotePills } from "./pills/ActiveNotePillNode";
@@ -120,12 +121,13 @@ export interface ChatInputProps {
      * target with the drafted selection.
      */
     commitSelection?: (modelKey: string, effort: string | null) => void;
-    /**
-     * Agent Mode only: the Agent section the merged popover opens with, so who
-     * answers is chosen right above what they answer on.
-     */
-    agents?: AgentPickerSection;
   };
+  /**
+   * Agent Mode only: the roster for the agent picker that stands between the Add
+   * Context button and the model picker, so who answers is one click to see and
+   * one click to change (`designdocs/CUSTOM_AGENTS.md` §3).
+   */
+  agentPicker?: AgentPickerSection;
   /**
    * Optional operational-mode picker (Agent Mode). Surfaces Copilot-canonical
    * modes (build/plan/auto-build) when the active backend exposes them. The
@@ -233,6 +235,7 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
     setSelectedImages,
     disableModelSwitch,
     modelPickerOverride,
+    agentPicker,
     modePickerOverride,
     selectedTextContexts,
     onRemoveSelectedText,
@@ -870,6 +873,7 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
               lexicalEditorRef={lexicalEditorRef}
             />
           )}
+          {agentPicker && <AgentPicker section={agentPicker} />}
           {modelPickerOverride?.effortOptionsByModelKey && modelPickerOverride.commitSelection ? (
             // Agent Mode: always use the merged picker, even when the active
             // model has no effort dimension — the user can still switch to
@@ -882,7 +886,6 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
                 effort: modelPickerOverride.effort,
                 effortOptionsByModelKey: modelPickerOverride.effortOptionsByModelKey,
                 commitSelection: modelPickerOverride.commitSelection,
-                agents: modelPickerOverride.agents,
               }}
               className="tw-min-w-0 tw-max-w-full tw-truncate"
             />
