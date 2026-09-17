@@ -39,9 +39,10 @@ export const FilesChangedCard: React.FC<FilesChangedCardProps> = ({ changes, onO
         </span>
         <FileChangeCounts additions={totals.additions} deletions={totals.deletions} />
       </div>
-      {/* 11rem — five rows' worth of height. A ten-file turn must not push the
-          composer off screen, so the rows scroll inside the card instead. */}
-      <ul className="tw-m-0 tw-max-h-44 tw-list-none tw-overflow-y-auto tw-p-0">
+      {/* 16rem — five rows' worth of height, counting the folder line most rows
+          carry. A turn that changed more files must not push the composer off
+          screen, so the rows scroll inside the card instead. */}
+      <ul className="tw-m-0 tw-max-h-64 tw-list-none tw-overflow-y-auto tw-p-0">
         {rows.map((row) => (
           <FileRow key={row.path} change={row} onOpen={onOpen} />
         ))}

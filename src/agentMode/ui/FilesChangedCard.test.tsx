@@ -103,7 +103,7 @@ describe("FilesChangedCard", () => {
     renderCard(Array.from({ length: 10 }, (_, i) => change(`notes/file-${i}.md`)));
 
     const list = screen.getByRole("list");
-    expect(list.classList.contains("tw-max-h-44")).toBe(true);
+    expect(list.classList.contains("tw-max-h-64")).toBe(true);
     expect(list.classList.contains("tw-overflow-y-auto")).toBe(true);
     expect(screen.getAllByRole("button")).toHaveLength(10);
   });
