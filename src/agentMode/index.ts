@@ -40,6 +40,7 @@ export { partitionOpencodeOnlyWireIds } from "./backends/opencode/opencodeProbeP
 export { mapProviderToOpencodeId } from "./backends/opencode/opencodeModelResolve";
 export type { CopilotMode, ModelSelection } from "./session/types";
 export { AgentDefaultModelSetting } from "./ui/AgentDefaultModelSetting";
+export { resolveEffortOptions } from "./ui/agentModelPickerHelpers";
 export { ModelEnableList } from "@/components/ui/ModelEnableList";
 export type { ModelEnableGroup } from "@/components/ui/ModelEnableList";
 export { PlanPreviewView, PLAN_PREVIEW_VIEW_TYPE } from "./ui/PlanPreviewView";

@@ -68,11 +68,13 @@ function editorProps(overrides: Partial<AgentEditorProps> = {}): AgentEditorProp
       instructions: "",
       backendId: "",
       modelId: "",
+      effort: "",
       memoryEnabled: true,
     },
     onChange: jest.fn(),
     backendOptions: [{ label: "Session default", value: "" }],
     modelOptions: [{ label: "Backend default", value: "" }],
+    effortOptions: [{ label: "Model default", value: "" }],
     error: null,
     saving: false,
     onSave: jest.fn(),
@@ -187,6 +189,7 @@ describe("AgentsSettingsView", () => {
           instructions: "You are Jennifer.",
           backendId: "claude",
           modelId: "",
+          effort: "",
           memoryEnabled: true,
         },
         onOpenInEditor: jest.fn(),
@@ -276,7 +279,66 @@ describe("AgentEditor", () => {
 
     fireEvent.change(select("Backend"), { target: { value: "claude" } });
 
-    expect(onChange).toHaveBeenCalledWith({ backendId: "claude", modelId: "" });
+    expect(onChange).toHaveBeenCalledWith({ backendId: "claude", modelId: "", effort: "" });
+  });
+
+  const EFFORT_OPTIONS = [
+    { label: "Model default", value: "" },
+    { label: "Low", value: "low" },
+    { label: "High", value: "high" },
+  ];
+
+  it("leaves the effort picker disabled until a model is pinned (designdocs/CUSTOM_AGENTS.md §7)", () => {
+    renderView({
+      editor: editorProps({
+        effortOptions: EFFORT_OPTIONS,
+        draft: { ...editorProps().draft, backendId: "claude", modelId: "" },
+      }),
+    });
+    expect(select("Effort").disabled).toBe(true);
+  });
+
+  it("offers the pinned model's effort levels once a model is pinned", () => {
+    renderView({
+      editor: editorProps({
+        effortOptions: EFFORT_OPTIONS,
+        draft: { ...editorProps().draft, backendId: "claude", modelId: "sonnet" },
+      }),
+    });
+    expect(select("Effort").disabled).toBe(false);
+    expect([...select("Effort").options].map((option) => option.value)).toEqual([
+      "",
+      "low",
+      "high",
+    ]);
+  });
+
+  it("disables the effort picker for a model that advertises no levels", () => {
+    renderView({
+      editor: editorProps({
+        draft: { ...editorProps().draft, backendId: "claude", modelId: "haiku" },
+      }),
+    });
+    expect(select("Effort").disabled).toBe(true);
+  });
+
+  it("clears the pinned effort when the model changes, since levels belong to a model", () => {
+    const onChange = jest.fn();
+    renderView({
+      editor: editorProps({
+        onChange,
+        modelOptions: [
+          { label: "Backend default", value: "" },
+          { label: "Opus", value: "opus" },
+        ],
+        effortOptions: EFFORT_OPTIONS,
+        draft: { ...editorProps().draft, backendId: "claude", modelId: "", effort: "high" },
+      }),
+    });
+
+    fireEvent.change(select("Model"), { target: { value: "opus" } });
+
+    expect(onChange).toHaveBeenCalledWith({ modelId: "opus", effort: "" });
   });
 
   it("reports a rejected save above the buttons rather than silently doing nothing", () => {

@@ -6,9 +6,10 @@ import { AgentDeleteConfirmModal } from "@/agents/ui/AgentDeleteConfirmModal";
 import type { AgentEditorDraft, AgentEditorProps } from "@/agents/ui/AgentEditor";
 import type { AgentRowItem } from "@/agents/ui/AgentRow";
 import { AgentsSettingsView } from "@/agents/ui/AgentsSettingsView";
-import { listBackendDescriptors } from "@/agentMode";
+import { listBackendDescriptors, resolveEffortOptions } from "@/agentMode";
 import type { SelectOption } from "@/components/ui/obsidian-native-select";
 import { useApp } from "@/context";
+import { usePlugin } from "@/contexts/PluginContext";
 import { logError } from "@/logger";
 import { deriveAgentsFolder } from "@/settings/copilotFolder";
 import { useSettingsValue } from "@/settings/model";
@@ -21,6 +22,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 const UNPINNED = "";
 const SESSION_BACKEND_OPTION: SelectOption = { label: "Session default", value: UNPINNED };
 const BACKEND_DEFAULT_MODEL_OPTION: SelectOption = { label: "Backend default", value: UNPINNED };
+const MODEL_DEFAULT_EFFORT_OPTION: SelectOption = { label: "Model default", value: UNPINNED };
 
 /** A blank agent, used as the starting point of every create. */
 const EMPTY_DRAFT: AgentEditorDraft = Object.freeze({
@@ -30,6 +32,7 @@ const EMPTY_DRAFT: AgentEditorDraft = Object.freeze({
   instructions: "",
   backendId: UNPINNED,
   modelId: UNPINNED,
+  effort: UNPINNED,
   memoryEnabled: true,
 });
 
@@ -49,6 +52,7 @@ interface EditorState {
  */
 export const AgentsSettings: React.FC = () => {
   const app = useApp();
+  const plugin = usePlugin();
   const settings = useSettingsValue();
   // Agents live under the single configurable Copilot root, so the folder is
   // derived rather than configured here; it also keys the reload effect.
@@ -101,6 +105,22 @@ export const AgentsSettings: React.FC = () => {
       })),
     ];
   }, [descriptors, editor?.draft.backendId, settings]);
+  // The same levels the composer's effort stepper offers for this model, read
+  // from the session manager's probed catalog, so an agent can only pin an
+  // effort its model actually advertises (`designdocs/CUSTOM_AGENTS.md` §7).
+  const effortOptions = useMemo<SelectOption[]>(() => {
+    const backendId = editor?.draft.backendId;
+    const modelId = editor?.draft.modelId;
+    const manager = plugin.agentSessionManager;
+    if (!manager || !backendId || !modelId) return [MODEL_DEFAULT_EFFORT_OPTION];
+    return [
+      MODEL_DEFAULT_EFFORT_OPTION,
+      ...resolveEffortOptions(manager, backendId, modelId).map((option) => ({
+        label: option.label,
+        value: option.value ?? UNPINNED,
+      })),
+    ];
+  }, [editor?.draft.backendId, editor?.draft.modelId, plugin]);
 
   const rows = useMemo<AgentRowItem[]>(
     () =>
@@ -136,6 +156,7 @@ export const AgentsSettings: React.FC = () => {
           instructions: agent.instructions,
           backendId: agent.backendId ?? UNPINNED,
           modelId: agent.modelId ?? UNPINNED,
+          effort: agent.effort ?? UNPINNED,
           memoryEnabled: agent.memoryEnabled,
         },
       });
@@ -170,6 +191,7 @@ export const AgentsSettings: React.FC = () => {
       instructions: draft.instructions,
       backendId: draft.backendId || null,
       modelId: draft.modelId || null,
+      effort: draft.effort || null,
       memoryEnabled: draft.memoryEnabled,
     };
     setEditor({ ...editor, error: null, saving: true });
@@ -241,13 +263,14 @@ export const AgentsSettings: React.FC = () => {
         ),
       backendOptions,
       modelOptions,
+      effortOptions,
       error: editor.error,
       saving: editor.saving,
       onSave: handleSave,
       onCancel: () => setEditor(null),
       onOpenInEditor: record ? () => openNote(record.filePath) : undefined,
     };
-  }, [backendOptions, editor, handleSave, modelOptions, openNote, records]);
+  }, [backendOptions, editor, effortOptions, handleSave, modelOptions, openNote, records]);
 
   return (
     <div ref={containerRef}>

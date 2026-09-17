@@ -61,6 +61,13 @@ const MODEL_OPTIONS = [
   { label: "Opus", value: "opus" },
 ];
 
+const EFFORT_OPTIONS = [
+  { label: "Model default", value: "" },
+  { label: "Low", value: "low" },
+  { label: "Medium", value: "medium" },
+  { label: "High", value: "high" },
+];
+
 function editor(overrides: Partial<AgentEditorProps>): AgentEditorProps {
   return {
     mode: "create",
@@ -72,11 +79,13 @@ function editor(overrides: Partial<AgentEditorProps>): AgentEditorProps {
       instructions: "",
       backendId: "",
       modelId: "",
+      effort: "",
       memoryEnabled: true,
     },
     onChange: noop,
     backendOptions: BACKEND_OPTIONS,
     modelOptions: MODEL_OPTIONS,
+    effortOptions: EFFORT_OPTIONS,
     error: null,
     saving: false,
     onSave: noop,
@@ -126,6 +135,7 @@ export const EditorCreate: StoryObj<AgentsSettingsViewProps> = {
           "You are Jennifer, a developmental editor. You care about the reader more than the author. Push back on vague claims. Prefer short sentences.",
         backendId: "claude",
         modelId: "sonnet",
+        effort: "low",
         memoryEnabled: true,
       },
     }),
@@ -148,6 +158,7 @@ export const EditorEdit: StoryObj<AgentsSettingsViewProps> = {
         instructions: "You are Vancat. Find the failure mode first, then say what you would do.",
         backendId: "",
         modelId: "",
+        effort: "",
         memoryEnabled: true,
       },
       onOpenInEditor: noop,
@@ -168,6 +179,7 @@ export const EditorRejectedIcon: StoryObj<AgentsSettingsViewProps> = {
         instructions: "",
         backendId: "",
         modelId: "",
+        effort: "",
         memoryEnabled: true,
       },
       error: "The icon must be a single emoji or letter.",

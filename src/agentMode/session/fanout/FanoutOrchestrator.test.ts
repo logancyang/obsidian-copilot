@@ -182,6 +182,7 @@ function answerer(backendId: BackendId, overrides: Partial<FanoutAnswerer> = {})
     name: backendId.toUpperCase(),
     icon: "",
     backendId,
+    selection: null,
     personaBlock: null,
     memoryEnabled: false,
     ...overrides,
@@ -459,6 +460,40 @@ describe("FanoutOrchestrator", () => {
         });
         expect(proc.setSessionConfigOption).toHaveBeenCalledTimes(4);
         expect(proc.setSessionModel).not.toHaveBeenCalled();
+      });
+
+      it("runs an answerer on its agent's own pinned model and effort, not the backend default (designdocs/CUSTOM_AGENTS.md §3)", async () => {
+        const { host, procs } = makeHost({ codex: { sessionId: "s-codex" } });
+        const proc = procs.get("codex")!.proc;
+        configureCodex(proc);
+        host.ensureBackendForSubSession = async () => ({
+          proc,
+          descriptor: CodexBackendDescriptor,
+        });
+        host.getDefaultSelection = () => ({ baseModelId: "example", effort: "low" });
+        jest.mocked(proc.prompt).mockImplementation(async () => {
+          procs.get("codex")!.emit(textChunk("s-codex", "answer"));
+          return { stopReason: "end_turn" };
+        });
+
+        await new FanoutOrchestrator(host).run(
+          runInput(["codex"], {
+            answerers: [
+              answerer("codex", { selection: { baseModelId: "example", effort: "high" } }),
+            ],
+          })
+        );
+
+        expect(proc.setSessionConfigOption).toHaveBeenCalledWith({
+          sessionId: "s-codex",
+          configId: "reasoning_effort",
+          value: "high",
+        });
+        expect(proc.setSessionConfigOption).not.toHaveBeenCalledWith({
+          sessionId: "s-codex",
+          configId: "reasoning_effort",
+          value: "low",
+        });
       });
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/550 reports a rejected model config switch rather than running fan-out on a different model", async () => {

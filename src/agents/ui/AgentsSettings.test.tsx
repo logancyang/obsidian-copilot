@@ -1,6 +1,7 @@
 import type { AgentDraft, AgentRecord } from "@/agents/types";
 import { AgentsSettings } from "@/agents/ui/AgentsSettings";
 import { AppContext } from "@/context";
+import { PluginProvider } from "@/contexts/PluginContext";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { App } from "obsidian";
 import React from "react";
@@ -36,6 +37,13 @@ jest.mock("@/agentMode", () => ({
       getEnabledModelEntries: () => [],
     },
   ],
+  resolveEffortOptions: (_manager: unknown, _backendId: string, baseModelId: string) =>
+    baseModelId === "sonnet"
+      ? [
+          { label: "Low", value: "low" },
+          { label: "High", value: "high" },
+        ]
+      : [],
 }));
 
 // The cloud-egress marker is a hover tooltip, so its copy is not in the tree
@@ -103,6 +111,7 @@ function makeRecord(overrides: Partial<AgentRecord["agent"]> = {}): AgentRecord 
       icon: "🪶",
       backendId: null,
       modelId: null,
+      effort: null,
       memoryEnabled: true,
       created: "2026-09-16T10:00:00Z",
       instructions: "You are Jennifer.",
@@ -121,12 +130,19 @@ function nameInput(): HTMLInputElement {
 
 const closeSettings = jest.fn();
 const app = { setting: { close: closeSettings } } as unknown as App;
+// The effort levels a model advertises are probed by the session manager, so the
+// panel reads them off the plugin the way the backend settings panels do.
+const plugin = { agentSessionManager: {} } as unknown as Parameters<
+  typeof PluginProvider
+>[0]["plugin"];
 
 function renderPanel() {
   return render(
-    <AppContext.Provider value={app}>
-      <AgentsSettings />
-    </AppContext.Provider>
+    <PluginProvider plugin={plugin}>
+      <AppContext.Provider value={app}>
+        <AgentsSettings />
+      </AppContext.Provider>
+    </PluginProvider>
   );
 }
 
@@ -174,6 +190,7 @@ describe("AgentsSettings", () => {
         instructions: "",
         backendId: null,
         modelId: null,
+        effort: null,
         memoryEnabled: true,
       })
     );
@@ -246,6 +263,22 @@ describe("AgentsSettings", () => {
     await waitFor(() => expect(updateAgent).toHaveBeenCalledTimes(1));
     expect(updateAgent.mock.calls[0][0]).toBe("jennifer");
     expect(updateAgent.mock.calls[0][1].name).toBe("Jen");
+  });
+
+  it("offers the pinned model's own effort levels and writes the chosen one (designdocs/CUSTOM_AGENTS.md §7)", async () => {
+    const pinned = makeRecord({ backendId: "claude", modelId: "sonnet" });
+    listAgents.mockResolvedValue([pinned]);
+    updateAgent.mockResolvedValue(pinned);
+    renderPanel();
+
+    fireEvent.click(await screen.findByText("Jennifer"));
+    const effort = screen.getByLabelText<HTMLSelectElement>("Effort");
+    expect([...effort.options].map((option) => option.value)).toEqual(["", "low", "high"]);
+    fireEvent.change(effort, { target: { value: "high" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(updateAgent).toHaveBeenCalledTimes(1));
+    expect(updateAgent.mock.calls[0][1].effort).toBe("high");
   });
 
   it("reveals the agent's folder in the file explorer", async () => {

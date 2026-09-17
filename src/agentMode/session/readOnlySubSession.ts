@@ -57,6 +57,12 @@ export interface ReadOnlySubSessionHost {
 export interface ReadOnlySubSessionRequest {
   backendId: BackendId;
   prompt: PromptContent[];
+  /**
+   * Run on this (model, effort) instead of the backend's saved default — how a
+   * fan-out answerer's own pins reach its sub-session. Absent or null keeps the
+   * saved default.
+   */
+  selection?: ModelSelection | null;
   /** Aborts the run when fired; the run then settles `"aborted"`. */
   signal: AbortSignal;
   /** Receives every assistant prose chunk as it streams. */
@@ -111,7 +117,7 @@ export class ReadOnlySubSessionRunner {
    * cancel/timeout suppress that.
    */
   run(params: ReadOnlySubSessionRequest): Promise<"done" | "aborted"> {
-    const { backendId, prompt, signal, onText } = params;
+    const { backendId, prompt, selection, signal, onText } = params;
 
     // The attempt owns the full lifecycle (setup, prompt, trailing-chunk grace,
     // teardown), so its `finally` always closes any session it opened — even a
@@ -154,7 +160,7 @@ export class ReadOnlySubSessionRunner {
         // Sandbox mode and model selection mutate disjoint fields.
         await Promise.all([
           this.applyReadOnlyMode(proc, descriptor, sessionId),
-          this.applyDefaultModel(proc, descriptor, backendId, sessionId, live),
+          this.applyModel(proc, descriptor, backendId, sessionId, live, selection ?? null),
         ]);
 
         // If the race already won during setup, do NOT dispatch: the caller's
@@ -347,14 +353,15 @@ export class ReadOnlySubSessionRunner {
     }
   }
 
-  private async applyDefaultModel(
+  private async applyModel(
     proc: BackendProcess,
     descriptor: BackendDescriptor,
     backendId: BackendId,
     sessionId: SessionId,
-    live: SubSessionState
+    live: SubSessionState,
+    requested: ModelSelection | null
   ): Promise<void> {
-    const seed = this.host.getDefaultSelection(backendId);
+    const seed = requested ?? this.host.getDefaultSelection(backendId);
     const selection = descriptor.routesCopilotModels
       ? await this.settleOnEnabledModel(descriptor, seed, live)
       : (seed ?? live.current.model?.current);

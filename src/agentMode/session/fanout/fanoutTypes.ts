@@ -2,6 +2,7 @@ import type {
   AgentChatMessage,
   AgentToolKind,
   BackendId,
+  ModelSelection,
   PromptContent,
 } from "@/agentMode/session/types";
 import { USER_SENDER } from "@/constants";
@@ -28,6 +29,7 @@ export interface FanoutAnswerer {
   name: string;
   icon: string;
   backendId: BackendId | null;
+  selection: ModelSelection | null;
   personaBlock: string | null;
   memoryEnabled: boolean;
   missing?: boolean;

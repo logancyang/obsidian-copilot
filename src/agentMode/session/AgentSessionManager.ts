@@ -4,6 +4,7 @@ import { logError, logInfo, logWarn } from "@/logger";
 import type CopilotPlugin from "@/main";
 import { AgentChatUIState } from "@/agentMode/session/AgentChatUIState";
 import { AgentInputDraftStore } from "@/agentMode/session/AgentInputDraftStore";
+import { resolveAgentPinnedSelection } from "@/agentMode/session/agentPinnedSelection";
 import {
   agentProjectContextLoadAtom,
   type AgentInFlightSource,
@@ -369,18 +370,24 @@ export class AgentSessionManager {
 
   async runFanoutTurn(request: FanoutTurnRequest): Promise<FanoutTurn> {
     const { agentSlugs, ...context } = request;
-    const answerers = await Promise.all(agentSlugs.map((slug) => this.resolveFanoutAnswerer(slug)));
+    const answerers = await Promise.all(
+      agentSlugs.map((slug) => this.resolveFanoutAnswerer(slug, context.sessionBackendId))
+    );
     const turn = await this.fanoutOrchestrator.run({ ...context, answerers });
     this.beginFanoutMemoryPasses(answerers, turn, request);
     return turn;
   }
 
-  private async resolveFanoutAnswerer(slug: string): Promise<FanoutAnswerer> {
+  private async resolveFanoutAnswerer(
+    slug: string,
+    sessionBackendId: BackendId
+  ): Promise<FanoutAnswerer> {
     const gone: FanoutAnswerer = {
       slug,
       name: formatMissingAgentLabel(slug),
       icon: "",
       backendId: null,
+      selection: null,
       personaBlock: null,
       memoryEnabled: false,
       missing: true,
@@ -392,11 +399,17 @@ export class AgentSessionManager {
       if (!record) return gone;
       const { agent } = record;
       const session = await loadSessionAgent(files, agent);
+      const answeringOn = agent.backendId ?? sessionBackendId;
       return {
         slug,
         name: agent.name,
         icon: agent.icon,
         backendId: agent.backendId,
+        selection: resolveAgentPinnedSelection(
+          agent,
+          answeringOn,
+          this.getSeedSelection(answeringOn)
+        ),
         personaBlock: session.personaBlock,
         memoryEnabled: agent.memoryEnabled,
       };
@@ -904,12 +917,9 @@ export class AgentSessionManager {
     const resolvedId = this.opts.resolveDescriptor(requestedId) ? requestedId : "opencode";
     const errorSeqAtStart = this.lastErrorSeq;
     const descriptor = this.resolveDescriptor(resolvedId);
-    const pinnedSelection =
-      pinned?.modelId && (!pinned.backendId || pinned.backendId === resolvedId)
-        ? { baseModelId: pinned.modelId, effort: null }
-        : undefined;
-    const resolvedSeed =
-      seedSelection ?? pinnedSelection ?? this.getSeedSelection(resolvedId) ?? undefined;
+    const persistedSeed = this.getSeedSelection(resolvedId);
+    const pinnedSelection = resolveAgentPinnedSelection(pinned, resolvedId, persistedSeed);
+    const resolvedSeed = seedSelection ?? pinnedSelection ?? persistedSeed ?? undefined;
     if (!resolvedSeed && descriptor.routesCopilotModels) {
       const message = `Enable a model for ${descriptor.displayName} in Copilot's model settings to start a chat.`;
       this.setLastError(message);

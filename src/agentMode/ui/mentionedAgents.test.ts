@@ -15,6 +15,7 @@ function agent(slug: string, over: Partial<CustomAgent> = {}): CustomAgent {
     icon: "🪶",
     backendId: null,
     modelId: null,
+    effort: null,
     memoryEnabled: true,
     created: "2026-09-16T10:00:00Z",
     instructions: "Be yourself.",
