@@ -589,7 +589,7 @@ const FETCH_X = relaySkill({
   scriptFile: "fetch-x.sh",
 });
 
-const OPENARTIFACTS_PUBLISH_VERSION = 2;
+const OPENARTIFACTS_PUBLISH_VERSION = 3;
 const OPENARTIFACTS_PUBLISH_USAGE = "openartifacts-publish";
 /** Where the wrapper sends requests unless a test or self-host points it elsewhere. */
 const OPENARTIFACTS_API_HOST_ENV = "OPENARTIFACTS_API_HOST";
@@ -602,6 +602,9 @@ const OPENARTIFACTS_PUBLISH: BuiltinSkill = {
   name: "openartifacts-publish",
   version: OPENARTIFACTS_PUBLISH_VERSION,
   enabledAgents: ["claude", "codex", "opencode"],
+  // Published notes need a visible identity without repeating an equivalent title
+  // that is already part of the note body.
+  // https://github.com/logancyang/obsidian-copilot/issues/3196
   skillMd: `---
 name: openartifacts-publish
 description: Publish, update, or withdraw an existing Markdown note as a public OpenArtifacts page. Use when the user asks to publish, share, update, delete, remove, or withdraw an OpenArtifacts page.
@@ -635,6 +638,15 @@ under \`$${OPENARTIFACTS_WORKSPACE_ROOT_ENV}/${OPENARTIFACTS_AGENT_HANDOFF_DIR}/
 the directory if needed. Preserve the note's content; render Obsidian-specific syntax such
 as wikilinks, callouts, embeds, Mermaid, and Bases into static HTML or SVG. CSS, scripts,
 and external resources are allowed and are published unchanged.
+
+Use the note's file name without \`.md\` as its page title. Put that title in both the HTML
+\`<title>\` and a visible \`<h1>\` above the rendered note body. If the rendered note body
+already starts with an equivalent \`<h1>\` containing the same visible title text, use that
+heading as the page-body title and do not add another heading. Preserve all remaining note
+content below it, and do not edit the source Markdown to add the heading. Keep normal text
+wrapping on the \`<h1>\` so long titles wrap naturally on narrow screens. Never truncate the title,
+hide its overflow, or apply single-line or ellipsis styling. The review and publish steps must
+use this same complete HTML file so its title and body match in preview and after publishing.
 
 Themes are optional. For a named theme, check
 \`$${OPENARTIFACTS_WORKSPACE_ROOT_ENV}/${OPENARTIFACTS_THEMES_DIR}/<name>.md\`, then

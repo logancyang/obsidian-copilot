@@ -234,7 +234,7 @@ describe("builtinSkills", () => {
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/394 publishes over HTTPS with the injected license key and never touches the Obsidian CLI", () => {
       const skill = BUILTIN_SKILLS.find((item) => item.name === "openartifacts-publish");
       expect(skill).toBeDefined();
-      expect(skill!.version).toBe(2);
+      expect(skill!.version).toBe(3);
 
       expect(skill!.files.map((file) => file.path)).toEqual([
         "themes/research-memo.md",
@@ -292,6 +292,23 @@ describe("builtinSkills", () => {
       expect(scriptOf("openartifacts-publish", ".cmd")).toContain(
         '-File "%~dp0openartifacts-publish.ps1"'
       );
+    });
+
+    it("https://github.com/logancyang/obsidian-copilot/issues/3196 gives published notes a filename-derived visible title without duplicating an equivalent opening H1", () => {
+      const skill = BUILTIN_SKILLS.find((item) => item.name === "openartifacts-publish");
+      expect(skill).toBeDefined();
+
+      const md = skill!.skillMd;
+      expect(md).toContain("Use the note's file name without `.md` as its page title");
+      expect(md).toMatch(/both the HTML\s+`<title>` and a visible `<h1>`/);
+      expect(md).toContain("above the rendered note body");
+      expect(md).toContain("already starts with an equivalent `<h1>`");
+      expect(md).toContain("do not add another heading");
+      expect(md).toMatch(/Preserve all remaining note\s+content/);
+      expect(md).toContain("do not edit the source Markdown to add the heading");
+      expect(md).toContain("same complete HTML file");
+      expect(md).toContain("wrap naturally on narrow screens");
+      expect(md).toContain("Never truncate the title");
     });
   });
 
