@@ -33,6 +33,28 @@ describe("ModelEffortPicker", () => {
       expect(commitSelection).toHaveBeenCalledWith("other|agent", null);
     });
 
+    it("tints the active model row and reserves no marker column for it (designdocs/CUSTOM_AGENTS.md §3)", async () => {
+      render(
+        <ModelEffortPicker
+          override={{
+            models: [...models, { name: "other", provider: "agent", enabled: true }],
+            value: "model|agent",
+            effortOptionsByModelKey: {},
+            commitSelection: jest.fn(),
+          }}
+        />
+      );
+      fireEvent.click(screen.getByTitle("Model · effort"));
+
+      const [active, other] = await screen.findAllByRole("option");
+      expect(active.getAttribute("aria-selected")).toBe("true");
+      expect(active.className).toContain("tw-bg-interactive-accent-hsl/10");
+      expect(active.querySelector(".tw-font-medium")?.textContent).toBe("model");
+      expect(active.textContent).toBe("model");
+      expect(other.className).not.toContain("tw-bg-interactive-accent-hsl/10");
+      expect(other.textContent).toBe("other");
+    });
+
     it.each(["row", "icon", "keyboard", "Tab", "Shift+Tab", "middle-click"])(
       "preserves native pricing navigation and discards pending edits after %s interaction with a locked row (https://github.com/Brevilabs/obsidian-copilot-private/issues/476)",
       async (action) => {
@@ -270,8 +292,8 @@ describe("ModelEffortPicker", () => {
         const row = await screen.findByRole("combobox", { name: "Agent" });
         expect(row.textContent).toBe("✦Copilot");
         expect(screen.queryByRole("listbox", { name: "Agent" })).toBeNull();
-        // The glyph leads the row: no column is reserved for a check this row
-        // can never carry, so the agent starts where a model row's ✓ does.
+        // The glyph leads the row: no list in this popover reserves a marker
+        // column, so the agent starts where a model row's name does.
         expect(row.querySelectorAll("[aria-hidden]")).toHaveLength(1);
         const modelBox = screen.getByRole("listbox", { name: "Model" });
         expect(
@@ -279,12 +301,12 @@ describe("ModelEffortPicker", () => {
         ).toBeTruthy();
       });
 
-      it("opens the whole roster on the row, with the current agent checked", async () => {
+      it("opens the whole roster on the row, naming each agent with no marker column (designdocs/CUSTOM_AGENTS.md §3)", async () => {
         renderWithAgents([COPILOT, { slug: "jennifer", modelKey: null, effort: null }]);
 
         const list = await openRoster();
         expect(list.getAllByRole("option").map((row) => row.textContent)).toEqual([
-          "✓✦CopilotYour vault instructions, no persona, no memory.",
+          "✦CopilotYour vault instructions, no persona, no memory.",
           "🪶jenniferjennifer description",
         ]);
         expect(screen.getByRole("combobox", { name: "Agent" }).getAttribute("aria-expanded")).toBe(
@@ -525,7 +547,7 @@ describe("ModelEffortPicker", () => {
       effort: null,
     };
 
-    it("checks the selected agent and hovers the highlighted one", () => {
+    it("tints the selected agent and keeps the keyboard highlight visible on another row", () => {
       render(
         <AgentPickerList
           rows={[row, { ...row, slug: "vancat", name: "Vancat" }]}
@@ -537,7 +559,28 @@ describe("ModelEffortPicker", () => {
 
       const [jennifer, vancat] = screen.getAllByRole("option");
       expect(jennifer.getAttribute("aria-selected")).toBe("true");
+      expect(jennifer.className).toContain("tw-bg-interactive-accent-hsl/10");
+      expect(jennifer.querySelector(".tw-font-medium")?.textContent).toBe("Jennifer");
+      expect(jennifer.textContent).toBe("🪶JenniferSkeptical editor.");
       expect(vancat.getAttribute("data-highlighted")).toBe("true");
+      expect(vancat.className).toContain("tw-bg-interactive-hover");
+      expect(vancat.className).not.toContain("tw-bg-interactive-accent-hsl/10");
+    });
+
+    it("keeps the tint on the selected agent when the keyboard highlight lands back on it", () => {
+      render(
+        <AgentPickerList
+          rows={[row]}
+          selectedSlug="jennifer"
+          highlightSlug="jennifer"
+          onPick={jest.fn()}
+        />
+      );
+
+      const [jennifer] = screen.getAllByRole("option");
+      expect(jennifer.getAttribute("aria-selected")).toBe("true");
+      expect(jennifer.className).toContain("tw-bg-interactive-accent-hsl/10");
+      expect(jennifer.className).not.toContain("tw-bg-interactive-hover");
     });
 
     it("omits the search field when the caller supplies none", () => {

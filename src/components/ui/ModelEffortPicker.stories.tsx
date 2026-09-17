@@ -192,6 +192,18 @@ export const AgentListSixAgents: StoryObj<Props> = {
   ),
 };
 
+/** The keyboard back on the row the list opened on: the tint holds. */
+export const AgentListHighlightOnSelected: StoryObj<Props> = {
+  render: () => (
+    <AgentPickerList
+      rows={[COPILOT_ROW, JENNIFER_ROW, VANCAT_ROW]}
+      selectedSlug="jennifer"
+      highlightSlug="jennifer"
+      onPick={() => undefined}
+    />
+  ),
+};
+
 /** Twelve entries: past six the list scrolls, so a search field heads it. */
 export const AgentListSearchable: StoryObj<Props> = {
   render: () => (

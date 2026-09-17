@@ -108,9 +108,22 @@ const GROUP_HEADING_CLASS = "tw-px-3 tw-pb-1 tw-pt-2 tw-text-xs tw-uppercase tw-
 const ROW_CLASS =
   "tw-flex tw-cursor-pointer tw-items-center tw-justify-between tw-gap-3 tw-px-3 tw-py-1.5 tw-text-sm";
 
-/** The fixed leading column a list row reserves for its ✓ / › marker. */
-const MARKER_CLASS =
-  "tw-flex tw-w-3 tw-shrink-0 tw-items-center tw-justify-center tw-text-xs tw-text-muted";
+/*
+ * Selection is color, not a marker column (`designdocs/CUSTOM_AGENTS.md` §3).
+ * The row holding the current choice takes the accent tint an active fan-out
+ * tab and the effort footer's active step already wear, and weights its name.
+ * The name keeps the normal text color: a theme is free to pick an accent
+ * bright enough that accent-on-tint falls under 4.5:1, and Atom's light theme
+ * does, at 2.7:1.
+ *
+ * A row gets exactly one background — two background utilities would leave the
+ * winner to stylesheet order — and the tint wins over the keyboard highlight,
+ * because both lists open with the keyboard already on the current row and
+ * that row has to read as the current one.
+ */
+const SELECTED_ROW_BG = "tw-bg-interactive-accent-hsl/10";
+const SELECTED_ROW_NAME = "tw-font-medium";
+const HIGHLIGHT_ROW_BG = "tw-bg-interactive-hover";
 
 interface AgentPickerListProps {
   /** Rows to draw, already narrowed by {@link filterAgentRows}. */
@@ -125,9 +138,9 @@ interface AgentPickerListProps {
 
 /**
  * The roster itself: everyone the chat could be held with, each with the glyph,
- * name, and description the choice is made on, and a check on whoever holds it
- * now. Pure presentation — the caller owns the query, the highlight, and what
- * picking a row does.
+ * name, and description the choice is made on, the current one tinted. Pure
+ * presentation — the caller owns the query, the highlight, and what picking a
+ * row does.
  */
 export const AgentPickerList: React.FC<AgentPickerListProps> = ({
   rows,
@@ -180,17 +193,18 @@ export const AgentPickerList: React.FC<AgentPickerListProps> = ({
                 className={cn(
                   ROW_CLASS,
                   "tw-items-start",
-                  isHighlight && "tw-bg-interactive-hover"
+                  isSelected ? SELECTED_ROW_BG : isHighlight && HIGHLIGHT_ROW_BG
                 )}
                 onClick={() => onPick(row)}
               >
                 <div className="tw-flex tw-min-w-0 tw-items-start tw-gap-2">
-                  <span className={cn(MARKER_CLASS, "tw-h-5")} aria-hidden>
-                    {isSelected ? "✓" : ""}
-                  </span>
                   <AgentGlyph icon={row.icon} className="tw-h-5" />
                   <div className="tw-min-w-0">
-                    <div className="tw-truncate tw-text-normal">{row.name}</div>
+                    <div
+                      className={cn("tw-truncate tw-text-normal", isSelected && SELECTED_ROW_NAME)}
+                    >
+                      {row.name}
+                    </div>
                     {row.description && (
                       // Wrapped, not truncated: the description is the whole basis
                       // on which the user picks one agent over another, and at this
@@ -296,9 +310,6 @@ function AgentPickerSelect({ section, onPick }: AgentPickerSelectProps) {
             handleOpenChange(true);
           }}
         >
-          {/* No marker column: nothing in this row can ever be checked, so
-              reserving one would indent the agent past where every other row's
-              leading content starts. */}
           <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-2">
             <AgentGlyph icon={current.icon} />
             <span className="tw-truncate tw-text-normal">{current.name}</span>
@@ -583,7 +594,7 @@ export function ModelEffortPicker({ override, className, defaultOpen }: ModelEff
                     aria-disabled={(!entry._needsLicense && itemDisabled) || undefined}
                     className={cn(
                       ROW_CLASS,
-                      isHighlight && !itemDisabled && "tw-bg-interactive-hover",
+                      isActive ? SELECTED_ROW_BG : isHighlight && !itemDisabled && HIGHLIGHT_ROW_BG,
                       itemDisabled && "tw-opacity-50",
                       itemDisabled && !entry._needsLicense && "tw-cursor-not-allowed",
                       entry._needsLicense &&
@@ -616,23 +627,23 @@ export function ModelEffortPicker({ override, className, defaultOpen }: ModelEff
                     }}
                     title={disabledReason ?? undefined}
                   >
-                    <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-2">
-                      <span className={MARKER_CLASS} aria-hidden>
-                        {isActive ? "✓" : isHighlight ? "›" : ""}
-                      </span>
-                      <div className="tw-min-w-0">
-                        <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-1">
-                          <ModelDisplay model={entry} iconSize={12} />
-                          {entry._needsLicense && <LicenseRequiredIcon />}
-                          {entry._isFree && <FreeModelWarningIcon />}
-                          {entry._needsSelfHostWarning && <SelfHostCloudWarningIcon />}
-                        </div>
-                        {entry._subtitle && (
-                          <div className="tw-truncate tw-text-xs tw-text-muted">
-                            {entry._subtitle}
-                          </div>
+                    <div className="tw-min-w-0">
+                      <div
+                        className={cn(
+                          "tw-flex tw-min-w-0 tw-items-center tw-gap-1",
+                          isActive && SELECTED_ROW_NAME
                         )}
+                      >
+                        <ModelDisplay model={entry} iconSize={12} />
+                        {entry._needsLicense && <LicenseRequiredIcon />}
+                        {entry._isFree && <FreeModelWarningIcon />}
+                        {entry._needsSelfHostWarning && <SelfHostCloudWarningIcon />}
                       </div>
+                      {entry._subtitle && (
+                        <div className="tw-truncate tw-text-xs tw-text-muted">
+                          {entry._subtitle}
+                        </div>
+                      )}
                     </div>
                     {rightLabel && (
                       <span className="tw-shrink-0 tw-text-xs tw-text-faint">{rightLabel}</span>
