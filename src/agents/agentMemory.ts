@@ -83,9 +83,11 @@ export function buildAgentMemoryFlushPrompt(source: AgentMemoryFlushPromptSource
     [
       "## What to write down",
       "- First, one bullet saying what this conversation was about: what the " +
-        "user asked for and what you did or answered, in one line. Every " +
-        "conversation gets this bullet, so that you can later say what the two " +
-        "of you talked about today.",
+        "user asked for and what you did or answered, in one line, naming the " +
+        'specific decision, fact, or result rather than the topic ("decided the ' +
+        'intro is always one paragraph", not "discussed intro length"). Every ' +
+        "conversation gets this bullet; it is the line a later chat reads first, " +
+        "so that you can later say what the two of you talked about today.",
       "- Then one bullet per thing worth keeping, each a single line that stands " +
         "on its own: who the user is, their preferences, their standing " +
         "requests, open threads, and decisions they made. Never retell the " +

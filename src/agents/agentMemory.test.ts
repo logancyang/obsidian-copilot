@@ -63,6 +63,9 @@ describe("agentMemory", () => {
       const prompt = buildAgentMemoryFlushPrompt(source);
 
       expect(prompt).toContain("one bullet saying what this conversation was about");
+      expect(prompt).toContain(
+        "naming the specific decision, fact, or result rather than the topic"
+      );
       expect(prompt).toContain("Every conversation gets this bullet");
     });
 
