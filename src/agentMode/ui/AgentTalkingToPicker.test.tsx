@@ -10,6 +10,7 @@ function customAgent(overrides: Partial<CustomAgent> & { slug: string }): Custom
     icon: "🙂",
     backendId: null,
     modelId: null,
+    effort: null,
     memoryEnabled: true,
     created: "2026-09-16T10:00:00Z",
     instructions: "",

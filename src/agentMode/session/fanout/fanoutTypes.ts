@@ -2,6 +2,7 @@ import type {
   AgentChatMessage,
   AgentToolKind,
   BackendId,
+  ModelSelection,
   PromptContent,
 } from "@/agentMode/session/types";
 import { USER_SENDER } from "@/constants";
@@ -55,6 +56,12 @@ export interface FanoutAnswerer {
   icon: string;
   /** Backend the agent pinned, or null to answer on the chat's own backend. */
   backendId: BackendId | null;
+  /**
+   * The agent's pinned (model, effort) for the backend it will answer on, or
+   * null when it pinned neither and the sub-session should use the backend's
+   * own default (`designdocs/CUSTOM_AGENTS.md` §3).
+   */
+  selection: ModelSelection | null;
   /** The agent's `<agent_persona>` + `<agent_memory>` blocks, or null when it has neither. */
   personaBlock: string | null;
   /** Whether a memory pass runs for this agent once the turn completes. */

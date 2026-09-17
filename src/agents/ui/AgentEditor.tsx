@@ -18,6 +18,8 @@ export interface AgentEditorDraft {
   backendId: string;
   /** Empty string means "use the backend's default model". */
   modelId: string;
+  /** Empty string means "use whatever effort the session would run at". */
+  effort: string;
   memoryEnabled: boolean;
 }
 
@@ -32,6 +34,8 @@ export interface AgentEditorProps {
   backendOptions: readonly SelectOption[];
   /** "Backend default" plus the chosen backend's enabled models. */
   modelOptions: readonly SelectOption[];
+  /** "Model default" plus the effort levels the pinned model advertises. */
+  effortOptions: readonly SelectOption[];
   /** Blocking message shown above the buttons, e.g. a rejected icon or a failed write. */
   error: string | null;
   saving: boolean;
@@ -52,6 +56,7 @@ export const AgentEditor: React.FC<AgentEditorProps> = ({
   onChange,
   backendOptions,
   modelOptions,
+  effortOptions,
   error,
   saving,
   onSave,
@@ -60,6 +65,10 @@ export const AgentEditor: React.FC<AgentEditorProps> = ({
 }) => {
   const canSave = draft.name.trim().length > 0 && !saving;
   const backendPinned = draft.backendId.length > 0;
+  // Effort levels belong to a model, so there is nothing to choose between
+  // until one is pinned, and only one level to offer once it is
+  // (`designdocs/CUSTOM_AGENTS.md` §7).
+  const modelPinned = backendPinned && draft.modelId.length > 0;
 
   return (
     <div className="tw-flex tw-flex-col tw-gap-4">
@@ -144,7 +153,9 @@ export const AgentEditor: React.FC<AgentEditorProps> = ({
           <FormField label="Backend">
             <ObsidianNativeSelect
               value={draft.backendId}
-              onChange={(event) => onChange({ backendId: event.target.value, modelId: "" })}
+              onChange={(event) =>
+                onChange({ backendId: event.target.value, modelId: "", effort: "" })
+              }
               options={[...backendOptions]}
               aria-label="Backend"
             />
@@ -154,12 +165,23 @@ export const AgentEditor: React.FC<AgentEditorProps> = ({
           <FormField label="Model">
             <ObsidianNativeSelect
               value={draft.modelId}
-              onChange={(event) => onChange({ modelId: event.target.value })}
+              onChange={(event) => onChange({ modelId: event.target.value, effort: "" })}
               options={[...modelOptions]}
               // A model belongs to a backend, so there is nothing to choose
               // between until one is pinned.
               disabled={!backendPinned}
               aria-label="Model"
+            />
+          </FormField>
+        </div>
+        <div className="tw-min-w-0 tw-flex-1">
+          <FormField label="Effort">
+            <ObsidianNativeSelect
+              value={draft.effort}
+              onChange={(event) => onChange({ effort: event.target.value })}
+              options={[...effortOptions]}
+              disabled={!modelPinned || effortOptions.length <= 1}
+              aria-label="Effort"
             />
           </FormField>
         </div>

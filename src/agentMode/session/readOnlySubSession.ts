@@ -50,6 +50,12 @@ export interface ReadOnlySubSessionHost {
 export interface ReadOnlySubSessionRequest {
   backendId: BackendId;
   prompt: PromptContent[];
+  /**
+   * Run on this (model, effort) instead of the backend's saved default — how a
+   * fan-out answerer's own pins reach its sub-session. Absent or null keeps the
+   * saved default.
+   */
+  selection?: ModelSelection | null;
   /** Aborts the run when fired; the run then settles `"aborted"`. */
   signal: AbortSignal;
   /** Receives every assistant prose chunk as it streams. */
@@ -99,7 +105,7 @@ export class ReadOnlySubSessionRunner {
    * cancel/timeout suppress that.
    */
   run(params: ReadOnlySubSessionRequest): Promise<"done" | "aborted"> {
-    const { backendId, prompt, signal, onText } = params;
+    const { backendId, prompt, selection, signal, onText } = params;
 
     // The attempt owns the full lifecycle (setup, prompt, trailing-chunk grace,
     // teardown), so its `finally` always closes any session it opened — even a
@@ -136,7 +142,7 @@ export class ReadOnlySubSessionRunner {
         // Sandbox mode and model selection mutate disjoint fields.
         await Promise.all([
           this.applyReadOnlyMode(proc, descriptor, sessionId),
-          this.applyDefaultModel(proc, descriptor, backendId, sessionId, opened.state),
+          this.applyModel(proc, descriptor, backendId, sessionId, opened.state, selection ?? null),
         ]);
 
         // If the race already won during setup, do NOT dispatch: the caller's
@@ -330,17 +336,22 @@ export class ReadOnlySubSessionRunner {
   }
 
   /**
-   * Apply the saved model through the same backend policy as visible chats.
-   * State is local to this ephemeral session and refreshed after each write.
+   * Apply the caller's requested model, else the saved one, through the same
+   * backend policy as visible chats. State is local to this ephemeral session
+   * and refreshed after each write.
+   *
+   * @param requested - The caller's own (model, effort); null falls back to the
+   *   backend's saved default and then to whatever the fresh session reports.
    */
-  private async applyDefaultModel(
+  private async applyModel(
     proc: BackendProcess,
     descriptor: BackendDescriptor,
     backendId: BackendId,
     sessionId: SessionId,
-    state: BackendState
+    state: BackendState,
+    requested: ModelSelection | null
   ): Promise<void> {
-    const selection = this.host.getDefaultSelection(backendId) ?? state.model?.current;
+    const selection = requested ?? this.host.getDefaultSelection(backendId) ?? state.model?.current;
     if (!selection) return;
     // Duplicating codec/config dispatch here bypasses backend default-effort
     // handling. https://github.com/Brevilabs/obsidian-copilot-private/issues/219

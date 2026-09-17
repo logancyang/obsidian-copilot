@@ -161,6 +161,9 @@ export class FanoutOrchestrator {
     try {
       const outcome = await this.subSessions.run({
         backendId: answerer.backendId ?? input.sessionBackendId,
+        // An agent answers on what it pinned, not just where it pinned it
+        // (`designdocs/CUSTOM_AGENTS.md` §3).
+        selection: answerer.selection,
         // The agent's identity leads its prompt, so it answers in character and
         // with what it remembers (`designdocs/CUSTOM_AGENTS.md` §6).
         prompt: prependPromptText(input.prompt, answerer.personaBlock ?? ""),

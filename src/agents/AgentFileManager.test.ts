@@ -27,6 +27,7 @@ const DRAFT: AgentDraft = {
   instructions: "You are Jennifer, a developmental editor.\n",
   backendId: "claude",
   modelId: null,
+  effort: null,
   memoryEnabled: true,
 };
 
@@ -93,6 +94,7 @@ class FakeVault {
         icon: "",
         backendId: null,
         modelId: null,
+        effort: null,
         memoryEnabled: true,
         created: "2026-01-01T00:00:00Z",
         instructions: "",

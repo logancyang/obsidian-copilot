@@ -18,6 +18,11 @@ export interface CustomAgent {
   backendId: string | null;
   /** Pinned model id, or null to use the backend's own default. */
   modelId: string | null;
+  /**
+   * Pinned reasoning effort, or null to use whatever effort the session would
+   * otherwise run at (`designdocs/CUSTOM_AGENTS.md` §7).
+   */
+  effort: string | null;
   /** When false, `MEMORY.md` is neither read nor written. */
   memoryEnabled: boolean;
   /** ISO-8601 creation timestamp, written once at create. */

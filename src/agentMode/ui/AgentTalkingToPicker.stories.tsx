@@ -25,6 +25,7 @@ function agent(fields: {
     ...fields,
     backendId: null,
     modelId: null,
+    effort: null,
     memoryEnabled: true,
     created: "2026-09-16T10:00:00Z",
     instructions: "",

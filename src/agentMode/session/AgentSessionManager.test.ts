@@ -4716,6 +4716,7 @@ describe("AgentSessionManager talking-to selection", () => {
       icon: "🪶",
       backendId: null,
       modelId: null,
+      effort: null,
       memoryEnabled: true,
       created: "2026-09-16T10:00:00Z",
       instructions: "You are Jennifer, a developmental editor.",
@@ -4798,6 +4799,60 @@ describe("AgentSessionManager talking-to selection", () => {
       backendId: "opencode",
       defaultModelSelection: { baseModelId: "pinned-model", effort: null },
     });
+  });
+
+  it("opens a new chat at the effort the agent pinned beside its model (designdocs/CUSTOM_AGENTS.md §3)", async () => {
+    const manager = buildManager(
+      {},
+      undefined,
+      buildAgentFiles([
+        jennifer({ backendId: "opencode", modelId: "pinned-model", effort: "high" }),
+      ])
+    );
+    await manager.setSelectedAgent("jennifer");
+    sessionCreateSpy.mockClear();
+
+    await manager.createSession();
+
+    expect(sessionCreateSpy.mock.calls[0][0]).toMatchObject({
+      defaultModelSelection: { baseModelId: "pinned-model", effort: "high" },
+    });
+  });
+
+  it("rides an effort-only pin on the model the chat would otherwise open on (designdocs/CUSTOM_AGENTS.md §3)", async () => {
+    const original = (mockedGetSettings as jest.Mock).getMockImplementation();
+    const settings = mockedGetSettings();
+    (mockedGetSettings as jest.Mock).mockReturnValue({
+      ...settings,
+      agentMode: {
+        ...settings.agentMode,
+        activeBackend: "opencode",
+        backends: { opencode: { defaultModel: { baseModelId: "saved-model", effort: "low" } } },
+      },
+    });
+    try {
+      const manager = buildManager({}, undefined, buildAgentFiles([jennifer({ effort: "high" })]));
+      await manager.setSelectedAgent("jennifer");
+      sessionCreateSpy.mockClear();
+
+      await manager.createSession();
+
+      expect(sessionCreateSpy.mock.calls[0][0]).toMatchObject({
+        defaultModelSelection: { baseModelId: "saved-model", effort: "high" },
+      });
+    } finally {
+      (mockedGetSettings as jest.Mock).mockImplementation(original);
+    }
+  });
+
+  it("leaves an unpinned agent's chat on the selection the session would have used", async () => {
+    const manager = buildManager({}, undefined, buildAgentFiles([jennifer()]));
+    await manager.setSelectedAgent("jennifer");
+    sessionCreateSpy.mockClear();
+
+    await manager.createSession();
+
+    expect(sessionCreateSpy.mock.calls[0][0].defaultModelSelection).toBeUndefined();
   });
 
   it("ignores a model pinned for another backend so the chat never names an unknown model", async () => {
@@ -5269,6 +5324,24 @@ describe("AgentSessionManager talking-to selection", () => {
       expect(resolved[0][0].personaBlock).toContain("<agent_memory");
       // Vancat pins nothing, so the orchestrator falls back to the chat's backend.
       expect(resolved[0][1]).toMatchObject({ name: "Vancat", icon: "🐱", backendId: null });
+    });
+
+    it("hands over each answerer's pinned model and effort, not only its backend (designdocs/CUSTOM_AGENTS.md §3)", async () => {
+      const manager = buildManager(
+        {},
+        undefined,
+        buildAgentFiles([
+          jennifer({ backendId: "opencode", modelId: "pinned-model", effort: "high" }),
+          vancat(),
+        ])
+      );
+      const resolved = stubOrchestrator(() => "an answer");
+
+      await manager.runFanoutTurn(request(["jennifer", "vancat"]));
+
+      expect(resolved[0][0].selection).toEqual({ baseModelId: "pinned-model", effort: "high" });
+      // Vancat pins nothing, so its sub-session keeps the backend's own default.
+      expect(resolved[0][1].selection).toBeNull();
     });
 
     it("marks an agent deleted since the pill was inserted as missing rather than dropping it", async () => {

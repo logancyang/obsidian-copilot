@@ -3,6 +3,7 @@ import { resolveEffort } from "@/lib/model-effort";
 import { logError, logInfo, logWarn } from "@/logger";
 import type CopilotPlugin from "@/main";
 import { AgentChatUIState } from "@/agentMode/session/AgentChatUIState";
+import { resolveAgentPinnedSelection } from "@/agentMode/session/agentPinnedSelection";
 import {
   agentProjectContextLoadAtom,
   type AgentInFlightSource,
@@ -584,7 +585,9 @@ export class AgentSessionManager {
    */
   async runFanoutTurn(request: FanoutTurnRequest): Promise<FanoutTurn> {
     const { agentSlugs, ...context } = request;
-    const answerers = await Promise.all(agentSlugs.map((slug) => this.resolveFanoutAnswerer(slug)));
+    const answerers = await Promise.all(
+      agentSlugs.map((slug) => this.resolveFanoutAnswerer(slug, context.sessionBackendId))
+    );
     const turn = await this.fanoutOrchestrator.run({ ...context, answerers });
     this.beginFanoutMemoryPasses(answerers, turn, request);
     return turn;
@@ -596,13 +599,19 @@ export class AgentSessionManager {
    * so its tab says so instead of a personaless sub-session answering as nobody.
    *
    * @param slug - Slug of the mentioned agent.
+   * @param sessionBackendId - Backend the visible chat runs on, which an agent
+   *   that pinned none answers on, and which its model pin is resolved against.
    */
-  private async resolveFanoutAnswerer(slug: string): Promise<FanoutAnswerer> {
+  private async resolveFanoutAnswerer(
+    slug: string,
+    sessionBackendId: BackendId
+  ): Promise<FanoutAnswerer> {
     const gone: FanoutAnswerer = {
       slug,
       name: formatMissingAgentLabel(slug),
       icon: "",
       backendId: null,
+      selection: null,
       personaBlock: null,
       memoryEnabled: false,
       missing: true,
@@ -614,11 +623,17 @@ export class AgentSessionManager {
       if (!record) return gone;
       const { agent } = record;
       const session = await loadSessionAgent(files, agent);
+      const answeringOn = agent.backendId ?? sessionBackendId;
       return {
         slug,
         name: agent.name,
         icon: agent.icon,
         backendId: agent.backendId,
+        selection: resolveAgentPinnedSelection(
+          agent,
+          answeringOn,
+          this.getSeedSelection(answeringOn)
+        ),
         personaBlock: session.personaBlock,
         memoryEnabled: agent.memoryEnabled,
       };
@@ -1442,17 +1457,11 @@ export class AgentSessionManager {
     // An absent preference means "Agent default": let session/new report the
     // backend's actual selection. Catalog ordering describes choices, not a
     // default, so only explicit transient or persisted selections are applied.
-    // A pinned model applies only on the backend the agent pinned it for (or the
-    // one the session is already on when it pinned no backend); otherwise the
-    // id would name a model that backend has never heard of.
-    const pinnedSelection =
-      pinned?.modelId && (!pinned.backendId || pinned.backendId === resolvedId)
-        ? // The agent pins a model, not an effort level; the backend applies its
-          // own default effort for that model.
-          { baseModelId: pinned.modelId, effort: null }
-        : undefined;
-    const resolvedSeed =
-      seedSelection ?? pinnedSelection ?? this.getSeedSelection(resolvedId) ?? undefined;
+    // The agent's own model and effort pins, resolved against the backend this
+    // chat actually spawned on (`designdocs/CUSTOM_AGENTS.md` §3).
+    const persistedSeed = this.getSeedSelection(resolvedId);
+    const pinnedSelection = resolveAgentPinnedSelection(pinned, resolvedId, persistedSeed);
+    const resolvedSeed = seedSelection ?? pinnedSelection ?? persistedSeed ?? undefined;
 
     // A new chat must always start from a brand-new backend session. When a
     // warm preload probe is available we reuse its already-spawned and

@@ -2,6 +2,7 @@ import {
   COPILOT_AGENT_BACKEND,
   COPILOT_AGENT_CREATED,
   COPILOT_AGENT_DESCRIPTION,
+  COPILOT_AGENT_EFFORT,
   COPILOT_AGENT_ICON,
   COPILOT_AGENT_MEMORY,
   COPILOT_AGENT_MODEL,
@@ -105,6 +106,7 @@ export function parseAgentFile(slug: string, raw: string): CustomAgent {
     icon: readString(frontmatter, COPILOT_AGENT_ICON),
     backendId: readString(frontmatter, COPILOT_AGENT_BACKEND) || null,
     modelId: readString(frontmatter, COPILOT_AGENT_MODEL) || null,
+    effort: readString(frontmatter, COPILOT_AGENT_EFFORT) || null,
     // Memory is on unless the file says otherwise, so an agent whose key was
     // hand-deleted keeps the notebook it has already written.
     memoryEnabled: memory !== false && memory !== "false",
@@ -128,6 +130,7 @@ export function serializeAgentFile(agent: CustomAgent): string {
     [COPILOT_AGENT_ICON]: agent.icon.trim(),
     [COPILOT_AGENT_BACKEND]: agent.backendId ?? "",
     [COPILOT_AGENT_MODEL]: agent.modelId ?? "",
+    [COPILOT_AGENT_EFFORT]: agent.effort ?? "",
     [COPILOT_AGENT_MEMORY]: agent.memoryEnabled,
     [COPILOT_AGENT_CREATED]: agent.created,
   };

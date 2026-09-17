@@ -14,6 +14,7 @@ const JENNIFER: CustomAgent = {
   icon: "🪶",
   backendId: "claude",
   modelId: null,
+  effort: null,
   memoryEnabled: true,
   created: "2026-09-16T10:00:00Z",
   instructions: "You are Jennifer, a developmental editor.\n",
@@ -88,6 +89,7 @@ describe("agentFile", () => {
           "copilot-agent-icon: 🪶",
           "copilot-agent-backend: claude",
           "copilot-agent-model: sonnet",
+          "copilot-agent-effort: low",
           "copilot-agent-memory: true",
           "copilot-agent-created: 2026-09-16T10:00:00Z",
           "---",
@@ -103,6 +105,7 @@ describe("agentFile", () => {
         icon: "🪶",
         backendId: "claude",
         modelId: "sonnet",
+        effort: "low",
         memoryEnabled: true,
         created: "2026-09-16T10:00:00Z",
         instructions: "You are Jennifer.\n",
@@ -118,6 +121,7 @@ describe("agentFile", () => {
         icon: "V",
         backendId: null,
         modelId: null,
+        effort: null,
         created: "",
         instructions: "Be blunt.",
       });
@@ -155,6 +159,14 @@ describe("agentFile", () => {
       expect(agent.description).toBe("");
     });
 
+    it("leaves the effort pin unset when a hand edit put a list where a level belongs", () => {
+      const agent = parseAgentFile(
+        "vancat",
+        "---\ncopilot-agent-effort:\n  - low\n  - high\n---\nBody."
+      );
+      expect(agent.effort).toBeNull();
+    });
+
     it("strips a leading byte-order mark so a BOM'd file still parses", () => {
       const agent = parseAgentFile("vancat", "﻿---\ncopilot-agent-name: Vancat\n---\nBody.");
       expect(agent.name).toBe("Vancat");
@@ -173,13 +185,24 @@ describe("agentFile", () => {
     });
 
     it("emits unset pins as empty keys so the record is visible to hand edits", () => {
-      const written = serializeAgentFile({ ...JENNIFER, backendId: null, modelId: null });
+      const written = serializeAgentFile({
+        ...JENNIFER,
+        backendId: null,
+        modelId: null,
+        effort: null,
+      });
       expect(written).toContain('copilot-agent-backend: ""');
       expect(written).toContain('copilot-agent-model: ""');
+      expect(written).toContain('copilot-agent-effort: ""');
     });
 
     it("round-trips an agent unchanged through parse", () => {
       expect(parseAgentFile("jennifer", serializeAgentFile(JENNIFER))).toEqual(JENNIFER);
+    });
+
+    it("round-trips a pinned effort level (designdocs/CUSTOM_AGENTS.md §7)", () => {
+      const pinned = { ...JENNIFER, modelId: "sonnet", effort: "high" };
+      expect(parseAgentFile("jennifer", serializeAgentFile(pinned))).toEqual(pinned);
     });
 
     it("quotes a description containing YAML punctuation so it round-trips intact", () => {
