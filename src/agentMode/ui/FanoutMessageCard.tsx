@@ -27,7 +27,7 @@ interface FanoutMessageCardProps {
 /**
  * The assistant card for a fan-out turn: the segmented tab row
  * ({@link FanoutTurnView}) plus the same action bar as the normal AI card. Its
- * one Copy/Insert affordance is context-aware — the WHOLE composite on the
+ * one Copy/Insert affordance is context-aware — the WHOLE composite on a
  * Summary tab, just that agent's answer on an agent tab. The card owns the
  * selected tab so the action bar can target it.
  */

@@ -94,12 +94,28 @@ export function fanoutDisplayName(backendId: BackendId): string {
 }
 
 /**
- * Derive the dropdown options: the summary first (the default view), then one
- * entry per agent in slot order (insertion order preserved).
+ * A one-answer turn is direct only when no summary was produced. Older saved
+ * one-answer turns may already contain a summary and must keep exposing it.
+ * https://github.com/Brevilabs/obsidian-copilot-private/issues/481
+ */
+function isDirectAnswerTurn(turn: FanoutTurn): boolean {
+  return (
+    Object.keys(turn.answers).length === 1 &&
+    turn.summary.text.trim().length === 0 &&
+    turn.summary.error === undefined
+  );
+}
+
+/**
+ * Derive the dropdown options: one direct agent entry for a single answer;
+ * otherwise the summary first, then agents in insertion order.
  */
 export function buildFanoutOptions(turn: FanoutTurn): FanoutOption[] {
-  const options: FanoutOption[] = [{ value: FANOUT_SUMMARY_OPTION, label: "Summary" }];
-  for (const backendId of Object.keys(turn.answers)) {
+  const backendIds = Object.keys(turn.answers);
+  const options: FanoutOption[] = isDirectAnswerTurn(turn)
+    ? []
+    : [{ value: FANOUT_SUMMARY_OPTION, label: "Summary" }];
+  for (const backendId of backendIds) {
     const answer = turn.answers[backendId];
     const { displayName, Icon } = brandFor(backendId);
     options.push({
@@ -112,9 +128,10 @@ export function buildFanoutOptions(turn: FanoutTurn): FanoutOption[] {
   return options;
 }
 
-/** The default selected option: always the summary. A function for a single future seam. */
-export function defaultFanoutOption(_turn: FanoutTurn): FanoutOptionValue {
-  return FANOUT_SUMMARY_OPTION;
+/** The default selected option: the sole agent for a direct response, otherwise the summary. */
+export function defaultFanoutOption(turn: FanoutTurn): FanoutOptionValue {
+  const backendIds = Object.keys(turn.answers);
+  return isDirectAnswerTurn(turn) ? backendIds[0] : FANOUT_SUMMARY_OPTION;
 }
 
 /**

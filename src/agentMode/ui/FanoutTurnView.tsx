@@ -87,11 +87,11 @@ const FanoutStatusDot: React.FC<FanoutStatusDotProps> = ({ state }) => {
 };
 
 /**
- * Render a fan-out turn as one assistant turn: a segmented tab row (Summary
- * first, default) switching between the summary and each agent's answer, each
- * tab reflecting its live state. Renders for BOTH a live turn and a reloaded
- * composite. Controlled — the owning card holds the selected tab so its action
- * bar can Copy/Insert the tab in view.
+ * Render a fan-out turn as one assistant turn: a segmented tab row switching
+ * between the summary and each agent's answer, with a direct agent-only view for
+ * a sole answer. Each tab reflects its live state. Renders for BOTH a live turn
+ * and a reloaded composite. Controlled — the owning card holds the selected tab
+ * so its action bar can Copy/Insert the tab in view.
  */
 export const FanoutTurnView: React.FC<FanoutTurnViewProps> = memo(
   ({ turn, app, value, onSelect }) => {

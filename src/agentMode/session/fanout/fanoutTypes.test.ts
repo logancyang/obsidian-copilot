@@ -266,6 +266,17 @@ describe("serializeFanoutComposite / parseFanoutComposite", () => {
 describe("renderFanoutComposite", () => {
   const name = (id: string) => id.toUpperCase();
 
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/481 renders a single direct answer without an empty Summary heading", () => {
+    const turn: FanoutTurn = {
+      answers: {
+        claude: { backendId: "claude", status: "done", text: "Claude answer" },
+      },
+      summary: { status: "done", text: "" },
+    };
+
+    expect(renderFanoutComposite(turn, name)).toBe("### CLAUDE\nClaude answer");
+  });
+
   it("renders clean markdown (no markers): summary + each succeeded agent + did-not-answer notes", () => {
     const turn: FanoutTurn = {
       answers: {

@@ -205,16 +205,44 @@ describe("FanoutOrchestrator", () => {
 
   describe("FanoutOrchestrator", () => {
     describe("run()", () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/481 returns one mentioned agent's answer without dispatching a summary", async () => {
+        const { host, procs } = makeHost({ claude: { sessionId: "s-claude" } });
+        const proc = procs.get("claude")!;
+        jest.mocked(proc.proc.prompt).mockImplementation(async () => {
+          proc.emit(textChunk("s-claude", "Claude answered directly"));
+          return { stopReason: "end_turn" };
+        });
+
+        const turn = await new FanoutOrchestrator(host).run(runInput(["claude"]));
+
+        expect(proc.proc.prompt).toHaveBeenCalledTimes(1);
+        expect(turn.answers.claude).toMatchObject({
+          status: "done",
+          text: "Claude answered directly",
+        });
+        expect(turn.summary).toEqual({ status: "done", text: "" });
+      });
+
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/219 applies explicit Codex effort to both answer and summary sessions", async () => {
-        const { host, procs } = makeHost({ codex: { sessionId: "s-codex" } });
+        const { host, procs } = makeHost({
+          codex: { sessionId: "s-codex" },
+          claude: { sessionId: "s-claude" },
+        });
         const proc = procs.get("codex")!.proc;
-        host.ensureBackendForFanout = async () => ({ proc, descriptor: CodexBackendDescriptor });
+        host.ensureBackendForFanout = async (backendId) =>
+          backendId === "codex"
+            ? { proc, descriptor: CodexBackendDescriptor }
+            : {
+                proc: procs.get(backendId)!.proc,
+                descriptor: descriptorFor(backendId),
+              };
         host.getDefaultSelection = () => ({ baseModelId: "example", effort: "high" });
         jest.mocked(proc.prompt).mockImplementation(async () => {
           procs.get("codex")!.emit(textChunk("s-codex", "answer"));
           return { stopReason: "end_turn" };
         });
-        await new FanoutOrchestrator(host).run(runInput(["codex"]));
+        jest.mocked(procs.get("claude")!.proc.prompt).mockResolvedValue({ stopReason: "end_turn" });
+        await new FanoutOrchestrator(host).run(runInput(["codex", "claude"]));
         expect(proc.setSessionModel).toHaveBeenCalledWith({
           sessionId: "s-codex",
           modelId: "example[high]",
@@ -236,19 +264,33 @@ describe("FanoutOrchestrator", () => {
       });
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/219 exposes a summary-only model selection failure while preserving successful answers", async () => {
-        const { host, procs } = makeHost({ codex: { sessionId: "s-codex" } });
+        const { host, procs } = makeHost({
+          codex: { sessionId: "s-codex" },
+          claude: { sessionId: "s-claude" },
+        });
         const proc = procs.get("codex")!.proc;
-        host.ensureBackendForFanout = async () => ({ proc, descriptor: CodexBackendDescriptor });
-        host.getDefaultSelection = jest
-          .fn()
-          .mockReturnValueOnce({ baseModelId: "example", effort: "high" })
-          .mockReturnValue({ baseModelId: "example", effort: null });
+        host.ensureBackendForFanout = async (backendId) =>
+          backendId === "codex"
+            ? { proc, descriptor: CodexBackendDescriptor }
+            : {
+                proc: procs.get(backendId)!.proc,
+                descriptor: descriptorFor(backendId),
+              };
+        let codexSelectionCount = 0;
+        host.getDefaultSelection = (backendId) => {
+          if (backendId !== "codex") return null;
+          codexSelectionCount += 1;
+          return codexSelectionCount === 1
+            ? { baseModelId: "example", effort: "high" }
+            : { baseModelId: "example", effort: null };
+        };
         jest.mocked(proc.prompt).mockImplementation(async () => {
           procs.get("codex")!.emit(textChunk("s-codex", "Successful answer"));
           return { stopReason: "end_turn" };
         });
+        jest.mocked(procs.get("claude")!.proc.prompt).mockResolvedValue({ stopReason: "end_turn" });
 
-        const result = await new FanoutOrchestrator(host).run(runInput(["codex"]));
+        const result = await new FanoutOrchestrator(host).run(runInput(["codex", "claude"]));
 
         expect(result.answers.codex).toMatchObject({ status: "done", text: "Successful answer" });
         expect(result.summary.status).toBe("done");
@@ -258,7 +300,10 @@ describe("FanoutOrchestrator", () => {
       });
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/219 applies and reports the lowest OpenCode effort before both answer and summary prompts", async () => {
-        const { host, procs } = makeHost({ opencode: { sessionId: "s-opencode" } });
+        const { host, procs } = makeHost({
+          opencode: { sessionId: "s-opencode" },
+          claude: { sessionId: "s-claude" },
+        });
         const proc = procs.get("opencode")!.proc;
         const state: BackendState = {
           model: {
@@ -278,8 +323,15 @@ describe("FanoutOrchestrator", () => {
           },
           mode: null,
         };
-        host.ensureBackendForFanout = async () => ({ proc, descriptor: OpencodeBackendDescriptor });
-        host.getDefaultSelection = () => ({ baseModelId: "provider/model", effort: null });
+        host.ensureBackendForFanout = async (backendId) =>
+          backendId === "opencode"
+            ? { proc, descriptor: OpencodeBackendDescriptor }
+            : {
+                proc: procs.get(backendId)!.proc,
+                descriptor: descriptorFor(backendId),
+              };
+        host.getDefaultSelection = (backendId) =>
+          backendId === "opencode" ? { baseModelId: "provider/model", effort: null } : null;
         jest.mocked(proc.newSession).mockResolvedValue({ sessionId: "s-opencode", state });
         const confirmed = {
           ...state,
@@ -291,8 +343,9 @@ describe("FanoutOrchestrator", () => {
           procs.get("opencode")!.emit(textChunk("s-opencode", "answer"));
           return { stopReason: "end_turn" };
         });
+        jest.mocked(procs.get("claude")!.proc.prompt).mockResolvedValue({ stopReason: "end_turn" });
 
-        await new FanoutOrchestrator(host).run(runInput(["opencode"]));
+        await new FanoutOrchestrator(host).run(runInput(["opencode", "claude"]));
 
         expect(jest.mocked(proc.setSessionConfigOption).mock.calls).toEqual([
           [{ sessionId: "s-opencode", configId: "effort", value: "low" }],

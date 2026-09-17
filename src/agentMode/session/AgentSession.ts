@@ -1045,7 +1045,7 @@ export class AgentSession {
       const projectContextUpdatesBlock = projectContextUpdates?.block ?? null;
 
       // Fan-out path: the `@`-mentioned answerers dispatch the identical prompt in
-      // parallel ephemeral read-only sub-sessions and the main agent summarizes.
+      // parallel ephemeral read-only sub-sessions. Multi-answer turns are summarized.
       // It never talks to the visible backend, so it doesn't inject/flush the
       // pending fan-out buffer (only appends on completion). `isFanout` collapses
       // the degenerate `[main]` case so the main agent never both answers and
@@ -1248,9 +1248,9 @@ export class AgentSession {
   /**
    * Dispatch a fan-out turn. Every ANSWERER runs the identical `promptBlocks` in
    * a parallel ephemeral read-only sub-session, answers stream into per-agent
-   * slots of one live {@link FanoutTurn}, and the main agent fills the summary
-   * once they settle. Returns a `StopReason` so the surrounding `runTurn`
-   * lifecycle matches the single-agent path.
+   * slots of one live {@link FanoutTurn}. Once they settle, the main agent fills
+   * the summary only when there are multiple answers. Returns a `StopReason` so
+   * the surrounding `runTurn` lifecycle matches the single-agent path.
    */
   private async runFanoutPath(
     placeholderId: string,
@@ -1261,7 +1261,7 @@ export class AgentSession {
     const signal = this.abortController?.signal ?? new AbortController().signal;
     const input: FanoutRunInput = {
       agents: this.lastMentionedAgents,
-      // The summarizer is ALWAYS the session's main agent, separate from the answerers.
+      // Multi-answer turns use the session's main agent as the summarizer.
       mainAgent: this.backendId,
       prompt: withReadOnlyPreamble(promptBlocks),
       // The raw question fed to the summary. Distinct from `prompt`, which carries
@@ -1281,10 +1281,15 @@ export class AgentSession {
     const stopReason: StopReason = signal.aborted ? "cancelled" : "end_turn";
     // Persist the FULL composite as the message body so the dropdown reconstructs
     // on reload. Any non-empty slot text counts (including a terminal slot's
-    // partial text), so a turn cancelled mid-stream is saved, not dropped blank;
-    // a turn with no content at all persists/buffers nothing.
+    // partial text), so a turn cancelled mid-stream is saved, not dropped blank.
+    // A sole agent's empty terminal slot also carries the only visible outcome
+    // and must survive reload with its error/cancel status.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/481
     const hasAnswerText = Object.values(turn.answers).some((a) => a.text.trim().length > 0);
-    const hasContent = turn.summary.text.trim().length > 0 || hasAnswerText;
+    const hasContent =
+      turn.summary.text.trim().length > 0 ||
+      hasAnswerText ||
+      Object.keys(turn.answers).length === 1;
     if (hasContent) {
       const composite = serializeFanoutComposite(turn, (id) => this.displayNameFor(id));
       this.store.appendAgentText(placeholderId, composite);

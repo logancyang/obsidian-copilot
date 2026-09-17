@@ -637,7 +637,12 @@ export function renderFanoutComposite(
   const sections: string[] = [];
 
   const summaryText = turn.summary.text.trim();
-  sections.push(summaryText.length > 0 ? `### Summary\n${summaryText}` : "### Summary");
+  // A single direct answer has no synthesized summary, so continuity replay and
+  // copy output should not invent an empty Summary section.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/481
+  if (summaryText.length > 0 || Object.keys(turn.answers).length !== 1) {
+    sections.push(summaryText.length > 0 ? `### Summary\n${summaryText}` : "### Summary");
+  }
 
   for (const backendId of Object.keys(turn.answers)) {
     const name = displayName(backendId);

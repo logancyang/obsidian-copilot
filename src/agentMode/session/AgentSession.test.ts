@@ -1589,6 +1589,34 @@ describe("withReadOnlyPreamble", () => {
 });
 
 describe("AgentSession fan-out branching", () => {
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/481 persists an empty failed single-agent response so it survives reload", async () => {
+    const mock = makeMockBackend();
+    const runFanoutTurn = jest.fn(async (input: FanoutRunInput): Promise<FanoutTurn> => {
+      const turn: FanoutTurn = {
+        answers: {
+          claude: { backendId: "claude", status: "error", text: "", error: "backend boom" },
+        },
+        summary: { status: "done", text: "" },
+      };
+      input.onChange(turn);
+      return turn;
+    });
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "opencode",
+      runFanoutTurn,
+    });
+
+    await session.sendPrompt("review", undefined, undefined, ["claude"]).turn;
+
+    const response = session.store.getDisplayMessages().find((m) => m.sender === AI_SENDER);
+    expect(response?.message).toContain('id="claude"');
+    expect(response?.message).toContain('status="error"');
+    expect(response?.message).toContain('error="backend boom"');
+  });
+
   it("dispatches to the fan-out runner (not backend.prompt) when >1 agent", async () => {
     const mock = makeMockBackend();
     const runFanoutTurn = jest.fn(async (input: FanoutRunInput): Promise<FanoutTurn> => {
