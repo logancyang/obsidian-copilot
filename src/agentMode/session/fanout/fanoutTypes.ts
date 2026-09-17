@@ -30,14 +30,45 @@ export const FANOUT_READONLY_PREAMBLE =
  */
 export interface FanoutTurn {
   /**
-   * One slot per ANSWERER (the deduped `@`-mentioned installed agents), keyed by
-   * `BackendId`. For multiple answerers, the session main agent summarizes
-   * separately and has a slot only if it was itself `@`-mentioned.
+   * One slot per ANSWERER (the deduped `@`-mentioned agents), keyed by agent
+   * slug. For multiple answerers, the chat's own agent summarizes separately and
+   * has a slot only if it was itself `@`-mentioned.
    */
-  answers: Record<BackendId, AgentAnswer>;
-  /** Narrative summary, filled by the main agent only for multi-answer turns. */
+  answers: Record<string, AgentAnswer>;
+  /** Narrative summary, filled by the chat's own agent only for multi-answer turns. */
   summary: FanoutSummary;
 }
+
+/**
+ * One `@`-mentioned agent as the turn will run it: resolved from its folder when
+ * the turn is sent, so the persona and memory it answers with are what is on
+ * disk now rather than what the composer last listed.
+ *
+ * See `designdocs/CUSTOM_AGENTS.md` §6 ("Fan-out becomes agent fan-out").
+ */
+export interface FanoutAnswerer {
+  /** Folder name, and the key of this agent's answer slot. */
+  slug: string;
+  /** Display name, shown on the answer tab and used as the persisted section label. */
+  name: string;
+  /** The agent's emoji; empty when it set none. */
+  icon: string;
+  /** Backend the agent pinned, or null to answer on the chat's own backend. */
+  backendId: BackendId | null;
+  /** The agent's `<agent_persona>` + `<agent_memory>` blocks, or null when it has neither. */
+  personaBlock: string | null;
+  /** Whether a memory pass runs for this agent once the turn completes. */
+  memoryEnabled: boolean;
+  /**
+   * The agent folder is gone — deleted between composing and sending. Its slot
+   * says so rather than running a personaless sub-session that would answer as
+   * nobody (`designdocs/CUSTOM_AGENTS.md` §1).
+   */
+  missing?: boolean;
+}
+
+/** What an answer slot reports for an agent whose folder no longer exists. */
+export const FANOUT_MISSING_AGENT_ERROR = "This agent no longer exists.";
 
 /**
  * Whether a turn's sole agent answer is the response of record. A one-answer
@@ -55,9 +86,21 @@ export function isDirectAnswerTurn(turn: FanoutTurn): boolean {
  */
 export type AgentAnswerStatus = "running" | "done" | "error" | "cancelled";
 
-/** One agent's slot in a fan-out turn. `error` is set when `status === "error"`. */
+/**
+ * One agent's slot in a fan-out turn. `error` is set when `status === "error"`.
+ *
+ * The slot carries the agent's own name and icon rather than a slug the renderer
+ * would have to look up: a reloaded turn then still labels its tabs correctly
+ * after the agent has been renamed or deleted, and a composite written by an
+ * older build — whose sections were backend brands — reads back the same way.
+ */
 export interface AgentAnswer {
-  backendId: BackendId;
+  /** Slug of the answering agent; the brand id (`claude`, …) in a legacy composite. */
+  agentSlug: string;
+  /** Name shown on the tab and written as the persisted section label. */
+  name: string;
+  /** The agent's emoji; empty for an agent with no icon and for legacy composites. */
+  icon: string;
   status: AgentAnswerStatus;
   text: string;
   error?: string;
@@ -146,9 +189,9 @@ export function isVaultWriteToolKind(kind: AgentToolKind | undefined): boolean {
  * captured snapshot to stay stable as the live turn keeps mutating.
  */
 export function snapshotFanoutTurn(turn: FanoutTurn): FanoutTurn {
-  const answers: Record<BackendId, AgentAnswer> = {};
-  for (const backendId of Object.keys(turn.answers)) {
-    answers[backendId] = { ...turn.answers[backendId] };
+  const answers: Record<string, AgentAnswer> = {};
+  for (const slug of Object.keys(turn.answers)) {
+    answers[slug] = { ...turn.answers[slug] };
   }
   return { answers, summary: { ...turn.summary } };
 }
@@ -204,6 +247,25 @@ export const FANOUT_SUMMARY_INSTRUCTION =
   "  Do NOT reproduce the artifacts (the user already has each in its own tab); " +
   "describe the approach only.\n\n" +
   "Do NOT modify any files or run write/shell tools.";
+
+/**
+ * Prepend `text` to a prompt's leading text block (or add one), so framing that
+ * has to be read first — the read-only rule, an answerer's own persona — arrives
+ * ahead of the shared context instead of after it.
+ *
+ * @param blocks - The prompt as built so far; returned unmodified in place of a
+ *   copy only when there is nothing to prepend.
+ * @param text - The framing to put in front.
+ */
+export function prependPromptText(blocks: PromptContent[], text: string): PromptContent[] {
+  if (!text.trim()) return blocks;
+  const i = blocks.findIndex((b) => b.type === "text");
+  if (i === -1) return [{ type: "text", text }, ...blocks];
+  const block = blocks[i] as Extract<PromptContent, { type: "text" }>;
+  const out = blocks.slice();
+  out[i] = { type: "text", text: `${text}\n\n${block.text}` };
+  return out;
+}
 
 /** The text persisted when every fan-out agent failed. */
 export const FANOUT_ALL_FAILED_SUMMARY =
@@ -362,7 +424,7 @@ function renderMessageContext(context: MessageContext | undefined): string[] {
  */
 function historyProse(message: AgentChatMessage): string {
   const turn = message.fanout ?? parseFanoutComposite(message.message);
-  return turn ? renderFanoutComposite(turn, (id) => id) : message.message;
+  return turn ? renderFanoutComposite(turn) : message.message;
 }
 
 /**
@@ -438,7 +500,9 @@ export function buildConversationHistoryBlock(
 
 /** One agent's succeeded answer, ready to feed into the summary prompt. */
 export interface SucceededAnswer {
-  backendId: BackendId;
+  agentSlug: string;
+  /** The agent's display name, which is how the summary attributes its points. */
+  name: string;
   text: string;
 }
 
@@ -449,7 +513,8 @@ export interface SucceededAnswer {
  */
 export interface SummaryInputs {
   succeeded: SucceededAnswer[];
-  failed: BackendId[];
+  /** Slugs of the agents that errored or finished empty. */
+  failed: string[];
 }
 
 /**
@@ -458,14 +523,14 @@ export interface SummaryInputs {
  */
 export function selectSummaryInputs(turn: FanoutTurn): SummaryInputs {
   const succeeded: SucceededAnswer[] = [];
-  const failed: BackendId[] = [];
-  for (const backendId of Object.keys(turn.answers)) {
-    const slot = turn.answers[backendId];
+  const failed: string[] = [];
+  for (const slug of Object.keys(turn.answers)) {
+    const slot = turn.answers[slug];
     const text = slot.text.trim();
     if (slot.status === "done" && text.length > 0) {
-      succeeded.push({ backendId, text });
+      succeeded.push({ agentSlug: slug, name: slot.name, text });
     } else {
-      failed.push(backendId);
+      failed.push(slug);
     }
   }
   return { succeeded, failed };
@@ -481,23 +546,21 @@ const FANOUT_SUMMARY_ANSWER_MAX_CHARS = 12_000;
 const FANOUT_SUMMARY_ANSWER_TRUNCATION_MARKER = "[answer truncated]";
 
 /**
- * Compose the NEW user-turn prompt fed to the main agent for the summary: the
- * instruction, the user's original prompt, then each succeeded answer labeled by
- * its agent's display name. `displayNameFor` falls back to the id when unknown.
- * Returns `null` when zero agents succeeded so the caller doesn't fabricate a
- * summary over nothing.
+ * Compose the NEW user-turn prompt fed to the chat's own agent for the summary:
+ * the instruction, the user's original prompt, then each succeeded answer
+ * labeled by its agent's display name. Returns `null` when zero agents succeeded
+ * so the caller doesn't fabricate a summary over nothing.
  */
 export function buildSummaryUserPrompt(
   originalPrompt: string,
-  inputs: SummaryInputs,
-  displayNameFor: (backendId: BackendId) => string
+  inputs: SummaryInputs
 ): PromptContent[] | null {
   if (inputs.succeeded.length === 0) return null;
   // Cap each answer's length so a single oversized one can't blow the summary
   // sub-session's context/timeout.
   const sections = inputs.succeeded.map(
-    ({ backendId, text }) =>
-      `### ${displayNameFor(backendId)}\n${trimHead(text, FANOUT_SUMMARY_ANSWER_MAX_CHARS, FANOUT_SUMMARY_ANSWER_TRUNCATION_MARKER)}`
+    ({ name, text }) =>
+      `### ${name}\n${trimHead(text, FANOUT_SUMMARY_ANSWER_MAX_CHARS, FANOUT_SUMMARY_ANSWER_TRUNCATION_MARKER)}`
   );
   // Only SUCCEEDED answers are shown; failed agents are omitted entirely so the
   // summary can't mention or speculate about them.
@@ -594,25 +657,26 @@ const FANOUT_NO_ANSWER_NOTE = "did not answer";
  * answers are capped; the response-of-record direct answer is not. Every answer
  * is marker-escaped so it can't forge a section.
  */
-export function serializeFanoutComposite(
-  turn: FanoutTurn,
-  displayName: (backendId: BackendId) => string
-): string {
+export function serializeFanoutComposite(turn: FanoutTurn): string {
   const { succeeded } = selectSummaryInputs(turn);
-  const succeededIds = new Set(succeeded.map((s) => s.backendId));
+  const succeededSlugs = new Set(succeeded.map((s) => s.agentSlug));
   const summaryText = turn.summary.text.trim();
   const shouldCapAnswers = !isDirectAnswerTurn(turn);
 
   const lines: string[] = [FANOUT_MARKER_OPEN, FANOUT_MARKER_SUMMARY, "### Summary"];
   if (summaryText.length > 0) lines.push(escapeFanoutMarkers(summaryText));
 
-  for (const backendId of Object.keys(turn.answers)) {
-    const name = displayName(backendId);
-    const nameAttr = ` name="${escapeMarkerAttr(name)}"`;
-    const slot = turn.answers[backendId];
-    if (succeededIds.has(backendId)) {
+  for (const slug of Object.keys(turn.answers)) {
+    const slot = turn.answers[slug];
+    const name = slot.name;
+    // The icon rides the marker so a reloaded tab keeps the agent's face even
+    // after the agent is renamed or deleted; a legacy composite has none.
+    const identity =
+      `id="${escapeMarkerAttr(slug)}" name="${escapeMarkerAttr(name)}"` +
+      (slot.icon ? ` icon="${escapeMarkerAttr(slot.icon)}"` : "");
+    if (succeededSlugs.has(slug)) {
       lines.push(
-        `<!--copilot:agent id="${escapeMarkerAttr(backendId)}"${nameAttr} status="done"-->`,
+        `<!--copilot:agent ${identity} status="done"-->`,
         `### ${name}`,
         escapeFanoutMarkers(
           shouldCapAnswers ? capPersistedAnswer(slot.text.trim()) : slot.text.trim()
@@ -627,13 +691,13 @@ export function serializeFanoutComposite(
       const partial = slot.text.trim();
       if (partial.length > 0) {
         lines.push(
-          `<!--copilot:agent id="${escapeMarkerAttr(backendId)}"${nameAttr}${statusAttr}${errorAttr}-->`,
+          `<!--copilot:agent ${identity}${statusAttr}${errorAttr}-->`,
           `### ${name}`,
           escapeFanoutMarkers(shouldCapAnswers ? capPersistedAnswer(partial) : partial)
         );
       } else {
         lines.push(
-          `<!--copilot:agent id="${escapeMarkerAttr(backendId)}"${nameAttr}${statusAttr}${errorAttr} note="${FANOUT_NO_ANSWER_NOTE}"-->`
+          `<!--copilot:agent ${identity}${statusAttr}${errorAttr} note="${FANOUT_NO_ANSWER_NOTE}"-->`
         );
       }
     }
@@ -647,12 +711,9 @@ export function serializeFanoutComposite(
  * The CLEAN composite (markers stripped) for copy / insert of the whole turn:
  * readable markdown so the user copies prose, never the invisible markers.
  */
-export function renderFanoutComposite(
-  turn: FanoutTurn,
-  displayName: (backendId: BackendId) => string
-): string {
+export function renderFanoutComposite(turn: FanoutTurn): string {
   const { succeeded } = selectSummaryInputs(turn);
-  const succeededIds = new Set(succeeded.map((s) => s.backendId));
+  const succeededSlugs = new Set(succeeded.map((s) => s.agentSlug));
   const sections: string[] = [];
 
   const summaryText = turn.summary.text.trim();
@@ -663,10 +724,10 @@ export function renderFanoutComposite(
     sections.push(summaryText.length > 0 ? `### Summary\n${summaryText}` : "### Summary");
   }
 
-  for (const backendId of Object.keys(turn.answers)) {
-    const name = displayName(backendId);
-    const slot = turn.answers[backendId];
-    if (succeededIds.has(backendId)) {
+  for (const slug of Object.keys(turn.answers)) {
+    const slot = turn.answers[slug];
+    const name = slot.name;
+    if (succeededSlugs.has(slug)) {
       sections.push(`### ${name}\n${slot.text.trim()}`);
     } else {
       // A terminal slot keeps partial text if any; an empty one gets the note.
@@ -707,13 +768,18 @@ function statusFromMarker(raw: string | undefined): AgentAnswerStatus {
  * message (no composite marker). Reconstructs a {@link FanoutTurn} keying ONLY on
  * the section markers (the cosmetic `### Heading` lines are ignored); inner text
  * is marker-unescaped so a literal `<!--copilot:` is restored verbatim.
+ *
+ * A composite written before agents replaced backend brands as answerers keys
+ * its sections by brand id and carries no `icon`, so it reads back as an
+ * icon-less answer labeled with the brand's name and still renders
+ * (`designdocs/CUSTOM_AGENTS.md` §6).
  */
 export function parseFanoutComposite(body: string): FanoutTurn | null {
   // Require the COMPLETE wrapper (open + close), so a plain answer that merely
   // contains `<!--copilot:…` is left as-is, not hidden behind the fan-out card.
   if (!FANOUT_MARKER_OPEN_RE.test(body) || !body.includes(FANOUT_MARKER_CLOSE)) return null;
 
-  const answers: Record<BackendId, AgentAnswer> = {};
+  const answers: Record<string, AgentAnswer> = {};
   let summaryText = "";
 
   // Split on every section marker, tagging each chunk with its opening marker;
@@ -747,7 +813,9 @@ export function parseFanoutComposite(body: string): FanoutTurn | null {
     const note = readMarkerAttr(section.marker, "note");
     const errorReason = readMarkerAttr(section.marker, "error");
     answers[id] = {
-      backendId: id,
+      agentSlug: id,
+      name: readMarkerAttr(section.marker, "name") || id,
+      icon: readMarkerAttr(section.marker, "icon") ?? "",
       status,
       // A body-less "did not answer" marker (carries `note`) is an empty slot;
       // every other slot carries its body verbatim.

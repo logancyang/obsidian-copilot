@@ -1,17 +1,15 @@
-import { backendRegistry } from "@/agentMode/backends/registry";
 import {
   isDirectAnswerTurn,
   type AgentAnswer,
   type AgentAnswerStatus,
   type FanoutTurn,
 } from "@/agentMode/session/fanout/fanoutTypes";
-import type { AgentBrand, BackendId } from "@/agentMode/session/types";
 
-/** The summary entry's reserved option value — never a valid `BackendId`. */
+/** The summary entry's reserved option value — never a valid agent slug. */
 export const FANOUT_SUMMARY_OPTION = "__summary__";
 
-/** A selectable value: {@link FANOUT_SUMMARY_OPTION} or an agent's `BackendId`. */
-export type FanoutOptionValue = BackendId;
+/** A selectable value: {@link FANOUT_SUMMARY_OPTION} or an agent's slug. */
+export type FanoutOptionValue = string;
 
 /**
  * Presentational state of one agent's slot, derived from its live status.
@@ -67,49 +65,33 @@ export function summaryDisplayState(turn: FanoutTurn): FanoutSummaryState {
 }
 
 /**
- * One entry in the dropdown switcher. `label` + `Icon` render the row
- * (registry-driven). The summary entry carries no icon/state.
+ * One entry in the dropdown switcher. `label` + `icon` render the row, read off
+ * the answer slot so a renamed or deleted agent still labels its own tab. The
+ * summary entry carries no icon/state.
  */
 export interface FanoutOption {
   value: FanoutOptionValue;
   label: string;
-  /** Brand icon for an agent entry; `undefined` for the summary entry. */
-  Icon?: AgentBrand["Icon"];
+  /** The agent's emoji; `undefined` for the summary entry, empty for an agent with none. */
+  icon?: string;
   /** Live state for an agent entry; `undefined` for the summary entry. */
   state?: FanoutAgentState;
 }
 
-/** Resolve a `BackendId` to its registry brand (display name + icon); id fallback if unknown. */
-function brandFor(backendId: BackendId): { displayName: string; Icon?: AgentBrand["Icon"] } {
-  const descriptor = backendRegistry[backendId];
-  if (!descriptor) return { displayName: backendId };
-  return { displayName: descriptor.displayName, Icon: descriptor.Icon };
-}
-
-/**
- * Resolve a `BackendId` to its display name. Shared by the clean-composite
- * renderer so copied/inserted headings match the rendered tab labels.
- */
-export function fanoutDisplayName(backendId: BackendId): string {
-  return brandFor(backendId).displayName;
-}
-
 /**
  * Derive the dropdown options: one direct agent entry for a single answer;
- * otherwise the summary first, then agents in insertion order.
+ * otherwise the summary first, then agents in mention order.
  */
 export function buildFanoutOptions(turn: FanoutTurn): FanoutOption[] {
-  const backendIds = Object.keys(turn.answers);
   const options: FanoutOption[] = isDirectAnswerTurn(turn)
     ? []
     : [{ value: FANOUT_SUMMARY_OPTION, label: "Summary" }];
-  for (const backendId of backendIds) {
-    const answer = turn.answers[backendId];
-    const { displayName, Icon } = brandFor(backendId);
+  for (const slug of Object.keys(turn.answers)) {
+    const answer = turn.answers[slug];
     options.push({
-      value: backendId,
-      label: displayName,
-      Icon,
+      value: slug,
+      label: answer.name,
+      icon: answer.icon,
       state: agentStateForAnswer(answer),
     });
   }
@@ -118,8 +100,7 @@ export function buildFanoutOptions(turn: FanoutTurn): FanoutOption[] {
 
 /** The default selected option: the sole agent for a direct response, otherwise the summary. */
 export function defaultFanoutOption(turn: FanoutTurn): FanoutOptionValue {
-  const backendIds = Object.keys(turn.answers);
-  return isDirectAnswerTurn(turn) ? backendIds[0] : FANOUT_SUMMARY_OPTION;
+  return isDirectAnswerTurn(turn) ? Object.keys(turn.answers)[0] : FANOUT_SUMMARY_OPTION;
 }
 
 /**

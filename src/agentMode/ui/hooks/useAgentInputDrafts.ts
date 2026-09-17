@@ -1,4 +1,4 @@
-import type { BackendId, PromptContent } from "@/agentMode/session/types";
+import type { PromptContent } from "@/agentMode/session/types";
 import type { MessageContext } from "@/types/message";
 import { TFile } from "obsidian";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -26,7 +26,7 @@ export interface QueuedAgentMessage {
    * qualifying mentions, or only the main agent `@`-ed). Snapshotted at enqueue
    * time alongside the rest.
    */
-  mentionedAgents?: ReadonlyArray<BackendId>;
+  mentionedAgents?: ReadonlyArray<string>;
 }
 
 /**

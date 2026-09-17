@@ -34,12 +34,6 @@ export interface AgentBrand {
   readonly id: BackendId;
   readonly displayName: string;
   readonly Icon: React.ComponentType<{ className?: string }>;
-  /**
-   * `true` when Self-Host Mode is on and this is a cloud agent — the mention
-   * menu flags it with a cloud-egress warning. A read-time projection (see
-   * `backendNeedsSelfHostWarning`); never persisted.
-   */
-  readonly needsSelfHostWarning?: boolean;
 }
 
 /**

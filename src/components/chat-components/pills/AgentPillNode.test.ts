@@ -18,25 +18,41 @@ function makeEditor(): LexicalEditor {
 }
 
 describe("AgentPillNode", () => {
-  it("contributes empty text content so the backend id never reaches the prompt", () => {
+  it("contributes empty text content so the agent slug never reaches the prompt", () => {
     const editor = makeEditor();
     editor.update(
       () => {
-        const node = $createAgentPillNode("claude", "Claude");
+        const node = $createAgentPillNode("jennifer", "Jennifer", "🪶");
         expect(node.getTextContent()).toBe("");
-        // The id is still available structurally for routing.
-        expect(node.getBackendId()).toBe("claude");
+        // The slug is still available structurally for routing.
+        expect(node.getAgentSlug()).toBe("jennifer");
       },
       { discrete: true }
     );
   });
 
-  it("serializes a prompt with an agent pill + text without leaking the backend id", () => {
+  it("round-trips the agent's name and icon through serialization, so render needs no roster", () => {
+    const editor = makeEditor();
+    editor.update(
+      () => {
+        const node = $createAgentPillNode("jennifer", "Jennifer", "🪶");
+        const restored = AgentPillNode.importJSON(node.exportJSON());
+        expect(restored.exportJSON()).toMatchObject({
+          value: "jennifer",
+          label: "Jennifer",
+          icon: "🪶",
+        });
+      },
+      { discrete: true }
+    );
+  });
+
+  it("serializes a prompt with an agent pill + text without leaking the agent slug", () => {
     const editor = makeEditor();
     editor.update(
       () => {
         const paragraph = $createParagraphNode();
-        paragraph.append($createAgentPillNode("claude", "Claude"));
+        paragraph.append($createAgentPillNode("jennifer", "Jennifer", "🪶"));
         paragraph.append($createTextNode(" should we use X?"));
         $getRoot().clear().append(paragraph);
       },
@@ -45,6 +61,6 @@ describe("AgentPillNode", () => {
 
     const promptText = editor.getEditorState().read(() => $getRoot().getTextContent());
     expect(promptText).toBe(" should we use X?");
-    expect(promptText).not.toContain("claude");
+    expect(promptText).not.toContain("jennifer");
   });
 });

@@ -11,7 +11,12 @@ import type {
   SessionUpdateHandler,
 } from "@/agentMode/session/types";
 import { createFanoutTurn, FanoutOrchestrator, type FanoutHost } from "./FanoutOrchestrator";
-import { FANOUT_ALL_FAILED_SUMMARY, FANOUT_TRAILING_CHUNK_GRACE_MS } from "./fanoutTypes";
+import {
+  FANOUT_ALL_FAILED_SUMMARY,
+  FANOUT_MISSING_AGENT_ERROR,
+  FANOUT_TRAILING_CHUNK_GRACE_MS,
+  type FanoutAnswerer,
+} from "./fanoutTypes";
 
 jest.mock("@/logger", () => ({
   logInfo: jest.fn(),
@@ -147,7 +152,6 @@ function makeHost(
       descriptor: descriptors.get(backendId)!,
     }),
     getDefaultSelection: () => null,
-    getDisplayName: (backendId) => backendId.toUpperCase(),
     getCwd: () => "/vault",
     registerReadOnlySession: (sessionId) => {
       readOnlyRegistered.push(sessionId);
@@ -173,18 +177,35 @@ const flushPastGrace = () =>
   new Promise((r) => window.setTimeout(r, FANOUT_TRAILING_CHUNK_GRACE_MS + 20));
 
 /**
- * Build a `run` input with sensible defaults: `mainAgent` (the multi-answer
- * summarizer) defaults to the first agent for the common case where the main
- * agent is also an answerer, but it is decoupled from `agents` — tests override
- * it to a backend that is NOT an answerer. `originalPromptText` is fixed.
+ * An agent pinned to one backend, named after it, so a test can keep talking in
+ * backend ids while the orchestrator routes by agent.
+ */
+function answerer(backendId: BackendId, overrides: Partial<FanoutAnswerer> = {}): FanoutAnswerer {
+  return {
+    slug: backendId,
+    name: backendId.toUpperCase(),
+    icon: "",
+    backendId,
+    personaBlock: null,
+    memoryEnabled: false,
+    ...overrides,
+  };
+}
+
+/**
+ * Build a `run` input with sensible defaults: `sessionBackendId` (where the
+ * chat's own agent summarizes) defaults to the first answerer's backend for the
+ * common case, but it is decoupled from the answerers — tests override it to a
+ * backend nobody answers on. `originalPromptText` is fixed.
  */
 function runInput(
   agents: BackendId[],
   overrides: Partial<Parameters<FanoutOrchestrator["run"]>[0]> = {}
 ): Parameters<FanoutOrchestrator["run"]>[0] {
   return {
-    agents,
-    mainAgent: agents[0],
+    answerers: agents.map((id) => answerer(id)),
+    sessionBackendId: agents[0],
+    summarizerPersonaBlock: null,
     prompt: [{ type: "text", text: "q" }],
     originalPromptText: "the original question",
     signal: new AbortController().signal,
@@ -195,10 +216,20 @@ function runInput(
 
 describe("FanoutOrchestrator", () => {
   describe("createFanoutTurn()", () => {
-    it("seeds one running slot per agent (insertion order) plus a pending summary", () => {
-      const turn = createFanoutTurn(["opencode", "claude", "codex"]);
-      expect(Object.keys(turn.answers)).toEqual(["opencode", "claude", "codex"]);
-      expect(turn.answers.claude).toEqual({ backendId: "claude", status: "running", text: "" });
+    it("seeds one running slot per agent (mention order), labeled with its name and icon", () => {
+      const turn = createFanoutTurn([
+        answerer("opencode"),
+        answerer("claude", { slug: "jennifer", name: "Jennifer", icon: "🪶" }),
+        answerer("codex"),
+      ]);
+      expect(Object.keys(turn.answers)).toEqual(["opencode", "jennifer", "codex"]);
+      expect(turn.answers.jennifer).toEqual({
+        agentSlug: "jennifer",
+        name: "Jennifer",
+        icon: "🪶",
+        status: "running",
+        text: "",
+      });
       expect(turn.summary).toEqual({ status: "pending", text: "" });
     });
   });
@@ -217,7 +248,7 @@ describe("FanoutOrchestrator", () => {
         });
 
         const turn = await new FanoutOrchestrator(host).run(
-          runInput(["claude"], { mainAgent: "opencode" })
+          runInput(["claude"], { sessionBackendId: "opencode" })
         );
 
         expect(proc.proc.prompt).toHaveBeenCalledTimes(1);
@@ -481,16 +512,8 @@ describe("FanoutOrchestrator", () => {
         procs.get("claude")!.resolvePrompt();
 
         const turn = await runPromise;
-        expect(turn.answers.claude).toEqual({
-          backendId: "claude",
-          status: "done",
-          text: "Claude says hi",
-        });
-        expect(turn.answers.codex).toEqual({
-          backendId: "codex",
-          status: "done",
-          text: "Codex says hi",
-        });
+        expect(turn.answers.claude).toMatchObject({ status: "done", text: "Claude says hi" });
+        expect(turn.answers.codex).toMatchObject({ status: "done", text: "Codex says hi" });
         expect(turn.summary.status).toBe("done");
         expect(turn.summary.text).toBe("summary");
         // Three sub-sessions registered read-only: two answers + the summary (a
@@ -605,6 +628,91 @@ describe("FanoutOrchestrator", () => {
         // No summary sub-session ran after cancel (only the two answer prompts).
         expect(procs.get("claude")!.promptCount()).toBe(1);
         expect(turn.summary.status).toBe("pending");
+      });
+
+      it("leads each answerer's prompt with its own persona and memory, on the backend it pinned", async () => {
+        // designdocs/CUSTOM_AGENTS.md §6 — an agent answers in character, and an
+        // agent that pins no backend answers on the chat's own.
+        const { host, procs } = makeHost({
+          claude: { sessionId: "s-claude" },
+          codex: { sessionId: "s-codex" },
+        });
+        jest.mocked(procs.get("claude")!.proc.prompt).mockResolvedValue({ stopReason: "end_turn" });
+        jest.mocked(procs.get("codex")!.proc.prompt).mockResolvedValue({ stopReason: "end_turn" });
+
+        await new FanoutOrchestrator(host).run(
+          runInput([], {
+            sessionBackendId: "claude",
+            answerers: [
+              answerer("codex", {
+                slug: "jennifer",
+                name: "Jennifer",
+                personaBlock: "<agent_persona>Jennifer</agent_persona>",
+              }),
+              answerer("claude", {
+                slug: "vancat",
+                name: "Vancat",
+                backendId: null,
+                personaBlock: "<agent_persona>Vancat</agent_persona>",
+              }),
+            ],
+          })
+        );
+
+        const jenniferPrompt = jest.mocked(procs.get("codex")!.proc.prompt).mock.calls[0][0];
+        expect((jenniferPrompt.prompt[0] as { text: string }).text).toBe(
+          "<agent_persona>Jennifer</agent_persona>\n\nq"
+        );
+        // Vancat pins nothing, so it answers on the chat's backend — which is
+        // also where the summary later runs.
+        const vancatPrompt = jest.mocked(procs.get("claude")!.proc.prompt).mock.calls[0][0];
+        expect((vancatPrompt.prompt[0] as { text: string }).text).toBe(
+          "<agent_persona>Vancat</agent_persona>\n\nq"
+        );
+      });
+
+      it("has the chat's own persona write the summary, in its own voice", async () => {
+        // designdocs/CUSTOM_AGENTS.md §6 — a DM with Jennifer that fans out to
+        // Vancat is summarized by Jennifer, not by the anonymous assistant.
+        const { host, procs } = makeHost({
+          claude: { sessionId: "s-claude" },
+          codex: { sessionId: "s-codex" },
+        });
+        for (const id of ["claude", "codex"]) {
+          jest.mocked(procs.get(id)!.proc.prompt).mockImplementation(async () => {
+            procs.get(id)!.emit(textChunk(`s-${id}`, `${id} answer`));
+            return { stopReason: "end_turn" };
+          });
+        }
+
+        await new FanoutOrchestrator(host).run(
+          runInput(["claude", "codex"], {
+            summarizerPersonaBlock: "<agent_persona>Jennifer</agent_persona>",
+          })
+        );
+
+        const summaryPrompt = jest.mocked(procs.get("claude")!.proc.prompt).mock.calls[1][0];
+        const text = (summaryPrompt.prompt[0] as { text: string }).text;
+        expect(text.startsWith("<agent_persona>Jennifer</agent_persona>\n\n")).toBe(true);
+        expect(text).toContain("the original question");
+      });
+
+      it("reports an agent deleted between composing and sending instead of answering as nobody", async () => {
+        // designdocs/CUSTOM_AGENTS.md §1 — a chat outlives the agent it names.
+        const { host, procs } = makeHost({ claude: { sessionId: "s-claude" } });
+
+        const turn = await new FanoutOrchestrator(host).run(
+          runInput([], {
+            sessionBackendId: "claude",
+            answerers: [answerer("claude", { slug: "ghost", name: "Ghost", missing: true })],
+          })
+        );
+
+        expect(turn.answers.ghost).toMatchObject({
+          status: "error",
+          error: FANOUT_MISSING_AGENT_ERROR,
+        });
+        expect(procs.get("claude")!.proc.newSession).not.toHaveBeenCalled();
       });
 
       it("lands a brief all-failed note (no fabricated summary) when zero agents succeed", async () => {

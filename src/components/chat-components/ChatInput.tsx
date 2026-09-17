@@ -40,8 +40,7 @@ import { $removeActiveWebTabPills } from "./pills/ActiveWebTabPillNode";
 import { $findWebTabPills, $removeWebTabPillsByUrl } from "./pills/WebTabPillNode";
 import LexicalEditor from "./LexicalEditor";
 import { cn } from "@/lib/utils";
-import { type AgentMentionBrand, EMPTY_AGENT_MENTION_BRANDS } from "./hooks/useAtMentionCategories";
-import { EMPTY_CLOUD_AGENT_IDS } from "./context/CloudAgentContext";
+import { type AgentMentionState, NO_AGENT_MENTIONS } from "./hooks/useAtMentionCategories";
 import { $createAgentPillNode } from "./pills/AgentPillNode";
 
 const ACCENT_CIRCLE_BUTTON_CLASS =
@@ -185,24 +184,17 @@ export interface ChatInputProps {
   isAgentMode?: boolean;
 
   /**
-   * Installed coding agents the user can `@`-mention this turn (Agent Mode
-   * only). Non-empty enables the "Agents" typeahead group and agent pills.
+   * The agents the user can `@`-mention this turn (Agent Mode only). Enables the
+   * "Agents" typeahead group, agent pills, and the create-an-agent empty state.
    */
-  agentBrands?: ReadonlyArray<AgentMentionBrand>;
+  agentMentions?: AgentMentionState;
 
   /**
-   * Cloud (non-self-hostable) agent backend ids — the full registry set (not
-   * just installed agents), so a stale/pasted agent pill still resolves. Drives
-   * the Self-Host cloud-egress warning on agent pills.
+   * Fires with the slugs of the agent pills currently in the editor, whenever
+   * that set changes. The Agent Mode wrapper resolves these into the structured
+   * `mentionedAgents` selection at send time.
    */
-  cloudAgentIds?: ReadonlySet<string>;
-
-  /**
-   * Fires with the backend ids of the agent pills currently in the editor,
-   * whenever that set changes. The Agent Mode wrapper resolves these into the
-   * structured `mentionedAgents` selection at send time.
-   */
-  onMentionedAgentsChange?: (backendIds: string[]) => void;
+  onMentionedAgentsChange?: (slugs: string[]) => void;
 }
 
 /**
@@ -249,8 +241,7 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
     onEditCancel,
     initialContext,
     isAgentMode = false,
-    agentBrands = EMPTY_AGENT_MENTION_BRANDS,
-    cloudAgentIds = EMPTY_CLOUD_AGENT_IDS,
+    agentMentions = NO_AGENT_MENTIONS,
     onMentionedAgentsChange,
   },
   ref
@@ -348,11 +339,11 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
     });
   };
 
-  // Forward the full current set of mentioned backend ids to the Agent Mode
+  // Forward the full current set of mentioned agent slugs to the Agent Mode
   // wrapper, which resolves the structured selection at send time.
   const handleAgentsChange = useCallback(
-    (backendIds: string[]) => {
-      onMentionedAgentsChange?.(backendIds);
+    (slugs: string[]) => {
+      onMentionedAgentsChange?.(slugs);
     },
     [onMentionedAgentsChange]
   );
@@ -454,13 +445,15 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
         break;
       case "agents":
         // Insert an agent pill at the cursor; agentsFromPills syncs via
-        // AgentPillSyncPlugin. `data` is the backend id.
+        // AgentPillSyncPlugin. `data` is the agent's slug.
         if (typeof data === "string" && lexicalEditorRef.current) {
-          const label = agentBrands.find((b) => b.id === data)?.displayName ?? data;
+          const agent = agentMentions.entries.find((entry) => entry.slug === data);
           lexicalEditorRef.current.update(() => {
             const selection = $getSelection();
             if ($isRangeSelection(selection)) {
-              selection.insertNodes([$createAgentPillNode(data, label)]);
+              selection.insertNodes([
+                $createAgentPillNode(data, agent?.name ?? data, agent?.icon ?? ""),
+              ]);
             }
           });
         }
@@ -830,8 +823,7 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
               onWebTabsChange={setWebTabsFromPills}
               onActiveWebTabAdded={handleActiveWebTabAdded}
               onActiveWebTabRemoved={handleActiveWebTabRemoved}
-              agentBrands={agentBrands}
-              cloudAgentIds={cloudAgentIds}
+              agentMentions={agentMentions}
               onAgentsChange={handleAgentsChange}
               onEditorReady={onEditorReady}
               onImagePaste={onAddImage}

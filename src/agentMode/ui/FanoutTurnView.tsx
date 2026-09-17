@@ -8,6 +8,7 @@ import {
   type FanoutOption,
   type FanoutOptionValue,
 } from "@/agentMode/ui/fanoutDropdown";
+import { AgentGlyph } from "@/agents/ui/AgentGlyph";
 import { CopilotSpinner } from "@/components/chat-components/CopilotSpinner";
 import { cn } from "@/lib/utils";
 import type { FanoutTurn } from "@/agentMode/session/fanout/fanoutTypes";
@@ -37,9 +38,9 @@ interface FanoutTabProps {
   onSelect: (value: FanoutOptionValue) => void;
 }
 
-/** One segmented-row tab: brand icon, label, and live status dot. */
+/** One segmented-row tab: the agent's emoji, its name, and a live status dot. */
 const FanoutTab: React.FC<FanoutTabProps> = ({ option, selected, onSelect }) => {
-  const { value, Icon, label, state } = option;
+  const { value, icon, label, state } = option;
   const handleClick = useCallback(() => onSelect(value), [onSelect, value]);
   return (
     <button
@@ -57,7 +58,7 @@ const FanoutTab: React.FC<FanoutTabProps> = ({ option, selected, onSelect }) => 
           : "tw-text-muted hover:tw-bg-interactive-hover hover:tw-text-normal"
       )}
     >
-      {Icon ? <Icon className="tw-size-4 tw-shrink-0" /> : null}
+      {icon === undefined ? null : <AgentGlyph icon={icon} />}
       <span className="tw-max-w-32 tw-truncate">{label}</span>
       <FanoutStatusDot state={state} />
     </button>

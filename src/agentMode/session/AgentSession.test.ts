@@ -15,7 +15,7 @@ import { ensureMultiAgentEntitlement, showMultiAgentUpgradePrompt } from "@/plus
 import { GLOBAL_SCOPE } from "./scope";
 import { AuthRequiredError, MethodUnsupportedError } from "./errors";
 import type { ApplySelectionContext } from "./descriptor";
-import type { FanoutRunInput } from "./fanout/FanoutOrchestrator";
+import type { FanoutTurnRequest } from "./fanout/FanoutOrchestrator";
 import { FANOUT_READONLY_PREAMBLE, type FanoutTurn } from "./fanout/fanoutTypes";
 import type {
   AgentToolCallOutput,
@@ -1591,14 +1591,21 @@ describe("withReadOnlyPreamble", () => {
 describe("AgentSession fan-out branching", () => {
   it("https://github.com/Brevilabs/obsidian-copilot-private/issues/481 persists an empty failed single-agent response so it survives reload", async () => {
     const mock = makeMockBackend();
-    const runFanoutTurn = jest.fn(async (input: FanoutRunInput): Promise<FanoutTurn> => {
+    const runFanoutTurn = jest.fn(async (request: FanoutTurnRequest): Promise<FanoutTurn> => {
       const turn: FanoutTurn = {
         answers: {
-          claude: { backendId: "claude", status: "error", text: "", error: "backend boom" },
+          claude: {
+            agentSlug: "claude",
+            name: "Claude",
+            icon: "",
+            status: "error",
+            text: "",
+            error: "backend boom",
+          },
         },
         summary: { status: "done", text: "" },
       };
-      input.onChange(turn);
+      request.onChange(turn);
       return turn;
     });
     const session = new AgentSession({
@@ -1620,15 +1627,27 @@ describe("AgentSession fan-out branching", () => {
 
   it("dispatches to the fan-out runner (not backend.prompt) when >1 agent", async () => {
     const mock = makeMockBackend();
-    const runFanoutTurn = jest.fn(async (input: FanoutRunInput): Promise<FanoutTurn> => {
+    const runFanoutTurn = jest.fn(async (request: FanoutTurnRequest): Promise<FanoutTurn> => {
       const turn: FanoutTurn = {
         answers: {
-          opencode: { backendId: "opencode", status: "done", text: "opencode answer" },
-          claude: { backendId: "claude", status: "done", text: "claude answer" },
+          opencode: {
+            agentSlug: "opencode",
+            name: "Opencode",
+            icon: "",
+            status: "done",
+            text: "opencode answer",
+          },
+          claude: {
+            agentSlug: "claude",
+            name: "Claude",
+            icon: "",
+            status: "done",
+            text: "claude answer",
+          },
         },
         summary: { status: "pending", text: "" },
       };
-      input.onChange(turn);
+      request.onChange(turn);
       return turn;
     });
     const session = new AgentSession({
@@ -1649,10 +1668,11 @@ describe("AgentSession fan-out branching", () => {
     expect(mock.prompt).not.toHaveBeenCalled();
     // Every agent received the identical prompt blocks, led by the read-only
     // QA preamble (the universal "answer only, no writes" instruction).
-    expect(runFanoutTurn.mock.calls[0][0].agents).toEqual(["opencode", "claude"]);
-    // Multi-answer turns use the session's own main agent as the summarizer (here
-    // it is also an answerer because it was explicitly `@`-mentioned).
-    expect(runFanoutTurn.mock.calls[0][0].mainAgent).toBe("opencode");
+    expect(runFanoutTurn.mock.calls[0][0].agentSlugs).toEqual(["opencode", "claude"]);
+    // Multi-answer turns are summarized by the chat's own agent, on the chat's
+    // backend (here the chat is with the built-in Copilot, so no persona rides).
+    expect(runFanoutTurn.mock.calls[0][0].sessionBackendId).toBe("opencode");
+    expect(runFanoutTurn.mock.calls[0][0].summarizerPersonaBlock).toBeNull();
     const fanoutPrompt = runFanoutTurn.mock.calls[0][0].prompt[0] as { type: "text"; text: string };
     expect(fanoutPrompt.text).toContain("read-only");
     expect(fanoutPrompt.text).toContain("review");
@@ -1664,15 +1684,27 @@ describe("AgentSession fan-out branching", () => {
 
   it("persists the full composite (summary + per-agent answers + markers) and keeps the live turn on the message", async () => {
     const mock = makeMockBackend();
-    const runFanoutTurn = jest.fn(async (input: FanoutRunInput): Promise<FanoutTurn> => {
+    const runFanoutTurn = jest.fn(async (request: FanoutTurnRequest): Promise<FanoutTurn> => {
       const turn: FanoutTurn = {
         answers: {
-          opencode: { backendId: "opencode", status: "done", text: "OPENCODE_ANSWER" },
-          claude: { backendId: "claude", status: "done", text: "CLAUDE_ANSWER" },
+          opencode: {
+            agentSlug: "opencode",
+            name: "Opencode",
+            icon: "",
+            status: "done",
+            text: "OPENCODE_ANSWER",
+          },
+          claude: {
+            agentSlug: "claude",
+            name: "Claude",
+            icon: "",
+            status: "done",
+            text: "CLAUDE_ANSWER",
+          },
         },
         summary: { status: "done", text: "the narrative summary" },
       };
-      input.onChange(turn);
+      request.onChange(turn);
       return turn;
     });
     const session = new AgentSession({
@@ -1699,15 +1731,21 @@ describe("AgentSession fan-out branching", () => {
 
   it("does not let a first-turn fan-out consume the visible session's project context", async () => {
     const mock = makeMockBackend();
-    const runFanoutTurn = jest.fn(async (input: FanoutRunInput): Promise<FanoutTurn> => {
+    const runFanoutTurn = jest.fn(async (request: FanoutTurnRequest): Promise<FanoutTurn> => {
       const turn: FanoutTurn = {
         answers: {
-          opencode: { backendId: "opencode", status: "done", text: "a" },
-          claude: { backendId: "claude", status: "done", text: "b" },
+          opencode: {
+            agentSlug: "opencode",
+            name: "Opencode",
+            icon: "",
+            status: "done",
+            text: "a",
+          },
+          claude: { agentSlug: "claude", name: "Claude", icon: "", status: "done", text: "b" },
         },
         summary: { status: "done", text: "summary" },
       };
-      input.onChange(turn);
+      request.onChange(turn);
       return turn;
     });
     const session = new AgentSession({
@@ -1747,15 +1785,21 @@ describe("AgentSession fan-out paywall (send-boundary entitlement)", () => {
   >;
 
   const fanoutRunner = () =>
-    jest.fn(async (input: FanoutRunInput): Promise<FanoutTurn> => {
+    jest.fn(async (request: FanoutTurnRequest): Promise<FanoutTurn> => {
       const turn: FanoutTurn = {
         answers: {
-          opencode: { backendId: "opencode", status: "done", text: "a" },
-          claude: { backendId: "claude", status: "done", text: "b" },
+          opencode: {
+            agentSlug: "opencode",
+            name: "Opencode",
+            icon: "",
+            status: "done",
+            text: "a",
+          },
+          claude: { agentSlug: "claude", name: "Claude", icon: "", status: "done", text: "b" },
         },
         summary: { status: "done", text: "summary" },
       };
-      input.onChange(turn);
+      request.onChange(turn);
       return turn;
     });
 
@@ -1836,8 +1880,10 @@ describe("AgentSession fan-out paywall (send-boundary entitlement)", () => {
 
     // No mentioned agents -> single-agent path; the paywall must never run.
     await session.sendPrompt("hi").turn;
-    // Only the main agent @-ed -> collapses to single-agent; also no gate.
-    await session.sendPrompt("hi again", undefined, undefined, ["opencode"]).turn;
+    // Only the chat's OWN persona @-ed -> collapses to single-agent; also no gate.
+    // designdocs/CUSTOM_AGENTS.md §6.
+    session.setAgent({ slug: "jennifer", name: "Jennifer", icon: "🪶", personaBlock: null });
+    await session.sendPrompt("hi again", undefined, undefined, ["jennifer"]).turn;
 
     expect(mockedEnsure).not.toHaveBeenCalled();
     expect(mockedPrompt).not.toHaveBeenCalled();
@@ -1924,15 +1970,21 @@ describe("ensureMultiAgentEntitlement (paywall helper)", () => {
 describe("AgentSession fan-out conversation history", () => {
   /** A fan-out runner returning the given summary; captures its input prompt. */
   const fanoutWithSummary = (summary: string) =>
-    jest.fn(async (input: FanoutRunInput): Promise<FanoutTurn> => {
+    jest.fn(async (request: FanoutTurnRequest): Promise<FanoutTurn> => {
       const turn: FanoutTurn = {
         answers: {
-          opencode: { backendId: "opencode", status: "done", text: "a" },
-          claude: { backendId: "claude", status: "done", text: "b" },
+          opencode: {
+            agentSlug: "opencode",
+            name: "Opencode",
+            icon: "",
+            status: "done",
+            text: "a",
+          },
+          claude: { agentSlug: "claude", name: "Claude", icon: "", status: "done", text: "b" },
         },
         summary: { status: "done", text: summary, complete: true },
       };
-      input.onChange(turn);
+      request.onChange(turn);
       return turn;
     });
 
@@ -1975,15 +2027,21 @@ describe("AgentSession fan-out conversation history", () => {
 describe("AgentSession fan-out follow-up continuity", () => {
   /** A fan-out runner that returns a turn with the given summary text. */
   const fanoutWithSummary = (summary: string) =>
-    jest.fn(async (input: FanoutRunInput): Promise<FanoutTurn> => {
+    jest.fn(async (request: FanoutTurnRequest): Promise<FanoutTurn> => {
       const turn: FanoutTurn = {
         answers: {
-          opencode: { backendId: "opencode", status: "done", text: "a" },
-          claude: { backendId: "claude", status: "done", text: "b" },
+          opencode: {
+            agentSlug: "opencode",
+            name: "Opencode",
+            icon: "",
+            status: "done",
+            text: "a",
+          },
+          claude: { agentSlug: "claude", name: "Claude", icon: "", status: "done", text: "b" },
         },
         summary: { status: "done", text: summary, complete: true },
       };
-      input.onChange(turn);
+      request.onChange(turn);
       return turn;
     });
 
@@ -1993,15 +2051,27 @@ describe("AgentSession fan-out follow-up continuity", () => {
    * must fall back to a note, never a blank bubble.
    */
   const fanoutAnswersNoSummary = () =>
-    jest.fn(async (input: FanoutRunInput): Promise<FanoutTurn> => {
+    jest.fn(async (request: FanoutTurnRequest): Promise<FanoutTurn> => {
       const turn: FanoutTurn = {
         answers: {
-          opencode: { backendId: "opencode", status: "done", text: "answer a" },
-          claude: { backendId: "claude", status: "done", text: "answer b" },
+          opencode: {
+            agentSlug: "opencode",
+            name: "Opencode",
+            icon: "",
+            status: "done",
+            text: "answer a",
+          },
+          claude: {
+            agentSlug: "claude",
+            name: "Claude",
+            icon: "",
+            status: "done",
+            text: "answer b",
+          },
         },
         summary: { status: "done", text: "" },
       };
-      input.onChange(turn);
+      request.onChange(turn);
       return turn;
     });
 

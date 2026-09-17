@@ -1,165 +1,87 @@
 import {
-  EMPTY_AGENT_BRANDS,
   EMPTY_ANSWERERS,
   isFanout,
-  listInstalledAgentBrands,
+  listMentionableAgents,
   resolveAnswerers,
-  useInstalledAgentBrands,
 } from "@/agentMode/ui/mentionedAgents";
-import type { BackendDescriptor, InstallState } from "@/agentMode/session/types";
-import type CopilotPlugin from "@/main";
-import type { CopilotSettings } from "@/settings/model";
-import { act, renderHook } from "@testing-library/react";
+import { EMPTY_AGENT_MENTIONS } from "@/components/chat-components/hooks/useAtMentionCategories";
+import { BUILTIN_AGENT, toAgentEntry, type CustomAgent } from "@/agents/types";
 
-const Icon = () => null;
-
-jest.mock("@/agentMode/backends/registry", () => ({
-  listBackendDescriptors: jest.fn(),
-  backendNeedsSelfHostWarning: (
-    descriptor: { selfHostable?: boolean },
-    settings: { enableSelfHostMode?: boolean }
-  ) => Boolean(settings.enableSelfHostMode) && !descriptor.selfHostable,
-}));
-
-jest.mock("@/settings/model", () => ({
-  useSettingsValue: () => ({}),
-}));
-
-import { listBackendDescriptors } from "@/agentMode/backends/registry";
-
-const mockedList = listBackendDescriptors as jest.MockedFunction<typeof listBackendDescriptors>;
-
-function descriptor(id: string, install: InstallState, selfHostable = true): BackendDescriptor {
+function agent(slug: string, over: Partial<CustomAgent> = {}): CustomAgent {
   return {
-    id,
-    displayName: id[0].toUpperCase() + id.slice(1),
-    Icon,
-    selfHostable,
-    getInstallState: () => install,
-  } as unknown as BackendDescriptor;
+    slug,
+    name: slug[0].toUpperCase() + slug.slice(1),
+    description: `${slug} does things`,
+    icon: "🪶",
+    backendId: null,
+    modelId: null,
+    memoryEnabled: true,
+    created: "2026-09-16T10:00:00Z",
+    instructions: "Be yourself.",
+    ...over,
+  };
 }
 
-const settings = {} as CopilotSettings;
-const selfHostSettings = { enableSelfHostMode: true } as CopilotSettings;
+describe("mentionedAgents", () => {
+  describe("listMentionableAgents()", () => {
+    it("offers every custom agent with its name, description and icon", () => {
+      const entries = listMentionableAgents([
+        BUILTIN_AGENT,
+        toAgentEntry(agent("jennifer")),
+        toAgentEntry(agent("vancat", { icon: "🐱" })),
+      ]);
 
-describe("listInstalledAgentBrands", () => {
-  it("offers only ready backends; excludes absent, checking, incompatible, and errored", () => {
-    mockedList.mockReturnValue([
-      descriptor("opencode", { kind: "ready", source: "managed" }),
-      descriptor("claude", { kind: "absent" }),
-      descriptor("codex", { kind: "error", message: "boom" }),
-      descriptor("checking", { kind: "checking", source: "custom" }),
-      descriptor("old", {
-        kind: "incompatible",
-        source: "custom",
-        currentVersion: "1.0.0",
-        minVersion: "2.0.0",
-        message: "too old",
-      }),
-    ]);
-
-    const brands = listInstalledAgentBrands(settings);
-    expect(brands.map((b) => b.id)).toEqual(["opencode"]);
-    expect(brands[0]).toMatchObject({ id: "opencode", displayName: "Opencode", Icon });
-  });
-
-  it("returns the frozen empty constant when nothing is installed", () => {
-    mockedList.mockReturnValue([descriptor("opencode", { kind: "absent" })]);
-    expect(listInstalledAgentBrands(settings)).toBe(EMPTY_AGENT_BRANDS);
-  });
-
-  it("does not flag any brand when Self-Host Mode is off", () => {
-    mockedList.mockReturnValue([
-      descriptor("opencode", { kind: "ready", source: "managed" }, true),
-      descriptor("claude", { kind: "ready", source: "managed" }, false),
-    ]);
-    const byId = new Map(listInstalledAgentBrands(settings).map((b) => [b.id, b]));
-    expect(byId.get("opencode")?.needsSelfHostWarning).toBe(false);
-    expect(byId.get("claude")?.needsSelfHostWarning).toBe(false);
-  });
-
-  it("flags cloud agents (not opencode) when Self-Host Mode is on", () => {
-    mockedList.mockReturnValue([
-      descriptor("opencode", { kind: "ready", source: "managed" }, true),
-      descriptor("claude", { kind: "ready", source: "managed" }, false),
-      descriptor("codex", { kind: "ready", source: "managed" }, false),
-    ]);
-    const byId = new Map(listInstalledAgentBrands(selfHostSettings).map((b) => [b.id, b]));
-    expect(byId.get("opencode")?.needsSelfHostWarning).toBe(false);
-    expect(byId.get("claude")?.needsSelfHostWarning).toBe(true);
-    expect(byId.get("codex")?.needsSelfHostWarning).toBe(true);
-  });
-});
-
-describe("useInstalledAgentBrands", () => {
-  it("re-lists a backend whose readiness settles without a settings write", () => {
-    let install: InstallState = { kind: "checking", source: "managed" };
-    const listeners = new Set<() => void>();
-    mockedList.mockReturnValue([
-      {
-        id: "claude",
-        displayName: "Claude",
-        Icon,
-        getInstallState: () => install,
-        subscribeInstallState: (_plugin: CopilotPlugin, cb: () => void) => {
-          listeners.add(cb);
-          return () => listeners.delete(cb);
-        },
-      } as unknown as BackendDescriptor,
-    ]);
-
-    const { result, unmount } = renderHook(() => useInstalledAgentBrands({} as CopilotPlugin));
-    expect(result.current).toBe(EMPTY_AGENT_BRANDS);
-
-    // The compatibility probe settles ready — no settings write involved.
-    act(() => {
-      install = { kind: "ready", source: "managed" };
-      listeners.forEach((cb) => cb());
+      expect(entries).toEqual([
+        { slug: "jennifer", name: "Jennifer", description: "jennifer does things", icon: "🪶" },
+        { slug: "vancat", name: "Vancat", description: "vancat does things", icon: "🐱" },
+      ]);
     });
-    expect(result.current.map((b) => b.id)).toEqual(["claude"]);
 
-    unmount();
-    expect(listeners.size).toBe(0);
-  });
-});
-
-describe("resolveAnswerers", () => {
-  const installed = new Set(["opencode", "claude", "codex"]);
-
-  it("returns the frozen empty constant when nothing is mentioned (main is NOT auto-included)", () => {
-    expect(resolveAnswerers({ mentionedAgentIds: [], installedAgentIds: installed })).toBe(
-      EMPTY_ANSWERERS
-    );
+    it("never offers the built-in Copilot, which is already who the chat is talking to", () => {
+      expect(listMentionableAgents([BUILTIN_AGENT])).toBe(EMPTY_AGENT_MENTIONS);
+    });
   });
 
-  it("returns mentions in order (keeping an explicitly-mentioned main), dedup'd", () => {
-    expect(
-      resolveAnswerers({
-        mentionedAgentIds: ["claude", "opencode", "claude"],
-        installedAgentIds: installed,
-      })
-    ).toEqual(["claude", "opencode"]);
+  describe("resolveAnswerers()", () => {
+    const known = new Set(["jennifer", "vancat", "rafa"]);
+
+    it("returns the frozen empty constant when nothing is mentioned", () => {
+      expect(resolveAnswerers({ mentionedSlugs: [], knownSlugs: known })).toBe(EMPTY_ANSWERERS);
+    });
+
+    it("keeps mentions in editor order and drops repeats", () => {
+      expect(
+        resolveAnswerers({
+          mentionedSlugs: ["vancat", "jennifer", "vancat"],
+          knownSlugs: known,
+        })
+      ).toEqual(["vancat", "jennifer"]);
+    });
+
+    it("drops a mention of an agent that no longer exists rather than asking nobody", () => {
+      expect(
+        resolveAnswerers({ mentionedSlugs: ["jennifer", "ghost"], knownSlugs: known })
+      ).toEqual(["jennifer"]);
+    });
   });
 
-  it("drops mentions of uninstalled agents", () => {
-    expect(
-      resolveAnswerers({
-        mentionedAgentIds: ["claude", "ghost"],
-        installedAgentIds: new Set(["opencode", "claude"]),
-      })
-    ).toEqual(["claude"]);
-  });
-});
+  describe("isFanout()", () => {
+    it("collapses a lone mention of the chat's own persona to the single-agent path", () => {
+      // designdocs/CUSTOM_AGENTS.md §6 — the chat's own agent must never both
+      // answer through a sub-session and summarize itself.
+      expect(isFanout([], "jennifer")).toBe(false);
+      expect(isFanout(["jennifer"], "jennifer")).toBe(false);
+    });
 
-describe("isFanout", () => {
-  // Claude is the session main agent in these cases.
-  it("routes single-vs-fan-out: collapses to single-agent only when no non-main answerer exists", () => {
-    // No answerers, or the only answerer IS the main agent → single-agent.
-    expect(isFanout([], "claude")).toBe(false);
-    expect(isFanout(["claude"], "claude")).toBe(false);
-    // A non-main answerer uses the fan-out path; the main summarizes only 2+.
-    expect(isFanout(["opencode"], "claude")).toBe(true);
-    expect(isFanout(["opencode", "codex"], "claude")).toBe(true);
-    expect(isFanout(["claude", "opencode"], "claude")).toBe(true);
+    it("fans out for any other answerer, including the own persona alongside another", () => {
+      expect(isFanout(["vancat"], "jennifer")).toBe(true);
+      expect(isFanout(["vancat", "rafa"], "jennifer")).toBe(true);
+      expect(isFanout(["jennifer", "vancat"], "jennifer")).toBe(true);
+    });
+
+    it("fans out from a Copilot chat, which has no slug of its own to collapse against", () => {
+      expect(isFanout(["vancat"], null)).toBe(true);
+      expect(isFanout([], null)).toBe(false);
+    });
   });
 });

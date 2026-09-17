@@ -6,39 +6,40 @@ import {
   LexicalNode,
   NodeKey,
 } from "lexical";
-import { Bot } from "lucide-react";
 import React from "react";
-import { useSettingsValue } from "@/settings/model";
-import { useCloudAgentIds } from "@/components/chat-components/context/CloudAgentContext";
-import { SelfHostCloudWarningIcon } from "@/components/ui/SelfHostCloudWarningIcon";
+import { AgentGlyph } from "@/agents/ui/AgentGlyph";
 import { BasePillNode, SerializedBasePillNode } from "./BasePillNode";
 import { PillBadge } from "./PillBadge";
 
 export interface SerializedAgentPillNode extends SerializedBasePillNode {
   type: "agent-pill";
-  /** Display label captured at insert time, so render needs no registry. */
+  /** Display name captured at insert time, so render needs no roster. */
   label: string;
+  /** The agent's emoji, captured with the name; "" when it set none. */
+  icon?: string;
 }
 
 /**
- * Agent pill node: a coding agent `@`-mentioned in the composer. Value is the
- * backend id, `label` the display name captured at insert time. Registry-agnostic
- * so the generic chat editor never depends on Agent Mode internals.
+ * Agent pill node: an agent `@`-mentioned in the composer. Value is the agent's
+ * slug; `label` and `icon` are its name and emoji captured at insert time, so
+ * the generic chat editor never depends on Agent Mode internals.
  */
 export class AgentPillNode extends BasePillNode {
   __label: string;
+  __icon: string;
 
   static getType(): string {
     return "agent-pill";
   }
 
   static clone(node: AgentPillNode): AgentPillNode {
-    return new AgentPillNode(node.__value, node.__label, node.__key);
+    return new AgentPillNode(node.__value, node.__label, node.__icon, node.__key);
   }
 
-  constructor(backendId: string, label: string, key?: NodeKey) {
-    super(backendId, key);
+  constructor(slug: string, label: string, icon: string = "", key?: NodeKey) {
+    super(slug, key);
     this.__label = label;
+    this.__icon = icon;
   }
 
   getClassName(): string {
@@ -64,7 +65,11 @@ export class AgentPillNode extends BasePillNode {
   }
 
   static importJSON(serializedNode: SerializedAgentPillNode): AgentPillNode {
-    return $createAgentPillNode(serializedNode.value, serializedNode.label);
+    return $createAgentPillNode(
+      serializedNode.value,
+      serializedNode.label,
+      serializedNode.icon ?? ""
+    );
   }
 
   exportJSON(): SerializedAgentPillNode {
@@ -72,11 +77,12 @@ export class AgentPillNode extends BasePillNode {
       ...super.exportJSON(),
       type: "agent-pill",
       label: this.__label,
+      icon: this.__icon,
     };
   }
 
-  /** The mentioned backend id. */
-  getBackendId(): string {
+  /** The mentioned agent's slug. */
+  getAgentSlug(): string {
     return this.getValue();
   }
 
@@ -91,36 +97,28 @@ export class AgentPillNode extends BasePillNode {
   }
 
   exportDOM(editor: LexicalEditor): DOMExportOutput {
-    // Base writes data-attribute/value/textContent; layer on the label so it
-    // round-trips through DOM import.
+    // Base writes data-attribute/value/textContent; layer on the label and icon
+    // so they round-trip through DOM import.
     const out = super.exportDOM(editor);
     if (out.element instanceof HTMLElement) {
       out.element.setAttribute("data-pill-label", this.__label);
+      if (this.__icon) out.element.setAttribute("data-pill-icon", this.__icon);
       out.element.textContent = this.__label || this.__value;
     }
     return out;
   }
 
   decorate(): JSX.Element {
-    return <AgentPillContent backendId={this.__value} label={this.__label || this.__value} />;
+    return <AgentPillContent icon={this.__icon} label={this.__label || this.__value} />;
   }
 }
 
-/**
- * Pill body. A component (not inline JSX) so it can read the live Self-Host
- * setting and the cloud-agent id set from context — a stale/pasted `@Claude`
- * pill then lights up its cloud-egress warning the moment Self-Host Mode is
- * toggled on, without the node needing any Agent Mode knowledge of its own.
- */
-export function AgentPillContent({ backendId, label }: { backendId: string; label: string }) {
-  const { enableSelfHostMode } = useSettingsValue();
-  const cloudAgentIds = useCloudAgentIds();
-  const showWarning = enableSelfHostMode && cloudAgentIds.has(backendId);
+/** Pill body: the agent's face and name, matching how every other surface names it. */
+export function AgentPillContent({ icon, label }: { icon: string; label: string }) {
   return (
     <PillBadge>
-      <Bot className="tw-size-3" />
+      <AgentGlyph icon={icon} className="tw-size-3" />
       {label}
-      {showWarning && <SelfHostCloudWarningIcon />}
     </PillBadge>
   );
 }
@@ -128,13 +126,19 @@ export function AgentPillContent({ backendId, label }: { backendId: string; labe
 function convertAgentPillElement(domNode: HTMLElement): DOMConversionOutput | null {
   const value = domNode.getAttribute("data-pill-value");
   if (value !== null) {
-    return { node: $createAgentPillNode(value, domNode.getAttribute("data-pill-label") ?? value) };
+    return {
+      node: $createAgentPillNode(
+        value,
+        domNode.getAttribute("data-pill-label") ?? value,
+        domNode.getAttribute("data-pill-icon") ?? ""
+      ),
+    };
   }
   return null;
 }
 
-export function $createAgentPillNode(backendId: string, label: string): AgentPillNode {
-  return new AgentPillNode(backendId, label);
+export function $createAgentPillNode(slug: string, label: string, icon = ""): AgentPillNode {
+  return new AgentPillNode(slug, label, icon);
 }
 
 export function $isAgentPillNode(node: LexicalNode): node is AgentPillNode {

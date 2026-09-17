@@ -80,7 +80,6 @@ export {
   backendDisplayOrder,
   backendNeedsSelfHostWarning,
   getActiveBackendDescriptor,
-  getCloudAgentIds,
   listBackendDescriptors,
   RECOMMENDED_BACKEND_ID,
 } from "./backends/registry";

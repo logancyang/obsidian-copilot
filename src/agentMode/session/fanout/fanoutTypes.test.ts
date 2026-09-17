@@ -11,6 +11,7 @@ import {
   isDirectAnswerTurn,
   isVaultWriteToolKind,
   parseFanoutComposite,
+  prependPromptText,
   renderFanoutComposite,
   selectSummaryInputs,
   serializeFanoutComposite,
@@ -25,13 +26,13 @@ const histMsg = (sender: string, message: string): AgentChatMessage => ({
   message,
 });
 
-const upper = (id: string) => id.toUpperCase();
-
 describe("fanoutTypes", () => {
   describe("isDirectAnswerTurn()", () => {
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/481 identifies only a sole answer without a generated summary", () => {
       const direct: FanoutTurn = {
-        answers: { claude: { backendId: "claude", status: "done", text: "answer" } },
+        answers: {
+          claude: { agentSlug: "claude", name: "Claude", icon: "", status: "done", text: "answer" },
+        },
         summary: { status: "done", text: "" },
       };
       const summarized: FanoutTurn = {
@@ -41,7 +42,13 @@ describe("fanoutTypes", () => {
       const multi: FanoutTurn = {
         answers: {
           ...direct.answers,
-          codex: { backendId: "codex", status: "done", text: "second answer" },
+          codex: {
+            agentSlug: "codex",
+            name: "Codex",
+            icon: "",
+            status: "done",
+            text: "second answer",
+          },
         },
         summary: { status: "done", text: "" },
       };
@@ -85,60 +92,67 @@ describe("fanoutTypes", () => {
   describe("selectSummaryInputs()", () => {
     const turn = (): FanoutTurn => ({
       answers: {
-        claude: { backendId: "claude", status: "done", text: "claude answer" },
-        codex: { backendId: "codex", status: "error", text: "", error: "boom" },
-        opencode: { backendId: "opencode", status: "done", text: "  " },
+        claude: {
+          agentSlug: "claude",
+          name: "Claude",
+          icon: "",
+          status: "done",
+          text: "claude answer",
+        },
+        codex: {
+          agentSlug: "codex",
+          name: "Codex",
+          icon: "",
+          status: "error",
+          text: "",
+          error: "boom",
+        },
+        opencode: { agentSlug: "opencode", name: "Opencode", icon: "", status: "done", text: "  " },
       },
       summary: { status: "pending", text: "" },
     });
 
     it("keeps only done non-empty slots as succeeded; treats errored and done-but-empty as failed", () => {
       const { succeeded, failed } = selectSummaryInputs(turn());
-      expect(succeeded).toEqual([{ backendId: "claude", text: "claude answer" }]);
+      expect(succeeded).toEqual([{ agentSlug: "claude", name: "Claude", text: "claude answer" }]);
       expect(failed).toEqual(["codex", "opencode"]);
     });
   });
 
   describe("buildSummaryUserPrompt()", () => {
     it("returns null when zero agents succeeded (never fabricates)", () => {
-      const prompt = buildSummaryUserPrompt(
-        "the question",
-        { succeeded: [], failed: ["claude", "codex"] },
-        upper
-      );
+      const prompt = buildSummaryUserPrompt("the question", {
+        succeeded: [],
+        failed: ["claude", "codex"],
+      });
       expect(prompt).toBeNull();
     });
 
     it("composes a single text block with the question and the succeeded answers only", () => {
-      const prompt = buildSummaryUserPrompt(
-        "  the question  ",
-        {
-          succeeded: [
-            { backendId: "claude", text: "claude says X" },
-            { backendId: "opencode", text: "opencode says Y" },
-          ],
-          failed: ["codex"],
-        },
-        upper
-      );
+      const prompt = buildSummaryUserPrompt("  the question  ", {
+        succeeded: [
+          { agentSlug: "claude", name: "Claude", text: "claude says X" },
+          { agentSlug: "opencode", name: "Opencode", text: "opencode says Y" },
+        ],
+        failed: ["codex"],
+      });
       expect(prompt).not.toBeNull();
       expect(prompt!).toHaveLength(1);
       expect(prompt![0].type).toBe("text");
       const text = (prompt![0] as { text: string }).text;
       expect(text).toContain("the question");
-      expect(text).toContain("### CLAUDE\nclaude says X");
-      expect(text).toContain("### OPENCODE\nopencode says Y");
+      expect(text).toContain("### Claude\nclaude says X");
+      expect(text).toContain("### Opencode\nopencode says Y");
       // The summarizer is never told about agents that did not answer.
-      expect(text).not.toContain("CODEX");
+      expect(text).not.toContain("Codex");
     });
 
     it("caps an oversized answer so it can't blow the summary sub-session", () => {
       const huge = "z".repeat(50_000);
-      const prompt = buildSummaryUserPrompt(
-        "q",
-        { succeeded: [{ backendId: "claude", text: huge }], failed: [] },
-        upper
-      );
+      const prompt = buildSummaryUserPrompt("q", {
+        succeeded: [{ agentSlug: "claude", name: "Claude", text: huge }],
+        failed: [],
+      });
       const text = (prompt![0] as { text: string }).text;
       expect(text).toContain("[answer truncated]");
       expect(text.length).toBeLessThan(huge.length);
@@ -231,18 +245,28 @@ describe("fanoutTypes", () => {
   });
 
   describe("serializeFanoutComposite()", () => {
-    const name = (id: string) => id.toUpperCase();
-
     const multiTurn = (): FanoutTurn => ({
       answers: {
-        opencode: { backendId: "opencode", status: "done", text: "opencode says X" },
-        codex: { backendId: "codex", status: "done", text: "codex says Y" },
+        opencode: {
+          agentSlug: "opencode",
+          name: "Opencode",
+          icon: "",
+          status: "done",
+          text: "opencode says X",
+        },
+        codex: {
+          agentSlug: "codex",
+          name: "Codex",
+          icon: "",
+          status: "done",
+          text: "codex says Y",
+        },
       },
       summary: { status: "done", text: "the narrative summary" },
     });
 
     it("round-trips a multi-agent turn (serialize → parse)", () => {
-      const body = serializeFanoutComposite(multiTurn(), name);
+      const body = serializeFanoutComposite(multiTurn());
       expect(body).toContain("<!--copilot:multi-agent v=1-->");
       expect(body).toContain("<!--copilot:multi-agent-end-->");
       const parsed = parseFanoutComposite(body)!;
@@ -257,17 +281,25 @@ describe("fanoutTypes", () => {
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/481 persists a direct answer uncapped while retaining the multi-agent cap", () => {
       const longAnswer = "x".repeat(FANOUT_PERSISTED_ANSWER_MAX_CHARS + 1);
       const direct: FanoutTurn = {
-        answers: { claude: { backendId: "claude", status: "done", text: longAnswer } },
+        answers: {
+          claude: {
+            agentSlug: "claude",
+            name: "Claude",
+            icon: "",
+            status: "done",
+            text: longAnswer,
+          },
+        },
         summary: { status: "done", text: "" },
       };
       const multi = multiTurn();
       multi.answers.opencode.text = longAnswer;
 
+      expect(parseFanoutComposite(serializeFanoutComposite(direct))?.answers.claude.text).toBe(
+        longAnswer
+      );
       expect(
-        parseFanoutComposite(serializeFanoutComposite(direct, name))?.answers.claude.text
-      ).toBe(longAnswer);
-      expect(
-        parseFanoutComposite(serializeFanoutComposite(multi, name))?.answers.opencode.text
+        parseFanoutComposite(serializeFanoutComposite(multi))?.answers.opencode.text
       ).toContain("[answer truncated]");
     });
 
@@ -281,10 +313,18 @@ describe("fanoutTypes", () => {
         `<!--copilot${sentinel}1 lookalike inside my answer.`;
       const summaryText = `summary with <!--copilot:summary--> and ${sentinel} body`;
       const turn: FanoutTurn = {
-        answers: { opencode: { backendId: "opencode", status: "done", text: forged } },
+        answers: {
+          opencode: {
+            agentSlug: "opencode",
+            name: "Opencode",
+            icon: "",
+            status: "done",
+            text: forged,
+          },
+        },
         summary: { status: "done", text: summaryText },
       };
-      const body = serializeFanoutComposite(turn, name);
+      const body = serializeFanoutComposite(turn);
       const parsed = parseFanoutComposite(body)!;
       // Only the REAL agent (opencode) is reconstructed — no forged "evil" slot.
       expect(Object.keys(parsed.answers)).toEqual(["opencode"]);
@@ -293,7 +333,79 @@ describe("fanoutTypes", () => {
     });
   });
 
+  describe("prependPromptText()", () => {
+    it("leads the first text block, and adds one when the prompt has none", () => {
+      expect(prependPromptText([{ type: "text", text: "body" }], "lead")).toEqual([
+        { type: "text", text: "lead\n\nbody" },
+      ]);
+      const image = { type: "image" as const, mimeType: "image/png", data: "x" };
+      expect(prependPromptText([image], "lead")).toEqual([{ type: "text", text: "lead" }, image]);
+    });
+
+    it("returns the prompt untouched when there is nothing to lead with", () => {
+      const blocks = [{ type: "text" as const, text: "body" }];
+      expect(prependPromptText(blocks, "   ")).toBe(blocks);
+    });
+  });
+
   describe("parseFanoutComposite()", () => {
+    it("keeps the agent's icon so a reloaded tab still shows its face", () => {
+      const turn: FanoutTurn = {
+        answers: {
+          jennifer: {
+            agentSlug: "jennifer",
+            name: "Jennifer",
+            icon: "🪶",
+            status: "done",
+            text: "her answer",
+          },
+          vancat: {
+            agentSlug: "vancat",
+            name: "Vancat",
+            icon: "🐱",
+            status: "done",
+            text: "his answer",
+          },
+        },
+        summary: { status: "done", text: "both agree" },
+      };
+
+      const parsed = parseFanoutComposite(serializeFanoutComposite(turn))!;
+
+      expect(parsed.answers.jennifer).toMatchObject({ name: "Jennifer", icon: "🪶" });
+      expect(parsed.answers.vancat).toMatchObject({ name: "Vancat", icon: "🐱" });
+    });
+
+    it("still renders a turn saved before agents replaced backend brands as answerers", () => {
+      // designdocs/CUSTOM_AGENTS.md §6 — the composite is persisted as message
+      // text and the parser keys sections by their marker, so an existing chat
+      // whose sections are `claude` / `codex` opens unchanged.
+      const legacy = [
+        "<!--copilot:multi-agent v=1-->",
+        "<!--copilot:summary-->",
+        "### Summary",
+        "Both agents suggest a weekly review.",
+        '<!--copilot:agent id="claude" name="Claude" status="done"-->',
+        "### Claude",
+        "Claude says X",
+        '<!--copilot:agent id="codex" name="Codex" status="error" error="boom" note="did not answer"-->',
+        "<!--copilot:multi-agent-end-->",
+      ].join("\n");
+
+      const parsed = parseFanoutComposite(legacy)!;
+
+      expect(parsed.summary.text).toBe("Both agents suggest a weekly review.");
+      expect(parsed.answers.claude).toEqual({
+        agentSlug: "claude",
+        name: "Claude",
+        icon: "",
+        status: "done",
+        text: "Claude says X",
+      });
+      expect(parsed.answers.codex).toMatchObject({ name: "Codex", status: "error", text: "" });
+      expect(renderFanoutComposite(parsed)).toContain("### Claude\nClaude says X");
+    });
+
     it("requires the full composite wrapper — a plain message or a mere mention is not a turn", () => {
       expect(parseFanoutComposite("plain text")).toBeNull();
       // A message discussing the serializer (e.g. in a code block) must not be
@@ -310,32 +422,49 @@ describe("fanoutTypes", () => {
   });
 
   describe("renderFanoutComposite()", () => {
-    const name = (id: string) => id.toUpperCase();
-
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/481 renders a single direct answer without an empty Summary heading", () => {
       const turn: FanoutTurn = {
         answers: {
-          claude: { backendId: "claude", status: "done", text: "Claude answer" },
+          claude: {
+            agentSlug: "claude",
+            name: "Claude",
+            icon: "",
+            status: "done",
+            text: "Claude answer",
+          },
         },
         summary: { status: "done", text: "" },
       };
 
-      expect(renderFanoutComposite(turn, name)).toBe("### CLAUDE\nClaude answer");
+      expect(renderFanoutComposite(turn)).toBe("### Claude\nClaude answer");
     });
 
     it("renders clean markdown (no markers): summary + each succeeded agent + did-not-answer notes", () => {
       const turn: FanoutTurn = {
         answers: {
-          opencode: { backendId: "opencode", status: "done", text: "opencode body" },
-          codex: { backendId: "codex", status: "error", text: "", error: "boom" },
+          opencode: {
+            agentSlug: "opencode",
+            name: "Opencode",
+            icon: "",
+            status: "done",
+            text: "opencode body",
+          },
+          codex: {
+            agentSlug: "codex",
+            name: "Codex",
+            icon: "",
+            status: "error",
+            text: "",
+            error: "boom",
+          },
         },
         summary: { status: "done", text: "the summary" },
       };
-      const out = renderFanoutComposite(turn, name);
+      const out = renderFanoutComposite(turn);
       expect(out).not.toContain("<!--copilot:");
       expect(out).toContain("### Summary\nthe summary");
-      expect(out).toContain("### OPENCODE\nopencode body");
-      expect(out).toContain("### CODEX");
+      expect(out).toContain("### Opencode\nopencode body");
+      expect(out).toContain("### Codex");
       expect(out).toContain("did not answer");
     });
   });

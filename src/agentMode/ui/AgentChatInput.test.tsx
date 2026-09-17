@@ -1,5 +1,5 @@
 import { expandCustomCommandPrefix } from "@/agentMode/session/expandCustomCommandPrefix";
-import { EMPTY_AGENT_MENTION_BRANDS } from "@/components/chat-components/hooks/useAtMentionCategories";
+import { NO_AGENT_MENTIONS } from "@/components/chat-components/hooks/useAtMentionCategories";
 import { AgentChatInput } from "@/agentMode/ui/AgentChatInput";
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
 import type { AgentInputDraftControls } from "@/agentMode/ui/hooks/useAgentInputDrafts";
@@ -21,32 +21,33 @@ jest.mock("@/plusUtils", () => ({
   navigateToPlusPage: (...args: unknown[]) => mockNavigateToPlusPage(...args),
 }));
 
-// Installed agents the gate either surfaces or suppresses.
-const FAKE_BRANDS = Object.freeze([{ id: "claude", displayName: "Claude", Icon: () => null }]);
+// Agents the gate either surfaces or suppresses.
+const FAKE_AGENTS = Object.freeze([
+  { slug: "jennifer", name: "Jennifer", description: "Skeptical editor.", icon: "🪶" },
+]);
 jest.mock("@/agentMode/ui/mentionedAgents", () => ({
   EMPTY_ANSWERERS: Object.freeze([]),
   isFanout: () => false,
   resolveAnswerers: () => [],
-  useInstalledAgentBrands: () => FAKE_BRANDS,
 }));
 
-// One ChatInput mock serves both suites: it captures the brands handed to the
-// editor (agent-mention gate) AND renders a clickable send button that routes
+// One ChatInput mock serves both suites: it captures the agent-mention state
+// handed to the editor (the gate) AND renders a clickable send button that routes
 // through `handleSendMessage` — the same entry the real Lexical editor's Enter
 // key hits (send-flow regression tests).
-let capturedAgentBrands: ReadonlyArray<unknown> | undefined;
+let capturedAgentMentions: unknown;
 let capturedTopRightAccessory: React.ReactNode | undefined;
 let capturedPlaceholder: string | undefined;
 jest.mock("@/components/chat-components/ChatInput", () => ({
   __esModule: true,
   default: (props: {
-    agentBrands?: ReadonlyArray<unknown>;
+    agentMentions?: unknown;
     topRightAccessory?: React.ReactNode;
     placeholder?: string;
     handleSendMessage?: () => void;
     onStopGenerating?: () => void;
   }) => {
-    capturedAgentBrands = props.agentBrands;
+    capturedAgentMentions = props.agentMentions;
     capturedTopRightAccessory = props.topRightAccessory;
     capturedPlaceholder = props.placeholder;
     return (
@@ -127,7 +128,9 @@ function inputNode(
       chatInputId="input-1"
       draft={draft}
       app={makeApp()}
-      mainAgentId={null}
+      ownAgentSlug={null}
+      mentionableAgents={FAKE_AGENTS}
+      onCreateAgent={jest.fn()}
       updateUserMessageHistory={jest.fn()}
       isStarting={false}
       hasPendingPlanPermission={false}
@@ -456,17 +459,17 @@ describe("AgentChatInput", () => {
 
   describe("identity and agent-mention gate", () => {
     beforeEach(() => {
-      capturedAgentBrands = undefined;
+      capturedAgentMentions = undefined;
       mockNavigateToPlusPage.mockClear();
     });
 
-    it("passes the real installed-agent list when entitled", () => {
+    it("offers the roster's agents to the typeahead when entitled", () => {
       mockUseCanUseMultiAgent.mockReturnValue(true);
       renderInput(
         { sendMessage: jest.fn(), cancel: jest.fn() } as unknown as AgentChatBackend,
         makeDraft()
       );
-      expect(capturedAgentBrands).toBe(FAKE_BRANDS);
+      expect(capturedAgentMentions).toMatchObject({ entries: FAKE_AGENTS, enabled: true });
     });
 
     it("clears input-scoped context only when the logical chat input changes", () => {
@@ -483,13 +486,15 @@ describe("AgentChatInput", () => {
       expect(clearSelectedTextContexts).toHaveBeenCalledTimes(1);
     });
 
-    it("passes the frozen empty list (not a fresh []) when not entitled", () => {
+    it("hides the whole Agents group (the frozen constant, not a fresh object) when not entitled", () => {
+      // designdocs/CUSTOM_AGENTS.md §9 — the reactive hook hides the group; the
+      // send boundary re-checks entitlement separately.
       mockUseCanUseMultiAgent.mockReturnValue(false);
       renderInput(
         { sendMessage: jest.fn(), cancel: jest.fn() } as unknown as AgentChatBackend,
         makeDraft()
       );
-      expect(capturedAgentBrands).toBe(EMPTY_AGENT_MENTION_BRANDS);
+      expect(capturedAgentMentions).toBe(NO_AGENT_MENTIONS);
     });
   });
 

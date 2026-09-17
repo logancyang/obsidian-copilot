@@ -10,13 +10,16 @@ import {
 } from "@/components/chat-components/utils/lexicalTextUtils";
 import {
   useAtMentionCategories,
-  AgentMentionBrand,
+  AgentMentionState,
   AtMentionCategory,
   AtMentionOption,
   CategoryOption,
-  EMPTY_AGENT_MENTION_BRANDS,
+  NO_AGENT_MENTIONS,
 } from "@/components/chat-components/hooks/useAtMentionCategories";
-import { useAtMentionSearch } from "@/components/chat-components/hooks/useAtMentionSearch";
+import {
+  CREATE_AGENT_OPTION_KEY,
+  useAtMentionSearch,
+} from "@/components/chat-components/hooks/useAtMentionSearch";
 
 interface AtMentionCommandPluginProps {
   isCopilotPlus?: boolean;
@@ -24,17 +27,18 @@ interface AtMentionCommandPluginProps {
   showTools?: boolean;
   currentActiveFile?: TFile | null;
   /**
-   * Installed coding agents mentionable in this composer. Non-empty only in
-   * Agent Mode; surfaces the "Agents" typeahead group and inserts agent pills.
+   * The agents mentionable in this composer. Enabled only in Agent Mode for a
+   * user entitled to fan out; surfaces the "Agents" typeahead group and inserts
+   * agent pills.
    */
-  agentBrands?: ReadonlyArray<AgentMentionBrand>;
+  agentMentions?: AgentMentionState;
 }
 
 export function AtMentionCommandPlugin({
   isCopilotPlus = false,
   showTools = false,
   currentActiveFile = null,
-  agentBrands = EMPTY_AGENT_MENTION_BRANDS,
+  agentMentions = NO_AGENT_MENTIONS,
 }: AtMentionCommandPluginProps): JSX.Element {
   const app = useApp();
   const [editor] = useLexicalComposerContext();
@@ -51,7 +55,7 @@ export function AtMentionCommandPlugin({
   // Use the shared at-mention categories hook. Action categories (e.g. Images,
   // which opens a file picker) are not supported inline because the editor has
   // no pill representation for them — they only appear in the `+` popover.
-  const allCategoryOptions = useAtMentionCategories(showTools, agentBrands.length > 0);
+  const allCategoryOptions = useAtMentionCategories(showTools, agentMentions.enabled);
   const availableCategoryOptions = useMemo(
     () => allCategoryOptions.filter((c) => !c.isAction),
     [allCategoryOptions]
@@ -100,7 +104,7 @@ export function AtMentionCommandPlugin({
     showTools,
     availableCategoryOptions,
     currentActiveFile,
-    agentBrands
+    agentMentions
   );
 
   // Type guard functions
@@ -131,6 +135,13 @@ export function AtMentionCommandPlugin({
         return;
       }
 
+      // The empty-state row is the way OUT of the composer: it opens Settings →
+      // Agents rather than inserting a pill for an agent that does not exist yet.
+      if (option.key === CREATE_AGENT_OPTION_KEY) {
+        agentMentions.onCreateAgent?.();
+        return;
+      }
+
       // Item was selected - create appropriate pill using shared utility
       if (isAtMentionOption(option)) {
         // Check if this is the "Active Note" option by its category
@@ -145,6 +156,9 @@ export function AtMentionCommandPlugin({
             type: option.category as PillData["type"],
             title: option.title,
             data: option.data,
+            // An agent pill wears its agent's face, captured at insert time so
+            // the editor needs no roster to render it.
+            icon: option.pillIcon,
           };
 
           editor.update(() => {
@@ -153,7 +167,7 @@ export function AtMentionCommandPlugin({
         }
       }
     },
-    [extendedState.mode, currentQuery, isCategoryOption, isAtMentionOption, editor]
+    [extendedState.mode, currentQuery, isCategoryOption, isAtMentionOption, editor, agentMentions]
   );
 
   const onStateChangeCallback = useCallback((newState: { query: string; isOpen: boolean }) => {

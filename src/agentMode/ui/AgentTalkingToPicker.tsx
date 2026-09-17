@@ -1,4 +1,5 @@
 import type { AgentEntry } from "@/agents/types";
+import { AgentGlyph } from "@/agents/ui/AgentGlyph";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -127,18 +128,3 @@ export const AgentTalkingToPicker: React.FC<AgentTalkingToPickerProps> = ({
 };
 
 AgentTalkingToPicker.displayName = "AgentTalkingToPicker";
-
-/**
- * An agent's emoji in a fixed box, so rows and the trigger keep one leading
- * width whether the agent set an icon or not.
- */
-function AgentGlyph({ icon }: { icon: string }): React.ReactElement {
-  return (
-    <span
-      aria-hidden="true"
-      className="tw-flex tw-size-4 tw-shrink-0 tw-items-center tw-justify-center tw-text-xs"
-    >
-      {icon}
-    </span>
-  );
-}

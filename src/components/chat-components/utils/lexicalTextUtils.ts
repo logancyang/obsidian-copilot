@@ -50,13 +50,15 @@ export interface PillData {
   type: PillType;
   title?: string;
   data?: PillDataValue;
+  /** Agent pills only: the agent's emoji, captured at insert time. */
+  icon?: string;
 }
 
 /**
  * Generic function to create pill nodes based on type and data
  */
 function $createPillNode(pillData: PillData) {
-  const { type, title, data } = pillData;
+  const { type, title, data, icon } = pillData;
 
   switch (type) {
     case "active-note":
@@ -87,7 +89,7 @@ function $createPillNode(pillData: PillData) {
       return $createActiveWebTabPillNode();
     case "agents":
       if (typeof data === "string") {
-        return $createAgentPillNode(data, title ?? data);
+        return $createAgentPillNode(data, title ?? data, icon ?? "");
       }
       break;
   }

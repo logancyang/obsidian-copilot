@@ -1,7 +1,10 @@
 import type { AgentFileManager } from "@/agents/AgentFileManager";
 import { AGENT_MEMORY_HEADINGS } from "@/agents/agentFile";
 import type { CustomAgent } from "@/agents/types";
-import { runAgentMemoryPass } from "@/agentMode/session/agentMemoryPass";
+import {
+  buildFanoutMemoryTranscript,
+  runAgentMemoryPass,
+} from "@/agentMode/session/agentMemoryPass";
 import type { ReadOnlySubSessionRunner } from "@/agentMode/session/readOnlySubSession";
 import type { AgentChatMessage } from "@/agentMode/session/types";
 import { AI_SENDER, USER_SENDER } from "@/constants";
@@ -218,6 +221,23 @@ describe("agentMemoryPass", () => {
 
       expect(await run(harness)).toMatchObject({ status: "failed" });
       expect(harness.written).toHaveLength(0);
+    });
+  });
+
+  describe("buildFanoutMemoryTranscript()", () => {
+    it("carries the question and that agent's own answer, and nothing else", () => {
+      // designdocs/CUSTOM_AGENTS.md §6 — a consulted agent read only these two
+      // things, so its memory must not be fed the other agents or the summary.
+      const transcript = buildFanoutMemoryTranscript("Which title is better?", "Vancat here!");
+
+      expect(transcript).toHaveLength(2);
+      expect(transcript[0]).toMatchObject({
+        sender: USER_SENDER,
+        message: "Which title is better?",
+        isVisible: true,
+      });
+      expect(transcript[1]).toMatchObject({ sender: AI_SENDER, message: "Vancat here!" });
+      expect(transcript[0].id).not.toBe(transcript[1].id);
     });
   });
 });

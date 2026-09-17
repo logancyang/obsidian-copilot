@@ -4,13 +4,13 @@ import { GenericPillSyncPlugin, PillSyncConfig } from "./GenericPillSyncPlugin";
 import type { LexicalNode } from "lexical";
 
 interface AgentPillSyncPluginProps {
-  /** Backend ids of the agent pills currently in the editor. */
-  onAgentsChange?: (backendIds: string[]) => void;
+  /** Slugs of the agent pills currently in the editor. */
+  onAgentsChange?: (slugs: string[]) => void;
 }
 
 const agentPillConfig: PillSyncConfig<string> = {
   isPillNode: $isAgentPillNode,
-  extractData: (node: LexicalNode) => (node as AgentPillNode).getBackendId(),
+  extractData: (node: LexicalNode) => (node as AgentPillNode).getAgentSlug(),
 };
 
 /**

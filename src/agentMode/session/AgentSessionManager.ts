@@ -44,8 +44,9 @@ import { playNotificationSound } from "@/utils/notificationSound";
 import type { AgentSessionIndex } from "./AgentSessionIndex";
 import type { AgentFileManager } from "@/agents/AgentFileManager";
 import { BUILTIN_AGENT, BUILTIN_AGENT_SLUG, toAgentEntry } from "@/agents/types";
+import { formatMissingAgentLabel } from "@/agents/agentDisplay";
 import type { AgentEntry, CustomAgent } from "@/agents/types";
-import { runAgentMemoryPass } from "./agentMemoryPass";
+import { buildFanoutMemoryTranscript, runAgentMemoryPass } from "./agentMemoryPass";
 import { ReadOnlySubSessionRunner } from "./readOnlySubSession";
 import {
   COPILOT_SESSION_AGENT,
@@ -63,9 +64,9 @@ import { replayPersistedMode } from "./replayPersistedMode";
 import {
   FanoutOrchestrator,
   type FanoutHost,
-  type FanoutRunInput,
+  type FanoutTurnRequest,
 } from "./fanout/FanoutOrchestrator";
-import type { FanoutTurn } from "./fanout/fanoutTypes";
+import type { FanoutAnswerer, FanoutTurn } from "./fanout/fanoutTypes";
 import { modelCatalogSignature } from "./translateBackendState";
 import { GLOBAL_SCOPE, type ProjectScopeId } from "./scope";
 import {
@@ -450,10 +451,13 @@ export class AgentSessionManager {
   private readonly fanoutOrchestrator: FanoutOrchestrator;
   /** Ephemeral read-only runs that are not fan-out — today, the memory pass. */
   private readonly subSessions: ReadOnlySubSessionRunner;
-  // Chats with a memory pass in flight, keyed by internal session id. One pass
-  // per chat at a time: a second boundary firing while the first is still
-  // talking to the backend is dropped rather than queued, because the running
-  // pass already covers everything said so far.
+  // Memory passes in flight, keyed by internal session id for a conversation
+  // boundary and by `fanout:<slug>` for an agent that answered a fan-out turn.
+  // One pass per key at a time: a second boundary firing while the first is
+  // still talking to the backend is dropped rather than queued, because the
+  // running pass already covers everything said so far. Overlapping fan-out
+  // turns key by agent, not by chat, since the same agent can be consulted from
+  // two chats at once.
   private readonly memoryPassesInFlight = new Set<string>();
   // Sessions being closed only to be re-created (a backend switch, a restart).
   // Their conversation carries on in the replacement, so closing them is not a
@@ -569,9 +573,59 @@ export class AgentSessionManager {
     return this.readOnlyFanoutSessions.has(backendSessionId);
   }
 
-  /** Run a multi-agent read-only QA turn. Called by `AgentSession.runTurn` when the turn fans out. */
-  runFanoutTurn(input: FanoutRunInput): Promise<FanoutTurn> {
-    return this.fanoutOrchestrator.run(input);
+  /**
+   * Run a multi-agent read-only QA turn. Called by `AgentSession.runTurn` when
+   * the turn fans out.
+   *
+   * The mentioned slugs are resolved here, at send time, so each agent answers
+   * with the persona and memory its folder holds now. Once the turn settles,
+   * every agent that answered folds the exchange into its own memory
+   * (`designdocs/CUSTOM_AGENTS.md` §6).
+   */
+  async runFanoutTurn(request: FanoutTurnRequest): Promise<FanoutTurn> {
+    const { agentSlugs, ...context } = request;
+    const answerers = await Promise.all(agentSlugs.map((slug) => this.resolveFanoutAnswerer(slug)));
+    const turn = await this.fanoutOrchestrator.run({ ...context, answerers });
+    this.beginFanoutMemoryPasses(answerers, turn, request);
+    return turn;
+  }
+
+  /**
+   * Read one `@`-mentioned agent's folder into the form the orchestrator runs
+   * it as. An agent deleted between composing and sending comes back `missing`,
+   * so its tab says so instead of a personaless sub-session answering as nobody.
+   *
+   * @param slug - Slug of the mentioned agent.
+   */
+  private async resolveFanoutAnswerer(slug: string): Promise<FanoutAnswerer> {
+    const gone: FanoutAnswerer = {
+      slug,
+      name: formatMissingAgentLabel(slug),
+      icon: "",
+      backendId: null,
+      personaBlock: null,
+      memoryEnabled: false,
+      missing: true,
+    };
+    const files = this.opts.agentFileManager;
+    if (!files) return gone;
+    try {
+      const record = await files.readAgent(slug);
+      if (!record) return gone;
+      const { agent } = record;
+      const session = await loadSessionAgent(files, agent);
+      return {
+        slug,
+        name: agent.name,
+        icon: agent.icon,
+        backendId: agent.backendId,
+        personaBlock: session.personaBlock,
+        memoryEnabled: agent.memoryEnabled,
+      };
+    } catch (error) {
+      logWarn(`[Agents] Could not read agent "${slug}" for a fan-out turn`, error);
+      return gone;
+    }
   }
 
   /** Narrow backend seam the {@link FanoutOrchestrator} drives. */
@@ -586,7 +640,6 @@ export class AgentSessionManager {
       // own session/new reports; catalog ordering carries no default meaning.
       getDefaultSelection: (backendId) => this.getSeedSelection(backendId),
       onSelectionApplied: (backendId, state) => this.repairDefaultEffort(backendId, state),
-      getDisplayName: (backendId) => this.resolveDescriptor(backendId).displayName,
       // DESIGN NOTE: fan-out sub-sessions intentionally run at the vault root,
       // not the originating session's project folder, and aren't handed the
       // project's `projectId` / `additionalDirectories`. This is the seam where
@@ -1421,8 +1474,7 @@ export class AgentSessionManager {
       projectId,
       defaultModelSelection: resolvedSeed,
       getDescriptor: () => this.opts.resolveDescriptor(resolvedId),
-      runFanoutTurn: (input) => this.runFanoutTurn(input),
-      getDisplayName: (backendId) => this.resolveDescriptor(backendId).displayName,
+      runFanoutTurn: (request) => this.runFanoutTurn(request),
       getApp: () => this.app,
       contextReady,
       // Project sessions only — leaving these absent keeps a GLOBAL session's
@@ -2028,6 +2080,57 @@ export class AgentSessionManager {
       })
       .finally(() => this.memoryPassesInFlight.delete(internalId));
     return pass;
+  }
+
+  /**
+   * Fold a finished fan-out turn into the memory of every agent that answered
+   * it, because being consulted is a conversation with that agent too
+   * (`designdocs/CUSTOM_AGENTS.md` §6).
+   *
+   * Fire-and-forget: the turn is already on screen and the user has moved on,
+   * so nothing here is awaited and nothing here can fail the turn. An agent
+   * whose memory is off, whose folder is gone, or who produced no answer is
+   * skipped. The chat's own `memorizedThroughTurn` marker is deliberately
+   * untouched — a fan-out answer is the agent's conversation, not the chat's.
+   *
+   * @param answerers - The agents as the turn resolved them.
+   * @param turn - The settled turn, read for each agent's own answer.
+   * @param context - The question asked and the chat's backend, which an agent
+   *   that pins none of its own runs its memory pass on.
+   */
+  private beginFanoutMemoryPasses(
+    answerers: ReadonlyArray<FanoutAnswerer>,
+    turn: FanoutTurn,
+    context: { originalPromptText: string; sessionBackendId: BackendId }
+  ): void {
+    const files = this.opts.agentFileManager;
+    if (!files) return;
+    for (const answerer of answerers) {
+      if (answerer.missing || !answerer.memoryEnabled) continue;
+      const slot = turn.answers[answerer.slug];
+      if (!slot || slot.status !== "done") continue;
+      const answer = slot.text.trim();
+      if (!answer) continue;
+      const key = `fanout:${answerer.slug}`;
+      if (this.memoryPassesInFlight.has(key)) continue;
+      this.memoryPassesInFlight.add(key);
+      void runAgentMemoryPass(
+        { files, subSessions: this.subSessions },
+        {
+          agentSlug: answerer.slug,
+          sessionBackendId: answerer.backendId ?? context.sessionBackendId,
+          messages: buildFanoutMemoryTranscript(context.originalPromptText, answer),
+          // Nothing cancels a memory pass: the turn it reports on has already
+          // finished, and the pass bounds itself with its own deadline.
+          signal: new AbortController().signal,
+        }
+      )
+        .then((outcome) => {
+          if (outcome.status !== "written") return;
+          void this.rebindUnstartedChats(answerer.slug);
+        })
+        .finally(() => this.memoryPassesInFlight.delete(key));
+    }
   }
 
   /**
@@ -3753,8 +3856,7 @@ export class AgentSessionManager {
       initialState: resumeResult.state,
       cwd,
       getDescriptor: () => this.opts.resolveDescriptor(backendId),
-      runFanoutTurn: (input) => this.runFanoutTurn(input),
-      getDisplayName: (id) => this.resolveDescriptor(id).displayName,
+      runFanoutTurn: (request) => this.runFanoutTurn(request),
       getApp: () => this.app,
       // Project sessions only. A resumed conversation was closed for a while, so
       // its sources may well have changed — seed the cursor BEHIND the current

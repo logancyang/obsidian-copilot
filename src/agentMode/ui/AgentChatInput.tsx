@@ -15,20 +15,18 @@ import {
 import { CustomCommandManager } from "@/commands/customCommandManager";
 import { getCachedCustomCommands } from "@/commands/state";
 import ChatInput, { type ChatInputProps } from "@/components/chat-components/ChatInput";
-import { EMPTY_AGENT_MENTION_BRANDS } from "@/components/chat-components/hooks/useAtMentionCategories";
+import {
+  NO_AGENT_MENTIONS,
+  type AgentMentionEntry,
+  type AgentMentionState,
+} from "@/components/chat-components/hooks/useAtMentionCategories";
 import { useActiveWebTabState } from "@/components/chat-components/hooks/useActiveWebTabState";
 import { ACTIVE_WEB_TAB_MARKER, EVENT_NAMES } from "@/constants";
 import { useCanUseMultiAgent } from "@/plusUtils";
 import { EventTargetContext } from "@/context";
 import { logError, logWarn } from "@/logger";
-import {
-  isFanout,
-  resolveAnswerers,
-  useInstalledAgentBrands,
-} from "@/agentMode/ui/mentionedAgents";
-import type { BackendId } from "@/agentMode/session/types";
+import { isFanout, resolveAnswerers } from "@/agentMode/ui/mentionedAgents";
 import type CopilotPlugin from "@/main";
-import { getCloudAgentIds } from "@/agentMode/backends/registry";
 import { buildWebTabsWithActiveSnapshot } from "@/services/webViewerService/activeWebTabSnapshot";
 import {
   isNoteSelectedTextContext,
@@ -61,11 +59,15 @@ interface AgentChatInputProps {
   draft: AgentInputDraftControls;
   app: App;
   /**
-   * The session's main agent and multi-answer summarizer. Used by `isFanout` to
-   * collapse the degenerate `[main]` selection to the single-agent path. `null`
-   * before a session lands.
+   * Slug of the agent this chat is held with, or null for the built-in Copilot.
+   * Used by `isFanout` to collapse a lone mention of the chat's own persona to
+   * the single-agent path (`designdocs/CUSTOM_AGENTS.md` §6).
    */
-  mainAgentId: BackendId | null;
+  ownAgentSlug: string | null;
+  /** Agents the user can `@`-mention this turn, from the talking-to roster. */
+  mentionableAgents: ReadonlyArray<AgentMentionEntry>;
+  /** Open Settings → Agents, for the typeahead's empty state. */
+  onCreateAgent: () => void;
   updateUserMessageHistory: (newMessage: string) => void;
   isStarting: boolean;
   hasPendingPlanPermission: boolean;
@@ -179,7 +181,9 @@ export const AgentChatInput = memo(function AgentChatInput({
   chatInputId,
   draft,
   app,
-  mainAgentId,
+  ownAgentSlug,
+  mentionableAgents,
+  onCreateAgent,
   updateUserMessageHistory,
   isStarting,
   hasPendingPlanPermission,
@@ -210,23 +214,26 @@ export const AgentChatInput = memo(function AgentChatInput({
   // change flips the gate live; the authoritative send-time check is separate.
   const canUseMultiAgent = useCanUseMultiAgent();
 
-  // Installed agents the user can `@`-mention; tracks settings *and* async
-  // readiness (compatibility probes settle without a settings write).
-  const installedAgentBrands = useInstalledAgentBrands(plugin);
-  // Entitlement-gated typeahead list: free users get the frozen empty list so the
-  // "Agents" group never renders. Both operands are stable refs (no memo needed).
-  const agentBrands = canUseMultiAgent ? installedAgentBrands : EMPTY_AGENT_MENTION_BRANDS;
-  // The send-time allowlist is the REAL installed set, INDEPENDENT of the gated
+  // Entitlement-gated typeahead group: free users get the frozen "no group"
+  // state so neither the agent rows nor the create row ever renders.
+  const agentMentions = useMemo<AgentMentionState>(
+    () =>
+      canUseMultiAgent
+        ? { entries: mentionableAgents, enabled: true, onCreateAgent }
+        : NO_AGENT_MENTIONS,
+    [canUseMultiAgent, mentionableAgents, onCreateAgent]
+  );
+  // The send-time allowlist is the REAL roster, INDEPENDENT of the gated
   // typeahead list: a pasted pill (or a stale-false cache) must still resolve to a
   // real answerer so the turn fans out and hits the authoritative entitlement check.
-  const installedAgentIds = useMemo(
-    () => new Set(installedAgentBrands.map((b) => b.id)),
-    [installedAgentBrands]
+  const knownAgentSlugs = useMemo(
+    () => new Set(mentionableAgents.map((agent) => agent.slug)),
+    [mentionableAgents]
   );
   // Held in a ref (not state) so a mention edit never re-renders mid-stream; read at send time.
   const mentionedAgentIdsRef = useRef<string[]>([]);
-  const handleMentionedAgentsChange = useCallback((backendIds: string[]) => {
-    mentionedAgentIdsRef.current = backendIds;
+  const handleMentionedAgentsChange = useCallback((slugs: string[]) => {
+    mentionedAgentIdsRef.current = slugs;
   }, []);
 
   // Draft state is owned by AgentHome (so it can read `loading`/feed the drop
@@ -375,14 +382,11 @@ export const AgentChatInput = memo(function AgentChatInput({
       // carried when it actually fans out; the single-agent path sends no
       // `mentionedAgents` and stays byte-for-byte the existing behavior. Read the
       // mention ref before resetCompose clears it below.
-      let mentionedAgents: ReadonlyArray<BackendId> | undefined;
-      if (mainAgentId) {
-        const answerers = resolveAnswerers({
-          mentionedAgentIds: mentionedAgentIdsRef.current,
-          installedAgentIds,
-        });
-        if (isFanout(answerers, mainAgentId)) mentionedAgents = answerers;
-      }
+      const answerers = resolveAnswerers({
+        mentionedSlugs: mentionedAgentIdsRef.current,
+        knownSlugs: knownAgentSlugs,
+      });
+      const mentionedAgents = isFanout(answerers, ownAgentSlug) ? answerers : undefined;
 
       // Clear the composer NOW, before the async image reads below, so it empties
       // the instant the user sends instead of after every attached image finishes
@@ -456,8 +460,8 @@ export const AgentChatInput = memo(function AgentChatInput({
       resetCompose,
       runSend,
       setQueuedMessages,
-      mainAgentId,
-      installedAgentIds,
+      ownAgentSlug,
+      knownAgentSlugs,
     ]
   );
 
@@ -590,8 +594,7 @@ export const AgentChatInput = memo(function AgentChatInput({
           modePickerOverride={modePickerOverride ?? undefined}
           selectedTextContexts={selectedTextContexts}
           onRemoveSelectedText={removeSelectedTextContext}
-          agentBrands={agentBrands}
-          cloudAgentIds={getCloudAgentIds()}
+          agentMentions={agentMentions}
           onMentionedAgentsChange={handleMentionedAgentsChange}
           // No placeholder swap while context is loading, on purpose: loads
           // often clear in ~hundreds of ms, so any transient placeholder (text

@@ -404,12 +404,9 @@ export class AgentChatPersistenceManager {
         // to `m.message` only at completion. If autosave fires mid-turn (a long
         // turn outliving the debounce, then reload/close/crash), serialize the
         // LIVE fanout so the saved chat keeps the streamed per-agent text instead
-        // of a blank assistant bubble. Backend ids label the sections here; the
-        // completed turn later overwrites `m.message` with display-name labels.
+        // of a blank assistant bubble.
         const body =
-          m.message.length === 0 && m.fanout
-            ? serializeFanoutComposite(m.fanout, (id) => id)
-            : m.message;
+          m.message.length === 0 && m.fanout ? serializeFanoutComposite(m.fanout) : m.message;
         return `**${m.sender}**: ${body}\n[Timestamp: ${ts}]`;
       })
       .join("\n\n");

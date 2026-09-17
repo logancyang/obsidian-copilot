@@ -50,14 +50,15 @@ import { deriveChatTitleFromMessages } from "@/agentMode/session/chatHistoryMerg
 import { ContextProcessor } from "@/contextProcessor";
 import type { ContextMaterializationResult } from "@/context/projectContextMaterializer";
 import { escapeXml } from "@/LLMProviders/chainRunner/utils/xmlParsing";
-import type { FanoutRunInput } from "@/agentMode/session/fanout/FanoutOrchestrator";
-import { isFanout } from "@/agentMode/session/fanout/answerers";
+import type { FanoutTurnRequest } from "@/agentMode/session/fanout/FanoutOrchestrator";
+import { EMPTY_ANSWERERS, isFanout } from "@/agentMode/session/fanout/answerers";
 import {
   buildConversationHistoryBlock,
   buildPriorFanoutContextBlock,
   FANOUT_HISTORY_MAX_CHARS,
   FANOUT_READONLY_PREAMBLE,
   isDirectAnswerTurn,
+  prependPromptText,
   renderFanoutComposite,
   serializeFanoutComposite,
   type FanoutTurn,
@@ -69,7 +70,7 @@ import { v4 as uuidv4 } from "uuid";
  * Seam the session calls to dispatch a multi-agent read-only QA turn. Supplied
  * by `AgentSessionManager`; omitted in tests and on the single-agent path.
  */
-export type RunFanoutTurn = (input: FanoutRunInput) => Promise<FanoutTurn>;
+export type RunFanoutTurn = (request: FanoutTurnRequest) => Promise<FanoutTurn>;
 
 /**
  * Prefix opencode uses for placeholder titles before its title-summarizer
@@ -102,7 +103,6 @@ const EMPTY_QUESTIONS: AskUserQuestionPrompt[] = [];
 // cancel/dispose makes the bridge treat it as a user cancellation.
 const EMPTY_ANSWERS: AgentQuestionAnswers = Object.freeze({});
 // Canonical "no fan-out" selection — referential stability on the single-agent path.
-const EMPTY_BACKEND_IDS: ReadonlyArray<BackendId> = Object.freeze([]);
 // Shared "no extra roots" array so a session created without project context
 // keeps a stable reference (no fresh `[]` allocation per construction).
 const EMPTY_ADDITIONAL_DIRECTORIES: string[] = Object.freeze([]) as unknown as string[];
@@ -254,11 +254,6 @@ export interface AgentSessionStartOptions extends ProjectContextUpdatesHooks {
    */
   runFanoutTurn?: RunFanoutTurn;
   /**
-   * Resolve any `BackendId` to its display name for the persisted composite
-   * headings. Manager-supplied; without it the serializer falls back to the id.
-   */
-  getDisplayName?: (backendId: BackendId) => string;
-  /**
    * Resolve the Obsidian `App` for send-boundary side effects (the entitlement
    * re-check passes it to `validateLicenseKey`). Threaded via DI so the session
    * never reaches for the global `app`. Manager-supplied; tests omit it.
@@ -303,7 +298,6 @@ export interface AgentSessionStateOptions extends ProjectContextUpdatesHooks {
   cwd?: string | null;
   getDescriptor?: () => BackendDescriptor | undefined;
   runFanoutTurn?: RunFanoutTurn;
-  getDisplayName?: (backendId: BackendId) => string;
   getApp?: () => App;
 }
 
@@ -355,7 +349,6 @@ export class AgentSession {
   private firstPromptSent = false;
   private readonly getDescriptor: (() => BackendDescriptor | undefined) | null;
   private readonly runFanoutTurn: RunFanoutTurn | null;
-  private readonly getDisplayName: ((backendId: BackendId) => string) | null;
   private readonly getApp: (() => App) | null;
   // Per-turn project-context freshness hooks (see `ProjectContextUpdatesHooks`).
   // Null for GLOBAL / context-free sessions, so their turn path is unchanged.
@@ -378,9 +371,9 @@ export class AgentSession {
   // preconditions pass. Yields the per-turn `"error"` status while the
   // session sits idle between a failed turn and the next prompt.
   private lastTurnError = false;
-  // The resolved answerer selection for the most recent turn (deduped
-  // `@`-mentioned installed agents). Empty on the single-agent path.
-  private lastMentionedAgents: ReadonlyArray<BackendId> = EMPTY_BACKEND_IDS;
+  // The resolved answerer selection for the most recent turn (deduped slugs of
+  // the `@`-mentioned agents). Empty on the single-agent path.
+  private lastMentionedAgents: ReadonlyArray<string> = EMPTY_ANSWERERS;
   // Fan-out turns the visible backend never processed. The next single-agent turn
   // injects them in order as a labeled prior-turn block, then clears, so follow-ups
   // keep the QA context. LIVE-ONLY — never persisted.
@@ -508,7 +501,6 @@ export class AgentSession {
     this.cwd = opts.cwd ?? null;
     this.getDescriptor = opts.getDescriptor ?? null;
     this.runFanoutTurn = opts.runFanoutTurn ?? null;
-    this.getDisplayName = opts.getDisplayName ?? null;
     this.getApp = opts.getApp ?? null;
     this.getProjectContextUpdatesFn = opts.getProjectContextUpdates ?? null;
     this.markProjectContextUpdatesDeliveredFn = opts.markProjectContextUpdatesDelivered ?? null;
@@ -1028,7 +1020,7 @@ export class AgentSession {
     displayText: string,
     context?: MessageContext,
     promptContent?: PromptContent[],
-    mentionedAgents?: ReadonlyArray<BackendId>
+    mentionedAgents?: ReadonlyArray<string>
   ): { userMessageId: string; turn: Promise<StopReason> } {
     const status = this.getStatus();
     if (status === "starting") {
@@ -1078,7 +1070,7 @@ export class AgentSession {
 
     // Record the fan-out selection for this turn (empty = single-agent path).
     this.lastMentionedAgents =
-      mentionedAgents && mentionedAgents.length > 0 ? mentionedAgents : EMPTY_BACKEND_IDS;
+      mentionedAgents && mentionedAgents.length > 0 ? mentionedAgents : EMPTY_ANSWERERS;
 
     this.abortController = new AbortController();
     // Clear any prior terminal error before the new turn starts so the
@@ -1092,7 +1084,7 @@ export class AgentSession {
   }
 
   /** The resolved answerer selection for the most recent `sendPrompt`; empty on the single-agent path. */
-  getLastMentionedAgents(): ReadonlyArray<BackendId> {
+  getLastMentionedAgents(): ReadonlyArray<string> {
     return this.lastMentionedAgents;
   }
 
@@ -1139,15 +1131,15 @@ export class AgentSession {
       const projectContextUpdates = this.getProjectContextUpdatesFn?.() ?? null;
       const projectContextUpdatesBlock = projectContextUpdates?.block ?? null;
 
-      // Fan-out path: the `@`-mentioned answerers dispatch the identical prompt in
+      // Fan-out path: the `@`-mentioned agents dispatch the shared prompt in
       // parallel ephemeral read-only sub-sessions. Multi-answer turns are summarized.
       // It never talks to the visible backend, so it doesn't inject/flush the
       // pending fan-out buffer (only appends on completion). `isFanout` collapses
-      // the degenerate `[main]` case so the main agent never both answers and
+      // a lone mention of this chat's OWN persona so it never both answers and
       // summarizes — shared with the composer's `mentionedAgents` gate.
       if (
         this.runFanoutTurn &&
-        isFanout(this.lastMentionedAgents, this.backendId) &&
+        isFanout(this.lastMentionedAgents, this.sessionAgent.slug) &&
         placeholderId
       ) {
         // Authoritative paywall: a fan-out turn is Plus-only, and the typeahead UI
@@ -1164,6 +1156,9 @@ export class AgentSession {
           this.priorDisplayMessages(userMessageId, placeholderId),
           FANOUT_HISTORY_MAX_CHARS
         );
+        // No persona block here: this prompt is SHARED, and each answerer leads
+        // it with its own persona and memory. The chat's own persona rides the
+        // summary instead (`designdocs/CUSTOM_AGENTS.md` §6).
         const promptBlocks = buildPromptBlocks(
           displayText,
           context,
@@ -1171,8 +1166,7 @@ export class AgentSession {
           webTabBlock,
           projectContextBlock,
           historyBlock,
-          projectContextUpdatesBlock,
-          agentPersonaBlock
+          projectContextUpdatesBlock
         );
         // Deliberately do NOT mark `firstPromptSent` here. Fan-out delivers the
         // first-turn project-context block only to the ephemeral sub-sessions; the
@@ -1356,10 +1350,12 @@ export class AgentSession {
     turnStartedAtMs: number
   ): Promise<StopReason> {
     const signal = this.abortController?.signal ?? new AbortController().signal;
-    const input: FanoutRunInput = {
-      agents: this.lastMentionedAgents,
-      // Multi-answer turns use the session's main agent as the summarizer.
-      mainAgent: this.backendId,
+    const request: FanoutTurnRequest = {
+      agentSlugs: this.lastMentionedAgents,
+      // An agent that pins no backend answers on this chat's, and this chat's
+      // own agent writes the summary in its own voice.
+      sessionBackendId: this.backendId,
+      summarizerPersonaBlock: this.sessionAgent.personaBlock,
       prompt: withReadOnlyPreamble(promptBlocks),
       // The raw question fed to the summary. Distinct from `prompt`, which carries
       // the read-only preamble + context.
@@ -1372,7 +1368,7 @@ export class AgentSession {
         this.scheduleNotifyMessages();
       },
     };
-    const turn = await this.runFanoutTurn!(input);
+    const turn = await this.runFanoutTurn!(request);
     this.store.setFanout(placeholderId, turn);
 
     const stopReason: StopReason = signal.aborted ? "cancelled" : "end_turn";
@@ -1386,7 +1382,7 @@ export class AgentSession {
     const hasContent =
       turn.summary.text.trim().length > 0 || hasAnswerText || isDirectAnswerTurn(turn);
     if (hasContent) {
-      const composite = serializeFanoutComposite(turn, (id) => this.displayNameFor(id));
+      const composite = serializeFanoutComposite(turn);
       this.store.appendAgentText(placeholderId, composite);
       // Buffer this turn so the next single-agent prompt can replay it (the visible
       // backend never saw it). Prefer the summary ONLY when it generated
@@ -1397,7 +1393,7 @@ export class AgentSession {
         turn.summary.complete && summaryText.length > 0
           ? summaryText
           : hasAnswerText
-            ? renderFanoutComposite(turn, (id) => this.displayNameFor(id))
+            ? renderFanoutComposite(turn)
             : "";
       if (replay) {
         this.pendingFanoutContext.push({ question: originalPromptText, summary: replay });
@@ -1423,14 +1419,6 @@ export class AgentSession {
     return this.store
       .getDisplayMessages()
       .filter((m) => m.id !== userMessageId && m.id !== placeholderId);
-  }
-
-  /**
-   * Resolve a `BackendId` to its display name via the injected resolver (id
-   * fallback). Mirrors the `fanoutDropdown` resolver so heading and tab agree.
-   */
-  private displayNameFor(backendId: BackendId): string {
-    return this.getDisplayName?.(backendId) ?? backendId;
   }
 
   /**
@@ -2370,12 +2358,7 @@ export function buildPromptBlocks(
  * read-only framing before the context. Identical for every agent.
  */
 export function withReadOnlyPreamble(blocks: PromptContent[]): PromptContent[] {
-  const i = blocks.findIndex((b) => b.type === "text");
-  if (i === -1) return [{ type: "text", text: FANOUT_READONLY_PREAMBLE }, ...blocks];
-  const block = blocks[i] as Extract<PromptContent, { type: "text" }>;
-  const out = blocks.slice();
-  out[i] = { type: "text", text: `${FANOUT_READONLY_PREAMBLE}\n\n${block.text}` };
-  return out;
+  return prependPromptText(blocks, FANOUT_READONLY_PREAMBLE);
 }
 
 /**

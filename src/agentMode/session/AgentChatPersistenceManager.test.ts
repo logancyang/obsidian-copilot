@@ -232,7 +232,13 @@ describe("AgentChatPersistenceManager", () => {
       timestamp: { epoch: 2, display: "2026/01/01 12:00:00", fileName: "20260101_120000" },
       fanout: {
         answers: {
-          opencode: { backendId: "opencode", status: "running", text: "partial opencode answer" },
+          jennifer: {
+            agentSlug: "jennifer",
+            name: "Jennifer",
+            icon: "🪶",
+            status: "running",
+            text: "partial opencode answer",
+          },
         },
         summary: { status: "streaming", text: "" },
       },

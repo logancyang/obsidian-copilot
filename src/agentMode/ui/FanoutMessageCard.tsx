@@ -1,7 +1,6 @@
 import { FanoutTurnView } from "@/agentMode/ui/FanoutTurnView";
 import {
   defaultFanoutOption,
-  fanoutDisplayName,
   FANOUT_SUMMARY_OPTION,
   type FanoutOptionValue,
 } from "@/agentMode/ui/fanoutDropdown";
@@ -46,7 +45,7 @@ export const FanoutMessageCard: React.FC<FanoutMessageCardProps> = memo(
     const currentText = useMemo(
       () =>
         activeValue === FANOUT_SUMMARY_OPTION
-          ? renderFanoutComposite(turn, fanoutDisplayName)
+          ? renderFanoutComposite(turn)
           : (turn.answers[activeValue]?.text ?? ""),
       [turn, activeValue]
     );

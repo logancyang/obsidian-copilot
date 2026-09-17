@@ -15,6 +15,8 @@ import { CHAT_AGENT_VIEWTYPE } from "@/constants";
 import { playNotificationSound } from "@/utils/notificationSound";
 import { AgentSessionIndex } from "./AgentSessionIndex";
 import { AgentSessionManager } from "./AgentSessionManager";
+import { FanoutOrchestrator } from "./fanout/FanoutOrchestrator";
+import type { FanoutAnswerer, FanoutTurn } from "./fanout/fanoutTypes";
 import { ProjectContentTracker } from "@/context/projectContentTracker";
 import { GLOBAL_SCOPE } from "./scope";
 import {
@@ -54,7 +56,10 @@ jest.mock("@/logger", () => ({
 
 // The pass itself is covered in `agentMemoryPass.test.ts`; here we test what the
 // manager does around it — when it starts one, and what it records afterwards.
-jest.mock("./agentMemoryPass", () => ({ runAgentMemoryPass: jest.fn() }));
+jest.mock("./agentMemoryPass", () => ({
+  ...jest.requireActual("./agentMemoryPass"),
+  runAgentMemoryPass: jest.fn(),
+}));
 const mockRunAgentMemoryPass = jest.requireMock("./agentMemoryPass")
   .runAgentMemoryPass as jest.Mock;
 
@@ -5198,6 +5203,133 @@ describe("AgentSessionManager talking-to selection", () => {
       );
 
       expect(loaded.getAgent()).toBe(COPILOT_SESSION_AGENT);
+    });
+  });
+
+  describe("runFanoutTurn()", () => {
+    /** Capture what the manager resolved, and answer for each agent it hands over. */
+    function stubOrchestrator(answerText: (slug: string) => string | null) {
+      const resolved: FanoutAnswerer[][] = [];
+      jest.spyOn(FanoutOrchestrator.prototype, "run").mockImplementation(async (input) => {
+        resolved.push([...input.answerers]);
+        const answers: FanoutTurn["answers"] = {};
+        for (const answerer of input.answerers) {
+          const text = answerText(answerer.slug);
+          answers[answerer.slug] = {
+            agentSlug: answerer.slug,
+            name: answerer.name,
+            icon: answerer.icon,
+            status: text === null ? "error" : "done",
+            text: text ?? "",
+          };
+        }
+        return { answers, summary: { status: "done", text: "the summary" } };
+      });
+      return resolved;
+    }
+
+    const vancat = (overrides: Partial<CustomAgent> = {}): CustomAgent =>
+      jennifer({
+        slug: "vancat",
+        name: "Vancat",
+        icon: "🐱",
+        instructions: "You are Vancat.",
+        ...overrides,
+      });
+
+    function request(agentSlugs: string[]) {
+      return {
+        agentSlugs,
+        sessionBackendId: "opencode",
+        summarizerPersonaBlock: null,
+        prompt: [{ type: "text" as const, text: "which title is better?" }],
+        originalPromptText: "which title is better?",
+        signal: new AbortController().signal,
+        onChange: () => {},
+      };
+    }
+
+    afterEach(() => jest.restoreAllMocks());
+
+    it("hands each mentioned agent over with its persona, memory, icon and pinned backend", async () => {
+      // designdocs/CUSTOM_AGENTS.md §6 — resolved at send time, so the agent
+      // answers with what its folder holds now.
+      const manager = buildManager(
+        {},
+        undefined,
+        buildAgentFiles([jennifer({ backendId: "claude" }), vancat()])
+      );
+      const resolved = stubOrchestrator(() => "an answer");
+
+      await manager.runFanoutTurn(request(["jennifer", "vancat"]));
+
+      expect(resolved[0].map((a) => a.slug)).toEqual(["jennifer", "vancat"]);
+      expect(resolved[0][0]).toMatchObject({ name: "Jennifer", icon: "🪶", backendId: "claude" });
+      expect(resolved[0][0].personaBlock).toContain('<agent_persona name="Jennifer">');
+      expect(resolved[0][0].personaBlock).toContain("<agent_memory");
+      // Vancat pins nothing, so the orchestrator falls back to the chat's backend.
+      expect(resolved[0][1]).toMatchObject({ name: "Vancat", icon: "🐱", backendId: null });
+    });
+
+    it("marks an agent deleted since the pill was inserted as missing rather than dropping it", async () => {
+      const manager = buildManager({}, undefined, buildAgentFiles([jennifer()]));
+      const resolved = stubOrchestrator(() => "an answer");
+
+      await manager.runFanoutTurn(request(["jennifer", "ghost"]));
+
+      expect(resolved[0][1]).toMatchObject({ slug: "ghost", name: "Ghost", missing: true });
+    });
+
+    it("folds the turn into each answering agent's memory, feeding it only its own answer", async () => {
+      // designdocs/CUSTOM_AGENTS.md §6 — being consulted is a conversation too.
+      const manager = buildManager({}, undefined, buildAgentFiles([jennifer(), vancat()]));
+      stubOrchestrator((slug) => `${slug} answered`);
+      mockRunAgentMemoryPass.mockResolvedValue({ status: "skipped", reason: "no-turns" });
+
+      await manager.runFanoutTurn(request(["jennifer", "vancat"]));
+
+      await waitFor(() => expect(mockRunAgentMemoryPass).toHaveBeenCalledTimes(2));
+      expect(mockRunAgentMemoryPass.mock.calls.map((call) => call[1].agentSlug)).toEqual([
+        "jennifer",
+        "vancat",
+      ]);
+      expect(mockRunAgentMemoryPass.mock.calls[0][1].messages).toEqual([
+        expect.objectContaining({ sender: "user", message: "which title is better?" }),
+        expect.objectContaining({ sender: "ai", message: "jennifer answered" }),
+      ]);
+    });
+
+    it("skips the memory pass for an agent whose memory is off, one that is gone, and one that did not answer", async () => {
+      const manager = buildManager(
+        {},
+        undefined,
+        buildAgentFiles([jennifer({ memoryEnabled: false }), vancat()])
+      );
+      stubOrchestrator((slug) => (slug === "vancat" ? null : "an answer"));
+
+      await manager.runFanoutTurn(request(["jennifer", "vancat", "ghost"]));
+
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+      expect(mockRunAgentMemoryPass).not.toHaveBeenCalled();
+    });
+
+    it("never advances the chat's memorized-through marker for a fan-out answer", async () => {
+      // The exchange belongs to the answering agent, not to this chat's own
+      // conversation with its own agent (`designdocs/CUSTOM_AGENTS.md` §6).
+      const manager = buildManager({}, undefined, buildAgentFiles([jennifer()]));
+      await manager.setSelectedAgent("jennifer");
+      const chat = await manager.createSession();
+      stubOrchestrator(() => "an answer");
+      mockRunAgentMemoryPass.mockResolvedValue({
+        status: "written",
+        agentName: "Jennifer",
+        memoryPath: "copilot/agents/jennifer/MEMORY.md",
+      });
+
+      await manager.runFanoutTurn(request(["jennifer"]));
+
+      await waitFor(() => expect(mockRunAgentMemoryPass).toHaveBeenCalledTimes(1));
+      expect(chat.getMemorizedThroughTurn()).toBe(0);
     });
   });
 });
