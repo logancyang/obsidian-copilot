@@ -579,6 +579,43 @@ describe("searchUtils", () => {
     });
   });
 
+  describe("agent persona and memory files", () => {
+    const agentSettings = {
+      qaInclusions: "",
+      qaExclusions: "",
+      copilotFolder: "copilot",
+      copilotRootHistory: ["copilot"],
+    };
+
+    it("keeps an agent's instructions and memory out of indexing", () => {
+      (settingsModel.getSettings as jest.Mock).mockReturnValue(agentSettings);
+      expect(
+        shouldIndexFile(window.app, createTestFile("copilot/agents/jennifer/agent.md"), null, null)
+      ).toBe(false);
+      expect(
+        shouldIndexFile(window.app, createTestFile("copilot/agents/jennifer/MEMORY.md"), null, null)
+      ).toBe(false);
+    });
+
+    it("keeps them out of query-time search results too", () => {
+      (settingsModel.getSettings as jest.Mock).mockReturnValue(agentSettings);
+      const filter = createCopilotPatternFilter(window.app);
+      expect(filter("copilot/agents/jennifer/agent.md")).toBe(false);
+      expect(filter("copilot/agents/jennifer/MEMORY.md")).toBe(false);
+    });
+
+    it("excludes them under a custom Copilot root but still indexes a user note named MEMORY.md", () => {
+      (settingsModel.getSettings as jest.Mock).mockReturnValue({
+        ...agentSettings,
+        copilotFolder: "team-ai",
+        copilotRootHistory: ["team-ai"],
+      });
+      const filter = createCopilotPatternFilter(window.app);
+      expect(filter("team-ai/agents/jennifer/MEMORY.md")).toBe(false);
+      expect(filter("notes/MEMORY.md")).toBe(true);
+    });
+  });
+
   describe("createCopilotPatternFilter()", () => {
     it("excludes the active and historical roots even with no user patterns", () => {
       (settingsModel.getSettings as jest.Mock).mockReturnValue({

@@ -72,10 +72,18 @@ describe("SettingsMainV2", () => {
         "BYOK",
         "Miyo",
         "Skills",
+        "Agents",
         "Command",
         "Self-Host",
         "Advanced",
       ]);
+    });
+
+    it("places the Agents tab immediately after Skills", () => {
+      render(<SettingsMainV2 plugin={plugin} />);
+
+      const labels = screen.getAllByRole("tab").map((tab) => tab.textContent);
+      expect(labels.indexOf("Agents")).toBe(labels.indexOf("Skills") + 1);
     });
 
     it("marks the Skills tab while a skill failed to load for https://github.com/Brevilabs/obsidian-copilot-private/issues/166", () => {

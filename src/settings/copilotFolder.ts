@@ -11,6 +11,7 @@ export const COPILOT_SUBFOLDER = Object.freeze({
   skills: "skills",
   memory: "memory",
   projects: "projects",
+  agents: "agents",
 } as const);
 
 type FolderSettings = Pick<CopilotSettings, "copilotFolder">;
@@ -51,6 +52,10 @@ export function deriveProjectsFolder(settings: FolderSettings): string {
   return deriveSubfolder(settings, COPILOT_SUBFOLDER.projects);
 }
 
+export function deriveAgentsFolder(settings: FolderSettings): string {
+  return deriveSubfolder(settings, COPILOT_SUBFOLDER.agents);
+}
+
 export function getEffectiveCopilotFolder(): string {
   return normalizePath(copilotRoot(getSettings()));
 }
@@ -79,6 +84,10 @@ export function getEffectiveProjectsFolder(): string {
   return deriveProjectsFolder(getSettings());
 }
 
+export function getEffectiveAgentsFolder(): string {
+  return deriveAgentsFolder(getSettings());
+}
+
 export async function ensureCopilotSubfolders(
   vault: Vault,
   settings: FolderSettings
@@ -90,6 +99,7 @@ export async function ensureCopilotSubfolders(
     deriveSkillsFolder,
     deriveMemoryFolder,
     deriveProjectsFolder,
+    deriveAgentsFolder,
   ];
   for (const derive of derivers) {
     const folder = derive(settings);

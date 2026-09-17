@@ -1,4 +1,4 @@
-import { parse as parseYamlString } from "yaml";
+import { parse as parseYamlString, stringify as stringifyYamlValue } from "yaml";
 
 let requestUrlImpl = jest.fn().mockResolvedValue({
   status: 200,
@@ -64,6 +64,9 @@ module.exports = {
   normalizePath: (p) => String(p).replace(/\\\\/g, "/").replace(/\/+/g, "/"),
   parseYaml: jest.fn().mockImplementation((content) => {
     return parseYamlString(content);
+  }),
+  stringifyYaml: jest.fn().mockImplementation((value) => {
+    return stringifyYamlValue(value);
   }),
   Modal: class Modal {
     constructor(app) {
