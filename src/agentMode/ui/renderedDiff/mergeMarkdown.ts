@@ -82,7 +82,10 @@ export function buildRenderedDiffPlan(
   const beforeSplit = splitFrontmatter(beforeText);
   const afterSplit = splitFrontmatter(afterText);
   const segments: DiffSegment[] = [];
-  if (beforeSplit.frontmatter !== null || afterSplit.frontmatter !== null) {
+  // Frontmatter is split off so no marker can land on its fence, not so it can
+  // be put on display: properties the turn left alone are not part of the
+  // change, and a block of them above every diff buries the edit below the fold.
+  if (beforeSplit.frontmatter !== afterSplit.frontmatter) {
     segments.push({
       kind: "code",
       lines: diffCodeLines(beforeSplit.frontmatter ?? "", afterSplit.frontmatter ?? ""),

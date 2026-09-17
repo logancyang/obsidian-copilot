@@ -4,6 +4,7 @@ import {
   FILE_CREATED,
   FILE_EMPTIED,
   FRONTMATTER_TAG_ADDED,
+  FRONTMATTER_UNCHANGED_BODY_EDIT,
   NON_MARKDOWN_FILE,
 } from "@/agentMode/ui/renderedDiff/fixtures";
 import {
@@ -65,6 +66,16 @@ describe("mergeMarkdown", () => {
         ],
       });
       expect(plan[1]).toEqual({ kind: "markdown", markdown: "The pilot runs for six weeks." });
+    });
+
+    it("omits the frontmatter block entirely when the turn changed only the body", () => {
+      const plan = buildRenderedDiffPlan(
+        FRONTMATTER_UNCHANGED_BODY_EDIT.before,
+        FRONTMATTER_UNCHANGED_BODY_EDIT.after
+      );
+
+      expect(plan.every((segment) => segment.kind !== "code")).toBe(true);
+      expect(plan).toHaveLength(1);
     });
 
     it("diffs a fenced code block line by line instead of rendering it", () => {

@@ -100,6 +100,13 @@ export const FRONTMATTER_TAG_ADDED: RenderedDiffFixture = {
     "---\ntags:\n  - project\n  - rollout\nstatus: draft\n---\n\nThe pilot runs for six weeks.\n",
 };
 
+/** Properties the turn left alone, which stay out of the diff entirely. */
+export const FRONTMATTER_UNCHANGED_BODY_EDIT: RenderedDiffFixture = {
+  path: "projects/Alpha/Project brief.md",
+  before: "---\ntags:\n  - project\nstatus: draft\n---\n\nThe pilot runs for six weeks.\n",
+  after: "---\ntags:\n  - project\nstatus: draft\n---\n\nThe pilot runs for eight weeks.\n",
+};
+
 /** A paragraph relocated verbatim, which reads as a deletion and an insertion. */
 export const BLOCK_MOVED: RenderedDiffFixture = {
   path: "projects/Alpha/Project brief.md",

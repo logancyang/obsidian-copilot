@@ -6,6 +6,7 @@ import {
   FILE_CREATED,
   FILE_EMPTIED,
   FRONTMATTER_TAG_ADDED,
+  FRONTMATTER_UNCHANGED_BODY_EDIT,
   HEADING_LEVEL_CHANGE,
   LINK_HREF_CHANGE,
   NON_MARKDOWN_FILE,
@@ -69,6 +70,11 @@ export const CodeBlockLineChange: StoryObj<RenderedDiffProps> = story(CODE_BLOCK
 
 /** A tag added to the frontmatter, which never reaches the Markdown renderer. */
 export const FrontmatterTagAdded: StoryObj<RenderedDiffProps> = story(FRONTMATTER_TAG_ADDED);
+
+/** Properties the turn left alone, which stay out of the diff entirely. */
+export const FrontmatterUnchanged: StoryObj<RenderedDiffProps> = story(
+  FRONTMATTER_UNCHANGED_BODY_EDIT
+);
 
 /** A paragraph relocated verbatim. */
 export const BlockMoved: StoryObj<RenderedDiffProps> = story(BLOCK_MOVED);

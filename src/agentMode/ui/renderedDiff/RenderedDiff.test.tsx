@@ -6,6 +6,7 @@ import {
   FILE_CREATED,
   FILE_EMPTIED,
   FRONTMATTER_TAG_ADDED,
+  FRONTMATTER_UNCHANGED_BODY_EDIT,
   HEADING_LEVEL_CHANGE,
   LINK_HREF_CHANGE,
   NON_MARKDOWN_FILE,
@@ -315,6 +316,14 @@ describe("RenderedDiff", () => {
         "  - rollout"
       );
       expect(root.querySelector("p")?.textContent).toBe("The pilot runs for six weeks.");
+    });
+
+    it("shows no frontmatter block when the turn changed only the body", async () => {
+      const root = await renderFixture(FRONTMATTER_UNCHANGED_BODY_EDIT);
+
+      expect(root.querySelector("pre.copilot-diff-code")).toBeNull();
+      expect(root.querySelector(".copilot-diff-del")?.textContent).toBe("six");
+      expect(root.querySelector(".copilot-diff-ins")?.textContent).toBe("eight");
     });
 
     it("shows a moved block as a removed block where it was and an added block where it went", async () => {
