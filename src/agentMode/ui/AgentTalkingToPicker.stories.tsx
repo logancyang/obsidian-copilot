@@ -11,7 +11,7 @@ const COPILOT: AgentEntry = {
   kind: "builtin",
   slug: "copilot",
   name: "Copilot",
-  description: "The default assistant. Your vault instructions, no persona, no memory.",
+  description: "Your vault instructions, no persona, no memory.",
   icon: "✦",
 };
 
