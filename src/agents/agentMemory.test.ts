@@ -53,14 +53,24 @@ describe("agentMemory", () => {
     it("asks for standalone bullets rather than a file, since the note is shared (CUSTOM_AGENTS.md §5)", () => {
       const prompt = buildAgentMemoryFlushPrompt(source);
 
-      expect(prompt).toContain("One bullet per thing worth keeping");
-      expect(prompt).toContain("Never retell the conversation.");
+      expect(prompt).toContain("one bullet per thing worth keeping");
+      expect(prompt).toContain("Never retell the conversation turn by turn.");
       expect(prompt).toContain("Reply with the bullets and nothing else");
       expect(prompt).not.toContain("complete new contents");
     });
 
-    it("offers a word for a conversation that taught it nothing, so silence is not guessed at", () => {
-      expect(buildAgentMemoryFlushPrompt(source)).toContain("the single word NOTHING");
+    it("always asks for one bullet saying what the conversation was about, so a later chat can say what was discussed today (CUSTOM_AGENTS.md §5)", () => {
+      const prompt = buildAgentMemoryFlushPrompt(source);
+
+      expect(prompt).toContain("one bullet saying what this conversation was about");
+      expect(prompt).toContain("Every conversation gets this bullet");
+    });
+
+    it("reserves the nothing word for a conversation with no substance, such as a greeting or a test message", () => {
+      const prompt = buildAgentMemoryFlushPrompt(source);
+
+      expect(prompt).toContain("Only when the user said nothing of substance");
+      expect(prompt).toContain("the single word NOTHING");
     });
 
     it("falls back to a neutral subject when the agent has no readable name", () => {

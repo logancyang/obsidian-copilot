@@ -191,6 +191,18 @@ describe("agentMemoryPass", () => {
       expect(harness.appended).toHaveLength(0);
     });
 
+    // designdocs/CUSTOM_AGENTS.md §5: the marker advances only past turns the
+    // agent actually read; a silent backend must not look like a judgement.
+    it("reports a reply with no text as a failure, so the turns are flushed again later", async () => {
+      const harness = buildHarness({ answer: "   " });
+
+      expect(await run(harness)).toEqual({
+        status: "failed",
+        error: "Memory flush returned no text.",
+      });
+      expect(harness.appended).toHaveLength(0);
+    });
+
     it("reports a backend failure as an outcome rather than throwing at the boundary", async () => {
       const harness = buildHarness({ fail: new Error("backend down") });
 

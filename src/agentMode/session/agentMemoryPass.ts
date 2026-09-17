@@ -101,11 +101,23 @@ export async function runAgentMemoryFlush(
       },
     });
     if (outcome === "aborted") return { status: "failed", error: "Memory flush was cancelled." };
+    // A reply with no text at all is the backend failing quietly, not the agent
+    // deciding there was nothing to keep, so the marker must not advance past
+    // turns that were never read (`designdocs/CUSTOM_AGENTS.md` §5).
+    if (returned.trim().length === 0) {
+      logWarn(`[Agents] Memory flush for "${request.agentSlug}" returned no text`);
+      return { status: "failed", error: "Memory flush returned no text." };
+    }
 
     const bullets = parseMemoryFlushBullets(returned);
     // A conversation that taught the agent nothing leaves no heading behind, so
     // a day of notes reads as the days that mattered.
-    if (bullets.length === 0) return { status: "skipped", reason: "nothing-to-keep" };
+    if (bullets.length === 0) {
+      logInfo(
+        `[Agents] Memory flush for "${request.agentSlug}" kept nothing: ${returned.trim().slice(0, 120)}`
+      );
+      return { status: "skipped", reason: "nothing-to-keep" };
+    }
 
     const at = request.now ?? new Date();
     const date = formatMemoryEntryDate(at);

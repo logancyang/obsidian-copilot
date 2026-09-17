@@ -223,6 +223,9 @@ Budget stays 8k characters.
 
 **Daily notes.** `memory/YYYY-MM-DD.md` is the episodic tier. It has one
 heading per conversation, `## HH:MM <chat title>`, and dated bullets beneath.
+The first bullet under a heading always says what that conversation was
+about, what the user asked and what the agent did, so a later chat can answer
+"what did we talk about today" even when nothing durable was learned.
 Two writers append to it:
 
 - The agent itself, during a turn, through its harness's own file tools. The
