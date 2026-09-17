@@ -182,70 +182,91 @@ backend mid-chat behaves exactly as it does today.
 
 ### 5. Memory
 
-One file, `MEMORY.md`, per agent. Plain markdown with dated bullets under a few
-fixed headings so the agent has structure to append to:
+Memory is layered the way OpenClaw layers it, mapped onto the vault. Each agent
+owns a small curated file that is always in context and a folder of dated
+notes that grows during work and is consolidated in the background.
 
-```markdown
-# Jennifer's memory
-
-## About the user
-
-- (2026-09-10) Writes a weekly newsletter on climate policy; audience is non-expert.
-
-## Preferences and standing requests
-
-- (2026-09-10) Wants edits shown as a diff, not a rewrite.
-
-## Ongoing threads
-
-- (2026-09-14) Draft "Grid storage explainer" is at v3; user unsure about the intro.
-
-## Facts and decisions
-
-- (2026-09-14) User decided to cut the section on hydrogen.
+```text
+copilot/agents/jennifer/
+  agent.md              instructions, user-owned
+  MEMORY.md             curated core: durable facts, always in context,
+                        rewritten only by consolidation or by the user
+  memory/
+    2026-09-16.md       daily note: observations written during work
+    2026-09-17.md
 ```
 
-**When it updates.** After a conversation ends, not after every message. A
-conversation ends when the user starts a new chat, switches to another chat tab,
-closes the chat, or the plugin unloads. The persistence manager already knows
-these boundaries. A manual **Update memory now** action is also exposed on the
-chat menu for users who want it immediately. Memory update never runs on an
-empty chat or on a chat with no new turns since the last update.
+**Curated core.** `MEMORY.md` keeps the four fixed headings and dated bullets.
+Every bullet that came out of consolidation ends with a source anchor to the
+daily note it was distilled from, `[[memory/2026-09-17]]`, so the user can
+trace any fact back to the day it was learned. A frontmatter field
+`consolidated-through: YYYY-MM-DD` records the last daily note folded in.
+Budget stays 8k characters.
 
-**How it updates.** A short, isolated pass, built the same way the fan-out
-summary pass is: a fresh read-only sub-session on the agent's backend, given the
-current `MEMORY.md` and the conversation transcript (same user-facing history
-renderer fan-out uses), asked to return the complete new file. The plugin writes
-the returned text to `MEMORY.md` through the vault API. The agent never gets a
-write tool for this; the plugin owns the write. The sub-session is tombstoned
-like fan-out sub-sessions so it never shows in Recent Chats.
+**Daily notes.** `memory/YYYY-MM-DD.md` is the episodic tier. It has one
+heading per conversation, `## HH:MM <chat title>`, and dated bullets beneath.
+Two writers append to it:
 
-The prompt is intentionally simple for v1:
+- The agent itself, during a turn, through its harness's own file tools. The
+  persona block names today's note path and says: when you learn something
+  worth keeping, append a bullet there; never edit `MEMORY.md`, consolidation
+  owns it. This is the equivalent of OpenClaw's in-work writes.
+- The plugin, through a flush pass. The flush is the existing read-only
+  sub-session, given the turns since the chat's `memorizedThroughTurn` marker
+  and asked for the bullets worth keeping, and its output is appended under a
+  new heading in today's note. It runs at conversation boundaries (new chat,
+  tab switch, close, unload), on a debounce after a turn ends while the chat
+  stays open (two minutes idle), on "Update memory now", and after each
+  fan-out answer. Nothing is written for a chat with no new turns. This is
+  the equivalent of OpenClaw's flush-before-compaction, since the plugin does
+  not see the harness's compaction.
 
-- Keep what is still true. Merge duplicates. Drop what the conversation
-  contradicted, and say so in the entry rather than silently deleting.
-- Add only things worth knowing next time: who the user is, preferences,
-  standing requests, open threads, decisions. Do not store the conversation
-  itself.
-- Date new entries. Keep the headings. Stay under a size budget (8k characters
-  in v1). When over budget, compress older entries first.
+Daily notes are not capped. They are ordinary vault notes and stay searchable
+and readable by the agent on demand.
 
-**Safety rails.**
+**Consolidation.** The only writer of `MEMORY.md` besides the user. A
+read-only sub-session on the agent's backend receives the current `MEMORY.md`
+and every daily note newer than `consolidated-through`, bounded to the most
+recent 32k characters of notes, and returns the complete new file. The prompt
+asks it to keep what is still true, merge duplicates, retire what later notes
+contradicted and say so in the replacing entry, add only durable facts
+(who the user is, preferences, standing requests, open threads, decisions),
+date every entry, anchor every entry to its source note, keep the headings,
+and stay under budget by compressing the oldest entries first.
 
-- The plugin diffs the returned file against the old one. An empty result, a
-  result that lost more than half its length, or a result missing the headings
-  is rejected and the old file is kept. A rejection is logged, not shown.
-- The chat's frontmatter records the index of the last turn that was
-  memorized, so re-opening and continuing a chat only feeds the new turns.
-- The user can open, edit, or clear `MEMORY.md` at any time from Settings or
-  from the chat's agent popover. The user's edits are the new baseline.
-- Memory is a vault note, so it syncs like any note. Two devices editing at
-  once resolve however the user's sync resolves note conflicts; we do not add a
-  merge layer.
+Consolidation runs when the plugin has been idle for ten minutes with at least
+one daily note newer than `consolidated-through`, on plugin load when the last
+consolidation is older than a day and new notes exist, and on demand from the
+agent's menu ("Consolidate memory now"). One consolidation per agent at a time.
 
-**Trust surface.** After a memory update lands, the chat shows one quiet line
-where the turn ended, "Jennifer updated her memory", with an open link. Nothing
-modal, nothing that nags.
+**Safety rails**, unchanged in spirit: an empty result, a result that lost more
+than half the old file's length, or a result missing a heading is rejected and
+logged. Replacing `MEMORY.md` uses optimistic concurrency: the file's content
+hash is captured when the consolidation input is built and re-checked before
+the write, and a mismatch (the user edited meanwhile) discards the result and
+reschedules. The user's edits are always the new baseline.
+
+**Reading.** When a chat is bound to an agent, `<agent_memory>` carries
+`MEMORY.md` plus today's and yesterday's daily notes. Long chats refresh
+per turn: before each user message is sent, if any of those files changed
+since the last injection, a fresh `<agent_memory>` block is prepended to that
+message. The persona block also names the `memory/` folder so the agent can
+read older days with its file tools when a question reaches back further.
+
+**Trust surface.** After a flush lands, the chat shows one quiet line under
+the turn, "Jennifer added to today's notes", with an open link to the daily
+note. After a consolidation lands, the next turn in any open chat with that
+agent shows "Jennifer consolidated their memory" with a link to `MEMORY.md`.
+Nothing modal, nothing that nags.
+
+**Fan-out.** An answering agent's flush is fed the question and its own answer
+and appends to its daily note; consolidation later folds it in. No change to
+`memorizedThroughTurn`, which belongs to the chat's own agent.
+
+**Settings and menus.** The Agents row menu and the agent entry in the model
+picker offer Open memory (opens `MEMORY.md`), Open today's notes, Consolidate
+memory now, and Clear memory. Clear memory resets `MEMORY.md` to the skeleton
+and trashes the `memory/` folder after a confirm.
 
 ### 6. Fan-out becomes agent fan-out
 
@@ -410,11 +431,12 @@ the previous one is verified. The spec is mirrored at
 `designdocs/CUSTOM_AGENTS.md` in the repo so the code and the plan travel
 together.
 
-| #   | Milestone                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | Status                                                                                                                                                                                                                                                       |
-| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| M1  | **Agent files and the Agents settings tab.** `agents` subfolder in `COPILOT_SUBFOLDER`; `src/agents/` with `AgentFileManager`, `agentPaths.ts`, frontmatter constants, `MEMORY.md` skeleton; `agent.md` / `MEMORY.md` excluded from retrieval; Agents tab after Skills with list + editor (name, icon, description, instructions, backend/model, memory toggle), row menu (Edit, Open folder, Open memory, Clear memory, Delete with confirm); stories; unit tests. E2E: create, edit, delete an agent from Settings and see the folder change in the vault.                                                                                                                                                                                 | ."done (e563f0e9, c258c64b; roster and editor stack vertically because the settings panel is ~653px wide)".                                                                                                                                                  |
-| M2  | **Talking-to picker and persona delivery.** Picker top-left of Agent Home header (global and project scope) listing Copilot + agents with icon and description; selection applies to the next new chat only; active tab shows icon + name; `AgentSessionManager` holds the selected agent; `promptEnvelope` emits `<agent_persona>` and `<agent_memory>` beside `<project_context>`; one constant paragraph in the agent system prompt; pinned backend/model honored on new chat; `agentSlug` frontmatter; Recent Chats icon; deleted-agent fallback to Copilot with label kept. E2E: DM an agent and confirm it answers in character and remembers its memory file.                                                                         | done (75435c4f; the tab shows the agent icon always and its name until the chat is titled, so a deleted agent's name survives in the tab tooltip rather than as visible text).                                                                               |
-| M3  | **Self-maintained memory.** `agentMemory.ts` read + update pass (isolated read-only sub-session, tombstoned) + safety rails (empty, >50% shrink, missing headings rejected and logged); triggers at conversation boundaries (new chat, tab switch, close, unload) plus "Update memory now" in the chat menu; skips empty chats and chats with no new turns; `memorizedThroughTurn` frontmatter; "<Agent> updated their memory" trust line with an open link; Open/Clear memory from Settings and the agent popover. E2E: hold a chat, end it, watch `MEMORY.md` gain dated entries, start a new chat and see the agent recall them.                                                                                                          | done (e113180f, 022f96c8, af8fc0cf; a completed write also re-binds open chats that have not spoken, so the landing chat opened at the boundary carries the new memory rather than the copy it was created with).                                            |
-| M4  | **Agent fan-out replaces brand fan-out.** Answerer type becomes an agent slug; brand answerers (`@claude`, `@codex`, `@opencode`) and their typeahead group are deleted; typeahead lists agents with a "Create an agent" row when empty; answer tabs labeled with agent icon + name; the session's own persona summarizes; per-agent memory pass after a fan-out turn (question + own answer only); mentioning the chat's own persona collapses to the single-agent path; Plus gate unchanged; fan-out card story with a custom agent tab; old brand composites still render. E2E: `@A @B compare these drafts` from a Copilot chat and from a DM.                                                                                           | done (7ba837d7, 3b06bc99; each answer slot carries its own name and icon, so a reloaded tab needs no roster and a brand composite still renders, and the summary sub-session carries the chat's persona so a DM really is summarized in its own voice).      |
-| M5  | **End-to-end experience review.** A dedicated pass over the whole flow (create agent, DM, memory, fan-out) for alignment, spacing, design-system use, copy, and empty states, with fixes applied and re-verified in the live UI. Ends with the branch pushed.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | done (0572cffe, 78a1e605, b0c482e0; the talking-to trigger now shares the session tab's leading column, and the memory trust line takes the place of the transcript's scroll headroom so it lands under the turn that ended rather than above the composer). |
-| M6  | **Agent selection moves into the model picker.** Remove the standalone talking-to control from the Agent Home header. The model picker popover gains an Agent section at the top (heading, Copilot by default, each agent with icon, name, description), a divider, then the existing model and effort sections. Picking an agent with pinned backend, model, or effort switches those sections to the pins; an unpinned agent leaves them alone. Agent editor gains an optional Effort field and `copilot-agent-effort` frontmatter. Open memory / Clear memory move with the agent entry. Stories and tests updated. E2E: pick Jennifer from the popover, see model and effort follow her pins, send, and confirm the tab label and reply. | pending                                                                                                                                                                                                                                                      |
+| #   | Milestone                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | Status                                                                                                                                                                                                                                                       |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| M1  | **Agent files and the Agents settings tab.** `agents` subfolder in `COPILOT_SUBFOLDER`; `src/agents/` with `AgentFileManager`, `agentPaths.ts`, frontmatter constants, `MEMORY.md` skeleton; `agent.md` / `MEMORY.md` excluded from retrieval; Agents tab after Skills with list + editor (name, icon, description, instructions, backend/model, memory toggle), row menu (Edit, Open folder, Open memory, Clear memory, Delete with confirm); stories; unit tests. E2E: create, edit, delete an agent from Settings and see the folder change in the vault.                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | ."done (e563f0e9, c258c64b; roster and editor stack vertically because the settings panel is ~653px wide)".                                                                                                                                                  |
+| M2  | **Talking-to picker and persona delivery.** Picker top-left of Agent Home header (global and project scope) listing Copilot + agents with icon and description; selection applies to the next new chat only; active tab shows icon + name; `AgentSessionManager` holds the selected agent; `promptEnvelope` emits `<agent_persona>` and `<agent_memory>` beside `<project_context>`; one constant paragraph in the agent system prompt; pinned backend/model honored on new chat; `agentSlug` frontmatter; Recent Chats icon; deleted-agent fallback to Copilot with label kept. E2E: DM an agent and confirm it answers in character and remembers its memory file.                                                                                                                                                                                                                                                                                                                                                                  | done (75435c4f; the tab shows the agent icon always and its name until the chat is titled, so a deleted agent's name survives in the tab tooltip rather than as visible text).                                                                               |
+| M3  | **Self-maintained memory.** `agentMemory.ts` read + update pass (isolated read-only sub-session, tombstoned) + safety rails (empty, >50% shrink, missing headings rejected and logged); triggers at conversation boundaries (new chat, tab switch, close, unload) plus "Update memory now" in the chat menu; skips empty chats and chats with no new turns; `memorizedThroughTurn` frontmatter; "<Agent> updated their memory" trust line with an open link; Open/Clear memory from Settings and the agent popover. E2E: hold a chat, end it, watch `MEMORY.md` gain dated entries, start a new chat and see the agent recall them.                                                                                                                                                                                                                                                                                                                                                                                                   | done (e113180f, 022f96c8, af8fc0cf; a completed write also re-binds open chats that have not spoken, so the landing chat opened at the boundary carries the new memory rather than the copy it was created with).                                            |
+| M4  | **Agent fan-out replaces brand fan-out.** Answerer type becomes an agent slug; brand answerers (`@claude`, `@codex`, `@opencode`) and their typeahead group are deleted; typeahead lists agents with a "Create an agent" row when empty; answer tabs labeled with agent icon + name; the session's own persona summarizes; per-agent memory pass after a fan-out turn (question + own answer only); mentioning the chat's own persona collapses to the single-agent path; Plus gate unchanged; fan-out card story with a custom agent tab; old brand composites still render. E2E: `@A @B compare these drafts` from a Copilot chat and from a DM.                                                                                                                                                                                                                                                                                                                                                                                    | done (7ba837d7, 3b06bc99; each answer slot carries its own name and icon, so a reloaded tab needs no roster and a brand composite still renders, and the summary sub-session carries the chat's persona so a DM really is summarized in its own voice).      |
+| M5  | **End-to-end experience review.** A dedicated pass over the whole flow (create agent, DM, memory, fan-out) for alignment, spacing, design-system use, copy, and empty states, with fixes applied and re-verified in the live UI. Ends with the branch pushed.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | done (0572cffe, 78a1e605, b0c482e0; the talking-to trigger now shares the session tab's leading column, and the memory trust line takes the place of the transcript's scroll headroom so it lands under the turn that ended rather than above the composer). |
+| M6  | **Agent selection moves into the model picker.** Remove the standalone talking-to control from the Agent Home header. The model picker popover gains an Agent section at the top (heading, Copilot by default, each agent with icon, name, description), a divider, then the existing model and effort sections. Picking an agent with pinned backend, model, or effort switches those sections to the pins; an unpinned agent leaves them alone. Agent editor gains an optional Effort field and `copilot-agent-effort` frontmatter. Open memory / Clear memory move with the agent entry. Stories and tests updated. E2E: pick Jennifer from the popover, see model and effort follow her pins, send, and confirm the tab label and reply.                                                                                                                                                                                                                                                                                          | pending                                                                                                                                                                                                                                                      |
+| M7  | **OpenClaw-style layered memory.** Daily notes under `memory/YYYY-MM-DD.md` as the episodic tier, written by the agent during turns (persona instruction, harness file tools) and by a plugin flush pass at boundaries, on a two-minute idle debounce, on demand, and after fan-out answers. `MEMORY.md` becomes the curated core written only by a background consolidation pass (idle ten minutes, plugin load when stale, or on demand) with source anchors, `consolidated-through` frontmatter, the existing rails, and optimistic concurrency. `<agent_memory>` carries `MEMORY.md` plus today's and yesterday's notes and is re-injected on the next turn whenever those files change. Trust lines for flush and consolidation; menu entries for Open today's notes and Consolidate memory now; Clear memory covers the folder. Stories and tests. E2E: talk in one tab, switch tabs, ask in the other tab what was discussed and get it from today's note; trigger consolidation and see anchored entries land in `MEMORY.md`. | pending                                                                                                                                                                                                                                                      |
