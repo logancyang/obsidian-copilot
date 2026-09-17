@@ -95,6 +95,16 @@ jest.mock("@/services/webViewerService/activeWebTabSnapshot", () => ({
 
 const makeApp = (): App => ({ workspace: { getActiveFile: () => null } }) as unknown as App;
 
+const makeFile = (path: string): TFile =>
+  new (TFile as unknown as new (path: string) => TFile)(path);
+
+// A 3-byte PNG and the content block the composer converts it into.
+const image = {
+  type: "image/png",
+  arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+} as File;
+const imageBlock = { type: "image", mimeType: "image/png", data: "AQID" };
+
 const makeDraft = (overrides: Partial<AgentInputDraftControls> = {}): AgentInputDraftControls => ({
   input: "hello",
   images: [],
@@ -199,8 +209,7 @@ describe("AgentChatInput", () => {
     ])(
       "sends $scenario as independent context https://github.com/Brevilabs/obsidian-copilot-private/issues/465",
       async ({ includeActiveNote, includeSelection }) => {
-        const TFileConstructor = TFile as unknown as new (path: string) => TFile;
-        const note = new TFileConstructor("Research.md");
+        const note = makeFile("Research.md");
         const selection: NoteSelectedTextContext = {
           id: "research-excerpt",
           sourceType: "note",
@@ -242,12 +251,6 @@ describe("AgentChatInput", () => {
       await waitFor(() => expect(backend.sendMessage).toHaveBeenCalledTimes(1));
       expect(Notice).not.toHaveBeenCalled();
     });
-
-    const image = {
-      type: "image/png",
-      arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
-    } as File;
-    const imageBlock = { type: "image", mimeType: "image/png", data: "AQID" };
 
     it.each(["", "   ", "Describe this"])(
       "sends image content with draft %p https://github.com/logancyang/obsidian-copilot/issues/2850",
@@ -350,7 +353,7 @@ describe("AgentChatInput", () => {
     });
   });
   describe("handleStopGenerating()", () => {
-    it("discards queued follow-ups before cancellation settles the active turn https://github.com/Brevilabs/obsidian-copilot-private/issues/365", async () => {
+    it("returns queued follow-ups to the composer before cancellation settles the active turn https://github.com/Brevilabs/obsidian-copilot-private/issues/365", async () => {
       const { backend, getDraft, settleCancel } = setupCancellation();
       act(() => getDraft().setInput("first turn"));
       fireEvent.click(screen.getByText("send"));
@@ -363,7 +366,52 @@ describe("AgentChatInput", () => {
 
       expect(backend.sendMessage).toHaveBeenCalledTimes(1);
       expect(getDraft().queue).toHaveLength(0);
+      expect(getDraft().input).toBe("queued follow-up");
       expect(getDraft().loading).toBe(false);
+      await act(async () => settleCancel());
+    });
+
+    it("joins several queued follow-ups ahead of text typed since they were queued", async () => {
+      const { backend, getDraft, settleCancel } = setupCancellation();
+      act(() => getDraft().setInput("first turn"));
+      fireEvent.click(screen.getByText("send"));
+      await waitFor(() => expect(backend.sendMessage).toHaveBeenCalledTimes(1));
+      act(() => getDraft().setInput("first follow-up"));
+      fireEvent.click(screen.getByText("send"));
+      await waitFor(() => expect(getDraft().queue).toHaveLength(1));
+      act(() => getDraft().setInput("second follow-up"));
+      fireEvent.click(screen.getByText("send"));
+      await waitFor(() => expect(getDraft().queue).toHaveLength(2));
+      act(() => getDraft().setInput("still typing"));
+
+      await act(async () => fireEvent.click(screen.getByText("stop")));
+
+      expect(getDraft().input).toBe("first follow-up\n\nsecond follow-up\n\nstill typing");
+      await act(async () => settleCancel());
+    });
+
+    it("returns a queued follow-up's notes and images to the composer", async () => {
+      const note = makeFile("Queued.md");
+      const { backend, getDraft, settleCancel } = setupCancellation();
+      act(() => getDraft().setInput("first turn"));
+      fireEvent.click(screen.getByText("send"));
+      await waitFor(() => expect(backend.sendMessage).toHaveBeenCalledTimes(1));
+      act(() => {
+        getDraft().setInput("look at this");
+        getDraft().setContextNotes([note]);
+        getDraft().setSelectedImages([image]);
+      });
+      fireEvent.click(screen.getByText("send"));
+      await waitFor(() => expect(getDraft().queue).toHaveLength(1));
+      expect(getDraft().contextNotes).toHaveLength(0);
+      expect(getDraft().images).toHaveLength(0);
+
+      await act(async () => fireEvent.click(screen.getByText("stop")));
+
+      expect(getDraft().input).toBe("look at this");
+      expect(getDraft().contextNotes).toEqual([note]);
+      expect(getDraft().images).toHaveLength(1);
+      expect(getDraft().images[0]).toMatchObject({ type: "image/png", size: 3 });
       await act(async () => settleCancel());
     });
 
@@ -382,7 +430,7 @@ describe("AgentChatInput", () => {
 
       expect(getDraft().loading).toBe(true);
     });
-    it("discards queued follow-ups but keeps the active turn running when cancellation fails https://github.com/Brevilabs/obsidian-copilot-private/issues/365", async () => {
+    it("returns queued follow-ups to the composer but keeps the active turn running when cancellation fails https://github.com/Brevilabs/obsidian-copilot-private/issues/365", async () => {
       const { backend, getDraft, settleTurn } = setupCancellation();
       jest.mocked(backend.cancel).mockRejectedValueOnce(new Error("Cancellation failed"));
       act(() => getDraft().setInput("first turn"));
@@ -395,6 +443,7 @@ describe("AgentChatInput", () => {
       await act(async () => fireEvent.click(screen.getByText("stop")));
 
       expect(getDraft().queue).toHaveLength(0);
+      expect(getDraft().input).toBe("queued follow-up");
       expect(getDraft().loading).toBe(true);
       await act(async () => settleTurn());
       expect(getDraft().loading).toBe(false);
@@ -640,7 +689,7 @@ describe("AgentChatInput", () => {
       // Lexical editor race resetCompose and strand the just-sent text in the
       // input when text was sent alongside images.
       let resolveRead!: (buf: ArrayBuffer) => void;
-      const image = {
+      const slowImage = {
         type: "image/png",
         arrayBuffer: () =>
           new Promise<ArrayBuffer>((resolve) => {
@@ -652,7 +701,7 @@ describe("AgentChatInput", () => {
         sendMessage: jest.fn(() => ({ turn: Promise.resolve() })),
         cancel: jest.fn(),
       } as unknown as AgentChatBackend;
-      const draft = makeDraft({ images: [image] });
+      const draft = makeDraft({ images: [slowImage] });
 
       renderInput(backend, draft);
       fireEvent.click(screen.getByText("send"));

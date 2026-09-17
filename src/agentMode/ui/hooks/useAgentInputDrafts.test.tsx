@@ -93,17 +93,20 @@ describe("useAgentInputDrafts", () => {
     expect(result.current.loading).toBe(true);
   });
 
-  it("applies functional updates to attachments and queue", () => {
+  it("applies functional updates to the input, attachments and queue", () => {
     const { result } = renderDrafts({
       activeChatInputId: "a",
       liveChatInputIds: ["a"],
       defaultIncludeActiveNote: false,
     });
 
+    act(() => result.current.setInput("typed"));
+    act(() => result.current.setInput((prev) => `restored\n\n${prev}`));
     act(() => result.current.setContextNotes((prev) => [...prev, file("one.md")]));
     act(() => result.current.addImages([new File([], "img.png")]));
     act(() => result.current.setQueue((q) => [...q, queued("q1")]));
 
+    expect(result.current.input).toBe("restored\n\ntyped");
     expect(result.current.contextNotes.map((n) => n.path)).toEqual(["one.md"]);
     expect(result.current.images).toHaveLength(1);
     expect(result.current.queue.map((q) => q.id)).toEqual(["q1"]);

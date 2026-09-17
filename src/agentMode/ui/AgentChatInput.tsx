@@ -38,7 +38,7 @@ import {
 } from "@/types/message";
 import { getModelKeyFromModel } from "@/settings/model";
 import { modelSupportsVision } from "@/utils";
-import { arrayBufferToBase64 } from "@/utils/base64";
+import { arrayBufferToBase64, base64ToArrayBuffer } from "@/utils/base64";
 import { mergeWebTabContexts } from "@/utils/urlNormalization";
 import { QueuedMessageList } from "@/agentMode/ui/QueuedMessageList";
 import { App, Notice, TFile } from "obsidian";
@@ -167,6 +167,21 @@ async function fileToImageBlock(file: File): Promise<PromptContent | null> {
 }
 
 /**
+ * Convert an image block back into a `File` the composer can hold, so a
+ * cancelled queue entry returns its attachments alongside its text. Returns
+ * `null` for non-image blocks. The original filename isn't carried on the
+ * block, so the restored file gets a generated one (it only labels the
+ * preview thumbnail).
+ */
+function imageBlockToFile(block: PromptContent, index: number): File | null {
+  if (block.type !== "image") return null;
+  const extension = block.mimeType.split("/")[1] || "png";
+  return new File([base64ToArrayBuffer(block.data)], `queued-image-${index + 1}.${extension}`, {
+    type: block.mimeType,
+  });
+}
+
+/**
  * Composer for Agent Mode: consumes per-chat-input draft state (input,
  * attachments, include flags, in-flight loading, queued follow-ups), owns the
  * send/queue/stop flow, and renders `ChatInput`. Memoized and detached from the message stream
@@ -268,16 +283,39 @@ export const AgentChatInput = memo(function AgentChatInput({
   }, [chatInputId]);
 
   const handleStopGenerating = useCallback(async () => {
-    // Clear follow-ups before cancellation can finish the turn and flush them.
-    // Only runSend owns loading: a late cancel response must not mark a newer turn idle.
+    // Stopping is a change of mind about what was lined up, not a request to
+    // throw it away: the follow-ups move back into the composer — text, notes,
+    // and images — so the user can edit and resend them. Text selections don't
+    // come back; they're a global ephemeral atom, cleared at send time.
+    //
+    // The move has to complete before cancellation can finish the turn and let
+    // the flush effect send them. Only runSend owns loading: a late cancel
+    // response must not mark a newer turn idle.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/365
     setQueuedMessages([]);
+    if (queuedMessages.length > 0) {
+      const restored = combineQueuedMessages(queuedMessages);
+      // Queued text predates whatever is being typed now, so it leads. Read
+      // through the updater rather than closing over `inputMessage`, which
+      // would rebuild this callback (and its ABORT_STREAM listener) per keystroke.
+      setInputMessage((current) =>
+        [restored.rawInput, current].filter((text) => text.trim()).join("\n\n")
+      );
+      const notes = restored.context?.notes ?? [];
+      if (notes.length > 0) {
+        setContextNotes((previous) => dedupeBy([...notes, ...previous], (note) => note.path));
+      }
+      const images = (restored.promptContent ?? [])
+        .map(imageBlockToFile)
+        .filter((file): file is File => file !== null);
+      if (images.length > 0) addImages(images);
+    }
     try {
       await backend.cancel();
     } catch (e) {
       logError("[AgentMode] cancel failed", e);
     }
-  }, [backend, setQueuedMessages]);
+  }, [addImages, backend, queuedMessages, setContextNotes, setInputMessage, setQueuedMessages]);
 
   const runSend = useCallback(
     async (item: QueuedAgentMessage) => {
