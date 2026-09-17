@@ -87,10 +87,10 @@ describe("sessionAgent", () => {
       const memory = await loadAgentMemoryInjection(files, jennifer(), NOW);
 
       expect(readDailyNote.mock.calls.map((call) => call[1])).toEqual(["2026-09-16", "2026-09-17"]);
-      expect(memory?.block).toContain("## MEMORY.md");
+      expect(memory?.block).toContain("## Your consolidated summary");
       expect(memory?.block).toContain("Writes a climate newsletter.");
-      expect(memory?.block).toContain("## Your notes from 2026-09-16");
-      expect(memory?.block).toContain("## Your notes from 2026-09-17");
+      expect(memory?.block).toContain("## Notes you wrote yesterday, 2026-09-16");
+      expect(memory?.block).toContain("## Notes you wrote today, 2026-09-17");
     });
 
     it("gives the same files the same fingerprint and a changed file a new one", async () => {

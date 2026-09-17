@@ -2,7 +2,6 @@ import type { AgentFileManager } from "@/agents/AgentFileManager";
 import { formatMissingAgentLabel } from "@/agents/agentDisplay";
 import { formatMemoryEntryDate } from "@/agents/agentMemory";
 import { hashMemoryContent } from "@/agents/agentMemoryFile";
-import { AGENT_MEMORY_FILE_NAME } from "@/agents/constants";
 import { BUILTIN_AGENT, type CustomAgent } from "@/agents/types";
 import {
   buildAgentMemoryBlock,
@@ -97,13 +96,18 @@ export async function loadAgentMemoryInjection(
 
     const core = await files.readMemoryDocument(agent.slug);
     if (core) {
-      sections.push({ label: AGENT_MEMORY_FILE_NAME, text: core.body });
+      sections.push({ label: "Your consolidated summary", text: core.body });
       modifiedAtMs = Math.max(modifiedAtMs, core.modifiedAtMs);
     }
-    for (const day of [previousDay(now), now]) {
+    // Labeled by how recent they are rather than only by date, so the model
+    // does not have to work out which day "today" is to rank them.
+    for (const [day, when] of [
+      [previousDay(now), "yesterday"],
+      [now, "today"],
+    ] as const) {
       const note = await files.readDailyNote(agent.slug, formatMemoryEntryDate(day));
       if (!note) continue;
-      sections.push({ label: `Your notes from ${note.date}`, text: note.text });
+      sections.push({ label: `Notes you wrote ${when}, ${note.date}`, text: note.text });
       modifiedAtMs = Math.max(modifiedAtMs, note.modifiedAtMs);
     }
 
