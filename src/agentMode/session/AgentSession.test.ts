@@ -4403,7 +4403,11 @@ describe("AgentSession.getCurrentTodoList", () => {
 });
 
 describe("AgentSession file-change capture", () => {
-  /** In-memory vault whose reads resolve with the content present when the read was issued. */
+  /**
+   * In-memory vault whose reads resolve with the content present when the read
+   * was issued, plus the `create` events Obsidian's watcher fires for files
+   * that appear while a turn runs.
+   */
   function makeVault(initial: Record<string, string>) {
     const files = new Map(Object.entries(initial));
     // The obsidian test double defaults its base path to "/vault".
@@ -4414,8 +4418,24 @@ describe("AgentSession file-change capture", () => {
         ? Promise.reject(new Error(`ENOENT: ${p}`))
         : Promise.resolve(content);
     });
-    const app = { vault: { adapter } } as unknown as App;
-    return { files, adapter, app };
+    let watchers: Array<(file: { path: string }) => void> = [];
+    const vault = {
+      adapter,
+      on: (name: string, cb: (file: { path: string }) => void) => {
+        if (name === "create") watchers.push(cb);
+        return { name, cb };
+      },
+      offref: (ref: { cb: (file: { path: string }) => void }) => {
+        watchers = watchers.filter((w) => w !== ref.cb);
+      },
+    };
+    const app = { vault } as unknown as App;
+    /** Write a file that did not exist and announce it the way the watcher does. */
+    const createFile = (path: string, content: string) => {
+      files.set(path, content);
+      for (const watcher of watchers) watcher({ path });
+    };
+    return { files, adapter, app, createFile, watcherCount: () => watchers.length };
   }
 
   function makeSession(mock: ReturnType<typeof makeMockBackend>, app: App) {
@@ -4998,5 +5018,51 @@ describe("AgentSession file-change capture", () => {
     expect(fileChangesOf(session)).toMatchObject([
       { path: "notes/a.md", before: "first\n", after: "third\n" },
     ]);
+  });
+
+  it("reports a file Obsidian saw appear during the turn as created", async () => {
+    // A write tool that reports only what it wrote, on a backend that writes
+    // before announcing: the vault watcher is the only evidence the file is new.
+    const vault = makeVault({});
+    const mock = makeMockBackend();
+    mock.prompt.mockImplementation(async () => {
+      vault.createFile("notes/new.md", "fresh\n");
+      mock.emit({
+        sessionId: "acp-1",
+        update: {
+          sessionUpdate: "tool_call_update",
+          toolCallId: "t1",
+          kind: "edit",
+          status: "in_progress",
+          locations: [{ path: "/vault/notes/new.md" }],
+          rawInput: { filePath: "/vault/notes/new.md", content: "fresh\n" },
+        },
+      });
+      await Promise.resolve();
+      return { stopReason: "end_turn" as const };
+    });
+    const session = makeSession(mock, vault.app);
+
+    await session.sendPrompt("write a new note").turn;
+
+    expect(fileChangesOf(session)).toMatchObject([
+      { path: "notes/new.md", status: "created", before: null, after: "fresh\n" },
+    ]);
+  });
+
+  it("watches the vault only while the turn runs", async () => {
+    const vault = makeVault({ "notes/a.md": "one\n" });
+    const mock = makeMockBackend();
+    let watchersDuringTurn = 0;
+    mock.prompt.mockImplementation(async () => {
+      watchersDuringTurn = vault.watcherCount();
+      return { stopReason: "end_turn" as const };
+    });
+    const session = makeSession(mock, vault.app);
+
+    await session.sendPrompt("do nothing").turn;
+
+    expect(watchersDuringTurn).toBe(1);
+    expect(vault.watcherCount()).toBe(0);
   });
 });

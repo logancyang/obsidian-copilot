@@ -44,7 +44,7 @@ import {
 } from "@/types/message";
 import { err2String, formatDateTime } from "@/utils";
 import { ensureMultiAgentEntitlement, showMultiAgentUpgradePrompt } from "@/plusUtils";
-import type { App, DataAdapter } from "obsidian";
+import type { App, DataAdapter, EventRef } from "obsidian";
 import { MethodUnsupportedError } from "@/agentMode/session/errors";
 import {
   diffTargetPaths,
@@ -193,15 +193,25 @@ function firstString(
  * Settle on a file's pre-turn content from what the turn learned about it. The
  * backend's own statement wins; otherwise the reported edits are undone against
  * the end state, which recovers the original even when the agent wrote the file
- * before announcing the call; the snapshot read is the last resort, and the only
- * evidence for a tool that reports nothing about what it replaced.
+ * before announcing the call; a file the vault watcher saw appear had no earlier
+ * content at all; and the snapshot read is the last resort, the only evidence
+ * for a tool that reports nothing about what it replaced.
+ *
+ * @param capture - Everything the turn learned about the file.
+ * @param after - The file's content when the turn ended.
+ * @param appearedDuringTurn - Whether Obsidian reported the file appearing while the turn ran.
  */
-function resolveBefore(capture: TurnFileCapture, after: string | null): string | null {
+function resolveBefore(
+  capture: TurnFileCapture,
+  after: string | null,
+  appearedDuringTurn: boolean
+): string | null {
   if (capture.reportedBefore !== undefined) return capture.reportedBefore;
   if (capture.edits.size > 0) {
     const reverted = revertReportedEdits([...capture.edits.values()], after);
     if (reverted) return reverted.text;
   }
+  if (appearedDuringTurn) return null;
   return capture.snapshot;
 }
 
@@ -489,6 +499,12 @@ export class AgentSession {
   // Paths each tool call named, so a backend's reported original content is
   // attributed only to the file its own call was about.
   private turnPathsByToolCall = new Map<string, Set<string>>();
+  // Vault-relative paths Obsidian's watcher saw appear while this turn ran. A
+  // tool that reports only what it wrote leaves no trace of whether the file
+  // existed, and the agent writes outside Obsidian, so the watcher is the
+  // remaining witness that the turn created the file.
+  private turnCreatedPaths = new Set<string>();
+  private turnCreateWatcher: EventRef | null = null;
   // A task update routed to an earlier turn still counts as activity consumed
   // by the current backend prompt, even though it adds nothing to this turn's
   // placeholder.
@@ -1095,6 +1111,7 @@ export class AgentSession {
     this.currentTurnHadRoutedToolActivity = false;
     this.turnFiles = new Map();
     this.turnPathsByToolCall = new Map();
+    this.watchVaultCreations();
     this.notifyMessages();
 
     // Backends without a title summarizer (codex, Claude Code) have no usable
@@ -1337,6 +1354,7 @@ export class AgentSession {
       // both the success path (no error) and the catch path (error set) so
       // listeners see the single transition out of the in-flight state.
       this.abortController = null;
+      this.unwatchVaultCreations();
       this.recomputeStatusIfChanged();
     }
   }
@@ -1496,6 +1514,7 @@ export class AgentSession {
   /** Detach from the backend. Does not cancel — call `cancel()` first. */
   async dispose(): Promise<void> {
     this.disposed = true;
+    this.unwatchVaultCreations();
     this.unregisterSessionHandler?.();
     this.unregisterSessionHandler = null;
     this.flushResolvers(this.pendingPlanResolvers);
@@ -2089,6 +2108,24 @@ export class AgentSession {
    * @param update - The tool call or tool-call update announcing the edit.
    * @param kind - Effective tool kind, taken from the opening call when an update omits it.
    */
+  /** Follow the files appearing in the vault for the duration of one turn. */
+  private watchVaultCreations(): void {
+    this.unwatchVaultCreations();
+    this.turnCreatedPaths = new Set();
+    const vault = this.getApp?.()?.vault;
+    if (!vault) return;
+    this.turnCreateWatcher = vault.on("create", (file) => {
+      this.turnCreatedPaths.add(file.path);
+    });
+  }
+
+  private unwatchVaultCreations(): void {
+    const ref = this.turnCreateWatcher;
+    if (!ref) return;
+    this.turnCreateWatcher = null;
+    this.getApp?.()?.vault?.offref(ref);
+  }
+
   /**
    * Record what one tool call says about the vault files it names. Reads are
    * followed as well as writes: an agent that reads a file before editing it
@@ -2178,8 +2215,11 @@ export class AgentSession {
    */
   private async finalizeTurnFileChanges(messageId: string): Promise<void> {
     const files = this.turnFiles;
+    const created = this.turnCreatedPaths;
+    this.unwatchVaultCreations();
     this.turnFiles = new Map();
     this.turnPathsByToolCall = new Map();
+    this.turnCreatedPaths = new Set();
     const adapter = this.vaultAdapter();
     if (files.size === 0 || !adapter) return;
     await Promise.all([...files.values()].map((capture) => capture.snapshotRead));
@@ -2187,7 +2227,8 @@ export class AgentSession {
     for (const [path, capture] of files) {
       if (!capture.edited) continue;
       const after = await readVaultText(adapter, path);
-      const change = buildTurnFileChange(path, resolveBefore(capture, after), after);
+      const before = resolveBefore(capture, after, created.has(path));
+      const change = buildTurnFileChange(path, before, after);
       if (change) changes.push(change);
     }
     if (changes.length === 0) return;
