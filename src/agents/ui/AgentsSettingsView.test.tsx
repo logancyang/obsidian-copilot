@@ -8,6 +8,12 @@ import {
 import { fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
 
+// The cloud-egress marker is a hover tooltip, so its copy is not in the tree
+// until the pointer arrives. Stand it in by test id, as the model pickers do.
+jest.mock("@/components/ui/SelfHostCloudWarningIcon", () => ({
+  SelfHostCloudWarningIcon: () => <span data-testid="cloud-warning" />,
+}));
+
 // Radix's dropdown portals resolve `activeDocument` at render time and its
 // trigger relies on Pointer Capture, neither of which jsdom implements.
 beforeAll(() => {
@@ -26,6 +32,7 @@ const JENNIFER: AgentRowItem = {
   description: "Skeptical editor. Cuts fluff, argues for the reader.",
   icon: "🪶",
   backendLabel: "Claude Code",
+  cloudEgress: false,
   memoryLabel: "2.6 KB",
 };
 
@@ -35,6 +42,7 @@ const VANCAT: AgentRowItem = {
   description: "Blunt systems reviewer.",
   icon: "🐈",
   backendLabel: null,
+  cloudEgress: false,
   memoryLabel: null,
 };
 
@@ -112,6 +120,16 @@ describe("AgentsSettingsView", () => {
     expect(screen.getByText("Skeptical editor. Cuts fluff, argues for the reader.")).toBeTruthy();
     expect(screen.getByText("Claude Code")).toBeTruthy();
     expect(screen.getByText("2.6 KB")).toBeTruthy();
+  });
+
+  it("marks an agent pinned to a cloud backend so Self-Host Mode is not silently bypassed", () => {
+    renderView({ agents: [{ ...JENNIFER, cloudEgress: true }] });
+    expect(screen.getByTestId("cloud-warning")).toBeTruthy();
+  });
+
+  it("leaves an agent on a self-hostable backend unmarked", () => {
+    renderView({ agents: [JENNIFER] });
+    expect(screen.queryByTestId("cloud-warning")).toBeNull();
   });
 
   it("reports memory as off for an agent that keeps none", () => {

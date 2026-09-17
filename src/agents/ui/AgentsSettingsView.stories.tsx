@@ -25,6 +25,7 @@ const AGENTS: AgentRowItem[] = [
     description: "Skeptical editor. Cuts fluff, argues for the reader.",
     icon: "🪶",
     backendLabel: "Claude Code",
+    cloudEgress: false,
     memoryLabel: "2.6 KB",
   },
   {
@@ -33,6 +34,7 @@ const AGENTS: AgentRowItem[] = [
     description: "Blunt systems reviewer. Asks what breaks at ten times the load.",
     icon: "🐈",
     backendLabel: null,
+    cloudEgress: false,
     memoryLabel: "412 B",
   },
   {
@@ -41,6 +43,7 @@ const AGENTS: AgentRowItem[] = [
     description: "Research librarian with no memory, for one-off lookups.",
     icon: "A",
     backendLabel: "Codex",
+    cloudEgress: false,
     memoryLabel: null,
   },
 ];
@@ -169,6 +172,22 @@ export const EditorRejectedIcon: StoryObj<AgentsSettingsViewProps> = {
       },
       error: "The icon must be a single emoji or letter.",
     }),
+  },
+};
+
+/**
+ * Self-Host Mode on: an agent pinned to a backend that cannot be self-hosted
+ * carries the same cloud-egress marker the model pickers use, because its
+ * pinned backend is the one thing about it the session's model picker does not
+ * speak for.
+ */
+export const SelfHostCloudPin: StoryObj<AgentsSettingsViewProps> = {
+  name: "List with a cloud-pinned agent in Self-Host Mode",
+  args: {
+    ...base,
+    agents: AGENTS.map((agent) =>
+      agent.backendLabel === null ? agent : { ...agent, cloudEgress: true }
+    ),
   },
 };
 

@@ -16,7 +16,9 @@ export const AgentGlyph: React.FC<AgentGlyphProps> = ({ icon, className }) => (
   <span
     aria-hidden="true"
     className={cn(
-      "tw-flex tw-size-4 tw-shrink-0 tw-items-center tw-justify-center tw-text-xs",
+      // Sized by the same UI token as the labels it sits beside, so the emoji
+      // reads at the weight of the lucide icons sharing its column.
+      "tw-flex tw-size-4 tw-shrink-0 tw-items-center tw-justify-center tw-text-ui-small",
       className
     )}
   >

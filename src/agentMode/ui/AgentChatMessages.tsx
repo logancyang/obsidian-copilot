@@ -216,7 +216,10 @@ const AgentChatMessages = memo(
         >
           {visible.map((message, index) => {
             const shouldApplyMinHeight =
-              index === visible.length - 1 && message.sender !== USER_SENDER && !showPlanCard;
+              index === visible.length - 1 &&
+              message.sender !== USER_SENDER &&
+              !showPlanCard &&
+              !memoryNotice;
             const messageKey = getMessageKey(adapted[index], index);
 
             return (

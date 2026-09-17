@@ -55,6 +55,9 @@ describe("useAtMentionSearch", () => {
       expect(rows[0]).toMatchObject({
         key: CREATE_AGENT_OPTION_KEY,
         title: "Create an agent",
+        // Short enough to survive the composer's narrowest menu, and it names
+        // where the row leads rather than describing what an agent is.
+        subtitle: "Set one up in Settings",
         isAction: true,
       });
     });

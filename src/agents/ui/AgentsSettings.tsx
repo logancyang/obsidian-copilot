@@ -111,9 +111,12 @@ export const AgentsSettings: React.FC = () => {
         icon: agent.icon,
         backendLabel:
           descriptors.find((entry) => entry.id === agent.backendId)?.displayName ?? agent.backendId,
+        cloudEgress:
+          settings.enableSelfHostMode === true &&
+          descriptors.find((entry) => entry.id === agent.backendId)?.selfHostable === false,
         memoryLabel: agent.memoryEnabled ? formatMemorySize(memoryBytes) : null,
       })),
-    [descriptors, records]
+    [descriptors, records, settings.enableSelfHostMode]
   );
 
   const openEditor = useCallback(
@@ -152,11 +155,9 @@ export const AgentsSettings: React.FC = () => {
   const handleSave = useCallback(() => {
     if (!editor) return;
     const { draft } = editor;
+    // The Save button stays disabled until the name is non-blank, so the only
+    // field that can still be wrong here is the icon.
     const name = draft.name.trim();
-    if (!name) {
-      setEditor({ ...editor, error: "Give the agent a name." });
-      return;
-    }
     if (draft.icon.trim().length > 0 && !isValidAgentIcon(draft.icon)) {
       setEditor({ ...editor, error: "The icon must be a single emoji or letter." });
       return;

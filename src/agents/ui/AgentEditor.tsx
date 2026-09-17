@@ -128,8 +128,8 @@ export const AgentEditor: React.FC<AgentEditorProps> = ({
           onClick={onOpenInEditor}
           // Preflight is off: zero the native chrome so this reads as the link
           // it is rather than as a second command button under the textarea.
-          style={{ appearance: "none", border: 0, background: "transparent", padding: 0 }}
           className={cn(
+            "tw-appearance-none tw-border-0 tw-bg-transparent tw-p-0",
             "tw--mt-2 tw-flex tw-w-fit tw-cursor-pointer tw-items-center tw-gap-1.5",
             "tw-text-ui-smaller tw-text-accent hover:tw-underline"
           )}

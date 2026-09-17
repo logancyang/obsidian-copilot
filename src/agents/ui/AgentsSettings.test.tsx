@@ -26,12 +26,29 @@ jest.mock("@/agentMode", () => ({
     {
       id: "claude",
       displayName: "Claude Code",
+      selfHostable: false,
       getEnabledModelEntries: () => [{ baseModelId: "sonnet", name: "Sonnet" }],
+    },
+    {
+      id: "opencode",
+      displayName: "OpenCode",
+      selfHostable: true,
+      getEnabledModelEntries: () => [],
     },
   ],
 }));
 
-jest.mock("@/settings/model", () => ({ useSettingsValue: () => ({ copilotFolder: "copilot" }) }));
+// The cloud-egress marker is a hover tooltip, so its copy is not in the tree
+// until the pointer arrives. Stand it in by test id, as the model pickers do.
+jest.mock("@/components/ui/SelfHostCloudWarningIcon", () => ({
+  SelfHostCloudWarningIcon: () => <span data-testid="cloud-warning" />,
+}));
+
+let selfHostMode = false;
+jest.mock("@/settings/model", () => ({
+  // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook; name must match the export
+  useSettingsValue: () => ({ copilotFolder: "copilot", enableSelfHostMode: selfHostMode }),
+}));
 jest.mock("@/logger", () => ({ logError: jest.fn(), logInfo: jest.fn(), logWarn: jest.fn() }));
 
 const openVaultPath = jest.fn();
@@ -118,6 +135,7 @@ describe("AgentsSettings", () => {
     jest.clearAllMocks();
     confirmDelete = null;
     confirmArgs = null;
+    selfHostMode = false;
     listAgents.mockResolvedValue([]);
   });
 
@@ -161,6 +179,31 @@ describe("AgentsSettings", () => {
     );
     // The reload after the write is what makes the new row appear.
     expect(listAgents).toHaveBeenCalledTimes(2);
+  });
+
+  it("marks an agent pinned to a cloud backend only while Self-Host Mode is on", async () => {
+    selfHostMode = true;
+    listAgents.mockResolvedValue([makeRecord({ backendId: "claude" })]);
+    renderPanel();
+
+    await waitFor(() => expect(screen.getByTestId("cloud-warning")).toBeTruthy());
+  });
+
+  it("leaves a self-hostable pin unmarked in Self-Host Mode", async () => {
+    selfHostMode = true;
+    listAgents.mockResolvedValue([makeRecord({ backendId: "opencode" })]);
+    renderPanel();
+
+    await waitFor(() => expect(screen.getByText("OpenCode")).toBeTruthy());
+    expect(screen.queryByTestId("cloud-warning")).toBeNull();
+  });
+
+  it("leaves a cloud pin unmarked when the vault is not in Self-Host Mode", async () => {
+    listAgents.mockResolvedValue([makeRecord({ backendId: "claude" })]);
+    renderPanel();
+
+    await waitFor(() => expect(screen.getByText("Claude Code")).toBeTruthy());
+    expect(screen.queryByTestId("cloud-warning")).toBeNull();
   });
 
   it("rejects an icon of more than one character before touching the vault", async () => {

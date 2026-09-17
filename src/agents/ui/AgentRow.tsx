@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { SelfHostCloudWarningIcon } from "@/components/ui/SelfHostCloudWarningIcon";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -18,6 +19,13 @@ export interface AgentRowItem {
   icon: string;
   /** Display name of the pinned backend, or null when the agent pins none. */
   backendLabel: string | null;
+  /**
+   * True when this agent is pinned to a backend that cannot be self-hosted
+   * while the vault is in Self-Host Mode. A pinned backend is the one part of
+   * an agent that sends prompts somewhere the session's own model picker does
+   * not speak for, so the roster is where that has to be visible.
+   */
+  cloudEgress: boolean;
   /** Human-readable size of `MEMORY.md`, or null when memory is off. */
   memoryLabel: string | null;
 }
@@ -73,8 +81,10 @@ export const AgentRow: React.FC<AgentRowProps> = ({
         aria-pressed={selected}
         // Preflight is off: zero the native button chrome so the row body reads
         // as part of the card rather than as a beveled grey control.
-        style={{ appearance: "none", border: 0, background: "transparent", padding: 0 }}
-        className="tw-flex tw-min-w-0 tw-flex-1 tw-cursor-pointer tw-items-center tw-gap-3 tw-text-left"
+        className={cn(
+          "tw-appearance-none tw-border-0 tw-bg-transparent tw-p-0",
+          "tw-flex tw-min-w-0 tw-flex-1 tw-cursor-pointer tw-items-center tw-gap-3 tw-text-left"
+        )}
       >
         <span
           aria-hidden="true"
@@ -95,6 +105,7 @@ export const AgentRow: React.FC<AgentRowProps> = ({
               {agent.name}
             </span>
             {agent.backendLabel !== null && <Chip label={agent.backendLabel} />}
+            {agent.cloudEgress && <SelfHostCloudWarningIcon />}
           </span>
           {agent.description.length > 0 && (
             <span
