@@ -131,6 +131,26 @@ describe("applySentinels", () => {
       expect(marked(root, "ins.copilot-diff-ins")).toEqual(["3"]);
     });
 
+    it("marks a completed task line the diff added so its reading-view strike can be dropped", () => {
+      const item = el("li", `${INS_OPEN}Draft the runbook${INS_CLOSE}`);
+      item.className = "task-list-item is-checked";
+      const root = el("div", el("ul", item));
+
+      applySentinels(root);
+
+      expect(item.classList.contains("copilot-diff-task-ins")).toBe(true);
+    });
+
+    it("leaves an untouched completed task unmarked so it still reads as completed", () => {
+      const item = el("li", "Draft the runbook");
+      item.className = "task-list-item is-checked";
+      const root = el("div", el("ul", item));
+
+      applySentinels(root);
+
+      expect(item.classList.contains("copilot-diff-task-ins")).toBe(false);
+    });
+
     it("leaves a fragment without sentinels exactly as the renderer produced it", () => {
       const root = el("div", el("p", "The pilot runs for six weeks."));
       const original = root.querySelector("p")?.firstChild;

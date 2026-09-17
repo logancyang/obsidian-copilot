@@ -1085,6 +1085,10 @@ If your plugin does not need CSS, delete this file.
 .copilot-diff-ins,
 .copilot-diff-block-ins {
   background: rgb(var(--color-green-rgb), 0.18);
+
+  /* The green wash is the whole signal; the underline browsers put on `ins`
+     makes plain insertions look like links and doubles up on real ones. */
+  text-decoration: none;
 }
 
 .copilot-diff-del,
@@ -1092,6 +1096,12 @@ If your plugin does not need CSS, delete this file.
   background: rgb(var(--color-red-rgb), 0.18);
   text-decoration: line-through;
   color: var(--text-muted);
+
+  /* A replacement renders as the old text immediately followed by the new one.
+     Without a gap the two run together as one word. The margin sits on the
+     deletion rather than on an adjacent-sibling insertion because the two are
+     often not siblings: replacing a link puts each inside its own anchor. */
+  margin-inline-end: 0.25em;
 }
 
 /* A deletion is wrapped inside whatever emphasis the renderer produced, so struck
@@ -1125,6 +1135,13 @@ mark .copilot-diff-del {
 tr.copilot-diff-row-ins .copilot-diff-ins,
 tr.copilot-diff-row-del .copilot-diff-del {
   background: none;
+}
+
+/* A task line the diff added keeps the checked box but drops the reading view
+   strike, which in this view would read as a deletion. The selector has to
+   reach the list item because that is where the decoration is set. */
+.markdown-rendered ul > li.task-list-item.copilot-diff-task-ins {
+  text-decoration: none;
 }
 
 .copilot-diff-block-del,

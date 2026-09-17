@@ -14,6 +14,7 @@ export const INS_CLASS = "copilot-diff-ins";
 export const DEL_CLASS = "copilot-diff-del";
 export const ROW_INS_CLASS = "copilot-diff-row-ins";
 export const ROW_DEL_CLASS = "copilot-diff-row-del";
+export const TASK_INS_CLASS = "copilot-diff-task-ins";
 
 const SENTINEL = new RegExp(`[${INS_OPEN}-${DEL_CLOSE}]`);
 
@@ -69,6 +70,7 @@ export function applySentinels(root: HTMLElement): void {
   }
 
   tagFullyChangedRows(root);
+  tagInsertedTasks(root);
 }
 
 function markedElement(doc: Document, mode: Exclude<Mode, null>, text: string): HTMLElement {
@@ -92,6 +94,20 @@ function tagFullyChangedRows(root: HTMLElement): void {
     if (changed.length === 0) continue;
     if (changed.every((change) => change === "ins")) row.classList.add(ROW_INS_CLASS);
     else if (changed.every((change) => change === "del")) row.classList.add(ROW_DEL_CLASS);
+  }
+}
+
+/**
+ * The reading view strikes a completed task through. Inside a diff a strike
+ * means "removed", so a task the agent added and ticked in the same turn would
+ * read as a deletion; the lines the diff inserted are marked so the stylesheet
+ * can drop that decoration on them alone and leave untouched tasks looking
+ * exactly as they do in the note.
+ */
+function tagInsertedTasks(root: HTMLElement): void {
+  for (const item of Array.from(root.querySelectorAll("li.task-list-item.is-checked"))) {
+    if (item.querySelector(`ins.${INS_CLASS}`) === null) continue;
+    item.classList.add(TASK_INS_CLASS);
   }
 }
 
