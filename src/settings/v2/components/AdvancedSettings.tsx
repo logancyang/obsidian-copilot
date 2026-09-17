@@ -14,6 +14,7 @@ import {
   suppressNextPersistOnce,
 } from "@/services/settingsPersistence";
 import { hasPersistedSecrets } from "@/services/settingsSecretTransforms";
+import { providerHasApiKey, useModelManagement } from "@/modelManagement";
 import { logError } from "@/logger";
 import {
   type CopilotSettings,
@@ -34,6 +35,7 @@ const DESKTOP_UNAVAILABLE_FRAME_LOG_PATH = "(Agent Mode frame logs are desktop-o
 
 export const AdvancedSettings: React.FC = () => {
   const app = useApp();
+  const { providerRegistry } = useModelManagement();
   const settings = useSettingsValue();
   const [forgetting, setForgetting] = useState(false);
   const [frameLogPath, setFrameLogPath] = useState(DESKTOP_UNAVAILABLE_FRAME_LOG_PATH);
@@ -54,7 +56,17 @@ export const AdvancedSettings: React.FC = () => {
   }, []);
 
   const keychainAvailable = KeychainService.getInstance().isAvailable();
-  const keychainAppearsEmpty = keychainAvailable && !hasPersistedSecrets(settings);
+  // "No API keys" must also count BYOK provider keys, which live only in the
+  // keychain behind each row's `apiKeyKeychainId` pointer — they never appear
+  // in the legacy top-level/model-level fields `hasPersistedSecrets` scans, so
+  // a BYOK-only setup would be misreported as keyless.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/210
+  const keychainAppearsEmpty =
+    keychainAvailable &&
+    !hasPersistedSecrets(settings) &&
+    !Object.values(settings.providers).some((provider) =>
+      providerHasApiKey(provider, KeychainService.getInstance())
+    );
 
   const handleReportIssue = useCallback(() => {
     // Gate before importing the agentMode barrel: on mobile the barrel pulls in
@@ -176,7 +188,6 @@ export const AdvancedSettings: React.FC = () => {
     try {
       const keychain = KeychainService.getInstance();
       const saveData = getCopilotSaveData(app);
-
       // Reason: run inside the persistence queue to prevent interleaving
       // with normal saves that could restore old secrets.
       await runPersistenceTransaction(() =>
@@ -193,6 +204,23 @@ export const AdvancedSettings: React.FC = () => {
             refreshLastPersistedSettings(nextSettings as CopilotSettings);
             suppressNextPersistOnce();
             setSettings(nextSettings);
+            // The keychain sweep bypasses ProviderRegistry, but subprocess
+            // backends bake provider keys into spawn-time config and only
+            // re-read it on a registry emission. Notify from THIS callback,
+            // not after the await: a disk-write failure returns without
+            // reaching here (nothing was deleted — nothing to announce), while
+            // a partial keychain failure runs this before throwing (keys DID
+            // change — the announcement must still fire).
+            // Read the candidates off the sweep's own snapshot, not off this
+            // render: confirmation and the persistence queue both await, so a
+            // provider added meanwhile is cleared by the sweep while a render
+            // snapshot still has no record of it. The sweep leaves each row's
+            // `apiKeyKeychainId` in place, so the snapshot still names them.
+            // https://github.com/Brevilabs/obsidian-copilot-private/issues/210
+            const credentialedProviderIds = Object.values(nextSettings.providers ?? {})
+              .filter((provider) => provider.apiKeyKeychainId)
+              .map((provider) => provider.providerId);
+            providerRegistry.notifyCredentialStoreChanged(credentialedProviderIds);
           }
         )
       );
@@ -202,7 +230,7 @@ export const AdvancedSettings: React.FC = () => {
     } finally {
       setForgetting(false);
     }
-  }, [app, forgetting]);
+  }, [app, forgetting, providerRegistry]);
 
   return (
     <div className="tw-space-y-4">
