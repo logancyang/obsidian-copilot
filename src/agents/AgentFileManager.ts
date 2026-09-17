@@ -14,7 +14,6 @@ import {
   getAgentMemoryPath,
   parseAgentDailyNoteDate,
 } from "@/agents/agentPaths";
-import type { AgentDailyNoteInput } from "@/agents/agentMemory";
 import { AGENT_FILE_NAME } from "@/agents/constants";
 import type { AgentDraft, AgentRecord, CustomAgent } from "@/agents/types";
 import { logInfo, logWarn } from "@/logger";
@@ -186,20 +185,20 @@ export class AgentFileManager {
 
   /**
    * The daily notes dated after `after`, oldest first — what one consolidation
-   * has left to fold in.
+   * has left to fold in, and the window the conversation index is built from.
+   *
+   * Empty notes are skipped: a day whose file exists but holds nothing has no
+   * conversation to index and nothing to consolidate.
    *
    * @param slug - Identity of the agent whose notes are read.
-   * @param after - Last day already folded in, or null to read every note.
+   * @param after - Last day to exclude, or null to read every note.
    */
-  public async readDailyNotesAfter(
-    slug: string,
-    after: string | null
-  ): Promise<AgentDailyNoteInput[]> {
+  public async readDailyNotesAfter(slug: string, after: string | null): Promise<DailyNoteRead[]> {
     const dates = this.listDailyNoteDates(slug).filter((date) => !after || date > after);
-    const notes: AgentDailyNoteInput[] = [];
+    const notes: DailyNoteRead[] = [];
     for (const date of dates) {
       const note = await this.readDailyNote(slug, date);
-      if (note && note.text.trim().length > 0) notes.push({ date, text: note.text });
+      if (note && note.text.trim().length > 0) notes.push(note);
     }
     return notes;
   }

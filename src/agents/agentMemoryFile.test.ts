@@ -1,5 +1,6 @@
 import {
   appendToDailyNote,
+  parseDailyNoteConversations,
   buildDailyNoteSection,
   formatDailyNoteTime,
   hashMemoryContent,
@@ -136,6 +137,70 @@ describe("agentMemoryFile", () => {
 
     it("treats a whitespace-only file as a new day, so a stray save still gets a title", () => {
       expect(appendToDailyNote("\n \n", "2026-09-17", section)).toBe(`# 2026-09-17\n\n${section}`);
+    });
+  });
+
+  describe("parseDailyNoteConversations()", () => {
+    // designdocs/CUSTOM_AGENTS.md §5: the index is built from these headings and
+    // the first bullet under each, which is the one saying what it was about.
+    it("reads each timed heading with the first bullet under it", () => {
+      const text = [
+        "# 2026-09-17",
+        "",
+        "## 09:40 Grid Notes intro",
+        "",
+        "- Cut the intro to one paragraph.",
+        "- The user prefers short leads.",
+        "",
+        "## 16:20 Pitch list",
+        "",
+        "- Ranked the six pitches.",
+      ].join("\n");
+
+      expect(parseDailyNoteConversations(text)).toEqual([
+        { time: "09:40", title: "Grid Notes intro", summary: "Cut the intro to one paragraph." },
+        { time: "16:20", title: "Pitch list", summary: "Ranked the six pitches." },
+      ]);
+    });
+
+    it("reports no summary for a heading whose bullets are gone", () => {
+      const text = "## 09:40 Grid Notes intro\n\n## 16:20 Pitch list\n\n- Ranked them.";
+
+      expect(parseDailyNoteConversations(text)[0]).toEqual({
+        time: "09:40",
+        title: "Grid Notes intro",
+        summary: null,
+      });
+    });
+
+    it("reads a heading with no title, which a hand-written one may have", () => {
+      expect(parseDailyNoteConversations("## 09:40\n\n- Something.")).toEqual([
+        { time: "09:40", title: "", summary: "Something." },
+      ]);
+    });
+
+    it("skips the day's own title, an untimed heading, and an impossible time", () => {
+      const text = [
+        "# 2026-09-17",
+        "## Notes to self",
+        "- mine",
+        "## 25:00 Nope",
+        "### 09:40 Deep",
+      ].join("\n");
+
+      expect(parseDailyNoteConversations(text)).toEqual([]);
+    });
+
+    it("collapses a wrapped title and summary onto one line each", () => {
+      const text = "##  09:40   Grid   Notes\n\n-   Cut   the intro.";
+
+      expect(parseDailyNoteConversations(text)).toEqual([
+        { time: "09:40", title: "Grid Notes", summary: "Cut the intro." },
+      ]);
+    });
+
+    it("reads an empty note as no conversations", () => {
+      expect(parseDailyNoteConversations("")).toEqual([]);
     });
   });
 });
