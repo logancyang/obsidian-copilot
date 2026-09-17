@@ -1,7 +1,9 @@
 import { AgentFileManager } from "@/agents/AgentFileManager";
 import { isValidAgentIcon } from "@/agents/agentFile";
+import { formatMemoryEntryDate } from "@/agents/agentMemory";
 import { formatMemorySize } from "@/agents/agentDisplay";
 import type { AgentDraft, AgentRecord } from "@/agents/types";
+import { AgentClearMemoryConfirmModal } from "@/agents/ui/AgentClearMemoryConfirmModal";
 import { AgentDeleteConfirmModal } from "@/agents/ui/AgentDeleteConfirmModal";
 import type { AgentEditorDraft, AgentEditorProps } from "@/agents/ui/AgentEditor";
 import type { AgentRowItem } from "@/agents/ui/AgentRow";
@@ -221,15 +223,67 @@ export const AgentsSettings: React.FC = () => {
 
   const handleClearMemory = useCallback(
     (slug: string) => {
-      void manager
-        .clearMemory(slug)
-        .then(reload)
+      const record = records.find((entry) => entry.agent.slug === slug);
+      if (!record) return;
+      // Clearing takes the daily notes as well as the curated file, so it is
+      // confirmed the same way a delete is (`designdocs/CUSTOM_AGENTS.md` §5).
+      new AgentClearMemoryConfirmModal(
+        app,
+        record.agent.name,
+        record.memoryFolderPath,
+        async () => {
+          try {
+            await manager.clearMemory(slug);
+          } catch (error) {
+            logError("[Agents] Failed to clear memory", error);
+            new Notice("Could not clear the memory file.");
+          }
+          await reload();
+        }
+      ).open();
+    },
+    [app, manager, records, reload]
+  );
+
+  /**
+   * Open the day the agent is writing to right now, creating nothing: a day it
+   * has not written to has no note, and an empty one would only be noise in the
+   * vault.
+   */
+  const handleOpenTodaysNotes = useCallback(
+    (slug: string) => {
+      const path = manager.getDailyNotePath(slug, formatMemoryEntryDate(new Date()));
+      if (!app.vault.getAbstractFileByPath(path)) {
+        new Notice("No notes today yet.");
+        return;
+      }
+      openNote(path);
+    },
+    [app, manager, openNote]
+  );
+
+  const handleConsolidate = useCallback(
+    (slug: string) => {
+      const sessions = plugin.agentSessionManager;
+      if (!sessions) return;
+      new Notice("Consolidating memory…");
+      void sessions
+        .consolidateMemoryNow(slug)
+        .then(async (outcome) => {
+          await reload();
+          if (outcome.status === "written") new Notice("Memory consolidated.");
+          else if (outcome.status === "skipped" && outcome.reason === "no-new-notes")
+            new Notice("Nothing new to fold in.");
+          else if (outcome.status === "conflict")
+            new Notice("Memory changed while consolidating; kept your version.");
+          else new Notice("Could not consolidate the memory file.");
+        })
         .catch((error: unknown) => {
-          logError("[Agents] Failed to clear memory", error);
-          new Notice("Could not clear the memory file.");
+          logError("[Agents] Failed to consolidate memory", error);
+          new Notice("Could not consolidate the memory file.");
         });
     },
-    [manager, reload]
+    [plugin, reload]
   );
 
   const handleDelete = useCallback(
@@ -302,6 +356,8 @@ export const AgentsSettings: React.FC = () => {
             const record = records.find((entry) => entry.agent.slug === slug);
             if (record) openNote(record.memoryPath);
           },
+          onOpenTodaysNotes: handleOpenTodaysNotes,
+          onConsolidateMemory: handleConsolidate,
           onClearMemory: handleClearMemory,
           onDelete: handleDelete,
         }}

@@ -103,6 +103,12 @@ class FakeVault {
     );
     this.files.set(`${AGENTS_ROOT}/${slug}/MEMORY.md`, memory);
   }
+
+  /** Seed one day of daily notes, as a flush or the agent itself would leave it. */
+  seedDailyNote(slug: string, date: string, text: string): void {
+    this.folders.add(`${AGENTS_ROOT}/${slug}/memory`);
+    this.files.set(`${AGENTS_ROOT}/${slug}/memory/${date}.md`, text);
+  }
 }
 
 function buildManager(): { manager: AgentFileManager; vault: FakeVault } {
@@ -212,22 +218,6 @@ describe("AgentFileManager", () => {
     });
   });
 
-  describe("readMemoryDocument()", () => {
-    it("returns the memory file's text with the time it was last written", async () => {
-      const { manager, vault } = buildManager();
-      vault.seedAgent("jennifer", { name: "Jennifer" }, "# Jennifer's memory\n");
-      await expect(manager.readMemoryDocument("jennifer")).resolves.toEqual({
-        text: "# Jennifer's memory\n",
-        modifiedAtMs: MEMORY_MTIME_MS,
-      });
-    });
-
-    it("returns null when the memory file is absent", async () => {
-      const { manager } = buildManager();
-      await expect(manager.readMemoryDocument("nobody")).resolves.toBeNull();
-    });
-  });
-
   describe("updateAgent()", () => {
     it("writes the edited fields back to the same agent.md", async () => {
       const { manager, vault } = buildManager();
@@ -299,26 +289,216 @@ describe("AgentFileManager", () => {
     });
   });
 
-  describe("writeMemory()", () => {
-    it("replaces the memory file with what the agent returned and reports the path", async () => {
+  describe("readMemoryDocument()", () => {
+    it("splits the consolidation marker from the body and hashes what it read", async () => {
       const { manager, vault } = buildManager();
-      vault.seedAgent("jennifer", { name: "Jennifer" }, "- old note\n");
+      vault.seedAgent(
+        "jennifer",
+        { name: "Jennifer" },
+        "---\nconsolidated-through: 2026-09-16\n---\n\n# Jennifer's memory\n"
+      );
 
-      const path = await manager.writeMemory("jennifer", "# Jennifer's memory\n\n- new note\n");
+      const read = await manager.readMemoryDocument("jennifer");
 
-      expect(path).toBe("copilot/agents/jennifer/MEMORY.md");
-      expect(vault.files.get(path)).toContain("new note");
-      expect(vault.files.get(path)).not.toContain("old note");
+      expect(read?.body).toBe("# Jennifer's memory\n");
+      expect(read?.consolidatedThrough).toBe("2026-09-16");
+      expect(read?.modifiedAtMs).toBe(MEMORY_MTIME_MS);
+      expect(read?.hash).toEqual(expect.any(String));
     });
 
-    it("recreates the memory file when the user had deleted it", async () => {
+    // designdocs/CUSTOM_AGENTS.md §5: files written before consolidation
+    // existed carry no frontmatter and must still load.
+    it("loads a memory file that has no frontmatter as never consolidated", async () => {
+      const { manager, vault } = buildManager();
+      vault.seedAgent("jennifer", { name: "Jennifer" }, "# Jennifer's memory\n");
+
+      const read = await manager.readMemoryDocument("jennifer");
+
+      expect(read?.body).toBe("# Jennifer's memory\n");
+      expect(read?.consolidatedThrough).toBeNull();
+    });
+
+    it("reports nothing for an agent whose memory file the user deleted", async () => {
       const { manager, vault } = buildManager();
       vault.seedAgent("jennifer", { name: "Jennifer" });
       vault.files.delete("copilot/agents/jennifer/MEMORY.md");
 
-      await manager.writeMemory("jennifer", "# Jennifer's memory\n");
+      expect(await manager.readMemoryDocument("jennifer")).toBeNull();
+      expect(await manager.readMemoryDocument("nobody")).toBeNull();
+    });
+  });
 
-      expect(vault.files.get("copilot/agents/jennifer/MEMORY.md")).toContain("Jennifer's memory");
+  describe("readDailyNote()", () => {
+    it("reads one day of notes with where it lives, so a trust line can offer it", async () => {
+      const { manager, vault } = buildManager();
+      vault.seedAgent("jennifer", { name: "Jennifer" });
+      vault.seedDailyNote("jennifer", "2026-09-17", "# 2026-09-17\n");
+
+      expect(await manager.readDailyNote("jennifer", "2026-09-17")).toEqual({
+        date: "2026-09-17",
+        path: "copilot/agents/jennifer/memory/2026-09-17.md",
+        text: "# 2026-09-17\n",
+        modifiedAtMs: MEMORY_MTIME_MS,
+      });
+    });
+
+    it("reports nothing for a day the agent has not written to", async () => {
+      const { manager, vault } = buildManager();
+      vault.seedAgent("jennifer", { name: "Jennifer" });
+
+      expect(await manager.readDailyNote("jennifer", "2026-09-17")).toBeNull();
+    });
+  });
+
+  describe("listDailyNoteDates()", () => {
+    it("lists the days the agent has notes for, oldest first", () => {
+      const { manager, vault } = buildManager();
+      vault.seedAgent("jennifer", { name: "Jennifer" });
+      vault.seedDailyNote("jennifer", "2026-09-17", "a");
+      vault.seedDailyNote("jennifer", "2026-09-15", "b");
+
+      expect(manager.listDailyNoteDates("jennifer")).toEqual(["2026-09-15", "2026-09-17"]);
+    });
+
+    // designdocs/CUSTOM_AGENTS.md §5: `memory/` is an ordinary vault folder the
+    // user may keep their own notes in.
+    it("skips a file in the folder whose name is not a day", () => {
+      const { manager, vault } = buildManager();
+      vault.seedAgent("jennifer", { name: "Jennifer" });
+      vault.seedDailyNote("jennifer", "2026-09-17", "a");
+      vault.files.set("copilot/agents/jennifer/memory/scratch.md", "mine");
+
+      expect(manager.listDailyNoteDates("jennifer")).toEqual(["2026-09-17"]);
+    });
+
+    it("reports none for an agent that has never written a note", () => {
+      const { manager, vault } = buildManager();
+      vault.seedAgent("jennifer", { name: "Jennifer" });
+
+      expect(manager.listDailyNoteDates("jennifer")).toEqual([]);
+    });
+  });
+
+  describe("readDailyNotesAfter()", () => {
+    it("reads only the days a consolidation has left to fold in", async () => {
+      const { manager, vault } = buildManager();
+      vault.seedAgent("jennifer", { name: "Jennifer" });
+      vault.seedDailyNote("jennifer", "2026-09-15", "old");
+      vault.seedDailyNote("jennifer", "2026-09-16", "newer");
+      vault.seedDailyNote("jennifer", "2026-09-17", "newest");
+
+      expect(await manager.readDailyNotesAfter("jennifer", "2026-09-15")).toEqual([
+        { date: "2026-09-16", text: "newer" },
+        { date: "2026-09-17", text: "newest" },
+      ]);
+    });
+
+    it("reads every day when the agent has never consolidated", async () => {
+      const { manager, vault } = buildManager();
+      vault.seedAgent("jennifer", { name: "Jennifer" });
+      vault.seedDailyNote("jennifer", "2026-09-15", "old");
+
+      expect(await manager.readDailyNotesAfter("jennifer", null)).toEqual([
+        { date: "2026-09-15", text: "old" },
+      ]);
+    });
+
+    it("skips an empty day, so a stray file does not count as work to fold in", async () => {
+      const { manager, vault } = buildManager();
+      vault.seedAgent("jennifer", { name: "Jennifer" });
+      vault.seedDailyNote("jennifer", "2026-09-17", "  \n");
+
+      expect(await manager.readDailyNotesAfter("jennifer", null)).toEqual([]);
+    });
+  });
+
+  describe("appendDailyNote()", () => {
+    const section = "## 09:40 Newsletter\n\n- Renamed to Grid Notes.\n";
+
+    it("starts a new day's note, titled with its date (CUSTOM_AGENTS.md §5)", async () => {
+      const { manager, vault } = buildManager();
+      vault.seedAgent("jennifer", { name: "Jennifer" });
+
+      const path = await manager.appendDailyNote("jennifer", "2026-09-17", section);
+
+      expect(path).toBe("copilot/agents/jennifer/memory/2026-09-17.md");
+      expect(vault.files.get(path)).toBe(`# 2026-09-17\n\n${section}`);
+    });
+
+    it("adds a second heading to a day that already has one", async () => {
+      const { manager, vault } = buildManager();
+      vault.seedAgent("jennifer", { name: "Jennifer" });
+      vault.seedDailyNote("jennifer", "2026-09-17", "# 2026-09-17\n\n## 08:00 Earlier\n\n- old\n");
+
+      await manager.appendDailyNote("jennifer", "2026-09-17", section);
+
+      const note = vault.files.get("copilot/agents/jennifer/memory/2026-09-17.md");
+      expect(note).toContain("## 08:00 Earlier");
+      expect(note).toContain("## 09:40 Newsletter");
+    });
+  });
+
+  describe("writeConsolidatedMemory()", () => {
+    const body = "# Jennifer's memory\n\n## About the user\n- (2026-09-17) Writes.\n";
+
+    it("writes the consolidated body with the marker the next pass reads", async () => {
+      const { manager, vault } = buildManager();
+      vault.seedAgent("jennifer", { name: "Jennifer" }, "old\n");
+      const before = await manager.readMemoryDocument("jennifer");
+
+      const result = await manager.writeConsolidatedMemory(
+        "jennifer",
+        body,
+        "2026-09-17",
+        before!.hash
+      );
+
+      expect(result).toBe("written");
+      const written = vault.files.get("copilot/agents/jennifer/MEMORY.md");
+      expect(written).toContain("consolidated-through: 2026-09-17");
+      expect(written).toContain("Writes.");
+    });
+
+    // designdocs/CUSTOM_AGENTS.md §5: the user's edits are always the new
+    // baseline, so a file edited while the pass ran is left exactly as it is.
+    it("discards the pass when the user edited MEMORY.md while it ran", async () => {
+      const { manager, vault } = buildManager();
+      vault.seedAgent("jennifer", { name: "Jennifer" }, "old\n");
+      const before = await manager.readMemoryDocument("jennifer");
+      vault.files.set("copilot/agents/jennifer/MEMORY.md", "the user's own edit\n");
+
+      const result = await manager.writeConsolidatedMemory(
+        "jennifer",
+        body,
+        "2026-09-17",
+        before!.hash
+      );
+
+      expect(result).toBe("conflict");
+      expect(vault.files.get("copilot/agents/jennifer/MEMORY.md")).toBe("the user's own edit\n");
+    });
+
+    it("treats a memory file deleted mid-pass as a conflict rather than resurrecting it", async () => {
+      const { manager, vault } = buildManager();
+      vault.seedAgent("jennifer", { name: "Jennifer" }, "old\n");
+      const before = await manager.readMemoryDocument("jennifer");
+      vault.files.delete("copilot/agents/jennifer/MEMORY.md");
+
+      expect(
+        await manager.writeConsolidatedMemory("jennifer", body, "2026-09-17", before!.hash)
+      ).toBe("conflict");
+      expect(vault.files.has("copilot/agents/jennifer/MEMORY.md")).toBe(false);
+    });
+
+    it("creates the file when the pass was handed no file to begin with", async () => {
+      const { manager, vault } = buildManager();
+      vault.seedAgent("jennifer", { name: "Jennifer" });
+      vault.files.delete("copilot/agents/jennifer/MEMORY.md");
+
+      expect(await manager.writeConsolidatedMemory("jennifer", body, "2026-09-17", null)).toBe(
+        "written"
+      );
+      expect(vault.files.get("copilot/agents/jennifer/MEMORY.md")).toContain("Writes.");
     });
   });
 
@@ -343,6 +523,29 @@ describe("AgentFileManager", () => {
       await manager.clearMemory("jennifer");
 
       expect(vault.files.get("copilot/agents/jennifer/MEMORY.md")).toContain("# Jennifer's memory");
+    });
+
+    // designdocs/CUSTOM_AGENTS.md §5: clearing only the core would leave the
+    // next consolidation to write it straight back from the daily notes.
+    it("also moves the daily-notes folder to trash", async () => {
+      const { manager, vault } = buildManager();
+      vault.seedAgent("jennifer", { name: "Jennifer" });
+      vault.seedDailyNote("jennifer", "2026-09-17", "- Renamed the newsletter.\n");
+
+      await manager.clearMemory("jennifer");
+
+      expect(trashFile).toHaveBeenCalledTimes(1);
+      const trashed = (trashFile as jest.Mock).mock.calls[0][1] as { path: string };
+      expect(trashed.path).toBe("copilot/agents/jennifer/memory");
+    });
+
+    it("leaves the trash alone for an agent that has never written a note", async () => {
+      const { manager, vault } = buildManager();
+      vault.seedAgent("jennifer", { name: "Jennifer" });
+
+      await manager.clearMemory("jennifer");
+
+      expect(trashFile).not.toHaveBeenCalled();
     });
 
     it("rejects clearing memory for an agent that is no longer on disk", async () => {

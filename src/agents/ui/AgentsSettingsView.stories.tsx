@@ -14,6 +14,8 @@ const actions: AgentRowActions = {
   onEdit: noop,
   onOpenFolder: noop,
   onOpenMemory: noop,
+  onOpenTodaysNotes: noop,
+  onConsolidateMemory: noop,
   onClearMemory: noop,
   onDelete: noop,
 };

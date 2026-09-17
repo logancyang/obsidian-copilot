@@ -240,8 +240,9 @@ const AgentChatMessages = memo(
           {inlinePlanCard}
           {memoryNotice ? (
             <AgentMemoryNoticeLine
+              kind={memoryNotice.kind}
               agentName={memoryNotice.agentName}
-              onOpen={() => onOpenMemory?.(memoryNotice.memoryPath)}
+              onOpen={() => onOpenMemory?.(memoryNotice.path)}
             />
           ) : null}
         </ChatTranscriptViewport>

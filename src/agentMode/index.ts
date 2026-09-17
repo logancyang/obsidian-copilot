@@ -168,6 +168,9 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     agentFileManager: new AgentFileManager(app),
   });
   managerRef = manager;
+  void manager
+    .consolidateStaleAgentsOnLoad()
+    .catch((error) => logError("[Agents] Load-time consolidation failed", error));
   // `noteSpawnConfigChanged` holds the restart behind Reload while a session is open: a skill
   // file an agent just wrote must not close the conversation that asked for it. https://github.com/Brevilabs/obsidian-copilot-private/issues/475
   skillManager.subscribeToSkillSetChange((backendId) => {

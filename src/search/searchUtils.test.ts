@@ -604,6 +604,13 @@ describe("searchUtils", () => {
       expect(filter("copilot/agents/jennifer/MEMORY.md")).toBe(false);
     });
 
+    it("keeps an agent's daily notes out of indexing and search", () => {
+      (settingsModel.getSettings as jest.Mock).mockReturnValue(agentSettings);
+      const note = "copilot/agents/jennifer/memory/2026-09-17.md";
+      expect(shouldIndexFile(window.app, createTestFile(note), null, null)).toBe(false);
+      expect(createCopilotPatternFilter(window.app)(note)).toBe(false);
+    });
+
     it("excludes them under a custom Copilot root but still indexes a user note named MEMORY.md", () => {
       (settingsModel.getSettings as jest.Mock).mockReturnValue({
         ...agentSettings,

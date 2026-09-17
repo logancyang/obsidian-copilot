@@ -9,7 +9,13 @@ import React from "react";
 type AgentTabStripProps = React.ComponentProps<typeof AgentTabStrip>;
 
 /** The built-in answerer as a session holds it (fixture, not the constant). */
-const COPILOT: SessionAgent = { slug: null, name: "Copilot", icon: "✦", personaBlock: null };
+const COPILOT: SessionAgent = {
+  slug: null,
+  name: "Copilot",
+  icon: "✦",
+  personaBlock: null,
+  memory: null,
+};
 
 /** One inert tab fixture: enough surface for the strip to render a session. */
 function tab(fields: { id: string; label: string | null; agent?: SessionAgent }): AgentSession {
@@ -30,6 +36,7 @@ const JENNIFER: SessionAgent = {
   name: "Jennifer",
   icon: "🪶",
   personaBlock: '<agent_persona name="Jennifer">…</agent_persona>',
+  memory: null,
 };
 
 function managerWith(sessions: AgentSession[]): AgentSessionManager {

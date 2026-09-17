@@ -12,6 +12,8 @@ export interface AgentRowActions {
   onEdit: (slug: string) => void;
   onOpenFolder: (slug: string) => void;
   onOpenMemory: (slug: string) => void;
+  onOpenTodaysNotes: (slug: string) => void;
+  onConsolidateMemory: (slug: string) => void;
   onClearMemory: (slug: string) => void;
   onDelete: (slug: string) => void;
 }
@@ -119,6 +121,8 @@ export const AgentsSettingsView: React.FC<AgentsSettingsViewProps> = ({
                     onEdit={() => actions.onEdit(agent.slug)}
                     onOpenFolder={() => actions.onOpenFolder(agent.slug)}
                     onOpenMemory={() => actions.onOpenMemory(agent.slug)}
+                    onOpenTodaysNotes={() => actions.onOpenTodaysNotes(agent.slug)}
+                    onConsolidateMemory={() => actions.onConsolidateMemory(agent.slug)}
                     onClearMemory={() => actions.onClearMemory(agent.slug)}
                     onDelete={() => actions.onDelete(agent.slug)}
                     containerRef={containerRef}

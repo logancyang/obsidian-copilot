@@ -2,7 +2,11 @@ import { AI_SENDER, USER_SENDER, WEB_SELECTED_TEXT_TAG } from "@/constants";
 import { logInfo, logWarn } from "@/logger";
 import { AgentMessageStore } from "@/agentMode/session/AgentMessageStore";
 import { GLOBAL_SCOPE, type ProjectScopeId } from "@/agentMode/session/scope";
-import { COPILOT_SESSION_AGENT, type SessionAgent } from "@/agentMode/session/sessionAgent";
+import {
+  COPILOT_SESSION_AGENT,
+  type AgentMemoryInjection,
+  type SessionAgent,
+} from "@/agentMode/session/sessionAgent";
 import {
   AgentChatMessage,
   AgentMessagePart,
@@ -168,8 +172,10 @@ export class AgentSession {
   private readonly contextReady: Promise<ContextMaterializationResult> | null;
   private projectContextBlock: string | null = null;
   private sessionAgent: SessionAgent = COPILOT_SESSION_AGENT;
+  private injectedMemoryFingerprint: string | null = null;
   private memorizedThroughTurn = 0;
   private memoryNotice: AgentMemoryNotice | null = null;
+  private pendingMemoryNotice: AgentMemoryNotice | null = null;
   private firstPromptSent = false;
   private readonly getDescriptor: (() => BackendDescriptor | undefined) | null;
   private readonly runFanoutTurn: RunFanoutTurn | null;
@@ -568,6 +574,25 @@ export class AgentSession {
     this.memorizedThroughTurn = Math.floor(count);
   }
 
+  setAgentMemory(memory: AgentMemoryInjection | null): void {
+    if (memory?.fingerprint === this.sessionAgent.memory?.fingerprint) return;
+    this.sessionAgent = { ...this.sessionAgent, memory };
+  }
+
+  private takeAgentMemoryBlock(): string | null {
+    const memory = this.sessionAgent.memory;
+    if (!memory || memory.fingerprint === this.injectedMemoryFingerprint) return null;
+    this.injectedMemoryFingerprint = memory.fingerprint;
+    return memory.block;
+  }
+
+  private buildSummarizerPersonaBlock(): string | null {
+    const parts = [this.sessionAgent.personaBlock, this.sessionAgent.memory?.block].filter(
+      (part): part is string => Boolean(part)
+    );
+    return parts.length > 0 ? parts.join("\n\n") : null;
+  }
+
   getMemoryNotice(): AgentMemoryNotice | null {
     return this.memoryNotice;
   }
@@ -578,14 +603,29 @@ export class AgentSession {
     this.notifyMessages();
   }
 
+  setPendingMemoryNotice(notice: AgentMemoryNotice): void {
+    this.pendingMemoryNotice = notice;
+  }
+
+  promotePendingMemoryNotice(): void {
+    const notice = this.pendingMemoryNotice;
+    if (!notice) return;
+    this.pendingMemoryNotice = null;
+    this.setMemoryNotice(notice);
+  }
+
   setAgent(agent: SessionAgent): void {
     if (
       agent.slug === this.sessionAgent.slug &&
       agent.name === this.sessionAgent.name &&
-      agent.personaBlock === this.sessionAgent.personaBlock
+      agent.personaBlock === this.sessionAgent.personaBlock &&
+      agent.memory?.fingerprint === this.sessionAgent.memory?.fingerprint
     ) {
       return;
     }
+    // A different agent has a different notebook; nothing sent so far speaks
+    // for it, so the next turn re-sends whatever this one remembers.
+    if (agent.slug !== this.sessionAgent.slug) this.injectedMemoryFingerprint = null;
     this.sessionAgent = agent;
     this.notifyLabelChanged();
   }
@@ -766,6 +806,7 @@ export class AgentSession {
         return await this.runFanoutPath(placeholderId, displayText, promptBlocks, turnStartedAtMs);
       }
 
+      const agentMemoryBlock = this.takeAgentMemoryBlock();
       const leadingContextBlock = buildPriorFanoutContextBlock(this.pendingFanoutContext);
       const promptBlocks = buildPromptBlocks(
         displayText,
@@ -775,7 +816,8 @@ export class AgentSession {
         projectContextBlock,
         leadingContextBlock,
         projectContextUpdatesBlock,
-        agentPersonaBlock
+        agentPersonaBlock,
+        agentMemoryBlock
       );
 
       const req: PromptInput = {
@@ -896,7 +938,9 @@ export class AgentSession {
     const request: FanoutTurnRequest = {
       agentSlugs: this.lastMentionedAgents,
       sessionBackendId: this.backendId,
-      summarizerPersonaBlock: this.sessionAgent.personaBlock,
+      // The summary is written by this chat's own agent in a fresh sub-session,
+      // so it carries what that agent knows as well as who it is.
+      summarizerPersonaBlock: this.buildSummarizerPersonaBlock(),
       prompt: withReadOnlyPreamble(promptBlocks),
       originalPromptText,
       signal,
@@ -1704,11 +1748,14 @@ export function buildPromptBlocks(
   projectContextBlock?: string | null,
   leadingContextBlock?: string | null,
   projectContextUpdatesBlock?: string | null,
-  agentPersonaBlock?: string | null
+  agentPersonaBlock?: string | null,
+  agentMemoryBlock?: string | null
 ): PromptContent[] {
   const sections = [
-    // Identity first: who the model is answering as frames everything after it.
+    // Identity first: who the model is answering as frames everything after it,
+    // then what it already knows about the person it is answering.
     agentPersonaBlock?.trim() || null,
+    agentMemoryBlock?.trim() || null,
     projectContextBlock?.trim() || null,
     projectContextUpdatesBlock?.trim() || null,
     leadingContextBlock?.trim() || null,

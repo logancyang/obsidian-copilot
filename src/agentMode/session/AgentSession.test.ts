@@ -1,3 +1,4 @@
+import type { SessionAgent } from "@/agentMode/session/sessionAgent";
 import { resolveEffort } from "@/lib/model-effort";
 import { OpencodeBackendDescriptor } from "@/agentMode/backends/opencode/descriptor";
 import { AI_SENDER, USER_SENDER } from "@/constants";
@@ -1831,7 +1832,13 @@ describe("AgentSession", () => {
           const session = makeSession(mock, { runFanoutTurn });
 
           await session.sendPrompt("hi").turn;
-          session.setAgent({ slug: "jennifer", name: "Jennifer", icon: "🪶", personaBlock: null });
+          session.setAgent({
+            slug: "jennifer",
+            name: "Jennifer",
+            icon: "🪶",
+            personaBlock: null,
+            memory: null,
+          });
           await session.sendPrompt("hi again", undefined, undefined, ["jennifer"]).turn;
 
           expect(mockedEnsure).not.toHaveBeenCalled();
@@ -1915,6 +1922,103 @@ describe("AgentSession", () => {
           expect(text).toContain("answer a");
           expect(text).toContain("answer b");
           expect(text).not.toContain("a combined summary could not be generated");
+        });
+      });
+
+      describe("with a custom agent", () => {
+        const JENNIFER: SessionAgent = {
+          slug: "jennifer",
+          name: "Jennifer",
+          icon: "🪶",
+          personaBlock: '<agent_persona name="Jennifer">You are Jennifer.</agent_persona>',
+          memory: {
+            block: '<agent_memory name="Jennifer">knows the newsletter</agent_memory>',
+            fingerprint: "fp-1",
+          },
+        };
+
+        function promptText(mock: MockBackend, call: number): string {
+          const input = mock.prompt.mock.calls[call][0] as { prompt: Array<{ text?: string }> };
+          return input.prompt[0].text ?? "";
+        }
+
+        it("sends the persona and what the agent knows on the first turn", async () => {
+          const mock = makeMockBackend();
+          const session = makeSession(mock);
+          session.setAgent(JENNIFER);
+
+          await session.sendPrompt("hi").turn;
+
+          expect(promptText(mock, 0)).toContain("<agent_persona");
+          expect(promptText(mock, 0)).toContain("knows the newsletter");
+        });
+
+        it("repeats neither block on a later turn while the memory files are unchanged", async () => {
+          const mock = makeMockBackend();
+          const session = makeSession(mock);
+          session.setAgent(JENNIFER);
+
+          await session.sendPrompt("hi").turn;
+          await session.sendPrompt("again").turn;
+
+          expect(promptText(mock, 1)).not.toContain("<agent_persona");
+          expect(promptText(mock, 1)).not.toContain("<agent_memory");
+        });
+
+        it("prepends a fresh memory block, and only that, once the files have changed", async () => {
+          const mock = makeMockBackend();
+          const session = makeSession(mock);
+          session.setAgent(JENNIFER);
+          await session.sendPrompt("hi").turn;
+
+          session.setAgentMemory({
+            block: '<agent_memory name="Jennifer">renamed to Grid Notes Weekly</agent_memory>',
+            fingerprint: "fp-2",
+          });
+          await session.sendPrompt("and now").turn;
+
+          expect(promptText(mock, 1)).toContain("renamed to Grid Notes Weekly");
+          expect(promptText(mock, 1)).not.toContain("<agent_persona");
+        });
+
+        it("sends nothing extra when a refresh found the same files as last time", async () => {
+          const mock = makeMockBackend();
+          const session = makeSession(mock);
+          session.setAgent(JENNIFER);
+          await session.sendPrompt("hi").turn;
+
+          session.setAgentMemory({ ...JENNIFER.memory!, fingerprint: "fp-1" });
+          await session.sendPrompt("again").turn;
+
+          expect(promptText(mock, 1)).not.toContain("<agent_memory");
+        });
+
+        it("sends no memory block for an agent whose memory is off", async () => {
+          const mock = makeMockBackend();
+          const session = makeSession(mock);
+          session.setAgent({ ...JENNIFER, memory: null });
+
+          await session.sendPrompt("hi").turn;
+
+          expect(promptText(mock, 0)).toContain("<agent_persona");
+          expect(promptText(mock, 0)).not.toContain("<agent_memory");
+        });
+
+        it("sends neither block for a chat whose agent was deleted", async () => {
+          const mock = makeMockBackend();
+          const session = makeSession(mock);
+          session.setAgent({
+            slug: "gone",
+            name: "Gone",
+            icon: "",
+            personaBlock: null,
+            memory: null,
+          });
+
+          await session.sendPrompt("hi").turn;
+
+          expect(promptText(mock, 0)).not.toContain("<agent_persona");
+          expect(promptText(mock, 0)).not.toContain("<agent_memory");
         });
       });
     });
@@ -3490,6 +3594,31 @@ describe("AgentSession", () => {
         mock.emit(planUpdate([{ content: "again", status: "pending" }]));
         await session.dispose();
         expect(session.getCurrentTodoList()).toBeNull();
+      });
+    });
+
+    describe("promotePendingMemoryNotice()", () => {
+      it("shows a held line only once a turn has ended", () => {
+        const session = makeSession(makeMockBackend());
+        const notice = {
+          kind: "consolidation" as const,
+          agentName: "Jennifer",
+          path: "copilot/agents/jennifer/MEMORY.md",
+        };
+
+        session.setPendingMemoryNotice(notice);
+        expect(session.getMemoryNotice()).toBeNull();
+
+        session.promotePendingMemoryNotice();
+        expect(session.getMemoryNotice()).toEqual(notice);
+      });
+
+      it("does nothing when no line is waiting", () => {
+        const session = makeSession(makeMockBackend());
+
+        session.promotePendingMemoryNotice();
+
+        expect(session.getMemoryNotice()).toBeNull();
       });
     });
   });

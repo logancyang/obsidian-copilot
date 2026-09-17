@@ -1,10 +1,20 @@
 import { buildAgentMemorySkeleton, parseAgentFile, serializeAgentFile } from "@/agents/agentFile";
 import {
+  appendToDailyNote,
+  hashMemoryContent,
+  parseAgentMemoryFile,
+  serializeAgentMemoryFile,
+} from "@/agents/agentMemoryFile";
+import {
   deriveUniqueAgentSlug,
+  getAgentDailyNotePath,
   getAgentFilePath,
   getAgentFolderPath,
+  getAgentMemoryFolderPath,
   getAgentMemoryPath,
+  parseAgentDailyNoteDate,
 } from "@/agents/agentPaths";
+import type { AgentDailyNoteInput } from "@/agents/agentMemory";
 import { AGENT_FILE_NAME } from "@/agents/constants";
 import type { AgentDraft, AgentRecord, CustomAgent } from "@/agents/types";
 import { logInfo, logWarn } from "@/logger";
@@ -13,6 +23,30 @@ import { getSettings } from "@/settings/model";
 import { ensureFolderExists } from "@/utils";
 import { trashFile } from "@/utils/vaultAdapterUtils";
 import { App, TFile, TFolder, Vault } from "obsidian";
+
+/** An agent's `MEMORY.md` as the session and the consolidation pass read it. */
+export interface AgentMemoryRead {
+  /** Full file contents, frontmatter included. */
+  text: string;
+  /** The part below the frontmatter — what a conversation is given. */
+  body: string;
+  /** Last daily note folded in, or null when the file has never been consolidated. */
+  consolidatedThrough: string | null;
+  /** Modification time, which dates the `<agent_memory updated="…">` attribute. */
+  modifiedAtMs: number;
+  /** Identity of `text`, re-checked before a consolidation overwrites the file. */
+  hash: string;
+}
+
+/** One day of an agent's daily notes, with where it lives. */
+export interface DailyNoteRead {
+  /** Day the note records, as `YYYY-MM-DD`. */
+  date: string;
+  /** Vault-relative path, so a trust line can offer the note. */
+  path: string;
+  text: string;
+  modifiedAtMs: number;
+}
 
 /**
  * Owns the `copilot/agents/<slug>/` tree: listing agents, creating the two
@@ -67,27 +101,166 @@ export class AgentFileManager {
     );
   }
 
+  /** Vault-relative `memory/` folder of one agent, resolved against today's root. */
+  public getMemoryFolderPath(slug: string): string {
+    return getAgentMemoryFolderPath(this.agentsFolder(), slug);
+  }
+
+  /**
+   * Vault-relative path of one agent's note for `date`, whether or not it
+   * exists yet — what the persona block names as the place to append to.
+   *
+   * @param date - Day the note records, as `YYYY-MM-DD`.
+   */
+  public getDailyNotePath(slug: string, date: string): string {
+    return getAgentDailyNotePath(this.agentsFolder(), slug, date);
+  }
+
   /** One agent by slug, or null when its folder or `agent.md` is gone. */
   public async readAgent(slug: string): Promise<AgentRecord | null> {
     return this.readRecord(this.agentsFolder(), slug);
   }
 
   /**
-   * An agent's `MEMORY.md` with the time it was last written, or null when the
-   * file is absent (a hand-deleted one, or an agent whose folder predates it).
+   * An agent's `MEMORY.md`, split into the body a conversation is given and the
+   * consolidation bookkeeping above it, or null when the file is absent (a
+   * hand-deleted one, or an agent whose folder predates it).
    *
    * The timestamp travels with the text because a conversation is told how old
    * the agent's recollection is, not just what it says — see the
-   * `<agent_memory updated="…">` block in `designdocs/CUSTOM_AGENTS.md` §4.
+   * `<agent_memory updated="…">` block in `designdocs/CUSTOM_AGENTS.md` §4. The
+   * hash travels with it because consolidation has to notice a user edit made
+   * while it was thinking (§5, "Safety rails").
    *
    * @param slug - Identity of the agent whose memory is read.
    */
-  public async readMemoryDocument(
-    slug: string
-  ): Promise<{ text: string; modifiedAtMs: number } | null> {
+  public async readMemoryDocument(slug: string): Promise<AgentMemoryRead | null> {
     const file = this.vault.getAbstractFileByPath(getAgentMemoryPath(this.agentsFolder(), slug));
     if (!(file instanceof TFile)) return null;
-    return { text: await this.vault.read(file), modifiedAtMs: file.stat.mtime };
+    const text = await this.vault.read(file);
+    const parsed = parseAgentMemoryFile(text);
+    return {
+      text,
+      body: parsed.body,
+      consolidatedThrough: parsed.consolidatedThrough,
+      modifiedAtMs: file.stat.mtime,
+      hash: hashMemoryContent(text),
+    };
+  }
+
+  /**
+   * One day of an agent's daily notes, or null when that day has none.
+   *
+   * @param slug - Identity of the agent whose notes are read.
+   * @param date - Day to read, as `YYYY-MM-DD`.
+   */
+  public async readDailyNote(slug: string, date: string): Promise<DailyNoteRead | null> {
+    const path = getAgentDailyNotePath(this.agentsFolder(), slug, date);
+    const file = this.vault.getAbstractFileByPath(path);
+    if (!(file instanceof TFile)) return null;
+    return { date, path, text: await this.vault.read(file), modifiedAtMs: file.stat.mtime };
+  }
+
+  /**
+   * Every day this agent has notes for, oldest first.
+   *
+   * Files whose name is not a date are skipped: `memory/` is an ordinary vault
+   * folder the user may keep their own notes in
+   * (`designdocs/CUSTOM_AGENTS.md` §5).
+   *
+   * @param slug - Identity of the agent whose notes are listed.
+   */
+  public listDailyNoteDates(slug: string): string[] {
+    const folder = this.vault.getAbstractFileByPath(
+      getAgentMemoryFolderPath(this.agentsFolder(), slug)
+    );
+    if (!(folder instanceof TFolder)) return [];
+    const dates: string[] = [];
+    for (const child of folder.children) {
+      if (!(child instanceof TFile)) continue;
+      const date = parseAgentDailyNoteDate(child.name);
+      if (date) dates.push(date);
+    }
+    return dates.sort();
+  }
+
+  /**
+   * The daily notes dated after `after`, oldest first — what one consolidation
+   * has left to fold in.
+   *
+   * @param slug - Identity of the agent whose notes are read.
+   * @param after - Last day already folded in, or null to read every note.
+   */
+  public async readDailyNotesAfter(
+    slug: string,
+    after: string | null
+  ): Promise<AgentDailyNoteInput[]> {
+    const dates = this.listDailyNoteDates(slug).filter((date) => !after || date > after);
+    const notes: AgentDailyNoteInput[] = [];
+    for (const date of dates) {
+      const note = await this.readDailyNote(slug, date);
+      if (note && note.text.trim().length > 0) notes.push({ date, text: note.text });
+    }
+    return notes;
+  }
+
+  /**
+   * Append one flush's section to the agent's note for `date`, creating the
+   * `memory/` folder and the note itself on the first write of a new day.
+   *
+   * @param slug - Identity of the agent whose note is appended to.
+   * @param date - Day the note records, as `YYYY-MM-DD`.
+   * @param section - Rendered heading and bullets to add.
+   * @returns Vault-relative path of the note that was written.
+   */
+  public async appendDailyNote(slug: string, date: string, section: string): Promise<string> {
+    const agentsFolder = this.agentsFolder();
+    const path = getAgentDailyNotePath(agentsFolder, slug, date);
+    const file = this.vault.getAbstractFileByPath(path);
+    if (file instanceof TFile) {
+      const existing = await this.vault.read(file);
+      await this.vault.modify(file, appendToDailyNote(existing, date, section));
+    } else {
+      await ensureFolderExists(this.vault, getAgentMemoryFolderPath(agentsFolder, slug));
+      await this.vault.create(path, appendToDailyNote(null, date, section));
+    }
+    return path;
+  }
+
+  /**
+   * Replace an agent's `MEMORY.md` with a consolidated body, but only if the
+   * file still holds what the consolidation was handed.
+   *
+   * The user's own edits are always the new baseline, so a file that changed
+   * while the pass was thinking is left alone and the pass is discarded; the
+   * next consolidation starts from what the user wrote
+   * (`designdocs/CUSTOM_AGENTS.md` §5, "Safety rails").
+   *
+   * @param slug - Identity of the agent whose memory is written.
+   * @param body - New file body, without frontmatter.
+   * @param consolidatedThrough - Last daily note folded in, as `YYYY-MM-DD`.
+   * @param expectedHash - Hash of the file as the pass was handed it, or null
+   *   when there was no file to read.
+   */
+  public async writeConsolidatedMemory(
+    slug: string,
+    body: string,
+    consolidatedThrough: string,
+    expectedHash: string | null
+  ): Promise<"written" | "conflict"> {
+    const memoryPath = getAgentMemoryPath(this.agentsFolder(), slug);
+    const file = this.vault.getAbstractFileByPath(memoryPath);
+    const text = serializeAgentMemoryFile(body, consolidatedThrough);
+    if (!(file instanceof TFile)) {
+      // The file the pass read is gone. Recreating it would resurrect memory the
+      // user deleted, so this is a conflict like any other.
+      if (expectedHash !== null) return "conflict";
+      await this.vault.create(memoryPath, text);
+      return "written";
+    }
+    if (hashMemoryContent(await this.vault.read(file)) !== expectedHash) return "conflict";
+    await this.vault.modify(file, text);
+    return "written";
   }
 
   /**
@@ -117,7 +290,14 @@ export class AgentFileManager {
     await this.vault.create(memoryPath, buildAgentMemorySkeleton(name));
 
     logInfo(`[Agents] Created agent "${name}" at ${folderPath}`);
-    return { agent, folderPath, filePath, memoryPath, memoryBytes: 0 };
+    return {
+      agent,
+      folderPath,
+      filePath,
+      memoryPath,
+      memoryFolderPath: getAgentMemoryFolderPath(agentsFolder, slug),
+      memoryBytes: 0,
+    };
   }
 
   /**
@@ -167,29 +347,6 @@ export class AgentFileManager {
   }
 
   /**
-   * Replace an agent's `MEMORY.md` with `text`, creating the file when the user
-   * deleted it. Returns the vault-relative path that was written.
-   *
-   * The agent decides what its memory says, but never writes it: the memory
-   * pass runs without a write tool and hands the file back as text, so this is
-   * the only place an agent's own recollection reaches disk. See
-   * `designdocs/CUSTOM_AGENTS.md` §5 ("Memory").
-   *
-   * @param slug - Identity of the agent whose memory is written.
-   * @param text - Full new contents of the file.
-   */
-  public async writeMemory(slug: string, text: string): Promise<string> {
-    const memoryPath = getAgentMemoryPath(this.agentsFolder(), slug);
-    const file = this.vault.getAbstractFileByPath(memoryPath);
-    if (file instanceof TFile) {
-      await this.vault.modify(file, text);
-    } else {
-      await this.vault.create(memoryPath, text);
-    }
-    return memoryPath;
-  }
-
-  /**
    * Reset an agent's `MEMORY.md` to the empty skeleton, recreating the file if
    * the user deleted it, so "Clear memory" always leaves a file the agent can
    * append to next time.
@@ -208,6 +365,10 @@ export class AgentFileManager {
     } else {
       await this.vault.create(record.memoryPath, skeleton);
     }
+    // Clearing the core without the notes it is distilled from would leave the
+    // next consolidation to write it all back (`designdocs/CUSTOM_AGENTS.md` §5).
+    const notes = this.vault.getAbstractFileByPath(record.memoryFolderPath);
+    if (notes instanceof TFolder) await trashFile(this.app, notes);
     logInfo(`[Agents] Cleared memory at ${record.memoryPath}`);
   }
 
@@ -238,6 +399,7 @@ export class AgentFileManager {
       folderPath: getAgentFolderPath(agentsFolder, slug),
       filePath,
       memoryPath,
+      memoryFolderPath: getAgentMemoryFolderPath(agentsFolder, slug),
       memoryBytes: memoryFile instanceof TFile ? memoryFile.stat.size : 0,
     };
   }

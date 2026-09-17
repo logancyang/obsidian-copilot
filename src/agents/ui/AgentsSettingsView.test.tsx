@@ -52,6 +52,8 @@ function noopActions(): AgentRowActions {
     onEdit: jest.fn(),
     onOpenFolder: jest.fn(),
     onOpenMemory: jest.fn(),
+    onOpenTodaysNotes: jest.fn(),
+    onConsolidateMemory: jest.fn(),
     onClearMemory: jest.fn(),
     onDelete: jest.fn(),
   };
