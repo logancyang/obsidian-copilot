@@ -13,6 +13,9 @@ jest.mock("@/utils/vaultAdapterUtils", () => ({
 
 const AGENTS_ROOT = "copilot/agents";
 
+/** Fixed mtime for every seeded file, so memory-timestamp assertions are exact. */
+const MEMORY_MTIME_MS = new Date(2026, 8, 14, 15, 0, 0).getTime();
+
 // The Obsidian mock's TFile/TFolder take a path; the published types do not.
 const FileCtor = TFile as unknown as new (path: string) => TFile;
 const FolderCtor = TFolder as unknown as new (path: string) => TFolder;
@@ -39,8 +42,9 @@ class FakeVault {
     if (this.files.has(path)) {
       const file = new FileCtor(path);
       // The list row reports memory size, which the real TFile carries in `stat`.
-      (file as unknown as { stat: { size: number } }).stat = {
+      (file as unknown as { stat: { size: number; mtime: number } }).stat = {
         size: Buffer.byteLength(this.files.get(path) ?? "", "utf8"),
+        mtime: MEMORY_MTIME_MS,
       };
       return file;
     }
@@ -206,16 +210,19 @@ describe("AgentFileManager", () => {
     });
   });
 
-  describe("readMemory()", () => {
-    it("returns the memory file's text", async () => {
+  describe("readMemoryDocument()", () => {
+    it("returns the memory file's text with the time it was last written", async () => {
       const { manager, vault } = buildManager();
       vault.seedAgent("jennifer", { name: "Jennifer" }, "# Jennifer's memory\n");
-      await expect(manager.readMemory("jennifer")).resolves.toBe("# Jennifer's memory\n");
+      await expect(manager.readMemoryDocument("jennifer")).resolves.toEqual({
+        text: "# Jennifer's memory\n",
+        modifiedAtMs: MEMORY_MTIME_MS,
+      });
     });
 
-    it("returns an empty string when the memory file is absent", async () => {
+    it("returns null when the memory file is absent", async () => {
       const { manager } = buildManager();
-      await expect(manager.readMemory("nobody")).resolves.toBe("");
+      await expect(manager.readMemoryDocument("nobody")).resolves.toBeNull();
     });
   });
 

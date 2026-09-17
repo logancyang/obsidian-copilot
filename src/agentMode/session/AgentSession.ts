@@ -2,6 +2,7 @@ import { AI_SENDER, USER_SENDER, WEB_SELECTED_TEXT_TAG } from "@/constants";
 import { logInfo, logWarn } from "@/logger";
 import { AgentMessageStore } from "@/agentMode/session/AgentMessageStore";
 import { GLOBAL_SCOPE, type ProjectScopeId } from "@/agentMode/session/scope";
+import { COPILOT_SESSION_AGENT, type SessionAgent } from "@/agentMode/session/sessionAgent";
 import {
   AgentChatMessage,
   AgentMessagePart,
@@ -337,6 +338,11 @@ export class AgentSession {
   // `initialize`. Inlined into the FIRST user prompt only (see `runTurn` /
   // `buildPromptBlocks`); null for GLOBAL / context-free / resumed sessions.
   private projectContextBlock: string | null = null;
+  // Who this chat is talking to. Defaults to the built-in Copilot; the manager
+  // assigns a custom agent right after construction and may reassign it while
+  // the chat is still empty. Its persona blocks ride the FIRST user prompt,
+  // beside `<project_context>` (see `designdocs/CUSTOM_AGENTS.md` §3 and §4).
+  private sessionAgent: SessionAgent = COPILOT_SESSION_AGENT;
   // Flips true once the first user prompt has been built, so the project-context
   // block is injected exactly once at the head of the conversation.
   private firstPromptSent = false;
@@ -859,6 +865,27 @@ export class AgentSession {
     return this.label;
   }
 
+  /** Who this chat is talking to — the built-in Copilot unless one was assigned. */
+  getAgent(): SessionAgent {
+    return this.sessionAgent;
+  }
+
+  /**
+   * Bind this chat to an agent. Callers own the rule about when this is
+   * allowed: the manager reassigns only chats that have not sent a message yet,
+   * because a conversation already in character cannot change who it is with
+   * (`designdocs/CUSTOM_AGENTS.md` §3).
+   *
+   * @param agent - Resolved agent, or {@link COPILOT_SESSION_AGENT} for the default.
+   */
+  setAgent(agent: SessionAgent): void {
+    if (agent.slug === this.sessionAgent.slug && agent.name === this.sessionAgent.name) return;
+    this.sessionAgent = agent;
+    // The tab renders the agent beside the title, so the label listeners are
+    // the ones that need to repaint.
+    this.notifyLabelChanged();
+  }
+
   /**
    * Who set the current label: `"user"` (Rename), `"agent"`
    * (`session_info_update` / title poll), or `null` when unlabeled. The
@@ -1038,6 +1065,10 @@ export class AgentSession {
       // up front so both the fan-out and single-agent paths can inject it.
       const isFirstTurn = !this.firstPromptSent;
       const projectContextBlock = isFirstTurn ? this.projectContextBlock : null;
+      // The persona + memory blocks ride the first user message for the same
+      // reason the project manifest does: they are conversation-level context,
+      // not per-turn, and repeating them would cost tokens on every send.
+      const agentPersonaBlock = isFirstTurn ? this.sessionAgent.personaBlock : null;
       // The coarse "sources may have changed" note for an ongoing/resumed project
       // session. Read once here (the manager flushes pending vault events inside
       // the getter) so both paths inject the same value; acked only after the
@@ -1077,7 +1108,8 @@ export class AgentSession {
           webTabBlock,
           projectContextBlock,
           historyBlock,
-          projectContextUpdatesBlock
+          projectContextUpdatesBlock,
+          agentPersonaBlock
         );
         // Deliberately do NOT mark `firstPromptSent` here. Fan-out delivers the
         // first-turn project-context block only to the ephemeral sub-sessions; the
@@ -1100,7 +1132,8 @@ export class AgentSession {
         webTabBlock,
         projectContextBlock,
         leadingContextBlock,
-        projectContextUpdatesBlock
+        projectContextUpdatesBlock,
+        agentPersonaBlock
       );
 
       const req: PromptInput = {
@@ -2238,9 +2271,11 @@ export function buildPromptBlocks(
   webTabBlock?: string,
   projectContextBlock?: string | null,
   leadingContextBlock?: string | null,
-  projectContextUpdatesBlock?: string | null
+  projectContextUpdatesBlock?: string | null,
+  agentPersonaBlock?: string | null
 ): PromptContent[] {
-  // Context sections precede the user message: the project-context block (first
+  // Context sections precede the user message: the agent's persona + memory
+  // blocks (first user prompt only), the project-context block (first
   // user prompt only — the project's folders/notes/URLs), then the coarse
   // "sources may have changed" updates note (ongoing/resumed turns), then an
   // optional prior-turn block (buffered fan-out turns the backend never saw), the
@@ -2248,6 +2283,8 @@ export function buildPromptBlocks(
   // live web-tab content. Web tab/selection blocks reuse the legacy `<web_*>` tags
   // so the model reads the same shapes it does in the non-agent chat.
   const sections = [
+    // Identity first: who the model is answering as frames everything after it.
+    agentPersonaBlock?.trim() || null,
     projectContextBlock?.trim() || null,
     projectContextUpdatesBlock?.trim() || null,
     leadingContextBlock?.trim() || null,

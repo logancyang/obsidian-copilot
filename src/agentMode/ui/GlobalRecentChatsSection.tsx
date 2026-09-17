@@ -222,7 +222,7 @@ const RecentChatRow = memo(function RecentChatRow({
       }}
     >
       <ChatIconTile Icon={Icon} needsAttention={hasAttention} />
-      <RecentChatTitle title={item.title} />
+      <RecentChatTitle title={item.title} agentIcon={item.agentIcon} />
 
       {/* Relative time by default; a backgrounded running session shows an accent
           spinner in its place. The action cluster replaces either on hover or

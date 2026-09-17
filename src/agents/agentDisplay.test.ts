@@ -1,4 +1,4 @@
-import { formatMemorySize } from "@/agents/agentDisplay";
+import { formatMemorySize, formatMissingAgentLabel } from "@/agents/agentDisplay";
 
 describe("agentDisplay", () => {
   describe("formatMemorySize()", () => {
@@ -19,6 +19,20 @@ describe("agentDisplay", () => {
       expect(formatMemorySize(0)).toBe("0 B");
       expect(formatMemorySize(Number.NaN)).toBe("0 B");
       expect(formatMemorySize(-1)).toBe("0 B");
+    });
+  });
+
+  describe("formatMissingAgentLabel()", () => {
+    it("reads a slug back as the name a deleted agent's chat still shows", () => {
+      // A chat persists only the slug, so a deleted agent's label is derived
+      // from it. See `designdocs/CUSTOM_AGENTS.md` §1 and §8.
+      expect(formatMissingAgentLabel("jennifer")).toBe("Jennifer");
+      expect(formatMissingAgentLabel("night-editor")).toBe("Night Editor");
+    });
+
+    it("drops the empty segments a collision suffix or a stray hyphen leaves", () => {
+      expect(formatMissingAgentLabel("jennifer--2")).toBe("Jennifer 2");
+      expect(formatMissingAgentLabel("")).toBe("");
     });
   });
 });

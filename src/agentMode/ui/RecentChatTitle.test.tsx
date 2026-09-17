@@ -26,5 +26,19 @@ describe("RecentChatTitle", () => {
       expect(titleElement.classList.contains("tw-truncate")).toBe(true);
       expect(titleElement.getAttribute("title")).toBe(title);
     });
+
+    it("puts the agent's icon before the title of a chat held with one", () => {
+      // `designdocs/CUSTOM_AGENTS.md` §8 — the icon is how a DM is recognized
+      // in the list; the title itself is unchanged.
+      const { container } = render(<RecentChatTitle title="Newsletter intro" agentIcon="🪶" />);
+
+      expect(container.textContent).toBe("🪶Newsletter intro");
+    });
+
+    it("renders a Copilot chat's title with no leading glyph", () => {
+      const { container } = render(<RecentChatTitle title="Newsletter intro" />);
+
+      expect(container.textContent).toBe("Newsletter intro");
+    });
   });
 });

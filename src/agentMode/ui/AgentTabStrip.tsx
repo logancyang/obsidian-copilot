@@ -106,12 +106,21 @@ function useSessionDisplay(session: AgentSession) {
   );
   const label = session.getLabel();
   const descriptor = backendRegistry[session.backendId] as BackendDescriptor | undefined;
+  // Who is answering replaces the backend brand on both the glyph and the
+  // untitled-chat fallback, so a DM reads as the agent rather than the harness
+  // it happens to run on (`designdocs/CUSTOM_AGENTS.md` §3). A chat with the
+  // built-in Copilot is unchanged.
+  const agent = session.getAgent();
   return {
     status: session.getStatus(),
     label,
     needsAttention: session.getNeedsAttention(),
     descriptor,
-    displayLabel: label ?? descriptor?.displayName ?? "Session",
+    agentIcon: agent.slug ? agent.icon : "",
+    displayLabel: label ?? (agent.slug ? agent.name : (descriptor?.displayName ?? "Session")),
+    tooltipLabel: agent.slug
+      ? `${agent.name}${label ? ` · ${label}` : ""}`
+      : (label ?? descriptor?.displayName ?? "Session"),
   };
 }
 
@@ -268,7 +277,8 @@ const SessionTab: React.FC<TabProps> = ({
   onSubmitRename,
   onCancelRename,
 }) => {
-  const { status, label, needsAttention, descriptor, displayLabel } = useSessionDisplay(session);
+  const { status, label, needsAttention, descriptor, agentIcon, displayLabel, tooltipLabel } =
+    useSessionDisplay(session);
 
   const [menuOpen, setMenuOpen] = React.useState(false);
 
@@ -320,13 +330,14 @@ const SessionTab: React.FC<TabProps> = ({
         >
           <BrandIcon
             descriptor={descriptor}
+            agentIcon={agentIcon}
             status={status}
             needsAttention={needsAttention}
             onCloseOnHover={onClose}
           />
           <TruncatedText
             className="tw-min-w-0 tw-flex-1 !tw-text-current"
-            tooltipContent={displayLabel}
+            tooltipContent={tooltipLabel}
           >
             {displayLabel}
           </TruncatedText>
@@ -381,6 +392,8 @@ const RenameInput: React.FC<RenameInputProps> = ({ initialValue, onSubmit, onCan
 
 interface BrandIconProps {
   descriptor: BackendDescriptor | undefined;
+  /** The agent's emoji, shown instead of the brand glyph. Empty for Copilot. */
+  agentIcon?: string;
   status: AgentSessionStatus;
   /** Accent dot — set when the session demands the user's attention. */
   needsAttention?: boolean;
@@ -401,6 +414,7 @@ interface BrandIconProps {
  */
 const BrandIcon: React.FC<BrandIconProps> = ({
   descriptor,
+  agentIcon,
   status,
   needsAttention,
   onCloseOnHover,
@@ -421,6 +435,10 @@ const BrandIcon: React.FC<BrandIconProps> = ({
             onCloseOnHover && "group-hover:tw-hidden"
           )}
         />
+      ) : agentIcon ? (
+        <span className={cn("tw-text-xs", onCloseOnHover && "group-hover:tw-hidden")}>
+          {agentIcon}
+        </span>
       ) : Icon ? (
         <Icon className={cn("tw-size-4", onCloseOnHover && "group-hover:tw-hidden")} />
       ) : (
@@ -506,7 +524,8 @@ interface OverflowRowProps {
 }
 
 const OverflowRow: React.FC<OverflowRowProps> = ({ session, isActive, onActivate, onClose }) => {
-  const { status, needsAttention, descriptor, displayLabel } = useSessionDisplay(session);
+  const { status, needsAttention, descriptor, agentIcon, displayLabel, tooltipLabel } =
+    useSessionDisplay(session);
 
   // Plain div row instead of DropdownMenuItem: MenuItem synthesizes a select
   // on pointerup (`currentTarget.click()`) which would activate the session
@@ -524,10 +543,15 @@ const OverflowRow: React.FC<OverflowRowProps> = ({ session, isActive, onActivate
         isActive && "tw-bg-interactive-accent/10"
       )}
     >
-      <BrandIcon descriptor={descriptor} status={status} needsAttention={needsAttention} />
+      <BrandIcon
+        descriptor={descriptor}
+        agentIcon={agentIcon}
+        status={status}
+        needsAttention={needsAttention}
+      />
       <TruncatedText
         className="tw-min-w-0 tw-flex-1 !tw-text-current"
-        tooltipContent={displayLabel}
+        tooltipContent={tooltipLabel}
       >
         {displayLabel}
       </TruncatedText>

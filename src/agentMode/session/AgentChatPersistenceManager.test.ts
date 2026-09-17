@@ -461,4 +461,77 @@ describe("AgentChatPersistenceManager", () => {
       expect(loaded.backendId).toBe("claude");
     });
   });
+
+  describe("agentSlug frontmatter", () => {
+    afterEach(() => {
+      (readFrontmatterViaAdapter as jest.Mock).mockResolvedValue(null);
+    });
+
+    it("round-trips the agent a chat was held with", async () => {
+      const saved = await manager.saveSession([makeMessage(USER_SENDER, "hi")], "claude", {
+        agentSlug: "jennifer",
+      });
+      const raw = app.files.get(saved!.path)!.contents!;
+      expect(raw).toContain('agentSlug: "jennifer"');
+
+      const loaded = await manager.loadFile(app.files.get(saved!.path) as unknown as TFile);
+      expect(loaded.agentSlug).toBe("jennifer");
+    });
+
+    it("writes no field for a Copilot chat, so it matches one saved before agents existed", async () => {
+      // `designdocs/CUSTOM_AGENTS.md` §8: the field is omitted for the built-in
+      // assistant, which is what keeps older chats loading unchanged.
+      const saved = await manager.saveSession([makeMessage(USER_SENDER, "hi")], "claude", {
+        agentSlug: null,
+      });
+      const raw = app.files.get(saved!.path)!.contents!;
+      expect(raw).not.toContain("agentSlug:");
+
+      const loaded = await manager.loadFile(app.files.get(saved!.path) as unknown as TFile);
+      expect(loaded.agentSlug).toBeUndefined();
+    });
+
+    it("keeps the persisted slug when a later save omits it", async () => {
+      const messages = [makeMessage(USER_SENDER, "hi")];
+      const first = await manager.saveSession(messages, "claude", { agentSlug: "jennifer" });
+      Object.setPrototypeOf(app.files.get(first!.path)!, TFile.prototype);
+      (readFrontmatterViaAdapter as jest.Mock).mockImplementation(async (_app, path: string) => {
+        const raw = app.files.get(path)?.contents ?? "";
+        const yaml = raw.match(/^---\n([\s\S]*?)\n---/)?.[1];
+        if (!yaml) return null;
+        const fm: Record<string, string> = {};
+        for (const line of yaml.split("\n")) {
+          const m = line.match(/^([\w-]+):\s*(.+)/);
+          if (m) fm[m[1]] = m[2].trim().replace(/^["']|["']$/g, "");
+        }
+        return fm;
+      });
+
+      const second = await manager.saveSession(messages, "claude", { existingPath: first!.path });
+
+      const loaded = await manager.loadFile(app.files.get(second!.path) as unknown as TFile);
+      expect(loaded.agentSlug).toBe("jennifer");
+    });
+
+    it("loads a chat written before the field existed with no agent named", async () => {
+      const path = "test-folder/agent__legacy-agentless.md";
+      await app.vault.adapter.write(
+        path,
+        [
+          "---",
+          "epoch: 1735732800000",
+          "mode: agent",
+          "backendId: claude",
+          "---",
+          "",
+          "**user**: hi",
+        ].join("\n")
+      );
+
+      const loaded = await manager.loadFile(app.files.get(path) as unknown as TFile);
+
+      expect(loaded.agentSlug).toBeUndefined();
+      expect(loaded.backendId).toBe("claude");
+    });
+  });
 });

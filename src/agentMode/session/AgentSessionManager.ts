@@ -42,6 +42,15 @@ import { buildNativeChatId, parseNativeChatId } from "@/utils/nativeChatId";
 import { CHAT_AGENT_VIEWTYPE } from "@/constants";
 import { playNotificationSound } from "@/utils/notificationSound";
 import type { AgentSessionIndex } from "./AgentSessionIndex";
+import type { AgentFileManager } from "@/agents/AgentFileManager";
+import { BUILTIN_AGENT, BUILTIN_AGENT_SLUG, toAgentEntry } from "@/agents/types";
+import type { AgentEntry, CustomAgent } from "@/agents/types";
+import {
+  COPILOT_SESSION_AGENT,
+  loadSessionAgent,
+  missingSessionAgent,
+  type SessionAgent,
+} from "./sessionAgent";
 import {
   deriveChatTitleFromMessages,
   mergeChatHistoryItems,
@@ -152,6 +161,10 @@ const EMPTY_HISTORY_ITEMS = Object.freeze([]) as unknown as ChatHistoryItem[];
 const EMPTY_RECENT_CHAT_IDS: ReadonlySet<string> = new Set();
 /** See AGENTS.md → "Referential stability". */
 const EMPTY_CHAT_INPUT_IDS: readonly string[] = Object.freeze([]);
+/** The picker's list before any agent exists: the built-in entry alone. */
+const BUILTIN_ONLY_AGENT_ENTRIES: readonly AgentEntry[] = Object.freeze([BUILTIN_AGENT]);
+/** See AGENTS.md → "Referential stability". */
+const EMPTY_CUSTOM_AGENTS: readonly CustomAgent[] = Object.freeze([]);
 
 // Delivery-cursor seed for a resumed session: BEHIND any real content epoch
 // (which starts at 0), so its first send always emits the coarse freshness note
@@ -246,6 +259,14 @@ export interface AgentSessionManagerOptions {
    * `agentMode/index.ts`.
    */
   sessionIndex?: AgentSessionIndex;
+  /**
+   * Reader for `copilot/agents/`, used to resolve the agent a chat is talking
+   * to and to load its persona and memory. Optional only so legacy callers
+   * (tests) can omit it; production wiring always supplies one via the barrel
+   * in `agentMode/index.ts`. Without it every chat runs as the built-in
+   * Copilot, and a chat that names an agent shows the name as a plain label.
+   */
+  agentFileManager?: AgentFileManager;
 }
 
 /**
@@ -418,6 +439,16 @@ export class AgentSessionManager {
   // the final settings value always wins.
   private readonly defaultApplyChains = new Map<string, Promise<void>>();
   private readonly fanoutOrchestrator: FanoutOrchestrator;
+  // Who the user is talking to. Applies to the next new chat and to any chat
+  // that has not sent a message yet; a chat with messages keeps the agent it
+  // started with. See `designdocs/CUSTOM_AGENTS.md` §3.
+  private selectedAgentSlug: string = BUILTIN_AGENT_SLUG;
+  // Agents on disk as of the last `refreshAgents()`. Only the picker's list and
+  // the recent-list icons read it; binding a chat to an agent re-reads that
+  // agent's files, so a stale roster can never put stale persona text on the
+  // wire.
+  private agentRoster: readonly CustomAgent[] = EMPTY_CUSTOM_AGENTS;
+  private agentEntries: readonly AgentEntry[] = BUILTIN_ONLY_AGENT_ENTRIES;
   // Tear-down for the settings subscription that re-applies a changed
   // per-backend default model to any live session on that backend.
   private readonly settingsUnsub: () => void;
@@ -755,6 +786,11 @@ export class AgentSessionManager {
     // app-lifetime only — purely-on-disk chats stay unflagged. Applied in the
     // map below so both the global and project views carry the cue.
     const liveAttentionPaths = this.collectLiveAttentionPaths();
+    // Rows show the agent's icon before the title, which needs the roster the
+    // slugs resolve against (`designdocs/CUSTOM_AGENTS.md` §8). Refreshing here
+    // also keeps the talking-to picker current whenever the landing reloads.
+    await this.refreshAgents();
+    const iconBySlug = new Map(this.agentRoster.map((agent) => [agent.slug, agent.icon]));
 
     let files: TFile[] = [];
     let markdownEntries: MarkdownChatEntry[] = [];
@@ -768,12 +804,19 @@ export class AgentSessionManager {
           // cache-only read would leave those rows unmergeable and duplicate
           // their native twins.
           const ref = await this.readSessionRefFromFile(file.path);
-          const item = fileToHistoryItem(this.app, file, tracker);
-          return {
-            item: liveAttentionPaths.has(item.id) ? { ...item, needsAttention: true } : item,
-            backendId: ref?.backendId,
-            sessionId: ref?.sessionId,
-          };
+          const base = fileToHistoryItem(this.app, file, tracker);
+          // A slug with no icon (or none left, its agent deleted) simply gets no
+          // glyph; the row falls back to the backend brand icon it always had.
+          const agentIcon = ref?.agentSlug ? iconBySlug.get(ref.agentSlug) : undefined;
+          const item =
+            liveAttentionPaths.has(base.id) || agentIcon
+              ? {
+                  ...base,
+                  ...(liveAttentionPaths.has(base.id) ? { needsAttention: true } : {}),
+                  ...(agentIcon ? { agentIcon } : {}),
+                }
+              : base;
+          return { item, backendId: ref?.backendId, sessionId: ref?.sessionId };
         })
       );
     }
@@ -973,7 +1016,7 @@ export class AgentSessionManager {
    */
   private async readSessionRefFromFile(
     fileId: string
-  ): Promise<{ backendId: BackendId; sessionId: string } | null> {
+  ): Promise<{ backendId: BackendId; sessionId: string; agentSlug?: string } | null> {
     let fm: Record<string, unknown> | undefined;
     const file = this.app.vault.getAbstractFileByPath(fileId);
     if (file instanceof TFile) {
@@ -989,7 +1032,8 @@ export class AgentSessionManager {
     const backendId = typeof fm?.backendId === "string" ? fm.backendId.trim() : "";
     const sessionId = typeof fm?.sessionId === "string" ? fm.sessionId.trim() : "";
     if (!backendId || !sessionId) return null;
-    return { backendId, sessionId };
+    const agentSlug = typeof fm?.agentSlug === "string" ? fm.agentSlug.trim() : "";
+    return { backendId, sessionId, agentSlug: agentSlug || undefined };
   }
 
   /**
@@ -1209,16 +1253,33 @@ export class AgentSessionManager {
    * to seed a specific (model, effort) without touching that default — used
    * by a cross-backend chat pick, which is transient. `chatInputId` is supplied
    * only when the replacement must retain the same logical AgentChatInput.
+   *
+   * The new chat is bound to the agent the picker has selected, and opens on
+   * that agent's pinned backend and model when it has them and the caller named
+   * no backend of its own. Pass `sessionAgent` to carry an existing chat's agent
+   * across a replacement (a backend switch or restart) instead.
    */
   async createSession(
     backendId?: BackendId,
     projectId: ProjectScopeId = this.activeProjectId,
     seedSelection?: ModelSelection,
-    chatInputId?: string
+    chatInputId?: string,
+    sessionAgent?: SessionAgent
   ): Promise<AgentSession> {
     if (this.disposed) {
       throw new Error("AgentSessionManager has been shut down");
     }
+
+    // Bind the chat to its agent before anything else: a pinned backend or
+    // model changes what gets spawned. A replacement carries the replaced
+    // chat's agent, so switching backend mid-chat never changes who is
+    // answering. See `designdocs/CUSTOM_AGENTS.md` §4.
+    const bound = sessionAgent ? null : await this.bindSessionAgent(this.selectedAgentSlug);
+    const agent = sessionAgent ?? bound?.agent ?? COPILOT_SESSION_AGENT;
+    const pinned = bound?.source ?? null;
+    // An explicitly requested backend is the user's own pick (a cross-backend
+    // model choice, a restart), so it outranks the agent's pin.
+    const pinnedBackendId = backendId ? undefined : pinned?.backendId;
 
     // Resolve the backend to spawn: the explicit request, else the persisted
     // default, else opencode. Held in one variable so the whole method — cwd
@@ -1226,7 +1287,8 @@ export class AgentSessionManager {
     // an unknown id (corrupt persisted `activeBackend`, or a removed backend) to
     // opencode so auto-spawn degrades gracefully instead of throwing — the same
     // safety the removed Self-Host redirect used to provide as a side effect.
-    const requestedId = backendId ?? getSettings().agentMode?.activeBackend ?? "opencode";
+    const requestedId =
+      backendId ?? pinnedBackendId ?? getSettings().agentMode?.activeBackend ?? "opencode";
     const resolvedId = this.opts.resolveDescriptor(requestedId) ? requestedId : "opencode";
     // Read SYNCHRONOUSLY, before this method's first await, so the success path below can
     // tell whether any failure landed while this create was in flight.
@@ -1305,7 +1367,17 @@ export class AgentSessionManager {
     // An absent preference means "Agent default": let session/new report the
     // backend's actual selection. Catalog ordering describes choices, not a
     // default, so only explicit transient or persisted selections are applied.
-    const resolvedSeed = seedSelection ?? this.getSeedSelection(resolvedId) ?? undefined;
+    // A pinned model applies only on the backend the agent pinned it for (or the
+    // one the session is already on when it pinned no backend); otherwise the
+    // id would name a model that backend has never heard of.
+    const pinnedSelection =
+      pinned?.modelId && (!pinned.backendId || pinned.backendId === resolvedId)
+        ? // The agent pins a model, not an effort level; the backend applies its
+          // own default effort for that model.
+          { baseModelId: pinned.modelId, effort: null }
+        : undefined;
+    const resolvedSeed =
+      seedSelection ?? pinnedSelection ?? this.getSeedSelection(resolvedId) ?? undefined;
 
     // A new chat must always start from a brand-new backend session. When a
     // warm preload probe is available we reuse its already-spawned and
@@ -1341,6 +1413,7 @@ export class AgentSessionManager {
           }
         : {}),
     });
+    session.setAgent(agent);
     this.sessions.set(session.internalId, session);
     this.chatUIStates.set(session.internalId, new AgentChatUIState(session));
     // Record what this project landing captured so re-entry can tell a current
@@ -1767,6 +1840,112 @@ export class AgentSessionManager {
   }
 
   /** The scope the active session belongs to ({@link GLOBAL_SCOPE} or a project id). */
+  /**
+   * Re-read `copilot/agents/` so the picker lists what is on disk now. Agents
+   * are ordinary notes the user may have just created in Settings or edited in
+   * another window, so the roster is refreshed on demand rather than cached
+   * behind an invalidation step. Never throws.
+   */
+  async refreshAgents(): Promise<void> {
+    const files = this.opts.agentFileManager;
+    if (!files) return;
+    let agents: readonly CustomAgent[];
+    try {
+      agents = (await files.listAgents()).map((record) => record.agent);
+    } catch (error) {
+      logWarn("[Agents] Could not list agents", error);
+      return;
+    }
+    const entries: readonly AgentEntry[] =
+      agents.length === 0
+        ? BUILTIN_ONLY_AGENT_ENTRIES
+        : [BUILTIN_AGENT, ...agents.map(toAgentEntry)];
+    const unchanged =
+      entries.length === this.agentEntries.length &&
+      entries.every((entry, i) => {
+        const before = this.agentEntries[i];
+        return (
+          entry.slug === before.slug &&
+          entry.name === before.name &&
+          entry.icon === before.icon &&
+          entry.description === before.description
+        );
+      });
+    this.agentRoster = agents.length === 0 ? EMPTY_CUSTOM_AGENTS : agents;
+    if (unchanged) return;
+    this.agentEntries = entries;
+    // A deleted agent must not stay selected, or the next new chat would open
+    // on a persona that no longer exists.
+    if (!entries.some((entry) => entry.slug === this.selectedAgentSlug)) {
+      this.selectedAgentSlug = BUILTIN_AGENT_SLUG;
+    }
+    this.notify();
+  }
+
+  /** Everything the user can be talking to: the built-in Copilot plus every agent. */
+  getAgentEntries(): readonly AgentEntry[] {
+    return this.agentEntries;
+  }
+
+  /** Slug the picker shows; {@link BUILTIN_AGENT_SLUG} means the default assistant. */
+  getSelectedAgentSlug(): string {
+    return this.selectedAgentSlug;
+  }
+
+  /**
+   * Choose who the user is talking to. Applies to the next new chat and,
+   * immediately, to every chat that has not sent a message yet — a chat already
+   * in character keeps the agent it started with
+   * (`designdocs/CUSTOM_AGENTS.md` §3).
+   *
+   * An agent's pinned backend and model are honored when a chat is CREATED, so
+   * retagging an already-open empty chat leaves it on the backend it spawned
+   * with; the next new chat opens on the pin.
+   *
+   * @param slug - Agent to talk to, or {@link BUILTIN_AGENT_SLUG} for Copilot.
+   */
+  async setSelectedAgent(slug: string): Promise<void> {
+    this.selectedAgentSlug = slug || BUILTIN_AGENT_SLUG;
+    const agent = await this.resolveSessionAgent(this.selectedAgentSlug);
+    for (const session of this.sessions.values()) {
+      if (session.getStatus() === "closed") continue;
+      if (session.hasUserVisibleMessages()) continue;
+      session.setAgent(agent);
+    }
+    this.notify();
+  }
+
+  /**
+   * Build the session-side view of one agent: its display fields plus the
+   * persona and memory blocks its chat's first message carries. Reads the
+   * agent's files directly rather than the cached roster, so a chat never opens
+   * on a persona the user has since edited.
+   *
+   * @param slug - Persisted or selected slug; null/`copilot` means the built-in.
+   */
+  private async bindSessionAgent(
+    slug: string | null | undefined
+  ): Promise<{ agent: SessionAgent; source: CustomAgent | null }> {
+    if (!slug || slug === BUILTIN_AGENT_SLUG) return { agent: COPILOT_SESSION_AGENT, source: null };
+    const files = this.opts.agentFileManager;
+    // No reader wired: treat the named agent exactly like a deleted one — the
+    // chat keeps its label and runs as the default assistant.
+    if (!files) return { agent: missingSessionAgent(slug), source: null };
+    try {
+      const record = await files.readAgent(slug);
+      if (!record) return { agent: missingSessionAgent(slug), source: null };
+      return { agent: await loadSessionAgent(files, record.agent), source: record.agent };
+    } catch (error) {
+      logWarn(`[Agents] Could not read agent "${slug}"`, error);
+      return { agent: missingSessionAgent(slug), source: null };
+    }
+  }
+
+  /** {@link bindSessionAgent} for callers that need only the session-side view. */
+  private async resolveSessionAgent(slug: string | null | undefined): Promise<SessionAgent> {
+    return (await this.bindSessionAgent(slug)).agent;
+  }
+
   getActiveProjectId(): ProjectScopeId {
     return this.activeProjectId;
   }
@@ -2756,7 +2935,8 @@ export class AgentSessionManager {
       backendId,
       replacedProjectId,
       options.seedSelection,
-      chatInputId
+      chatInputId,
+      replaced?.getAgent()
     );
     if (oldIdx >= 0) {
       this.moveMapEntry(this.sessions, created.internalId, oldIdx);
@@ -3027,17 +3207,25 @@ export class AgentSessionManager {
     // above so a failed open doesn't leave the active scope ahead of the active
     // session. The throw points are all before a session activates, so no
     // already-active session in the target scope can be wrongly rolled back.
+    // Resolve who this chat was held with before the session exists, so the tab
+    // never paints as Copilot and then flips. A slug whose agent has been
+    // deleted resolves to a name-only label and the chat runs as the default
+    // assistant (`designdocs/CUSTOM_AGENTS.md` §1).
+    const agent = await this.resolveSessionAgent(loaded.agentSlug);
     let session: AgentSession;
     try {
       const resumed = loaded.sessionId
         ? await this.tryResumeSessionFromHistory(loaded.backendId, loaded.sessionId, projectId)
         : null;
-      session = resumed ?? (await this.createSession(loaded.backendId, projectId));
+      session =
+        resumed ??
+        (await this.createSession(loaded.backendId, projectId, undefined, undefined, agent));
     } catch (err) {
       this.rollbackOptimisticScopeSwitch(previousActiveProjectId, scopeSeq);
       throw err;
     }
 
+    session.setAgent(agent);
     session.loadDisplayMessages(loaded.messages);
     session.seedSessionUsage(loaded.usage);
     if (loaded.label) session.setLabel(loaded.label);
@@ -3552,6 +3740,8 @@ export class AgentSessionManager {
       // a real project id binds the chat to that scope on disk.
       projectId: session.projectId,
       usage: usage ?? undefined,
+      // Null for the built-in Copilot, which writes no frontmatter field.
+      agentSlug: session.getAgent().slug,
     });
     if (result) {
       state.path = result.path;
@@ -3833,6 +4023,7 @@ export class AgentSessionManager {
    * @param resumableSessionId Backend session id the replaced tab was bound to.
    * @param label Replaced tab's title, reapplied when the resume comes back untitled.
    * @param labelSource Whether that title was the user's or the agent's.
+   * @param agent Who the replaced tab was talking to, carried across the restart.
    */
   private async rebuildReplacedSession(
     backendId: BackendId,
@@ -3840,7 +4031,8 @@ export class AgentSessionManager {
     chatInputId: string | undefined,
     resumableSessionId: SessionId | undefined,
     label: string | null,
-    labelSource: "user" | "agent" | null
+    labelSource: "user" | "agent" | null,
+    agent: SessionAgent
   ): Promise<AgentSession> {
     if (resumableSessionId) {
       const resumed = await this.tryResumeSessionFromHistory(
@@ -3853,6 +4045,7 @@ export class AgentSessionManager {
         return null;
       });
       if (resumed) {
+        resumed.setAgent(agent);
         // Claude returns no transcript from `resumeSession`; ACP replays its
         // own during `loadSession`, so this is a no-op there.
         await this.hydrateResumedTranscript(resumed, backendId, resumableSessionId);
@@ -3861,7 +4054,7 @@ export class AgentSessionManager {
         return resumed;
       }
     }
-    return this.createSession(backendId, projectId, undefined, chatInputId);
+    return this.createSession(backendId, projectId, undefined, chatInputId, agent);
   }
 
   /** Immediately tear down `backendId` and rebuild its tabs with their composers. */
@@ -3912,6 +4105,7 @@ export class AgentSessionManager {
             resumableSessionId: session.getBackendSessionId() ?? undefined,
             label: session.getLabel(),
             labelSource: session.getLabelSource(),
+            agent: session.getAgent(),
             detached: this.detachedFromTabIds.has(session.internalId),
           }))
         : [];
@@ -3945,7 +4139,8 @@ export class AgentSessionManager {
               replacement.chatInputId,
               replacement.resumableSessionId,
               replacement.label,
-              replacement.labelSource
+              replacement.labelSource,
+              replacement.agent
             );
             if (replacement.detached) this.detachedFromTabIds.add(rebuilt.internalId);
             if (replacement.internalId === activeSessionId) selectedId = rebuilt.internalId;

@@ -142,6 +142,23 @@ When the conversation includes a \`<project_context>\` block:
 export const COPILOT_INSTRUCTION_PRECEDENCE = `## AGENTS.md precedence
 The user's own instructions reach you as AGENTS.md files, in whatever order this runtime loads them. Judge them by scope, not by the order they appear in: an AGENTS.md inside the current project folder is more specific than the one at the vault root, so follow the project file wherever the two conflict.`;
 
+/**
+ * Teaches the model what to do with the `<agent_persona>` / `<agent_memory>`
+ * blocks a custom agent's first user message carries. Those blocks are user
+ * data and cannot live in this prompt, so without this paragraph the model sees
+ * two unexplained tags and is free to narrate them instead of becoming the
+ * persona. See `designdocs/CUSTOM_AGENTS.md` §4.
+ *
+ * Constant, and gated on the blocks' presence in the conversation rather than
+ * on a per-chat flag, so the prompt stays byte-identical whichever agent the
+ * user is talking to — the cache-prefix rule in
+ * `AGENT_INSTRUCTIONS_AND_PROMPT_CACHING.md`. Always sent, like the workspace
+ * policy above: it describes how to read the user's own persona files, not
+ * Copilot framing the "Disable builtin system prompt" toggle opts out of.
+ */
+export const COPILOT_AGENT_PERSONA_POLICY = `## Personas and their memory
+When the conversation contains an \`<agent_persona name="…">\` block, that persona is who you are for the whole conversation: answer as them, in their voice, and follow the standing instructions in the block. An accompanying \`<agent_memory>\` block is what you already know about this user from earlier conversations with them — treat it as your own recollection, use it where it is relevant, and never claim you cannot remember previous conversations. Where either block conflicts with the generic assistant framing in this prompt, the block wins; neither block overrides your safety obligations or the tool, workspace, and file policies here.`;
+
 export const COPILOT_PROMPT_BASE = `You are Obsidian Copilot, an AI assistant that helps users work with their Obsidian vault — markdown notes for knowledge management, writing, and research. You are NOT a software-engineering agent or CLI coding tool. The working directory is the user's Obsidian vault, or a project folder within it: a collection of markdown notes, not a code repository. Disregard any framing in environment metadata that suggests otherwise.
 
 ## Grounding
@@ -225,6 +242,7 @@ export function buildAgentSystemPrompt(): string {
   // Outside the toggle on purpose — see COPILOT_PROJECT_WORKSPACE_POLICY.
   parts.push(COPILOT_PROJECT_WORKSPACE_POLICY);
   parts.push(COPILOT_INSTRUCTION_PRECEDENCE);
+  parts.push(COPILOT_AGENT_PERSONA_POLICY);
   parts.push(buildPillSyntaxDirective());
 
   return parts.join("\n\n");

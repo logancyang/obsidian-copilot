@@ -83,6 +83,14 @@ export interface LoadedAgentChat {
    * a resumed session show its last-known usage before the next turn.
    */
   usage?: SessionUsage;
+  /**
+   * Custom agent this chat was held with, or `undefined` for a chat with the
+   * built-in Copilot — which writes no field, so every chat saved before agents
+   * existed loads unchanged. A slug that no longer resolves still loads: the
+   * session layer falls back to Copilot and keeps the name as a plain label.
+   * See `designdocs/CUSTOM_AGENTS.md` §8.
+   */
+  agentSlug?: string;
 }
 
 interface ExistingMeta {
@@ -92,6 +100,7 @@ interface ExistingMeta {
   sessionId?: string;
   projectId?: string;
   usage?: SessionUsage;
+  agentSlug?: string;
 }
 
 /**
@@ -137,6 +146,11 @@ export class AgentChatPersistenceManager {
       projectId?: string;
       /** Latest token-usage snapshot to persist for resume. */
       usage?: SessionUsage;
+      /**
+       * Slug of the custom agent this chat is held with. Omit for the built-in
+       * Copilot, which writes no field at all.
+       */
+      agentSlug?: string | null;
     }
   ): Promise<{ path: string } | null> {
     if (messages.length === 0) return null;
@@ -189,6 +203,9 @@ export class AgentChatPersistenceManager {
         // Round-trip the persisted usage when the caller doesn't re-supply it,
         // so a save that isn't triggered by a usage change keeps the snapshot.
         usage: options?.usage ?? existingMeta.usage,
+        // Round-trip the persisted slug when the caller doesn't re-supply it,
+        // so an autosave can never quietly demote a persona chat to Copilot.
+        agentSlug: options?.agentSlug ?? existingMeta.agentSlug,
       });
 
       if (existingFile && isInVaultCache(this.app, existingFile.path)) {
@@ -259,12 +276,13 @@ export class AgentChatPersistenceManager {
     // chats stay in the global history. Never inferred from the filename.
     const projectId = frontmatter.projectId?.trim() || GLOBAL_SCOPE;
     const usage = parseUsageJson(frontmatter.usage);
+    const agentSlug = frontmatter.agentSlug?.trim() || undefined;
     const messages = this.parseChatBody(body);
 
     logInfo(
       `[AgentChatPersistenceManager] Loaded ${messages.length} messages from ${file.path} (backend=${backendId}, sessionId=${sessionId ?? "none"}, projectId=${projectId})`
     );
-    return { messages, backendId, topic, label, sessionId, projectId, usage };
+    return { messages, backendId, topic, label, sessionId, projectId, usage, agentSlug };
   }
 
   /**
@@ -313,6 +331,7 @@ export class AgentChatPersistenceManager {
         sessionId: typeof cached.sessionId === "string" ? cached.sessionId : undefined,
         projectId: coerceProjectId(cached.projectId),
         usage: parseUsageJson(cached.usage),
+        agentSlug: typeof cached.agentSlug === "string" ? cached.agentSlug : undefined,
       };
     }
     try {
@@ -326,6 +345,7 @@ export class AgentChatPersistenceManager {
         sessionId: typeof fm.sessionId === "string" ? fm.sessionId : undefined,
         projectId: coerceProjectId(fm.projectId),
         usage: parseUsageJson(fm.usage),
+        agentSlug: typeof fm.agentSlug === "string" ? fm.agentSlug : undefined,
       };
     } catch {
       return {};
@@ -509,6 +529,7 @@ export class AgentChatPersistenceManager {
     sessionId?: string | null;
     projectId?: string;
     usage?: SessionUsage;
+    agentSlug?: string | null;
   }): string {
     const lines: string[] = [
       "---",
@@ -524,6 +545,9 @@ export class AgentChatPersistenceManager {
       lines.push(`projectId: "${escapeYamlString(projectId)}"`);
     }
     if (args.sessionId) lines.push(`sessionId: "${escapeYamlString(args.sessionId)}"`);
+    // Omitted for the built-in Copilot, so a chat with no persona stays
+    // byte-identical to one saved before agents existed.
+    if (args.agentSlug) lines.push(`agentSlug: "${escapeYamlString(args.agentSlug)}"`);
     if (args.topic) lines.push(`topic: "${escapeYamlString(args.topic)}"`);
     if (args.label) lines.push(`agentLabel: "${escapeYamlString(args.label)}"`);
     if (args.modelKey) lines.push(`modelKey: "${escapeYamlString(args.modelKey)}"`);

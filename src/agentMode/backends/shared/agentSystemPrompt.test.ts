@@ -8,6 +8,7 @@ import {
 import type { UserSystemPrompt } from "@/system-prompts/type";
 import {
   buildAgentSystemPrompt,
+  COPILOT_AGENT_PERSONA_POLICY,
   COPILOT_MIYO_DOCUMENT_STEERING,
   COPILOT_MIYO_SEARCH_STEERING,
   COPILOT_PLUS_DOCUMENT_STEERING,
@@ -168,6 +169,29 @@ describe("agentSystemPrompt", () => {
     it("keeps the precedence rule through the builtin toggle, like the workspace policy", () => {
       setDisableBuiltinSystemPrompt(true);
       expect(buildAgentSystemPrompt()).toContain(COPILOT_INSTRUCTION_PRECEDENCE);
+    });
+
+    it("tells the agent to adopt an <agent_persona> block and trust <agent_memory>", () => {
+      // The blocks are user data delivered in the first user message, so this
+      // paragraph is the only place the model is told how to read them.
+      // See `designdocs/CUSTOM_AGENTS.md` §4.
+      const prompt = buildAgentSystemPrompt();
+      expect(prompt).toContain(COPILOT_AGENT_PERSONA_POLICY);
+      expect(prompt).toContain("<agent_persona");
+      expect(prompt).toContain("<agent_memory>");
+    });
+
+    it("keeps the persona policy through the builtin toggle and names no specific agent", () => {
+      // Byte-identical across chats is what keeps the prompt a cache prefix, so
+      // the paragraph can never mention which agent the user picked.
+      setDisableBuiltinSystemPrompt(true);
+      expect(buildAgentSystemPrompt()).toContain(COPILOT_AGENT_PERSONA_POLICY);
+      expect(COPILOT_AGENT_PERSONA_POLICY).not.toMatch(/Jennifer/);
+    });
+
+    it("subordinates a persona to safety and tool policy, not to the generic framing", () => {
+      expect(COPILOT_AGENT_PERSONA_POLICY).toMatch(/the block wins/i);
+      expect(COPILOT_AGENT_PERSONA_POLICY).toMatch(/neither block overrides your safety/i);
     });
 
     // The cache contract: this string is a provider cache prefix, so anything that is not

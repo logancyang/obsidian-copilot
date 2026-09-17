@@ -1,3 +1,4 @@
+import { COPILOT_SESSION_AGENT } from "@/agentMode/session/sessionAgent";
 import {
   AgentTabStrip,
   computeVisibleCount,
@@ -119,6 +120,7 @@ describe("AgentTabStrip", () => {
         backendId: "test",
         subscribe: () => () => {},
         getLabel: () => "Existing chat",
+        getAgent: () => COPILOT_SESSION_AGENT,
         getStatus: () => "idle",
         getNeedsAttention: () => false,
       };

@@ -7,6 +7,8 @@ import { FileSystemAdapter, App, Notice, TFile } from "obsidian";
 import { join } from "node:path";
 import { waitFor } from "@testing-library/react";
 import { AgentSession } from "./AgentSession";
+import { COPILOT_SESSION_AGENT } from "./sessionAgent";
+import { BUILTIN_AGENT_SLUG, type CustomAgent } from "@/agents/types";
 import type { AgentModelPreloader } from "./AgentModelPreloader";
 import { buildNativeChatId } from "@/utils/nativeChatId";
 import { CHAT_AGENT_VIEWTYPE } from "@/constants";
@@ -183,6 +185,12 @@ function makeMockSession(overrides: {
 }): AgentSession {
   const sessionId = overrides.backendSessionId ?? `backend-${nextBackendSessionId++}`;
   let label: string | null = overrides.label ?? null;
+  let sessionAgent: {
+    slug: string | null;
+    name: string;
+    icon: string;
+    personaBlock: string | null;
+  } = COPILOT_SESSION_AGENT;
   let labelSource: "user" | "agent" | null = overrides.label ? "agent" : null;
   let status: "starting" | "idle" | "running" | "awaiting_permission" | "error" | "closed" = "idle";
   let needsAttention = false;
@@ -207,6 +215,10 @@ function makeMockSession(overrides: {
     setModel: jest.fn(),
     setMode: jest.fn(),
     setConfigOption: jest.fn(),
+    getAgent: () => sessionAgent,
+    setAgent: (next: unknown) => {
+      sessionAgent = next as typeof sessionAgent;
+    },
     getLabel: () => label,
     getLabelSource: () => labelSource,
     restoreLabel: (next: string, source: "user" | "agent") => {
@@ -215,6 +227,11 @@ function makeMockSession(overrides: {
     },
     setLabel: jest.fn(),
     getSessionUsage: () => null,
+    seedSessionUsage: jest.fn(),
+    loadDisplayMessages: (messages: { message: string }[]) => {
+      displayMessages = messages;
+      hasUserVisibleMessages = messages.length > 0;
+    },
     subscribe: (l: Parameters<typeof listeners.add>[0]) => {
       listeners.add(l);
       return () => listeners.delete(l);
@@ -362,7 +379,8 @@ function modelCatalog(baseModelId: string): BackendModelCatalog {
 
 function buildManager(
   modelPreloaderOverrides: Partial<AgentModelPreloader> = {},
-  persistenceManager?: ConstructorParameters<typeof AgentSessionManager>[2]["persistenceManager"]
+  persistenceManager?: ConstructorParameters<typeof AgentSessionManager>[2]["persistenceManager"],
+  agentFileManager?: ConstructorParameters<typeof AgentSessionManager>[2]["agentFileManager"]
 ): AgentSessionManager {
   const descriptor = buildDescriptor();
   const modelPreloader = {
@@ -382,6 +400,7 @@ function buildManager(
     buildPlugin() as unknown as ConstructorParameters<typeof AgentSessionManager>[1],
     {
       persistenceManager,
+      agentFileManager,
       permissionPrompter: jest.fn(),
       resolveDescriptor: (id) => (id === descriptor.id ? descriptor : undefined),
       modelPreloader: modelPreloader as unknown as ConstructorParameters<
@@ -4626,5 +4645,270 @@ describe("AgentSessionManager context-source dirty tracking", () => {
     expect(m.getProjectContextUpdates(session.internalId, PID)?.block).toContain(
       "<project_context_updates>"
     );
+  });
+});
+
+describe("AgentSessionManager talking-to selection", () => {
+  /** An agent folder reader over a fixed roster, standing in for the vault. */
+  function buildAgentFiles(agents: CustomAgent[], memory = "## About the user\n\n- knows things") {
+    return {
+      listAgents: jest.fn(async () =>
+        agents.map((agent) => ({
+          agent,
+          folderPath: `copilot/agents/${agent.slug}`,
+          filePath: `copilot/agents/${agent.slug}/agent.md`,
+          memoryPath: `copilot/agents/${agent.slug}/MEMORY.md`,
+          memoryBytes: memory.length,
+        }))
+      ),
+      readAgent: jest.fn(async (slug: string) => {
+        const agent = agents.find((candidate) => candidate.slug === slug);
+        return agent
+          ? {
+              agent,
+              folderPath: `copilot/agents/${slug}`,
+              filePath: `copilot/agents/${slug}/agent.md`,
+              memoryPath: `copilot/agents/${slug}/MEMORY.md`,
+              memoryBytes: memory.length,
+            }
+          : null;
+      }),
+      readMemoryDocument: jest.fn(async () => ({ text: memory, modifiedAtMs: 1_700_000_000_000 })),
+    } as unknown as ConstructorParameters<typeof AgentSessionManager>[2]["agentFileManager"];
+  }
+
+  function jennifer(overrides: Partial<CustomAgent> = {}): CustomAgent {
+    return {
+      slug: "jennifer",
+      name: "Jennifer",
+      description: "Skeptical editor.",
+      icon: "🪶",
+      backendId: null,
+      modelId: null,
+      memoryEnabled: true,
+      created: "2026-09-16T10:00:00Z",
+      instructions: "You are Jennifer, a developmental editor.",
+      ...overrides,
+    };
+  }
+
+  it("offers the built-in Copilot alone until an agent exists", async () => {
+    const manager = buildManager({}, undefined, buildAgentFiles([]));
+    await manager.refreshAgents();
+
+    expect(manager.getAgentEntries().map((entry) => entry.slug)).toEqual([BUILTIN_AGENT_SLUG]);
+    expect(manager.getSelectedAgentSlug()).toBe(BUILTIN_AGENT_SLUG);
+  });
+
+  it("lists every agent after Copilot, with its icon and description", async () => {
+    const manager = buildManager({}, undefined, buildAgentFiles([jennifer()]));
+    await manager.refreshAgents();
+
+    expect(manager.getAgentEntries().map((entry) => entry.name)).toEqual(["Copilot", "Jennifer"]);
+    expect(manager.getAgentEntries()[1]).toMatchObject({
+      icon: "🪶",
+      description: "Skeptical editor.",
+    });
+  });
+
+  it("applies a new selection to the next new chat and to chats with no message yet", async () => {
+    // The rule from `designdocs/CUSTOM_AGENTS.md` §3: a conversation already in
+    // character keeps its agent; an untouched one follows the picker.
+    const manager = buildManager({}, undefined, buildAgentFiles([jennifer()]));
+    const started = await manager.createSession();
+    getSessionTestHandle(started).setHasUserVisibleMessages(true);
+    const untouched = await manager.createSession();
+
+    await manager.setSelectedAgent("jennifer");
+    const next = await manager.createSession();
+
+    expect(started.getAgent().slug).toBeNull();
+    expect(untouched.getAgent()).toMatchObject({ slug: "jennifer", name: "Jennifer", icon: "🪶" });
+    expect(next.getAgent().slug).toBe("jennifer");
+  });
+
+  it("carries the agent's persona and memory into the new chat's first prompt", async () => {
+    const manager = buildManager({}, undefined, buildAgentFiles([jennifer()]));
+    await manager.setSelectedAgent("jennifer");
+
+    const persona = (await manager.createSession()).getAgent().personaBlock;
+
+    expect(persona).toContain('<agent_persona name="Jennifer">');
+    expect(persona).toContain("You are Jennifer, a developmental editor.");
+    expect(persona).toContain('<agent_memory name="Jennifer"');
+  });
+
+  it("sends no memory block for an agent whose memory toggle is off", async () => {
+    const manager = buildManager(
+      {},
+      undefined,
+      buildAgentFiles([jennifer({ memoryEnabled: false })])
+    );
+    await manager.setSelectedAgent("jennifer");
+
+    const persona = (await manager.createSession()).getAgent().personaBlock;
+
+    expect(persona).toContain("<agent_persona");
+    expect(persona).not.toContain("<agent_memory");
+  });
+
+  it("opens a new chat on the model the agent pinned", async () => {
+    const manager = buildManager(
+      {},
+      undefined,
+      buildAgentFiles([jennifer({ backendId: "opencode", modelId: "pinned-model" })])
+    );
+    await manager.setSelectedAgent("jennifer");
+    sessionCreateSpy.mockClear();
+
+    await manager.createSession();
+
+    expect(sessionCreateSpy.mock.calls[0][0]).toMatchObject({
+      backendId: "opencode",
+      defaultModelSelection: { baseModelId: "pinned-model", effort: null },
+    });
+  });
+
+  it("ignores a model pinned for another backend so the chat never names an unknown model", async () => {
+    const manager = buildManager(
+      {},
+      undefined,
+      buildAgentFiles([jennifer({ backendId: "claude", modelId: "opus" })])
+    );
+    await manager.setSelectedAgent("jennifer");
+    sessionCreateSpy.mockClear();
+
+    // The pinned backend is not registered here, so the create degrades to
+    // opencode — and must not carry claude's model id onto it.
+    await manager.createSession();
+
+    expect(sessionCreateSpy.mock.calls[0][0].defaultModelSelection).toBeUndefined();
+  });
+
+  it("keeps the chat's agent when the user switches its backend mid-chat", async () => {
+    const manager = buildManager({}, undefined, buildAgentFiles([jennifer()]));
+    await manager.setSelectedAgent("jennifer");
+    const chat = await manager.createSession();
+    getSessionTestHandle(chat).setHasUserVisibleMessages(true);
+    await manager.setSelectedAgent(BUILTIN_AGENT_SLUG);
+
+    const replacement = await manager.replaceSessionInPlace(chat.internalId, "opencode");
+
+    expect(replacement.getAgent().slug).toBe("jennifer");
+  });
+
+  it("drops a selection whose agent the user has since deleted", async () => {
+    const files = buildAgentFiles([jennifer()]);
+    const manager = buildManager({}, undefined, files);
+    await manager.refreshAgents();
+    await manager.setSelectedAgent("jennifer");
+
+    (files as unknown as { listAgents: jest.Mock }).listAgents.mockResolvedValueOnce([]);
+    await manager.refreshAgents();
+
+    expect(manager.getSelectedAgentSlug()).toBe(BUILTIN_AGENT_SLUG);
+  });
+
+  describe("chat persistence", () => {
+    function buildPersistence(loaded: Record<string, unknown>) {
+      return {
+        saveSession: jest.fn(
+          async (
+            _messages: unknown,
+            _backendId: string,
+            _options?: { agentSlug?: string | null }
+          ) => ({ path: "chats/agent__x.md" })
+        ),
+        loadFile: jest.fn(async () => ({
+          messages: [{ id: "m1", message: "hi", sender: "user", isVisible: true, timestamp: null }],
+          backendId: "opencode",
+          projectId: GLOBAL_SCOPE,
+          ...loaded,
+        })),
+        getAgentChatHistoryFiles: jest.fn(async () => []),
+        updateTopic: jest.fn(async () => undefined),
+        deleteFile: jest.fn(async () => undefined),
+      };
+    }
+
+    it("writes the agent's slug with the chat and nothing for Copilot", async () => {
+      const persistence = buildPersistence({});
+      const manager = buildManager(
+        {},
+        persistence as unknown as ConstructorParameters<
+          typeof AgentSessionManager
+        >[2]["persistenceManager"],
+        buildAgentFiles([jennifer()])
+      );
+      const copilotChat = await manager.createSession();
+      getSessionTestHandle(copilotChat).setMessages([{ message: "hello" }]);
+      await manager.saveActiveSession();
+      expect(persistence.saveSession.mock.calls[0][2]).toMatchObject({ agentSlug: null });
+
+      await manager.setSelectedAgent("jennifer");
+      const agentChat = await manager.createSession();
+      getSessionTestHandle(agentChat).setMessages([{ message: "hello" }]);
+      await manager.saveActiveSession();
+
+      expect(persistence.saveSession.mock.calls[1][2]).toMatchObject({ agentSlug: "jennifer" });
+    });
+
+    it("reopens a saved chat with the agent it was held with", async () => {
+      const persistence = buildPersistence({ agentSlug: "jennifer" });
+      const manager = buildManager(
+        {},
+        persistence as unknown as ConstructorParameters<
+          typeof AgentSessionManager
+        >[2]["persistenceManager"],
+        buildAgentFiles([jennifer()])
+      );
+
+      const loaded = await manager.loadSessionFromHistory(
+        new (TFile as unknown as new (path: string) => TFile)("chats/agent__x.md")
+      );
+
+      expect(loaded.getAgent()).toMatchObject({ slug: "jennifer", name: "Jennifer", icon: "🪶" });
+    });
+
+    it("opens a chat whose agent was deleted as Copilot, keeping the name as a plain label", async () => {
+      // `designdocs/CUSTOM_AGENTS.md` §1: the chat still opens, shows the name,
+      // and runs as the default assistant — no persona reaches the model.
+      const persistence = buildPersistence({ agentSlug: "jennifer" });
+      const manager = buildManager(
+        {},
+        persistence as unknown as ConstructorParameters<
+          typeof AgentSessionManager
+        >[2]["persistenceManager"],
+        buildAgentFiles([])
+      );
+
+      const loaded = await manager.loadSessionFromHistory(
+        new (TFile as unknown as new (path: string) => TFile)("chats/agent__x.md")
+      );
+
+      expect(loaded.getAgent()).toEqual({
+        slug: "jennifer",
+        name: "Jennifer",
+        icon: "",
+        personaBlock: null,
+      });
+    });
+
+    it("opens a chat saved before agents existed as Copilot", async () => {
+      const persistence = buildPersistence({});
+      const manager = buildManager(
+        {},
+        persistence as unknown as ConstructorParameters<
+          typeof AgentSessionManager
+        >[2]["persistenceManager"],
+        buildAgentFiles([jennifer()])
+      );
+
+      const loaded = await manager.loadSessionFromHistory(
+        new (TFile as unknown as new (path: string) => TFile)("chats/agent__legacy.md")
+      );
+
+      expect(loaded.getAgent()).toBe(COPILOT_SESSION_AGENT);
+    });
   });
 });
