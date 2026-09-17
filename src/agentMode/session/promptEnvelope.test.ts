@@ -138,66 +138,92 @@ describe("promptEnvelope", () => {
   describe("buildAgentMemoryBlock()", () => {
     // 2026-09-14T15:00:00 local, so the rendered day is timezone-independent.
     const MEMORY_MODIFIED_MS = new Date(2026, 8, 14, 15, 0, 0).getTime();
+    const CORE = "## About the user\n\n- Writes a climate newsletter.";
+    const INDEX =
+      "- 2026-09-14 16:20 Newsletter intro · Renamed the newsletter. [[memory/2026-09-14]]";
 
-    // designdocs/CUSTOM_AGENTS.md §5: the block carries the curated core plus
-    // today's and yesterday's notes, each labeled so the model can weigh them.
-    it("labels each section and dates the block by the newest file it read", () => {
+    // designdocs/CUSTOM_AGENTS.md §5: the block carries the curated core and the
+    // conversation index, each labeled so the model can weigh them.
+    it("labels the core and the index and dates the block by the newest file it read", () => {
       const block = buildAgentMemoryBlock("Jennifer", {
-        sections: [
-          { label: "MEMORY.md", text: "## About the user\n\n- Writes a climate newsletter." },
-          { label: "Your notes from 2026-09-14", text: "- Renamed the newsletter." },
-        ],
+        core: CORE,
+        index: INDEX,
         modifiedAtMs: MEMORY_MODIFIED_MS,
       });
 
       expect(block).toContain('<agent_memory name="Jennifer" updated="2026-09-14">');
-      expect(block).toContain("## MEMORY.md\n## About the user\n\n- Writes a climate newsletter.");
-      expect(block).toContain("## Your notes from 2026-09-14\n- Renamed the newsletter.");
+      expect(block).toContain(`## Your consolidated summary\n${CORE}`);
+      expect(block).toContain(`## Your recent conversations\n${INDEX}`);
       expect(block?.endsWith("</agent_memory>")).toBe(true);
+    });
+
+    // A one-line summary the agent reads as the whole of a conversation is worse
+    // than no line: asked what was decided, it would answer from the line rather
+    // than open the day (`designdocs/CUSTOM_AGENTS.md` §5, "Reading").
+    it("says the index is a table of contents and where the rest of a conversation is", () => {
+      const block = buildAgentMemoryBlock("Jennifer", {
+        core: CORE,
+        index: INDEX,
+        modifiedAtMs: MEMORY_MODIFIED_MS,
+      });
+
+      expect(block).toContain("an index, one line per conversation");
+      expect(block).toContain("daily note each line links to holds the rest");
+      expect(block).toContain("conversations folder holds its transcript");
+      expect(block).toContain("only when a question reaches back");
     });
 
     // A model asked what was decided today otherwise answers from the longer,
     // more confident-sounding summary and reports the day's own decision as
     // still open (`designdocs/CUSTOM_AGENTS.md` §5, "Reading").
-    it("says the dated notes outrank the consolidated summary where they differ", () => {
+    it("says the recent conversations outrank the consolidated summary where they differ", () => {
       const block = buildAgentMemoryBlock("Jennifer", {
-        sections: [{ label: "MEMORY.md", text: "- something" }],
+        core: CORE,
+        index: null,
         modifiedAtMs: MEMORY_MODIFIED_MS,
       });
 
-      expect(block).toContain("the notes are right and the summary has not caught up yet");
+      expect(block).toContain("they are right and the summary has not caught up yet");
     });
 
-    it("drops a section whose file held only whitespace", () => {
+    it("omits the index section, and the sentence explaining it, when there is no index", () => {
       const block = buildAgentMemoryBlock("Jennifer", {
-        sections: [
-          { label: "MEMORY.md", text: "- something" },
-          { label: "Your notes from 2026-09-14", text: "   \n\n" },
-        ],
+        core: CORE,
+        index: "   \n\n",
         modifiedAtMs: MEMORY_MODIFIED_MS,
       });
 
-      expect(block).toContain("- something");
-      expect(block).not.toContain("Your notes from");
+      expect(block).toContain(CORE);
+      expect(block).not.toContain("Your recent conversations");
+      expect(block).not.toContain("one line per conversation");
+    });
+
+    it("carries the index alone for an agent whose core has never been consolidated", () => {
+      const block = buildAgentMemoryBlock("Jennifer", {
+        core: null,
+        index: INDEX,
+        modifiedAtMs: MEMORY_MODIFIED_MS,
+      });
+
+      expect(block).toContain(INDEX);
+      expect(block).not.toContain("Your consolidated summary");
     });
 
     it("returns null when the agent has nothing to recall, rather than an empty notebook", () => {
       expect(buildAgentMemoryBlock("Jennifer", null)).toBeNull();
-      expect(buildAgentMemoryBlock("Jennifer", { sections: [], modifiedAtMs: 0 })).toBeNull();
+      expect(
+        buildAgentMemoryBlock("Jennifer", { core: null, index: null, modifiedAtMs: 0 })
+      ).toBeNull();
     });
 
     it("returns null when no agent is named, which is how the built-in Copilot sends nothing", () => {
-      expect(
-        buildAgentMemoryBlock("", {
-          sections: [{ label: "MEMORY.md", text: "x" }],
-          modifiedAtMs: 0,
-        })
-      ).toBeNull();
+      expect(buildAgentMemoryBlock("", { core: CORE, index: null, modifiedAtMs: 0 })).toBeNull();
     });
 
     it("escapes a double quote in the agent name so it cannot break the attribute", () => {
       const block = buildAgentMemoryBlock('Jen "The Knife"', {
-        sections: [{ label: "MEMORY.md", text: "x" }],
+        core: CORE,
+        index: null,
         modifiedAtMs: MEMORY_MODIFIED_MS,
       });
 
@@ -206,7 +232,8 @@ describe("promptEnvelope", () => {
 
     it("omits the updated attribute when no file carried a usable timestamp", () => {
       const block = buildAgentMemoryBlock("Jennifer", {
-        sections: [{ label: "MEMORY.md", text: "- something" }],
+        core: CORE,
+        index: null,
         modifiedAtMs: Number.NaN,
       });
 

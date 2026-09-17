@@ -387,7 +387,7 @@ describe("AgentFileManager", () => {
       vault.seedDailyNote("jennifer", "2026-09-16", "newer");
       vault.seedDailyNote("jennifer", "2026-09-17", "newest");
 
-      expect(await manager.readDailyNotesAfter("jennifer", "2026-09-15")).toEqual([
+      expect(await manager.readDailyNotesAfter("jennifer", "2026-09-15")).toMatchObject([
         { date: "2026-09-16", text: "newer" },
         { date: "2026-09-17", text: "newest" },
       ]);
@@ -398,8 +398,10 @@ describe("AgentFileManager", () => {
       vault.seedAgent("jennifer", { name: "Jennifer" });
       vault.seedDailyNote("jennifer", "2026-09-15", "old");
 
-      expect(await manager.readDailyNotesAfter("jennifer", null)).toEqual([
-        { date: "2026-09-15", text: "old" },
+      // The full read travels, so the index window can date the memory block by
+      // the newest note it carries.
+      expect(await manager.readDailyNotesAfter("jennifer", null)).toMatchObject([
+        { date: "2026-09-15", path: "copilot/agents/jennifer/memory/2026-09-15.md", text: "old" },
       ]);
     });
 

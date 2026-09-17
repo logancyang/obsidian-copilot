@@ -2,12 +2,9 @@ import type { AgentFileManager } from "@/agents/AgentFileManager";
 import { formatMissingAgentLabel } from "@/agents/agentDisplay";
 import { formatMemoryEntryDate } from "@/agents/agentMemory";
 import { hashMemoryContent } from "@/agents/agentMemoryFile";
+import { agentMemoryIndexCutoff, buildAgentMemoryIndex } from "@/agents/agentMemoryIndex";
 import { BUILTIN_AGENT, type CustomAgent } from "@/agents/types";
-import {
-  buildAgentMemoryBlock,
-  buildAgentPersonaBlock,
-  type AgentMemorySection,
-} from "@/agentMode/session/promptEnvelope";
+import { buildAgentMemoryBlock, buildAgentPersonaBlock } from "@/agentMode/session/promptEnvelope";
 import { logWarn } from "@/logger";
 
 /**
@@ -40,8 +37,11 @@ export interface SessionAgent {
 /**
  * What an agent currently remembers, ready to prepend to a user message.
  *
- * The fingerprint identifies the files it was built from, so a chat can tell
- * whether what it already sent is still current without re-reading anything
+ * The fingerprint identifies the block itself, so a chat can tell whether what
+ * it already sent is still current without re-reading anything. It keys on the
+ * rendered text rather than on the files behind it, so a bullet appended below
+ * a conversation's first one — which the index does not show — does not cost
+ * every later turn a re-send of an identical block
  * (`designdocs/CUSTOM_AGENTS.md` §5, "Reading").
  */
 export interface AgentMemoryInjection {
@@ -63,26 +63,19 @@ export const COPILOT_SESSION_AGENT: SessionAgent = Object.freeze({
   memory: null,
 });
 
-/** The day before `date`, stepping the calendar rather than subtracting hours. */
-function previousDay(date: Date): Date {
-  const previous = new Date(date.getTime());
-  previous.setDate(previous.getDate() - 1);
-  return previous;
-}
-
 /**
- * Read what an agent currently remembers: its curated core plus today's and
- * yesterday's daily notes.
+ * Read what an agent currently remembers: its curated core, and an index of the
+ * conversations its recent daily notes record.
  *
- * Two days rather than one because work spills over midnight and a morning
- * question about last night's decision is the case memory exists for; older
- * days are left for the agent to read on demand, which is what the `memory/`
- * folder in its persona block is for. See `designdocs/CUSTOM_AGENTS.md` §5
- * ("Reading").
+ * The notes themselves are not read into the turn. A fortnight of them would
+ * crowd out the conversation, and most of what they hold is not what the
+ * current question is about, so the agent is given the table of contents and
+ * opens a day itself when a question reaches into one. See
+ * `designdocs/CUSTOM_AGENTS.md` §5 ("Reading").
  *
  * @param files - Reader for the agent folder.
  * @param agent - The agent whose memory is read.
- * @param now - Clock, passed in so the two days read are testable.
+ * @param now - Clock, passed in so the index window is testable.
  */
 export async function loadAgentMemoryInjection(
   files: AgentFileManager,
@@ -91,27 +84,18 @@ export async function loadAgentMemoryInjection(
 ): Promise<AgentMemoryInjection | null> {
   if (!agent.memoryEnabled) return null;
   try {
-    const sections: AgentMemorySection[] = [];
-    let modifiedAtMs = 0;
-
     const core = await files.readMemoryDocument(agent.slug);
-    if (core) {
-      sections.push({ label: "Your consolidated summary", text: core.body });
-      modifiedAtMs = Math.max(modifiedAtMs, core.modifiedAtMs);
-    }
-    // Labeled by how recent they are rather than only by date, so the model
-    // does not have to work out which day "today" is to rank them.
-    for (const [day, when] of [
-      [previousDay(now), "yesterday"],
-      [now, "today"],
-    ] as const) {
-      const note = await files.readDailyNote(agent.slug, formatMemoryEntryDate(day));
-      if (!note) continue;
-      sections.push({ label: `Notes you wrote ${when}, ${note.date}`, text: note.text });
-      modifiedAtMs = Math.max(modifiedAtMs, note.modifiedAtMs);
-    }
+    const notes = await files.readDailyNotesAfter(agent.slug, agentMemoryIndexCutoff(now));
+    const modifiedAtMs = Math.max(
+      core?.modifiedAtMs ?? 0,
+      ...notes.map((note) => note.modifiedAtMs)
+    );
 
-    const block = buildAgentMemoryBlock(agent.name, { sections, modifiedAtMs });
+    const block = buildAgentMemoryBlock(agent.name, {
+      core: core?.body ?? null,
+      index: buildAgentMemoryIndex(notes),
+      modifiedAtMs,
+    });
     return block ? { block, fingerprint: hashMemoryContent(block) } : null;
   } catch (error) {
     // Unreadable memory must not stop the user talking to the agent; it answers

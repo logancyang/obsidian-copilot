@@ -11,7 +11,7 @@ jest.mock("@/logger", () => ({ logInfo: jest.fn(), logWarn: jest.fn(), logError:
 
 const MEMORY_MODIFIED_MS = new Date(2026, 8, 14, 15, 0, 0).getTime();
 const NOTE_MODIFIED_MS = new Date(2026, 8, 17, 9, 40, 0).getTime();
-/** The clock every read is taken against, so "today" and "yesterday" are fixed. */
+/** The clock every read is taken against, so the index window is fixed. */
 const NOW = new Date(2026, 8, 17, 10, 0, 0);
 
 function jennifer(overrides: Partial<CustomAgent> = {}): CustomAgent {
@@ -38,95 +38,186 @@ const CORE: AgentMemoryRead = {
   hash: "core-hash",
 };
 
-function note(date: string, text: string): DailyNoteRead {
-  return {
-    date,
-    path: `copilot/agents/jennifer/memory/${date}.md`,
-    text,
-    modifiedAtMs: NOTE_MODIFIED_MS,
-  };
+function note(date: string, text: string, modifiedAtMs = NOTE_MODIFIED_MS): DailyNoteRead {
+  return { date, path: `copilot/agents/jennifer/memory/${date}.md`, text, modifiedAtMs };
+}
+
+/** One day holding one conversation, written the way a flush writes it. */
+function dayWith(date: string, time: string, title: string, summary: string): DailyNoteRead {
+  return note(date, `# ${date}\n\n## ${time} ${title}\n\n- ${summary}\n`);
 }
 
 interface Stubs {
   files: AgentFileManager;
   readMemoryDocument: jest.Mock;
-  readDailyNote: jest.Mock;
+  readDailyNotesAfter: jest.Mock;
 }
 
 function buildFiles(
   overrides: {
     readMemoryDocument?: jest.Mock;
-    readDailyNote?: jest.Mock;
+    readDailyNotesAfter?: jest.Mock;
   } = {}
 ): Stubs {
   const readMemoryDocument = overrides.readMemoryDocument ?? jest.fn(async () => CORE);
-  const readDailyNote = overrides.readDailyNote ?? jest.fn(async () => null);
+  const readDailyNotesAfter = overrides.readDailyNotesAfter ?? jest.fn(async () => []);
   return {
     files: {
       readMemoryDocument,
-      readDailyNote,
+      readDailyNotesAfter,
       getDailyNotePath: (slug: string, date: string) => `copilot/agents/${slug}/memory/${date}.md`,
       getMemoryFolderPath: (slug: string) => `copilot/agents/${slug}/memory`,
     } as unknown as AgentFileManager,
     readMemoryDocument,
-    readDailyNote,
+    readDailyNotesAfter,
   };
 }
 
 describe("sessionAgent", () => {
   describe("loadAgentMemoryInjection()", () => {
-    // designdocs/CUSTOM_AGENTS.md §5: the block carries MEMORY.md plus today's
-    // and yesterday's notes, each labeled.
-    it("carries the curated core and the two most recent days, labeled", async () => {
-      const { files, readDailyNote } = buildFiles({
-        readDailyNote: jest.fn(async (_slug: string, date: string) =>
-          date === "2026-09-17" ? note(date, "- Renamed the newsletter.") : note(date, "- Older.")
-        ),
+    // designdocs/CUSTOM_AGENTS.md §5: the block carries MEMORY.md plus an index
+    // of the conversations the recent daily notes record, not the notes.
+    it("carries the curated core and an index line per recent conversation", async () => {
+      const { files } = buildFiles({
+        readDailyNotesAfter: jest.fn(async () => [
+          dayWith("2026-09-16", "11:00", "Pitch list", "Ranked the six pitches."),
+          dayWith("2026-09-17", "09:40", "Grid Notes intro", "Cut the intro to one paragraph."),
+        ]),
       });
 
       const memory = await loadAgentMemoryInjection(files, jennifer(), NOW);
 
-      expect(readDailyNote.mock.calls.map((call) => call[1])).toEqual(["2026-09-16", "2026-09-17"]);
       expect(memory?.block).toContain("## Your consolidated summary");
       expect(memory?.block).toContain("Writes a climate newsletter.");
-      expect(memory?.block).toContain("## Notes you wrote yesterday, 2026-09-16");
-      expect(memory?.block).toContain("## Notes you wrote today, 2026-09-17");
+      expect(memory?.block).toContain("## Your recent conversations");
+      expect(memory?.block).toContain(
+        "- 2026-09-17 09:40 Grid Notes intro · Cut the intro to one paragraph. [[memory/2026-09-17]]"
+      );
+      expect(memory?.block).toContain(
+        "- 2026-09-16 11:00 Pitch list · Ranked the six pitches. [[memory/2026-09-16]]"
+      );
     });
 
-    it("gives the same files the same fingerprint and a changed file a new one", async () => {
-      const { files } = buildFiles();
+    it("leaves the bullets a note holds beyond the first on disk", async () => {
+      const { files } = buildFiles({
+        readDailyNotesAfter: jest.fn(async () => [
+          note(
+            "2026-09-17",
+            "# 2026-09-17\n\n## 09:40 Grid Notes intro\n\n- Cut the intro.\n- The user has two cats.\n"
+          ),
+        ]),
+      });
+
+      const memory = await loadAgentMemoryInjection(files, jennifer(), NOW);
+
+      expect(memory?.block).toContain("Cut the intro.");
+      expect(memory?.block).not.toContain("two cats");
+    });
+
+    it("reads only the daily notes inside the fourteen-day window", async () => {
+      const { files, readDailyNotesAfter } = buildFiles();
+
+      await loadAgentMemoryInjection(files, jennifer(), NOW);
+
+      expect(readDailyNotesAfter).toHaveBeenCalledWith("jennifer", "2026-09-03");
+    });
+
+    it("gives the same files the same fingerprint and a changed note inside the window a new one", async () => {
+      const inWindow = dayWith("2026-09-17", "09:40", "Grid Notes intro", "Cut the intro.");
+      const { files } = buildFiles({ readDailyNotesAfter: jest.fn(async () => [inWindow]) });
       const first = await loadAgentMemoryInjection(files, jennifer(), NOW);
       const again = await loadAgentMemoryInjection(files, jennifer(), NOW);
 
       expect(again?.fingerprint).toBe(first?.fingerprint);
 
+      // A flush in another tab appends a heading to the same day, which is what
+      // has to reach the next turn in this one.
+      const flushed = buildFiles({
+        readDailyNotesAfter: jest.fn(async () => [
+          note(
+            inWindow.date,
+            `${inWindow.text}\n## 11:00 Pitch list\n\n- Ranked the six pitches.\n`
+          ),
+        ]),
+      });
+
+      expect(
+        (await loadAgentMemoryInjection(flushed.files, jennifer(), NOW))?.fingerprint
+      ).not.toBe(first?.fingerprint);
+    });
+
+    it("keeps the fingerprint when a day outside the window changes, which it never reads", async () => {
+      // The window is enforced by the read, so an older day cannot reach the
+      // block at all — the same read returns the same index.
+      const readDailyNotesAfter = jest.fn(async (_slug: string, after: string) =>
+        after === "2026-09-03"
+          ? [dayWith("2026-09-17", "09:40", "Grid Notes intro", "Cut the intro.")]
+          : []
+      );
+      const { files } = buildFiles({ readDailyNotesAfter });
+
+      const first = await loadAgentMemoryInjection(files, jennifer(), NOW);
+      const again = await loadAgentMemoryInjection(files, jennifer(), NOW);
+
+      expect(again?.fingerprint).toBe(first?.fingerprint);
+      expect(readDailyNotesAfter.mock.calls.map((call) => call[1])).toEqual([
+        "2026-09-03",
+        "2026-09-03",
+      ]);
+    });
+
+    it("gives an edited MEMORY.md a new fingerprint", async () => {
+      const { files } = buildFiles();
+      const first = await loadAgentMemoryInjection(files, jennifer(), NOW);
+
       const edited = buildFiles({
         readMemoryDocument: jest.fn(async () => ({ ...CORE, body: "## About the user\n\n- New." })),
       });
-      const changed = await loadAgentMemoryInjection(edited.files, jennifer(), NOW);
 
-      expect(changed?.fingerprint).not.toBe(first?.fingerprint);
-    });
-
-    it("steps the calendar back a day rather than subtracting hours", async () => {
-      const { readDailyNote, files } = buildFiles();
-
-      await loadAgentMemoryInjection(files, jennifer(), new Date(2026, 8, 1, 10, 0, 0));
-
-      expect(readDailyNote.mock.calls.map((call) => call[1])).toEqual(["2026-08-31", "2026-09-01"]);
+      expect((await loadAgentMemoryInjection(edited.files, jennifer(), NOW))?.fingerprint).not.toBe(
+        first?.fingerprint
+      );
     });
 
     it("never reads a file when the agent's memory toggle is off", async () => {
-      const { files, readMemoryDocument, readDailyNote } = buildFiles();
+      const { files, readMemoryDocument, readDailyNotesAfter } = buildFiles();
 
       expect(
         await loadAgentMemoryInjection(files, jennifer({ memoryEnabled: false }), NOW)
       ).toBeNull();
       expect(readMemoryDocument).not.toHaveBeenCalled();
-      expect(readDailyNote).not.toHaveBeenCalled();
+      expect(readDailyNotesAfter).not.toHaveBeenCalled();
     });
 
-    it("reports nothing when the agent has neither a core nor any recent notes", async () => {
+    it("carries the index alone for an agent whose MEMORY.md is missing", async () => {
+      const { files } = buildFiles({
+        readMemoryDocument: jest.fn(async () => null),
+        readDailyNotesAfter: jest.fn(async () => [
+          dayWith("2026-09-17", "09:40", "Grid Notes intro", "Cut the intro."),
+        ]),
+      });
+
+      const memory = await loadAgentMemoryInjection(files, jennifer(), NOW);
+
+      expect(memory?.block).toContain("Grid Notes intro");
+      expect(memory?.block).not.toContain("Your consolidated summary");
+    });
+
+    it("carries a legacy MEMORY.md that has no frontmatter, which is every pre-consolidation file", async () => {
+      const { files } = buildFiles({
+        readMemoryDocument: jest.fn(async () => ({
+          ...CORE,
+          consolidatedThrough: null,
+          body: "## About the user\n\n- Writes a climate newsletter.",
+        })),
+      });
+
+      expect((await loadAgentMemoryInjection(files, jennifer(), NOW))?.block).toContain(
+        "Writes a climate newsletter."
+      );
+    });
+
+    it("reports nothing when the agent has neither a core nor any recent conversation", async () => {
       const { files } = buildFiles({ readMemoryDocument: jest.fn(async () => null) });
 
       expect(await loadAgentMemoryInjection(files, jennifer(), NOW)).toBeNull();
@@ -165,6 +256,7 @@ describe("sessionAgent", () => {
       const agent = await loadSessionAgent(files, jennifer());
 
       expect(agent.personaBlock).toContain("copilot/agents/jennifer/memory/");
+      expect(agent.personaBlock).toContain("open a day's file when a question reaches past");
       expect(agent.personaBlock).toContain("Never edit your MEMORY.md.");
     });
 

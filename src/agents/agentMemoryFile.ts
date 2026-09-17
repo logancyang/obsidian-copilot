@@ -147,3 +147,53 @@ export function appendToDailyNote(existing: string | null, date: string, section
   }
   return `${existing.replace(/\s+$/, "")}\n\n${section}`;
 }
+
+/** One conversation as a daily note records it: its heading, and what it was about. */
+export interface DailyNoteConversation {
+  /** Time the heading is stamped with, as `HH:MM`. */
+  time: string;
+  /** Chat title the heading names. */
+  title: string;
+  /**
+   * The first bullet under the heading, which is the one that says what the
+   * conversation was about, or null when the heading carries no bullets (a
+   * hand-written heading, or a flush whose bullets were removed).
+   */
+  summary: string | null;
+}
+
+/** `## HH:MM <title>` — the heading one flush writes. */
+const CONVERSATION_HEADING = /^##[^\S\r\n]+([01]\d|2[0-3]):([0-5]\d)[^\S\r\n]*(.*)$/;
+
+/** A top-level bullet, which is how a flush writes every line it records. */
+const CONVERSATION_BULLET = /^[-*+][^\S\r\n]+(.*)$/;
+
+/**
+ * Read the conversations one daily note records, in the order they appear.
+ *
+ * Only `## HH:MM <title>` headings count. The `memory/` folder is an ordinary
+ * vault folder and the note itself opens with an `# YYYY-MM-DD` title, so
+ * anything else — the day's title, a heading the user typed, a line that only
+ * looks like a time — is skipped rather than indexed as a conversation that
+ * never happened. See `designdocs/CUSTOM_AGENTS.md` §5 ("Reading").
+ *
+ * @param text - The note's contents as they are on disk.
+ */
+export function parseDailyNoteConversations(text: string): DailyNoteConversation[] {
+  const conversations: DailyNoteConversation[] = [];
+  for (const line of (text || "").split(/\r?\n/)) {
+    const heading = CONVERSATION_HEADING.exec(line);
+    if (heading) {
+      const title = heading[3].trim().replace(/\s+/g, " ");
+      conversations.push({ time: `${heading[1]}:${heading[2]}`, title, summary: null });
+      continue;
+    }
+    const current = conversations[conversations.length - 1];
+    // Only the first bullet is kept: it is the one that says what the
+    // conversation was about, and the rest are what the index points at.
+    if (!current || current.summary) continue;
+    const bullet = CONVERSATION_BULLET.exec(line.trim());
+    if (bullet && bullet[1].trim()) current.summary = bullet[1].trim().replace(/\s+/g, " ");
+  }
+  return conversations;
+}
