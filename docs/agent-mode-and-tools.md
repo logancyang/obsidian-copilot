@@ -121,7 +121,7 @@ Agent Chat keeps each conversation separate:
 
 - Select **+** for another session. Each tab keeps its own history, draft, attachments, and queued follow-ups.
 - Select **New Chat** to reset the current tab.
-- Select **Stop** to cancel the current turn. Queued follow-ups return to the message box, with their notes and images, so you can edit or resend them.
+- Select **Stop** to cancel the current turn. Queued follow-ups return to the message box, with their notes, web pages, agent mentions, and images, so you can edit or resend them. Queued content comes before the current draft, and custom commands return as their expanded text.
 - Use **Recent Chats** from the Agent Chat home screen, or **Chat History** inside a conversation, to resume saved work. The **Recent Chats** list can be scrolled or searched.
 - Add the active note, selected text, other notes, folders, a Copilot Web Viewer tab, or supported images. You can also mention a note with `[[Note title]]`.
 - Hover the context ring beside the send controls to see how much of the model's context window is in use. The ring stays empty until the agent reports usage, and a stopped response keeps the last reported reading. If the connected account reports usage limits, the same panel shows the available limit and reset time.

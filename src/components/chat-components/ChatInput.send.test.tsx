@@ -1,6 +1,18 @@
-import ChatInput, { type ChatInputProps } from "@/components/chat-components/ChatInput";
-import { fireEvent, render, screen } from "@testing-library/react";
+import ChatInput, {
+  type ChatInputHandle,
+  type ChatInputProps,
+} from "@/components/chat-components/ChatInput";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
+import {
+  createEditor,
+  $getRoot,
+  $createParagraphNode,
+  $createTextNode,
+  type LexicalEditor,
+} from "lexical";
+import { AgentPillNode, $createAgentPillNode, $isAgentPillNode } from "./pills/AgentPillNode";
+let mockEditor: LexicalEditor;
 
 jest.mock("@/aiParams", () => ({
   useChainType: jest.fn().mockReturnValue(["agent"]),
@@ -16,9 +28,40 @@ jest.mock("@/components/chat-components/AddContextButton", () => ({
 }));
 jest.mock("@/components/chat-components/LexicalEditor", () => ({
   __esModule: true,
-  default: ({ onSubmit }: { onSubmit: () => void }) => (
-    <input aria-label="Message" onKeyDown={(event) => event.key === "Enter" && onSubmit()} />
-  ),
+  default: function MockLexicalEditor({
+    onSubmit,
+    onEditorReady,
+    value,
+  }: {
+    onSubmit: () => void;
+    onEditorReady: (editor: LexicalEditor) => void;
+    value: string;
+  }) {
+    React.useEffect(() => {
+      mockEditor = createEditor({
+        namespace: "restore-test",
+        nodes: [AgentPillNode],
+        onError: (error) => {
+          throw error;
+        },
+      });
+      mockEditor.update(
+        () => {
+          $getRoot().append(
+            $createParagraphNode().append(
+              $createAgentPillNode("codex", "Codex"),
+              $createTextNode(value)
+            )
+          );
+        },
+        { discrete: true }
+      );
+      onEditorReady(mockEditor);
+    }, [onEditorReady, value]);
+    return (
+      <input aria-label="Message" onKeyDown={(event) => event.key === "Enter" && onSubmit()} />
+    );
+  },
 }));
 
 const image = new File(["image bytes"], "screenshot.png", { type: "image/png" });
@@ -43,7 +86,7 @@ function composer(inputMessage: string, selectedImages: File[]) {
     includeActiveWebTab: false,
     activeWebTab: null,
   } as unknown as ChatInputProps;
-  return { node: <ChatInput {...props} />, send: props.handleSendMessage };
+  return { node: <ChatInput {...props} />, send: props.handleSendMessage, props };
 }
 
 describe("ChatInput", () => {
@@ -53,6 +96,34 @@ describe("ChatInput", () => {
   });
   afterAll(() => {
     URL.createObjectURL = createObjectURL;
+  });
+  describe("prependContent()", () => {
+    it.each(["draft in progress", ""])(
+      "restores agents, web context, and resolved text ahead of draft %p without losing existing pills https://github.com/Brevilabs/obsidian-copilot-private/issues/485",
+      (current) => {
+        const { props, send } = composer(current, []);
+        const ref: React.RefObject<ChatInputHandle> = { current: null };
+        render(<ChatInput {...props} ref={ref} />);
+        const webTab = { url: "https://example.com/report", title: "Report" };
+        act(() => ref.current!.prependContent("Review these changes", ["claude"], [webTab]));
+        const restored = mockEditor.getEditorState().read(() => ({
+          text: $getRoot().getTextContent(),
+          nodes: $getRoot()
+            .getChildren()
+            .flatMap((node) =>
+              "getChildren" in node ? (node as import("lexical").ElementNode).getChildren() : []
+            ),
+        }));
+        expect(restored.text).toBe("Review these changes" + (current ? "\n\n" + current : ""));
+        expect(restored.nodes.filter($isAgentPillNode).map((node) => node.getBackendId())).toEqual([
+          "claude",
+          "codex",
+        ]);
+        expect(props.setInputMessage).toHaveBeenCalledWith(restored.text);
+        fireEvent.keyDown(screen.getByRole("textbox", { name: "Message" }), { key: "Enter" });
+        expect(send).toHaveBeenCalledWith(expect.objectContaining({ webTabs: [webTab] }));
+      }
+    );
   });
   describe("onSendMessage()", () => {
     it.each(["", "   ", "Describe this"])(

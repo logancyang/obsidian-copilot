@@ -2,7 +2,8 @@ import { AppContext, EventTargetContext, useApp } from "@/context";
 import { render } from "@testing-library/react";
 import type { App } from "obsidian";
 import * as React from "react";
-import { GalleryProviders } from "@/components/gallery-hosts.fixtures";
+import { useChatInput } from "@/context/ChatInputContext";
+import { GalleryChatInputProvider, GalleryProviders } from "@/components/gallery-hosts.fixtures";
 
 interface ContextProbeProps {
   onRead: (app: App, eventTarget: EventTarget | undefined) => void;
@@ -13,7 +14,28 @@ function ContextProbe({ onRead }: ContextProbeProps): React.ReactElement {
   return <div>Contexts available</div>;
 }
 
+function EditorProbe() {
+  const { registerEditor } = useChatInput();
+  return (
+    <div>
+      {typeof registerEditor === "function" ? "Editor context available" : "Missing editor"}
+    </div>
+  );
+}
+
 describe("GalleryProviders", () => {
+  describe("GalleryChatInputProvider()", () => {
+    it("provides editor registration to composer stories", () => {
+      const view = render(
+        <AppContext.Provider value={{} as App}>
+          <GalleryChatInputProvider>
+            <EditorProbe />
+          </GalleryChatInputProvider>
+        </AppContext.Provider>
+      );
+      expect(view.getByText("Editor context available")).toBeTruthy();
+    });
+  });
   describe("GalleryProviders()", () => {
     it("provides the current app and one stable event target across story rerenders", () => {
       const app = {} as App;

@@ -36,31 +36,47 @@ jest.mock("@/agentMode/ui/mentionedAgents", () => ({
 // key hits (send-flow regression tests).
 let capturedAgentBrands: ReadonlyArray<unknown> | undefined;
 let capturedTopRightAccessory: React.ReactNode | undefined;
+const mockPrependContent = jest.fn();
 let capturedPlaceholder: string | undefined;
 jest.mock("@/components/chat-components/ChatInput", () => ({
   __esModule: true,
-  default: (props: {
-    agentBrands?: ReadonlyArray<unknown>;
-    topRightAccessory?: React.ReactNode;
-    placeholder?: string;
-    handleSendMessage?: () => void;
-    onStopGenerating?: () => void;
-  }) => {
-    capturedAgentBrands = props.agentBrands;
-    capturedTopRightAccessory = props.topRightAccessory;
-    capturedPlaceholder = props.placeholder;
-    return (
-      <>
-        {props.topRightAccessory}
-        <button type="button" onClick={() => props.handleSendMessage?.()}>
-          send
-        </button>
-        <button type="button" onClick={() => props.onStopGenerating?.()}>
-          stop
-        </button>
-      </>
-    );
-  },
+  default: jest.requireActual<typeof React>("react").forwardRef(
+    (
+      props: {
+        setInputMessage: React.Dispatch<React.SetStateAction<string>>;
+        agentBrands?: ReadonlyArray<unknown>;
+        topRightAccessory?: React.ReactNode;
+        placeholder?: string;
+        handleSendMessage?: () => void;
+        onStopGenerating?: () => void;
+      },
+      ref: React.ForwardedRef<import("@/components/chat-components/ChatInput").ChatInputHandle>
+    ) => {
+      React.useImperativeHandle(ref, () => ({
+        removeToolPills: jest.fn(),
+        prependContent: (text: string, agents: readonly string[], webTabs: readonly unknown[]) => {
+          mockPrependContent(text, agents, webTabs);
+          props.setInputMessage((current) =>
+            [text, current].filter((part) => part.trim()).join("\n\n")
+          );
+        },
+      }));
+      capturedAgentBrands = props.agentBrands;
+      capturedTopRightAccessory = props.topRightAccessory;
+      capturedPlaceholder = props.placeholder;
+      return (
+        <>
+          {props.topRightAccessory}
+          <button type="button" onClick={() => props.handleSendMessage?.()}>
+            send
+          </button>
+          <button type="button" onClick={() => props.onStopGenerating?.()}>
+            stop
+          </button>
+        </>
+      );
+    }
+  ),
 }));
 
 jest.mock("@/components/chat-components/hooks/useActiveWebTabState", () => ({
@@ -353,7 +369,7 @@ describe("AgentChatInput", () => {
     });
   });
   describe("handleStopGenerating()", () => {
-    it("returns queued follow-ups to the composer before cancellation settles the active turn https://github.com/Brevilabs/obsidian-copilot-private/issues/365", async () => {
+    it("returns queued follow-ups to the composer before cancellation settles the active turn https://github.com/Brevilabs/obsidian-copilot-private/issues/485", async () => {
       const { backend, getDraft, settleCancel } = setupCancellation();
       act(() => getDraft().setInput("first turn"));
       fireEvent.click(screen.getByText("send"));
@@ -371,7 +387,7 @@ describe("AgentChatInput", () => {
       await act(async () => settleCancel());
     });
 
-    it("joins several queued follow-ups ahead of text typed since they were queued", async () => {
+    it("joins several queued follow-ups ahead of text typed since they were queued https://github.com/Brevilabs/obsidian-copilot-private/issues/485", async () => {
       const { backend, getDraft, settleCancel } = setupCancellation();
       act(() => getDraft().setInput("first turn"));
       fireEvent.click(screen.getByText("send"));
@@ -390,7 +406,7 @@ describe("AgentChatInput", () => {
       await act(async () => settleCancel());
     });
 
-    it("returns a queued follow-up's notes and images to the composer", async () => {
+    it("returns a queued follow-up's notes and images to the composer https://github.com/Brevilabs/obsidian-copilot-private/issues/485", async () => {
       const note = makeFile("Queued.md");
       const { backend, getDraft, settleCancel } = setupCancellation();
       act(() => getDraft().setInput("first turn"));
@@ -415,6 +431,44 @@ describe("AgentChatInput", () => {
       await act(async () => settleCancel());
     });
 
+    it("restores resolved commands and prepends queued images before draft images https://github.com/Brevilabs/obsidian-copilot-private/issues/485", async () => {
+      const { getDraft, settleCancel } = setupCancellation();
+      act(() => {
+        getDraft().setLoading(true);
+        getDraft().setInput("current draft");
+        getDraft().setSelectedImages([image]);
+        getDraft().setQueue([
+          {
+            id: "one",
+            rawInput: "first",
+            text: "first",
+            mentionedAgents: ["claude"],
+            context: {
+              notes: [],
+              urls: [],
+              webTabs: [{ url: "https://example.com/report", title: "Report" }],
+            },
+          },
+          {
+            id: "two",
+            rawInput: "/review",
+            text: "Review the changes",
+            promptContent: [{ type: "image", mimeType: "image/png", data: "BAUG" }],
+          },
+        ]);
+      });
+      await act(async () => fireEvent.click(screen.getByText("stop")));
+      expect(getDraft().input).toBe("first\n\nReview the changes\n\ncurrent draft");
+      expect(getDraft().images[0]).toMatchObject({ name: "queued-image-1.png" });
+      expect(getDraft().images[1]).toBe(image);
+      expect(mockPrependContent).toHaveBeenLastCalledWith(
+        "first\n\nReview the changes",
+        ["claude"],
+        [{ url: "https://example.com/report", title: "Report" }]
+      );
+      await act(async () => settleCancel());
+    });
+
     it("keeps a subsequent turn running when the previous cancellation resolves https://github.com/Brevilabs/obsidian-copilot-private/issues/365", async () => {
       const { backend, getDraft, settleCancel } = setupCancellation();
       act(() => getDraft().setInput("first turn"));
@@ -430,7 +484,7 @@ describe("AgentChatInput", () => {
 
       expect(getDraft().loading).toBe(true);
     });
-    it("returns queued follow-ups to the composer but keeps the active turn running when cancellation fails https://github.com/Brevilabs/obsidian-copilot-private/issues/365", async () => {
+    it("returns queued follow-ups to the composer but keeps the active turn running when cancellation fails https://github.com/Brevilabs/obsidian-copilot-private/issues/365 https://github.com/Brevilabs/obsidian-copilot-private/issues/485", async () => {
       const { backend, getDraft, settleTurn } = setupCancellation();
       jest.mocked(backend.cancel).mockRejectedValueOnce(new Error("Cancellation failed"));
       act(() => getDraft().setInput("first turn"));

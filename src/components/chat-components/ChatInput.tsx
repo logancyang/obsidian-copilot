@@ -24,7 +24,13 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { $getSelection, $isRangeSelection, LexicalEditor as LexicalEditorType } from "lexical";
+import {
+  $getRoot,
+  $createTextNode,
+  $getSelection,
+  $isRangeSelection,
+  LexicalEditor as LexicalEditorType,
+} from "lexical";
 import { ContextControl } from "./ContextControl";
 import { AddContextButton } from "./AddContextButton";
 import { openImagePicker } from "./openImagePicker";
@@ -212,6 +218,17 @@ export interface ChatInputProps {
  */
 export interface ChatInputHandle {
   removeToolPills(toolNames: string[]): void;
+  /**
+   * Restore queued content ahead of the current draft without discarding its pills.
+   * @param text Resolved queued prompt text, including expanded custom commands.
+   * @param agentIds Queued answerers to restore as removable agent pills.
+   * @param webTabs Queued pages to restore as removable context badges.
+   */
+  prependContent(
+    text: string,
+    agentIds: readonly string[],
+    webTabs: readonly WebTabContext[]
+  ): void;
 }
 
 const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput(
@@ -725,6 +742,23 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
   useImperativeHandle(
     ref,
     () => ({
+      prependContent(text, agentIds, webTabs) {
+        setContextWebTabs((previous) => mergeWebTabContexts([...webTabs, ...previous]));
+        lexicalEditorRef.current?.update(
+          () => {
+            // Preserve the current draft's structured pills when restoring a stopped queue.
+            // https://github.com/Brevilabs/obsidian-copilot-private/issues/485
+            const root = $getRoot();
+            const pills = agentIds.map((id) =>
+              $createAgentPillNode(id, agentBrands.find((b) => b.id === id)?.displayName ?? id)
+            );
+            const separator = root.getTextContent().trim() ? "\n\n" : "";
+            root.selectStart().insertNodes([...pills, $createTextNode(text + separator)]);
+            setInputMessage(root.getTextContent());
+          },
+          { discrete: true }
+        );
+      },
       removeToolPills(toolNames: string[]) {
         if (!lexicalEditorRef.current) return;
         lexicalEditorRef.current.update(() => {
@@ -732,7 +766,7 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
         });
       },
     }),
-    []
+    [agentBrands, setInputMessage]
   );
 
   // Active note pill sync callbacks
