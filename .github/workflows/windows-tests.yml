@@ -37,6 +37,13 @@ jobs:
         with:
           path: node_modules
           key: ${{ runner.os }}-node-modules-${{ hashFiles('package-lock.json') }}
+      - name: Restore Jest transform cache
+        uses: actions/cache@v4
+        with:
+          path: .jest-cache
+          key: ${{ runner.os }}-jest-${{ matrix.shard }}-${{ hashFiles('package-lock.json', 'jest.config.js', 'jest.setup.js', 'tsconfig.json') }}-${{ hashFiles('src/**', 'dev/**', 'scripts/**') }}
+          restore-keys: |
+            ${{ runner.os }}-jest-${{ matrix.shard }}-${{ hashFiles('package-lock.json', 'jest.config.js', 'jest.setup.js', 'tsconfig.json') }}-
       - if: steps.node-modules-cache.outputs.cache-hit != 'true'
         run: npm ci
       - name: Test native PowerShell publishing wrapper
@@ -81,7 +88,7 @@ jobs:
           node --version >> windows-test-results/environment.txt
           npm.cmd --version >> windows-test-results/environment.txt
           node -p "process.platform + ' ' + process.arch" >> windows-test-results/environment.txt
-          node node_modules/jest/bin/jest.js --shard=${{ matrix.shard }}/4 --silent --testPathIgnorePatterns=openArtifactsPublishWrappers.test.ts --json --outputFile=windows-test-results/jest-${{ matrix.shard }}.json *> windows-test-results/jest-${{ matrix.shard }}.log
+          node node_modules/jest/bin/jest.js --shard=${{ matrix.shard }}/4 --cacheDirectory=.jest-cache --silent --testPathIgnorePatterns=openArtifactsPublishWrappers.test.ts --json --outputFile=windows-test-results/jest-${{ matrix.shard }}.json *> windows-test-results/jest-${{ matrix.shard }}.log
           $testExitCode = $LASTEXITCODE
           if ($testExitCode -ne 0) {
             Get-Content windows-test-results/jest-${{ matrix.shard }}.log
