@@ -3077,6 +3077,53 @@ describe("AgentSessionManager.onInstallStateChanged", () => {
     return { mgr, preloader, setInstallState: (state: InstallState) => (installState = state) };
   }
 
+  it("runs queued install work in order (https://github.com/Brevilabs/obsidian-copilot-private/issues/480)", async () => {
+    const { mgr } = buildInstallStateManager({ installState: { kind: "ready", source: "custom" } });
+    const order: string[] = [];
+    let releaseFirst!: () => void;
+    const firstPrepared = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+
+    const first = mgr.onInstallStateChanged("opencode", async () => {
+      order.push("first:start");
+      await firstPrepared;
+      order.push("first:end");
+    });
+    const second = mgr.onInstallStateChanged("opencode", async () => {
+      order.push("second:start");
+    });
+
+    await waitFor(() => expect(order).toEqual(["first:start"]));
+    releaseFirst();
+    await Promise.all([first, second]);
+
+    expect(order).toEqual(["first:start", "first:end", "second:start"]);
+  });
+
+  it("holds a session create until in-flight install work settles (https://github.com/Brevilabs/obsidian-copilot-private/issues/480)", async () => {
+    const { mgr, preloader } = buildInstallStateManager({
+      installState: { kind: "ready", source: "custom" },
+    });
+    let release!: () => void;
+    const prepared = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    sessionCreateSpy.mockClear();
+
+    const work = mgr.onInstallStateChanged("opencode", () => prepared);
+    const creating = mgr.getOrCreateActiveSession();
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    expect(sessionCreateSpy).not.toHaveBeenCalled();
+
+    release();
+    await work;
+    await creating;
+
+    expect(sessionCreateSpy).toHaveBeenCalledTimes(1);
+    expect(preloader.preload).toHaveBeenCalledWith("opencode");
+  });
+
   it("preloads a freshly-installed backend that was never probed", async () => {
     // Newly installed: nothing warm, nothing live. `restartBackend` returns
     // false, so the manager must kick a first preload — without it the picker

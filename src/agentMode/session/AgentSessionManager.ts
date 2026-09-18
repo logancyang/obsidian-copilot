@@ -264,6 +264,7 @@ export interface AgentSessionManagerOptions {
 export class AgentSessionManager {
   private backends = new Map<BackendId, BackendProcess>();
   private starting = new Map<BackendId, Promise<BackendProcess>>();
+  private readonly installWork = new Map<BackendId, Promise<void>>();
   private sessions = new Map<string, AgentSession>();
   private chatUIStates = new Map<string, AgentChatUIState>();
   private activeSessionId: string | null = null;
@@ -1174,6 +1175,10 @@ export class AgentSessionManager {
     if (this.disposed) {
       throw new Error("AgentSessionManager has been shut down");
     }
+    // A create started mid-install would adopt the outgoing runtime or a stale warm probe.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/480
+    const backendId = this.getActiveSession()?.backendId ?? getSettings().agentMode?.activeBackend;
+    if (backendId) await this.waitForBackendInstall(backendId);
     const active = this.getActiveSession();
     // Only reuse the active session when it belongs to the current scope —
     // after `enterProject` the prior scope's session may still be pointed at by
@@ -2480,8 +2485,36 @@ export class AgentSessionManager {
    * preload". The provider/system-prompt restart subscriptions always act on
    * an already-installed (already-preloaded) backend, so they only ever need
    * `restartBackend`'s restart/refresh — never a first preload.
+   *
+   * @param backendId - Backend whose installed runtime changed.
+   * @param prepare - Skill preparation that must finish before refreshing or starting its runtime.
    */
-  async onInstallStateChanged(backendId: BackendId): Promise<void> {
+  onInstallStateChanged(backendId: BackendId, prepare?: () => Promise<void>): Promise<void> {
+    // Register before preparation yields so a session start cannot race the install refresh.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/480
+    const previous = this.installWork.get(backendId) ?? Promise.resolve();
+    const work = previous
+      .catch(() => undefined)
+      .then(async () => {
+        if (this.disposed) return;
+        await prepare?.();
+        await this.refreshInstalledBackend(backendId);
+      })
+      .finally(() => {
+        if (this.installWork.get(backendId) === work) this.installWork.delete(backendId);
+        this.notify();
+      });
+    this.installWork.set(backendId, work);
+    return work;
+  }
+
+  /** Block until every queued install refresh for this backend has settled. */
+  private async waitForBackendInstall(backendId: BackendId): Promise<void> {
+    let work: Promise<void> | undefined;
+    while ((work = this.installWork.get(backendId))) await work;
+  }
+
+  private async refreshInstalledBackend(backendId: BackendId): Promise<void> {
     if (this.disposed) return;
     const installState = this.opts.resolveDescriptor(backendId)?.getInstallState(getSettings());
     // Compatibility probes publish a transient checking state before their
