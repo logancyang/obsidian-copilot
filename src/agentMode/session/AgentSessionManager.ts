@@ -3398,6 +3398,11 @@ export class AgentSessionManager {
     // conversation boundary for whatever is active — which is usually the very
     // chat being replaced.
     this.continuingSessionIds.add(oldId);
+    // A chat already in character keeps its agent across the switch. An empty
+    // chat follows the current selection instead: picking an agent whose pin
+    // changes the backend fires the selection and this switch together, and
+    // the agent the empty chat spawned with is the one being replaced.
+    const carried = replaced?.hasUserVisibleMessages() ? replaced.getAgent() : undefined;
     let created: AgentSession;
     try {
       created = await this.createSession(
@@ -3405,7 +3410,7 @@ export class AgentSessionManager {
         replacedProjectId,
         options.seedSelection,
         chatInputId,
-        replaced?.getAgent()
+        carried
       );
     } catch (error) {
       this.continuingSessionIds.delete(oldId);

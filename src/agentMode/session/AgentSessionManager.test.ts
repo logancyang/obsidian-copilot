@@ -4941,6 +4941,33 @@ describe("AgentSessionManager talking-to selection", () => {
     expect(replacement.getAgent().slug).toBe("jennifer");
   });
 
+  it("opens an empty chat's backend-switch replacement on the agent just picked, not the one it spawned with", async () => {
+    // Found live: picking an agent whose pin changes the backend fires the
+    // selection and the backend switch together. The switch replaced the
+    // empty chat before the selection had bound it, and the replacement
+    // carried the old Copilot agent across (`designdocs/CUSTOM_AGENTS.md` §3).
+    const manager = buildManager({}, undefined, buildAgentFiles([jennifer()]));
+    const chat = await manager.createSession();
+    // A vault read finishes long before a backend spawns, so the selection
+    // has bound every chat it can see while the replacement is still
+    // spawning and not yet one of them.
+    let selecting: Promise<void> = Promise.resolve();
+    const spawner = manager as unknown as {
+      ensureBackend: (...args: unknown[]) => Promise<unknown>;
+    };
+    const ensureBackend = spawner.ensureBackend.bind(manager);
+    jest.spyOn(spawner, "ensureBackend").mockImplementation(async (...args) => {
+      await selecting;
+      return ensureBackend(...args);
+    });
+
+    selecting = manager.setSelectedAgent("jennifer");
+    const replacement = await manager.replaceSessionInPlace(chat.internalId, "opencode");
+
+    expect(replacement.getAgent().slug).toBe("jennifer");
+    expect(manager.getTalkingToSlug()).toBe("jennifer");
+  });
+
   it("names the chat in front of the user's agent, not the last agent picked (designdocs/CUSTOM_AGENTS.md §3)", async () => {
     const manager = buildManager({}, undefined, buildAgentFiles([jennifer()]));
     await manager.setSelectedAgent("jennifer");
