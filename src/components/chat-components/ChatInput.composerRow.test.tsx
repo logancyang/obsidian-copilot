@@ -1,3 +1,4 @@
+import { BUILTIN_AGENT_SLUG } from "@/agents/types";
 import ChatInput, { type ChatInputProps } from "@/components/chat-components/ChatInput";
 import { render, screen } from "@testing-library/react";
 import React from "react";
@@ -18,6 +19,25 @@ jest.mock("@/components/chat-components/LexicalEditor", () => ({
 const effortOptions = [
   { value: "low", label: "Low" },
   { value: "high", label: "High" },
+];
+
+const agentRows = [
+  {
+    slug: BUILTIN_AGENT_SLUG,
+    name: "Copilot",
+    icon: "✦",
+    description: "Your vault instructions, no persona, no memory.",
+    modelKey: null,
+    effort: null,
+  },
+  {
+    slug: "jennifer",
+    name: "Jennifer",
+    icon: "🪶",
+    description: "Skeptical editor.",
+    modelKey: "sonnet|agent",
+    effort: "high",
+  },
 ];
 
 function composer(): ChatInputProps {
@@ -48,17 +68,8 @@ function composer(): ChatInputProps {
       commitSelection: jest.fn(),
     },
     agentPicker: {
-      rows: [
-        {
-          slug: "jennifer",
-          name: "Jennifer",
-          icon: "🪶",
-          description: "Skeptical editor.",
-          modelKey: null,
-          effort: null,
-        },
-      ],
-      selectedSlug: "jennifer",
+      rows: agentRows,
+      selectedSlug: BUILTIN_AGENT_SLUG,
       onSelect: jest.fn(),
     },
   } as unknown as ChatInputProps;
@@ -73,7 +84,7 @@ describe("ChatInput", () => {
       const agent = screen.getByTitle("Agent");
       const model = screen.getByTitle("Model · effort");
 
-      expect(agent.textContent).toBe("🪶Jennifer");
+      expect(agent.textContent).toBe("✦Copilot");
       expect(
         addContext.compareDocumentPosition(agent) & Node.DOCUMENT_POSITION_FOLLOWING
       ).toBeTruthy();
@@ -81,6 +92,30 @@ describe("ChatInput", () => {
       // One row, so the three controls share a baseline and the row's own gap.
       expect(agent.parentElement).toBe(addContext.parentElement);
       expect(agent.parentElement).toBe(model.parentElement);
+    });
+
+    it("drops the model picker while a custom agent answers, whose model and effort come from its own config (designdocs/CUSTOM_AGENTS.md §3)", () => {
+      const props = composer();
+      render(
+        <ChatInput {...props} agentPicker={{ ...props.agentPicker!, selectedSlug: "jennifer" }} />
+      );
+
+      const agent = screen.getByTitle("Agent");
+
+      expect(agent.textContent).toBe("🪶Jennifer");
+      expect(screen.queryByTitle("Model · effort")).toBeNull();
+    });
+
+    it("brings the model picker back when the chat returns to Copilot, which pins nothing", () => {
+      const props = composer();
+      const { rerender } = render(
+        <ChatInput {...props} agentPicker={{ ...props.agentPicker!, selectedSlug: "jennifer" }} />
+      );
+      expect(screen.queryByTitle("Model · effort")).toBeNull();
+
+      rerender(<ChatInput {...props} />);
+
+      expect(screen.getByTitle("Model · effort")).toBeTruthy();
     });
 
     it("renders no agent picker when the caller supplies no roster, as Quick Chat does", () => {
