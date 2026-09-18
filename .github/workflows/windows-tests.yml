@@ -4,6 +4,8 @@ name: Windows tests
 # Releases call the same jobs pinned to their exact merge commit.
 # https://github.com/Brevilabs/obsidian-copilot-private/issues/479
 on:
+  push:
+    branches: [master]
   pull_request:
   workflow_call:
     inputs:
@@ -17,8 +19,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && inputs.ref == '' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' && inputs.ref == '' }}
 
 jobs:
   publish-windows:
