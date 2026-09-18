@@ -228,6 +228,7 @@ export interface ToolCallDelta {
   kind?: AgentToolKind;
   status?: AgentToolStatus;
   rawInput?: unknown;
+  rawOutput?: unknown;
   content?: ToolCallContent[] | null;
   locations?: Array<{ path: string; line?: number | null }> | null;
   vendorToolName?: string;
@@ -467,6 +468,19 @@ export interface AgentChatMessage {
   turnStopReason?: StopReason;
   turnDurationMs?: number;
   fanout?: FanoutTurn;
+  fileChanges?: TurnFileChange[];
+}
+
+// Snapshot the vault around the turn instead of merging the agent's edits: backends
+// report edits too differently to combine, and a turn is the review boundary.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/347
+export interface TurnFileChange {
+  path: string;
+  status: "modified" | "created" | "deleted";
+  before: string | null;
+  after: string | null;
+  additions: number;
+  deletions: number;
 }
 
 export type NewAgentChatMessage = Omit<AgentChatMessage, "id"> & { id?: string };

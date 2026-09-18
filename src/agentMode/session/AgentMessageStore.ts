@@ -10,6 +10,7 @@ import {
   AgentToolCallOutput,
   NewAgentChatMessage,
   StopReason,
+  TurnFileChange,
 } from "@/agentMode/session/types";
 import { USER_SENDER } from "@/constants";
 import { FormattedDateTime, MessageContext } from "@/types/message";
@@ -28,6 +29,7 @@ interface StoredAgentMessage {
   turnStopReason?: StopReason;
   turnDurationMs?: number;
   fanout?: FanoutTurn;
+  fileChanges?: TurnFileChange[];
   version: number;
 }
 
@@ -261,6 +263,14 @@ export class AgentMessageStore {
     return true;
   }
 
+  setFileChanges(id: string, changes: TurnFileChange[]): boolean {
+    const msg = this.messages.find((m) => m.id === id);
+    if (!msg) return false;
+    msg.fileChanges = changes;
+    this.touch(msg);
+    return true;
+  }
+
   appendDisplayText(id: string, chunk: string): boolean {
     const msg = this.messages.find((m) => m.id === id);
     if (!msg) return false;
@@ -458,6 +468,7 @@ export class AgentMessageStore {
       parts: m.parts,
       turnStopReason: m.turnStopReason,
       turnDurationMs: m.turnDurationMs,
+      ...(m.fileChanges ? { fileChanges: m.fileChanges } : {}),
       ...(m.fanout ? { fanout: snapshotFanoutTurn(m.fanout) } : {}),
     };
   }
