@@ -82,9 +82,11 @@ jobs:
       - name: Run remaining native Windows unit suite
         shell: pwsh
         run: |
-          npm.cmd test -- --shard=${{ matrix.shard }}/4 --maxWorkers=4 --testPathIgnorePatterns=openArtifactsPublishWrappers.test.ts --json --outputFile=windows-test-results/jest-${{ matrix.shard }}.json *> windows-test-results/jest-${{ matrix.shard }}.log
+          npm.cmd test -- --shard=${{ matrix.shard }}/4 --silent --testPathIgnorePatterns=openArtifactsPublishWrappers.test.ts --json --outputFile=windows-test-results/jest-${{ matrix.shard }}.json *> windows-test-results/jest-${{ matrix.shard }}.log
           $testExitCode = $LASTEXITCODE
-          Get-Content windows-test-results/jest-${{ matrix.shard }}.log
+          if ($testExitCode -ne 0) {
+            Get-Content windows-test-results/jest-${{ matrix.shard }}.log
+          }
           exit $testExitCode
       - name: Retain native test results
         if: always()

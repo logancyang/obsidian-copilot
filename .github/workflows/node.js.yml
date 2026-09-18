@@ -28,7 +28,7 @@ jobs:
           node-version: 22.x
           cache: npm
       - run: npm ci
-      - run: npm test -- --shard=${{ matrix.shard }}/4 --maxWorkers=4
+      - run: npm test -- --shard=${{ matrix.shard }}/4
 
   lint:
     name: Lint and PR size (22.x)
