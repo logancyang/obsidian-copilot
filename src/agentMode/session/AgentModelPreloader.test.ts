@@ -110,6 +110,25 @@ function buildDescriptor(makeProc: () => MockProcHandle): {
 }
 
 describe("AgentModelPreloader", () => {
+  describe("preload()", () => {
+    it("does not start or probe an incompatible binary (https://github.com/Brevilabs/obsidian-copilot-private/issues/480)", async () => {
+      const { descriptor, procHandle } = buildDescriptor(() => makeMockProc());
+      descriptor.getInstallState = () => ({
+        kind: "incompatible",
+        source: "custom",
+        currentVersion: "1",
+        minVersion: "2",
+        message: "Upgrade required",
+      });
+      const preloader = new AgentModelPreloader(buildApp(), buildPlugin(), () => descriptor);
+      await preloader.preload(descriptor.id);
+      expect(descriptor.createBackendProcess).not.toHaveBeenCalled();
+      expect(procHandle.start).not.toHaveBeenCalled();
+      expect(procHandle.newSession).not.toHaveBeenCalled();
+      expect(preloader.takeWarm(descriptor.id)).toBeNull();
+      expect(preloader.getCachedModelCatalog(descriptor.id)).toBeNull();
+    });
+  });
   describe("getCachedModelCatalog()", () => {
     it("exposes only the discovered model catalog from a full probe state", async () => {
       const probeState: BackendState = {
