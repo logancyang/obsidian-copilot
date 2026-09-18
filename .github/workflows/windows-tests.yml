@@ -1,0 +1,81 @@
+name: Windows tests
+
+# Every PR gets native coverage, including drafts and changes outside src/.
+# Releases call the same jobs pinned to their exact merge commit.
+# https://github.com/Brevilabs/obsidian-copilot-private/issues/479
+on:
+  pull_request:
+  workflow_call:
+    inputs:
+      ref:
+        description: Commit to test; empty uses the pull request merge ref
+        type: string
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  publish-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: npm
+      - run: npm ci
+      - name: Test native PowerShell publishing wrapper
+        run: npm test -- --runInBand src/agentMode/skills/builtin/openArtifactsPublishWrappers.test.ts
+
+  # Native coverage is required to diagnose Windows-only fixture failures.
+  # https://github.com/logancyang/obsidian-copilot/issues/2967
+  test-windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: npm
+      - name: Record native test environment
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path windows-test-results
+          git rev-parse HEAD > windows-test-results/environment.txt
+          [System.Environment]::OSVersion.VersionString >> windows-test-results/environment.txt
+          node --version >> windows-test-results/environment.txt
+          npm.cmd --version >> windows-test-results/environment.txt
+          node -p "process.platform + ' ' + process.arch" >> windows-test-results/environment.txt
+      - run: npm ci
+        id: install
+      # The PowerShell wrapper suite runs in publish-windows. Running it again
+      # in the full-suite process intermittently exceeds its subprocess timeout.
+      - name: Run remaining native Windows unit suite
+        shell: pwsh
+        run: |
+          npm.cmd test -- --testPathIgnorePatterns=openArtifactsPublishWrappers.test.ts --json --outputFile=windows-test-results/jest.json *> windows-test-results/jest.log
+          $testExitCode = $LASTEXITCODE
+          Get-Content windows-test-results/jest.log
+          exit $testExitCode
+      - name: Verify sanitization without regexp optimization
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        shell: pwsh
+        run: |
+          node --no-regexp-optimization node_modules/jest/bin/jest.js --runInBand --runTestsByPath src/openArtifacts/openArtifactsDocument.test.ts src/utils/redactLog.test.ts *> windows-test-results/sanitization.log
+          $testExitCode = $LASTEXITCODE
+          Get-Content windows-test-results/sanitization.log
+          exit $testExitCode
+      - name: Retain native test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-unit-node-22
+          path: windows-test-results/
+          retention-days: 14

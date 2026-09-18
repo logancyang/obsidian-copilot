@@ -175,16 +175,41 @@ describe("redactLog", () => {
       );
     });
 
-    // V8 overflows on this 16 MiB input on Windows and macOS. Restore this
-    // stress case when the scanner handles it without exhausting the stack.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/202
-    it.skip("redacts a credential too long for a counted quantifier to walk (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", () => {
-      // A log can hold one unbroken multi-megabyte run, and V8 exhausts the
-      // regexp stack walking `{n,}` over it — a throw here would take down the
-      // whole report, not just this line.
+    it("redacts a multi-MiB Basic credential without exhausting the regex stack (https://github.com/Brevilabs/obsidian-copilot-private/issues/479)", () => {
       const huge = `Authorization: Basic ${"A".repeat(16 * 1024 * 1024)}`;
 
       expect(redactLogText(huge)).toBe("Authorization: Basic <redacted>");
+      expect(redactLogText(`${huge}==; Authorization: Basic dTpw`)).toBe(
+        "Authorization: Basic <redacted>; Authorization: Basic <redacted>"
+      );
+    });
+
+    it("redacts a multi-MiB address whole and preserves surrounding punctuation (https://github.com/Brevilabs/obsidian-copilot-private/issues/479)", () => {
+      const address = `${"a".repeat(16 * 1024 * 1024)}@example.com`;
+      expect(redactLogText(`before (${address}.) after`)).toBe("before (<email>.) after");
+    });
+
+    it("preserves Basic credential delimiters and padding boundaries across repeated headers (https://github.com/Brevilabs/obsidian-copilot-private/issues/479)", () => {
+      const headers = [
+        "Authorization: Basic dTpw",
+        '"authorization": "Basic YTpiYw=="',
+        "Proxy-Authorization=Basic YTpiY2Q=; next",
+        "x_authorization: bAsIc Ab+/===!",
+        "Authorization: Basic \npassword=hunter2000",
+        "Authorization: Basic =; empty",
+        "Authorization: Basic /+Aa, next",
+      ].join("\n");
+      expect(redactLogText(headers)).toBe(
+        [
+          "Authorization: Basic <redacted>",
+          '"authorization": "Basic <redacted>"',
+          "Proxy-Authorization=Basic <redacted>; next",
+          "x_authorization: bAsIc <redacted>=!",
+          "Authorization: Basic \npassword=<redacted>",
+          "Authorization: Basic =; empty",
+          "Authorization: Basic <redacted>, next",
+        ].join("\n")
+      );
     });
 
     it("removes AWS secret and session values, whose field names the key/secret rule misses (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", () => {
