@@ -130,10 +130,14 @@ field once there are more than six entries. The model picker is the model
 picker: it lists models and effort only and carries no agent section.
 
 Picking an agent that pins a backend, model, or effort switches the model
-picker to those values at once, so its trigger reflects what the agent will
-actually run on. An agent with no pins leaves the current
-model and effort alone. The user can still change model or effort after
-picking an agent; the pins are a starting point, not a lock.
+picker to those values at once, so the session runs on what the agent asks
+for. An agent with no pins leaves the current model and effort alone.
+
+While a custom agent is answering, the composer shows no model picker at all:
+the agent's config is the one place its model and effort are set, and offering
+a second one in the composer would let the two disagree about what the agent
+runs on. Copilot pins nothing, so a Copilot chat keeps the picker, and so does
+every surface with no agent roster of its own.
 
 The section is a chooser and nothing else. An agent's memory actions live on
 its row in Settings, where the agent is edited, and the chat tab menu keeps

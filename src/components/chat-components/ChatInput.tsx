@@ -31,6 +31,7 @@ import { openImagePicker } from "./openImagePicker";
 import { shouldShowAtMentionTools } from "./hooks/useAtMentionCategories";
 import { ModelEffortPicker } from "@/components/ui/ModelEffortPicker";
 import { AgentPicker, type AgentPickerSection } from "@/components/ui/AgentPicker";
+import { BUILTIN_AGENT_SLUG } from "@/agents/types";
 import { ModePicker } from "@/components/ui/ModePicker";
 import { $removePillsByPath } from "./pills/NotePillNode";
 import { $removeActiveNotePills } from "./pills/ActiveNotePillNode";
@@ -755,6 +756,13 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
     setIncludeActiveWebTab(false);
   }, [setIncludeActiveWebTab]);
 
+  // A custom agent carries its own model and effort from its config, so the
+  // composer stops offering a second place to set them: one agent, one answer
+  // to what it runs on, changed where the agent itself is edited
+  // (`designdocs/CUSTOM_AGENTS.md` §3). Copilot pins nothing, so its chats keep
+  // the picker, as does every surface that supplies no roster at all.
+  const showModelPicker = !agentPicker || agentPicker.selectedSlug === BUILTIN_AGENT_SLUG;
+
   return (
     <div
       className={cn(
@@ -874,33 +882,34 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
             />
           )}
           {agentPicker && <AgentPicker section={agentPicker} />}
-          {modelPickerOverride?.effortOptionsByModelKey && modelPickerOverride.commitSelection ? (
-            // Agent Mode: always use the merged picker, even when the active
-            // model has no effort dimension — the user can still switch to
-            // one that does, and the picker surfaces the whole catalog.
-            <ModelEffortPicker
-              override={{
-                models: modelPickerOverride.models,
-                value: modelPickerOverride.value,
-                disabled: modelPickerOverride.disabled,
-                effort: modelPickerOverride.effort,
-                effortOptionsByModelKey: modelPickerOverride.effortOptionsByModelKey,
-                commitSelection: modelPickerOverride.commitSelection,
-              }}
-              className="tw-min-w-0 tw-max-w-full tw-truncate"
-            />
-          ) : (
-            <ModelSelector
-              variant="ghost2"
-              size="fit"
-              disabled={modelPickerOverride?.disabled ?? disableModelSwitch}
-              value={modelPickerOverride?.value ?? currentModelKey}
-              models={modelPickerOverride?.models ?? settings.activeModels}
-              apiKeySettings={modelPickerOverride ? undefined : settings}
-              onChange={modelPickerOverride?.onChange ?? setCurrentModelKey}
-              className="tw-min-w-0 tw-max-w-full tw-truncate"
-            />
-          )}
+          {showModelPicker &&
+            (modelPickerOverride?.effortOptionsByModelKey && modelPickerOverride.commitSelection ? (
+              // Agent Mode: always use the merged picker, even when the active
+              // model has no effort dimension — the user can still switch to
+              // one that does, and the picker surfaces the whole catalog.
+              <ModelEffortPicker
+                override={{
+                  models: modelPickerOverride.models,
+                  value: modelPickerOverride.value,
+                  disabled: modelPickerOverride.disabled,
+                  effort: modelPickerOverride.effort,
+                  effortOptionsByModelKey: modelPickerOverride.effortOptionsByModelKey,
+                  commitSelection: modelPickerOverride.commitSelection,
+                }}
+                className="tw-min-w-0 tw-max-w-full tw-truncate"
+              />
+            ) : (
+              <ModelSelector
+                variant="ghost2"
+                size="fit"
+                disabled={modelPickerOverride?.disabled ?? disableModelSwitch}
+                value={modelPickerOverride?.value ?? currentModelKey}
+                models={modelPickerOverride?.models ?? settings.activeModels}
+                apiKeySettings={modelPickerOverride ? undefined : settings}
+                onChange={modelPickerOverride?.onChange ?? setCurrentModelKey}
+                className="tw-min-w-0 tw-max-w-full tw-truncate"
+              />
+            ))}
         </div>
 
         <div className="tw-flex tw-items-center tw-gap-1">
