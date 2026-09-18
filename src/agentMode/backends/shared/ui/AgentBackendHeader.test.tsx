@@ -26,7 +26,6 @@ describe("AgentBackendHeader", () => {
             resolvedPath={resolvedPath}
             installState={{ kind: "ready", source: "custom" }}
             authStatus={{ signedIn: true }}
-            canUpdate={false}
             onConfigure={onConfigure}
           />
         );
@@ -55,22 +54,24 @@ describe("AgentBackendHeader", () => {
       view.rerender(<AgentBackendHeader {...meta.args} {...SignedIn.args} />);
       expect(screen.getByText("Ready")).toBeTruthy();
     });
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/368 shows update, shared progress, and retry in the settings row", () => {
-      const onUpdate = jest.fn();
-      const view = render(<AgentBackendHeader {...meta.args} onUpdate={onUpdate} />);
-      fireEvent.click(screen.getByRole("button", { name: "Upgrade" }));
-      expect(onUpdate).toHaveBeenCalledTimes(1);
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/480 opens configuration without installing and retains access through progress and failure", () => {
+      const onConfigure = jest.fn();
+      const view = render(<AgentBackendHeader {...meta.args} onConfigure={onConfigure} />);
+      fireEvent.click(screen.getByRole("button", { name: "Configure" }));
+      expect(onConfigure).toHaveBeenCalledTimes(1);
       view.rerender(<AgentBackendHeader {...meta.args} {...Running.args} />);
-      expect(screen.getByRole("button", { name: "Upgrading…" }).hasAttribute("disabled")).toBe(
-        true
+      expect(screen.getByRole("button", { name: "Configure" }).hasAttribute("disabled")).toBe(
+        false
       );
       expect(screen.getByText("Downloading opencode.zip (42%)")).toBeTruthy();
       view.rerender(<AgentBackendHeader {...meta.args} {...Indeterminate.args} />);
       expect(screen.getByText("Downloading opencode.zip")).toBeTruthy();
       expect(screen.queryByText(/0%/)).toBeNull();
-      view.rerender(<AgentBackendHeader {...meta.args} {...Retry.args} onUpdate={onUpdate} />);
-      fireEvent.click(screen.getByRole("button", { name: "Retry" }));
-      expect(onUpdate).toHaveBeenCalledTimes(2);
+      view.rerender(
+        <AgentBackendHeader {...meta.args} {...Retry.args} onConfigure={onConfigure} />
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Configure" }));
+      expect(onConfigure).toHaveBeenCalledTimes(2);
     });
   });
 });

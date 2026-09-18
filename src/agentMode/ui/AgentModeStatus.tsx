@@ -8,7 +8,6 @@ import {
 import { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import { logError } from "@/logger";
 import type CopilotPlugin from "@/main";
-import { Notice } from "obsidian";
 import React from "react";
 
 interface Props {
@@ -53,19 +52,6 @@ export const AgentModeStatus: React.FC<Props> = ({ manager, plugin, onInstallCli
     });
   }, [manager, descriptor.id]);
 
-  const handleUpgrade = React.useCallback(() => {
-    const action = descriptor.managedInstall;
-    if (!action || managedInstall.kind === "running") return;
-    new Notice(`Upgrading ${descriptor.displayName}…`);
-    action
-      .run(plugin)
-      .then(() => new Notice(`${descriptor.displayName} upgraded.`))
-      .catch((e) => {
-        logError("[AgentMode] upgrade failed", e);
-        new Notice(`Failed to upgrade ${descriptor.displayName}. See console for details.`);
-      });
-  }, [descriptor, plugin, managedInstall.kind]);
-
   if (installState.kind === "absent") {
     return (
       <AgentStatusCard
@@ -80,7 +66,6 @@ export const AgentModeStatus: React.FC<Props> = ({ manager, plugin, onInstallCli
   }
 
   if (installState.kind === "incompatible") {
-    const canUpgrade = descriptor.managedInstall !== undefined;
     // Shared progress prevents duplicate updates; shared errors keep Retry available across surfaces.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
     const upgrading = managedInstall.kind === "running";
@@ -101,15 +86,10 @@ export const AgentModeStatus: React.FC<Props> = ({ manager, plugin, onInstallCli
           upgrading ? managedInstall.label : failed ? managedInstall.message : installState.message
         }
         action={{
-          label: canUpgrade
-            ? upgrading
-              ? "Upgrading…"
-              : failed
-                ? "Retry"
-                : "Upgrade"
-            : `Configure ${descriptor.displayName}`,
-          disabled: canUpgrade && upgrading,
-          onClick: canUpgrade ? handleUpgrade : () => descriptor.openInstallUI(plugin),
+          // Users choose managed or custom upgrades in configuration, never as a chat side effect.
+          // https://github.com/Brevilabs/obsidian-copilot-private/issues/480
+          label: `Configure ${descriptor.displayName}`,
+          onClick: () => descriptor.openInstallUI(plugin),
         }}
       />
     );
@@ -165,7 +145,6 @@ export const AgentModeStatus: React.FC<Props> = ({ manager, plugin, onInstallCli
     if (!heldConfigChange) return null;
     return (
       <AgentStatusCard
-        layout="row"
         message={`${descriptor.displayName} config has changed`}
         action={{
           label: reloading ? "Reloading…" : "Reload",

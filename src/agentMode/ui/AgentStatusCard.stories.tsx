@@ -55,7 +55,7 @@ export const ManagedUpgradeRequired: StoryObj<AgentStatusCardProps> = {
     summary: "opencode update required",
     tone: "warning",
     message: "opencode v1.15.0 is not supported. Copilot requires opencode v1.16.0 or newer.",
-    action: { label: "Upgrade", onClick: () => undefined },
+    action: { label: "Configure opencode", onClick: () => undefined },
   },
 };
 
@@ -64,7 +64,7 @@ export const ManagedUpgradeRunning: StoryObj<AgentStatusCardProps> = {
     summary: "Updating opencode…",
     tone: "warning",
     message: "Downloading opencode-darwin-arm64.zip 42%",
-    action: { label: "Upgrading…", onClick: () => undefined, disabled: true },
+    action: { label: "Configure opencode", onClick: () => undefined },
   },
 };
 
@@ -73,7 +73,16 @@ export const ManagedUpgradeFailed: StoryObj<AgentStatusCardProps> = {
     summary: "opencode update failed",
     tone: "error",
     message: "GitHub API rate-limited. Retry after the limit resets.",
-    action: { label: "Retry", onClick: () => undefined },
+    action: { label: "Configure opencode", onClick: () => undefined },
+  },
+};
+
+export const OutdatedCodex: StoryObj<AgentStatusCardProps> = {
+  args: {
+    summary: "Codex update required",
+    tone: "warning",
+    message: "Codex v0.0.44 is not supported. Copilot requires Codex v1.10.0 or newer.",
+    action: { label: "Configure Codex", onClick: () => undefined },
   },
 };
 
@@ -106,7 +115,6 @@ export const LongPathError: StoryObj<AgentStatusCardProps> = {
 
 export const ConfigChangedReload: StoryObj<AgentStatusCardProps> = {
   args: {
-    layout: "row",
     message: "opencode config has changed",
     action: { label: "Reload", onClick: () => undefined },
   },
@@ -114,7 +122,6 @@ export const ConfigChangedReload: StoryObj<AgentStatusCardProps> = {
 
 export const ConfigChangedReloading: StoryObj<AgentStatusCardProps> = {
   args: {
-    layout: "row",
     message: "Very Long Local Agent Backend Name config has changed",
     action: { label: "Reloading…", onClick: () => undefined, disabled: true },
   },

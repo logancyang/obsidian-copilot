@@ -71,9 +71,19 @@ You can also choose **Sign in** on the Agent Chat status card. For terminal logi
 
 Switching to your own Codex binary removes unused managed downloads. Your custom binary and account credentials remain on your computer. Cancel is available during downloads; configuration changes finish before another action can start.
 
-When the plugin's managed version changes, Agent Chat and Settings show the same **Upgrade** action and shared progress or **Retry** state. The older `@zed-industries/codex-acp` package is not supported. Copilot uses the login stored by the bundled Codex CLI. Models added under **BYOK** do not join the Codex model list.
+The older `@zed-industries/codex-acp` package is not supported. Copilot uses the login stored by the adapter's Codex CLI. Models added under **BYOK** do not join the Codex model list.
 
 For Windows-specific installation help, see [Windows setup for Agent Chat](agent-mode-windows-setup.md).
+
+### Update an outdated agent
+
+If an installed agent is too old, Agent Chat and **Settings → Copilot → Basic → Agents** show a warning.
+
+1. Select **Configure** in the warning to open the agent's configuration dialog. Opening it does not start an upgrade.
+2. For **Managed by Copilot**, choose the upgrade action or **Download & install** to install Copilot's pinned version.
+3. For **My own binary**, update your installation yourself, then use **Apply** or **Auto-detect** to validate it again. You can also choose a managed download instead.
+
+Chat and Settings keep shared installation progress and errors visible. If an installation fails, open **Configure**, resolve the reported problem, and retry there. Copilot does not upgrade agents automatically.
 
 ### Start a chat
 
@@ -197,6 +207,6 @@ Copilot also includes **research-memo** as an optional theme. For a named theme,
 
 ### Upgrading an agent
 
-When an installed agent needs a supported version, Basic → Agents and Agent Chat offer **Upgrade** if Copilot can upgrade that installation. Both show the same progress, including upgrades started in Configure. If an upgrade fails, use **Retry**. A failed custom-path selection is reported in Configure and does not turn the upgrade action into a path-validation retry.
+For minimum versions and the **Configure** upgrade flow, see [Update an outdated agent](#update-an-outdated-agent). A failed custom-path selection is reported in Configure; correct the path and use **Apply** or **Auto-detect** again.
 
 Image-only messages appear as "Image attachment" in the queue. Sessions with only images use the same fallback title in tabs and Recent Chats until a text or agent-generated title is available.
