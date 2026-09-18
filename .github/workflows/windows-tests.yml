@@ -60,7 +60,7 @@ jobs:
       - name: Run remaining native Windows unit suite
         shell: pwsh
         run: |
-          npm.cmd test -- --runInBand --testPathIgnorePatterns=openArtifactsPublishWrappers.test.ts --json --outputFile=windows-test-results/jest.json *> windows-test-results/jest.log
+          npm.cmd test -- --testPathIgnorePatterns=openArtifactsPublishWrappers.test.ts --json --outputFile=windows-test-results/jest.json *> windows-test-results/jest.log
           $testExitCode = $LASTEXITCODE
           Get-Content windows-test-results/jest.log
           exit $testExitCode
