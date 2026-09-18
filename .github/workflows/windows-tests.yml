@@ -31,7 +31,14 @@ jobs:
         with:
           node-version: 22.x
           cache: npm
-      - run: npm ci
+      - name: Restore node_modules
+        id: node-modules-cache
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node-modules-${{ hashFiles('package-lock.json') }}
+      - if: steps.node-modules-cache.outputs.cache-hit != 'true'
+        run: npm ci
       - name: Test native PowerShell publishing wrapper
         run: npm test -- --runInBand src/agentMode/skills/builtin/openArtifactsPublishWrappers.test.ts
       - name: Verify sanitization without regexp optimization
@@ -55,6 +62,12 @@ jobs:
         with:
           node-version: 22.x
           cache: npm
+      - name: Restore node_modules
+        id: node-modules-cache
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node-modules-${{ hashFiles('package-lock.json') }}
       - name: Record native test environment
         shell: pwsh
         run: |
@@ -64,7 +77,8 @@ jobs:
           node --version >> windows-test-results/environment.txt
           npm.cmd --version >> windows-test-results/environment.txt
           node -p "process.platform + ' ' + process.arch" >> windows-test-results/environment.txt
-      - run: npm ci
+      - if: steps.node-modules-cache.outputs.cache-hit != 'true'
+        run: npm ci
       # The PowerShell wrapper suite runs in publish-windows. Running it again
       # in the full-suite process intermittently exceeds its subprocess timeout.
       - name: Run remaining native Windows unit suite
