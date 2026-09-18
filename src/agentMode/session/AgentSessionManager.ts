@@ -48,6 +48,7 @@ import {
   type MarkdownChatEntry,
 } from "./chatHistoryMerge";
 import { MethodUnsupportedError } from "./errors";
+import { assertBackendCompatible } from "./descriptor";
 import { replayPersistedMode } from "./replayPersistedMode";
 import {
   FanoutOrchestrator,
@@ -3296,6 +3297,7 @@ export class AgentSessionManager {
     }
     let resumeResult: LoadSessionOutput | null = null;
     try {
+      assertBackendCompatible(descriptor, getSettings());
       resumeResult = await backend.loadSession({
         sessionId,
         cwd,
@@ -3312,6 +3314,7 @@ export class AgentSessionManager {
 
     if (!resumeResult) {
       try {
+        assertBackendCompatible(descriptor, getSettings());
         resumeResult = await backend.resumeSession({
           sessionId,
           cwd,
@@ -3678,6 +3681,7 @@ export class AgentSessionManager {
     backendId: BackendId,
     descriptor: BackendDescriptor
   ): Promise<BackendProcess> {
+    assertBackendCompatible(descriptor, getSettings());
     const existing = this.backends.get(backendId);
     if (existing && existing.isRunning()) return existing;
     const inflight = this.starting.get(backendId);
@@ -3690,6 +3694,7 @@ export class AgentSessionManager {
         await this.preloader.preload(backendId);
       }
 
+      assertBackendCompatible(descriptor, getSettings());
       const warm = this.preloader.takeWarm(backendId);
       if (warm) {
         // Probe subprocess is already started + initialize-handshaken —
