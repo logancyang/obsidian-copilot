@@ -473,6 +473,51 @@ describe("translateSdkMessage", () => {
     expect(out[0].update).toMatchObject({ status: "failed" });
   });
 
+  it("forwards the pre-edit file content an Edit result carries as rawOutput", () => {
+    const state = createTranslatorState();
+    const out = translateSdkMessage(
+      {
+        type: "user",
+        tool_use_result: {
+          filePath: "/vault/notes/a.md",
+          originalFile: "before the edit\n",
+          userModified: false,
+        },
+        message: {
+          content: [{ type: "tool_result", tool_use_id: "tu-edit", content: "ok" }],
+        } as never,
+        parent_tool_use_id: null,
+        session_id: SESSION_ID,
+      } as never,
+      SESSION_ID,
+      state
+    );
+    expect(out[0].update).toMatchObject({
+      sessionUpdate: "tool_call_update",
+      toolCallId: "tu-edit",
+      status: "completed",
+      rawOutput: { originalFile: "before the edit\n" },
+    });
+  });
+
+  it("omits rawOutput for a tool result that carries no pre-edit content", () => {
+    const state = createTranslatorState();
+    const out = translateSdkMessage(
+      {
+        type: "user",
+        tool_use_result: { stdout: "listing" },
+        message: {
+          content: [{ type: "tool_result", tool_use_id: "tu-bash", content: "ok" }],
+        } as never,
+        parent_tool_use_id: null,
+        session_id: SESSION_ID,
+      } as never,
+      SESSION_ID,
+      state
+    );
+    expect(out[0].update).not.toHaveProperty("rawOutput");
+  });
+
   it("synthesizes current_mode_update on EnterPlanMode tool_use", () => {
     const state = createTranslatorState();
     const out = translateSdkMessage(
