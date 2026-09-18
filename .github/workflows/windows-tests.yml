@@ -4,6 +4,8 @@ name: Windows tests
 # Releases call the same jobs pinned to their exact merge commit.
 # https://github.com/Brevilabs/obsidian-copilot-private/issues/479
 on:
+  push:
+    branches: [master]
   pull_request:
   workflow_call:
     inputs:
@@ -16,6 +18,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && inputs.ref == '' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' && inputs.ref == '' }}
+
 jobs:
   publish-windows:
     runs-on: windows-latest
@@ -23,28 +29,59 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.ref }}
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: 22.x
-          cache: npm
-      - run: npm ci
+      - name: Restore node_modules
+        id: node-modules-cache
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node-modules-${{ hashFiles('package-lock.json') }}
+      - if: steps.node-modules-cache.outputs.cache-hit != 'true'
+        run: npm ci
       - name: Test native PowerShell publishing wrapper
         run: npm test -- --runInBand src/agentMode/skills/builtin/openArtifactsPublishWrappers.test.ts
+      - name: Verify sanitization without regexp optimization
+        run: node --no-regexp-optimization node_modules/jest/bin/jest.js --runInBand --runTestsByPath src/openArtifacts/openArtifactsDocument.test.ts src/utils/redactLog.test.ts
 
   # Native coverage is required to diagnose Windows-only fixture failures.
   # https://github.com/logancyang/obsidian-copilot/issues/2967
   test-windows:
+    name: test-windows (shard ${{ matrix.shard }}/4)
     runs-on: windows-latest
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.ref }}
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: 22.x
-          cache: npm
-      - name: Record native test environment
+      - name: Restore node_modules
+        id: node-modules-cache
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node-modules-${{ hashFiles('package-lock.json') }}
+      - name: Restore Jest transform cache
+        uses: actions/cache@v4
+        with:
+          path: .jest-cache
+          key: ${{ runner.os }}-jest-${{ matrix.shard }}-${{ hashFiles('package-lock.json', 'jest.config.js', 'jest.setup.js', 'tsconfig.json') }}-${{ hashFiles('src/**', 'dev/**', 'scripts/**') }}
+          restore-keys: |
+            ${{ runner.os }}-jest-${{ matrix.shard }}-${{ hashFiles('package-lock.json', 'jest.config.js', 'jest.setup.js', 'tsconfig.json') }}-
+      - if: steps.node-modules-cache.outputs.cache-hit != 'true'
+        run: npm ci
+      # The PowerShell wrapper suite runs in publish-windows. Running it again
+      # in the full-suite process intermittently exceeds its subprocess timeout.
+      - name: Run remaining native Windows unit suite
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Path windows-test-results
@@ -53,29 +90,17 @@ jobs:
           node --version >> windows-test-results/environment.txt
           npm.cmd --version >> windows-test-results/environment.txt
           node -p "process.platform + ' ' + process.arch" >> windows-test-results/environment.txt
-      - run: npm ci
-        id: install
-      # The PowerShell wrapper suite runs in publish-windows. Running it again
-      # in the full-suite process intermittently exceeds its subprocess timeout.
-      - name: Run remaining native Windows unit suite
-        shell: pwsh
-        run: |
-          npm.cmd test -- --testPathIgnorePatterns=openArtifactsPublishWrappers.test.ts --json --outputFile=windows-test-results/jest.json *> windows-test-results/jest.log
+          node node_modules/jest/bin/jest.js --shard=${{ matrix.shard }}/4 --cacheDirectory=.jest-cache --silent --testPathIgnorePatterns=openArtifactsPublishWrappers.test.ts --json --outputFile=windows-test-results/jest-${{ matrix.shard }}.json *> windows-test-results/jest-${{ matrix.shard }}.log
           $testExitCode = $LASTEXITCODE
-          Get-Content windows-test-results/jest.log
-          exit $testExitCode
-      - name: Verify sanitization without regexp optimization
-        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
-        shell: pwsh
-        run: |
-          node --no-regexp-optimization node_modules/jest/bin/jest.js --runInBand --runTestsByPath src/openArtifacts/openArtifactsDocument.test.ts src/utils/redactLog.test.ts *> windows-test-results/sanitization.log
-          $testExitCode = $LASTEXITCODE
-          Get-Content windows-test-results/sanitization.log
+          if ($testExitCode -ne 0) {
+            Get-Content windows-test-results/jest-${{ matrix.shard }}.log
+          }
           exit $testExitCode
       - name: Retain native test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: windows-unit-node-22
+          name: windows-unit-node-22-shard-${{ matrix.shard }}
           path: windows-test-results/
           retention-days: 14
+          compression-level: 0
