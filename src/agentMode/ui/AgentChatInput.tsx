@@ -61,8 +61,9 @@ interface AgentChatInputProps {
   draft: AgentInputDraftControls;
   app: App;
   /**
-   * The session's main agent (the summarizer). Used by `isFanout` to collapse the
-   * degenerate `[main]` selection to the single-agent path. `null` before a session lands.
+   * The session's main agent and multi-answer summarizer. Used by `isFanout` to
+   * collapse the degenerate `[main]` selection to the single-agent path. `null`
+   * before a session lands.
    */
   mainAgentId: BackendId | null;
   updateUserMessageHistory: (newMessage: string) => void;

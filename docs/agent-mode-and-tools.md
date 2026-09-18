@@ -136,15 +136,15 @@ Type `/` to insert an enabled Skill or [Copilot command](custom-commands.md). Fo
 
 ## Multi-agent answers
 
-With active Plus access, type `@`, open **Agents**, and mention one or more other installed agents in the same prompt. Copilot sends the same question, that turn's attachments, and a bounded slice of the visible conversation to each mentioned agent in parallel. The current agent summarizes their answers; it does not automatically produce a separate answer of its own.
+With active Plus access, type `@`, open **Agents**, and mention one or more other installed agents in the same prompt. Copilot sends the same question, that turn's attachments, and a bounded slice of the visible conversation to each mentioned agent. With one other agent mentioned, only that agent responds and its answer is shown directly. With two or more, they answer in parallel and the current agent summarizes their answers without producing a separate answer of its own.
 
 This is useful for research, second opinions, and reviews. Mentioning only the current agent behaves like a normal turn.
 
-Each answer appears in its own tab, with **Summary** first. If one answerer fails, Copilot keeps the successful answers and summarizes what completed.
+Each answer appears in its own tab. A direct one-agent turn shows only that agent. A turn with two or more answerers opens with **Summary** first. If one answerer fails in a multi-agent turn, Copilot keeps the successful answers and summarizes what completed.
 
 Multi-agent answers are designed for read-only research, not edits. Copilot denies explicit vault edit, delete, and move tools, along with tools it cannot classify. Retrieval Skills can still run their own scripts under the agent's permissions, so multi-agent answers are not a security sandbox. Use only trusted Skills, and use a regular single-agent turn when you want files changed.
 
-The default model and effort saved for each mentioned agent are used for its answer. If the summary fails, its tab shows the error and any partial summary; the individual answers remain available. If an agent is not installed or ready, configure it before adding it to the prompt.
+The default model and effort saved for each mentioned agent are used for its answer. If a multi-agent summary fails, its tab shows the error and any partial summary; the individual answers remain available. If an agent is not installed or ready, configure it before adding it to the prompt.
 
 ## Skills across agents
 
@@ -189,7 +189,7 @@ Two changes never wait. Narrowing Miyo's **Search scope** and turning on Self-Ho
 
 Copilot ships an `openartifacts-publish` skill to Claude Code, Codex, and OpenCode. Publishing needs a Copilot Plus license key in Copilot settings. Copilot passes that key to the agent process, and the skill's bundled wrapper script sends it to `api.openartifacts.ai` over HTTPS. The wrapper needs only the shell tools already on your system: `sh`, `curl`, and `awk` on macOS and Linux, PowerShell on Windows.
 
-Ask the agent to publish a note. It renders the note to HTML, writes the file under `.openartifacts/handoffs/` in your vault, tells you the path, and stops. Open that file in your browser to see the page as it will be uploaded; OpenArtifacts adds its own header and footer bylines when it serves the page. Reply that it should publish, or describe changes and the agent revises the same file and asks again. The agent never publishes in the same turn that produced the HTML.
+Ask the agent to publish a note. It renders the note to HTML, using the note's file name without `.md`, converted to title case, as both the browser title and a visible heading above the note body. If the note already starts with the same heading, Copilot keeps that heading instead of adding a duplicate. If you explicitly ask for no title, Copilot does not add the visible heading but keeps the browser title. Long titles wrap on narrow screens instead of being cut off. Copilot writes the complete page under `.openartifacts/handoffs/` in your vault, tells you the path, and stops. Open that file in your browser to see the page as it will be uploaded; OpenArtifacts adds its own header and footer bylines when it serves the page. Reply that it should publish, or describe changes and the agent revises the same file and asks again. The agent never publishes in the same turn that produced the HTML.
 
 After publishing, the agent saves the public link in the note's `openartifacts` property, so publishing the note again updates the same page and the regular **Publish file to OpenArtifacts** command recognizes it as published. Notes published under the older `symposium` property keep working and move to `openartifacts` the next time they are published. If a property already holds something other than an OpenArtifacts link, the agent asks before touching it. Ask the agent to withdraw a page to take it down; it confirms first and removes the property afterwards.
 

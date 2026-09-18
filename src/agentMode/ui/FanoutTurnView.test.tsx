@@ -56,8 +56,19 @@ const Harness: React.FC<{ t: FanoutTurn }> = ({ t }) => {
 const renderView = (t: FanoutTurn) => render(<Harness t={t} />);
 
 describe("FanoutTurnView", () => {
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/481 shows only the sole mentioned agent and its answer", () => {
+    renderView(turn([answer("claude", "done", "Claude answered directly")]));
+
+    expect(screen.queryByRole("tab", { name: "Summary" })).toBeNull();
+    expect(screen.getByRole("tab", { name: /Claude/ }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByTestId("agent-md").textContent).toBe("Claude answered directly");
+  });
+
   it("defaults to the summary view (summary-first)", () => {
-    const t = turn([answer("opencode", "done", "main")], "the narrative summary");
+    const t = turn(
+      [answer("opencode", "done", "main"), answer("claude", "done", "second")],
+      "the narrative summary"
+    );
     renderView(t);
     expect(screen.getByTestId("agent-md").textContent).toBe("the narrative summary");
   });
@@ -65,7 +76,13 @@ describe("FanoutTurnView", () => {
   it.each(["", "Partial summary"])(
     "https://github.com/Brevilabs/obsidian-copilot-private/issues/219 shows the summary failure alongside any partial text: %s",
     (partialText) => {
-      const t = turn([answer("opencode", "done", "Successful answer")], partialText);
+      const t = turn(
+        [
+          answer("opencode", "done", "Successful answer"),
+          answer("claude", "done", "Second answer"),
+        ],
+        partialText
+      );
       t.summary.error = "Choose an explicit effort or update the Codex adapter.";
       renderView(t);
       expect(screen.getByText(t.summary.error)).toBeTruthy();
@@ -77,7 +94,7 @@ describe("FanoutTurnView", () => {
   );
 
   it("shows a pending placeholder when the summary has no text yet", () => {
-    const t = turn([answer("opencode", "running")], "", "pending");
+    const t = turn([answer("opencode", "running"), answer("claude", "running")], "", "pending");
     renderView(t);
     expect(screen.queryByTestId("agent-md")).toBeNull();
     expect(screen.getByText(/Waiting for answers/)).toBeTruthy();

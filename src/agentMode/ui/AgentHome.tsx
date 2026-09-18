@@ -499,7 +499,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   }
   const projectPlacement = placementRef.current;
 
-  // The session's main agent — the summarizer and the dedup anchor for
+  // The session's main agent — the multi-answer summarizer and dedup anchor for
   // `@`-mentions. The composer belongs to the ACTIVE session, so anchor to its
   // backend whenever one exists; fall back to the starting backend only for the
   // initial no-session startup. (Preferring the starting backend would mis-anchor

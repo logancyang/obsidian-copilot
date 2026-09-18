@@ -69,12 +69,13 @@ function textChunkOf(event: SessionEvent): string | null {
 export interface FanoutRunInput {
   /**
    * The `@`-mentioned installed answerers (deduped). Each gets an answer slot.
-   * Decoupled from {@link mainAgent}: the summarizer answers only if itself mentioned.
+   * Decoupled from {@link mainAgent}: the multi-answer summarizer answers only
+   * if itself mentioned.
    */
   agents: ReadonlyArray<BackendId>;
   /**
-   * The session's main agent — ALWAYS the summarizer, tracked separately from
-   * {@link agents}, whether or not it is one of the answerers.
+   * The session's main agent — the summarizer for multi-agent turns, tracked
+   * separately from {@link agents}, whether or not it is one of the answerers.
    */
   mainAgent: BackendId;
   /** The identical prompt blocks (text envelope + context + images) every agent receives. */
@@ -107,8 +108,8 @@ export function createFanoutTurn(agents: ReadonlyArray<BackendId>): FanoutTurn {
  * Orchestrates a multi-agent read-only QA turn. Every ANSWERER runs in an
  * ephemeral, read-only sub-session on its own backend (never a visible
  * AgentSession/tab) with the identical prompt; answers stream into per-agent
- * slots of one {@link FanoutTurn}. Once every answer settles the main agent
- * (summarizer) writes the narrative summary over the survivors.
+ * slots of one {@link FanoutTurn}. With multiple answerers, the main agent
+ * writes the narrative summary over the survivors after every answer settles.
  *
  * One agent's error never throws out of the run — its slot goes `error`, others
  * continue. Prompts are cancellable via `signal`; every sub-session closes at
@@ -123,9 +124,15 @@ export class FanoutOrchestrator {
 
     await Promise.all(input.agents.map((backendId) => this.runAgent(backendId, turn, input)));
 
-    // Every answer settled; the main agent summarizes the survivors. Cancellation
-    // skips it — nothing to reconcile and the turn is ending.
-    if (!input.signal.aborted) {
+    // A sole mentioned agent is already the complete response; invoking the main
+    // agent would add an unwanted second voice to a direct request.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/481
+    if (input.agents.length === 1) {
+      turn.summary.status = "done";
+      input.onChange(turn);
+    } else if (!input.signal.aborted) {
+      // Every answer settled; the main agent summarizes the survivors. Cancellation
+      // skips it — nothing to reconcile and the turn is ending.
       await this.runSummary(turn, input);
     }
 

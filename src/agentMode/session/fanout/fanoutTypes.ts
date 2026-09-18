@@ -31,12 +31,21 @@ export const FANOUT_READONLY_PREAMBLE =
 export interface FanoutTurn {
   /**
    * One slot per ANSWERER (the deduped `@`-mentioned installed agents), keyed by
-   * `BackendId`. The session main agent is the separate summarizer and has a
-   * slot only if it was itself `@`-mentioned.
+   * `BackendId`. For multiple answerers, the session main agent summarizes
+   * separately and has a slot only if it was itself `@`-mentioned.
    */
   answers: Record<BackendId, AgentAnswer>;
-  /** Narrative summary, filled by the main agent. The only part that persists. */
+  /** Narrative summary, filled by the main agent only for multi-answer turns. */
   summary: FanoutSummary;
+}
+
+/**
+ * Whether a turn's sole agent answer is the response of record. A one-answer
+ * turn with persisted summary text predates direct routing and keeps that summary.
+ * https://github.com/Brevilabs/obsidian-copilot-private/issues/481
+ */
+export function isDirectAnswerTurn(turn: FanoutTurn): boolean {
+  return Object.keys(turn.answers).length === 1 && turn.summary.text.trim().length === 0;
 }
 
 /**
@@ -90,7 +99,7 @@ export const FANOUT_TRAILING_CHUNK_GRACE_MS = 500;
 /** Status of the main-agent narrative summary slot. */
 export type FanoutSummaryStatus = "pending" | "streaming" | "done";
 
-/** The summary slot — the only part of a fan-out turn that is persisted. */
+/** The main-agent summary slot for multi-answer fan-out turns. */
 export interface FanoutSummary {
   status: FanoutSummaryStatus;
   text: string;
@@ -495,9 +504,9 @@ export function buildSummaryUserPrompt(
 }
 
 /**
- * Char cap on EACH persisted agent answer in the composite body (bounds the
- * on-disk transcript, not the model input). Large enough that a normal QA answer
- * is never clipped; the summary is persisted uncapped.
+ * Char cap on each supporting answer in a summarized composite (bounds the
+ * on-disk transcript, not the model input). A direct sole answer is the response
+ * of record and persists uncapped, like a normal assistant response.
  */
 export const FANOUT_PERSISTED_ANSWER_MAX_CHARS = 24_000;
 
@@ -575,8 +584,9 @@ const FANOUT_NO_ANSWER_NOTE = "did not answer";
  * the summary plus each agent's answer, delimited by HTML-comment section markers
  * the reload parse keys on ({@link parseFanoutComposite}); the `### Heading`
  * lines are cosmetic. A failed/cancelled agent persists its partial text when it
- * streamed any, else a body-less marker carrying `status` + `note`. Each answer
- * is capped and marker-escaped so it can't forge a section.
+ * streamed any, else a body-less marker carrying `status` + `note`. Supporting
+ * answers are capped; the response-of-record direct answer is not. Every answer
+ * is marker-escaped so it can't forge a section.
  */
 export function serializeFanoutComposite(
   turn: FanoutTurn,
@@ -585,6 +595,7 @@ export function serializeFanoutComposite(
   const { succeeded } = selectSummaryInputs(turn);
   const succeededIds = new Set(succeeded.map((s) => s.backendId));
   const summaryText = turn.summary.text.trim();
+  const shouldCapAnswers = !isDirectAnswerTurn(turn);
 
   const lines: string[] = [FANOUT_MARKER_OPEN, FANOUT_MARKER_SUMMARY, "### Summary"];
   if (summaryText.length > 0) lines.push(escapeFanoutMarkers(summaryText));
@@ -597,7 +608,9 @@ export function serializeFanoutComposite(
       lines.push(
         `<!--copilot:agent id="${escapeMarkerAttr(backendId)}"${nameAttr} status="done"-->`,
         `### ${name}`,
-        escapeFanoutMarkers(capPersistedAnswer(slot.text.trim()))
+        escapeFanoutMarkers(
+          shouldCapAnswers ? capPersistedAnswer(slot.text.trim()) : slot.text.trim()
+        )
       );
     } else {
       // A failed/cancelled agent: persist its partial text (with terminal status)
@@ -610,7 +623,7 @@ export function serializeFanoutComposite(
         lines.push(
           `<!--copilot:agent id="${escapeMarkerAttr(backendId)}"${nameAttr}${statusAttr}${errorAttr}-->`,
           `### ${name}`,
-          escapeFanoutMarkers(capPersistedAnswer(partial))
+          escapeFanoutMarkers(shouldCapAnswers ? capPersistedAnswer(partial) : partial)
         );
       } else {
         lines.push(
@@ -637,7 +650,12 @@ export function renderFanoutComposite(
   const sections: string[] = [];
 
   const summaryText = turn.summary.text.trim();
-  sections.push(summaryText.length > 0 ? `### Summary\n${summaryText}` : "### Summary");
+  // A single direct answer has no synthesized summary, so continuity replay and
+  // copy output should not invent an empty Summary section.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/481
+  if (!isDirectAnswerTurn(turn)) {
+    sections.push(summaryText.length > 0 ? `### Summary\n${summaryText}` : "### Summary");
+  }
 
   for (const backendId of Object.keys(turn.answers)) {
     const name = displayName(backendId);
