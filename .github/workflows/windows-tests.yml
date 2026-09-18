@@ -37,13 +37,6 @@ jobs:
         with:
           path: node_modules
           key: ${{ runner.os }}-node-modules-${{ hashFiles('package-lock.json') }}
-      - name: Restore Jest transform cache
-        uses: actions/cache@v4
-        with:
-          path: .jest-cache
-          key: ${{ runner.os }}-jest-${{ matrix.shard }}-${{ hashFiles('package-lock.json', 'jest.config.js', 'jest.setup.js', 'tsconfig.json') }}-${{ hashFiles('src/**', 'dev/**', 'scripts/**') }}
-          restore-keys: |
-            ${{ runner.os }}-jest-${{ matrix.shard }}-${{ hashFiles('package-lock.json', 'jest.config.js', 'jest.setup.js', 'tsconfig.json') }}-
       - if: steps.node-modules-cache.outputs.cache-hit != 'true'
         run: npm ci
       - name: Test native PowerShell publishing wrapper
@@ -75,6 +68,13 @@ jobs:
         with:
           path: node_modules
           key: ${{ runner.os }}-node-modules-${{ hashFiles('package-lock.json') }}
+      - name: Restore Jest transform cache
+        uses: actions/cache@v4
+        with:
+          path: .jest-cache
+          key: ${{ runner.os }}-jest-${{ matrix.shard }}-${{ hashFiles('package-lock.json', 'jest.config.js', 'jest.setup.js', 'tsconfig.json') }}-${{ hashFiles('src/**', 'dev/**', 'scripts/**') }}
+          restore-keys: |
+            ${{ runner.os }}-jest-${{ matrix.shard }}-${{ hashFiles('package-lock.json', 'jest.config.js', 'jest.setup.js', 'tsconfig.json') }}-
       - if: steps.node-modules-cache.outputs.cache-hit != 'true'
         run: npm ci
       # The PowerShell wrapper suite runs in publish-windows. Running it again
