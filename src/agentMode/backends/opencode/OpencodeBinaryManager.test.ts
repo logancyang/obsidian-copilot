@@ -620,25 +620,28 @@ exit 1
     expect(settingsMock.__get()).toEqual(managed);
   });
 
-  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/480 does not stamp the probed version onto a different binary configured while it ran", async () => {
-    if (process.platform === "win32") return;
-    const marker = path.join(tmpDir, "probing");
-    const file = await writeVersionStub("1.18.0", marker);
-    settingsMock.__reset({ binaryPath: file, binaryVersion: "1.15.11", binarySource: "custom" });
-    const manager = new OpencodeBinaryManager(fakePlugin);
+  it.each(["different path", "same path"] as const)(
+    "preserves a newer configuration at the %s when a stale probe finishes (https://github.com/Brevilabs/obsidian-copilot-private/issues/480)",
+    async (scenario) => {
+      if (process.platform === "win32") return;
+      const marker = path.join(tmpDir, "probing");
+      const file = await writeVersionStub("1.15.11", marker);
+      settingsMock.__reset({ binaryPath: file, binaryVersion: "1.15.11", binarySource: "custom" });
+      const manager = new OpencodeBinaryManager(fakePlugin);
 
-    const probe = manager.revalidateCustomBinary();
-    await waitFor(() => expect(fs.existsSync(marker)).toBe(true));
-    const replacement = {
-      binaryPath: path.join(tmpDir, "managed", "opencode"),
-      binaryVersion: OPENCODE_PINNED_VERSION,
-      binarySource: "managed" as const,
-    };
-    settingsMock.__reset(replacement);
-    await probe;
+      const probe = manager.revalidateCustomBinary();
+      await waitFor(() => expect(fs.existsSync(marker)).toBe(true));
+      const replacement = {
+        binaryPath: scenario === "same path" ? file : path.join(tmpDir, "managed", "opencode"),
+        binaryVersion: OPENCODE_PINNED_VERSION,
+        binarySource: scenario === "same path" ? ("custom" as const) : ("managed" as const),
+      };
+      settingsMock.__reset(replacement);
+      await probe;
 
-    expect(settingsMock.__get()).toEqual(replacement);
-  });
+      expect(settingsMock.__get()).toEqual(replacement);
+    }
+  );
 
   it("reports an unreadable binary so the caller can log it rather than persist a guess", async () => {
     settingsMock.__reset({

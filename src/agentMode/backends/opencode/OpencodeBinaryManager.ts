@@ -605,13 +605,12 @@ export class OpencodeBinaryManager extends ManagedBinaryManager<ProgressEvent, I
     if (before.binarySource !== "custom" || !before.binaryPath) return;
     const { version } = await this.validateCustomBinary(before.binaryPath);
     const after = readOpencodeSettings();
-    // Probing is asynchronous and only the version is written back, so persist
-    // nothing unless the binary just measured is still the configured one and
-    // reports something new.
+    // A delayed probe must not overwrite a newer selection or an in-place upgrade.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/480
     if (
       after.binarySource !== "custom" ||
       after.binaryPath !== before.binaryPath ||
+      after.binaryVersion !== before.binaryVersion ||
       after.binaryVersion === version
     ) {
       return;

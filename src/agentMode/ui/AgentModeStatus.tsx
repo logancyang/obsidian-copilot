@@ -66,7 +66,7 @@ export const AgentModeStatus: React.FC<Props> = ({ manager, plugin, onInstallCli
   }
 
   if (installState.kind === "incompatible") {
-    // Shared progress prevents duplicate updates; shared errors keep Retry available across surfaces.
+    // Keep progress and failures visible while configuration remains accessible.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
     const upgrading = managedInstall.kind === "running";
     const failed = managedInstall.kind === "error";

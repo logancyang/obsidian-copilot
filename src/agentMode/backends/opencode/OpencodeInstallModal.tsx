@@ -87,11 +87,7 @@ export const OpencodeConfigContainer: React.FC<{
     manager.getRuntimeState,
     manager.getRuntimeState
   );
-  // The managed panel and the warning strip both render the manager's own run,
-  // so a dialog reopened during an upgrade shows that upgrade's progress or
-  // failure instead of a second action that could only lose the lock. A failed
-  // path selection is reported by the path field, so it is not an upgrade
-  // outcome and must not turn the upgrade action into a path-validation retry.
+  // Use manager state across dialog reopenings; path-validation errors belong to the path field.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/480
   const sharedRun: OpencodeRunState =
     runtime.kind === "installing"
@@ -100,9 +96,7 @@ export const OpencodeConfigContainer: React.FC<{
         ? { kind: "error", message: runtime.message }
         : { kind: "idle" };
 
-  // Opening Configure re-reads a custom binary's version, because a user who
-  // updates their own opencode in place keeps the path Copilot persisted and
-  // would otherwise have no way to clear the outdated-install warning.
+  // Refresh the version after external upgrades.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/480
   React.useEffect(() => {
     manager
