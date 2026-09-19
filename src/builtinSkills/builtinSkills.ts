@@ -589,7 +589,7 @@ const FETCH_X = relaySkill({
   scriptFile: "fetch-x.sh",
 });
 
-const OPENARTIFACTS_PUBLISH_VERSION = 4;
+const OPENARTIFACTS_PUBLISH_VERSION = 5;
 const OPENARTIFACTS_PUBLISH_USAGE = "openartifacts-publish";
 /** Where the wrapper sends requests unless a test or self-host points it elsewhere. */
 const OPENARTIFACTS_API_HOST_ENV = "OPENARTIFACTS_API_HOST";
@@ -605,15 +605,17 @@ const OPENARTIFACTS_PUBLISH: BuiltinSkill = {
   // Published notes need a visible identity without repeating an equivalent title
   // that is already part of the note body.
   // https://github.com/logancyang/obsidian-copilot/issues/3196
+  // Existing HTML is already the complete page and must bypass Markdown rendering and cleanup.
+  // https://github.com/logancyang/obsidian-copilot/issues/3294
   skillMd: `---
 name: openartifacts-publish
-description: Publish, update, or withdraw an existing Markdown note as a public OpenArtifacts page. Use when the user asks to publish, share, update, delete, remove, or withdraw an OpenArtifacts page.
+description: Publish an existing Markdown note or local HTML file, update a published Markdown note, or withdraw an OpenArtifacts page. Use when the user asks to publish, share, update, delete, remove, or withdraw an OpenArtifacts page.
 metadata:
   copilot-enabled-agents: claude, codex, opencode
   copilot-builtin-version: "${OPENARTIFACTS_PUBLISH_VERSION}"
 ---
 
-# Publish Markdown to OpenArtifacts
+# Publish Markdown or HTML to OpenArtifacts
 
 Copilot supplies everything this skill needs through the environment:
 \`$${OPENARTIFACTS_WORKSPACE_ROOT_ENV}\` is the vault root, and \`${PLUS_ENV.licenseKey}\`
@@ -624,6 +626,8 @@ If \`${PLUS_ENV.licenseKey}\` is unset or empty, stop before generating anything
 the user: ${OPENARTIFACTS_MISSING_KEY_MESSAGE}
 
 ## 1. Prepare the page
+
+### Existing Markdown note
 
 Read one existing Markdown source note. Treat YAML frontmatter as metadata, never as page
 content. Note its \`openartifacts\` property, or on older notes the \`symposium\` property:
@@ -657,6 +661,16 @@ Themes are optional. For a named theme, check
 exists, continue with readable defaults; a missing theme must never block publishing.
 The bundled \`${OPENARTIFACTS_DEFAULT_THEME}\` is an optional example.
 
+### Existing HTML file
+
+For an existing local \`.html\` file, confirm that it exists and is at most
+\`${OPENARTIFACTS_MAX_HTML_BYTES}\` bytes. Pass that original HTML file path directly to
+the wrapper. Treat the file as the complete page: do not convert it to Markdown, and do
+not render, rewrite, or copy it into \`${OPENARTIFACTS_AGENT_HANDOFF_DIR}/\`. Use its file
+name without \`.html\` as the wrapper title without changing the document's own title or
+visible content. Skip the Markdown frontmatter, generated-title, and theme instructions
+above. The original file remains user-owned; never delete the original HTML file.
+
 ## 2. Let the user review
 
 Tell the user the absolute path of the HTML file and that opening it in a browser shows
@@ -670,11 +684,18 @@ message is an approval, ask once. Never simulate the user's approval.
 
 ## 3. Publish
 
-Run the wrapper next to this SKILL.md with the HTML file, the note's title (its file
-name without \`.md\`), and the existing \`docId\` when updating. On macOS or Linux:
+Run the wrapper next to this SKILL.md with the HTML file, its filename-derived title, and
+the existing \`docId\` when updating a Markdown note. On macOS or Linux, the Markdown path
+uses its generated handoff:
 
 \`\`\`bash
 sh "/absolute/path/to/this/skill/directory/${OPENARTIFACTS_PUBLISH_USAGE}.sh" publish "$${OPENARTIFACTS_WORKSPACE_ROOT_ENV}/${OPENARTIFACTS_AGENT_HANDOFF_DIR}/unique.html" "Note title" [docId]
+\`\`\`
+
+An existing HTML file uses its original path directly:
+
+\`\`\`bash
+sh "/absolute/path/to/this/skill/directory/${OPENARTIFACTS_PUBLISH_USAGE}.sh" publish "/absolute/path/to/page.html" "Page title"
 \`\`\`
 
 On Windows, use the \`.cmd\` wrapper (prefix with \`&\` in PowerShell):
@@ -683,11 +704,15 @@ On Windows, use the \`.cmd\` wrapper (prefix with \`&\` in PowerShell):
 & "/absolute/path/to/this/skill/directory/${OPENARTIFACTS_PUBLISH_USAGE}.cmd" publish "$env:${OPENARTIFACTS_WORKSPACE_ROOT_ENV}/${OPENARTIFACTS_AGENT_HANDOFF_DIR}/unique.html" "Note title" [docId]
 \`\`\`
 
-Success prints the server's JSON, \`{"docId", "url", "version"}\`. Set the note's
-\`openartifacts\` frontmatter property to that \`url\` (create the frontmatter block if
-needed, keep every other property) and remove a \`symposium\` property whose link has the
-same document id. Delete the HTML file from \`${OPENARTIFACTS_AGENT_HANDOFF_DIR}/\`, then
-report the URL. Publishing the same note again updates the same page.
+For an existing HTML file on Windows, replace the handoff path with the original absolute
+\`.html\` path and omit the \`docId\`.
+
+Success returns the same server receipt, \`{"docId", "url", "version"}\`, for either
+input. For a Markdown note, set its \`openartifacts\` frontmatter property to that \`url\`
+(create the frontmatter block if needed, keep every other property), remove a \`symposium\`
+property whose link has the same document id, and delete the generated HTML file from
+\`${OPENARTIFACTS_AGENT_HANDOFF_DIR}/\`. For an existing HTML file, leave the source file
+unchanged. Then report the URL. Publishing the same Markdown note again updates the same page.
 
 On failure the wrapper prints the HTTP status and the server's message to stderr and
 exits 1. Report that message verbatim. Do not retry on your own, invent a cause, strip

@@ -234,7 +234,7 @@ describe("builtinSkills", () => {
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/394 publishes over HTTPS with the injected license key and never touches the Obsidian CLI", () => {
       const skill = BUILTIN_SKILLS.find((item) => item.name === "openartifacts-publish");
       expect(skill).toBeDefined();
-      expect(skill!.version).toBe(4);
+      expect(skill!.version).toBe(5);
 
       expect(skill!.files.map((file) => file.path)).toEqual([
         "themes/research-memo.md",
@@ -321,6 +321,24 @@ describe("builtinSkills", () => {
       expect(md).toContain("do not add the `<h1>`");
       expect(md).toContain("Keep the HTML `<title>` as browser metadata");
       expect(md).toMatch(/preserve any\s+authored opening heading as note content/);
+    });
+
+    it("publishes an existing HTML file unchanged through the same wrapper https://github.com/logancyang/obsidian-copilot/issues/3294", () => {
+      const skill = BUILTIN_SKILLS.find((item) => item.name === "openartifacts-publish");
+      expect(skill).toBeDefined();
+
+      const md = skill!.skillMd;
+      expect(md).toContain("existing Markdown note or local HTML file");
+      expect(md).toContain("### Existing HTML file");
+      expect(md).toMatch(/Pass that original HTML file path directly to\s+the wrapper/);
+      expect(md).toContain("do not convert it to Markdown");
+      expect(md).toMatch(/do\s+not render, rewrite, or copy it/);
+      expect(md).toContain("never delete the original HTML file");
+      expect(md).toContain(
+        'sh "/absolute/path/to/this/skill/directory/openartifacts-publish.sh" publish "/absolute/path/to/page.html" "Page title"'
+      );
+      expect(md).toMatch(/For an existing HTML file on Windows, replace the handoff path/);
+      expect(md).toContain("Success returns the same server receipt");
     });
   });
 
