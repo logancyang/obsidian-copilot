@@ -77,7 +77,7 @@ For Windows-specific installation help, see [Windows setup for Agent Chat](agent
 
 ### Start a chat
 
-Select the **Agent Chat** ribbon icon or run **Open Copilot Agent Chat Window** from the command palette. If the default agent is not ready, Copilot opens **Select your agent**. Configure an agent, choose an installed row, then select **Start chat**.
+Select the **Agent Chat** ribbon icon or run **Open Copilot Agent Chat Window** from the command palette. If no agent is installed, or Copilot cannot read the one you configured, Copilot opens **Select your agent**. Configure an agent, choose an installed row, then select **Start chat**. An installed agent that is too old to run keeps the status card instead, so you can upgrade it or switch to another saved model without leaving the chat.
 
 An empty Agent Chat shows a fixed hint: "Ask anything • @ to add context • / for commands".
 

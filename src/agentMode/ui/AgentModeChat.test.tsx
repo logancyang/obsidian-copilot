@@ -121,23 +121,6 @@ describe("AgentModeChat", () => {
   });
 
   describe("compose draft ownership", () => {
-    it("offers saved models on cold incompatible startup (https://github.com/Brevilabs/obsidian-copilot-private/issues/480)", () => {
-      renderFallback(
-        {
-          kind: "incompatible",
-          source: "custom",
-          currentVersion: "1",
-          minVersion: "2",
-          message: "Upgrade required",
-        },
-        null
-      );
-      expect(screen.getByRole("button", { name: /Saved model/i })).toBeTruthy();
-      fireEvent.click(screen.getByRole("button", { name: /Saved model/i }));
-      fireEvent.click(screen.getByRole("option", { name: /Other saved model/i }));
-      fireEvent.keyDown(screen.getByRole("listbox"), { key: "Escape" });
-      expect(mockCommitSelection).toHaveBeenCalledWith("other|agent", null);
-    });
     it("keeps the unsent message across a restart that leaves no active session (https://github.com/Brevilabs/obsidian-copilot-private/issues/473)", () => {
       // A backend restart closes the session before its replacement exists. With
       // the draft store inside AgentHome, that gap unmounts the component and
@@ -246,7 +229,7 @@ describe("AgentModeChat", () => {
       expect(screen.queryByTestId("status-card")).toBeNull();
     });
 
-    it("keeps the status and saved-model picker available when the agent's binary is too old (https://github.com/Brevilabs/obsidian-copilot-private/issues/480)", () => {
+    it("keeps the status card and commits a saved-model pick when the agent's binary is too old (https://github.com/Brevilabs/obsidian-copilot-private/issues/480)", () => {
       renderFallback(
         {
           kind: "incompatible",
@@ -259,7 +242,18 @@ describe("AgentModeChat", () => {
       );
 
       expect(screen.getByTestId("status-card")).toBeTruthy();
-      expect(screen.getByRole("button", { name: /Saved model/i })).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: /Saved model/i }));
+      fireEvent.click(screen.getByRole("option", { name: /Other saved model/i }));
+      fireEvent.keyDown(screen.getByRole("listbox"), { key: "Escape" });
+      expect(mockCommitSelection).toHaveBeenCalledWith("other|agent", null);
+    });
+
+    it("refuses recovery model picks while a session start is already in flight (https://github.com/Brevilabs/obsidian-copilot-private/issues/480)", () => {
+      renderFallback({ kind: "ready", source: "custom" }, null, true);
+
+      expect(screen.getByRole("button", { name: /Saved model/i }).hasAttribute("disabled")).toBe(
+        true
+      );
     });
 
     it("takes the pane over when the agent's readiness check failed", () => {

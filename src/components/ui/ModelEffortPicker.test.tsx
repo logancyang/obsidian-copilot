@@ -33,6 +33,32 @@ describe("ModelEffortPicker", () => {
       expect(commitSelection).toHaveBeenCalledWith("other|agent", null);
     });
 
+    it.each([
+      { picked: false, expected: undefined },
+      { picked: true, expected: ["model|agent", null] },
+    ])(
+      "with no model selected yet, commits the first row only once it is picked: picked=$picked (https://github.com/Brevilabs/obsidian-copilot-private/issues/480)",
+      async ({ picked, expected }) => {
+        const commitSelection = jest.fn();
+        render(
+          <ModelEffortPicker
+            override={{
+              models: [...models, { name: "other", provider: "agent", enabled: true }],
+              value: "",
+              effortOptionsByModelKey: {},
+              commitSelection,
+            }}
+          />
+        );
+        fireEvent.click(screen.getByTitle("Model · effort"));
+        const dialog = await screen.findByRole("dialog");
+        if (picked) fireEvent.click(screen.getByRole("option", { name: /^model/ }));
+        fireEvent.keyDown(dialog, { key: "Escape" });
+        if (expected) expect(commitSelection).toHaveBeenCalledWith(...expected);
+        else expect(commitSelection).not.toHaveBeenCalled();
+      }
+    );
+
     it.each(["row", "icon", "keyboard", "Tab", "Shift+Tab", "middle-click"])(
       "preserves native pricing navigation and discards pending edits after %s interaction with a locked row (https://github.com/Brevilabs/obsidian-copilot-private/issues/476)",
       async (action) => {

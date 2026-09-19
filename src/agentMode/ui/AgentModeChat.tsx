@@ -160,10 +160,17 @@ export const AgentModeChat: React.FC<Props> = ({
     );
   }
 
+  // A start already in flight owns the session that is about to take this pane
+  // over. Committing a pick meanwhile calls `createSession` directly, which is
+  // not de-duped against the pending `getOrCreateActiveSession`, so both
+  // sessions would land and the later one would steal focus.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/480
+  const recoveryPicker = picker && manager.getIsStarting() ? { ...picker, disabled: true } : picker;
+
   // Render the chain switcher below the status surface so the user can still
   // leave Agent Mode without going through settings or the command palette.
   return (
-    <AgentModeChatRecovery picker={picker} controls={<AgentChatControls />}>
+    <AgentModeChatRecovery picker={recoveryPicker} controls={<AgentChatControls />}>
       <AgentModeStatus manager={manager} plugin={plugin} onInstallClick={handleInstall} />
     </AgentModeChatRecovery>
   );
