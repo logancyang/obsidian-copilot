@@ -116,8 +116,7 @@ export class TagSuggestionRow extends Component {
       return;
     }
 
-    session.modal?.close();
-    session.modal = undefined;
+    this.closeModal(session);
     const row = container.createDiv({ cls: "metadata-property copilot-tag-suggestion-row" });
     const properties = Array.from(
       container.querySelectorAll<HTMLElement>(".metadata-property")
@@ -153,13 +152,21 @@ export class TagSuggestionRow extends Component {
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/492
     if (session.fallbackOpened || !session.queue.length) return;
     session.fallbackOpened = true;
-    session.modal = new TagSuggestionModal(this.app, session.queue, async (tag) => {
-      const suggestion = session.queue.find(
-        (candidate) => normalizedTag(candidate.tag) === normalizedTag(tag)
-      );
-      if (suggestion) await this.choose(session, suggestion);
-    });
-    session.modal.open();
+    const modal = new TagSuggestionModal(
+      this.app,
+      session.queue,
+      async (tag) => {
+        const suggestion = session.queue.find(
+          (candidate) => normalizedTag(candidate.tag) === normalizedTag(tag)
+        );
+        if (suggestion) await this.choose(session, suggestion);
+      },
+      () => {
+        if (this.session === session && session.modal === modal) this.closeSession(session);
+      }
+    );
+    session.modal = modal;
+    modal.open();
   }
 
   private async choose(
@@ -178,18 +185,23 @@ export class TagSuggestionRow extends Component {
     if (!written) {
       // A failed write must not silently consume a suggestion the user can retry.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/492
-      session.modal?.close();
-      session.modal = undefined;
+      this.closeModal(session);
       session.fallbackOpened = false;
       session.queue.splice(Math.min(index, session.queue.length), 0, suggestion);
     }
     this.render(session);
   }
 
+  private closeModal(session: TagSuggestionSession): void {
+    const modal = session.modal;
+    session.modal = undefined;
+    modal?.close();
+  }
+
   private closeSession(session: TagSuggestionSession): void {
     if (this.session !== session) return;
     session.rowEl?.remove();
-    session.modal?.close();
+    this.closeModal(session);
     this.app.metadataCache.offref(session.metadataRef);
     this.app.workspace.offref(session.workspaceRef);
     this.session = undefined;

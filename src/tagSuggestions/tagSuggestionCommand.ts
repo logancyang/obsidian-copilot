@@ -12,7 +12,7 @@ import {
   tagSuggestionErrorNotice,
 } from "@/tagSuggestions/tagSuggestions";
 import type { TagSuggestionRow } from "@/tagSuggestions/tagSuggestionRow";
-import { App, Notice, TFile } from "obsidian";
+import { App, MarkdownView, Notice, TFile } from "obsidian";
 
 export async function suggestTagsForCurrentNote(
   app: App,
@@ -52,6 +52,7 @@ export async function suggestTagsForCurrentNote(
         )
       )
     );
+    if (app.workspace.getActiveViewOfType(MarkdownView)?.file?.path !== file.path) return;
     const ranking = rankTagSuggestions(requests, responses);
     if (!ranking.length) {
       new Notice("No tag suggestions were returned. Try again.");

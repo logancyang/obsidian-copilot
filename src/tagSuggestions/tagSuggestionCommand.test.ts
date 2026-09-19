@@ -4,7 +4,8 @@ import type {
   TagSuggestionState,
 } from "@/tagSuggestions/tagSuggestions";
 import type { TagSuggestionRow } from "@/tagSuggestions/tagSuggestionRow";
-import type { App } from "obsidian";
+import { waitFor } from "@testing-library/react";
+import type { App, MarkdownView } from "obsidian";
 
 const mockCheckIsPlusUser = jest.fn<Promise<boolean>, unknown[]>();
 const mockBroca = jest.fn<Promise<Record<string, { noul: number }>>, unknown[]>();
@@ -40,6 +41,8 @@ import { BrevilabsApiError } from "@/LLMProviders/brevilabsClient";
 import { suggestTagsForCurrentNote } from "@/tagSuggestions/tagSuggestionCommand";
 import { CachedMetadata, Notice, TFile } from "obsidian";
 
+const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/492";
+
 function note(path: string, mtime: number): TFile {
   const TFileConstructor = TFile as unknown as new (path: string) => TFile;
   const value = new TFileConstructor(path);
@@ -69,7 +72,10 @@ function createApp(active: TFile | null = note("Projects/Active.md", 20), candid
   const caches = new Map<TFile, CachedMetadata>(cacheEntries);
   const frontmatter: Record<string, unknown> = {};
   const app = {
-    workspace: { getActiveFile: jest.fn(() => active) },
+    workspace: {
+      getActiveFile: jest.fn(() => active),
+      getActiveViewOfType: jest.fn(() => (active ? ({ file: active } as MarkdownView) : null)),
+    },
     vault: {
       getMarkdownFiles: jest.fn(() => (active ? [active, ...others] : others)),
       cachedRead: jest.fn().mockResolvedValue("Active note body"),
@@ -131,6 +137,27 @@ describe("tagSuggestionCommand", () => {
 
       expect(frontmatter.tags).toEqual(["research"]);
       expect(Notice).toHaveBeenCalledWith("Added #research");
+    });
+
+    it(`discards results when the originating note is no longer active (${ISSUE})`, async () => {
+      let resolveBroca: (value: Record<string, { noul: number }>) => void = () => undefined;
+      mockBroca.mockImplementation(
+        async () =>
+          await new Promise<Record<string, { noul: number }>>((resolve) => {
+            resolveBroca = resolve;
+          })
+      );
+      const { app } = createApp();
+
+      const pending = suggestTagsForCurrentNote(app, suggestionRow);
+      await waitFor(() => expect(mockBroca).toHaveBeenCalled());
+      jest
+        .mocked(app.workspace.getActiveViewOfType)
+        .mockReturnValue({ file: note("Projects/Other.md", 21) } as MarkdownView);
+      resolveBroca({ t0: { noul: 0.85 } });
+      await pending;
+
+      expect(mockRowShow).not.toHaveBeenCalled();
     });
 
     it("reports a failed tag write so the suggestion row can restore the pill (https://github.com/Brevilabs/obsidian-copilot-private/issues/492)", async () => {

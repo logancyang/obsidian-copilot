@@ -8,6 +8,7 @@ const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/492"
 const mockModalOpen = jest.fn<void, []>();
 const mockModalClose = jest.fn<void, []>();
 let chooseFromModal: ((tag: string) => void | Promise<void>) | undefined;
+let dismissModal: (() => void) | undefined;
 
 jest.mock("@/components/modals/TagSuggestionModal", () => ({
   TagSuggestionModal: jest
@@ -16,9 +17,11 @@ jest.mock("@/components/modals/TagSuggestionModal", () => ({
       (
         _app: App,
         _suggestions: RankedTagSuggestion[],
-        onChoose: (tag: string) => void | Promise<void>
+        onChoose: (tag: string) => void | Promise<void>,
+        onDismiss: () => void
       ) => {
         chooseFromModal = onChoose;
+        dismissModal = onDismiss;
         return { open: mockModalOpen, close: mockModalClose };
       }
     ),
@@ -126,6 +129,7 @@ describe("tagSuggestionRow", () => {
     beforeEach(() => {
       jest.clearAllMocks();
       chooseFromModal = undefined;
+      dismissModal = undefined;
       document.body.replaceChildren();
     });
 
@@ -236,6 +240,18 @@ describe("tagSuggestionRow", () => {
         await chooseFromModal?.("tag-1");
 
         expect(mockModalOpen).toHaveBeenCalledTimes(2);
+      });
+
+      it(`closes the session when the fallback picker is dismissed (${ISSUE})`, () => {
+        const context = testContext();
+        context.metadataContainer.remove();
+        const row = new TagSuggestionRow(context.app);
+        row.show(context.file, suggestions(), jest.fn().mockResolvedValue(true));
+
+        dismissModal?.();
+
+        expect(context.metadataOffRef).toHaveBeenCalledTimes(1);
+        expect(context.workspaceOffRef).toHaveBeenCalledTimes(1);
       });
 
       it(`filters manually added tags and fills the visible row from the remaining queue (${ISSUE})`, () => {
