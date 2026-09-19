@@ -6,6 +6,7 @@ jest.mock("obsidian", () => {
   return {
     ...actual,
     editorInfoField: StateField.define<unknown>({ create: () => null, update: (value) => value }),
+    addIcon: jest.fn(),
     Plugin: class Plugin {},
     PluginSettingTab: class PluginSettingTab {},
     MarkdownView: class MarkdownView {},
@@ -28,14 +29,16 @@ jest.mock("@/services/settingsPersistence", () => ({
   resetPersistenceState: jest.fn(),
 }));
 jest.mock("@/logFileManager", () => ({
-  logFileManager: { flush: jest.fn().mockResolvedValue(undefined) },
+  logFileManager: { flush: jest.fn().mockResolvedValue(undefined), setApp: jest.fn() },
 }));
 jest.mock("@/state/vaultDataAtoms", () => ({
-  VaultDataManager: { getInstance: jest.fn(() => ({ cleanup: jest.fn() })) },
+  VaultDataManager: {
+    getInstance: jest.fn(() => ({ cleanup: jest.fn(), initialize: jest.fn() })),
+  },
 }));
 jest.mock("@/services/webViewerService/webViewerServiceSingleton", () => ({
   getWebViewerService: jest.fn(() => ({ stopActiveWebTabTracking: jest.fn() })),
-  startActiveWebTabTracking: jest.fn(),
+  startActiveWebTabTracking: jest.fn(() => ({})),
 }));
 jest.mock("@/utils/desktopRuntime", () => ({ isDesktopRuntime: jest.fn(() => false) }));
 jest.mock("@/utils/notificationSound", () => ({ disposeNotificationSound: jest.fn() }));
@@ -46,11 +49,54 @@ jest.mock("@/utils/chatDeepLink", () => ({
 const mockSkillManagerDispose = jest.fn();
 const mockSkillManagerHasInstance = jest.fn(() => true);
 jest.mock("@/agentMode", () => ({
+  ...jest.requireActual<typeof import("@/agentMode/ui/TurnDiffView")>(
+    "@/agentMode/ui/TurnDiffView"
+  ),
+  CopilotAgentView: jest.fn(),
+  PlanPreviewView: jest.fn(),
+  PLAN_PREVIEW_VIEW_TYPE: "copilot-plan-preview-view",
+  acpFrameSink: { narrowLegacyLogs: jest.fn() },
+  createAgentSessionManager: jest.fn(),
+  setFrameSinkVaultBasePath: jest.fn(),
   SkillManager: {
     hasInstance: () => mockSkillManagerHasInstance(),
     getInstance: () => ({ dispose: mockSkillManagerDispose }),
   },
 }));
+
+jest.mock("@/utils/rendererEventsShim");
+jest.mock("@/services/keychainService");
+jest.mock("@/modelManagement");
+jest.mock("@/services/releaseUpdateNotice");
+jest.mock("@/settings/migrations");
+jest.mock("@/settings/migrations/legacyIndexRemovalMigration");
+jest.mock("@/tools/builtinTools");
+jest.mock("@/contextProcessor");
+jest.mock("@/commands/customCommandManager");
+jest.mock("@/LLMProviders/brevilabsClient", () => ({
+  BrevilabsClient: { getInstance: () => ({ setPluginVersion: jest.fn() }) },
+}));
+jest.mock("@/plusUtils");
+jest.mock("@/LLMProviders/chainOwner", () => ({
+  __esModule: true,
+  default: { getInstance: () => ({ getCurrentChainManager: jest.fn() }) },
+}));
+jest.mock("@/LLMProviders/selfHostServices", () => ({
+  createSelfHostWebSearchAgentBridge: () => ({ dispose: jest.fn() }),
+}));
+jest.mock("@/agentMode/agentModelDiscovery");
+jest.mock("@/tools/FileParserManager");
+jest.mock("@/core/ChatManager");
+jest.mock("@/state/ChatUIState");
+jest.mock("@/memory/UserMemoryManager");
+jest.mock("@/editor");
+jest.mock("@/editor/registerNoteHeaderAction");
+jest.mock("@/openArtifacts/openArtifactsLedger");
+jest.mock("@/openArtifacts/OpenArtifactsPublisher");
+jest.mock("@/commands");
+jest.mock("@/commands/customCommandRegister");
+jest.mock("@/system-prompts/systemPromptRegister");
+jest.mock("@/projects/projectRegister");
 
 import CopilotPlugin from "@/main";
 import CopilotView from "@/components/CopilotView";
@@ -79,7 +125,8 @@ import { flushPersistence } from "@/services/settingsPersistence";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { disposeNotificationSound } from "@/utils/notificationSound";
 import { findChatFileByDeepLinkId } from "@/utils/chatDeepLink";
-import { Notice, TFile, type WorkspaceLeaf } from "obsidian";
+import { TurnDiffView, TURN_DIFF_VIEW_TYPE } from "@/agentMode/ui/TurnDiffView";
+import { Notice, TFile, type ViewCreator, type WorkspaceLeaf } from "obsidian";
 
 function createPluginUnderTest(calls: string[]) {
   const plugin = Object.create(CopilotPlugin.prototype) as CopilotPlugin;
@@ -111,6 +158,52 @@ async function flushTeardown(): Promise<void> {
 
 describe("main", () => {
   describe("CopilotPlugin", () => {
+    describe("onload()", () => {
+      it("registers a diff-tab factory that creates a TurnDiffView for Obsidian's leaf on desktop", async () => {
+        (isDesktopRuntime as jest.Mock).mockReturnValue(true);
+        const plugin = Object.create(CopilotPlugin.prototype) as CopilotPlugin;
+        const registerView = jest.fn<void, [string, ViewCreator]>();
+        const cleanups: (() => void)[] = [];
+        Object.assign(plugin, {
+          app: {
+            vault: { adapter: {} },
+            workspace: { on: jest.fn(), onLayoutReady: jest.fn() },
+          },
+          manifest: { version: "4.0.9" },
+          loadSettings: jest.fn(),
+          register: (cleanup: () => void) => cleanups.push(cleanup),
+          registerInterval: (id: number) => cleanups.push(() => window.clearInterval(id)),
+          registerEvent: jest.fn(),
+          registerEditorExtension: jest.fn(),
+          registerObsidianProtocolHandler: jest.fn(),
+          registerView,
+          addSettingTab: jest.fn(),
+          addRibbonIcon: jest.fn(),
+          initActiveLeafChangeHandler: jest.fn(),
+          initSelectionHandler: jest.fn(),
+          initWebSelectionWatcher: jest.fn(),
+        });
+
+        try {
+          await plugin.onload();
+
+          const factory = registerView.mock.calls.find(
+            ([type]) => type === TURN_DIFF_VIEW_TYPE
+          )?.[1];
+          expect(factory).toBeDefined();
+          const leaf = { app: plugin.app } as unknown as WorkspaceLeaf;
+          const view = factory!(leaf);
+          expect(view).toBeInstanceOf(TurnDiffView);
+          expect(view.leaf).toBe(leaf);
+          expect(view.getViewType()).toBe(TURN_DIFF_VIEW_TYPE);
+        } finally {
+          plugin.settingsUnsubscriber?.();
+          for (const cleanup of cleanups) cleanup?.();
+          (isDesktopRuntime as jest.Mock).mockReturnValue(false);
+        }
+      });
+    });
+
     describe("copyChatLink()", () => {
       beforeEach(() => jest.clearAllMocks());
 
@@ -228,6 +321,7 @@ describe("main", () => {
         const plugin = Object.create(CopilotPlugin.prototype) as CopilotPlugin;
         Object.assign(plugin, {
           registerEditorExtension: jest.fn(),
+          registerObsidianProtocolHandler: jest.fn(),
           registerDomEvent: (doc: Document, event: string, handler: EventListener) => {
             doc.addEventListener(event, handler);
             cleanups.push(() => doc.removeEventListener(event, handler));
