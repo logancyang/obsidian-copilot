@@ -45,6 +45,7 @@ function descriptor(id: string): BackendDescriptor {
 function makeManager() {
   let startingBackendId: string | null = null;
   let activeBackendId: string | null = null;
+  let recoveryBackendId: string | null = null;
   const listeners = new Set<() => void>();
   const manager = {
     subscribe: (listener: () => void) => {
@@ -52,14 +53,20 @@ function makeManager() {
       return () => listeners.delete(listener);
     },
     getStartingBackendId: () => startingBackendId,
+    getRecoverySelection: () => (recoveryBackendId ? { backendId: recoveryBackendId } : null),
     getActiveSession: () => (activeBackendId ? { backendId: activeBackendId } : null),
   } as unknown as AgentSessionManager;
 
   return {
     manager,
-    emit: (next: { starting?: string | null; active?: string | null }) => {
+    emit: (next: {
+      starting?: string | null;
+      active?: string | null;
+      recovery?: string | null;
+    }) => {
       if (next.starting !== undefined) startingBackendId = next.starting;
       if (next.active !== undefined) activeBackendId = next.active;
+      if (next.recovery !== undefined) recoveryBackendId = next.recovery;
       for (const listener of listeners) listener();
     },
     unsubscribed: () => listeners.size === 0,
@@ -120,6 +127,18 @@ describe("useBackendDescriptor", () => {
   });
 
   describe("useSessionBackendDescriptor()", () => {
+    it("shows the recovery target rather than the preserved source session (https://github.com/Brevilabs/obsidian-copilot-private/issues/480)", () => {
+      registry.source = descriptor("source");
+      registry.target = descriptor("target");
+      const fake = makeManager();
+      fake.emit({ active: "source" });
+      const { result } = renderHook(() => useSessionBackendDescriptor(fake.manager));
+      expect(result.current).toBe(registry.source);
+      act(() => fake.emit({ recovery: "target" }));
+      expect(result.current).toBe(registry.target);
+      act(() => fake.emit({ recovery: null }));
+      expect(result.current).toBe(registry.source);
+    });
     it("tracks starting and active session backend changes", () => {
       const fallback = descriptor("fallback");
       const claude = descriptor("claude");

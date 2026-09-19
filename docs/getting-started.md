@@ -47,6 +47,10 @@ You can also choose **Sign in to Codex** on the Agent Chat status card. For term
 
 For manual installations, Copilot requires `@agentclientprotocol/codex-acp` 0.0.45 or newer. This is the minimum supported adapter version; managed downloads are pinned to 1.10.0 in this Copilot release. See [Codex installation details](agent-mode-and-tools.md#codex). The older `@zed-industries/codex-acp` package is not supported. Codex uses the login stored by the bundled Codex CLI; there is no Codex key to paste into Copilot.
 
+### If an agent needs an update
+
+For outdated opencode or Codex ACP installations, Agent Chat and **Settings → Copilot → Basic → Agents** show a warning with **Configure**. Saved enabled models stay visible and selectable, but cannot run until the agent is updated. Open **Configure** and choose a managed upgrade/download, or update your custom installation yourself and select **Apply** or **Auto-detect**. Progress and errors remain visible in Chat and Settings. Copilot does not upgrade automatically or poll for the latest upstream agent release. See [Update an outdated agent](agent-mode-and-tools.md#update-an-outdated-agent).
+
 ## Start Your First Agent Chat
 
 1. Click the **Agent Chat** ribbon icon, or run **Open Copilot Agent Chat Window** from the command palette.

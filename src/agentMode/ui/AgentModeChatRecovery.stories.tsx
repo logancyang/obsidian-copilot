@@ -13,6 +13,8 @@ export default meta;
 
 export const Upgrade = {
   args: {
+    hasSourceChat: true,
+    onCancel: () => undefined,
     controls: null,
     picker: {
       models: [
@@ -33,7 +35,7 @@ export const Upgrade = {
       <AgentStatusCard
         tone="warning"
         summary="Agent upgrade required"
-        message="The configured agent version is below the supported minimum. Upgrade it in Configure."
+        message="The configured agent version is below the supported minimum. Upgrade it in Configure, or return to your open chat."
         action={{ label: "Configure", onClick: () => undefined }}
       />
     ),
@@ -46,6 +48,8 @@ export const Starting = {
     picker: { ...Upgrade.args.picker, disabled: true },
     children: <AgentStatusCard message="Starting the agent…" />,
   },
+export const ColdStartup = {
+  args: { ...Upgrade.args, hasSourceChat: false, onCancel: undefined },
 } satisfies StoryObj<Props>;
 export const StartupFailure = {
   args: {

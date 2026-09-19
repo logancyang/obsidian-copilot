@@ -48,6 +48,8 @@ The model controls shared by installed agents behave as follows:
 | **Search models and model switches** | Dynamic                                   | Controls which reported, BYOK, or Copilot-hosted models appear in that agent's model picker. A missing-key label means the model is known but cannot run until its provider key is set.                                                                                                                                                                          |
 | **Environment variables**            | No rows                                   | Select **Add variable** to pass a name and value only to that agent process; use the trash button to remove a row. Names must be valid environment variable identifiers. Values are used literally, so `~` is not expanded. Do not treat this editor as a secret manager.                                                                                        |
 
+If opencode or Codex ACP is below the supported version, saved enabled models remain visible and selectable, but cannot run requests. The agent's Settings tab and Agent Chat show a warning with **Configure**, which opens the existing configuration dialog without starting an upgrade. Choose a managed upgrade/download there, or update your custom installation yourself and select **Apply** or **Auto-detect**. Shared installation progress and errors remain visible in Chat and Settings; open **Configure** to retry a failed installation. Copilot does not upgrade automatically or poll for the latest upstream agent release.
+
 #### opencode
 
 Copilot can install and manage opencode for you. It can route Copilot-hosted models, supported BYOK providers, local OpenAI-compatible endpoints, and models reported by opencode.

@@ -2,18 +2,27 @@ import {
   ModelEffortPicker,
   type ModelEffortPickerOverride,
 } from "@/components/ui/ModelEffortPicker";
+import { Button } from "@/components/ui/button";
 import React, { type ReactNode } from "react";
 
 interface AgentModeChatRecoveryProps {
   picker: ModelEffortPickerOverride | null;
   children: ReactNode;
   controls: ReactNode;
+  onCancel?: () => void;
+  hasSourceChat: boolean;
 }
 
-/** Keeps model selection available while the chosen agent cannot run.
+/** Keeps model selection and an exit available while the chosen agent cannot run.
  * https://github.com/Brevilabs/obsidian-copilot-private/issues/480
  */
-export function AgentModeChatRecovery({ picker, children, controls }: AgentModeChatRecoveryProps) {
+export function AgentModeChatRecovery({
+  picker,
+  children,
+  controls,
+  onCancel,
+  hasSourceChat,
+}: AgentModeChatRecoveryProps) {
   return (
     <div className="tw-flex tw-size-full tw-flex-col tw-overflow-hidden">
       <div className="tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-overflow-y-auto">
@@ -21,6 +30,11 @@ export function AgentModeChatRecovery({ picker, children, controls }: AgentModeC
       </div>
       <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-2 tw-p-2">
         {picker && <ModelEffortPicker override={picker} />}
+        {onCancel && (
+          <Button variant="ghost" onClick={onCancel}>
+            {hasSourceChat ? "Back to chat" : "Cancel selection"}
+          </Button>
+        )}
       </div>
       {controls}
     </div>

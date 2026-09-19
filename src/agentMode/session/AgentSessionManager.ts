@@ -223,6 +223,15 @@ export interface ReplaceSessionOptions {
   seedSelection?: ModelSelection;
 }
 
+interface RecoverySelection {
+  backendId: BackendId;
+  selection: ModelSelection;
+  sourceChatInputId: string | null;
+  projectId: ProjectScopeId;
+  scopeSeq: number;
+  attempt?: Promise<void>;
+}
+
 export interface AgentSessionManagerOptions {
   permissionPrompter: PermissionPrompter;
   /**
@@ -268,6 +277,7 @@ export class AgentSessionManager {
   private sessions = new Map<string, AgentSession>();
   private chatUIStates = new Map<string, AgentChatUIState>();
   private activeSessionId: string | null = null;
+  private recoverySelection: RecoverySelection | null = null;
   // The scope the active session belongs to. Invariant:
   // `activeSession.projectId === activeProjectId` (active always belongs to the
   // current scope). `GLOBAL_SCOPE` is the implicit global workspace.
@@ -1175,6 +1185,13 @@ export class AgentSessionManager {
     if (this.disposed) {
       throw new Error("AgentSessionManager has been shut down");
     }
+    // Retry must honor the recovery target rather than reuse its preserved source chat.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/480
+    const recovery = this.getRecoverySelection();
+    if (recovery) {
+      assertBackendCompatible(this.resolveDescriptor(recovery.backendId), getSettings());
+      await this.resumeRecoverySelection();
+    }
     const active = this.getActiveSession();
     // Only reuse the active session when it belongs to the current scope —
     // after `enterProject` the prior scope's session may still be pointed at by
@@ -1211,12 +1228,14 @@ export class AgentSessionManager {
    * to seed a specific (model, effort) without touching that default — used
    * by a cross-backend chat pick, which is transient. `chatInputId` is supplied
    * only when the replacement must retain the same logical AgentChatInput.
+   * `activate=false` keeps a recovery candidate hidden until its caller accepts startup.
    */
   async createSession(
     backendId?: BackendId,
     projectId: ProjectScopeId = this.activeProjectId,
     seedSelection?: ModelSelection,
-    chatInputId?: string
+    chatInputId?: string,
+    activate = true
   ): Promise<AgentSession> {
     // Spawning mid-install would adopt the outgoing live process or a warm probe of the
     // runtime being replaced, so every externally-initiated create settles the queue first.
@@ -1225,7 +1244,7 @@ export class AgentSessionManager {
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/480
     const resolvedId = this.resolveCreateBackendId(backendId);
     await this.waitForBackendInstall(resolvedId);
-    return this.createSessionInternal(resolvedId, projectId, seedSelection, chatInputId);
+    return this.createSessionInternal(resolvedId, projectId, seedSelection, chatInputId, activate);
   }
 
   /**
@@ -1246,7 +1265,8 @@ export class AgentSessionManager {
     resolvedId: BackendId,
     projectId: ProjectScopeId,
     seedSelection?: ModelSelection,
-    chatInputId?: string
+    chatInputId?: string,
+    activate = true
   ): Promise<AgentSession> {
     if (this.disposed) {
       throw new Error("AgentSessionManager has been shut down");
@@ -1309,14 +1329,14 @@ export class AgentSessionManager {
     const descriptor = this.resolveDescriptor(resolvedId);
 
     this.pendingCreates++;
-    this.startingBackendId = resolvedId;
+    if (activate) this.startingBackendId = resolvedId;
     this.notify();
 
     let backend: BackendProcess;
     try {
       backend = await this.ensureBackend(resolvedId, descriptor);
     } catch (err) {
-      this.setLastError(err2String(err));
+      if (activate) this.setLastError(err2String(err));
       this.finishPendingCreate();
       throw err;
     }
@@ -1376,16 +1396,13 @@ export class AgentSessionManager {
     } else {
       this.landingCaptureSignatures.delete(session.internalId);
     }
-    // A fresh id is never detached; clear defensively so a new session can't
-    // inherit a stale hidden-from-strip flag.
-    this.detachedFromTabIds.delete(session.internalId);
-    // Always the scope's newest MRU. But only steal the global active pointer
-    // when this session's scope is still the current one — a slow auto-spawn or
-    // a restart that replaces a *background* tab must not yank the user out of a
-    // scope they've since switched to (preserves `active.projectId ===
-    // activeProjectId`).
-    this.lastActiveByScope.set(projectId, session.internalId);
-    if (projectId === this.activeProjectId) {
+    // Recovery candidates stay hidden until ready, so failure or cancellation cannot take the source chat.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/480
+    if (activate) this.detachedFromTabIds.delete(session.internalId);
+    else this.detachedFromTabIds.add(session.internalId);
+    // A slow create must not take focus from a scope the user has since entered.
+    if (activate) this.lastActiveByScope.set(projectId, session.internalId);
+    if (activate && projectId === this.activeProjectId) {
       this.activeSessionId = session.internalId;
     }
     this.attachAutoSave(session);
@@ -1449,10 +1466,10 @@ export class AgentSessionManager {
             );
           }
         }
-        this.repairDefaultEffort(resolvedId, session.getState());
+        if (activate) this.repairDefaultEffort(resolvedId, session.getState());
         // Only clear when nothing failed while this session was starting — a concurrent
         // create's failure must stay on the status surface.
-        if (this.lastErrorSeq === errorSeqAtStart) {
+        if (activate && this.lastErrorSeq === errorSeqAtStart) {
           this.lastError = null;
         }
         logInfo(
@@ -1465,7 +1482,7 @@ export class AgentSessionManager {
         await replayPersistedMode(session, this.getDefaultMode(resolvedId));
       })
       .catch((err) => {
-        this.setLastError(err2String(err));
+        if (activate) this.setLastError(err2String(err));
       })
       .finally(() => this.finishPendingCreate());
 
@@ -2508,7 +2525,8 @@ export class AgentSessionManager {
    * @param prepare - Skill preparation that must finish before refreshing or starting its runtime.
    */
   onInstallStateChanged(backendId: BackendId, prepare?: () => Promise<void>): Promise<void> {
-    // Register before preparation yields so a session start cannot race the install refresh.
+    // Register before preparation yields so a session start or recovery cannot race the
+    // install-triggered restart.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/480
     const previous = this.installWork.get(backendId) ?? Promise.resolve();
     const work = previous
@@ -2846,7 +2864,7 @@ export class AgentSessionManager {
   }
 
   getIsStarting(): boolean {
-    return this.startingBackendId !== null;
+    return this.startingBackendId !== null || !!this.getRecoverySelection()?.attempt;
   }
 
   /** Backend id currently being booted, or null when no create is in flight. */
@@ -2856,6 +2874,125 @@ export class AgentSessionManager {
 
   getLastError(): string | null {
     return this.lastError;
+  }
+
+  /** The pending model pick for the visible chat, without changing its session ownership. */
+  getRecoverySelection(): RecoverySelection | null {
+    const pending = this.recoverySelection;
+    return pending?.projectId === this.activeProjectId &&
+      pending.scopeSeq === this.scopeSeq &&
+      pending.sourceChatInputId === (this.getActiveSession()?.chatInputId ?? null)
+      ? pending
+      : null;
+  }
+
+  /** Keep an upgrade-blocked pick without discarding the current conversation or draft.
+   * @param backendId - Backend chosen in the model picker.
+   * @param selection - Transient model and effort to apply after upgrade.
+   * @returns Whether recovery owns the selection instead of the running session.
+   */
+  deferRecoverySelection(backendId: BackendId, selection: ModelSelection): boolean {
+    const session = this.getActiveSession();
+    // A stale picker must not transfer history to another agent.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/480
+    if (session?.hasUserVisibleMessages() && session.backendId !== backendId) return true;
+    const recover =
+      !!this.getRecoverySelection() ||
+      this.resolveDescriptor(backendId).getInstallState(getSettings()).kind === "incompatible";
+    this.recoverySelection = recover
+      ? {
+          backendId,
+          selection,
+          sourceChatInputId: session?.chatInputId ?? null,
+          projectId: this.activeProjectId,
+          scopeSeq: this.scopeSeq,
+        }
+      : null;
+    if (recover) this.lastError = null;
+    this.notify();
+    return recover;
+  }
+
+  /** Leave recovery without changing the preserved source chat or its draft. */
+  cancelRecoverySelection(): void {
+    this.recoverySelection = null;
+    this.lastError = null;
+    this.notify();
+  }
+
+  /** Apply only a still-current recovery pick after startup succeeds; never auto-send its draft.
+   * https://github.com/Brevilabs/obsidian-copilot-private/issues/480
+   */
+  async resumeRecoverySelection(): Promise<void> {
+    const pending = this.getRecoverySelection();
+    if (!pending) return;
+    if (pending.attempt) return pending.attempt;
+    if (this.resolveDescriptor(pending.backendId).getInstallState(getSettings()).kind !== "ready")
+      return;
+    pending.attempt = (async () => {
+      let candidate: AgentSession | undefined;
+      try {
+        await this.waitForBackendInstall(pending.backendId);
+        if (this.getRecoverySelection() !== pending) return;
+        const source = this.getActiveSession();
+        if (source?.hasUserVisibleMessages()) {
+          if (source.backendId !== pending.backendId) {
+            this.cancelRecoverySelection();
+            return;
+          }
+          await source.ready;
+          if (this.getRecoverySelection() !== pending) return;
+          await this.applySelection(pending.selection);
+        } else {
+          candidate = await this.createSession(
+            pending.backendId,
+            pending.projectId,
+            pending.selection,
+            source?.chatInputId,
+            false
+          );
+          await candidate.ready;
+        }
+        if (
+          this.getRecoverySelection() !== pending ||
+          this.getActiveSession() !== source ||
+          (candidate && this.sessions.get(candidate.internalId) !== candidate)
+        )
+          return;
+        if (source?.hasUserVisibleMessages() && candidate) {
+          this.cancelRecoverySelection();
+          return;
+        }
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/480
+        const baseModelId = pending.selection.baseModelId;
+        if (candidate && candidate.getState()?.model?.current.baseModelId !== baseModelId) {
+          throw new Error(`Model "${baseModelId}" is unavailable. Choose another model or retry.`);
+        }
+        this.recoverySelection = null;
+        this.lastError = null;
+        this.setDefaultBackend(pending.backendId);
+        if (candidate) {
+          this.setActiveSession(candidate.internalId);
+          const accepted = candidate;
+          candidate = undefined;
+          if (source) {
+            const index = Array.from(this.sessions.keys()).indexOf(source.internalId);
+            this.moveMapEntry(this.sessions, accepted.internalId, index);
+            this.moveMapEntry(this.chatUIStates, accepted.internalId, index);
+            await this.closeSession(source.internalId);
+          }
+        }
+      } catch (err) {
+        if (this.getRecoverySelection() === pending) this.setLastError(err2String(err));
+        throw err;
+      } finally {
+        if (candidate) await this.closeSession(candidate.internalId);
+        pending.attempt = undefined;
+        this.notify();
+      }
+    })();
+    this.notify();
+    return pending.attempt;
   }
 
   getSession(id: string): AgentSession | null {
@@ -2955,6 +3092,7 @@ export class AgentSessionManager {
   async shutdown(): Promise<void> {
     if (this.disposed) return;
     this.disposed = true;
+    this.recoverySelection = null;
     this.settingsUnsub();
     // Unsubscribe SYNCHRONOUSLY up front: the teardown below awaits, and a
     // project-record change landing in that window must not re-enter the handler
