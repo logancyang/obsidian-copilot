@@ -693,6 +693,30 @@ describe("AgentSessionManager", () => {
           expect(sessionCreateSpy).not.toHaveBeenCalled();
         }
       );
+      it("shuts down a cold process whose install turns unsupported during startup instead of adopting it (https://github.com/Brevilabs/obsidian-copilot-private/issues/480)", async () => {
+        const descriptor = buildDescriptor();
+        const mgr = new AgentSessionManager(buildApp(), buildPlugin() as never, {
+          permissionPrompter: jest.fn(),
+          resolveDescriptor: () => descriptor,
+          modelPreloader: {
+            preload: jest.fn(async () => undefined),
+            takeWarm: jest.fn(() => null),
+          } as unknown as AgentModelPreloader,
+        });
+        mockBackendStart.mockImplementationOnce(async () => {
+          (descriptor.getInstallState as jest.Mock).mockReturnValue({
+            kind: "incompatible",
+            source: "custom",
+            currentVersion: "1",
+            minVersion: "2",
+            message: "Upgrade required",
+          });
+        });
+
+        await expect(mgr.createSession()).rejects.toThrow("Upgrade required");
+        expect(mockBackendShutdown).toHaveBeenCalledTimes(1);
+        expect(sessionCreateSpy).not.toHaveBeenCalled();
+      });
       it("creates a session and sets it as the active one", async () => {
         const mgr = buildManager();
         const session = await mgr.createSession();
@@ -3292,7 +3316,7 @@ describe("AgentSessionManager chat history aggregation", () => {
     const descriptor = {
       ...buildDescriptor(),
       id: backendId,
-      getInstallState: () => opts?.installState ?? { kind: "ready", source: "custom" },
+      getInstallState: jest.fn(() => opts?.installState ?? { kind: "ready", source: "custom" }),
       summarizesSessionTitle: opts?.summarizesSessionTitle ?? true,
       getProbeSessionId: jest.fn(() => opts?.probeSessionId),
       applyInitialSessionConfig: opts?.applyInitialSessionConfig,
@@ -3334,7 +3358,7 @@ describe("AgentSessionManager chat history aggregation", () => {
         sessionIndex: index,
       }
     );
-    return { manager, index, persistence };
+    return { manager, index, persistence, descriptor };
   }
 
   it("merges markdown and native entries, de-duplicated on backend session id", async () => {
@@ -3529,6 +3553,28 @@ describe("AgentSessionManager chat history aggregation", () => {
       expect(manager.getActiveSession()).toBeNull();
       expect(manager.getLastError()).toContain("Upgrade required");
     });
+    it("reports the upgrade requirement rather than the generic resume failure when readiness flips after the backend is ensured (https://github.com/Brevilabs/obsidian-copilot-private/issues/480)", async () => {
+      const { manager, descriptor } = buildHistoryHarness();
+      // A running backend makes `ensureBackend` return on its first readiness
+      // read, so the single `Once` below models an install that only turns
+      // unsupported afterwards — while the resume awaits its project context.
+      await manager.createSession("opencode");
+      (descriptor.getInstallState as jest.Mock)
+        .mockReturnValueOnce({ kind: "ready", source: "custom" })
+        .mockReturnValue({
+          kind: "incompatible",
+          source: "custom",
+          currentVersion: "1",
+          minVersion: "2",
+          message: "Upgrade required",
+        });
+
+      await expect(manager.loadNativeSessionFromHistory("opencode", "saved-chat")).rejects.toThrow(
+        "Could not resume"
+      );
+      expect(manager.getLastError()).toContain("Upgrade required");
+    });
+
     it("matches live sessions by the (backendId, sessionId) pair, not session id alone", async () => {
       const { manager } = buildHistoryHarness();
       const session = await manager.createSession("opencode");
