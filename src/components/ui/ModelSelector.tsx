@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ModelDisplay } from "@/components/ui/model-display";
 import { LicenseRequiredIcon } from "@/components/ui/LicenseRequiredIcon";
-import { MODEL_PICKER_PRICING_URL } from "@/components/ui/model-pricing-links";
+import { createProductUrl, PRODUCT_URLS } from "@/lib/productLinks";
 import { SelfHostCloudWarningIcon } from "@/components/ui/SelfHostCloudWarningIcon";
 import { checkModelApiKey, err2String } from "@/lib/model-display-utils";
 import type { ModelApiKeySettings } from "@/lib/model-display-utils";
@@ -170,7 +170,7 @@ export function ModelSelector({
                   // https://github.com/Brevilabs/obsidian-copilot-private/issues/476
                   if (model._needsLicense) {
                     (event.currentTarget as HTMLElement).win.open(
-                      MODEL_PICKER_PRICING_URL,
+                      createProductUrl(PRODUCT_URLS.COPILOT_PRICING, "model_picker_lock"),
                       "_blank",
                       "noopener,noreferrer"
                     );

@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { SettingSection } from "@/components/ui/setting-section";
 import { SettingSwitch } from "@/components/ui/setting-switch";
-import { createMiyoPageUrl } from "@/lib/miyoLinks";
+import { createProductUrl, PRODUCT_URLS } from "@/lib/productLinks";
 import { useApp } from "@/context";
 import { usePlugin } from "@/contexts/PluginContext";
 import { cn } from "@/lib/utils";
@@ -484,7 +484,7 @@ export const MiyoSettings: React.FC = () => {
       connectModalRef.current?.close();
       const modal = new MiyoConnectModal(app, {
         initialStep,
-        downloadUrl: createMiyoPageUrl("connection"),
+        downloadUrl: createProductUrl(PRODUCT_URLS.MIYO, "connection"),
         canAutoAdd: canAutoAddVault(),
         onClose: () => {
           // Closing (Cancel / ESC / header X / after connecting) invalidates any
@@ -640,7 +640,7 @@ export const MiyoSettings: React.FC = () => {
         localSupported={onDesktop}
         onModeChange={(next) => changeConnection(next)}
         onAddressChange={(address) => changeConnection(mode, address)}
-        downloadUrl={createMiyoPageUrl("miyo_settings")}
+        downloadUrl={createProductUrl(PRODUCT_URLS.MIYO, "miyo_settings")}
         error={
           connectionError?.endpoint === `${mode}:${urlDraft}` ? connectionError.message : undefined
         }

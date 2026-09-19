@@ -3,7 +3,6 @@ import { App, Modal } from "obsidian";
 import { Root } from "react-dom/client";
 import { Button } from "@/components/ui/button";
 import { isUsingLicensedModels, navigateToPlusPage } from "@/plusUtils";
-import { PLUS_UTM_MEDIUMS } from "@/constants";
 import { ExternalLink } from "lucide-react";
 import { getSettings } from "@/settings/model";
 import { createPluginRoot } from "@/utils/react/createPluginRoot";
@@ -40,7 +39,7 @@ export function CopilotPlusExpiredModalContent({
         <Button
           variant="default"
           onClick={() => {
-            navigateToPlusPage(PLUS_UTM_MEDIUMS.EXPIRED_MODAL);
+            navigateToPlusPage("expired_modal");
           }}
         >
           Renew Now <ExternalLink className="tw-size-4" />

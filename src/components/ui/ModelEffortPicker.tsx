@@ -5,7 +5,7 @@ import * as SliderPrimitive from "@radix-ui/react-slider";
 import { Button } from "@/components/ui/button";
 import { FreeModelWarningIcon } from "@/components/ui/FreeModelWarningIcon";
 import { LicenseRequiredIcon } from "@/components/ui/LicenseRequiredIcon";
-import { MODEL_PICKER_PRICING_URL } from "@/components/ui/model-pricing-links";
+import { createProductUrl, PRODUCT_URLS } from "@/lib/productLinks";
 import { SelfHostCloudWarningIcon } from "@/components/ui/SelfHostCloudWarningIcon";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ModelDisplay } from "@/components/ui/model-display";
@@ -252,7 +252,11 @@ export function ModelEffortPicker({ override, className }: ModelEffortPickerProp
                   </div>
                 )}
                 <Row
-                  href={entry._needsLicense ? MODEL_PICKER_PRICING_URL : undefined}
+                  href={
+                    entry._needsLicense
+                      ? createProductUrl(PRODUCT_URLS.COPILOT_PRICING, "model_picker_lock")
+                      : undefined
+                  }
                   target={entry._needsLicense ? "_blank" : undefined}
                   rel={entry._needsLicense ? "noopener noreferrer" : undefined}
                   role={entry._needsLicense ? undefined : "option"}

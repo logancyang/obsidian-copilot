@@ -2,7 +2,7 @@ import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { FreeModelWarningIcon } from "@/components/ui/FreeModelWarningIcon";
 import { LicenseRequiredIcon } from "@/components/ui/LicenseRequiredIcon";
-import { MODEL_SETTINGS_PRICING_URL } from "@/components/ui/model-pricing-links";
+import { createProductUrl, PRODUCT_URLS } from "@/lib/productLinks";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { ModelCapabilityIcons, hasCapabilityIcons } from "@/components/ui/model-display";
 import { SearchBar } from "@/components/ui/SearchBar";
@@ -132,7 +132,11 @@ export const ModelEnableList: React.FC<ModelEnableListProps> = ({
         return (
           <Row
             key={row.id}
-            href={row.locked ? MODEL_SETTINGS_PRICING_URL : undefined}
+            href={
+              row.locked
+                ? createProductUrl(PRODUCT_URLS.COPILOT_PRICING, "model_settings_lock")
+                : undefined
+            }
             target={row.locked ? "_blank" : undefined}
             rel={row.locked ? "noopener noreferrer" : undefined}
             className={cn(

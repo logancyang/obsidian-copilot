@@ -22,7 +22,6 @@ jest.mock("@/plusUtils", () => ({
   // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook
   useIsPaidUser: () => mockIsPaidUser,
   checkIsPaidUser: (...a: unknown[]) => checkIsPaidUser(...a),
-  createPlusPageUrl: () => "https://example.test/plans",
   navigateToPlusPage: jest.fn(),
 }));
 

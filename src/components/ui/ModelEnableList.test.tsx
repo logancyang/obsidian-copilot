@@ -67,7 +67,7 @@ describe("ModelEnableList", () => {
         });
         const link = screen.getByRole("link", { name: /Locked model/ });
         expect(link.getAttribute("href")).toBe(
-          "https://obsidiancopilot.com/pricing?utm_source=obsidian-copilot&utm_medium=model-settings-lock"
+          "https://www.obsidiancopilot.com/pricing?utm_source=obsidian_copilot&utm_medium=model_settings_lock"
         );
         expect(link.getAttribute("target")).toBe("_blank");
         expect(within(link).queryByRole("switch")).toBeNull();

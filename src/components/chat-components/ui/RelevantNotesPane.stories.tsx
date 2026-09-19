@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { createMiyoPageUrl } from "@/lib/miyoLinks";
+import { createProductUrl, PRODUCT_URLS } from "@/lib/productLinks";
 import {
   RelevantNotesPane,
   type RelevantNotesPaneProps,
@@ -33,7 +33,7 @@ const baseArgs: RelevantNotesPaneProps = {
   status: "matches",
   noteRows: NoteRows(),
   actions: {
-    miyoDownloadUrl: createMiyoPageUrl("relevant_notes"),
+    miyoDownloadUrl: createProductUrl(PRODUCT_URLS.MIYO, "relevant_notes"),
     onOpenMiyoSettings: () => undefined,
     onRefresh: () => undefined,
     reviewIndexing: {

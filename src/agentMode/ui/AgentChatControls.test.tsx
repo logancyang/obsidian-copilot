@@ -1,6 +1,5 @@
 import { AgentChatControls } from "@/agentMode/ui/AgentChatControls";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { PLUS_UTM_MEDIUMS } from "@/constants";
 import { navigateToPlusPage, useCanUseMultiAgent } from "@/plusUtils";
 import { fireEvent, render, screen } from "@testing-library/react";
 import * as React from "react";
@@ -69,7 +68,7 @@ describe("AgentChatControls", () => {
 
       fireEvent.click(screen.getByText(UPSELL_COPY));
 
-      expect(mockNavigateToPlusPage).toHaveBeenCalledWith(PLUS_UTM_MEDIUMS.MULTI_AGENT);
+      expect(mockNavigateToPlusPage).toHaveBeenCalledWith("multi_agent");
     });
   });
 });

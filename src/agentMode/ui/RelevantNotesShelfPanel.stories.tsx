@@ -1,4 +1,4 @@
-import { createMiyoPageUrl } from "@/lib/miyoLinks";
+import { createProductUrl, PRODUCT_URLS } from "@/lib/productLinks";
 import {
   RelevantNotesShelfPanel,
   type RelevantNotesShelfPanelProps,
@@ -35,7 +35,7 @@ function notes(status: RelevantNotesPaneProps["status"], count = 0): React.React
               </div>
             ))}
             actions={{
-              miyoDownloadUrl: createMiyoPageUrl("relevant_notes"),
+              miyoDownloadUrl: createProductUrl(PRODUCT_URLS.MIYO, "relevant_notes"),
               onOpenMiyoSettings: () => undefined,
               onRefresh: () => undefined,
               reviewIndexing: { destination: "miyo", onSelect: () => undefined },
