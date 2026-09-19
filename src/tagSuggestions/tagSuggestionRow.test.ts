@@ -37,6 +37,10 @@ function suggestions(count = 10): RankedTagSuggestion[] {
   }));
 }
 
+function scoredSuggestions(scores: number[]): RankedTagSuggestion[] {
+  return scores.map((score, index) => ({ tag: `tag-${index + 1}`, score }));
+}
+
 function testContext(
   options: { tagsRow?: boolean; properties?: number; mode?: "source" | "preview" } = {}
 ): TestContext {
@@ -155,7 +159,7 @@ describe("tagSuggestionRow", () => {
     });
 
     describe("show()", () => {
-      it(`mounts five suggestions after the tags property and replaces an existing row (${ISSUE})`, () => {
+      it(`mounts five suggestions above the tags property and replaces an existing row (${ISSUE})`, () => {
         const context = testContext({ tagsRow: true });
         const row = new TagSuggestionRow(context.app);
 
@@ -167,7 +171,7 @@ describe("tagSuggestionRow", () => {
           '.metadata-property[data-property-key="tags"]'
         );
         expect(mounted).toHaveLength(1);
-        expect(tagsProperty?.nextElementSibling).toBe(mounted[0]);
+        expect(tagsProperty?.previousElementSibling).toBe(mounted[0]);
         expect(labels(context.metadataContainer)).toEqual([
           "tag-1",
           "tag-2",
@@ -243,8 +247,8 @@ describe("tagSuggestionRow", () => {
       it(`moves a hidden-panel row under tags after the first write creates frontmatter (${ISSUE})`, async () => {
         const context = testContext({ tagsRow: true });
         context.metadataContainer.classList.add("is-hidden");
-        const addTag = jest.fn(async (tag: string) => {
-          context.setTags([tag]);
+        const addTag = jest.fn(async (tags: string[]) => {
+          context.setTags(tags);
           context.metadataContainer.classList.remove("is-hidden");
           context.emitMetadataChanged();
           return true;
@@ -256,11 +260,13 @@ describe("tagSuggestionRow", () => {
           .querySelector<HTMLButtonElement>('button[aria-label="Add #tag-1"]')
           ?.click();
 
-        await waitFor(() => expect(addTag).toHaveBeenCalledWith("tag-1"));
+        await waitFor(() => expect(addTag).toHaveBeenCalledWith(["tag-1"]));
         const tagsProperty = context.metadataContainer.querySelector(
           '.metadata-property[data-property-key="tags"]'
         );
-        expect(tagsProperty?.nextElementSibling?.classList).toContain("copilot-tag-suggestion-row");
+        expect(tagsProperty?.previousElementSibling?.classList).toContain(
+          "copilot-tag-suggestion-row"
+        );
         expect(labels(context.metadataContainer)).toEqual([
           "tag-2",
           "tag-3",
@@ -299,7 +305,7 @@ describe("tagSuggestionRow", () => {
           "tag-5",
           "tag-6",
         ]);
-        await waitFor(() => expect(addTag).toHaveBeenCalledWith("tag-1"));
+        await waitFor(() => expect(addTag).toHaveBeenCalledWith(["tag-1"]));
       });
 
       it(`restores a clicked pill when the frontmatter write fails (${ISSUE})`, async () => {
@@ -341,8 +347,8 @@ describe("tagSuggestionRow", () => {
 
       it(`returns a clicked tag in ranked position after it is removed from the note (${ISSUE})`, async () => {
         const context = testContext({ tagsRow: true });
-        const addTag = jest.fn(async (tag: string) => {
-          context.setTags([tag]);
+        const addTag = jest.fn(async (tags: string[]) => {
+          context.setTags(tags);
           context.emitMetadataChanged();
           return true;
         });
@@ -352,7 +358,7 @@ describe("tagSuggestionRow", () => {
         context.metadataContainer
           .querySelector<HTMLButtonElement>('button[aria-label="Add #tag-1"]')
           ?.click();
-        await waitFor(() => expect(addTag).toHaveBeenCalledWith("tag-1"));
+        await waitFor(() => expect(addTag).toHaveBeenCalledWith(["tag-1"]));
 
         context.setTags([]);
         context.emitMetadataChanged();
@@ -423,6 +429,69 @@ describe("tagSuggestionRow", () => {
         expect(context.workspaceOffRef).toHaveBeenCalledTimes(6);
       });
 
+      it(`shows one non-clickable placeholder pill until ranked suggestions arrive (${ISSUE})`, () => {
+        const context = testContext({ tagsRow: true });
+        const row = new TagSuggestionRow(context.app);
+
+        row.showLoading(context.file);
+
+        const placeholder = context.metadataContainer.querySelector(
+          ".copilot-tag-suggestion-placeholder"
+        );
+        expect(placeholder?.textContent).toBe("Suggesting tags…");
+        expect(placeholder?.tagName).toBe("SPAN");
+        expect(
+          context.metadataContainer.querySelectorAll("button[aria-label^='Add #']")
+        ).toHaveLength(0);
+
+        row.show(context.file, suggestions(), jest.fn().mockResolvedValue(true));
+
+        expect(
+          context.metadataContainer.querySelector(".copilot-tag-suggestion-placeholder")
+        ).toBeNull();
+        expect(labels(context.metadataContainer)).toHaveLength(5);
+      });
+
+      it(`counts Auto-add from all ten ranked tags and caps one write at three (${ISSUE})`, async () => {
+        const context = testContext({ tagsRow: true });
+        const addTags = jest.fn(async (tags: string[]) => {
+          context.setTags(tags);
+          context.emitMetadataChanged();
+          return true;
+        });
+        const row = new TagSuggestionRow(context.app);
+        row.show(
+          context.file,
+          scoredSuggestions([0.99, 0.95, 0.9, 0.86, 0.84, 0.8, 0.7, 0.6, 0.5, 0.4]),
+          addTags
+        );
+
+        const autoAdd = context.metadataContainer.querySelector<HTMLButtonElement>(
+          'button[aria-label="Auto-add 3 tags"]'
+        );
+        expect(autoAdd?.textContent).toBe("Auto-add 3");
+        autoAdd?.click();
+
+        expect(labels(context.metadataContainer)).toEqual([
+          "tag-4",
+          "tag-5",
+          "tag-6",
+          "tag-7",
+          "tag-8",
+        ]);
+        await waitFor(() => expect(addTags).toHaveBeenCalledWith(["tag-1", "tag-2", "tag-3"]));
+        expect(addTags).toHaveBeenCalledTimes(1);
+      });
+
+      it(`hides Auto-add when no remaining ranked tag reaches the provisional threshold (${ISSUE})`, () => {
+        const context = testContext({ tagsRow: true });
+        const row = new TagSuggestionRow(context.app);
+
+        row.show(context.file, scoredSuggestions([0.84, 0.8, 0.7]), jest.fn());
+
+        expect(context.metadataContainer.querySelector(".copilot-tag-auto-add-pill")).toBeNull();
+      });
+
       it(`does not retain closed session refs in the long-lived component (${ISSUE})`, () => {
         const context = testContext({ tagsRow: true });
         const row = new TagSuggestionRow(context.app);
@@ -447,7 +516,7 @@ describe("tagSuggestionRow", () => {
 
         context.emitMetadataChanged();
 
-        expect(context.metadataContainer.lastElementChild?.classList).toContain(
+        expect(replacement.previousElementSibling?.classList).toContain(
           "copilot-tag-suggestion-row"
         );
         expect(labels(context.metadataContainer)).toHaveLength(5);
@@ -493,6 +562,65 @@ describe("tagSuggestionRow", () => {
         expect(context.modeRoot.querySelector(".copilot-tag-suggestion-row")).toBeNull();
         expect(context.metadataOffRef).toHaveBeenCalledTimes(1);
         expect(context.workspaceOffRef).toHaveBeenCalledTimes(3);
+      });
+    });
+
+    describe("request lifecycle", () => {
+      it(`invalidates an older generation and reports only the current request (${ISSUE})`, () => {
+        const context = testContext();
+        const row = new TagSuggestionRow(context.app);
+
+        const first = row.beginRequest(context.file);
+        const second = row.beginRequest(context.file);
+
+        expect(row.isCurrentRequest(first)).toBe(false);
+        expect(row.isCurrentRequest(second)).toBe(true);
+      });
+
+      it(`tracks a request as in flight until its matching generation finishes (${ISSUE})`, () => {
+        const context = testContext();
+        const row = new TagSuggestionRow(context.app);
+        const generation = row.beginRequest(context.file);
+
+        expect(row.isRequestInFlight(context.file)).toBe(true);
+        row.finishRequest(context.file, generation + 1);
+        expect(row.isRequestInFlight(context.file)).toBe(true);
+        row.finishRequest(context.file, generation);
+        expect(row.isRequestInFlight(context.file)).toBe(false);
+      });
+    });
+
+    describe("ranked suggestion cache", () => {
+      it(`returns a fresh entry without sharing its mutable array (${ISSUE})`, () => {
+        const context = testContext();
+        const row = new TagSuggestionRow(context.app);
+        const ranked = suggestions(2);
+
+        row.cacheSuggestions(context.file, ranked, 1_000);
+        ranked.pop();
+
+        expect(row.getCachedSuggestions(context.file, 1_000 + 10 * 60 * 1_000)).toEqual(
+          suggestions(2)
+        );
+      });
+
+      it(`expires a cached ranking after ten minutes (${ISSUE})`, () => {
+        const context = testContext();
+        const row = new TagSuggestionRow(context.app);
+        row.cacheSuggestions(context.file, suggestions(2), 1_000);
+
+        expect(row.getCachedSuggestions(context.file, 1_000 + 10 * 60 * 1_000 + 1)).toBeUndefined();
+      });
+
+      it(`keeps only the fifty most recently cached notes (${ISSUE})`, () => {
+        const context = testContext();
+        const row = new TagSuggestionRow(context.app);
+        const files = Array.from({ length: 51 }, (_, index) => file(`Notes/${index}.md`));
+
+        files.forEach((note, index) => row.cacheSuggestions(note, suggestions(1), index));
+
+        expect(row.getCachedSuggestions(files[0], 51)).toBeUndefined();
+        expect(row.getCachedSuggestions(files[50], 51)).toEqual(suggestions(1));
       });
     });
   });

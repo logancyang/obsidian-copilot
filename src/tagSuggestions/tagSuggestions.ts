@@ -15,6 +15,11 @@ const EVIDENCE_TOKEN_MARGIN = 1.3;
 const CJK = /[぀-ヿ㐀-鿿가-힯]/g;
 const HEX_COLOUR_TAG = /^(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
 
+// Provisional until the version-2 hold-one-out measurement sets an evidence-backed cutoff.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/492
+export const AUTO_ADD_MIN_NOUL = 0.85;
+export const AUTO_ADD_MAX = 3;
+
 export interface TagSuggestionState {
   title: string;
   path: string;
@@ -451,18 +456,25 @@ export function rankTagSuggestions(
   return ranked.map(({ tag, score }) => ({ tag, score }));
 }
 
-export async function addTagToFrontmatter(app: App, file: TFile, tag: string): Promise<void> {
-  const normalized = tag.replace(/^#/, "");
+export async function addTagToFrontmatter(app: App, file: TFile, tags: string[]): Promise<void> {
+  const requested = tags.map((tag) => tag.replace(/^#/, "")).filter(Boolean);
   await app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
     const key = "tags" in frontmatter ? "tags" : "tag" in frontmatter ? "tag" : "tags";
     const value = frontmatter[key];
     const current = stringList(value, true);
-    if (!current.some((existing) => existing.toLowerCase() === normalized.toLowerCase())) {
+    const seen = new Set(current.map((tag) => tag.toLowerCase()));
+    const additions = requested.filter((tag) => {
+      const normalized = tag.toLowerCase();
+      if (seen.has(normalized)) return false;
+      seen.add(normalized);
+      return true;
+    });
+    if (additions.length) {
       frontmatter[key] = Array.isArray(value)
-        ? [...value, normalized]
+        ? [...value, ...additions]
         : typeof value === "string" || value == null
-          ? [...current, normalized]
-          : [value, normalized];
+          ? [...current, ...additions]
+          : [value, ...additions];
     }
   });
 }

@@ -411,7 +411,7 @@ describe("tagSuggestions", () => {
         const app = { fileManager: { processFrontMatter } } as unknown as App;
         const active = file("Active.md");
 
-        await addTagToFrontmatter(app, active, "#suggested");
+        await addTagToFrontmatter(app, active, ["#suggested"]);
 
         expect(processFrontMatter).toHaveBeenCalledWith(active, expect.any(Function));
         expect(frontmatter).toMatchObject(expected);
@@ -431,9 +431,23 @@ describe("tagSuggestions", () => {
         },
       } as unknown as App;
 
-      await addTagToFrontmatter(app, file("Active.md"), "suggested");
+      await addTagToFrontmatter(app, file("Active.md"), ["suggested"]);
 
       expect(frontmatter.tags).toEqual(["Suggested"]);
+    });
+
+    it(`adds several tags in one frontmatter write without duplicating existing values (${ISSUE})`, async () => {
+      const frontmatter = { tags: [2024, "Existing"] };
+      const processFrontMatter = jest.fn(
+        async (_file: TFile, update: (value: Record<string, unknown>) => void) =>
+          update(frontmatter)
+      );
+      const app = { fileManager: { processFrontMatter } } as unknown as App;
+
+      await addTagToFrontmatter(app, file("Active.md"), ["existing", "first", "#second"]);
+
+      expect(processFrontMatter).toHaveBeenCalledTimes(1);
+      expect(frontmatter.tags).toEqual([2024, "Existing", "first", "second"]);
     });
   });
 

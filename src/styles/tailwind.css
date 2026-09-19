@@ -1096,6 +1096,18 @@ If your plugin does not need CSS, delete this file.
   opacity: 1;
 }
 
+.copilot-tag-auto-add-pill {
+  appearance: none;
+  cursor: pointer;
+  font: inherit;
+}
+
+.copilot-tag-suggestion-placeholder {
+  background: var(--background-modifier-hover);
+  color: var(--text-muted);
+  opacity: 0.65;
+}
+
 .copilot-tag-suggestion-close {
   appearance: none;
   background: transparent;

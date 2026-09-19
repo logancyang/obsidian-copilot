@@ -8,32 +8,49 @@ import { waitFor } from "@testing-library/react";
 import type { App, MarkdownView } from "obsidian";
 
 const mockCheckIsPlusUser = jest.fn<Promise<boolean>, unknown[]>();
+const mockIsPlusEnabled = jest.fn<boolean, unknown[]>();
 const mockBroca = jest.fn<Promise<Record<string, { noul: number }>>, unknown[]>();
 const mockLogInfo = jest.fn<void, unknown[]>();
+const mockLogError = jest.fn<void, unknown[]>();
 let latestRequest = 0;
 const mockBeginRequest = jest.fn(() => ++latestRequest);
 const mockIsCurrentRequest = jest.fn((request: number) => request === latestRequest);
+const mockFinishRequest = jest.fn();
+const mockShowLoading = jest.fn();
+const mockClose = jest.fn();
+const mockHasSession = jest.fn<boolean, unknown[]>();
+const mockIsRequestInFlight = jest.fn<boolean, unknown[]>();
+const mockGetCachedSuggestions = jest.fn<RankedTagSuggestion[] | undefined, unknown[]>();
+const mockCacheSuggestions = jest.fn();
 const mockRowShow = jest.fn<
   void,
-  [import("obsidian").TFile, RankedTagSuggestion[], (tag: string) => Promise<boolean>]
+  [import("obsidian").TFile, RankedTagSuggestion[], (tags: string[]) => Promise<boolean>]
 >();
-let chooseTag: ((tag: string) => Promise<boolean>) | undefined;
+let chooseTags: ((tags: string[]) => Promise<boolean>) | undefined;
 const suggestionRow = {
   beginRequest: mockBeginRequest,
   isCurrentRequest: mockIsCurrentRequest,
+  finishRequest: mockFinishRequest,
+  showLoading: mockShowLoading,
+  close: mockClose,
+  hasSession: mockHasSession,
+  isRequestInFlight: mockIsRequestInFlight,
+  getCachedSuggestions: mockGetCachedSuggestions,
+  cacheSuggestions: mockCacheSuggestions,
   show: mockRowShow,
 } as unknown as TagSuggestionRow;
 
 jest.mock("@/plusUtils", () => ({
   checkIsPlusUser: async (...args: unknown[]): Promise<boolean> =>
     await mockCheckIsPlusUser(...args),
+  isPlusEnabled: (...args: unknown[]): boolean => mockIsPlusEnabled(...args),
 }));
 jest.mock("@/settings/model", () => ({
   getSettings: () => ({ userId: "user-1", debug: false }),
 }));
 jest.mock("@/logger", () => ({
   logInfo: (...args: unknown[]) => mockLogInfo(...args),
-  logError: jest.fn(),
+  logError: (...args: unknown[]) => mockLogError(...args),
 }));
 jest.mock("@/LLMProviders/brevilabsClient", () => {
   const actual = jest.requireActual<typeof import("@/LLMProviders/brevilabsClient")>(
@@ -102,22 +119,20 @@ function createApp(active: TFile | null = note("Projects/Active.md", 20), candid
   return { app, frontmatter };
 }
 
-function loadingNotice(): { hide: jest.Mock } | undefined {
-  const notice = jest.mocked(Notice);
-  const index = notice.mock.calls.findIndex(([message]) => message === "Suggesting tags…");
-  return notice.mock.instances[index] as unknown as { hide: jest.Mock } | undefined;
-}
-
 describe("tagSuggestionCommand", () => {
   describe("suggestTagsForCurrentNote()", () => {
     beforeEach(() => {
       jest.clearAllMocks();
       latestRequest = 0;
-      chooseTag = undefined;
+      chooseTags = undefined;
       mockRowShow.mockImplementation((_file, _suggestions, onChoose) => {
-        chooseTag = onChoose;
+        chooseTags = onChoose;
       });
       mockCheckIsPlusUser.mockResolvedValue(true);
+      mockIsPlusEnabled.mockReturnValue(true);
+      mockHasSession.mockReturnValue(false);
+      mockIsRequestInFlight.mockReturnValue(false);
+      mockGetCachedSuggestions.mockReturnValue(undefined);
       mockBroca.mockResolvedValue({ t0: { noul: 0.85 } });
     });
 
@@ -142,10 +157,60 @@ describe("tagSuggestionCommand", () => {
         { tag: "research", noul: 0.85, rank: 1 },
       ]);
 
-      await expect(chooseTag?.("research")).resolves.toBe(true);
+      await expect(chooseTags?.(["research"])).resolves.toBe(true);
 
       expect(frontmatter.tags).toEqual(["research"]);
       expect(Notice).toHaveBeenCalledWith("Added #research");
+    });
+
+    it(`adds several Auto-add tags in one write and reports the count (${ISSUE})`, async () => {
+      const { app, frontmatter } = createApp();
+      await suggestTagsForCurrentNote(app, suggestionRow);
+
+      await expect(chooseTags?.(["research", "planning", "next"])).resolves.toBe(true);
+
+      expect(app.fileManager.processFrontMatter).toHaveBeenCalledTimes(1);
+      expect(frontmatter.tags).toEqual(["research", "planning", "next"]);
+      expect(Notice).toHaveBeenCalledWith("Added 3 tags");
+    });
+
+    it(`shows the in-row loading placeholder instead of a loading notice (${ISSUE})`, async () => {
+      const { app } = createApp();
+
+      await suggestTagsForCurrentNote(app, suggestionRow);
+
+      expect(mockShowLoading).toHaveBeenCalledWith(app.workspace.getActiveFile(), false);
+      expect(Notice).not.toHaveBeenCalledWith("Suggesting tags…", 0);
+    });
+
+    it(`uses a fresh cached ranking in quiet mode without sending a request (${ISSUE})`, async () => {
+      const cached = [{ tag: "cached", score: 0.93 }];
+      mockGetCachedSuggestions.mockReturnValue(cached);
+      const { app } = createApp();
+
+      await suggestTagsForCurrentNote(app, suggestionRow, { quiet: true });
+
+      expect(mockCheckIsPlusUser).not.toHaveBeenCalled();
+      expect(mockIsPlusEnabled).toHaveBeenCalled();
+      expect(mockBroca).not.toHaveBeenCalled();
+      expect(mockRowShow).toHaveBeenCalledWith(
+        app.workspace.getActiveFile(),
+        cached,
+        expect.any(Function)
+      );
+    });
+
+    it(`bypasses a cached ranking when the command explicitly requests fresh results (${ISSUE})`, async () => {
+      mockGetCachedSuggestions.mockReturnValue([{ tag: "cached", score: 0.93 }]);
+      const { app } = createApp();
+
+      await suggestTagsForCurrentNote(app, suggestionRow);
+
+      expect(mockGetCachedSuggestions).not.toHaveBeenCalled();
+      expect(mockBroca).toHaveBeenCalled();
+      expect(mockCacheSuggestions).toHaveBeenCalledWith(app.workspace.getActiveFile(), [
+        { tag: "research", score: 0.85 },
+      ]);
     });
 
     it(`discards results when the originating note is no longer active (${ISSUE})`, async () => {
@@ -226,7 +291,7 @@ describe("tagSuggestionCommand", () => {
       jest.mocked(app.fileManager.processFrontMatter).mockRejectedValue(new Error("write failed"));
       await suggestTagsForCurrentNote(app, suggestionRow);
 
-      await expect(chooseTag?.("research")).resolves.toBe(false);
+      await expect(chooseTags?.(["research"])).resolves.toBe(false);
 
       expect(Notice).toHaveBeenCalledWith("Couldn’t add that tag. Try again.");
     });
@@ -285,7 +350,8 @@ describe("tagSuggestionCommand", () => {
       expect(Notice).toHaveBeenCalledWith(
         "A valid Copilot Plus license is required to suggest tags."
       );
-      expect(loadingNotice()?.hide).toHaveBeenCalled();
+      expect(mockShowLoading).toHaveBeenCalledWith(app.workspace.getActiveFile(), false);
+      expect(mockFinishRequest).toHaveBeenCalled();
     });
 
     it("does not call Jev when the vault has no usable candidate tags (https://github.com/Brevilabs/obsidian-copilot-private/issues/492)", async () => {
@@ -313,7 +379,7 @@ describe("tagSuggestionCommand", () => {
         await suggestTagsForCurrentNote(app, suggestionRow);
 
         expect(Notice).toHaveBeenCalledWith(expected);
-        expect(loadingNotice()?.hide).toHaveBeenCalled();
+        expect(mockFinishRequest).toHaveBeenCalled();
       }
     );
 
@@ -326,7 +392,36 @@ describe("tagSuggestionCommand", () => {
       expect(Notice).toHaveBeenCalledWith(
         "Couldn’t suggest tags. Check your connection and try again."
       );
-      expect(loadingNotice()?.hide).toHaveBeenCalled();
+      expect(mockFinishRequest).toHaveBeenCalled();
+    });
+
+    it.each([
+      [new BrevilabsApiError("failed", 403)],
+      [new BrevilabsApiError("failed", 413)],
+      [new BrevilabsApiError("failed", 429)],
+      [new BrevilabsApiError("failed", 504)],
+      [new Error("offline")],
+    ])(`keeps quiet-mode request failures silent for %s (${ISSUE})`, async (error) => {
+      mockBroca.mockRejectedValue(error);
+      const { app } = createApp();
+
+      await suggestTagsForCurrentNote(app, suggestionRow, { quiet: true });
+
+      expect(Notice).not.toHaveBeenCalled();
+      expect(mockClose).toHaveBeenCalled();
+      expect(mockLogError).toHaveBeenCalledWith("Tag suggestion failed", error);
+    });
+
+    it(`keeps quiet-mode empty candidates and empty rankings silent (${ISSUE})`, async () => {
+      const { app } = createApp();
+      const active = app.workspace.getActiveFile();
+      jest.mocked(app.vault.getMarkdownFiles).mockReturnValue(active ? [active] : []);
+
+      await suggestTagsForCurrentNote(app, suggestionRow, { quiet: true });
+
+      expect(Notice).not.toHaveBeenCalled();
+      expect(mockClose).toHaveBeenCalled();
+      expect(mockLogInfo).toHaveBeenCalledWith("[Tag suggestions] No usable candidate tags");
     });
   });
 });

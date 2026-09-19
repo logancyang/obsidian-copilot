@@ -9,6 +9,7 @@ import { CustomModel, setSelectedTextContexts, getSelectedTextContexts } from "@
 import { NoteSelectedTextContext, SelectedTextContext } from "@/types/message";
 import { registerCommands } from "@/commands";
 import { TagSuggestionRow } from "@/tagSuggestions/tagSuggestionRow";
+import { TagSuggestionFocusTrigger } from "@/tagSuggestions/tagSuggestionFocusTrigger";
 import CopilotView from "@/components/CopilotView";
 import RelevantNotesView from "@/components/RelevantNotesView";
 import { APPLY_VIEW_TYPE, ApplyView } from "@/components/composer/ApplyView";
@@ -456,6 +457,7 @@ export default class CopilotPlugin extends Plugin {
     this.register(() => openArtifactsPublisher.dispose());
     this.tagSuggestionRow = new TagSuggestionRow(this.app);
     this.addChild(this.tagSuggestionRow);
+    this.addChild(new TagSuggestionFocusTrigger(this.app, this.tagSuggestionRow));
     registerCommands(this, publishFile);
 
     // Tool initialization is now handled automatically in CopilotPlusChainRunner and AutonomousAgentChainRunner

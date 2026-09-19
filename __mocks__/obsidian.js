@@ -122,6 +122,9 @@ module.exports = {
     unload() {}
     register() {}
     registerEvent() {}
+    registerDomEvent(el, type, callback, options) {
+      el.addEventListener(type, callback, options);
+    }
   },
   // Base class for FolderSearchModal & friends; subclasses only need it to be
   // constructable so suites that pull them into the module graph can load.
