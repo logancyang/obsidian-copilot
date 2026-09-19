@@ -669,13 +669,17 @@ the wrapper. Treat the file as the complete page: do not convert it to Markdown,
 not render, rewrite, or copy it into \`${OPENARTIFACTS_AGENT_HANDOFF_DIR}/\`. Use its file
 name without \`.html\` as the wrapper title without changing the document's own title or
 visible content. Skip the Markdown frontmatter, generated-title, and theme instructions
-above. The original file remains user-owned; never delete the original HTML file.
+above. Check the HTML for relative \`src\` or \`href\` references to local files. If any
+exist, keep the file unchanged; name each reference in the review message and say it will
+not load on the published page because only the HTML file is uploaded. This warning does
+not block publication: let the user make the file self-contained or approve publishing
+anyway. The original file remains user-owned; never delete the original HTML file.
 
 ## 2. Let the user review
 
-Tell the user the absolute path of the HTML file and that opening it in a browser shows
-the page as it will be uploaded; OpenArtifacts adds its own header and footer bylines when
-it serves the page. Then end your turn.
+Tell the user the absolute path of the HTML file and that, subject to any relative-asset
+warning above, opening it in a browser shows the page as it will be uploaded; OpenArtifacts
+adds its own header and footer bylines when it serves the page. Then end your turn.
 
 Never publish in the same turn that generated the HTML. Publish only when a later
 message from the user clearly asks to publish this page. Treat anything else as feedback
