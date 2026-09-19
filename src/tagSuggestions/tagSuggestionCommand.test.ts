@@ -71,10 +71,11 @@ function createApp(active: TFile | null = note("Projects/Active.md", 20), candid
   }
   const caches = new Map<TFile, CachedMetadata>(cacheEntries);
   const frontmatter: Record<string, unknown> = {};
+  const activeView = active ? ({ file: active } as MarkdownView) : null;
   const app = {
     workspace: {
       getActiveFile: jest.fn(() => active),
-      getActiveViewOfType: jest.fn(() => (active ? ({ file: active } as MarkdownView) : null)),
+      getActiveViewOfType: jest.fn(() => activeView),
     },
     vault: {
       getMarkdownFiles: jest.fn(() => (active ? [active, ...others] : others)),
@@ -197,6 +198,17 @@ describe("tagSuggestionCommand", () => {
 
       await suggestTagsForCurrentNote(app, suggestionRow);
 
+      expect(mockBroca).not.toHaveBeenCalled();
+      expect(Notice).toHaveBeenCalledWith("Open a Markdown note before suggesting tags.");
+    });
+
+    it(`does not read or send the last active file from a non-file view (${ISSUE})`, async () => {
+      const { app } = createApp();
+      jest.mocked(app.workspace.getActiveViewOfType).mockReturnValue(null);
+
+      await suggestTagsForCurrentNote(app, suggestionRow);
+
+      expect(app.vault.cachedRead).not.toHaveBeenCalled();
       expect(mockBroca).not.toHaveBeenCalled();
       expect(Notice).toHaveBeenCalledWith("Open a Markdown note before suggesting tags.");
     });

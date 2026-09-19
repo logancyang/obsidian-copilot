@@ -21,7 +21,8 @@ export async function suggestTagsForCurrentNote(
   // Tag suggestion is an optional Jev judgment: every failure stays local to this
   // user-triggered command and leaves the note unchanged.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/492
-  const file = app.workspace.getActiveFile();
+  const view = app.workspace.getActiveViewOfType(MarkdownView);
+  const file = view?.file;
   if (!(file instanceof TFile) || file.extension !== "md") {
     new Notice("Open a Markdown note before suggesting tags.");
     return;
@@ -52,7 +53,8 @@ export async function suggestTagsForCurrentNote(
         )
       )
     );
-    if (app.workspace.getActiveViewOfType(MarkdownView)?.file?.path !== file.path) return;
+    const activeView = app.workspace.getActiveViewOfType(MarkdownView);
+    if (!activeView || activeView !== view || activeView.file?.path !== file.path) return;
     const ranking = rankTagSuggestions(requests, responses);
     if (!ranking.length) {
       new Notice("No tag suggestions were returned. Try again.");

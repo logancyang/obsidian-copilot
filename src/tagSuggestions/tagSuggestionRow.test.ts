@@ -81,6 +81,7 @@ function testContext(options: { tagsRow?: boolean; properties?: number } = {}): 
   });
   const app = {
     workspace: {
+      getActiveViewOfType: jest.fn(() => view),
       getLeavesOfType: jest.fn(() => [leaf]),
       on: jest.fn((_event: string, callback: () => void) => {
         workspaceListeners.add(callback);
@@ -343,6 +344,21 @@ describe("tagSuggestionRow", () => {
         context.emitActiveLeafChange();
 
         expect(context.metadataContainer.querySelector(".copilot-tag-suggestion-row")).toBeNull();
+        expect(context.metadataOffRef).toHaveBeenCalledTimes(1);
+        expect(context.workspaceOffRef).toHaveBeenCalledTimes(1);
+      });
+
+      it(`closes a fallback picker when another Markdown view becomes active (${ISSUE})`, () => {
+        const context = testContext();
+        context.metadataContainer.remove();
+        const row = new TagSuggestionRow(context.app);
+        row.show(context.file, suggestions(), jest.fn().mockResolvedValue(true));
+        const otherView = { file: file("Projects/Other.md") } as MarkdownView;
+
+        jest.mocked(context.app.workspace.getActiveViewOfType).mockReturnValue(otherView);
+        context.emitActiveLeafChange();
+
+        expect(mockModalClose).toHaveBeenCalledTimes(1);
         expect(context.metadataOffRef).toHaveBeenCalledTimes(1);
         expect(context.workspaceOffRef).toHaveBeenCalledTimes(1);
       });

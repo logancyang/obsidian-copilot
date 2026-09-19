@@ -57,11 +57,13 @@ export class TagSuggestionRow extends Component {
       if (changedFile.path === session.file.path) this.render(session);
     });
     session.workspaceRef = this.app.workspace.on("active-leaf-change", () => {
-      if (session.view && !this.viewStillShowsFile(session.view, session.file)) {
+      const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
+      if (
+        !activeView ||
+        activeView !== session.view ||
+        activeView.file?.path !== session.file.path
+      ) {
         this.closeSession(session);
-      } else if (!session.view) {
-        session.view = this.findView(session.file);
-        this.render(session);
       }
     });
     this.session = session;
