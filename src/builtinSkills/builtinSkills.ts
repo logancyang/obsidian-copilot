@@ -735,9 +735,9 @@ step 1: \`openartifacts\` first, \`symposium\` on older notes, compared by docum
 stop to ask on any other value or on two properties naming different ids. If there is no link
 or property, say nothing is published. Otherwise tell the user the link will stop working and
 that copies people already saved cannot be recalled, then end your turn. On a clear yes, run
-the wrapper with \`unshare <docId>\`, remove the \`openartifacts\` and \`symposium\` properties
-only from a Markdown note whose link has the same document id, and report that the page is
-gone. Never tell the user to delete the page at its public URL.
+the wrapper with \`unshare <docId>\`, remove each \`openartifacts\` or \`symposium\` property
+only when that property's own link has the same document id, and report that the page is gone.
+Never tell the user to delete the page at its public URL.
 `,
   files: [
     { path: `themes/${OPENARTIFACTS_DEFAULT_THEME}.md`, content: RESEARCH_MEMO_THEME },

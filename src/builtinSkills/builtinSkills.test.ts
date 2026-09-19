@@ -346,7 +346,7 @@ describe("builtinSkills", () => {
         /take the `docId` from an OpenArtifacts link the\s+user supplies or the receipt URL reported earlier/
       );
       expect(md).toMatch(
-        /remove the `openartifacts` and `symposium` properties\s+only from a Markdown note whose link has the same document id/
+        /remove each `openartifacts` or `symposium` property\s+only when that property's own link has the same document id/
       );
     });
   });
