@@ -35,10 +35,15 @@ interface TestContext {
   view: MarkdownView;
   contentEl: HTMLElement;
   metadataContainer: HTMLElement;
+  sourceMetadataContainer: HTMLElement;
+  readingMetadataContainer: HTMLElement;
+  modeRoot: HTMLElement;
   setTags(tags: string[]): void;
+  setMode(mode: "source" | "preview"): void;
   emitMetadataChanged(): void;
   emitActiveLeafChange(): void;
   emitFileOpen(): void;
+  emitLayoutChange(): void;
   metadataOffRef: jest.Mock;
   workspaceOffRef: jest.Mock;
 }
@@ -55,28 +60,43 @@ function suggestions(count = 10): RankedTagSuggestion[] {
   }));
 }
 
-function testContext(options: { tagsRow?: boolean; properties?: number } = {}): TestContext {
+function testContext(
+  options: { tagsRow?: boolean; properties?: number; mode?: "source" | "preview" } = {}
+): TestContext {
   const activeFile = file("Projects/Active.md");
   const contentEl = document.createElement("div");
-  const metadataContainer = contentEl.createDiv({ cls: "metadata-container" });
+  const sourceRoot = contentEl.createDiv({ cls: "markdown-source-view" });
+  const readingRoot = contentEl.createDiv({ cls: "markdown-reading-view" });
+  const sourceMetadataContainer = sourceRoot.createDiv({ cls: "metadata-container" });
+  const readingMetadataContainer = readingRoot.createDiv({ cls: "metadata-container" });
+  let mode = options.mode ?? "source";
+  const metadataContainer = mode === "preview" ? readingMetadataContainer : sourceMetadataContainer;
+  const inactiveMetadataContainer =
+    mode === "preview" ? sourceMetadataContainer : readingMetadataContainer;
   const propertyCount = options.properties ?? 2;
-  for (let index = 0; index < propertyCount; index++) {
-    metadataContainer.createDiv({
-      cls: "metadata-property",
-      attr: { "data-property-key": options.tagsRow && index === 0 ? "tags" : `property-${index}` },
-    });
+  for (const container of [metadataContainer, inactiveMetadataContainer]) {
+    for (let index = 0; index < propertyCount; index++) {
+      container.createDiv({
+        cls: "metadata-property",
+        attr: {
+          "data-property-key": options.tagsRow && index === 0 ? "tags" : `property-${index}`,
+        },
+      });
+    }
   }
   document.body.appendChild(contentEl);
 
   const view = {
     file: activeFile,
     contentEl,
+    getMode: jest.fn(() => mode),
   } as unknown as MarkdownView;
   const leaf = { view } as unknown as WorkspaceLeaf;
   let tags: string[] = [];
   const metadataListeners = new Set<(changed: TFile) => void>();
   const activeLeafListeners = new Set<() => void>();
   const fileOpenListeners = new Set<() => void>();
+  const layoutChangeListeners = new Set<() => void>();
   const metadataOffRef = jest.fn((ref: EventRef) => {
     metadataListeners.delete((ref as unknown as { callback: (changed: TFile) => void }).callback);
   });
@@ -84,13 +104,20 @@ function testContext(options: { tagsRow?: boolean; properties?: number } = {}): 
     const callback = (ref as unknown as { callback: () => void }).callback;
     activeLeafListeners.delete(callback);
     fileOpenListeners.delete(callback);
+    layoutChangeListeners.delete(callback);
   });
   const app = {
     workspace: {
       getActiveViewOfType: jest.fn(() => view),
       getLeavesOfType: jest.fn(() => [leaf]),
       on: jest.fn((event: string, callback: () => void) => {
-        (event === "file-open" ? fileOpenListeners : activeLeafListeners).add(callback);
+        const listeners =
+          event === "file-open"
+            ? fileOpenListeners
+            : event === "layout-change"
+              ? layoutChangeListeners
+              : activeLeafListeners;
+        listeners.add(callback);
         return { callback };
       }),
       offref: workspaceOffRef,
@@ -111,8 +138,14 @@ function testContext(options: { tagsRow?: boolean; properties?: number } = {}): 
     view,
     contentEl,
     metadataContainer,
+    sourceMetadataContainer,
+    readingMetadataContainer,
+    modeRoot: mode === "preview" ? readingRoot : sourceRoot,
     setTags(nextTags) {
       tags = nextTags;
+    },
+    setMode(nextMode) {
+      mode = nextMode;
     },
     emitMetadataChanged() {
       metadataListeners.forEach((listener) => listener(activeFile));
@@ -122,6 +155,9 @@ function testContext(options: { tagsRow?: boolean; properties?: number } = {}): 
     },
     emitFileOpen() {
       fileOpenListeners.forEach((listener) => listener());
+    },
+    emitLayoutChange() {
+      layoutChangeListeners.forEach((listener) => listener());
     },
     metadataOffRef,
     workspaceOffRef,
@@ -168,6 +204,34 @@ describe("tagSuggestionRow", () => {
         expect(mockModalOpen).not.toHaveBeenCalled();
       });
 
+      it.each([
+        ["source", "sourceMetadataContainer", "readingMetadataContainer"],
+        ["preview", "readingMetadataContainer", "sourceMetadataContainer"],
+      ] as const)(
+        `mounts in the active %s mode when both Properties containers exist (${ISSUE})`,
+        (mode, activeKey, inactiveKey) => {
+          const context = testContext({ tagsRow: true, mode });
+          const row = new TagSuggestionRow(context.app);
+
+          row.show(context.file, suggestions(), jest.fn().mockResolvedValue(true));
+
+          expect(labels(context[activeKey])).toHaveLength(5);
+          expect(labels(context[inactiveKey])).toHaveLength(0);
+        }
+      );
+
+      it(`moves the row when the Markdown view changes mode (${ISSUE})`, () => {
+        const context = testContext({ tagsRow: true });
+        const row = new TagSuggestionRow(context.app);
+        row.show(context.file, suggestions(), jest.fn().mockResolvedValue(true));
+
+        context.setMode("preview");
+        context.emitLayoutChange();
+
+        expect(labels(context.sourceMetadataContainer)).toHaveLength(0);
+        expect(labels(context.readingMetadataContainer)).toHaveLength(5);
+      });
+
       it(`mounts after the last property when the note has no tags property (${ISSUE})`, () => {
         const context = testContext({ properties: 3 });
         const lastProperty = context.metadataContainer.lastElementChild;
@@ -187,7 +251,7 @@ describe("tagSuggestionRow", () => {
         row.show(context.file, suggestions(), addTag);
         await chooseFromModal?.("tag-1");
         context.setTags(["tag-1"]);
-        context.contentEl.appendChild(context.metadataContainer);
+        context.modeRoot.appendChild(context.metadataContainer);
         context.emitMetadataChanged();
 
         expect(mockModalOpen).toHaveBeenCalledTimes(2);
@@ -200,6 +264,21 @@ describe("tagSuggestionRow", () => {
           "tag-5",
           "tag-6",
         ]);
+      });
+
+      it(`reopens fallback after a mounted row loses its Properties container (${ISSUE})`, async () => {
+        const context = testContext();
+        context.metadataContainer.remove();
+        const row = new TagSuggestionRow(context.app);
+        row.show(context.file, suggestions(), jest.fn().mockResolvedValue(true));
+
+        await chooseFromModal?.("tag-1");
+        context.modeRoot.appendChild(context.metadataContainer);
+        context.emitMetadataChanged();
+        context.metadataContainer.remove();
+        context.emitMetadataChanged();
+
+        expect(mockModalOpen).toHaveBeenCalledTimes(3);
       });
 
       it(`removes a clicked pill immediately and refills from the ranked queue (${ISSUE})`, async () => {
@@ -273,7 +352,7 @@ describe("tagSuggestionRow", () => {
         dismissModal?.();
 
         expect(context.metadataOffRef).toHaveBeenCalledTimes(1);
-        expect(context.workspaceOffRef).toHaveBeenCalledTimes(2);
+        expect(context.workspaceOffRef).toHaveBeenCalledTimes(3);
       });
 
       it(`filters manually added tags and fills the visible row from the remaining queue (${ISSUE})`, () => {
@@ -320,7 +399,7 @@ describe("tagSuggestionRow", () => {
 
         expect(context.metadataContainer.querySelector(".copilot-tag-suggestion-row")).toBeNull();
         expect(context.metadataOffRef).toHaveBeenCalledTimes(1);
-        expect(context.workspaceOffRef).toHaveBeenCalledTimes(2);
+        expect(context.workspaceOffRef).toHaveBeenCalledTimes(3);
       });
 
       it(`removes the row and listeners on close and plugin unload (${ISSUE})`, () => {
@@ -334,13 +413,13 @@ describe("tagSuggestionRow", () => {
 
         expect(context.metadataContainer.querySelector(".copilot-tag-suggestion-row")).toBeNull();
         expect(context.metadataOffRef).toHaveBeenCalledTimes(1);
-        expect(context.workspaceOffRef).toHaveBeenCalledTimes(2);
+        expect(context.workspaceOffRef).toHaveBeenCalledTimes(3);
 
         row.show(context.file, suggestions(), jest.fn().mockResolvedValue(true));
         row.onunload();
         expect(context.metadataContainer.querySelector(".copilot-tag-suggestion-row")).toBeNull();
         expect(context.metadataOffRef).toHaveBeenCalledTimes(2);
-        expect(context.workspaceOffRef).toHaveBeenCalledTimes(4);
+        expect(context.workspaceOffRef).toHaveBeenCalledTimes(6);
       });
 
       it(`does not retain closed session refs in the long-lived component (${ISSUE})`, () => {
@@ -353,7 +432,7 @@ describe("tagSuggestionRow", () => {
 
         expect(registerEvent).not.toHaveBeenCalled();
         expect(context.metadataOffRef).toHaveBeenCalledTimes(1);
-        expect(context.workspaceOffRef).toHaveBeenCalledTimes(2);
+        expect(context.workspaceOffRef).toHaveBeenCalledTimes(3);
       });
 
       it(`re-mounts after Obsidian replaces the Properties rows (${ISSUE})`, () => {
@@ -383,7 +462,7 @@ describe("tagSuggestionRow", () => {
 
         expect(context.metadataContainer.querySelector(".copilot-tag-suggestion-row")).toBeNull();
         expect(context.metadataOffRef).toHaveBeenCalledTimes(1);
-        expect(context.workspaceOffRef).toHaveBeenCalledTimes(2);
+        expect(context.workspaceOffRef).toHaveBeenCalledTimes(3);
       });
 
       it(`closes a fallback picker when another Markdown view becomes active (${ISSUE})`, () => {
@@ -398,7 +477,7 @@ describe("tagSuggestionRow", () => {
 
         expect(mockModalClose).toHaveBeenCalledTimes(1);
         expect(context.metadataOffRef).toHaveBeenCalledTimes(1);
-        expect(context.workspaceOffRef).toHaveBeenCalledTimes(2);
+        expect(context.workspaceOffRef).toHaveBeenCalledTimes(3);
       });
 
       it(`closes a fallback picker when its active leaf opens another file (${ISSUE})`, () => {
@@ -412,7 +491,7 @@ describe("tagSuggestionRow", () => {
 
         expect(mockModalClose).toHaveBeenCalledTimes(1);
         expect(context.metadataOffRef).toHaveBeenCalledTimes(1);
-        expect(context.workspaceOffRef).toHaveBeenCalledTimes(2);
+        expect(context.workspaceOffRef).toHaveBeenCalledTimes(3);
       });
     });
   });

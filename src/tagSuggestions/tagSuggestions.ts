@@ -460,7 +460,7 @@ export async function addTagToFrontmatter(app: App, file: TFile, tag: string): P
     if (!current.some((existing) => existing.toLowerCase() === normalized.toLowerCase())) {
       frontmatter[key] = Array.isArray(value)
         ? [...value, normalized]
-        : typeof value === "string" || value === undefined
+        : typeof value === "string" || value == null
           ? [...current, normalized]
           : [value, normalized];
     }

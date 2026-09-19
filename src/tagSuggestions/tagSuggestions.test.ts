@@ -388,6 +388,8 @@ describe("tagSuggestions", () => {
     it.each([
       ["no frontmatter", {}, { tags: ["suggested"] }],
       ["empty tags", { tags: [] }, { tags: ["suggested"] }],
+      ["empty tags property", { tags: null }, { tags: ["suggested"] }],
+      ["empty tag property", { tag: null }, { tag: ["suggested"] }],
       ["populated tags", { tags: ["existing"], owner: "Ada" }, { tags: ["existing", "suggested"] }],
       ["mixed-value tags", { tags: [2024, "book"] }, { tags: [2024, "book", "suggested"] }],
       ["singular tag scalar", { tag: "book" }, { tag: ["book", "suggested"] }],

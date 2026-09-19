@@ -14,10 +14,10 @@ interface TagSuggestionSession {
   pendingWrites: number;
   rowEl?: HTMLElement;
   modal?: TagSuggestionModal;
-  fallbackOpened: boolean;
   metadataRef: EventRef;
   workspaceRef: EventRef;
   fileOpenRef: EventRef;
+  layoutRef: EventRef;
 }
 
 function normalizedTag(tag: string): string {
@@ -61,10 +61,9 @@ export class TagSuggestionRow extends Component {
     const session = {
       file,
       view: this.findView(file),
-      queue: suggestions.slice(0, 10),
+      queue: suggestions,
       addTag,
       pendingWrites: 0,
-      fallbackOpened: false,
     } as TagSuggestionSession;
     session.metadataRef = this.app.metadataCache.on("changed", (changedFile) => {
       if (changedFile.path === session.file.path) this.render(session);
@@ -81,6 +80,7 @@ export class TagSuggestionRow extends Component {
     };
     session.workspaceRef = this.app.workspace.on("active-leaf-change", closeIfSourceIsInactive);
     session.fileOpenRef = this.app.workspace.on("file-open", closeIfSourceIsInactive);
+    session.layoutRef = this.app.workspace.on("layout-change", () => this.render(session));
     this.session = session;
     this.render(session);
   }
@@ -130,12 +130,14 @@ export class TagSuggestionRow extends Component {
 
     session.rowEl?.remove();
     session.rowEl = undefined;
-    const container = session.view?.contentEl.querySelector<HTMLElement>(".metadata-container");
+    const view = session.view;
+    const modeRootSelector =
+      view?.getMode() === "preview" ? ".markdown-reading-view" : ".markdown-source-view";
+    const container = view?.contentEl
+      .querySelector<HTMLElement>(modeRootSelector)
+      ?.querySelector<HTMLElement>(".metadata-container");
     if (!container || !isVisible(container)) {
-      if (queueChanged && session.fallbackOpened) {
-        this.closeModal(session);
-        session.fallbackOpened = false;
-      }
+      if (queueChanged && session.modal) this.closeModal(session);
       this.openFallback(session);
       return;
     }
@@ -174,15 +176,13 @@ export class TagSuggestionRow extends Component {
     // The Properties DOM is not a public Obsidian API, so the modal remains the
     // safe path when that surface is unavailable.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/492
-    if (session.fallbackOpened || session.pendingWrites > 0 || !session.queue.length) return;
-    session.fallbackOpened = true;
+    if (session.modal || session.pendingWrites > 0 || !session.queue.length) return;
     const modal = new TagSuggestionModal(
       this.app,
       session.queue,
       async (tag) => {
         if (this.session !== session || session.modal !== modal) return;
         session.modal = undefined;
-        session.fallbackOpened = false;
         const suggestion = session.queue.find(
           (candidate) => normalizedTag(candidate.tag) === normalizedTag(tag)
         );
@@ -213,7 +213,6 @@ export class TagSuggestionRow extends Component {
       // A failed write must not silently consume a suggestion the user can retry.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/492
       this.closeModal(session);
-      session.fallbackOpened = false;
       session.queue.splice(Math.min(index, session.queue.length), 0, suggestion);
     }
     this.render(session);
@@ -232,6 +231,7 @@ export class TagSuggestionRow extends Component {
     this.app.metadataCache.offref(session.metadataRef);
     this.app.workspace.offref(session.workspaceRef);
     this.app.workspace.offref(session.fileOpenRef);
+    this.app.workspace.offref(session.layoutRef);
     this.session = undefined;
   }
 }
