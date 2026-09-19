@@ -7,6 +7,7 @@ import { TFile as ObsidianTFile } from "obsidian";
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/492";
 const mockModalOpen = jest.fn<void, []>();
 const mockModalClose = jest.fn<void, []>();
+const modalQueues: string[][] = [];
 let chooseFromModal: ((tag: string) => void | Promise<void>) | undefined;
 let dismissModal: (() => void) | undefined;
 
@@ -20,6 +21,7 @@ jest.mock("@/components/modals/TagSuggestionModal", () => ({
         onChoose: (tag: string) => void | Promise<void>,
         onDismiss: () => void
       ) => {
+        modalQueues.push(_suggestions.map(({ tag }) => tag));
         chooseFromModal = onChoose;
         dismissModal = onDismiss;
         return { open: mockModalOpen, close: mockModalClose };
@@ -136,6 +138,7 @@ describe("tagSuggestionRow", () => {
   describe("TagSuggestionRow", () => {
     beforeEach(() => {
       jest.clearAllMocks();
+      modalQueues.length = 0;
       chooseFromModal = undefined;
       dismissModal = undefined;
       document.body.replaceChildren();
@@ -287,6 +290,23 @@ describe("tagSuggestionRow", () => {
           "tag-4",
           "tag-5",
           "tag-6",
+        ]);
+      });
+
+      it(`refreshes an open fallback picker after metadata filters its queue (${ISSUE})`, () => {
+        const context = testContext();
+        context.metadataContainer.remove();
+        const row = new TagSuggestionRow(context.app);
+        row.show(context.file, suggestions(6), jest.fn().mockResolvedValue(true));
+
+        context.setTags(["tag-1"]);
+        context.emitMetadataChanged();
+
+        expect(mockModalClose).toHaveBeenCalledTimes(1);
+        expect(mockModalOpen).toHaveBeenCalledTimes(2);
+        expect(modalQueues).toEqual([
+          ["tag-1", "tag-2", "tag-3", "tag-4", "tag-5", "tag-6"],
+          ["tag-2", "tag-3", "tag-4", "tag-5", "tag-6"],
         ]);
       });
 

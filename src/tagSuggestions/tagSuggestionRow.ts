@@ -120,7 +120,9 @@ export class TagSuggestionRow extends Component {
 
     const cache = this.app.metadataCache.getFileCache(session.file);
     const existing = new Set((cache ? (getAllTags(cache) ?? []) : []).map(normalizedTag));
-    session.queue = session.queue.filter(({ tag }) => !existing.has(normalizedTag(tag)));
+    const filteredQueue = session.queue.filter(({ tag }) => !existing.has(normalizedTag(tag)));
+    const queueChanged = filteredQueue.length !== session.queue.length;
+    session.queue = filteredQueue;
     if (!session.queue.length && session.pendingWrites === 0) {
       this.closeSession(session);
       return;
@@ -130,6 +132,10 @@ export class TagSuggestionRow extends Component {
     session.rowEl = undefined;
     const container = session.view?.contentEl.querySelector<HTMLElement>(".metadata-container");
     if (!container || !isVisible(container)) {
+      if (queueChanged && session.fallbackOpened) {
+        this.closeModal(session);
+        session.fallbackOpened = false;
+      }
       this.openFallback(session);
       return;
     }

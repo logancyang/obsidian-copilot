@@ -169,6 +169,27 @@ describe("tagSuggestionCommand", () => {
       expect(mockRowShow).not.toHaveBeenCalled();
     });
 
+    it(`does not upload after the source view changes during cachedRead (${ISSUE})`, async () => {
+      let resolveRead: (value: string) => void = () => undefined;
+      const { app } = createApp();
+      jest.mocked(app.vault.cachedRead).mockImplementation(
+        async () =>
+          await new Promise<string>((resolve) => {
+            resolveRead = resolve;
+          })
+      );
+
+      const pending = suggestTagsForCurrentNote(app, suggestionRow);
+      await waitFor(() => expect(app.vault.cachedRead).toHaveBeenCalled());
+      jest
+        .mocked(app.workspace.getActiveViewOfType)
+        .mockReturnValue({ file: note("Projects/Other.md", 21) } as MarkdownView);
+      resolveRead("Active note body");
+      await pending;
+
+      expect(mockBroca).not.toHaveBeenCalled();
+    });
+
     it(`discards an older request that finishes after a newer invocation (${ISSUE})`, async () => {
       let resolveFirst: (value: Record<string, { noul: number }>) => void = () => undefined;
       let resolveSecond: (value: Record<string, { noul: number }>) => void = () => undefined;

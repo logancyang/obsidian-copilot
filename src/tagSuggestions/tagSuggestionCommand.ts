@@ -28,18 +28,27 @@ export async function suggestTagsForCurrentNote(
     return;
   }
   const request = suggestionRow.beginRequest();
+  const sourceIsCurrent = (): boolean => {
+    const activeView = app.workspace.getActiveViewOfType(MarkdownView);
+    return (
+      suggestionRow.isCurrentRequest(request) &&
+      activeView !== null &&
+      activeView === view &&
+      activeView.file?.path === file.path
+    );
+  };
 
   const loading = new Notice("Suggesting tags…", 0);
   try {
     const isPlusUser = await checkIsPlusUser(app, "tool_call");
-    if (!suggestionRow.isCurrentRequest(request)) return;
+    if (!sourceIsCurrent()) return;
     if (!isPlusUser) {
       new Notice("A valid Copilot Plus license is required to suggest tags.");
       return;
     }
 
     const content = await app.vault.cachedRead(file);
-    if (!suggestionRow.isCurrentRequest(request)) return;
+    if (!sourceIsCurrent()) return;
     const candidates = collectTagCandidates(app, file, content);
     if (!candidates.length) {
       new Notice("This vault has no other tags to suggest for this note.");
@@ -48,6 +57,7 @@ export async function suggestTagsForCurrentNote(
     const state = buildTagSuggestionState(app, file, content, app.metadataCache.getFileCache(file));
     const requests = packTagSuggestionRequests(state, candidates, getSettings().userId);
     const client = BrevilabsClient.getInstance();
+    if (!sourceIsCurrent()) return;
     const responses = await Promise.all(
       requests.map((request) =>
         client.broca<typeof state, (typeof request.questions)[string], NoulAnswer>(
@@ -56,14 +66,7 @@ export async function suggestTagsForCurrentNote(
         )
       )
     );
-    const activeView = app.workspace.getActiveViewOfType(MarkdownView);
-    if (
-      !suggestionRow.isCurrentRequest(request) ||
-      !activeView ||
-      activeView !== view ||
-      activeView.file?.path !== file.path
-    )
-      return;
+    if (!sourceIsCurrent()) return;
     const ranking = rankTagSuggestions(requests, responses);
     if (!ranking.length) {
       new Notice("No tag suggestions were returned. Try again.");
@@ -86,7 +89,7 @@ export async function suggestTagsForCurrentNote(
       }
     });
   } catch (error) {
-    if (suggestionRow.isCurrentRequest(request)) {
+    if (sourceIsCurrent()) {
       logError("Tag suggestion failed", error);
       new Notice(tagSuggestionErrorNotice(error));
     }
