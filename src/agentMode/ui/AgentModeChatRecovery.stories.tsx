@@ -39,6 +39,14 @@ export const Upgrade = {
     ),
   },
 } satisfies StoryObj<Props>;
+/** A session start is already in flight, so the pane shows the pending selection without accepting a new one. */
+export const Starting = {
+  args: {
+    ...Upgrade.args,
+    picker: { ...Upgrade.args.picker, disabled: true },
+    children: <AgentStatusCard message="Starting the agent…" />,
+  },
+} satisfies StoryObj<Props>;
 export const StartupFailure = {
   args: {
     ...Upgrade.args,

@@ -60,6 +60,12 @@ export function ModelEffortPicker({ override, className }: ModelEffortPickerProp
     model: "",
     effort: null,
   });
+  // Whether a row was chosen while the popover was open. The draft seeds itself
+  // from the first selectable row whenever `value` names nothing selectable —
+  // the Agent Chat recovery pane has no session, so it has no selection — and
+  // committing that seed on dismissal would start an agent nobody picked.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/480
+  const pickedRef = useRef(false);
 
   // Agent Mode entries are synthesized and never gated by BYOK API-key checks
   // (the backend manages its own credentials). `_disabledReason` is the only
@@ -91,6 +97,7 @@ export function ModelEffortPicker({ override, className }: ModelEffortPickerProp
       );
       setDraftEffort(initialEffort);
       initialRef.current = { model: value, effort: activeEffortValue };
+      pickedRef.current = false;
       /* eslint-enable @eslint-react/hooks-extra/no-direct-set-state-in-use-effect -- resume checking after draft initialization */
     }
   }, [open, value, enabledKeys, activeEffortValue, effortOptionsByModelKey]);
@@ -117,6 +124,7 @@ export function ModelEffortPicker({ override, className }: ModelEffortPickerProp
   // active row).
   const pickDraft = useCallback(
     (key: string) => {
+      pickedRef.current = true;
       setDraftModelKey(key);
       setHighlightKey(key);
       const rowOpts = effortOptionsByModelKey[key] ?? [];
@@ -173,7 +181,7 @@ export function ModelEffortPicker({ override, className }: ModelEffortPickerProp
     }
     if (draftModelKey) {
       const init = initialRef.current;
-      const modelChanged = draftModelKey !== init.model;
+      const modelChanged = pickedRef.current && draftModelKey !== init.model;
       const effortChanged = draftEffort !== init.effort;
       if (modelChanged) {
         commitSelection(draftModelKey, draftEffort);
