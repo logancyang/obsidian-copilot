@@ -1175,10 +1175,6 @@ export class AgentSessionManager {
     if (this.disposed) {
       throw new Error("AgentSessionManager has been shut down");
     }
-    // A create started mid-install would adopt the outgoing runtime or a stale warm probe.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/480
-    const backendId = this.getActiveSession()?.backendId ?? getSettings().agentMode?.activeBackend;
-    if (backendId) await this.waitForBackendInstall(backendId);
     const active = this.getActiveSession();
     // Only reuse the active session when it belongs to the current scope —
     // after `enterProject` the prior scope's session may still be pointed at by
@@ -1222,18 +1218,40 @@ export class AgentSessionManager {
     seedSelection?: ModelSelection,
     chatInputId?: string
   ): Promise<AgentSession> {
+    // Spawning mid-install would adopt the outgoing live process or a warm probe of the
+    // runtime being replaced, so every externally-initiated create settles the queue first.
+    // The install refresh rebuilds its own tabs through `createSessionInternal`, which never
+    // waits and so cannot deadlock on the queue it is running in.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/480
+    const resolvedId = this.resolveCreateBackendId(backendId);
+    await this.waitForBackendInstall(resolvedId);
+    return this.createSessionInternal(resolvedId, projectId, seedSelection, chatInputId);
+  }
+
+  /**
+   * Backend a create spawns on: the explicit request, else the persisted default, else
+   * opencode. An unknown id (corrupt persisted `activeBackend`, or a backend that no longer
+   * ships) coerces to opencode so auto-spawn degrades gracefully instead of throwing.
+   */
+  private resolveCreateBackendId(backendId: BackendId | undefined): BackendId {
+    const requestedId = backendId ?? getSettings().agentMode?.activeBackend ?? "opencode";
+    return this.opts.resolveDescriptor(requestedId) ? requestedId : "opencode";
+  }
+
+  /**
+   * Build the session without waiting on install work. Only the install refresh's own tab
+   * rebuild may call this directly; every other caller goes through `createSession`.
+   */
+  private async createSessionInternal(
+    resolvedId: BackendId,
+    projectId: ProjectScopeId,
+    seedSelection?: ModelSelection,
+    chatInputId?: string
+  ): Promise<AgentSession> {
     if (this.disposed) {
       throw new Error("AgentSessionManager has been shut down");
     }
 
-    // Resolve the backend to spawn: the explicit request, else the persisted
-    // default, else opencode. Held in one variable so the whole method — cwd
-    // mirror, descriptor, pending-create bookkeeping — uses the same id. Coerce
-    // an unknown id (corrupt persisted `activeBackend`, or a removed backend) to
-    // opencode so auto-spawn degrades gracefully instead of throwing — the same
-    // safety the removed Self-Host redirect used to provide as a side effect.
-    const requestedId = backendId ?? getSettings().agentMode?.activeBackend ?? "opencode";
-    const resolvedId = this.opts.resolveDescriptor(requestedId) ? requestedId : "opencode";
     // Read SYNCHRONOUSLY, before this method's first await, so the success path below can
     // tell whether any failure landed while this create was in flight.
     const errorSeqAtStart = this.lastErrorSeq;
@@ -2508,10 +2526,13 @@ export class AgentSessionManager {
     return work;
   }
 
-  /** Block until every queued install refresh for this backend has settled. */
+  /**
+   * Block until every queued install refresh for this backend has settled. A refresh that
+   * threw is the install's failure, not the waiter's, so its rejection is absorbed here.
+   */
   private async waitForBackendInstall(backendId: BackendId): Promise<void> {
     let work: Promise<void> | undefined;
-    while ((work = this.installWork.get(backendId))) await work;
+    while ((work = this.installWork.get(backendId))) await work.catch(() => undefined);
   }
 
   private async refreshInstalledBackend(backendId: BackendId): Promise<void> {
@@ -3920,7 +3941,7 @@ export class AgentSessionManager {
         return resumed;
       }
     }
-    return this.createSession(backendId, projectId, undefined, chatInputId);
+    return this.createSessionInternal(backendId, projectId, undefined, chatInputId);
   }
 
   /** Immediately tear down `backendId` and rebuild its tabs with their composers. */
