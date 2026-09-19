@@ -1,5 +1,4 @@
 import { BrevilabsApiError } from "@/LLMProviders/brevilabsClient";
-import { isSensitiveKey } from "@/services/settingsSecretTransforms";
 import { App, CachedMetadata, parseFrontMatterAliases, TFile } from "obsidian";
 
 const EXCERPT_CHARS = 1500;
@@ -100,12 +99,18 @@ function formatLocalDate(timestamp: number, includeTime = false): string {
 
 function isSensitiveFrontmatterKey(key: string): boolean {
   const normalized = key.toLowerCase().replace(/[^a-z0-9]/g, "");
-  return (
-    isSensitiveKey(key) ||
-    ["authorization", "credential", "privatekey", "passphrase"].some((term) =>
-      normalized.includes(term)
-    )
-  );
+  return [
+    "apikey",
+    "token",
+    "secret",
+    "password",
+    "passwd",
+    "licensekey",
+    "authorization",
+    "credential",
+    "privatekey",
+    "passphrase",
+  ].some((term) => normalized.includes(term));
 }
 
 function stripTagSuggestionFrontmatter(content: string): string {
@@ -453,7 +458,11 @@ export async function addTagToFrontmatter(app: App, file: TFile, tag: string): P
     const value = frontmatter[key];
     const current = stringList(value, true);
     if (!current.some((existing) => existing.toLowerCase() === normalized.toLowerCase())) {
-      frontmatter[key] = Array.isArray(value) ? [...value, normalized] : [...current, normalized];
+      frontmatter[key] = Array.isArray(value)
+        ? [...value, normalized]
+        : typeof value === "string" || value === undefined
+          ? [...current, normalized]
+          : [value, normalized];
     }
   });
 }

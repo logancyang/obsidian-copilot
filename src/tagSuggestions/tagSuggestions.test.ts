@@ -137,21 +137,26 @@ describe("tagSuggestions", () => {
       expect(state.excerpt?.length).toBe(1500);
     });
 
-    it.each(["authorization", "credential", "private_key", "passphrase"])(
-      `excludes the credential-shaped frontmatter property %s (${ISSUE})`,
-      (sensitiveKey) => {
-        const active = file("Private.md");
-        const cache = metadata([], { [sensitiveKey]: "must-not-leave", owner: "Ada" });
-        const app = {
-          vault: { getMarkdownFiles: () => [active] },
-          metadataCache: { getFileCache: () => cache, resolvedLinks: {} },
-        } as unknown as App;
+    it.each([
+      "authorization",
+      "credential",
+      "private_key",
+      "passphrase",
+      "passwd",
+      "aws_secret_access_key",
+      "aws_session_token",
+    ])(`excludes the credential-shaped frontmatter property %s (${ISSUE})`, (sensitiveKey) => {
+      const active = file("Private.md");
+      const cache = metadata([], { [sensitiveKey]: "must-not-leave", owner: "Ada" });
+      const app = {
+        vault: { getMarkdownFiles: () => [active] },
+        metadataCache: { getFileCache: () => cache, resolvedLinks: {} },
+      } as unknown as App;
 
-        const state = buildTagSuggestionState(app, active, "body", cache);
+      const state = buildTagSuggestionState(app, active, "body", cache);
 
-        expect(state.properties).toEqual({ owner: "Ada" });
-      }
-    );
+      expect(state.properties).toEqual({ owner: "Ada" });
+    });
 
     it(`strips frontmatter only at a standalone closing fence (${ISSUE})`, () => {
       const active = file("Private.md");
@@ -386,6 +391,8 @@ describe("tagSuggestions", () => {
       ["populated tags", { tags: ["existing"], owner: "Ada" }, { tags: ["existing", "suggested"] }],
       ["mixed-value tags", { tags: [2024, "book"] }, { tags: [2024, "book", "suggested"] }],
       ["singular tag scalar", { tag: "book" }, { tag: ["book", "suggested"] }],
+      ["numeric tags scalar", { tags: 2024 }, { tags: [2024, "suggested"] }],
+      ["boolean tag scalar", { tag: true }, { tag: [true, "suggested"] }],
       [
         "singular mixed-value tag array",
         { tag: [2024, "book"] },
