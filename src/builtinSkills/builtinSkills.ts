@@ -679,8 +679,9 @@ it serves the page. Then end your turn.
 
 Never publish in the same turn that generated the HTML. Publish only when a later
 message from the user clearly asks to publish this page. Treat anything else as feedback
-(revise the same file and repeat this step) or as a cancellation. When unsure whether a
-message is an approval, ask once. Never simulate the user's approval.
+(revise the generated Markdown handoff and repeat this step; for existing HTML, relay the
+feedback and wait for the user to update the file) or as a cancellation. When unsure whether
+a message is an approval, ask once. Never simulate the user's approval.
 
 ## 3. Publish
 
@@ -729,8 +730,8 @@ stop to ask on any other value or on two properties naming different ids. If the
 or property, say nothing is published. Otherwise tell the user the link will stop working and
 that copies people already saved cannot be recalled, then end your turn. On a clear yes, run
 the wrapper with \`unshare <docId>\`, remove the \`openartifacts\` and \`symposium\` properties
-from the Markdown note when present, and report that the page is gone. Never tell the user to
-delete the page at its public URL.
+only from a Markdown note whose link has the same document id, and report that the page is
+gone. Never tell the user to delete the page at its public URL.
 `,
   files: [
     { path: `themes/${OPENARTIFACTS_DEFAULT_THEME}.md`, content: RESEARCH_MEMO_THEME },
