@@ -1,5 +1,7 @@
 import { AgentChatControls } from "@/agentMode/ui/AgentChatControls";
 import { AgentHome } from "@/agentMode/ui/AgentHome";
+import { AgentModeChatRecovery } from "@/agentMode/ui/AgentModeChatRecovery";
+import { useAgentModelPicker } from "@/agentMode/ui/useAgentModelPicker";
 import { AgentModeStatus } from "@/agentMode/ui/AgentModeStatus";
 import { AgentSelectPanel } from "@/agentMode/ui/AgentSelectPanel";
 import { AgentSelectPane } from "@/agentMode/ui/AgentSelectPane";
@@ -37,6 +39,7 @@ export const AgentModeChat: React.FC<Props> = ({
   const descriptor = useSessionBackendDescriptor(manager);
   const installState = useBackendInstallState(descriptor, plugin);
   const settings = useSettingsValue();
+  const picker = useAgentModelPicker(manager ?? null, plugin);
   const [tick, setTick] = React.useState(0);
 
   React.useEffect(() => {
@@ -100,7 +103,10 @@ export const AgentModeChat: React.FC<Props> = ({
   // Render a loading placeholder until plugin-load preload settles. This
   // guarantees the picker (and effort dropdown) read from a populated
   // cache on first paint instead of flashing an empty list.
-  if (!preloadReady) {
+  // An agent that cannot run never settles a preload, so the placeholder would
+  // hide the status card and its picker forever.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/480
+  if (!preloadReady && installState.kind === "ready") {
     return (
       <div className="tw-flex tw-size-full tw-items-center tw-justify-center tw-text-muted">
         Loading agent models…
@@ -144,11 +150,7 @@ export const AgentModeChat: React.FC<Props> = ({
   const isColdStart =
     !manager.getIsStarting() &&
     manager.getLastError() === null &&
-    (installState.kind === "absent" ||
-      // Cold-start upgrades need the same progress and Retry card as active sessions.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
-      (installState.kind === "incompatible" && !descriptor.managedInstall) ||
-      installState.kind === "error");
+    (installState.kind === "absent" || installState.kind === "error");
 
   if (isColdStart) {
     return (
@@ -158,13 +160,18 @@ export const AgentModeChat: React.FC<Props> = ({
     );
   }
 
+  // A start already in flight owns the session that is about to take this pane
+  // over. Committing a pick meanwhile calls `createSession` directly, which is
+  // not de-duped against the pending `getOrCreateActiveSession`, so both
+  // sessions would land and the later one would steal focus.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/480
+  const recoveryPicker = picker && manager.getIsStarting() ? { ...picker, disabled: true } : picker;
+
   // Render the chain switcher below the status surface so the user can still
   // leave Agent Mode without going through settings or the command palette.
   return (
-    <div className="tw-flex tw-size-full tw-flex-col tw-overflow-hidden">
-      <div className="tw-flex-1" />
+    <AgentModeChatRecovery picker={recoveryPicker} controls={<AgentChatControls />}>
       <AgentModeStatus manager={manager} plugin={plugin} onInstallClick={handleInstall} />
-      <AgentChatControls />
-    </div>
+    </AgentModeChatRecovery>
   );
 };

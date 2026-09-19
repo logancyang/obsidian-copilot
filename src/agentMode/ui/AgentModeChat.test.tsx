@@ -4,13 +4,25 @@ import type { AgentSession } from "@/agentMode/session/AgentSession";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import type { InstallState } from "@/agentMode/session/types";
 import type CopilotPlugin from "@/main";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import React from "react";
 
 // Readiness of the backend the pane would run, swapped per test. Declared with
 // the `mock` prefix so Jest allows the mock factory below to close over it.
 let mockManagedInstall: object | undefined;
 let mockInstallState: InstallState = { kind: "ready", source: "custom" };
+const mockCommitSelection = jest.fn();
+jest.mock("@/agentMode/ui/useAgentModelPicker", () => ({
+  useAgentModelPicker: jest.fn(() => ({
+    models: [
+      { name: "saved", displayName: "Saved model", provider: "agent", enabled: true },
+      { name: "other", displayName: "Other saved model", provider: "agent", enabled: true },
+    ],
+    value: "saved|agent",
+    effortOptionsByModelKey: {},
+    commitSelection: mockCommitSelection,
+  })),
+}));
 
 // Stub the descriptor hooks so the effect's `preloadReady`/install gates are
 // satisfied without the real backend registry / jotai atoms. The mock factory
@@ -105,6 +117,7 @@ describe("AgentModeChat", () => {
     mockManagedInstall = undefined;
     mockInstallState = { kind: "ready", source: "custom" };
     mockLastDraft = null;
+    mockCommitSelection.mockClear();
   });
 
   describe("compose draft ownership", () => {
@@ -216,7 +229,7 @@ describe("AgentModeChat", () => {
       expect(screen.queryByTestId("status-card")).toBeNull();
     });
 
-    it("takes the pane over when the agent's binary is too old to run", () => {
+    it("keeps the status card and commits a saved-model pick when the agent's binary is too old (https://github.com/Brevilabs/obsidian-copilot-private/issues/480)", () => {
       renderFallback(
         {
           kind: "incompatible",
@@ -228,7 +241,19 @@ describe("AgentModeChat", () => {
         null
       );
 
-      expect(screen.getByTestId("select-panel")).toBeTruthy();
+      expect(screen.getByTestId("status-card")).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: /Saved model/i }));
+      fireEvent.click(screen.getByRole("option", { name: /Other saved model/i }));
+      fireEvent.keyDown(screen.getByRole("listbox"), { key: "Escape" });
+      expect(mockCommitSelection).toHaveBeenCalledWith("other|agent", null);
+    });
+
+    it("refuses recovery model picks while a session start is already in flight (https://github.com/Brevilabs/obsidian-copilot-private/issues/480)", () => {
+      renderFallback({ kind: "ready", source: "custom" }, null, true);
+
+      expect(screen.getByRole("button", { name: /Saved model/i }).hasAttribute("disabled")).toBe(
+        true
+      );
     });
 
     it("takes the pane over when the agent's readiness check failed", () => {

@@ -83,8 +83,13 @@ export function ModelEffortPicker({ override, className }: ModelEffortPickerProp
   useEffect(() => {
     if (open) {
       /* eslint-disable @eslint-react/hooks-extra/no-direct-set-state-in-use-effect -- seed the editable draft from props when the popover opens; drafts are committed on close, so this can't be pure derived state */
-      const initial = value && enabledKeys.includes(value) ? value : (enabledKeys[0] ?? null);
-      setHighlightKey(initial);
+      // Only a selectable `value` seeds the draft. The recovery pane has no
+      // session, so nothing is selected; seeding the first row there would
+      // commit a model on dismissal that nobody picked. The highlight still
+      // starts on the first row so arrow keys have a starting point.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/480
+      const initial = value && enabledKeys.includes(value) ? value : null;
+      setHighlightKey(initial ?? enabledKeys[0] ?? null);
       setDraftModelKey(initial);
       const initialOpts = initial ? (effortOptionsByModelKey[initial] ?? []) : [];
       const initialEffort = resolveEffort(
