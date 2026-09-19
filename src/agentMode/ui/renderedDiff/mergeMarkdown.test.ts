@@ -39,6 +39,31 @@ describe("mergeMarkdown", () => {
     it("returns nothing for two empty texts", () => {
       expect(diffCodeLines("", "")).toEqual([]);
     });
+
+    it("shows an added final newline without losing the unterminated original line (https://github.com/Brevilabs/obsidian-copilot-private/issues/349)", () => {
+      expect(diffCodeLines('{"ready":true}', '{"ready":true}\n')).toEqual([
+        { change: "deleted", text: '{"ready":true}' },
+        { change: "deleted", text: "\\ No newline at end of file" },
+        { change: "inserted", text: '{"ready":true}' },
+      ]);
+    });
+
+    it("shows a removed final newline without losing the unterminated replacement line (https://github.com/Brevilabs/obsidian-copilot-private/issues/349)", () => {
+      expect(diffCodeLines('{"ready":true}\n', '{"ready":true}')).toEqual([
+        { change: "deleted", text: '{"ready":true}' },
+        { change: "inserted", text: '{"ready":true}' },
+        { change: "inserted", text: "\\ No newline at end of file" },
+      ]);
+    });
+
+    it("preserves unchanged and edited unterminated lines without inventing a newline change (https://github.com/Brevilabs/obsidian-copilot-private/issues/349)", () => {
+      expect(diffCodeLines("same", "same")).toEqual([{ change: "unchanged", text: "same" }]);
+      expect(diffCodeLines("context\nold", "context\nnew")).toEqual([
+        { change: "unchanged", text: "context" },
+        { change: "deleted", text: "old" },
+        { change: "inserted", text: "new" },
+      ]);
+    });
   });
 
   describe("buildRenderedDiffPlan()", () => {
