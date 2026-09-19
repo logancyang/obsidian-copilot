@@ -1797,6 +1797,15 @@ export class AgentSession {
     const entry = this.pendingToolResolvers.get(toolCallId);
     if (!entry) return;
     this.pendingToolResolvers.delete(toolCallId);
+    // Denied arguments describe intent, not a write that can be reversed.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/347
+    if (
+      entry.request.options.some(
+        (option) => option.optionId === optionId && PERMISSION_REJECT_KINDS.includes(option.kind)
+      )
+    ) {
+      this.discardReportedEdits(toolCallId);
+    }
     entry.resolve({ outcome: { outcome: "selected", optionId } });
     this.recomputeStatusIfChanged();
     this.notifyMessages();
@@ -1863,6 +1872,7 @@ export class AgentSession {
     map: Map<string, { request: PermissionPrompt; resolve: (resp: PermissionDecision) => void }>
   ): void {
     for (const { request, resolve } of map.values()) {
+      this.discardReportedEdits(request.toolCall.toolCallId);
       resolve(decisionFor(request, PERMISSION_REJECT_KINDS));
     }
     map.clear();
@@ -2140,6 +2150,12 @@ export class AgentSession {
     call: ToolCallSnapshot | ToolCallDelta,
     kind: AgentToolKind | undefined
   ): void {
+    // A failed substitution can match text that already existed, inventing a diff.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/347
+    if (call.status === "failed") {
+      this.discardReportedEdits(call.toolCallId);
+      return;
+    }
     if (!kind || !CAPTURED_KINDS.has(kind)) return;
     const app = this.getApp?.();
     const adapter = this.vaultAdapter();
@@ -2185,6 +2201,14 @@ export class AgentSession {
       const edit = reported.get(path);
       if (edit) capture.edits.set(call.toolCallId, edit);
     }
+  }
+
+  // Keep snapshots and other calls' evidence so partial writes still appear.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/347
+  private discardReportedEdits(toolCallId: string): void {
+    const paths = this.turnPathsByToolCall.get(toolCallId);
+    if (!paths) return;
+    for (const path of paths) this.turnFiles.get(path)?.edits.delete(toolCallId);
   }
 
   /**

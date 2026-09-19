@@ -4724,6 +4724,183 @@ describe("AgentSession file-change capture", () => {
     ]);
   });
 
+  describe("sendPrompt() rejected edit evidence", () => {
+    const requestedEdit = {
+      file_path: "/vault/notes/a.md",
+      old_string: "missing",
+      new_string: "two",
+    };
+
+    it("recovers a completed edit from its report when the snapshot is already post-write https://github.com/Brevilabs/obsidian-copilot-private/issues/347", async () => {
+      const vault = makeVault({ "notes/a.md": "one\ntwo\n" });
+      const mock = makeMockBackend();
+      mock.prompt.mockImplementation(async () => {
+        const call = editCall("t1", requestedEdit.file_path);
+        mock.emit({ ...call, update: { ...call.update, rawInput: requestedEdit } });
+        mock.emit({
+          sessionId: "acp-1",
+          update: { sessionUpdate: "tool_call_update", toolCallId: "t1", status: "completed" },
+        });
+        return { stopReason: "end_turn" as const };
+      });
+      const session = makeSession(mock, vault.app);
+
+      await session.sendPrompt("edit it").turn;
+
+      expect(fileChangesOf(session)).toMatchObject([
+        { before: "one\nmissing\n", after: "one\ntwo\n" },
+      ]);
+    });
+
+    it.each(["status-only", "repeated arguments"])(
+      "reports no change after a failed edit with %s when its replacement text already existed https://github.com/Brevilabs/obsidian-copilot-private/issues/347",
+      async (report) => {
+        const vault = makeVault({ "notes/a.md": "one\ntwo\n" });
+        const mock = makeMockBackend();
+        mock.prompt.mockImplementation(async () => {
+          const call = editCall("t1", requestedEdit.file_path);
+          mock.emit({ ...call, update: { ...call.update, rawInput: requestedEdit } });
+          mock.emit({
+            sessionId: "acp-1",
+            update: {
+              sessionUpdate: "tool_call_update",
+              toolCallId: "t1",
+              status: "failed",
+              ...(report === "repeated arguments" ? { rawInput: requestedEdit } : {}),
+            },
+          });
+          return { stopReason: "end_turn" as const };
+        });
+        const session = makeSession(mock, vault.app);
+
+        await session.sendPrompt("attempt an edit").turn;
+
+        expect(fileChangesOf(session)).toBeUndefined();
+      }
+    );
+
+    it("reports actual partial changes from the snapshot when the editing tool fails https://github.com/Brevilabs/obsidian-copilot-private/issues/347", async () => {
+      const vault = makeVault({ "notes/a.md": "one\ntwo\n" });
+      const mock = makeMockBackend();
+      mock.prompt.mockImplementation(async () => {
+        const call = editCall("t1", requestedEdit.file_path);
+        mock.emit({ ...call, update: { ...call.update, rawInput: requestedEdit } });
+        vault.files.set("notes/a.md", "ONE\ntwo\n");
+        mock.emit({
+          sessionId: "acp-1",
+          update: { sessionUpdate: "tool_call_update", toolCallId: "t1", status: "failed" },
+        });
+        return { stopReason: "end_turn" as const };
+      });
+      const session = makeSession(mock, vault.app);
+
+      await session.sendPrompt("attempt an edit").turn;
+
+      expect(fileChangesOf(session)).toEqual([
+        {
+          path: "notes/a.md",
+          status: "modified",
+          before: "one\ntwo\n",
+          after: "ONE\ntwo\n",
+          additions: 1,
+          deletions: 1,
+        },
+      ]);
+    });
+
+    it("preserves another call's successful edit evidence on the same file after a failure https://github.com/Brevilabs/obsidian-copilot-private/issues/347", async () => {
+      const vault = makeVault({ "notes/a.md": "one\ntwo\n" });
+      const mock = makeMockBackend();
+      mock.prompt.mockImplementation(async () => {
+        const success = editCall("success", requestedEdit.file_path);
+        mock.emit({
+          ...success,
+          update: {
+            ...success.update,
+            status: "completed",
+            rawInput: { ...requestedEdit, old_string: "zero", new_string: "one" },
+          },
+        });
+        const failure = editCall("failure", requestedEdit.file_path);
+        mock.emit({ ...failure, update: { ...failure.update, rawInput: requestedEdit } });
+        mock.emit({
+          sessionId: "acp-1",
+          update: { sessionUpdate: "tool_call_update", toolCallId: "failure", status: "failed" },
+        });
+        return { stopReason: "end_turn" as const };
+      });
+      const session = makeSession(mock, vault.app);
+
+      await session.sendPrompt("edit twice").turn;
+
+      expect(fileChangesOf(session)).toMatchObject([
+        { before: "zero\ntwo\n", after: "one\ntwo\n" },
+      ]);
+    });
+
+    it.each(["allow_once", "allow_always"] as const)(
+      "reports the actual edit after permission is granted via %s https://github.com/Brevilabs/obsidian-copilot-private/issues/347",
+      async (kind) => {
+        const vault = makeVault({ "notes/a.md": "one\nmissing\n" });
+        const mock = makeMockBackend();
+        mock.prompt.mockImplementation(async () => {
+          const decision = session.handleToolPermission({
+            sessionId: "acp-1",
+            toolCall: {
+              ...editCall("t1", requestedEdit.file_path).update,
+              rawInput: requestedEdit,
+            },
+            options: [{ optionId: "yes", name: "Allow", kind }],
+          });
+          session.resolveToolPermission("t1", "yes");
+          await expect(decision).resolves.toEqual({
+            outcome: { outcome: "selected", optionId: "yes" },
+          });
+          vault.files.set("notes/a.md", "one\ntwo\n");
+          return { stopReason: "end_turn" as const };
+        });
+        const session = makeSession(mock, vault.app);
+
+        await session.sendPrompt("edit it").turn;
+
+        expect(fileChangesOf(session)).toMatchObject([
+          { before: "one\nmissing\n", after: "one\ntwo\n" },
+        ]);
+      }
+    );
+
+    it.each(["reject_once", "reject_always", "cancel"] as const)(
+      "reports no invented change when permission is denied via %s without a failure event https://github.com/Brevilabs/obsidian-copilot-private/issues/347",
+      async (kind) => {
+        const vault = makeVault({ "notes/a.md": "one\ntwo\n" });
+        const mock = makeMockBackend();
+        mock.prompt.mockImplementation(async () => {
+          const decision = session.handleToolPermission({
+            sessionId: "acp-1",
+            toolCall: {
+              ...editCall("t1", requestedEdit.file_path).update,
+              rawInput: requestedEdit,
+            },
+            options: [
+              { optionId: "no", name: "Deny", kind: kind === "cancel" ? "reject_once" : kind },
+            ],
+          });
+          if (kind === "cancel") await session.cancel();
+          else session.resolveToolPermission("t1", "no");
+          await expect(decision).resolves.toEqual({
+            outcome: { outcome: "selected", optionId: "no" },
+          });
+          return { stopReason: "end_turn" as const };
+        });
+        const session = makeSession(mock, vault.app);
+
+        await session.sendPrompt("attempt an edit").turn;
+
+        expect(fileChangesOf(session)).toBeUndefined();
+      }
+    );
+  });
+
   it("ignores paths outside the vault and inside hidden folders", async () => {
     const vault = makeVault({});
     const mock = makeMockBackend();
