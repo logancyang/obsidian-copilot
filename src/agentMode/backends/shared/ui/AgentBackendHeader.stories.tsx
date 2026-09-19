@@ -35,12 +35,12 @@ export const OutdatedCodex: StoryObj<AgentBackendHeaderProps> = {
     displayName: "Codex",
     installState: {
       kind: "incompatible",
-      source: "custom",
-      currentVersion: "0.0.44",
+      source: "managed",
+      currentVersion: "1.9.0",
       minVersion: "1.10.0",
-      message: "Codex v0.0.44 is not supported. Copilot requires Codex v1.10.0 or newer.",
+      message: "Codex adapter 1.9.0 does not match this Copilot release (1.10.0).",
     },
-    resolvedPath: "~/.local/bin/codex-acp",
+    resolvedPath: "~/.obsidian-copilot/codex/1.9.0/codex-acp",
   },
 };
 export const Running: StoryObj<AgentBackendHeaderProps> = {

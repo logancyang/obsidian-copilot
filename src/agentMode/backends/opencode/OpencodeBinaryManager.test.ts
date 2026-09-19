@@ -560,6 +560,98 @@ fi
   });
 });
 
+describe("OpencodeBinaryManager.revalidateCustomBinary", () => {
+  let tmpDir: string;
+
+  beforeEach(async () => {
+    tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "opencode-revalidate-"));
+  });
+
+  afterEach(async () => {
+    await fs.promises.rm(tmpDir, { recursive: true, force: true });
+  });
+
+  /**
+   * A stub custom binary whose `--version` prints `version`, optionally after
+   * touching `marker` and pausing so a test can change settings mid-probe.
+   */
+  const writeVersionStub = async (version: string, marker?: string): Promise<string> => {
+    const file = path.join(tmpDir, "opencode");
+    await fs.promises.writeFile(
+      file,
+      `#!/bin/sh
+if [ "$1" = "--version" ]; then
+${marker ? `  touch ${JSON.stringify(marker)}\n  sleep 1\n` : ""}  echo "${version}"
+  exit 0
+fi
+exit 1
+`
+    );
+    await fs.promises.chmod(file, 0o755);
+    return file;
+  };
+
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/480 records the new version of a custom binary the user updated in place", async () => {
+    if (process.platform === "win32") return;
+    const file = await writeVersionStub(OPENCODE_PINNED_VERSION);
+    settingsMock.__reset({ binaryPath: file, binaryVersion: "1.15.11", binarySource: "custom" });
+
+    await new OpencodeBinaryManager(fakePlugin).revalidateCustomBinary();
+
+    expect(settingsMock.__get()).toEqual({
+      binaryPath: file,
+      binaryVersion: OPENCODE_PINNED_VERSION,
+      binarySource: "custom",
+    });
+  });
+
+  it("leaves a managed install alone, because Copilot already knows what it downloaded", async () => {
+    if (process.platform === "win32") return;
+    const file = await writeVersionStub(OPENCODE_PINNED_VERSION);
+    const managed = {
+      binaryPath: file,
+      binaryVersion: "1.15.11",
+      binarySource: "managed" as const,
+    };
+    settingsMock.__reset(managed);
+
+    await new OpencodeBinaryManager(fakePlugin).revalidateCustomBinary();
+
+    expect(settingsMock.__get()).toEqual(managed);
+  });
+
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/480 does not stamp the probed version onto a different binary configured while it ran", async () => {
+    if (process.platform === "win32") return;
+    const marker = path.join(tmpDir, "probing");
+    const file = await writeVersionStub("1.18.0", marker);
+    settingsMock.__reset({ binaryPath: file, binaryVersion: "1.15.11", binarySource: "custom" });
+    const manager = new OpencodeBinaryManager(fakePlugin);
+
+    const probe = manager.revalidateCustomBinary();
+    await waitFor(() => expect(fs.existsSync(marker)).toBe(true));
+    const replacement = {
+      binaryPath: path.join(tmpDir, "managed", "opencode"),
+      binaryVersion: OPENCODE_PINNED_VERSION,
+      binarySource: "managed" as const,
+    };
+    settingsMock.__reset(replacement);
+    await probe;
+
+    expect(settingsMock.__get()).toEqual(replacement);
+  });
+
+  it("reports an unreadable binary so the caller can log it rather than persist a guess", async () => {
+    settingsMock.__reset({
+      binaryPath: path.join(tmpDir, "missing"),
+      binaryVersion: "1.15.11",
+      binarySource: "custom",
+    });
+
+    await expect(new OpencodeBinaryManager(fakePlugin).revalidateCustomBinary()).rejects.toThrow();
+    expect(settingsMock.__get().binaryVersion).toBe("1.15.11");
+  });
+});
+
 describe("install-dir paths (outside the vault)", () => {
   afterEach(() => jest.mocked(os.homedir).mockReset());
 

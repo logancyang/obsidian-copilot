@@ -81,7 +81,7 @@ export const OutdatedCodex: StoryObj<AgentStatusCardProps> = {
   args: {
     summary: "Codex update required",
     tone: "warning",
-    message: "Codex v0.0.44 is not supported. Copilot requires Codex v1.10.0 or newer.",
+    message: "Codex adapter 1.9.0 does not match this Copilot release (1.10.0).",
     action: { label: "Configure Codex", onClick: () => undefined },
   },
 };

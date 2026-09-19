@@ -81,7 +81,7 @@ If an installed agent is too old, Agent Chat and **Settings → Copilot → Basi
 
 1. Select **Configure** in the warning to open the agent's configuration dialog. Opening it does not start an upgrade.
 2. For **Managed by Copilot**, choose the upgrade action or **Download & install** to install Copilot's pinned version.
-3. For **My own binary**, update your installation yourself, then use **Apply** or **Auto-detect** to validate it again. You can also choose a managed download instead.
+3. For **My own binary**, update your installation yourself and reopen **Configure**. Copilot re-reads the installed version when the dialog opens, so an installation that is now new enough stops being reported as outdated. You can also choose a managed download instead.
 
 Chat and Settings keep shared installation progress and errors visible. If an installation fails, open **Configure**, resolve the reported problem, and retry there. Copilot does not upgrade agents automatically.
 
