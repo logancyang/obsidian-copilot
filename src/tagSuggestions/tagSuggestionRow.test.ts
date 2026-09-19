@@ -2,32 +2,9 @@ import type { RankedTagSuggestion } from "@/tagSuggestions/tagSuggestions";
 import { TagSuggestionRow } from "@/tagSuggestions/tagSuggestionRow";
 import { waitFor } from "@testing-library/react";
 import type { App, CachedMetadata, EventRef, MarkdownView, TFile, WorkspaceLeaf } from "obsidian";
-import { TFile as ObsidianTFile } from "obsidian";
+import { Notice, TFile as ObsidianTFile } from "obsidian";
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/492";
-const mockModalOpen = jest.fn<void, []>();
-const mockModalClose = jest.fn<void, []>();
-const modalQueues: string[][] = [];
-let chooseFromModal: ((tag: string) => void | Promise<void>) | undefined;
-let dismissModal: (() => void) | undefined;
-
-jest.mock("@/components/modals/TagSuggestionModal", () => ({
-  TagSuggestionModal: jest
-    .fn()
-    .mockImplementation(
-      (
-        _app: App,
-        _suggestions: RankedTagSuggestion[],
-        onChoose: (tag: string) => void | Promise<void>,
-        onDismiss: () => void
-      ) => {
-        modalQueues.push(_suggestions.map(({ tag }) => tag));
-        chooseFromModal = onChoose;
-        dismissModal = onDismiss;
-        return { open: mockModalOpen, close: mockModalClose };
-      }
-    ),
-}));
 
 interface TestContext {
   app: App;
@@ -174,9 +151,6 @@ describe("tagSuggestionRow", () => {
   describe("TagSuggestionRow", () => {
     beforeEach(() => {
       jest.clearAllMocks();
-      modalQueues.length = 0;
-      chooseFromModal = undefined;
-      dismissModal = undefined;
       document.body.replaceChildren();
     });
 
@@ -201,7 +175,6 @@ describe("tagSuggestionRow", () => {
           "tag-4",
           "tag-5",
         ]);
-        expect(mockModalOpen).not.toHaveBeenCalled();
       });
 
       it.each([
@@ -242,21 +215,40 @@ describe("tagSuggestionRow", () => {
         expect(lastProperty?.nextElementSibling?.classList).toContain("copilot-tag-suggestion-row");
       });
 
-      it(`uses the modal without a visible Properties container and lets the row take over after a pick (${ISSUE})`, async () => {
+      it(`mounts the row after a hidden Properties container without opening a modal (${ISSUE})`, () => {
         const context = testContext();
-        context.metadataContainer.remove();
-        const addTag = jest.fn().mockResolvedValue(true);
+        context.metadataContainer.classList.add("is-hidden");
         const row = new TagSuggestionRow(context.app);
 
-        row.show(context.file, suggestions(), addTag);
-        await chooseFromModal?.("tag-1");
-        context.setTags(["tag-1"]);
-        context.modeRoot.appendChild(context.metadataContainer);
-        context.emitMetadataChanged();
+        row.show(context.file, suggestions(), jest.fn().mockResolvedValue(true));
 
-        expect(mockModalOpen).toHaveBeenCalledTimes(2);
-        expect(addTag).toHaveBeenCalledWith("tag-1");
-        expect(mockModalClose).toHaveBeenCalled();
+        expect(context.metadataContainer.nextElementSibling?.classList).toContain(
+          "copilot-tag-suggestion-row"
+        );
+        expect(labels(context.modeRoot)).toEqual(["tag-1", "tag-2", "tag-3", "tag-4", "tag-5"]);
+      });
+
+      it(`moves a hidden-panel row under tags after the first write creates frontmatter (${ISSUE})`, async () => {
+        const context = testContext({ tagsRow: true });
+        context.metadataContainer.classList.add("is-hidden");
+        const addTag = jest.fn(async (tag: string) => {
+          context.setTags([tag]);
+          context.metadataContainer.classList.remove("is-hidden");
+          context.emitMetadataChanged();
+          return true;
+        });
+        const row = new TagSuggestionRow(context.app);
+        row.show(context.file, suggestions(6), addTag);
+
+        context.modeRoot
+          .querySelector<HTMLButtonElement>('button[aria-label="Add #tag-1"]')
+          ?.click();
+
+        await waitFor(() => expect(addTag).toHaveBeenCalledWith("tag-1"));
+        const tagsProperty = context.metadataContainer.querySelector(
+          '.metadata-property[data-property-key="tags"]'
+        );
+        expect(tagsProperty?.nextElementSibling?.classList).toContain("copilot-tag-suggestion-row");
         expect(labels(context.metadataContainer)).toEqual([
           "tag-2",
           "tag-3",
@@ -266,19 +258,16 @@ describe("tagSuggestionRow", () => {
         ]);
       });
 
-      it(`reopens fallback after a mounted row loses its Properties container (${ISSUE})`, async () => {
+      it(`shows a notice and ends the session when the mode has no Properties container (${ISSUE})`, () => {
         const context = testContext();
         context.metadataContainer.remove();
         const row = new TagSuggestionRow(context.app);
+
         row.show(context.file, suggestions(), jest.fn().mockResolvedValue(true));
 
-        await chooseFromModal?.("tag-1");
-        context.modeRoot.appendChild(context.metadataContainer);
-        context.emitMetadataChanged();
-        context.metadataContainer.remove();
-        context.emitMetadataChanged();
-
-        expect(mockModalOpen).toHaveBeenCalledTimes(3);
+        expect(Notice).toHaveBeenCalledWith("Couldn’t show tag suggestions in this note.");
+        expect(context.metadataOffRef).toHaveBeenCalledTimes(1);
+        expect(context.workspaceOffRef).toHaveBeenCalledTimes(3);
       });
 
       it(`removes a clicked pill immediately and refills from the ranked queue (${ISSUE})`, async () => {
@@ -321,40 +310,6 @@ describe("tagSuggestionRow", () => {
         );
       });
 
-      it(`reopens the fallback picker when its frontmatter write fails (${ISSUE})`, async () => {
-        const context = testContext();
-        context.metadataContainer.remove();
-        const row = new TagSuggestionRow(context.app);
-        row.show(context.file, suggestions(), jest.fn().mockResolvedValue(false));
-
-        await chooseFromModal?.("tag-1");
-
-        expect(mockModalOpen).toHaveBeenCalledTimes(2);
-      });
-
-      it(`reopens the fallback picker with the remaining queue after a successful write (${ISSUE})`, async () => {
-        const context = testContext();
-        context.metadataContainer.remove();
-        const row = new TagSuggestionRow(context.app);
-        row.show(context.file, suggestions(), jest.fn().mockResolvedValue(true));
-
-        await chooseFromModal?.("tag-1");
-
-        expect(mockModalOpen).toHaveBeenCalledTimes(2);
-      });
-
-      it(`closes the session when the fallback picker is dismissed (${ISSUE})`, () => {
-        const context = testContext();
-        context.metadataContainer.remove();
-        const row = new TagSuggestionRow(context.app);
-        row.show(context.file, suggestions(), jest.fn().mockResolvedValue(true));
-
-        dismissModal?.();
-
-        expect(context.metadataOffRef).toHaveBeenCalledTimes(1);
-        expect(context.workspaceOffRef).toHaveBeenCalledTimes(3);
-      });
-
       it(`filters manually added tags and fills the visible row from the remaining queue (${ISSUE})`, () => {
         const context = testContext({ tagsRow: true });
         const row = new TagSuggestionRow(context.app);
@@ -369,23 +324,6 @@ describe("tagSuggestionRow", () => {
           "tag-4",
           "tag-5",
           "tag-6",
-        ]);
-      });
-
-      it(`refreshes an open fallback picker after metadata filters its queue (${ISSUE})`, () => {
-        const context = testContext();
-        context.metadataContainer.remove();
-        const row = new TagSuggestionRow(context.app);
-        row.show(context.file, suggestions(6), jest.fn().mockResolvedValue(true));
-
-        context.setTags(["tag-1"]);
-        context.emitMetadataChanged();
-
-        expect(mockModalClose).toHaveBeenCalledTimes(1);
-        expect(mockModalOpen).toHaveBeenCalledTimes(2);
-        expect(modalQueues).toEqual([
-          ["tag-1", "tag-2", "tag-3", "tag-4", "tag-5", "tag-6"],
-          ["tag-2", "tag-3", "tag-4", "tag-5", "tag-6"],
         ]);
       });
 
@@ -465,9 +403,9 @@ describe("tagSuggestionRow", () => {
         expect(context.workspaceOffRef).toHaveBeenCalledTimes(3);
       });
 
-      it(`closes a fallback picker when another Markdown view becomes active (${ISSUE})`, () => {
+      it(`removes a hidden-panel row when another Markdown view becomes active (${ISSUE})`, () => {
         const context = testContext();
-        context.metadataContainer.remove();
+        context.metadataContainer.classList.add("is-hidden");
         const row = new TagSuggestionRow(context.app);
         row.show(context.file, suggestions(), jest.fn().mockResolvedValue(true));
         const otherView = { file: file("Projects/Other.md") } as MarkdownView;
@@ -475,21 +413,21 @@ describe("tagSuggestionRow", () => {
         jest.mocked(context.app.workspace.getActiveViewOfType).mockReturnValue(otherView);
         context.emitActiveLeafChange();
 
-        expect(mockModalClose).toHaveBeenCalledTimes(1);
+        expect(context.modeRoot.querySelector(".copilot-tag-suggestion-row")).toBeNull();
         expect(context.metadataOffRef).toHaveBeenCalledTimes(1);
         expect(context.workspaceOffRef).toHaveBeenCalledTimes(3);
       });
 
-      it(`closes a fallback picker when its active leaf opens another file (${ISSUE})`, () => {
+      it(`removes a hidden-panel row when its active leaf opens another file (${ISSUE})`, () => {
         const context = testContext();
-        context.metadataContainer.remove();
+        context.metadataContainer.classList.add("is-hidden");
         const row = new TagSuggestionRow(context.app);
         row.show(context.file, suggestions(), jest.fn().mockResolvedValue(true));
 
         context.view.file = file("Projects/Other.md");
         context.emitFileOpen();
 
-        expect(mockModalClose).toHaveBeenCalledTimes(1);
+        expect(context.modeRoot.querySelector(".copilot-tag-suggestion-row")).toBeNull();
         expect(context.metadataOffRef).toHaveBeenCalledTimes(1);
         expect(context.workspaceOffRef).toHaveBeenCalledTimes(3);
       });

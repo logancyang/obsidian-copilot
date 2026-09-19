@@ -1,6 +1,5 @@
-import { TagSuggestionModal } from "@/components/modals/TagSuggestionModal";
 import type { RankedTagSuggestion } from "@/tagSuggestions/tagSuggestions";
-import { App, Component, EventRef, getAllTags, MarkdownView, TFile } from "obsidian";
+import { App, Component, EventRef, getAllTags, MarkdownView, Notice, TFile } from "obsidian";
 
 const VISIBLE_SUGGESTIONS = 5;
 
@@ -13,7 +12,6 @@ interface TagSuggestionSession {
   addTag: AddSuggestedTag;
   pendingWrites: number;
   rowEl?: HTMLElement;
-  modal?: TagSuggestionModal;
   metadataRef: EventRef;
   workspaceRef: EventRef;
   fileOpenRef: EventRef;
@@ -24,16 +22,20 @@ function normalizedTag(tag: string): string {
   return tag.replace(/^#/, "").toLowerCase();
 }
 
-function isVisible(container: HTMLElement): boolean {
-  if (
-    container.hidden ||
-    container.getAttribute("aria-hidden") === "true" ||
-    container.closest(".is-hidden, .is-collapsed")
-  ) {
-    return false;
+function isVisible(container: HTMLElement, viewContent: HTMLElement): boolean {
+  for (let element: HTMLElement | null = container; element; element = element.parentElement) {
+    if (
+      element.hidden ||
+      element.getAttribute("aria-hidden") === "true" ||
+      element.matches(".is-hidden, .is-collapsed")
+    ) {
+      return false;
+    }
+    const style = element.doc.defaultView?.getComputedStyle(element);
+    if (style?.display === "none" || style?.visibility === "hidden") return false;
+    if (element === viewContent) break;
   }
-  const style = container.doc.defaultView?.getComputedStyle(container);
-  return style?.display !== "none" && style?.visibility !== "hidden";
+  return true;
 }
 
 /** Owns the in-view tag suggestion UI and its per-note lifecycle. */
@@ -121,7 +123,6 @@ export class TagSuggestionRow extends Component {
     const cache = this.app.metadataCache.getFileCache(session.file);
     const existing = new Set((cache ? (getAllTags(cache) ?? []) : []).map(normalizedTag));
     const filteredQueue = session.queue.filter(({ tag }) => !existing.has(normalizedTag(tag)));
-    const queueChanged = filteredQueue.length !== session.queue.length;
     session.queue = filteredQueue;
     if (!session.queue.length && session.pendingWrites === 0) {
       this.closeSession(session);
@@ -136,21 +137,24 @@ export class TagSuggestionRow extends Component {
     const container = view?.contentEl
       .querySelector<HTMLElement>(modeRootSelector)
       ?.querySelector<HTMLElement>(".metadata-container");
-    if (!container || !isVisible(container)) {
-      if (queueChanged && session.modal) this.closeModal(session);
-      this.openFallback(session);
+    if (!container || !view) {
+      new Notice("Couldn’t show tag suggestions in this note.");
+      this.closeSession(session);
       return;
     }
 
-    this.closeModal(session);
     const row = container.createDiv({ cls: "metadata-property copilot-tag-suggestion-row" });
-    const properties = Array.from(
-      container.querySelectorAll<HTMLElement>(".metadata-property")
-    ).filter((property) => property !== row);
-    const anchor =
-      container.querySelector<HTMLElement>('.metadata-property[data-property-key="tags"]') ??
-      properties.at(-1);
-    if (anchor) anchor.after(row);
+    if (isVisible(container, view.contentEl)) {
+      const properties = Array.from(
+        container.querySelectorAll<HTMLElement>(".metadata-property")
+      ).filter((property) => property !== row);
+      const anchor =
+        container.querySelector<HTMLElement>('.metadata-property[data-property-key="tags"]') ??
+        properties.at(-1);
+      if (anchor) anchor.after(row);
+    } else {
+      container.after(row);
+    }
 
     for (const suggestion of session.queue.slice(0, VISIBLE_SUGGESTIONS)) {
       const pill = row.createEl("button", {
@@ -172,30 +176,6 @@ export class TagSuggestionRow extends Component {
     session.rowEl = row;
   }
 
-  private openFallback(session: TagSuggestionSession): void {
-    // The Properties DOM is not a public Obsidian API, so the modal remains the
-    // safe path when that surface is unavailable.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/492
-    if (session.modal || session.pendingWrites > 0 || !session.queue.length) return;
-    const modal = new TagSuggestionModal(
-      this.app,
-      session.queue,
-      async (tag) => {
-        if (this.session !== session || session.modal !== modal) return;
-        session.modal = undefined;
-        const suggestion = session.queue.find(
-          (candidate) => normalizedTag(candidate.tag) === normalizedTag(tag)
-        );
-        if (suggestion) await this.choose(session, suggestion);
-      },
-      () => {
-        if (this.session === session && session.modal === modal) this.closeSession(session);
-      }
-    );
-    session.modal = modal;
-    modal.open();
-  }
-
   private async choose(
     session: TagSuggestionSession,
     suggestion: RankedTagSuggestion
@@ -212,22 +192,14 @@ export class TagSuggestionRow extends Component {
     if (!written) {
       // A failed write must not silently consume a suggestion the user can retry.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/492
-      this.closeModal(session);
       session.queue.splice(Math.min(index, session.queue.length), 0, suggestion);
     }
     this.render(session);
   }
 
-  private closeModal(session: TagSuggestionSession): void {
-    const modal = session.modal;
-    session.modal = undefined;
-    modal?.close();
-  }
-
   private closeSession(session: TagSuggestionSession): void {
     if (this.session !== session) return;
     session.rowEl?.remove();
-    this.closeModal(session);
     this.app.metadataCache.offref(session.metadataRef);
     this.app.workspace.offref(session.workspaceRef);
     this.app.workspace.offref(session.fileOpenRef);

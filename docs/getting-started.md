@@ -77,7 +77,7 @@ Run **Quick Ask** from the command palette, or assign it a hotkey under **Obsidi
 
 ### Suggest Tags for a Note
 
-With a Markdown note open, run **Suggest tags for current note** from the command palette. Copilot Plus ranks tags already used elsewhere in your vault and shows five suggestions under the note's Properties. Select a half-transparent tag to add it; the next of the ten ranked matches takes its place. Close the suggestion row whenever you are done. If Properties is not visible, Copilot opens the same suggestions in a picker instead. Nothing is sent until you run the command.
+With a Markdown note open, run **Suggest tags for current note** from the command palette. Copilot Plus ranks tags already used elsewhere in your vault and shows five suggestions under the note's Properties, or under the title when Properties is hidden. Select a half-transparent tag to add it; the next of the ten ranked matches takes its place. Close the suggestion row whenever you are done. Nothing is sent until you run the command.
 
 ## Next Steps
 
