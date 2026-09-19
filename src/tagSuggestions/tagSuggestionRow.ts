@@ -8,9 +8,9 @@ export type AddSuggestedTag = (tag: string) => Promise<boolean>;
 interface TagSuggestionSession {
   file: TFile;
   view?: MarkdownView;
-  queue: RankedTagSuggestion[];
+  ranked: ReadonlyArray<RankedTagSuggestion>;
   addTag: AddSuggestedTag;
-  pendingWrites: number;
+  pendingTags: Set<string>;
   rowEl?: HTMLElement;
   metadataRef: EventRef;
   workspaceRef: EventRef;
@@ -22,20 +22,24 @@ function normalizedTag(tag: string): string {
   return tag.replace(/^#/, "").toLowerCase();
 }
 
-function isVisible(container: HTMLElement, viewContent: HTMLElement): boolean {
-  for (let element: HTMLElement | null = container; element; element = element.parentElement) {
+function hiddenMountAnchor(container: HTMLElement, modeRoot: HTMLElement): HTMLElement | undefined {
+  let anchor: HTMLElement | undefined;
+  for (
+    let element: HTMLElement | null = container;
+    element && element !== modeRoot;
+    element = element.parentElement
+  ) {
     if (
       element.hidden ||
       element.getAttribute("aria-hidden") === "true" ||
       element.matches(".is-hidden, .is-collapsed")
     ) {
-      return false;
+      anchor = element;
     }
     const style = element.doc.defaultView?.getComputedStyle(element);
-    if (style?.display === "none" || style?.visibility === "hidden") return false;
-    if (element === viewContent) break;
+    if (style?.display === "none" || style?.visibility === "hidden") anchor = element;
   }
-  return true;
+  return anchor;
 }
 
 /** Owns the in-view tag suggestion UI and its per-note lifecycle. */
@@ -60,14 +64,8 @@ export class TagSuggestionRow extends Component {
 
   show(file: TFile, suggestions: RankedTagSuggestion[], addTag: AddSuggestedTag): void {
     this.close();
-    const session = {
-      file,
-      view: this.findView(file),
-      queue: suggestions,
-      addTag,
-      pendingWrites: 0,
-    } as TagSuggestionSession;
-    session.metadataRef = this.app.metadataCache.on("changed", (changedFile) => {
+    let session: TagSuggestionSession;
+    const metadataRef = this.app.metadataCache.on("changed", (changedFile) => {
       if (changedFile.path === session.file.path) this.render(session);
     });
     const closeIfSourceIsInactive = () => {
@@ -80,9 +78,20 @@ export class TagSuggestionRow extends Component {
         this.closeSession(session);
       }
     };
-    session.workspaceRef = this.app.workspace.on("active-leaf-change", closeIfSourceIsInactive);
-    session.fileOpenRef = this.app.workspace.on("file-open", closeIfSourceIsInactive);
-    session.layoutRef = this.app.workspace.on("layout-change", () => this.render(session));
+    const workspaceRef = this.app.workspace.on("active-leaf-change", closeIfSourceIsInactive);
+    const fileOpenRef = this.app.workspace.on("file-open", closeIfSourceIsInactive);
+    const layoutRef = this.app.workspace.on("layout-change", () => this.render(session));
+    session = {
+      file,
+      view: this.findView(file),
+      ranked: [...suggestions],
+      addTag,
+      pendingTags: new Set<string>(),
+      metadataRef,
+      workspaceRef,
+      fileOpenRef,
+      layoutRef,
+    };
     this.session = session;
     this.render(session);
   }
@@ -120,43 +129,45 @@ export class TagSuggestionRow extends Component {
     }
     session.view ??= this.findView(session.file);
 
-    const cache = this.app.metadataCache.getFileCache(session.file);
-    const existing = new Set((cache ? (getAllTags(cache) ?? []) : []).map(normalizedTag));
-    const filteredQueue = session.queue.filter(({ tag }) => !existing.has(normalizedTag(tag)));
-    session.queue = filteredQueue;
-    if (!session.queue.length && session.pendingWrites === 0) {
-      this.closeSession(session);
-      return;
-    }
-
     session.rowEl?.remove();
     session.rowEl = undefined;
     const view = session.view;
     const modeRootSelector =
       view?.getMode() === "preview" ? ".markdown-reading-view" : ".markdown-source-view";
-    const container = view?.contentEl
-      .querySelector<HTMLElement>(modeRootSelector)
-      ?.querySelector<HTMLElement>(".metadata-container");
-    if (!container || !view) {
+    const modeRoot = view?.contentEl.querySelector<HTMLElement>(modeRootSelector);
+    const container = modeRoot?.querySelector<HTMLElement>(".metadata-container");
+    if (!container || !modeRoot) {
       new Notice("Couldn’t show tag suggestions in this note.");
       this.closeSession(session);
       return;
     }
 
-    const row = container.createDiv({ cls: "metadata-property copilot-tag-suggestion-row" });
-    if (isVisible(container, view.contentEl)) {
-      const properties = Array.from(
-        container.querySelectorAll<HTMLElement>(".metadata-property")
-      ).filter((property) => property !== row);
+    const cache = this.app.metadataCache.getFileCache(session.file);
+    const existing = new Set((cache ? (getAllTags(cache) ?? []) : []).map(normalizedTag));
+    const visible = session.ranked
+      .filter(({ tag }) => {
+        const normalized = normalizedTag(tag);
+        return !existing.has(normalized) && !session.pendingTags.has(normalized);
+      })
+      .slice(0, VISIBLE_SUGGESTIONS);
+    if (!visible.length) return;
+
+    const row = container.doc.win.createDiv({
+      cls: "metadata-property copilot-tag-suggestion-row",
+    });
+    const hiddenAnchor = hiddenMountAnchor(container, modeRoot);
+    if (hiddenAnchor) {
+      hiddenAnchor.after(row);
+    } else {
+      const properties = Array.from(container.querySelectorAll<HTMLElement>(".metadata-property"));
       const anchor =
         container.querySelector<HTMLElement>('.metadata-property[data-property-key="tags"]') ??
         properties.at(-1);
       if (anchor) anchor.after(row);
-    } else {
-      container.after(row);
+      else container.appendChild(row);
     }
 
-    for (const suggestion of session.queue.slice(0, VISIBLE_SUGGESTIONS)) {
+    for (const suggestion of visible) {
       const pill = row.createEl("button", {
         cls: ["multi-select-pill", "copilot-tag-suggestion-pill"],
         text: `#${suggestion.tag}`,
@@ -181,20 +192,16 @@ export class TagSuggestionRow extends Component {
     suggestion: RankedTagSuggestion
   ): Promise<void> {
     if (this.session !== session) return;
-    const index = session.queue.indexOf(suggestion);
-    if (index < 0) return;
-    session.queue.splice(index, 1);
-    session.pendingWrites++;
+    const normalized = normalizedTag(suggestion.tag);
+    if (session.pendingTags.has(normalized)) return;
+    session.pendingTags.add(normalized);
     this.render(session);
-    const written = await session.addTag(suggestion.tag);
-    session.pendingWrites--;
-    if (this.session !== session) return;
-    if (!written) {
-      // A failed write must not silently consume a suggestion the user can retry.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/492
-      session.queue.splice(Math.min(index, session.queue.length), 0, suggestion);
+    try {
+      await session.addTag(suggestion.tag);
+    } finally {
+      session.pendingTags.delete(normalized);
+      if (this.session === session) this.render(session);
     }
-    this.render(session);
   }
 
   private closeSession(session: TagSuggestionSession): void {

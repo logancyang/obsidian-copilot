@@ -228,6 +228,18 @@ describe("tagSuggestionRow", () => {
         expect(labels(context.modeRoot)).toEqual(["tag-1", "tag-2", "tag-3", "tag-4", "tag-5"]);
       });
 
+      it(`mounts outside an ancestor that hides Properties (${ISSUE})`, () => {
+        const context = testContext();
+        const hiddenWrapper = context.modeRoot.createDiv({ cls: "is-hidden" });
+        hiddenWrapper.appendChild(context.metadataContainer);
+        const row = new TagSuggestionRow(context.app);
+
+        row.show(context.file, suggestions(), jest.fn().mockResolvedValue(true));
+
+        expect(hiddenWrapper.nextElementSibling?.classList).toContain("copilot-tag-suggestion-row");
+        expect(hiddenWrapper.querySelector(".copilot-tag-suggestion-row")).toBeNull();
+      });
+
       it(`moves a hidden-panel row under tags after the first write creates frontmatter (${ISSUE})`, async () => {
         const context = testContext({ tagsRow: true });
         context.metadataContainer.classList.add("is-hidden");
@@ -270,7 +282,7 @@ describe("tagSuggestionRow", () => {
         expect(context.workspaceOffRef).toHaveBeenCalledTimes(3);
       });
 
-      it(`removes a clicked pill immediately and refills from the ranked queue (${ISSUE})`, async () => {
+      it(`removes a clicked pill immediately and refills from the ranked list (${ISSUE})`, async () => {
         const context = testContext({ tagsRow: true });
         const addTag = jest.fn().mockResolvedValue(true);
         const row = new TagSuggestionRow(context.app);
@@ -327,7 +339,53 @@ describe("tagSuggestionRow", () => {
         ]);
       });
 
-      it(`removes an exhausted row and unregisters its listeners (${ISSUE})`, () => {
+      it(`returns a clicked tag in ranked position after it is removed from the note (${ISSUE})`, async () => {
+        const context = testContext({ tagsRow: true });
+        const addTag = jest.fn(async (tag: string) => {
+          context.setTags([tag]);
+          context.emitMetadataChanged();
+          return true;
+        });
+        const row = new TagSuggestionRow(context.app);
+        row.show(context.file, suggestions(6), addTag);
+
+        context.metadataContainer
+          .querySelector<HTMLButtonElement>('button[aria-label="Add #tag-1"]')
+          ?.click();
+        await waitFor(() => expect(addTag).toHaveBeenCalledWith("tag-1"));
+
+        context.setTags([]);
+        context.emitMetadataChanged();
+
+        expect(labels(context.metadataContainer)).toEqual([
+          "tag-1",
+          "tag-2",
+          "tag-3",
+          "tag-4",
+          "tag-5",
+        ]);
+      });
+
+      it(`returns a manually added candidate in ranked position after it is removed (${ISSUE})`, () => {
+        const context = testContext({ tagsRow: true });
+        const row = new TagSuggestionRow(context.app);
+        row.show(context.file, suggestions(6), jest.fn().mockResolvedValue(true));
+
+        context.setTags(["tag-2"]);
+        context.emitMetadataChanged();
+        context.setTags([]);
+        context.emitMetadataChanged();
+
+        expect(labels(context.metadataContainer)).toEqual([
+          "tag-1",
+          "tag-2",
+          "tag-3",
+          "tag-4",
+          "tag-5",
+        ]);
+      });
+
+      it(`hides an exhausted row but keeps the session so a removed tag returns (${ISSUE})`, () => {
         const context = testContext({ tagsRow: true });
         const row = new TagSuggestionRow(context.app);
         row.show(context.file, suggestions(2), jest.fn().mockResolvedValue(true));
@@ -336,8 +394,13 @@ describe("tagSuggestionRow", () => {
         context.emitMetadataChanged();
 
         expect(context.metadataContainer.querySelector(".copilot-tag-suggestion-row")).toBeNull();
-        expect(context.metadataOffRef).toHaveBeenCalledTimes(1);
-        expect(context.workspaceOffRef).toHaveBeenCalledTimes(3);
+        expect(context.metadataOffRef).not.toHaveBeenCalled();
+        expect(context.workspaceOffRef).not.toHaveBeenCalled();
+
+        context.setTags(["tag-2"]);
+        context.emitMetadataChanged();
+
+        expect(labels(context.metadataContainer)).toEqual(["tag-1"]);
       });
 
       it(`removes the row and listeners on close and plugin unload (${ISSUE})`, () => {
