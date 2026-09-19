@@ -227,6 +227,17 @@ describe("tagSuggestionRow", () => {
         );
       });
 
+      it(`reopens the fallback picker when its frontmatter write fails (${ISSUE})`, async () => {
+        const context = testContext();
+        context.metadataContainer.remove();
+        const row = new TagSuggestionRow(context.app);
+        row.show(context.file, suggestions(), jest.fn().mockResolvedValue(false));
+
+        await chooseFromModal?.("tag-1");
+
+        expect(mockModalOpen).toHaveBeenCalledTimes(2);
+      });
+
       it(`filters manually added tags and fills the visible row from the remaining queue (${ISSUE})`, () => {
         const context = testContext({ tagsRow: true });
         const row = new TagSuggestionRow(context.app);
@@ -275,6 +286,19 @@ describe("tagSuggestionRow", () => {
         expect(context.metadataContainer.querySelector(".copilot-tag-suggestion-row")).toBeNull();
         expect(context.metadataOffRef).toHaveBeenCalledTimes(2);
         expect(context.workspaceOffRef).toHaveBeenCalledTimes(2);
+      });
+
+      it(`does not retain closed session refs in the long-lived component (${ISSUE})`, () => {
+        const context = testContext({ tagsRow: true });
+        const row = new TagSuggestionRow(context.app);
+        const registerEvent = jest.spyOn(row, "registerEvent");
+
+        row.show(context.file, suggestions(), jest.fn().mockResolvedValue(true));
+        row.close();
+
+        expect(registerEvent).not.toHaveBeenCalled();
+        expect(context.metadataOffRef).toHaveBeenCalledTimes(1);
+        expect(context.workspaceOffRef).toHaveBeenCalledTimes(1);
       });
 
       it(`re-mounts after Obsidian replaces the Properties rows (${ISSUE})`, () => {

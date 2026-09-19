@@ -1,6 +1,7 @@
 import type { RankedTagSuggestion } from "@/tagSuggestions/tagSuggestions";
 import { App, FuzzySuggestModal } from "obsidian";
 
+/** Presents ranked tag choices while delegating all note writes to its callback. */
 export class TagSuggestionModal extends FuzzySuggestModal<RankedTagSuggestion> {
   constructor(
     app: App,

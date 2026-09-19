@@ -64,8 +64,6 @@ export class TagSuggestionRow extends Component {
         this.render(session);
       }
     });
-    this.registerEvent(session.metadataRef);
-    this.registerEvent(session.workspaceRef);
     this.session = session;
     this.render(session);
   }
@@ -180,6 +178,9 @@ export class TagSuggestionRow extends Component {
     if (!written) {
       // A failed write must not silently consume a suggestion the user can retry.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/492
+      session.modal?.close();
+      session.modal = undefined;
+      session.fallbackOpened = false;
       session.queue.splice(Math.min(index, session.queue.length), 0, suggestion);
     }
     this.render(session);

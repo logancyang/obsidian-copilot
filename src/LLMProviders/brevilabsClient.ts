@@ -139,6 +139,7 @@ export interface BrocaResponse<TAnswer = unknown> {
   elapsed_time_ms: number;
 }
 
+/** Represents an HTTP failure returned by the Brevilabs API, not a local transport error. */
 export class BrevilabsApiError extends Error {
   constructor(
     message: string,
