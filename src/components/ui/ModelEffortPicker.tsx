@@ -62,12 +62,6 @@ export function ModelEffortPicker({ override, className }: ModelEffortPickerProp
     model: "",
     effort: null,
   });
-  // Whether a row was chosen while the popover was open. The draft seeds itself
-  // from the first selectable row whenever `value` names nothing selectable —
-  // the Agent Chat recovery pane has no session, so it has no selection — and
-  // committing that seed on dismissal would start an agent nobody picked.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/480
-  const pickedRef = useRef(false);
 
   // Agent Mode entries are synthesized and never gated by BYOK API-key checks
   // (the backend manages its own credentials). `_disabledReason` is the only
@@ -89,8 +83,13 @@ export function ModelEffortPicker({ override, className }: ModelEffortPickerProp
   useEffect(() => {
     if (open) {
       /* eslint-disable @eslint-react/hooks-extra/no-direct-set-state-in-use-effect -- seed the editable draft from props when the popover opens; drafts are committed on close, so this can't be pure derived state */
-      const initial = value && enabledKeys.includes(value) ? value : (enabledKeys[0] ?? null);
-      setHighlightKey(initial);
+      // Only a selectable `value` seeds the draft. The recovery pane has no
+      // session, so nothing is selected; seeding the first row there would
+      // commit a model on dismissal that nobody picked. The highlight still
+      // starts on the first row so arrow keys have a starting point.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/480
+      const initial = value && enabledKeys.includes(value) ? value : null;
+      setHighlightKey(initial ?? enabledKeys[0] ?? null);
       setDraftModelKey(initial);
       const initialOpts = initial ? (effortOptionsByModelKey[initial] ?? []) : [];
       const initialEffort = resolveEffort(
@@ -99,7 +98,6 @@ export function ModelEffortPicker({ override, className }: ModelEffortPickerProp
       );
       setDraftEffort(initialEffort);
       initialRef.current = { model: value, effort: activeEffortValue };
-      pickedRef.current = false;
       /* eslint-enable @eslint-react/hooks-extra/no-direct-set-state-in-use-effect -- resume checking after draft initialization */
     }
   }, [open, value, enabledKeys, activeEffortValue, effortOptionsByModelKey]);
@@ -126,7 +124,6 @@ export function ModelEffortPicker({ override, className }: ModelEffortPickerProp
   // active row).
   const pickDraft = useCallback(
     (key: string) => {
-      pickedRef.current = true;
       setDraftModelKey(key);
       setHighlightKey(key);
       const rowOpts = effortOptionsByModelKey[key] ?? [];
@@ -183,7 +180,7 @@ export function ModelEffortPicker({ override, className }: ModelEffortPickerProp
     }
     if (draftModelKey) {
       const init = initialRef.current;
-      const modelChanged = pickedRef.current && draftModelKey !== init.model;
+      const modelChanged = draftModelKey !== init.model;
       const effortChanged = draftEffort !== init.effort;
       if (modelChanged) {
         commitSelection(draftModelKey, draftEffort);
