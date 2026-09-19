@@ -137,7 +137,6 @@ jest.mock("@/contexts/PluginContext", () => ({
   // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook; name must match the export
   usePlugin: () => ({ isPluginLifecycleActive: () => mockLifecycleActive }),
 }));
-jest.mock("@/plusUtils", () => ({ createPlusPageUrl: () => "https://example.com" }));
 jest.mock("@/utils/vaultPath", () => ({ getVaultBase: () => "/vault" }));
 
 // Platform gate for the desktop-only controls. Default desktop; the mobile

@@ -1,17 +1,10 @@
-import { createMiyoPageUrl } from "@/lib/miyoLinks";
+import { createProductUrl, PRODUCT_URLS } from "@/lib/productLinks";
 import { CopilotPlusWelcomeModal } from "@/components/modals/CopilotPlusWelcomeModal";
 import { useApp } from "@/context";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { PasswordInput } from "@/components/ui/password-input";
-import { PLUS_UTM_MEDIUMS } from "@/constants";
-import {
-  checkIsPaidUser,
-  createPlusPageUrl,
-  navigateToPlusPage,
-  useIsPaidUser,
-  useLicenseState,
-} from "@/plusUtils";
+import { checkIsPaidUser, navigateToPlusPage, useIsPaidUser, useLicenseState } from "@/plusUtils";
 import { updateSetting, useSettingsValue } from "@/settings/model";
 import { ExternalLink, Loader2 } from "lucide-react";
 import React, { useState } from "react";
@@ -64,7 +57,7 @@ export function PlusSettings() {
       <div className="tw-flex tw-flex-col tw-gap-2 tw-text-sm tw-text-muted">
         <div>
           <a
-            href={createPlusPageUrl(PLUS_UTM_MEDIUMS.SETTINGS)}
+            href={createProductUrl(PRODUCT_URLS.COPILOT, "settings")}
             target="_blank"
             rel="noopener noreferrer"
             className="tw-font-semibold tw-text-accent"
@@ -77,7 +70,7 @@ export function PlusSettings() {
           <strong className="tw-font-semibold tw-text-normal">multi-agent capabilities</strong> to
           your Copilot agentic experience. Pair it with{" "}
           <a
-            href={createMiyoPageUrl("license_settings")}
+            href={createProductUrl(PRODUCT_URLS.MIYO, "license_settings")}
             target="_blank"
             rel="noopener noreferrer"
             className="tw-font-semibold tw-text-accent"
@@ -100,12 +93,12 @@ export function PlusSettings() {
           <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-2">
             <Button
               className="tw-text-xs md:tw-text-sm"
-              onClick={() => navigateToPlusPage(PLUS_UTM_MEDIUMS.SETTINGS)}
+              onClick={() => navigateToPlusPage("settings")}
             >
               See plans <ExternalLink className="tw-size-2 md:tw-size-4" />
             </Button>
             <a
-              href={createMiyoPageUrl("pairing")}
+              href={createProductUrl(PRODUCT_URLS.MIYO, "pairing")}
               target="_blank"
               rel="noopener noreferrer"
               className="tw-inline-flex tw-items-center tw-gap-0.5 tw-text-sm tw-text-accent"
@@ -173,7 +166,10 @@ export function PlusSettings() {
             size="sm"
             className="tw-gap-1 tw-text-sm tw-text-accent hover:tw-text-accent-hover"
             onClick={() => {
-              window.open("https://obsidiancopilot.com/dashboard", "_blank");
+              window.open(
+                createProductUrl(PRODUCT_URLS.COPILOT_DASHBOARD, "usage_footer"),
+                "_blank"
+              );
             }}
           >
             Dashboard <ExternalLink className="tw-size-3.5" />

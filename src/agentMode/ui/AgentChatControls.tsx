@@ -5,7 +5,6 @@ import {
 } from "@/components/chat-components/ChatHistoryPopover";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { PLUS_UTM_MEDIUMS } from "@/constants";
 import { cn } from "@/lib/utils";
 import { navigateToPlusPage, useCanUseMultiAgent } from "@/plusUtils";
 import { useSettingsValue } from "@/settings/model";
@@ -87,7 +86,7 @@ export const AgentChatControls: React.FC<AgentChatControlsProps> = ({
               "tw-flex tw-min-w-0 tw-items-center tw-gap-1 tw-text-ui-smaller tw-text-muted",
               "hover:tw-text-normal"
             )}
-            onClick={() => navigateToPlusPage(PLUS_UTM_MEDIUMS.MULTI_AGENT)}
+            onClick={() => navigateToPlusPage("multi_agent")}
           >
             <Sparkles className="tw-size-3 tw-shrink-0" />
             {/* The label must truncate on its own element: `tw-truncate` on the

@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { createMiyoPageUrl } from "@/lib/miyoLinks";
+import { createProductUrl, PRODUCT_URLS } from "@/lib/productLinks";
 import type { Meta, StoryObj } from "@/lib/story";
 import React from "react";
 import { MiyoConnectionControl } from "./MiyoConnectionControl";
@@ -24,7 +24,7 @@ function InteractiveConnection(args: Partial<MiyoConnectionPanelProps>) {
       checking={checking}
       mode={mode}
       address={address}
-      downloadUrl={createMiyoPageUrl("miyo_settings")}
+      downloadUrl={createProductUrl(PRODUCT_URLS.MIYO, "miyo_settings")}
       onModeChange={setMode}
       onAddressChange={setAddress}
     >

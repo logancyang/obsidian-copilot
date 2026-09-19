@@ -69,7 +69,7 @@ describe("ModelSelector", () => {
         }
         expect(window.open).toHaveBeenCalledTimes(1);
         expect(window.open).toHaveBeenCalledWith(
-          "https://obsidiancopilot.com/pricing?utm_source=obsidian-copilot&utm_medium=model-picker-lock",
+          "https://www.obsidiancopilot.com/pricing?utm_source=obsidian_copilot&utm_medium=model_picker_lock",
           "_blank",
           "noopener,noreferrer"
         );

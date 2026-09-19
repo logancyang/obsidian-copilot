@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { SettingSwitch } from "@/components/ui/setting-switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { PLUS_UTM_MEDIUMS } from "@/constants";
 import { navigateToPlusPage, useIsPaidUser } from "@/plusUtils";
 import { updateSetting, useSettingsValue } from "@/settings/model";
 import { DropdownMenu, DropdownMenuTrigger } from "@radix-ui/react-dropdown-menu";
@@ -54,7 +53,7 @@ export function ChatControls({
           selectedChain={selectedChain}
           isPaidUser={Boolean(isPaidUser)}
           onModeChange={handleModeChange}
-          onPlusUpsell={() => navigateToPlusPage(PLUS_UTM_MEDIUMS.CHAT_MODE_SELECT)}
+          onPlusUpsell={() => navigateToPlusPage("chat_mode_select")}
         />
       </div>
       <div className="tw-flex tw-items-center tw-gap-1">

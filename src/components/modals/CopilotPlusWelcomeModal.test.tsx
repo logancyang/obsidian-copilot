@@ -15,7 +15,9 @@ describe("CopilotPlusWelcomeModal", () => {
       render(<CopilotPlusWelcomeModalContent onConfirm={jest.fn()} onCancel={jest.fn()} />);
 
       const link = screen.getByRole("link", { name: "OpenArtifacts" });
-      expect(link.getAttribute("href")).toBe("https://openartifacts.ai");
+      expect(link.getAttribute("href")).toBe(
+        "https://openartifacts.ai/?utm_source=obsidian_copilot&utm_medium=welcome_modal"
+      );
       expect(screen.getByText(/Copilot exclusive/)).toBeTruthy();
       expect(screen.getByText(/cross-agent skills/)).toBeTruthy();
     });

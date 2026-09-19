@@ -174,14 +174,6 @@ export const LOADING_MESSAGES = {
   READING_FILE_TREE: "Reading file tree",
   COMPACTING: "Compacting",
 };
-export const PLUS_UTM_MEDIUMS = {
-  SETTINGS: "settings",
-  EXPIRED_MODAL: "expired_modal",
-  CHAT_MODE_SELECT: "chat_mode_select",
-  MODE_SELECT_TOOLTIP: "mode_select_tooltip",
-  MULTI_AGENT: "multi_agent",
-};
-export type PlusUtmMedium = (typeof PLUS_UTM_MEDIUMS)[keyof typeof PLUS_UTM_MEDIUMS];
 
 /**
  * Reasoning effort levels for OpenAI reasoning models

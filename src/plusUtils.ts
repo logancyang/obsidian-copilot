@@ -1,8 +1,9 @@
 import { setModelKey } from "@/aiParams";
 import { CopilotPlusExpiredModal } from "@/components/modals/CopilotPlusExpiredModal";
-import { ChatModelProviders, ChatModels, PLUS_UTM_MEDIUMS, PlusUtmMedium } from "@/constants";
+import { ChatModelProviders, ChatModels } from "@/constants";
 import { EntitlementFeature, verifyEntitlement } from "@/entitlement";
 import { BrevilabsClient, LicenseCheckContext } from "@/LLMProviders/brevilabsClient";
+import { createProductUrl, PRODUCT_URLS, ProductUtmMedium } from "@/lib/productLinks";
 import { logError, logInfo, logWarn } from "@/logger";
 import {
   CopilotSettings,
@@ -256,7 +257,7 @@ export function showMultiAgentUpgradePrompt(): void {
     "Multi-agent QA (@-mentioning more than one agent in a turn) is a Copilot Plus feature. Opening the upgrade page…",
     8000
   );
-  navigateToPlusPage(PLUS_UTM_MEDIUMS.MULTI_AGENT);
+  navigateToPlusPage("multi_agent");
 }
 
 /**
@@ -504,12 +505,8 @@ export async function applyLicenseSettings(): Promise<void> {
   }
 }
 
-export function createPlusPageUrl(medium: PlusUtmMedium): string {
-  return `https://www.obsidiancopilot.com?utm_source=obsidian&utm_medium=${medium}`;
-}
-
-export function navigateToPlusPage(medium: PlusUtmMedium): void {
-  window.open(createPlusPageUrl(medium), "_blank");
+export function navigateToPlusPage(medium: ProductUtmMedium): void {
+  window.open(createProductUrl(PRODUCT_URLS.COPILOT, medium), "_blank");
 }
 
 /**
