@@ -91,6 +91,14 @@ export const FileEmptied: StoryObj<RenderedDiffProps> = story(FILE_EMPTIED);
 /** A canvas file, shown verbatim rather than rendered. */
 export const NonMarkdownFile: StoryObj<RenderedDiffProps> = story(NON_MARKDOWN_FILE);
 
+export const FinalNewlineAdded: StoryObj<RenderedDiffProps> = {
+  args: { path: "config.json", before: '{"ready":true}', after: '{"ready":true}\n' },
+};
+
+export const FinalNewlineRemoved: StoryObj<RenderedDiffProps> = {
+  args: { path: "config.json", before: '{"ready":true}\n', after: '{"ready":true}' },
+};
+
 /** Literal private-use characters require a verbatim diff rather than Markdown rendering. */
 export const ReservedMarkerFallback: StoryObj<RenderedDiffProps> = {
   args: {

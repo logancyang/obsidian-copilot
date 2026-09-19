@@ -207,6 +207,30 @@ describe("RenderedDiff", () => {
   });
 
   describe("RenderedDiff()", () => {
+    it.each(["added", "removed"])(
+      "shows the final newline being %s in a non-Markdown file with a missing-newline marker (https://github.com/Brevilabs/obsidian-copilot-private/issues/349)",
+      async (direction) => {
+        const text = '{"ready":true}';
+        const root = await renderFixture({
+          path: "config.json",
+          before: direction === "added" ? text : `${text}\n`,
+          after: direction === "added" ? `${text}\n` : text,
+        });
+
+        const marker = "\\ No newline at end of file";
+        expect(textOf(root, "pre > div")).toEqual(
+          direction === "added" ? [text, marker, text] : [text, text, marker]
+        );
+        expect(textOf(root, ".diff-line-del")).toEqual(
+          direction === "added" ? [text, marker] : [text]
+        );
+        expect(textOf(root, ".diff-line-ins")).toEqual(
+          direction === "removed" ? [text, marker] : [text]
+        );
+        expect(renderMarkdown).not.toHaveBeenCalled();
+      }
+    );
+
     it("preserves raw markers and unchanged content without invented highlights (https://github.com/Brevilabs/obsidian-copilot-private/issues/348)", async () => {
       const text = "# Literal \uE000addition\uE001 and \uE002deletion\uE003";
       const root = await renderFixture({ path: "Literal.md", before: text, after: text });

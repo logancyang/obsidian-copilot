@@ -41,14 +41,23 @@ export function isMarkdownPath(path: string): boolean {
 
 /**
  * Diffs two texts line by line without interpreting their content.
+ * Annotates the unterminated side when their final-newline states differ.
  * @param before - Text from the original document.
  * @param after - Text from the edited document.
  */
 export function diffCodeLines(before: string, after: string): CodeDiffLine[] {
   const lines: CodeDiffLine[] = [];
-  for (const part of diffLines(withTrailingNewline(before), withTrailingNewline(after))) {
+  for (const part of diffLines(before, after)) {
     const change: DiffChange = part.added ? "inserted" : part.removed ? "deleted" : "unchanged";
-    for (const text of part.value.split("\n").slice(0, -1)) lines.push({ change, text });
+    const terminated = part.value.endsWith("\n");
+    const texts = part.value.split("\n");
+    if (terminated) texts.pop();
+    for (const text of texts) lines.push({ change, text });
+    // Normalizing final newlines hides real edits; annotate only differing termination.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/349
+    if (!terminated && before.endsWith("\n") !== after.endsWith("\n")) {
+      lines.push({ change, text: "\\ No newline at end of file" });
+    }
   }
   return lines;
 }
@@ -155,9 +164,4 @@ function collapseMarkdown(segments: readonly DiffSegment[]): DiffSegment[] {
     collapsed.push(segment);
   }
   return collapsed;
-}
-
-function withTrailingNewline(value: string): string {
-  if (value === "") return value;
-  return value.endsWith("\n") ? value : `${value}\n`;
 }
