@@ -27,15 +27,17 @@ const TABLE_DELIMITER = /^[ \t]*\|?[\s:|-]*-[\s:|-]*\|?[ \t]*$/;
  */
 export function splitFrontmatter(source: string): FrontmatterSplit {
   const lines = source.split("\n");
-  if (lines[0] !== "---") return { frontmatter: null, body: source };
+  // Recognise CRLF fences so unchanged properties stay out of the body, retaining source bytes.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/349
+  if (!/^---\r?$/.test(lines[0])) return { frontmatter: null, body: source };
   for (let index = 1; index < lines.length; index++) {
-    if (lines[index] !== "---") continue;
+    if (!/^---\r?$/.test(lines[index])) continue;
     return {
       frontmatter: lines.slice(0, index + 1).join("\n"),
       body: lines
         .slice(index + 1)
         .join("\n")
-        .replace(/^\n+/, ""),
+        .replace(/^(?:\r?\n)+/, ""),
     };
   }
   return { frontmatter: null, body: source };
@@ -92,7 +94,9 @@ export function splitBlocks(body: string): MarkdownBlock[] {
 }
 
 function skipFencedCode(lines: string[], start: number, marker: string): number {
-  const closing = new RegExp(`^ {0,3}${marker[0]}{${marker.length},}[ \\t]*$`);
+  // CRLF closing fences must not swallow following prose; keep the captured code unchanged.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/349
+  const closing = new RegExp(`^ {0,3}${marker[0]}{${marker.length},}[ \\t]*\\r?$`);
   let index = start + 1;
   while (index < lines.length && !closing.test(lines[index])) index++;
   return Math.min(index + 1, lines.length);

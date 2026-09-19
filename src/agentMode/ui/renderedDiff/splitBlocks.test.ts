@@ -11,6 +11,16 @@ describe("splitBlocks", () => {
       });
     });
 
+    it("separates unchanged CRLF frontmatter from edited bodies so callers can omit it (https://github.com/Brevilabs/obsidian-copilot-private/issues/349)", () => {
+      const frontmatter = "---\r\ntags:\r\n  - project\r\n---\r";
+      const before = splitFrontmatter(`${frontmatter}\n\r\n# Alpha\r\n\r\nSix weeks.\r\n`);
+      const after = splitFrontmatter(`${frontmatter}\n\r\n# Alpha\r\n\r\nEight weeks.\r\n`);
+
+      expect(before).toEqual({ frontmatter, body: "# Alpha\r\n\r\nSix weeks.\r\n" });
+      expect(after).toEqual({ frontmatter, body: "# Alpha\r\n\r\nEight weeks.\r\n" });
+      expect(before.frontmatter).toBe(after.frontmatter);
+    });
+
     it("reports no frontmatter when the document does not open with a fence", () => {
       const source = "# Alpha pilot\n\n---\n";
 
@@ -54,6 +64,19 @@ describe("splitBlocks", () => {
         { type: "text", text: "Done." },
       ]);
     });
+
+    it.each(["```", "~~~"])(
+      "closes a CRLF %s code fence before following heading and prose without normalizing source (https://github.com/Brevilabs/obsidian-copilot-private/issues/349)",
+      (fence) => {
+        const code = `${fence}bash\r\nnpm run migrate\r\n\r\nnpm run verify\r\n${fence}\r`;
+
+        expect(splitBlocks(`${code}\n## Next\r\nDone.\r\n`)).toEqual([
+          { type: "code", text: code },
+          { type: "heading", text: "## Next\r" },
+          { type: "text", text: "Done.\r" },
+        ]);
+      }
+    );
 
     it("keeps a table whole and separate from the paragraph directly above it", () => {
       const blocks = splitBlocks("Capacity:\n| Region | Partners |\n| --- | --- |\n| EMEA | 2 |\n");
