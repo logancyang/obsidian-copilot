@@ -409,6 +409,14 @@ export type AgentToolKind =
   | "switch_mode"
   | "other";
 
+export type SubagentState =
+  | "running"
+  | "completed"
+  | "failed"
+  | "cancelled"
+  | "disconnected"
+  | "unavailable";
+
 export type AgentToolStatus = "pending" | "in_progress" | "completed" | "failed";
 
 /**
@@ -469,6 +477,8 @@ export interface ToolCallSnapshot {
   mcpServer?: string;
   /** Parent tool-call id, for nested tools (e.g. Claude's Task subagents). */
   parentToolCallId?: string;
+  /** Explicit delegated-work lifecycle; unavailable means legacy activity only. */
+  subagent?: SubagentState;
   /** Latest backend-neutral progress for a long-running tool call. */
   progress?: AgentToolProgress;
   /** True iff this tool call is the agent's plan-finalization signal. */
@@ -490,6 +500,8 @@ export interface ToolCallDelta {
   /** MCP server name; see `ToolCallSnapshot.mcpServer`. */
   mcpServer?: string;
   parentToolCallId?: string;
+  /** Explicit delegated-work lifecycle; unavailable means legacy activity only. */
+  subagent?: SubagentState;
   progress?: AgentToolProgress;
   isPlanProposal?: boolean;
 }
@@ -863,6 +875,8 @@ export type AgentMessagePart =
        * top-level.
        */
       parentToolCallId?: string;
+      /** Explicit delegated-work lifecycle; unavailable means legacy activity only. */
+      subagent?: SubagentState;
       /** Latest normalized progress for this tool call. */
       progress?: AgentToolProgress;
     }

@@ -51,7 +51,7 @@ class ClientSideConnection {
   cancel = jest.fn(async () => undefined);
 }
 
-const ndJsonStream = jest.fn(() => ({}));
+const ndJsonStream = jest.fn(() => ({ readable: new ReadableStream(), writable: new WritableStream() }));
 const PROTOCOL_VERSION = 1;
 
 module.exports = {

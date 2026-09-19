@@ -12,7 +12,17 @@ import {
 } from "@/agentMode/ui/toolSummaries";
 import { AgentActivityCard } from "@/components/chat-components/AgentActivityCard";
 
+const SUBAGENT_OUTCOMES = {
+  running: "Working",
+  completed: "Completed",
+  failed: "Failed",
+  cancelled: "Cancelled",
+  disconnected: "Disconnected · outcome unknown",
+  unavailable: "Limited activity · this adapter does not report child sessions",
+};
+
 interface SubAgentCardProps {
+  inactive?: boolean;
   parent: ToolCallPart;
   childNodes: GroupedTrailNode[];
   truncated?: boolean;
@@ -24,6 +34,7 @@ interface SubAgentCardProps {
 
 /**
  * Keeps delegated work attached to its launch so the prompt, progress, and report remain one traceable unit.
+ * @param inactive - Whether an ancestor ended without a final status for this child.
  * @param parent - The tool call that launched the delegated work.
  * @param childNodes - The nested activity produced by the delegated work.
  * @param truncated - Whether omitted activity should be disclosed to the user.
@@ -32,6 +43,7 @@ interface SubAgentCardProps {
  */
 export const SubAgentCard: React.FC<SubAgentCardProps> = ({
   parent,
+  inactive,
   childNodes,
   truncated,
   app,
@@ -42,16 +54,22 @@ export const SubAgentCard: React.FC<SubAgentCardProps> = ({
   const summary = lookupToolSummary(parent);
   const Icon = summary.icon;
   const line = summary.collapsedLine(parent);
-  const outcome = summary.outcome(parent);
+  const outcome =
+    inactive && parent.subagent === "running"
+      ? "No final child outcome reported"
+      : parent.subagent
+        ? SUBAGENT_OUTCOMES[parent.subagent]
+        : summary.outcome(parent);
   const childCounts = countChildren(childNodes);
   const inputPrompt = extractSubAgentInputPrompt(parent);
   const returnText = extractSubAgentReturnText(parent);
+  const isNativeTask = parent.subagent !== undefined && parent.subagent !== "unavailable";
 
   return (
     <AgentActivityCard
       icon={Icon}
       label={line}
-      trailing={<StatusBadge status={parent.status} />}
+      trailing={<StatusBadge status={parent.status} inactive={inactive} />}
       secondary={outcome}
       expandable
       open={open}
@@ -67,7 +85,7 @@ export const SubAgentCard: React.FC<SubAgentCardProps> = ({
             onClick={() => setPromptOpen((v) => !v)}
             role="button"
           >
-            <span className="tw-flex-1 tw-truncate">Prompt</span>
+            <span className="tw-flex-1 tw-truncate">{isNativeTask ? "Task" : "Prompt"}</span>
             {promptOpen ? (
               <ChevronDown className="tw-size-3" />
             ) : (
@@ -77,6 +95,11 @@ export const SubAgentCard: React.FC<SubAgentCardProps> = ({
           {promptOpen ? (
             <div className="tw-mt-1 tw-border-l-[2px] tw-border-border tw-pl-2">
               <AgentMarkdownText text={inputPrompt} app={app} />
+              {isNativeTask ? (
+                <div className="tw-mt-1 tw-text-xs tw-text-muted">
+                  The adapter reports this task description, not the full delegated prompt.
+                </div>
+              ) : null}
             </div>
           ) : null}
         </div>

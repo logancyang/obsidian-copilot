@@ -47,6 +47,7 @@ import type {
   ToolCallContent,
   ToolCallDelta,
   ToolCallSnapshot,
+  SubagentState,
 } from "@/agentMode/session/types";
 import { PERMISSION_OPTION_KINDS } from "@/agentMode/session/types";
 import { resolveToolName } from "@/agentMode/session/toolName";
@@ -206,6 +207,50 @@ function toolCallContentFromAcp(
   return out.length > 0 ? out : undefined;
 }
 
+// Preserve negotiated child identity, and identify older Codex launches without
+// inventing lifecycle or activity the adapter did not send.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/467
+function subagentFields(
+  call: ToolCall | ToolCallUpdate
+): Pick<ToolCallSnapshot, "subagent" | "parentToolCallId"> {
+  const normalized = call._meta?.copilot as
+    | { subagent?: unknown; parentToolCallId?: unknown }
+    | undefined;
+  const codex = call._meta?.codex as
+    | { collaboration?: { tool?: unknown }; subagent?: { activity?: unknown } }
+    | undefined;
+  const state = normalized?.subagent;
+  return {
+    parentToolCallId:
+      typeof normalized?.parentToolCallId === "string" ? normalized.parentToolCallId : undefined,
+    subagent:
+      typeof state === "string" &&
+      ["running", "completed", "failed", "cancelled", "disconnected"].includes(state)
+        ? (state as SubagentState)
+        : ["spawnAgent", "spawn_agent"].includes(String(codex?.collaboration?.tool)) ||
+            codex?.subagent?.activity === "started"
+          ? "unavailable"
+          : undefined,
+  };
+}
+
+// Child command completions may contain only Codex rawOutput, including on replay.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/467
+function toolCallContentForDisplay(call: ToolCall | ToolCallUpdate): ToolCallContent[] | undefined {
+  const content = toolCallContentFromAcp(call.content);
+  const child = subagentFields(call);
+  if (content || (!child.subagent && !child.parentToolCallId)) return content;
+  const output = call.rawOutput as
+    | { formatted_output?: unknown; output?: unknown }
+    | string
+    | null
+    | undefined;
+  const text = typeof output === "string" ? output : (output?.formatted_output ?? output?.output);
+  return typeof text === "string"
+    ? [{ type: "content", content: { type: "text", text } }]
+    : undefined;
+}
+
 function toolCallSnapshotFromAcp(
   call: ToolCall & { sessionUpdate?: "tool_call" }
 ): ToolCallSnapshot {
@@ -216,9 +261,10 @@ function toolCallSnapshotFromAcp(
     kind: toolKindFromAcp(call.kind),
     status: toolStatusFromAcp(call.status),
     rawInput: call.rawInput,
-    content: toolCallContentFromAcp(call.content),
+    content: toolCallContentForDisplay(call),
     locations: call.locations?.map((l) => ({ path: l.path, line: l.line ?? undefined })),
     mcpServer,
+    ...subagentFields(call),
   };
 }
 
@@ -238,11 +284,12 @@ function toolCallDeltaFromAcp(
     kind: toolKindFromAcp(upd.kind ?? undefined),
     status: toolStatusFromAcp(upd.status as string | undefined),
     rawInput: upd.rawInput,
-    content: mapNullable(upd.content, toolCallContentFromAcp),
+    content: toolCallContentForDisplay(upd) ?? (upd.content === null ? null : undefined),
     locations: mapNullable(upd.locations, (locs) =>
       locs.map((l) => ({ path: l.path, line: l.line ?? undefined }))
     ),
     mcpServer: resolved?.mcpServer,
+    ...subagentFields(upd),
   };
 }
 
@@ -435,7 +482,7 @@ export function acpPermissionRequestToPrompt(
       kind: toolKindFromAcp(call.kind ?? undefined),
       status: toolStatusFromAcp(call.status as string | undefined) ?? "pending",
       rawInput: call.rawInput,
-      content: toolCallContentFromAcp(call.content),
+      content: toolCallContentForDisplay(call),
       locations: call.locations?.map((l) => ({ path: l.path, line: l.line ?? undefined })),
     },
     options: req.options.map((option) => permissionOptionFromAcp(option, presentPermissionOption)),

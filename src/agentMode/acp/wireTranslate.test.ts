@@ -15,6 +15,85 @@ const VALID_TODOS = [
 ];
 
 const testAcpNotificationToEvents = () => {
+  it("keeps raw child command output when the adapter omits content (https://github.com/Brevilabs/obsidian-copilot-private/issues/467)", () => {
+    const tool = {
+      sessionUpdate: "tool_call_update",
+      toolCallId: "child-read",
+      rawOutput: {
+        formatted_output: "# Fixture Alpha\n\nThe copper fox carries seven paper stars.",
+        exit_code: 0,
+      },
+      _meta: { copilot: { parentToolCallId: "child" } },
+    };
+    expect(acpNotificationToEvents(notification(tool))[0].update).toMatchObject({
+      content: [
+        { type: "content", content: { type: "text", text: tool.rawOutput.formatted_output } },
+      ],
+    });
+    expect(
+      acpNotificationToEvents(
+        notification({
+          ...tool,
+          content: [{ type: "content", content: { type: "text", text: "Authoritative content" } }],
+        })
+      )[0].update
+    ).toMatchObject({ content: [{ content: { text: "Authoritative content" } }] });
+    expect(
+      acpNotificationToEvents(
+        notification({ ...tool, rawOutput: { output: "Function result" } })
+      )[0].update
+    ).toMatchObject({ content: [{ content: { text: "Function result" } }] });
+    expect(
+      acpNotificationToEvents(notification({ ...tool, _meta: undefined }))[0].update
+    ).toMatchObject({ content: undefined });
+    expect(
+      acpNotificationToEvents(
+        notification({
+          sessionUpdate: "tool_call",
+          toolCallId: "old-launch",
+          title: "spawnAgent",
+          rawOutput: "Available result",
+          _meta: { codex: { collaboration: { tool: "spawnAgent" } } },
+        })
+      )[0].update
+    ).toMatchObject({ content: [{ content: { text: "Available result" } }] });
+  });
+
+  it("preserves native child identity and marks legacy collaboration/activity launches as limited (https://github.com/Brevilabs/obsidian-copilot-private/issues/467)", () => {
+    const tool = {
+      sessionUpdate: "tool_call",
+      toolCallId: "launch",
+      title: "Reader",
+      kind: "other",
+      rawInput: { prompt: "Read fixture" },
+    };
+    expect(
+      acpNotificationToEvents(
+        notification({
+          ...tool,
+          _meta: { copilot: { subagent: "running", parentToolCallId: "parent" } },
+        })
+      )[0].update
+    ).toMatchObject({
+      subagent: "running",
+      parentToolCallId: "parent",
+      rawInput: { prompt: "Read fixture" },
+    });
+    for (const codex of [
+      { collaboration: { tool: "spawnAgent" } },
+      { subagent: { activity: "started", threadId: "child", path: "/root/reader" } },
+    ]) {
+      expect(
+        acpNotificationToEvents(notification({ ...tool, _meta: { codex } }))[0].update
+      ).toMatchObject({ subagent: "unavailable" });
+    }
+    expect(
+      acpNotificationToEvents(
+        notification({ ...tool, _meta: { copilot: { subagent: "bogus", parentToolCallId: 42 } } })
+      )[0].update
+    ).toMatchObject({ subagent: undefined, parentToolCallId: undefined });
+  });
+
   it("drops a user message chunk instead of reporting it as a titleless session update", () => {
     // A backend may echo the prompt on every live turn. Translating it would reach
     // the unknown-discriminant fallback, which reports a titleless session

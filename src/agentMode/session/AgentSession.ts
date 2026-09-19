@@ -86,6 +86,7 @@ export const DEFAULT_TITLE_PREFIX = "New session";
  * agent's own context always receives the full output regardless.
  */
 const MAX_TOOL_OUTPUT_TEXT_CHARS = 256_000;
+
 // ACP prompt results can arrive before the last session/update frames. Require
 // a quiet interval after a cancelled backing prompt settles before dispatching
 // a follow-up on the same session.
@@ -1740,9 +1741,18 @@ export class AgentSession {
   private handleSessionEvent(event: SessionEvent): void {
     const update = event.update;
     const toolOwnerMessageId =
-      update.sessionUpdate === "tool_call_update"
-        ? this.store.findMessageIdWithToolCall(update.toolCallId)
+      update.sessionUpdate === "tool_call_update" || update.sessionUpdate === "tool_call"
+        ? (this.store.findMessageIdWithToolCall(update.toolCallId) ??
+          (update.parentToolCallId
+            ? this.store.findMessageIdWithToolCall(update.parentToolCallId)
+            : undefined))
         : undefined;
+    // Stop suppresses new activity, but a reported child outcome must settle its card.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/467
+    const isSubagentOutcome =
+      update.sessionUpdate === "tool_call_update" &&
+      toolOwnerMessageId !== undefined &&
+      ["completed", "cancelled", "failed", "disconnected"].includes(update.subagent ?? "");
     const toolOwnerStopReason = toolOwnerMessageId
       ? this.store.getMessage(toolOwnerMessageId)?.turnStopReason
       : undefined;
@@ -1767,13 +1777,14 @@ export class AgentSession {
           return;
         case "tool_call":
         case "plan":
+          if (update.sessionUpdate === "tool_call" && isPriorToolUpdate) break;
           this.cancelledTurnActivity += 1;
           logWarn(
             `[AgentMode] dropping ${update.sessionUpdate} from cancelled turn ${this.internalId}`
           );
           return;
         case "tool_call_update":
-          if (isPriorToolUpdate) break;
+          if (isPriorToolUpdate || isSubagentOutcome) break;
           this.cancelledTurnActivity += 1;
           logWarn(
             `[AgentMode] dropping ${update.sessionUpdate} from cancelled turn ${this.internalId}`
@@ -1851,7 +1862,8 @@ export class AgentSession {
     }
 
     const placeholderId = this.placeholderId;
-    const targetMessageId = isPriorToolUpdate ? toolOwnerMessageId : placeholderId;
+    const targetMessageId =
+      isPriorToolUpdate || isSubagentOutcome ? toolOwnerMessageId : placeholderId;
     if (!targetMessageId) {
       logWarn(`[AgentMode] dropping session/update — no placeholder for ${this.internalId}`);
       return;
@@ -2361,6 +2373,7 @@ function toolCallToPart(
     vendorToolName: call.vendorToolName,
     mcpServer: call.mcpServer,
     parentToolCallId: call.parentToolCallId,
+    subagent: call.subagent,
     progress: call.progress,
   };
 }
@@ -2423,6 +2436,7 @@ function mergeToolCallUpdate(
     vendorToolName: upd.vendorToolName ?? base.vendorToolName,
     mcpServer: upd.mcpServer ?? base.mcpServer,
     parentToolCallId: upd.parentToolCallId ?? base.parentToolCallId,
+    subagent: upd.subagent ?? base.subagent,
     progress: upd.progress === undefined ? base.progress : { ...base.progress, ...upd.progress },
   };
 }
@@ -2463,7 +2477,6 @@ function capToolOutputText(text: string): AgentToolCallOutput {
       `\n\n[Display trimmed: ${omitted.toLocaleString()} more characters. The agent received the full output.]`,
   };
 }
-
 /**
  * Pick the first option matching one of the given kinds (in order) and return
  * a `selected` decision. Falls back to `cancelled` (spec-safe no-decision)
