@@ -104,6 +104,15 @@ if (typeof Node !== "undefined" && typeof Node.prototype.createEl !== "function"
   };
 }
 
+if (
+  typeof HTMLElement !== "undefined" &&
+  typeof HTMLElement.prototype.onWindowMigrated !== "function"
+) {
+  HTMLElement.prototype.onWindowMigrated = function () {
+    return () => {};
+  };
+}
+
 if (typeof HTMLElement !== "undefined" && typeof HTMLElement.prototype.setCssProps !== "function") {
   HTMLElement.prototype.setCssProps = function (props) {
     for (const [name, value] of Object.entries(props)) {

@@ -82,6 +82,7 @@ import {
   CHAT_VIEWTYPE,
   PLAN_PREVIEW_VIEW_TYPE,
   RELEVANT_NOTES_VIEWTYPE,
+  TURN_DIFF_VIEW_TYPE,
 } from "@/constants";
 import { StartupLoadingView } from "@/components/StartupLoadingView";
 import { settingsAtom, settingsStore } from "@/settings/model";
@@ -649,7 +650,7 @@ describe("main", () => {
         expect(openRegisteredView(CHAT_VIEWTYPE)).toBeInstanceOf(StartupLoadingView);
       });
 
-      it("also registers the Agent Chat and plan preview views up front on desktop https://github.com/logancyang/obsidian-copilot/issues/3518", () => {
+      it("also registers the Agent Chat, plan preview, and turn diff views up front on desktop https://github.com/logancyang/obsidian-copilot/issues/3518", () => {
         (isDesktopRuntime as jest.Mock).mockReturnValue(true);
         const settings = deferred();
         const { plugin, registrations } = createLoadingPlugin(() => settings.promise);
@@ -662,6 +663,7 @@ describe("main", () => {
           RELEVANT_NOTES_VIEWTYPE,
           CHAT_AGENT_VIEWTYPE,
           PLAN_PREVIEW_VIEW_TYPE,
+          TURN_DIFF_VIEW_TYPE,
         ]);
       });
 
