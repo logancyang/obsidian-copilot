@@ -1,14 +1,6 @@
 import { getSettings } from "@/settings/model";
 import { logFileManager } from "@/logFileManager";
 
-export function logDebug(...args: unknown[]) {
-  if (getSettings().debug) {
-    // eslint-disable-next-line no-restricted-syntax -- logDebug is the approved console boundary.
-    console.debug(...args);
-  }
-  void logFileManager.append("DEBUG", ...args);
-}
-
 export function logInfo(...args: unknown[]) {
   if (getSettings().debug) {
     // Obsidian's plugin review allows only warn, error, and debug on the console, so

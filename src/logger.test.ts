@@ -16,7 +16,7 @@ jest.mock("@/logFileManager", () => ({
   },
 }));
 
-import { logDebug, logError, logInfo, logMarkdownBlock, logWarn } from "@/logger";
+import { logError, logInfo, logMarkdownBlock, logWarn } from "@/logger";
 
 describe("logger", () => {
   let logSpy: jest.SpyInstance;
@@ -68,21 +68,6 @@ describe("logger", () => {
 
       expect(mockAppend).toHaveBeenNthCalledWith(1, "INFO", "first");
       expect(mockAppend).toHaveBeenNthCalledWith(2, "INFO", "second");
-    });
-  });
-
-  describe("logDebug()", () => {
-    it("writes debug judgments to the console when enabled and always records their level", () => {
-      setDebug(false);
-      logDebug("first");
-      expect(debugSpy).not.toHaveBeenCalled();
-
-      setDebug(true);
-      logDebug("second", { score: 0.9 });
-
-      expect(debugSpy).toHaveBeenCalledWith("second", { score: 0.9 });
-      expect(mockAppend).toHaveBeenNthCalledWith(1, "DEBUG", "first");
-      expect(mockAppend).toHaveBeenNthCalledWith(2, "DEBUG", "second", { score: 0.9 });
     });
   });
 

@@ -8,7 +8,7 @@ import type { App } from "obsidian";
 const mockCheckIsPaidUser = jest.fn<Promise<boolean | undefined>, unknown[]>();
 const mockBroca = jest.fn<Promise<Record<string, { noul: number }>>, unknown[]>();
 const mockModalOpen = jest.fn<void, []>();
-const mockLogDebug = jest.fn<void, unknown[]>();
+const mockLogInfo = jest.fn<void, unknown[]>();
 const mockModal = jest.fn<
   void,
   [App, RankedTagSuggestion[], (tag: string) => void | Promise<void>]
@@ -23,7 +23,7 @@ jest.mock("@/settings/model", () => ({
   getSettings: () => ({ userId: "user-1", debug: false }),
 }));
 jest.mock("@/logger", () => ({
-  logDebug: (...args: unknown[]) => mockLogDebug(...args),
+  logInfo: (...args: unknown[]) => mockLogInfo(...args),
   logError: jest.fn(),
 }));
 jest.mock("@/LLMProviders/brevilabsClient", () => {
@@ -65,11 +65,16 @@ function note(path: string, mtime: number): TFile {
   return value;
 }
 
-function createApp(active: TFile | null = note("Projects/Active.md", 2)) {
-  const other = note("Projects/Research.md", 1);
-  const cacheEntries: Array<[TFile, CachedMetadata]> = [
-    [other, { frontmatter: { tags: ["research"] } } as unknown as CachedMetadata],
-  ];
+function createApp(active: TFile | null = note("Projects/Active.md", 20), candidateCount = 1) {
+  const others = Array.from({ length: candidateCount }, (_, index) =>
+    note(index === 0 ? "Projects/Research.md" : `Projects/Topic ${index}.md`, index)
+  );
+  const cacheEntries: Array<[TFile, CachedMetadata]> = others.map((other, index) => [
+    other,
+    {
+      frontmatter: { tags: [index === 0 ? "research" : `topic-${index}`] },
+    } as unknown as CachedMetadata,
+  ]);
   if (active) {
     cacheEntries.push([
       active,
@@ -81,7 +86,7 @@ function createApp(active: TFile | null = note("Projects/Active.md", 2)) {
   const app = {
     workspace: { getActiveFile: jest.fn(() => active) },
     vault: {
-      getMarkdownFiles: jest.fn(() => (active ? [active, other] : [other])),
+      getMarkdownFiles: jest.fn(() => (active ? [active, ...others] : others)),
       cachedRead: jest.fn().mockResolvedValue("Active note body"),
     },
     metadataCache: { getFileCache: jest.fn((file: TFile) => caches.get(file) ?? null) },
@@ -127,16 +132,37 @@ describe("tagSuggestionCommand", () => {
         expect.any(Function)
       );
       expect(mockModalOpen).toHaveBeenCalled();
-      expect(mockLogDebug).toHaveBeenCalledWith("[Tag suggestion judgment]", {
-        tag: "research",
-        noul: 0.85,
-        rank: 1,
-      });
+      expect(mockLogInfo).toHaveBeenCalledTimes(1);
+      expect(mockLogInfo).toHaveBeenCalledWith("[Tag suggestion judgments]", [
+        { tag: "research", noul: 0.85, rank: 1 },
+      ]);
 
       await chooseTag?.("research");
 
       expect(frontmatter.tags).toEqual(["research"]);
       expect(Notice).toHaveBeenCalledWith("Added #research");
+    });
+
+    it("logs one entry containing only the ten suggestions shown", async () => {
+      const { app } = createApp(note("Projects/Active.md", 20), 11);
+      mockBroca.mockImplementation(async (_state, questions: Record<string, NoulQuestion>) =>
+        Object.fromEntries(
+          Object.keys(questions).map((id, index) => [id, { noul: 1 - index / 100 }])
+        )
+      );
+
+      await suggestTagsForCurrentNote(app);
+
+      const suggestions = mockModal.mock.calls[0][1];
+      const judgments = mockLogInfo.mock.calls[0][1] as Array<{
+        tag: string;
+        noul: number;
+        rank: number;
+      }>;
+      expect(mockLogInfo).toHaveBeenCalledTimes(1);
+      expect(judgments).toHaveLength(10);
+      expect(judgments.map(({ tag }) => tag)).toEqual(suggestions.map(({ tag }) => tag));
+      expect(judgments.map(({ rank }) => rank)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
     });
 
     it("does not call Jev without an active Markdown note (https://github.com/Brevilabs/obsidian-copilot-private/issues/492)", async () => {

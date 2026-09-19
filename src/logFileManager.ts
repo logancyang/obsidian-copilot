@@ -5,7 +5,7 @@ import { getSettings } from "@/settings/model";
 import { getEffectiveCopilotFolder } from "@/settings/copilotFolder";
 import { isSensitiveKey } from "@/services/settingsSecretTransforms";
 
-type LogLevel = "DEBUG" | "INFO" | "WARN" | "ERROR";
+type LogLevel = "INFO" | "WARN" | "ERROR";
 
 /**
  * Manages a rolling log file that keeps the last N entries and works on desktop and mobile.

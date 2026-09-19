@@ -188,6 +188,7 @@ describe("tagSuggestions", () => {
       ["no frontmatter", {}, ["suggested"]],
       ["empty tags", { tags: [] }, ["suggested"]],
       ["populated tags", { tags: ["existing"], owner: "Ada" }, ["existing", "suggested"]],
+      ["mixed-value tags", { tags: [2024, "book"] }, [2024, "book", "suggested"]],
     ])("adds a tag for %s without changing other properties", async (_label, frontmatter, tags) => {
       const originalOwner = (frontmatter as { owner?: string }).owner;
       const processFrontMatter = jest.fn(

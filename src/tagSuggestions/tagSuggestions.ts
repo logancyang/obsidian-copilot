@@ -299,7 +299,9 @@ export async function addTagToFrontmatter(app: App, file: TFile, tag: string): P
   await app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
     const current = stringList(frontmatter.tags, true);
     if (!current.some((existing) => existing.toLowerCase() === normalized.toLowerCase())) {
-      frontmatter.tags = [...current, normalized];
+      frontmatter.tags = Array.isArray(frontmatter.tags)
+        ? [...frontmatter.tags, normalized]
+        : [...current, normalized];
     }
   });
 }

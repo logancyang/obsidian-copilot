@@ -1,6 +1,6 @@
 import { TagSuggestionModal } from "@/components/modals/TagSuggestionModal";
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
-import { logDebug, logError } from "@/logger";
+import { logError, logInfo } from "@/logger";
 import { checkIsPaidUser } from "@/plusUtils";
 import { getSettings } from "@/settings/model";
 import {
@@ -54,10 +54,12 @@ export async function suggestTagsForCurrentNote(app: App): Promise<void> {
       new Notice("No tag suggestions were returned. Try again.");
       return;
     }
-    ranking.forEach(({ tag, score }, index) =>
-      logDebug("[Tag suggestion judgment]", { tag, noul: score, rank: index + 1 })
+    const suggestions = ranking.slice(0, 10);
+    logInfo(
+      "[Tag suggestion judgments]",
+      suggestions.map(({ tag, score }, index) => ({ tag, noul: score, rank: index + 1 }))
     );
-    new TagSuggestionModal(app, ranking.slice(0, 10), async (tag) => {
+    new TagSuggestionModal(app, suggestions, async (tag) => {
       try {
         await addTagToFrontmatter(app, file, tag);
         new Notice(`Added #${tag}`);
