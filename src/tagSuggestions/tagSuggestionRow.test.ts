@@ -528,7 +528,7 @@ describe("tagSuggestionRow", () => {
         const autoAdd = context.metadataContainer.querySelector<HTMLButtonElement>(
           'button[aria-label="Auto-add 3 tags"]'
         );
-        expect(autoAdd?.textContent).toBe("Auto-add 3");
+        expect(autoAdd?.textContent).toBe("Auto-add");
         autoAdd?.click();
 
         expect(labels(context.metadataContainer)).toEqual([
@@ -549,7 +549,7 @@ describe("tagSuggestionRow", () => {
         row.show(context.file, scoredSuggestions([0.5, 0.49]), jest.fn());
         expect(
           context.metadataContainer.querySelector(".copilot-tag-auto-add-pill")?.textContent
-        ).toBe("Auto-add 1");
+        ).toBe("Auto-add");
 
         row.show(context.file, scoredSuggestions([0.49, 0.4]), jest.fn());
         expect(context.metadataContainer.querySelector(".copilot-tag-auto-add-pill")).toBeNull();

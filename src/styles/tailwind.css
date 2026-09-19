@@ -1086,6 +1086,7 @@ If your plugin does not need CSS, delete this file.
 
 .copilot-tag-suggestion-key-label {
   font-size: var(--metadata-label-font-size);
+  padding-inline-start: var(--size-4-2);
 }
 
 .copilot-tag-suggestion-row .multi-select-pill {

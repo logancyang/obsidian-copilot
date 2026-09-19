@@ -302,7 +302,7 @@ export class TagSuggestionRow extends Component {
         });
         autoAddPill.createSpan({
           cls: "multi-select-pill-content",
-          text: `Auto-add ${count}`,
+          text: "Auto-add",
         });
         autoAddPill.addEventListener("click", () => {
           void this.choose(
