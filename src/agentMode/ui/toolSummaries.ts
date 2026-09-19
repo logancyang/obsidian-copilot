@@ -3,7 +3,11 @@ import { Bot, MessageCircleQuestion } from "lucide-react";
 import { pickToolIcon } from "@/agentMode/ui/toolIcons";
 import type { ToolCallPart } from "@/agentMode/ui/agentTrail";
 import { formatDuration } from "@/lib/duration";
-import { isAbsolutePath, toVaultRelative } from "@/utils/vaultPath";
+import {
+  diffTargetPaths as diffTargetPathsOf,
+  primaryEditTargetPath,
+} from "@/agentMode/session/editTargets";
+import { isAbsolutePath } from "@/utils/vaultPath";
 
 /**
  * Render-time context passed through to the summary callbacks that need
@@ -152,26 +156,14 @@ function verb(part: ToolCallPart, progressive: string, past: string): string {
 }
 
 function diffTargetPaths(part: ToolCallPart): string[] {
-  const paths = new Set<string>();
-  for (const output of part.output ?? []) {
-    if (output.type === "diff" && output.path.length > 0) paths.add(output.path);
-  }
-  return [...paths];
+  return diffTargetPathsOf(part.output);
 }
 
 function targetFromPath(part: ToolCallPart, vaultBase: string | null): string | null {
-  const loc = part.locations?.[0]?.path;
-  if (typeof loc === "string" && loc.length > 0) return toVaultRelative(loc, vaultBase);
-  const input = part.input as
-    | { file_path?: unknown; filePath?: unknown; path?: unknown }
-    | null
-    | undefined;
-  if (typeof input?.file_path === "string") return toVaultRelative(input.file_path, vaultBase);
-  if (typeof input?.filePath === "string") return toVaultRelative(input.filePath, vaultBase);
-  if (typeof input?.path === "string") return toVaultRelative(input.path, vaultBase);
-  const diffPaths = diffTargetPaths(part);
-  if (diffPaths.length === 1) return toVaultRelative(diffPaths[0], vaultBase);
-  return null;
+  return primaryEditTargetPath(
+    { locations: part.locations, input: part.input, diffPaths: diffTargetPaths(part) },
+    vaultBase
+  );
 }
 
 function displayTargetFromPath(part: ToolCallPart, vaultBase: string | null): string | null {
