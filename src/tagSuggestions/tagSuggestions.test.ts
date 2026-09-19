@@ -153,6 +153,28 @@ describe("tagSuggestions", () => {
       }
     );
 
+    it(`strips frontmatter only at a standalone closing fence (${ISSUE})`, () => {
+      const active = file("Private.md");
+      const cache = metadata([], {
+        description: "alpha---beta",
+        password: "top-secret",
+      });
+      const app = {
+        vault: { getMarkdownFiles: () => [active] },
+        metadataCache: { getFileCache: () => cache, resolvedLinks: {} },
+      } as unknown as App;
+
+      const state = buildTagSuggestionState(
+        app,
+        active,
+        '---\ndescription: "alpha---beta"\npassword: top-secret\n---\nSafe body',
+        cache
+      );
+
+      expect(state.content).toBe("Safe body");
+      expect(JSON.stringify(state)).not.toContain("top-secret");
+    });
+
     it("caps properties, link titles, and neighbor tags from metadata only (https://github.com/Brevilabs/obsidian-copilot-private/issues/492)", () => {
       const active = file("Active.md");
       const neighbors = Array.from({ length: 25 }, (_, index) =>

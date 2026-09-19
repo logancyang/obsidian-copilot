@@ -1,6 +1,5 @@
 import { BrevilabsApiError } from "@/LLMProviders/brevilabsClient";
 import { isSensitiveKey } from "@/services/settingsSecretTransforms";
-import { stripFrontmatter } from "@/utils";
 import { App, CachedMetadata, parseFrontMatterAliases, TFile } from "obsidian";
 
 const EXCERPT_CHARS = 1500;
@@ -109,6 +108,16 @@ function isSensitiveFrontmatterKey(key: string): boolean {
   );
 }
 
+function stripTagSuggestionFrontmatter(content: string): string {
+  const opening = /^(?:\uFEFF)?---[ \t]*(?:\r\n|\n)/.exec(content);
+  if (!opening) return content;
+  const closingFence = /^---[ \t]*(?:\r\n|\n|$)/gm;
+  closingFence.lastIndex = opening[0].length;
+  const closing = closingFence.exec(content);
+  if (!closing) return "";
+  return content.slice(closing.index + closing[0].length).trimStart();
+}
+
 function frontmatterProperties(
   frontmatter: Record<string, unknown> | undefined
 ): Record<string, FrontmatterValue> {
@@ -210,7 +219,7 @@ export function buildTagSuggestionState(
   rawContent: string,
   cache: CachedMetadata | null
 ): TagSuggestionState {
-  const body = stripFrontmatter(rawContent);
+  const body = stripTagSuggestionFrontmatter(rawContent);
   const existingTags = Array.from(tagsFromCache(cache).values());
   const state: TagSuggestionState = {
     title: file.basename,
@@ -274,7 +283,8 @@ export function collectTagCandidates(
   }
   const activeFolder = active?.folder ?? activeFile.parent?.path ?? "";
   const activeCreated = active?.ctime ?? activeFile.stat.ctime;
-  const text = `${activeFile.basename} ${stripFrontmatter(activeContent)}`.toLowerCase();
+  const text =
+    `${activeFile.basename} ${stripTagSuggestionFrontmatter(activeContent)}`.toLowerCase();
   const candidates: TagCandidate[] = [];
   for (const [key, entry] of index) {
     if (existingKeys.has(key) || HEX_COLOUR_TAG.test(key)) continue;
