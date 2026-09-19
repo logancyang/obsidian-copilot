@@ -136,6 +136,7 @@ export interface MiyoSearchResult {
   title?: string | null;
   chunk_index?: number;
   chunk_text?: string | null;
+  snippet?: string | null;
   metadata?: Record<string, unknown>;
   embedding_model?: string | null;
   ctime?: number;
@@ -571,6 +572,7 @@ export class MiyoClient {
    * @param query - User query.
    * @param limit - Maximum number of results.
    * @param filters - Optional search filters.
+   * @param paths - Optional path substrings matched by Miyo before client-side filtering.
    * @returns Search response.
    */
   public async search(
@@ -578,13 +580,15 @@ export class MiyoClient {
     folderName: string | undefined,
     query: string,
     limit: number,
-    filters?: MiyoSearchFilter[]
+    filters?: MiyoSearchFilter[],
+    paths?: string[]
   ): Promise<MiyoSearchResponse> {
     const payload = {
       query,
       ...(folderName ? { folder_name: folderName } : {}),
       limit,
       ...(filters && filters.length > 0 ? { filters } : {}),
+      ...(paths && paths.length > 0 ? { paths } : {}),
     };
     if (getSettings().debug) {
       logInfo("Miyo search request:", { baseUrl, payload });

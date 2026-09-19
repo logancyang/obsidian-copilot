@@ -141,6 +141,30 @@ describe("MiyoClient", () => {
     );
   });
 
+  it("sends path substrings for checked vault-search file types", async () => {
+    mockedRequestUrl.mockResolvedValue({
+      status: 200,
+      json: { results: [] },
+      text: "",
+    } as RequestUrlResponse);
+
+    await new MiyoClient().search("http://127.0.0.1:8742", "Vault", "stoicism", 30, undefined, [
+      ".pdf",
+      ".epub",
+    ]);
+
+    expect(mockedRequestUrl).toHaveBeenCalledWith(
+      expect.objectContaining({
+        body: JSON.stringify({
+          query: "stoicism",
+          folder_name: "Vault",
+          limit: 30,
+          paths: [".pdf", ".epub"],
+        }),
+      })
+    );
+  });
+
   it("requests folder scans through /v0/scan", async () => {
     mockedRequestUrl.mockResolvedValue({
       status: 202,

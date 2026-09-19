@@ -400,6 +400,15 @@ describe("sanitizeEnvOverrides", () => {
 });
 
 describe("sanitizeSettings - legacy Miyo settings cleanup", () => {
+  it(`normalizes persisted vault-search exclusions without requiring a migration (${"https://github.com/Brevilabs/obsidian-copilot-private/issues/515"})`, () => {
+    const sanitized = sanitizeSettings({
+      ...DEFAULT_SETTINGS,
+      vaultSearchExcludedFileTypes: [".PDF", " epub ", "pdf", 7],
+    } as unknown as CopilotSettings);
+
+    expect(sanitized.vaultSearchExcludedFileTypes).toEqual(["pdf", "epub"]);
+  });
+
   it("migrates legacy Miyo settings and strips obsolete remote vault path state", () => {
     const legacySettings = {
       ...DEFAULT_SETTINGS,
