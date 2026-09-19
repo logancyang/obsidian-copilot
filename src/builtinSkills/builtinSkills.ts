@@ -722,14 +722,15 @@ do not create a replacement page unless the user explicitly asks.
 
 ## 4. Withdraw
 
-For delete, remove, or withdraw requests, read the \`docId\` with the same rules as step 1:
-\`openartifacts\` first, \`symposium\` on older notes, compared by document id, and stop to
-ask on any other value or on two properties naming different ids. If there is none, say
-nothing is published. Otherwise tell the user the link will stop working and that copies
-people already saved cannot be recalled, then end your turn. On a clear yes, run the wrapper
-with \`unshare <docId>\`, remove the \`openartifacts\` and \`symposium\` properties from the
-note, and report that the page is gone. Never tell the user to delete the page at its
-public URL.
+For delete, remove, or withdraw requests, take the \`docId\` from an OpenArtifacts link the
+user supplies or the receipt URL reported earlier. Otherwise, read it with the same rules as
+step 1: \`openartifacts\` first, \`symposium\` on older notes, compared by document id, and
+stop to ask on any other value or on two properties naming different ids. If there is no link
+or property, say nothing is published. Otherwise tell the user the link will stop working and
+that copies people already saved cannot be recalled, then end your turn. On a clear yes, run
+the wrapper with \`unshare <docId>\`, remove the \`openartifacts\` and \`symposium\` properties
+from the Markdown note when present, and report that the page is gone. Never tell the user to
+delete the page at its public URL.
 `,
   files: [
     { path: `themes/${OPENARTIFACTS_DEFAULT_THEME}.md`, content: RESEARCH_MEMO_THEME },

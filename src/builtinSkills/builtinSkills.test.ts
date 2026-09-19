@@ -339,6 +339,9 @@ describe("builtinSkills", () => {
       );
       expect(md).toMatch(/For an existing HTML file on Windows, replace the handoff path/);
       expect(md).toContain("Success returns the same server receipt");
+      expect(md).toMatch(
+        /take the `docId` from an OpenArtifacts link the\s+user supplies or the receipt URL reported earlier/
+      );
     });
   });
 
