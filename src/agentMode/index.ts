@@ -43,6 +43,8 @@ export { ModelEnableList } from "@/components/ui/ModelEnableList";
 export type { ModelEnableGroup } from "@/components/ui/ModelEnableList";
 export { PlanPreviewView, PLAN_PREVIEW_VIEW_TYPE } from "./ui/PlanPreviewView";
 export { ReportIssueModal } from "./ui/ReportIssueModal";
+export { openTurnDiff, TurnDiffView, TURN_DIFF_VIEW_TYPE } from "./ui/TurnDiffView";
+export type { TurnDiffViewState } from "./ui/TurnDiffView";
 export {
   backendDisplayOrder,
   backendNeedsSelfHostWarning,
