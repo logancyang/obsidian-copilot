@@ -75,6 +75,10 @@ Create preset prompts under **Settings → Copilot → Command**. Run them from 
 
 Run **Quick Ask** from the command palette, or assign it a hotkey under **Obsidian Settings → Hotkeys**. It opens a small prompt beside your cursor or selection for quick rewrites, explanations, and follow-up questions. Quick Ask uses your Quick Chat model, so set up a Copilot-hosted or BYOK model first.
 
+### Suggest Tags for a Note
+
+With a Markdown note open, run **Suggest tags for current note** from the command palette. Copilot Plus ranks tags already used elsewhere in your vault and shows five suggestions under the note's Properties, or under the title when Properties is hidden. Select a half-transparent tag to add it; the next of the ten ranked matches takes its place. Close the suggestion row whenever you are done. Nothing is sent until you run the command.
+
 ## Next Steps
 
 - [Agent Chat](agent-mode-and-tools.md): agents, permissions, context, models, and skills

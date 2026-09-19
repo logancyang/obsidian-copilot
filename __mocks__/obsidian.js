@@ -73,6 +73,27 @@ module.exports = {
   parseYaml: jest.fn().mockImplementation((content) => {
     return parseYamlString(content);
   }),
+  parseFrontMatterAliases: (frontmatter) => {
+    const value = frontmatter?.aliases ?? frontmatter?.alias;
+    if (typeof value === "string") return [value];
+    if (Array.isArray(value)) return value.filter((alias) => typeof alias === "string");
+    return null;
+  },
+  getAllTags: (cache) => {
+    const frontmatterValue = cache?.frontmatter?.tags ?? cache?.frontmatter?.tag;
+    const frontmatterTags = Array.isArray(frontmatterValue)
+      ? frontmatterValue
+      : typeof frontmatterValue === "string"
+        ? frontmatterValue.split(/[\s,]+/)
+        : [];
+    const tags = [
+      ...frontmatterTags.filter((tag) => typeof tag === "string"),
+      ...(cache?.tags ?? []).map(({ tag }) => tag),
+    ]
+      .map((tag) => (tag.startsWith("#") ? tag : `#${tag}`))
+      .filter(Boolean);
+    return tags.length ? Array.from(new Set(tags)) : null;
+  },
   Modal: class Modal {
     constructor(app) {
       this.app = app;
@@ -100,6 +121,7 @@ module.exports = {
     load() {}
     unload() {}
     register() {}
+    registerEvent() {}
   },
   // Base class for FolderSearchModal & friends; subclasses only need it to be
   // constructable so suites that pull them into the module graph can load.

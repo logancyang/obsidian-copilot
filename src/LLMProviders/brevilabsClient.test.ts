@@ -14,7 +14,7 @@ jest.mock("@/plusUtils", () => ({
   turnOffPaid: (app?: unknown) => mockTurnOffPaid(app),
 }));
 
-import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
+import { BrevilabsApiError, BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import { BREVILABS_MODELS_BASE_URL } from "@/constants";
 
 import * as obsidianModule from "obsidian";
@@ -266,6 +266,83 @@ describe("brevilabsClient", () => {
 
         expect(result).toEqual({ isValid: undefined });
         expect(mockTurnOffPaid).not.toHaveBeenCalled();
+      });
+    });
+
+    describe("broca()", () => {
+      const requestUrlMock = jest.fn();
+
+      beforeEach(() => {
+        jest.clearAllMocks();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- restore the transport after license tests stub it
+        delete (BrevilabsClient.getInstance() as any).makeRequest;
+        mockGetSettings.mockReturnValue({ plusLicenseKey: "license", userId: "user-1" });
+        setRequestUrlImpl(requestUrlMock);
+      });
+
+      it("posts generic state and questions to /broca and returns its answer envelope", async () => {
+        requestUrlMock.mockResolvedValue({
+          status: 200,
+          json: {
+            response: {
+              model: "jev-latest",
+              answers: { relevance: { noul: 0.91 } },
+              usage: { input_tokens: 20 },
+            },
+            elapsed_time_ms: 120,
+          },
+        });
+
+        const result = await BrevilabsClient.getInstance().broca(
+          { title: "Note" },
+          { relevance: { type: "noul", instructions: "Relevant?" } }
+        );
+
+        expect(result).toEqual({ relevance: { noul: 0.91 } });
+        const request = requestUrlMock.mock.calls[0][0] as {
+          url: string;
+          body: string;
+          headers: Record<string, string>;
+        };
+        expect(new URL(request.url).pathname).toBe("/v1/broca");
+        expect(request.headers.Authorization).toBe("Bearer license");
+        expect(JSON.parse(request.body)).toEqual({
+          state: { title: "Note" },
+          questions: { relevance: { type: "noul", instructions: "Relevant?" } },
+          user_id: "user-1",
+        });
+      });
+
+      it.each([403, 413, 429, 504])(
+        "preserves HTTP %i so a Jev feature can choose its fallback",
+        async (status) => {
+          requestUrlMock.mockResolvedValue({
+            status,
+            json: { detail: { reason: "Proxy failure" } },
+          });
+
+          const request = BrevilabsClient.getInstance().broca(
+            {},
+            {
+              relevance: { type: "noul", instructions: "Relevant?" },
+            }
+          );
+
+          await expect(request).rejects.toMatchObject<Partial<BrevilabsApiError>>({ status });
+        }
+      );
+
+      it("leaves a network failure as a rejected request", async () => {
+        requestUrlMock.mockRejectedValue(new Error("offline"));
+
+        await expect(
+          BrevilabsClient.getInstance().broca(
+            {},
+            {
+              relevance: { type: "noul", instructions: "Relevant?" },
+            }
+          )
+        ).rejects.toThrow("offline");
       });
     });
 
