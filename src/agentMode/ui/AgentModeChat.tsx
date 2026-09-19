@@ -5,6 +5,7 @@ import { useAgentModelPicker } from "@/agentMode/ui/useAgentModelPicker";
 import { AgentModeStatus } from "@/agentMode/ui/AgentModeStatus";
 import { AgentSelectPanel } from "@/agentMode/ui/AgentSelectPanel";
 import { AgentSelectPane } from "@/agentMode/ui/AgentSelectPane";
+import { AgentStatusCard } from "@/agentMode/ui/AgentStatusCard";
 import {
   useBackendInstallState,
   useSessionBackendDescriptor,
@@ -169,23 +170,30 @@ export const AgentModeChat: React.FC<Props> = ({
     );
   }
 
-  // A start already in flight owns the session that is about to take this pane
-  // over. Committing a pick meanwhile calls `createSession` directly, which is
-  // not de-duped against the pending `getOrCreateActiveSession`, so both
-  // sessions would land and the later one would steal focus.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/480
-  const recoveryPicker = picker && manager.getIsStarting() ? { ...picker, disabled: true } : picker;
+  // Recovery starts the chosen agent with the source chat unmounted, so this pane is the only
+  // surface that can report that start — and `AgentModeStatus` says nothing about a ready
+  // backend with no error, which is exactly the state a preload or a hidden candidate startup
+  // sits in. https://github.com/Brevilabs/obsidian-copilot-private/issues/480
+  const recoveryStarting = !!recovery && installState.kind === "ready" && !manager.getLastError();
+  // A start already in flight owns the session that is about to take this pane over. Committing
+  // a pick meanwhile calls `createSession` directly, which is not de-duped against the pending
+  // `getOrCreateActiveSession`, so both sessions would land and the later one would steal focus.
+  const starting = manager.getIsStarting() || recoveryStarting;
 
   // Render the chain switcher below the status surface so the user can still
   // leave Agent Mode without going through settings or the command palette.
   return (
     <AgentModeChatRecovery
-      picker={recoveryPicker}
+      picker={picker && starting ? { ...picker, disabled: true } : picker}
       controls={<AgentChatControls />}
       hasSourceChat={!!activeSession}
       onCancel={recovery ? () => manager.cancelRecoverySelection() : undefined}
     >
-      <AgentModeStatus manager={manager} plugin={plugin} onInstallClick={handleInstall} />
+      {recoveryStarting ? (
+        <AgentStatusCard message={`Starting ${descriptor.displayName}…`} />
+      ) : (
+        <AgentModeStatus manager={manager} plugin={plugin} onInstallClick={handleInstall} />
+      )}
     </AgentModeChatRecovery>
   );
 };

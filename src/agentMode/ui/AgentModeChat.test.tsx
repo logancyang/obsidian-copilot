@@ -32,6 +32,7 @@ jest.mock("@/agentMode/ui/useAgentModelPicker", () => ({
 jest.mock("@/agentMode/ui/useBackendDescriptor", () => ({
   useSessionBackendDescriptor: () => ({
     id: "claude",
+    displayName: "Claude",
     managedInstall: mockManagedInstall,
     openInstallUI: jest.fn(),
   }),
@@ -124,23 +125,6 @@ describe("AgentModeChat", () => {
   });
 
   describe("compose draft ownership", () => {
-    it("offers saved models on cold incompatible startup (https://github.com/Brevilabs/obsidian-copilot-private/issues/480)", () => {
-      renderFallback(
-        {
-          kind: "incompatible",
-          source: "custom",
-          currentVersion: "1",
-          minVersion: "2",
-          message: "Upgrade required",
-        },
-        null
-      );
-      expect(screen.getByRole("button", { name: /Saved model/i })).toBeTruthy();
-      fireEvent.click(screen.getByRole("button", { name: /Saved model/i }));
-      fireEvent.click(screen.getByRole("option", { name: /Other saved model/i }));
-      fireEvent.keyDown(screen.getByRole("listbox"), { key: "Escape" });
-      expect(mockCommitSelection).toHaveBeenCalledWith("other|agent", null);
-    });
     it("offers Back to chat without discarding the preserved draft (https://github.com/Brevilabs/obsidian-copilot-private/issues/480)", () => {
       const active = { internalId: "source", chatInputId: "input" } as AgentSession;
       const { manager } = makeManager({
@@ -173,7 +157,7 @@ describe("AgentModeChat", () => {
       rerender(chat());
       expect(screen.getByTestId("agent-home").textContent).toBe("keep my draft");
     });
-    it("renders recovery without discarding the source draft and resumes only after upgrade (https://github.com/Brevilabs/obsidian-copilot-private/issues/480)", () => {
+    it("renders recovery without discarding the source draft, then reports the chosen agent starting until it settles (https://github.com/Brevilabs/obsidian-copilot-private/issues/480)", () => {
       const active = { internalId: "s-1", chatInputId: "chat-1" } as AgentSession;
       const { manager } = makeManager({
         activeProjectId: GLOBAL_SCOPE,
@@ -207,6 +191,10 @@ describe("AgentModeChat", () => {
         <AgentModeChat plugin={plugin} onSaveChat={() => {}} updateUserMessageHistory={() => {}} />
       );
       expect(manager.resumeRecoverySelection).toHaveBeenCalledTimes(1);
+      expect(screen.getByText("Starting Claude…")).toBeTruthy();
+      expect(screen.getByRole("button", { name: /Saved model/i }).hasAttribute("disabled")).toBe(
+        true
+      );
       (manager.getRecoverySelection as jest.Mock).mockReturnValue(null);
       rerender(chat);
       expect(screen.getByTestId("agent-home").textContent).toBe("unsent draft");

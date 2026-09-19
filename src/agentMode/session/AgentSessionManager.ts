@@ -2934,6 +2934,12 @@ export class AgentSessionManager {
       try {
         await this.waitForBackendInstall(pending.backendId);
         if (this.getRecoverySelection() !== pending) return;
+        // The install queue can drain while a compatibility probe is still transient, so the
+        // runtime may be unsupported by the time recovery resumes. `createSession` guards the
+        // candidate branch; the history-preserving branch below would otherwise send its model
+        // RPC to a process that cannot serve it.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/480
+        assertBackendCompatible(this.resolveDescriptor(pending.backendId), getSettings());
         const source = this.getActiveSession();
         if (source?.hasUserVisibleMessages()) {
           if (source.backendId !== pending.backendId) {
@@ -2963,9 +2969,12 @@ export class AgentSessionManager {
           this.cancelRecoverySelection();
           return;
         }
-        // https://github.com/Brevilabs/obsidian-copilot-private/issues/480
+        // One acceptance rule for both branches: the session that will serve the chat has to
+        // report the chosen model. A backend that answers the apply while still reporting its
+        // previous or default model would otherwise clear recovery and persist a default for a
+        // selection that never took. https://github.com/Brevilabs/obsidian-copilot-private/issues/480
         const baseModelId = pending.selection.baseModelId;
-        if (candidate && candidate.getState()?.model?.current.baseModelId !== baseModelId) {
+        if ((candidate ?? source)?.getState()?.model?.current.baseModelId !== baseModelId) {
           throw new Error(`Model "${baseModelId}" is unavailable. Choose another model or retry.`);
         }
         this.recoverySelection = null;

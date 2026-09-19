@@ -435,6 +435,30 @@ function savedNoteFixture() {
   return { mgr, saveSession };
 }
 
+/**
+ * Manager over a single descriptor whose install state flips mid-test, the way an upgrade does.
+ * Every recovery case resolves the same descriptor for any backend id, so "source" and "target"
+ * name distinct agents without a second fixture.
+ */
+function buildRecoveryManager(): { mgr: AgentSessionManager; descriptor: BackendDescriptor } {
+  const descriptor = buildDescriptor();
+  const mgr = new AgentSessionManager(buildApp(), buildPlugin() as never, {
+    permissionPrompter: jest.fn(),
+    resolveDescriptor: () => descriptor,
+    modelPreloader: {
+      getCachedModelCatalog: jest.fn(() => null),
+      preload: jest.fn(async () => undefined),
+      refresh: jest.fn(() => null),
+      subscribe: jest.fn(() => () => {}),
+      shutdown: jest.fn(),
+      clearCached: jest.fn(),
+      takeWarm: jest.fn(() => null),
+      getWarmProcs: jest.fn(() => []),
+    } as unknown as AgentModelPreloader,
+  });
+  return { mgr, descriptor };
+}
+
 describe("AgentSessionManager", () => {
   describe("AgentSessionManager", () => {
     describe("deferRecoverySelection()", () => {
@@ -456,12 +480,7 @@ describe("AgentSessionManager", () => {
         expect(mgr.getActiveSession()).toBe(original);
       });
       it("retains an outdated target's model and effort without replacing the current chat or input (https://github.com/Brevilabs/obsidian-copilot-private/issues/480)", async () => {
-        const descriptor = buildDescriptor();
-        const mgr = new AgentSessionManager(buildApp(), buildPlugin() as never, {
-          permissionPrompter: jest.fn(),
-          resolveDescriptor: () => descriptor,
-          modelPreloader: { takeWarm: () => null } as unknown as AgentModelPreloader,
-        });
+        const { mgr, descriptor } = buildRecoveryManager();
         const original = await mgr.createSession("source-agent");
         (descriptor.getInstallState as jest.Mock).mockReturnValue({
           kind: "incompatible",
@@ -483,12 +502,7 @@ describe("AgentSessionManager", () => {
       it.each(["agent-default", null])(
         "retains recovery when setModel fails and leaves %s reported, then accepts normalized effort on retry (https://github.com/Brevilabs/obsidian-copilot-private/issues/480)",
         async (reportedModel) => {
-          const descriptor = buildDescriptor();
-          const mgr = new AgentSessionManager(buildApp(), buildPlugin() as never, {
-            permissionPrompter: jest.fn(),
-            resolveDescriptor: () => descriptor,
-            modelPreloader: { takeWarm: () => null } as unknown as AgentModelPreloader,
-          });
+          const { mgr, descriptor } = buildRecoveryManager();
           const source = await mgr.createSession("source");
           const selection = { baseModelId: "legacy-model", effort: "high" };
           (descriptor.getInstallState as jest.Mock).mockReturnValue({ kind: "incompatible" });
@@ -543,12 +557,7 @@ describe("AgentSessionManager", () => {
         }
       );
       it("applies a recovered model within the same agent without replacing its conversation (https://github.com/Brevilabs/obsidian-copilot-private/issues/480)", async () => {
-        const descriptor = buildDescriptor();
-        const mgr = new AgentSessionManager(buildApp(), buildPlugin() as never, {
-          permissionPrompter: jest.fn(),
-          resolveDescriptor: () => descriptor,
-          modelPreloader: { takeWarm: () => null } as unknown as AgentModelPreloader,
-        });
+        const { mgr, descriptor } = buildRecoveryManager();
         const source = await mgr.createSession("source");
         getSessionTestHandle(source).setHasUserVisibleMessages(true);
         let current: ModelSelection = { baseModelId: "original", effort: "low" };
@@ -578,12 +587,7 @@ describe("AgentSessionManager", () => {
               (id) => ({ filePath: `Projects/${id}/project.md`, project: { id } }) as never
             );
           try {
-            const descriptor = buildDescriptor();
-            const mgr = new AgentSessionManager(buildApp(), buildPlugin() as never, {
-              permissionPrompter: jest.fn(),
-              resolveDescriptor: () => descriptor,
-              modelPreloader: { takeWarm: () => null } as unknown as AgentModelPreloader,
-            });
+            const { mgr, descriptor } = buildRecoveryManager();
             const other = await mgr.createSession("source", "other-project");
             const source = await mgr.createSession("source");
             (descriptor.getInstallState as jest.Mock).mockReturnValue({ kind: "incompatible" });
@@ -619,12 +623,7 @@ describe("AgentSessionManager", () => {
       it.each(["cold", "source", "target"])(
         "retains the selection after %s startup fails and retries with a fresh session (https://github.com/Brevilabs/obsidian-copilot-private/issues/480)",
         async (sourceBackend) => {
-          const descriptor = buildDescriptor();
-          const mgr = new AgentSessionManager(buildApp(), buildPlugin() as never, {
-            permissionPrompter: jest.fn(),
-            resolveDescriptor: () => descriptor,
-            modelPreloader: { takeWarm: () => null } as unknown as AgentModelPreloader,
-          });
+          const { mgr, descriptor } = buildRecoveryManager();
           const source = sourceBackend === "cold" ? null : await mgr.createSession(sourceBackend);
           const initialCount = source ? 1 : 0;
           if (source && sourceBackend === "target") getSessionTestHandle(source).setStatus("error");
@@ -662,12 +661,7 @@ describe("AgentSessionManager", () => {
       );
 
       it("does not publish an old target after another model is picked during startup (https://github.com/Brevilabs/obsidian-copilot-private/issues/480)", async () => {
-        const descriptor = buildDescriptor();
-        const mgr = new AgentSessionManager(buildApp(), buildPlugin() as never, {
-          permissionPrompter: jest.fn(),
-          resolveDescriptor: () => descriptor,
-          modelPreloader: { takeWarm: () => null } as unknown as AgentModelPreloader,
-        });
+        const { mgr, descriptor } = buildRecoveryManager();
         const source = await mgr.createSession("source");
         (descriptor.getInstallState as jest.Mock).mockReturnValue({ kind: "incompatible" });
         mgr.deferRecoverySelection("old-target", { baseModelId: "old", effort: "low" });
@@ -689,12 +683,7 @@ describe("AgentSessionManager", () => {
         expect(mockedSetSettings).not.toHaveBeenCalled();
       });
       it("keeps the source conversation if messages arrive while an upgrade is pending (https://github.com/Brevilabs/obsidian-copilot-private/issues/480)", async () => {
-        const descriptor = buildDescriptor();
-        const mgr = new AgentSessionManager(buildApp(), buildPlugin() as never, {
-          permissionPrompter: jest.fn(),
-          resolveDescriptor: () => descriptor,
-          modelPreloader: { takeWarm: () => null } as unknown as AgentModelPreloader,
-        });
+        const { mgr, descriptor } = buildRecoveryManager();
         const original = await mgr.createSession("source-agent");
         (descriptor.getInstallState as jest.Mock).mockReturnValue({
           kind: "incompatible",
@@ -719,12 +708,7 @@ describe("AgentSessionManager", () => {
       it.each(["cold", "fresh chat"])(
         "starts the chosen model after upgrade from %s and preserves the logical input (https://github.com/Brevilabs/obsidian-copilot-private/issues/480)",
         async (origin) => {
-          const descriptor = buildDescriptor();
-          const mgr = new AgentSessionManager(buildApp(), buildPlugin() as never, {
-            permissionPrompter: jest.fn(),
-            resolveDescriptor: () => descriptor,
-            modelPreloader: { takeWarm: () => null } as unknown as AgentModelPreloader,
-          });
+          const { mgr, descriptor } = buildRecoveryManager();
           const original = origin === "cold" ? null : await mgr.createSession("source-agent");
           (descriptor.getInstallState as jest.Mock).mockReturnValue({
             kind: "incompatible",
@@ -773,6 +757,169 @@ describe("AgentSessionManager", () => {
           expect(mgr.getActiveSession()?.getState()?.model?.current).toEqual(selection);
         }
       );
+      it.each(["one install", "a second queued install"])(
+        "starts the recovered chat exactly once, after %s settles (https://github.com/Brevilabs/obsidian-copilot-private/issues/480)",
+        async (scenario) => {
+          const { mgr, descriptor } = buildRecoveryManager();
+          const selection = { baseModelId: "chosen", effort: "high" };
+          (descriptor.getInstallState as jest.Mock).mockReturnValue({ kind: "incompatible" });
+          mgr.deferRecoverySelection("target", selection);
+          (descriptor.getInstallState as jest.Mock).mockReturnValue({
+            kind: "ready",
+            source: "managed",
+          });
+          let release!: () => void;
+          const prepared = new Promise<void>((resolve) => {
+            release = resolve;
+          });
+          const installing = mgr.onInstallStateChanged("target", () => prepared);
+          sessionCreateSpy.mockClear();
+          sessionCreateSpy.mockImplementationOnce((opts) => {
+            const started = makeMockSession(opts);
+            jest.spyOn(started, "getState").mockReturnValue({
+              model: { current: selection, availableModels: [], apply: { kind: "setModel" } },
+              mode: null,
+            });
+            return started;
+          });
+          const resumed = mgr.resumeRecoverySelection();
+          const queued = scenario === "one install" ? null : mgr.onInstallStateChanged("target");
+          await new Promise((resolve) => window.setTimeout(resolve, 0));
+          expect(sessionCreateSpy).not.toHaveBeenCalled();
+
+          release();
+          await Promise.all([installing, queued, resumed]);
+
+          expect(sessionCreateSpy).toHaveBeenCalledTimes(1);
+          expect(mgr.getSessions()).toHaveLength(1);
+          expect(mgr.getActiveSession()?.getState()?.model?.current).toEqual(selection);
+          expect(mgr.getRecoverySelection()).toBeNull();
+        }
+      );
+      it("refuses the model apply when the compatibility probe settles unsupported after the install queue drains (https://github.com/Brevilabs/obsidian-copilot-private/issues/480)", async () => {
+        const { mgr, descriptor } = buildRecoveryManager();
+        const source = await mgr.createSession("target");
+        getSessionTestHandle(source).setHasUserVisibleMessages(true);
+        descriptor.applySelection = jest.fn(async () => undefined);
+        (descriptor.getInstallState as jest.Mock).mockReturnValue({ kind: "incompatible" });
+        const selection = { baseModelId: "chosen", effort: "high" };
+        mgr.deferRecoverySelection("target", selection);
+        (descriptor.getInstallState as jest.Mock).mockReturnValue({ kind: "ready" });
+        let release!: () => void;
+        const prepared = new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        const installing = mgr.onInstallStateChanged("target", () => prepared);
+        const resumed = mgr.resumeRecoverySelection();
+        // The queued refresh reads the transient probe state and leaves the session alone; the
+        // authoritative result lands while recovery is still waiting on that queue.
+        (descriptor.getInstallState as jest.Mock)
+          .mockReturnValueOnce({ kind: "checking", source: "managed" })
+          .mockReturnValue({
+            kind: "incompatible",
+            source: "managed",
+            currentVersion: "1",
+            minVersion: "2",
+            message: "Upgrade required",
+          });
+
+        release();
+        await installing;
+        await expect(resumed).rejects.toThrow("Upgrade required");
+
+        expect(descriptor.applySelection).not.toHaveBeenCalled();
+        expect(mgr.getActiveSession()).toBe(source);
+        expect(mgr.getRecoverySelection()?.selection).toEqual(selection);
+        expect(mgr.getLastError()).toContain("Upgrade required");
+      });
+      it("keeps recovery pending when the preserved conversation still reports its previous model (https://github.com/Brevilabs/obsidian-copilot-private/issues/480)", async () => {
+        const { mgr, descriptor } = buildRecoveryManager();
+        const source = await mgr.createSession("target");
+        getSessionTestHandle(source).setHasUserVisibleMessages(true);
+        jest.spyOn(source, "getState").mockReturnValue({
+          model: {
+            current: { baseModelId: "original", effort: "low" },
+            availableModels: [],
+            apply: { kind: "setModel" },
+          },
+          mode: null,
+        });
+        // The backend answers the switch but keeps serving the model it already had.
+        descriptor.applySelection = jest.fn(async () => undefined);
+        (descriptor.getInstallState as jest.Mock).mockReturnValue({ kind: "incompatible" });
+        const selection = { baseModelId: "chosen", effort: "high" };
+        mgr.deferRecoverySelection("target", selection);
+        (descriptor.getInstallState as jest.Mock).mockReturnValue({ kind: "ready" });
+        (mockedSetSettings as jest.Mock).mockClear();
+
+        await expect(mgr.resumeRecoverySelection()).rejects.toThrow(
+          'Model "chosen" is unavailable. Choose another model or retry.'
+        );
+
+        expect(descriptor.applySelection).toHaveBeenCalled();
+        expect(mgr.getRecoverySelection()?.selection).toEqual(selection);
+        expect(mgr.getActiveSession()).toBe(source);
+        expect(mockedSetSettings).not.toHaveBeenCalled();
+      });
+    });
+    describe("cancelRecoverySelection()", () => {
+      it("leaves the preserved conversation's model untouched when canceled before the apply is dispatched (https://github.com/Brevilabs/obsidian-copilot-private/issues/480)", async () => {
+        const { mgr, descriptor } = buildRecoveryManager();
+        let release!: () => void;
+        const ready = new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        sessionCreateSpy.mockImplementationOnce((opts) => makeMockSession({ ...opts, ready }));
+        const source = await mgr.createSession("target");
+        getSessionTestHandle(source).setHasUserVisibleMessages(true);
+        descriptor.applySelection = jest.fn(async () => undefined);
+        (descriptor.getInstallState as jest.Mock).mockReturnValue({ kind: "incompatible" });
+        mgr.deferRecoverySelection("target", { baseModelId: "chosen", effort: "high" });
+        (descriptor.getInstallState as jest.Mock).mockReturnValue({ kind: "ready" });
+        const resumed = mgr.resumeRecoverySelection();
+
+        mgr.cancelRecoverySelection();
+        release();
+        await resumed;
+
+        expect(descriptor.applySelection).not.toHaveBeenCalled();
+        expect(mgr.getActiveSession()).toBe(source);
+        expect(mgr.getRecoverySelection()).toBeNull();
+        expect(mgr.getLastError()).toBeNull();
+      });
+      it("returns to the preserved conversation without persisting a default when canceled during the apply (https://github.com/Brevilabs/obsidian-copilot-private/issues/480)", async () => {
+        const { mgr, descriptor } = buildRecoveryManager();
+        const source = await mgr.createSession("target");
+        getSessionTestHandle(source).setHasUserVisibleMessages(true);
+        let current: ModelSelection = { baseModelId: "original", effort: "low" };
+        jest.spyOn(source, "getState").mockImplementation(() => ({
+          model: { current, availableModels: [], apply: { kind: "setModel" } },
+          mode: null,
+        }));
+        let release!: () => void;
+        const applied = new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        descriptor.applySelection = jest.fn(async (_session, selected) => {
+          await applied;
+          current = selected;
+        });
+        (descriptor.getInstallState as jest.Mock).mockReturnValue({ kind: "incompatible" });
+        mgr.deferRecoverySelection("target", { baseModelId: "chosen", effort: "high" });
+        (descriptor.getInstallState as jest.Mock).mockReturnValue({ kind: "ready" });
+        const resumed = mgr.resumeRecoverySelection();
+        await waitFor(() => expect(descriptor.applySelection).toHaveBeenCalled());
+        (mockedSetSettings as jest.Mock).mockClear();
+
+        mgr.cancelRecoverySelection();
+        release();
+        await resumed;
+
+        expect(mgr.getActiveSession()).toBe(source);
+        expect(mgr.getRecoverySelection()).toBeNull();
+        expect(mgr.getLastError()).toBeNull();
+        expect(mockedSetSettings).not.toHaveBeenCalled();
+      });
     });
     describe("noteSpawnConfigChanged()", () => {
       it("keeps an open session alive and holds the restart for the user (https://github.com/Brevilabs/obsidian-copilot-private/issues/475)", async () => {

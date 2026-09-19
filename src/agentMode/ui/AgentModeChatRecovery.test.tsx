@@ -1,7 +1,12 @@
 import React from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { AgentModeChatRecovery } from "@/agentMode/ui/AgentModeChatRecovery";
-import { Upgrade, ColdStartup, StartupFailure } from "@/agentMode/ui/AgentModeChatRecovery.stories";
+import {
+  Upgrade,
+  ColdStartup,
+  RecoveryStarting,
+  StartupFailure,
+} from "@/agentMode/ui/AgentModeChatRecovery.stories";
 
 describe("AgentModeChatRecovery", () => {
   describe("AgentModeChatRecovery()", () => {
@@ -16,10 +21,20 @@ describe("AgentModeChatRecovery", () => {
         expect(onCancel).toHaveBeenCalledTimes(1);
       }
     );
-    it("offers saved models on cold startup without claiming there is a source chat (https://github.com/Brevilabs/obsidian-copilot-private/issues/480)", () => {
+    it("offers saved models on cold startup with nothing selected and no source chat (https://github.com/Brevilabs/obsidian-copilot-private/issues/480)", () => {
       render(<AgentModeChatRecovery {...ColdStartup.args} />);
-      expect(screen.getByRole("button", { name: /Saved model/ })).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: "Select Model" }));
+      expect(screen.getByRole("option", { name: /Saved model/ })).toBeTruthy();
       expect(screen.queryByRole("button", { name: "Back to chat" })).toBeNull();
+    });
+    it("keeps the exit to the preserved chat while the chosen agent starts, with the picker locked (https://github.com/Brevilabs/obsidian-copilot-private/issues/480)", () => {
+      const onCancel = jest.fn();
+      render(<AgentModeChatRecovery {...RecoveryStarting.args} onCancel={onCancel} />);
+      expect(screen.getByRole("button", { name: /Saved model/ }).hasAttribute("disabled")).toBe(
+        true
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Back to chat" }));
+      expect(onCancel).toHaveBeenCalledTimes(1);
     });
   });
 });
