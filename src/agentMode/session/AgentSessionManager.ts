@@ -2889,7 +2889,7 @@ export class AgentSessionManager {
   /** Keep an upgrade-blocked pick without discarding the current conversation or draft.
    * @param backendId - Backend chosen in the model picker.
    * @param selection - Transient model and effort to apply after upgrade.
-   * @returns Whether recovery owns the selection instead of the running session.
+   * @returns Whether the caller should stop applying this pick.
    */
   deferRecoverySelection(backendId: BackendId, selection: ModelSelection): boolean {
     const session = this.getActiveSession();
@@ -2969,10 +2969,8 @@ export class AgentSessionManager {
           this.cancelRecoverySelection();
           return;
         }
-        // One acceptance rule for both branches: the session that will serve the chat has to
-        // report the chosen model. A backend that answers the apply while still reporting its
-        // previous or default model would otherwise clear recovery and persist a default for a
-        // selection that never took. https://github.com/Brevilabs/obsidian-copilot-private/issues/480
+        // Keep recovery pending until the session reports the requested model.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/480
         const baseModelId = pending.selection.baseModelId;
         if ((candidate ?? source)?.getState()?.model?.current.baseModelId !== baseModelId) {
           throw new Error(`Model "${baseModelId}" is unavailable. Choose another model or retry.`);

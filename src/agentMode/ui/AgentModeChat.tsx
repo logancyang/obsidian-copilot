@@ -125,7 +125,7 @@ export const AgentModeChat: React.FC<Props> = ({
 
   const activeSession = manager.getActiveSession();
   const backend = manager.getActiveChatUIState();
-  if (activeSession && backend && !manager.getRecoverySelection()) {
+  if (activeSession && backend && !recovery) {
     // AgentHome owns the tab strip + chat surface and persists across tab
     // switches: it keys input drafts by session id internally, so switching
     // tabs swaps the active draft rather than remounting and discarding input.
@@ -157,7 +157,7 @@ export const AgentModeChat: React.FC<Props> = ({
   //  - `checking`: transient and Claude-only. Flashing the select view and
   //    swapping it out is worse than the one-line "Checking … version…".
   const isColdStart =
-    !manager.getRecoverySelection() &&
+    !recovery &&
     !manager.getIsStarting() &&
     manager.getLastError() === null &&
     (installState.kind === "absent" || installState.kind === "error");
@@ -170,10 +170,9 @@ export const AgentModeChat: React.FC<Props> = ({
     );
   }
 
-  // Recovery starts the chosen agent with the source chat unmounted, so this pane is the only
-  // surface that can report that start — and `AgentModeStatus` says nothing about a ready
-  // backend with no error, which is exactly the state a preload or a hidden candidate startup
-  // sits in. https://github.com/Brevilabs/obsidian-copilot-private/issues/480
+  // Show startup feedback while recovery hides the source chat; AgentModeStatus renders
+  // nothing for a ready backend without an error.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/480
   const recoveryStarting = !!recovery && installState.kind === "ready" && !manager.getLastError();
   // A start already in flight owns the session that is about to take this pane over. Committing
   // a pick meanwhile calls `createSession` directly, which is not de-duped against the pending

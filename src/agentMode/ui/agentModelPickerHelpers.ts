@@ -667,35 +667,41 @@ export function buildAgentModelPicker(args: {
   const ctx = collectModelActiveContext(manager);
   const { entries, valueKey } = buildPickerEntries(manager, descriptors, ctx, settings);
   const onChange = buildModelOnChange(manager, ctx, entries);
-  const picker: AgentModelPickerOverride = {
-    models: entries,
-    value: valueKey,
-    disabled: false,
-    effort: buildEffortSibling(manager, ctx),
-    effortOptionsByModelKey: buildEffortOptionsByModelKey(manager, entries),
-    onChange,
-    commitSelection: buildCommitSelection(manager, ctx, entries, onChange),
-  };
+  const commitSelection = buildCommitSelection(manager, ctx, entries, onChange);
+  const effortOptionsByModelKey = buildEffortOptionsByModelKey(manager, entries);
+  let value = valueKey;
+  let effort: AgentModelPickerOverride["effort"];
   // The process-free target, not its preserved source chat, owns the recovery picker.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/480
   const pending = manager.getRecoverySelection();
   const descriptor = descriptors.find((d) => d.id === pending?.backendId);
   if (pending && descriptor) {
-    const { baseModelId, effort } = pending.selection;
+    const { baseModelId, effort: selectedEffort } = pending.selection;
     let entry = entries.find((e) => e._backendId === pending.backendId && e.name === baseModelId);
     if (!entry) {
       entry = synthesizeAgentEntry(baseModelId, baseModelId, descriptor);
       entries.push(entry);
     }
-    picker.value = getModelKeyFromModel(entry);
+    value = getModelKeyFromModel(entry);
     const known = resolveEffortOptions(manager, pending.backendId, baseModelId);
-    const options = known.length || !effort ? known : [{ value: effort, label: effort }];
-    picker.effortOptionsByModelKey[picker.value] = options;
-    picker.effort = {
+    const options =
+      known.length || !selectedEffort ? known : [{ value: selectedEffort, label: selectedEffort }];
+    effortOptionsByModelKey[value] = options;
+    effort = {
       options,
-      value: effort,
-      onChange: (value) => picker.commitSelection(picker.value, value),
+      value: selectedEffort,
+      onChange: (nextEffort) => commitSelection(value, nextEffort),
     };
+  } else {
+    effort = buildEffortSibling(manager, ctx);
   }
-  return picker;
+  return {
+    models: entries,
+    value,
+    disabled: false,
+    effort,
+    effortOptionsByModelKey,
+    onChange,
+    commitSelection,
+  };
 }
