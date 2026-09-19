@@ -213,6 +213,18 @@ describe("CodexBinaryManager", () => {
     });
 
     describe("setCustomBinaryPath()", () => {
+      it.each(["0.0.44", "1.10.0", CODEX_ACP_PINNED_VERSION, "1.13.0"])(
+        "retains recognized custom adapter %s and its version for readiness guidance (https://github.com/Brevilabs/obsidian-copilot-private/issues/480)",
+        async (version) => {
+          const entry = writeAdapter(path.join(tempDir, "custom"), version);
+          await new CodexBinaryManager().setCustomBinaryPath(entry);
+          expect(getSettings().agentMode.backends?.codex).toMatchObject({
+            binaryPath: fs.realpathSync(entry),
+            binaryVersion: version,
+            binarySource: "custom",
+          });
+        }
+      );
       // Real filesystem fixtures need the host path rules, unlike mocked bundle installs.
       // https://github.com/logancyang/obsidian-copilot/issues/2967
       beforeEach(() => setPlatform(originalPlatform));
@@ -242,8 +254,8 @@ describe("CodexBinaryManager", () => {
         expect(fs.readFileSync(path.join(profile, "auth.json"), "utf8")).toBe("credentials");
         expect(getSettings().agentMode.backends?.codex?.binarySource).toBe("custom");
       });
-      it("rejects an unsupported custom package before changing settings", async () => {
-        const entry = writeAdapter(path.join(tempDir, "custom"), "0.0.1");
+      it("rejects a malformed custom package before changing settings", async () => {
+        const entry = writeAdapter(path.join(tempDir, "custom"), "garbage");
         const before = getSettings().agentMode.backends?.codex;
         await expect(new CodexBinaryManager().setCustomBinaryPath(entry)).rejects.toThrow();
         expect(getSettings().agentMode.backends?.codex).toEqual(before);

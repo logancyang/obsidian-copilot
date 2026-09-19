@@ -2,7 +2,7 @@ import * as path from "node:path";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import { execFileSync } from "node:child_process";
-import { buildCodexAcpInvocation, resolveSupportedCodexAcpPackage } from "./codexVersion";
+import { buildCodexAcpInvocation, resolveCodexAcpPackage } from "./codexVersion";
 
 import { codexAcpSearchDirs, resolveCodexAcpBinary } from "./codexBinaryResolver";
 
@@ -187,7 +187,7 @@ describe("codexBinaryResolver", () => {
       };
       const accepts = jest.fn((candidate: string) => {
         try {
-          resolveSupportedCodexAcpPackage(candidate, "win32", packageFs);
+          resolveCodexAcpPackage(candidate, "win32", packageFs);
           return true;
         } catch {
           return false;
@@ -246,7 +246,7 @@ process.stdin.on("end", () => process.stdout.write(JSON.stringify({ args: proces
               fs,
             },
             (candidate) => {
-              resolveSupportedCodexAcpPackage(candidate);
+              resolveCodexAcpPackage(candidate);
               return true;
             }
           );

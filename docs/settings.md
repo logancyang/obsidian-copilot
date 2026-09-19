@@ -54,6 +54,8 @@ If opencode or Codex ACP is below the supported version, saved enabled models re
 
 Copilot can install and manage opencode for you. It can route Copilot-hosted models, supported BYOK providers, local OpenAI-compatible endpoints, and models reported by opencode.
 
+Both managed and custom installations require opencode **1.18.31 or newer**. The managed download is pinned to **1.18.31** in this Copilot release.
+
 When opencode is absent:
 
 1. Open **Configure**, choose **Managed by Copilot**, then select **Download & install** to download Copilot's pinned build. Progress and **Cancel** appear in the dialog.
@@ -93,7 +95,7 @@ The Claude settings card also includes:
 
 #### Codex
 
-Codex uses the `codex-acp` adapter and the login held by the Codex CLI. It does not use an OpenAI API key from the BYOK tab. Managed downloads are pinned to adapter version **1.12.0** in this Copilot release. **0.0.45** is the minimum supported version for an existing or manually installed adapter. See [Codex installation details](agent-mode-and-tools.md#codex).
+Codex uses the `codex-acp` adapter and the login held by the Codex CLI. It does not use an OpenAI API key from the BYOK tab. Both managed and custom installations require adapter version **1.12.0 or newer**. Managed downloads are pinned to **1.12.0** in this Copilot release. This requirement applies to the adapter, not its Codex CLI dependency. See [Codex installation details](agent-mode-and-tools.md#codex) for native bundle and npm requirements.
 
 Select **Configure** to open these controls:
 

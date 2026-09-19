@@ -12,7 +12,7 @@ import type { ManagedInstallActionState } from "@/agentMode/session/types";
 import { copilotAppDataDir } from "@/utils/appPaths";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 import { getSettings, updateAgentModeBackendFields } from "@/settings/model";
-import { resolveSupportedCodexAcpPackage } from "./codexVersion";
+import { resolveCodexAcpPackage } from "@/agentMode/backends/codex/codexVersion";
 import { CODEX_ACP_PINNED_VERSION } from "./cliSetup";
 
 import { installCodexArchive, CODEX_BUNDLE_VERSION } from "./codexArchive";
@@ -46,8 +46,8 @@ export class CodexBinaryManager extends ManagedBinaryManager<CodexInstallProgres
   }
 
   protected async validateCustomBinary(binaryPath: string): Promise<InstalledBinary> {
-    const supported = resolveSupportedCodexAcpPackage(binaryPath);
-    return { version: supported.version, path: supported.entryPath };
+    const installed = resolveCodexAcpPackage(binaryPath);
+    return { version: installed.version, path: installed.entryPath };
   }
 
   readonly getActionState = (): ManagedInstallActionState => {

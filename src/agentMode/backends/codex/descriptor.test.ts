@@ -5,7 +5,7 @@ import { detectBinary } from "@/utils/detectBinary";
 import { resolveCodexAcpBinary } from "./codexBinaryResolver";
 import { CODEX_BUNDLE_VERSION } from "./codexArchive";
 import { CodexBackendDescriptor, detectCodexAcpPath, getCodexBinaryManager } from "./descriptor";
-import { isSupportedCodexAcpPath, resolveSupportedCodexAcpPackage } from "./codexVersion";
+import { isCodexAcpPath, resolveCodexAcpPackage } from "./codexVersion";
 
 jest.mock("@/utils/detectBinary", () => ({ detectBinary: jest.fn() }));
 jest.mock("./codexBinaryResolver", () => ({
@@ -14,13 +14,13 @@ jest.mock("./codexBinaryResolver", () => ({
 }));
 jest.mock("./codexVersion", () => ({
   ...jest.requireActual("./codexVersion"),
-  isSupportedCodexAcpPath: jest.fn(),
-  resolveSupportedCodexAcpPackage: jest.fn(),
+  isCodexAcpPath: jest.fn(),
+  resolveCodexAcpPackage: jest.fn(),
 }));
 
 const mockedDetectBinary = jest.mocked(detectBinary);
 const mockedResolveCodexAcpBinary = jest.mocked(resolveCodexAcpBinary);
-const mockedIsSupportedCodexAcpPath = jest.mocked(isSupportedCodexAcpPath);
+const mockedIsCodexAcpPath = jest.mocked(isCodexAcpPath);
 import type { AgentSession } from "@/agentMode/session/AgentSession";
 import { translateBackendState } from "@/agentMode/session/translateBackendState";
 import type {
@@ -68,7 +68,7 @@ const ADVERTISED_CONFIG_OPTIONS: BackendConfigOption[] = [
     ],
   },
 ];
-const mockedResolveSupportedPackage = jest.mocked(resolveSupportedCodexAcpPackage);
+const mockedResolvePackage = jest.mocked(resolveCodexAcpPackage);
 
 function settingsWithCodex(codex: Record<string, unknown>): CopilotSettings {
   return {
@@ -86,7 +86,7 @@ describe("descriptor", () => {
       mockedResolveCodexAcpBinary.mockReturnValue("/known/codex-acp");
 
       await expect(detectCodexAcpPath()).resolves.toBe("/known/codex-acp");
-      expect(mockedResolveCodexAcpBinary.mock.calls[0]?.[1]).toBe(mockedIsSupportedCodexAcpPath);
+      expect(mockedResolveCodexAcpBinary.mock.calls[0]?.[1]).toBe(mockedIsCodexAcpPath);
       expect(mockedDetectBinary).not.toHaveBeenCalled();
     });
 
@@ -94,16 +94,16 @@ describe("descriptor", () => {
       const customPath = "/custom/npm/bin/codex-acp";
       mockedResolveCodexAcpBinary.mockReturnValue(null);
       mockedDetectBinary.mockResolvedValue(customPath);
-      mockedIsSupportedCodexAcpPath.mockImplementation((candidate) => candidate === customPath);
+      mockedIsCodexAcpPath.mockImplementation((candidate) => candidate === customPath);
 
       await expect(detectCodexAcpPath()).resolves.toBe(customPath);
-      expect(mockedIsSupportedCodexAcpPath).toHaveBeenCalledWith(customPath);
+      expect(mockedIsCodexAcpPath).toHaveBeenCalledWith(customPath);
     });
 
     it("https://github.com/logancyang/obsidian-copilot/issues/2916 rejects an unsupported adapter found on PATH", async () => {
       mockedResolveCodexAcpBinary.mockReturnValue(null);
       mockedDetectBinary.mockResolvedValue("/custom/npm/bin/codex-acp");
-      mockedIsSupportedCodexAcpPath.mockReturnValue(false);
+      mockedIsCodexAcpPath.mockReturnValue(false);
 
       await expect(detectCodexAcpPath()).resolves.toBeNull();
     });
@@ -272,8 +272,163 @@ describe("descriptor", () => {
       expect(CodexBackendDescriptor.auth).toBe(codexAuth);
     });
     describe("getInstallState()", () => {
+      it.each(["managed", "custom"] as const)(
+        "rejects the floor prerelease in readiness and execution for %s adapters (https://github.com/Brevilabs/obsidian-copilot-private/issues/480)",
+        (binarySource) => {
+          const actual = jest.requireActual<typeof import("./codexVersion")>("./codexVersion");
+          const version = `${CODEX_BUNDLE_VERSION}-beta.1`;
+          for (const native of [false, true]) {
+            const entryPath = native ? "/bundle/codex-acp" : "/npm/codex-acp/dist/index.js";
+            const packageFs = {
+              realpathSync: () => entryPath,
+              readFileSync: () =>
+                JSON.stringify(
+                  native
+                    ? {
+                        acpVersion: version,
+                        packagingRevision: 1,
+                        target: `darwin-${process.arch}`,
+                      }
+                    : {
+                        name: "@agentclientprotocol/codex-acp",
+                        version,
+                        bin: { "codex-acp": "dist/index.js" },
+                      }
+                ),
+            };
+            mockedResolvePackage.mockImplementation(() =>
+              actual.resolveCodexAcpPackage(entryPath, "darwin", packageFs)
+            );
+            expect(() =>
+              actual.resolveSupportedCodexAcpEntry(entryPath, "darwin", packageFs)
+            ).toThrow("not supported");
+            expect(
+              CodexBackendDescriptor.getInstallState(
+                settingsWithCodex({ binaryPath: entryPath, binarySource })
+              )
+            ).toMatchObject({
+              kind: "incompatible",
+              source: binarySource,
+              currentVersion: native ? `${version}-r1` : version,
+              minVersion: CODEX_BUNDLE_VERSION,
+            });
+          }
+        }
+      );
+      it("accepts a stable native packaging revision at the floor in readiness and execution (https://github.com/Brevilabs/obsidian-copilot-private/issues/480)", () => {
+        const actual = jest.requireActual<typeof import("./codexVersion")>("./codexVersion");
+        const entryPath = "/bundle/codex-acp";
+        const packageFs = {
+          realpathSync: () => entryPath,
+          readFileSync: () =>
+            JSON.stringify({
+              acpVersion: CODEX_BUNDLE_VERSION,
+              packagingRevision: 1,
+              target: `darwin-${process.arch}`,
+            }),
+        };
+        mockedResolvePackage.mockImplementation(() =>
+          actual.resolveCodexAcpPackage(entryPath, "darwin", packageFs)
+        );
+        expect(
+          CodexBackendDescriptor.getInstallState(
+            settingsWithCodex({ binaryPath: entryPath, binarySource: "managed" })
+          )
+        ).toEqual({ kind: "ready", source: "managed" });
+        expect(actual.resolveSupportedCodexAcpEntry(entryPath, "darwin", packageFs)).toBe(
+          entryPath
+        );
+      });
+      it.each(["managed", "custom"] as const)(
+        "reports recognized below-minimum %s adapters as incompatible rather than absent (https://github.com/Brevilabs/obsidian-copilot-private/issues/480)",
+        (binarySource) => {
+          const actual = jest.requireActual<typeof import("./codexVersion")>("./codexVersion");
+          mockedResolvePackage.mockImplementation(() =>
+            actual.resolveCodexAcpPackage("/npm/codex-acp/dist/index.js", "darwin", {
+              realpathSync: () => "/npm/codex-acp/dist/index.js",
+              readFileSync: () =>
+                JSON.stringify({
+                  name: "@agentclientprotocol/codex-acp",
+                  version: "0.0.44",
+                  bin: { "codex-acp": "dist/index.js" },
+                }),
+            })
+          );
+          expect(
+            CodexBackendDescriptor.getInstallState(
+              settingsWithCodex({ binaryPath: "/npm/codex-acp/dist/index.js", binarySource })
+            )
+          ).toMatchObject({
+            kind: "incompatible",
+            source: binarySource,
+            currentVersion: "0.0.44",
+            minVersion: CODEX_BUNDLE_VERSION,
+          });
+        }
+      );
+      it.each(["managed", "custom", undefined] as const)(
+        "classifies recognized npm and native adapters with source %s by the release floor, not an exact pin (https://github.com/Brevilabs/obsidian-copilot-private/issues/480)",
+        (binarySource) => {
+          const actual = jest.requireActual<typeof import("./codexVersion")>("./codexVersion");
+          for (const native of [false, true]) {
+            for (const version of [
+              CODEX_BUNDLE_VERSION,
+              "1.13.0",
+              "1.13.0-beta.1",
+              "1.10.0",
+              "0.0.44",
+            ]) {
+              const entryPath = native ? "/bundle/codex-acp" : "/npm/codex-acp/dist/index.js";
+              mockedResolvePackage.mockImplementation(() =>
+                actual.resolveCodexAcpPackage(entryPath, "darwin", {
+                  realpathSync: () => entryPath,
+                  readFileSync: () =>
+                    JSON.stringify(
+                      native
+                        ? { acpVersion: version, target: `darwin-${process.arch}` }
+                        : {
+                            name: "@agentclientprotocol/codex-acp",
+                            version,
+                            bin: { "codex-acp": "dist/index.js" },
+                          }
+                    ),
+                })
+              );
+              const state = CodexBackendDescriptor.getInstallState(
+                settingsWithCodex({
+                  binaryPath: entryPath,
+                  binaryVersion: "stale",
+                  binarySource,
+                })
+              );
+              expect(state).toEqual(
+                version === CODEX_BUNDLE_VERSION || version.startsWith("1.13.0")
+                  ? { kind: "ready", source: binarySource ?? "custom" }
+                  : {
+                      kind: "incompatible",
+                      source: binarySource ?? "custom",
+                      currentVersion: version,
+                      minVersion: CODEX_BUNDLE_VERSION,
+                      message: `Codex adapter v${version} is not supported. Copilot requires Codex adapter v${CODEX_BUNDLE_VERSION} or newer.`,
+                    }
+              );
+            }
+          }
+        }
+      );
+      it("keeps missing and malformed installations absent (https://github.com/Brevilabs/obsidian-copilot-private/issues/480)", () => {
+        expect(CodexBackendDescriptor.getInstallState(settingsWithCodex({}))).toEqual({
+          kind: "absent",
+        });
+        mockedResolvePackage.mockImplementation(() => {
+          throw new Error("invalid package");
+        });
+        expect(
+          CodexBackendDescriptor.getInstallState(settingsWithCodex({ binaryPath: "/missing" }))
+        ).toEqual({ kind: "absent" });
+      });
       it.each([
-        ["legacy path", {}, "1.9.0", { kind: "ready", source: "custom" }],
+        ["legacy path", {}, "1.9.0", { kind: "incompatible", source: "custom" }],
         [
           "managed older bundle",
           { binarySource: "managed", binaryVersion: "1.9.0-r1" },
@@ -284,7 +439,7 @@ describe("descriptor", () => {
           "custom mismatch",
           { binarySource: "custom", binaryVersion: "1.9.0" },
           "1.9.0",
-          { kind: "ready", source: "custom" },
+          { kind: "incompatible", source: "custom" },
         ],
         [
           "managed packaging mismatch",
@@ -299,11 +454,12 @@ describe("descriptor", () => {
           { kind: "ready", source: "managed" },
         ],
       ])(
-        "https://github.com/Brevilabs/obsidian-copilot-private/issues/379 classifies a supported %s by ownership",
+        "classifies a recognized %s while preserving ownership (https://github.com/Brevilabs/obsidian-copilot-private/issues/480)",
         (_label, fields, actualVersion, expected) => {
-          mockedResolveSupportedPackage.mockReturnValue({
+          mockedResolvePackage.mockReturnValue({
             entryPath: "/codex/index.js",
             version: actualVersion,
+            acpVersion: actualVersion.split("-r")[0],
           });
 
           expect(

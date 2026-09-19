@@ -23,7 +23,7 @@ Open **Settings → Copilot → Basic** and find **Agents**. For most people, th
    - **Bring your own key:** open the **BYOK** tab, select **Add a provider**, enter your provider details, and choose models. Copilot stores the key in this device's Obsidian Keychain and enables the selected models for opencode and Quick Chat.
 4. Return to **Basic → Agents → opencode** and choose the default model for new chats.
 
-Already have the `opencode` binary? Open **Configure**, choose **My own binary**, then select **Auto-detect** or enter its absolute path and click **Apply**.
+Copilot requires opencode **1.18.31 or newer** and downloads **1.18.31** for managed installations. Already have a supported `opencode` binary? Open **Configure**, choose **My own binary**, then select **Auto-detect** or enter its absolute path and click **Apply**.
 
 ### Alternative: Link Claude Code
 
@@ -45,7 +45,7 @@ Copilot connects to Codex through the `codex-acp` adapter, which includes a comp
 
 You can also choose **Sign in to Codex** on the Agent Chat status card. For terminal login, run your configured adapter with `cli login` using the same `CODEX_HOME` as Copilot.
 
-For manual installations, Copilot requires `@agentclientprotocol/codex-acp` 0.0.45 or newer. This is the minimum supported adapter version; managed downloads are pinned to 1.12.0 in this Copilot release. See [Codex installation details](agent-mode-and-tools.md#codex). The older `@zed-industries/codex-acp` package is not supported. Codex uses the login stored by the bundled Codex CLI; there is no Codex key to paste into Copilot.
+Copilot requires Codex ACP **1.12.0 or newer** for both managed and custom installations. Managed downloads are pinned to **1.12.0** in this Copilot release. For native bundle and npm requirements, see [Codex installation details](agent-mode-and-tools.md#codex). The older `@zed-industries/codex-acp` package is not supported. Codex uses the login stored by its CLI; there is no Codex key to paste into Copilot.
 
 ### If an agent needs an update
 
