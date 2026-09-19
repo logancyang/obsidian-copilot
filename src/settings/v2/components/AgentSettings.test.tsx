@@ -353,8 +353,9 @@ describe("AgentSettings", () => {
       kind: "incompatible",
       source: "managed",
       currentVersion: "1.9.0",
-      minVersion: "1.10.0",
-      message: "Codex adapter 1.9.0 does not match this Copilot release (1.10.0).",
+      minVersion: "1.12.0",
+      message:
+        "Codex adapter v1.9.0 is not supported. Copilot requires Codex adapter v1.12.0 or newer.",
     };
     const view = render(<AgentSettings />);
     fireEvent.click(screen.getByRole("tab", { name: "Codex" }));

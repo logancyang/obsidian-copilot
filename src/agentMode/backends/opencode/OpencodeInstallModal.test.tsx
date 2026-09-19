@@ -23,6 +23,7 @@ import {
   type ProgressEvent,
   type RuntimeState,
 } from "@/agentMode/backends/opencode/OpencodeBinaryManager";
+import { OPENCODE_MIN_ACP_VERSION } from "@/agentMode/backends/opencode/ui/opencodeVersion";
 import {
   OpencodeConfigContainer,
   OpencodeInstallModal,
@@ -409,10 +410,13 @@ describe("OpencodeInstallModal", () => {
         binarySource: "custom",
       });
       const { manager, revalidateCustomBinary } = makeManager();
+      // Re-probing must clear the warning against the release floor in force, not a literal
+      // that a later pin bump silently invalidates.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/480
       revalidateCustomBinary.mockImplementation(async () =>
         setOpencodeSettings({
           binaryPath: EXISTING_BINARY_PATH,
-          binaryVersion: "1.16.0",
+          binaryVersion: OPENCODE_MIN_ACP_VERSION,
           binarySource: "custom",
         })
       );

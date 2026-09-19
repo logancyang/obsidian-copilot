@@ -34,7 +34,11 @@ import { CodexBinaryManager } from "./CodexBinaryManager";
 import { CODEX_BUNDLE_VERSION } from "./codexArchive";
 import { CODEX_BINARY_NAME } from "./cliSetup";
 import { buildCodexModeMapping } from "./codexModeMapping";
-import { isCodexAcpPath, resolveCodexAcpPackage } from "@/agentMode/backends/codex/codexVersion";
+import {
+  isCodexAcpPath,
+  isSupportedCodexAcpPath,
+  resolveCodexAcpPackage,
+} from "@/agentMode/backends/codex/codexVersion";
 
 const codexBinaryManager = new CodexBinaryManager();
 
@@ -62,7 +66,13 @@ function codexAcpResolverEnv(): Parameters<typeof resolveCodexAcpBinary>[0] {
 }
 
 export async function detectCodexAcpPath(): Promise<string | null> {
-  const fromKnownLocations = resolveCodexAcpBinary(codexAcpResolverEnv(), isCodexAcpPath);
+  const env = codexAcpResolverEnv();
+  // The candidate list ranks search locations, not versions, so an outdated adapter in an early
+  // directory would otherwise be offered while a supported one sits later in the list.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/480
+  const fromKnownLocations =
+    resolveCodexAcpBinary(env, isSupportedCodexAcpPath) ??
+    resolveCodexAcpBinary(env, isCodexAcpPath);
   if (fromKnownLocations) return fromKnownLocations;
 
   // npm can install into a user-selected prefix outside the known directories;

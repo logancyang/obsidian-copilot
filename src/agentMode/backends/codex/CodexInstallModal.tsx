@@ -172,7 +172,12 @@ export const CodexConfigContainer: React.FC<CodexConfigContainerProps> = ({ mana
         install,
         cancelInstall: () => manager.cancelCurrentOperation(),
         uninstall: () => void uninstall(),
-        upgrade: install,
+        // The managed download installs the pinned bundle and claims `binarySource`, so offering
+        // it as the remedy for a user-owned adapter would silently take that install over. Codex
+        // adapters have no self-upgrade command; the user updates their own copy, then re-applies
+        // or auto-detects the path below.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/480
+        upgrade: activeSource === "custom" ? undefined : install,
         saveCustomPath,
         clearCustomPath,
         detectCustomPath: detectCodexAcpPath,

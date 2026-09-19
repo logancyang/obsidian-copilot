@@ -48,8 +48,11 @@ export interface ManagedBinaryConfigActions {
   cancelInstall: () => void;
   /** Reclaim every downloaded managed copy. Owns its own confirmation step. */
   uninstall: () => void;
-  /** Upgrade whichever binary is active — the managed download or the user's own. */
-  upgrade: () => void;
+  /**
+   * Upgrade whichever binary is active. Omitted when the active install has no in-dialog
+   * remedy, which hides the warning strip's button rather than offering the wrong one.
+   */
+  upgrade?: () => void;
   /** Validate and persist a user-supplied path. Resolves to an error message, or null on success. */
   saveCustomPath: (path: string) => Promise<string | null>;
   /** Forget the user-supplied path. */
@@ -227,9 +230,14 @@ export const ManagedBinaryConfigView: React.FC<ManagedBinaryConfigViewProps> = (
               {upgradeRun.kind === "error" && (
                 <span className="tw-text-xs tw-text-error">{upgradeRun.message}</span>
               )}
-              <Button variant="default" size="sm" onClick={actions.upgrade}>
-                {upgradeLabel}
-              </Button>
+              {/* An install Copilot does not own has no button that can fix it; the managed
+                  download would replace the user's binary instead of upgrading it.
+                  https://github.com/Brevilabs/obsidian-copilot-private/issues/480 */}
+              {actions.upgrade && (
+                <Button variant="default" size="sm" onClick={actions.upgrade}>
+                  {upgradeLabel}
+                </Button>
+              )}
             </div>
           )
         }

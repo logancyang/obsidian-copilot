@@ -103,6 +103,21 @@ describe("codexAuth", () => {
       expect(key).not.toBe(codexAuth.getProbeKey!(settings));
       expect(key).toMatch(/^[a-f0-9]{64}$/);
     });
+    it("re-identifies a custom adapter updated in place, so a rejected adapter's cached sign-in answer does not survive its upgrade (https://github.com/Brevilabs/obsidian-copilot-private/issues/480)", () => {
+      const path = "/usr/local/bin/codex-acp";
+      const outdated = configured({
+        binaryPath: path,
+        binarySource: "custom",
+        binaryVersion: "1.10.0",
+      });
+      const upgraded = configured({
+        binaryPath: path,
+        binarySource: "custom",
+        binaryVersion: "1.12.0",
+      });
+
+      expect(codexAuth.getProbeKey!(outdated)).not.toBe(codexAuth.getProbeKey!(upgraded));
+    });
     it(`ignores environment property ordering: ${ISSUE}`, () => {
       expect(
         codexAuth.getProbeKey!(

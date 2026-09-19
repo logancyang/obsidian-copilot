@@ -167,15 +167,29 @@ export function resolveSupportedCodexAcpEntry(
   return installed.entryPath;
 }
 
-export function isCodexAcpPath(adapterPath: string | undefined): boolean {
-  if (!adapterPath) return false;
-  try {
-    resolveCodexAcpPackage(adapterPath);
-    return true;
-  } catch {
-    return false;
-  }
+function recognizes(
+  resolve: (adapterPath: string) => unknown
+): (adapterPath: string | undefined) => boolean {
+  return (adapterPath) => {
+    if (!adapterPath) return false;
+    try {
+      resolve(adapterPath);
+      return true;
+    } catch {
+      return false;
+    }
+  };
 }
+
+/** Whether the path holds a genuine `codex-acp` adapter, at any release. */
+export const isCodexAcpPath = recognizes(resolveCodexAcpPackage);
+
+/**
+ * Whether the path holds an adapter this Copilot release can actually run, so detection can
+ * rank a supported install above a genuine but outdated one found in an earlier location.
+ * https://github.com/Brevilabs/obsidian-copilot-private/issues/480
+ */
+export const isSupportedCodexAcpPath = recognizes(resolveSupportedCodexAcpEntry);
 
 /**
  * Launches native bundles directly and supported npm entries through the

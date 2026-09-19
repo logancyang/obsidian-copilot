@@ -7,6 +7,7 @@ import {
   buildCodexAcpInvocation,
   CODEX_ACP_MIN_VERSION,
   isCodexAcpPath,
+  isSupportedCodexAcpPath,
   resolveCodexAcpPackage,
   resolveSupportedCodexAcpEntry,
   type CodexAcpPackageFs,
@@ -269,6 +270,29 @@ describe("codexVersion", () => {
       expect(isCodexAcpPath(installedAdapterPath({ ...metadata("1.7.0"), name: "other" }))).toBe(
         false
       );
+    });
+  });
+
+  describe("isSupportedCodexAcpPath()", () => {
+    afterEach(() => {
+      for (const tempDir of tempDirs.splice(0)) {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
+
+    it("separates a runnable adapter from one that is merely genuine, so detection can rank candidates (https://github.com/Brevilabs/obsidian-copilot-private/issues/480)", () => {
+      const outdated = installedAdapterPath(metadata("0.0.44"));
+
+      expect(isCodexAcpPath(outdated)).toBe(true);
+      expect(isSupportedCodexAcpPath(outdated)).toBe(false);
+      expect(isSupportedCodexAcpPath(installedAdapterPath(metadata(CODEX_ACP_MIN_VERSION)))).toBe(
+        true
+      );
+    });
+
+    it("rejects an empty path and an adapter that is not installed (https://github.com/Brevilabs/obsidian-copilot-private/issues/480)", () => {
+      expect(isSupportedCodexAcpPath(undefined)).toBe(false);
+      expect(isSupportedCodexAcpPath("/missing/codex-acp")).toBe(false);
     });
   });
 

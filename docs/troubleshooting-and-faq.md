@@ -18,7 +18,7 @@ Copilot requires opencode **1.18.31 or newer** and Codex ACP **1.12.0 or newer**
 
 1. Select **Configure** in Agent Chat or **Settings → Copilot → Basic → Agents** to open the agent's configuration dialog.
 2. For a managed installation, choose the upgrade action or **Download & install**.
-3. For a custom installation, update it yourself, then select **Apply** or **Auto-detect** to validate the updated binary. Updating the Codex CLI alone does not update the ACP adapter.
+3. For a custom installation, update it yourself, then select **Apply** or **Auto-detect** to validate the updated binary. The managed download never replaces a custom Codex adapter, so the Codex dialog offers no upgrade button for one. Updating the Codex CLI alone does not update the ACP adapter.
 
 Opening Configure does not start an upgrade. Chat and Settings keep shared installation progress and errors visible. If installation fails, resolve the reported problem and retry in Configure. Copilot does not upgrade agents automatically or poll for the latest upstream agent release.
 

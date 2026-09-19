@@ -5,7 +5,7 @@ import { detectBinary } from "@/utils/detectBinary";
 import { resolveCodexAcpBinary } from "./codexBinaryResolver";
 import { CODEX_BUNDLE_VERSION } from "./codexArchive";
 import { CodexBackendDescriptor, detectCodexAcpPath, getCodexBinaryManager } from "./descriptor";
-import { isCodexAcpPath, resolveCodexAcpPackage } from "./codexVersion";
+import { isCodexAcpPath, isSupportedCodexAcpPath, resolveCodexAcpPackage } from "./codexVersion";
 
 jest.mock("@/utils/detectBinary", () => ({ detectBinary: jest.fn() }));
 jest.mock("./codexBinaryResolver", () => ({
@@ -15,12 +15,18 @@ jest.mock("./codexBinaryResolver", () => ({
 jest.mock("./codexVersion", () => ({
   ...jest.requireActual("./codexVersion"),
   isCodexAcpPath: jest.fn(),
+  isSupportedCodexAcpPath: jest.fn(),
   resolveCodexAcpPackage: jest.fn(),
 }));
 
 const mockedDetectBinary = jest.mocked(detectBinary);
 const mockedResolveCodexAcpBinary = jest.mocked(resolveCodexAcpBinary);
 const mockedIsCodexAcpPath = jest.mocked(isCodexAcpPath);
+const mockedIsSupportedCodexAcpPath = jest.mocked(isSupportedCodexAcpPath);
+
+/** Search locations in priority order, as `resolveCodexAcpBinary` walks them. */
+const EARLY_LOCATION = "/home/user/.local/bin/codex-acp";
+const LATE_LOCATION = "/usr/local/bin/codex-acp";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
 import { translateBackendState } from "@/agentMode/session/translateBackendState";
 import type {
@@ -86,8 +92,31 @@ describe("descriptor", () => {
       mockedResolveCodexAcpBinary.mockReturnValue("/known/codex-acp");
 
       await expect(detectCodexAcpPath()).resolves.toBe("/known/codex-acp");
-      expect(mockedResolveCodexAcpBinary.mock.calls[0]?.[1]).toBe(mockedIsCodexAcpPath);
+      expect(mockedResolveCodexAcpBinary.mock.calls[0]?.[1]).toBe(mockedIsSupportedCodexAcpPath);
       expect(mockedDetectBinary).not.toHaveBeenCalled();
+    });
+
+    it("prefers a supported adapter in a later search location over an outdated one found first (https://github.com/Brevilabs/obsidian-copilot-private/issues/480)", async () => {
+      mockedResolveCodexAcpBinary.mockImplementation(
+        (_input, accepts = () => true) =>
+          [EARLY_LOCATION, LATE_LOCATION].find((candidate) => accepts(candidate)) ?? null
+      );
+      mockedIsCodexAcpPath.mockReturnValue(true);
+      mockedIsSupportedCodexAcpPath.mockImplementation((path) => path === LATE_LOCATION);
+
+      await expect(detectCodexAcpPath()).resolves.toBe(LATE_LOCATION);
+      expect(mockedDetectBinary).not.toHaveBeenCalled();
+    });
+
+    it("falls back to the first outdated adapter when no supported one is installed, so Configure can report an update (https://github.com/Brevilabs/obsidian-copilot-private/issues/480)", async () => {
+      mockedResolveCodexAcpBinary.mockImplementation(
+        (_input, accepts = () => true) =>
+          [EARLY_LOCATION, LATE_LOCATION].find((candidate) => accepts(candidate)) ?? null
+      );
+      mockedIsCodexAcpPath.mockReturnValue(true);
+      mockedIsSupportedCodexAcpPath.mockReturnValue(false);
+
+      await expect(detectCodexAcpPath()).resolves.toBe(EARLY_LOCATION);
     });
 
     it("https://github.com/logancyang/obsidian-copilot/issues/2916 accepts a supported adapter from a custom directory on PATH", async () => {

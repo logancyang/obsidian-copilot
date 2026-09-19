@@ -4,6 +4,14 @@ import type * as React from "react";
 
 type AgentStatusCardProps = React.ComponentProps<typeof AgentStatusCard>;
 
+// The gallery import fence keeps backend modules out of agent-mode stories, so the two release
+// floors are restated here. Each outdated fixture sits below its floor, which is the single
+// support threshold for managed and user-owned installs alike.
+const OPENCODE_FLOOR = "1.18.31";
+const OPENCODE_OUTDATED = "1.18.16";
+const CODEX_FLOOR = "1.12.0";
+const CODEX_OUTDATED = "1.10.0";
+
 const meta = {
   title: "Agent Mode/Agent Status Card",
   component: AgentStatusCard,
@@ -54,7 +62,7 @@ export const ManagedUpgradeRequired: StoryObj<AgentStatusCardProps> = {
   args: {
     summary: "opencode update required",
     tone: "warning",
-    message: "opencode v1.15.0 is not supported. Copilot requires opencode v1.16.0 or newer.",
+    message: `opencode v${OPENCODE_OUTDATED} is not supported. Copilot requires opencode v${OPENCODE_FLOOR} or newer.`,
     action: { label: "Configure opencode", onClick: () => undefined },
   },
 };
@@ -81,7 +89,7 @@ export const OutdatedCodex: StoryObj<AgentStatusCardProps> = {
   args: {
     summary: "Codex update required",
     tone: "warning",
-    message: "Codex adapter 1.10.0 does not match this Copilot release (1.12.0).",
+    message: `Codex adapter v${CODEX_OUTDATED} is not supported. Copilot requires Codex adapter v${CODEX_FLOOR} or newer.`,
     action: { label: "Configure Codex", onClick: () => undefined },
   },
 };
