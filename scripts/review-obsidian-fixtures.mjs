@@ -186,6 +186,43 @@ async function main() {
     ),
     "browser polyfills or guarded/type-only Node access were rejected"
   );
+  // Browser storage bypasses Obsidian's vault scope, including when aliased or destructured.
+  const browserStorageAccesses = [
+    'localStorage.getItem("key")',
+    'sessionStorage.setItem("key", "value")',
+    "window.localStorage",
+    "globalThis.sessionStorage",
+    'window["localStorage"]',
+    "window?.sessionStorage",
+    "const { localStorage: storage } = window; void storage",
+    'const { ["sessionStorage"]: storage } = globalThis; void storage',
+  ];
+  for (const access of browserStorageAccesses) {
+    const result = await lintSourceFixture(`${access};`, "src/utils.ts");
+    assert(
+      result.messages.some(
+        (message) =>
+          message.ruleId === "no-restricted-syntax" &&
+          message.severity === 2 &&
+          message.message.includes("vault-scoped storage")
+      ),
+      `Browser storage access was not blocked: ${access}`
+    );
+  }
+  const vaultStorageResult = await lintSourceFixture(
+    `import type { App } from "obsidian";
+export function savePreference(app: App): unknown {
+  app.saveLocalStorage("key", "value");
+  return app.loadLocalStorage("key");
+}`,
+    "src/utils.ts"
+  );
+  assert(
+    !vaultStorageResult.messages.some((message) =>
+      message.message.includes("vault-scoped storage")
+    ),
+    "Obsidian vault-scoped storage was rejected"
+  );
   const invalidLicenseResult = await lintSourceFixture(invalidLicenseFixture, "LICENSE");
   assert(
     invalidLicenseResult.errorCount === 0,
