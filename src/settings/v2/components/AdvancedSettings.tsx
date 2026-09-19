@@ -27,7 +27,7 @@ import { Notice } from "obsidian";
 import React, { useCallback, useEffect, useState } from "react";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
-import { getReportInstallId } from "@/utils/reportInstallId";
+import { getPersistedDeviceId } from "@/utils/deviceId";
 import { createReportUploader } from "@/utils/reportUpload.brevilabs";
 
 const DESKTOP_UNAVAILABLE_FRAME_LOG_PATH = "(Agent Mode frame logs are desktop-only)";
@@ -113,10 +113,10 @@ export const AdvancedSettings: React.FC = () => {
           (app as unknown as { setting: { close: () => void } }).setting.close();
         },
         // `installId` is a getter, resolved on the upload click rather than
-        // here: its failure mode (unusable localStorage) should surface on the
+        // here: its failure mode (unusable vault storage) should surface on the
         // action that needs it, as a refusal to upload — not break the modal.
         uploader: createReportUploader({
-          installId: getReportInstallId,
+          installId: () => getPersistedDeviceId(app),
           clientVersion: pluginVersion,
         }),
       }).open();
