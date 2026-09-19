@@ -113,10 +113,10 @@ export const AdvancedSettings: React.FC = () => {
           (app as unknown as { setting: { close: () => void } }).setting.close();
         },
         // `installId` is a getter, resolved on the upload click rather than
-        // here: its failure mode (unusable localStorage) should surface on the
+        // here: its failure mode (unusable vault storage) should surface on the
         // action that needs it, as a refusal to upload — not break the modal.
         uploader: createReportUploader({
-          installId: getReportInstallId,
+          installId: () => getReportInstallId(app),
           clientVersion: pluginVersion,
         }),
       }).open();

@@ -119,7 +119,7 @@ Before anything is written into the zip, Copilot cleans every log and your own d
 
 A log too large for the report keeps its newest entries rather than being dropped, and the file itself opens with a banner identifying it as a truncated log and naming the original size. Cleaning always runs over the whole log before anything is cut, so a log too large to clean whole (over 64 MB) is left out and listed with that reason.
 
-Only the zip is uploaded, and only to Brevilabs. It carries no license key and no account identity, and it is not tied to your Copilot account. The public GitHub issue carries the report ID and nothing else — there is no download link on it, and nothing on that page can fetch the bundle.
+The zip is uploaded only to Brevilabs. The upload also sends a random identifier for grouping reports and limiting uploads. Obsidian stores this identifier separately for each vault on each device; it is not synced or tied to your Copilot account. The upload carries no license key or account identity. The public GitHub issue carries the report ID and nothing else — there is no download link on it, and nothing on that page can fetch the bundle.
 
 ### What the report ID is for
 

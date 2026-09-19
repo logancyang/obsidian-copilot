@@ -121,6 +121,16 @@ const restrictedZodSourceImport = {
     'Use `import * as z from "zod"` so the production bundle can tree-shake unused Zod locales.',
 };
 
+// Raw browser storage bypasses Obsidian's vault-scoped persistence APIs.
+const restrictedBrowserStorage = {
+  selector:
+    "Identifier[name=/^(localStorage|sessionStorage)$/], " +
+    "MemberExpression[computed=true] > Literal.property[value=/^(localStorage|sessionStorage)$/], " +
+    "ObjectPattern > Property > Literal.key[value=/^(localStorage|sessionStorage)$/]",
+  message:
+    "Use Obsidian's vault-scoped storage through app.loadLocalStorage() / app.saveLocalStorage() instead of raw browser storage.",
+};
+
 const restrictedConsoleCalls = [
   {
     selector: "CallExpression[callee.object.name='console'][callee.property.name='log']",
@@ -336,6 +346,7 @@ export default [
         "error",
         ...restrictedSourceImports,
         restrictedZodSourceImport,
+        restrictedBrowserStorage,
         ...restrictedConsoleCalls,
       ],
     },
@@ -346,7 +357,20 @@ export default [
   {
     files: ["src/utils/react/createPluginRoot.tsx"],
     rules: {
-      "no-restricted-syntax": ["error", restrictedZodSourceImport, ...restrictedConsoleCalls],
+      "no-restricted-syntax": [
+        "error",
+        restrictedZodSourceImport,
+        restrictedBrowserStorage,
+        ...restrictedConsoleCalls,
+      ],
+    },
+  },
+
+  {
+    files: ["dev/gallery/**/*.{ts,tsx}"],
+    ignores: ["dev/gallery/**/*.test.{ts,tsx}"],
+    rules: {
+      "no-restricted-syntax": ["error", restrictedBrowserStorage],
     },
   },
 
