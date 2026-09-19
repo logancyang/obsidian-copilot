@@ -17,10 +17,8 @@ const STRUCTURAL_PREFIX =
   /^([ \t]*(?:>[ \t]?)*)((?:[-*+]|\d{1,9}[.)])[ \t]+)?(\[[ xX]\][ \t]+)?(#{1,6}[ \t]+)?/;
 
 const TOKEN_PATTERNS: readonly RegExp[] = [
-  /^!?\[\[[^\]\n]*\]\]/, // wikilink or embed
-  /^!?\[[^\]\n]*\]\([^)\n]*\)/, // link or image, URL included
-  /^(`+)[^\n]*?\1/, // inline code
-  /^(?:\*{1,3}|_{1,3}|~~|==)/, // emphasis delimiter run
+  /^!?\[\[[^\]\n]*\]\]/,
+  /^(?:\*{1,3}|_{1,3}|~~|==)/,
   /^[ \t]+/,
 ];
 
@@ -80,6 +78,25 @@ function matchToken(text: string, index: number): string | null {
     if (match !== null && match[0].length > 0) return match[0];
   }
   const previous = index === 0 ? "" : text[index - 1];
+  // Partial delimiters let diff markers corrupt link destinations and code spans.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/348
+  const link = /^!?\[[^\]\r\n]*\]\(/.exec(rest);
+  if (link !== null) {
+    let depth = 1;
+    for (const part of rest.slice(link[0].length).matchAll(/\\[^\r\n]|[()\r\n]/g)) {
+      if (/[\r\n]/.test(part[0])) break;
+      if (part[0] === "(") depth++;
+      if (part[0] === ")" && --depth === 0) return rest.slice(0, link[0].length + part.index + 1);
+    }
+  }
+  const opening = /^`+/.exec(rest)?.[0];
+  if (opening !== undefined && previous !== "`") {
+    for (const closing of rest.slice(opening.length).matchAll(/`+|[\r\n]/g)) {
+      if (/[\r\n]/.test(closing[0])) break;
+      if (closing[0].length === opening.length)
+        return rest.slice(0, opening.length + closing.index + closing[0].length);
+    }
+  }
   if (index === 0 || /[\s([]/.test(previous)) {
     const tag = TAG.exec(rest);
     if (tag !== null) return tag[0];
