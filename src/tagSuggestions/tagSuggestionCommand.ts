@@ -1,7 +1,7 @@
 import { TagSuggestionModal } from "@/components/modals/TagSuggestionModal";
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import { logError, logInfo } from "@/logger";
-import { checkIsPaidUser } from "@/plusUtils";
+import { checkIsPlusUser } from "@/plusUtils";
 import { getSettings } from "@/settings/model";
 import {
   addTagToFrontmatter,
@@ -24,14 +24,14 @@ export async function suggestTagsForCurrentNote(app: App): Promise<void> {
     return;
   }
 
-  const isPaidUser = await checkIsPaidUser(app, { trigger: "tool_call" });
-  if (!isPaidUser) {
-    new Notice("A valid Copilot Plus license is required to suggest tags.");
-    return;
-  }
-
   const loading = new Notice("Suggesting tags…", 0);
   try {
+    const isPlusUser = await checkIsPlusUser(app, "tool_call");
+    if (!isPlusUser) {
+      new Notice("A valid Copilot Plus license is required to suggest tags.");
+      return;
+    }
+
     const content = await app.vault.cachedRead(file);
     const candidates = collectTagCandidates(app, file, content);
     if (!candidates.length) {

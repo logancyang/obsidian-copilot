@@ -1,6 +1,6 @@
 import { BrevilabsApiError } from "@/LLMProviders/brevilabsClient";
 import { stripFrontmatter } from "@/utils";
-import { App, CachedMetadata, TFile } from "obsidian";
+import { App, CachedMetadata, parseFrontMatterAliases, TFile } from "obsidian";
 
 const EXCERPT_CHARS = 1500;
 const EVIDENCE_TITLES = 4;
@@ -106,7 +106,7 @@ export function buildTagSuggestionState(
     folder: file.parent?.path ?? "",
     existing_tags: existingTags,
   };
-  const aliases = stringList(cache?.frontmatter?.aliases ?? cache?.frontmatter?.alias, true);
+  const aliases = parseFrontMatterAliases(cache?.frontmatter) ?? [];
   if (aliases.length) state.aliases = aliases;
 
   if (body.length <= EXCERPT_CHARS) {
@@ -123,6 +123,7 @@ export function buildTagSuggestionState(
     if (headings.length < 40) headings.push(heading[1].trim());
     const lead = lines.slice(index + 1).find((line) => line.trim() && !/^#{1,6}\s/.test(line));
     if (lead && sectionLeads.length < 20) sectionLeads.push(clip(lead.trim(), 160));
+    if (headings.length === 40 && sectionLeads.length === 20) break;
   }
   state.headings = headings;
   state.excerpt = clip(body.trim(), EXCERPT_CHARS);

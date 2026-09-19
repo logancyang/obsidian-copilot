@@ -44,8 +44,8 @@ describe("tagSuggestions", () => {
       const active = file("Projects/Launch.md");
       const state = buildTagSuggestionState(
         active,
-        "---\ntag: work\naliases: [Launch plan]\n---\nShort body",
-        metadata(["inline"], { tag: "work", aliases: ["Launch plan"] })
+        "---\ntag: work\naliases: Launch plan\n---\nShort body",
+        metadata(["inline"], { tag: "work", aliases: "Launch plan" })
       );
 
       expect(state).toEqual({

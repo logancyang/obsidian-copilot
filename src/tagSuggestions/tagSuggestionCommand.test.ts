@@ -5,7 +5,7 @@ import type {
 } from "@/tagSuggestions/tagSuggestions";
 import type { App } from "obsidian";
 
-const mockCheckIsPaidUser = jest.fn<Promise<boolean | undefined>, unknown[]>();
+const mockCheckIsPlusUser = jest.fn<Promise<boolean>, unknown[]>();
 const mockBroca = jest.fn<Promise<Record<string, { noul: number }>>, unknown[]>();
 const mockModalOpen = jest.fn<void, []>();
 const mockLogInfo = jest.fn<void, unknown[]>();
@@ -16,8 +16,8 @@ const mockModal = jest.fn<
 let chooseTag: ((tag: string) => void | Promise<void>) | undefined;
 
 jest.mock("@/plusUtils", () => ({
-  checkIsPaidUser: async (...args: unknown[]): Promise<boolean | undefined> =>
-    await mockCheckIsPaidUser(...args),
+  checkIsPlusUser: async (...args: unknown[]): Promise<boolean> =>
+    await mockCheckIsPlusUser(...args),
 }));
 jest.mock("@/settings/model", () => ({
   getSettings: () => ({ userId: "user-1", debug: false }),
@@ -111,7 +111,7 @@ describe("tagSuggestionCommand", () => {
     beforeEach(() => {
       jest.clearAllMocks();
       chooseTag = undefined;
-      mockCheckIsPaidUser.mockResolvedValue(true);
+      mockCheckIsPlusUser.mockResolvedValue(true);
       mockBroca.mockResolvedValue({ t0: { noul: 0.85 } });
     });
 
@@ -174,16 +174,19 @@ describe("tagSuggestionCommand", () => {
       expect(Notice).toHaveBeenCalledWith("Open a Markdown note before suggesting tags.");
     });
 
-    it("does not call Jev without a valid paid license (https://github.com/Brevilabs/obsidian-copilot-private/issues/492)", async () => {
-      mockCheckIsPaidUser.mockResolvedValue(false);
+    it("does not call Jev for a Lite license below Plus (https://github.com/Brevilabs/obsidian-copilot-private/issues/492)", async () => {
+      mockCheckIsPlusUser.mockResolvedValue(false);
       const { app } = createApp();
 
       await suggestTagsForCurrentNote(app);
 
+      expect(mockCheckIsPlusUser).toHaveBeenCalledWith(app, "tool_call");
+      expect(app.vault.cachedRead).not.toHaveBeenCalled();
       expect(mockBroca).not.toHaveBeenCalled();
       expect(Notice).toHaveBeenCalledWith(
         "A valid Copilot Plus license is required to suggest tags."
       );
+      expect(loadingNotice()?.hide).toHaveBeenCalled();
     });
 
     it("does not call Jev when the vault has no usable candidate tags (https://github.com/Brevilabs/obsidian-copilot-private/issues/492)", async () => {

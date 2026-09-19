@@ -73,6 +73,12 @@ module.exports = {
   parseYaml: jest.fn().mockImplementation((content) => {
     return parseYamlString(content);
   }),
+  parseFrontMatterAliases: (frontmatter) => {
+    const value = frontmatter?.aliases ?? frontmatter?.alias;
+    if (typeof value === "string") return [value];
+    if (Array.isArray(value)) return value.filter((alias) => typeof alias === "string");
+    return null;
+  },
   Modal: class Modal {
     constructor(app) {
       this.app = app;
