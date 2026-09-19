@@ -65,7 +65,7 @@ export function appendBackendSection(
     keepBaseModelId: string | null;
     /** Current settings — read by `getEnabledModelEntries`. */
     settings: CopilotSettings;
-    /** Preload settled without a catalog, so persisted enabled models are the only recovery path. */
+    /** Persisted models provide recovery when discovery is unavailable or blocked on upgrade. */
     useEnabledFallback?: boolean;
   }
 ): void {
@@ -190,7 +190,7 @@ function credentialDisabledReason(
  * Map a backend's readiness to a `_disabledReason` for every row it
  * contributes, or `undefined` when its rows stay selectable. Picking a model on
  * a backend that isn't set up can only end in a failed spawn, so the picker says
- * so up front instead of letting the user find out by losing their pane.
+ * so up front. Incompatible installs remain selectable through process-free recovery.
  *
  * `checking` stays selectable: it is a transient probe that resolves on its own,
  * and labelling a backend "not set up" for the moment it takes to read a version
@@ -202,10 +202,11 @@ export function backendReadinessReason(state: InstallState): string | undefined 
   switch (state.kind) {
     case "absent":
       return "Not set up";
-    case "incompatible":
-      return "Update required";
     case "error":
       return "Setup error";
+    // Recovery selections do not execute a process.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/480
+    case "incompatible":
     case "checking":
     case "ready":
       return undefined;
@@ -326,13 +327,22 @@ export function buildPickerEntries(
     const backendModels = catalog?.availableModels ?? null;
     const hasNoCatalog = catalog === null;
     const preloadStatus = manager.getPreloadStatus(descriptor.id);
+    const incompatible = descriptor.getInstallState(settings).kind === "incompatible";
     const sectionStart = entries.length;
     appendBackendSection(entries, descriptor, {
-      backendModels,
+      backendModels: incompatible ? null : backendModels,
       keepBaseModelId,
       settings,
-      useEnabledFallback: hasNoCatalog && (preloadStatus === "ready" || preloadStatus === "error"),
+      // An unsupported binary cannot preload; saved choices are its recovery entry point.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/480
+      useEnabledFallback:
+        incompatible || (hasNoCatalog && (preloadStatus === "ready" || preloadStatus === "error")),
     });
+    // Upgrade recovery must remain reachable even when credentials also need repair.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/480
+    if (incompatible) {
+      for (let i = sectionStart; i < entries.length; i++) delete entries[i]._disabledReason;
+    }
     // No catalog discovered yet (distinct from a settled probe reporting no
     // model catalog). Show a per-backend loading / failure row so
     // the user can see every installed backend immediately — important
@@ -518,6 +528,17 @@ export function buildModelOnChange(
       return;
     }
 
+    if (
+      manager.deferRecoverySelection(targetBackendId, {
+        baseModelId,
+        effort:
+          activeSession?.backendId === targetBackendId
+            ? (ctx.activeModelState?.current.effort ?? null)
+            : (manager.getDefaultSelection(targetBackendId)?.effort ?? null),
+      })
+    )
+      return;
+
     if (!activeSession || activeSession.backendId !== targetBackendId) {
       // Legacy ModelSelector path: no effort plumbed through. Preserve any
       // existing persisted effort for this backend.
@@ -611,6 +632,7 @@ export function buildCommitSelection(
       logError("[AgentMode] commitSelection references unknown backend", targetBackendId);
       return;
     }
+    if (manager.deferRecoverySelection(targetBackendId, { baseModelId, effort })) return;
     if (!activeSession || activeSession.backendId !== targetBackendId) {
       runCrossBackendPick(
         manager,
@@ -645,13 +667,41 @@ export function buildAgentModelPicker(args: {
   const ctx = collectModelActiveContext(manager);
   const { entries, valueKey } = buildPickerEntries(manager, descriptors, ctx, settings);
   const onChange = buildModelOnChange(manager, ctx, entries);
+  const commitSelection = buildCommitSelection(manager, ctx, entries, onChange);
+  const effortOptionsByModelKey = buildEffortOptionsByModelKey(manager, entries);
+  let value = valueKey;
+  let effort: AgentModelPickerOverride["effort"];
+  // The process-free target, not its preserved source chat, owns the recovery picker.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/480
+  const pending = manager.getRecoverySelection();
+  const descriptor = descriptors.find((d) => d.id === pending?.backendId);
+  if (pending && descriptor) {
+    const { baseModelId, effort: selectedEffort } = pending.selection;
+    let entry = entries.find((e) => e._backendId === pending.backendId && e.name === baseModelId);
+    if (!entry) {
+      entry = synthesizeAgentEntry(baseModelId, baseModelId, descriptor);
+      entries.push(entry);
+    }
+    value = getModelKeyFromModel(entry);
+    const known = resolveEffortOptions(manager, pending.backendId, baseModelId);
+    const options =
+      known.length || !selectedEffort ? known : [{ value: selectedEffort, label: selectedEffort }];
+    effortOptionsByModelKey[value] = options;
+    effort = {
+      options,
+      value: selectedEffort,
+      onChange: (nextEffort) => commitSelection(value, nextEffort),
+    };
+  } else {
+    effort = buildEffortSibling(manager, ctx);
+  }
   return {
     models: entries,
-    value: valueKey,
+    value,
     disabled: false,
-    effort: buildEffortSibling(manager, ctx),
-    effortOptionsByModelKey: buildEffortOptionsByModelKey(manager, entries),
+    effort,
+    effortOptionsByModelKey,
     onChange,
-    commitSelection: buildCommitSelection(manager, ctx, entries, onChange),
+    commitSelection,
   };
 }

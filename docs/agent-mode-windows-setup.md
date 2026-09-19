@@ -42,6 +42,8 @@ For manual installations, the Codex backend needs `@agentclientprotocol/codex-ac
 3. Click **Sign in** and complete authentication in your browser. If the browser does not open, click **Open sign-in page**. Return to Obsidian to see the signed-in status.
 4. To use your own supported adapter, choose **My own binary** and Auto-detect it or enter its path. Copilot keeps your binary and credentials when you uninstall managed downloads.
 
+An outdated adapter shows a warning in Chat and Settings. Select **Configure** to choose a managed upgrade/download, or update your custom adapter yourself and select **Apply** or **Auto-detect**. Saved enabled models remain selectable but cannot run until updated. Progress and errors stay visible; opening Configure does not start an upgrade.
+
 You can also choose **Sign in to Codex** on the Agent Chat status card. For terminal login, run your configured adapter with `cli login` using the same `CODEX_HOME` as Copilot.
 
 ## Share Skills across agents

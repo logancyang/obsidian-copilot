@@ -13,6 +13,8 @@ export default meta;
 
 export const Upgrade = {
   args: {
+    hasSourceChat: true,
+    onCancel: () => undefined,
     controls: null,
     picker: {
       models: [
@@ -33,18 +35,19 @@ export const Upgrade = {
       <AgentStatusCard
         tone="warning"
         summary="Agent upgrade required"
-        message="The configured agent version is below the supported minimum. Upgrade it in Configure."
+        message="The configured agent version is below the supported minimum. Upgrade it in Configure, or return to your open chat."
         action={{ label: "Configure", onClick: () => undefined }}
       />
     ),
   },
 } satisfies StoryObj<Props>;
-/** A session start is already in flight, so the pane shows the pending selection without accepting a new one. */
-export const Starting = {
+/** No chat to return to and no pick made yet, so the saved lineup is offered with nothing selected. */
+export const ColdStartup = {
   args: {
     ...Upgrade.args,
-    picker: { ...Upgrade.args.picker, disabled: true },
-    children: <AgentStatusCard message="Starting the agent…" />,
+    hasSourceChat: false,
+    onCancel: undefined,
+    picker: { ...Upgrade.args.picker, value: "" },
   },
 } satisfies StoryObj<Props>;
 export const StartupFailure = {
@@ -57,5 +60,13 @@ export const StartupFailure = {
         action={{ label: "Retry", onClick: () => undefined }}
       />
     ),
+  },
+} satisfies StoryObj<Props>;
+/** The upgraded agent is starting behind the pane, which still holds the preserved chat's exit. */
+export const RecoveryStarting = {
+  args: {
+    ...Upgrade.args,
+    picker: { ...Upgrade.args.picker, disabled: true },
+    children: <AgentStatusCard message="Starting Codex…" />,
   },
 } satisfies StoryObj<Props>;

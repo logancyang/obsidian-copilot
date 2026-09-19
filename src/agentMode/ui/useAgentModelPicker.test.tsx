@@ -48,9 +48,11 @@ jest.mock("./agentModelPickerHelpers", () => ({
     descriptors: BackendDescriptor[];
   }) => ({
     models: [],
-    value: `${
-      manager.getActiveSession()?.getState()?.model?.current.baseModelId ?? ""
-    }:${manager.getModelCacheSignature("opencode")}:${descriptors[0].getInstallState({} as never).kind}`,
+    value: manager.getRecoverySelection()
+      ? JSON.stringify(manager.getRecoverySelection()?.selection)
+      : `${
+          manager.getActiveSession()?.getState()?.model?.current.baseModelId ?? ""
+        }:${manager.getModelCacheSignature("opencode")}:${descriptors[0].getInstallState({} as never).kind}`,
     onChange: jest.fn(),
   }),
 }));
@@ -73,11 +75,13 @@ describe("useAgentModelPicker", () => {
   });
 
   describe("useAgentModelPicker()", () => {
-    it("rerenders from session, catalog, and backend readiness signals", () => {
+    it("rerenders from session, catalog, readiness, and pending recovery selection signals (https://github.com/Brevilabs/obsidian-copilot-private/issues/480)", () => {
       let state = stateWithModel("first");
       let catalogSignal = "catalog-one";
       let activeListener: (() => void) | null = null;
       let cacheListener: (() => void) | null = null;
+      let managerListener: (() => void) | null = null;
+      let recovery: ReturnType<AgentSessionManager["getRecoverySelection"]> = null;
       const activeUI = {
         subscribe: (listener: () => void) => {
           activeListener = listener;
@@ -95,8 +99,12 @@ describe("useAgentModelPicker", () => {
       } as unknown as AgentSession;
       const manager = {
         getActiveSession: () => session,
+        getRecoverySelection: () => recovery,
         getActiveChatUIState: () => activeUI,
-        subscribe: () => jest.fn(),
+        subscribe: (listener: () => void) => {
+          managerListener = listener;
+          return jest.fn();
+        },
         subscribeModelCache: (listener: () => void) => {
           cacheListener = listener;
           return () => {
@@ -120,6 +128,18 @@ describe("useAgentModelPicker", () => {
       mockInstallKind = "incompatible";
       act(() => mockInstallListener?.());
       expect(result.current?.value).toBe("second:catalog-two:incompatible");
+      recovery = {
+        backendId: "target",
+        selection: { baseModelId: "saved", effort: "high" },
+        sourceChatInputId: "input",
+        projectId: "__global__",
+        scopeSeq: 0,
+      };
+      act(() => managerListener?.());
+      expect(result.current?.value).toBe(JSON.stringify(recovery.selection));
+      recovery = { ...recovery, selection: { baseModelId: "saved", effort: "low" } };
+      act(() => managerListener?.());
+      expect(result.current?.value).toBe(JSON.stringify(recovery.selection));
     });
   });
 });

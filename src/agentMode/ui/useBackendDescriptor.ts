@@ -56,7 +56,11 @@ export function useSessionBackendDescriptor(
     [manager]
   );
   const getSnapshot = React.useCallback(
-    () => manager?.getStartingBackendId() ?? manager?.getActiveSession()?.backendId ?? null,
+    () =>
+      manager?.getRecoverySelection()?.backendId ??
+      manager?.getStartingBackendId() ??
+      manager?.getActiveSession()?.backendId ??
+      null,
     [manager]
   );
   const sessionBackendId = React.useSyncExternalStore(subscribe, getSnapshot, getSnapshot);

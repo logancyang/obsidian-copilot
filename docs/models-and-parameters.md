@@ -56,6 +56,13 @@ an empty session, choosing a model from another installed agent switches that
 session to the other agent. After the conversation has started, the picker
 stays with the current agent.
 
+If opencode or Codex ACP needs an update, saved enabled models remain visible
+and selectable, but the agent cannot run requests until updated. Select
+**Configure** in the warning in Agent Chat or Settings, then choose a managed
+upgrade/download or update your custom installation yourself and select
+**Apply** or **Auto-detect**. See [Update an outdated agent](agent-mode-and-tools.md#update-an-outdated-agent)
+for the required versions and upgrade steps.
+
 A model or effort picked beside the message box applies to that chat; it does
 not replace the saved **Default model** or **Default effort**. Saved agent
 defaults are used for new chats and multi-agent answers. Changes to an explicit

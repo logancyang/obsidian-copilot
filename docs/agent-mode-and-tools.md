@@ -77,7 +77,7 @@ For Windows-specific installation help, see [Windows setup for Agent Chat](agent
 
 ### Update an outdated agent
 
-If an installed agent is too old, Agent Chat and **Settings → Copilot → Basic → Agents** show a warning.
+If an installed agent is too old, Agent Chat and **Settings → Copilot → Basic → Agents** show a warning. Saved enabled models remain visible and selectable, but the agent cannot run requests until updated.
 
 1. Select **Configure** in the warning to open the agent's configuration dialog. Opening it does not start an upgrade.
 2. For **Managed by Copilot**, choose the upgrade action or **Download & install** to install Copilot's pinned version.

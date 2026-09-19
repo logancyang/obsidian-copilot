@@ -32,6 +32,7 @@ jest.mock("@/agentMode/ui/useAgentModelPicker", () => ({
 jest.mock("@/agentMode/ui/useBackendDescriptor", () => ({
   useSessionBackendDescriptor: () => ({
     id: "claude",
+    displayName: "Claude",
     managedInstall: mockManagedInstall,
     openInstallUI: jest.fn(),
   }),
@@ -84,6 +85,9 @@ function makeManager({
     getActiveProjectId: jest.fn(() => activeProjectId),
     getIsStarting: jest.fn(() => starting),
     getLastError: jest.fn(() => lastError),
+    getRecoverySelection: jest.fn(() => null),
+    resumeRecoverySelection: jest.fn(async () => undefined),
+    cancelRecoverySelection: jest.fn(),
     getActiveSession: jest.fn(() => null),
     getActiveChatUIState: jest.fn(() => null),
     getLiveChatInputIds: jest.fn(() => []),
@@ -121,6 +125,80 @@ describe("AgentModeChat", () => {
   });
 
   describe("compose draft ownership", () => {
+    it("offers Back to chat without discarding the preserved draft (https://github.com/Brevilabs/obsidian-copilot-private/issues/480)", () => {
+      const active = { internalId: "source", chatInputId: "input" } as AgentSession;
+      const { manager } = makeManager({
+        activeProjectId: GLOBAL_SCOPE,
+        scopeSessions: [active],
+        poolSessions: [active],
+      });
+      (manager.getActiveSession as jest.Mock).mockReturnValue(active);
+      (manager.getActiveChatUIState as jest.Mock).mockReturnValue({});
+      (manager.getLiveChatInputIds as jest.Mock).mockReturnValue(["input"]);
+      const { rerender } = renderChat(manager);
+      act(() => mockLastDraft!.setInput("keep my draft"));
+      (manager.getRecoverySelection as jest.Mock).mockReturnValue({ backendId: "target" });
+      (manager.cancelRecoverySelection as jest.Mock).mockImplementation(() => {
+        (manager.getRecoverySelection as jest.Mock).mockReturnValue(null);
+      });
+      mockInstallState = {
+        kind: "incompatible",
+        source: "custom",
+        currentVersion: "1",
+        minVersion: "2",
+        message: "Upgrade required",
+      };
+      const plugin = { agentSessionManager: manager } as unknown as CopilotPlugin;
+      const chat = () => (
+        <AgentModeChat plugin={plugin} onSaveChat={() => {}} updateUserMessageHistory={() => {}} />
+      );
+      rerender(chat());
+      fireEvent.click(screen.getByRole("button", { name: "Back to chat" }));
+      rerender(chat());
+      expect(screen.getByTestId("agent-home").textContent).toBe("keep my draft");
+    });
+    it("renders recovery without discarding the source draft, then reports the chosen agent starting until it settles (https://github.com/Brevilabs/obsidian-copilot-private/issues/480)", () => {
+      const active = { internalId: "s-1", chatInputId: "chat-1" } as AgentSession;
+      const { manager } = makeManager({
+        activeProjectId: GLOBAL_SCOPE,
+        scopeSessions: [active],
+        poolSessions: [active],
+      });
+      (manager.getActiveSession as jest.Mock).mockReturnValue(active);
+      (manager.getActiveChatUIState as jest.Mock).mockReturnValue({});
+      (manager.getLiveChatInputIds as jest.Mock).mockReturnValue(["chat-1"]);
+      const { rerender } = renderChat(manager);
+      act(() => mockLastDraft!.setInput("unsent draft"));
+      (manager.getRecoverySelection as jest.Mock).mockReturnValue({ backendId: "target" });
+      mockInstallState = {
+        kind: "incompatible",
+        source: "custom",
+        currentVersion: "1",
+        minVersion: "2",
+        message: "Upgrade required",
+      };
+      const plugin = { app: {}, agentSessionManager: manager } as unknown as CopilotPlugin;
+      const chat = (
+        <AgentModeChat plugin={plugin} onSaveChat={() => {}} updateUserMessageHistory={() => {}} />
+      );
+      rerender(chat);
+      expect(screen.getByTestId("status-card")).toBeTruthy();
+      expect(screen.queryByTestId("agent-home")).toBeNull();
+      expect(manager.resumeRecoverySelection).not.toHaveBeenCalled();
+
+      mockInstallState = { kind: "ready", source: "custom" };
+      rerender(
+        <AgentModeChat plugin={plugin} onSaveChat={() => {}} updateUserMessageHistory={() => {}} />
+      );
+      expect(manager.resumeRecoverySelection).toHaveBeenCalledTimes(1);
+      expect(screen.getByText("Starting Claude…")).toBeTruthy();
+      expect(screen.getByRole("button", { name: /Saved model/i }).hasAttribute("disabled")).toBe(
+        true
+      );
+      (manager.getRecoverySelection as jest.Mock).mockReturnValue(null);
+      rerender(chat);
+      expect(screen.getByTestId("agent-home").textContent).toBe("unsent draft");
+    });
     it("keeps the unsent message across a restart that leaves no active session (https://github.com/Brevilabs/obsidian-copilot-private/issues/473)", () => {
       // A backend restart closes the session before its replacement exists. With
       // the draft store inside AgentHome, that gap unmounts the component and

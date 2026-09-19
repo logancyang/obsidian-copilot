@@ -5,6 +5,7 @@ import { useAgentModelPicker } from "@/agentMode/ui/useAgentModelPicker";
 import { AgentModeStatus } from "@/agentMode/ui/AgentModeStatus";
 import { AgentSelectPanel } from "@/agentMode/ui/AgentSelectPanel";
 import { AgentSelectPane } from "@/agentMode/ui/AgentSelectPane";
+import { AgentStatusCard } from "@/agentMode/ui/AgentStatusCard";
 import {
   useBackendInstallState,
   useSessionBackendDescriptor,
@@ -40,6 +41,7 @@ export const AgentModeChat: React.FC<Props> = ({
   const installState = useBackendInstallState(descriptor, plugin);
   const settings = useSettingsValue();
   const picker = useAgentModelPicker(manager ?? null, plugin);
+  const recovery = manager?.getRecoverySelection();
   const [tick, setTick] = React.useState(0);
 
   React.useEffect(() => {
@@ -64,6 +66,16 @@ export const AgentModeChat: React.FC<Props> = ({
   React.useEffect(() => {
     if (!manager) return;
     if (!preloadReady) return;
+    // Recovery keeps the old session/draft alive but starts only the chosen upgraded agent.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/480
+    if (manager.getRecoverySelection()) {
+      if (installState.kind === "ready" && !manager.getLastError()) {
+        void manager
+          .resumeRecoverySelection()
+          .catch((e) => logError("[AgentMode] recovery failed", e));
+      }
+      return;
+    }
     // Gate on the *current scope's* sessions, not the whole pool: closing the
     // last session in a scope (project or global) nulls the active session but
     // keeps `activeProjectId` put, so we must re-spawn that scope's landing even
@@ -103,10 +115,7 @@ export const AgentModeChat: React.FC<Props> = ({
   // Render a loading placeholder until plugin-load preload settles. This
   // guarantees the picker (and effort dropdown) read from a populated
   // cache on first paint instead of flashing an empty list.
-  // An agent that cannot run never settles a preload, so the placeholder would
-  // hide the status card and its picker forever.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/480
-  if (!preloadReady && installState.kind === "ready") {
+  if (!preloadReady && !recovery && installState.kind === "ready") {
     return (
       <div className="tw-flex tw-size-full tw-items-center tw-justify-center tw-text-muted">
         Loading agent models…
@@ -116,7 +125,7 @@ export const AgentModeChat: React.FC<Props> = ({
 
   const activeSession = manager.getActiveSession();
   const backend = manager.getActiveChatUIState();
-  if (activeSession && backend) {
+  if (activeSession && backend && !recovery) {
     // AgentHome owns the tab strip + chat surface and persists across tab
     // switches: it keys input drafts by session id internally, so switching
     // tabs swaps the active draft rather than remounting and discarding input.
@@ -148,6 +157,7 @@ export const AgentModeChat: React.FC<Props> = ({
   //  - `checking`: transient and Claude-only. Flashing the select view and
   //    swapping it out is worse than the one-line "Checking … version…".
   const isColdStart =
+    !recovery &&
     !manager.getIsStarting() &&
     manager.getLastError() === null &&
     (installState.kind === "absent" || installState.kind === "error");
@@ -160,18 +170,29 @@ export const AgentModeChat: React.FC<Props> = ({
     );
   }
 
-  // A start already in flight owns the session that is about to take this pane
-  // over. Committing a pick meanwhile calls `createSession` directly, which is
-  // not de-duped against the pending `getOrCreateActiveSession`, so both
-  // sessions would land and the later one would steal focus.
+  // Show startup feedback while recovery hides the source chat; AgentModeStatus renders
+  // nothing for a ready backend without an error.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/480
-  const recoveryPicker = picker && manager.getIsStarting() ? { ...picker, disabled: true } : picker;
+  const recoveryStarting = !!recovery && installState.kind === "ready" && !manager.getLastError();
+  // A start already in flight owns the session that is about to take this pane over. Committing
+  // a pick meanwhile calls `createSession` directly, which is not de-duped against the pending
+  // `getOrCreateActiveSession`, so both sessions would land and the later one would steal focus.
+  const starting = manager.getIsStarting() || recoveryStarting;
 
   // Render the chain switcher below the status surface so the user can still
   // leave Agent Mode without going through settings or the command palette.
   return (
-    <AgentModeChatRecovery picker={recoveryPicker} controls={<AgentChatControls />}>
-      <AgentModeStatus manager={manager} plugin={plugin} onInstallClick={handleInstall} />
+    <AgentModeChatRecovery
+      picker={picker && starting ? { ...picker, disabled: true } : picker}
+      controls={<AgentChatControls />}
+      hasSourceChat={!!activeSession}
+      onCancel={recovery ? () => manager.cancelRecoverySelection() : undefined}
+    >
+      {recoveryStarting ? (
+        <AgentStatusCard message={`Starting ${descriptor.displayName}…`} />
+      ) : (
+        <AgentModeStatus manager={manager} plugin={plugin} onInstallClick={handleInstall} />
+      )}
     </AgentModeChatRecovery>
   );
 };

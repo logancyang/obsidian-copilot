@@ -41,6 +41,8 @@ function useAgentModelSignal(
       session?.getStatus() ?? "",
       session?.hasUserVisibleMessages() ? "1" : "0",
       modelStateSignature(session?.getState() ?? null),
+      JSON.stringify(manager.getRecoverySelection()?.selection ?? null),
+      manager.getRecoverySelection()?.backendId ?? "",
     ];
     for (const d of descriptors) {
       parts.push(`${d.id}:${manager.getModelCacheSignature(d.id)}`);
