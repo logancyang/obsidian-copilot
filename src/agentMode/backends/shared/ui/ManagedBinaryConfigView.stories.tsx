@@ -124,6 +124,10 @@ export const Upgrading: StoryObj<ManagedBinaryConfigViewProps> = {
   render: InteractiveConfigView,
   args: {
     ...Incompatible.args,
+    managed: {
+      ...MANAGED,
+      run: { kind: "running", label: "Downloading archive…", percent: 42 },
+    },
     upgradeRun: { kind: "running", label: "Downloading archive…", percent: 42 },
   },
 };

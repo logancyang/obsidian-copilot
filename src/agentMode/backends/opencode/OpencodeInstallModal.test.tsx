@@ -337,7 +337,8 @@ describe("OpencodeInstallModal", () => {
       fireEvent.click(screen.getByRole("button", { name: "Reinstall" }));
 
       expect(screen.queryByRole("button", { name: "Upgrade to latest" })).toBeNull();
-      expect(screen.getAllByRole("progressbar")).toHaveLength(2);
+      expect(screen.getAllByRole("progressbar")).toHaveLength(1);
+      expect(screen.getByRole("button", { name: "Cancel" })).toBeTruthy();
     });
 
     it("names the operation that won when an upgrade loses the lock to another window", async () => {

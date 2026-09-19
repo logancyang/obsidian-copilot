@@ -212,14 +212,16 @@ export const ManagedBinaryConfigView: React.FC<ManagedBinaryConfigViewProps> = (
     warning={
       <ConfigWarningStrip
         state={state}
-        // Keep update progress and failures attached to the shared warning.
+        // Managed installs show progress and Cancel below; custom upgrades need progress here.
         // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
         action={
           upgradeRun.kind === "running" ? (
-            <>
-              <p className="tw-my-0 tw-text-xs">{upgradeRun.label}</p>
-              <Progress value={upgradeRun.percent} />
-            </>
+            source === "managed" && managed.run.kind === "running" ? null : (
+              <>
+                <p className="tw-my-0 tw-text-xs">{upgradeRun.label}</p>
+                <Progress value={upgradeRun.percent} />
+              </>
+            )
           ) : (
             <div className="tw-flex tw-items-center tw-justify-end tw-gap-2">
               {upgradeRun.kind === "error" && (
