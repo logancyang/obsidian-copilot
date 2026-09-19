@@ -1,8 +1,8 @@
 /**
  * Insertion and deletion boundaries are carried through the Markdown renderer as
- * Unicode private-use code points. They survive Markdown parsing as ordinary text,
- * can never combine into syntax, and cannot occur in a real note, so the renderer
- * always sees valid Markdown and the post-pass can find every boundary again.
+ * reserved internal boundaries U+E000-U+E003. Callers must avoid sentinel-bearing
+ * raw input: this post-pass cannot distinguish literal private-use characters
+ * from deliberately inserted boundaries.
  */
 const SENTINEL_BLOCK_START = 0xe000;
 export const INS_OPEN = String.fromCharCode(SENTINEL_BLOCK_START);
@@ -106,7 +106,12 @@ function tagFullyChangedRows(root: HTMLElement): void {
  */
 function tagInsertedTasks(root: HTMLElement): void {
   for (const item of Array.from(root.querySelectorAll("li.task-list-item.is-checked"))) {
-    if (item.querySelector(`ins.${INS_CLASS}`) === null) continue;
+    // Nested task insertions must not remove an untouched parent's completion strike.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/348
+    const hasOwnInsertion = Array.from(item.querySelectorAll(`ins.${INS_CLASS}`)).some(
+      (insertion) => insertion.closest("li") === item
+    );
+    if (!hasOwnInsertion) continue;
     item.classList.add(TASK_INS_CLASS);
   }
 }

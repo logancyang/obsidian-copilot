@@ -151,6 +151,20 @@ describe("applySentinels", () => {
       expect(item.classList.contains("copilot-diff-task-ins")).toBe(false);
     });
 
+    it("marks an inserted nested task without marking its untouched checked parent https://github.com/Brevilabs/obsidian-copilot-private/issues/348", () => {
+      const child = el("li", el("strong", `${INS_OPEN}Check the links${INS_CLOSE}`));
+      child.className = "task-list-item is-checked";
+      const parent = el("li", "Draft the runbook", el("ul", child));
+      parent.className = "task-list-item is-checked";
+      const root = el("div", el("ul", parent));
+
+      applySentinels(root);
+
+      expect(parent.classList.contains("copilot-diff-task-ins")).toBe(false);
+      expect(child.classList.contains("copilot-diff-task-ins")).toBe(true);
+      expect(marked(child, "ins.copilot-diff-ins")).toEqual(["Check the links"]);
+    });
+
     it("leaves a fragment without sentinels exactly as the renderer produced it", () => {
       const root = el("div", el("p", "The pilot runs for six weeks."));
       const original = root.querySelector("p")?.firstChild;
