@@ -27,7 +27,7 @@ import { Notice } from "obsidian";
 import React, { useCallback, useEffect, useState } from "react";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
-import { getReportInstallId } from "@/utils/reportInstallId";
+import { getPersistedDeviceId } from "@/utils/deviceId";
 import { createReportUploader } from "@/utils/reportUpload.brevilabs";
 
 const DESKTOP_UNAVAILABLE_FRAME_LOG_PATH = "(Agent Mode frame logs are desktop-only)";
@@ -116,7 +116,7 @@ export const AdvancedSettings: React.FC = () => {
         // here: its failure mode (unusable vault storage) should surface on the
         // action that needs it, as a refusal to upload — not break the modal.
         uploader: createReportUploader({
-          installId: () => getReportInstallId(app),
+          installId: () => getPersistedDeviceId(app),
           clientVersion: pluginVersion,
         }),
       }).open();

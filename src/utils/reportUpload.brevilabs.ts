@@ -52,7 +52,7 @@ export type ReportRequest = (params: {
 /** What the adapter needs from the host to identify the client. */
 export interface ReportUploaderDeps {
   /**
-   * Resolves the per-installation UUIDv4, called at upload time rather than at
+   * Resolves the persisted device UUIDv4 for this vault, called at upload time rather than at
    * construction so its failure (unusable storage) surfaces on the click that
    * needs it. May throw; the adapter turns that into a `ReportUploadError`.
    */
@@ -150,7 +150,7 @@ export function createReportUploader(deps: ReportUploaderDeps): ReportUploader {
       // threw can carry environment details such as home paths. The single
       // trust boundary for that lives here.
       throw new ReportUploadError(
-        "Copilot could not create its report install ID (local storage may be unavailable), so nothing was uploaded."
+        "Copilot could not get a valid saved device ID, so nothing was uploaded."
       );
     }
     // The exact-lowercase comparison mirrors the endpoint's own check, which

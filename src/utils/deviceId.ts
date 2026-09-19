@@ -21,6 +21,7 @@
  */
 
 import type { App } from "obsidian";
+import { v4 as uuidv4, validate as validateUuid, version as uuidVersion } from "uuid";
 
 const DEVICE_ID_STORAGE_KEY = "obsidian-copilot:device-id:v1";
 
@@ -29,24 +30,9 @@ const DEVICE_ID_STORAGE_KEY = "obsidian-copilot:device-id:v1";
  *  random id each session. */
 const FALLBACK_DEVICE_ID = "unknown";
 
-/** Process-lifetime cache so every call returns the same id, even if storage is unavailable. */
-let cachedDeviceId: string | null = null;
-
-/** Generate a random id, preferring `crypto.randomUUID`, with progressive fallbacks. */
-function generateDeviceId(): string {
-  const cryptoApi = window.crypto;
-  if (typeof cryptoApi?.randomUUID === "function") {
-    return cryptoApi.randomUUID();
-  }
-  // Reason: guard `getRandomValues` existence — optional chaining on a missing
-  // method silently returns undefined, leaving the buffer zero-filled.
-  if (typeof cryptoApi?.getRandomValues === "function") {
-    const bytes = new Uint8Array(16);
-    cryptoApi.getRandomValues(bytes);
-    return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
-  }
-  return `${Date.now().toString(16)}-${Math.random().toString(16).slice(2)}`;
-}
+// Each vault owns its identity, including its sticky storage-failure fallback.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/202
+const cachedDeviceIds = new WeakMap<App, string>();
 
 /**
  * Return this device's stable id, generating and persisting one on first use.
@@ -57,32 +43,57 @@ function generateDeviceId(): string {
  *   the id lives in.
  */
 export function getDeviceId(app: App): string {
+  const cachedDeviceId = cachedDeviceIds.get(app);
   if (cachedDeviceId) return cachedDeviceId;
 
   try {
     const existing = app.loadLocalStorage(DEVICE_ID_STORAGE_KEY);
     if (typeof existing === "string" && existing.length > 0) {
-      cachedDeviceId = existing;
+      cachedDeviceIds.set(app, existing);
       return existing;
     }
 
-    const id = generateDeviceId();
+    const id = uuidv4();
     app.saveLocalStorage(DEVICE_ID_STORAGE_KEY, id);
     // Reason: `saveLocalStorage` swallows write failures instead of throwing.
     // Without a read-back check, a broken-storage device would mint a new
     // random id every session and orphan a profile segment each time; the
     // shared sentinel keeps it on one segment.
     if (app.loadLocalStorage(DEVICE_ID_STORAGE_KEY) !== id) {
-      cachedDeviceId = FALLBACK_DEVICE_ID;
+      cachedDeviceIds.set(app, FALLBACK_DEVICE_ID);
       return FALLBACK_DEVICE_ID;
     }
-    cachedDeviceId = id;
+    cachedDeviceIds.set(app, id);
     return id;
   } catch {
     // Storage access threw (disabled / restricted). Fall back to a stable
     // sentinel so this device keeps one profile segment instead of a new
     // random id each session.
-    cachedDeviceId = FALLBACK_DEVICE_ID;
+    cachedDeviceIds.set(app, FALLBACK_DEVICE_ID);
     return FALLBACK_DEVICE_ID;
   }
+}
+
+/**
+ * Return the existing device identity only when it is a persisted UUIDv4.
+ * Report uploads require this stricter contract than device settings, which
+ * retain legacy identifiers and a storage-failure fallback as profile keys.
+ *
+ * @param app - Obsidian app whose vault owns the device identifier.
+ * @throws When the identifier is not a UUIDv4 or storage cannot confirm it.
+ */
+export function getPersistedDeviceId(app: App): string {
+  const id = getDeviceId(app);
+  // Uploads reject non-UUID identities, and accepting a cached but unpersisted
+  // identity would allow a fresh rate-limit bucket after every restart.
+  // Preserve legacy profile keys rather than orphaning their saved settings.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/202
+  if (
+    !validateUuid(id) ||
+    uuidVersion(id) !== 4 ||
+    app.loadLocalStorage(DEVICE_ID_STORAGE_KEY) !== id
+  ) {
+    throw new Error("A persisted UUIDv4 device identifier is required.");
+  }
+  return id;
 }
