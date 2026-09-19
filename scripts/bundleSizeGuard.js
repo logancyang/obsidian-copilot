@@ -2,6 +2,7 @@
 
 const fs = require("node:fs");
 const path = require("node:path");
+const { minify } = require("terser");
 const ts = require("typescript");
 
 const MAX_BUNDLE_BYTES = 5_000_000;
@@ -124,6 +125,21 @@ function assertBundleSize(source, maxBytes = MAX_BUNDLE_BYTES) {
   return bytes;
 }
 
+async function finalizeProductionBundle(source, maxBytes = MAX_BUNDLE_BYTES) {
+  const deduplicated = dedupeEsbuildLegalComments(source);
+  // Localization catalogs are static bundle data, so the final minifier must run before the
+  // release-size assertion. https://github.com/Brevilabs/obsidian-copilot-private/issues/325
+  const result = await minify(deduplicated, {
+    ecma: 2020,
+    compress: { passes: 3, toplevel: true },
+    mangle: { toplevel: true },
+    format: { comments: "some" },
+  });
+  const output = result.code;
+  assertBundleSize(output, maxBytes);
+  return output;
+}
+
 function createBundleSizeGuard({ production }) {
   return {
     name: "bundle-size-guard",
@@ -140,14 +156,13 @@ function createBundleSizeGuard({ production }) {
       // notice block and skip release-only enforcement for issue #94.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/94
       if (!production) return;
-      build.onEnd((result) => {
+      build.onEnd(async (result) => {
         if (result.errors.length > 0) return;
         const outfile = build.initialOptions.outfile;
         if (!outfile) throw new Error("[bundle-size-guard] expected an outfile");
 
         const source = fs.readFileSync(outfile, "utf8");
-        const output = dedupeEsbuildLegalComments(source);
-        assertBundleSize(output);
+        const output = await finalizeProductionBundle(source);
         fs.writeFileSync(outfile, output, "utf8");
       });
     },
@@ -158,5 +173,6 @@ module.exports = {
   assertBundleSize,
   createBundleSizeGuard,
   dedupeEsbuildLegalComments,
+  finalizeProductionBundle,
   rewriteExactZodImports,
 };
