@@ -1,4 +1,5 @@
 import { BrevilabsApiError } from "@/LLMProviders/brevilabsClient";
+import { isSensitiveKey } from "@/services/settingsSecretTransforms";
 import { stripFrontmatter } from "@/utils";
 import { App, CachedMetadata, parseFrontMatterAliases, TFile } from "obsidian";
 
@@ -112,7 +113,7 @@ function frontmatterProperties(
   // unbounded nested YAML. https://github.com/Brevilabs/obsidian-copilot-private/issues/492
   for (const [key, value] of Object.entries(frontmatter ?? {})) {
     if (Object.keys(properties).length >= MAX_PROPERTIES) break;
-    if (excluded.has(key)) continue;
+    if (excluded.has(key) || isSensitiveKey(key)) continue;
     if (scalar(value)) {
       properties[key] = clipped(value);
     } else if (Array.isArray(value) && value.every(scalar)) {

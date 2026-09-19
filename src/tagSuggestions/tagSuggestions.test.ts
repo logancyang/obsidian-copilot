@@ -75,6 +75,8 @@ describe("tagSuggestions", () => {
             aliases: "Launch plan",
             owner: "Ada",
             priority: ["high", 2],
+            api_key: "must-not-leave-the-vault",
+            password: "also-private",
             nested: { ignored: true },
             position: { start: 0 },
           }),

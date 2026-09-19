@@ -138,7 +138,7 @@ export function registerCommands(plugin: CopilotPlugin, publish: PublishFile) {
   });
 
   addCommand(plugin, COMMAND_IDS.SUGGEST_TAGS, async () => {
-    await suggestTagsForCurrentNote(plugin.app);
+    await suggestTagsForCurrentNote(plugin.app, plugin.tagSuggestionRow);
   });
 
   addCommand(plugin, COMMAND_IDS.NEW_CHAT, async () => {

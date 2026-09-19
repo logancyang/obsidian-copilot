@@ -9,6 +9,7 @@ import { Notice, TFile, type Command } from "obsidian";
 
 const mockRequestMiyoIndexRefresh = jest.fn();
 const mockSuggestTagsForCurrentNote = jest.fn();
+const mockTagSuggestionRow = { show: jest.fn() };
 
 jest.mock("@/commands/CustomCommandChatModal", () => ({
   CustomCommandChatModal: jest.fn(),
@@ -29,8 +30,8 @@ jest.mock("@/miyo/miyoIndex", () => ({
   },
 }));
 jest.mock("@/tagSuggestions/tagSuggestionCommand", () => ({
-  suggestTagsForCurrentNote: async (app: unknown): Promise<void> => {
-    await mockSuggestTagsForCurrentNote(app);
+  suggestTagsForCurrentNote: async (app: unknown, row: unknown): Promise<void> => {
+    await mockSuggestTagsForCurrentNote(app, row);
   },
 }));
 jest.mock("@/miyo/MiyoClient", () => {
@@ -68,6 +69,7 @@ describe("commands", () => {
       const plugin = {
         addCommand: jest.fn((command: Command) => commands.push(command)),
         app: { workspace: { getActiveFile: jest.fn(() => null) } },
+        tagSuggestionRow: mockTagSuggestionRow,
       } as unknown as CopilotPlugin;
 
       registerCommands(plugin, jest.fn());
@@ -82,12 +84,15 @@ describe("commands", () => {
       const plugin = {
         addCommand: jest.fn((command: Command) => commands.push(command)),
         app: { workspace: { getActiveFile: jest.fn(() => null) } },
+        tagSuggestionRow: mockTagSuggestionRow,
       } as unknown as CopilotPlugin;
 
       registerCommands(plugin, jest.fn());
       commands.find(({ id }) => id === COMMAND_IDS.SUGGEST_TAGS)?.callback?.();
 
-      await waitFor(() => expect(mockSuggestTagsForCurrentNote).toHaveBeenCalledWith(plugin.app));
+      await waitFor(() =>
+        expect(mockSuggestTagsForCurrentNote).toHaveBeenCalledWith(plugin.app, mockTagSuggestionRow)
+      );
     });
 
     it("registers the OpenArtifacts palette command and publishes the active Markdown file", () => {

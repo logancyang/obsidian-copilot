@@ -3,17 +3,18 @@ import type {
   RankedTagSuggestion,
   TagSuggestionState,
 } from "@/tagSuggestions/tagSuggestions";
+import type { TagSuggestionRow } from "@/tagSuggestions/tagSuggestionRow";
 import type { App } from "obsidian";
 
 const mockCheckIsPlusUser = jest.fn<Promise<boolean>, unknown[]>();
 const mockBroca = jest.fn<Promise<Record<string, { noul: number }>>, unknown[]>();
-const mockModalOpen = jest.fn<void, []>();
 const mockLogInfo = jest.fn<void, unknown[]>();
-const mockModal = jest.fn<
+const mockRowShow = jest.fn<
   void,
-  [App, RankedTagSuggestion[], (tag: string) => void | Promise<void>]
+  [import("obsidian").TFile, RankedTagSuggestion[], (tag: string) => Promise<boolean>]
 >();
-let chooseTag: ((tag: string) => void | Promise<void>) | undefined;
+let chooseTag: ((tag: string) => Promise<boolean>) | undefined;
+const suggestionRow = { show: mockRowShow } as unknown as TagSuggestionRow;
 
 jest.mock("@/plusUtils", () => ({
   checkIsPlusUser: async (...args: unknown[]): Promise<boolean> =>
@@ -35,22 +36,6 @@ jest.mock("@/LLMProviders/brevilabsClient", () => {
     BrevilabsClient: { getInstance: () => ({ broca: mockBroca }) },
   };
 });
-jest.mock("@/components/modals/TagSuggestionModal", () => ({
-  TagSuggestionModal: jest
-    .fn()
-    .mockImplementation(
-      (
-        app: App,
-        suggestions: RankedTagSuggestion[],
-        onChoose: (tag: string) => void | Promise<void>
-      ) => {
-        chooseTag = onChoose;
-        mockModal(app, suggestions, onChoose);
-        return { open: mockModalOpen };
-      }
-    ),
-}));
-
 import { BrevilabsApiError } from "@/LLMProviders/brevilabsClient";
 import { suggestTagsForCurrentNote } from "@/tagSuggestions/tagSuggestionCommand";
 import { CachedMetadata, Notice, TFile } from "obsidian";
@@ -114,14 +99,17 @@ describe("tagSuggestionCommand", () => {
     beforeEach(() => {
       jest.clearAllMocks();
       chooseTag = undefined;
+      mockRowShow.mockImplementation((_file, _suggestions, onChoose) => {
+        chooseTag = onChoose;
+      });
       mockCheckIsPlusUser.mockResolvedValue(true);
       mockBroca.mockResolvedValue({ t0: { noul: 0.85 } });
     });
 
-    it("shows a ranked modal and writes the selected tag", async () => {
+    it("shows a ranked suggestion row and writes the selected tag", async () => {
       const { app, frontmatter } = createApp();
 
-      await suggestTagsForCurrentNote(app);
+      await suggestTagsForCurrentNote(app, suggestionRow);
 
       const [state, questions] = mockBroca.mock.calls[0] as [
         TagSuggestionState,
@@ -129,21 +117,30 @@ describe("tagSuggestionCommand", () => {
       ];
       expect(state).toMatchObject({ title: "Active", existing_tags: ["existing"] });
       expect(questions.t0).toMatchObject({ type: "noul" });
-      expect(mockModal).toHaveBeenCalledWith(
-        app,
+      expect(mockRowShow).toHaveBeenCalledWith(
+        app.workspace.getActiveFile(),
         [{ tag: "research", score: 0.85 }],
         expect.any(Function)
       );
-      expect(mockModalOpen).toHaveBeenCalled();
       expect(mockLogInfo).toHaveBeenCalledTimes(1);
       expect(mockLogInfo).toHaveBeenCalledWith("[Tag suggestion judgments]", [
         { tag: "research", noul: 0.85, rank: 1 },
       ]);
 
-      await chooseTag?.("research");
+      await expect(chooseTag?.("research")).resolves.toBe(true);
 
       expect(frontmatter.tags).toEqual(["research"]);
       expect(Notice).toHaveBeenCalledWith("Added #research");
+    });
+
+    it("reports a failed tag write so the suggestion row can restore the pill (https://github.com/Brevilabs/obsidian-copilot-private/issues/492)", async () => {
+      const { app } = createApp();
+      jest.mocked(app.fileManager.processFrontMatter).mockRejectedValue(new Error("write failed"));
+      await suggestTagsForCurrentNote(app, suggestionRow);
+
+      await expect(chooseTag?.("research")).resolves.toBe(false);
+
+      expect(Notice).toHaveBeenCalledWith("Couldn’t add that tag. Try again.");
     });
 
     it("logs one entry containing only the ten suggestions shown", async () => {
@@ -154,9 +151,9 @@ describe("tagSuggestionCommand", () => {
         )
       );
 
-      await suggestTagsForCurrentNote(app);
+      await suggestTagsForCurrentNote(app, suggestionRow);
 
-      const suggestions = mockModal.mock.calls[0][1];
+      const suggestions = mockRowShow.mock.calls[0][1];
       const judgments = mockLogInfo.mock.calls[0][1] as Array<{
         tag: string;
         noul: number;
@@ -171,7 +168,7 @@ describe("tagSuggestionCommand", () => {
     it("does not call Jev without an active Markdown note (https://github.com/Brevilabs/obsidian-copilot-private/issues/492)", async () => {
       const { app } = createApp(null);
 
-      await suggestTagsForCurrentNote(app);
+      await suggestTagsForCurrentNote(app, suggestionRow);
 
       expect(mockBroca).not.toHaveBeenCalled();
       expect(Notice).toHaveBeenCalledWith("Open a Markdown note before suggesting tags.");
@@ -181,7 +178,7 @@ describe("tagSuggestionCommand", () => {
       mockCheckIsPlusUser.mockResolvedValue(false);
       const { app } = createApp();
 
-      await suggestTagsForCurrentNote(app);
+      await suggestTagsForCurrentNote(app, suggestionRow);
 
       expect(mockCheckIsPlusUser).toHaveBeenCalledWith(app, "tool_call");
       expect(app.vault.cachedRead).not.toHaveBeenCalled();
@@ -197,7 +194,7 @@ describe("tagSuggestionCommand", () => {
       const active = app.workspace.getActiveFile();
       jest.mocked(app.vault.getMarkdownFiles).mockReturnValue(active ? [active] : []);
 
-      await suggestTagsForCurrentNote(app);
+      await suggestTagsForCurrentNote(app, suggestionRow);
 
       expect(mockBroca).not.toHaveBeenCalled();
       expect(Notice).toHaveBeenCalledWith("This vault has no other tags to suggest for this note.");
@@ -214,7 +211,7 @@ describe("tagSuggestionCommand", () => {
         mockBroca.mockRejectedValue(new BrevilabsApiError("failed", status));
         const { app } = createApp();
 
-        await suggestTagsForCurrentNote(app);
+        await suggestTagsForCurrentNote(app, suggestionRow);
 
         expect(Notice).toHaveBeenCalledWith(expected);
         expect(loadingNotice()?.hide).toHaveBeenCalled();
@@ -225,7 +222,7 @@ describe("tagSuggestionCommand", () => {
       mockBroca.mockRejectedValue(new Error("offline"));
       const { app } = createApp();
 
-      await suggestTagsForCurrentNote(app);
+      await suggestTagsForCurrentNote(app, suggestionRow);
 
       expect(Notice).toHaveBeenCalledWith(
         "Couldn’t suggest tags. Check your connection and try again."

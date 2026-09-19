@@ -1071,3 +1071,38 @@ If your plugin does not need CSS, delete this file.
 .copilot-fade-mask-bottom {
   background: linear-gradient(to top, var(--background-primary), transparent);
 }
+
+/* This plain-DOM row extends Obsidian's Properties UI outside React. */
+.copilot-tag-suggestion-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--size-2-2);
+  padding: var(--size-2-2) var(--size-4-2);
+}
+
+.copilot-tag-suggestion-pill {
+  appearance: none;
+  background: var(--background-modifier-hover);
+  border-style: dashed;
+  color: var(--text-normal);
+  cursor: pointer;
+  font: inherit;
+  opacity: 0.5;
+}
+
+.copilot-tag-suggestion-pill:hover,
+.copilot-tag-suggestion-pill:focus-visible {
+  opacity: 1;
+}
+
+.copilot-tag-suggestion-close {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: var(--text-muted);
+  cursor: pointer;
+  font: inherit;
+  margin-inline-start: auto;
+  padding: var(--size-2-1);
+}
