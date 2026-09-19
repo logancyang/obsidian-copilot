@@ -94,7 +94,7 @@ The selected model is only one possible route. A feature may call another servic
 - In **Agent Chat**, **Miyo document processing** runs through the local Miyo CLI, so PDF and EPUB parsing stays on this computer even when search uses a remote Miyo server.
 - In **Quick Chat**, **Miyo document processing** uses the connected Miyo service. A configured remote Miyo server processes the document there rather than on this computer.
 - Saved **project context** that needs web, YouTube, or binary-file conversion can use Copilot's hosted project service. The Miyo Document Processor choice does not change that project route.
-- **Suggest tags for current note** sends the active note's title, folder, tags, aliases, headings, and an excerpt, plus candidate tags' names, use counts, and up to four example note titles, to Brevilabs only when you run the command.
+- **Suggest tags for current note** sends the active note's title, file path, folder and times, tags, aliases, other frontmatter properties, headings, an excerpt, and linked-note titles and tag counts, plus candidate tags' names, use counts, dates, relationship counts, and up to four example note paths with created dates, to Brevilabs only when you run the command.
 - An agent can read a local note and include relevant text in the prompt sent to the selected model. Opening Agent Chat alone does not upload the whole vault.
 
 For a workflow that does not send task content to Brevilabs, use direct Markdown context, local tools or local Miyo, and a local model. Disable Copilot's cloud-backed Skills for every agent you use. Do not add web pages, YouTube links, or binary files as saved project context when their hosted conversion is outside your intended boundary.

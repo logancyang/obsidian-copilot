@@ -4,7 +4,11 @@ import { App, CachedMetadata, parseFrontMatterAliases, TFile } from "obsidian";
 
 const EXCERPT_CHARS = 1500;
 const EVIDENCE_TITLES = 4;
-const TITLE_CHARS = 60;
+const EVIDENCE_PATH_CHARS = 80;
+const PROPERTY_VALUE_CHARS = 80;
+const MAX_PROPERTIES = 20;
+const MAX_LINKS = 10;
+const MAX_NEIGHBOR_TAGS = 20;
 const REQUEST_TOKEN_BUDGET = 28_000;
 const REQUEST_BODY_BYTES = 256 * 1024;
 const MAX_CANDIDATES = 600;
@@ -14,9 +18,16 @@ const HEX_COLOUR_TAG = /^(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
 
 export interface TagSuggestionState {
   title: string;
+  path: string;
   folder: string;
+  created: string;
+  modified: string;
   existing_tags: string[];
   aliases?: string[];
+  properties?: Record<string, FrontmatterValue>;
+  links_out?: string[];
+  links_in?: string[];
+  neighbor_tags?: NeighborTag[];
   content?: string;
   headings?: string[];
   excerpt?: string;
@@ -27,9 +38,26 @@ export interface TagCandidate {
   key: string;
   tag: string;
   count: number;
-  titles: string[];
+  firstUsed: string;
+  lastUsed: string;
+  sameFolder: number;
+  sharedTags: number;
+  examples: TagExample[];
   prior: number;
 }
+
+export interface TagExample {
+  path: string;
+  created: string;
+}
+
+export interface NeighborTag {
+  tag: string;
+  count: number;
+}
+
+type FrontmatterScalar = string | number | boolean | null;
+type FrontmatterValue = FrontmatterScalar | FrontmatterScalar[];
 
 export interface NoulQuestion {
   type: "noul";
@@ -54,14 +82,44 @@ export interface RankedTagSuggestion {
 
 interface IndexedNote {
   path: string;
-  title: string;
   folder: string;
-  mtime: number;
+  ctime: number;
   tags: Map<string, string>;
 }
 
 function clip(value: string, max: number): string {
   return value.length > max ? `${value.slice(0, max - 1).trimEnd()}…` : value;
+}
+
+function formatLocalDate(timestamp: number, includeTime = false): string {
+  const date = new Date(timestamp);
+  const pad = (value: number) => String(value).padStart(2, "0");
+  const day = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+  return includeTime ? `${day} ${pad(date.getHours())}:${pad(date.getMinutes())}` : day;
+}
+
+function frontmatterProperties(
+  frontmatter: Record<string, unknown> | undefined
+): Record<string, FrontmatterValue> {
+  const properties: Record<string, FrontmatterValue> = {};
+  const excluded = new Set(["tags", "tag", "aliases", "alias", "position"]);
+  const scalar = (value: unknown): value is FrontmatterScalar =>
+    value === null || ["string", "number", "boolean"].includes(typeof value);
+  const clipped = (value: FrontmatterScalar): FrontmatterScalar =>
+    typeof value === "string" ? clip(value, PROPERTY_VALUE_CHARS) : value;
+
+  // The Jev proxy needs useful metadata, not Obsidian's structural fields or
+  // unbounded nested YAML. https://github.com/Brevilabs/obsidian-copilot-private/issues/492
+  for (const [key, value] of Object.entries(frontmatter ?? {})) {
+    if (Object.keys(properties).length >= MAX_PROPERTIES) break;
+    if (excluded.has(key)) continue;
+    if (scalar(value)) {
+      properties[key] = clipped(value);
+    } else if (Array.isArray(value) && value.every(scalar)) {
+      properties[key] = value.map(clipped);
+    }
+  }
+  return properties;
 }
 
 function stringList(value: unknown, splitTags = false): string[] {
@@ -94,7 +152,49 @@ function stripCode(value: string): string {
     .replace(/`[^`\n]*`/g, " ");
 }
 
+function linkedNoteContext(
+  app: App,
+  file: TFile,
+  existingTagKeys: ReadonlySet<string>
+): Pick<TagSuggestionState, "links_out" | "links_in" | "neighbor_tags"> {
+  const filesByPath = new Map(app.vault.getMarkdownFiles().map((note) => [note.path, note]));
+  const resolvedLinks = app.metadataCache.resolvedLinks ?? {};
+  const validPaths = (paths: string[]) =>
+    Array.from(new Set(paths))
+      .filter((path) => filesByPath.has(path))
+      .sort((first, second) => first.localeCompare(second));
+  const allLinksOut = validPaths(Object.keys(resolvedLinks[file.path] ?? {}));
+  const allLinksIn = validPaths(
+    Object.entries(resolvedLinks)
+      .filter(([, destinations]) => file.path in destinations)
+      .map(([source]) => source)
+  );
+  const linksOut = allLinksOut.slice(0, MAX_LINKS);
+  const linksIn = allLinksIn.slice(0, MAX_LINKS);
+  const neighborPaths = new Set([...allLinksOut, ...allLinksIn]);
+  const neighborTags = new Map<string, NeighborTag>();
+  for (const path of neighborPaths) {
+    const note = filesByPath.get(path);
+    if (!note) continue;
+    for (const [key, tag] of tagsFromCache(app.metadataCache.getFileCache(note))) {
+      if (existingTagKeys.has(key)) continue;
+      const entry = neighborTags.get(key) ?? { tag, count: 0 };
+      entry.count++;
+      neighborTags.set(key, entry);
+    }
+  }
+  const result: Pick<TagSuggestionState, "links_out" | "links_in" | "neighbor_tags"> = {};
+  if (linksOut.length) result.links_out = linksOut.map((path) => filesByPath.get(path)!.basename);
+  if (linksIn.length) result.links_in = linksIn.map((path) => filesByPath.get(path)!.basename);
+  const rankedTags = Array.from(neighborTags.values())
+    .sort((first, second) => second.count - first.count || first.tag.localeCompare(second.tag))
+    .slice(0, MAX_NEIGHBOR_TAGS);
+  if (rankedTags.length) result.neighbor_tags = rankedTags;
+  return result;
+}
+
 export function buildTagSuggestionState(
+  app: App,
   file: TFile,
   rawContent: string,
   cache: CachedMetadata | null
@@ -103,11 +203,20 @@ export function buildTagSuggestionState(
   const existingTags = Array.from(tagsFromCache(cache).values());
   const state: TagSuggestionState = {
     title: file.basename,
+    path: file.path,
     folder: file.parent?.path ?? "",
+    created: formatLocalDate(file.stat.ctime, true),
+    modified: formatLocalDate(file.stat.mtime, true),
     existing_tags: existingTags,
   };
   const aliases = parseFrontMatterAliases(cache?.frontmatter) ?? [];
   if (aliases.length) state.aliases = aliases;
+  const properties = frontmatterProperties(cache?.frontmatter);
+  if (Object.keys(properties).length) state.properties = properties;
+  Object.assign(
+    state,
+    linkedNoteContext(app, file, new Set(existingTags.map((tag) => tag.toLowerCase())))
+  );
 
   if (body.length <= EXCERPT_CHARS) {
     state.content = body.trim();
@@ -138,9 +247,8 @@ export function collectTagCandidates(
 ): TagCandidate[] {
   const notes: IndexedNote[] = app.vault.getMarkdownFiles().map((file) => ({
     path: file.path,
-    title: file.basename,
     folder: file.parent?.path ?? "",
-    mtime: file.stat.mtime,
+    ctime: file.stat.ctime,
     tags: tagsFromCache(app.metadataCache.getFileCache(file)),
   }));
   const active = notes.find((note) => note.path === activeFile.path);
@@ -153,11 +261,8 @@ export function collectTagCandidates(
       index.set(key, entry);
     }
   }
-  for (const entry of index.values()) {
-    entry.notes.sort((first, second) => second.mtime - first.mtime);
-  }
-
   const activeFolder = active?.folder ?? activeFile.parent?.path ?? "";
+  const activeCreated = active?.ctime ?? activeFile.stat.ctime;
   const text = `${activeFile.basename} ${stripFrontmatter(activeContent)}`.toLowerCase();
   const candidates: TagCandidate[] = [];
   for (const [key, entry] of index) {
@@ -184,7 +289,22 @@ export function collectTagCandidates(
       key,
       tag: entry.tag,
       count: users.length,
-      titles: users.map((note) => note.title),
+      firstUsed: formatLocalDate(Math.min(...users.map((note) => note.ctime))),
+      lastUsed: formatLocalDate(Math.max(...users.map((note) => note.ctime))),
+      sameFolder,
+      sharedTags: cooccurrence,
+      examples: [...users]
+        .sort(
+          (first, second) =>
+            Number(second.folder === activeFolder) - Number(first.folder === activeFolder) ||
+            Math.abs(first.ctime - activeCreated) - Math.abs(second.ctime - activeCreated) ||
+            first.path.localeCompare(second.path)
+        )
+        .slice(0, EVIDENCE_TITLES)
+        .map((note) => ({
+          path: clip(note.path, EVIDENCE_PATH_CHARS),
+          created: formatLocalDate(note.ctime),
+        })),
       prior,
     });
   }
@@ -195,13 +315,23 @@ export function collectTagCandidates(
 }
 
 export function buildEvidenceQuestion(candidate: TagCandidate): NoulQuestion {
-  const titles = candidate.titles
+  const relationships = [
+    candidate.sameFolder
+      ? `${candidate.sameFolder} of them ${candidate.sameFolder === 1 ? "is" : "are"} in this note's folder`
+      : "",
+    candidate.sharedTags
+      ? `${candidate.sharedTags} share${candidate.sharedTags === 1 ? "s" : ""} a tag with this note`
+      : "",
+  ].filter(Boolean);
+  const examples = candidate.examples
     .slice(0, EVIDENCE_TITLES)
-    .map((title) => clip(title, TITLE_CHARS))
+    .map(({ path, created }) => `${clip(path, EVIDENCE_PATH_CHARS)} (created ${created})`)
     .join("; ");
+  const relationshipSentence = relationships.length ? ` ${relationships.join(" and ")}.` : "";
+  const exampleSentence = examples ? ` Examples: ${examples}.` : "";
   return {
     type: "noul",
-    instructions: `Should this note be tagged "#${candidate.tag}"? In this vault "#${candidate.tag}" is used on ${candidate.count} note${candidate.count === 1 ? "" : "s"}, such as: ${titles}.`,
+    instructions: `Should this note be tagged "#${candidate.tag}"? In this vault "#${candidate.tag}" is used on ${candidate.count} note${candidate.count === 1 ? "" : "s"}, first on ${candidate.firstUsed} and most recently on ${candidate.lastUsed}.${relationshipSentence}${exampleSentence}`,
   };
 }
 

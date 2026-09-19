@@ -60,7 +60,7 @@ function note(path: string, mtime: number): TFile {
   const value = new TFileConstructor(path);
   Object.assign(value, {
     parent: { path: path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "" },
-    stat: { mtime },
+    stat: { mtime, ctime: mtime },
   });
   return value;
 }
@@ -89,7 +89,10 @@ function createApp(active: TFile | null = note("Projects/Active.md", 20), candid
       getMarkdownFiles: jest.fn(() => (active ? [active, ...others] : others)),
       cachedRead: jest.fn().mockResolvedValue("Active note body"),
     },
-    metadataCache: { getFileCache: jest.fn((file: TFile) => caches.get(file) ?? null) },
+    metadataCache: {
+      getFileCache: jest.fn((file: TFile) => caches.get(file) ?? null),
+      resolvedLinks: {},
+    },
     fileManager: {
       processFrontMatter: jest.fn(
         async (_file: TFile, update: (value: Record<string, unknown>) => void) =>

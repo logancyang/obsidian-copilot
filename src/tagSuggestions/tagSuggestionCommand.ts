@@ -38,7 +38,7 @@ export async function suggestTagsForCurrentNote(app: App): Promise<void> {
       new Notice("This vault has no other tags to suggest for this note.");
       return;
     }
-    const state = buildTagSuggestionState(file, content, app.metadataCache.getFileCache(file));
+    const state = buildTagSuggestionState(app, file, content, app.metadataCache.getFileCache(file));
     const requests = packTagSuggestionRequests(state, candidates, getSettings().userId);
     const client = BrevilabsClient.getInstance();
     const responses = await Promise.all(
