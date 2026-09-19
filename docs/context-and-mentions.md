@@ -37,6 +37,8 @@ To attach an excerpt from a note:
 2. Run **Add selection to chat context** from the command palette.
 3. Review the removable selection badge before sending.
 
+The manual selection command is available from the command palette or an assigned hotkey. The editor's Copilot menu contains Quick Ask, quick commands, and custom commands.
+
 For text selected in the Web Viewer, run **Add web selection to chat context**. Copilot sends the selected excerpt instead of also attaching the full active web tab.
 
 Selected text in note editors is automatically added to chat context. On desktop, this also works with Web Viewer selections. Review or remove the selection badge before sending.
