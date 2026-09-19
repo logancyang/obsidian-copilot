@@ -88,6 +88,14 @@ interface ModelSelectorProps {
    * authentication and `_disabledReason` is the only availability gate.
    */
   apiKeySettings?: Readonly<ModelApiKeySettings>;
+  /**
+   * Portal host for the dropdown. Pass an element from the caller's own tree
+   * so the menu mounts in the document the picker lives in; the default
+   * (`activeDocument.body`) tracks window focus, not component ownership, and
+   * goes stale when the picker re-renders while another Obsidian window is
+   * focused. https://github.com/Brevilabs/obsidian-copilot-private/issues/153
+   */
+  container?: HTMLElement | null;
 }
 
 export function ModelSelector({
@@ -99,6 +107,7 @@ export function ModelSelector({
   onChange,
   models,
   apiKeySettings,
+  container,
 }: ModelSelectorProps) {
   const [modelError, setModelError] = useState<string | null>(null);
 
@@ -137,7 +146,11 @@ export function ModelSelector({
         </Button>
       </DropdownMenuTrigger>
 
-      <DropdownMenuContent align="start" className="tw-max-h-64 tw-overflow-y-auto">
+      <DropdownMenuContent
+        align="start"
+        className="tw-max-h-64 tw-overflow-y-auto"
+        container={container}
+      >
         {visible.map((model) => {
           const disabledReason = model._disabledReason;
           const hasApiKey = apiKeySettings

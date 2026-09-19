@@ -235,6 +235,26 @@ describe("ProviderRegistry", () => {
         await registry.setApiKey(id, "sk-live");
         expect(await registry.getApiKey(id)).toBe("sk-live");
       });
+
+      it("re-issues the row with a fresh identity when a rotation reuses the pointer, so live keychain reads re-run (https://github.com/Brevilabs/obsidian-copilot-private/issues/210)", async () => {
+        const id = await registry.add({
+          providerType: "anthropic",
+          displayName: "A",
+          origin: { kind: "byok" },
+        });
+        await registry.setApiKey(id, "sk-first");
+        const rowBefore = registry.get(id)!;
+
+        await registry.setApiKey(id, "sk-rotated");
+
+        // Content is untouched: a rotation reuses the pointer, so settings
+        // carry no evidence the key changed. Only the row's identity moves,
+        // and that is what makes keychain-reading consumers re-run.
+        const rowAfter = registry.get(id)!;
+        expect(rowAfter).toEqual(rowBefore);
+        expect(rowAfter).not.toBe(rowBefore);
+        expect(await registry.getApiKey(id)).toBe("sk-rotated");
+      });
     });
 
     describe("getApiKey()", () => {
@@ -362,6 +382,29 @@ describe("ProviderRegistry", () => {
         await registry.setApiKey(id, "old-key");
         KeychainService.getInstance(app).deleteSecretById(registry.get(id)!.apiKeyKeychainId!);
         expect(await registry.verify(id)).toMatchObject({ ok: false, code: "missing_api_key" });
+      });
+    });
+
+    describe("notifyCredentialStoreChanged()", () => {
+      it("announces an external credential wipe once per affected provider (https://github.com/Brevilabs/obsidian-copilot-private/issues/210)", async () => {
+        const first = await registry.add({
+          providerType: "anthropic",
+          displayName: "A",
+          origin: { kind: "byok" },
+        });
+        const second = await registry.add({
+          providerType: "anthropic",
+          displayName: "B",
+          origin: { kind: "byok" },
+        });
+        const listener = jest.fn();
+        registry.subscribe(listener);
+
+        // Subscribers resolve the row by id and ignore ids they do not serve,
+        // so a sweep must name every provider it touched; duplicates collapse.
+        registry.notifyCredentialStoreChanged([first, second, first]);
+
+        expect(listener.mock.calls).toEqual([[first], [second]]);
       });
     });
 

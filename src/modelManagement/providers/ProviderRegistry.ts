@@ -91,6 +91,27 @@ export class ProviderRegistry {
     return () => this.#listeners.delete(listener);
   }
 
+  /**
+   * Notify subscribers after provider credentials were mutated outside this
+   * registry (e.g. the "Delete All Keys" keychain sweep). Subprocess agent
+   * backends bake provider keys into their spawn config and only re-read it on
+   * a registry emission, so an external credential wipe must be announced here
+   * or a running backend keeps serving requests with the deleted key. Emits
+   * once per provider because subscribers resolve the row by id and ignore ids
+   * they do not serve — a single anonymous signal would be filtered out. Call
+   * only after the credential-store operation and its in-memory settings
+   * projection have settled, so consumers read final state.
+   * https://github.com/Brevilabs/obsidian-copilot-private/issues/210
+   *
+   * @param providerIds - Providers whose stored credential may have changed;
+   *   duplicates are collapsed.
+   */
+  notifyCredentialStoreChanged(providerIds: readonly string[]): void {
+    for (const providerId of new Set(providerIds)) {
+      this.#emit(providerId);
+    }
+  }
+
   #emit(providerId: string): void {
     for (const listener of [...this.#listeners]) {
       try {
@@ -298,7 +319,28 @@ export class ProviderRegistry {
       this.#setApiKeyKeychainId(providerId, keychainId);
     }
     keychain.setSecretById(keychainId, apiKey);
+    if (row.apiKeyKeychainId === keychainId) {
+      // Reason: a same-pointer rewrite (e.g. re-entering a key after Delete
+      // All Keys tombstoned the entry) changes only the keychain, which
+      // settings subscribers cannot see. Consumers that ask whether a key is
+      // present read the keychain live and only re-run when the row identity
+      // changes, so refresh the row — same content, new reference — or they
+      // would report "no key" until restart.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/210
+      this.#touchProviderRow(providerId);
+    }
     this.#emit(providerId);
+  }
+
+  /** Internal: re-issue a provider row with a fresh identity so settings
+   *  subscribers (and the derived picker atoms) re-run keychain-backed
+   *  reads. No fields change. */
+  #touchProviderRow(providerId: string): void {
+    setSettings((cur) => {
+      const current = cur.providers[providerId];
+      if (!current) return {};
+      return { providers: { ...cur.providers, [providerId]: { ...current } } };
+    });
   }
 
   /** Drops the keychain entry and clears `apiKeyKeychainId` on the row. */

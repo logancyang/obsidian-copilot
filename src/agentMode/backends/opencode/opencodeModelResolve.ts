@@ -4,9 +4,11 @@ import type { CopilotSettings } from "@/settings/model";
 import type { ConfiguredModel, Provider } from "@/modelManagement";
 import {
   capabilitiesFromConfiguredInfo,
+  providerHasApiKey,
   providerNeedsSelfHostWarning,
-  providerRequiresApiKey,
+  providerNeedsResolvedApiKey,
 } from "@/modelManagement";
+import { KeychainService } from "@/services/keychainService";
 import type { EnabledModelCredentialState, EnabledModelEntry } from "@/agentMode/session/types";
 
 export interface OpencodeProviderMapping {
@@ -108,15 +110,35 @@ export function opencodeWireBaseIdFor(
 }
 
 /**
- * Credential health for an enabled opencode model, derived purely from the
- * persisted provider row (sync — no keychain read). Native (agent-hosted)
- * providers carry their own auth, so they're always `ok`. Otherwise a
- * required-key provider with no key reads `missing_key`.
+ * Credential health for an enabled opencode model. Native (agent-hosted)
+ * providers carry their own auth, so they're always `ok`. Otherwise a provider
+ * the runtime must resolve a credential for — which includes an optional-auth
+ * row that still owns a keychain pointer — reads `missing_key` when the key is
+ * absent from this device's keychain. Presence is `hasKey`'s live local read,
+ * never the synced `apiKeyKeychainId` pointer (see the note on that field).
+ * https://github.com/Brevilabs/obsidian-copilot-private/issues/210
  */
-function credentialStateFor(provider: Provider, native: boolean): EnabledModelCredentialState {
+function credentialStateFor(
+  provider: Provider,
+  native: boolean,
+  hasKey: (provider: Provider) => boolean
+): EnabledModelCredentialState {
   if (native) return "ok";
-  if (providerRequiresApiKey(provider) && !provider.apiKeyKeychainId) return "missing_key";
+  if (providerNeedsResolvedApiKey(provider) && !hasKey(provider)) return "missing_key";
   return "ok";
+}
+
+/**
+ * Default presence probe: live read against this device's keychain.
+ *
+ * Relies on plugin startup having initialized `KeychainService` before any
+ * model resolution runs — the same contract `loadSettingsWithKeychain` uses.
+ * Keychain read failures are absorbed by `providerHasApiKey`; a missing
+ * service is a wiring error and must surface rather than be reported as
+ * "user has no key".
+ */
+function defaultHasKey(provider: Provider): boolean {
+  return providerHasApiKey(provider, KeychainService.getInstance());
 }
 
 /**
@@ -128,7 +150,8 @@ function credentialStateFor(provider: Provider, native: boolean): EnabledModelCr
  * via `opencodeWireBaseId`; unroutable / missing entries are skipped.
  */
 export function opencodeEnabledModelEntries(
-  settings: CopilotSettings
+  settings: CopilotSettings,
+  hasKey: (provider: Provider) => boolean = defaultHasKey
 ): readonly EnabledModelEntry[] {
   const enabledIds = settings.backends.opencode?.enabledModels ?? [];
   if (enabledIds.length === 0) return EMPTY_ENABLED_ENTRIES;
@@ -152,7 +175,7 @@ export function opencodeEnabledModelEntries(
       baseModelId,
       name: configuredModel.info.displayName || configuredModel.info.id,
       description: configuredModel.info.description,
-      credentialState: credentialStateFor(provider, mapping.native),
+      credentialState: credentialStateFor(provider, mapping.native, hasKey),
       isFree: isOpencodeZenWireId(baseModelId),
       capabilities: capabilitiesFromConfiguredInfo(configuredModel.info),
       needsSelfHostWarning: providerNeedsSelfHostWarning(provider, settings),

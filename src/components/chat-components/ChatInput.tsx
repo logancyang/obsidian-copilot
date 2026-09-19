@@ -258,7 +258,26 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
   const [contextUrls, setContextUrls] = useState<string[]>(initialContext?.urls || []);
   const [contextFolders, setContextFolders] = useState<string[]>(initialContext?.folders || []);
   const [contextWebTabs, setContextWebTabs] = useState<WebTabContext[]>([]);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  // Portal host for the pickers: this pane's OWN document body. The wrapper
+  // default is `activeDocument.body`, which tracks window focus rather than
+  // component ownership, so a re-render while the Settings window is focused
+  // pins the menus to a body that is destroyed when Settings closes.
+  //
+  // The body, not this component's root: the root carries `@container`, and a
+  // container query makes the element a containing block for fixed-position
+  // descendants, so the menu's viewport-relative offsets would resolve against
+  // the composer box and land off-screen.
+  //
+  // Held in state rather than read from the ref because the first render
+  // passes before the ref attaches and a ref attachment alone never
+  // re-renders; the state write on attach refreshes all three picker props.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/153
+  const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(null);
+  const setContainerEl = useCallback((el: HTMLDivElement | null) => {
+    containerRef.current = el;
+    setPortalContainer(el?.doc.body ?? null);
+  }, []);
   const lexicalEditorRef = useRef<LexicalEditorType | null>(null);
   const [currentModelKey, setCurrentModelKey] = useModelKey();
   const settings = useSettingsValue();
@@ -763,7 +782,7 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
         modePickerOverride?.value === "auto" &&
           "tw-shadow-[0_0_10px_rgba(var(--color-red-rgb),0.18)] tw-border-red/60"
       )}
-      ref={containerRef}
+      ref={setContainerEl}
     >
       {/* Two columns: the content stack, and (when provided) a structural
           accessory column. A column, not an overlay, so badges, images,
@@ -873,6 +892,13 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
               lexicalEditorRef={lexicalEditorRef}
             />
           )}
+          {/* All three pickers portal into this pane's own tree via
+              `containerRef`. The wrappers' default host (`activeDocument.body`)
+              tracks window focus, not component ownership: a settings change
+              re-renders this pane while the settings window is focused, the
+              stale host is captured, and once that window closes the menus
+              open into a destroyed document — trigger toggles, nothing shows.
+              https://github.com/Brevilabs/obsidian-copilot-private/issues/153 */}
           {modelPickerOverride?.effortOptionsByModelKey && modelPickerOverride.commitSelection ? (
             // Agent Mode: always use the merged picker, even when the active
             // model has no effort dimension — the user can still switch to
@@ -887,6 +913,7 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
                 commitSelection: modelPickerOverride.commitSelection,
               }}
               className="tw-min-w-0 tw-max-w-full tw-truncate"
+              container={portalContainer}
             />
           ) : (
             <ModelSelector
@@ -898,13 +925,16 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
               apiKeySettings={modelPickerOverride ? undefined : settings}
               onChange={modelPickerOverride?.onChange ?? setCurrentModelKey}
               className="tw-min-w-0 tw-max-w-full tw-truncate"
+              container={portalContainer}
             />
           )}
         </div>
 
         <div className="tw-flex tw-items-center tw-gap-1">
           {!isGenerating && toolControls}
-          {modePickerOverride && <ModePicker override={modePickerOverride} />}
+          {modePickerOverride && (
+            <ModePicker override={modePickerOverride} container={portalContainer} />
+          )}
           {isGenerating ? (
             <Button
               size="icon"

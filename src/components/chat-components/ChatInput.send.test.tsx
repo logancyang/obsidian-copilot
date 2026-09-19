@@ -9,7 +9,15 @@ jest.mock("@/aiParams", () => ({
 jest.mock("@/settings/model", () => ({
   useSettingsValue: jest.fn().mockReturnValue({ activeModels: [] }),
 }));
-jest.mock("@/components/ui/ModelSelector", () => ({ ModelSelector: () => null }));
+// Records the portal host ChatInput hands its pickers; the menu itself is not
+// rendered here (layout is untestable under jsdom), only the host choice.
+const pickerContainers: (HTMLElement | null | undefined)[] = [];
+jest.mock("@/components/ui/ModelSelector", () => ({
+  ModelSelector: ({ container }: { container?: HTMLElement | null }) => {
+    pickerContainers.push(container);
+    return null;
+  },
+}));
 jest.mock("@/components/chat-components/ContextControl", () => ({ ContextControl: () => null }));
 jest.mock("@/components/chat-components/AddContextButton", () => ({
   AddContextButton: () => null,
@@ -54,6 +62,23 @@ describe("ChatInput", () => {
   afterAll(() => {
     URL.createObjectURL = createObjectURL;
   });
+  describe("ChatInput()", () => {
+    it("hands the pickers this pane's document body, not the composer root (https://github.com/Brevilabs/obsidian-copilot-private/issues/153)", () => {
+      // The composer root carries `@container`, and a container query makes an
+      // element a containing block for fixed-position descendants — mounting
+      // the menu there resolves Radix's viewport offsets against the composer
+      // box and puts the menu off-screen. The body of the pane's own document
+      // keeps the menu positioned correctly while still following the
+      // component rather than whichever Obsidian window holds focus.
+      pickerContainers.length = 0;
+      render(composer("", []).node);
+
+      const host = pickerContainers.at(-1);
+      expect(host).toBe(document.body);
+      expect(host?.className).not.toMatch(/@container/);
+    });
+  });
+
   describe("onSendMessage()", () => {
     it.each(["", "   ", "Describe this"])(
       "enables Send with an image and draft %p https://github.com/logancyang/obsidian-copilot/issues/2850",
