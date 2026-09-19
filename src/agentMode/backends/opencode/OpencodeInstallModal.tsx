@@ -17,7 +17,7 @@ import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { formatBinaryPathForDisplay } from "@/utils/binaryPath";
 import { formatBytes } from "@/utils/formatBytes";
 import { OPENCODE_PINNED_VERSION } from "@/agentMode/backends/opencode/ui/opencodeVersion";
-import { logError } from "@/logger";
+import { logError, logWarn } from "@/logger";
 import { useSettingsValue } from "@/settings/model";
 import { App, Notice } from "obsidian";
 import React from "react";
@@ -53,15 +53,10 @@ const runningState = (e: ProgressEvent | null): OpencodeRunState => {
   }
 };
 
-const errorState = (err: unknown): OpencodeRunState => ({
-  kind: "error",
-  message: err instanceof Error ? err.message : String(err),
-});
-
 /**
  * Stateful half of the opencode Configure dialog: the only place that reads
- * settings, drives the binary manager, owns the install/upgrade progress
- * machines, and raises notices. Everything it computes is handed to
+ * settings, drives the binary manager, formats its run state for display, and
+ * raises notices. Everything it computes is handed to
  * {@link OpencodeConfigView} as plain data. Exported so tests can drive the
  * container directly against the settings store and a mocked manager.
  */
@@ -92,29 +87,27 @@ export const OpencodeConfigContainer: React.FC<{
     manager.getRuntimeState,
     manager.getRuntimeState
   );
-  const [upgradeRun, setUpgradeRun] = React.useState<OpencodeRunState>({ kind: "idle" });
-
-  /**
-   * Drop the last upgrade's outcome, because the binary it described has just
-   * been replaced. Called on the success of every operation that changes which
-   * binary is in play — never before one, since an operation that fails leaves
-   * that outcome as true as it was, and the strip is the only place it is shown.
-   */
-  const forgetUpgradeOutcome = React.useCallback(() => setUpgradeRun({ kind: "idle" }), []);
-  // Only installs support cancellation; other manager operations must not show
-  // a Cancel button. Shared progress stays visible regardless of local outcomes.
-  const installRun: OpencodeRunState =
+  // Use manager state across dialog reopenings; path-validation errors belong to the path field.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/480
+  const sharedRun: OpencodeRunState =
     runtime.kind === "installing"
       ? runningState(runtime.progress)
-      : runtime.kind === "error"
+      : runtime.kind === "error" && runtime.operation === "install"
         ? { kind: "error", message: runtime.message }
         : { kind: "idle" };
+
+  // Refresh the version after external upgrades.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/480
+  React.useEffect(() => {
+    manager
+      .revalidateCustomBinary()
+      .catch((e: unknown) => logWarn("[AgentMode] opencode revalidation failed", e));
+  }, [manager]);
 
   const install = React.useCallback(() => {
     manager
       .install()
       .then(({ version }) => {
-        forgetUpgradeOutcome();
         new Notice(`opencode v${version} installed.`);
       })
       .catch((err: unknown) => {
@@ -130,7 +123,7 @@ export const OpencodeConfigContainer: React.FC<{
         }
         logError("[AgentMode] opencode install failed", err);
       });
-  }, [manager, forgetUpgradeOutcome]);
+  }, [manager]);
 
   const cancelInstall = React.useCallback(() => manager.cancelCurrentOperation(), [manager]);
 
@@ -146,7 +139,6 @@ export const OpencodeConfigContainer: React.FC<{
       async () => {
         try {
           await manager.uninstall();
-          forgetUpgradeOutcome();
           new Notice(`opencode uninstalled${bytes > 0 ? ` (freed ${formatBytes(bytes)})` : ""}.`);
         } catch (e) {
           logError("[AgentMode] uninstall failed", e);
@@ -158,38 +150,26 @@ export const OpencodeConfigContainer: React.FC<{
       "Uninstall opencode",
       "Uninstall"
     ).open();
-  }, [app, manager, forgetUpgradeOutcome]);
+  }, [app, manager]);
 
   const upgrade = React.useCallback(() => {
-    setUpgradeRun(runningState(null));
     // A user-supplied binary upgrades itself in place; the managed one is
     // re-downloaded at the pinned version. Different calls, same button.
     const action =
-      activeSource === "custom"
-        ? manager.upgradeCustomBinary()
-        : manager.upgradeManaged({ onProgress: (e) => setUpgradeRun(runningState(e)) });
+      activeSource === "custom" ? manager.upgradeCustomBinary() : manager.upgradeManaged();
     action
-      .then(({ version }) => {
-        setUpgradeRun({ kind: "idle" });
-        new Notice(`opencode upgraded to v${version}.`);
-      })
+      .then(({ version }) => new Notice(`opencode upgraded to v${version}.`))
       .catch((err: unknown) => {
-        // Cancelling is the user's own doing, and losing the race means this
-        // upgrade never owned the run at all. Either way `upgradeRun` must go
-        // back to idle: the section below reads a non-idle value as "an upgrade
-        // is showing this run", and would otherwise hide the operation that
-        // actually holds the manager.
-        if (err instanceof AbortError || (err as Error)?.name === "AbortError") {
-          setUpgradeRun({ kind: "idle" });
-          return;
-        }
+        // Cancelling is the user's own doing, and a real failure is already in
+        // the manager's runtime state, which the warning strip renders.
+        if (err instanceof AbortError || (err as Error)?.name === "AbortError") return;
+        // Losing the race belongs to the operation that won, which is rendering
+        // its own progress. Without this the button would look inert.
         if (err instanceof OperationInFlightError) {
-          setUpgradeRun({ kind: "idle" });
           new Notice(err.message);
           return;
         }
         logError("[AgentMode] opencode upgrade failed", err);
-        setUpgradeRun(errorState(err));
       });
   }, [manager, activeSource]);
 
@@ -200,11 +180,10 @@ export const OpencodeConfigContainer: React.FC<{
       } catch (e) {
         return e instanceof Error ? e.message : String(e);
       }
-      forgetUpgradeOutcome();
       new Notice("Custom opencode binary path saved.");
       return null;
     },
-    [manager, forgetUpgradeOutcome]
+    [manager]
   );
 
   const clearCustomPath = React.useCallback(async (): Promise<void> => {
@@ -218,9 +197,8 @@ export const OpencodeConfigContainer: React.FC<{
       new Notice(`Couldn't clear the custom path: ${e instanceof Error ? e.message : String(e)}`);
       return;
     }
-    forgetUpgradeOutcome();
     new Notice("Custom opencode path cleared.");
-  }, [manager, forgetUpgradeOutcome]);
+  }, [manager]);
 
   return (
     <OpencodeConfigView
@@ -232,10 +210,10 @@ export const OpencodeConfigContainer: React.FC<{
         platform: `${hostPlatform}-${hostArch}`,
         version: OPENCODE_PINNED_VERSION,
         destination: formatBinaryPathForDisplay(manager.getDataDir()),
-        run: installRun,
+        run: sharedRun,
       }}
       customPath={customPath}
-      upgradeRun={upgradeRun}
+      upgradeRun={sharedRun}
       actions={{
         install,
         cancelInstall,

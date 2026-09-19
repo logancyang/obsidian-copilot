@@ -187,15 +187,6 @@ const BackendPanel: React.FC<{
   const managedInstall = useManagedInstallActionState(descriptor, plugin);
   const auth = useBackendAuthState(descriptor);
   const resolvedPath = descriptor.getResolvedBinaryPath?.(settings) ?? null;
-  const canUpdate = installState.kind === "incompatible" && descriptor.managedInstall !== undefined;
-  const updating = managedInstall.kind === "running";
-
-  const runManagedInstall = React.useCallback(() => {
-    if (!descriptor.managedInstall || updating) return;
-    descriptor.managedInstall
-      .run(plugin)
-      .catch((error) => logError(`[AgentMode] ${descriptor.id} update failed`, error));
-  }, [descriptor, plugin, updating]);
 
   // Probe when ready but uncached — the load-time preload may have skipped this
   // backend (binary installed after plugin start).
@@ -234,9 +225,7 @@ const BackendPanel: React.FC<{
           installState={installState}
           authStatus={descriptor.auth ? auth.status : undefined}
           managedInstall={managedInstall}
-          canUpdate={canUpdate}
           resolvedPath={resolvedPath ? formatBinaryPathForDisplay(resolvedPath) : null}
-          onUpdate={runManagedInstall}
           onConfigure={() => descriptor.openInstallUI(plugin)}
         />
 

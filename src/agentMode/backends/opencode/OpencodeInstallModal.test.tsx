@@ -29,7 +29,7 @@ import {
 } from "@/agentMode/backends/opencode/OpencodeInstallModal";
 import { getSettings, settingsAtom, settingsStore } from "@/settings/model";
 import type { OpencodeBackendSettings } from "@/settings/model";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { App, Notice } from "obsidian";
 import React from "react";
 
@@ -51,6 +51,7 @@ const makeManager = (): {
   upgradeCustomBinary: jest.Mock;
   setCustomBinaryPath: jest.Mock;
   uninstall: jest.Mock;
+  revalidateCustomBinary: jest.Mock;
 } => {
   const installCalls: Array<{ signal?: AbortSignal; onProgress?: (e: ProgressEvent) => void }> = [];
   const deferreds: Deferred<{ version: string; path: string }>[] = [];
@@ -58,6 +59,7 @@ const makeManager = (): {
   const upgradeCustomBinary = jest.fn().mockResolvedValue({ version: "1.16.0", path: "/custom" });
   const setCustomBinaryPath = jest.fn().mockResolvedValue(undefined);
   const uninstall = jest.fn().mockResolvedValue(undefined);
+  const revalidateCustomBinary = jest.fn().mockResolvedValue(undefined);
   const cancelCurrentOperation = jest.fn();
 
   // The dialog reads progress off the manager now, so the fake has to be a
@@ -88,6 +90,7 @@ const makeManager = (): {
     upgradeCustomBinary,
     setCustomBinaryPath,
     uninstall,
+    revalidateCustomBinary,
     downloadsSize: jest.fn().mockResolvedValue(2048),
     getDataDir: jest.fn().mockReturnValue("/home/user/.obsidian-copilot/opencode"),
   } as unknown as OpencodeBinaryManager;
@@ -101,6 +104,7 @@ const makeManager = (): {
     upgradeCustomBinary,
     setCustomBinaryPath,
     uninstall,
+    revalidateCustomBinary,
   };
 };
 
@@ -272,32 +276,72 @@ describe("OpencodeInstallModal", () => {
       expect(upgradeCustomBinary).not.toHaveBeenCalled();
       expect(noticeMessages()).toContain("opencode upgraded to v1.16.0.");
     });
-    it("drops a failed upgrade's reason once an install has replaced the binary", async () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/480 reports a running upgrade in a reopened dialog instead of offering a competing action", () => {
+      setOpencodeSettings({
+        binaryPath: EXISTING_BINARY_PATH,
+        binaryVersion: "1.15.12",
+        binarySource: "custom",
+      });
+      const { manager, publish } = makeManager();
+      // The dialog that started this upgrade has been closed; the manager still owns it.
+      publish({ kind: "installing", progress: null });
+      renderContainer(manager);
+
+      expect(screen.getByText("Starting…")).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Run opencode upgrade" })).toBeNull();
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/480 reports a failed upgrade in a reopened dialog and keeps the retry offered", () => {
+      setOpencodeSettings({
+        binaryPath: EXISTING_BINARY_PATH,
+        binaryVersion: "1.15.12",
+        binarySource: "custom",
+      });
+      const { manager, publish } = makeManager();
+      publish({
+        kind: "error",
+        operation: "install",
+        message: "`opencode upgrade` failed: EACCES",
+      });
+      renderContainer(manager);
+
+      expect(screen.getByText("`opencode upgrade` failed: EACCES")).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Run opencode upgrade" })).toBeTruthy();
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/480 leaves a rejected path out of the upgrade strip, which the path field already reports", () => {
+      setOpencodeSettings({
+        binaryPath: EXISTING_BINARY_PATH,
+        binaryVersion: "1.15.12",
+        binarySource: "custom",
+      });
+      const { manager, publish } = makeManager();
+      publish({ kind: "error", operation: "configure", message: "No file at /nope/opencode" });
+      renderContainer(manager);
+
+      expect(screen.queryByText("No file at /nope/opencode")).toBeNull();
+      expect(screen.getByRole("button", { name: "Run opencode upgrade" })).toBeTruthy();
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/480 withdraws the upgrade action while the manager owns a run", () => {
       setOpencodeSettings({
         binaryPath: EXISTING_BINARY_PATH,
         binaryVersion: "1.15.12",
         binarySource: "managed",
       });
-      const { manager, upgradeManaged, installDeferred, publish } = makeManager();
-      upgradeManaged.mockRejectedValue(new Error("tar exited with 1"));
+      const { manager } = makeManager();
       renderContainer(manager);
-      await act(async () => {
-        fireEvent.click(screen.getByRole("button", { name: "Upgrade to latest" }));
-      });
-      expect(screen.getByText("tar exited with 1")).toBeTruthy();
 
+      // The reinstall takes the binary-path lock, so an upgrade offered
+      // alongside it could only produce a call the lock rejects.
       fireEvent.click(screen.getByRole("button", { name: "Reinstall" }));
-      await act(async () => {
-        installDeferred().resolve({ version: "1.16.0", path: "/managed" });
-      });
-      publish({ kind: "idle" });
 
-      // The reason described a binary this install has replaced. It survives a
-      // *failed* install on purpose: nothing changed, so it is still true.
-      expect(screen.queryByText("tar exited with 1")).toBeNull();
+      expect(screen.queryByRole("button", { name: "Upgrade to latest" })).toBeNull();
+      expect(screen.getAllByRole("progressbar")).toHaveLength(1);
+      expect(screen.getByRole("button", { name: "Cancel" })).toBeTruthy();
     });
 
-    it("leaves a running install visible when an upgrade loses the race for it", async () => {
+    it("names the operation that won when an upgrade loses the lock to another window", async () => {
       setOpencodeSettings({
         binaryPath: EXISTING_BINARY_PATH,
         binaryVersion: "1.15.12",
@@ -307,15 +351,14 @@ describe("OpencodeInstallModal", () => {
       upgradeManaged.mockRejectedValue(new OperationInFlightError());
       renderContainer(manager);
 
-      // The reinstall takes the lock; the upgrade clicked underneath it never
-      // owns the run, so it must not take the run's display with it.
-      fireEvent.click(screen.getByRole("button", { name: "Reinstall" }));
       await act(async () => {
         fireEvent.click(screen.getByRole("button", { name: "Upgrade to latest" }));
       });
 
-      expect(screen.getAllByRole("progressbar")).toHaveLength(1);
+      // This upgrade never owned the run, so the strip must keep offering it
+      // rather than reporting a failure that belongs to no operation.
       expect(noticeMessages().join(" ")).toContain("already running");
+      expect(screen.getByRole("button", { name: "Upgrade to latest" })).toBeTruthy();
     });
 
     it("treats a cancelled upgrade as cancelled, not as a failure", async () => {
@@ -338,30 +381,47 @@ describe("OpencodeInstallModal", () => {
       expect(screen.getByRole("button", { name: "Upgrade to latest" })).toBeTruthy();
     });
 
-    it("drops a failed upgrade's reason once another binary is applied", async () => {
+    it("drops a failed upgrade's reason once the manager's next operation settles", async () => {
       setOpencodeSettings({
         binaryPath: EXISTING_BINARY_PATH,
         binaryVersion: "1.15.12",
         binarySource: "managed",
       });
-      const { manager, upgradeManaged } = makeManager();
+      const { manager, upgradeManaged, publish } = makeManager();
       upgradeManaged.mockRejectedValue(new Error("GitHub API rate-limited"));
       renderContainer(manager);
       await act(async () => {
         fireEvent.click(screen.getByRole("button", { name: "Upgrade to latest" }));
       });
-      expect(screen.getByText("GitHub API rate-limited")).toBeTruthy();
+      publish({ kind: "error", operation: "install", message: "GitHub API rate-limited" });
+      expect(within(screen.getByRole("alert")).getByText("GitHub API rate-limited")).toBeTruthy();
 
-      fireEvent.click(screen.getByRole("radio", { name: "My own binary" }));
-      fireEvent.change(screen.getByPlaceholderText("/absolute/path/to/opencode"), {
-        target: { value: "/opt/homebrew/bin/opencode" },
-      });
-      await act(async () => {
-        fireEvent.click(screen.getByRole("button", { name: "Apply" }));
-      });
-
-      // The reason belonged to the managed download, not to the binary now in play.
+      // The reason described a run that has since been superseded, so the strip
+      // goes back to offering the upgrade instead of re-reporting it.
+      publish({ kind: "idle" });
       expect(screen.queryByText("GitHub API rate-limited")).toBeNull();
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/480 clears the outdated warning for a custom binary the user updated outside Copilot", async () => {
+      setOpencodeSettings({
+        binaryPath: EXISTING_BINARY_PATH,
+        binaryVersion: "1.15.12",
+        binarySource: "custom",
+      });
+      const { manager, revalidateCustomBinary } = makeManager();
+      revalidateCustomBinary.mockImplementation(async () =>
+        setOpencodeSettings({
+          binaryPath: EXISTING_BINARY_PATH,
+          binaryVersion: "1.16.0",
+          binarySource: "custom",
+        })
+      );
+      await act(async () => {
+        renderContainer(manager);
+      });
+
+      expect(screen.queryByRole("alert")).toBeNull();
+      expect(screen.queryByRole("button", { name: "Run opencode upgrade" })).toBeNull();
     });
 
     it("upgrades an outdated custom binary through its own upgrade command", async () => {

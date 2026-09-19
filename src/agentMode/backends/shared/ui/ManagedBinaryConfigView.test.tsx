@@ -314,6 +314,37 @@ describe("ManagedBinaryConfigView", () => {
       expect(screen.queryByRole("button", { name: "Upgrade to latest" })).toBeNull();
     });
 
+    it("shows only installation progress and keeps cancellation during a managed upgrade (https://github.com/Brevilabs/obsidian-copilot-private/issues/368)", () => {
+      const run = { kind: "running", label: "Downloading archive…", percent: 42 } as const;
+      const { actions } = renderView({
+        state: OUTDATED,
+        activeSource: "managed",
+        managed: { ...MANAGED, run },
+        upgradeRun: run,
+      });
+
+      expect(screen.getAllByRole("progressbar")).toHaveLength(1);
+      expect(screen.getByText(run.label)).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Upgrade to latest" })).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+      expect(actions.cancelInstall).toHaveBeenCalledTimes(1);
+    });
+
+    it("keeps upgrade progress visible while viewing a custom binary (https://github.com/Brevilabs/obsidian-copilot-private/issues/368)", () => {
+      const run = { kind: "running", label: "Running opencode upgrade…" } as const;
+      renderView({
+        state: { ...OUTDATED, source: "custom" },
+        source: "custom",
+        activeSource: "custom",
+        managed: { ...MANAGED, run },
+        upgradeRun: run,
+      });
+
+      expect(screen.getAllByRole("progressbar")).toHaveLength(1);
+      expect(screen.getByText(run.label)).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Run opencode upgrade" })).toBeNull();
+    });
+
     it("keeps the upgrade button beside the reason it failed (https://github.com/Brevilabs/obsidian-copilot-private/issues/368)", () => {
       renderView({
         state: OUTDATED,

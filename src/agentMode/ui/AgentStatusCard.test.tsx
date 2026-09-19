@@ -106,6 +106,31 @@ describe("AgentStatusCard", () => {
       expect(screen.queryByRole("button")).toBeNull();
     });
 
+    it.each([
+      ["with a summary", "opencode update required"],
+      ["without a summary", undefined],
+    ])(
+      "trails the action at the end of the message row %s so it takes its own line only when cramped (https://github.com/Brevilabs/obsidian-copilot-private/issues/480)",
+      (_label, summary) => {
+        const message = "opencode v1.18.16 is not supported. Copilot requires v1.18.31 or newer.";
+        render(
+          <AgentStatusCard
+            tone="warning"
+            summary={summary}
+            message={message}
+            action={{ label: "Configure opencode", onClick: jest.fn() }}
+          />
+        );
+
+        const action = screen.getByRole("button", { name: "Configure opencode" });
+        const row = action.parentElement!;
+        expect(row.contains(screen.getByText(message))).toBe(true);
+        expect(row.className).toContain("tw-flex-wrap");
+        expect(action.className).toContain("tw-ml-auto");
+        expect(action.className).toContain("tw-shrink-0");
+      }
+    );
+
     it("allows long messages and actions to wrap inside the card", () => {
       const message = "VeryLongBackendNameWithoutNaturalBreaks could not be configured";
       render(

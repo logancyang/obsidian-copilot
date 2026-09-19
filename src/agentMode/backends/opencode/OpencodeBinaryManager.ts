@@ -594,6 +594,31 @@ export class OpencodeBinaryManager extends ManagedBinaryManager<ProgressEvent, I
   }
 
   /**
+   * Re-read the version of the configured custom binary and persist it when it
+   * changed. {@link computeInstallState} reports the persisted version, and a
+   * user who updates their own opencode outside Copilot keeps the same path, so
+   * without this an install that became supported would stay marked outdated.
+   * https://github.com/Brevilabs/obsidian-copilot-private/issues/480
+   */
+  async revalidateCustomBinary(): Promise<void> {
+    const before = readOpencodeSettings();
+    if (before.binarySource !== "custom" || !before.binaryPath) return;
+    const { version } = await this.validateCustomBinary(before.binaryPath);
+    const after = readOpencodeSettings();
+    // A delayed probe must not overwrite a newer selection or an in-place upgrade.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/480
+    if (
+      after.binarySource !== "custom" ||
+      after.binaryPath !== before.binaryPath ||
+      after.binaryVersion !== before.binaryVersion ||
+      after.binaryVersion === version
+    ) {
+      return;
+    }
+    updateOpencodeFields({ binaryVersion: version });
+  }
+
+  /**
    * Every dir {@link uninstall} reclaims: the OS-local managed root plus the
    * pre-#2569 in-vault copy (so a tester who just updated, and still has the
    * binary only inside the vault, isn't told there's nothing to remove).

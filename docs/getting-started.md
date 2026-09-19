@@ -43,7 +43,7 @@ Copilot connects to Codex through the `codex-acp` adapter, which includes a comp
 2. Click **Sign in**, complete authentication in your browser, and return to Obsidian. If the browser does not open, click **Open sign-in page**. You can cancel or retry sign-in.
 3. To use your own adapter instead, choose **My own binary**, then use **Auto-detect** or enter its path. Copilot never updates a custom binary.
 
-When a Copilot release requires a newer managed adapter, **Agent Chat** and **Settings** show **Update**. Both use the same operation and keep progress, errors, and **Retry** in sync. You can also choose **Sign in to Codex** on the Agent Chat status card. For terminal login, run your configured adapter with `cli login` using the same `CODEX_HOME` as Copilot.
+You can also choose **Sign in to Codex** on the Agent Chat status card. For terminal login, run your configured adapter with `cli login` using the same `CODEX_HOME` as Copilot.
 
 For manual installations, Copilot requires `@agentclientprotocol/codex-acp` 0.0.45 or newer. This is the minimum supported adapter version; managed downloads are pinned to 1.10.0 in this Copilot release. See [Codex installation details](agent-mode-and-tools.md#codex). The older `@zed-industries/codex-acp` package is not supported. Codex uses the login stored by the bundled Codex CLI; there is no Codex key to paste into Copilot.
 
