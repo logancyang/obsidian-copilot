@@ -16,6 +16,25 @@ import {
 const deleted = (text: string): string => DEL_OPEN + text + DEL_CLOSE;
 const inserted = (text: string): string => INS_OPEN + text + INS_CLOSE;
 
+const atomicEdits = [
+  [
+    "nested link destinations",
+    "[doc](https://example.com/a(b)c)",
+    "[doc](https://example.com/a(b)d)",
+  ],
+  [
+    "deeply nested image destinations",
+    "![chart](a(b(c(d(e)f)g)h)i)",
+    "![chart](a(b(c(d(e)f)g)h)j)",
+  ],
+  ["escaped closing parentheses", "[doc](a\\)b)", "[doc](a\\)c)"],
+  ["escaped opening parentheses", "[doc](a\\(b)", "[doc](a\\(c)"],
+  ["escaped backslashes before parentheses", "[doc](a\\\\(b)c)", "[doc](a\\\\(b)d)"],
+  ["longer internal backtick runs", "`alpha `` beta`", "`alpha `` gamma`"],
+  ["multi-backtick delimiters", "``alpha ``` beta``", "``alpha ``` gamma``"],
+  ["shorter internal backtick runs", "````alpha ``` beta````", "````alpha ``` gamma````"],
+] as const;
+
 describe("tokenDiff", () => {
   describe("splitStructuralPrefix()", () => {
     it("keeps a list bullet out of the diffable content", () => {
@@ -71,6 +90,27 @@ describe("tokenDiff", () => {
     it("splits CJK text per character because it carries no word spaces", () => {
       expect(tokenizeInline("发布准备")).toEqual(["发", "布", "准", "备"]);
     });
+
+    it.each(atomicEdits)(
+      "keeps %s atomic so diff markers cannot split syntax (https://github.com/Brevilabs/obsidian-copilot-private/issues/348)",
+      (_name, before, after) => {
+        expect(tokenizeInline(`See ${before} first.`)).toEqual(["See", " ", before, " ", "first."]);
+        expect(tokenizeInline(`See ${after} first.`)).toEqual(["See", " ", after, " ", "first."]);
+      }
+    );
+
+    it.each(["``", "```", "````"])(
+      "does not shorten an unmatched %s opener to manufacture a code span (https://github.com/Brevilabs/obsidian-copilot-private/issues/348)",
+      (opening) => {
+        expect(tokenizeInline(`${opening}alpha \` beta`)).toEqual([
+          `${opening}alpha`,
+          " ",
+          "`",
+          " ",
+          "beta",
+        ]);
+      }
+    );
   });
 
   describe("diffInline()", () => {
@@ -110,6 +150,15 @@ describe("tokenDiff", () => {
     it("returns the line untouched when nothing changed", () => {
       expect(diffInline("The pilot runs.", "The pilot runs.")).toBe("The pilot runs.");
     });
+
+    it.each(atomicEdits)(
+      "replaces %s whole without inserting markers inside syntax (https://github.com/Brevilabs/obsidian-copilot-private/issues/348)",
+      (_name, before, after) => {
+        expect(diffInline(`See ${before} first.`, `See ${after} first.`)).toBe(
+          `See ${deleted(before)}${inserted(after)} first.`
+        );
+      }
+    );
   });
 
   describe("markDeletedLine()", () => {
