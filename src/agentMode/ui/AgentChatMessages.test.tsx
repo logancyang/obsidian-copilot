@@ -12,12 +12,22 @@ import React from "react";
 
 type AgentChatMessagesProps = React.ComponentProps<typeof AgentChatMessages>;
 
+const scrollingMockState = {
+  isAtBottom: true,
+  jumpToLatest: jest.fn(),
+  scrollBy: jest.fn(),
+};
+
 jest.mock("@/hooks/useChatScrolling", () => ({
   // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook; name must match the export
   useChatScrolling: () => ({
     containerMinHeight: 0,
     scrollContainerCallbackRef: jest.fn(),
+    contentCallbackRef: jest.fn(),
     getMessageKey: (message: { id: string }) => message.id,
+    isAtBottom: scrollingMockState.isAtBottom,
+    jumpToLatest: scrollingMockState.jumpToLatest,
+    scrollBy: scrollingMockState.scrollBy,
   }),
 }));
 
@@ -129,6 +139,9 @@ describe("AgentChatMessages", () => {
     beforeEach(() => {
       jest.useFakeTimers();
       jest.setSystemTime(200_000);
+      scrollingMockState.isAtBottom = true;
+      scrollingMockState.jumpToLatest = jest.fn();
+      scrollingMockState.scrollBy = jest.fn();
     });
 
     afterEach(() => jest.useRealTimers());
@@ -225,6 +238,61 @@ describe("AgentChatMessages", () => {
 
       expect(screen.getByTestId("chat-messages").textContent).toContain("Plan plan-1");
       expect(screen.queryByTestId("agent-action-rail")).toBeNull();
+    });
+
+    it("hides the scroll-to-bottom button while the viewport rests at the newest message (https://github.com/logancyang/obsidian-copilot-preview/issues/329)", () => {
+      scrollingMockState.isAtBottom = true;
+      renderMessages([assistantMessage("answer-1", 62_000)], false);
+
+      expect(screen.queryByLabelText("Scroll to latest message")).toBeNull();
+    });
+
+    it("shows the scroll-to-bottom button after scrolling away and jumps back on click (https://github.com/logancyang/obsidian-copilot-preview/issues/329)", () => {
+      scrollingMockState.isAtBottom = false;
+      scrollingMockState.jumpToLatest = jest.fn();
+      renderMessages([assistantMessage("answer-1", 62_000)], false);
+
+      const button = screen.getByLabelText("Scroll to latest message");
+      act(() => button.click());
+      expect(scrollingMockState.jumpToLatest).toHaveBeenCalledTimes(1);
+    });
+
+    it("anchors the scroll-to-bottom button above the transcript only, leaving a pending action rail uncovered (https://github.com/logancyang/obsidian-copilot-preview/issues/329)", () => {
+      // The button is absolutely positioned against its nearest positioned
+      // ancestor. If that ancestor also holds the action rail, the button
+      // floats over a pending permission card and hides the very controls the
+      // rail bounds itself to keep reachable
+      // (https://github.com/logancyang/obsidian-copilot/issues/2948). jsdom
+      // does no layout, so the containment relationship stands in for the
+      // geometry.
+      scrollingMockState.isAtBottom = false;
+      renderMessages([assistantMessage("answer-1", 62_000)], false, {
+        pendingToolPermissions: [permission("permission-while-scrolled-up")],
+      });
+
+      const button = screen.getByLabelText("Scroll to latest message");
+      const rail = screen.getByTestId("agent-action-rail");
+
+      let anchorEl = button.parentElement;
+      while (anchorEl && !anchorEl.className.includes("tw-relative")) {
+        anchorEl = anchorEl.parentElement;
+      }
+
+      expect(anchorEl).not.toBeNull();
+      expect(anchorEl!.contains(button)).toBe(true);
+      expect(anchorEl!.contains(rail)).toBe(false);
+    });
+
+    it("swaps the arrow for a bouncing typing indicator while a turn is streaming (https://github.com/logancyang/obsidian-copilot-preview/issues/329)", () => {
+      scrollingMockState.isAtBottom = false;
+      const { container } = renderMessages(
+        [assistantMessage("answer-1", 62_000, { message: "", parts: [] })],
+        true
+      );
+
+      const button = screen.getByLabelText("Scroll to latest message");
+      expect(container.querySelectorAll(".copilot-typing-dot")).toHaveLength(3);
+      expect(button.querySelector("svg")).toBeNull();
     });
   });
 });
