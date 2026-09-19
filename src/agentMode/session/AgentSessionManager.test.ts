@@ -2283,6 +2283,9 @@ describe("AgentSessionManager.getRunningChatIds", () => {
   it("keeps both ids when a running session's first save re-keys it (dual-id)", async () => {
     const mgr = buildManagerWithPersistence();
     const a = await mgr.createSession();
+    // Let the create's own ready-tail notify land before subscribing, so the listener
+    // below observes the save and nothing else.
+    await waitFor(() => expect(mgr.getIsStarting()).toBe(false));
     getSessionTestHandle(a).setMessages([{ message: "hi" }]);
     getSessionTestHandle(a).setStatus("running");
     // Before the save the running session is keyed by its native id.
@@ -3076,6 +3079,94 @@ describe("AgentSessionManager.onInstallStateChanged", () => {
     );
     return { mgr, preloader, setInstallState: (state: InstallState) => (installState = state) };
   }
+
+  it("runs queued install work in order (https://github.com/Brevilabs/obsidian-copilot-private/issues/480)", async () => {
+    const { mgr } = buildInstallStateManager({ installState: { kind: "ready", source: "custom" } });
+    const order: string[] = [];
+    let releaseFirst!: () => void;
+    const firstPrepared = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+
+    const first = mgr.onInstallStateChanged("opencode", async () => {
+      order.push("first:start");
+      await firstPrepared;
+      order.push("first:end");
+    });
+    const second = mgr.onInstallStateChanged("opencode", async () => {
+      order.push("second:start");
+    });
+
+    await waitFor(() => expect(order).toEqual(["first:start"]));
+    releaseFirst();
+    await Promise.all([first, second]);
+
+    expect(order).toEqual(["first:start", "first:end", "second:start"]);
+  });
+
+  it("holds a session create until in-flight install work settles (https://github.com/Brevilabs/obsidian-copilot-private/issues/480)", async () => {
+    const { mgr, preloader } = buildInstallStateManager({
+      installState: { kind: "ready", source: "custom" },
+    });
+    let release!: () => void;
+    const prepared = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    sessionCreateSpy.mockClear();
+
+    const work = mgr.onInstallStateChanged("opencode", () => prepared);
+    const creating = mgr.getOrCreateActiveSession();
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    expect(sessionCreateSpy).not.toHaveBeenCalled();
+
+    release();
+    await work;
+    await creating;
+
+    expect(sessionCreateSpy).toHaveBeenCalledTimes(1);
+    expect(preloader.preload).toHaveBeenCalledWith("opencode");
+  });
+
+  it("holds a direct session create until in-flight install work settles (https://github.com/Brevilabs/obsidian-copilot-private/issues/480)", async () => {
+    const { mgr } = buildInstallStateManager({
+      installState: { kind: "ready", source: "custom" },
+    });
+    let release!: () => void;
+    const prepared = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    sessionCreateSpy.mockClear();
+
+    // The New Chat button and a cross-backend model pick both land here, not on
+    // `getOrCreateActiveSession`.
+    const work = mgr.onInstallStateChanged("opencode", () => prepared);
+    const creating = mgr.createSession("opencode");
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    expect(sessionCreateSpy).not.toHaveBeenCalled();
+
+    release();
+    await work;
+    await creating;
+
+    expect(sessionCreateSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("rebuilds the refreshed backend's tab from inside its own queued work (https://github.com/Brevilabs/obsidian-copilot-private/issues/480)", async () => {
+    const { mgr } = buildInstallStateManager({
+      installState: { kind: "ready", source: "custom" },
+    });
+    const original = await mgr.createSession("opencode");
+
+    // The refresh restarts the backend and rebuilds its tabs while its own queue entry is
+    // still running, so that rebuild must never wait on the queue.
+    const settled = await Promise.race([
+      mgr.onInstallStateChanged("opencode").then(() => "settled" as const),
+      new Promise<"deadlocked">((resolve) => window.setTimeout(() => resolve("deadlocked"), 1000)),
+    ]);
+
+    expect(settled).toBe("settled");
+    expect(mgr.getActiveSession()).not.toBe(original);
+  });
 
   it("preloads a freshly-installed backend that was never probed", async () => {
     // Newly installed: nothing warm, nothing live. `restartBackend` returns

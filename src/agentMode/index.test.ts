@@ -110,7 +110,9 @@ const mockManager = {
   restartBackend: jest.fn(async (_id: string, _reason: string) => {}),
   noteSpawnConfigChanged: jest.fn(async (_id: string, _reason: string) => {}),
   registerPreload: jest.fn<void, [string, Promise<void>]>(),
-  onInstallStateChanged: jest.fn(async (_id: string) => {}),
+  onInstallStateChanged: jest.fn(async (_id: string, prepare?: () => Promise<void>) => {
+    await prepare?.();
+  }),
 };
 let plugin: CopilotPlugin;
 const reconcile = jest.mocked(reconcileBuiltinSkills);
@@ -199,22 +201,31 @@ describe("agentMode", () => {
       }
     );
 
-    it(`settles new-agent skills before refreshing that agent's installation ${ISSUE}`, async () => {
+    it(`registers installation work immediately and prepares skills before refreshing ${ISSUE} https://github.com/Brevilabs/obsidian-copilot-private/issues/480`, async () => {
       createAgentSessionManager({} as App, plugin);
       await mockManager.registerPreload.mock.calls[0][1];
       const gate = deferred();
       const handled = deferred();
       reconcile.mockReturnValueOnce(gate.promise);
-      mockManager.onInstallStateChanged.mockImplementationOnce(async () => handled.resolve());
+      let prepared = false;
+      mockManager.onInstallStateChanged.mockImplementationOnce(async (_id, prepare) => {
+        await prepare?.();
+        prepared = true;
+        handled.resolve();
+      });
       mockStates.opencode = { kind: "ready", source: "custom" };
       mockInstallListeners.opencode();
       expect(reconcile).toHaveBeenLastCalledWith(
         expect.objectContaining({ availableAgents: ["claude", "opencode"] })
       );
-      expect(mockManager.onInstallStateChanged).not.toHaveBeenCalled();
+      expect(mockManager.onInstallStateChanged).toHaveBeenCalledWith(
+        "opencode",
+        expect.any(Function)
+      );
+      expect(prepared).toBe(false);
       gate.resolve();
       await handled.promise;
-      expect(mockManager.onInstallStateChanged).toHaveBeenCalledWith("opencode");
+      expect(prepared).toBe(true);
     });
 
     it(`refreshes a spawn-config backend when a model's published effort levels change ${LINEUP_ISSUE}`, () => {
@@ -381,7 +392,10 @@ describe("agentMode", () => {
       mockStates.claude = { kind: "checking", source: "custom" };
       mockStates.opencode = { kind: "checking", source: "custom" };
       const handled = deferred();
-      mockManager.onInstallStateChanged.mockImplementationOnce(async () => handled.resolve());
+      mockManager.onInstallStateChanged.mockImplementationOnce(async (_id, prepare) => {
+        await prepare?.();
+        handled.resolve();
+      });
       mockInstallListeners.claude();
       await handled.promise;
       expect(reconcile).toHaveBeenLastCalledWith(
