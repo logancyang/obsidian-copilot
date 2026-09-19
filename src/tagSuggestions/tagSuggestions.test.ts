@@ -359,25 +359,35 @@ describe("tagSuggestions", () => {
 
   describe("addTagToFrontmatter()", () => {
     it.each([
-      ["no frontmatter", {}, ["suggested"]],
-      ["empty tags", { tags: [] }, ["suggested"]],
-      ["populated tags", { tags: ["existing"], owner: "Ada" }, ["existing", "suggested"]],
-      ["mixed-value tags", { tags: [2024, "book"] }, [2024, "book", "suggested"]],
-    ])("adds a tag for %s without changing other properties", async (_label, frontmatter, tags) => {
-      const originalOwner = (frontmatter as { owner?: string }).owner;
-      const processFrontMatter = jest.fn(
-        async (_file: TFile, update: (value: Record<string, unknown>) => void) =>
-          update(frontmatter)
-      );
-      const app = { fileManager: { processFrontMatter } } as unknown as App;
-      const active = file("Active.md");
+      ["no frontmatter", {}, { tags: ["suggested"] }],
+      ["empty tags", { tags: [] }, { tags: ["suggested"] }],
+      ["populated tags", { tags: ["existing"], owner: "Ada" }, { tags: ["existing", "suggested"] }],
+      ["mixed-value tags", { tags: [2024, "book"] }, { tags: [2024, "book", "suggested"] }],
+      ["singular tag scalar", { tag: "book" }, { tag: ["book", "suggested"] }],
+      [
+        "singular mixed-value tag array",
+        { tag: [2024, "book"] },
+        { tag: [2024, "book", "suggested"] },
+      ],
+    ])(
+      "adds a tag for %s without changing other properties",
+      async (_label, frontmatter, expected) => {
+        const originalOwner = (frontmatter as { owner?: string }).owner;
+        const processFrontMatter = jest.fn(
+          async (_file: TFile, update: (value: Record<string, unknown>) => void) =>
+            update(frontmatter)
+        );
+        const app = { fileManager: { processFrontMatter } } as unknown as App;
+        const active = file("Active.md");
 
-      await addTagToFrontmatter(app, active, "#suggested");
+        await addTagToFrontmatter(app, active, "#suggested");
 
-      expect(processFrontMatter).toHaveBeenCalledWith(active, expect.any(Function));
-      expect(frontmatter).toMatchObject({ tags });
-      expect((frontmatter as { owner?: string }).owner).toBe(originalOwner);
-    });
+        expect(processFrontMatter).toHaveBeenCalledWith(active, expect.any(Function));
+        expect(frontmatter).toMatchObject(expected);
+        expect("tag" in frontmatter && "tags" in frontmatter).toBe(false);
+        expect((frontmatter as { owner?: string }).owner).toBe(originalOwner);
+      }
+    );
 
     it("does not duplicate a case-insensitive existing tag", async () => {
       const frontmatter = { tags: ["Suggested"] };

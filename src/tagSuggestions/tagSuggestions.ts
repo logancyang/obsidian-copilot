@@ -439,11 +439,11 @@ export function rankTagSuggestions(
 export async function addTagToFrontmatter(app: App, file: TFile, tag: string): Promise<void> {
   const normalized = tag.replace(/^#/, "");
   await app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
-    const current = stringList(frontmatter.tags, true);
+    const key = "tags" in frontmatter ? "tags" : "tag" in frontmatter ? "tag" : "tags";
+    const value = frontmatter[key];
+    const current = stringList(value, true);
     if (!current.some((existing) => existing.toLowerCase() === normalized.toLowerCase())) {
-      frontmatter.tags = Array.isArray(frontmatter.tags)
-        ? [...frontmatter.tags, normalized]
-        : [...current, normalized];
+      frontmatter[key] = Array.isArray(value) ? [...value, normalized] : [...current, normalized];
     }
   });
 }

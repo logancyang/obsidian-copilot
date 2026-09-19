@@ -10,12 +10,19 @@ import type { App, MarkdownView } from "obsidian";
 const mockCheckIsPlusUser = jest.fn<Promise<boolean>, unknown[]>();
 const mockBroca = jest.fn<Promise<Record<string, { noul: number }>>, unknown[]>();
 const mockLogInfo = jest.fn<void, unknown[]>();
+let latestRequest = 0;
+const mockBeginRequest = jest.fn(() => ++latestRequest);
+const mockIsCurrentRequest = jest.fn((request: number) => request === latestRequest);
 const mockRowShow = jest.fn<
   void,
   [import("obsidian").TFile, RankedTagSuggestion[], (tag: string) => Promise<boolean>]
 >();
 let chooseTag: ((tag: string) => Promise<boolean>) | undefined;
-const suggestionRow = { show: mockRowShow } as unknown as TagSuggestionRow;
+const suggestionRow = {
+  beginRequest: mockBeginRequest,
+  isCurrentRequest: mockIsCurrentRequest,
+  show: mockRowShow,
+} as unknown as TagSuggestionRow;
 
 jest.mock("@/plusUtils", () => ({
   checkIsPlusUser: async (...args: unknown[]): Promise<boolean> =>
@@ -105,6 +112,7 @@ describe("tagSuggestionCommand", () => {
   describe("suggestTagsForCurrentNote()", () => {
     beforeEach(() => {
       jest.clearAllMocks();
+      latestRequest = 0;
       chooseTag = undefined;
       mockRowShow.mockImplementation((_file, _suggestions, onChoose) => {
         chooseTag = onChoose;
@@ -159,6 +167,37 @@ describe("tagSuggestionCommand", () => {
       await pending;
 
       expect(mockRowShow).not.toHaveBeenCalled();
+    });
+
+    it(`discards an older request that finishes after a newer invocation (${ISSUE})`, async () => {
+      let resolveFirst: (value: Record<string, { noul: number }>) => void = () => undefined;
+      let resolveSecond: (value: Record<string, { noul: number }>) => void = () => undefined;
+      mockBroca
+        .mockImplementationOnce(
+          async () =>
+            await new Promise<Record<string, { noul: number }>>((resolve) => {
+              resolveFirst = resolve;
+            })
+        )
+        .mockImplementationOnce(
+          async () =>
+            await new Promise<Record<string, { noul: number }>>((resolve) => {
+              resolveSecond = resolve;
+            })
+        );
+      const { app } = createApp();
+
+      const first = suggestTagsForCurrentNote(app, suggestionRow);
+      await waitFor(() => expect(mockBroca).toHaveBeenCalledTimes(1));
+      const second = suggestTagsForCurrentNote(app, suggestionRow);
+      await waitFor(() => expect(mockBroca).toHaveBeenCalledTimes(2));
+      resolveSecond({ t0: { noul: 0.9 } });
+      await second;
+      resolveFirst({ t0: { noul: 0.1 } });
+      await first;
+
+      expect(mockRowShow).toHaveBeenCalledTimes(1);
+      expect(mockRowShow.mock.calls[0][1]).toEqual([{ tag: "research", score: 0.9 }]);
     });
 
     it("reports a failed tag write so the suggestion row can restore the pill (https://github.com/Brevilabs/obsidian-copilot-private/issues/492)", async () => {

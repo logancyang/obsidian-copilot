@@ -36,6 +36,7 @@ interface TestContext {
   setTags(tags: string[]): void;
   emitMetadataChanged(): void;
   emitActiveLeafChange(): void;
+  emitFileOpen(): void;
   metadataOffRef: jest.Mock;
   workspaceOffRef: jest.Mock;
 }
@@ -72,19 +73,22 @@ function testContext(options: { tagsRow?: boolean; properties?: number } = {}): 
   const leaf = { view } as unknown as WorkspaceLeaf;
   let tags: string[] = [];
   const metadataListeners = new Set<(changed: TFile) => void>();
-  const workspaceListeners = new Set<() => void>();
+  const activeLeafListeners = new Set<() => void>();
+  const fileOpenListeners = new Set<() => void>();
   const metadataOffRef = jest.fn((ref: EventRef) => {
     metadataListeners.delete((ref as unknown as { callback: (changed: TFile) => void }).callback);
   });
   const workspaceOffRef = jest.fn((ref: EventRef) => {
-    workspaceListeners.delete((ref as unknown as { callback: () => void }).callback);
+    const callback = (ref as unknown as { callback: () => void }).callback;
+    activeLeafListeners.delete(callback);
+    fileOpenListeners.delete(callback);
   });
   const app = {
     workspace: {
       getActiveViewOfType: jest.fn(() => view),
       getLeavesOfType: jest.fn(() => [leaf]),
-      on: jest.fn((_event: string, callback: () => void) => {
-        workspaceListeners.add(callback);
+      on: jest.fn((event: string, callback: () => void) => {
+        (event === "file-open" ? fileOpenListeners : activeLeafListeners).add(callback);
         return { callback };
       }),
       offref: workspaceOffRef,
@@ -112,7 +116,10 @@ function testContext(options: { tagsRow?: boolean; properties?: number } = {}): 
       metadataListeners.forEach((listener) => listener(activeFile));
     },
     emitActiveLeafChange() {
-      workspaceListeners.forEach((listener) => listener());
+      activeLeafListeners.forEach((listener) => listener());
+    },
+    emitFileOpen() {
+      fileOpenListeners.forEach((listener) => listener());
     },
     metadataOffRef,
     workspaceOffRef,
@@ -263,7 +270,7 @@ describe("tagSuggestionRow", () => {
         dismissModal?.();
 
         expect(context.metadataOffRef).toHaveBeenCalledTimes(1);
-        expect(context.workspaceOffRef).toHaveBeenCalledTimes(1);
+        expect(context.workspaceOffRef).toHaveBeenCalledTimes(2);
       });
 
       it(`filters manually added tags and fills the visible row from the remaining queue (${ISSUE})`, () => {
@@ -293,7 +300,7 @@ describe("tagSuggestionRow", () => {
 
         expect(context.metadataContainer.querySelector(".copilot-tag-suggestion-row")).toBeNull();
         expect(context.metadataOffRef).toHaveBeenCalledTimes(1);
-        expect(context.workspaceOffRef).toHaveBeenCalledTimes(1);
+        expect(context.workspaceOffRef).toHaveBeenCalledTimes(2);
       });
 
       it(`removes the row and listeners on close and plugin unload (${ISSUE})`, () => {
@@ -307,13 +314,13 @@ describe("tagSuggestionRow", () => {
 
         expect(context.metadataContainer.querySelector(".copilot-tag-suggestion-row")).toBeNull();
         expect(context.metadataOffRef).toHaveBeenCalledTimes(1);
-        expect(context.workspaceOffRef).toHaveBeenCalledTimes(1);
+        expect(context.workspaceOffRef).toHaveBeenCalledTimes(2);
 
         row.show(context.file, suggestions(), jest.fn().mockResolvedValue(true));
         row.onunload();
         expect(context.metadataContainer.querySelector(".copilot-tag-suggestion-row")).toBeNull();
         expect(context.metadataOffRef).toHaveBeenCalledTimes(2);
-        expect(context.workspaceOffRef).toHaveBeenCalledTimes(2);
+        expect(context.workspaceOffRef).toHaveBeenCalledTimes(4);
       });
 
       it(`does not retain closed session refs in the long-lived component (${ISSUE})`, () => {
@@ -326,7 +333,7 @@ describe("tagSuggestionRow", () => {
 
         expect(registerEvent).not.toHaveBeenCalled();
         expect(context.metadataOffRef).toHaveBeenCalledTimes(1);
-        expect(context.workspaceOffRef).toHaveBeenCalledTimes(1);
+        expect(context.workspaceOffRef).toHaveBeenCalledTimes(2);
       });
 
       it(`re-mounts after Obsidian replaces the Properties rows (${ISSUE})`, () => {
@@ -356,7 +363,7 @@ describe("tagSuggestionRow", () => {
 
         expect(context.metadataContainer.querySelector(".copilot-tag-suggestion-row")).toBeNull();
         expect(context.metadataOffRef).toHaveBeenCalledTimes(1);
-        expect(context.workspaceOffRef).toHaveBeenCalledTimes(1);
+        expect(context.workspaceOffRef).toHaveBeenCalledTimes(2);
       });
 
       it(`closes a fallback picker when another Markdown view becomes active (${ISSUE})`, () => {
@@ -371,7 +378,21 @@ describe("tagSuggestionRow", () => {
 
         expect(mockModalClose).toHaveBeenCalledTimes(1);
         expect(context.metadataOffRef).toHaveBeenCalledTimes(1);
-        expect(context.workspaceOffRef).toHaveBeenCalledTimes(1);
+        expect(context.workspaceOffRef).toHaveBeenCalledTimes(2);
+      });
+
+      it(`closes a fallback picker when its active leaf opens another file (${ISSUE})`, () => {
+        const context = testContext();
+        context.metadataContainer.remove();
+        const row = new TagSuggestionRow(context.app);
+        row.show(context.file, suggestions(), jest.fn().mockResolvedValue(true));
+
+        context.view.file = file("Projects/Other.md");
+        context.emitFileOpen();
+
+        expect(mockModalClose).toHaveBeenCalledTimes(1);
+        expect(context.metadataOffRef).toHaveBeenCalledTimes(1);
+        expect(context.workspaceOffRef).toHaveBeenCalledTimes(2);
       });
     });
   });

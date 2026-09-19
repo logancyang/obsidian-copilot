@@ -27,16 +27,19 @@ export async function suggestTagsForCurrentNote(
     new Notice("Open a Markdown note before suggesting tags.");
     return;
   }
+  const request = suggestionRow.beginRequest();
 
   const loading = new Notice("Suggesting tags…", 0);
   try {
     const isPlusUser = await checkIsPlusUser(app, "tool_call");
+    if (!suggestionRow.isCurrentRequest(request)) return;
     if (!isPlusUser) {
       new Notice("A valid Copilot Plus license is required to suggest tags.");
       return;
     }
 
     const content = await app.vault.cachedRead(file);
+    if (!suggestionRow.isCurrentRequest(request)) return;
     const candidates = collectTagCandidates(app, file, content);
     if (!candidates.length) {
       new Notice("This vault has no other tags to suggest for this note.");
@@ -54,7 +57,13 @@ export async function suggestTagsForCurrentNote(
       )
     );
     const activeView = app.workspace.getActiveViewOfType(MarkdownView);
-    if (!activeView || activeView !== view || activeView.file?.path !== file.path) return;
+    if (
+      !suggestionRow.isCurrentRequest(request) ||
+      !activeView ||
+      activeView !== view ||
+      activeView.file?.path !== file.path
+    )
+      return;
     const ranking = rankTagSuggestions(requests, responses);
     if (!ranking.length) {
       new Notice("No tag suggestions were returned. Try again.");
@@ -77,8 +86,10 @@ export async function suggestTagsForCurrentNote(
       }
     });
   } catch (error) {
-    logError("Tag suggestion failed", error);
-    new Notice(tagSuggestionErrorNotice(error));
+    if (suggestionRow.isCurrentRequest(request)) {
+      logError("Tag suggestion failed", error);
+      new Notice(tagSuggestionErrorNotice(error));
+    }
   } finally {
     loading.hide();
   }

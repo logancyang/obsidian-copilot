@@ -17,6 +17,7 @@ interface TagSuggestionSession {
   fallbackOpened: boolean;
   metadataRef: EventRef;
   workspaceRef: EventRef;
+  fileOpenRef: EventRef;
 }
 
 function normalizedTag(tag: string): string {
@@ -38,9 +39,21 @@ function isVisible(container: HTMLElement): boolean {
 /** Owns the in-view tag suggestion UI and its per-note lifecycle. */
 export class TagSuggestionRow extends Component {
   private session?: TagSuggestionSession;
+  private requestGeneration = 0;
 
   constructor(private readonly app: App) {
     super();
+  }
+
+  /** Invalidates older command runs and returns the new run's generation. */
+  beginRequest(): number {
+    this.close();
+    return ++this.requestGeneration;
+  }
+
+  /** Reports whether an asynchronous command run may still publish its result. */
+  isCurrentRequest(generation: number): boolean {
+    return generation === this.requestGeneration;
   }
 
   show(file: TFile, suggestions: RankedTagSuggestion[], addTag: AddSuggestedTag): void {
@@ -56,7 +69,7 @@ export class TagSuggestionRow extends Component {
     session.metadataRef = this.app.metadataCache.on("changed", (changedFile) => {
       if (changedFile.path === session.file.path) this.render(session);
     });
-    session.workspaceRef = this.app.workspace.on("active-leaf-change", () => {
+    const closeIfSourceIsInactive = () => {
       const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
       if (
         !activeView ||
@@ -65,7 +78,9 @@ export class TagSuggestionRow extends Component {
       ) {
         this.closeSession(session);
       }
-    });
+    };
+    session.workspaceRef = this.app.workspace.on("active-leaf-change", closeIfSourceIsInactive);
+    session.fileOpenRef = this.app.workspace.on("file-open", closeIfSourceIsInactive);
     this.session = session;
     this.render(session);
   }
@@ -75,6 +90,7 @@ export class TagSuggestionRow extends Component {
   }
 
   onunload(): void {
+    this.requestGeneration++;
     this.close();
   }
 
@@ -209,6 +225,7 @@ export class TagSuggestionRow extends Component {
     this.closeModal(session);
     this.app.metadataCache.offref(session.metadataRef);
     this.app.workspace.offref(session.workspaceRef);
+    this.app.workspace.offref(session.fileOpenRef);
     this.session = undefined;
   }
 }
