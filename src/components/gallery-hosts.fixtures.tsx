@@ -1,3 +1,4 @@
+import { ChatInputProvider } from "@/context/ChatInputContext";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppContext, EventTargetContext, useApp } from "@/context";
 import * as React from "react";
@@ -40,3 +41,14 @@ export const galleryHostFixtures = Object.freeze({
     title: "Allow model fallback",
   }),
 });
+
+/** Supplies the editor registration context for interactive composer stories.
+ * @param props Story content containing a chat composer.
+ */
+export function GalleryChatInputProvider({ children }: GalleryProvidersProps): React.ReactElement {
+  return (
+    <GalleryProviders>
+      <ChatInputProvider>{children}</ChatInputProvider>
+    </GalleryProviders>
+  );
+}

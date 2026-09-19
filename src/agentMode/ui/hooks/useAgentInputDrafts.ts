@@ -67,7 +67,7 @@ interface UseAgentInputDraftsArgs {
 }
 
 export interface AgentInputDraftControls extends AgentInputDraft {
-  setInput: (input: string) => void;
+  setInput: React.Dispatch<React.SetStateAction<string>>;
   setContextNotes: React.Dispatch<React.SetStateAction<TFile[]>>;
   setSelectedImages: React.Dispatch<React.SetStateAction<File[]>>;
   addImages: (files: File[]) => void;
@@ -95,8 +95,8 @@ const createDraft = (includeActiveNote: boolean): AgentInputDraft => ({
   queue: [],
 });
 
-const applyArrayState = <T>(value: React.SetStateAction<T[]>, previous: T[]): T[] =>
-  typeof value === "function" ? value(previous) : value;
+const applyState = <T>(value: React.SetStateAction<T>, previous: T): T =>
+  typeof value === "function" ? (value as (previous: T) => T)(previous) : value;
 
 export function useAgentInputDrafts({
   activeChatInputId,
@@ -150,8 +150,8 @@ export function useAgentInputDrafts({
     [activeChatInputId, updateDraft]
   );
 
-  const setInput = useCallback(
-    (input: string) => updateActive((draft) => ({ ...draft, input })),
+  const setInput = useCallback<React.Dispatch<React.SetStateAction<string>>>(
+    (value) => updateActive((draft) => ({ ...draft, input: applyState(value, draft.input) })),
     [updateActive]
   );
 
@@ -159,14 +159,13 @@ export function useAgentInputDrafts({
     (value) =>
       updateActive((draft) => ({
         ...draft,
-        contextNotes: applyArrayState(value, draft.contextNotes),
+        contextNotes: applyState(value, draft.contextNotes),
       })),
     [updateActive]
   );
 
   const setSelectedImages = useCallback<React.Dispatch<React.SetStateAction<File[]>>>(
-    (value) =>
-      updateActive((draft) => ({ ...draft, images: applyArrayState(value, draft.images) })),
+    (value) => updateActive((draft) => ({ ...draft, images: applyState(value, draft.images) })),
     [updateActive]
   );
 
@@ -191,7 +190,7 @@ export function useAgentInputDrafts({
   );
 
   const setQueue = useCallback<React.Dispatch<React.SetStateAction<QueuedAgentMessage[]>>>(
-    (value) => updateActive((draft) => ({ ...draft, queue: applyArrayState(value, draft.queue) })),
+    (value) => updateActive((draft) => ({ ...draft, queue: applyState(value, draft.queue) })),
     [updateActive]
   );
 

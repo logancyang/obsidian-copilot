@@ -14,7 +14,10 @@ import {
 } from "@/aiParams";
 import { CustomCommandManager } from "@/commands/customCommandManager";
 import { getCachedCustomCommands } from "@/commands/state";
-import ChatInput, { type ChatInputProps } from "@/components/chat-components/ChatInput";
+import ChatInput, {
+  type ChatInputHandle,
+  type ChatInputProps,
+} from "@/components/chat-components/ChatInput";
 import { EMPTY_AGENT_MENTION_BRANDS } from "@/components/chat-components/hooks/useAtMentionCategories";
 import { useActiveWebTabState } from "@/components/chat-components/hooks/useActiveWebTabState";
 import { ACTIVE_WEB_TAB_MARKER, EVENT_NAMES } from "@/constants";
@@ -38,7 +41,7 @@ import {
 } from "@/types/message";
 import { getModelKeyFromModel } from "@/settings/model";
 import { modelSupportsVision } from "@/utils";
-import { arrayBufferToBase64 } from "@/utils/base64";
+import { arrayBufferToBase64, base64ToArrayBuffer } from "@/utils/base64";
 import { mergeWebTabContexts } from "@/utils/urlNormalization";
 import { QueuedMessageList } from "@/agentMode/ui/QueuedMessageList";
 import { App, Notice, TFile } from "obsidian";
@@ -167,6 +170,21 @@ async function fileToImageBlock(file: File): Promise<PromptContent | null> {
 }
 
 /**
+ * Convert an image block back into a `File` the composer can hold, so a
+ * cancelled queue entry returns its attachments alongside its text. Returns
+ * `null` for non-image blocks. The original filename isn't carried on the
+ * block, so the restored file gets a generated one (it only labels the
+ * preview thumbnail).
+ */
+function imageBlockToFile(block: PromptContent, index: number): File | null {
+  if (block.type !== "image") return null;
+  const extension = block.mimeType.split("/")[1] || "png";
+  return new File([base64ToArrayBuffer(block.data)], `queued-image-${index + 1}.${extension}`, {
+    type: block.mimeType,
+  });
+}
+
+/**
  * Composer for Agent Mode: consumes per-chat-input draft state (input,
  * attachments, include flags, in-flight loading, queued follow-ups), owns the
  * send/queue/stop flow, and renders `ChatInput`. Memoized and detached from the message stream
@@ -192,6 +210,7 @@ export const AgentChatInput = memo(function AgentChatInput({
   contextStatusIndicator,
 }: AgentChatInputProps) {
   const eventTarget = useContext(EventTargetContext);
+  const chatInputRef = useRef<ChatInputHandle>(null);
 
   // Hold sends only while a *real* project's context is materializing. Global
   // scope never holds, so the global landing's send path is byte-identical.
@@ -268,16 +287,34 @@ export const AgentChatInput = memo(function AgentChatInput({
   }, [chatInputId]);
 
   const handleStopGenerating = useCallback(async () => {
-    // Clear follow-ups before cancellation can finish the turn and flush them.
-    // Only runSend owns loading: a late cancel response must not mark a newer turn idle.
+    // Restore before cancellation can finish the turn and flush the queue.
+    // Only runSend owns loading; a late cancel must not mark a newer turn idle.
+    // Selected text remains ephemeral and is deliberately not restored.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/365
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/485
     setQueuedMessages([]);
+    if (queuedMessages.length > 0) {
+      const restored = combineQueuedMessages(queuedMessages);
+      chatInputRef.current?.prependContent(
+        restored.text,
+        restored.mentionedAgents ?? [],
+        restored.context?.webTabs ?? []
+      );
+      const notes = restored.context?.notes ?? [];
+      if (notes.length > 0) {
+        setContextNotes((previous) => dedupeBy([...notes, ...previous], (note) => note.path));
+      }
+      const images = (restored.promptContent ?? [])
+        .map(imageBlockToFile)
+        .filter((file): file is File => file !== null);
+      if (images.length > 0) setSelectedImages((previous) => [...images, ...previous]);
+    }
     try {
       await backend.cancel();
     } catch (e) {
       logError("[AgentMode] cancel failed", e);
     }
-  }, [backend, setQueuedMessages]);
+  }, [backend, queuedMessages, setContextNotes, setSelectedImages, setQueuedMessages]);
 
   const runSend = useCallback(
     async (item: QueuedAgentMessage) => {
@@ -564,6 +601,7 @@ export const AgentChatInput = memo(function AgentChatInput({
             chatInputId also stays stable when only the backend runtime is
             replaced, so that transition preserves editor-owned state. */}
         <ChatInput
+          ref={chatInputRef}
           key={chatInputId}
           isAgentMode
           placeholder="Ask anything • @ to add context • / for commands"

@@ -36,31 +36,47 @@ jest.mock("@/agentMode/ui/mentionedAgents", () => ({
 // key hits (send-flow regression tests).
 let capturedAgentBrands: ReadonlyArray<unknown> | undefined;
 let capturedTopRightAccessory: React.ReactNode | undefined;
+const mockPrependContent = jest.fn();
 let capturedPlaceholder: string | undefined;
 jest.mock("@/components/chat-components/ChatInput", () => ({
   __esModule: true,
-  default: (props: {
-    agentBrands?: ReadonlyArray<unknown>;
-    topRightAccessory?: React.ReactNode;
-    placeholder?: string;
-    handleSendMessage?: () => void;
-    onStopGenerating?: () => void;
-  }) => {
-    capturedAgentBrands = props.agentBrands;
-    capturedTopRightAccessory = props.topRightAccessory;
-    capturedPlaceholder = props.placeholder;
-    return (
-      <>
-        {props.topRightAccessory}
-        <button type="button" onClick={() => props.handleSendMessage?.()}>
-          send
-        </button>
-        <button type="button" onClick={() => props.onStopGenerating?.()}>
-          stop
-        </button>
-      </>
-    );
-  },
+  default: jest.requireActual<typeof React>("react").forwardRef(
+    (
+      props: {
+        setInputMessage: React.Dispatch<React.SetStateAction<string>>;
+        agentBrands?: ReadonlyArray<unknown>;
+        topRightAccessory?: React.ReactNode;
+        placeholder?: string;
+        handleSendMessage?: () => void;
+        onStopGenerating?: () => void;
+      },
+      ref: React.ForwardedRef<import("@/components/chat-components/ChatInput").ChatInputHandle>
+    ) => {
+      React.useImperativeHandle(ref, () => ({
+        removeToolPills: jest.fn(),
+        prependContent: (text: string, agents: readonly string[], webTabs: readonly unknown[]) => {
+          mockPrependContent(text, agents, webTabs);
+          props.setInputMessage((current) =>
+            [text, current].filter((part) => part.trim()).join("\n\n")
+          );
+        },
+      }));
+      capturedAgentBrands = props.agentBrands;
+      capturedTopRightAccessory = props.topRightAccessory;
+      capturedPlaceholder = props.placeholder;
+      return (
+        <>
+          {props.topRightAccessory}
+          <button type="button" onClick={() => props.handleSendMessage?.()}>
+            send
+          </button>
+          <button type="button" onClick={() => props.onStopGenerating?.()}>
+            stop
+          </button>
+        </>
+      );
+    }
+  ),
 }));
 
 jest.mock("@/components/chat-components/hooks/useActiveWebTabState", () => ({
@@ -94,6 +110,16 @@ jest.mock("@/services/webViewerService/activeWebTabSnapshot", () => ({
 }));
 
 const makeApp = (): App => ({ workspace: { getActiveFile: () => null } }) as unknown as App;
+
+const makeFile = (path: string): TFile =>
+  new (TFile as unknown as new (path: string) => TFile)(path);
+
+// A 3-byte PNG and the content block the composer converts it into.
+const image = {
+  type: "image/png",
+  arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+} as File;
+const imageBlock = { type: "image", mimeType: "image/png", data: "AQID" };
 
 const makeDraft = (overrides: Partial<AgentInputDraftControls> = {}): AgentInputDraftControls => ({
   input: "hello",
@@ -199,8 +225,7 @@ describe("AgentChatInput", () => {
     ])(
       "sends $scenario as independent context https://github.com/Brevilabs/obsidian-copilot-private/issues/465",
       async ({ includeActiveNote, includeSelection }) => {
-        const TFileConstructor = TFile as unknown as new (path: string) => TFile;
-        const note = new TFileConstructor("Research.md");
+        const note = makeFile("Research.md");
         const selection: NoteSelectedTextContext = {
           id: "research-excerpt",
           sourceType: "note",
@@ -242,12 +267,6 @@ describe("AgentChatInput", () => {
       await waitFor(() => expect(backend.sendMessage).toHaveBeenCalledTimes(1));
       expect(Notice).not.toHaveBeenCalled();
     });
-
-    const image = {
-      type: "image/png",
-      arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
-    } as File;
-    const imageBlock = { type: "image", mimeType: "image/png", data: "AQID" };
 
     it.each(["", "   ", "Describe this"])(
       "sends image content with draft %p https://github.com/logancyang/obsidian-copilot/issues/2850",
@@ -350,7 +369,7 @@ describe("AgentChatInput", () => {
     });
   });
   describe("handleStopGenerating()", () => {
-    it("discards queued follow-ups before cancellation settles the active turn https://github.com/Brevilabs/obsidian-copilot-private/issues/365", async () => {
+    it("returns queued follow-ups to the composer before cancellation settles the active turn https://github.com/Brevilabs/obsidian-copilot-private/issues/485", async () => {
       const { backend, getDraft, settleCancel } = setupCancellation();
       act(() => getDraft().setInput("first turn"));
       fireEvent.click(screen.getByText("send"));
@@ -363,7 +382,90 @@ describe("AgentChatInput", () => {
 
       expect(backend.sendMessage).toHaveBeenCalledTimes(1);
       expect(getDraft().queue).toHaveLength(0);
+      expect(getDraft().input).toBe("queued follow-up");
       expect(getDraft().loading).toBe(false);
+      await act(async () => settleCancel());
+    });
+
+    it("joins several queued follow-ups ahead of text typed since they were queued https://github.com/Brevilabs/obsidian-copilot-private/issues/485", async () => {
+      const { backend, getDraft, settleCancel } = setupCancellation();
+      act(() => getDraft().setInput("first turn"));
+      fireEvent.click(screen.getByText("send"));
+      await waitFor(() => expect(backend.sendMessage).toHaveBeenCalledTimes(1));
+      act(() => getDraft().setInput("first follow-up"));
+      fireEvent.click(screen.getByText("send"));
+      await waitFor(() => expect(getDraft().queue).toHaveLength(1));
+      act(() => getDraft().setInput("second follow-up"));
+      fireEvent.click(screen.getByText("send"));
+      await waitFor(() => expect(getDraft().queue).toHaveLength(2));
+      act(() => getDraft().setInput("still typing"));
+
+      await act(async () => fireEvent.click(screen.getByText("stop")));
+
+      expect(getDraft().input).toBe("first follow-up\n\nsecond follow-up\n\nstill typing");
+      await act(async () => settleCancel());
+    });
+
+    it("returns a queued follow-up's notes and images to the composer https://github.com/Brevilabs/obsidian-copilot-private/issues/485", async () => {
+      const note = makeFile("Queued.md");
+      const { backend, getDraft, settleCancel } = setupCancellation();
+      act(() => getDraft().setInput("first turn"));
+      fireEvent.click(screen.getByText("send"));
+      await waitFor(() => expect(backend.sendMessage).toHaveBeenCalledTimes(1));
+      act(() => {
+        getDraft().setInput("look at this");
+        getDraft().setContextNotes([note]);
+        getDraft().setSelectedImages([image]);
+      });
+      fireEvent.click(screen.getByText("send"));
+      await waitFor(() => expect(getDraft().queue).toHaveLength(1));
+      expect(getDraft().contextNotes).toHaveLength(0);
+      expect(getDraft().images).toHaveLength(0);
+
+      await act(async () => fireEvent.click(screen.getByText("stop")));
+
+      expect(getDraft().input).toBe("look at this");
+      expect(getDraft().contextNotes).toEqual([note]);
+      expect(getDraft().images).toHaveLength(1);
+      expect(getDraft().images[0]).toMatchObject({ type: "image/png", size: 3 });
+      await act(async () => settleCancel());
+    });
+
+    it("restores resolved commands and prepends queued images before draft images https://github.com/Brevilabs/obsidian-copilot-private/issues/485", async () => {
+      const { getDraft, settleCancel } = setupCancellation();
+      act(() => {
+        getDraft().setLoading(true);
+        getDraft().setInput("current draft");
+        getDraft().setSelectedImages([image]);
+        getDraft().setQueue([
+          {
+            id: "one",
+            rawInput: "first",
+            text: "first",
+            mentionedAgents: ["claude"],
+            context: {
+              notes: [],
+              urls: [],
+              webTabs: [{ url: "https://example.com/report", title: "Report" }],
+            },
+          },
+          {
+            id: "two",
+            rawInput: "/review",
+            text: "Review the changes",
+            promptContent: [{ type: "image", mimeType: "image/png", data: "BAUG" }],
+          },
+        ]);
+      });
+      await act(async () => fireEvent.click(screen.getByText("stop")));
+      expect(getDraft().input).toBe("first\n\nReview the changes\n\ncurrent draft");
+      expect(getDraft().images[0]).toMatchObject({ name: "queued-image-1.png" });
+      expect(getDraft().images[1]).toBe(image);
+      expect(mockPrependContent).toHaveBeenLastCalledWith(
+        "first\n\nReview the changes",
+        ["claude"],
+        [{ url: "https://example.com/report", title: "Report" }]
+      );
       await act(async () => settleCancel());
     });
 
@@ -382,7 +484,7 @@ describe("AgentChatInput", () => {
 
       expect(getDraft().loading).toBe(true);
     });
-    it("discards queued follow-ups but keeps the active turn running when cancellation fails https://github.com/Brevilabs/obsidian-copilot-private/issues/365", async () => {
+    it("returns queued follow-ups to the composer but keeps the active turn running when cancellation fails https://github.com/Brevilabs/obsidian-copilot-private/issues/365 https://github.com/Brevilabs/obsidian-copilot-private/issues/485", async () => {
       const { backend, getDraft, settleTurn } = setupCancellation();
       jest.mocked(backend.cancel).mockRejectedValueOnce(new Error("Cancellation failed"));
       act(() => getDraft().setInput("first turn"));
@@ -395,6 +497,7 @@ describe("AgentChatInput", () => {
       await act(async () => fireEvent.click(screen.getByText("stop")));
 
       expect(getDraft().queue).toHaveLength(0);
+      expect(getDraft().input).toBe("queued follow-up");
       expect(getDraft().loading).toBe(true);
       await act(async () => settleTurn());
       expect(getDraft().loading).toBe(false);
@@ -640,7 +743,7 @@ describe("AgentChatInput", () => {
       // Lexical editor race resetCompose and strand the just-sent text in the
       // input when text was sent alongside images.
       let resolveRead!: (buf: ArrayBuffer) => void;
-      const image = {
+      const slowImage = {
         type: "image/png",
         arrayBuffer: () =>
           new Promise<ArrayBuffer>((resolve) => {
@@ -652,7 +755,7 @@ describe("AgentChatInput", () => {
         sendMessage: jest.fn(() => ({ turn: Promise.resolve() })),
         cancel: jest.fn(),
       } as unknown as AgentChatBackend;
-      const draft = makeDraft({ images: [image] });
+      const draft = makeDraft({ images: [slowImage] });
 
       renderInput(backend, draft);
       fireEvent.click(screen.getByText("send"));
