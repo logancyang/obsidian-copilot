@@ -1,7 +1,24 @@
 import React from "react";
+import type { InstallState } from "@/agentMode/session/types";
 import type { Meta, StoryObj } from "@/lib/story";
 import { Terminal } from "lucide-react";
 import { AgentBackendHeader, type AgentBackendHeaderProps } from "./AgentBackendHeader";
+
+// The gallery import fence keeps backend modules out of shared stories, so the two release
+// floors are restated here. Each outdated fixture sits below its floor, which is the single
+// support threshold for managed and user-owned installs alike.
+const OPENCODE_FLOOR = "1.18.31";
+const OPENCODE_OUTDATED = "1.18.16";
+const CODEX_FLOOR = "1.12.0";
+const CODEX_OUTDATED = "1.10.0";
+
+const codexOutdated = (source: "managed" | "custom"): InstallState => ({
+  kind: "incompatible",
+  source,
+  currentVersion: CODEX_OUTDATED,
+  minVersion: CODEX_FLOOR,
+  message: `Codex adapter v${CODEX_OUTDATED} is not supported. Copilot requires Codex adapter v${CODEX_FLOOR} or newer.`,
+});
 
 const meta = {
   title: "Settings/Agent Backend Header",
@@ -12,12 +29,12 @@ const meta = {
     installState: {
       kind: "incompatible",
       source: "managed",
-      currentVersion: "1.15.0",
-      minVersion: "1.16.0",
-      message: "opencode v1.15.0 is not supported. Copilot requires opencode v1.16.0 or newer.",
+      currentVersion: OPENCODE_OUTDATED,
+      minVersion: OPENCODE_FLOOR,
+      message: `opencode v${OPENCODE_OUTDATED} is not supported. Copilot requires opencode v${OPENCODE_FLOOR} or newer.`,
     },
     managedInstall: { kind: "idle" },
-    resolvedPath: "~/.obsidian-copilot/opencode/1.15.0/opencode",
+    resolvedPath: `~/.obsidian-copilot/opencode/${OPENCODE_OUTDATED}/opencode`,
     onConfigure: () => {},
   },
   parameters: { gallery: { host: "settings-tab", layout: "padded" } },
@@ -33,14 +50,20 @@ export const Upgrade: StoryObj<AgentBackendHeaderProps> = {};
 export const OutdatedCodex: StoryObj<AgentBackendHeaderProps> = {
   args: {
     displayName: "Codex",
-    installState: {
-      kind: "incompatible",
-      source: "managed",
-      currentVersion: "1.10.0",
-      minVersion: "1.12.0",
-      message: "Codex adapter 1.10.0 does not match this Copilot release (1.12.0).",
-    },
-    resolvedPath: "~/.obsidian-copilot/codex/1.10.0/codex-acp",
+    installState: codexOutdated("managed"),
+    resolvedPath: `~/.obsidian-copilot/codex/${CODEX_OUTDATED}/codex-acp`,
+  },
+};
+/**
+ * A user-owned Codex adapter below the release floor. It reports an update rather than a
+ * missing install, so the configured path survives and Configure can explain the requirement.
+ * https://github.com/Brevilabs/obsidian-copilot-private/issues/480
+ */
+export const OutdatedCustomCodex: StoryObj<AgentBackendHeaderProps> = {
+  args: {
+    displayName: "Codex",
+    installState: codexOutdated("custom"),
+    resolvedPath: "~/.local/bin/codex-acp",
   },
 };
 export const Running: StoryObj<AgentBackendHeaderProps> = {

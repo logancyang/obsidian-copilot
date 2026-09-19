@@ -1,14 +1,13 @@
 import { requireNodeModule } from "@/utils/desktopRuntime";
-import { compareSemver } from "@/utils/semver";
+import { CODEX_ACP_PINNED_VERSION } from "@/agentMode/backends/codex/cliSetup";
+import { versionInstallState } from "@/agentMode/backends/shared/versionInstallState";
 
 const CURRENT_PACKAGE_NAME = "@agentclientprotocol/codex-acp";
 const CURRENT_PACKAGE_ENTRY = "dist/index.js";
 const SEMVER_PATTERN =
   /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
 
-// Bundled CLI authentication requires the passthrough added in version 0.0.45.
-// https://github.com/logancyang/obsidian-copilot/issues/2967
-export const CODEX_ACP_MIN_VERSION = "0.0.45";
+export const CODEX_ACP_MIN_VERSION = CODEX_ACP_PINNED_VERSION;
 
 export interface CodexAcpInvocation {
   command: string;
@@ -19,6 +18,8 @@ export interface CodexAcpInvocation {
 export interface CodexAcpPackage {
   entryPath: string;
   version: string;
+  /** Semantic release version without the legacy native packaging revision. */
+  acpVersion: string;
 }
 
 export interface CodexAcpPackageFs {
@@ -42,7 +43,7 @@ function unsupportedAdapter(message?: string): Error {
 }
 
 /**
- * Resolves a supported native bundle or a supported npm package entry point.
+ * Recognizes native bundles and npm package entries without enforcing the release floor.
  * The older Zed adapter shares the `codex-acp` binary name but advertises
  * incompatible mode ids, so package identity is part of the support contract.
  * https://github.com/logancyang/obsidian-copilot/issues/2916
@@ -50,7 +51,7 @@ function unsupportedAdapter(message?: string): Error {
  * @param platform - Platform whose path rules should resolve the package layout.
  * @param packageFs - Filesystem operations used to inspect package metadata.
  */
-export function resolveSupportedCodexAcpPackage(
+export function resolveCodexAcpPackage(
   adapterPath: string,
   platform: NodeJS.Platform = process.platform,
   packageFs: CodexAcpPackageFs = defaultPackageFs()
@@ -80,14 +81,10 @@ export function resolveSupportedCodexAcpPackage(
         typeof provenance.acpVersion === "string"
           ? SEMVER_PATTERN.exec(provenance.acpVersion)
           : null;
-      const versionOrder = parsedVersion
-        ? compareSemver(parsedVersion[0], CODEX_ACP_MIN_VERSION)
-        : -1;
-      // The minimum stable release guarantees bundled CLI authentication; its prereleases do not.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
+      // Keep valid old adapters identifiable so configuration can offer an upgrade instead of Install.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/480
       if (
         parsedVersion &&
-        (versionOrder > 0 || (versionOrder === 0 && parsedVersion[4] === undefined)) &&
         (provenance.packagingRevision === undefined ||
           (Number.isSafeInteger(provenance.packagingRevision) &&
             provenance.packagingRevision > 0)) &&
@@ -97,6 +94,7 @@ export function resolveSupportedCodexAcpPackage(
         // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
         return {
           entryPath,
+          acpVersion: provenance.acpVersion!,
           version:
             provenance.packagingRevision === undefined
               ? provenance.acpVersion!
@@ -141,33 +139,57 @@ export function resolveSupportedCodexAcpPackage(
   if (!parsedVersion) {
     throw unsupportedAdapter();
   }
-  const versionOrder = compareSemver(version, CODEX_ACP_MIN_VERSION);
-  if (versionOrder < 0 || (versionOrder === 0 && parsedVersion[4] !== undefined)) {
-    throw unsupportedAdapter(
-      `${CURRENT_PACKAGE_NAME} ${version} is not supported. Install ${CODEX_ACP_MIN_VERSION} or newer, then run Auto-detect again.`
-    );
-  }
-  return { entryPath, version };
+  return { entryPath, version, acpVersion: version };
 }
 
-/** Resolve only the package entry for callers that do not need version metadata. */
+/**
+ * Enforces execution support after identity detection, without hiding old installations from setup.
+ * @param adapterPath - Configured native executable, npm launcher, or package entry point.
+ * @param platform - Platform whose path rules should resolve the package layout.
+ * @param packageFs - Filesystem operations used to inspect package metadata.
+ */
 export function resolveSupportedCodexAcpEntry(
   adapterPath: string,
   platform: NodeJS.Platform = process.platform,
   packageFs: CodexAcpPackageFs = defaultPackageFs()
 ): string {
-  return resolveSupportedCodexAcpPackage(adapterPath, platform, packageFs).entryPath;
+  const installed = resolveCodexAcpPackage(adapterPath, platform, packageFs);
+  const state = versionInstallState(
+    "Codex adapter",
+    installed.acpVersion,
+    CODEX_ACP_MIN_VERSION,
+    "custom",
+    installed.version
+  );
+  // Detection must retain old versions, but execution still requires the supported adapter contract.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/480
+  if (state.kind === "incompatible") throw unsupportedAdapter(state.message);
+  return installed.entryPath;
 }
 
-export function isSupportedCodexAcpPath(adapterPath: string | undefined): boolean {
-  if (!adapterPath) return false;
-  try {
-    resolveSupportedCodexAcpEntry(adapterPath);
-    return true;
-  } catch {
-    return false;
-  }
+function recognizes(
+  resolve: (adapterPath: string) => unknown
+): (adapterPath: string | undefined) => boolean {
+  return (adapterPath) => {
+    if (!adapterPath) return false;
+    try {
+      resolve(adapterPath);
+      return true;
+    } catch {
+      return false;
+    }
+  };
 }
+
+/** Whether the path holds a genuine `codex-acp` adapter, at any release. */
+export const isCodexAcpPath = recognizes(resolveCodexAcpPackage);
+
+/**
+ * Whether the path holds an adapter this Copilot release can actually run, so detection can
+ * rank a supported install above a genuine but outdated one found in an earlier location.
+ * https://github.com/Brevilabs/obsidian-copilot-private/issues/480
+ */
+export const isSupportedCodexAcpPath = recognizes(resolveSupportedCodexAcpEntry);
 
 /**
  * Launches native bundles directly and supported npm entries through the

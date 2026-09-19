@@ -302,6 +302,23 @@ describe("CodexInstallModal", () => {
       expect(fixture.manager.install).toHaveBeenCalledTimes(1);
     });
 
+    it("offers no managed upgrade for an outdated custom adapter, so the download cannot take over a user-owned install (https://github.com/Brevilabs/obsidian-copilot-private/issues/480)", async () => {
+      setCodexSettings({ binaryPath: "/usr/local/bin/codex-acp", binarySource: "custom" });
+      jest.mocked(CodexBackendDescriptor.getInstallState).mockReturnValue({
+        kind: "incompatible",
+        source: "custom",
+        message: "Codex adapter v1.10.0 is not supported.",
+        currentVersion: "1.10.0",
+        minVersion: "1.12.0",
+      });
+      const fixture = makeManager();
+      await fixture.render();
+
+      expect(screen.getByText("Codex adapter v1.10.0 is not supported.")).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Upgrade" })).toBeNull();
+      expect(fixture.manager.install).not.toHaveBeenCalled();
+    });
+
     it(`requires the size-annotated uninstall confirmation before removing managed copies for ${ISSUE}`, async () => {
       setCodexSettings({ binaryPath: "/managed/codex-acp", binarySource: "managed" });
       const fixture = makeManager();

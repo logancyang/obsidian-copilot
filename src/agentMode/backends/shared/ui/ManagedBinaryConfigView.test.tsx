@@ -303,6 +303,17 @@ describe("ManagedBinaryConfigView", () => {
       expect(screen.getByRole("button", { name: "Run opencode upgrade" })).toBeTruthy();
     });
 
+    it("states the requirement without an upgrade button when the container offers no remedy (https://github.com/Brevilabs/obsidian-copilot-private/issues/480)", () => {
+      renderView({
+        state: { ...OUTDATED, source: "custom" },
+        activeSource: "custom",
+        actions: { ...makeActions(), upgrade: undefined },
+      });
+
+      expect(screen.getByRole("alert").textContent).toContain("is not supported");
+      expect(screen.queryByRole("button", { name: "Run opencode upgrade" })).toBeNull();
+    });
+
     it("replaces the upgrade button with its progress while the upgrade runs (https://github.com/Brevilabs/obsidian-copilot-private/issues/368)", () => {
       renderView({
         state: OUTDATED,

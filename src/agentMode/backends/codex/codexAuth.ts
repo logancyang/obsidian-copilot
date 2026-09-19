@@ -122,11 +122,15 @@ export const codexAuth: BackendAuth = {
     // Reinstalling a managed version changes its UUID path, not its account or login process.
     // Hash the environment so probe identities never expose credential values.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
+    // A user-owned adapter updated in place keeps its path, so the version is the only part of
+    // its identity that moves; without it the rejected adapter's cached "signed out" answer
+    // survives the update and sends an already-authenticated user back through sign-in.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/480
     const selection = !config?.binaryPath
       ? null
       : config.binarySource === "managed"
         ? ["managed", config.binaryVersion]
-        : config.binaryPath;
+        : [config.binaryPath, config.binaryVersion];
     return requireNodeModule<typeof import("node:crypto")>("crypto")
       .createHash("sha256")
       .update(

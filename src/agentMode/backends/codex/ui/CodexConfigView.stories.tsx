@@ -28,13 +28,18 @@ const MANAGED: CodexManagedInfo = {
   run: { kind: "idle" },
 };
 
-const OUTDATED: InstallState = {
+const OUTDATED_VERSION = "1.9.0";
+
+/** An adapter below the release floor, which both ownership paths are now measured against. */
+const outdated = (source: CodexBinarySource, currentVersion: string): InstallState => ({
   kind: "incompatible",
-  source: "managed",
-  currentVersion: "1.9.0-r1",
+  source,
+  currentVersion,
   minVersion: CODEX_BUNDLE_VERSION,
-  message: `Codex adapter v1.9.0-r1 requires an upgrade. Copilot requires Codex adapter v${CODEX_BUNDLE_VERSION} or newer.`,
-};
+  message: `Codex adapter v${currentVersion} is not supported. Copilot requires Codex adapter v${CODEX_BUNDLE_VERSION} or newer.`,
+});
+
+const OUTDATED: InstallState = outdated("managed", `${OUTDATED_VERSION}-r1`);
 
 /**
  * Every story renders through this stateful wrapper so the gallery can exercise
@@ -134,6 +139,23 @@ export const CustomNotSetYet: StoryObj<CodexConfigViewProps> = {
 export const OutdatedWithUpgrade: StoryObj<CodexConfigViewProps> = {
   render: InteractiveConfigView,
   args: { state: OUTDATED, activeSource: "managed" },
+};
+
+/**
+ * A user-owned adapter below the release floor. The strip states the requirement, and the
+ * managed Upgrade button is absent because installing the pinned bundle would replace the
+ * user's own adapter instead of upgrading it; Auto-detect and Apply below are the remedy.
+ * https://github.com/Brevilabs/obsidian-copilot-private/issues/480
+ */
+export const OutdatedCustomAdapter: StoryObj<CodexConfigViewProps> = {
+  render: InteractiveConfigView,
+  args: {
+    state: outdated("custom", OUTDATED_VERSION),
+    source: "custom",
+    activeSource: "custom",
+    customPath: "/usr/local/bin/codex-acp",
+    actions: { ...ACTIONS, upgrade: undefined },
+  },
 };
 
 export const ManagedRetry: StoryObj<CodexConfigViewProps> = {

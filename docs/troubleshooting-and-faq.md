@@ -12,6 +12,16 @@ Start in **Settings → Copilot → Basic → Agents** and check the status besi
 
 Use **Configure → Managed by Copilot** to reinstall or uninstall it. Setup is complete at **Ready**.
 
+### opencode or Codex shows an update warning, but models are still selectable
+
+Copilot requires opencode **1.18.31 or newer** and Codex ACP **1.12.0 or newer** for both managed and custom installations. Those minimum versions are also the managed download versions in this Copilot release. Saved enabled models stay visible and selectable, but an outdated agent cannot run requests.
+
+1. Select **Configure** in Agent Chat or **Settings → Copilot → Basic → Agents** to open the agent's configuration dialog.
+2. For a managed installation, choose the upgrade action or **Download & install**.
+3. For a custom installation, update it yourself, then select **Apply** or **Auto-detect** to validate the updated binary. The managed download never replaces a custom Codex adapter, so the Codex dialog offers no upgrade button for one. Updating the Codex CLI alone does not update the ACP adapter.
+
+Opening Configure does not start an upgrade. Chat and Settings keep shared installation progress and errors visible. If installation fails, resolve the reported problem and retry in Configure. Copilot does not upgrade agents automatically or poll for the latest upstream agent release.
+
 ### Claude shows “Update required,” cannot be found, or is signed out
 
 - **Update required:** update Claude Code to the minimum version shown by Copilot, then run **Configure Claude → Auto-detect**. For a custom path, update that installation or choose **Clear**.
@@ -22,11 +32,11 @@ Copilot uses your Claude Code login; there is no API key to paste here.
 
 ### Codex is installed, but Copilot cannot find it
 
-Copilot connects through `codex-acp`, not the `codex` executable alone. Manual installations require adapter version 0.0.45 or newer. This is the minimum supported version; the managed download is pinned to 1.12.0 in this Copilot release.
+Copilot connects through `codex-acp`, not the `codex` executable alone. Managed and custom installations require adapter version **1.12.0 or newer**. The managed download is pinned to **1.12.0** in this Copilot release. A custom npm installation must use `@agentclientprotocol/codex-acp` **1.12.0 or newer**, not just a newer Codex CLI. See [Codex installation details](agent-mode-and-tools.md#codex).
 
 1. Open **Basic → Agents → Codex → Configure**.
-2. Choose **Download & install** under **Managed by Copilot**. If this first installation fails, read the error in Configure, fix the reported problem, then choose **Download & install** again. Failed updates of an already-managed adapter show the same error and **Retry** action in Settings and Agent Chat.
-3. For an adapter you manage yourself, choose **My own binary**, then **Auto-detect** or enter the absolute path to `codex-acp` on macOS/Linux or its `dist\index.js` on Windows. Copilot does not update custom binaries.
+2. Choose **Download & install** under **Managed by Copilot**. If installation fails, read the error in Configure, fix the reported problem, then retry there. Shared progress and errors remain visible in Settings and Agent Chat.
+3. For an adapter you manage yourself, choose **My own binary**, then **Auto-detect** or enter its absolute path and select **Apply**. Use `codex-acp` on macOS/Linux or `codex-acp.exe` on Windows for a native bundle, keeping its companion files in place. For an npm installation on Windows, use the package's `dist\index.js`. Copilot does not update custom Codex binaries.
 4. Click **Sign in** and finish authentication in your browser. If it does not open, click **Open sign-in page**. Cancel or retry if needed. Managed Codex includes its runtime; Node.js and npm are not required.
 
 You can also choose **Sign in to Codex** on the Agent Chat status card. For terminal login, run your configured adapter with `cli login` using the same `CODEX_HOME` as Copilot.

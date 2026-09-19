@@ -1,12 +1,15 @@
 import { extractArchive } from "@/agentMode/backends/shared/extractArchive";
 import {
+  isVersionSupported,
+  versionInstallState,
+} from "@/agentMode/backends/shared/versionInstallState";
+import {
   ManagedBinaryManager,
   type BinarySettings,
   type InstalledBinary,
 } from "@/agentMode/backends/shared/ManagedBinaryManager";
 import { OPENCODE_MIN_ACP_VERSION, OPENCODE_PINNED_VERSION } from "./ui/opencodeVersion";
 import { OPENCODE_RELEASE_API_URL_TEMPLATE } from "@/constants";
-import { compareSemver } from "@/utils/semver";
 import { logError, logInfo, logWarn } from "@/logger";
 import type CopilotPlugin from "@/main";
 import { getSettings, setSettings, type OpencodeBackendSettings } from "@/settings/model";
@@ -176,14 +179,12 @@ export function readOpencodeSettings(): OpencodeBackendSettings {
 
 /**
  * Whether an installed opencode version predates the minimum the plugin
- * supports ({@link OPENCODE_MIN_ACP_VERSION}). Older binaries either predate
- * the current model catalog or leave the backing turn running after ACP
- * cancellation. An unknown version isn't flagged — we can't prove it's old,
- * and a missing install is handled by the install prompt instead.
+ * supports ({@link OPENCODE_MIN_ACP_VERSION}). An unknown version isn't flagged
+ * because its age cannot be determined; missing installs use the install prompt.
  */
 export function isOpencodeVersionOutdated(version: string | undefined): boolean {
   if (!version) return false;
-  return compareSemver(version, OPENCODE_MIN_ACP_VERSION) < 0;
+  return !isVersionSupported(version, OPENCODE_MIN_ACP_VERSION);
 }
 
 /**
@@ -192,16 +193,7 @@ export function isOpencodeVersionOutdated(version: string | undefined): boolean 
  */
 export function toOpencodeInstallState(state: InstallState): BackendInstallState {
   if (state.kind === "absent") return state;
-  if (!isOpencodeVersionOutdated(state.version)) {
-    return { kind: "ready", source: state.source };
-  }
-  return {
-    kind: "incompatible",
-    source: state.source,
-    currentVersion: state.version,
-    minVersion: OPENCODE_MIN_ACP_VERSION,
-    message: `opencode v${state.version} is not supported. Copilot requires opencode v${OPENCODE_MIN_ACP_VERSION} or newer.`,
-  };
+  return versionInstallState("opencode", state.version, OPENCODE_MIN_ACP_VERSION, state.source);
 }
 
 function updateOpencodeFields(partial: Partial<OpencodeBackendSettings>): void {

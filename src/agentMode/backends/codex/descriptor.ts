@@ -15,6 +15,7 @@ import CodexLogo from "./logo.svg";
 import { CodexSettingsPanel } from "./CodexSettingsPanel";
 import { agentOriginEnabledModelEntries } from "@/agentMode/backends/shared/agentEnabledModels";
 import { simpleBinaryBackendProcess } from "@/agentMode/backends/shared/simpleBinaryBackend";
+import { versionInstallState } from "@/agentMode/backends/shared/versionInstallState";
 import type {
   EnabledModelEntry,
   ModelSelection,
@@ -33,7 +34,11 @@ import { CodexBinaryManager } from "./CodexBinaryManager";
 import { CODEX_BUNDLE_VERSION } from "./codexArchive";
 import { CODEX_BINARY_NAME } from "./cliSetup";
 import { buildCodexModeMapping } from "./codexModeMapping";
-import { isSupportedCodexAcpPath, resolveSupportedCodexAcpPackage } from "./codexVersion";
+import {
+  isCodexAcpPath,
+  isSupportedCodexAcpPath,
+  resolveCodexAcpPackage,
+} from "@/agentMode/backends/codex/codexVersion";
 
 const codexBinaryManager = new CodexBinaryManager();
 
@@ -61,14 +66,20 @@ function codexAcpResolverEnv(): Parameters<typeof resolveCodexAcpBinary>[0] {
 }
 
 export async function detectCodexAcpPath(): Promise<string | null> {
-  const fromKnownLocations = resolveCodexAcpBinary(codexAcpResolverEnv(), isSupportedCodexAcpPath);
+  const env = codexAcpResolverEnv();
+  // The candidate list ranks search locations, not versions, so an outdated adapter in an early
+  // directory would otherwise be offered while a supported one sits later in the list.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/480
+  const fromKnownLocations =
+    resolveCodexAcpBinary(env, isSupportedCodexAcpPath) ??
+    resolveCodexAcpBinary(env, isCodexAcpPath);
   if (fromKnownLocations) return fromKnownLocations;
 
   // npm can install into a user-selected prefix outside the known directories;
-  // retain PATH discovery while enforcing the same supported-package contract.
+  // retain PATH discovery while enforcing the same package identity contract.
   // https://github.com/logancyang/obsidian-copilot/issues/2916
   const fromPath = await detectBinary(CODEX_BINARY_NAME);
-  return isSupportedCodexAcpPath(fromPath ?? undefined) ? fromPath : null;
+  return isCodexAcpPath(fromPath ?? undefined) ? fromPath : null;
 }
 
 export function codexAcpDetectionSearchDirs(): string[] {
@@ -156,20 +167,15 @@ export const CodexBackendDescriptor: BackendDescriptor = {
     const configured = settings.agentMode?.backends?.codex;
     if (!configured?.binaryPath) return { kind: "absent" };
     try {
-      const installed = resolveSupportedCodexAcpPackage(configured.binaryPath);
+      const installed = resolveCodexAcpPackage(configured.binaryPath);
       const source = configured.binarySource ?? "custom";
-      // A supported older bundle stays selectable for the managed Update action.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
-      if (source === "managed" && installed.version !== CODEX_BUNDLE_VERSION) {
-        return {
-          kind: "incompatible",
-          source,
-          currentVersion: installed.version,
-          minVersion: CODEX_BUNDLE_VERSION,
-          message: `Codex adapter ${installed.version} does not match this Copilot release (${CODEX_BUNDLE_VERSION}).`,
-        };
-      }
-      return { kind: "ready", source };
+      return versionInstallState(
+        "Codex adapter",
+        installed.acpVersion,
+        CODEX_BUNDLE_VERSION,
+        source,
+        installed.version
+      );
     } catch {
       return { kind: "absent" };
     }
