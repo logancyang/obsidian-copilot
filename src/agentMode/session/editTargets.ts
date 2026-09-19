@@ -88,6 +88,9 @@ export function editTargetPaths(source: EditTargetSource, vaultBase: string | nu
  * expect to review.
  */
 export function isCapturableVaultPath(path: string): boolean {
+  // Backslash paths must not bypass snapshot exclusions for hidden files or paths outside the vault.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/347
+  path = path.replace(/\\/g, "/");
   if (path.length === 0 || isAbsolutePath(path)) return false;
   return !path.split("/").some((segment) => segment.startsWith("."));
 }
