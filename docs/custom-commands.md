@@ -23,7 +23,7 @@ Skills can be shared with opencode, Claude, and Codex. Commands stay inside Copi
 4. Optionally choose **Model (Optional)**, **Show in context menu**, and **Show in slash menu**.
 5. Click **Save**.
 
-Choose **Inherit from chat model** when the command should use your current Quick Chat model. A command-specific model applies to editor and command-palette runs. A slash run uses the model selected for that Quick Chat or Agent Chat.
+Choose **Inherit from chat model** and an editor or command-palette run snapshots the model selected in your active Agent Chat session when the command opens, when that model is also enabled for Quick Chat. If the Agent Chat model cannot run through Quick Chat, the command falls back to your Quick Chat model. A command-specific model always wins over inheritance for editor and command-palette runs. A slash run uses the model selected for that Quick Chat or Agent Chat.
 
 Use **Generate Default** for a starter set. You can edit, duplicate, delete, or drag commands to reorder them. **Custom Prompts Sort Strategy** controls their order in the slash menu.
 

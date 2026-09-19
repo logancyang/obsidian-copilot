@@ -41,6 +41,9 @@ import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
  */
 export type ModelSelectionScope = "quick-command" | "custom-command";
 
+/** Resolves the active Agent Chat model when a saved command is opened. */
+export type AgentModelKeyResolver = () => string | null;
+
 /**
  * Configuration for modal behavior.
  * This replaces the mode-based branching with explicit configuration.
@@ -98,12 +101,16 @@ interface CustomCommandChatModalContentProps {
   /** Bottom-anchor Y for "above" placement (panel grows upward) */
   anchorBottom?: number;
   behaviorConfig?: Partial<ModalBehaviorConfig>;
+  /** Active Agent Chat model captured when the modal opened. */
+  agentModelKey?: string | null;
 }
 
 /**
  * Content component for CustomCommandChatModal using the new MenuCommandModal.
+ *
+ * @param props - Modal content state, callbacks, and model-selection context.
  */
-function CustomCommandChatModalContent({
+export function CustomCommandChatModalContent({
   originalText,
   command,
   onInsert,
@@ -113,6 +120,7 @@ function CustomCommandChatModalContent({
   initialPosition,
   anchorBottom,
   behaviorConfig,
+  agentModelKey,
 }: CustomCommandChatModalContentProps) {
   const app = useApp();
   // Resolve behavior configuration
@@ -178,7 +186,8 @@ function CustomCommandChatModalContent({
 
   // Determine initial model key based on scope:
   // - quick-command: Use quickCommandModelKey (shared with Quick Ask)
-  // - custom-command: Use command's modelKey if set, otherwise global model
+  // - custom-command: Use command's modelKey if set, otherwise inherit from
+  //   the active Agent Chat model and then the legacy Quick Chat model
   const initialModelKey = useMemo(() => {
     if (modelSelectionScope === "quick-command") {
       // Use ?? to match QuickAskPanel behavior (empty string is valid, only null/undefined falls back)
@@ -186,8 +195,16 @@ function CustomCommandChatModalContent({
     }
     // For custom-command scope, respect command-level config
     // Use || here because empty string means "inherit from global"
-    return command.modelKey || globalModelKey;
-  }, [modelSelectionScope, settings.quickCommandModelKey, command.modelKey, globalModelKey]);
+    // The Agent model is snapshotted at modal open so a running command cannot
+    // change models if Agent Chat is changed in another pane.
+    return command.modelKey || agentModelKey || globalModelKey;
+  }, [
+    modelSelectionScope,
+    settings.quickCommandModelKey,
+    command.modelKey,
+    agentModelKey,
+    globalModelKey,
+  ]);
 
   const [userSelectedModelKey, setUserSelectedModelKey] = useState(initialModelKey);
 
@@ -471,6 +488,8 @@ export class CustomCommandChatModal {
       command: CustomCommand;
       systemPrompt?: string;
       behaviorConfig?: Partial<ModalBehaviorConfig>;
+      /** Resolves the active Agent Chat model at modal-open time. */
+      agentModelKey?: AgentModelKeyResolver;
     }
   ) {}
 
@@ -643,6 +662,7 @@ export class CustomCommandChatModal {
 
     // Capture ReplaceGuard (replaces captureReplaceSnapshot)
     const { selectedText, command, systemPrompt, behaviorConfig } = this.configs;
+    const agentModelKey = this.configs.agentModelKey?.() ?? null;
     let selectedTextSnapshot = selectedText;
 
     if (activeView?.editor?.cm) {
@@ -710,6 +730,7 @@ export class CustomCommandChatModal {
         initialPosition={initialPosition}
         anchorBottom={anchorBottom}
         behaviorConfig={behaviorConfig}
+        agentModelKey={agentModelKey}
       />
     );
   }
