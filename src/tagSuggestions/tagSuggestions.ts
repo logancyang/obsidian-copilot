@@ -15,9 +15,10 @@ const EVIDENCE_TOKEN_MARGIN = 1.3;
 const CJK = /[぀-ヿ㐀-鿿가-힯]/g;
 const HEX_COLOUR_TAG = /^(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
 
-// Provisional until the version-2 hold-one-out measurement sets an evidence-backed cutoff.
+// Provisional: 0.5 is the model's yes/no boundary. A version-2 hold-one-out measurement will
+// set the final cutoff; keep the cap because noul remains a weak cutoff across notes.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/492
-export const AUTO_ADD_MIN_NOUL = 0.85;
+export const AUTO_ADD_MIN_NOUL = 0.5;
 export const AUTO_ADD_MAX = 3;
 
 export interface TagSuggestionState {

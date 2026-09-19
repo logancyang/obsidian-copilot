@@ -513,12 +513,16 @@ describe("tagSuggestionRow", () => {
         expect(addTags).toHaveBeenCalledTimes(1);
       });
 
-      it(`hides Auto-add when no remaining ranked tag reaches the provisional threshold (${ISSUE})`, () => {
+      it(`uses the provisional 0.5 Auto-add threshold and hides when none qualify (${ISSUE})`, () => {
         const context = testContext({ tagsRow: true });
         const row = new TagSuggestionRow(context.app);
 
-        row.show(context.file, scoredSuggestions([0.84, 0.8, 0.7]), jest.fn());
+        row.show(context.file, scoredSuggestions([0.5, 0.49]), jest.fn());
+        expect(
+          context.metadataContainer.querySelector(".copilot-tag-auto-add-pill")?.textContent
+        ).toBe("Auto-add 1");
 
+        row.show(context.file, scoredSuggestions([0.49, 0.4]), jest.fn());
         expect(context.metadataContainer.querySelector(".copilot-tag-auto-add-pill")).toBeNull();
       });
 
