@@ -74,6 +74,8 @@ export type { ModelEnableGroup, ModelEnableRow } from "@/components/ui/ModelEnab
 export { PlanPreviewView, PLAN_PREVIEW_VIEW_TYPE } from "./ui/PlanPreviewView";
 export type { PlanPreviewViewState } from "./ui/PlanPreviewView";
 export { ReportIssueModal } from "./ui/ReportIssueModal";
+export { openTurnDiff, TurnDiffView, TURN_DIFF_VIEW_TYPE } from "./ui/TurnDiffView";
+export type { TurnDiffViewState } from "./ui/TurnDiffView";
 export type { ReportIssueModalParams } from "./ui/ReportIssueModal";
 export {
   backendDisplayOrder,
