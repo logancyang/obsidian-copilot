@@ -15,6 +15,7 @@ jest.mock("@/utils/renderMarkdown", () => ({
 
 const ALPHA_BEFORE = "The quick brown fox.\n";
 const ALPHA_AFTER = "The quick red fox.\n";
+const openViews: TurnDiffView[] = [];
 
 function change(path: string, overrides: Partial<TurnFileChange> = {}): TurnFileChange {
   return {
@@ -37,6 +38,7 @@ function fakeApp(): App {
 
 async function openView(app: App = fakeApp()): Promise<TurnDiffView> {
   const view = new TurnDiffView({ app, detach: jest.fn() } as unknown as WorkspaceLeaf);
+  openViews.push(view);
   await act(async () => {
     await view.onOpen();
   });
@@ -59,6 +61,13 @@ function header(view: TurnDiffView): HTMLElement {
 }
 
 describe("TurnDiffView", () => {
+  afterEach(async () => {
+    await act(async () => {
+      for (const view of openViews.splice(0)) await view.onClose();
+    });
+    jest.restoreAllMocks();
+  });
+
   describe("TurnDiffView", () => {
     describe("getDisplayText()", () => {
       it("titles the tab with the file's basename so a row of diff tabs stays readable", async () => {
@@ -178,6 +187,25 @@ describe("TurnDiffView", () => {
       });
     });
 
+    describe("onClose()", () => {
+      it("removes the rendered diff and its window-migration listener when the tab closes", async () => {
+        const detachMigration = jest.fn();
+        jest.spyOn(HTMLElement.prototype, "onWindowMigrated").mockReturnValueOnce(detachMigration);
+        const view = await openView();
+        await hydrate(view, { ...change("notes/diff-demo/alpha.md"), turnId: "turn-1" });
+        expect(view.containerEl.textContent).toContain("red");
+
+        await act(async () => {
+          await view.onClose();
+        });
+
+        expect(view.containerEl.children[1].childNodes).toHaveLength(0);
+        expect(detachMigration).toHaveBeenCalledTimes(1);
+        await hydrate(view, { ...change("notes/diff-demo/beta.md"), turnId: "turn-2" });
+        expect(view.containerEl.children[1].childNodes).toHaveLength(0);
+      });
+    });
+
     describe("Open note", () => {
       it("opens the changed file in its own tab, leaving the diff tab in place", async () => {
         const app = fakeApp();
@@ -225,13 +253,11 @@ describe("TurnDiffView", () => {
           getLeavesOfType: (type: string) => (type === TURN_DIFF_VIEW_TYPE ? state.leaves : []),
           getLeaf: () => {
             state.opened++;
+            const view = new TurnDiffView({ app: state.app } as unknown as WorkspaceLeaf);
             const leaf = {
-              view: { getDiffKey: () => undefined as string | undefined },
-              setViewState: (viewState: { state: TurnDiffViewState }) => {
-                const key = `${viewState.state.turnId}\n${viewState.state.path}`;
-                leaf.view.getDiffKey = () => key;
-                return Promise.resolve();
-              },
+              view,
+              setViewState: (viewState: { state: TurnDiffViewState }) =>
+                view.setState(viewState.state),
             };
             state.leaves.push(leaf);
             return leaf;
