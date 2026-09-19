@@ -181,6 +181,36 @@ describe("tagSuggestionRow", () => {
         ]);
       });
 
+      it(`mounts in the supplied pane when the same note is open twice (${ISSUE})`, () => {
+        const context = testContext({ tagsRow: true });
+        const otherContentEl = document.createElement("div");
+        const otherRoot = otherContentEl.createDiv({ cls: "markdown-source-view" });
+        const otherContainer = otherRoot.createDiv({ cls: "metadata-container" });
+        otherContainer.createDiv({
+          cls: "metadata-property",
+          attr: { "data-property-key": "tags" },
+        });
+        document.body.appendChild(otherContentEl);
+        const otherView = {
+          file: context.file,
+          contentEl: otherContentEl,
+          getMode: jest.fn(() => "source"),
+        } as unknown as MarkdownView;
+        jest.mocked(context.app.workspace.getActiveViewOfType).mockReturnValue(otherView);
+        jest
+          .mocked(context.app.workspace.getLeavesOfType)
+          .mockReturnValue([
+            { view: otherView } as unknown as WorkspaceLeaf,
+            { view: context.view } as unknown as WorkspaceLeaf,
+          ]);
+        const row = new TagSuggestionRow(context.app);
+
+        row.show(context.file, suggestions(), jest.fn().mockResolvedValue(true), context.view);
+
+        expect(labels(context.metadataContainer)).toHaveLength(5);
+        expect(labels(otherContainer)).toHaveLength(0);
+      });
+
       it.each([
         ["source", "sourceMetadataContainer", "readingMetadataContainer"],
         ["preview", "readingMetadataContainer", "sourceMetadataContainer"],
@@ -587,6 +617,22 @@ describe("tagSuggestionRow", () => {
         expect(row.isRequestInFlight(context.file)).toBe(true);
         row.finishRequest(context.file, generation);
         expect(row.isRequestInFlight(context.file)).toBe(false);
+      });
+
+      it(`removes a loading session when its request finishes without results (${ISSUE})`, () => {
+        const context = testContext({ tagsRow: true });
+        const row = new TagSuggestionRow(context.app);
+        const generation = row.beginRequest(context.file);
+        row.showLoading(context.file);
+
+        expect(
+          context.modeRoot.querySelector(".copilot-tag-suggestion-placeholder")
+        ).not.toBeNull();
+
+        row.finishRequest(context.file, generation);
+
+        expect(context.modeRoot.querySelector(".copilot-tag-suggestion-row")).toBeNull();
+        expect(row.hasSession(context.file)).toBe(false);
       });
     });
 

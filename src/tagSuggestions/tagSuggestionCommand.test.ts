@@ -5,7 +5,7 @@ import type {
 } from "@/tagSuggestions/tagSuggestions";
 import type { TagSuggestionRow } from "@/tagSuggestions/tagSuggestionRow";
 import { waitFor } from "@testing-library/react";
-import type { App, MarkdownView } from "obsidian";
+import type { App } from "obsidian";
 
 const mockCheckIsPlusUser = jest.fn<Promise<boolean>, unknown[]>();
 const mockIsPlusEnabled = jest.fn<boolean, unknown[]>();
@@ -24,7 +24,12 @@ const mockGetCachedSuggestions = jest.fn<RankedTagSuggestion[] | undefined, unkn
 const mockCacheSuggestions = jest.fn();
 const mockRowShow = jest.fn<
   void,
-  [import("obsidian").TFile, RankedTagSuggestion[], (tags: string[]) => Promise<boolean>]
+  [
+    import("obsidian").TFile,
+    RankedTagSuggestion[],
+    (tags: string[]) => Promise<boolean>,
+    MarkdownView?,
+  ]
 >();
 let chooseTags: ((tags: string[]) => Promise<boolean>) | undefined;
 const suggestionRow = {
@@ -63,7 +68,7 @@ jest.mock("@/LLMProviders/brevilabsClient", () => {
 });
 import { BrevilabsApiError } from "@/LLMProviders/brevilabsClient";
 import { suggestTagsForCurrentNote } from "@/tagSuggestions/tagSuggestionCommand";
-import { CachedMetadata, Notice, TFile } from "obsidian";
+import { CachedMetadata, MarkdownView, Notice, TFile } from "obsidian";
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/492";
 
@@ -150,7 +155,8 @@ describe("tagSuggestionCommand", () => {
       expect(mockRowShow).toHaveBeenCalledWith(
         app.workspace.getActiveFile(),
         [{ tag: "research", score: 0.85 }],
-        expect.any(Function)
+        expect.any(Function),
+        app.workspace.getActiveViewOfType(MarkdownView)
       );
       expect(mockLogInfo).toHaveBeenCalledTimes(1);
       expect(mockLogInfo).toHaveBeenCalledWith("[Tag suggestion judgments]", [
@@ -179,7 +185,11 @@ describe("tagSuggestionCommand", () => {
 
       await suggestTagsForCurrentNote(app, suggestionRow);
 
-      expect(mockShowLoading).toHaveBeenCalledWith(app.workspace.getActiveFile(), false);
+      expect(mockShowLoading).toHaveBeenCalledWith(
+        app.workspace.getActiveFile(),
+        false,
+        app.workspace.getActiveViewOfType(MarkdownView)
+      );
       expect(Notice).not.toHaveBeenCalledWith("Suggesting tags…", 0);
     });
 
@@ -196,8 +206,26 @@ describe("tagSuggestionCommand", () => {
       expect(mockRowShow).toHaveBeenCalledWith(
         app.workspace.getActiveFile(),
         cached,
-        expect.any(Function)
+        expect.any(Function),
+        app.workspace.getActiveViewOfType(MarkdownView)
       );
+    });
+
+    it.each([
+      "Plus is not already enabled",
+      "a session is already open",
+      "a request is already in flight",
+    ])(`keeps the shared quiet pipeline idle when %s (${ISSUE})`, async (guard) => {
+      if (guard === "Plus is not already enabled") mockIsPlusEnabled.mockReturnValue(false);
+      if (guard === "a session is already open") mockHasSession.mockReturnValue(true);
+      if (guard === "a request is already in flight") mockIsRequestInFlight.mockReturnValue(true);
+      const { app } = createApp();
+
+      await suggestTagsForCurrentNote(app, suggestionRow, { quiet: true });
+
+      expect(mockBeginRequest).not.toHaveBeenCalled();
+      expect(mockShowLoading).not.toHaveBeenCalled();
+      expect(mockBroca).not.toHaveBeenCalled();
     });
 
     it(`bypasses a cached ranking when the command explicitly requests fresh results (${ISSUE})`, async () => {
@@ -350,7 +378,11 @@ describe("tagSuggestionCommand", () => {
       expect(Notice).toHaveBeenCalledWith(
         "A valid Copilot Plus license is required to suggest tags."
       );
-      expect(mockShowLoading).toHaveBeenCalledWith(app.workspace.getActiveFile(), false);
+      expect(mockShowLoading).toHaveBeenCalledWith(
+        app.workspace.getActiveFile(),
+        false,
+        app.workspace.getActiveViewOfType(MarkdownView)
+      );
       expect(mockFinishRequest).toHaveBeenCalled();
     });
 

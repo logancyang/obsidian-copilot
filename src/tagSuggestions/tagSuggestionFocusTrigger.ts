@@ -1,4 +1,3 @@
-import { isPlusEnabled } from "@/plusUtils";
 import { getSettings } from "@/settings/model";
 import {
   suggestTagsForCurrentNote,
@@ -56,19 +55,11 @@ export class TagSuggestionFocusTrigger extends Component {
       .getLeavesOfType("markdown")
       .map((leaf) => leaf.view as MarkdownView)
       .find((candidate) => candidate.contentEl.contains(property));
-    const file = view?.file;
-    if (!(file instanceof TFile) || file.extension !== "md") return;
+    if (!(view?.file instanceof TFile) || view.file.extension !== "md") return;
 
-    // Focus is intentionally silent and must never turn into a license request or duplicate run.
+    // The shared quiet pipeline owns entitlement and duplicate-run guards.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/492
-    if (
-      !getSettings().suggestTagsOnPropertyFocus ||
-      !isPlusEnabled() ||
-      this.row.hasSession(file) ||
-      this.row.isRequestInFlight(file)
-    ) {
-      return;
-    }
+    if (!getSettings().suggestTagsOnPropertyFocus) return;
     void this.run(this.app, this.row, { quiet: true, view });
   }
 }

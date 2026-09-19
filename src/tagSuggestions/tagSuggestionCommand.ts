@@ -27,7 +27,7 @@ export async function suggestTagsForCurrentNote(
   const quiet = options.quiet === true;
   const view = options.view ?? app.workspace.getActiveViewOfType(MarkdownView);
   const file = view?.file;
-  if (!(file instanceof TFile) || file.extension !== "md") {
+  if (!view || !(file instanceof TFile) || file.extension !== "md") {
     if (!quiet) new Notice("Open a Markdown note before suggesting tags.");
     return;
   }
@@ -63,7 +63,7 @@ export async function suggestTagsForCurrentNote(
   };
 
   try {
-    if (suggestionRow.showLoading(file, quiet) === false) {
+    if (suggestionRow.showLoading(file, quiet, view) === false) {
       if (quiet) logInfo("[Tag suggestions] Could not mount the loading row");
       return;
     }
@@ -80,7 +80,7 @@ export async function suggestTagsForCurrentNote(
     if (quiet) {
       const cached = suggestionRow.getCachedSuggestions(file);
       if (cached) {
-        if (sourceIsCurrent()) suggestionRow.show(file, cached, addTags);
+        if (sourceIsCurrent()) suggestionRow.show(file, cached, addTags, view);
         return;
       }
     }
@@ -120,7 +120,7 @@ export async function suggestTagsForCurrentNote(
       suggestions.map(({ tag, score }, index) => ({ tag, noul: score, rank: index + 1 }))
     );
     suggestionRow.cacheSuggestions(file, suggestions);
-    suggestionRow.show(file, suggestions, addTags);
+    suggestionRow.show(file, suggestions, addTags, view);
   } catch (error) {
     if (sourceIsCurrent()) {
       logError("Tag suggestion failed", error);

@@ -5,16 +5,11 @@ import { TFile as ObsidianTFile } from "obsidian";
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/492";
 const mockGetSettings = jest.fn<{ suggestTagsOnPropertyFocus: boolean }, []>();
-const mockIsPlusEnabled = jest.fn<boolean, []>();
 const mockSuggestTags = jest.fn().mockResolvedValue(undefined);
 
 jest.mock("@/settings/model", () => ({
   getSettings: () => mockGetSettings(),
 }));
-jest.mock("@/plusUtils", () => ({
-  isPlusEnabled: () => mockIsPlusEnabled(),
-}));
-
 function file(path: string): TFile {
   const TFileConstructor = ObsidianTFile as unknown as new (path: string) => TFile;
   return new TFileConstructor(path);
@@ -43,10 +38,7 @@ function context() {
       }),
     },
   } as unknown as App;
-  const row = {
-    hasSession: jest.fn(() => false),
-    isRequestInFlight: jest.fn(() => false),
-  } as unknown as TagSuggestionRow;
+  const row = {} as TagSuggestionRow;
   const trigger = new TagSuggestionFocusTrigger(app, row, mockSuggestTags);
   trigger.onload();
   return { app, row, view, activeFile, input, elsewhere, windowListeners };
@@ -58,7 +50,6 @@ describe("tagSuggestionFocusTrigger", () => {
       jest.clearAllMocks();
       document.body.replaceChildren();
       mockGetSettings.mockReturnValue({ suggestTagsOnPropertyFocus: true });
-      mockIsPlusEnabled.mockReturnValue(true);
     });
 
     describe("onload()", () => {
@@ -78,25 +69,14 @@ describe("tagSuggestionFocusTrigger", () => {
         expect(mockSuggestTags).not.toHaveBeenCalled();
       });
 
-      it.each([
-        ["the setting is off", false, true, false, false],
-        ["Plus is not already enabled", true, false, false, false],
-        ["a session is already open", true, true, true, false],
-        ["a request is already in flight", true, true, false, true],
-      ])(
-        `silently ignores focus when %s (${ISSUE})`,
-        (_label, setting, plus, hasSession, inFlight) => {
-          mockGetSettings.mockReturnValue({ suggestTagsOnPropertyFocus: setting });
-          mockIsPlusEnabled.mockReturnValue(plus);
-          const { row, input } = context();
-          jest.mocked(row.hasSession).mockReturnValue(hasSession);
-          jest.mocked(row.isRequestInFlight).mockReturnValue(inFlight);
+      it(`silently ignores focus when the setting is off (${ISSUE})`, () => {
+        mockGetSettings.mockReturnValue({ suggestTagsOnPropertyFocus: false });
+        const { input } = context();
 
-          input.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+        input.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
 
-          expect(mockSuggestTags).not.toHaveBeenCalled();
-        }
-      );
+        expect(mockSuggestTags).not.toHaveBeenCalled();
+      });
 
       it(`registers focus handling for a popout opened after plugin load (${ISSUE})`, () => {
         const { app, row, view, activeFile, windowListeners } = context();

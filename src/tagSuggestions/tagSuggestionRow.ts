@@ -79,9 +79,17 @@ export class TagSuggestionRow extends Component {
     return generation === this.requestGeneration;
   }
 
-  /** Clears the in-flight marker only when the matching run settles. */
+  /** Finishes the matching run and removes its placeholder if no result replaced it. */
   finishRequest(file: TFile, generation: number): void {
-    if (this.inFlight.get(file.path) === generation) this.inFlight.delete(file.path);
+    if (this.inFlight.get(file.path) !== generation) return;
+    this.inFlight.delete(file.path);
+    if (
+      this.requestGeneration === generation &&
+      this.session?.file.path === file.path &&
+      this.session.loading
+    ) {
+      this.closeSession(this.session);
+    }
   }
 
   isRequestInFlight(file: TFile): boolean {
@@ -117,20 +125,26 @@ export class TagSuggestionRow extends Component {
     return [...entry.ranked];
   }
 
-  showLoading(file: TFile, quiet = false): boolean {
-    this.replaceSession(file, [], undefined, true, quiet);
+  showLoading(file: TFile, quiet = false, view?: MarkdownView): boolean {
+    this.replaceSession(file, [], undefined, true, quiet, view);
     return this.session?.file.path === file.path;
   }
 
-  show(file: TFile, suggestions: RankedTagSuggestion[], addTags: AddSuggestedTags): void {
+  show(
+    file: TFile,
+    suggestions: RankedTagSuggestion[],
+    addTags: AddSuggestedTags,
+    view?: MarkdownView
+  ): void {
     if (this.session?.file.path === file.path) {
+      if (view) this.session.view = view;
       this.session.ranked = Object.freeze([...suggestions]);
       this.session.addTags = addTags;
       this.session.loading = false;
       this.render(this.session);
       return;
     }
-    this.replaceSession(file, suggestions, addTags, false, false);
+    this.replaceSession(file, suggestions, addTags, false, false, view);
   }
 
   close(): void {
@@ -149,7 +163,8 @@ export class TagSuggestionRow extends Component {
     suggestions: RankedTagSuggestion[],
     addTags: AddSuggestedTags | undefined,
     loading: boolean,
-    quiet: boolean
+    quiet: boolean,
+    view?: MarkdownView
   ): void {
     if (this.session) this.closeSession(this.session);
     let session: TagSuggestionSession;
@@ -171,7 +186,7 @@ export class TagSuggestionRow extends Component {
     const layoutRef = this.app.workspace.on("layout-change", () => this.render(session));
     session = {
       file,
-      view: this.findView(file),
+      view: view ?? this.findView(file),
       ranked: Object.freeze([...suggestions]),
       addTags,
       pendingTags: new Set<string>(),
