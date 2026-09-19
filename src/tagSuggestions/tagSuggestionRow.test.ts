@@ -181,6 +181,35 @@ describe("tagSuggestionRow", () => {
         ]);
       });
 
+      it(`uses Obsidian's native property-row and pill anatomy (${ISSUE})`, () => {
+        const context = testContext({ tagsRow: true });
+        const row = new TagSuggestionRow(context.app);
+
+        row.show(context.file, suggestions(), jest.fn().mockResolvedValue(true));
+
+        const mounted = context.metadataContainer.querySelector<HTMLElement>(
+          ".copilot-tag-suggestion-row"
+        );
+        const [key, value, close] = Array.from(mounted?.children ?? []);
+        expect(mounted?.hasAttribute("data-property-key")).toBe(false);
+        expect(key?.classList).toContain("metadata-property-key");
+        expect(key?.textContent).toBe("Suggested");
+        expect(key?.querySelector(".metadata-property-icon")).not.toBeNull();
+        expect(key?.querySelector('[data-icon="sparkles"]')).not.toBeNull();
+        expect(value?.classList).toContain("metadata-property-value");
+        expect(value?.getAttribute("data-property-type")).toBe("tags");
+        expect(value?.firstElementChild?.classList).toContain("multi-select-container");
+        const pills = value?.querySelectorAll(".multi-select-pill") ?? [];
+        expect(pills).toHaveLength(6);
+        for (const pill of pills) {
+          expect(pill.firstElementChild?.classList).toContain("multi-select-pill-content");
+        }
+        expect(close?.classList).toContain("clickable-icon");
+        expect(close?.getAttribute("aria-label")).toBe("Close tag suggestions");
+        expect(close?.querySelector('[data-icon="x"]')).not.toBeNull();
+        expect(close?.textContent).toBe("");
+      });
+
       it(`mounts in the supplied pane when the same note is open twice (${ISSUE})`, () => {
         const context = testContext({ tagsRow: true });
         const otherContentEl = document.createElement("div");

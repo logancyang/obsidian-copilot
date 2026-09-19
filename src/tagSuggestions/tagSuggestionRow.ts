@@ -3,7 +3,16 @@ import {
   AUTO_ADD_MIN_NOUL,
   type RankedTagSuggestion,
 } from "@/tagSuggestions/tagSuggestions";
-import { App, Component, EventRef, getAllTags, MarkdownView, Notice, TFile } from "obsidian";
+import {
+  App,
+  Component,
+  EventRef,
+  getAllTags,
+  MarkdownView,
+  Notice,
+  setIcon,
+  TFile,
+} from "obsidian";
 
 const VISIBLE_SUGGESTIONS = 5;
 const CACHE_TTL_MS = 10 * 60 * 1_000;
@@ -262,49 +271,67 @@ export class TagSuggestionRow extends Component {
       else container.appendChild(row);
     }
 
+    const key = row.createDiv({
+      cls: ["metadata-property-key", "copilot-tag-suggestion-key"],
+    });
+    const keyIcon = key.createSpan({
+      cls: ["metadata-property-icon", "copilot-tag-suggestion-key-icon"],
+    });
+    setIcon(keyIcon, "sparkles");
+    key.createSpan({ cls: "copilot-tag-suggestion-key-label", text: "Suggested" });
+    const value = row.createDiv({
+      cls: "metadata-property-value",
+      attr: { "data-property-type": "tags" },
+    });
+    const pills = value.createDiv({ cls: "multi-select-container" });
+
     if (session.loading) {
-      row.createSpan({
+      const placeholder = pills.createSpan({
         cls: ["multi-select-pill", "copilot-tag-suggestion-placeholder"],
-        text: "Suggesting tags…",
       });
+      placeholder.createSpan({ cls: "multi-select-pill-content", text: "Suggesting tags…" });
     } else {
       const autoAdd = available
         .filter(({ score }) => score >= AUTO_ADD_MIN_NOUL)
         .slice(0, AUTO_ADD_MAX);
       if (autoAdd.length) {
         const count = autoAdd.length;
-        row
-          .createEl("button", {
-            cls: ["multi-select-pill", "copilot-tag-auto-add-pill"],
-            text: `Auto-add ${count}`,
-            attr: { type: "button", "aria-label": `Auto-add ${count} tags` },
-          })
-          .addEventListener("click", () => {
-            void this.choose(
-              session,
-              autoAdd.map(({ tag }) => tag)
-            );
-          });
+        const autoAddPill = pills.createEl("button", {
+          cls: ["multi-select-pill", "copilot-tag-auto-add-pill"],
+          attr: { type: "button", "aria-label": `Auto-add ${count} tags` },
+        });
+        autoAddPill.createSpan({
+          cls: "multi-select-pill-content",
+          text: `Auto-add ${count}`,
+        });
+        autoAddPill.addEventListener("click", () => {
+          void this.choose(
+            session,
+            autoAdd.map(({ tag }) => tag)
+          );
+        });
       }
 
       for (const suggestion of available.slice(0, VISIBLE_SUGGESTIONS)) {
-        const pill = row.createEl("button", {
+        const pill = pills.createEl("button", {
           cls: ["multi-select-pill", "copilot-tag-suggestion-pill"],
-          text: `#${suggestion.tag}`,
           attr: { type: "button", "aria-label": `Add #${suggestion.tag}` },
+        });
+        pill.createSpan({
+          cls: "multi-select-pill-content",
+          text: `#${suggestion.tag}`,
         });
         pill.addEventListener("click", () => {
           void this.choose(session, [suggestion.tag]);
         });
       }
     }
-    row
-      .createEl("button", {
-        cls: ["clickable-icon", "copilot-tag-suggestion-close"],
-        text: "×",
-        attr: { type: "button", "aria-label": "Close tag suggestions" },
-      })
-      .addEventListener("click", () => this.close());
+    const close = row.createEl("button", {
+      cls: ["clickable-icon", "copilot-tag-suggestion-close"],
+      attr: { type: "button", "aria-label": "Close tag suggestions" },
+    });
+    setIcon(close, "x");
+    close.addEventListener("click", () => this.close());
     session.rowEl = row;
   }
 

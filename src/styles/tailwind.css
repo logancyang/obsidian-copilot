@@ -1072,23 +1072,48 @@ If your plugin does not need CSS, delete this file.
   background: linear-gradient(to top, var(--background-primary), transparent);
 }
 
-/* This plain-DOM row extends Obsidian's Properties UI outside React. */
-.copilot-tag-suggestion-row {
-  display: flex;
+/* This plain-DOM row extends Obsidian's native Properties anatomy outside React. */
+.copilot-tag-suggestion-key {
   align-items: center;
-  flex-wrap: wrap;
-  gap: var(--size-2-2);
-  padding: var(--size-2-2) var(--size-4-2);
+  color: var(--text-faint);
+  display: flex;
 }
 
-.copilot-tag-suggestion-pill {
+.copilot-tag-suggestion-key-icon {
+  align-items: center;
+  display: inline-flex;
+}
+
+.copilot-tag-suggestion-key-label {
+  font-size: var(--metadata-label-font-size);
+}
+
+.copilot-tag-suggestion-row .multi-select-pill {
   appearance: none;
-  background: var(--background-modifier-hover);
-  border-style: dashed;
-  color: var(--text-normal);
+  background-color: var(--pill-background);
+  box-shadow: none;
+  color: var(--pill-color);
   cursor: pointer;
   font: inherit;
-  opacity: 0.5;
+  font-size: inherit;
+  height: auto;
+}
+
+.copilot-tag-suggestion-row .multi-select-pill-content {
+  margin-inline-end: var(--pill-padding-x);
+}
+
+.copilot-tag-suggestion-pill,
+.copilot-tag-suggestion-placeholder {
+  border-color: currentcolor;
+  border-style: dashed;
+  opacity: 0.55;
+}
+
+.copilot-tag-suggestion-row
+  .metadata-property-value[data-property-type="tags"]
+  :is(.copilot-tag-suggestion-pill, .copilot-tag-suggestion-placeholder) {
+  --pill-border-width: 1px;
 }
 
 .copilot-tag-suggestion-pill:hover,
@@ -1096,25 +1121,26 @@ If your plugin does not need CSS, delete this file.
   opacity: 1;
 }
 
-.copilot-tag-auto-add-pill {
-  appearance: none;
-  cursor: pointer;
-  font: inherit;
+.copilot-tag-suggestion-row
+  .metadata-property-value[data-property-type="tags"]
+  .copilot-tag-auto-add-pill {
+  --pill-background: var(--interactive-accent);
+  --pill-color: var(--text-on-accent);
+
+  font-weight: var(--font-medium);
+}
+
+.copilot-tag-suggestion-row
+  .metadata-property-value[data-property-type="tags"]
+  .copilot-tag-auto-add-pill:hover {
+  --pill-background: var(--interactive-accent-hover);
 }
 
 .copilot-tag-suggestion-placeholder {
-  background: var(--background-modifier-hover);
-  color: var(--text-muted);
-  opacity: 0.65;
+  cursor: default;
 }
 
 .copilot-tag-suggestion-close {
-  appearance: none;
-  background: transparent;
-  border: 0;
-  color: var(--text-muted);
-  cursor: pointer;
-  font: inherit;
+  align-self: center;
   margin-inline-start: auto;
-  padding: var(--size-2-1);
 }

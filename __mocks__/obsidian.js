@@ -79,6 +79,12 @@ module.exports = {
     if (Array.isArray(value)) return value.filter((alias) => typeof alias === "string");
     return null;
   },
+  setIcon: jest.fn((element, icon) => {
+    element.replaceChildren();
+    const svg = element.ownerDocument.createElement("svg");
+    svg.dataset.icon = icon;
+    element.appendChild(svg);
+  }),
   getAllTags: (cache) => {
     const frontmatterValue = cache?.frontmatter?.tags ?? cache?.frontmatter?.tag;
     const frontmatterTags = Array.isArray(frontmatterValue)
