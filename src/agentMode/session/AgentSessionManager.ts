@@ -3295,9 +3295,20 @@ export class AgentSessionManager {
       this.finishPendingCreate();
       return null;
     }
-    let resumeResult: LoadSessionOutput | null = null;
+    // Readiness can flip while the project context materializes, after
+    // `ensureBackend` already cleared the install. Recorded as the resume's own
+    // failure so the status surface shows the upgrade requirement instead of the
+    // generic "Could not resume".
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/480
     try {
       assertBackendCompatible(descriptor, getSettings());
+    } catch (err) {
+      this.setLastError(err2String(err));
+      this.finishPendingCreate();
+      return null;
+    }
+    let resumeResult: LoadSessionOutput | null = null;
+    try {
       resumeResult = await backend.loadSession({
         sessionId,
         cwd,
@@ -3314,7 +3325,6 @@ export class AgentSessionManager {
 
     if (!resumeResult) {
       try {
-        assertBackendCompatible(descriptor, getSettings());
         resumeResult = await backend.resumeSession({
           sessionId,
           cwd,
@@ -3714,6 +3724,17 @@ export class AgentSessionManager {
       // ACP backends declare `start()` to spawn the subprocess and run the
       // initialize handshake. In-process adapters (Claude SDK) omit it.
       if (proc.start) await proc.start();
+      // A readiness flip during the handshake is invisible to
+      // `onInstallStateChanged`: the process is not in `this.backends` yet, so
+      // its teardown finds nothing and the unsupported binary would be adopted
+      // and cached here, then run by the very next `newSession`.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/480
+      try {
+        assertBackendCompatible(descriptor, getSettings());
+      } catch (err) {
+        await proc.shutdown().catch(() => {});
+        throw err;
+      }
       this.wirePrompters(proc);
       this.installBackendExitHandler(backendId, proc, descriptor);
       this.backends.set(backendId, proc);
