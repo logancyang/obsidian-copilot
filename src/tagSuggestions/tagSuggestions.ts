@@ -99,6 +99,16 @@ function formatLocalDate(timestamp: number, includeTime = false): string {
   return includeTime ? `${day} ${pad(date.getHours())}:${pad(date.getMinutes())}` : day;
 }
 
+function isSensitiveFrontmatterKey(key: string): boolean {
+  const normalized = key.toLowerCase().replace(/[^a-z0-9]/g, "");
+  return (
+    isSensitiveKey(key) ||
+    ["authorization", "credential", "privatekey", "passphrase"].some((term) =>
+      normalized.includes(term)
+    )
+  );
+}
+
 function frontmatterProperties(
   frontmatter: Record<string, unknown> | undefined
 ): Record<string, FrontmatterValue> {
@@ -113,7 +123,7 @@ function frontmatterProperties(
   // unbounded nested YAML. https://github.com/Brevilabs/obsidian-copilot-private/issues/492
   for (const [key, value] of Object.entries(frontmatter ?? {})) {
     if (Object.keys(properties).length >= MAX_PROPERTIES) break;
-    if (excluded.has(key) || isSensitiveKey(key)) continue;
+    if (excluded.has(key) || isSensitiveFrontmatterKey(key)) continue;
     if (scalar(value)) {
       properties[key] = clipped(value);
     } else if (Array.isArray(value) && value.every(scalar)) {

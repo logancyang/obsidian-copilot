@@ -12,6 +12,8 @@ import {
 } from "@/tagSuggestions/tagSuggestions";
 import { App, CachedMetadata, TFile } from "obsidian";
 
+const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/492";
+
 function file(path: string, mtime = 0, ctime = mtime): TFile {
   const TFileConstructor = TFile as unknown as new (path: string) => TFile;
   const value = new TFileConstructor(path);
@@ -134,6 +136,22 @@ describe("tagSuggestions", () => {
       expect(state.section_leads).toEqual(["First lead", "Second lead"]);
       expect(state.excerpt?.length).toBe(1500);
     });
+
+    it.each(["authorization", "credential", "private_key", "passphrase"])(
+      `excludes the credential-shaped frontmatter property %s (${ISSUE})`,
+      (sensitiveKey) => {
+        const active = file("Private.md");
+        const cache = metadata([], { [sensitiveKey]: "must-not-leave", owner: "Ada" });
+        const app = {
+          vault: { getMarkdownFiles: () => [active] },
+          metadataCache: { getFileCache: () => cache, resolvedLinks: {} },
+        } as unknown as App;
+
+        const state = buildTagSuggestionState(app, active, "body", cache);
+
+        expect(state.properties).toEqual({ owner: "Ada" });
+      }
+    );
 
     it("caps properties, link titles, and neighbor tags from metadata only (https://github.com/Brevilabs/obsidian-copilot-private/issues/492)", () => {
       const active = file("Active.md");

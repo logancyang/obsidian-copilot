@@ -180,7 +180,7 @@ describe("tagSuggestionRow", () => {
         context.contentEl.appendChild(context.metadataContainer);
         context.emitMetadataChanged();
 
-        expect(mockModalOpen).toHaveBeenCalledTimes(1);
+        expect(mockModalOpen).toHaveBeenCalledTimes(2);
         expect(addTag).toHaveBeenCalledWith("tag-1");
         expect(mockModalClose).toHaveBeenCalled();
         expect(labels(context.metadataContainer)).toEqual([
@@ -237,6 +237,17 @@ describe("tagSuggestionRow", () => {
         context.metadataContainer.remove();
         const row = new TagSuggestionRow(context.app);
         row.show(context.file, suggestions(), jest.fn().mockResolvedValue(false));
+
+        await chooseFromModal?.("tag-1");
+
+        expect(mockModalOpen).toHaveBeenCalledTimes(2);
+      });
+
+      it(`reopens the fallback picker with the remaining queue after a successful write (${ISSUE})`, async () => {
+        const context = testContext();
+        context.metadataContainer.remove();
+        const row = new TagSuggestionRow(context.app);
+        row.show(context.file, suggestions(), jest.fn().mockResolvedValue(true));
 
         await chooseFromModal?.("tag-1");
 

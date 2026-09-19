@@ -152,12 +152,15 @@ export class TagSuggestionRow extends Component {
     // The Properties DOM is not a public Obsidian API, so the modal remains the
     // safe path when that surface is unavailable.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/492
-    if (session.fallbackOpened || !session.queue.length) return;
+    if (session.fallbackOpened || session.pendingWrites > 0 || !session.queue.length) return;
     session.fallbackOpened = true;
     const modal = new TagSuggestionModal(
       this.app,
       session.queue,
       async (tag) => {
+        if (this.session !== session || session.modal !== modal) return;
+        session.modal = undefined;
+        session.fallbackOpened = false;
         const suggestion = session.queue.find(
           (candidate) => normalizedTag(candidate.tag) === normalizedTag(tag)
         );
