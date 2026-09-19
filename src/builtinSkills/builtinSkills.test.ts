@@ -335,7 +335,7 @@ describe("builtinSkills", () => {
       expect(md).toMatch(/do\s+not render, rewrite, or copy it/);
       expect(md).toContain("never delete the original HTML file");
       expect(md).toMatch(
-        /every reference to a local file[\s\S]*`srcset`[\s\S]*`poster`[\s\S]*CSS `url\(\.\.\.\)`[\s\S]*name each reference in the review message[\s\S]*will\s+not load on the published page because only the HTML file is uploaded[\s\S]*warning\s+does\s+not block publication[\s\S]*make the file self-contained or approve publishing\s+anyway/
+        /every reference to a local file[\s\S]*`srcset`[\s\S]*`poster`[\s\S]*CSS `url\(\.\.\.\)`[\s\S]*name each reference in the review message[\s\S]*will\s+not load on the published page because only the HTML file is uploaded[\s\S]*warning\s+does\s+not block publication[\s\S]*make the file self-contained or approve publishing\s+anyway[\s\S]*wait for the user to update the file[\s\S]*repeat steps 1 and 2 before accepting\s+publication approval/
       );
       expect(md).toContain(
         'sh "/absolute/path/to/this/skill/directory/openartifacts-publish.sh" publish "/absolute/path/to/page.html" "Page title"'

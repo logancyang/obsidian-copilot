@@ -685,8 +685,9 @@ adds its own header and footer bylines when it serves the page. Then end your tu
 Never publish in the same turn that generated the HTML. Publish only when a later
 message from the user clearly asks to publish this page. Treat anything else as feedback
 (revise the generated Markdown handoff and repeat this step; for existing HTML, relay the
-feedback and wait for the user to update the file) or as a cancellation. When unsure whether
-a message is an approval, ask once. Never simulate the user's approval.
+feedback and wait for the user to update the file, then repeat steps 1 and 2 before accepting
+publication approval) or as a cancellation. When unsure whether a message is an approval,
+ask once. Never simulate the user's approval.
 
 ## 3. Publish
 
