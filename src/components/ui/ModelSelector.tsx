@@ -18,6 +18,8 @@ import type { CustomModel } from "@/aiParams";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+const PICKER_PRICING_URL = createProductUrl(PRODUCT_URLS.COPILOT_PRICING, "model_picker_lock");
+
 /**
  * Picker entry shape. The selector is normally driven by `settings.activeModels`,
  * but callers can pass an explicit `models` list (e.g. Agent Mode merges
@@ -170,7 +172,7 @@ export function ModelSelector({
                   // https://github.com/Brevilabs/obsidian-copilot-private/issues/476
                   if (model._needsLicense) {
                     (event.currentTarget as HTMLElement).win.open(
-                      createProductUrl(PRODUCT_URLS.COPILOT_PRICING, "model_picker_lock"),
+                      PICKER_PRICING_URL,
                       "_blank",
                       "noopener,noreferrer"
                     );

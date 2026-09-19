@@ -13,6 +13,8 @@ import type { ModelSelectorEntry } from "@/components/ui/ModelSelector";
 import { getModelKeyFromModel } from "@/lib/model-key";
 import { cn } from "@/lib/utils";
 
+const PICKER_PRICING_URL = createProductUrl(PRODUCT_URLS.COPILOT_PRICING, "model_picker_lock");
+
 export interface ModelEffortPickerOverride {
   models: ModelSelectorEntry[];
   value: string;
@@ -252,11 +254,7 @@ export function ModelEffortPicker({ override, className }: ModelEffortPickerProp
                   </div>
                 )}
                 <Row
-                  href={
-                    entry._needsLicense
-                      ? createProductUrl(PRODUCT_URLS.COPILOT_PRICING, "model_picker_lock")
-                      : undefined
-                  }
+                  href={entry._needsLicense ? PICKER_PRICING_URL : undefined}
                   target={entry._needsLicense ? "_blank" : undefined}
                   rel={entry._needsLicense ? "noopener noreferrer" : undefined}
                   role={entry._needsLicense ? undefined : "option"}

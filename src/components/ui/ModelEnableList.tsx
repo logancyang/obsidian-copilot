@@ -12,6 +12,8 @@ import { cn } from "@/lib/utils";
 import { ChevronRight, KeyRound } from "lucide-react";
 import React from "react";
 
+const SETTINGS_PRICING_URL = createProductUrl(PRODUCT_URLS.COPILOT_PRICING, "model_settings_lock");
+
 /** A single toggleable model row. */
 export interface ModelEnableRow {
   /** Stable identity used for the toggle callback (a `configuredModelId`). */
@@ -132,11 +134,7 @@ export const ModelEnableList: React.FC<ModelEnableListProps> = ({
         return (
           <Row
             key={row.id}
-            href={
-              row.locked
-                ? createProductUrl(PRODUCT_URLS.COPILOT_PRICING, "model_settings_lock")
-                : undefined
-            }
+            href={row.locked ? SETTINGS_PRICING_URL : undefined}
             target={row.locked ? "_blank" : undefined}
             rel={row.locked ? "noopener noreferrer" : undefined}
             className={cn(

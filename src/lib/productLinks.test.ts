@@ -9,11 +9,11 @@ import { join, relative } from "path";
  */
 const UNTAGGED_BY_DESIGN = [
   // `USAGE_DASHBOARD_URL`, interpolated into an `ErrorBlock` message.
-  "constants.ts",
+  ["constants.ts"],
   // Prompt text the model repeats in its own prose.
-  "builtinSkills/builtinSkills.ts",
+  ["builtinSkills", "builtinSkills.ts"],
   // OpenRouter's `HTTP-Referer` attribution header, not a user-facing link.
-  "LLMProviders/chatModelManager.ts",
+  ["LLMProviders", "chatModelManager.ts"],
 ];
 
 describe("productLinks", () => {
@@ -40,9 +40,11 @@ describe("productLinks", () => {
 
   it("keeps product website URLs centralized so new links cannot bypass attribution — https://github.com/Brevilabs/obsidian-copilot-private/issues/318", () => {
     const sourceRoot = join(__dirname, "..");
+    // Joined rather than compared as literal strings so the separators match
+    // whatever platform runs the suite; CI runs it on Windows too.
     const allowed = new Set([
-      relative(sourceRoot, join(__dirname, "productLinks.ts")),
-      ...UNTAGGED_BY_DESIGN,
+      join(__dirname, "productLinks.ts"),
+      ...UNTAGGED_BY_DESIGN.map((segments) => join(sourceRoot, ...segments)),
     ]);
     const bypasses: string[] = [];
     function scan(directory: string): void {
@@ -52,7 +54,7 @@ describe("productLinks", () => {
         else if (
           /\.[jt]sx?$/.test(entry.name) &&
           !/\.test\.[jt]sx?$/.test(entry.name) &&
-          !allowed.has(relative(sourceRoot, path)) &&
+          !allowed.has(path) &&
           /https?:\/\/(?:www\.)?(?:obsidiancopilot\.com|miyo\.md|openartifacts\.ai)\b/.test(
             readFileSync(path, "utf8")
           )
