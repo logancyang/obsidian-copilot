@@ -113,6 +113,19 @@ if (typeof Node !== "undefined" && typeof Node.prototype.createEl !== "function"
   };
 }
 
+// Polyfill Obsidian's `HTMLElement.onWindowMigrated` augmentation, which fires
+// when a leaf is dragged into or out of a popout window. jsdom has one window
+// and never migrates anything, so the polyfill only hands back the detach
+// function callers unsubscribe with.
+if (
+  typeof HTMLElement !== "undefined" &&
+  typeof HTMLElement.prototype.onWindowMigrated !== "function"
+) {
+  HTMLElement.prototype.onWindowMigrated = function () {
+    return () => {};
+  };
+}
+
 // Polyfill Obsidian's `HTMLElement.setCssProps` augmentation (sets one or more
 // CSS custom properties) so plugin code that calls it — e.g. the autosizing
 // `Textarea` — works under jsdom.

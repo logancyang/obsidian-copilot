@@ -1,6 +1,6 @@
 import { useApp } from "@/context";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import type { AgentMessagePart } from "@/agentMode/session/types";
+import type { AgentMessagePart, TurnFileChange } from "@/agentMode/session/types";
 import { AgentTrail } from "@/agentMode/ui/AgentTrailView";
 import type { Meta, StoryObj } from "@/lib/story";
 import React from "react";
@@ -95,7 +95,8 @@ const TrailDemo: React.FC<{
   parts: AgentMessagePart[];
   isStreaming?: boolean;
   showCompletedDuration?: boolean;
-}> = ({ parts, isStreaming = false, showCompletedDuration = true }) => {
+  fileChanges?: TurnFileChange[];
+}> = ({ parts, isStreaming = false, showCompletedDuration = true, fileChanges }) => {
   const app = useApp();
   return (
     <TooltipProvider>
@@ -107,6 +108,7 @@ const TrailDemo: React.FC<{
         timestamp="2026/08/07 20:31:10"
         app={app}
         turnStopReason={isStreaming ? undefined : "end_turn"}
+        fileChanges={fileChanges}
       />
     </TooltipProvider>
   );
@@ -137,4 +139,29 @@ export const UnifiedCardStyles: StoryObj<AgentTrailProps> = {
 /** A restored structured turn falls back to its timestamp when no duration was persisted. */
 export const CompletedWithoutDuration: StoryObj<AgentTrailProps> = {
   render: () => <TrailDemo parts={UNIFIED_CARDS} showCompletedDuration={false} />,
+};
+
+/** What the agent wrote during the turn, listed under the answer it gave. */
+const EDITED_FILES: TurnFileChange[] = [
+  {
+    path: "Events/Agentic AI Summit 2026.md",
+    status: "created",
+    before: null,
+    after: "after\n",
+    additions: 42,
+    deletions: 0,
+  },
+  {
+    path: "Daily/2026-08-07.md",
+    status: "modified",
+    before: "before\n",
+    after: "after\n",
+    additions: 3,
+    deletions: 1,
+  },
+];
+
+/** A finished turn closes with the files it changed, above the response footer. */
+export const WithFilesChanged: StoryObj<AgentTrailProps> = {
+  render: () => <TrailDemo parts={TURN} fileChanges={EDITED_FILES} />,
 };

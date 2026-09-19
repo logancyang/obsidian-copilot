@@ -3,7 +3,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppContext } from "@/context";
 import { AgentTrail } from "@/agentMode/ui/AgentTrailView";
-import type { AgentMessagePart } from "@/agentMode/session/types";
+import type { AgentMessagePart, TurnFileChange } from "@/agentMode/session/types";
 
 // Render `text` parts as plain text so the test doesn't pull in Obsidian's
 // markdown renderer (`MarkdownRenderer.render` / `Component`).
@@ -118,6 +118,54 @@ describe("AgentTrail", () => {
 
     fireEvent.click(screen.getByTitle("Insert / Replace at cursor"));
     expect(insertAtCursor).toHaveBeenCalledWith(app, "The final answer.");
+  });
+
+  const EDITED_NOTE: TurnFileChange = {
+    path: "notes/diff-demo/alpha.md",
+    status: "modified",
+    before: "before",
+    after: "after",
+    additions: 3,
+    deletions: 1,
+  };
+
+  it("shows the one file a finished turn changed as a single unheaded card", () => {
+    renderTrail({ fileChanges: [EDITED_NOTE] });
+
+    expect(screen.queryByText(/Files changed/)).toBeNull();
+    expect(screen.getByRole("button", { name: /alpha\.md/ })).toBeTruthy();
+  });
+
+  it("lists the files under a Files changed header when a finished turn changed several", () => {
+    renderTrail({
+      fileChanges: [EDITED_NOTE, { ...EDITED_NOTE, path: "notes/diff-demo/beta.md" }],
+    });
+
+    expect(screen.getByText("Files changed (2)")).toBeTruthy();
+    expect(screen.getAllByRole("button", { name: /\.md/ })).toHaveLength(2);
+  });
+
+  it("hands the clicked file to the caller so it can open the diff", () => {
+    const onOpenFileChange = jest.fn();
+    renderTrail({ fileChanges: [EDITED_NOTE], onOpenFileChange });
+
+    fireEvent.click(screen.getByRole("button", { name: /alpha\.md/ }));
+
+    expect(onOpenFileChange).toHaveBeenCalledWith(EDITED_NOTE);
+  });
+
+  it("withholds the changed-files card until the turn has stopped", () => {
+    renderTrail({ isStreaming: true, turnStopReason: undefined, fileChanges: [EDITED_NOTE] });
+
+    expect(screen.queryByText(/Files changed/)).toBeNull();
+  });
+
+  it("shows no changed-files card when the turn changed nothing", () => {
+    renderTrail({ fileChanges: [] });
+    expect(screen.queryByText(/Files changed/)).toBeNull();
+
+    renderTrail({ fileChanges: undefined });
+    expect(screen.queryByText(/Files changed/)).toBeNull();
   });
 
   it("renders neither button while the message is still streaming", () => {

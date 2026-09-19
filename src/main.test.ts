@@ -6,6 +6,7 @@ jest.mock("obsidian", () => {
   const actual = jest.requireActual<Record<string, unknown>>("obsidian");
   return {
     ...actual,
+    addIcon: jest.fn(),
     Plugin: class Plugin {},
     PluginSettingTab: class PluginSettingTab {},
   };
@@ -27,25 +28,70 @@ jest.mock("@/services/settingsPersistence", () => ({
   resetPersistenceState: jest.fn(),
 }));
 jest.mock("@/logFileManager", () => ({
-  logFileManager: { flush: jest.fn().mockResolvedValue(undefined) },
+  logFileManager: { flush: jest.fn().mockResolvedValue(undefined), setApp: jest.fn() },
 }));
 jest.mock("@/state/vaultDataAtoms", () => ({
-  VaultDataManager: { getInstance: jest.fn(() => ({ cleanup: jest.fn() })) },
+  VaultDataManager: {
+    getInstance: jest.fn(() => ({ cleanup: jest.fn(), initialize: jest.fn() })),
+  },
 }));
 jest.mock("@/services/webViewerService/webViewerServiceSingleton", () => ({
   getWebViewerService: jest.fn(() => ({ stopActiveWebTabTracking: jest.fn() })),
-  startActiveWebTabTracking: jest.fn(),
+  startActiveWebTabTracking: jest.fn(() => ({})),
 }));
 jest.mock("@/utils/desktopRuntime", () => ({ isDesktopRuntime: jest.fn(() => false) }));
 jest.mock("@/utils/notificationSound", () => ({ disposeNotificationSound: jest.fn() }));
 const mockSkillManagerDispose = jest.fn();
 const mockSkillManagerHasInstance = jest.fn(() => true);
 jest.mock("@/agentMode", () => ({
+  ...jest.requireActual<typeof import("@/agentMode/ui/TurnDiffView")>(
+    "@/agentMode/ui/TurnDiffView"
+  ),
+  CopilotAgentView: jest.fn(),
+  PlanPreviewView: jest.fn(),
+  PLAN_PREVIEW_VIEW_TYPE: "copilot-plan-preview-view",
+  acpFrameSink: { narrowLegacyLogs: jest.fn() },
+  createAgentSessionManager: jest.fn(),
+  setFrameSinkVaultBasePath: jest.fn(),
   SkillManager: {
     hasInstance: () => mockSkillManagerHasInstance(),
     getInstance: () => ({ dispose: mockSkillManagerDispose }),
   },
 }));
+
+// Startup services are outside the view-registration contract exercised here.
+jest.mock("@/utils/rendererEventsShim");
+jest.mock("@/services/keychainService");
+jest.mock("@/modelManagement");
+jest.mock("@/services/releaseUpdateNotice");
+jest.mock("@/settings/migrations");
+jest.mock("@/settings/migrations/legacyIndexRemovalMigration");
+jest.mock("@/tools/builtinTools");
+jest.mock("@/contextProcessor");
+jest.mock("@/commands/customCommandManager");
+jest.mock("@/LLMProviders/brevilabsClient", () => ({
+  BrevilabsClient: { getInstance: () => ({ setPluginVersion: jest.fn() }) },
+}));
+jest.mock("@/plusUtils");
+jest.mock("@/LLMProviders/chainOwner", () => ({
+  __esModule: true,
+  default: { getInstance: () => ({ getCurrentChainManager: jest.fn() }) },
+}));
+jest.mock("@/LLMProviders/selfHostServices", () => ({
+  createSelfHostWebSearchAgentBridge: () => ({ dispose: jest.fn() }),
+}));
+jest.mock("@/agentMode/agentModelDiscovery");
+jest.mock("@/tools/FileParserManager");
+jest.mock("@/core/ChatManager");
+jest.mock("@/state/ChatUIState");
+jest.mock("@/memory/UserMemoryManager");
+jest.mock("@/editor");
+jest.mock("@/openArtifacts/openArtifactsLedger");
+jest.mock("@/openArtifacts/OpenArtifactsPublisher");
+jest.mock("@/commands");
+jest.mock("@/commands/customCommandRegister");
+jest.mock("@/system-prompts/systemPromptRegister");
+jest.mock("@/projects/projectRegister");
 
 import CopilotPlugin from "@/main";
 import { getSelectedTextContexts, setSelectedTextContexts } from "@/aiParams";
@@ -68,6 +114,8 @@ import { logFileManager } from "@/logFileManager";
 import { flushPersistence } from "@/services/settingsPersistence";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { disposeNotificationSound } from "@/utils/notificationSound";
+import { TurnDiffView, TURN_DIFF_VIEW_TYPE } from "@/agentMode/ui/TurnDiffView";
+import type { ViewCreator, WorkspaceLeaf } from "obsidian";
 
 /**
  * Build a plugin instance without running Obsidian's `Plugin` constructor or
@@ -107,6 +155,51 @@ async function flushTeardown(): Promise<void> {
 
 describe("main", () => {
   describe("CopilotPlugin", () => {
+    describe("onload()", () => {
+      it("registers a diff-tab factory that creates a TurnDiffView for Obsidian's leaf on desktop", async () => {
+        (isDesktopRuntime as jest.Mock).mockReturnValue(true);
+        const plugin = Object.create(CopilotPlugin.prototype) as CopilotPlugin;
+        const registerView = jest.fn<void, [string, ViewCreator]>();
+        const cleanups: (() => void)[] = [];
+        Object.assign(plugin, {
+          app: {
+            vault: { adapter: {} },
+            workspace: { on: jest.fn(), onLayoutReady: jest.fn() },
+          },
+          manifest: { version: "4.0.9" },
+          loadSettings: jest.fn(),
+          register: (cleanup: () => void) => cleanups.push(cleanup),
+          registerInterval: (id: number) => cleanups.push(() => window.clearInterval(id)),
+          registerEvent: jest.fn(),
+          registerEditorExtension: jest.fn(),
+          registerView,
+          addSettingTab: jest.fn(),
+          addRibbonIcon: jest.fn(),
+          initActiveLeafChangeHandler: jest.fn(),
+          initSelectionHandler: jest.fn(),
+          initWebSelectionWatcher: jest.fn(),
+        });
+
+        try {
+          await plugin.onload();
+
+          const factory = registerView.mock.calls.find(
+            ([type]) => type === TURN_DIFF_VIEW_TYPE
+          )?.[1];
+          expect(factory).toBeDefined();
+          const leaf = { app: plugin.app } as unknown as WorkspaceLeaf;
+          const view = factory!(leaf);
+          expect(view).toBeInstanceOf(TurnDiffView);
+          expect(view.leaf).toBe(leaf);
+          expect(view.getViewType()).toBe(TURN_DIFF_VIEW_TYPE);
+        } finally {
+          plugin.settingsUnsubscriber?.();
+          for (const cleanup of cleanups) cleanup?.();
+          (isDesktopRuntime as jest.Mock).mockReturnValue(false);
+        }
+      });
+    });
+
     describe("handleSelectionChange()", () => {
       it("automatically attaches a note excerpt even when the retired preferences were saved as false", () => {
         settingsStore.set(settingsAtom, {
