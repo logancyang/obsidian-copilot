@@ -348,7 +348,7 @@ describe("AgentSettings", () => {
     expect(screen.getByRole("button", { name: "Configure" })).not.toBeNull();
   });
 
-  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/368 shares managed update progress and Retry in settings", () => {
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/531 opens configuration for outdated agents and shares update progress and failures", () => {
     installStates.codex = {
       kind: "incompatible",
       source: "managed",
@@ -358,18 +358,20 @@ describe("AgentSettings", () => {
     };
     const view = render(<AgentSettings />);
     fireEvent.click(screen.getByRole("tab", { name: "Codex" }));
-    fireEvent.click(screen.getByRole("button", { name: "Upgrade" }));
-    expect(runManagedInstall).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "Configure" }));
+    expect(DESCRIPTORS.find((d) => d.id === "codex")!.openInstallUI).toHaveBeenCalledTimes(1);
+    expect(runManagedInstall).not.toHaveBeenCalled();
 
     managedInstallStates.codex = { kind: "running", label: "Installing… 30%" };
     view.rerender(<AgentSettings />);
     expect(screen.getByText("Installing… 30%")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Upgrading…" }).hasAttribute("disabled")).toBe(true);
+    expect(screen.getByRole("button", { name: "Configure" }).hasAttribute("disabled")).toBe(false);
 
     managedInstallStates.codex = { kind: "error", message: "npm unavailable" };
     view.rerender(<AgentSettings />);
     expect(screen.getByText("npm unavailable")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
-    expect(runManagedInstall).toHaveBeenCalledTimes(2);
+    fireEvent.click(screen.getByRole("button", { name: "Configure" }));
+    expect(DESCRIPTORS.find((d) => d.id === "codex")!.openInstallUI).toHaveBeenCalledTimes(2);
+    expect(runManagedInstall).not.toHaveBeenCalled();
   });
 });

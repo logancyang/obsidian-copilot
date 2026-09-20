@@ -47,7 +47,7 @@ Claude models and billing come from your Claude Code account. Models added under
 
 The Codex backend uses `@agentclientprotocol/codex-acp`, which includes a compatible Codex CLI:
 
-Managed Codex downloads are pinned to `codex-acp` **1.10.0** in this Copilot release. Copilot uses the system `tar -xf` command to unpack the runtime on all supported desktop platforms:
+Managed Codex downloads are pinned to `codex-acp` **1.12.0** in this Copilot release. Copilot uses the system `tar -xf` command to unpack the runtime on all supported desktop platforms:
 
 | Platform | Download format | Extraction                                                         |
 | -------- | --------------- | ------------------------------------------------------------------ |
@@ -71,7 +71,7 @@ You can also choose **Sign in** on the Agent Chat status card. For terminal logi
 
 Switching to your own Codex binary removes unused managed downloads. Your custom binary and account credentials remain on your computer. Cancel is available during downloads; configuration changes finish before another action can start.
 
-When the plugin's managed version changes, Agent Chat and Settings show the same **Upgrade** action and shared progress or **Retry** state. The older `@zed-industries/codex-acp` package is not supported. Copilot uses the login stored by the bundled Codex CLI. Models added under **BYOK** do not join the Codex model list.
+If your adapter is below the supported minimum, select **Configure** in Settings to manage it. Agent Chat also offers **Upgrade**, with shared progress and errors. The older `@zed-industries/codex-acp` package is not supported. Copilot uses the login stored by the bundled Codex CLI. Models added under **BYOK** do not join the Codex model list.
 
 For Windows-specific installation help, see [Windows setup for Agent Chat](agent-mode-windows-setup.md).
 
@@ -197,6 +197,6 @@ Copilot also includes **research-memo** as an optional theme. For a named theme,
 
 ### Upgrading an agent
 
-When an installed agent needs a supported version, Basic → Agents and Agent Chat offer **Upgrade** if Copilot can upgrade that installation. Both show the same progress, including upgrades started in Configure. If an upgrade fails, use **Retry**. A failed custom-path selection is reported in Configure and does not turn the upgrade action into a path-validation retry.
+When an installed agent needs a supported version, select **Configure** in Basic → Agents. Agent Chat offers **Upgrade** if Copilot can upgrade that installation. Both surfaces show the same progress and failures, including upgrades started in Configure. If an upgrade fails, retry in Configure or use **Retry** in Agent Chat. A failed custom-path selection is reported in Configure and does not turn the upgrade action into a path-validation retry.
 
 Image-only messages appear as "Image attachment" in the queue. Sessions with only images use the same fallback title in tabs and Recent Chats until a text or agent-generated title is available.

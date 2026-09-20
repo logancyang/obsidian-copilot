@@ -1,7 +1,7 @@
 import { terminalSignInCommand } from "@/agentMode/backends/shared/terminalSignInCommand";
 
 export const CODEX_BINARY_NAME = "codex-acp";
-export const CODEX_ACP_PINNED_VERSION = "1.10.0";
+export const CODEX_ACP_PINNED_VERSION = "1.12.0";
 export const CODEX_BUNDLE_VERSION = CODEX_ACP_PINNED_VERSION;
 
 export function codexBinaryPathPlaceholder(platform: NodeJS.Platform): string {

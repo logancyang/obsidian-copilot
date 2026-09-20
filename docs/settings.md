@@ -91,7 +91,7 @@ The Claude settings card also includes:
 
 #### Codex
 
-Codex uses the `codex-acp` adapter and the login held by the Codex CLI. It does not use an OpenAI API key from the BYOK tab. Managed downloads are pinned to adapter version **1.10.0** in this Copilot release. **0.0.45** is the minimum supported version for an existing or manually installed adapter. See [Codex installation details](agent-mode-and-tools.md#codex).
+Codex uses the `codex-acp` adapter and the login held by the Codex CLI. It does not use an OpenAI API key from the BYOK tab. Managed downloads are pinned to adapter version **1.12.0** in this Copilot release. **0.0.45** is the minimum supported version for an existing or manually installed adapter. See [Codex installation details](agent-mode-and-tools.md#codex).
 
 Select **Configure** to open these controls:
 
@@ -109,7 +109,7 @@ The Configure dialog uses the same **Managed by Copilot** and **My own binary** 
 
 Codex and Claude share an **Authentication** section. The badge beside its heading shows the current sign-in state. When signed out, choose **Sign in with your browser** or use the displayed terminal command. After signing in, the section shows the account label when the CLI provides one and offers **Sign out** so you can sign in with another account. Sign-out uses the selected CLI profile; environment-provided API keys must be removed from the environment separately.
 
-If a Copilot update pins a different managed adapter, the Codex row shows **Update**. Its progress, failure message, and **Retry** action are shared with the alert in Agent Chat. A custom binary remains usable and is never changed automatically.
+The Codex row always offers **Configure**, including when its adapter is below the supported minimum. Progress and failure messages are shared with Agent Chat; open Configure to manage the installation or retry. A custom binary remains usable and is never changed automatically.
 
 See [Agent Chat](agent-mode-and-tools.md) for setup, permissions, projects, multi-agent answers, and normal use.
 

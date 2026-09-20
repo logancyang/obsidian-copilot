@@ -15,9 +15,7 @@ export interface AgentBackendHeaderProps {
   installState: InstallState;
   authStatus?: BackendAuthStatus | null;
   managedInstall: ManagedInstallActionState;
-  canUpdate: boolean;
   resolvedPath: string | null;
-  onUpdate: () => void;
   onConfigure: () => void;
 }
 
@@ -27,13 +25,11 @@ export function AgentBackendHeader({
   installState,
   authStatus,
   managedInstall,
-  canUpdate,
   resolvedPath,
-  onUpdate,
   onConfigure,
 }: AgentBackendHeaderProps) {
-  // Shared progress prevents duplicate updates; shared errors keep Retry available across surfaces.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
+  // Keep progress and failures visible while configuration remains accessible.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/531
   const updating = managedInstall.kind === "running";
   const updateFailed = managedInstall.kind === "error";
   return (
@@ -53,29 +49,23 @@ export function AgentBackendHeader({
             )}
             {(installState.kind === "incompatible" || installState.kind === "error") && (
               <span className="tw-text-xs tw-text-error">
-                {canUpdate && updating
+                {updating
                   ? managedInstall.label
-                  : canUpdate && updateFailed
+                  : updateFailed
                     ? managedInstall.message
                     : installState.message}
               </span>
             )}
           </div>
         </div>
-        {canUpdate ? (
-          <Button className="tw-shrink-0" size="default" disabled={updating} onClick={onUpdate}>
-            {updating ? "Upgrading…" : updateFailed ? "Retry" : "Upgrade"}
-          </Button>
-        ) : (
-          <Button
-            className="tw-shrink-0"
-            size="default"
-            variant={installState.kind === "ready" ? "secondary" : "default"}
-            onClick={onConfigure}
-          >
-            Configure
-          </Button>
-        )}
+        <Button
+          className="tw-shrink-0"
+          size="default"
+          variant={installState.kind === "ready" ? "secondary" : "default"}
+          onClick={onConfigure}
+        >
+          Configure
+        </Button>
       </div>
     </div>
   );

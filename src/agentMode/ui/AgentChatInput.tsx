@@ -69,6 +69,14 @@ interface AgentChatInputProps {
    * before a session lands.
    */
   mainAgentId: BackendId | null;
+  /**
+   * Upgrade requirement of the agent that would run the turn, or `null` when it
+   * can run. Present means every send is refused up front; the session layer's
+   * own refusal arrives after the composer has been emptied, which would throw
+   * the user's text, images and context away.
+   * https://github.com/Brevilabs/obsidian-copilot-private/issues/531
+   */
+  unsupportedAgentMessage: string | null;
   updateUserMessageHistory: (newMessage: string) => void;
   isStarting: boolean;
   hasPendingPlanPermission: boolean;
@@ -198,6 +206,7 @@ export const AgentChatInput = memo(function AgentChatInput({
   draft,
   app,
   mainAgentId,
+  unsupportedAgentMessage,
   updateUserMessageHistory,
   isStarting,
   hasPendingPlanPermission,
@@ -408,6 +417,14 @@ export const AgentChatInput = memo(function AgentChatInput({
         return;
       }
 
+      // Same contract for an agent that is too old to run: refuse here, ahead of
+      // `resetCompose`, so the message survives for a resend after the upgrade.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/531
+      if (unsupportedAgentMessage) {
+        new Notice(unsupportedAgentMessage);
+        return;
+      }
+
       // Resolve the `@`-mentions into the ANSWERER set (installed, deduped). Only
       // carried when it actually fans out; the single-agent path sends no
       // `mentionedAgents` and stays byte-for-byte the existing behavior. Read the
@@ -488,6 +505,7 @@ export const AgentChatInput = memo(function AgentChatInput({
       loading,
       isStarting,
       unsupportedImageModelLabel,
+      unsupportedAgentMessage,
       holdForContext,
       disabled,
       resetCompose,
@@ -521,8 +539,20 @@ export const AgentChatInput = memo(function AgentChatInput({
   useEffect(() => {
     // `disabled` guards the same hard-disable as the send path: a project
     // orphaned while messages are queued must not drain its queue into a
-    // disabled composer.
-    if (disabled || loading || isStarting || holdForContext || queuedMessages.length === 0) return;
+    // disabled composer. `unsupportedAgentMessage` holds the queue for the same
+    // reason it blocks a send — draining into a refusal the session layer raises
+    // after the dequeue would discard the follow-ups.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/531
+    if (
+      disabled ||
+      loading ||
+      isStarting ||
+      holdForContext ||
+      unsupportedAgentMessage ||
+      queuedMessages.length === 0
+    ) {
+      return;
+    }
     const combined = combineQueuedMessages(queuedMessages);
     if (
       combined.promptContent?.some((content) => content.type === "image") &&
@@ -544,6 +574,7 @@ export const AgentChatInput = memo(function AgentChatInput({
     runSend,
     setQueuedMessages,
     unsupportedImageModelLabel,
+    unsupportedAgentMessage,
   ]);
 
   const handleRemoveQueuedMessage = useCallback(

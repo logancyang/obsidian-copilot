@@ -43,6 +43,20 @@ export type InstallState =
     }
   | { kind: "error"; message: string };
 
+/** Reject execution on an unsupported install, including an already-running process.
+ * @param descriptor - The executing backend, when supplied by the session owner.
+ * @param settings - Current configuration, not the process's startup snapshot.
+ */
+export function assertBackendCompatible(
+  descriptor: Pick<BackendDescriptor, "getInstallState"> | undefined,
+  settings: CopilotSettings
+): void {
+  // A selectable agent must never execute a binary below the supported minimum.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/531
+  const state = descriptor?.getInstallState(settings);
+  if (state?.kind === "incompatible") throw new Error(state.message);
+}
+
 export type ManagedInstallActionState =
   | { kind: "idle" }
   | { kind: "running"; label: string; percent?: number }

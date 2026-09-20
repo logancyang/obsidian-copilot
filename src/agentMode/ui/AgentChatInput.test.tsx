@@ -154,6 +154,7 @@ function inputNode(
       draft={draft}
       app={makeApp()}
       mainAgentId={null}
+      unsupportedAgentMessage={null}
       updateUserMessageHistory={jest.fn()}
       isStarting={false}
       hasPendingPlanPermission={false}
@@ -329,6 +330,22 @@ describe("AgentChatInput", () => {
         );
       }
     );
+
+    it("keeps the draft and its attachments in the composer when the agent is too old to run (https://github.com/Brevilabs/obsidian-copilot-private/issues/531)", async () => {
+      jest.mocked(Notice).mockClear();
+      const backend = { sendMessage: jest.fn(), cancel: jest.fn() } as unknown as AgentChatBackend;
+      const draft = makeDraft({ input: "keep this draft", images: [image] });
+
+      renderInput(backend, draft, {
+        unsupportedAgentMessage: "opencode 1.0.0 is outdated. Update to 1.16.0.",
+      });
+      await act(async () => fireEvent.click(screen.getByText("send")));
+
+      expect(backend.sendMessage).not.toHaveBeenCalled();
+      expect(draft.resetCompose).not.toHaveBeenCalled();
+      expect(draft.setQueue).not.toHaveBeenCalled();
+      expect(Notice).toHaveBeenCalledWith("opencode 1.0.0 is outdated. Update to 1.16.0.");
+    });
 
     it("keeps an image-only draft when the selected model lacks vision https://github.com/logancyang/obsidian-copilot/issues/2850", async () => {
       const backend = { sendMessage: jest.fn(), cancel: jest.fn() } as unknown as AgentChatBackend;
@@ -597,6 +614,20 @@ describe("AgentChatInput", () => {
   });
 
   describe("AgentChatInput()", () => {
+    it("holds queued follow-ups instead of flushing them when the agent is too old to run (https://github.com/Brevilabs/obsidian-copilot-private/issues/531)", async () => {
+      const backend = { sendMessage: jest.fn(), cancel: jest.fn() } as unknown as AgentChatBackend;
+      const draft = makeDraft({
+        input: "",
+        queue: [{ id: "queued-1", text: "follow-up", rawInput: "follow-up" }],
+      });
+
+      renderInput(backend, draft, { unsupportedAgentMessage: "Upgrade required" });
+      await act(async () => {});
+
+      expect(backend.sendMessage).not.toHaveBeenCalled();
+      expect(draft.setQueue).not.toHaveBeenCalled();
+    });
+
     it("keeps the static composer guidance when an empty draft is typed into and cleared", () => {
       mockUseCanUseMultiAgent.mockReturnValue(true);
       const backend = { sendMessage: jest.fn(), cancel: jest.fn() } as unknown as AgentChatBackend;
