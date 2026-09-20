@@ -572,7 +572,7 @@ export class MiyoClient {
    * @param query - User query.
    * @param limit - Maximum number of results.
    * @param filters - Optional search filters.
-   * @param paths - Optional path substrings matched by Miyo before client-side filtering.
+   * @param paths - Optional path substrings Miyo OR-matches against result paths.
    * @returns Search response.
    */
   public async search(
@@ -588,6 +588,8 @@ export class MiyoClient {
       ...(folderName ? { folder_name: folderName } : {}),
       limit,
       ...(filters && filters.length > 0 ? { filters } : {}),
+      // An empty list is omitted so a call with no path filter sends the same body as before:
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/527
       ...(paths && paths.length > 0 ? { paths } : {}),
     };
     if (getSettings().debug) {
