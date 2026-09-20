@@ -1,6 +1,11 @@
 import type { BoostPoolCandidate } from "@/vaultSearch/boost/boostPool";
 
-export const INCLUDE_SEARCH_SNIPPETS = true;
+/**
+ * Demo switch: Miyo passages can be removed from Jev without changing pool construction.
+ * https://github.com/Brevilabs/obsidian-copilot-private/issues/516
+ */
+export const SEND_MIYO_CONTENT_TO_JEV = true;
+export const MAX_MIYO_CONTENT_CHARS = 600;
 
 interface JevFileQuestion {
   name: string;
@@ -12,7 +17,7 @@ interface JevFileQuestion {
   tags: string[];
   search_score: number | null;
   search_rank: number | null;
-  snippet?: string;
+  content?: string;
 }
 
 export interface JevSearchQuestion {
@@ -51,7 +56,7 @@ function fileSize(bytes: number): string {
   return `${(bytes / 1_000_000).toFixed(1)} MB`;
 }
 
-/** Build one Jev noul question per candidate without reading any file contents. */
+/** Build one Jev noul question per candidate, with bounded Miyo content when available. */
 export function buildJevRequest(
   query: string,
   vault: string,
@@ -65,7 +70,7 @@ export function buildJevRequest(
     vault,
   };
   const questions: Record<string, JevSearchQuestion> = {};
-  pool.forEach(({ candidate, file, searchScore, searchRank }, index) => {
+  pool.forEach(({ candidate, file, sources, searchScore, searchRank }, index) => {
     questions[`c${index}`] = {
       type: "noul",
       instructions: {
@@ -80,12 +85,15 @@ export function buildJevRequest(
           tags: file.tags,
           search_score: searchScore,
           search_rank: searchRank,
-          ...(INCLUDE_SEARCH_SNIPPETS && candidate.snippet ? { snippet: candidate.snippet } : {}),
+          ...(SEND_MIYO_CONTENT_TO_JEV && sources.includes("miyo") && candidate.content
+            ? { content: candidate.content.slice(0, MAX_MIYO_CONTENT_CHARS) }
+            : {}),
         },
       },
       criteria: {
-        true: "The file matches what the query describes, by content, name, type, or time",
-        false: "The file does not match one or more things the query asks for",
+        true: "The file matches what the query describes, including the requested decision and whether it is current",
+        false:
+          "The file does not match one or more things the query asks for, is only topically related, or records a superseded decision",
       },
     };
   });

@@ -1,7 +1,9 @@
 import {
   filterCandidatesByTypes,
   groupMiyoResults,
+  markdownToPlainText,
   matchFilesByName,
+  prepareFilenameSearch,
 } from "@/vaultSearch/candidates";
 import type { SearchCandidate, SearchFile } from "@/vaultSearch/types";
 
@@ -63,6 +65,27 @@ describe("candidates", () => {
           new Set(["pdf"])
         )
       ).toEqual([]);
+    });
+
+    it(`turns the best Miyo chunk into plain text for display and boosting (${issue})`, () => {
+      const [grouped] = groupMiyoResults(
+        [
+          {
+            id: "markdown",
+            path: "Notes/Meditations.md",
+            score: 0.8,
+            snippet: "## 1/10 **Meditations**",
+            chunk_text: "### 🏛️ **Meditations**\n\n* * * [^228-1]:",
+          },
+        ],
+        new Set(["md"])
+      );
+
+      expect(grouped.snippet).toBe("1/10 Meditations");
+      expect(grouped.content).toBe("🏛️ Meditations");
+      expect(markdownToPlainText("[A link](https://example.com) and `code`")).toBe(
+        "A link and code"
+      );
     });
   });
 
@@ -137,6 +160,25 @@ describe("candidates", () => {
       expect(matches).toHaveLength(50);
       expect(matches[0].path).toBe("Notes/Match 59.md");
       expect(matches[49].path).toBe("Notes/Match 10.md");
+    });
+
+    it(`rejects scattered-letter filename non-matches for a whole-word query (${issue})`, () => {
+      const files = ["How to Get Paid for What You Know", "Start Your Own Corporation"].map(
+        (basename): SearchFile => ({
+          path: `${basename}.md`,
+          name: `${basename}.md`,
+          basename,
+          extension: "md",
+          ctime: 0,
+          mtime: 0,
+          size: 0,
+          tags: [],
+        })
+      );
+
+      expect(matchFilesByName(files, new Set(["md"]), prepareFilenameSearch("stoicism"))).toEqual(
+        []
+      );
     });
   });
 

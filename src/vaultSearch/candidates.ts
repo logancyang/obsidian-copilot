@@ -1,8 +1,33 @@
 import type { MiyoSearchResult } from "@/miyo/MiyoClient";
 import type { SearchCandidate, SearchFile } from "@/vaultSearch/types";
-import type { SearchResult } from "obsidian";
+import { prepareSimpleSearch, type SearchResult } from "obsidian";
 
 export type FuzzySearch = (text: string) => SearchResult | null;
+
+/** Match complete query terms rather than scattered letters across a long filename. */
+export function prepareFilenameSearch(query: string): FuzzySearch {
+  return prepareSimpleSearch(query);
+}
+
+/**
+ * Reduce a Miyo passage to a compact, readable line without rendering Markdown.
+ * https://github.com/Brevilabs/obsidian-copilot-private/issues/515
+ */
+export function markdownToPlainText(markdown: string): string {
+  return markdown
+    .replace(/^---[\s\S]*?^---\s*/m, "")
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+    .replace(/\[\^[^\]]+\](?::)?/g, "")
+    .replace(/^\s{0,3}(?:#{1,6}|>|[-+*]\s+|\d+[.)]\s+)/gm, "")
+    .replace(/^\s*(?:[-*_]\s*){3,}$/gm, "")
+    .replace(/\*\*([^*]+)\*\*|__([^_]+)__|~~([^~]+)~~|`([^`]+)`/g, "$1$2$3$4")
+    .replace(/[*_~`]/g, "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
 
 export function groupMiyoResults(
   results: MiyoSearchResult[],
@@ -14,12 +39,15 @@ export function groupMiyoResults(
     if (!selectedTypes.has(extension)) continue;
     const existing = byPath.get(result.path);
     if (existing && existing.score !== null && existing.score >= result.score) continue;
+    const snippet = markdownToPlainText(result.snippet?.trim() || result.chunk_text?.trim() || "");
+    const content = markdownToPlainText(result.chunk_text?.trim() || result.snippet?.trim() || "");
     byPath.set(result.path, {
       path: result.path,
       title: result.title?.trim() || basenameWithoutExtension(result.path),
       folder: folderFromPath(result.path),
       extension,
-      snippet: result.snippet?.trim() || result.chunk_text?.trim() || "",
+      snippet,
+      ...(content ? { content } : {}),
       mtime: result.mtime ?? 0,
       score: result.score,
       source: "miyo",

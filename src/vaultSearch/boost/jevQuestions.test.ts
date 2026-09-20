@@ -1,5 +1,6 @@
 import {
-  INCLUDE_SEARCH_SNIPPETS,
+  MAX_MIYO_CONTENT_CHARS,
+  SEND_MIYO_CONTENT_TO_JEV,
   buildJevRequest,
   parseJevProbabilities,
 } from "@/vaultSearch/boost/jevQuestions";
@@ -14,6 +15,7 @@ const candidate: BoostPoolCandidate = {
     folder: "Inbox/Papers",
     extension: "pdf",
     snippet: "Transformers replace recurrent sequence models.",
+    content: "Transformers replace recurrent sequence models.".repeat(20),
     mtime: new Date(2026, 8, 18, 9, 30).getTime(),
     score: null,
     source: "recent",
@@ -28,14 +30,14 @@ const candidate: BoostPoolCandidate = {
     size: 2_100_000,
     tags: ["paper"],
   },
-  sources: ["created"],
+  sources: ["miyo", "created"],
   searchScore: null,
   searchRank: null,
 };
 
 describe("jevQuestions", () => {
   describe("buildJevRequest()", () => {
-    it(`sends local and relative dates, nullable Miyo fields, and the demo snippet switch (${issue})`, () => {
+    it(`sends local and relative dates plus capped Miyo content behind the demo switch (${issue})`, () => {
       const request = buildJevRequest(
         "the pdf i got yesterday",
         "Main",
@@ -44,7 +46,7 @@ describe("jevQuestions", () => {
       );
       const file = request.questions.c0.instructions.file;
 
-      expect(INCLUDE_SEARCH_SNIPPETS).toBe(true);
+      expect(SEND_MIYO_CONTENT_TO_JEV).toBe(true);
       expect(request.state).toMatchObject({
         query: "the pdf i got yesterday",
         vault: "Main",
@@ -56,10 +58,29 @@ describe("jevQuestions", () => {
         tags: ["paper"],
         search_score: null,
         search_rank: null,
-        snippet: "Transformers replace recurrent sequence models.",
       });
+      expect(file.content).toHaveLength(MAX_MIYO_CONTENT_CHARS);
       expect(file.created).toContain("yesterday");
       expect(file.modified).toContain("today");
+    });
+
+    it(`keeps filename and recency candidates metadata-only (${issue})`, () => {
+      const localCandidate: BoostPoolCandidate = {
+        ...candidate,
+        candidate: { ...candidate.candidate, source: "filename" as const },
+        sources: ["filename", "created"],
+      };
+
+      const request = buildJevRequest(
+        "paper",
+        "Main",
+        [localCandidate],
+        new Date(2026, 8, 18, 14, 32)
+      );
+
+      expect(request.questions.c0.instructions.file.content).toBeUndefined();
+      expect(request.questions.c0.instructions.file.created).toBeTruthy();
+      expect(request.questions.c0.instructions.file.modified).toBeTruthy();
     });
   });
 

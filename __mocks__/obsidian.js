@@ -14,6 +14,13 @@ let requestUrlImpl = jest.fn().mockResolvedValue({
 
 module.exports = {
   moment: jest.requireActual("moment"),
+  prepareSimpleSearch: (query) => {
+    const words = query.toLocaleLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
+    return (text) => {
+      const haystack = text.toLocaleLowerCase();
+      return words.every((word) => haystack.includes(word)) ? { score: 0, matches: [] } : null;
+    };
+  },
   requestUrl: (...args) => requestUrlImpl(...args),
   __setRequestUrlImpl: (impl) => {
     requestUrlImpl = impl;

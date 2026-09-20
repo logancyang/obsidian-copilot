@@ -11,6 +11,8 @@ import type { FuzzySearch } from "@/vaultSearch/candidates";
 import type { SearchBooster, SearchCandidate, SearchFile } from "@/vaultSearch/types";
 
 export const JEV_TIMEOUT_MS = 2500;
+export const JEV_BATCH_SIZE = 30;
+export const JEV_MAX_IN_FLIGHT = 8;
 
 interface BrocaClient {
   broca(state: unknown, questions: Record<string, unknown>): Promise<Record<string, JevNoulAnswer>>;
@@ -51,21 +53,36 @@ export class JevSearchBooster implements SearchBooster {
 
     const pool = this.pool(query, candidates, this.options.selectedTypes);
     if (!pool.length) return new Map();
-    const request = buildJevRequest(query, this.options.vaultName, pool, this.now());
     const startedAt = Date.now();
-    const transport = this.options.client.broca(request.state, request.questions);
-    const tracked = transport.then(
-      () => undefined,
-      () => undefined
+    const batches = chunk(pool, JEV_BATCH_SIZE).slice(0, JEV_MAX_IN_FLIGHT);
+    const transports = batches.map((batch) => {
+      const request = buildJevRequest(query, this.options.vaultName, batch, this.now());
+      return {
+        batch,
+        transport: this.options.client.broca(request.state, request.questions),
+      };
+    });
+    const settledPromise = Promise.allSettled(
+      transports.map(({ transport }) => this.withTimeout(transport))
     );
+    const tracked = settledPromise.then(() => undefined);
     this.inFlight = tracked;
     void tracked.finally(() => {
       if (this.inFlight === tracked) this.inFlight = null;
     });
 
-    const answers = await this.withTimeout(transport);
+    const settled = await settledPromise;
     if (sequence !== this.sequence) throw new Error("AI boost superseded by a newer query");
-    const probabilities = parseJevProbabilities(pool, answers);
+    const probabilities = new Map<string, number>();
+    settled.forEach((result, index) => {
+      if (result.status !== "fulfilled") return;
+      for (const [path, probability] of parseJevProbabilities(
+        transports[index].batch,
+        result.value
+      )) {
+        probabilities.set(path, probability);
+      }
+    });
     this.rememberDetails(pool, probabilities);
     const sourceSizes = Object.fromEntries(
       ["miyo", "filename", "created", "modified"].map((source) => [
@@ -144,6 +161,14 @@ export class JevSearchBooster implements SearchBooster {
         }
       });
   }
+}
+
+function chunk<T>(items: readonly T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size));
+  }
+  return chunks;
 }
 
 export function createJevSearchBooster(

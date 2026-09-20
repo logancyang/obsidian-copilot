@@ -1,5 +1,10 @@
 import { BrevilabsApiError } from "@/LLMProviders/brevilabsClient";
-import { JEV_TIMEOUT_MS, JevSearchBooster } from "@/vaultSearch/boost/jevBooster";
+import {
+  JEV_BATCH_SIZE,
+  JEV_MAX_IN_FLIGHT,
+  JEV_TIMEOUT_MS,
+  JevSearchBooster,
+} from "@/vaultSearch/boost/jevBooster";
 import type { SearchCandidate, SearchFile } from "@/vaultSearch/types";
 
 const issue = "https://github.com/Brevilabs/obsidian-copilot-private/issues/516";
@@ -73,24 +78,82 @@ describe("jevBooster", () => {
       });
 
       it.each([429, 500])(
-        `rejects HTTP %i so basic results remain untouched (${issue})`,
+        `silently leaves an HTTP %i batch unjudged so basic results remain (${issue})`,
         async (status) => {
           const instance = booster(
             jest.fn().mockRejectedValue(new BrevilabsApiError("failed", status))
           );
 
-          await expect(instance.score("paper", candidates)).rejects.toMatchObject({ status });
+          await expect(instance.score("paper", candidates)).resolves.toEqual(new Map());
         }
       );
 
-      it(`rejects after the 2.5 second client timeout while retaining the underlying in-flight guard (${issue})`, async () => {
+      it(`leaves a batch unjudged after the 2.5 second client budget (${issue})`, async () => {
         const instance = booster(jest.fn(() => new Promise(() => undefined)));
         const scoring = instance.score("paper", candidates);
-        const timedOut = expect(scoring).rejects.toThrow("timed out");
 
         await jest.advanceTimersByTimeAsync(JEV_TIMEOUT_MS);
 
-        await timedOut;
+        await expect(scoring).resolves.toEqual(new Map());
+      });
+
+      it(`judges 30-question batches in parallel and keeps successful batches when one fails (${issue})`, async () => {
+        const batchFiles = Array.from(
+          { length: 61 },
+          (_, index): SearchFile => ({
+            path: `Inbox/Paper ${index}.pdf`,
+            name: `Paper ${index}.pdf`,
+            basename: `Paper ${index}`,
+            extension: "pdf",
+            ctime: index,
+            mtime: index,
+            size: 1000,
+            tags: [],
+          })
+        );
+        const batchCandidates = batchFiles.map(
+          (file, index): SearchCandidate => ({
+            path: file.path,
+            title: file.basename,
+            folder: "Inbox",
+            extension: "pdf",
+            snippet: `Result ${index}`,
+            content: `Decision ${index}`,
+            mtime: index,
+            score: 1 - index / 100,
+            source: "miyo",
+          })
+        );
+        const broca = jest
+          .fn()
+          .mockResolvedValueOnce({ c0: { noul: 0.91 } })
+          .mockRejectedValueOnce(new BrevilabsApiError("limited", 429))
+          .mockResolvedValueOnce({ c0: { noul: 0.72 } });
+        const instance = new JevSearchBooster({
+          client: { broca },
+          files: batchFiles,
+          selectedTypes: new Set(["pdf"]),
+          prepareSearch: () => () => null,
+          vaultName: "Main",
+          now: () => new Date(2026, 8, 18, 14, 32),
+        });
+
+        const scores = await instance.score("current decision", batchCandidates);
+
+        expect(JEV_BATCH_SIZE).toBe(30);
+        expect(JEV_MAX_IN_FLIGHT).toBe(8);
+        expect(broca).toHaveBeenCalledTimes(3);
+        expect(
+          broca.mock.calls.map(
+            ([, questions]) => Object.keys(questions as Record<string, unknown>).length
+          )
+        ).toEqual([30, 30, 1]);
+        expect(scores).toEqual(
+          new Map([
+            ["Inbox/Paper 0.pdf", 0.91],
+            ["Inbox/Paper 60.pdf", 0.72],
+          ])
+        );
       });
     });
   });

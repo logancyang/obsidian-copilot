@@ -421,18 +421,18 @@ describe("sanitizeEnvOverrides", () => {
 });
 
 describe("sanitizeSettings - legacy Miyo settings cleanup", () => {
-  it(`defaults a missing AI boost preference off without overwriting an explicit choice (${"https://github.com/Brevilabs/obsidian-copilot-private/issues/516"})`, () => {
+  it(`defaults a missing AI boost preference on without overwriting an explicit choice (${"https://github.com/Brevilabs/obsidian-copilot-private/issues/516"})`, () => {
     const missing = sanitizeSettings({
       ...DEFAULT_SETTINGS,
       vaultSearchAiBoostEnabled: undefined,
     } as unknown as CopilotSettings);
-    const enabled = sanitizeSettings({
+    const disabled = sanitizeSettings({
       ...DEFAULT_SETTINGS,
-      vaultSearchAiBoostEnabled: true,
+      vaultSearchAiBoostEnabled: false,
     });
 
-    expect(missing.vaultSearchAiBoostEnabled).toBe(false);
-    expect(enabled.vaultSearchAiBoostEnabled).toBe(true);
+    expect(missing.vaultSearchAiBoostEnabled).toBe(true);
+    expect(disabled.vaultSearchAiBoostEnabled).toBe(false);
   });
 
   it(`normalizes persisted vault-search exclusions without requiring a migration (${"https://github.com/Brevilabs/obsidian-copilot-private/issues/515"})`, () => {

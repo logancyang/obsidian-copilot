@@ -54,13 +54,12 @@ describe("boostPool", () => {
         },
       });
 
-      expect(BOOST_MIYO_COUNT).toBe(25);
-      expect(BOOST_FILENAME_COUNT).toBe(10);
-      expect(BOOST_CREATED_COUNT).toBe(10);
-      expect(BOOST_MODIFIED_COUNT).toBe(5);
-      expect(BOOST_MAX_CANDIDATES).toBe(50);
-      expect(pool).toHaveLength(40);
-      expect(new Set(pool.map(({ candidate }) => candidate.path)).size).toBe(40);
+      expect(BOOST_MIYO_COUNT).toBe(100);
+      expect(BOOST_FILENAME_COUNT).toBe(20);
+      expect(BOOST_CREATED_COUNT).toBe(20);
+      expect(BOOST_MODIFIED_COUNT).toBe(10);
+      expect(BOOST_MAX_CANDIDATES).toBe(150);
+      expect(new Set(pool.map(({ candidate }) => candidate.path)).size).toBe(pool.length);
       expect(pool[0]).toMatchObject({
         candidate: { path: "Folder/File 0.pdf" },
         searchScore: 1,
@@ -71,26 +70,26 @@ describe("boostPool", () => {
     });
 
     it(`fully represents all four source quotas when their candidates are disjoint (${issue})`, () => {
-      const files = Array.from({ length: 50 }, (_, index) => ({
+      const files = Array.from({ length: 150 }, (_, index) => ({
         ...file(index),
-        ctime: index >= 35 && index < 45 ? 2_000 + index : 0,
-        mtime: index >= 45 ? 2_000 + index : 0,
+        ctime: index >= 120 && index < 140 ? 2_000 + index : 0,
+        mtime: index >= 140 ? 2_000 + index : 0,
       }));
       const pool = buildBoostPool({
-        basicCandidates: Array.from({ length: 25 }, (_, index) => miyoCandidate(index)),
+        basicCandidates: Array.from({ length: 100 }, (_, index) => miyoCandidate(index)),
         files,
         selectedTypes: new Set(["pdf"]),
         fuzzySearch: (name) => {
           const index = Number(name.replace("File ", ""));
-          return index >= 25 && index < 35 ? { score: 100 - index, matches: [] } : null;
+          return index >= 100 && index < 120 ? { score: 200 - index, matches: [] } : null;
         },
       });
 
-      expect(pool).toHaveLength(50);
-      expect(pool.filter(({ sources }) => sources.includes("miyo"))).toHaveLength(25);
-      expect(pool.filter(({ sources }) => sources.includes("filename"))).toHaveLength(10);
-      expect(pool.filter(({ sources }) => sources.includes("created"))).toHaveLength(10);
-      expect(pool.filter(({ sources }) => sources.includes("modified"))).toHaveLength(5);
+      expect(pool).toHaveLength(150);
+      expect(pool.filter(({ sources }) => sources.includes("miyo"))).toHaveLength(100);
+      expect(pool.filter(({ sources }) => sources.includes("filename"))).toHaveLength(20);
+      expect(pool.filter(({ sources }) => sources.includes("created"))).toHaveLength(20);
+      expect(pool.filter(({ sources }) => sources.includes("modified"))).toHaveLength(10);
     });
 
     it(`limits recency candidates to checked file types (${issue})`, () => {

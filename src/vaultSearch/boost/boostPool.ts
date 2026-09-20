@@ -1,11 +1,11 @@
 import type { FuzzySearch } from "@/vaultSearch/candidates";
 import type { SearchCandidate, SearchFile } from "@/vaultSearch/types";
 
-export const BOOST_MIYO_COUNT = 25;
-export const BOOST_FILENAME_COUNT = 10;
-export const BOOST_CREATED_COUNT = 10;
-export const BOOST_MODIFIED_COUNT = 5;
-export const BOOST_MAX_CANDIDATES = 50;
+export const BOOST_MIYO_COUNT = 100;
+export const BOOST_FILENAME_COUNT = 20;
+export const BOOST_CREATED_COUNT = 20;
+export const BOOST_MODIFIED_COUNT = 10;
+export const BOOST_MAX_CANDIDATES = 150;
 
 export type BoostPoolSource = "miyo" | "filename" | "created" | "modified";
 

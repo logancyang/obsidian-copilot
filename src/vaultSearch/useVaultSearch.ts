@@ -9,8 +9,8 @@ import {
 import type { SearchBooster, SearchCandidate, SearchFile } from "@/vaultSearch/types";
 import { useEffect, useRef, useState } from "react";
 
-const MIYO_RESULT_LIMIT = 30;
-const FILTERED_MIYO_FETCH_LIMIT = 200;
+const MIYO_RESULT_LIMIT = 100;
+const FILTERED_MIYO_FETCH_LIMIT = 1000;
 
 export interface UseVaultSearchOptions {
   files: SearchFile[];

@@ -45,8 +45,8 @@ function props(
     query: "stoicism",
     onQueryChange: jest.fn(),
     fileTypes: [
-      { extension: "epub", count: 1, checked: true },
-      { extension: "pdf", count: 1, checked: true },
+      { id: "epub", label: "epub", extensions: ["epub"], count: 1, checked: true },
+      { id: "pdf", label: "pdf", extensions: ["pdf"], count: 1, checked: true },
     ],
     onTypeChange: jest.fn(),
     results,
@@ -108,9 +108,52 @@ describe("VaultSearchModal", () => {
       ];
 
       expect(buildFileTypeOptions(files, ["pdf"])).toEqual([
-        { extension: "md", count: 2, checked: true },
-        { extension: "pdf", count: 1, checked: false },
+        { id: "md", label: "md", extensions: ["md"], count: 2, checked: true },
+        { id: "pdf", label: "pdf", extensions: ["pdf"], count: 1, checked: false },
       ]);
+    });
+
+    it(`shows five common Miyo types plus one Other control for everything else (${issue})`, () => {
+      const extensions = [
+        ["md", 20],
+        ["pdf", 15],
+        ["epub", 10],
+        ["docx", 8],
+        ["txt", 7],
+        ["cmd", 6],
+        ["ps1", 5],
+        ["mjs", 4],
+        ["", 3],
+      ] as const;
+      const files = extensions.flatMap(([extension, count]) =>
+        Array.from(
+          { length: count },
+          (_, index): SearchFile => ({
+            path: `${extension || "none"}-${index}${extension ? `.${extension}` : ""}`,
+            name: `${extension || "none"}-${index}${extension ? `.${extension}` : ""}`,
+            basename: `${extension || "none"}-${index}`,
+            extension,
+            ctime: 0,
+            mtime: 0,
+            size: 0,
+            tags: [],
+          })
+        )
+      );
+
+      const options = buildFileTypeOptions(files, ["ps1"]);
+
+      expect(options).toHaveLength(6);
+      expect(options.map(({ label }) => label)).toEqual([
+        "md",
+        "pdf",
+        "epub",
+        "docx",
+        "txt",
+        "Other",
+      ]);
+      expect(options[5]).toMatchObject({ count: 18, checked: false });
+      expect(options[5].extensions).toEqual(["", "cmd", "mjs", "ps1"]);
     });
   });
 
@@ -122,8 +165,28 @@ describe("VaultSearchModal", () => {
       expect(screen.getByText("Books")).toBeTruthy();
       expect(screen.getAllByText("epub")).toHaveLength(2);
       expect(screen.getByText("A practical guide to Stoic philosophy")).toBeTruthy();
-      expect(screen.getByText("0.91")).toBeTruthy();
+      expect(screen.getByText("91%").getAttribute("title")).toBe("Similarity");
       expect(screen.getByText("Enable Miyo for content search")).toBeTruthy();
+      expect(screen.getByText("91%").closest("button")?.className).toContain("tw-border-0");
+    });
+
+    it(`leaves the folder slot blank for a file at the vault root (${issue})`, () => {
+      render(
+        <VaultSearchModalContent
+          {...props({
+            results: [
+              {
+                ...results[0],
+                path: "Stoicism.epub",
+                folder: "",
+                mtime: 0,
+              },
+            ],
+          })}
+        />
+      );
+
+      expect(screen.queryByText("/", { exact: true })).toBeNull();
     });
 
     it(`moves with arrows, opens with Enter, opens a new tab with Cmd/Ctrl+Enter, and closes with Escape (${issue})`, () => {
@@ -147,14 +210,14 @@ describe("VaultSearchModal", () => {
     it(`explains that an unrenderable result cannot open on mobile (${issue})`, () => {
       render(<VaultSearchModalContent {...props({ isMobile: true })} />);
 
-      expect(screen.getByText("Unavailable on mobile")).toBeTruthy();
+      expect(screen.getByLabelText("Unavailable on mobile")).toBeTruthy();
     });
 
     it(`shows a disabled license state without an upsell action (${"https://github.com/Brevilabs/obsidian-copilot-private/issues/516"})`, () => {
       render(<VaultSearchModalContent {...props({ aiBoostLicensed: false })} />);
 
-      expect(screen.getByRole("checkbox", { name: "AI boost" }).hasAttribute("disabled")).toBe(
-        true
+      expect(screen.getByRole("switch", { name: "AI boost" }).getAttribute("aria-disabled")).toBe(
+        "true"
       );
       expect(screen.getByText("License required")).toBeTruthy();
       expect(screen.queryByRole("link")).toBeNull();
@@ -173,9 +236,44 @@ describe("VaultSearchModal", () => {
 
       expect(screen.getByText("92%")).toBeTruthy();
       expect(screen.getByText("61%")).toBeTruthy();
+      expect(screen.getByText("92%").getAttribute("title")).toBe("AI boost relevance");
       expect(screen.getByText("Attention").closest("button")?.getAttribute("aria-selected")).toBe(
         "true"
       );
+    });
+
+    it(`separates low-probability rows and calls out an all-low boost result (${"https://github.com/Brevilabs/obsidian-copilot-private/issues/516"})`, () => {
+      const { rerender } = render(
+        <VaultSearchModalContent
+          {...props({
+            aiBoostEnabled: true,
+            aiBoostAttemptCompleted: true,
+            results: [
+              { ...results[0], boostScore: 0.83 },
+              { ...results[1], boostScore: 0.31 },
+            ],
+          })}
+        />
+      );
+
+      expect(screen.getByText("Less likely")).toBeTruthy();
+      expect(screen.queryByText("No strong match")).toBeNull();
+
+      rerender(
+        <VaultSearchModalContent
+          {...props({
+            aiBoostEnabled: true,
+            aiBoostAttemptCompleted: true,
+            results: results.map((result, index) => ({
+              ...result,
+              boostScore: index === 0 ? 0.42 : 0.18,
+            })),
+          })}
+        />
+      );
+
+      expect(screen.getByText("No strong match")).toBeTruthy();
+      expect(screen.queryByText("Less likely")).toBeNull();
     });
 
     it(`uses Enter to run a pending AI boost immediately, then opens the boosted result (${"https://github.com/Brevilabs/obsidian-copilot-private/issues/516"})`, () => {

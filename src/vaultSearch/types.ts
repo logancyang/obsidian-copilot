@@ -6,6 +6,8 @@ export interface SearchCandidate {
   folder: string;
   extension: string;
   snippet: string;
+  /** Plain text from the best Miyo chunk; never populated for local-only candidates. */
+  content?: string;
   mtime: number;
   score: number | null;
   boostScore?: number;

@@ -42,9 +42,16 @@ const meta = {
     query: "stoicism",
     onQueryChange: () => undefined,
     fileTypes: [
-      { extension: "epub", count: 12, checked: true },
-      { extension: "md", count: 4210, checked: true },
-      { extension: "pdf", count: 312, checked: true },
+      { id: "md", label: "md", extensions: ["md"], count: 4210, checked: true },
+      { id: "pdf", label: "pdf", extensions: ["pdf"], count: 312, checked: true },
+      { id: "epub", label: "epub", extensions: ["epub"], count: 12, checked: true },
+      {
+        id: "other",
+        label: "Other",
+        extensions: ["docx", "txt"],
+        count: 9,
+        checked: true,
+      },
     ],
     onTypeChange: () => undefined,
     results: RESULTS,
@@ -53,6 +60,7 @@ const meta = {
     aiBoostEnabled: false,
     aiBoostLicensed: true,
     aiBoosting: false,
+    aiBoostAttemptCompleted: false,
     onAiBoostChange: () => undefined,
     onAiBoostNow: () => undefined,
     onOpen: () => undefined,
@@ -91,4 +99,47 @@ export const Empty: StoryObj<VaultSearchModalContentProps> = {
 
 export const LicenseRequired: StoryObj<VaultSearchModalContentProps> = {
   args: { aiBoostLicensed: false },
+};
+
+export const AiBoostDecisionDemo: StoryObj<VaultSearchModalContentProps> = {
+  args: {
+    query: "关于 Atlas 现在的最终决定",
+    aiBoostEnabled: true,
+    aiBoostAttemptCompleted: true,
+    results: [
+      {
+        path: "Decisions/2025-04-22-atlas-final.md",
+        title: "Atlas final decision — do not adopt",
+        folder: "Decisions",
+        extension: "md",
+        snippet: "We decided against Atlas and superseded the January adoption decision.",
+        mtime: Date.UTC(2025, 3, 22),
+        score: 0.84,
+        boostScore: 0.88,
+        source: "miyo",
+      },
+      {
+        path: "Decisions/2025-01-10-atlas-adopt.md",
+        title: "Atlas adoption decision",
+        folder: "Decisions",
+        extension: "md",
+        snippet: "The team agreed to adopt Atlas for the search migration.",
+        mtime: Date.UTC(2025, 0, 10),
+        score: 0.83,
+        boostScore: 0.19,
+        source: "miyo",
+      },
+      {
+        path: "Research/atlas-comparison.md",
+        title: "Atlas comparison notes",
+        folder: "Research",
+        extension: "md",
+        snippet: "A topical comparison of Atlas with other search systems.",
+        mtime: Date.UTC(2025, 2, 3),
+        score: 0.8,
+        boostScore: 0.08,
+        source: "miyo",
+      },
+    ],
+  },
 };

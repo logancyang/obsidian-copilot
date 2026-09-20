@@ -98,7 +98,7 @@ describe("useVaultSearch", () => {
       expect(result.current.results.map(({ path }) => path)).toEqual(["Papers/Attention.pdf"]);
     });
 
-    it(`over-fetches checked extension paths and keeps 30 verified files when a type is unchecked (${issue})`, async () => {
+    it(`over-fetches checked extension paths and keeps up to 100 verified files when a type is unchecked (${issue})`, async () => {
       const searchMiyo = jest.fn().mockResolvedValue(
         Array.from({ length: 50 }, (_, index) => ({
           id: `result-${index}`,
@@ -115,19 +115,19 @@ describe("useVaultSearch", () => {
       act(() => result.current.setQuery("attention"));
       await act(async () => jest.advanceTimersByTime(150));
 
-      expect(searchMiyo).toHaveBeenCalledWith("attention", 200, [".pdf"]);
-      expect(result.current.results).toHaveLength(30);
+      expect(searchMiyo).toHaveBeenCalledWith("attention", 1000, [".pdf"]);
+      expect(result.current.results).toHaveLength(40);
       expect(result.current.results.every(({ extension }) => extension === "pdf")).toBe(true);
     });
 
-    it(`requests 30 Miyo results without paths when every type is checked (${issue})`, async () => {
+    it(`requests 100 Miyo results without paths when every type is checked (${issue})`, async () => {
       const searchMiyo = jest.fn().mockResolvedValue([]);
       const { result } = renderHook(() => useVaultSearch(options({ searchMiyo })));
 
       act(() => result.current.setQuery("attention"));
       await act(async () => jest.advanceTimersByTime(150));
 
-      expect(searchMiyo).toHaveBeenCalledWith("attention", 30, undefined);
+      expect(searchMiyo).toHaveBeenCalledWith("attention", 100, undefined);
     });
 
     it(`keeps filename matches and reports guidance when Miyo is disabled (${issue})`, () => {

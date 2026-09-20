@@ -820,7 +820,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   enableMiyoSearchSkill: false,
   miyoSearchAll: false,
   vaultSearchExcludedFileTypes: [],
-  vaultSearchAiBoostEnabled: false,
+  vaultSearchAiBoostEnabled: true,
   relevantNotesLiveUpdate: true,
   miyoServerUrl: "",
   selfHostSearchProvider: "firecrawl",
