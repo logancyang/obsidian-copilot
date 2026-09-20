@@ -2,7 +2,7 @@ import {
   MAX_JEV_STATE_BYTES,
   MAX_MIYO_CONTENT_CHARS,
   SEND_MIYO_CONTENT_TO_JEV,
-  buildJevRequest,
+  buildJevRequests,
   parseJevProbabilities,
 } from "@/vaultSearch/boost/jevQuestions";
 import type { BoostPoolCandidate } from "@/vaultSearch/boost/boostPool";
@@ -36,10 +36,20 @@ const candidate: BoostPoolCandidate = {
   searchRank: null,
 };
 
+function buildRequest(
+  query: string,
+  vault: string,
+  pool: BoostPoolCandidate[],
+  files: BoostPoolCandidate["file"][],
+  now: Date
+) {
+  return buildJevRequests(query, vault, [pool], files, now)[0];
+}
+
 describe("jevQuestions", () => {
-  describe("buildJevRequest()", () => {
+  describe("buildJevRequests()", () => {
     it(`sends local and relative dates plus capped Miyo content behind the demo switch (${issue})`, () => {
-      const request = buildJevRequest(
+      const request = buildRequest(
         "the pdf i got yesterday",
         "Main",
         [candidate],
@@ -76,7 +86,7 @@ describe("jevQuestions", () => {
         sources: ["filename", "created"],
       };
 
-      const request = buildJevRequest(
+      const request = buildRequest(
         "paper",
         "Main",
         [localCandidate],
@@ -129,7 +139,7 @@ describe("jevQuestions", () => {
         },
       };
 
-      const request = buildJevRequest(
+      const request = buildRequest(
         "the largest epub",
         "Main",
         [largest],
@@ -162,14 +172,14 @@ describe("jevQuestions", () => {
         extension: "md",
       };
 
-      const fitting = buildJevRequest(
+      const fitting = buildRequest(
         "largest note",
         "Main",
         [{ ...candidate, file: fittingFile }],
         [fittingFile],
         new Date(2026, 8, 18, 14, 32)
       );
-      const oversized = buildJevRequest(
+      const oversized = buildRequest(
         "largest note",
         "Main",
         [{ ...candidate, file: oversizedFile }],
@@ -199,7 +209,7 @@ describe("jevQuestions", () => {
         candidate: { ...candidate.candidate, path: files[0].path },
       };
 
-      const request = buildJevRequest(
+      const request = buildRequest(
         "largest note",
         "Main",
         [ranked],
@@ -213,6 +223,19 @@ describe("jevQuestions", () => {
       expect(request.questions.c0.instructions.file.size_rank).toBe(
         "1 of 2 pdf files (largest first)"
       );
+    });
+
+    it(`reuses one state across every batch in a search (${issue})`, () => {
+      const requests = buildJevRequests(
+        "paper",
+        "Main",
+        [[candidate], [candidate]],
+        [candidate.file],
+        new Date(2026, 8, 18, 14, 32)
+      );
+
+      expect(requests).toHaveLength(2);
+      expect(requests[0].state).toBe(requests[1].state);
     });
   });
 

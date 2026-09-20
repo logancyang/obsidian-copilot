@@ -166,55 +166,57 @@ function buildState(query: string, vault: string, files: SearchFile[], now: Date
   return state;
 }
 
-/** Build one Jev noul question per candidate, with bounded Miyo content when available. */
-export function buildJevRequest(
+/** Builds every batch around the same state and peer ranks for one search. */
+export function buildJevRequests(
   query: string,
   vault: string,
-  pool: BoostPoolCandidate[],
+  pools: BoostPoolCandidate[][],
   files: SearchFile[],
   now: Date
 ) {
   const state = buildState(query, vault, files, now);
   const ranks = fileRanks(files);
-  const questions: Record<string, JevSearchQuestion> = {};
-  pool.forEach(({ candidate, file, sources, searchScore, searchRank }, index) => {
-    const rank = ranks.get(file.path) ?? {
-      type: fileType(file),
-      total: 1,
-      size: 1,
-      created: 1,
-      modified: 1,
-    };
-    questions[`c${index}`] = {
-      type: "noul",
-      instructions: {
-        ask: "Is this file what the user is searching for?",
-        file: {
-          name: file.name,
-          folder: candidate.folder,
-          type: file.extension || "file",
-          created: localDate(file.ctime, now),
-          modified: localDate(file.mtime, now),
-          size: fileSize(file.size),
-          size_rank: rankLabel(rank.size, rank.total, rank.type, "largest"),
-          created_rank: rankLabel(rank.created, rank.total, rank.type, "newest"),
-          modified_rank: rankLabel(rank.modified, rank.total, rank.type, "newest"),
-          tags: file.tags,
-          search_score: searchScore,
-          search_rank: searchRank,
-          ...(SEND_MIYO_CONTENT_TO_JEV && sources.includes("miyo") && candidate.content
-            ? { content: candidate.content.slice(0, MAX_MIYO_CONTENT_CHARS) }
-            : {}),
+  return pools.map((pool) => {
+    const questions: Record<string, JevSearchQuestion> = {};
+    pool.forEach(({ candidate, file, sources, searchScore, searchRank }, index) => {
+      const rank = ranks.get(file.path) ?? {
+        type: fileType(file),
+        total: 1,
+        size: 1,
+        created: 1,
+        modified: 1,
+      };
+      questions[`c${index}`] = {
+        type: "noul",
+        instructions: {
+          ask: "Is this file what the user is searching for?",
+          file: {
+            name: file.name,
+            folder: candidate.folder,
+            type: file.extension || "file",
+            created: localDate(file.ctime, now),
+            modified: localDate(file.mtime, now),
+            size: fileSize(file.size),
+            size_rank: rankLabel(rank.size, rank.total, rank.type, "largest"),
+            created_rank: rankLabel(rank.created, rank.total, rank.type, "newest"),
+            modified_rank: rankLabel(rank.modified, rank.total, rank.type, "newest"),
+            tags: file.tags,
+            search_score: searchScore,
+            search_rank: searchRank,
+            ...(SEND_MIYO_CONTENT_TO_JEV && sources.includes("miyo") && candidate.content
+              ? { content: candidate.content.slice(0, MAX_MIYO_CONTENT_CHARS) }
+              : {}),
+          },
         },
-      },
-      criteria: {
-        true: "The file satisfies what the query asks for. Use the vault inventory and peer ranks for comparative or metadata requests. Only when the query asks about a decision, require the requested decision and whether it is current or supersedes another decision",
-        false:
-          "The file does not satisfy one or more things the query asks for, or is only topically related. When the query asks about a decision, a different or superseded decision is false",
-      },
-    };
+        criteria: {
+          true: "The file satisfies what the query asks for. Use the peer ranks for comparative or metadata requests. Only when the query asks about a decision, require the requested decision and whether it is current or supersedes another decision",
+          false:
+            "The file does not satisfy one or more things the query asks for, or is only topically related. When the query asks about a decision, a different or superseded decision is false",
+        },
+      };
+    });
+    return { state, questions };
   });
-  return { state, questions };
 }
 
 export function parseJevProbabilities(
