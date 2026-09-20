@@ -119,7 +119,7 @@ Before anything is written into the zip, Copilot cleans every log and your own d
 
 A log too large for the report keeps its newest entries rather than being dropped, and the file itself opens with a banner identifying it as a truncated log and naming the original size. Cleaning always runs over the whole log before anything is cut, so a log too large to clean whole (over 64 MB) is left out and listed with that reason.
 
-Only the zip is uploaded, and only to Brevilabs. It carries no license key and no account identity, and it is not tied to your Copilot account. The public GitHub issue carries the report ID and nothing else — there is no download link on it, and nothing on that page can fetch the bundle.
+The zip is uploaded only to Brevilabs. The upload reuses the random device identifier already used for this vault to group reports and limit uploads. It does not create a separate identifier for bug reports or use your Copilot account identity. If Copilot cannot read a valid saved device identifier, it refuses the upload; you can still save the zip and open the issue to attach it manually. The upload carries no license key or account identity. The public GitHub issue carries the report ID and nothing else — there is no download link on it, and nothing on that page can fetch the bundle.
 
 ### What the report ID is for
 

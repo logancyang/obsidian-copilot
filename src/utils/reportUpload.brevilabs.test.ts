@@ -1,3 +1,5 @@
+import type { App } from "obsidian";
+import { getPersistedDeviceId } from "@/utils/deviceId";
 import { BREVILABS_API_BASE_URL } from "@/constants";
 import { logError } from "@/logger";
 import { createReportUploader, type ReportRequest } from "@/utils/reportUpload.brevilabs";
@@ -70,6 +72,43 @@ describe("reportUpload.brevilabs", () => {
       });
       expect(new Uint8Array(sent.body)).toEqual(ZIP_BYTES);
     });
+
+    it("reuses the vault's saved device UUID for report uploads (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", async () => {
+      const savedDeviceId = "3f2a1d9e-8b4c-4f6d-9e2a-7c5b3a1d9e8f";
+      const app = {
+        loadLocalStorage: jest.fn((key: string) =>
+          key === "obsidian-copilot:device-id:v1" ? savedDeviceId : null
+        ),
+        saveLocalStorage: jest.fn(),
+      } as unknown as App;
+      const request = respondWith(201, OK_BODY);
+      const upload = makeUploader(request, { installId: () => getPersistedDeviceId(app) });
+
+      await upload(ATTEMPT);
+
+      expect(request.mock.calls[0][0].headers["X-Copilot-Install-ID"]).toBe(savedDeviceId);
+      expect(app.saveLocalStorage).not.toHaveBeenCalled();
+    });
+
+    it.each(["unreadable", "discarded writes", "legacy non-UUID"])(
+      "sends no report when device storage has %s (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)",
+      async (failure) => {
+        const app = {
+          loadLocalStorage: jest.fn(() => {
+            if (failure === "unreadable") throw new Error("StorageError");
+            return failure === "legacy non-UUID" ? "legacy-device-id" : null;
+          }),
+          saveLocalStorage: jest.fn(),
+        } as unknown as App;
+        const request = respondWith(201, OK_BODY);
+        const upload = makeUploader(request, { installId: () => getPersistedDeviceId(app) });
+
+        const error = await rejection(upload(ATTEMPT));
+
+        expect(error.message).toMatch(/nothing was uploaded/);
+        expect(request).not.toHaveBeenCalled();
+      }
+    );
 
     it("returns the report id and expiry the server confirmed", async () => {
       await expect(makeUploader(respondWith(200, OK_BODY))(ATTEMPT)).resolves.toEqual({
