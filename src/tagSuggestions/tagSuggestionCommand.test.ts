@@ -3,7 +3,7 @@ import type {
   RankedTagSuggestion,
   TagSuggestionState,
 } from "@/tagSuggestions/tagSuggestions";
-import type { TagSuggestionRow } from "@/tagSuggestions/tagSuggestionRow";
+import type { CachedTagSuggestions, TagSuggestionRow } from "@/tagSuggestions/tagSuggestionRow";
 import { waitFor } from "@testing-library/react";
 import type { App } from "obsidian";
 
@@ -19,8 +19,9 @@ const mockFinishRequest = jest.fn();
 const mockShowLoading = jest.fn();
 const mockClose = jest.fn();
 const mockHasSession = jest.fn<boolean, unknown[]>();
+const mockIsSessionLoading = jest.fn<boolean, unknown[]>();
 const mockIsRequestInFlight = jest.fn<boolean, unknown[]>();
-const mockGetCachedSuggestions = jest.fn<RankedTagSuggestion[] | undefined, unknown[]>();
+const mockGetCachedSuggestions = jest.fn<CachedTagSuggestions | undefined, unknown[]>();
 const mockCacheSuggestions = jest.fn();
 const mockRowShow = jest.fn<
   void,
@@ -29,6 +30,8 @@ const mockRowShow = jest.fn<
     RankedTagSuggestion[],
     (add: string[], remove: string[]) => Promise<boolean>,
     MarkdownView?,
+    ReadonlyArray<string>?,
+    (() => void)?,
   ]
 >();
 let updateTags: ((add: string[], remove: string[]) => Promise<boolean>) | undefined;
@@ -39,6 +42,7 @@ const suggestionRow = {
   showLoading: mockShowLoading,
   close: mockClose,
   hasSession: mockHasSession,
+  isSessionLoading: mockIsSessionLoading,
   isRequestInFlight: mockIsRequestInFlight,
   getCachedSuggestions: mockGetCachedSuggestions,
   cacheSuggestions: mockCacheSuggestions,
@@ -137,6 +141,7 @@ describe("tagSuggestionCommand", () => {
       mockCheckIsPlusUser.mockResolvedValue(true);
       mockIsPlusEnabled.mockReturnValue(true);
       mockHasSession.mockReturnValue(false);
+      mockIsSessionLoading.mockReturnValue(false);
       mockIsRequestInFlight.mockReturnValue(false);
       mockGetCachedSuggestions.mockReturnValue(undefined);
       mockBroca.mockResolvedValue({ t0: { noul: 0.85 } });
@@ -157,7 +162,9 @@ describe("tagSuggestionCommand", () => {
         app.workspace.getActiveFile(),
         [{ tag: "research", score: 0.85 }],
         expect.any(Function),
-        app.workspace.getActiveViewOfType(MarkdownView)
+        app.workspace.getActiveViewOfType(MarkdownView),
+        ["existing"],
+        expect.any(Function)
       );
       expect(mockLogInfo).toHaveBeenCalledTimes(1);
       expect(mockLogInfo).toHaveBeenCalledWith("[Tag suggestion judgments]", [
@@ -227,7 +234,10 @@ describe("tagSuggestionCommand", () => {
     });
 
     it(`uses a fresh cached ranking in quiet mode without sending a request (${ISSUE})`, async () => {
-      const cached = [{ tag: "cached", score: 0.93 }];
+      const cached = {
+        ranked: [{ tag: "cached", score: 0.93 }],
+        sourceTags: ["existing"],
+      };
       mockGetCachedSuggestions.mockReturnValue(cached);
       const { app } = createApp();
 
@@ -238,9 +248,11 @@ describe("tagSuggestionCommand", () => {
       expect(mockBroca).not.toHaveBeenCalled();
       expect(mockRowShow).toHaveBeenCalledWith(
         app.workspace.getActiveFile(),
-        cached,
+        cached.ranked,
         expect.any(Function),
-        app.workspace.getActiveViewOfType(MarkdownView)
+        app.workspace.getActiveViewOfType(MarkdownView),
+        cached.sourceTags,
+        expect.any(Function)
       );
     });
 
@@ -261,17 +273,34 @@ describe("tagSuggestionCommand", () => {
       expect(mockBroca).not.toHaveBeenCalled();
     });
 
+    it(`lets a stale live session use the shared quiet ranking pipeline (${ISSUE})`, async () => {
+      mockHasSession.mockReturnValue(true);
+      mockIsSessionLoading.mockReturnValue(true);
+      const { app } = createApp();
+
+      await suggestTagsForCurrentNote(app, suggestionRow, { quiet: true });
+
+      expect(mockBeginRequest).toHaveBeenCalledWith(app.workspace.getActiveFile());
+      expect(mockBroca).toHaveBeenCalledTimes(1);
+      expect(mockRowShow).toHaveBeenCalled();
+    });
+
     it(`bypasses a cached ranking when the command explicitly requests fresh results (${ISSUE})`, async () => {
-      mockGetCachedSuggestions.mockReturnValue([{ tag: "cached", score: 0.93 }]);
+      mockGetCachedSuggestions.mockReturnValue({
+        ranked: [{ tag: "cached", score: 0.93 }],
+        sourceTags: ["existing"],
+      });
       const { app } = createApp();
 
       await suggestTagsForCurrentNote(app, suggestionRow);
 
       expect(mockGetCachedSuggestions).not.toHaveBeenCalled();
       expect(mockBroca).toHaveBeenCalled();
-      expect(mockCacheSuggestions).toHaveBeenCalledWith(app.workspace.getActiveFile(), [
-        { tag: "research", score: 0.85 },
-      ]);
+      expect(mockCacheSuggestions).toHaveBeenCalledWith(
+        app.workspace.getActiveFile(),
+        [{ tag: "research", score: 0.85 }],
+        ["existing"]
+      );
     });
 
     it(`discards results when the originating note is no longer active (${ISSUE})`, async () => {

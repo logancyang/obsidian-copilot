@@ -178,6 +178,10 @@ function tagsFromCache(cache: CachedMetadata | null): Map<string, string> {
   return tags;
 }
 
+export function noteTags(cache: CachedMetadata | null): string[] {
+  return Array.from(tagsFromCache(cache).values());
+}
+
 function stripCode(value: string): string {
   return value
     .replace(/```[\s\S]*?```/g, " ")
@@ -233,7 +237,7 @@ export function buildTagSuggestionState(
   cache: CachedMetadata | null
 ): TagSuggestionState {
   const body = stripTagSuggestionFrontmatter(rawContent);
-  const existingTags = Array.from(tagsFromCache(cache).values());
+  const existingTags = noteTags(cache);
   const state: TagSuggestionState = {
     title: file.basename,
     path: file.path,

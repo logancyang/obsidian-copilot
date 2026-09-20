@@ -1,4 +1,8 @@
-import { frontmatterTags, type RankedTagSuggestion } from "@/tagSuggestions/tagSuggestions";
+import {
+  frontmatterTags,
+  noteTags,
+  type RankedTagSuggestion,
+} from "@/tagSuggestions/tagSuggestions";
 import { App, Component, EventRef, MarkdownView, setIcon, TFile } from "obsidian";
 
 const VISIBLE_SUGGESTIONS = 2;
@@ -13,6 +17,12 @@ export type UpdateSuggestedTags = (add: string[], remove: string[]) => Promise<b
 interface CachedSuggestions {
   expiresAt: number;
   ranked: ReadonlyArray<RankedTagSuggestion>;
+  sourceTags: ReadonlyArray<string>;
+}
+
+export interface CachedTagSuggestions {
+  ranked: RankedTagSuggestion[];
+  sourceTags: string[];
 }
 
 interface PendingTagWrite {
@@ -25,6 +35,8 @@ interface TagSuggestionSession {
   view: MarkdownView;
   nativeRow: HTMLElement;
   ranked: ReadonlyArray<RankedTagSuggestion>;
+  sourceTags: ReadonlyArray<string>;
+  rerank?: () => void;
   updateTags?: UpdateSuggestedTags;
   pendingTags: Map<string, PendingTagWrite>;
   loading: boolean;
@@ -38,6 +50,10 @@ interface TagSuggestionSession {
 
 function normalizedTag(tag: string): string {
   return tag.trim().replace(/^#/, "").toLowerCase();
+}
+
+function normalizedTags(tags: ReadonlyArray<string>): ReadonlyArray<string> {
+  return Object.freeze(Array.from(new Set(tags.map(normalizedTag).filter(Boolean))));
 }
 
 function isVisible(element: HTMLElement, boundary: HTMLElement): boolean {
@@ -70,7 +86,9 @@ export class TagSuggestionRow extends Component {
   }
 
   beginRequest(file: TFile): number {
-    if (this.session) this.closeSession(this.session);
+    if (this.session && (this.session.file.path !== file.path || this.session.loading === false)) {
+      this.closeSession(this.session);
+    }
     const generation = ++this.requestGeneration;
     this.inFlight.set(file.path, generation);
     return generation;
@@ -100,15 +118,25 @@ export class TagSuggestionRow extends Component {
     return this.session?.file.path === file.path;
   }
 
+  isSessionLoading(file: TFile): boolean {
+    return this.session?.file.path === file.path && this.session.loading;
+  }
+
   isNativeFocusSuppressed(property: HTMLElement): boolean {
     return this.suppressedNativeRow === property;
   }
 
-  cacheSuggestions(file: TFile, suggestions: RankedTagSuggestion[], now = Date.now()): void {
+  cacheSuggestions(
+    file: TFile,
+    suggestions: RankedTagSuggestion[],
+    sourceTags: ReadonlyArray<string>,
+    now = Date.now()
+  ): void {
     this.cache.delete(file.path);
     this.cache.set(file.path, {
       expiresAt: now + CACHE_TTL_MS,
       ranked: Object.freeze([...suggestions]),
+      sourceTags: normalizedTags(sourceTags),
     });
     while (this.cache.size > CACHE_MAX_NOTES) {
       const oldest = this.cache.keys().next().value as string | undefined;
@@ -117,19 +145,24 @@ export class TagSuggestionRow extends Component {
     }
   }
 
-  getCachedSuggestions(file: TFile, now = Date.now()): RankedTagSuggestion[] | undefined {
+  getCachedSuggestions(file: TFile, now = Date.now()): CachedTagSuggestions | undefined {
     const entry = this.cache.get(file.path);
     if (!entry) return undefined;
-    if (entry.expiresAt < now) {
+    if (entry.expiresAt < now || this.rankingIsStale(file, entry.sourceTags)) {
       this.cache.delete(file.path);
       return undefined;
     }
     this.cache.delete(file.path);
     this.cache.set(file.path, entry);
-    return [...entry.ranked];
+    return { ranked: [...entry.ranked], sourceTags: [...entry.sourceTags] };
   }
 
   showLoading(file: TFile, view?: MarkdownView): boolean {
+    if (this.session?.file.path === file.path && (!view || this.session.view === view)) {
+      this.session.loading = true;
+      this.render(this.session);
+      return true;
+    }
     return this.replaceSession(file, [], undefined, true, view);
   }
 
@@ -137,16 +170,20 @@ export class TagSuggestionRow extends Component {
     file: TFile,
     suggestions: RankedTagSuggestion[],
     updateTags: UpdateSuggestedTags,
-    view?: MarkdownView
+    view?: MarkdownView,
+    sourceTags: ReadonlyArray<string> = [],
+    rerank?: () => void
   ): void {
     if (this.session?.file.path === file.path && (!view || this.session.view === view)) {
       this.session.ranked = Object.freeze([...suggestions]);
+      this.session.sourceTags = normalizedTags(sourceTags);
+      this.session.rerank = rerank;
       this.session.updateTags = updateTags;
       this.session.loading = false;
       this.render(this.session);
       return;
     }
-    this.replaceSession(file, suggestions, updateTags, false, view);
+    this.replaceSession(file, suggestions, updateTags, false, view, sourceTags, rerank);
   }
 
   close(): void {
@@ -166,7 +203,9 @@ export class TagSuggestionRow extends Component {
     suggestions: RankedTagSuggestion[],
     updateTags: UpdateSuggestedTags | undefined,
     loading: boolean,
-    suppliedView?: MarkdownView
+    suppliedView?: MarkdownView,
+    sourceTags: ReadonlyArray<string> = [],
+    rerank?: () => void
   ): boolean {
     if (this.session) this.closeSession(this.session);
     const view = suppliedView ?? this.findView(file);
@@ -221,6 +260,8 @@ export class TagSuggestionRow extends Component {
       view,
       nativeRow,
       ranked: Object.freeze([...suggestions]),
+      sourceTags: normalizedTags(sourceTags),
+      rerank,
       updateTags,
       pendingTags: new Map<string, PendingTagWrite>(),
       loading,
@@ -307,6 +348,12 @@ export class TagSuggestionRow extends Component {
     }
     session.nativeRow = nativeRow;
     if (session.rowEl.nextElementSibling !== nativeRow) nativeRow.before(session.rowEl);
+
+    if (!session.loading && this.rankingIsStale(session.file, session.sourceTags)) {
+      this.cache.delete(session.file.path);
+      session.loading = true;
+      session.rerank?.();
+    }
 
     session.pillsEl.replaceChildren();
     if (session.loading) {
@@ -415,6 +462,13 @@ export class TagSuggestionRow extends Component {
     for (const [normalized, write] of writes) {
       if (session.pendingTags.get(normalized) === write) session.pendingTags.delete(normalized);
     }
+  }
+
+  private rankingIsStale(file: TFile, sourceTags: ReadonlyArray<string>): boolean {
+    const current = new Set(
+      noteTags(this.app.metadataCache.getFileCache(file)).map(normalizedTag).filter(Boolean)
+    );
+    return sourceTags.some((tag) => !current.has(tag));
   }
 
   private finishRender(session: TagSuggestionSession): void {

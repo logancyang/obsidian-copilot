@@ -33,7 +33,9 @@ export async function suggestTagsForCurrentNote(
   }
   if (
     quiet &&
-    (!isPlusEnabled() || suggestionRow.hasSession(file) || suggestionRow.isRequestInFlight(file))
+    (!isPlusEnabled() ||
+      (suggestionRow.hasSession(file) && !suggestionRow.isSessionLoading(file)) ||
+      suggestionRow.isRequestInFlight(file))
   ) {
     return;
   }
@@ -67,6 +69,9 @@ export async function suggestTagsForCurrentNote(
       return false;
     }
   };
+  const rerank = () => {
+    void suggestTagsForCurrentNote(app, suggestionRow, { quiet: true, view });
+  };
 
   try {
     if (suggestionRow.showLoading(file, view) === false) {
@@ -87,13 +92,17 @@ export async function suggestTagsForCurrentNote(
     if (quiet) {
       const cached = suggestionRow.getCachedSuggestions(file);
       if (cached) {
-        if (sourceIsCurrent()) suggestionRow.show(file, cached, updateTags, view);
+        if (sourceIsCurrent()) {
+          suggestionRow.show(file, cached.ranked, updateTags, view, cached.sourceTags, rerank);
+        }
         return;
       }
     }
 
     const content = await app.vault.cachedRead(file);
     if (!sourceIsCurrent()) return;
+    const fileCache = app.metadataCache.getFileCache(file);
+    const state = buildTagSuggestionState(app, file, content, fileCache);
     const candidates = collectTagCandidates(app, file, content);
     if (!candidates.length) {
       suggestionRow.close();
@@ -101,7 +110,6 @@ export async function suggestTagsForCurrentNote(
       else new Notice("This vault has no other tags to suggest for this note.");
       return;
     }
-    const state = buildTagSuggestionState(app, file, content, app.metadataCache.getFileCache(file));
     const requests = packTagSuggestionRequests(state, candidates, getSettings().userId);
     const client = BrevilabsClient.getInstance();
     if (!sourceIsCurrent()) return;
@@ -126,8 +134,8 @@ export async function suggestTagsForCurrentNote(
       "[Tag suggestion judgments]",
       suggestions.map(({ tag, score }, index) => ({ tag, noul: score, rank: index + 1 }))
     );
-    suggestionRow.cacheSuggestions(file, suggestions);
-    suggestionRow.show(file, suggestions, updateTags, view);
+    suggestionRow.cacheSuggestions(file, suggestions, state.existing_tags);
+    suggestionRow.show(file, suggestions, updateTags, view, state.existing_tags, rerank);
   } catch (error) {
     if (sourceIsCurrent()) {
       logError("Tag suggestion failed", error);

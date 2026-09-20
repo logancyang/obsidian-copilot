@@ -515,18 +515,69 @@ describe("TagSuggestionRow", () => {
     expect(row.isRequestInFlight(ctx.file)).toBe(false);
   });
 
+  it(`keeps the live row and quietly re-ranks when a source tag disappears (${ISSUE})`, () => {
+    const ctx = context();
+    const rerank = jest.fn();
+    const update = jest.fn().mockResolvedValue(true);
+    const row = new TagSuggestionRow(ctx.app);
+    row.show(ctx.file, suggestions(3), update, ctx.view, ["existing"], rerank);
+    const mounted = ctx.sourceContainer.querySelector<HTMLElement>(".copilot-tag-suggestion-row");
+
+    ctx.setFrontmatter({ tags: ["added-later"] });
+    ctx.emitMetadataChanged();
+
+    expect(ctx.sourceContainer.querySelector(".copilot-tag-suggestion-row")).toBe(mounted);
+    expect(
+      ctx.sourceContainer.querySelector(".copilot-tag-suggestion-placeholder")?.textContent
+    ).toBe("Suggesting…");
+    expect(rerank).toHaveBeenCalledTimes(1);
+    expect(row.isSessionLoading(ctx.file)).toBe(true);
+
+    ctx.emitMetadataChanged();
+    expect(rerank).toHaveBeenCalledTimes(1);
+
+    row.show(ctx.file, suggestions(2), update, ctx.view, ["added-later"], rerank);
+    expect(ctx.sourceContainer.querySelector(".copilot-tag-suggestion-row")).toBe(mounted);
+    expect(ctx.sourceContainer.querySelector(".copilot-tag-suggestion-placeholder")).toBeNull();
+    expect(suggestionLabels(ctx.sourceContainer)).toEqual(["tag-1", "tag-2"]);
+  });
+
   it(`caches immutable rankings for ten minutes and at most fifty notes (${ISSUE})`, () => {
     const ctx = context();
     const row = new TagSuggestionRow(ctx.app);
     const ranked = suggestions(2);
-    row.cacheSuggestions(ctx.file, ranked, 1_000);
+    row.cacheSuggestions(ctx.file, ranked, ["#Existing"], 1_000);
     ranked.pop();
-    expect(row.getCachedSuggestions(ctx.file, 1_000 + 10 * 60 * 1_000)).toEqual(suggestions(2));
+    expect(row.getCachedSuggestions(ctx.file, 1_000 + 10 * 60 * 1_000)).toEqual({
+      ranked: suggestions(2),
+      sourceTags: ["existing"],
+    });
     expect(row.getCachedSuggestions(ctx.file, 1_000 + 10 * 60 * 1_000 + 1)).toBeUndefined();
 
     const notes = Array.from({ length: 51 }, (_, index) => file(`Notes/${index}.md`));
-    notes.forEach((note, index) => row.cacheSuggestions(note, suggestions(1), index));
+    notes.forEach((note, index) => row.cacheSuggestions(note, suggestions(1), [], index));
     expect(row.getCachedSuggestions(notes[0], 51)).toBeUndefined();
-    expect(row.getCachedSuggestions(notes[50], 51)).toEqual(suggestions(1));
+    expect(row.getCachedSuggestions(notes[50], 51)).toEqual({
+      ranked: suggestions(1),
+      sourceTags: [],
+    });
+  });
+
+  it(`drops a cached ranking when a source tag disappears but not when tags are added (${ISSUE})`, () => {
+    const ctx = context();
+    const row = new TagSuggestionRow(ctx.app);
+    row.cacheSuggestions(ctx.file, suggestions(2), ["existing"], 1_000);
+
+    ctx.setFrontmatter({ tags: ["existing", "added-later"] });
+    expect(row.getCachedSuggestions(ctx.file, 1_001)).toEqual({
+      ranked: suggestions(2),
+      sourceTags: ["existing"],
+    });
+
+    ctx.setFrontmatter({ tags: ["added-later"] });
+    expect(row.getCachedSuggestions(ctx.file, 1_002)).toBeUndefined();
+
+    ctx.setFrontmatter({ tags: ["existing", "added-later"] });
+    expect(row.getCachedSuggestions(ctx.file, 1_003)).toBeUndefined();
   });
 });
