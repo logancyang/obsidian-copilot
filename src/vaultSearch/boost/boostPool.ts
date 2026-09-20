@@ -5,7 +5,7 @@ export const BOOST_MIYO_COUNT = 25;
 export const BOOST_FILENAME_COUNT = 10;
 export const BOOST_CREATED_COUNT = 10;
 export const BOOST_MODIFIED_COUNT = 5;
-export const BOOST_MAX_CANDIDATES = 40;
+export const BOOST_MAX_CANDIDATES = 50;
 
 export type BoostPoolSource = "miyo" | "filename" | "created" | "modified";
 

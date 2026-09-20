@@ -38,7 +38,7 @@ function miyoCandidate(index: number): SearchCandidate {
 
 describe("boostPool", () => {
   describe("buildBoostPool()", () => {
-    it(`uses the named source quotas, records overlapping sources, deduplicates paths, and caps the pool (${issue})`, () => {
+    it(`uses the named source quotas, records overlapping sources, and deduplicates paths (${issue})`, () => {
       const files = Array.from({ length: 60 }, (_, index) => ({
         ...file(index),
         ctime: index >= 30 && index < 40 ? 2_000 + index : 0,
@@ -58,7 +58,7 @@ describe("boostPool", () => {
       expect(BOOST_FILENAME_COUNT).toBe(10);
       expect(BOOST_CREATED_COUNT).toBe(10);
       expect(BOOST_MODIFIED_COUNT).toBe(5);
-      expect(BOOST_MAX_CANDIDATES).toBe(40);
+      expect(BOOST_MAX_CANDIDATES).toBe(50);
       expect(pool).toHaveLength(40);
       expect(new Set(pool.map(({ candidate }) => candidate.path)).size).toBe(40);
       expect(pool[0]).toMatchObject({
@@ -68,6 +68,29 @@ describe("boostPool", () => {
       });
       expect(pool[0].sources).toContain("miyo");
       expect(pool[0].sources).toContain("filename");
+    });
+
+    it(`fully represents all four source quotas when their candidates are disjoint (${issue})`, () => {
+      const files = Array.from({ length: 50 }, (_, index) => ({
+        ...file(index),
+        ctime: index >= 35 && index < 45 ? 2_000 + index : 0,
+        mtime: index >= 45 ? 2_000 + index : 0,
+      }));
+      const pool = buildBoostPool({
+        basicCandidates: Array.from({ length: 25 }, (_, index) => miyoCandidate(index)),
+        files,
+        selectedTypes: new Set(["pdf"]),
+        fuzzySearch: (name) => {
+          const index = Number(name.replace("File ", ""));
+          return index >= 25 && index < 35 ? { score: 100 - index, matches: [] } : null;
+        },
+      });
+
+      expect(pool).toHaveLength(50);
+      expect(pool.filter(({ sources }) => sources.includes("miyo"))).toHaveLength(25);
+      expect(pool.filter(({ sources }) => sources.includes("filename"))).toHaveLength(10);
+      expect(pool.filter(({ sources }) => sources.includes("created"))).toHaveLength(10);
+      expect(pool.filter(({ sources }) => sources.includes("modified"))).toHaveLength(5);
     });
 
     it(`limits recency candidates to checked file types (${issue})`, () => {

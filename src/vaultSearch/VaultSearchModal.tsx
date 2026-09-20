@@ -30,6 +30,7 @@ export interface VaultSearchModalContentProps {
   aiBoostEnabled: boolean;
   aiBoostLicensed: boolean;
   aiBoosting: boolean;
+  aiBoostAttemptCompleted: boolean;
   onAiBoostChange: (enabled: boolean) => void;
   onAiBoostNow: () => void;
   onOpen: (candidate: SearchCandidate, newTab: boolean) => void;
@@ -127,6 +128,7 @@ export function VaultSearchModalContent({
   aiBoostEnabled,
   aiBoostLicensed,
   aiBoosting,
+  aiBoostAttemptCompleted,
   onAiBoostChange,
   onAiBoostNow,
   onOpen,
@@ -149,8 +151,11 @@ export function VaultSearchModalContent({
       event.key === "Enter" &&
       aiBoostEnabled &&
       query.trim().length >= 3 &&
+      !aiBoostAttemptCompleted &&
       !results.some(({ boostScore }) => boostScore !== undefined)
     ) {
+      // A completed failure must not trap keyboard users in retrying optional enrichment.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/516
       event.preventDefault();
       if (!aiBoosting) onAiBoostNow();
       return;
@@ -397,6 +402,7 @@ function VaultSearchModalBody({
       aiBoostEnabled={aiBoostLicensed && settings.vaultSearchAiBoostEnabled}
       aiBoostLicensed={aiBoostLicensed}
       aiBoosting={search.boosting}
+      aiBoostAttemptCompleted={search.boostAttemptCompleted}
       onAiBoostChange={(enabled) => updateSetting("vaultSearchAiBoostEnabled", enabled)}
       onAiBoostNow={search.boostNow}
       onOpen={onOpen}

@@ -35,6 +35,7 @@ export interface UseVaultSearchResult {
   miyoUnavailable: boolean;
   searching: boolean;
   boosting: boolean;
+  boostAttemptCompleted: boolean;
 }
 
 export function useVaultSearch(options: UseVaultSearchOptions): UseVaultSearchResult {
@@ -43,6 +44,7 @@ export function useVaultSearch(options: UseVaultSearchOptions): UseVaultSearchRe
   const [miyoUnavailable, setMiyoUnavailable] = useState(!options.miyoEnabled);
   const [searching, setSearching] = useState(false);
   const [boosting, setBoosting] = useState(false);
+  const [completedBoostKey, setCompletedBoostKey] = useState<string | null>(null);
   const [boostRequest, setBoostRequest] = useState(0);
   const requestSequence = useRef(0);
   const boosterSequence = useRef(0);
@@ -56,6 +58,7 @@ export function useVaultSearch(options: UseVaultSearchOptions): UseVaultSearchRe
   const allTypesKey = [...options.allTypes].sort().join("\u0000");
   const recentPathsKey = options.recentPaths.join("\u0000");
   const boosterEnabled = Boolean(options.booster);
+  const boostKey = `${query.trim()}\u0001${selectedTypesKey}`;
 
   useEffect(() => {
     const currentSequence = ++requestSequence.current;
@@ -154,6 +157,7 @@ export function useVaultSearch(options: UseVaultSearchOptions): UseVaultSearchRe
     const current = optionsRef.current;
     const booster = current.booster;
     const trimmedQuery = query.trim();
+    setCompletedBoostKey(null);
     if (!booster || trimmedQuery.length < 3) {
       if (!booster) setResults(basicResults.current);
       setBoosting(false);
@@ -199,21 +203,34 @@ export function useVaultSearch(options: UseVaultSearchOptions): UseVaultSearchRe
           } catch {
             // A booster is optional enrichment; basic results stay unchanged on failure.
           } finally {
-            if (currentSequence === boosterSequence.current) setBoosting(false);
+            if (currentSequence === boosterSequence.current) {
+              setBoosting(false);
+              setCompletedBoostKey(boostKey);
+            }
           }
         })();
       },
       immediateBoostQuery.current === trimmedQuery ? 0 : (current.boosterSettleMs ?? 400)
     );
     return () => timerWindow.clearTimeout(timer);
-  }, [boosterEnabled, boostRequest, query, selectedTypesKey]);
+  }, [boosterEnabled, boostKey, boostRequest, query, selectedTypesKey]);
 
   const boostNow = () => {
     immediateBoostQuery.current = query.trim();
     setBoostRequest((request) => request + 1);
   };
 
-  return { query, setQuery, boostNow, results, miyoUnavailable, searching, boosting };
+  return {
+    query,
+    setQuery,
+    boostNow,
+    results,
+    miyoUnavailable,
+    searching,
+    boosting,
+    boostAttemptCompleted:
+      boosterEnabled && query.trim().length >= 3 && completedBoostKey === boostKey,
+  };
 }
 
 function recentCandidates(options: UseVaultSearchOptions): SearchCandidate[] {

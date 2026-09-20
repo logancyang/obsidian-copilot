@@ -229,6 +229,7 @@ describe("useVaultSearch", () => {
       await act(async () => jest.advanceTimersByTime(0));
 
       expect(booster.score).toHaveBeenCalledTimes(1);
+      expect(result.current.boostAttemptCompleted).toBe(true);
     });
 
     it(`restores the untouched basic order when AI boost is turned off (${"https://github.com/Brevilabs/obsidian-copilot-private/issues/516"})`, async () => {
@@ -292,11 +293,13 @@ describe("useVaultSearch", () => {
         );
 
         act(() => result.current.setQuery("stoic"));
+        expect(result.current.boostAttemptCompleted).toBe(false);
         const before = result.current.results;
         await act(async () => jest.advanceTimersByTime(400));
 
         expect(result.current.results).toBe(before);
         expect(result.current.results.map(({ path }) => path)).toEqual(["Books/Stoicism.epub"]);
+        expect(result.current.boostAttemptCompleted).toBe(true);
       }
     );
   });

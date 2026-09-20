@@ -55,6 +55,7 @@ function props(
     aiBoostEnabled: false,
     aiBoostLicensed: true,
     aiBoosting: false,
+    aiBoostAttemptCompleted: false,
     onAiBoostChange: jest.fn(),
     onAiBoostNow: jest.fn(),
     onOpen: jest.fn(),
@@ -200,6 +201,27 @@ describe("VaultSearchModal", () => {
       );
       fireEvent.keyDown(screen.getByRole("searchbox"), { key: "Enter" });
       expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ boostScore: 0.92 }), false);
+    });
+
+    it(`opens the selected result on Enter after an AI boost attempt fails (${"https://github.com/Brevilabs/obsidian-copilot-private/issues/516"})`, () => {
+      const onAiBoostNow = jest.fn();
+      const onOpen = jest.fn();
+      const { rerender } = render(
+        <VaultSearchModalContent {...props({ aiBoostEnabled: true, onAiBoostNow, onOpen })} />
+      );
+
+      fireEvent.keyDown(screen.getByRole("searchbox"), { key: "Enter" });
+      expect(onAiBoostNow).toHaveBeenCalledTimes(1);
+
+      const completedAttemptProps = {
+        ...props({ aiBoostEnabled: true, onAiBoostNow, onOpen }),
+        aiBoostAttemptCompleted: true,
+      };
+      rerender(<VaultSearchModalContent {...completedAttemptProps} />);
+      fireEvent.keyDown(screen.getByRole("searchbox"), { key: "Enter" });
+
+      expect(onAiBoostNow).toHaveBeenCalledTimes(1);
+      expect(onOpen).toHaveBeenCalledWith(results[0], false);
     });
   });
 
