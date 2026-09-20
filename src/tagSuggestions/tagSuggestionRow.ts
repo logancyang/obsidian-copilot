@@ -1,39 +1,47 @@
 import {
-  AUTO_ADD_MAX,
-  AUTO_ADD_MIN_NOUL,
+  frontmatterTags,
+  noteTags,
   type RankedTagSuggestion,
 } from "@/tagSuggestions/tagSuggestions";
-import {
-  App,
-  Component,
-  EventRef,
-  getAllTags,
-  MarkdownView,
-  Notice,
-  setIcon,
-  TFile,
-} from "obsidian";
+import { App, Component, EventRef, MarkdownView, setIcon, TFile } from "obsidian";
 
-const VISIBLE_SUGGESTIONS = 5;
+const VISIBLE_SUGGESTIONS = 2;
 const CACHE_TTL_MS = 10 * 60 * 1_000;
 const CACHE_MAX_NOTES = 50;
+const PENDING_WRITE_TIMEOUT_MS = 2_000;
+const TAG_PROPERTY_SELECTOR =
+  '.metadata-property[data-property-key="tags"], .metadata-property[data-property-key="tag"]';
 
-export type AddSuggestedTags = (tags: string[]) => Promise<boolean>;
+export type UpdateSuggestedTags = (add: string[], remove: string[]) => Promise<boolean>;
 
 interface CachedSuggestions {
   expiresAt: number;
   ranked: ReadonlyArray<RankedTagSuggestion>;
+  sourceTags: ReadonlyArray<string>;
+}
+
+export interface CachedTagSuggestions {
+  ranked: RankedTagSuggestion[];
+  sourceTags: string[];
+}
+
+interface PendingTagWrite {
+  present: boolean;
+  tag: string;
 }
 
 interface TagSuggestionSession {
   file: TFile;
-  view?: MarkdownView;
+  view: MarkdownView;
+  nativeRow: HTMLElement;
   ranked: ReadonlyArray<RankedTagSuggestion>;
-  addTags?: AddSuggestedTags;
-  pendingTags: Set<string>;
+  sourceTags: ReadonlyArray<string>;
+  rerank?: () => void;
+  updateTags?: UpdateSuggestedTags;
+  pendingTags: Map<string, PendingTagWrite>;
   loading: boolean;
-  quiet: boolean;
-  rowEl?: HTMLElement;
+  rowEl: HTMLElement;
+  pillsEl: HTMLElement;
   metadataRef: EventRef;
   workspaceRef: EventRef;
   fileOpenRef: EventRef;
@@ -41,32 +49,34 @@ interface TagSuggestionSession {
 }
 
 function normalizedTag(tag: string): string {
-  return tag.replace(/^#/, "").toLowerCase();
+  return tag.trim().replace(/^#/, "").toLowerCase();
 }
 
-function hiddenMountAnchor(container: HTMLElement, modeRoot: HTMLElement): HTMLElement | undefined {
-  let anchor: HTMLElement | undefined;
-  for (
-    let element: HTMLElement | null = container;
-    element && element !== modeRoot;
-    element = element.parentElement
-  ) {
+function normalizedTags(tags: ReadonlyArray<string>): ReadonlyArray<string> {
+  return Object.freeze(Array.from(new Set(tags.map(normalizedTag).filter(Boolean))));
+}
+
+function isVisible(element: HTMLElement, boundary: HTMLElement): boolean {
+  for (let current: HTMLElement | null = element; current; current = current.parentElement) {
     if (
-      element.hidden ||
-      element.getAttribute("aria-hidden") === "true" ||
-      element.matches(".is-hidden, .is-collapsed")
+      current.hidden ||
+      current.getAttribute("aria-hidden") === "true" ||
+      current.matches(".is-hidden, .is-collapsed")
     ) {
-      anchor = element;
+      return false;
     }
-    const style = element.doc.defaultView?.getComputedStyle(element);
-    if (style?.display === "none" || style?.visibility === "hidden") anchor = element;
+    const style = current.doc.defaultView?.getComputedStyle(current);
+    if (style?.display === "none" || style?.visibility === "hidden") return false;
+    if (current === boundary) return true;
   }
-  return anchor;
+  return false;
 }
 
-/** Owns the in-view tag suggestion UI and its per-note runtime state. */
+/** Owns the focused, native-looking tags row and its per-note runtime state. */
 export class TagSuggestionRow extends Component {
   private session?: TagSuggestionSession;
+  private suppressedNativeRow?: HTMLElement;
+  private clearSuppression?: () => void;
   private requestGeneration = 0;
   private readonly inFlight = new Map<string, number>();
   private readonly cache = new Map<string, CachedSuggestions>();
@@ -75,20 +85,19 @@ export class TagSuggestionRow extends Component {
     super();
   }
 
-  /** Invalidates older runs and records a request for the given note. */
   beginRequest(file: TFile): number {
-    if (this.session) this.closeSession(this.session);
+    if (this.session && (this.session.file.path !== file.path || this.session.loading === false)) {
+      this.closeSession(this.session);
+    }
     const generation = ++this.requestGeneration;
     this.inFlight.set(file.path, generation);
     return generation;
   }
 
-  /** Reports whether an asynchronous run may still publish its result. */
   isCurrentRequest(generation: number): boolean {
     return generation === this.requestGeneration;
   }
 
-  /** Finishes the matching run and removes its placeholder if no result replaced it. */
   finishRequest(file: TFile, generation: number): void {
     if (this.inFlight.get(file.path) !== generation) return;
     this.inFlight.delete(file.path);
@@ -109,11 +118,25 @@ export class TagSuggestionRow extends Component {
     return this.session?.file.path === file.path;
   }
 
-  cacheSuggestions(file: TFile, suggestions: RankedTagSuggestion[], now = Date.now()): void {
+  isSessionLoading(file: TFile): boolean {
+    return this.session?.file.path === file.path && this.session.loading;
+  }
+
+  isNativeFocusSuppressed(property: HTMLElement): boolean {
+    return this.suppressedNativeRow === property;
+  }
+
+  cacheSuggestions(
+    file: TFile,
+    suggestions: RankedTagSuggestion[],
+    sourceTags: ReadonlyArray<string>,
+    now = Date.now()
+  ): void {
     this.cache.delete(file.path);
     this.cache.set(file.path, {
       expiresAt: now + CACHE_TTL_MS,
       ranked: Object.freeze([...suggestions]),
+      sourceTags: normalizedTags(sourceTags),
     });
     while (this.cache.size > CACHE_MAX_NOTES) {
       const oldest = this.cache.keys().next().value as string | undefined;
@@ -122,38 +145,45 @@ export class TagSuggestionRow extends Component {
     }
   }
 
-  getCachedSuggestions(file: TFile, now = Date.now()): RankedTagSuggestion[] | undefined {
+  getCachedSuggestions(file: TFile, now = Date.now()): CachedTagSuggestions | undefined {
     const entry = this.cache.get(file.path);
     if (!entry) return undefined;
-    if (entry.expiresAt < now) {
+    if (entry.expiresAt < now || this.rankingIsStale(file, entry.sourceTags)) {
       this.cache.delete(file.path);
       return undefined;
     }
     this.cache.delete(file.path);
     this.cache.set(file.path, entry);
-    return [...entry.ranked];
+    return { ranked: [...entry.ranked], sourceTags: [...entry.sourceTags] };
   }
 
-  showLoading(file: TFile, quiet = false, view?: MarkdownView): boolean {
-    this.replaceSession(file, [], undefined, true, quiet, view);
-    return this.session?.file.path === file.path;
+  showLoading(file: TFile, view?: MarkdownView): boolean {
+    if (this.session?.file.path === file.path && (!view || this.session.view === view)) {
+      this.session.loading = true;
+      this.render(this.session);
+      return true;
+    }
+    return this.replaceSession(file, [], undefined, true, view);
   }
 
   show(
     file: TFile,
     suggestions: RankedTagSuggestion[],
-    addTags: AddSuggestedTags,
-    view?: MarkdownView
+    updateTags: UpdateSuggestedTags,
+    view?: MarkdownView,
+    sourceTags: ReadonlyArray<string> = [],
+    rerank?: () => void
   ): void {
-    if (this.session?.file.path === file.path) {
-      if (view) this.session.view = view;
+    if (this.session?.file.path === file.path && (!view || this.session.view === view)) {
       this.session.ranked = Object.freeze([...suggestions]);
-      this.session.addTags = addTags;
+      this.session.sourceTags = normalizedTags(sourceTags);
+      this.session.rerank = rerank;
+      this.session.updateTags = updateTags;
       this.session.loading = false;
       this.render(this.session);
       return;
     }
-    this.replaceSession(file, suggestions, addTags, false, false, view);
+    this.replaceSession(file, suggestions, updateTags, false, view, sourceTags, rerank);
   }
 
   close(): void {
@@ -164,21 +194,53 @@ export class TagSuggestionRow extends Component {
 
   onunload(): void {
     this.close();
+    this.clearNativeSuppression();
     this.cache.clear();
   }
 
   private replaceSession(
     file: TFile,
     suggestions: RankedTagSuggestion[],
-    addTags: AddSuggestedTags | undefined,
+    updateTags: UpdateSuggestedTags | undefined,
     loading: boolean,
-    quiet: boolean,
-    view?: MarkdownView
-  ): void {
+    suppliedView?: MarkdownView,
+    sourceTags: ReadonlyArray<string> = [],
+    rerank?: () => void
+  ): boolean {
     if (this.session) this.closeSession(this.session);
+    const view = suppliedView ?? this.findView(file);
+    const nativeRow = view ? this.findNativeRow(view) : undefined;
+    if (!view || !nativeRow) return false;
+
+    const rowEl = nativeRow.ownerDocument.win.createDiv({
+      cls: "metadata-property copilot-tag-suggestion-row",
+      attr: { tabindex: "-1" },
+    });
+    const key = rowEl.createDiv({ cls: "metadata-property-key" });
+    const icon = key.createSpan({ cls: "metadata-property-icon" });
+    setIcon(icon, "tags");
+    key.createEl("input", {
+      cls: "metadata-property-key-input",
+      attr: {
+        type: "text",
+        value: nativeRow.dataset.propertyKey ?? "tags",
+        readonly: "",
+        tabindex: "-1",
+        "aria-label": nativeRow.dataset.propertyKey ?? "tags",
+      },
+    });
+    const value = rowEl.createDiv({
+      cls: "metadata-property-value",
+      attr: { "data-property-type": "tags" },
+    });
+    const pillsEl = value.createDiv({ cls: "multi-select-container" });
+    nativeRow.before(rowEl);
+
     let session: TagSuggestionSession;
     const metadataRef = this.app.metadataCache.on("changed", (changedFile) => {
-      if (changedFile.path === session.file.path) this.render(session);
+      if (changedFile.path !== session.file.path) return;
+      this.clearLandedPendingTags(session);
+      this.render(session);
     });
     const closeIfSourceIsInactive = () => {
       const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
@@ -195,19 +257,51 @@ export class TagSuggestionRow extends Component {
     const layoutRef = this.app.workspace.on("layout-change", () => this.render(session));
     session = {
       file,
-      view: view ?? this.findView(file),
+      view,
+      nativeRow,
       ranked: Object.freeze([...suggestions]),
-      addTags,
-      pendingTags: new Set<string>(),
+      sourceTags: normalizedTags(sourceTags),
+      rerank,
+      updateTags,
+      pendingTags: new Map<string, PendingTagWrite>(),
       loading,
-      quiet,
+      rowEl,
+      pillsEl,
       metadataRef,
       workspaceRef,
       fileOpenRef,
       layoutRef,
     };
     this.session = session;
+
+    rowEl.addEventListener("focusout", (event) => {
+      if (this.session !== session || rowEl.contains(event.relatedTarget as Node | null)) return;
+      // Obsidian replaces the Properties DOM during a frontmatter write. The
+      // focused row is briefly detached with no related target before the
+      // metadata callback puts the same row back.
+      if (session.pendingTags.size && event.relatedTarget === null) return;
+      this.closeSession(session);
+    });
+    rowEl.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        this.closeSession(session);
+        return;
+      }
+      const printable = event.key.length === 1 && !event.metaKey && !event.ctrlKey && !event.altKey;
+      const target = event.target as Element | null;
+      const spaceOnButton = event.key === " " && Boolean(target?.closest?.("button"));
+      if ((printable && !spaceOnButton) || event.key === "Backspace") {
+        this.handBackToNative(session);
+      }
+    });
+    rowEl.addEventListener("click", (event) => {
+      const target = event.target as Element;
+      if (!target.closest(".multi-select-pill")) this.handBackToNative(session);
+    });
+
+    rowEl.focus();
     this.render(session);
+    return true;
   }
 
   private findView(file: TFile): MarkdownView | undefined {
@@ -219,6 +313,21 @@ export class TagSuggestionRow extends Component {
       .find((view) => view.file?.path === file.path);
   }
 
+  private findNativeRow(view: MarkdownView): HTMLElement | undefined {
+    const selector =
+      view.getMode() === "preview" ? ".markdown-reading-view" : ".markdown-source-view";
+    const modeRoot = view.contentEl.querySelector<HTMLElement>(selector);
+    const row = modeRoot?.querySelector<HTMLElement>(TAG_PROPERTY_SELECTOR);
+    const visibilityRoot = row?.previousElementSibling?.classList.contains(
+      "copilot-tag-suggestion-row"
+    )
+      ? row.parentElement
+      : row;
+    return modeRoot && row && visibilityRoot && isVisible(visibilityRoot, modeRoot)
+      ? row
+      : undefined;
+  }
+
   private viewStillShowsFile(view: MarkdownView, file: TFile): boolean {
     return (
       view.file?.path === file.path &&
@@ -228,134 +337,188 @@ export class TagSuggestionRow extends Component {
 
   private render(session: TagSuggestionSession): void {
     if (this.session !== session) return;
-    if (session.view && !this.viewStillShowsFile(session.view, session.file)) {
+    if (!this.viewStillShowsFile(session.view, session.file)) {
       this.close();
       return;
     }
-    session.view ??= this.findView(session.file);
+    const nativeRow = this.findNativeRow(session.view);
+    if (!nativeRow) {
+      this.closeSession(session);
+      return;
+    }
+    session.nativeRow = nativeRow;
+    if (session.rowEl.nextElementSibling !== nativeRow) nativeRow.before(session.rowEl);
 
-    session.rowEl?.remove();
-    session.rowEl = undefined;
-    const view = session.view;
-    const modeRootSelector =
-      view?.getMode() === "preview" ? ".markdown-reading-view" : ".markdown-source-view";
-    const modeRoot = view?.contentEl.querySelector<HTMLElement>(modeRootSelector);
-    const container = modeRoot?.querySelector<HTMLElement>(".metadata-container");
-    if (!container || !modeRoot) {
-      if (!session.quiet) new Notice("Couldn’t show tag suggestions in this note.");
-      this.close();
+    if (!session.loading && this.rankingIsStale(session.file, session.sourceTags)) {
+      this.cache.delete(session.file.path);
+      session.loading = true;
+      session.rerank?.();
+    }
+
+    session.pillsEl.replaceChildren();
+    if (session.loading) {
+      const placeholder = session.pillsEl.createSpan({
+        cls: ["multi-select-pill", "copilot-tag-suggestion-placeholder"],
+      });
+      placeholder.createSpan({ cls: "multi-select-pill-content", text: "Suggesting…" });
+      this.finishRender(session);
       return;
     }
 
     const cache = this.app.metadataCache.getFileCache(session.file);
-    const existing = new Set((cache ? (getAllTags(cache) ?? []) : []).map(normalizedTag));
+    const displayedTags = new Map<string, string>();
+    for (const tag of frontmatterTags(cache)) displayedTags.set(normalizedTag(tag), tag);
+    for (const [normalized, pending] of session.pendingTags) {
+      if (pending.present) displayedTags.set(normalized, pending.tag);
+      else displayedTags.delete(normalized);
+    }
+    const existing = new Set(displayedTags.keys());
+    for (const [normalized, tag] of displayedTags) {
+      if (!normalized) continue;
+      const pill = session.pillsEl.createDiv({
+        cls: "multi-select-pill",
+        attr: { tabindex: "0" },
+      });
+      const content = pill.createDiv({ cls: "multi-select-pill-content" });
+      content.createSpan({ text: tag.replace(/^#/, "") });
+      const remove = pill.createDiv({
+        cls: "multi-select-pill-remove-button",
+        attr: { role: "button", "aria-label": `Remove #${tag.replace(/^#/, "")}` },
+      });
+      setIcon(remove, "x");
+      remove.addEventListener("click", (event) => {
+        event.stopPropagation();
+        void this.changeTags(session, [], [tag]);
+      });
+    }
+
     const available = session.ranked.filter(({ tag }) => {
       const normalized = normalizedTag(tag);
       return !existing.has(normalized) && !session.pendingTags.has(normalized);
     });
-    if (!session.loading && !available.length) return;
-
-    const row = container.doc.win.createDiv({
-      cls: "metadata-property copilot-tag-suggestion-row",
-    });
-    const hiddenAnchor = hiddenMountAnchor(container, modeRoot);
-    if (hiddenAnchor) {
-      hiddenAnchor.after(row);
-    } else {
-      const properties = Array.from(container.querySelectorAll<HTMLElement>(".metadata-property"));
-      const tagsProperty = container.querySelector<HTMLElement>(
-        '.metadata-property[data-property-key="tags"]'
-      );
-      if (tagsProperty) tagsProperty.before(row);
-      else if (properties.at(-1)) properties.at(-1)?.after(row);
-      else container.appendChild(row);
-    }
-
-    const key = row.createDiv({
-      cls: ["metadata-property-key", "copilot-tag-suggestion-key"],
-    });
-    const keyIcon = key.createSpan({
-      cls: ["metadata-property-icon", "copilot-tag-suggestion-key-icon"],
-    });
-    setIcon(keyIcon, "sparkles");
-    key.createSpan({ cls: "copilot-tag-suggestion-key-label", text: "Suggested" });
-    const value = row.createDiv({
-      cls: "metadata-property-value",
-      attr: { "data-property-type": "tags" },
-    });
-    const pills = value.createDiv({ cls: "multi-select-container" });
-
-    if (session.loading) {
-      const placeholder = pills.createSpan({
-        cls: ["multi-select-pill", "copilot-tag-suggestion-placeholder"],
+    for (const suggestion of available.slice(0, VISIBLE_SUGGESTIONS)) {
+      const pill = session.pillsEl.createEl("button", {
+        cls: ["multi-select-pill", "copilot-tag-suggestion-pill"],
+        attr: { type: "button", "aria-label": `Add #${suggestion.tag}` },
       });
-      placeholder.createSpan({ cls: "multi-select-pill-content", text: "Suggesting tags…" });
-    } else {
-      const autoAdd = available
-        .filter(({ score }) => score >= AUTO_ADD_MIN_NOUL)
-        .slice(0, AUTO_ADD_MAX);
-      if (autoAdd.length) {
-        const count = autoAdd.length;
-        const autoAddPill = pills.createEl("button", {
-          cls: ["multi-select-pill", "copilot-tag-auto-add-pill"],
-          attr: { type: "button", "aria-label": `Auto-add ${count} tags` },
-        });
-        autoAddPill.createSpan({
-          cls: "multi-select-pill-content",
-          text: "Auto-add",
-        });
-        autoAddPill.addEventListener("click", () => {
-          void this.choose(
-            session,
-            autoAdd.map(({ tag }) => tag)
-          );
-        });
-      }
-
-      for (const suggestion of available.slice(0, VISIBLE_SUGGESTIONS)) {
-        const pill = pills.createEl("button", {
-          cls: ["multi-select-pill", "copilot-tag-suggestion-pill"],
-          attr: { type: "button", "aria-label": `Add #${suggestion.tag}` },
-        });
-        pill.createSpan({
-          cls: "multi-select-pill-content",
-          text: `#${suggestion.tag}`,
-        });
-        pill.addEventListener("click", () => {
-          void this.choose(session, [suggestion.tag]);
-        });
-      }
+      pill.createSpan({ cls: "multi-select-pill-content", text: `#${suggestion.tag}` });
+      pill.addEventListener("click", (event) => {
+        event.stopPropagation();
+        void this.changeTags(session, [suggestion.tag], []);
+      });
     }
-    const close = row.createEl("button", {
-      cls: ["clickable-icon", "copilot-tag-suggestion-close"],
-      attr: { type: "button", "aria-label": "Close tag suggestions" },
-    });
-    setIcon(close, "x");
-    close.addEventListener("click", () => this.close());
-    session.rowEl = row;
+    this.finishRender(session);
   }
 
-  private async choose(session: TagSuggestionSession, tags: string[]): Promise<void> {
-    if (this.session !== session || !session.addTags) return;
-    const normalized = tags.map(normalizedTag);
-    if (normalized.some((tag) => session.pendingTags.has(tag))) return;
-    normalized.forEach((tag) => session.pendingTags.add(tag));
+  private async changeTags(
+    session: TagSuggestionSession,
+    add: string[],
+    remove: string[]
+  ): Promise<void> {
+    if (this.session !== session || !session.updateTags) return;
+    const writes = [
+      ...add.map((tag) => [normalizedTag(tag), { present: true, tag }] as const),
+      ...remove.map((tag) => [normalizedTag(tag), { present: false, tag }] as const),
+    ];
+    if (writes.some(([normalized]) => session.pendingTags.has(normalized))) return;
+    writes.forEach(([normalized, write]) => session.pendingTags.set(normalized, write));
     this.render(session);
+    let updated = false;
     try {
-      await session.addTags(tags);
+      updated = await session.updateTags(add, remove);
     } finally {
-      normalized.forEach((tag) => session.pendingTags.delete(tag));
-      if (this.session === session) this.render(session);
+      if (this.session === session) {
+        if (updated) this.clearLandedPendingTags(session);
+        else this.clearPendingWrites(session, writes);
+        this.render(session);
+
+        const waiting = writes.filter(
+          ([normalized, write]) => session.pendingTags.get(normalized) === write
+        );
+        if (waiting.length) {
+          session.rowEl.win.setTimeout(() => {
+            if (this.session !== session) return;
+            this.clearPendingWrites(session, waiting);
+            this.render(session);
+          }, PENDING_WRITE_TIMEOUT_MS);
+        }
+      }
     }
+  }
+
+  private clearLandedPendingTags(session: TagSuggestionSession): void {
+    const existing = new Set(
+      frontmatterTags(this.app.metadataCache.getFileCache(session.file)).map(normalizedTag)
+    );
+    for (const [normalized, pending] of session.pendingTags) {
+      if (existing.has(normalized) === pending.present) session.pendingTags.delete(normalized);
+    }
+  }
+
+  private clearPendingWrites(
+    session: TagSuggestionSession,
+    writes: ReadonlyArray<readonly [string, PendingTagWrite]>
+  ): void {
+    for (const [normalized, write] of writes) {
+      if (session.pendingTags.get(normalized) === write) session.pendingTags.delete(normalized);
+    }
+  }
+
+  private rankingIsStale(file: TFile, sourceTags: ReadonlyArray<string>): boolean {
+    const current = new Set(
+      noteTags(this.app.metadataCache.getFileCache(file)).map(normalizedTag).filter(Boolean)
+    );
+    return sourceTags.some((tag) => !current.has(tag));
+  }
+
+  private finishRender(session: TagSuggestionSession): void {
+    if (this.session !== session) return;
+    const active = session.rowEl.doc.activeElement;
+    if (session.rowEl.contains(active)) return;
+    if (active === session.rowEl.doc.body) session.rowEl.focus();
+    else this.closeSession(session);
+  }
+
+  private handBackToNative(session: TagSuggestionSession): void {
+    if (this.session !== session) return;
+    const nativeRow = session.nativeRow;
+    const input = nativeRow.querySelector<HTMLElement>(
+      '.multi-select-input[contenteditable="true"], .multi-select-input, [contenteditable="true"]'
+    );
+    if (!input) {
+      this.closeSession(session);
+      return;
+    }
+    this.suppressNativeFocus(nativeRow);
+    this.closeSession(session);
+    input.focus();
+  }
+
+  private suppressNativeFocus(nativeRow: HTMLElement): void {
+    this.clearNativeSuppression();
+    this.suppressedNativeRow = nativeRow;
+    const onFocusOut = (event: FocusEvent) => {
+      if (!nativeRow.contains(event.relatedTarget as Node | null)) this.clearNativeSuppression();
+    };
+    nativeRow.addEventListener("focusout", onFocusOut);
+    this.clearSuppression = () => nativeRow.removeEventListener("focusout", onFocusOut);
+  }
+
+  private clearNativeSuppression(): void {
+    this.clearSuppression?.();
+    this.clearSuppression = undefined;
+    this.suppressedNativeRow = undefined;
   }
 
   private closeSession(session: TagSuggestionSession): void {
     if (this.session !== session) return;
-    session.rowEl?.remove();
+    // Removing the focused row can synchronously dispatch focusout. Clear the
+    // session first so that handler cannot re-enter closeSession.
+    this.session = undefined;
+    session.rowEl.remove();
     this.app.metadataCache.offref(session.metadataRef);
     this.app.workspace.offref(session.workspaceRef);
     this.app.workspace.offref(session.fileOpenRef);
     this.app.workspace.offref(session.layoutRef);
-    this.session = undefined;
   }
 }

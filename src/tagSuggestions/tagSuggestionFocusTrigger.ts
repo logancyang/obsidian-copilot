@@ -27,7 +27,10 @@ export class TagSuggestionFocusTrigger extends Component {
   onload(): void {
     this.listen(this.app.workspace.containerEl.doc);
     for (const leaf of this.app.workspace.getLeavesOfType("markdown")) {
-      this.listen((leaf.view as MarkdownView).contentEl.doc);
+      const contentEl = (leaf.view as MarkdownView).contentEl;
+      // Obsidian exposes deferred background leaves before creating their DOM.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/492
+      if (contentEl) this.listen(contentEl.doc);
     }
     this.registerEvent(
       this.app.workspace.on("window-open", (_workspaceWindow, win) => this.listen(win.document))
@@ -48,13 +51,16 @@ export class TagSuggestionFocusTrigger extends Component {
     const target = event.target;
     if (!target || typeof (target as Element).closest !== "function") return;
     const property = (target as Element).closest<HTMLElement>(
-      '.metadata-property[data-property-key="tags"]'
+      '.metadata-property[data-property-key="tags"], .metadata-property[data-property-key="tag"]'
     );
     if (!property) return;
+    if (this.row.isNativeFocusSuppressed(property)) return;
     const view = this.app.workspace
       .getLeavesOfType("markdown")
       .map((leaf) => leaf.view as MarkdownView)
-      .find((candidate) => candidate.contentEl.contains(property));
+      // A different background leaf can still be deferred when focus reaches a loaded view.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/492
+      .find((candidate) => candidate.contentEl?.contains(property));
     if (!(view?.file instanceof TFile) || view.file.extension !== "md") return;
 
     // The shared quiet pipeline owns entitlement and duplicate-run guards.

@@ -15,7 +15,7 @@ function file(path: string): TFile {
   return new TFileConstructor(path);
 }
 
-function context() {
+function context({ includeDeferredLeaf = false }: { includeDeferredLeaf?: boolean } = {}) {
   const contentEl = document.createElement("div");
   const tagsProperty = contentEl.createDiv({
     cls: "metadata-property",
@@ -31,17 +31,28 @@ function context() {
   const app = {
     workspace: {
       containerEl: document.body,
-      getLeavesOfType: jest.fn(() => [leaf]),
+      getLeavesOfType: jest.fn(() => [
+        ...(includeDeferredLeaf
+          ? [
+              {
+                view: { file: file("Projects/Deferred.md") } as unknown as MarkdownView,
+              } as unknown as WorkspaceLeaf,
+            ]
+          : []),
+        leaf,
+      ]),
       on: jest.fn((_event: string, callback: (workspaceWindow: unknown, win: Window) => void) => {
         windowListeners.add(callback);
         return { callback };
       }),
     },
   } as unknown as App;
-  const row = {} as TagSuggestionRow;
+  const row = {
+    isNativeFocusSuppressed: jest.fn(() => false),
+  } as unknown as TagSuggestionRow;
   const trigger = new TagSuggestionFocusTrigger(app, row, mockSuggestTags);
   trigger.onload();
-  return { app, row, view, activeFile, input, elsewhere, windowListeners };
+  return { app, row, trigger, view, activeFile, input, elsewhere, windowListeners };
 }
 
 describe("tagSuggestionFocusTrigger", () => {
@@ -53,6 +64,15 @@ describe("tagSuggestionFocusTrigger", () => {
     });
 
     describe("onload()", () => {
+      it(`loads when a background Markdown leaf has not created its content element (${ISSUE})`, () => {
+        const { app, row, trigger, view, input } = context({ includeDeferredLeaf: true });
+
+        input.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+
+        expect(mockSuggestTags).toHaveBeenCalledWith(app, row, { quiet: true, view });
+        trigger.unload();
+      });
+
       it(`starts the shared quiet pipeline when focus enters a Markdown tags property (${ISSUE})`, () => {
         const { app, row, view, input } = context();
 
@@ -72,6 +92,15 @@ describe("tagSuggestionFocusTrigger", () => {
       it(`silently ignores focus when the setting is off (${ISSUE})`, () => {
         mockGetSettings.mockReturnValue({ suggestTagsOnPropertyFocus: false });
         const { input } = context();
+
+        input.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+
+        expect(mockSuggestTags).not.toHaveBeenCalled();
+      });
+
+      it(`does not reopen while focus is handed back to Obsidian (${ISSUE})`, () => {
+        const { row, input } = context();
+        jest.mocked(row.isNativeFocusSuppressed).mockReturnValue(true);
 
         input.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
 

@@ -1,8 +1,9 @@
 import type { RankedTagSuggestion } from "@/tagSuggestions/tagSuggestions";
 import { TagSuggestionRow } from "@/tagSuggestions/tagSuggestionRow";
 import { waitFor } from "@testing-library/react";
+import { readFileSync } from "node:fs";
 import type { App, CachedMetadata, EventRef, MarkdownView, TFile, WorkspaceLeaf } from "obsidian";
-import { Notice, TFile as ObsidianTFile } from "obsidian";
+import { TFile as ObsidianTFile } from "obsidian";
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/492";
 
@@ -10,16 +11,16 @@ interface TestContext {
   app: App;
   file: TFile;
   view: MarkdownView;
-  contentEl: HTMLElement;
-  metadataContainer: HTMLElement;
-  sourceMetadataContainer: HTMLElement;
-  readingMetadataContainer: HTMLElement;
-  modeRoot: HTMLElement;
-  setTags(tags: string[]): void;
+  sourceContainer: HTMLElement;
+  readingContainer: HTMLElement;
+  nativeRow: HTMLElement;
+  nativeInput: HTMLElement;
+  outside: HTMLButtonElement;
+  setFrontmatter(value: Record<string, unknown>): void;
   setMode(mode: "source" | "preview"): void;
+  replaceNativeRow(key?: "tags" | "tag"): HTMLElement;
   emitMetadataChanged(): void;
   emitActiveLeafChange(): void;
-  emitFileOpen(): void;
   emitLayoutChange(): void;
   metadataOffRef: jest.Mock;
   workspaceOffRef: jest.Mock;
@@ -37,34 +38,44 @@ function suggestions(count = 10): RankedTagSuggestion[] {
   }));
 }
 
-function scoredSuggestions(scores: number[]): RankedTagSuggestion[] {
-  return scores.map((score, index) => ({ tag: `tag-${index + 1}`, score }));
+function createNativeRow(container: HTMLElement, key: "tags" | "tag" = "tags"): HTMLElement {
+  const row = container.createDiv({
+    cls: "metadata-property",
+    attr: { "data-property-key": key, tabindex: "0" },
+  });
+  const propertyKey = row.createDiv({ cls: "metadata-property-key" });
+  propertyKey.createSpan({ cls: "metadata-property-icon" });
+  propertyKey.createEl("input", { cls: "metadata-property-key-input", attr: { value: key } });
+  const value = row.createDiv({
+    cls: "metadata-property-value",
+    attr: { "data-property-type": "tags" },
+  });
+  const pills = value.createDiv({ cls: "multi-select-container", attr: { tabindex: "-1" } });
+  pills.createDiv({
+    cls: "multi-select-input",
+    attr: { contenteditable: "true", tabindex: "0" },
+  });
+  return row;
 }
 
-function testContext(
-  options: { tagsRow?: boolean; properties?: number; mode?: "source" | "preview" } = {}
-): TestContext {
+function context(options: { key?: "tags" | "tag"; withProperty?: boolean } = {}): TestContext {
   const activeFile = file("Projects/Active.md");
   const contentEl = document.createElement("div");
   const sourceRoot = contentEl.createDiv({ cls: "markdown-source-view" });
   const readingRoot = contentEl.createDiv({ cls: "markdown-reading-view" });
-  const sourceMetadataContainer = sourceRoot.createDiv({ cls: "metadata-container" });
-  const readingMetadataContainer = readingRoot.createDiv({ cls: "metadata-container" });
-  let mode = options.mode ?? "source";
-  const metadataContainer = mode === "preview" ? readingMetadataContainer : sourceMetadataContainer;
-  const inactiveMetadataContainer =
-    mode === "preview" ? sourceMetadataContainer : readingMetadataContainer;
-  const propertyCount = options.properties ?? 2;
-  for (const container of [metadataContainer, inactiveMetadataContainer]) {
-    for (let index = 0; index < propertyCount; index++) {
-      container.createDiv({
-        cls: "metadata-property",
-        attr: {
-          "data-property-key": options.tagsRow && index === 0 ? "tags" : `property-${index}`,
-        },
-      });
-    }
-  }
+  const sourceContainer = sourceRoot.createDiv({ cls: "metadata-container" });
+  const readingContainer = readingRoot.createDiv({ cls: "metadata-container" });
+  let mode: "source" | "preview" = "source";
+  let frontmatter: Record<string, unknown> = { [options.key ?? "tags"]: ["existing"] };
+  let nativeRow =
+    options.withProperty === false
+      ? sourceContainer.createDiv({
+          cls: "metadata-property",
+          attr: { "data-property-key": "owner" },
+        })
+      : createNativeRow(sourceContainer, options.key);
+  createNativeRow(readingContainer, options.key);
+  const outside = contentEl.createEl("button", { text: "Outside" });
   document.body.appendChild(contentEl);
 
   const view = {
@@ -73,11 +84,10 @@ function testContext(
     getMode: jest.fn(() => mode),
   } as unknown as MarkdownView;
   const leaf = { view } as unknown as WorkspaceLeaf;
-  let tags: string[] = [];
   const metadataListeners = new Set<(changed: TFile) => void>();
   const activeLeafListeners = new Set<() => void>();
   const fileOpenListeners = new Set<() => void>();
-  const layoutChangeListeners = new Set<() => void>();
+  const layoutListeners = new Set<() => void>();
   const metadataOffRef = jest.fn((ref: EventRef) => {
     metadataListeners.delete((ref as unknown as { callback: (changed: TFile) => void }).callback);
   });
@@ -85,7 +95,7 @@ function testContext(
     const callback = (ref as unknown as { callback: () => void }).callback;
     activeLeafListeners.delete(callback);
     fileOpenListeners.delete(callback);
-    layoutChangeListeners.delete(callback);
+    layoutListeners.delete(callback);
   });
   const app = {
     workspace: {
@@ -96,7 +106,7 @@ function testContext(
           event === "file-open"
             ? fileOpenListeners
             : event === "layout-change"
-              ? layoutChangeListeners
+              ? layoutListeners
               : activeLeafListeners;
         listeners.add(callback);
         return { callback };
@@ -104,7 +114,9 @@ function testContext(
       offref: workspaceOffRef,
     },
     metadataCache: {
-      getFileCache: jest.fn(() => ({ frontmatter: { tags } }) as unknown as CachedMetadata),
+      getFileCache: jest.fn(
+        () => ({ frontmatter, tags: [{ tag: "#inline-only" }] }) as unknown as CachedMetadata
+      ),
       on: jest.fn((_event: string, callback: (changed: TFile) => void) => {
         metadataListeners.add(callback);
         return { callback };
@@ -117,16 +129,26 @@ function testContext(
     app,
     file: activeFile,
     view,
-    contentEl,
-    metadataContainer,
-    sourceMetadataContainer,
-    readingMetadataContainer,
-    modeRoot: mode === "preview" ? readingRoot : sourceRoot,
-    setTags(nextTags) {
-      tags = nextTags;
+    sourceContainer,
+    readingContainer,
+    get nativeRow() {
+      return nativeRow;
+    },
+    get nativeInput() {
+      return nativeRow.querySelector<HTMLElement>(".multi-select-input") as HTMLElement;
+    },
+    outside,
+    setFrontmatter(value) {
+      frontmatter = value;
     },
     setMode(nextMode) {
       mode = nextMode;
+    },
+    replaceNativeRow(key = "tags") {
+      const replacement = createNativeRow(document.createElement("div"), key);
+      nativeRow.replaceWith(replacement);
+      nativeRow = replacement;
+      return replacement;
     },
     emitMetadataChanged() {
       metadataListeners.forEach((listener) => listener(activeFile));
@@ -134,573 +156,429 @@ function testContext(
     emitActiveLeafChange() {
       activeLeafListeners.forEach((listener) => listener());
     },
-    emitFileOpen() {
-      fileOpenListeners.forEach((listener) => listener());
-    },
     emitLayoutChange() {
-      layoutChangeListeners.forEach((listener) => listener());
+      layoutListeners.forEach((listener) => listener());
     },
     metadataOffRef,
     workspaceOffRef,
   };
 }
 
-function labels(container: ParentNode): string[] {
+function suggestionLabels(container: ParentNode): string[] {
   return Array.from(
     container.querySelectorAll<HTMLButtonElement>("button[aria-label^='Add #']")
   ).map((button) => button.getAttribute("aria-label")?.replace("Add #", "") ?? "");
 }
 
-describe("tagSuggestionRow", () => {
-  describe("TagSuggestionRow", () => {
-    beforeEach(() => {
-      jest.clearAllMocks();
-      document.body.replaceChildren();
+describe("TagSuggestionRow", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    document.body.replaceChildren();
+  });
+
+  it(`swaps directly before the native row with native anatomy, frontmatter tags, and two ghosts (${ISSUE})`, () => {
+    const ctx = context();
+    ctx.setFrontmatter({ tags: [2024, "", "existing"] });
+    const row = new TagSuggestionRow(ctx.app);
+
+    row.show(ctx.file, suggestions(), jest.fn().mockResolvedValue(true), ctx.view);
+
+    const mounted = ctx.sourceContainer.querySelector<HTMLElement>(".copilot-tag-suggestion-row");
+    expect(mounted?.nextElementSibling).toBe(ctx.nativeRow);
+    expect(ctx.nativeRow.hidden).toBe(false);
+    expect(ctx.nativeRow.getAttribute("style")).toBeNull();
+    expect(readFileSync("src/styles/tailwind.css", "utf8")).toContain(
+      '.copilot-tag-suggestion-row + .metadata-property[data-property-key="tags"]'
+    );
+    expect(mounted?.tabIndex).toBe(-1);
+    expect(mounted?.querySelector(".metadata-property-icon [data-icon='tags']")).not.toBeNull();
+    expect(mounted?.querySelector<HTMLInputElement>(".metadata-property-key-input")?.value).toBe(
+      "tags"
+    );
+    expect(mounted?.querySelector(".multi-select-pill:not(button)")?.textContent).toBe("existing");
+    expect(mounted?.querySelectorAll(".multi-select-pill:not(button)")).toHaveLength(1);
+    expect(mounted?.textContent).not.toContain("inline-only");
+    expect(suggestionLabels(mounted as HTMLElement)).toEqual(["tag-1", "tag-2"]);
+  });
+
+  it(`uses the singular property's own name and refuses notes without tag properties (${ISSUE})`, () => {
+    const singular = context({ key: "tag" });
+    const singularRow = new TagSuggestionRow(singular.app);
+    expect(singularRow.showLoading(singular.file, singular.view)).toBe(true);
+    expect(
+      singular.sourceContainer.querySelector<HTMLInputElement>(".metadata-property-key-input")
+        ?.value
+    ).toBe("tag");
+
+    document.body.replaceChildren();
+    const missing = context({ withProperty: false });
+    const missingRow = new TagSuggestionRow(missing.app);
+    expect(missingRow.showLoading(missing.file, missing.view)).toBe(false);
+    expect(missing.sourceContainer.querySelector(".copilot-tag-suggestion-row")).toBeNull();
+  });
+
+  it(`shows the loading placeholder and replaces it with two ranked pills (${ISSUE})`, () => {
+    const ctx = context();
+    const row = new TagSuggestionRow(ctx.app);
+
+    row.showLoading(ctx.file, ctx.view);
+    expect(
+      ctx.sourceContainer.querySelector(".copilot-tag-suggestion-placeholder")?.textContent
+    ).toBe("Suggesting…");
+
+    row.show(ctx.file, suggestions(), jest.fn().mockResolvedValue(true), ctx.view);
+    expect(ctx.sourceContainer.querySelector(".copilot-tag-suggestion-placeholder")).toBeNull();
+    expect(suggestionLabels(ctx.sourceContainer)).toEqual(["tag-1", "tag-2"]);
+  });
+
+  it(`keeps the same focused row alive when a clicked pill disappears and refills (${ISSUE})`, async () => {
+    const ctx = context();
+    const update = jest.fn().mockResolvedValue(true);
+    const row = new TagSuggestionRow(ctx.app);
+    row.show(ctx.file, suggestions(3), update, ctx.view);
+    const mounted = ctx.sourceContainer.querySelector<HTMLElement>(".copilot-tag-suggestion-row");
+    const first = mounted?.querySelector<HTMLButtonElement>('button[aria-label="Add #tag-1"]');
+    first?.focus();
+
+    first?.click();
+
+    expect(document.activeElement).toBe(mounted);
+    expect(ctx.sourceContainer.querySelector(".copilot-tag-suggestion-row")).toBe(mounted);
+    expect(suggestionLabels(ctx.sourceContainer)).toEqual(["tag-2", "tag-3"]);
+    await waitFor(() => expect(update).toHaveBeenCalledWith(["tag-1"], []));
+    expect(row.hasSession(ctx.file)).toBe(true);
+  });
+
+  it(`renders pending adds as solid and keeps pending removes out of both lists (${ISSUE})`, async () => {
+    const ctx = context();
+    ctx.setFrontmatter({ tags: ["tag-1"] });
+    let finish: ((updated: boolean) => void) | undefined;
+    const update = jest.fn(() => new Promise<boolean>((resolve) => (finish = resolve)));
+    const row = new TagSuggestionRow(ctx.app);
+    row.show(ctx.file, suggestions(3), update, ctx.view);
+
+    ctx.sourceContainer.querySelector<HTMLElement>('[aria-label="Remove #tag-1"]')?.click();
+
+    expect(ctx.sourceContainer.querySelector('[aria-label="Remove #tag-1"]')).toBeNull();
+    expect(suggestionLabels(ctx.sourceContainer)).toEqual(["tag-2", "tag-3"]);
+    finish?.(false);
+    await waitFor(() =>
+      expect(ctx.sourceContainer.querySelector('[aria-label="Remove #tag-1"]')).not.toBeNull()
+    );
+
+    ctx.setFrontmatter({ tags: [] });
+    ctx.emitMetadataChanged();
+    ctx.sourceContainer
+      .querySelector<HTMLButtonElement>('button[aria-label="Add #tag-1"]')
+      ?.click();
+
+    expect(ctx.sourceContainer.querySelector('[aria-label="Remove #tag-1"]')).not.toBeNull();
+    expect(suggestionLabels(ctx.sourceContainer)).toEqual(["tag-2", "tag-3"]);
+    finish?.(false);
+    await waitFor(() => expect(suggestionLabels(ctx.sourceContainer)).toContain("tag-1"));
+  });
+
+  it(`derives add, remove, and returned suggestions from one immutable ranking (${ISSUE})`, async () => {
+    const ctx = context();
+    ctx.setFrontmatter({ tags: [] });
+    const update = jest.fn(async (add: string[], remove: string[]) => {
+      const current = (
+        (ctx.app.metadataCache.getFileCache(ctx.file)?.frontmatter?.tags ?? []) as string[]
+      ).filter((tag) => !remove.includes(tag));
+      ctx.setFrontmatter({ tags: [...current, ...add] });
+      ctx.emitMetadataChanged();
+      return true;
     });
+    const row = new TagSuggestionRow(ctx.app);
+    row.show(ctx.file, suggestions(3), update, ctx.view);
 
-    describe("show()", () => {
-      it(`mounts five suggestions above the tags property and replaces an existing row (${ISSUE})`, () => {
-        const context = testContext({ tagsRow: true });
-        const row = new TagSuggestionRow(context.app);
+    ctx.sourceContainer
+      .querySelector<HTMLButtonElement>('button[aria-label="Add #tag-1"]')
+      ?.click();
+    await waitFor(() =>
+      expect(ctx.sourceContainer.querySelector('[aria-label="Remove #tag-1"]')).not.toBeNull()
+    );
+    expect(suggestionLabels(ctx.sourceContainer)).toEqual(["tag-2", "tag-3"]);
 
-        row.show(context.file, suggestions(), jest.fn().mockResolvedValue(true));
-        row.show(context.file, suggestions(), jest.fn().mockResolvedValue(true));
+    ctx.sourceContainer.querySelector<HTMLElement>('[aria-label="Remove #tag-1"]')?.click();
+    await waitFor(() => expect(suggestionLabels(ctx.sourceContainer)).toEqual(["tag-1", "tag-2"]));
+    ctx.sourceContainer
+      .querySelector<HTMLButtonElement>('button[aria-label="Add #tag-1"]')
+      ?.click();
 
-        const mounted = context.metadataContainer.querySelectorAll(".copilot-tag-suggestion-row");
-        const tagsProperty = context.metadataContainer.querySelector(
-          '.metadata-property[data-property-key="tags"]'
-        );
-        expect(mounted).toHaveLength(1);
-        expect(tagsProperty?.previousElementSibling).toBe(mounted[0]);
-        expect(labels(context.metadataContainer)).toEqual([
-          "tag-1",
-          "tag-2",
-          "tag-3",
-          "tag-4",
-          "tag-5",
-        ]);
-      });
+    await waitFor(() => expect(update).toHaveBeenLastCalledWith(["tag-1"], []));
+    expect(update.mock.calls).toEqual([
+      [["tag-1"], []],
+      [[], ["tag-1"]],
+      [["tag-1"], []],
+    ]);
+  });
 
-      it(`uses Obsidian's native property-row and pill anatomy (${ISSUE})`, () => {
-        const context = testContext({ tagsRow: true });
-        const row = new TagSuggestionRow(context.app);
+  it(`shows fewer ghosts only when the ranked list runs out (${ISSUE})`, () => {
+    const ctx = context();
+    const row = new TagSuggestionRow(ctx.app);
+    row.show(ctx.file, suggestions(1), jest.fn().mockResolvedValue(true), ctx.view);
 
-        row.show(context.file, suggestions(), jest.fn().mockResolvedValue(true));
+    expect(suggestionLabels(ctx.sourceContainer)).toEqual(["tag-1"]);
+  });
 
-        const mounted = context.metadataContainer.querySelector<HTMLElement>(
-          ".copilot-tag-suggestion-row"
-        );
-        const [key, value, close] = Array.from(mounted?.children ?? []);
-        expect(mounted?.hasAttribute("data-property-key")).toBe(false);
-        expect(key?.classList).toContain("metadata-property-key");
-        expect(key?.textContent).toBe("Suggested");
-        expect(key?.querySelector(".metadata-property-icon")).not.toBeNull();
-        expect(key?.querySelector('[data-icon="sparkles"]')).not.toBeNull();
-        expect(value?.classList).toContain("metadata-property-value");
-        expect(value?.getAttribute("data-property-type")).toBe("tags");
-        expect(value?.firstElementChild?.classList).toContain("multi-select-container");
-        const pills = value?.querySelectorAll(".multi-select-pill") ?? [];
-        expect(pills).toHaveLength(6);
-        for (const pill of pills) {
-          expect(pill.firstElementChild?.classList).toContain("multi-select-pill-content");
-        }
-        expect(close?.classList).toContain("clickable-icon");
-        expect(close?.getAttribute("aria-label")).toBe("Close tag suggestions");
-        expect(close?.querySelector('[data-icon="x"]')).not.toBeNull();
-        expect(close?.textContent).toBe("");
-      });
+  it(`keeps the session and row identity when metadata removes the focused pill (${ISSUE})`, () => {
+    const ctx = context();
+    const row = new TagSuggestionRow(ctx.app);
+    row.show(ctx.file, suggestions(3), jest.fn().mockResolvedValue(true), ctx.view);
+    const mounted = ctx.sourceContainer.querySelector<HTMLElement>(".copilot-tag-suggestion-row");
+    mounted?.querySelector<HTMLButtonElement>('button[aria-label="Add #tag-1"]')?.focus();
 
-      it(`mounts in the supplied pane when the same note is open twice (${ISSUE})`, () => {
-        const context = testContext({ tagsRow: true });
-        const otherContentEl = document.createElement("div");
-        const otherRoot = otherContentEl.createDiv({ cls: "markdown-source-view" });
-        const otherContainer = otherRoot.createDiv({ cls: "metadata-container" });
-        otherContainer.createDiv({
-          cls: "metadata-property",
-          attr: { "data-property-key": "tags" },
-        });
-        document.body.appendChild(otherContentEl);
-        const otherView = {
-          file: context.file,
-          contentEl: otherContentEl,
-          getMode: jest.fn(() => "source"),
-        } as unknown as MarkdownView;
-        jest.mocked(context.app.workspace.getActiveViewOfType).mockReturnValue(otherView);
-        jest
-          .mocked(context.app.workspace.getLeavesOfType)
-          .mockReturnValue([
-            { view: otherView } as unknown as WorkspaceLeaf,
-            { view: context.view } as unknown as WorkspaceLeaf,
-          ]);
-        const row = new TagSuggestionRow(context.app);
+    ctx.setFrontmatter({ tags: ["existing", "tag-1"] });
+    ctx.emitMetadataChanged();
 
-        row.show(context.file, suggestions(), jest.fn().mockResolvedValue(true), context.view);
+    expect(ctx.sourceContainer.querySelector(".copilot-tag-suggestion-row")).toBe(mounted);
+    expect(document.activeElement).toBe(mounted);
+    expect(row.hasSession(ctx.file)).toBe(true);
+    expect(suggestionLabels(ctx.sourceContainer)).toEqual(["tag-2", "tag-3"]);
+  });
 
-        expect(labels(context.metadataContainer)).toHaveLength(5);
-        expect(labels(otherContainer)).toHaveLength(0);
-      });
+  it(`re-inserts the same focused row when Obsidian redraws Properties during a write (${ISSUE})`, async () => {
+    const ctx = context();
+    const row = new TagSuggestionRow(ctx.app);
+    let mounted: HTMLElement | null = null;
+    const update = jest.fn(async (add: string[]) => {
+      mounted?.dispatchEvent(new FocusEvent("focusout", { bubbles: true, relatedTarget: null }));
+      mounted?.remove();
+      const replacement = ctx.replaceNativeRow();
+      ctx.setFrontmatter({ tags: ["existing", ...add] });
+      ctx.emitMetadataChanged();
+      expect(replacement.previousElementSibling).toBe(mounted);
+      return true;
+    });
+    row.show(ctx.file, suggestions(3), update, ctx.view);
+    mounted = ctx.sourceContainer.querySelector<HTMLElement>(".copilot-tag-suggestion-row");
 
-      it.each([
-        ["source", "sourceMetadataContainer", "readingMetadataContainer"],
-        ["preview", "readingMetadataContainer", "sourceMetadataContainer"],
-      ] as const)(
-        `mounts in the active %s mode when both Properties containers exist (${ISSUE})`,
-        (mode, activeKey, inactiveKey) => {
-          const context = testContext({ tagsRow: true, mode });
-          const row = new TagSuggestionRow(context.app);
+    mounted?.querySelector<HTMLButtonElement>('button[aria-label="Add #tag-1"]')?.click();
 
-          row.show(context.file, suggestions(), jest.fn().mockResolvedValue(true));
+    await waitFor(() => expect(update).toHaveBeenCalled());
+    expect(ctx.sourceContainer.querySelector(".copilot-tag-suggestion-row")).toBe(mounted);
+    expect(document.activeElement).toBe(mounted);
+    expect(row.hasSession(ctx.file)).toBe(true);
+  });
 
-          expect(labels(context[activeKey])).toHaveLength(5);
-          expect(labels(context[inactiveKey])).toHaveLength(0);
-        }
+  it(`re-focuses a row re-attached after the pending-write fallback clears (${ISSUE})`, async () => {
+    jest.useFakeTimers();
+    try {
+      const ctx = context();
+      const row = new TagSuggestionRow(ctx.app);
+      row.show(ctx.file, suggestions(3), jest.fn().mockResolvedValue(true), ctx.view);
+      const mounted = ctx.sourceContainer.querySelector<HTMLElement>(".copilot-tag-suggestion-row");
+
+      mounted?.querySelector<HTMLButtonElement>('button[aria-label="Add #tag-1"]')?.click();
+      await Promise.resolve();
+      mounted?.dispatchEvent(new FocusEvent("focusout", { bubbles: true, relatedTarget: null }));
+      mounted?.remove();
+      expect(document.activeElement).toBe(document.body);
+
+      await jest.advanceTimersByTimeAsync(2_000);
+
+      expect(ctx.nativeRow.previousElementSibling).toBe(mounted);
+      expect(document.activeElement).toBe(mounted);
+      expect(row.hasSession(ctx.file)).toBe(true);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it.each(["q", "Backspace"])(
+    `hands %s to the native input and suppresses re-triggering until native focus leaves (${ISSUE})`,
+    (key) => {
+      const ctx = context();
+      const row = new TagSuggestionRow(ctx.app);
+      row.show(ctx.file, suggestions(), jest.fn().mockResolvedValue(true), ctx.view);
+      const mounted = ctx.sourceContainer.querySelector<HTMLElement>(".copilot-tag-suggestion-row");
+
+      mounted?.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+
+      expect(ctx.sourceContainer.querySelector(".copilot-tag-suggestion-row")).toBeNull();
+      expect(document.activeElement).toBe(ctx.nativeInput);
+      expect(row.isNativeFocusSuppressed(ctx.nativeRow)).toBe(true);
+      ctx.nativeRow.dispatchEvent(
+        new FocusEvent("focusout", { bubbles: true, relatedTarget: ctx.outside })
       );
+      expect(row.isNativeFocusSuppressed(ctx.nativeRow)).toBe(false);
+    }
+  );
 
-      it(`moves the row when the Markdown view changes mode (${ISSUE})`, () => {
-        const context = testContext({ tagsRow: true });
-        const row = new TagSuggestionRow(context.app);
-        row.show(context.file, suggestions(), jest.fn().mockResolvedValue(true));
+  it(`keeps Space on a focused suggestion button (${ISSUE})`, () => {
+    const ctx = context();
+    const row = new TagSuggestionRow(ctx.app);
+    row.show(ctx.file, suggestions(), jest.fn().mockResolvedValue(true), ctx.view);
+    const mounted = ctx.sourceContainer.querySelector<HTMLElement>(".copilot-tag-suggestion-row");
+    const suggestion = mounted?.querySelector<HTMLButtonElement>('button[aria-label="Add #tag-1"]');
+    suggestion?.focus();
 
-        context.setMode("preview");
-        context.emitLayoutChange();
+    suggestion?.dispatchEvent(new KeyboardEvent("keydown", { key: " ", bubbles: true }));
 
-        expect(labels(context.sourceMetadataContainer)).toHaveLength(0);
-        expect(labels(context.readingMetadataContainer)).toHaveLength(5);
-      });
+    expect(ctx.sourceContainer.querySelector(".copilot-tag-suggestion-row")).toBe(mounted);
+    expect(document.activeElement).toBe(suggestion);
+    expect(row.isNativeFocusSuppressed(ctx.nativeRow)).toBe(false);
+  });
 
-      it(`mounts after the last property when the note has no tags property (${ISSUE})`, () => {
-        const context = testContext({ properties: 3 });
-        const lastProperty = context.metadataContainer.lastElementChild;
-        const row = new TagSuggestionRow(context.app);
+  it(`hands an empty-area click to the native input without preventing the click (${ISSUE})`, () => {
+    const ctx = context();
+    const row = new TagSuggestionRow(ctx.app);
+    row.show(ctx.file, suggestions(), jest.fn().mockResolvedValue(true), ctx.view);
+    const emptyArea = ctx.sourceContainer.querySelector<HTMLElement>(
+      ".copilot-tag-suggestion-row .multi-select-container"
+    );
+    const event = new MouseEvent("click", { bubbles: true, cancelable: true });
 
-        row.show(context.file, suggestions(), jest.fn().mockResolvedValue(true));
+    expect(emptyArea?.dispatchEvent(event)).toBe(true);
+    expect(event.defaultPrevented).toBe(false);
+    expect(document.activeElement).toBe(ctx.nativeInput);
+  });
 
-        expect(lastProperty?.nextElementSibling?.classList).toContain("copilot-tag-suggestion-row");
-      });
+  it.each(["focusout", "Escape", "view change", "unload"])(
+    `ends the session on %s and restores the native row (${ISSUE})`,
+    (reason) => {
+      const ctx = context();
+      const row = new TagSuggestionRow(ctx.app);
+      row.show(ctx.file, suggestions(), jest.fn().mockResolvedValue(true), ctx.view);
+      const mounted = ctx.sourceContainer.querySelector<HTMLElement>(".copilot-tag-suggestion-row");
 
-      it(`mounts the row after a hidden Properties container without opening a modal (${ISSUE})`, () => {
-        const context = testContext();
-        context.metadataContainer.classList.add("is-hidden");
-        const row = new TagSuggestionRow(context.app);
-
-        row.show(context.file, suggestions(), jest.fn().mockResolvedValue(true));
-
-        expect(context.metadataContainer.nextElementSibling?.classList).toContain(
-          "copilot-tag-suggestion-row"
+      if (reason === "focusout") {
+        mounted?.dispatchEvent(
+          new FocusEvent("focusout", { bubbles: true, relatedTarget: ctx.outside })
         );
-        expect(labels(context.modeRoot)).toEqual(["tag-1", "tag-2", "tag-3", "tag-4", "tag-5"]);
-      });
-
-      it(`mounts outside an ancestor that hides Properties (${ISSUE})`, () => {
-        const context = testContext();
-        const hiddenWrapper = context.modeRoot.createDiv({ cls: "is-hidden" });
-        hiddenWrapper.appendChild(context.metadataContainer);
-        const row = new TagSuggestionRow(context.app);
-
-        row.show(context.file, suggestions(), jest.fn().mockResolvedValue(true));
-
-        expect(hiddenWrapper.nextElementSibling?.classList).toContain("copilot-tag-suggestion-row");
-        expect(hiddenWrapper.querySelector(".copilot-tag-suggestion-row")).toBeNull();
-      });
-
-      it(`moves a hidden-panel row under tags after the first write creates frontmatter (${ISSUE})`, async () => {
-        const context = testContext({ tagsRow: true });
-        context.metadataContainer.classList.add("is-hidden");
-        const addTag = jest.fn(async (tags: string[]) => {
-          context.setTags(tags);
-          context.metadataContainer.classList.remove("is-hidden");
-          context.emitMetadataChanged();
-          return true;
-        });
-        const row = new TagSuggestionRow(context.app);
-        row.show(context.file, suggestions(6), addTag);
-
-        context.modeRoot
-          .querySelector<HTMLButtonElement>('button[aria-label="Add #tag-1"]')
-          ?.click();
-
-        await waitFor(() => expect(addTag).toHaveBeenCalledWith(["tag-1"]));
-        const tagsProperty = context.metadataContainer.querySelector(
-          '.metadata-property[data-property-key="tags"]'
-        );
-        expect(tagsProperty?.previousElementSibling?.classList).toContain(
-          "copilot-tag-suggestion-row"
-        );
-        expect(labels(context.metadataContainer)).toEqual([
-          "tag-2",
-          "tag-3",
-          "tag-4",
-          "tag-5",
-          "tag-6",
-        ]);
-      });
-
-      it(`shows a notice and ends the session when the mode has no Properties container (${ISSUE})`, () => {
-        const context = testContext();
-        context.metadataContainer.remove();
-        const row = new TagSuggestionRow(context.app);
-
-        row.show(context.file, suggestions(), jest.fn().mockResolvedValue(true));
-
-        expect(Notice).toHaveBeenCalledWith("Couldn’t show tag suggestions in this note.");
-        expect(context.metadataOffRef).toHaveBeenCalledTimes(1);
-        expect(context.workspaceOffRef).toHaveBeenCalledTimes(3);
-      });
-
-      it(`removes a clicked pill immediately and refills from the ranked list (${ISSUE})`, async () => {
-        const context = testContext({ tagsRow: true });
-        const addTag = jest.fn().mockResolvedValue(true);
-        const row = new TagSuggestionRow(context.app);
-        row.show(context.file, suggestions(6), addTag);
-
-        context.metadataContainer
-          .querySelector<HTMLButtonElement>('button[aria-label="Add #tag-1"]')
-          ?.click();
-
-        expect(labels(context.metadataContainer)).toEqual([
-          "tag-2",
-          "tag-3",
-          "tag-4",
-          "tag-5",
-          "tag-6",
-        ]);
-        await waitFor(() => expect(addTag).toHaveBeenCalledWith(["tag-1"]));
-      });
-
-      it(`restores a clicked pill when the frontmatter write fails (${ISSUE})`, async () => {
-        const context = testContext({ tagsRow: true });
-        const row = new TagSuggestionRow(context.app);
-        row.show(context.file, suggestions(6), jest.fn().mockResolvedValue(false));
-
-        context.metadataContainer
-          .querySelector<HTMLButtonElement>('button[aria-label="Add #tag-1"]')
-          ?.click();
-
-        await waitFor(() =>
-          expect(labels(context.metadataContainer)).toEqual([
-            "tag-1",
-            "tag-2",
-            "tag-3",
-            "tag-4",
-            "tag-5",
-          ])
-        );
-      });
-
-      it(`filters manually added tags and fills the visible row from the remaining queue (${ISSUE})`, () => {
-        const context = testContext({ tagsRow: true });
-        const row = new TagSuggestionRow(context.app);
-        row.show(context.file, suggestions(6), jest.fn().mockResolvedValue(true));
-
-        context.setTags(["tag-2"]);
-        context.emitMetadataChanged();
-
-        expect(labels(context.metadataContainer)).toEqual([
-          "tag-1",
-          "tag-3",
-          "tag-4",
-          "tag-5",
-          "tag-6",
-        ]);
-      });
-
-      it(`returns a clicked tag in ranked position after it is removed from the note (${ISSUE})`, async () => {
-        const context = testContext({ tagsRow: true });
-        const addTag = jest.fn(async (tags: string[]) => {
-          context.setTags(tags);
-          context.emitMetadataChanged();
-          return true;
-        });
-        const row = new TagSuggestionRow(context.app);
-        row.show(context.file, suggestions(6), addTag);
-
-        context.metadataContainer
-          .querySelector<HTMLButtonElement>('button[aria-label="Add #tag-1"]')
-          ?.click();
-        await waitFor(() => expect(addTag).toHaveBeenCalledWith(["tag-1"]));
-
-        context.setTags([]);
-        context.emitMetadataChanged();
-
-        expect(labels(context.metadataContainer)).toEqual([
-          "tag-1",
-          "tag-2",
-          "tag-3",
-          "tag-4",
-          "tag-5",
-        ]);
-      });
-
-      it(`returns a manually added candidate in ranked position after it is removed (${ISSUE})`, () => {
-        const context = testContext({ tagsRow: true });
-        const row = new TagSuggestionRow(context.app);
-        row.show(context.file, suggestions(6), jest.fn().mockResolvedValue(true));
-
-        context.setTags(["tag-2"]);
-        context.emitMetadataChanged();
-        context.setTags([]);
-        context.emitMetadataChanged();
-
-        expect(labels(context.metadataContainer)).toEqual([
-          "tag-1",
-          "tag-2",
-          "tag-3",
-          "tag-4",
-          "tag-5",
-        ]);
-      });
-
-      it(`hides an exhausted row but keeps the session so a removed tag returns (${ISSUE})`, () => {
-        const context = testContext({ tagsRow: true });
-        const row = new TagSuggestionRow(context.app);
-        row.show(context.file, suggestions(2), jest.fn().mockResolvedValue(true));
-
-        context.setTags(["tag-1", "tag-2"]);
-        context.emitMetadataChanged();
-
-        expect(context.metadataContainer.querySelector(".copilot-tag-suggestion-row")).toBeNull();
-        expect(context.metadataOffRef).not.toHaveBeenCalled();
-        expect(context.workspaceOffRef).not.toHaveBeenCalled();
-
-        context.setTags(["tag-2"]);
-        context.emitMetadataChanged();
-
-        expect(labels(context.metadataContainer)).toEqual(["tag-1"]);
-      });
-
-      it(`removes the row and listeners on close and plugin unload (${ISSUE})`, () => {
-        const context = testContext({ tagsRow: true });
-        const row = new TagSuggestionRow(context.app);
-        row.show(context.file, suggestions(), jest.fn().mockResolvedValue(true));
-
-        context.metadataContainer
-          .querySelector<HTMLButtonElement>('button[aria-label="Close tag suggestions"]')
-          ?.click();
-
-        expect(context.metadataContainer.querySelector(".copilot-tag-suggestion-row")).toBeNull();
-        expect(context.metadataOffRef).toHaveBeenCalledTimes(1);
-        expect(context.workspaceOffRef).toHaveBeenCalledTimes(3);
-
-        row.show(context.file, suggestions(), jest.fn().mockResolvedValue(true));
+      } else if (reason === "Escape") {
+        mounted?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      } else if (reason === "view change") {
+        ctx.view.file = file("Projects/Other.md");
+        ctx.emitActiveLeafChange();
+      } else {
         row.onunload();
-        expect(context.metadataContainer.querySelector(".copilot-tag-suggestion-row")).toBeNull();
-        expect(context.metadataOffRef).toHaveBeenCalledTimes(2);
-        expect(context.workspaceOffRef).toHaveBeenCalledTimes(6);
-      });
+      }
 
-      it(`shows one non-clickable placeholder pill until ranked suggestions arrive (${ISSUE})`, () => {
-        const context = testContext({ tagsRow: true });
-        const row = new TagSuggestionRow(context.app);
+      expect(ctx.sourceContainer.querySelector(".copilot-tag-suggestion-row")).toBeNull();
+      expect(ctx.nativeRow.isConnected).toBe(true);
+      expect(ctx.metadataOffRef).toHaveBeenCalledTimes(1);
+      expect(ctx.workspaceOffRef).toHaveBeenCalledTimes(3);
+    }
+  );
 
-        row.showLoading(context.file);
+  it(`does not re-enter cleanup when removing the focused row dispatches focusout (${ISSUE})`, () => {
+    const ctx = context();
+    const row = new TagSuggestionRow(ctx.app);
+    row.show(ctx.file, suggestions(), jest.fn().mockResolvedValue(true), ctx.view);
+    const mounted = ctx.sourceContainer.querySelector<HTMLElement>(".copilot-tag-suggestion-row");
+    let dispatched = false;
+    if (mounted) {
+      mounted.remove = () => {
+        if (!dispatched) {
+          dispatched = true;
+          mounted.dispatchEvent(
+            new FocusEvent("focusout", { bubbles: true, relatedTarget: ctx.outside })
+          );
+        }
+        mounted.parentNode?.removeChild(mounted);
+      };
+    }
 
-        const placeholder = context.metadataContainer.querySelector(
-          ".copilot-tag-suggestion-placeholder"
-        );
-        expect(placeholder?.textContent).toBe("Suggesting tags…");
-        expect(placeholder?.tagName).toBe("SPAN");
-        expect(
-          context.metadataContainer.querySelectorAll("button[aria-label^='Add #']")
-        ).toHaveLength(0);
+    mounted?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
 
-        row.show(context.file, suggestions(), jest.fn().mockResolvedValue(true));
+    expect(ctx.metadataOffRef).toHaveBeenCalledTimes(1);
+    expect(ctx.workspaceOffRef).toHaveBeenCalledTimes(3);
+    expect(row.hasSession(ctx.file)).toBe(false);
+  });
 
-        expect(
-          context.metadataContainer.querySelector(".copilot-tag-suggestion-placeholder")
-        ).toBeNull();
-        expect(labels(context.metadataContainer)).toHaveLength(5);
-      });
+  it(`moves the persistent row to the active mode and a replaced native row (${ISSUE})`, () => {
+    const ctx = context();
+    const row = new TagSuggestionRow(ctx.app);
+    row.show(ctx.file, suggestions(), jest.fn().mockResolvedValue(true), ctx.view);
+    const mounted = ctx.sourceContainer.querySelector<HTMLElement>(".copilot-tag-suggestion-row");
 
-      it(`counts Auto-add from all ten ranked tags and caps one write at three (${ISSUE})`, async () => {
-        const context = testContext({ tagsRow: true });
-        const addTags = jest.fn(async (tags: string[]) => {
-          context.setTags(tags);
-          context.emitMetadataChanged();
-          return true;
-        });
-        const row = new TagSuggestionRow(context.app);
-        row.show(
-          context.file,
-          scoredSuggestions([0.99, 0.95, 0.9, 0.86, 0.84, 0.8, 0.7, 0.6, 0.5, 0.4]),
-          addTags
-        );
+    ctx.setMode("preview");
+    ctx.emitLayoutChange();
+    expect(ctx.readingContainer.querySelector(".copilot-tag-suggestion-row")).toBe(mounted);
 
-        const autoAdd = context.metadataContainer.querySelector<HTMLButtonElement>(
-          'button[aria-label="Auto-add 3 tags"]'
-        );
-        expect(autoAdd?.textContent).toBe("Auto-add");
-        autoAdd?.click();
+    ctx.setMode("source");
+    const replacement = ctx.replaceNativeRow();
+    ctx.emitMetadataChanged();
+    expect(replacement.previousElementSibling).toBe(mounted);
+  });
 
-        expect(labels(context.metadataContainer)).toEqual([
-          "tag-4",
-          "tag-5",
-          "tag-6",
-          "tag-7",
-          "tag-8",
-        ]);
-        await waitFor(() => expect(addTags).toHaveBeenCalledWith(["tag-1", "tag-2", "tag-3"]));
-        expect(addTags).toHaveBeenCalledTimes(1);
-      });
+  it(`removes a loading session when a request finishes without a result (${ISSUE})`, () => {
+    const ctx = context();
+    const row = new TagSuggestionRow(ctx.app);
+    const generation = row.beginRequest(ctx.file);
+    row.showLoading(ctx.file, ctx.view);
 
-      it(`uses the provisional 0.5 Auto-add threshold and hides when none qualify (${ISSUE})`, () => {
-        const context = testContext({ tagsRow: true });
-        const row = new TagSuggestionRow(context.app);
+    row.finishRequest(ctx.file, generation);
 
-        row.show(context.file, scoredSuggestions([0.5, 0.49]), jest.fn());
-        expect(
-          context.metadataContainer.querySelector(".copilot-tag-auto-add-pill")?.textContent
-        ).toBe("Auto-add");
+    expect(ctx.sourceContainer.querySelector(".copilot-tag-suggestion-row")).toBeNull();
+    expect(row.isRequestInFlight(ctx.file)).toBe(false);
+  });
 
-        row.show(context.file, scoredSuggestions([0.49, 0.4]), jest.fn());
-        expect(context.metadataContainer.querySelector(".copilot-tag-auto-add-pill")).toBeNull();
-      });
+  it(`keeps the live row and quietly re-ranks when a source tag disappears (${ISSUE})`, () => {
+    const ctx = context();
+    const rerank = jest.fn();
+    const update = jest.fn().mockResolvedValue(true);
+    const row = new TagSuggestionRow(ctx.app);
+    row.show(ctx.file, suggestions(3), update, ctx.view, ["existing"], rerank);
+    const mounted = ctx.sourceContainer.querySelector<HTMLElement>(".copilot-tag-suggestion-row");
 
-      it(`does not retain closed session refs in the long-lived component (${ISSUE})`, () => {
-        const context = testContext({ tagsRow: true });
-        const row = new TagSuggestionRow(context.app);
-        const registerEvent = jest.spyOn(row, "registerEvent");
+    ctx.setFrontmatter({ tags: ["added-later"] });
+    ctx.emitMetadataChanged();
 
-        row.show(context.file, suggestions(), jest.fn().mockResolvedValue(true));
-        row.close();
+    expect(ctx.sourceContainer.querySelector(".copilot-tag-suggestion-row")).toBe(mounted);
+    expect(
+      ctx.sourceContainer.querySelector(".copilot-tag-suggestion-placeholder")?.textContent
+    ).toBe("Suggesting…");
+    expect(rerank).toHaveBeenCalledTimes(1);
+    expect(row.isSessionLoading(ctx.file)).toBe(true);
 
-        expect(registerEvent).not.toHaveBeenCalled();
-        expect(context.metadataOffRef).toHaveBeenCalledTimes(1);
-        expect(context.workspaceOffRef).toHaveBeenCalledTimes(3);
-      });
+    ctx.emitMetadataChanged();
+    expect(rerank).toHaveBeenCalledTimes(1);
 
-      it(`re-mounts after Obsidian replaces the Properties rows (${ISSUE})`, () => {
-        const context = testContext({ tagsRow: true });
-        const row = new TagSuggestionRow(context.app);
-        row.show(context.file, suggestions(), jest.fn().mockResolvedValue(true));
-        const replacement = context.metadataContainer.doc.createElement("div");
-        replacement.className = "metadata-property";
-        replacement.dataset.propertyKey = "tags";
-        context.metadataContainer.replaceChildren(replacement);
+    row.show(ctx.file, suggestions(2), update, ctx.view, ["added-later"], rerank);
+    expect(ctx.sourceContainer.querySelector(".copilot-tag-suggestion-row")).toBe(mounted);
+    expect(ctx.sourceContainer.querySelector(".copilot-tag-suggestion-placeholder")).toBeNull();
+    expect(suggestionLabels(ctx.sourceContainer)).toEqual(["tag-1", "tag-2"]);
+  });
 
-        context.emitMetadataChanged();
+  it(`caches immutable rankings for ten minutes and at most fifty notes (${ISSUE})`, () => {
+    const ctx = context();
+    const row = new TagSuggestionRow(ctx.app);
+    const ranked = suggestions(2);
+    row.cacheSuggestions(ctx.file, ranked, ["#Existing"], 1_000);
+    ranked.pop();
+    expect(row.getCachedSuggestions(ctx.file, 1_000 + 10 * 60 * 1_000)).toEqual({
+      ranked: suggestions(2),
+      sourceTags: ["existing"],
+    });
+    expect(row.getCachedSuggestions(ctx.file, 1_000 + 10 * 60 * 1_000 + 1)).toBeUndefined();
 
-        expect(replacement.previousElementSibling?.classList).toContain(
-          "copilot-tag-suggestion-row"
-        );
-        expect(labels(context.metadataContainer)).toHaveLength(5);
-      });
+    const notes = Array.from({ length: 51 }, (_, index) => file(`Notes/${index}.md`));
+    notes.forEach((note, index) => row.cacheSuggestions(note, suggestions(1), [], index));
+    expect(row.getCachedSuggestions(notes[0], 51)).toBeUndefined();
+    expect(row.getCachedSuggestions(notes[50], 51)).toEqual({
+      ranked: suggestions(1),
+      sourceTags: [],
+    });
+  });
 
-      it(`removes the row when its Markdown view changes file (${ISSUE})`, () => {
-        const context = testContext({ tagsRow: true });
-        const row = new TagSuggestionRow(context.app);
-        row.show(context.file, suggestions(), jest.fn().mockResolvedValue(true));
+  it(`drops a cached ranking when a source tag disappears but not when tags are added (${ISSUE})`, () => {
+    const ctx = context();
+    const row = new TagSuggestionRow(ctx.app);
+    row.cacheSuggestions(ctx.file, suggestions(2), ["existing"], 1_000);
 
-        context.view.file = file("Projects/Other.md");
-        context.emitActiveLeafChange();
-
-        expect(context.metadataContainer.querySelector(".copilot-tag-suggestion-row")).toBeNull();
-        expect(context.metadataOffRef).toHaveBeenCalledTimes(1);
-        expect(context.workspaceOffRef).toHaveBeenCalledTimes(3);
-      });
-
-      it(`removes a hidden-panel row when another Markdown view becomes active (${ISSUE})`, () => {
-        const context = testContext();
-        context.metadataContainer.classList.add("is-hidden");
-        const row = new TagSuggestionRow(context.app);
-        row.show(context.file, suggestions(), jest.fn().mockResolvedValue(true));
-        const otherView = { file: file("Projects/Other.md") } as MarkdownView;
-
-        jest.mocked(context.app.workspace.getActiveViewOfType).mockReturnValue(otherView);
-        context.emitActiveLeafChange();
-
-        expect(context.modeRoot.querySelector(".copilot-tag-suggestion-row")).toBeNull();
-        expect(context.metadataOffRef).toHaveBeenCalledTimes(1);
-        expect(context.workspaceOffRef).toHaveBeenCalledTimes(3);
-      });
-
-      it(`removes a hidden-panel row when its active leaf opens another file (${ISSUE})`, () => {
-        const context = testContext();
-        context.metadataContainer.classList.add("is-hidden");
-        const row = new TagSuggestionRow(context.app);
-        row.show(context.file, suggestions(), jest.fn().mockResolvedValue(true));
-
-        context.view.file = file("Projects/Other.md");
-        context.emitFileOpen();
-
-        expect(context.modeRoot.querySelector(".copilot-tag-suggestion-row")).toBeNull();
-        expect(context.metadataOffRef).toHaveBeenCalledTimes(1);
-        expect(context.workspaceOffRef).toHaveBeenCalledTimes(3);
-      });
+    ctx.setFrontmatter({ tags: ["existing", "added-later"] });
+    expect(row.getCachedSuggestions(ctx.file, 1_001)).toEqual({
+      ranked: suggestions(2),
+      sourceTags: ["existing"],
     });
 
-    describe("request lifecycle", () => {
-      it(`invalidates an older generation and reports only the current request (${ISSUE})`, () => {
-        const context = testContext();
-        const row = new TagSuggestionRow(context.app);
+    ctx.setFrontmatter({ tags: ["added-later"] });
+    expect(row.getCachedSuggestions(ctx.file, 1_002)).toBeUndefined();
 
-        const first = row.beginRequest(context.file);
-        const second = row.beginRequest(context.file);
-
-        expect(row.isCurrentRequest(first)).toBe(false);
-        expect(row.isCurrentRequest(second)).toBe(true);
-      });
-
-      it(`tracks a request as in flight until its matching generation finishes (${ISSUE})`, () => {
-        const context = testContext();
-        const row = new TagSuggestionRow(context.app);
-        const generation = row.beginRequest(context.file);
-
-        expect(row.isRequestInFlight(context.file)).toBe(true);
-        row.finishRequest(context.file, generation + 1);
-        expect(row.isRequestInFlight(context.file)).toBe(true);
-        row.finishRequest(context.file, generation);
-        expect(row.isRequestInFlight(context.file)).toBe(false);
-      });
-
-      it(`removes a loading session when its request finishes without results (${ISSUE})`, () => {
-        const context = testContext({ tagsRow: true });
-        const row = new TagSuggestionRow(context.app);
-        const generation = row.beginRequest(context.file);
-        row.showLoading(context.file);
-
-        expect(
-          context.modeRoot.querySelector(".copilot-tag-suggestion-placeholder")
-        ).not.toBeNull();
-
-        row.finishRequest(context.file, generation);
-
-        expect(context.modeRoot.querySelector(".copilot-tag-suggestion-row")).toBeNull();
-        expect(row.hasSession(context.file)).toBe(false);
-      });
-    });
-
-    describe("ranked suggestion cache", () => {
-      it(`returns a fresh entry without sharing its mutable array (${ISSUE})`, () => {
-        const context = testContext();
-        const row = new TagSuggestionRow(context.app);
-        const ranked = suggestions(2);
-
-        row.cacheSuggestions(context.file, ranked, 1_000);
-        ranked.pop();
-
-        expect(row.getCachedSuggestions(context.file, 1_000 + 10 * 60 * 1_000)).toEqual(
-          suggestions(2)
-        );
-      });
-
-      it(`expires a cached ranking after ten minutes (${ISSUE})`, () => {
-        const context = testContext();
-        const row = new TagSuggestionRow(context.app);
-        row.cacheSuggestions(context.file, suggestions(2), 1_000);
-
-        expect(row.getCachedSuggestions(context.file, 1_000 + 10 * 60 * 1_000 + 1)).toBeUndefined();
-      });
-
-      it(`keeps only the fifty most recently cached notes (${ISSUE})`, () => {
-        const context = testContext();
-        const row = new TagSuggestionRow(context.app);
-        const files = Array.from({ length: 51 }, (_, index) => file(`Notes/${index}.md`));
-
-        files.forEach((note, index) => row.cacheSuggestions(note, suggestions(1), index));
-
-        expect(row.getCachedSuggestions(files[0], 51)).toBeUndefined();
-        expect(row.getCachedSuggestions(files[50], 51)).toEqual(suggestions(1));
-      });
-    });
+    ctx.setFrontmatter({ tags: ["existing", "added-later"] });
+    expect(row.getCachedSuggestions(ctx.file, 1_003)).toBeUndefined();
   });
 });

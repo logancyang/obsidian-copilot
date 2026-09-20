@@ -15,12 +15,6 @@ const EVIDENCE_TOKEN_MARGIN = 1.3;
 const CJK = /[぀-ヿ㐀-鿿가-힯]/g;
 const HEX_COLOUR_TAG = /^(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
 
-// Provisional: 0.5 is the model's yes/no boundary. A version-2 hold-one-out measurement will
-// set the final cutoff; keep the cap because noul remains a weak cutoff across notes.
-// https://github.com/Brevilabs/obsidian-copilot-private/issues/492
-export const AUTO_ADD_MIN_NOUL = 0.5;
-export const AUTO_ADD_MAX = 3;
-
 export interface TagSuggestionState {
   title: string;
   path: string;
@@ -153,6 +147,10 @@ function frontmatterProperties(
   return properties;
 }
 
+function normalizedTag(value: string): string {
+  return value.trim().replace(/^#/, "");
+}
+
 function stringList(value: unknown, splitTags = false): string[] {
   const scalar = typeof value === "string";
   const values = Array.isArray(value) ? value : scalar ? [value] : [];
@@ -160,8 +158,16 @@ function stringList(value: unknown, splitTags = false): string[] {
     .flatMap((item) =>
       typeof item === "string" ? (splitTags && scalar ? item.split(/[\s,]+/) : [item]) : []
     )
-    .map((item) => item.trim().replace(/^#/, ""))
+    .map(normalizedTag)
     .filter(Boolean);
+}
+
+/** Returns only frontmatter tags, matching the native Properties tags row. */
+export function frontmatterTags(cache: CachedMetadata | null): string[] {
+  const frontmatter = cache?.frontmatter;
+  if (!frontmatter) return [];
+  const value = "tags" in frontmatter ? frontmatter.tags : frontmatter.tag;
+  return stringList(value, true);
 }
 
 function tagsFromCache(cache: CachedMetadata | null): Map<string, string> {
@@ -174,6 +180,10 @@ function tagsFromCache(cache: CachedMetadata | null): Map<string, string> {
     if (tag && !tags.has(tag.toLowerCase())) tags.set(tag.toLowerCase(), tag);
   }
   return tags;
+}
+
+export function noteTags(cache: CachedMetadata | null): string[] {
+  return Array.from(tagsFromCache(cache).values());
 }
 
 function stripCode(value: string): string {
@@ -231,7 +241,7 @@ export function buildTagSuggestionState(
   cache: CachedMetadata | null
 ): TagSuggestionState {
   const body = stripTagSuggestionFrontmatter(rawContent);
-  const existingTags = Array.from(tagsFromCache(cache).values());
+  const existingTags = noteTags(cache);
   const state: TagSuggestionState = {
     title: file.basename,
     path: file.path,
@@ -457,12 +467,31 @@ export function rankTagSuggestions(
   return ranked.map(({ tag, score }) => ({ tag, score }));
 }
 
-export async function addTagToFrontmatter(app: App, file: TFile, tags: string[]): Promise<void> {
-  const requested = tags.map((tag) => tag.replace(/^#/, "")).filter(Boolean);
+export async function addTagToFrontmatter(
+  app: App,
+  file: TFile,
+  tagsToAdd: string[],
+  tagsToRemove: string[] = []
+): Promise<void> {
+  const requested = tagsToAdd.map(normalizedTag).filter(Boolean);
+  const removals = new Set(
+    tagsToRemove.map((tag) => normalizedTag(tag).toLowerCase()).filter(Boolean)
+  );
   await app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
     const key = "tags" in frontmatter ? "tags" : "tag" in frontmatter ? "tag" : "tags";
     const value = frontmatter[key];
-    const current = stringList(value, true);
+    const before = stringList(value, true);
+    const current = before.filter((tag) => !removals.has(tag.toLowerCase()));
+    const preserved = Array.isArray(value)
+      ? value.filter((item) => {
+          if (typeof item !== "string") return true;
+          const normalized = normalizedTag(item);
+          return Boolean(normalized) && !removals.has(normalized.toLowerCase());
+        })
+      : undefined;
+    const removed = Array.isArray(value)
+      ? preserved?.length !== value.length
+      : typeof value === "string" && (!normalizedTag(value) || current.length !== before.length);
     const seen = new Set(current.map((tag) => tag.toLowerCase()));
     const additions = requested.filter((tag) => {
       const normalized = tag.toLowerCase();
@@ -470,13 +499,12 @@ export async function addTagToFrontmatter(app: App, file: TFile, tags: string[])
       seen.add(normalized);
       return true;
     });
-    if (additions.length) {
-      frontmatter[key] = Array.isArray(value)
-        ? [...value, ...additions]
-        : typeof value === "string" || value == null
-          ? [...current, ...additions]
-          : [value, ...additions];
-    }
+    if (!additions.length && !removed) return;
+    frontmatter[key] = Array.isArray(value)
+      ? [...(preserved ?? value), ...additions]
+      : typeof value === "string" || value == null
+        ? [...current, ...additions]
+        : [value, ...additions];
   });
 }
 
