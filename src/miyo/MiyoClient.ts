@@ -588,6 +588,8 @@ export class MiyoClient {
       ...(folderName ? { folder_name: folderName } : {}),
       limit,
       ...(filters && filters.length > 0 ? { filters } : {}),
+      // An empty list is omitted so a call with no path filter sends the same body as before:
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/527
       ...(paths && paths.length > 0 ? { paths } : {}),
     };
     if (getSettings().debug) {
