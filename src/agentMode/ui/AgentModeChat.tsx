@@ -1,3 +1,4 @@
+import { useBackendAuthState } from "@/agentMode/session/useBackendAuthState";
 import { AgentChatControls } from "@/agentMode/ui/AgentChatControls";
 import { AgentHome } from "@/agentMode/ui/AgentHome";
 import { AgentModeStatus } from "@/agentMode/ui/AgentModeStatus";
@@ -36,6 +37,11 @@ export const AgentModeChat: React.FC<Props> = ({
   const manager = plugin.agentSessionManager;
   const descriptor = useSessionBackendDescriptor(manager);
   const installState = useBackendInstallState(descriptor, plugin);
+  const auth = useBackendAuthState(descriptor);
+  const awaitingAuth = Boolean(
+    installState.kind === "ready" && descriptor.auth && auth.status === null
+  );
+  const signedOut = Boolean(descriptor.auth && auth.status?.signedIn === false);
   const settings = useSettingsValue();
   const [tick, setTick] = React.useState(0);
 
@@ -60,7 +66,7 @@ export const AgentModeChat: React.FC<Props> = ({
   // on-demand probe).
   React.useEffect(() => {
     if (!manager) return;
-    if (!preloadReady) return;
+    if (!preloadReady || awaitingAuth || signedOut) return;
     // Gate on the *current scope's* sessions, not the whole pool: closing the
     // last session in a scope (project or global) nulls the active session but
     // keeps `activeProjectId` put, so we must re-spawn that scope's landing even
@@ -76,7 +82,7 @@ export const AgentModeChat: React.FC<Props> = ({
       logError("[AgentMode] auto-start failed", e);
     });
     // tick forces re-evaluation when the manager's pool changes.
-  }, [manager, installState.kind, preloadReady, tick]);
+  }, [manager, installState.kind, preloadReady, awaitingAuth, signedOut, tick]);
 
   const handleInstall = React.useCallback(() => {
     descriptor.openInstallUI(plugin);
@@ -96,17 +102,6 @@ export const AgentModeChat: React.FC<Props> = ({
   });
 
   if (!manager) return null;
-
-  // Render a loading placeholder until plugin-load preload settles. This
-  // guarantees the picker (and effort dropdown) read from a populated
-  // cache on first paint instead of flashing an empty list.
-  if (!preloadReady) {
-    return (
-      <div className="tw-flex tw-size-full tw-items-center tw-justify-center tw-text-muted">
-        Loading agent models…
-      </div>
-    );
-  }
 
   const activeSession = manager.getActiveSession();
   const backend = manager.getActiveChatUIState();
@@ -128,33 +123,30 @@ export const AgentModeChat: React.FC<Props> = ({
     );
   }
 
-  // No active session (binary missing, booting, or boot error). The agent
-  // select view is a *cold-start* surface, so it takes the pane over only when
-  // nothing is actively erroring and the agent that would run isn't set up —
-  // the mirror image of the auto-spawn gate above. Two states deliberately keep
-  // the compact card instead:
-  //  - any `lastError`: a crashed agent, expired credentials, or a failed resume
-  //    is a runtime failure, not "no agent is set up". Replacing a working
-  //    panel with a setup screen would misdiagnose it, and the card's Retry /
-  //    Configure action is the fix. `lastError` therefore wins when both are
-  //    true — `AgentModeStatus` still checks install state first internally, so
-  //    an absent backend keeps its Install call to action there.
-  //  - `checking`: transient and Claude-only. Flashing the select view and
-  //    swapping it out is worse than the one-line "Checking … version…".
-  const isColdStart =
-    !manager.getIsStarting() &&
-    manager.getLastError() === null &&
-    (installState.kind === "absent" ||
-      // Cold-start upgrades need the same progress and Retry card as active sessions.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
-      (installState.kind === "incompatible" && !descriptor.managedInstall) ||
-      installState.kind === "error");
+  // Known setup failures must remain actionable even when model discovery or a
+  // previous startup has failed. Managed updates retain their progress/Retry card.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/532
+  const cannotLaunch =
+    installState.kind === "absent" ||
+    installState.kind === "error" ||
+    (installState.kind === "incompatible" && installState.source === "custom") ||
+    (installState.kind === "ready" && signedOut);
 
-  if (isColdStart) {
+  if (cannotLaunch) {
     return (
       <AgentSelectPane controls={<AgentChatControls />}>
         <AgentSelectPanel plugin={plugin} manager={manager} />
       </AgentSelectPane>
+    );
+  }
+
+  // Loading must never hide a surviving conversation or a known setup failure.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/532
+  if (!preloadReady || awaitingAuth) {
+    return (
+      <div className="tw-flex tw-size-full tw-items-center tw-justify-center tw-text-muted">
+        {awaitingAuth ? "Checking agent sign-in…" : "Loading agent models…"}
+      </div>
     );
   }
 

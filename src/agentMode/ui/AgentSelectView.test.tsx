@@ -64,6 +64,16 @@ describe("AgentSelectView", () => {
       expect(screen.getByText(label)).toBeTruthy();
     });
 
+    it("shows a sign-in requirement without an Error badge (https://github.com/Brevilabs/obsidian-copilot-private/issues/532)", () => {
+      renderView({
+        rows: [row({ id: "claude", status: "signed-out" })],
+        footerNote: "Claude not signed in",
+      });
+      expect(screen.getByText("Sign in required")).toBeTruthy();
+      expect(screen.getByText("Claude not signed in")).toBeTruthy();
+      expect(screen.queryByText("Error")).toBeNull();
+    });
+
     it("shows no status badge for an agent that is not set up", () => {
       renderView({ rows: [row({ id: "claude", status: "absent" })] });
 

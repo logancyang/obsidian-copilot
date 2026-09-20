@@ -77,7 +77,7 @@ For Windows-specific installation help, see [Windows setup for Agent Chat](agent
 
 ### Start a chat
 
-Select the **Agent Chat** ribbon icon or run **Open Copilot Agent Chat Window** from the command palette. If the default agent is not ready, Copilot opens **Select your agent**. Configure an agent, choose an installed row, then select **Start chat**.
+Select the **Agent Chat** ribbon icon or run **Open Copilot Agent Chat Window** from the command palette. If the default agent is missing, its custom binary is outdated or unusable, or it is not signed in, Copilot opens **Select your agent** with the reason and a **Configure** action. You can also choose another working agent and select **Start chat**. If you already have a chat open, Copilot keeps the conversation and your unsent draft visible and shows a warning above the chat.
 
 An empty Agent Chat shows a fixed hint: "Ask anything • @ to add context • / for commands".
 

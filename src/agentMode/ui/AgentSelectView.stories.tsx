@@ -138,3 +138,15 @@ export const LongAgentName: StoryObj<AgentSelectViewProps> = {
   },
   render: AgentSelectStory,
 };
+
+export const ClaudeSignInRequired: StoryObj<AgentSelectViewProps> = {
+  args: {
+    rows: [
+      { ...OPENCODE, status: "installed" },
+      { ...CLAUDE, status: "signed-out", statusMessage: "Claude not signed in" },
+      CODEX,
+    ],
+    selectedId: "claude",
+  },
+  render: AgentSelectStory,
+};

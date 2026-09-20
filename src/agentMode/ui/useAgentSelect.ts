@@ -1,3 +1,4 @@
+import { useBackendAuthState } from "@/agentMode/session/useBackendAuthState";
 import {
   backendDisplayOrder,
   backendRegistry,
@@ -49,9 +50,26 @@ export function useAgentSelect(
   const [pickedId, setPickedId] = React.useState<BackendId | null>(null);
   const selectedId = pickedId ?? sessionBackendId;
 
+  const selectedDescriptor = backendRegistry[selectedId];
+  const auth = useBackendAuthState(selectedDescriptor);
   const rows = React.useMemo(
-    () => buildAgentSelectRows(descriptors, states, RECOMMENDED_BACKEND_ID),
-    [descriptors, states]
+    () =>
+      buildAgentSelectRows(descriptors, states, RECOMMENDED_BACKEND_ID).map((row) => {
+        // Installation stays authoritative; only an installed selected agent
+        // needs its sign-in checked before exposing Start chat.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/532
+        if (row.id !== selectedId || row.status !== "installed" || !selectedDescriptor.auth)
+          return row;
+        if (auth.status === null) return { ...row, status: "checking" as const };
+        if (!auth.status.signedIn)
+          return {
+            ...row,
+            status: "signed-out" as const,
+            statusMessage: `${row.name} not signed in`,
+          };
+        return row;
+      }),
+    [descriptors, states, selectedId, selectedDescriptor.auth, auth.status]
   );
   const selectedRow = rows.find((row) => row.id === selectedId) ?? rows[0];
   const cta = React.useMemo(() => resolveAgentSelectCta(selectedRow), [selectedRow]);

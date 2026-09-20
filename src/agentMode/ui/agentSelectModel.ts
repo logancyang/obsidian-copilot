@@ -3,7 +3,13 @@ import type { BackendDescriptor, BackendId, InstallState } from "@/agentMode/ses
 /**
  * Readiness of one agent as the select view words it.
  */
-export type AgentSelectStatus = "checking" | "installed" | "outdated" | "absent" | "error";
+export type AgentSelectStatus =
+  | "checking"
+  | "installed"
+  | "outdated"
+  | "absent"
+  | "error"
+  | "signed-out";
 
 /** One agent row in the select view. */
 export interface AgentSelectRow {

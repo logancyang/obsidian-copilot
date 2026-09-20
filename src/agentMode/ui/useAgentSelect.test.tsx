@@ -7,6 +7,13 @@ import { act, renderHook } from "@testing-library/react";
 import { useAgentSelect } from "./useAgentSelect";
 import { useBackendInstallStates, useSessionBackendDescriptor } from "./useBackendDescriptor";
 
+let mockAuthStatuses: Record<string, { signedIn: boolean } | null> = {};
+jest.mock("@/agentMode/session/useBackendAuthState", () => ({
+  useBackendAuthState: jest.fn((descriptor: { id: string }) => ({
+    status: mockAuthStatuses[descriptor.id] ?? null,
+  })),
+}));
+
 jest.mock("@/logger", () => ({ logError: jest.fn() }));
 
 jest.mock("./useBackendDescriptor", () => ({
@@ -19,6 +26,7 @@ jest.mock("@/agentMode/backends/registry", () => {
   const make = (id: string, displayName: string) => ({
     id,
     displayName,
+    auth: id === "opencode" ? undefined : {},
     setupDescription: `${displayName} description`,
     openInstallUI,
   });
@@ -61,6 +69,7 @@ function render(
 describe("useAgentSelect", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockAuthStatuses = { claude: { signedIn: true }, codex: { signedIn: true } };
     mockSessionDescriptor.mockReturnValue(backendRegistry.opencode);
   });
 
@@ -136,6 +145,47 @@ describe("useAgentSelect", () => {
       expect(openInstallUI).not.toHaveBeenCalled();
       expect(manager.setDefaultBackend).not.toHaveBeenCalled();
       expect(manager.getOrCreateActiveSession).not.toHaveBeenCalled();
+    });
+
+    it("configures a signed-out choice and starts an authenticated alternative (https://github.com/Brevilabs/obsidian-copilot-private/issues/532)", () => {
+      mockSessionDescriptor.mockReturnValue(backendRegistry.claude);
+      mockAuthStatuses.claude = { signedIn: false };
+      mockAuthStatuses.codex = null;
+      const manager = makeManager();
+      const { result, rerender } = render(
+        {
+          claude: { kind: "ready", source: "custom" },
+          codex: { kind: "ready", source: "managed" },
+        },
+        manager
+      );
+      expect(result.current.cta).toEqual({
+        label: "Configure",
+        note: "Claude not signed in",
+        action: "configure",
+      });
+      act(() => result.current.runCta());
+      expect(openInstallUI).toHaveBeenCalledWith(plugin);
+      expect(manager.getOrCreateActiveSession).not.toHaveBeenCalled();
+      act(() => result.current.select("codex"));
+      expect(result.current.cta.action).toBe("wait");
+      act(() => result.current.runCta());
+      expect(manager.getOrCreateActiveSession).not.toHaveBeenCalled();
+      mockAuthStatuses.codex = { signedIn: true };
+      rerender();
+      expect(result.current.cta.action).toBe("start");
+      act(() => result.current.runCta());
+      expect(manager.setDefaultBackend).toHaveBeenCalledWith("codex");
+      expect(manager.getOrCreateActiveSession).toHaveBeenCalledTimes(1);
+    });
+    it("preserves the binary error over authentication state (https://github.com/Brevilabs/obsidian-copilot-private/issues/532)", () => {
+      mockSessionDescriptor.mockReturnValue(backendRegistry.claude);
+      mockAuthStatuses.claude = { signedIn: false };
+      const { result } = render(
+        { claude: { kind: "error", message: "Invalid binary" } },
+        makeManager()
+      );
+      expect(result.current.cta.note).toBe("Invalid binary");
     });
 
     it("logs a failed session spawn instead of rejecting", async () => {
