@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-Managed Codex and OpenCode runtimes now follow Copilot’s bundled version in the background on plugin load. Existing chats keep running, and failed downloads retain the previous runtime.
+Copilot now downloads its pinned Codex and OpenCode runtimes in the background on plugin load when their managed versions differ. Existing chats keep running, and failed downloads retain the previous runtime.
 
 # v4.0.9 - Use remote Miyo in Copilot
 
