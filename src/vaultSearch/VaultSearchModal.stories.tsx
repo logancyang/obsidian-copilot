@@ -61,6 +61,7 @@ const meta = {
     aiBoostLicensed: true,
     aiBoosting: false,
     aiBoostAttemptCompleted: false,
+    aiBoostUnavailable: false,
     onAiBoostChange: () => undefined,
     onAiBoostNow: () => undefined,
     onOpen: () => undefined,
@@ -141,5 +142,13 @@ export const AiBoostDecisionDemo: StoryObj<VaultSearchModalContentProps> = {
         source: "miyo",
       },
     ],
+  },
+};
+
+export const AiBoostUnavailable: StoryObj<VaultSearchModalContentProps> = {
+  args: {
+    aiBoostEnabled: true,
+    aiBoostAttemptCompleted: true,
+    aiBoostUnavailable: true,
   },
 };

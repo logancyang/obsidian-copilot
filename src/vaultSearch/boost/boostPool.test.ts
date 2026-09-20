@@ -138,6 +138,9 @@ describe("boostPool", () => {
           expect(attributePaths).toContain(`Books/${extension}-${index}.${extension}`);
         }
       }
+      expect(
+        pool.find(({ candidate }) => candidate.path === "Books/epub-7.epub")?.candidate.snippet
+      ).toBe("1007 B · EPUB");
     });
   });
 });

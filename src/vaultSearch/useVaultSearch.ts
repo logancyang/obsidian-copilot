@@ -36,6 +36,7 @@ export interface UseVaultSearchResult {
   searching: boolean;
   boosting: boolean;
   boostAttemptCompleted: boolean;
+  boostUnavailable: boolean;
 }
 
 export function useVaultSearch(options: UseVaultSearchOptions): UseVaultSearchResult {
@@ -45,6 +46,7 @@ export function useVaultSearch(options: UseVaultSearchOptions): UseVaultSearchRe
   const [searching, setSearching] = useState(false);
   const [boosting, setBoosting] = useState(false);
   const [completedBoostKey, setCompletedBoostKey] = useState<string | null>(null);
+  const [unavailableBoostKey, setUnavailableBoostKey] = useState<string | null>(null);
   const [boostRequest, setBoostRequest] = useState(0);
   const requestSequence = useRef(0);
   const boosterSequence = useRef(0);
@@ -158,6 +160,7 @@ export function useVaultSearch(options: UseVaultSearchOptions): UseVaultSearchRe
     const booster = current.booster;
     const trimmedQuery = query.trim();
     setCompletedBoostKey(null);
+    setUnavailableBoostKey(null);
     if (!booster || trimmedQuery.length < 3) {
       if (!booster) setResults(basicResults.current);
       setBoosting(false);
@@ -202,6 +205,10 @@ export function useVaultSearch(options: UseVaultSearchOptions): UseVaultSearchRe
             );
           } catch {
             // A booster is optional enrichment; basic results stay unchanged on failure.
+            // https://github.com/Brevilabs/obsidian-copilot-private/issues/516
+            if (currentSequence === boosterSequence.current) {
+              setUnavailableBoostKey(boostKey);
+            }
           } finally {
             if (currentSequence === boosterSequence.current) {
               setBoosting(false);
@@ -230,6 +237,8 @@ export function useVaultSearch(options: UseVaultSearchOptions): UseVaultSearchRe
     boosting,
     boostAttemptCompleted:
       boosterEnabled && query.trim().length >= 3 && completedBoostKey === boostKey,
+    boostUnavailable:
+      boosterEnabled && query.trim().length >= 3 && unavailableBoostKey === boostKey,
   };
 }
 

@@ -300,6 +300,7 @@ describe("useVaultSearch", () => {
         expect(result.current.results).toBe(before);
         expect(result.current.results.map(({ path }) => path)).toEqual(["Books/Stoicism.epub"]);
         expect(result.current.boostAttemptCompleted).toBe(true);
+        expect(result.current.boostUnavailable).toBe(true);
       }
     );
   });

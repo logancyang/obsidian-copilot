@@ -1,5 +1,6 @@
 import type { FuzzySearch } from "@/vaultSearch/candidates";
 import type { SearchCandidate, SearchFile } from "@/vaultSearch/types";
+import { formatBytes } from "@/utils/formatBytes";
 
 export const BOOST_MIYO_COUNT = 100;
 export const BOOST_FILENAME_COUNT = 20;
@@ -39,7 +40,7 @@ function candidateFromFile(
       source === "filename"
         ? "Filename match"
         : source === "metadata"
-          ? "File metadata"
+          ? `${formatBytes(file.size)} · ${(file.extension || "file").toUpperCase()}`
           : "Recent file",
     mtime: file.mtime,
     score: null,

@@ -1,4 +1,5 @@
 import { BrevilabsApiError } from "@/LLMProviders/brevilabsClient";
+import { logWarn } from "@/logger";
 import {
   JEV_BATCH_SIZE,
   JEV_MAX_IN_FLIGHT,
@@ -6,6 +7,8 @@ import {
   JevSearchBooster,
 } from "@/vaultSearch/boost/jevBooster";
 import type { SearchCandidate, SearchFile } from "@/vaultSearch/types";
+
+jest.mock("@/logger", () => ({ logInfo: jest.fn(), logWarn: jest.fn() }));
 
 const issue = "https://github.com/Brevilabs/obsidian-copilot-private/issues/516";
 
@@ -54,7 +57,10 @@ function booster(broca: jest.Mock) {
 }
 
 describe("jevBooster", () => {
-  beforeEach(() => jest.useFakeTimers());
+  beforeEach(() => {
+    jest.useFakeTimers();
+    jest.clearAllMocks();
+  });
   afterEach(() => jest.useRealTimers());
 
   describe("JevSearchBooster", () => {
@@ -78,23 +84,32 @@ describe("jevBooster", () => {
       });
 
       it.each([429, 500])(
-        `silently leaves an HTTP %i batch unjudged so basic results remain (${issue})`,
+        `reports an unavailable boost and logs HTTP %i when every batch rejects (${issue})`,
         async (status) => {
           const instance = booster(
             jest.fn().mockRejectedValue(new BrevilabsApiError("failed", status))
           );
 
-          await expect(instance.score("paper", candidates)).resolves.toEqual(new Map());
+          await expect(instance.score("paper", candidates)).rejects.toThrow("AI boost unavailable");
+          expect(logWarn).toHaveBeenCalledWith("[Vault search AI boost batch failed]", {
+            batch: 1,
+            status,
+          });
         }
       );
 
-      it(`leaves a batch unjudged after the 2.5 second client budget (${issue})`, async () => {
+      it(`reports an unavailable boost and logs a timeout after the 2.5 second client budget (${issue})`, async () => {
         const instance = booster(jest.fn(() => new Promise(() => undefined)));
         const scoring = instance.score("paper", candidates);
+        const rejection = expect(scoring).rejects.toThrow("AI boost unavailable");
 
         await jest.advanceTimersByTimeAsync(JEV_TIMEOUT_MS);
 
-        await expect(scoring).resolves.toEqual(new Map());
+        await rejection;
+        expect(logWarn).toHaveBeenCalledWith("[Vault search AI boost batch failed]", {
+          batch: 1,
+          status: "timed out",
+        });
       });
 
       it(`judges 30-question batches in parallel and keeps successful batches when one fails (${issue})`, async () => {
@@ -154,6 +169,10 @@ describe("jevBooster", () => {
             ["Inbox/Paper 60.pdf", 0.72],
           ])
         );
+        expect(logWarn).toHaveBeenCalledWith("[Vault search AI boost batch failed]", {
+          batch: 2,
+          status: 429,
+        });
       });
     });
   });

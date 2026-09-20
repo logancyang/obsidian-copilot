@@ -7,9 +7,6 @@ import type { SearchFile } from "@/vaultSearch/types";
  */
 export const SEND_MIYO_CONTENT_TO_JEV = true;
 export const MAX_MIYO_CONTENT_CHARS = 600;
-/** Demo switch: disclose the checked-type vault inventory so Jev can answer comparisons. */
-export const SEND_VAULT_FILE_LIST_TO_JEV = true;
-export const MAX_JEV_FILE_LIST_FILES = 2_000;
 
 interface JevFileQuestion {
   name: string;
@@ -42,8 +39,6 @@ interface JevSearchState {
   now: string;
   vault: string;
   file_type_counts: Record<string, number>;
-  file_inventory?: string;
-  file_inventory_omitted?: true;
 }
 
 interface FileRanks {
@@ -131,10 +126,6 @@ function fileRanks(files: SearchFile[]): Map<string, FileRanks> {
   return result;
 }
 
-function inventoryCell(value: string): string {
-  return value.replace(/[\t\r\n]+/g, " ");
-}
-
 function buildState(query: string, vault: string, files: SearchFile[], now: Date): JevSearchState {
   const weekday = now.toLocaleDateString("en-US", { weekday: "long" });
   const fileTypeCounts: Record<string, number> = {};
@@ -142,25 +133,12 @@ function buildState(query: string, vault: string, files: SearchFile[], now: Date
     const type = fileType(file);
     fileTypeCounts[type] = (fileTypeCounts[type] ?? 0) + 1;
   }
-  const state: JevSearchState = {
+  return {
     query,
     now: `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${weekday} ${pad(now.getHours())}:${pad(now.getMinutes())}, local time`,
     vault,
     file_type_counts: fileTypeCounts,
   };
-  if (!SEND_VAULT_FILE_LIST_TO_JEV) return state;
-  if (files.length > MAX_JEV_FILE_LIST_FILES) {
-    state.file_inventory_omitted = true;
-    return state;
-  }
-  const rows = [...files]
-    .sort((left, right) => left.path.localeCompare(right.path))
-    .map(
-      (file) =>
-        `${inventoryCell(file.path)}\t${fileType(file)}\t${file.size}\t${absoluteLocalDate(file.ctime)}\t${absoluteLocalDate(file.mtime)}`
-    );
-  state.file_inventory = ["path\ttype\tsize_bytes\tcreated\tmodified", ...rows].join("\n");
-  return state;
 }
 
 /** Build one Jev noul question per candidate, with bounded Miyo content when available. */
@@ -205,7 +183,7 @@ export function buildJevRequest(
         },
       },
       criteria: {
-        true: "The file satisfies what the query asks for. Use the vault inventory and peer ranks for comparative or metadata requests. Only when the query asks about a decision, require the requested decision and whether it is current or supersedes another decision",
+        true: "The file satisfies what the query asks for. Use the peer ranks for comparative or metadata requests. Only when the query asks about a decision, require the requested decision and whether it is current or supersedes another decision",
         false:
           "The file does not satisfy one or more things the query asks for, or is only topically related. When the query asks about a decision, a different or superseded decision is false",
       },

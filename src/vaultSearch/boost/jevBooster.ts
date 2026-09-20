@@ -1,5 +1,5 @@
-import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
-import { logInfo } from "@/logger";
+import { BrevilabsApiError, BrevilabsClient } from "@/LLMProviders/brevilabsClient";
+import { logInfo, logWarn } from "@/logger";
 import { getSettings } from "@/settings/model";
 import { buildBoostPool, type BoostPoolCandidate } from "@/vaultSearch/boost/boostPool";
 import {
@@ -79,8 +79,16 @@ export class JevSearchBooster implements SearchBooster {
     const settled = await settledPromise;
     if (sequence !== this.sequence) throw new Error("AI boost superseded by a newer query");
     const probabilities = new Map<string, number>();
+    let fulfilledBatchCount = 0;
     settled.forEach((result, index) => {
-      if (result.status !== "fulfilled") return;
+      if (result.status !== "fulfilled") {
+        logWarn("[Vault search AI boost batch failed]", {
+          batch: index + 1,
+          status: batchFailureStatus(result.reason),
+        });
+        return;
+      }
+      fulfilledBatchCount += 1;
       for (const [path, probability] of parseJevProbabilities(
         transports[index].batch,
         result.value
@@ -88,6 +96,9 @@ export class JevSearchBooster implements SearchBooster {
         probabilities.set(path, probability);
       }
     });
+    // A fully failed boost must not make basic search scores look like low Jev confidence.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/516
+    if (fulfilledBatchCount === 0) throw new Error("AI boost unavailable");
     this.rememberDetails(pool, probabilities);
     const sourceSizes = Object.fromEntries(
       ["miyo", "filename", "attributes", "created", "modified"].map((source) => [
@@ -177,6 +188,12 @@ export class JevSearchBooster implements SearchBooster {
         }
       });
   }
+}
+
+function batchFailureStatus(reason: unknown): number | string {
+  if (reason instanceof BrevilabsApiError) return reason.status;
+  if (reason instanceof Error && reason.message === "AI boost timed out") return "timed out";
+  return reason instanceof Error ? reason.message : String(reason);
 }
 
 function chunk<T>(items: readonly T[], size: number): T[][] {

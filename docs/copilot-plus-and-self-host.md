@@ -55,7 +55,7 @@ Plus includes everything in Lite with a higher hosted-model allowance. It also u
 - Built-in **YouTube and X capture Skills**.
 - **OpenArtifacts publishing** for supported outputs.
 - **Tag suggestions** that rank tags already used elsewhere in your vault.
-- **AI boost** in Open Copilot search, which re-ranks a bounded result pool after you turn it on.
+- **AI boost** in Open Copilot search, which re-ranks a bounded result pool and is on by default for licensed users.
 
 Plus is for people who want Copilot to provide both the model access and the research services. It does not include Self-Host Mode.
 
@@ -96,7 +96,7 @@ The selected model is only one possible route. A feature may call another servic
 - In **Quick Chat**, **Miyo document processing** uses the connected Miyo service. A configured remote Miyo server processes the document there rather than on this computer.
 - Saved **project context** that needs web, YouTube, or binary-file conversion can use Copilot's hosted project service. The Miyo Document Processor choice does not change that project route.
 - **Tag suggestions** send the active note's title, file path, folder and times, tags, aliases, other frontmatter properties, headings, an excerpt, and linked-note titles and tag counts, plus candidate tags' names, use counts, dates, relationship counts, and up to four example note paths with created dates, to Brevilabs when you run the command or, with **Suggest tags when I click into the tags property** on, click into that property. Click-triggered rankings are cached in memory for ten minutes.
-- **AI boost** in Open Copilot search sends the query, local time, vault name, and up to 40 candidate files' names, folders, types, dates, sizes, tags, Miyo scores and ranks, and result snippets to Brevilabs. It is off by default and sends nothing until a licensed user turns it on in the search modal.
+- **AI boost** in Open Copilot search sends the query, local time, vault name, and up to 150 candidate files' names, folders, types, dates, sizes, tags, Miyo scores and ranks to Brevilabs. Miyo-sourced candidates also include up to 600 characters from their best matching plain-text excerpt. It is on by default for licensed users and can be turned off in the search modal.
 - An agent can read a local note and include relevant text in the prompt sent to the selected model. Opening Agent Chat alone does not upload the whole vault.
 
 For a workflow that does not send task content to Brevilabs, use direct Markdown context, local tools or local Miyo, and a local model. Disable Copilot's cloud-backed Skills for every agent you use. Do not add web pages, YouTube links, or binary files as saved project context when their hosted conversion is outside your intended boundary.

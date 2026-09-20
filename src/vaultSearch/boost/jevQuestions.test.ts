@@ -1,8 +1,6 @@
 import {
-  MAX_JEV_FILE_LIST_FILES,
   MAX_MIYO_CONTENT_CHARS,
   SEND_MIYO_CONTENT_TO_JEV,
-  SEND_VAULT_FILE_LIST_TO_JEV,
   buildJevRequest,
   parseJevProbabilities,
 } from "@/vaultSearch/boost/jevQuestions";
@@ -50,7 +48,6 @@ describe("jevQuestions", () => {
       const file = request.questions.c0.instructions.file;
 
       expect(SEND_MIYO_CONTENT_TO_JEV).toBe(true);
-      expect(SEND_VAULT_FILE_LIST_TO_JEV).toBe(true);
       expect(request.state).toMatchObject({
         query: "the pdf i got yesterday",
         vault: "Main",
@@ -69,7 +66,6 @@ describe("jevQuestions", () => {
       expect(file.size_rank).toBe("1 of 1 pdf files (largest first)");
       expect(file.created_rank).toBe("1 of 1 pdf files (newest first)");
       expect(file.modified_rank).toBe("1 of 1 pdf files (newest first)");
-      expect(request.state.file_inventory).toContain("Inbox/Papers/Attention.pdf");
     });
 
     it(`keeps filename and recency candidates metadata-only (${issue})`, () => {
@@ -148,42 +144,7 @@ describe("jevQuestions", () => {
       });
       expect(question.criteria.true).toContain("query asks about a decision");
       expect(question.criteria.false).not.toContain("records a superseded decision");
-      expect(request.state.file_inventory).toContain("Books/Middle.epub");
       expect(request.state.file_type_counts).toEqual({ epub: 3 });
-    });
-
-    it(`omits the whole-vault list above the cap but keeps per-type counts and ranks (${issue})`, () => {
-      const files = Array.from({ length: MAX_JEV_FILE_LIST_FILES + 1 }, (_, index) => ({
-        ...candidate.file,
-        path: `Notes/${index}.md`,
-        name: `${index}.md`,
-        extension: "md",
-        size: index,
-      }));
-      const ranked: BoostPoolCandidate = {
-        ...candidate,
-        file: files[MAX_JEV_FILE_LIST_FILES],
-        candidate: {
-          ...candidate.candidate,
-          path: files[MAX_JEV_FILE_LIST_FILES].path,
-          extension: "md",
-        },
-      };
-
-      const request = buildJevRequest(
-        "largest note",
-        "Main",
-        [ranked],
-        files,
-        new Date(2026, 8, 18, 14, 32)
-      );
-
-      expect(request.state.file_inventory).toBeUndefined();
-      expect(request.state.file_inventory_omitted).toBe(true);
-      expect(request.state.file_type_counts).toEqual({ md: MAX_JEV_FILE_LIST_FILES + 1 });
-      expect(request.questions.c0.instructions.file.size_rank).toBe(
-        `1 of ${MAX_JEV_FILE_LIST_FILES + 1} md files (largest first)`
-      );
     });
   });
 

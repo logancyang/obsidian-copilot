@@ -56,6 +56,7 @@ function props(
     aiBoostLicensed: true,
     aiBoosting: false,
     aiBoostAttemptCompleted: false,
+    aiBoostUnavailable: false,
     onAiBoostChange: jest.fn(),
     onAiBoostNow: jest.fn(),
     onOpen: jest.fn(),
@@ -289,6 +290,29 @@ describe("VaultSearchModal", () => {
 
       expect(screen.getByText("No strong match")).toBeTruthy();
       expect(screen.queryByText("Less likely")).toBeNull();
+    });
+
+    it(`keeps Miyo order without confidence banners when every AI boost batch fails (${"https://github.com/Brevilabs/obsidian-copilot-private/issues/516"})`, () => {
+      render(
+        <VaultSearchModalContent
+          {...props({
+            aiBoostEnabled: true,
+            aiBoostAttemptCompleted: true,
+            aiBoostUnavailable: true,
+            results: [
+              { ...results[0], score: 0.75 },
+              { ...results[1], score: 0.62 },
+            ],
+          })}
+        />
+      );
+
+      expect(screen.getByText("AI boost unavailable")).toBeTruthy();
+      expect(screen.queryByText("No strong match")).toBeNull();
+      expect(screen.queryByText("Less likely")).toBeNull();
+      expect(
+        screen.getAllByRole("option").map((row) => row.querySelector(".tw-text-sm")?.textContent)
+      ).toEqual(["Stoicism", "Attention"]);
     });
 
     it(`uses Enter to run a pending AI boost immediately, then opens the boosted result (${"https://github.com/Brevilabs/obsidian-copilot-private/issues/516"})`, () => {

@@ -8,9 +8,11 @@ Miyo is a local-first knowledge service built for more than one plugin. It can s
 
 Run **Open Copilot search** from Obsidian's command palette, or assign it a hotkey under **Settings → Hotkeys**. Type what you remember about a file to search its name and, when Miyo is connected, its indexed content. Results can include Markdown notes, PDFs, EPUBs, HTML, and any other file types present in the vault.
 
-Use the file-type checkboxes to narrow the list. Copilot remembers unchecked types the next time you open the search. Press **Up** or **Down** to choose a result, **Enter** to open it, **Cmd+Enter** on macOS or **Ctrl+Enter** elsewhere to open it in a new tab, and **Escape** to close the search.
+Use the file-type filters to narrow the list. Copilot remembers unchecked types the next time you open the search. Press **Up** or **Down** to choose a result, **Enter** to open it, **Cmd+Enter** on macOS or **Ctrl+Enter** elsewhere to open it in a new tab, and **Escape** to close the search.
 
 When Miyo is disconnected or unavailable, filename matching still works and the search explains that Miyo is needed for content search. Files Obsidian cannot display open in their default desktop application; those files cannot be opened from this search on mobile.
+
+For licensed users, **AI boost** is on by default and reorders a bounded result set using the query, file metadata, and the best matching Miyo excerpts. If that optional ranking service is unavailable, Copilot keeps the Miyo results in their original order and shows **AI boost unavailable**.
 
 ## What moved from Copilot V3
 

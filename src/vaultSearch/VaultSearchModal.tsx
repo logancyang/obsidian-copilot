@@ -46,6 +46,7 @@ export interface VaultSearchModalContentProps {
   aiBoostLicensed: boolean;
   aiBoosting: boolean;
   aiBoostAttemptCompleted: boolean;
+  aiBoostUnavailable: boolean;
   onAiBoostChange: (enabled: boolean) => void;
   onAiBoostNow: () => void;
   onOpen: (candidate: SearchCandidate, newTab: boolean) => void;
@@ -171,6 +172,7 @@ export function VaultSearchModalContent({
   aiBoostLicensed,
   aiBoosting,
   aiBoostAttemptCompleted,
+  aiBoostUnavailable,
   onAiBoostChange,
   onAiBoostNow,
   onOpen,
@@ -226,10 +228,11 @@ export function VaultSearchModalContent({
       onOpen(results[selectedIndex], event.metaKey || event.ctrlKey);
     }
   };
+  const hasJevScore = results.some(({ boostScore }) => boostScore !== undefined);
   const hasStrongMatch = results.some(({ boostScore }) => (boostScore ?? -1) >= 0.5);
   // The calibrated boundary should read as confidence, not just a reordered list.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/516
-  const showBoostOutcome = aiBoostEnabled && aiBoostAttemptCompleted;
+  const showBoostOutcome = aiBoostEnabled && hasJevScore;
   let renderedLessLikely = false;
 
   return (
@@ -284,6 +287,9 @@ export function VaultSearchModalContent({
         className="tw-min-h-0 tw-flex-1 tw-overflow-y-auto tw-overscroll-contain tw-rounded-lg tw-p-1.5 tw-bg-secondary/30"
         role="listbox"
       >
+        {aiBoostEnabled && aiBoostUnavailable && (
+          <div className="tw-px-2.5 tw-py-1.5 tw-text-xs tw-text-muted">AI boost unavailable</div>
+        )}
         {showBoostOutcome && !hasStrongMatch && (
           <div className="tw-px-2.5 tw-py-1.5 tw-text-xs tw-text-muted">No strong match</div>
         )}
@@ -488,6 +494,7 @@ function VaultSearchModalBody({
       aiBoostLicensed={aiBoostLicensed}
       aiBoosting={search.boosting}
       aiBoostAttemptCompleted={search.boostAttemptCompleted}
+      aiBoostUnavailable={search.boostUnavailable}
       onAiBoostChange={(enabled) => updateSetting("vaultSearchAiBoostEnabled", enabled)}
       onAiBoostNow={search.boostNow}
       onOpen={onOpen}
