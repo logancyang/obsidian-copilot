@@ -33,6 +33,7 @@ import { v4 as uuidv4 } from "uuid";
 import { COMMAND_IDS, COMMAND_ICONS, COMMAND_NAMES, CommandId } from "@/constants";
 import { setSelectedTextContexts } from "@/aiParams";
 import { VaultSearchModal } from "@/vaultSearch/VaultSearchModal";
+import { suggestTagsForCurrentNote } from "@/tagSuggestions/tagSuggestionCommand";
 
 type PublishFile = (file: TFile) => void;
 
@@ -139,6 +140,10 @@ export function registerCommands(plugin: CopilotPlugin, publish: PublishFile) {
 
   addCommand(plugin, COMMAND_IDS.OPEN_RELEVANT_NOTES_VIEW, async () => {
     await plugin.activateRelevantNotesView();
+  });
+
+  addCommand(plugin, COMMAND_IDS.SUGGEST_TAGS, async () => {
+    await suggestTagsForCurrentNote(plugin.app, plugin.tagSuggestionRow);
   });
 
   addCommand(plugin, COMMAND_IDS.NEW_CHAT, async () => {
