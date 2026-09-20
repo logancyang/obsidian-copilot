@@ -11,6 +11,22 @@ language, comment, styling, and code-structure rules.
 - Prefer const assertions and type inference where appropriate
 - Use interface for object shapes, type for unions/aliases
 
+## UUID generation
+
+Use the existing `uuid` dependency for UUID v4 identifiers in plugin code,
+including desktop-only code:
+
+```ts
+import { v4 as uuidv4 } from "uuid";
+
+const id = uuidv4();
+```
+
+Do not introduce direct `crypto.randomUUID()` calls, Node `crypto` imports for
+UUID generation, or new UUID wrappers. One convention reuses the dependency
+already bundled for desktop and mobile. Node crypto remains appropriate for
+other cryptographic operations, such as hashing or random bytes.
+
 ## Import boundaries
 
 ESLint enforces module boundaries in two forms: layer rules

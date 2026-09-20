@@ -1,3 +1,4 @@
+import { v4 as uuidv4 } from "uuid";
 import {
   ManagedBinaryManager,
   type BinarySettings,
@@ -88,9 +89,7 @@ export class CodexBinaryManager extends ManagedBinaryManager<CodexInstallProgres
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/530
     const versionDir = path().join(
       dataDir,
-      preserveExisting
-        ? `${CODEX_BUNDLE_VERSION}-${requireNodeModule<typeof import("node:crypto")>("crypto").randomUUID()}`
-        : CODEX_BUNDLE_VERSION
+      preserveExisting ? `${CODEX_BUNDLE_VERSION}-${uuidv4()}` : CODEX_BUNDLE_VERSION
     );
     const stageDir = path().join(dataDir, `.tmp-${CODEX_ACP_PINNED_VERSION}-${Date.now()}`);
     await fs().promises.mkdir(stageDir, { recursive: true });

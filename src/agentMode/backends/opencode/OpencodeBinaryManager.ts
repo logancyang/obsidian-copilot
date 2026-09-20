@@ -1,3 +1,4 @@
+import { v4 as uuidv4 } from "uuid";
 import { extractArchive } from "@/agentMode/backends/shared/extractArchive";
 import {
   ManagedBinaryManager,
@@ -409,9 +410,7 @@ export class OpencodeBinaryManager extends ManagedBinaryManager<ProgressEvent, I
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/530
     const versionDir = nodePath().join(
       dataDir,
-      opts.preserveExisting
-        ? `${version}-${requireNodeModule<typeof import("node:crypto")>("crypto").randomUUID()}`
-        : version
+      opts.preserveExisting ? `${version}-${uuidv4()}` : version
     );
 
     opts.onProgress?.({ phase: "resolve", message: "Resolving platform asset…" });
