@@ -79,11 +79,19 @@ export class CodexBinaryManager extends ManagedBinaryManager<CodexInstallProgres
   protected async installPipeline({
     signal,
     onProgress,
+    preserveExisting,
   }: ManagedBinaryInstallOptions<CodexInstallProgress> & {
     signal: AbortSignal;
   }): Promise<InstalledBinary> {
     const dataDir = this.getDataDir();
-    const versionDir = path().join(dataDir, CODEX_BUNDLE_VERSION);
+    // A reverted pin may already have a running process; never replace its directory.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/530
+    const versionDir = path().join(
+      dataDir,
+      preserveExisting
+        ? `${CODEX_BUNDLE_VERSION}-${requireNodeModule<typeof import("node:crypto")>("crypto").randomUUID()}`
+        : CODEX_BUNDLE_VERSION
+    );
     const stageDir = path().join(dataDir, `.tmp-${CODEX_ACP_PINNED_VERSION}-${Date.now()}`);
     await fs().promises.mkdir(stageDir, { recursive: true });
     try {
@@ -102,7 +110,7 @@ export class CodexBinaryManager extends ManagedBinaryManager<CodexInstallProgres
       if (signal.aborted) throw new ManagedInstallAbortError();
       await promoteManagedVersion(stageDir, versionDir, "Codex adapter");
       const finalEntry = entryPath(versionDir);
-      updateAgentModeBackendFields("codex", {
+      this.selectInstalledBinary({
         binaryPath: finalEntry,
         binaryVersion: CODEX_BUNDLE_VERSION,
         binarySource: "managed",

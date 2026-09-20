@@ -503,7 +503,7 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
   // Non-blocking — plugin load should not wait on disk reconcile.
   for (const descriptor of listBackendDescriptors()) {
     descriptor
-      .onPluginLoad?.(plugin)
+      .onPluginLoad?.(plugin, () => !manager.getIsStarting() && manager.getSessions().length === 0)
       .catch((e) => logError(`[AgentMode] backend ${descriptor.id} onPluginLoad failed`, e));
   }
 

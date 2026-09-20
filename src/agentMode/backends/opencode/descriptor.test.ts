@@ -1,3 +1,4 @@
+import { OPENCODE_PINNED_VERSION } from "./ui/opencodeVersion";
 import { getOpencodeBinaryManager, OpencodeBackendDescriptor } from "./descriptor";
 import { legacyVaultDataDir } from "./OpencodeBinaryManager";
 import * as fs from "node:fs";
@@ -575,6 +576,25 @@ describe("descriptor", () => {
     });
 
     describe("onPluginLoad()", () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/530 reconciles disk state then checks the pin with the host session guard", async () => {
+        const plugin = vaultPlugin(os.tmpdir());
+        const manager = getOpencodeBinaryManager(plugin);
+        const refresh = jest.spyOn(manager, "refreshInstallState").mockResolvedValue();
+        const automatic = jest.spyOn(manager, "autoUpgrade").mockResolvedValue();
+        const canStart = () => true;
+        try {
+          await OpencodeBackendDescriptor.onPluginLoad?.(plugin, canStart);
+          expect(refresh).toHaveBeenCalledTimes(1);
+          expect(automatic).toHaveBeenCalledWith(
+            OPENCODE_PINNED_VERSION,
+            canStart,
+            expect.any(Function)
+          );
+        } finally {
+          refresh.mockRestore();
+          automatic.mockRestore();
+        }
+      });
       it("rebinds the surviving manager to the loading lifecycle's vault", async () => {
         const emptyVault = await fs.promises.mkdtemp(path.join(os.tmpdir(), "opencode-load-a-"));
         const legacyVault = await vaultWithLegacyInstall("opencode-load-b-", 12);

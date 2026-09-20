@@ -200,3 +200,7 @@ Copilot also includes **research-memo** as an optional theme. For a named theme,
 When an installed agent needs a supported version, select **Configure** in Basic → Agents. Agent Chat offers **Upgrade** if Copilot can upgrade that installation. Both surfaces show the same progress and failures, including upgrades started in Configure. If an upgrade fails, retry in Configure or use **Retry** in Agent Chat. A failed custom-path selection is reported in Configure and does not turn the upgrade action into a path-validation retry.
 
 Image-only messages appear as "Image attachment" in the queue. Sessions with only images use the same fallback title in tabs and Recent Chats until a text or agent-generated title is available.
+
+### Managed runtime updates
+
+When Copilot loads with no open agent session, managed Codex and OpenCode runtimes update to the version shipped with Copilot. Existing chats keep their current runtime if they start during the download. A failed download leaves the previous supported runtime available and retries on a later load after 24 hours. Configure lets you retry immediately or select your own binary, which Copilot does not update automatically.

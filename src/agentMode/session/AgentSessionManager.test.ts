@@ -3106,21 +3106,52 @@ describe("AgentSessionManager.onInstallStateChanged", () => {
     expect(preloader.preload).not.toHaveBeenCalled();
   });
 
-  it("restarts a live backend against the new binary", async () => {
-    const { mgr, preloader } = buildInstallStateManager({
-      installState: { kind: "ready", source: "custom" },
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/530 preserves a session whose process is still starting when the binary pointer changes", async () => {
+    const { mgr } = buildInstallStateManager({
+      installState: { kind: "ready", source: "managed" },
     });
-    await mgr.createSession();
+    let finishStart!: () => void;
+    const starting = new Promise<void>((resolve) => {
+      finishStart = resolve;
+    });
+    let entered!: () => void;
+    const booting = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    mockBackendStart.mockImplementationOnce(async () => {
+      entered();
+      await starting;
+      return undefined;
+    });
+    const created = mgr.createSession();
+    await booting;
+    const publication = mgr.onInstallStateChanged("opencode");
+    finishStart();
+    const session = await created;
+    await publication;
+    expect(mgr.getActiveSession()).toBe(session);
+    expect(mockBackendShutdown).not.toHaveBeenCalled();
+    expect(mgr.hasHeldConfigChange("opencode")).toBe(true);
+  });
+
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/530 preserves a session started during a background download when its pointer is published", async () => {
+    const { mgr, preloader } = buildInstallStateManager({
+      installState: { kind: "ready", source: "managed" },
+    });
+    let finishDownload!: () => void;
+    const downloaded = new Promise<void>((resolve) => {
+      finishDownload = resolve;
+    });
+    const publication = downloaded.then(() => mgr.onInstallStateChanged("opencode"));
+    const session = await mgr.createSession();
     mockBackendShutdown.mockClear();
     preloader.preload.mockClear();
-
-    await mgr.onInstallStateChanged("opencode");
-
-    // The old proc is torn down and the backend re-probed: a live session
-    // mirrors catalog state but not the derived effort catalog, so the restart
-    // re-probes (the replacement then adopts that warm proc).
-    expect(mockBackendShutdown).toHaveBeenCalled();
-    expect(preloader.preload).toHaveBeenCalledWith("opencode");
+    finishDownload();
+    await publication;
+    expect(mgr.getActiveSession()).toBe(session);
+    expect(mockBackendShutdown).not.toHaveBeenCalled();
+    expect(preloader.preload).not.toHaveBeenCalled();
+    expect(mgr.hasHeldConfigChange("opencode")).toBe(true);
   });
 
   it("tears down and drops the warm probe when the binary is no longer available", async () => {

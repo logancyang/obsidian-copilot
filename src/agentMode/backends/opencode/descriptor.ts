@@ -1,3 +1,5 @@
+import { Notice } from "obsidian";
+import { OPENCODE_PINNED_VERSION } from "./ui/opencodeVersion";
 import { resolveEffort } from "@/lib/model-effort";
 import { OpencodeInstallModal } from "@/agentMode/backends/opencode/OpencodeInstallModal";
 import OpencodeLogo from "@/agentMode/backends/opencode/logo.svg";
@@ -339,7 +341,7 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
 
   SettingsPanel: OpencodeSettingsPanel,
 
-  async onPluginLoad(plugin: CopilotPlugin): Promise<void> {
+  async onPluginLoad(plugin: CopilotPlugin, canAutoUpgrade): Promise<void> {
     const manager = getOpencodeBinaryManager(plugin);
     // The sole rebind point. Every other caller reaches the manager from a
     // surface that can outlive its lifecycle — a settings tree still holding
@@ -353,6 +355,10 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
     // over — and here it stops a failure from one vault greeting the next.
     manager.forgetSettledError();
     await manager.refreshInstallState();
+    if (canAutoUpgrade)
+      await manager.autoUpgrade(OPENCODE_PINNED_VERSION, canAutoUpgrade, (message) => {
+        new Notice(message);
+      });
   },
 
   getProbeSessionId(settings: CopilotSettings): string | undefined {

@@ -120,6 +120,17 @@ describe("CodexBinaryManager", () => {
         expect(manager.getActionState()).toEqual({ kind: "idle" });
         unsubscribe();
       });
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/530 installs into a fresh directory without modifying a previously published reverted pin", async () => {
+        const manager = new CodexBinaryManager();
+        const previous = await manager.install();
+        fs.writeFileSync(previous.path, "running process executable");
+        const next = await manager.install({ preserveExisting: true });
+        expect(next.version).toBe(previous.version);
+        expect(next.path).not.toBe(previous.path);
+        expect(fs.readFileSync(previous.path, "utf8")).toBe("running process executable");
+        expect(fs.readFileSync(next.path, "utf8")).toBe("native");
+        expect(getSettings().agentMode.backends?.codex?.binaryPath).toBe(next.path);
+      });
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 rejects a wrong adapter version or missing bundled runtime before selecting files", async () => {
         const manager = new CodexBinaryManager();
         const before = getSettings().agentMode.backends?.codex;

@@ -2413,7 +2413,9 @@ export class AgentSessionManager {
     const inflight = this.starting.get(backendId);
     if (inflight) await inflight.catch(() => undefined);
     if (this.disposed) return;
-    if (!this.hasSessionOn(backendId)) {
+    // Resume can still be negotiating its session after its process has started.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/530
+    if (!this.hasSessionOn(backendId) && this.pendingCreates === 0) {
       await this.restartBackend(backendId, reason);
       return;
     }
@@ -2469,8 +2471,8 @@ export class AgentSessionManager {
    * a burst of edits folds into one re-probe:
    *   - now uninstalled → tear down any live proc and drop the warm probe so
    *     the picker stops offering a backend that can no longer spawn;
-   *   - installed with a live/warm process → restart/refresh it against the
-   *     new binary;
+   *   - installed with an open/starting session → retain its process and hold a reload;
+   *   - installed with only a warm process → refresh it against the new binary;
    *   - installed but never probed (freshly installed) → kick a first preload
    *     (`restartBackend` returns `false` here, since nothing is warm yet).
    *
@@ -2500,6 +2502,15 @@ export class AgentSessionManager {
       if (!installState || installState.kind === "absent") {
         if (this.preloadStatus.delete(backendId)) this.notify();
       }
+      return;
+    }
+    // A session can start while an automatic download is in flight. Keep its process
+    // and binary intact; the next spawn reads the published pointer.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/530
+    const inflight = this.starting.get(backendId);
+    if (inflight) await inflight.catch(() => undefined);
+    if (this.hasSessionOn(backendId) || this.pendingCreates > 0) {
+      await this.noteSpawnConfigChanged(backendId, "binary path changed");
       return;
     }
     const refreshed = await this.restartBackend(backendId, "binary path changed");

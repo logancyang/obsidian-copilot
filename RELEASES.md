@@ -1,5 +1,9 @@
 # Release Notes
 
+## Unreleased
+
+Managed Codex and OpenCode runtimes now follow Copilot’s bundled version in the background on plugin load. Existing chats keep running, and failed downloads retain the previous runtime.
+
 # v4.0.9 - Use remote Miyo in Copilot
 
 ![Latest Miyo settings showing the connected Local server, Remote server setup, and Semantic search for agents](https://raw.githubusercontent.com/logancyang/obsidian-copilot/5a7041a3268eef309d4763147ac7d472efeb0e82/release-media/4.0.9/miyo-dark-atom.png)

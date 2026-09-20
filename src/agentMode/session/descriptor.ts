@@ -298,7 +298,7 @@ export interface BackendDescriptor {
   SettingsPanel?: React.FC<{ plugin: CopilotPlugin; app: App }>;
 
   /** Optional: reconcile install state on plugin load (e.g. clear stale managed install). */
-  onPluginLoad?(plugin: CopilotPlugin): Promise<void>;
+  onPluginLoad?(plugin: CopilotPlugin, canAutoUpgrade?: () => boolean): Promise<void>;
 
   /**
    * Wire-format codec for this backend's model ids. The single point of
