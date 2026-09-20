@@ -44,7 +44,7 @@ const meta = {
     fileTypes: [
       { id: "md", label: "md", extensions: ["md"], count: 4210, checked: true },
       { id: "pdf", label: "pdf", extensions: ["pdf"], count: 312, checked: true },
-      { id: "epub", label: "epub", extensions: ["epub"], count: 12, checked: true },
+      { id: "epub", label: "epub", extensions: ["epub"], count: 12, checked: false },
       {
         id: "other",
         label: "Other",

@@ -2,6 +2,7 @@ import { RelevanceMeter } from "@/components/chat-components/ui/RelevanceMeter";
 import { useRelevantNoteRowTransitions } from "@/components/chat-components/ui/useRelevantNoteRowTransitions";
 import { ReactModal } from "@/components/modals/ReactModal";
 import { Input } from "@/components/ui/input";
+import { FilterChip } from "@/components/ui/filter-chip";
 import { SettingSwitch } from "@/components/ui/setting-switch";
 import { useReducedMotion } from "@/hooks/useReducedMotion";
 import { cn } from "@/lib/utils";
@@ -255,21 +256,14 @@ export function VaultSearchModalContent({
           aria-label="File types"
         >
           {fileTypes.map(({ id, label, extensions, count, checked }) => (
-            <button
+            <FilterChip
               key={id}
-              type="button"
-              aria-pressed={checked}
+              pressed={checked}
+              count={count}
               onClick={() => onTypeChange(extensions, !checked)}
-              className={cn(
-                "tw-m-0 tw-flex tw-h-7 tw-shrink-0 tw-items-center tw-gap-1 tw-whitespace-nowrap tw-rounded-full tw-border tw-border-solid tw-border-border tw-px-2.5 tw-py-0 tw-text-xs tw-shadow-none tw-transition-colors",
-                checked
-                  ? "tw-bg-modifier-hover tw-text-normal"
-                  : "tw-bg-transparent tw-text-faint hover:tw-bg-modifier-hover"
-              )}
             >
-              <span>{label}</span>
-              <span className="tw-tabular-nums tw-text-faint">{count.toLocaleString()}</span>
-            </button>
+              {label}
+            </FilterChip>
           ))}
         </div>
         <div className="tw-flex tw-shrink-0 tw-items-center tw-gap-2 tw-border-0 tw-border-l tw-border-solid tw-border-border tw-pl-3 tw-text-xs tw-text-muted">

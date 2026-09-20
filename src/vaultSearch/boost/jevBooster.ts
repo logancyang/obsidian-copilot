@@ -54,11 +54,16 @@ export class JevSearchBooster implements SearchBooster {
     const pool = this.pool(query, candidates, this.options.selectedTypes);
     if (!pool.length) return new Map();
     const startedAt = Date.now();
+    const now = this.now();
+    const files = this.filesForTypes(this.options.selectedTypes);
     const batches = chunk(pool, JEV_BATCH_SIZE).slice(0, JEV_MAX_IN_FLIGHT);
     const transports = batches.map((batch) => {
-      const request = buildJevRequest(query, this.options.vaultName, batch, this.now());
+      const request = buildJevRequest(query, this.options.vaultName, batch, files, now);
       return {
         batch,
+        estimatedInputTokens: Math.ceil(
+          JSON.stringify({ state: request.state, questions: request.questions }).length / 4
+        ),
         transport: this.options.client.broca(request.state, request.questions),
       };
     });
@@ -85,7 +90,7 @@ export class JevSearchBooster implements SearchBooster {
     });
     this.rememberDetails(pool, probabilities);
     const sourceSizes = Object.fromEntries(
-      ["miyo", "filename", "created", "modified"].map((source) => [
+      ["miyo", "filename", "attributes", "created", "modified"].map((source) => [
         source,
         pool.filter(({ sources }) => sources.includes(source as never)).length,
       ])
@@ -95,6 +100,13 @@ export class JevSearchBooster implements SearchBooster {
       ...(getSettings().debug ? { query } : {}),
       poolSize: pool.length,
       sourceSizes,
+      estimatedInputTokensPerRequest: transports.map(
+        ({ estimatedInputTokens }) => estimatedInputTokens
+      ),
+      estimatedInputTokensPerSearch: transports.reduce(
+        (total, { estimatedInputTokens }) => total + estimatedInputTokens,
+        0
+      ),
       probabilities: Object.fromEntries(probabilities),
       jevLatencyMs: Date.now() - startedAt,
     });
@@ -121,6 +133,10 @@ export class JevSearchBooster implements SearchBooster {
 
   private now(): Date {
     return this.options.now?.() ?? new Date();
+  }
+
+  private filesForTypes(selectedTypes: ReadonlySet<string>): SearchFile[] {
+    return this.options.files.filter((file) => selectedTypes.has(file.extension));
   }
 
   private withTimeout<T>(request: Promise<T>): Promise<T> {

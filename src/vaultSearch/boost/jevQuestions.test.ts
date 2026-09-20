@@ -1,6 +1,8 @@
 import {
+  MAX_JEV_FILE_LIST_FILES,
   MAX_MIYO_CONTENT_CHARS,
   SEND_MIYO_CONTENT_TO_JEV,
+  SEND_VAULT_FILE_LIST_TO_JEV,
   buildJevRequest,
   parseJevProbabilities,
 } from "@/vaultSearch/boost/jevQuestions";
@@ -42,11 +44,13 @@ describe("jevQuestions", () => {
         "the pdf i got yesterday",
         "Main",
         [candidate],
+        [candidate.file],
         new Date(2026, 8, 18, 14, 32)
       );
       const file = request.questions.c0.instructions.file;
 
       expect(SEND_MIYO_CONTENT_TO_JEV).toBe(true);
+      expect(SEND_VAULT_FILE_LIST_TO_JEV).toBe(true);
       expect(request.state).toMatchObject({
         query: "the pdf i got yesterday",
         vault: "Main",
@@ -62,6 +66,10 @@ describe("jevQuestions", () => {
       expect(file.content).toHaveLength(MAX_MIYO_CONTENT_CHARS);
       expect(file.created).toContain("yesterday");
       expect(file.modified).toContain("today");
+      expect(file.size_rank).toBe("1 of 1 pdf files (largest first)");
+      expect(file.created_rank).toBe("1 of 1 pdf files (newest first)");
+      expect(file.modified_rank).toBe("1 of 1 pdf files (newest first)");
+      expect(request.state.file_inventory).toContain("Inbox/Papers/Attention.pdf");
     });
 
     it(`keeps filename and recency candidates metadata-only (${issue})`, () => {
@@ -75,12 +83,107 @@ describe("jevQuestions", () => {
         "paper",
         "Main",
         [localCandidate],
+        [localCandidate.file],
         new Date(2026, 8, 18, 14, 32)
       );
 
       expect(request.questions.c0.instructions.file.content).toBeUndefined();
       expect(request.questions.c0.instructions.file.created).toBeTruthy();
       expect(request.questions.c0.instructions.file.modified).toBeTruthy();
+    });
+
+    it(`adds exact peer ranks and neutral criteria for comparative queries (${issue})`, () => {
+      const epubFiles = [
+        {
+          ...candidate.file,
+          path: "Books/Largest.epub",
+          name: "Largest.epub",
+          extension: "epub",
+          size: 1_400_000,
+          ctime: 10,
+          mtime: 30,
+        },
+        {
+          ...candidate.file,
+          path: "Books/Middle.epub",
+          name: "Middle.epub",
+          extension: "epub",
+          size: 1_200_000,
+          ctime: 20,
+          mtime: 20,
+        },
+        {
+          ...candidate.file,
+          path: "Books/Smallest.epub",
+          name: "Smallest.epub",
+          extension: "epub",
+          size: 10,
+          ctime: 30,
+          mtime: 10,
+        },
+      ];
+      const largest: BoostPoolCandidate = {
+        ...candidate,
+        file: epubFiles[0],
+        candidate: {
+          ...candidate.candidate,
+          path: epubFiles[0].path,
+          extension: "epub",
+        },
+      };
+
+      const request = buildJevRequest(
+        "the largest epub",
+        "Main",
+        [largest],
+        epubFiles,
+        new Date(2026, 8, 18, 14, 32)
+      );
+      const question = request.questions.c0;
+
+      expect(question.instructions.file).toMatchObject({
+        size_rank: "1 of 3 epub files (largest first)",
+        created_rank: "3 of 3 epub files (newest first)",
+        modified_rank: "1 of 3 epub files (newest first)",
+      });
+      expect(question.criteria.true).toContain("query asks about a decision");
+      expect(question.criteria.false).not.toContain("records a superseded decision");
+      expect(request.state.file_inventory).toContain("Books/Middle.epub");
+      expect(request.state.file_type_counts).toEqual({ epub: 3 });
+    });
+
+    it(`omits the whole-vault list above the cap but keeps per-type counts and ranks (${issue})`, () => {
+      const files = Array.from({ length: MAX_JEV_FILE_LIST_FILES + 1 }, (_, index) => ({
+        ...candidate.file,
+        path: `Notes/${index}.md`,
+        name: `${index}.md`,
+        extension: "md",
+        size: index,
+      }));
+      const ranked: BoostPoolCandidate = {
+        ...candidate,
+        file: files[MAX_JEV_FILE_LIST_FILES],
+        candidate: {
+          ...candidate.candidate,
+          path: files[MAX_JEV_FILE_LIST_FILES].path,
+          extension: "md",
+        },
+      };
+
+      const request = buildJevRequest(
+        "largest note",
+        "Main",
+        [ranked],
+        files,
+        new Date(2026, 8, 18, 14, 32)
+      );
+
+      expect(request.state.file_inventory).toBeUndefined();
+      expect(request.state.file_inventory_omitted).toBe(true);
+      expect(request.state.file_type_counts).toEqual({ md: MAX_JEV_FILE_LIST_FILES + 1 });
+      expect(request.questions.c0.instructions.file.size_rank).toBe(
+        `1 of ${MAX_JEV_FILE_LIST_FILES + 1} md files (largest first)`
+      );
     });
   });
 

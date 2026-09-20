@@ -1,4 +1,5 @@
 import {
+  BOOST_ATTRIBUTE_EXTREME_COUNT,
   BOOST_CREATED_COUNT,
   BOOST_FILENAME_COUNT,
   BOOST_MAX_CANDIDATES,
@@ -56,6 +57,7 @@ describe("boostPool", () => {
 
       expect(BOOST_MIYO_COUNT).toBe(100);
       expect(BOOST_FILENAME_COUNT).toBe(20);
+      expect(BOOST_ATTRIBUTE_EXTREME_COUNT).toBe(3);
       expect(BOOST_CREATED_COUNT).toBe(20);
       expect(BOOST_MODIFIED_COUNT).toBe(10);
       expect(BOOST_MAX_CANDIDATES).toBe(150);
@@ -103,6 +105,39 @@ describe("boostPool", () => {
       expect(pool.map(({ candidate }) => candidate.path)).toEqual(["Books/Book.epub"]);
       expect(pool[0].sources).toEqual(expect.arrayContaining(["created", "modified"]));
       expect(pool[0]).toMatchObject({ searchScore: null, searchRank: null });
+    });
+
+    it(`adds size and date extremes for every checked file type (${issue})`, () => {
+      const files = ["epub", "pdf"].flatMap((extension, typeIndex) =>
+        Array.from({ length: 8 }, (_, index) => ({
+          ...file(typeIndex * 10 + index),
+          path: `Books/${extension}-${index}.${extension}`,
+          name: `${extension}-${index}.${extension}`,
+          basename: `${extension}-${index}`,
+          extension,
+          size: 1_000 + index,
+          ctime: 10_000 + index,
+          mtime: 20_000 + index,
+        }))
+      );
+
+      const pool = buildBoostPool({
+        basicCandidates: [],
+        files,
+        selectedTypes: new Set(["epub", "pdf"]),
+        fuzzySearch: () => null,
+      });
+      const attributePaths = new Set(
+        pool
+          .filter(({ sources }) => sources.includes("attributes"))
+          .map(({ candidate }) => candidate.path)
+      );
+
+      for (const extension of ["epub", "pdf"]) {
+        for (const index of [0, 1, 2, 5, 6, 7]) {
+          expect(attributePaths).toContain(`Books/${extension}-${index}.${extension}`);
+        }
+      }
     });
   });
 });
