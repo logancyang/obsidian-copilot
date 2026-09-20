@@ -4,6 +4,8 @@ import {
   buildEvidenceQuestion,
   buildTagSuggestionState,
   collectTagCandidates,
+  frontmatterTags,
+  noteTags,
   packTagSuggestionRequests,
   rankTagSuggestions,
   tagSuggestionErrorNotice,
@@ -62,6 +64,13 @@ function suggestionState(overrides: Partial<TagSuggestionState> = {}): TagSugges
 }
 
 describe("tagSuggestions", () => {
+  it("ignores empty strings when reading a note's tags", () => {
+    const cache = metadata([""], { tags: ["", " ", "#", "book"] });
+
+    expect(frontmatterTags(cache)).toEqual(["book"]);
+    expect(noteTags(cache)).toEqual(["book"]);
+  });
+
   describe("buildTagSuggestionState()", () => {
     it("uses file metadata and cached vault context for a short note whose title contains a date (https://github.com/Brevilabs/obsidian-copilot-private/issues/492)", () => {
       const created = new Date(2026, 8, 18, 14, 30).getTime();
@@ -390,6 +399,8 @@ describe("tagSuggestions", () => {
       ["empty tags", { tags: [] }, { tags: ["suggested"] }],
       ["empty tags property", { tags: null }, { tags: ["suggested"] }],
       ["empty tag property", { tag: null }, { tag: ["suggested"] }],
+      ["empty-string tags", { tags: [""] }, { tags: ["suggested"] }],
+      ["empty-string tag", { tag: [" ", "#"] }, { tag: ["suggested"] }],
       ["populated tags", { tags: ["existing"], owner: "Ada" }, { tags: ["existing", "suggested"] }],
       ["mixed-value tags", { tags: [2024, "book"] }, { tags: [2024, "book", "suggested"] }],
       ["singular tag scalar", { tag: "book" }, { tag: ["book", "suggested"] }],
@@ -434,6 +445,22 @@ describe("tagSuggestions", () => {
       await addTagToFrontmatter(app, file("Active.md"), ["suggested"]);
 
       expect(frontmatter.tags).toEqual(["Suggested"]);
+    });
+
+    it("strips empty strings from an existing list even when no tag changes", async () => {
+      const frontmatter = { tags: ["", " ", "#", 2024, "book"] };
+      const app = {
+        fileManager: {
+          processFrontMatter: jest.fn(
+            async (_file: TFile, update: (value: Record<string, unknown>) => void) =>
+              update(frontmatter)
+          ),
+        },
+      } as unknown as App;
+
+      await addTagToFrontmatter(app, file("Active.md"), []);
+
+      expect(frontmatter.tags).toEqual([2024, "book"]);
     });
 
     it(`adds several tags in one frontmatter write without duplicating existing values (${ISSUE})`, async () => {

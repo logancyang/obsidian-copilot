@@ -178,7 +178,7 @@ describe("TagSuggestionRow", () => {
 
   it(`swaps directly before the native row with native anatomy, frontmatter tags, and two ghosts (${ISSUE})`, () => {
     const ctx = context();
-    ctx.setFrontmatter({ tags: [2024, "existing"] });
+    ctx.setFrontmatter({ tags: [2024, "", "existing"] });
     const row = new TagSuggestionRow(ctx.app);
 
     row.show(ctx.file, suggestions(), jest.fn().mockResolvedValue(true), ctx.view);
@@ -196,6 +196,7 @@ describe("TagSuggestionRow", () => {
       "tags"
     );
     expect(mounted?.querySelector(".multi-select-pill:not(button)")?.textContent).toBe("existing");
+    expect(mounted?.querySelectorAll(".multi-select-pill:not(button)")).toHaveLength(1);
     expect(mounted?.textContent).not.toContain("inline-only");
     expect(suggestionLabels(mounted as HTMLElement)).toEqual(["tag-1", "tag-2"]);
   });

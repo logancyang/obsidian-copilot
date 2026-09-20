@@ -147,6 +147,10 @@ function frontmatterProperties(
   return properties;
 }
 
+function normalizedTag(value: string): string {
+  return value.trim().replace(/^#/, "");
+}
+
 function stringList(value: unknown, splitTags = false): string[] {
   const scalar = typeof value === "string";
   const values = Array.isArray(value) ? value : scalar ? [value] : [];
@@ -154,7 +158,7 @@ function stringList(value: unknown, splitTags = false): string[] {
     .flatMap((item) =>
       typeof item === "string" ? (splitTags && scalar ? item.split(/[\s,]+/) : [item]) : []
     )
-    .map((item) => item.trim().replace(/^#/, ""))
+    .map(normalizedTag)
     .filter(Boolean);
 }
 
@@ -469,9 +473,9 @@ export async function addTagToFrontmatter(
   tagsToAdd: string[],
   tagsToRemove: string[] = []
 ): Promise<void> {
-  const requested = tagsToAdd.map((tag) => tag.trim().replace(/^#/, "")).filter(Boolean);
+  const requested = tagsToAdd.map(normalizedTag).filter(Boolean);
   const removals = new Set(
-    tagsToRemove.map((tag) => tag.trim().replace(/^#/, "").toLowerCase()).filter(Boolean)
+    tagsToRemove.map((tag) => normalizedTag(tag).toLowerCase()).filter(Boolean)
   );
   await app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
     const key = "tags" in frontmatter ? "tags" : "tag" in frontmatter ? "tag" : "tags";
@@ -479,14 +483,15 @@ export async function addTagToFrontmatter(
     const before = stringList(value, true);
     const current = before.filter((tag) => !removals.has(tag.toLowerCase()));
     const preserved = Array.isArray(value)
-      ? value.filter(
-          (item) =>
-            typeof item !== "string" || !removals.has(item.trim().replace(/^#/, "").toLowerCase())
-        )
+      ? value.filter((item) => {
+          if (typeof item !== "string") return true;
+          const normalized = normalizedTag(item);
+          return Boolean(normalized) && !removals.has(normalized.toLowerCase());
+        })
       : undefined;
     const removed = Array.isArray(value)
       ? preserved?.length !== value.length
-      : typeof value === "string" && current.length !== before.length;
+      : typeof value === "string" && (!normalizedTag(value) || current.length !== before.length);
     const seen = new Set(current.map((tag) => tag.toLowerCase()));
     const additions = requested.filter((tag) => {
       const normalized = tag.toLowerCase();
