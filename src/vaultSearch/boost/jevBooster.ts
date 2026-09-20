@@ -3,14 +3,14 @@ import { logInfo, logWarn } from "@/logger";
 import { getSettings } from "@/settings/model";
 import { buildBoostPool, type BoostPoolCandidate } from "@/vaultSearch/boost/boostPool";
 import {
-  buildJevRequest,
+  buildJevRequests,
   parseJevProbabilities,
   type JevNoulAnswer,
 } from "@/vaultSearch/boost/jevQuestions";
 import type { FuzzySearch } from "@/vaultSearch/candidates";
 import type { SearchBooster, SearchCandidate, SearchFile } from "@/vaultSearch/types";
 
-export const JEV_TIMEOUT_MS = 2500;
+export const JEV_TIMEOUT_MS = 5000;
 export const JEV_BATCH_SIZE = 30;
 export const JEV_MAX_IN_FLIGHT = 8;
 
@@ -57,8 +57,9 @@ export class JevSearchBooster implements SearchBooster {
     const now = this.now();
     const files = this.filesForTypes(this.options.selectedTypes);
     const batches = chunk(pool, JEV_BATCH_SIZE).slice(0, JEV_MAX_IN_FLIGHT);
-    const transports = batches.map((batch) => {
-      const request = buildJevRequest(query, this.options.vaultName, batch, files, now);
+    const requests = buildJevRequests(query, this.options.vaultName, batches, files, now);
+    const transports = batches.map((batch, index) => {
+      const request = requests[index];
       return {
         batch,
         estimatedInputTokens: Math.ceil(

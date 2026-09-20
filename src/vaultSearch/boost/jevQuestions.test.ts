@@ -1,7 +1,8 @@
 import {
+  MAX_JEV_STATE_BYTES,
   MAX_MIYO_CONTENT_CHARS,
   SEND_MIYO_CONTENT_TO_JEV,
-  buildJevRequest,
+  buildJevRequests,
   parseJevProbabilities,
 } from "@/vaultSearch/boost/jevQuestions";
 import type { BoostPoolCandidate } from "@/vaultSearch/boost/boostPool";
@@ -35,10 +36,20 @@ const candidate: BoostPoolCandidate = {
   searchRank: null,
 };
 
+function buildRequest(
+  query: string,
+  vault: string,
+  pool: BoostPoolCandidate[],
+  files: BoostPoolCandidate["file"][],
+  now: Date
+) {
+  return buildJevRequests(query, vault, [pool], files, now)[0];
+}
+
 describe("jevQuestions", () => {
-  describe("buildJevRequest()", () => {
+  describe("buildJevRequests()", () => {
     it(`sends local and relative dates plus capped Miyo content behind the demo switch (${issue})`, () => {
-      const request = buildJevRequest(
+      const request = buildRequest(
         "the pdf i got yesterday",
         "Main",
         [candidate],
@@ -75,7 +86,7 @@ describe("jevQuestions", () => {
         sources: ["filename", "created"],
       };
 
-      const request = buildJevRequest(
+      const request = buildRequest(
         "paper",
         "Main",
         [localCandidate],
@@ -128,7 +139,7 @@ describe("jevQuestions", () => {
         },
       };
 
-      const request = buildJevRequest(
+      const request = buildRequest(
         "the largest epub",
         "Main",
         [largest],
@@ -145,6 +156,86 @@ describe("jevQuestions", () => {
       expect(question.criteria.true).toContain("query asks about a decision");
       expect(question.criteria.false).not.toContain("records a superseded decision");
       expect(request.state.file_type_counts).toEqual({ epub: 3 });
+    });
+
+    it(`includes the complete inventory only when the UTF-8 state fits its byte budget (${issue})`, () => {
+      const fittingFile = {
+        ...candidate.file,
+        path: `Notes/${"界".repeat(13_000)}.md`,
+        name: "fits.md",
+        extension: "md",
+      };
+      const oversizedFile = {
+        ...candidate.file,
+        path: `Notes/${"界".repeat(13_500)}.md`,
+        name: "too-large.md",
+        extension: "md",
+      };
+
+      const fitting = buildRequest(
+        "largest note",
+        "Main",
+        [{ ...candidate, file: fittingFile }],
+        [fittingFile],
+        new Date(2026, 8, 18, 14, 32)
+      );
+      const oversized = buildRequest(
+        "largest note",
+        "Main",
+        [{ ...candidate, file: oversizedFile }],
+        [oversizedFile],
+        new Date(2026, 8, 18, 14, 32)
+      );
+
+      expect(fitting.state.file_inventory).toContain(fittingFile.path);
+      expect(
+        new TextEncoder().encode(JSON.stringify(fitting.state)).byteLength
+      ).toBeLessThanOrEqual(MAX_JEV_STATE_BYTES);
+      expect(oversized.state).toMatchObject({
+        file_type_counts: { md: 1 },
+        file_inventory_omitted: true,
+      });
+      expect(oversized.state.file_inventory).toBeUndefined();
+    });
+
+    it(`falls back to counts and exact ranks instead of sending a partial inventory (${issue})`, () => {
+      const files = [
+        { ...candidate.file, path: `Notes/${"a".repeat(22_000)}.md`, name: "first.md" },
+        { ...candidate.file, path: `Notes/${"b".repeat(22_000)}.md`, name: "second.md" },
+      ];
+      const ranked = {
+        ...candidate,
+        file: files[0],
+        candidate: { ...candidate.candidate, path: files[0].path },
+      };
+
+      const request = buildRequest(
+        "largest note",
+        "Main",
+        [ranked],
+        files,
+        new Date(2026, 8, 18, 14, 32)
+      );
+
+      expect(request.state.file_inventory).toBeUndefined();
+      expect(request.state.file_inventory_omitted).toBe(true);
+      expect(request.state.file_type_counts).toEqual({ pdf: 2 });
+      expect(request.questions.c0.instructions.file.size_rank).toBe(
+        "1 of 2 pdf files (largest first)"
+      );
+    });
+
+    it(`reuses one state across every batch in a search (${issue})`, () => {
+      const requests = buildJevRequests(
+        "paper",
+        "Main",
+        [[candidate], [candidate]],
+        [candidate.file],
+        new Date(2026, 8, 18, 14, 32)
+      );
+
+      expect(requests).toHaveLength(2);
+      expect(requests[0].state).toBe(requests[1].state);
     });
   });
 
