@@ -98,8 +98,14 @@ describe("useVaultSearch", () => {
       expect(result.current.results.map(({ path }) => path)).toEqual(["Papers/Attention.pdf"]);
     });
 
-    it(`sends checked extension paths only when at least one type is unchecked (${issue})`, async () => {
-      const searchMiyo = jest.fn().mockResolvedValue([]);
+    it(`over-fetches checked extension paths and keeps 30 verified files when a type is unchecked (${issue})`, async () => {
+      const searchMiyo = jest.fn().mockResolvedValue(
+        Array.from({ length: 50 }, (_, index) => ({
+          id: `result-${index}`,
+          path: index < 10 ? `Books/Stoicism ${index}.epub` : `Papers/Attention ${index - 10}.pdf`,
+          score: 1 - index / 100,
+        }))
+      );
       const { result } = renderHook(() =>
         useVaultSearch(
           options({ selectedTypes: new Set(["pdf"]), searchMiyo, allTypes: ["epub", "pdf"] })
@@ -109,7 +115,19 @@ describe("useVaultSearch", () => {
       act(() => result.current.setQuery("attention"));
       await act(async () => jest.advanceTimersByTime(150));
 
-      expect(searchMiyo).toHaveBeenCalledWith("attention", [".pdf"]);
+      expect(searchMiyo).toHaveBeenCalledWith("attention", 200, [".pdf"]);
+      expect(result.current.results).toHaveLength(30);
+      expect(result.current.results.every(({ extension }) => extension === "pdf")).toBe(true);
+    });
+
+    it(`requests 30 Miyo results without paths when every type is checked (${issue})`, async () => {
+      const searchMiyo = jest.fn().mockResolvedValue([]);
+      const { result } = renderHook(() => useVaultSearch(options({ searchMiyo })));
+
+      act(() => result.current.setQuery("attention"));
+      await act(async () => jest.advanceTimersByTime(150));
+
+      expect(searchMiyo).toHaveBeenCalledWith("attention", 30, undefined);
     });
 
     it(`keeps filename matches and reports guidance when Miyo is disabled (${issue})`, () => {

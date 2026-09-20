@@ -346,13 +346,13 @@ function VaultSearchModalBody({
     });
   }, [aiBoostLicensed, app, files, selectedTypes, settings.vaultSearchAiBoostEnabled, timerWindow]);
   const searchMiyo = useCallback(
-    async (query: string, paths?: string[]) => {
+    async (query: string, limit: number, paths?: string[]) => {
       const baseUrl = await client.resolveBaseUrl(getMiyoCustomUrl(settings) || undefined);
       const response = await client.search(
         baseUrl,
         getMiyoFolderName(app),
         query,
-        30,
+        limit,
         undefined,
         paths
       );

@@ -9,13 +9,16 @@ import {
 import type { SearchBooster, SearchCandidate, SearchFile } from "@/vaultSearch/types";
 import { useEffect, useRef, useState } from "react";
 
+const MIYO_RESULT_LIMIT = 30;
+const FILTERED_MIYO_FETCH_LIMIT = 200;
+
 export interface UseVaultSearchOptions {
   files: SearchFile[];
   recentPaths: string[];
   selectedTypes: ReadonlySet<string>;
   allTypes: readonly string[];
   miyoEnabled: boolean;
-  searchMiyo: (query: string, paths?: string[]) => Promise<MiyoSearchResult[]>;
+  searchMiyo: (query: string, limit: number, paths?: string[]) => Promise<MiyoSearchResult[]>;
   prepareSearch: (query: string) => FuzzySearch;
   mapMiyoPath?: (path: string) => string;
   booster?: SearchBooster;
@@ -105,12 +108,18 @@ export function useVaultSearch(options: UseVaultSearchOptions): UseVaultSearchRe
             ? [...selectedTypes].filter(Boolean).map((extension) => `.${extension}`)
             : undefined;
         try {
-          const response = await current.searchMiyo(trimmedQuery, paths);
+          // Miyo applies path filters after over-fetching, so rare checked types need a wider pool.
+          // https://github.com/Brevilabs/obsidian-copilot-private/issues/515
+          const response = await current.searchMiyo(
+            trimmedQuery,
+            paths ? FILTERED_MIYO_FETCH_LIMIT : MIYO_RESULT_LIMIT,
+            paths
+          );
           if (currentSequence !== requestSequence.current) return;
           const mapped = current.mapMiyoPath
             ? response.map((result) => ({ ...result, path: current.mapMiyoPath!(result.path) }))
             : response;
-          const miyoResults = groupMiyoResults(mapped, selectedTypes);
+          const miyoResults = groupMiyoResults(mapped, selectedTypes).slice(0, MIYO_RESULT_LIMIT);
           const miyoPaths = new Set(miyoResults.map(({ path }) => path));
           applyResults([
             ...miyoResults,
