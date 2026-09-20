@@ -27,11 +27,11 @@ const mockRowShow = jest.fn<
   [
     import("obsidian").TFile,
     RankedTagSuggestion[],
-    (tags: string[]) => Promise<boolean>,
+    (add: string[], remove: string[]) => Promise<boolean>,
     MarkdownView?,
   ]
 >();
-let chooseTags: ((tags: string[]) => Promise<boolean>) | undefined;
+let updateTags: ((add: string[], remove: string[]) => Promise<boolean>) | undefined;
 const suggestionRow = {
   beginRequest: mockBeginRequest,
   isCurrentRequest: mockIsCurrentRequest,
@@ -129,10 +129,11 @@ describe("tagSuggestionCommand", () => {
     beforeEach(() => {
       jest.clearAllMocks();
       latestRequest = 0;
-      chooseTags = undefined;
-      mockRowShow.mockImplementation((_file, _suggestions, onChoose) => {
-        chooseTags = onChoose;
+      updateTags = undefined;
+      mockRowShow.mockImplementation((_file, _suggestions, onUpdate) => {
+        updateTags = onUpdate;
       });
+      mockShowLoading.mockReturnValue(true);
       mockCheckIsPlusUser.mockResolvedValue(true);
       mockIsPlusEnabled.mockReturnValue(true);
       mockHasSession.mockReturnValue(false);
@@ -163,21 +164,32 @@ describe("tagSuggestionCommand", () => {
         { tag: "research", noul: 0.85, rank: 1 },
       ]);
 
-      await expect(chooseTags?.(["research"])).resolves.toBe(true);
+      await expect(updateTags?.(["research"], [])).resolves.toBe(true);
 
       expect(frontmatter.tags).toEqual(["research"]);
       expect(Notice).toHaveBeenCalledWith("Added #research");
     });
 
-    it(`adds several Auto-add tags in one write and reports the count (${ISSUE})`, async () => {
+    it(`adds several tags in one writer call and reports the count (${ISSUE})`, async () => {
       const { app, frontmatter } = createApp();
       await suggestTagsForCurrentNote(app, suggestionRow);
 
-      await expect(chooseTags?.(["research", "planning", "next"])).resolves.toBe(true);
+      await expect(updateTags?.(["research", "planning", "next"], [])).resolves.toBe(true);
 
       expect(app.fileManager.processFrontMatter).toHaveBeenCalledTimes(1);
       expect(frontmatter.tags).toEqual(["research", "planning", "next"]);
       expect(Notice).toHaveBeenCalledWith("Added 3 tags");
+    });
+
+    it(`removes a tag through the same frontmatter writer (${ISSUE})`, async () => {
+      const { app, frontmatter } = createApp();
+      frontmatter.tags = [2024, "research", "keep"];
+      await suggestTagsForCurrentNote(app, suggestionRow);
+
+      await expect(updateTags?.([], ["research"])).resolves.toBe(true);
+
+      expect(app.fileManager.processFrontMatter).toHaveBeenCalledTimes(1);
+      expect(frontmatter.tags).toEqual([2024, "keep"]);
     });
 
     it(`shows the in-row loading placeholder instead of a loading notice (${ISSUE})`, async () => {
@@ -187,10 +199,31 @@ describe("tagSuggestionCommand", () => {
 
       expect(mockShowLoading).toHaveBeenCalledWith(
         app.workspace.getActiveFile(),
-        false,
         app.workspace.getActiveViewOfType(MarkdownView)
       );
       expect(Notice).not.toHaveBeenCalledWith("Suggesting tags…", 0);
+    });
+
+    it(`asks for a tags property when the command cannot mount the row (${ISSUE})`, async () => {
+      mockShowLoading.mockReturnValue(false);
+      const { app } = createApp();
+
+      await suggestTagsForCurrentNote(app, suggestionRow);
+
+      expect(app.vault.cachedRead).not.toHaveBeenCalled();
+      expect(mockBroca).not.toHaveBeenCalled();
+      expect(Notice).toHaveBeenCalledWith("Add a tags property to this note first.");
+    });
+
+    it(`silently restores the native row when quiet mode cannot mount (${ISSUE})`, async () => {
+      mockShowLoading.mockReturnValue(false);
+      const { app } = createApp();
+
+      await suggestTagsForCurrentNote(app, suggestionRow, { quiet: true });
+
+      expect(mockBroca).not.toHaveBeenCalled();
+      expect(Notice).not.toHaveBeenCalled();
+      expect(mockLogInfo).toHaveBeenCalledWith("[Tag suggestions] Could not mount the loading row");
     });
 
     it(`uses a fresh cached ranking in quiet mode without sending a request (${ISSUE})`, async () => {
@@ -319,7 +352,7 @@ describe("tagSuggestionCommand", () => {
       jest.mocked(app.fileManager.processFrontMatter).mockRejectedValue(new Error("write failed"));
       await suggestTagsForCurrentNote(app, suggestionRow);
 
-      await expect(chooseTags?.(["research"])).resolves.toBe(false);
+      await expect(updateTags?.(["research"], [])).resolves.toBe(false);
 
       expect(Notice).toHaveBeenCalledWith("Couldn’t add that tag. Try again.");
     });
@@ -380,7 +413,6 @@ describe("tagSuggestionCommand", () => {
       );
       expect(mockShowLoading).toHaveBeenCalledWith(
         app.workspace.getActiveFile(),
-        false,
         app.workspace.getActiveViewOfType(MarkdownView)
       );
       expect(mockFinishRequest).toHaveBeenCalled();

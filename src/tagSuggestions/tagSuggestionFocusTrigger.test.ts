@@ -38,7 +38,9 @@ function context() {
       }),
     },
   } as unknown as App;
-  const row = {} as TagSuggestionRow;
+  const row = {
+    isNativeFocusSuppressed: jest.fn(() => false),
+  } as unknown as TagSuggestionRow;
   const trigger = new TagSuggestionFocusTrigger(app, row, mockSuggestTags);
   trigger.onload();
   return { app, row, view, activeFile, input, elsewhere, windowListeners };
@@ -72,6 +74,15 @@ describe("tagSuggestionFocusTrigger", () => {
       it(`silently ignores focus when the setting is off (${ISSUE})`, () => {
         mockGetSettings.mockReturnValue({ suggestTagsOnPropertyFocus: false });
         const { input } = context();
+
+        input.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+
+        expect(mockSuggestTags).not.toHaveBeenCalled();
+      });
+
+      it(`does not reopen while focus is handed back to Obsidian (${ISSUE})`, () => {
+        const { row, input } = context();
+        jest.mocked(row.isNativeFocusSuppressed).mockReturnValue(true);
 
         input.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
 

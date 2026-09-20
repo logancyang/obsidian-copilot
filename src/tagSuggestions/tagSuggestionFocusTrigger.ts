@@ -48,9 +48,10 @@ export class TagSuggestionFocusTrigger extends Component {
     const target = event.target;
     if (!target || typeof (target as Element).closest !== "function") return;
     const property = (target as Element).closest<HTMLElement>(
-      '.metadata-property[data-property-key="tags"]'
+      '.metadata-property[data-property-key="tags"], .metadata-property[data-property-key="tag"]'
     );
     if (!property) return;
+    if (this.row.isNativeFocusSuppressed(property)) return;
     const view = this.app.workspace
       .getLeavesOfType("markdown")
       .map((leaf) => leaf.view as MarkdownView)

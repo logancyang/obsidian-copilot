@@ -48,23 +48,30 @@ export async function suggestTagsForCurrentNote(
       activeView.file?.path === file.path
     );
   };
-  const addTags = async (tags: string[]): Promise<boolean> => {
+  const updateTags = async (add: string[], remove: string[]): Promise<boolean> => {
     try {
-      await addTagToFrontmatter(app, file, tags);
-      new Notice(tags.length === 1 ? `Added #${tags[0]}` : `Added ${tags.length} tags`);
+      await addTagToFrontmatter(app, file, add, remove);
+      if (add.length) {
+        new Notice(add.length === 1 ? `Added #${add[0]}` : `Added ${add.length} tags`);
+      }
       return true;
     } catch (error) {
-      logError("Failed to add suggested tags", error);
+      logError("Failed to update suggested tags", error);
       new Notice(
-        tags.length === 1 ? "Couldn’t add that tag. Try again." : "Couldn’t add tags. Try again."
+        add.length === 1
+          ? "Couldn’t add that tag. Try again."
+          : remove.length === 1
+            ? "Couldn’t remove that tag. Try again."
+            : "Couldn’t update tags. Try again."
       );
       return false;
     }
   };
 
   try {
-    if (suggestionRow.showLoading(file, quiet, view) === false) {
+    if (suggestionRow.showLoading(file, view) === false) {
       if (quiet) logInfo("[Tag suggestions] Could not mount the loading row");
+      else new Notice("Add a tags property to this note first.");
       return;
     }
     if (!quiet) {
@@ -80,7 +87,7 @@ export async function suggestTagsForCurrentNote(
     if (quiet) {
       const cached = suggestionRow.getCachedSuggestions(file);
       if (cached) {
-        if (sourceIsCurrent()) suggestionRow.show(file, cached, addTags, view);
+        if (sourceIsCurrent()) suggestionRow.show(file, cached, updateTags, view);
         return;
       }
     }
@@ -120,7 +127,7 @@ export async function suggestTagsForCurrentNote(
       suggestions.map(({ tag, score }, index) => ({ tag, noul: score, rank: index + 1 }))
     );
     suggestionRow.cacheSuggestions(file, suggestions);
-    suggestionRow.show(file, suggestions, addTags, view);
+    suggestionRow.show(file, suggestions, updateTags, view);
   } catch (error) {
     if (sourceIsCurrent()) {
       logError("Tag suggestion failed", error);

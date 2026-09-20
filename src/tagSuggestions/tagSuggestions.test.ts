@@ -449,6 +449,42 @@ describe("tagSuggestions", () => {
       expect(processFrontMatter).toHaveBeenCalledTimes(1);
       expect(frontmatter.tags).toEqual([2024, "Existing", "first", "second"]);
     });
+
+    it.each([
+      ["mixed tags array", { tags: [2024, "book", "draft"] }, { tags: [2024, "draft"] }],
+      ["tags scalar", { tags: "book" }, { tags: [] }],
+      ["singular tag scalar", { tag: "book" }, { tag: [] }],
+      ["null tags", { tags: null }, { tags: null }],
+      ["null singular tag", { tag: null }, { tag: null }],
+      ["numeric scalar", { tags: 2024 }, { tags: 2024 }],
+    ])("removes from %s without losing preserved values", async (_label, frontmatter, expected) => {
+      const app = {
+        fileManager: {
+          processFrontMatter: jest.fn(
+            async (_file: TFile, update: (value: Record<string, unknown>) => void) =>
+              update(frontmatter)
+          ),
+        },
+      } as unknown as App;
+
+      await addTagToFrontmatter(app, file("Active.md"), [], ["#book"]);
+
+      expect(frontmatter).toEqual(expected);
+    });
+
+    it(`adds and removes in one frontmatter write (${ISSUE})`, async () => {
+      const frontmatter = { tags: [2024, "old", "keep"] };
+      const processFrontMatter = jest.fn(
+        async (_file: TFile, update: (value: Record<string, unknown>) => void) =>
+          update(frontmatter)
+      );
+      const app = { fileManager: { processFrontMatter } } as unknown as App;
+
+      await addTagToFrontmatter(app, file("Active.md"), ["new"], ["old"]);
+
+      expect(processFrontMatter).toHaveBeenCalledTimes(1);
+      expect(frontmatter.tags).toEqual([2024, "keep", "new"]);
+    });
   });
 
   describe("tagSuggestionErrorNotice()", () => {
