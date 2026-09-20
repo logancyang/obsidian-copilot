@@ -185,7 +185,7 @@ export function VaultSearchModalContent({
               onMouseEnter={() => setPreferredPath(candidate.path)}
               onClick={() => onOpen(candidate, false)}
               className={cn(
-                "tw-m-0 tw-flex tw-w-full tw-flex-col tw-gap-1 tw-rounded-md tw-border-0 tw-bg-transparent tw-p-2 tw-text-left tw-text-normal hover:tw-bg-secondary",
+                "tw-m-0 tw-flex tw-h-auto tw-w-full tw-flex-col tw-gap-1 tw-rounded-md tw-border-0 tw-bg-transparent tw-p-2 tw-text-left tw-text-normal hover:tw-bg-secondary",
                 selected && "tw-bg-secondary"
               )}
             >
@@ -319,7 +319,7 @@ function VaultSearchModalBody({
 /** Obsidian modal that owns the whole-vault Copilot search surface. */
 export class VaultSearchModal extends ReactModal {
   constructor(app: App) {
-    super(app, "Copilot search");
+    super(app, "Copilot search", "copilot-vault-search-modal");
   }
 
   protected renderContent(close: () => void): ReactElement {

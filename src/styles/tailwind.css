@@ -72,6 +72,10 @@ If your plugin does not need CSS, delete this file.
   padding: 0;
 }
 
+.modal.copilot-vault-search-modal {
+  width: min(760px, 85vw);
+}
+
 /* The shell owns the title, so the native header must not reserve space, and a
    host that sets a title anyway must not stack a second heading above the
    shell's own. Suppressing it here rather than per host keeps every future
