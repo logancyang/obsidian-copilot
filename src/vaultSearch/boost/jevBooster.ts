@@ -10,7 +10,7 @@ import {
 import type { FuzzySearch } from "@/vaultSearch/candidates";
 import type { SearchBooster, SearchCandidate, SearchFile } from "@/vaultSearch/types";
 
-export const JEV_TIMEOUT_MS = 2500;
+export const JEV_TIMEOUT_MS = 5000;
 export const JEV_BATCH_SIZE = 30;
 export const JEV_MAX_IN_FLIGHT = 8;
 

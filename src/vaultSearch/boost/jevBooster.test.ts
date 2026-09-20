@@ -98,7 +98,7 @@ describe("jevBooster", () => {
         }
       );
 
-      it(`reports an unavailable boost and logs a timeout after the 2.5 second client budget (${issue})`, async () => {
+      it(`reports an unavailable boost and logs a timeout after the client budget (${issue})`, async () => {
         const instance = booster(jest.fn(() => new Promise(() => undefined)));
         const scoring = instance.score("paper", candidates);
         const rejection = expect(scoring).rejects.toThrow("AI boost unavailable");
@@ -110,6 +110,22 @@ describe("jevBooster", () => {
           batch: 1,
           status: "timed out",
         });
+      });
+
+      it(`accepts a valid response that arrives after three seconds (${issue})`, async () => {
+        const instance = booster(
+          jest.fn(
+            () =>
+              new Promise((resolve) => {
+                window.setTimeout(() => resolve({ c0: { noul: 0.91 } }), 3000);
+              })
+          )
+        );
+
+        const scoring = instance.score("paper", candidates);
+        await jest.advanceTimersByTimeAsync(3000);
+
+        await expect(scoring).resolves.toEqual(new Map([["Inbox/Paper.pdf", 0.91]]));
       });
 
       it(`judges 30-question batches in parallel and keeps successful batches when one fails (${issue})`, async () => {
