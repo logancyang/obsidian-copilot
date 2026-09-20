@@ -37,13 +37,6 @@ export function registerContextMenu(menu: Menu, obsidianApp: App): void {
     const submenu = item.submenu;
     if (!submenu) return;
 
-    // Add the main selection command
-    submenu.addItem((subItem) => {
-      subItem.setTitle("Add selection to chat context").onClick(() => {
-        execute(`copilot:${COMMAND_IDS.ADD_SELECTION_TO_CHAT_CONTEXT}`);
-      });
-    });
-
     submenu.addItem((subItem) => {
       subItem.setTitle("Quick Ask").onClick(() => {
         execute(`copilot:${COMMAND_IDS.TRIGGER_QUICK_ASK}`);
