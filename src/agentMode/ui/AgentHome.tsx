@@ -34,7 +34,10 @@ import { useChatInputAutoFocus } from "@/agentMode/ui/hooks/useChatInputAutoFocu
 import { useRefreshEmptyLandingOnContextSourceChange } from "@/agentMode/ui/hooks/useRefreshEmptyLandingOnContextSourceChange";
 import { useAgentModelPicker } from "@/agentMode/ui/useAgentModelPicker";
 import { useAgentModePicker } from "@/agentMode/ui/useAgentModePicker";
-import { useSessionBackendDescriptor } from "@/agentMode/ui/useBackendDescriptor";
+import {
+  useBackendInstallState,
+  useSessionBackendDescriptor,
+} from "@/agentMode/ui/useBackendDescriptor";
 import { pickRandomGreeting } from "@/agentMode/ui/landingGreetings";
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
@@ -202,6 +205,13 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   }, [manager]);
 
   const descriptor = useSessionBackendDescriptor(manager);
+  const installState = useBackendInstallState(descriptor, plugin);
+  // An outdated install cannot run a turn, so the composer refuses the send
+  // itself rather than letting the session layer reject one it has already
+  // emptied the box for.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/531
+  const unsupportedAgentMessage =
+    installState.kind === "incompatible" ? installState.message : null;
   const handleInstall = useCallback(() => {
     descriptor.openInstallUI(plugin);
   }, [descriptor, plugin]);
@@ -755,6 +765,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       draft={draft}
       app={app}
       mainAgentId={mainAgentId}
+      unsupportedAgentMessage={unsupportedAgentMessage}
       updateUserMessageHistory={updateUserMessageHistory}
       isStarting={isStarting}
       hasPendingPlanPermission={hasPendingPlanPermission}

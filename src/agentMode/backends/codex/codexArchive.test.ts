@@ -33,7 +33,7 @@ describe("codexArchive", () => {
       manifest = {
         archive: `${stem}${extension}`,
         target,
-        acpVersion: "1.10.0",
+        acpVersion: CODEX_BUNDLE_VERSION,
         sha256: createHash("sha256").update(bytes).digest("hex"),
         archiveBytes: bytes.length,
         extractedBytes: 13,
