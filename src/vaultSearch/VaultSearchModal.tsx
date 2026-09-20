@@ -1,6 +1,7 @@
 import { RelevanceMeter } from "@/components/chat-components/ui/RelevanceMeter";
 import { useRelevantNoteRowTransitions } from "@/components/chat-components/ui/useRelevantNoteRowTransitions";
 import { ReactModal } from "@/components/modals/ReactModal";
+import { Input } from "@/components/ui/input";
 import { SettingSwitch } from "@/components/ui/setting-switch";
 import { useReducedMotion } from "@/hooks/useReducedMotion";
 import { cn } from "@/lib/utils";
@@ -15,7 +16,7 @@ import { prepareFilenameSearch } from "@/vaultSearch/candidates";
 import { useVaultSearch } from "@/vaultSearch/useVaultSearch";
 import type { SearchCandidate, SearchFile } from "@/vaultSearch/types";
 import { createJevSearchBooster, type JevSearchBooster } from "@/vaultSearch/boost/jevBooster";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, Search } from "lucide-react";
 import { FileSystemAdapter, Notice, Platform, TFile, type App } from "obsidian";
 import React, { type ReactElement, useCallback, useEffect, useMemo, useState } from "react";
 
@@ -231,53 +232,64 @@ export function VaultSearchModalContent({
   let renderedLessLikely = false;
 
   return (
-    <div className="tw-flex tw-max-h-[70vh] tw-min-h-96 tw-w-[min(760px,85vw)] tw-flex-col tw-gap-3 tw-px-4 tw-pb-4">
-      <input
-        autoFocus
-        type="search"
-        value={query}
-        onChange={(event) => onQueryChange(event.target.value)}
-        onKeyDown={onKeyDown}
-        placeholder="Search every file in your vault"
-        aria-label="Search vault files"
-        className="tw-w-full tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-primary tw-px-3 tw-py-2 tw-text-normal focus:tw-border-border-focus focus:tw-outline-none"
-      />
-      <div
-        className="tw-flex tw-shrink-0 tw-items-center tw-gap-1 tw-overflow-x-auto"
-        aria-label="File types"
-      >
-        {fileTypes.map(({ id, label, extensions, count, checked }) => (
-          <button
-            key={id}
-            type="button"
-            aria-pressed={checked}
-            onClick={() => onTypeChange(extensions, !checked)}
-            className={cn(
-              "tw-m-0 tw-flex tw-h-6 tw-shrink-0 tw-items-center tw-gap-1 tw-whitespace-nowrap tw-rounded-full tw-border tw-border-solid tw-border-border tw-px-2 tw-py-0 tw-text-xs tw-shadow-none",
-              checked
-                ? "tw-bg-modifier-hover tw-text-normal"
-                : "tw-bg-transparent tw-text-faint hover:tw-bg-modifier-hover"
-            )}
-          >
-            <span>{label}</span>
-            <span className="tw-tabular-nums tw-text-faint">{count.toLocaleString()}</span>
-          </button>
-        ))}
-      </div>
-      <div className="tw-flex tw-items-center tw-gap-2 tw-text-xs tw-text-muted">
-        <SettingSwitch
-          aria-label="AI boost"
-          checked={aiBoostEnabled}
-          disabled={!aiBoostLicensed}
-          onCheckedChange={onAiBoostChange}
+    <div className="tw-flex tw-h-[min(72vh,42rem)] tw-max-h-[calc(100vh-6rem)] tw-w-[min(52rem,calc(100vw-3rem))] tw-min-w-0 tw-flex-col tw-gap-4 tw-overflow-hidden tw-px-6 tw-pb-6">
+      <div className="tw-relative tw-shrink-0">
+        <Search
+          aria-hidden="true"
+          className="tw-pointer-events-none tw-absolute tw-left-3 tw-top-1/2 tw-size-4 -tw-translate-y-1/2 tw-text-muted"
         />
-        <span>AI boost</span>
-        {!aiBoostLicensed && <span className="tw-text-faint">License required</span>}
+        <Input
+          autoFocus
+          type="search"
+          value={query}
+          onChange={(event) => onQueryChange(event.target.value)}
+          onKeyDown={onKeyDown}
+          placeholder="Search every file in your vault"
+          aria-label="Search vault files"
+          className="!tw-h-11 !tw-bg-primary !tw-pl-10 !tw-pr-4"
+        />
+      </div>
+      <div className="tw-flex tw-shrink-0 tw-items-center tw-gap-3">
+        <div
+          className="tw-flex tw-min-w-0 tw-flex-1 tw-items-center tw-gap-1 tw-overflow-x-auto"
+          aria-label="File types"
+        >
+          {fileTypes.map(({ id, label, extensions, count, checked }) => (
+            <button
+              key={id}
+              type="button"
+              aria-pressed={checked}
+              onClick={() => onTypeChange(extensions, !checked)}
+              className={cn(
+                "tw-m-0 tw-flex tw-h-7 tw-shrink-0 tw-items-center tw-gap-1 tw-whitespace-nowrap tw-rounded-full tw-border tw-border-solid tw-border-border tw-px-2.5 tw-py-0 tw-text-xs tw-shadow-none tw-transition-colors",
+                checked
+                  ? "tw-bg-modifier-hover tw-text-normal"
+                  : "tw-bg-transparent tw-text-faint hover:tw-bg-modifier-hover"
+              )}
+            >
+              <span>{label}</span>
+              <span className="tw-tabular-nums tw-text-faint">{count.toLocaleString()}</span>
+            </button>
+          ))}
+        </div>
+        <div className="tw-flex tw-shrink-0 tw-items-center tw-gap-2 tw-border-0 tw-border-l tw-border-solid tw-border-border tw-pl-3 tw-text-xs tw-text-muted">
+          <SettingSwitch
+            aria-label="AI boost"
+            checked={aiBoostEnabled}
+            disabled={!aiBoostLicensed}
+            onCheckedChange={onAiBoostChange}
+          />
+          <span>AI boost</span>
+          {!aiBoostLicensed && <span className="tw-text-faint">License required</span>}
+        </div>
       </div>
       {miyoUnavailable && (
         <div className="tw-text-small tw-text-muted">Enable Miyo for content search</div>
       )}
-      <div className="tw-min-h-0 tw-flex-1 tw-overflow-y-auto" role="listbox">
+      <div
+        className="tw-min-h-0 tw-flex-1 tw-overflow-y-auto tw-overscroll-contain tw-rounded-lg tw-p-1.5 tw-bg-secondary/30"
+        role="listbox"
+      >
         {showBoostOutcome && !hasStrongMatch && (
           <div className="tw-px-2.5 tw-py-1.5 tw-text-xs tw-text-muted">No strong match</div>
         )}
@@ -335,6 +347,9 @@ export function VaultSearchModalContent({
                     </span>
                   )}
                 </span>
+                {displayScore !== null && (
+                  <RelevanceMeter score={displayScore} animated={animated} className="tw-mt-0.5" />
+                )}
                 <span className="tw-flex tw-w-full tw-items-center tw-gap-2 tw-text-xs tw-text-muted">
                   {candidate.folder && (
                     <span className="tw-min-w-0 tw-flex-1 tw-truncate">{candidate.folder}</span>
@@ -348,9 +363,6 @@ export function VaultSearchModalContent({
                 <span className="tw-w-full tw-truncate tw-text-xs tw-text-muted">
                   {candidate.snippet}
                 </span>
-                {displayScore !== null && (
-                  <RelevanceMeter score={displayScore} animated={animated} className="tw-mt-1" />
-                )}
               </button>
             </React.Fragment>
           );

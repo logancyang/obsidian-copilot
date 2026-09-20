@@ -158,6 +158,21 @@ describe("VaultSearchModal", () => {
   });
 
   describe("VaultSearchModalContent()", () => {
+    it(`keeps a spacious result viewport fixed while search results change (${issue})`, () => {
+      const view = render(<VaultSearchModalContent {...props()} />);
+      const modalBody = view.container.firstElementChild;
+
+      expect(modalBody?.classList.contains("tw-h-[min(72vh,42rem)]")).toBe(true);
+      expect(modalBody?.classList.contains("tw-max-h-[calc(100vh-6rem)]")).toBe(true);
+      expect(modalBody?.classList.contains("tw-overflow-hidden")).toBe(true);
+      expect(modalBody?.classList.contains("tw-px-6")).toBe(true);
+
+      view.rerender(<VaultSearchModalContent {...props({ results: [], searching: true })} />);
+
+      expect(view.container.firstElementChild).toBe(modalBody);
+      expect(modalBody?.classList.contains("tw-h-[min(72vh,42rem)]")).toBe(true);
+    });
+
     it(`renders result metadata and the Miyo-off fallback guidance (${issue})`, () => {
       render(<VaultSearchModalContent {...props({ miyoUnavailable: true })} />);
 

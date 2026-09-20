@@ -73,7 +73,16 @@ If your plugin does not need CSS, delete this file.
 }
 
 .modal.copilot-vault-search-modal {
-  width: min(760px, 85vw);
+  width: min(52rem, calc(100vw - 3rem));
+  min-width: 0;
+  max-width: calc(100vw - 3rem);
+  overflow: hidden;
+}
+
+/* Obsidian owns the modal frame. Keep result updates scrolling inside the
+   React viewport instead of letting the native content box remeasure. */
+.modal.copilot-vault-search-modal .modal-content {
+  overflow: hidden;
 }
 
 /* The shell owns the title, so the native header must not reserve space, and a
