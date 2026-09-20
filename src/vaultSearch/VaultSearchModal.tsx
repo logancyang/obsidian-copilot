@@ -151,7 +151,7 @@ export function VaultSearchModalContent({
         onKeyDown={onKeyDown}
         placeholder="Search every file in your vault"
         aria-label="Search vault files"
-        className="focus:tw-border-accent tw-w-full tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-primary tw-px-3 tw-py-2 tw-text-normal focus:tw-outline-none"
+        className="tw-w-full tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-primary tw-px-3 tw-py-2 tw-text-normal focus:tw-border-border-focus focus:tw-outline-none"
       />
       <div className="tw-flex tw-flex-wrap tw-gap-x-3 tw-gap-y-1" aria-label="File types">
         {fileTypes.map(({ extension, count, checked }) => (
