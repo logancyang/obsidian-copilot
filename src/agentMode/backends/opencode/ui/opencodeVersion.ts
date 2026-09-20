@@ -5,8 +5,8 @@
 export const OPENCODE_PINNED_VERSION = "1.18.31";
 
 /**
- * Oldest opencode release that satisfies Agent Mode's ACP contract. Version
- * 1.15.13 added the model catalog and 1.16.0 made session cancellation abort
- * the backing turn so a stopped session remains reusable.
+ * Oldest opencode release that satisfies Agent Mode's ACP contract: a model
+ * catalog and session cancellation that aborts the backing turn so a stopped
+ * session remains reusable.
  */
 export const OPENCODE_MIN_ACP_VERSION = "1.16.0";
