@@ -1,3 +1,4 @@
+import type { BackendDescriptor, InstallState } from "@/agentMode/session/types";
 import { expandCustomCommandPrefix } from "@/agentMode/session/expandCustomCommandPrefix";
 import { EMPTY_AGENT_MENTION_BRANDS } from "@/components/chat-components/hooks/useAtMentionCategories";
 import { AgentChatInput } from "@/agentMode/ui/AgentChatInput";
@@ -141,6 +142,22 @@ const makeDraft = (overrides: Partial<AgentInputDraftControls> = {}): AgentInput
   ...overrides,
 });
 
+function makeDescriptor(message: string | null = null): BackendDescriptor {
+  return {
+    getInstallState: () =>
+      message
+        ? {
+            kind: "incompatible",
+            source: "managed",
+            currentVersion: "1.0.0",
+            minVersion: "1.16.0",
+            message,
+          }
+        : { kind: "ready", source: "managed" },
+    subscribeInstallState: () => () => {},
+  } as unknown as BackendDescriptor;
+}
+
 function inputNode(
   backend: AgentChatBackend,
   draft: AgentInputDraftControls,
@@ -154,7 +171,7 @@ function inputNode(
       draft={draft}
       app={makeApp()}
       mainAgentId={null}
-      unsupportedAgentMessage={null}
+      descriptor={makeDescriptor()}
       updateUserMessageHistory={jest.fn()}
       isStarting={false}
       hasPendingPlanPermission={false}
@@ -337,7 +354,7 @@ describe("AgentChatInput", () => {
       const draft = makeDraft({ input: "keep this draft", images: [image] });
 
       renderInput(backend, draft, {
-        unsupportedAgentMessage: "opencode 1.0.0 is outdated. Update to 1.16.0.",
+        descriptor: makeDescriptor("opencode 1.0.0 is outdated. Update to 1.16.0."),
       });
       await act(async () => fireEvent.click(screen.getByText("send")));
 
@@ -346,6 +363,50 @@ describe("AgentChatInput", () => {
       expect(draft.setQueue).not.toHaveBeenCalled();
       expect(Notice).toHaveBeenCalledWith("opencode 1.0.0 is outdated. Update to 1.16.0.");
     });
+
+    it.each(["command expansion", "image decoding"])(
+      "https://github.com/Brevilabs/obsidian-copilot-private/issues/531 preserves the full draft when compatibility changes during %s",
+      async (stage) => {
+        let release!: () => void;
+        const pending = new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        const backend = {
+          sendMessage: jest.fn(() => ({ turn: Promise.resolve() })),
+        } as unknown as AgentChatBackend;
+        const attachment = {
+          ...image,
+          arrayBuffer: jest.fn(async () => {
+            if (stage === "image decoding") await pending;
+            return new Uint8Array([1, 2, 3]).buffer;
+          }),
+        } as unknown as File;
+        if (stage === "command expansion") {
+          jest.mocked(expandCustomCommandPrefix).mockImplementationOnce(async (text) => {
+            await pending;
+            return { text };
+          });
+        }
+        const draft = makeDraft({
+          input: "keep draft",
+          images: [attachment],
+          contextNotes: [makeFile("Context.md")],
+        });
+        let liveState: InstallState = { kind: "ready", source: "managed" };
+        const descriptor = { ...makeDescriptor(), getInstallState: () => liveState };
+        renderInput(backend, draft, { descriptor });
+        await act(async () => fireEvent.click(screen.getByText("send")));
+        liveState = makeDescriptor("Upgrade required").getInstallState({} as never);
+        await act(async () => {
+          release();
+          await pending;
+        });
+        expect(backend.sendMessage).not.toHaveBeenCalled();
+        expect(draft.resetCompose).not.toHaveBeenCalled();
+        expect(draft.setQueue).not.toHaveBeenCalled();
+        expect(Notice).toHaveBeenCalledWith("Upgrade required");
+      }
+    );
 
     it("keeps an image-only draft when the selected model lacks vision https://github.com/logancyang/obsidian-copilot/issues/2850", async () => {
       const backend = { sendMessage: jest.fn(), cancel: jest.fn() } as unknown as AgentChatBackend;
@@ -621,7 +682,7 @@ describe("AgentChatInput", () => {
         queue: [{ id: "queued-1", text: "follow-up", rawInput: "follow-up" }],
       });
 
-      renderInput(backend, draft, { unsupportedAgentMessage: "Upgrade required" });
+      renderInput(backend, draft, { descriptor: makeDescriptor("Upgrade required") });
       await act(async () => {});
 
       expect(backend.sendMessage).not.toHaveBeenCalled();
@@ -767,12 +828,8 @@ describe("AgentChatInput", () => {
       mockUseCanUseMultiAgent.mockReturnValue(true);
     });
 
-    it("regression: clears the composer before awaiting attached-image conversion (#211)", async () => {
-      // Hold the image read open so ordering is observable. The composer must
-      // clear the instant the user sends, not after every File.arrayBuffer()
-      // resolves — leaving the draft populated across those awaits let the
-      // Lexical editor race resetCompose and strand the just-sent text in the
-      // input when text was sent alongside images.
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/531 consumes the composer only after attached-image conversion and the final compatibility check", async () => {
+      // Keep the full draft recoverable until async preparation completes.
       let resolveRead!: (buf: ArrayBuffer) => void;
       const slowImage = {
         type: "image/png",
@@ -791,9 +848,8 @@ describe("AgentChatInput", () => {
       renderInput(backend, draft);
       fireEvent.click(screen.getByText("send"));
 
-      // Composer is cleared while the image read is still pending, before the
-      // turn is dispatched.
-      await waitFor(() => expect(draft.resetCompose).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(resolveRead).toBeDefined());
+      expect(draft.resetCompose).not.toHaveBeenCalled();
       expect(backend.sendMessage).not.toHaveBeenCalled();
 
       // Finishing the read lets the turn fire with the converted image attached.
@@ -802,6 +858,7 @@ describe("AgentChatInput", () => {
         await Promise.resolve();
       });
       await waitFor(() => expect(backend.sendMessage).toHaveBeenCalledTimes(1));
+      expect(draft.resetCompose).toHaveBeenCalledTimes(1);
       const promptContent = (backend.sendMessage as jest.Mock).mock.calls[0][2];
       expect(promptContent).toHaveLength(1);
       expect(promptContent[0].type).toBe("image");
