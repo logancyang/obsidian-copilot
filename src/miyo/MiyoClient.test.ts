@@ -1,5 +1,5 @@
 import { logInfo, logError } from "@/logger";
-import { MiyoClient, MiyoRequestError } from "@/miyo/MiyoClient";
+import { MiyoClient, MiyoRequestError, type MiyoSearchResult } from "@/miyo/MiyoClient";
 import { MiyoServiceDiscovery } from "@/miyo/MiyoServiceDiscovery";
 import { getSettings } from "@/settings/model";
 import { requestUrl, type RequestUrlResponse } from "obsidian";
@@ -139,6 +139,74 @@ describe("MiyoClient", () => {
         }),
       })
     );
+  });
+
+  it("sends paths in /v0/search requests when given", async () => {
+    mockedRequestUrl.mockResolvedValue({
+      status: 200,
+      json: { results: [] },
+      text: "",
+    } as RequestUrlResponse);
+
+    await new MiyoClient().search("http://127.0.0.1:8742", "Vault", "stoicism", 30, undefined, [
+      ".pdf",
+      ".epub",
+    ]);
+
+    expect(mockedRequestUrl).toHaveBeenCalledWith(
+      expect.objectContaining({
+        body: JSON.stringify({
+          query: "stoicism",
+          folder_name: "Vault",
+          limit: 30,
+          paths: [".pdf", ".epub"],
+        }),
+      })
+    );
+  });
+
+  it.each([[undefined], [[]]])("omits paths from /v0/search requests when %j", async (paths) => {
+    mockedRequestUrl.mockResolvedValue({
+      status: 200,
+      json: { results: [] },
+      text: "",
+    } as RequestUrlResponse);
+
+    await new MiyoClient().search(
+      "http://127.0.0.1:8742",
+      "Vault",
+      "stoicism",
+      30,
+      undefined,
+      paths
+    );
+
+    expect(mockedRequestUrl).toHaveBeenCalledWith(
+      expect.objectContaining({
+        body: JSON.stringify({ query: "stoicism", folder_name: "Vault", limit: 30 }),
+      })
+    );
+  });
+
+  it("returns snippet on /v0/search results as-is", async () => {
+    const results: MiyoSearchResult[] = [
+      { id: "a", score: 1, path: "a.md", snippet: "a short preview" },
+      { id: "b", score: 0.5, path: "b.md", snippet: null },
+    ];
+    mockedRequestUrl.mockResolvedValue({
+      status: 200,
+      json: { results },
+      text: "",
+    } as RequestUrlResponse);
+
+    const response = await new MiyoClient().search(
+      "http://127.0.0.1:8742",
+      "Vault",
+      "stoicism",
+      10
+    );
+
+    expect(response.results).toEqual(results);
   });
 
   it("requests folder scans through /v0/scan", async () => {
