@@ -45,7 +45,7 @@ Copilot connects to Codex through the `codex-acp` adapter, which includes a comp
 
 If your adapter is below the supported minimum, open **Configure** in Settings to manage the installation. Agent Chat also offers **Upgrade**, with shared progress and errors. You can also choose **Sign in to Codex** on the Agent Chat status card. For terminal login, run your configured adapter with `cli login` using the same `CODEX_HOME` as Copilot.
 
-For manual installations, Copilot requires `@agentclientprotocol/codex-acp` 0.0.45 or newer. This is the minimum supported adapter version; managed downloads are pinned to 1.12.0 in this Copilot release. See [Codex installation details](agent-mode-and-tools.md#codex). The older `@zed-industries/codex-acp` package is not supported. Codex uses the login stored by the bundled Codex CLI; there is no Codex key to paste into Copilot.
+For manual installations, Copilot requires a supported `@agentclientprotocol/codex-acp` adapter and checks compatibility in **Configure**. See [Codex installation details](agent-mode-and-tools.md#codex). Codex uses the login stored by the bundled Codex CLI; there is no Codex key to paste into Copilot.
 
 ## Start Your First Agent Chat
 

@@ -22,7 +22,7 @@ Copilot uses your Claude Code login; there is no API key to paste here.
 
 ### Codex is installed, but Copilot cannot find it
 
-Copilot connects through `codex-acp`, not the `codex` executable alone. Manual installations require adapter version 0.0.45 or newer. This is the minimum supported version; the managed download is pinned to 1.12.0 in this Copilot release.
+Copilot connects through `codex-acp`, not the `codex` executable alone. Manual installations require a supported `@agentclientprotocol/codex-acp` adapter. **Configure** reports any required compatibility update; managed downloads use the version pinned by Copilot.
 
 1. Open **Basic → Agents → Codex → Configure**.
 2. Choose **Download & install** under **Managed by Copilot**. If this first installation fails, read the error in Configure, fix the reported problem, then choose **Download & install** again. Failed updates of an already-managed adapter show the same error in Settings and Agent Chat. Open **Configure** in Settings to retry, or use **Retry** in Agent Chat.
