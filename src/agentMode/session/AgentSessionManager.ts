@@ -339,7 +339,9 @@ export class AgentSessionManager {
   // History opens may finish out of order. Only the most recent request may
   // move focus; older successful loads remain available as background tabs.
   private latestHistoryLoadRequestId = 0;
-  private pendingCreates = 0;
+  // An unrelated agent starting must not hold a freshly updated runtime.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/530
+  private readonly pendingCreates = new Map<BackendId, number>();
   private listeners = new Set<() => void>();
   private disposed = false;
   private startingBackendId: BackendId | null = null;
@@ -1285,7 +1287,7 @@ export class AgentSessionManager {
 
     const descriptor = this.resolveDescriptor(resolvedId);
 
-    this.pendingCreates++;
+    this.pendingCreates.set(resolvedId, (this.pendingCreates.get(resolvedId) ?? 0) + 1);
     this.startingBackendId = resolvedId;
     this.notify();
 
@@ -1294,12 +1296,12 @@ export class AgentSessionManager {
       backend = await this.ensureBackend(resolvedId, descriptor);
     } catch (err) {
       this.setLastError(err2String(err));
-      this.finishPendingCreate();
+      this.finishPendingCreate(resolvedId);
       throw err;
     }
 
     if (this.disposed) {
-      this.finishPendingCreate();
+      this.finishPendingCreate(resolvedId);
       throw new Error("AgentSessionManager was shut down during session creation");
     }
 
@@ -1444,7 +1446,7 @@ export class AgentSessionManager {
       .catch((err) => {
         this.setLastError(err2String(err));
       })
-      .finally(() => this.finishPendingCreate());
+      .finally(() => this.finishPendingCreate(resolvedId));
 
     return session;
   }
@@ -1478,9 +1480,11 @@ export class AgentSessionManager {
     this.lastErrorSeq++;
   }
 
-  private finishPendingCreate(): void {
-    this.pendingCreates--;
-    if (this.pendingCreates === 0) this.startingBackendId = null;
+  private finishPendingCreate(backendId: BackendId): void {
+    const remaining = this.pendingCreates.get(backendId)! - 1;
+    if (remaining === 0) this.pendingCreates.delete(backendId);
+    else this.pendingCreates.set(backendId, remaining);
+    if (this.pendingCreates.size === 0) this.startingBackendId = null;
     this.notify();
   }
 
@@ -2415,7 +2419,7 @@ export class AgentSessionManager {
     if (this.disposed) return;
     // Resume can still be negotiating its session after its process has started.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/530
-    if (!this.hasSessionOn(backendId) && this.pendingCreates === 0) {
+    if (!this.hasSessionOn(backendId) && !this.pendingCreates.has(backendId)) {
       await this.restartBackend(backendId, reason);
       return;
     }
@@ -2509,7 +2513,7 @@ export class AgentSessionManager {
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/530
     const inflight = this.starting.get(backendId);
     if (inflight) await inflight.catch(() => undefined);
-    if (this.hasSessionOn(backendId) || this.pendingCreates > 0) {
+    if (this.hasSessionOn(backendId) || this.pendingCreates.has(backendId)) {
       await this.noteSpawnConfigChanged(backendId, "binary path changed");
       return;
     }
@@ -3274,7 +3278,7 @@ export class AgentSessionManager {
           );
     const descriptor = this.resolveDescriptor(backendId);
 
-    this.pendingCreates++;
+    this.pendingCreates.set(backendId, (this.pendingCreates.get(backendId) ?? 0) + 1);
     this.startingBackendId = backendId;
     this.notify();
 
@@ -3283,12 +3287,12 @@ export class AgentSessionManager {
       backend = await this.ensureBackend(backendId, descriptor);
     } catch (err) {
       this.setLastError(err2String(err));
-      this.finishPendingCreate();
+      this.finishPendingCreate(backendId);
       return null;
     }
 
     if (this.disposed) {
-      this.finishPendingCreate();
+      this.finishPendingCreate(backendId);
       return null;
     }
 
@@ -3303,7 +3307,7 @@ export class AgentSessionManager {
     // touching the (possibly tearing-down) backend, mirroring the fresh-create
     // guard in AgentSession.initialize. Same cleanup as the path's other returns.
     if (this.disposed) {
-      this.finishPendingCreate();
+      this.finishPendingCreate(backendId);
       return null;
     }
     // Readiness can flip while the project context materializes, after
@@ -3315,7 +3319,7 @@ export class AgentSessionManager {
       assertBackendCompatible(descriptor, getSettings());
     } catch (err) {
       this.setLastError(err2String(err));
-      this.finishPendingCreate();
+      this.finishPendingCreate(backendId);
       return null;
     }
     let resumeResult: LoadSessionOutput | null = null;
@@ -3329,7 +3333,7 @@ export class AgentSessionManager {
     } catch (err) {
       if (!(err instanceof MethodUnsupportedError)) {
         logWarn(`[AgentMode] loadSession failed for ${sessionId}`, err);
-        this.finishPendingCreate();
+        this.finishPendingCreate(backendId);
         return null;
       }
     }
@@ -3350,13 +3354,13 @@ export class AgentSessionManager {
         } else {
           logWarn(`[AgentMode] resumeSession failed for ${sessionId}`, err);
         }
-        this.finishPendingCreate();
+        this.finishPendingCreate(backendId);
         return null;
       }
     }
 
     if (this.disposed) {
-      this.finishPendingCreate();
+      this.finishPendingCreate(backendId);
       return null;
     }
 
@@ -3408,7 +3412,7 @@ export class AgentSessionManager {
     await replayPersistedMode(session, this.getDefaultMode(backendId));
     if (this.disposed) {
       await session.dispose();
-      this.finishPendingCreate();
+      this.finishPendingCreate(backendId);
       return null;
     }
     if (projectId !== GLOBAL_SCOPE) {
@@ -3420,7 +3424,7 @@ export class AgentSessionManager {
     this.attachAutoSave(session);
     this.attachAttentionTracking(session);
     this.lastError = null;
-    this.finishPendingCreate();
+    this.finishPendingCreate(backendId);
     logInfo(
       `[AgentMode] resumed session (internal=${session.internalId} backend-id=${sessionId} backend=${backendId})`
     );

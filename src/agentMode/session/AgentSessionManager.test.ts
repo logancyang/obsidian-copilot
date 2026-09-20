@@ -3068,7 +3068,7 @@ describe("AgentSessionManager.onInstallStateChanged", () => {
       buildPlugin() as unknown as ConstructorParameters<typeof AgentSessionManager>[1],
       {
         permissionPrompter: jest.fn(),
-        resolveDescriptor: (id) => (id === descriptor.id ? descriptor : undefined),
+        resolveDescriptor: (id) => ({ ...descriptor, id }),
         modelPreloader: preloader as unknown as ConstructorParameters<
           typeof AgentSessionManager
         >[2]["modelPreloader"],
@@ -3105,6 +3105,41 @@ describe("AgentSessionManager.onInstallStateChanged", () => {
     expect(preloader.refresh).toHaveBeenCalledWith("opencode");
     expect(preloader.preload).not.toHaveBeenCalled();
   });
+
+  it.each(["codex", "claude"] as const)(
+    "https://github.com/Brevilabs/obsidian-copilot-private/issues/530 refreshes opencode while %s session creation is pending",
+    async (otherId) => {
+      const { mgr, preloader } = buildInstallStateManager({
+        installState: { kind: "ready", source: "managed" },
+        refreshResult: Promise.resolve(),
+      });
+      let finishStart!: () => void;
+      const starting = new Promise<void>((resolve) => {
+        finishStart = resolve;
+      });
+      let entered!: () => void;
+      const booting = new Promise<void>((resolve) => {
+        entered = resolve;
+      });
+      mockBackendStart.mockImplementationOnce(async () => {
+        entered();
+        await starting;
+      });
+      const created = mgr.createSession(otherId);
+      await booting;
+      try {
+        await mgr.onInstallStateChanged("opencode");
+        expect(preloader.refresh).toHaveBeenCalledWith("opencode");
+        expect(mgr.hasHeldConfigChange("opencode")).toBe(false);
+        expect(mockBackendShutdown).not.toHaveBeenCalled();
+      } finally {
+        finishStart();
+        await (
+          await created
+        ).ready;
+      }
+    }
+  );
 
   it("https://github.com/Brevilabs/obsidian-copilot-private/issues/530 preserves a session whose process is still starting when the binary pointer changes", async () => {
     const { mgr } = buildInstallStateManager({
