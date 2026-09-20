@@ -74,21 +74,30 @@ describe("candidates", () => {
           name: "Stoic Handbook.epub",
           basename: "Stoic Handbook",
           extension: "epub",
+          ctime: 20,
           mtime: 20,
+          size: 0,
+          tags: [],
         },
         {
           path: "Notes/Stoic practice.md",
           name: "Stoic practice.md",
           basename: "Stoic practice",
           extension: "md",
+          ctime: 10,
           mtime: 10,
+          size: 0,
+          tags: [],
         },
         {
           path: "Papers/Unrelated.pdf",
           name: "Unrelated.pdf",
           basename: "Unrelated",
           extension: "pdf",
+          ctime: 30,
           mtime: 30,
+          size: 0,
+          tags: [],
         },
       ];
       const scores = new Map([
@@ -114,7 +123,10 @@ describe("candidates", () => {
         name: `Match ${index}.md`,
         basename: `Match ${index}`,
         extension: "md",
+        ctime: index,
         mtime: index,
+        size: 0,
+        tags: [],
       }));
 
       const matches = matchFilesByName(files, new Set(["md"]), (name) => ({

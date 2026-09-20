@@ -3,12 +3,15 @@ import { cn } from "@/lib/utils";
 import { MiyoClient } from "@/miyo/MiyoClient";
 import { getMiyoCustomUrl, shouldUseMiyo } from "@/miyo/miyoRuntimePolicy";
 import { getMiyoFolderName, getVaultRelativeMiyoPath } from "@/miyo/miyoUtils";
+import { checkIsPlusUser, isPlusEnabled } from "@/plusUtils";
 import { updateSetting, useSettingsValue } from "@/settings/model";
+import { getTagsFromNote } from "@/utils";
 import { openWithSystemDefault } from "@/utils/openWithSystemDefault";
 import { useVaultSearch } from "@/vaultSearch/useVaultSearch";
 import type { SearchCandidate, SearchFile } from "@/vaultSearch/types";
+import { createJevSearchBooster, type JevSearchBooster } from "@/vaultSearch/boost/jevBooster";
 import { FileSystemAdapter, Notice, Platform, TFile, prepareFuzzySearch, type App } from "obsidian";
-import React, { type ReactElement, useCallback, useMemo, useState } from "react";
+import React, { type ReactElement, useCallback, useEffect, useMemo, useState } from "react";
 
 export interface FileTypeOption {
   extension: string;
@@ -24,6 +27,11 @@ export interface VaultSearchModalContentProps {
   results: SearchCandidate[];
   searching: boolean;
   miyoUnavailable: boolean;
+  aiBoostEnabled: boolean;
+  aiBoostLicensed: boolean;
+  aiBoosting: boolean;
+  onAiBoostChange: (enabled: boolean) => void;
+  onAiBoostNow: () => void;
   onOpen: (candidate: SearchCandidate, newTab: boolean) => void;
   onClose: () => void;
   isMobile: boolean;
@@ -116,6 +124,11 @@ export function VaultSearchModalContent({
   results,
   searching,
   miyoUnavailable,
+  aiBoostEnabled,
+  aiBoostLicensed,
+  aiBoosting,
+  onAiBoostChange,
+  onAiBoostNow,
   onOpen,
   onClose,
   isMobile,
@@ -130,6 +143,16 @@ export function VaultSearchModalContent({
     if (event.key === "Escape") {
       event.preventDefault();
       onClose();
+      return;
+    }
+    if (
+      event.key === "Enter" &&
+      aiBoostEnabled &&
+      query.trim().length >= 3 &&
+      !results.some(({ boostScore }) => boostScore !== undefined)
+    ) {
+      event.preventDefault();
+      if (!aiBoosting) onAiBoostNow();
       return;
     }
     if (results.length === 0) return;
@@ -178,6 +201,25 @@ export function VaultSearchModalContent({
           </label>
         ))}
       </div>
+      <div className="tw-flex tw-items-center tw-gap-2 tw-text-small tw-text-muted">
+        <label className="tw-flex tw-items-center tw-gap-1">
+          <input
+            type="checkbox"
+            aria-label="AI boost"
+            checked={aiBoostEnabled}
+            disabled={!aiBoostLicensed}
+            onChange={(event) => onAiBoostChange(event.target.checked)}
+          />
+          <span>AI boost</span>
+        </label>
+        <span
+          aria-label={aiBoostLicensed ? "Re-ranks results with AI" : "License required"}
+          title={aiBoostLicensed ? "Re-ranks results with AI" : "License required"}
+        >
+          !
+        </span>
+        {!aiBoostLicensed && <span>License required</span>}
+      </div>
       {miyoUnavailable && (
         <div className="tw-text-small tw-text-muted">Enable Miyo for content search</div>
       )}
@@ -205,11 +247,15 @@ export function VaultSearchModalContent({
                 <span className="tw-rounded tw-bg-modifier-hover tw-px-1.5 tw-py-0.5 tw-text-smallest tw-uppercase tw-text-muted">
                   {candidate.extension || "file"}
                 </span>
-                {candidate.score !== null && (
+                {candidate.boostScore !== undefined ? (
+                  <span className="tw-text-small tw-tabular-nums tw-text-muted">
+                    {Math.round(candidate.boostScore * 100)}%
+                  </span>
+                ) : candidate.score !== null ? (
                   <span className="tw-text-small tw-tabular-nums tw-text-muted">
                     {candidate.score.toFixed(2)}
                   </span>
-                )}
+                ) : null}
               </span>
               <span className="tw-flex tw-w-full tw-items-center tw-gap-2 tw-text-small tw-text-muted">
                 <span className="tw-min-w-0 tw-flex-1 tw-truncate">{candidate.folder || "/"}</span>
@@ -252,6 +298,7 @@ function VaultSearchModalBody({
   timerWindow: Window;
 }) {
   const settings = useSettingsValue();
+  const [aiBoostLicensed, setAiBoostLicensed] = useState(() => isPlusEnabled());
   const client = useMemo(() => new MiyoClient(), []);
   const files = useMemo<SearchFile[]>(
     () =>
@@ -260,7 +307,10 @@ function VaultSearchModalBody({
         name: file.name,
         basename: file.basename,
         extension: file.extension.toLowerCase(),
+        ctime: file.stat.ctime,
         mtime: file.stat.mtime,
+        size: file.stat.size,
+        tags: getTagsFromNote(app, file, false),
       })),
     [app]
   );
@@ -272,6 +322,29 @@ function VaultSearchModalBody({
     () => new Set(fileTypes.filter(({ checked }) => checked).map(({ extension }) => extension)),
     [fileTypes]
   );
+  useEffect(() => {
+    let active = true;
+    void checkIsPlusUser(app, "vault_search")
+      .then((licensed) => {
+        if (active) setAiBoostLicensed(licensed);
+      })
+      .catch(() => {
+        if (active) setAiBoostLicensed(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [app]);
+  const booster = useMemo<JevSearchBooster | undefined>(() => {
+    if (!aiBoostLicensed || !settings.vaultSearchAiBoostEnabled) return undefined;
+    return createJevSearchBooster({
+      files,
+      selectedTypes,
+      prepareSearch: prepareFuzzySearch,
+      vaultName: app.vault.getName(),
+      timerWindow,
+    });
+  }, [aiBoostLicensed, app, files, selectedTypes, settings.vaultSearchAiBoostEnabled, timerWindow]);
   const searchMiyo = useCallback(
     async (query: string, paths?: string[]) => {
       const baseUrl = await client.resolveBaseUrl(getMiyoCustomUrl(settings) || undefined);
@@ -296,6 +369,7 @@ function VaultSearchModalBody({
     searchMiyo,
     prepareSearch: prepareFuzzySearch,
     mapMiyoPath: (path) => getVaultRelativeMiyoPath(app, path),
+    booster,
     timerWindow,
   });
   const onTypeChange = (extension: string, checked: boolean) => {
@@ -305,6 +379,7 @@ function VaultSearchModalBody({
     updateSetting("vaultSearchExcludedFileTypes", [...excluded].sort());
   };
   const onOpen = (candidate: SearchCandidate, newTab: boolean) => {
+    booster?.logOpened(candidate.path);
     void openVaultSearchResult(app, candidate, newTab).then((opened) => {
       if (opened) close();
     });
@@ -319,6 +394,11 @@ function VaultSearchModalBody({
       results={search.results}
       searching={search.searching}
       miyoUnavailable={search.miyoUnavailable}
+      aiBoostEnabled={aiBoostLicensed && settings.vaultSearchAiBoostEnabled}
+      aiBoostLicensed={aiBoostLicensed}
+      aiBoosting={search.boosting}
+      onAiBoostChange={(enabled) => updateSetting("vaultSearchAiBoostEnabled", enabled)}
+      onAiBoostNow={search.boostNow}
       onOpen={onOpen}
       onClose={close}
       isMobile={Platform.isMobile}

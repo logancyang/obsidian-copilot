@@ -254,6 +254,7 @@ export type LicenseCheckTrigger =
   | "legacy_chat_turn"
   | "multi_agent_per_turn"
   | "tool_call"
+  | "vault_search"
   | "model_gate";
 
 /** Product context attached to each license validation request. */

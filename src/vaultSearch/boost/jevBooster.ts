@@ -1,0 +1,156 @@
+import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
+import { logInfo } from "@/logger";
+import { getSettings } from "@/settings/model";
+import { buildBoostPool, type BoostPoolCandidate } from "@/vaultSearch/boost/boostPool";
+import {
+  buildJevRequest,
+  parseJevProbabilities,
+  type JevNoulAnswer,
+} from "@/vaultSearch/boost/jevQuestions";
+import type { FuzzySearch } from "@/vaultSearch/candidates";
+import type { SearchBooster, SearchCandidate, SearchFile } from "@/vaultSearch/types";
+
+export const JEV_TIMEOUT_MS = 2500;
+
+interface BrocaClient {
+  broca(state: unknown, questions: Record<string, unknown>): Promise<Record<string, JevNoulAnswer>>;
+}
+
+interface JevSearchBoosterOptions {
+  client: BrocaClient;
+  files: SearchFile[];
+  selectedTypes: ReadonlySet<string>;
+  prepareSearch: (query: string) => FuzzySearch;
+  vaultName: string;
+  now?: () => Date;
+  timerWindow?: Pick<Window, "setTimeout" | "clearTimeout">;
+}
+
+interface JudgmentDetails {
+  sources: string[];
+  miyoRank: number | null;
+  jevRank: number;
+}
+
+/** Serializes Jev judgments and keeps the paid service outside basic vault search. */
+export class JevSearchBooster implements SearchBooster {
+  private sequence = 0;
+  private inFlight: Promise<void> | null = null;
+  private lastDetails = new Map<string, JudgmentDetails>();
+
+  constructor(private readonly options: JevSearchBoosterOptions) {}
+
+  extraCandidates(query: string, types: Set<string>): SearchCandidate[] {
+    return this.pool(query, [], types).map(({ candidate }) => candidate);
+  }
+
+  async score(query: string, candidates: SearchCandidate[]): Promise<Map<string, number>> {
+    const sequence = ++this.sequence;
+    if (this.inFlight) await this.inFlight;
+    if (sequence !== this.sequence) throw new Error("AI boost superseded by a newer query");
+
+    const pool = this.pool(query, candidates, this.options.selectedTypes);
+    if (!pool.length) return new Map();
+    const request = buildJevRequest(query, this.options.vaultName, pool, this.now());
+    const startedAt = Date.now();
+    const transport = this.options.client.broca(request.state, request.questions);
+    const tracked = transport.then(
+      () => undefined,
+      () => undefined
+    );
+    this.inFlight = tracked;
+    void tracked.finally(() => {
+      if (this.inFlight === tracked) this.inFlight = null;
+    });
+
+    const answers = await this.withTimeout(transport);
+    if (sequence !== this.sequence) throw new Error("AI boost superseded by a newer query");
+    const probabilities = parseJevProbabilities(pool, answers);
+    this.rememberDetails(pool, probabilities);
+    const sourceSizes = Object.fromEntries(
+      ["miyo", "filename", "created", "modified"].map((source) => [
+        source,
+        pool.filter(({ sources }) => sources.includes(source as never)).length,
+      ])
+    );
+    logInfo("[Vault search AI boost]", {
+      queryLength: query.length,
+      ...(getSettings().debug ? { query } : {}),
+      poolSize: pool.length,
+      sourceSizes,
+      probabilities: Object.fromEntries(probabilities),
+      jevLatencyMs: Date.now() - startedAt,
+    });
+    return probabilities;
+  }
+
+  logOpened(path: string): void {
+    const details = this.lastDetails.get(path);
+    if (details) logInfo("[Vault search AI boost opened]", { path, ...details });
+  }
+
+  private pool(
+    query: string,
+    basicCandidates: SearchCandidate[],
+    selectedTypes: ReadonlySet<string>
+  ): BoostPoolCandidate[] {
+    return buildBoostPool({
+      basicCandidates,
+      files: this.options.files,
+      selectedTypes,
+      fuzzySearch: this.options.prepareSearch(query),
+    });
+  }
+
+  private now(): Date {
+    return this.options.now?.() ?? new Date();
+  }
+
+  private withTimeout<T>(request: Promise<T>): Promise<T> {
+    const timerWindow = this.options.timerWindow ?? window;
+    return new Promise<T>((resolve, reject) => {
+      const timer = timerWindow.setTimeout(
+        () => reject(new Error("AI boost timed out")),
+        JEV_TIMEOUT_MS
+      );
+      request.then(
+        (value) => {
+          timerWindow.clearTimeout(timer);
+          resolve(value);
+        },
+        (error) => {
+          timerWindow.clearTimeout(timer);
+          reject(error instanceof Error ? error : new Error(String(error)));
+        }
+      );
+    });
+  }
+
+  private rememberDetails(
+    pool: BoostPoolCandidate[],
+    probabilities: ReadonlyMap<string, number>
+  ): void {
+    this.lastDetails.clear();
+    [...probabilities]
+      .sort(([, left], [, right]) => right - left)
+      .forEach(([path], index) => {
+        const entry = pool.find(({ candidate }) => candidate.path === path);
+        if (entry) {
+          this.lastDetails.set(path, {
+            sources: entry.sources,
+            miyoRank: entry.searchRank,
+            jevRank: index + 1,
+          });
+        }
+      });
+  }
+}
+
+export function createJevSearchBooster(
+  options: Omit<JevSearchBoosterOptions, "client">
+): JevSearchBooster {
+  return new JevSearchBooster({
+    ...options,
+    client: BrevilabsClient.getInstance(),
+  });
+}

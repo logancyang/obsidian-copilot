@@ -50,6 +50,11 @@ const meta = {
     results: RESULTS,
     searching: false,
     miyoUnavailable: false,
+    aiBoostEnabled: false,
+    aiBoostLicensed: true,
+    aiBoosting: false,
+    onAiBoostChange: () => undefined,
+    onAiBoostNow: () => undefined,
     onOpen: () => undefined,
     onClose: () => undefined,
     isMobile: false,
@@ -82,4 +87,8 @@ export const MiyoUnavailable: StoryObj<VaultSearchModalContentProps> = {
 
 export const Empty: StoryObj<VaultSearchModalContentProps> = {
   args: { results: [] },
+};
+
+export const LicenseRequired: StoryObj<VaultSearchModalContentProps> = {
+  args: { aiBoostLicensed: false },
 };

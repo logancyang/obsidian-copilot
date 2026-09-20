@@ -19,14 +19,20 @@ const files: SearchFile[] = [
     name: "Stoicism.epub",
     basename: "Stoicism",
     extension: "epub",
+    ctime: 15,
     mtime: 20,
+    size: 200,
+    tags: [],
   },
   {
     path: "Papers/Attention.pdf",
     name: "Attention.pdf",
     basename: "Attention",
     extension: "pdf",
+    ctime: 5,
     mtime: 10,
+    size: 100,
+    tags: [],
   },
 ];
 
@@ -132,5 +138,148 @@ describe("useVaultSearch", () => {
 
       expect(jest.getTimerCount()).toBe(1);
     });
+
+    it(`sorts judged rows by probability while leaving unjudged rows in their basic order (${"https://github.com/Brevilabs/obsidian-copilot-private/issues/516"})`, async () => {
+      const booster = {
+        extraCandidates: jest.fn(() => []),
+        score: jest.fn().mockResolvedValue(new Map([["Papers/Attention.pdf", 0.92]])),
+      };
+      const { result } = renderHook(() =>
+        useVaultSearch(
+          options({
+            booster,
+            miyoEnabled: false,
+            prepareSearch: () => (name) => ({
+              score: name === "Stoicism" ? 10 : 5,
+              matches: [],
+            }),
+          })
+        )
+      );
+
+      act(() => result.current.setQuery("paper"));
+      await act(async () => jest.advanceTimersByTime(400));
+
+      expect(result.current.results.map(({ path }) => path)).toEqual([
+        "Papers/Attention.pdf",
+        "Books/Stoicism.epub",
+      ]);
+      expect(result.current.results[0].boostScore).toBe(0.92);
+    });
+
+    it(`waits for the current Miyo result before building one boost pool (${"https://github.com/Brevilabs/obsidian-copilot-private/issues/516"})`, async () => {
+      const miyo = deferred<MiyoSearchResult[]>();
+      const booster = {
+        extraCandidates: jest.fn(() => []),
+        score: jest.fn().mockResolvedValue(new Map([["Papers/Attention.pdf", 0.92]])),
+      };
+      const { result } = renderHook(() =>
+        useVaultSearch(options({ booster, searchMiyo: jest.fn(() => miyo.promise) }))
+      );
+
+      act(() => result.current.setQuery("paper"));
+      await act(async () => jest.advanceTimersByTime(400));
+      expect(booster.score).not.toHaveBeenCalled();
+
+      await act(async () => {
+        miyo.resolve([
+          { id: "paper", path: "Papers/Attention.pdf", score: 0.8, snippet: "Result" },
+        ]);
+        await miyo.promise;
+      });
+
+      expect(booster.score).toHaveBeenCalledTimes(1);
+      expect(booster.score).toHaveBeenCalledWith(
+        "paper",
+        expect.arrayContaining([expect.objectContaining({ path: "Papers/Attention.pdf" })])
+      );
+      expect(result.current.results[0]).toMatchObject({
+        path: "Papers/Attention.pdf",
+        boostScore: 0.92,
+      });
+    });
+
+    it(`starts the same boost immediately when requested before the settle delay (${"https://github.com/Brevilabs/obsidian-copilot-private/issues/516"})`, async () => {
+      const booster = {
+        extraCandidates: jest.fn(() => []),
+        score: jest.fn().mockResolvedValue(new Map()),
+      };
+      const { result } = renderHook(() => useVaultSearch(options({ booster, miyoEnabled: false })));
+
+      act(() => result.current.setQuery("paper"));
+      act(() => result.current.boostNow());
+      await act(async () => jest.advanceTimersByTime(0));
+
+      expect(booster.score).toHaveBeenCalledTimes(1);
+    });
+
+    it(`restores the untouched basic order when AI boost is turned off (${"https://github.com/Brevilabs/obsidian-copilot-private/issues/516"})`, async () => {
+      const booster = {
+        extraCandidates: jest.fn(() => []),
+        score: jest.fn().mockResolvedValue(new Map([["Papers/Attention.pdf", 0.92]])),
+      };
+      const initialProps: { activeBooster: UseVaultSearchOptions["booster"] } = {
+        activeBooster: booster,
+      };
+      const { result, rerender } = renderHook(
+        ({ activeBooster }) =>
+          useVaultSearch(
+            options({
+              booster: activeBooster,
+              miyoEnabled: false,
+              prepareSearch: () => (name) => ({
+                score: name === "Stoicism" ? 10 : 5,
+                matches: [],
+              }),
+            })
+          ),
+        { initialProps }
+      );
+
+      act(() => result.current.setQuery("paper"));
+      await act(async () => jest.advanceTimersByTime(400));
+      expect(result.current.results[0]).toMatchObject({
+        path: "Papers/Attention.pdf",
+        boostScore: 0.92,
+      });
+
+      rerender({ activeBooster: undefined });
+      expect(result.current.results.map(({ path }) => path)).toEqual([
+        "Books/Stoicism.epub",
+        "Papers/Attention.pdf",
+      ]);
+      expect(result.current.results.every(({ boostScore }) => boostScore === undefined)).toBe(true);
+    });
+
+    it.each([
+      ["a timeout", new Error("AI boost timed out")],
+      ["HTTP 429", Object.assign(new Error("failed"), { status: 429 })],
+      ["HTTP 500", Object.assign(new Error("failed"), { status: 500 })],
+    ])(
+      `leaves the basic list unchanged when AI boost fails with %s (${"https://github.com/Brevilabs/obsidian-copilot-private/issues/516"})`,
+      async (_failure, error) => {
+        const booster = {
+          extraCandidates: jest.fn(() => []),
+          score: jest.fn().mockRejectedValue(error),
+        };
+        const { result } = renderHook(() =>
+          useVaultSearch(
+            options({
+              booster,
+              miyoEnabled: false,
+              prepareSearch: () => (name) =>
+                name === "Stoicism" ? { score: 1, matches: [] } : null,
+            })
+          )
+        );
+
+        act(() => result.current.setQuery("stoic"));
+        const before = result.current.results;
+        await act(async () => jest.advanceTimersByTime(400));
+
+        expect(result.current.results).toBe(before);
+        expect(result.current.results.map(({ path }) => path)).toEqual(["Books/Stoicism.epub"]);
+      }
+    );
   });
 });

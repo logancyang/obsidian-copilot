@@ -52,6 +52,11 @@ function props(
     results,
     searching: false,
     miyoUnavailable: false,
+    aiBoostEnabled: false,
+    aiBoostLicensed: true,
+    aiBoosting: false,
+    onAiBoostChange: jest.fn(),
+    onAiBoostNow: jest.fn(),
     onOpen: jest.fn(),
     onClose: jest.fn(),
     isMobile: false,
@@ -69,9 +74,36 @@ describe("VaultSearchModal", () => {
   describe("buildFileTypeOptions()", () => {
     it(`derives counted file types and remembers unchecked selections (${issue})`, () => {
       const files: SearchFile[] = [
-        { path: "a.md", name: "a.md", basename: "a", extension: "md", mtime: 0 },
-        { path: "b.md", name: "b.md", basename: "b", extension: "md", mtime: 0 },
-        { path: "c.pdf", name: "c.pdf", basename: "c", extension: "pdf", mtime: 0 },
+        {
+          path: "a.md",
+          name: "a.md",
+          basename: "a",
+          extension: "md",
+          ctime: 0,
+          mtime: 0,
+          size: 0,
+          tags: [],
+        },
+        {
+          path: "b.md",
+          name: "b.md",
+          basename: "b",
+          extension: "md",
+          ctime: 0,
+          mtime: 0,
+          size: 0,
+          tags: [],
+        },
+        {
+          path: "c.pdf",
+          name: "c.pdf",
+          basename: "c",
+          extension: "pdf",
+          ctime: 0,
+          mtime: 0,
+          size: 0,
+          tags: [],
+        },
       ];
 
       expect(buildFileTypeOptions(files, ["pdf"])).toEqual([
@@ -115,6 +147,59 @@ describe("VaultSearchModal", () => {
       render(<VaultSearchModalContent {...props({ isMobile: true })} />);
 
       expect(screen.getByText("Unavailable on mobile")).toBeTruthy();
+    });
+
+    it(`shows a disabled license state without an upsell action (${"https://github.com/Brevilabs/obsidian-copilot-private/issues/516"})`, () => {
+      render(<VaultSearchModalContent {...props({ aiBoostLicensed: false })} />);
+
+      expect(screen.getByRole("checkbox", { name: "AI boost" }).hasAttribute("disabled")).toBe(
+        true
+      );
+      expect(screen.getByText("License required")).toBeTruthy();
+      expect(screen.queryByRole("link")).toBeNull();
+      expect(screen.queryByRole("button", { name: /license/i })).toBeNull();
+    });
+
+    it(`shows Jev probabilities as percentages and keeps selection on the same file after re-sort (${"https://github.com/Brevilabs/obsidian-copilot-private/issues/516"})`, () => {
+      const boosted = results.map((result, index) => ({
+        ...result,
+        boostScore: index === 0 ? 0.92 : 0.61,
+      }));
+      const { rerender } = render(<VaultSearchModalContent {...props({ results: boosted })} />);
+      fireEvent.mouseEnter(screen.getByText("Attention").closest("button")!);
+
+      rerender(<VaultSearchModalContent {...props({ results: [...boosted].reverse() })} />);
+
+      expect(screen.getByText("92%")).toBeTruthy();
+      expect(screen.getByText("61%")).toBeTruthy();
+      expect(screen.getByText("Attention").closest("button")?.getAttribute("aria-selected")).toBe(
+        "true"
+      );
+    });
+
+    it(`uses Enter to run a pending AI boost immediately, then opens the boosted result (${"https://github.com/Brevilabs/obsidian-copilot-private/issues/516"})`, () => {
+      const onAiBoostNow = jest.fn();
+      const onOpen = jest.fn();
+      const { rerender } = render(
+        <VaultSearchModalContent {...props({ aiBoostEnabled: true, onAiBoostNow, onOpen })} />
+      );
+
+      fireEvent.keyDown(screen.getByRole("searchbox"), { key: "Enter" });
+      expect(onAiBoostNow).toHaveBeenCalledTimes(1);
+      expect(onOpen).not.toHaveBeenCalled();
+
+      rerender(
+        <VaultSearchModalContent
+          {...props({
+            aiBoostEnabled: true,
+            onAiBoostNow,
+            onOpen,
+            results: [{ ...results[0], boostScore: 0.92 }, results[1]],
+          })}
+        />
+      );
+      fireEvent.keyDown(screen.getByRole("searchbox"), { key: "Enter" });
+      expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ boostScore: 0.92 }), false);
     });
   });
 

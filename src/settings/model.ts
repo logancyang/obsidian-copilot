@@ -160,6 +160,8 @@ export interface CopilotSettings {
   miyoSearchAll: boolean;
   /** File extensions excluded in Open Copilot search; new extensions remain selected by default. */
   vaultSearchExcludedFileTypes: string[];
+  /** Remembered modal-only preference for licensed Jev re-ranking. */
+  vaultSearchAiBoostEnabled: boolean;
   /**
    * Keep Relevant Notes in step with the note being written. Miyo re-embeds a
    * file a few seconds after it lands on disk, so the pane can re-rank itself
@@ -1032,6 +1034,9 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
         ),
       ]
     : DEFAULT_SETTINGS.vaultSearchExcludedFileTypes;
+  if (typeof sanitizedSettings.vaultSearchAiBoostEnabled !== "boolean") {
+    sanitizedSettings.vaultSearchAiBoostEnabled = DEFAULT_SETTINGS.vaultSearchAiBoostEnabled;
+  }
 
   // Ensure relevantNotesLiveUpdate has a default value
   if (typeof sanitizedSettings.relevantNotesLiveUpdate !== "boolean") {

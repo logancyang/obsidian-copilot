@@ -1,4 +1,5 @@
 import type { MiyoSearchResult } from "@/miyo/MiyoClient";
+import { logInfo } from "@/logger";
 import {
   filterCandidatesByTypes,
   groupMiyoResults,
@@ -26,9 +27,11 @@ export interface UseVaultSearchOptions {
 export interface UseVaultSearchResult {
   query: string;
   setQuery: (query: string) => void;
+  boostNow: () => void;
   results: SearchCandidate[];
   miyoUnavailable: boolean;
   searching: boolean;
+  boosting: boolean;
 }
 
 export function useVaultSearch(options: UseVaultSearchOptions): UseVaultSearchResult {
@@ -36,12 +39,15 @@ export function useVaultSearch(options: UseVaultSearchOptions): UseVaultSearchRe
   const [results, setResults] = useState<SearchCandidate[]>(() => recentCandidates(options));
   const [miyoUnavailable, setMiyoUnavailable] = useState(!options.miyoEnabled);
   const [searching, setSearching] = useState(false);
+  const [boosting, setBoosting] = useState(false);
+  const [boostRequest, setBoostRequest] = useState(0);
   const requestSequence = useRef(0);
   const boosterSequence = useRef(0);
-  const latestResults = useRef(results);
+  const basicResults = useRef(results);
+  const basicSettled = useRef(Promise.resolve());
+  const immediateBoostQuery = useRef("");
   const optionsRef = useRef(options);
   optionsRef.current = options;
-  latestResults.current = results;
 
   const selectedTypesKey = [...options.selectedTypes].sort().join("\u0000");
   const allTypesKey = [...options.allTypes].sort().join("\u0000");
@@ -52,10 +58,19 @@ export function useVaultSearch(options: UseVaultSearchOptions): UseVaultSearchRe
     const currentSequence = ++requestSequence.current;
     const current = optionsRef.current;
     const trimmedQuery = query.trim();
+    let settleBasic!: () => void;
+    basicSettled.current = new Promise<void>((resolve) => {
+      settleBasic = resolve;
+    });
+    const applyResults = (nextResults: SearchCandidate[]) => {
+      basicResults.current = nextResults;
+      setResults(nextResults);
+    };
     if (!trimmedQuery) {
-      setResults(recentCandidates(current));
+      applyResults(recentCandidates(current));
       setMiyoUnavailable(!current.miyoEnabled);
       setSearching(false);
+      settleBasic();
       return;
     }
 
@@ -65,15 +80,17 @@ export function useVaultSearch(options: UseVaultSearchOptions): UseVaultSearchRe
       selectedTypes,
       current.prepareSearch(trimmedQuery)
     );
-    setResults(localResults);
+    applyResults(localResults);
     if (!current.miyoEnabled) {
       setMiyoUnavailable(true);
       setSearching(false);
+      settleBasic();
       return;
     }
     if (selectedTypes.size === 0) {
       setMiyoUnavailable(false);
       setSearching(false);
+      settleBasic();
       return;
     }
 
@@ -82,6 +99,7 @@ export function useVaultSearch(options: UseVaultSearchOptions): UseVaultSearchRe
     const timerWindow = current.timerWindow ?? window;
     const timer = timerWindow.setTimeout(() => {
       void (async () => {
+        const startedAt = Date.now();
         const paths =
           selectedTypes.size < current.allTypes.length
             ? [...selectedTypes].filter(Boolean).map((extension) => `.${extension}`)
@@ -94,18 +112,32 @@ export function useVaultSearch(options: UseVaultSearchOptions): UseVaultSearchRe
             : response;
           const miyoResults = groupMiyoResults(mapped, selectedTypes);
           const miyoPaths = new Set(miyoResults.map(({ path }) => path));
-          setResults([...miyoResults, ...localResults.filter(({ path }) => !miyoPaths.has(path))]);
+          applyResults([
+            ...miyoResults,
+            ...localResults.filter(({ path }) => !miyoPaths.has(path)),
+          ]);
+          logInfo("[Vault search basic]", {
+            queryLength: trimmedQuery.length,
+            resultCount: miyoResults.length,
+            latencyMs: Date.now() - startedAt,
+          });
           setMiyoUnavailable(false);
         } catch {
           if (currentSequence !== requestSequence.current) return;
-          setResults(localResults);
+          applyResults(localResults);
           setMiyoUnavailable(true);
         } finally {
-          if (currentSequence === requestSequence.current) setSearching(false);
+          if (currentSequence === requestSequence.current) {
+            setSearching(false);
+            settleBasic();
+          }
         }
       })();
     }, current.debounceMs ?? 150);
-    return () => timerWindow.clearTimeout(timer);
+    return () => {
+      timerWindow.clearTimeout(timer);
+      settleBasic();
+    };
   }, [allTypesKey, options.files, options.miyoEnabled, query, recentPathsKey, selectedTypesKey]);
 
   useEffect(() => {
@@ -113,36 +145,66 @@ export function useVaultSearch(options: UseVaultSearchOptions): UseVaultSearchRe
     const current = optionsRef.current;
     const booster = current.booster;
     const trimmedQuery = query.trim();
-    if (!booster || trimmedQuery.length < 3) return;
+    if (!booster || trimmedQuery.length < 3) {
+      if (!booster) setResults(basicResults.current);
+      setBoosting(false);
+      return;
+    }
     const selectedTypes = new Set(current.selectedTypes);
+    const currentBasicSearch = basicSettled.current;
     const timerWindow = current.timerWindow ?? window;
-    const timer = timerWindow.setTimeout(() => {
-      void (async () => {
-        const base = filterCandidatesByTypes(latestResults.current, selectedTypes);
-        const seen = new Set(base.map(({ path }) => path));
-        const extras = booster
-          .extraCandidates(trimmedQuery, selectedTypes)
-          .filter(
-            (candidate) => selectedTypes.has(candidate.extension) && !seen.has(candidate.path)
-          );
-        const candidates = [...base, ...extras];
-        try {
-          const scores = await booster.score(trimmedQuery, candidates);
+    const timer = timerWindow.setTimeout(
+      () => {
+        void (async () => {
+          await currentBasicSearch;
           if (currentSequence !== boosterSequence.current) return;
-          setResults(
-            [...candidates].sort(
-              (left, right) => (scores.get(right.path) ?? -1) - (scores.get(left.path) ?? -1)
-            )
-          );
-        } catch {
-          // A booster is optional enrichment; basic results stay unchanged on failure.
-        }
-      })();
-    }, current.boosterSettleMs ?? 400);
+          const base = filterCandidatesByTypes(basicResults.current, selectedTypes);
+          const seen = new Set(base.map(({ path }) => path));
+          const extras = booster
+            .extraCandidates(trimmedQuery, selectedTypes)
+            .filter(
+              (candidate) => selectedTypes.has(candidate.extension) && !seen.has(candidate.path)
+            );
+          const candidates = [...base, ...extras];
+          try {
+            setBoosting(true);
+            const scores = await booster.score(trimmedQuery, candidates);
+            if (currentSequence !== boosterSequence.current) return;
+            const basePaths = new Set(base.map(({ path }) => path));
+            setResults(
+              candidates
+                .filter(({ path }) => basePaths.has(path) || scores.has(path))
+                .map((candidate) => {
+                  const boostScore = scores.get(candidate.path);
+                  return boostScore === undefined ? candidate : { ...candidate, boostScore };
+                })
+                .sort((left, right) => {
+                  const leftScore = left.boostScore;
+                  const rightScore = right.boostScore;
+                  if (leftScore === undefined && rightScore === undefined) return 0;
+                  if (leftScore === undefined) return 1;
+                  if (rightScore === undefined) return -1;
+                  return rightScore - leftScore;
+                })
+            );
+          } catch {
+            // A booster is optional enrichment; basic results stay unchanged on failure.
+          } finally {
+            if (currentSequence === boosterSequence.current) setBoosting(false);
+          }
+        })();
+      },
+      immediateBoostQuery.current === trimmedQuery ? 0 : (current.boosterSettleMs ?? 400)
+    );
     return () => timerWindow.clearTimeout(timer);
-  }, [boosterEnabled, query, selectedTypesKey]);
+  }, [boosterEnabled, boostRequest, query, selectedTypesKey]);
 
-  return { query, setQuery, results, miyoUnavailable, searching };
+  const boostNow = () => {
+    immediateBoostQuery.current = query.trim();
+    setBoostRequest((request) => request + 1);
+  };
+
+  return { query, setQuery, boostNow, results, miyoUnavailable, searching, boosting };
 }
 
 function recentCandidates(options: UseVaultSearchOptions): SearchCandidate[] {

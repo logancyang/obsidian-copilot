@@ -8,6 +8,7 @@ export interface SearchCandidate {
   snippet: string;
   mtime: number;
   score: number | null;
+  boostScore?: number;
   source: SearchCandidateSource;
 }
 
@@ -16,7 +17,10 @@ export interface SearchFile {
   name: string;
   basename: string;
   extension: string;
+  ctime: number;
   mtime: number;
+  size: number;
+  tags: string[];
 }
 
 export interface SearchBooster {
