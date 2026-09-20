@@ -4,6 +4,7 @@ import { App, Component, EventRef, MarkdownView, setIcon, TFile } from "obsidian
 const VISIBLE_SUGGESTIONS = 2;
 const CACHE_TTL_MS = 10 * 60 * 1_000;
 const CACHE_MAX_NOTES = 50;
+const PENDING_WRITE_TIMEOUT_MS = 2_000;
 const TAG_PROPERTY_SELECTOR =
   '.metadata-property[data-property-key="tags"], .metadata-property[data-property-key="tag"]';
 
@@ -14,13 +15,18 @@ interface CachedSuggestions {
   ranked: ReadonlyArray<RankedTagSuggestion>;
 }
 
+interface PendingTagWrite {
+  present: boolean;
+  tag: string;
+}
+
 interface TagSuggestionSession {
   file: TFile;
   view: MarkdownView;
   nativeRow: HTMLElement;
   ranked: ReadonlyArray<RankedTagSuggestion>;
   updateTags?: UpdateSuggestedTags;
-  pendingTags: Set<string>;
+  pendingTags: Map<string, PendingTagWrite>;
   loading: boolean;
   rowEl: HTMLElement;
   pillsEl: HTMLElement;
@@ -193,7 +199,9 @@ export class TagSuggestionRow extends Component {
 
     let session: TagSuggestionSession;
     const metadataRef = this.app.metadataCache.on("changed", (changedFile) => {
-      if (changedFile.path === session.file.path) this.render(session);
+      if (changedFile.path !== session.file.path) return;
+      this.clearLandedPendingTags(session);
+      this.render(session);
     });
     const closeIfSourceIsInactive = () => {
       const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
@@ -214,7 +222,7 @@ export class TagSuggestionRow extends Component {
       nativeRow,
       ranked: Object.freeze([...suggestions]),
       updateTags,
-      pendingTags: new Set<string>(),
+      pendingTags: new Map<string, PendingTagWrite>(),
       loading,
       rowEl,
       pillsEl,
@@ -239,15 +247,19 @@ export class TagSuggestionRow extends Component {
         return;
       }
       const printable = event.key.length === 1 && !event.metaKey && !event.ctrlKey && !event.altKey;
-      if (printable || event.key === "Backspace") this.handBackToNative(session);
+      const target = event.target as Element | null;
+      const spaceOnButton = event.key === " " && Boolean(target?.closest?.("button"));
+      if ((printable && !spaceOnButton) || event.key === "Backspace") {
+        this.handBackToNative(session);
+      }
     });
     rowEl.addEventListener("click", (event) => {
       const target = event.target as Element;
       if (!target.closest(".multi-select-pill")) this.handBackToNative(session);
     });
 
-    this.render(session);
     rowEl.focus();
+    this.render(session);
     return true;
   }
 
@@ -294,26 +306,28 @@ export class TagSuggestionRow extends Component {
       return;
     }
     session.nativeRow = nativeRow;
-    const wasConnected = session.rowEl.isConnected;
     if (session.rowEl.nextElementSibling !== nativeRow) nativeRow.before(session.rowEl);
-    if (!wasConnected && session.pendingTags.size) session.rowEl.focus();
 
-    if (session.pillsEl.contains(session.rowEl.doc.activeElement)) session.rowEl.focus();
     session.pillsEl.replaceChildren();
     if (session.loading) {
       const placeholder = session.pillsEl.createSpan({
         cls: ["multi-select-pill", "copilot-tag-suggestion-placeholder"],
       });
       placeholder.createSpan({ cls: "multi-select-pill-content", text: "Suggesting…" });
+      this.finishRender(session);
       return;
     }
 
     const cache = this.app.metadataCache.getFileCache(session.file);
-    const existingTags = frontmatterTags(cache);
-    const existing = new Set(existingTags.map(normalizedTag));
-    for (const tag of existingTags) {
-      const normalized = normalizedTag(tag);
-      if (!normalized || session.pendingTags.has(normalized)) continue;
+    const displayedTags = new Map<string, string>();
+    for (const tag of frontmatterTags(cache)) displayedTags.set(normalizedTag(tag), tag);
+    for (const [normalized, pending] of session.pendingTags) {
+      if (pending.present) displayedTags.set(normalized, pending.tag);
+      else displayedTags.delete(normalized);
+    }
+    const existing = new Set(displayedTags.keys());
+    for (const [normalized, tag] of displayedTags) {
+      if (!normalized) continue;
       const pill = session.pillsEl.createDiv({
         cls: "multi-select-pill",
         attr: { tabindex: "0" },
@@ -346,6 +360,7 @@ export class TagSuggestionRow extends Component {
         void this.changeTags(session, [suggestion.tag], []);
       });
     }
+    this.finishRender(session);
   }
 
   private async changeTags(
@@ -354,20 +369,60 @@ export class TagSuggestionRow extends Component {
     remove: string[]
   ): Promise<void> {
     if (this.session !== session || !session.updateTags) return;
-    const normalized = [...add, ...remove].map(normalizedTag);
-    if (normalized.some((tag) => session.pendingTags.has(tag))) return;
-    normalized.forEach((tag) => session.pendingTags.add(tag));
+    const writes = [
+      ...add.map((tag) => [normalizedTag(tag), { present: true, tag }] as const),
+      ...remove.map((tag) => [normalizedTag(tag), { present: false, tag }] as const),
+    ];
+    if (writes.some(([normalized]) => session.pendingTags.has(normalized))) return;
+    writes.forEach(([normalized, write]) => session.pendingTags.set(normalized, write));
     this.render(session);
+    let updated = false;
     try {
-      await session.updateTags(add, remove);
+      updated = await session.updateTags(add, remove);
     } finally {
-      // processFrontMatter can resolve before Obsidian's Properties redraw.
-      // Keep the pending guard through that render frame so its transient
-      // focusout cannot close the session.
-      await new Promise<void>((resolve) => session.rowEl.win.setTimeout(resolve, 50));
-      normalized.forEach((tag) => session.pendingTags.delete(tag));
-      if (this.session === session) this.render(session);
+      if (this.session === session) {
+        if (updated) this.clearLandedPendingTags(session);
+        else this.clearPendingWrites(session, writes);
+        this.render(session);
+
+        const waiting = writes.filter(
+          ([normalized, write]) => session.pendingTags.get(normalized) === write
+        );
+        if (waiting.length) {
+          session.rowEl.win.setTimeout(() => {
+            if (this.session !== session) return;
+            this.clearPendingWrites(session, waiting);
+            this.render(session);
+          }, PENDING_WRITE_TIMEOUT_MS);
+        }
+      }
     }
+  }
+
+  private clearLandedPendingTags(session: TagSuggestionSession): void {
+    const existing = new Set(
+      frontmatterTags(this.app.metadataCache.getFileCache(session.file)).map(normalizedTag)
+    );
+    for (const [normalized, pending] of session.pendingTags) {
+      if (existing.has(normalized) === pending.present) session.pendingTags.delete(normalized);
+    }
+  }
+
+  private clearPendingWrites(
+    session: TagSuggestionSession,
+    writes: ReadonlyArray<readonly [string, PendingTagWrite]>
+  ): void {
+    for (const [normalized, write] of writes) {
+      if (session.pendingTags.get(normalized) === write) session.pendingTags.delete(normalized);
+    }
+  }
+
+  private finishRender(session: TagSuggestionSession): void {
+    if (this.session !== session) return;
+    const active = session.rowEl.doc.activeElement;
+    if (session.rowEl.contains(active)) return;
+    if (active === session.rowEl.doc.body) session.rowEl.focus();
+    else this.closeSession(session);
   }
 
   private handBackToNative(session: TagSuggestionSession): void {

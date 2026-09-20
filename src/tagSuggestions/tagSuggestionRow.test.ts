@@ -248,6 +248,35 @@ describe("TagSuggestionRow", () => {
     expect(row.hasSession(ctx.file)).toBe(true);
   });
 
+  it(`renders pending adds as solid and keeps pending removes out of both lists (${ISSUE})`, async () => {
+    const ctx = context();
+    ctx.setFrontmatter({ tags: ["tag-1"] });
+    let finish: ((updated: boolean) => void) | undefined;
+    const update = jest.fn(() => new Promise<boolean>((resolve) => (finish = resolve)));
+    const row = new TagSuggestionRow(ctx.app);
+    row.show(ctx.file, suggestions(3), update, ctx.view);
+
+    ctx.sourceContainer.querySelector<HTMLElement>('[aria-label="Remove #tag-1"]')?.click();
+
+    expect(ctx.sourceContainer.querySelector('[aria-label="Remove #tag-1"]')).toBeNull();
+    expect(suggestionLabels(ctx.sourceContainer)).toEqual(["tag-2", "tag-3"]);
+    finish?.(false);
+    await waitFor(() =>
+      expect(ctx.sourceContainer.querySelector('[aria-label="Remove #tag-1"]')).not.toBeNull()
+    );
+
+    ctx.setFrontmatter({ tags: [] });
+    ctx.emitMetadataChanged();
+    ctx.sourceContainer
+      .querySelector<HTMLButtonElement>('button[aria-label="Add #tag-1"]')
+      ?.click();
+
+    expect(ctx.sourceContainer.querySelector('[aria-label="Remove #tag-1"]')).not.toBeNull();
+    expect(suggestionLabels(ctx.sourceContainer)).toEqual(["tag-2", "tag-3"]);
+    finish?.(false);
+    await waitFor(() => expect(suggestionLabels(ctx.sourceContainer)).toContain("tag-1"));
+  });
+
   it(`derives add, remove, and returned suggestions from one immutable ranking (${ISSUE})`, async () => {
     const ctx = context();
     ctx.setFrontmatter({ tags: [] });
@@ -332,6 +361,30 @@ describe("TagSuggestionRow", () => {
     expect(row.hasSession(ctx.file)).toBe(true);
   });
 
+  it(`re-focuses a row re-attached after the pending-write fallback clears (${ISSUE})`, async () => {
+    jest.useFakeTimers();
+    try {
+      const ctx = context();
+      const row = new TagSuggestionRow(ctx.app);
+      row.show(ctx.file, suggestions(3), jest.fn().mockResolvedValue(true), ctx.view);
+      const mounted = ctx.sourceContainer.querySelector<HTMLElement>(".copilot-tag-suggestion-row");
+
+      mounted?.querySelector<HTMLButtonElement>('button[aria-label="Add #tag-1"]')?.click();
+      await Promise.resolve();
+      mounted?.dispatchEvent(new FocusEvent("focusout", { bubbles: true, relatedTarget: null }));
+      mounted?.remove();
+      expect(document.activeElement).toBe(document.body);
+
+      await jest.advanceTimersByTimeAsync(2_000);
+
+      expect(ctx.nativeRow.previousElementSibling).toBe(mounted);
+      expect(document.activeElement).toBe(mounted);
+      expect(row.hasSession(ctx.file)).toBe(true);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it.each(["q", "Backspace"])(
     `hands %s to the native input and suppresses re-triggering until native focus leaves (${ISSUE})`,
     (key) => {
@@ -351,6 +404,21 @@ describe("TagSuggestionRow", () => {
       expect(row.isNativeFocusSuppressed(ctx.nativeRow)).toBe(false);
     }
   );
+
+  it(`keeps Space on a focused suggestion button (${ISSUE})`, () => {
+    const ctx = context();
+    const row = new TagSuggestionRow(ctx.app);
+    row.show(ctx.file, suggestions(), jest.fn().mockResolvedValue(true), ctx.view);
+    const mounted = ctx.sourceContainer.querySelector<HTMLElement>(".copilot-tag-suggestion-row");
+    const suggestion = mounted?.querySelector<HTMLButtonElement>('button[aria-label="Add #tag-1"]');
+    suggestion?.focus();
+
+    suggestion?.dispatchEvent(new KeyboardEvent("keydown", { key: " ", bubbles: true }));
+
+    expect(ctx.sourceContainer.querySelector(".copilot-tag-suggestion-row")).toBe(mounted);
+    expect(document.activeElement).toBe(suggestion);
+    expect(row.isNativeFocusSuppressed(ctx.nativeRow)).toBe(false);
+  });
 
   it(`hands an empty-area click to the native input without preventing the click (${ISSUE})`, () => {
     const ctx = context();
