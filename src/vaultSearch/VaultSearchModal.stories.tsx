@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from "@/lib/story";
+import React, { useState } from "react";
 import type { SearchCandidate } from "./types";
 import { VaultSearchModalContent, type VaultSearchModalContentProps } from "./VaultSearchModal";
 
@@ -75,16 +76,28 @@ export default meta;
 
 export const Results: StoryObj<VaultSearchModalContentProps> = {};
 
-export const RecentlyOpened: StoryObj<VaultSearchModalContentProps> = {
+function SuggestionsPreview(args: Partial<VaultSearchModalContentProps>) {
+  const previewProps = { ...meta.args, ...args };
+  const [query, setQuery] = useState(previewProps.query);
+  return <VaultSearchModalContent {...previewProps} query={query} onQueryChange={setQuery} />;
+}
+
+export const BasicSuggestions: StoryObj<VaultSearchModalContentProps> = {
   args: {
     query: "",
-    results: RESULTS.map((result) => ({
-      ...result,
-      snippet: "Recently opened",
-      score: null,
-      source: "recent",
-    })),
+    results: [],
+    aiBoostEnabled: false,
   },
+  render: (args) => <SuggestionsPreview {...args} />,
+};
+
+export const AiBoostSuggestions: StoryObj<VaultSearchModalContentProps> = {
+  args: {
+    query: "",
+    results: [],
+    aiBoostEnabled: true,
+  },
+  render: (args) => <SuggestionsPreview {...args} />,
 };
 
 export const MiyoUnavailable: StoryObj<VaultSearchModalContentProps> = {

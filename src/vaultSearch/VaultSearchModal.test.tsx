@@ -174,6 +174,64 @@ describe("VaultSearchModal", () => {
       expect(modalBody?.classList.contains("tw-h-[min(72vh,42rem)]")).toBe(true);
     });
 
+    it(`shows clickable content and filename suggestions instead of files for an empty basic search (${issue})`, () => {
+      const onQueryChange = jest.fn();
+      const view = render(
+        <VaultSearchModalContent {...props({ query: "", aiBoostEnabled: false, onQueryChange })} />
+      );
+
+      expect(screen.queryAllByRole("option")).toHaveLength(0);
+      expect(screen.getByText("Try content or filename search")).toBeTruthy();
+      expect(screen.getByRole("button", { name: "notes about project planning" })).toBeTruthy();
+      expect(screen.getByRole("button", { name: "meeting notes" })).toBeTruthy();
+      expect(screen.getByRole("button", { name: "research in epub files" })).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "the largest epub" })).toBeNull();
+
+      fireEvent.click(screen.getByRole("button", { name: "meeting notes" }));
+      expect(onQueryChange).toHaveBeenCalledWith("meeting notes");
+
+      view.rerender(
+        <VaultSearchModalContent
+          {...props({
+            query: "",
+            aiBoostEnabled: false,
+            onQueryChange,
+            fileTypes: [
+              {
+                id: "other",
+                label: "Other",
+                extensions: ["cmd"],
+                count: 1,
+                checked: true,
+              },
+            ],
+          })}
+        />
+      );
+      expect(screen.getByRole("button", { name: "research in files" })).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "research in cmd files" })).toBeNull();
+    });
+
+    it(`switches empty search to type-aware comparison, decision, and cross-language AI suggestions (${"https://github.com/Brevilabs/obsidian-copilot-private/issues/516"})`, () => {
+      const onQueryChange = jest.fn();
+      render(
+        <VaultSearchModalContent {...props({ query: "", aiBoostEnabled: true, onQueryChange })} />
+      );
+
+      expect(screen.queryAllByRole("option")).toHaveLength(0);
+      expect(screen.getByText("Try AI boost")).toBeTruthy();
+      expect(screen.getByRole("button", { name: "the largest epub" })).toBeTruthy();
+      expect(screen.getByRole("button", { name: "the newest pdf" })).toBeTruthy();
+      expect(
+        screen.getByRole("button", { name: "the note where I decided against a tool" })
+      ).toBeTruthy();
+      expect(screen.getByRole("button", { name: "我决定不用某个工具的那篇笔记" })).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "meeting notes" })).toBeNull();
+
+      fireEvent.click(screen.getByRole("button", { name: "the largest epub" }));
+      expect(onQueryChange).toHaveBeenCalledWith("the largest epub");
+    });
+
     it(`renders result metadata and the Miyo-off fallback guidance (${issue})`, () => {
       render(<VaultSearchModalContent {...props({ miyoUnavailable: true })} />);
 

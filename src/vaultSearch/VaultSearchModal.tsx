@@ -1,6 +1,7 @@
 import { RelevanceMeter } from "@/components/chat-components/ui/RelevanceMeter";
 import { useRelevantNoteRowTransitions } from "@/components/chat-components/ui/useRelevantNoteRowTransitions";
 import { ReactModal } from "@/components/modals/ReactModal";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FilterChip } from "@/components/ui/filter-chip";
 import { SettingSwitch } from "@/components/ui/setting-switch";
@@ -180,6 +181,11 @@ export function VaultSearchModalContent({
   isMobile,
   canOpenInObsidian,
 }: VaultSearchModalContentProps): ReactElement {
+  const emptyQuery = !query.trim();
+  const suggestedQueries = useMemo(
+    () => buildSuggestedQueries(fileTypes, aiBoostEnabled),
+    [aiBoostEnabled, fileTypes]
+  );
   const animated = !useReducedMotion();
   const { rows, registerRow } = useRelevantNoteRowTransitions(
     results,
@@ -285,15 +291,43 @@ export function VaultSearchModalContent({
       )}
       <div
         className="tw-min-h-0 tw-flex-1 tw-overflow-y-auto tw-overscroll-contain tw-rounded-lg tw-p-1.5 tw-bg-secondary/30"
-        role="listbox"
+        role={emptyQuery ? undefined : "listbox"}
       >
-        {aiBoostEnabled && aiBoostUnavailable && (
+        {emptyQuery ? (
+          <div className="tw-flex tw-h-full tw-flex-col tw-items-center tw-justify-center tw-gap-4 tw-p-6">
+            <div className="tw-text-center">
+              <div className="tw-text-sm tw-font-medium tw-text-normal">
+                {aiBoostEnabled ? "Try AI boost" : "Try content or filename search"}
+              </div>
+              <div className="tw-mt-1 tw-text-xs tw-text-muted">
+                Select a suggestion to start searching your vault.
+              </div>
+            </div>
+            <div className="tw-grid tw-w-full tw-max-w-xl tw-grid-cols-1 tw-gap-2 sm:tw-grid-cols-2">
+              {suggestedQueries.map((suggestion) => (
+                <Button
+                  key={suggestion}
+                  type="button"
+                  variant="secondary"
+                  onClick={() => onQueryChange(suggestion)}
+                  className="tw-h-auto tw-min-h-10 tw-justify-start tw-whitespace-normal tw-px-3 tw-py-2 tw-text-left tw-font-normal"
+                >
+                  {suggestion}
+                </Button>
+              ))}
+            </div>
+          </div>
+        ) : null}
+        {!emptyQuery && aiBoostEnabled && aiBoostUnavailable && (
           <div className="tw-px-2.5 tw-py-1.5 tw-text-xs tw-text-muted">AI boost unavailable</div>
         )}
-        {showBoostOutcome && !hasStrongMatch && (
+        {!emptyQuery && showBoostOutcome && !hasStrongMatch && (
           <div className="tw-px-2.5 tw-py-1.5 tw-text-xs tw-text-muted">No strong match</div>
         )}
         {rows.map(({ note: candidate, entering, exiting }) => {
+          // Query clearing renders before the search effect can discard its previous result state.
+          // https://github.com/Brevilabs/obsidian-copilot-private/issues/515
+          if (emptyQuery) return null;
           const selected = candidate.path === selectedPath;
           const opensExternally = !canOpenInObsidian(candidate.extension);
           const displayScore = candidate.boostScore ?? candidate.score;
@@ -367,13 +401,9 @@ export function VaultSearchModalContent({
             </React.Fragment>
           );
         })}
-        {results.length === 0 && (
+        {!emptyQuery && results.length === 0 && (
           <div className="tw-py-10 tw-text-center tw-text-small tw-text-muted">
-            {searching
-              ? "Searching…"
-              : query.trim()
-                ? "No matching files"
-                : "Recently opened files will appear here"}
+            {searching ? "Searching…" : "No matching files"}
           </div>
         )}
       </div>
@@ -456,7 +486,6 @@ function VaultSearchModalBody({
   );
   const search = useVaultSearch({
     files,
-    recentPaths: app.workspace.getLastOpenFiles(),
     selectedTypes,
     allTypes: fileTypes.flatMap(({ extensions }) => extensions),
     miyoEnabled: shouldUseMiyo(settings),
@@ -503,6 +532,35 @@ function VaultSearchModalBody({
       canOpenInObsidian={(extension) => canObsidianRenderFile(app, extension)}
     />
   );
+}
+
+function buildSuggestedQueries(
+  fileTypes: readonly FileTypeOption[],
+  aiBoostEnabled: boolean
+): string[] {
+  const extensions = fileTypes
+    .filter(({ checked }) => checked)
+    .flatMap(({ extensions: optionExtensions }) => optionExtensions)
+    .filter((extension) => DEFAULT_MIYO_EXTENSIONS.has(extension));
+  const primaryType = extensions[0];
+  const secondaryType = extensions.find((extension) => extension !== primaryType) ?? primaryType;
+
+  if (aiBoostEnabled) {
+    // Boost suggestions expose comparisons and intent that basic similarity cannot resolve alone.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/516
+    return [
+      `the largest ${primaryType ?? "file"}`,
+      `the newest ${secondaryType ?? "file"}`,
+      "the note where I decided against a tool",
+      "我决定不用某个工具的那篇笔记",
+    ];
+  }
+
+  return [
+    "notes about project planning",
+    "meeting notes",
+    `research in ${primaryType ? `${primaryType} files` : "files"}`,
+  ];
 }
 
 /** Obsidian modal that owns the whole-vault Copilot search surface. */

@@ -39,7 +39,6 @@ const files: SearchFile[] = [
 function options(overrides: Partial<UseVaultSearchOptions> = {}): UseVaultSearchOptions {
   return {
     files,
-    recentPaths: ["Papers/Attention.pdf"],
     selectedTypes: new Set(["epub", "pdf"]),
     allTypes: ["epub", "pdf"],
     miyoEnabled: true,
@@ -61,12 +60,10 @@ describe("useVaultSearch", () => {
   });
 
   describe("useVaultSearch()", () => {
-    it(`lists recently opened files before the user enters a query (${issue})`, () => {
+    it(`shows no file results before the user enters a query (${issue})`, () => {
       const { result } = renderHook(() => useVaultSearch(options()));
 
-      expect(result.current.results).toEqual([
-        expect.objectContaining({ path: "Papers/Attention.pdf", source: "recent" }),
-      ]);
+      expect(result.current.results).toEqual([]);
     });
 
     it(`discards an older Miyo response after a newer query has completed (${issue})`, async () => {

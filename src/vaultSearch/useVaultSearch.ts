@@ -11,10 +11,11 @@ import { useEffect, useRef, useState } from "react";
 
 const MIYO_RESULT_LIMIT = 100;
 const FILTERED_MIYO_FETCH_LIMIT = 1000;
+const EMPTY_SEARCH_RESULTS: SearchCandidate[] = [];
+Object.freeze(EMPTY_SEARCH_RESULTS);
 
 export interface UseVaultSearchOptions {
   files: SearchFile[];
-  recentPaths: string[];
   selectedTypes: ReadonlySet<string>;
   allTypes: readonly string[];
   miyoEnabled: boolean;
@@ -41,7 +42,7 @@ export interface UseVaultSearchResult {
 
 export function useVaultSearch(options: UseVaultSearchOptions): UseVaultSearchResult {
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<SearchCandidate[]>(() => recentCandidates(options));
+  const [results, setResults] = useState<SearchCandidate[]>(EMPTY_SEARCH_RESULTS);
   const [miyoUnavailable, setMiyoUnavailable] = useState(!options.miyoEnabled);
   const [searching, setSearching] = useState(false);
   const [boosting, setBoosting] = useState(false);
@@ -58,7 +59,6 @@ export function useVaultSearch(options: UseVaultSearchOptions): UseVaultSearchRe
 
   const selectedTypesKey = [...options.selectedTypes].sort().join("\u0000");
   const allTypesKey = [...options.allTypes].sort().join("\u0000");
-  const recentPathsKey = options.recentPaths.join("\u0000");
   const boosterEnabled = Boolean(options.booster);
   const boostKey = `${query.trim()}\u0001${selectedTypesKey}`;
 
@@ -75,7 +75,9 @@ export function useVaultSearch(options: UseVaultSearchOptions): UseVaultSearchRe
       setResults(nextResults);
     };
     if (!trimmedQuery) {
-      applyResults(recentCandidates(current));
+      // The empty state is reserved for query suggestions, never a potentially distracting file list.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/515
+      applyResults(EMPTY_SEARCH_RESULTS);
       setMiyoUnavailable(!current.miyoEnabled);
       setSearching(false);
       settleBasic();
@@ -152,7 +154,7 @@ export function useVaultSearch(options: UseVaultSearchOptions): UseVaultSearchRe
       timerWindow.clearTimeout(timer);
       settleBasic();
     };
-  }, [allTypesKey, options.files, options.miyoEnabled, query, recentPathsKey, selectedTypesKey]);
+  }, [allTypesKey, options.files, options.miyoEnabled, query, selectedTypesKey]);
 
   useEffect(() => {
     const currentSequence = ++boosterSequence.current;
@@ -240,23 +242,4 @@ export function useVaultSearch(options: UseVaultSearchOptions): UseVaultSearchRe
     boostUnavailable:
       boosterEnabled && query.trim().length >= 3 && unavailableBoostKey === boostKey,
   };
-}
-
-function recentCandidates(options: UseVaultSearchOptions): SearchCandidate[] {
-  const byPath = new Map(options.files.map((file) => [file.path, file]));
-  return options.recentPaths
-    .map((path) => byPath.get(path))
-    .filter((file): file is SearchFile => Boolean(file))
-    .filter((file) => options.selectedTypes.has(file.extension.toLowerCase()))
-    .slice(0, 10)
-    .map((file) => ({
-      path: file.path,
-      title: file.basename,
-      folder: file.path.includes("/") ? file.path.slice(0, file.path.lastIndexOf("/")) : "",
-      extension: file.extension.toLowerCase(),
-      snippet: "Recently opened",
-      mtime: file.mtime,
-      score: null,
-      source: "recent",
-    }));
 }
