@@ -107,6 +107,25 @@ describe("candidates", () => {
       ]);
       expect(matches.every(({ source }) => source === "filename")).toBe(true);
     });
+
+    it(`returns only the 50 best filename matches in large vaults (${issue})`, () => {
+      const files: SearchFile[] = Array.from({ length: 60 }, (_, index) => ({
+        path: `Notes/Match ${index}.md`,
+        name: `Match ${index}.md`,
+        basename: `Match ${index}`,
+        extension: "md",
+        mtime: index,
+      }));
+
+      const matches = matchFilesByName(files, new Set(["md"]), (name) => ({
+        score: Number(name.replace("Match ", "")),
+        matches: [],
+      }));
+
+      expect(matches).toHaveLength(50);
+      expect(matches[0].path).toBe("Notes/Match 59.md");
+      expect(matches[49].path).toBe("Notes/Match 10.md");
+    });
   });
 
   describe("filterCandidatesByTypes()", () => {

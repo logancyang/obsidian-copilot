@@ -33,11 +33,14 @@ export function matchFilesByName(
   selectedTypes: ReadonlySet<string>,
   fuzzySearch: FuzzySearch
 ): SearchCandidate[] {
+  // Bound the render work for broad queries in large vaults.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/515
   return files
     .filter((file) => selectedTypes.has(file.extension.toLowerCase()))
     .map((file) => ({ file, match: fuzzySearch(file.basename) }))
     .filter((entry): entry is { file: SearchFile; match: SearchResult } => entry.match !== null)
     .sort((left, right) => right.match.score - left.match.score)
+    .slice(0, 50)
     .map(({ file }) => ({
       path: file.path,
       title: file.basename,

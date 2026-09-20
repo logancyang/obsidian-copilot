@@ -8,7 +8,7 @@ import {
 import { openWithSystemDefault } from "@/utils/openWithSystemDefault";
 import type { SearchCandidate, SearchFile } from "@/vaultSearch/types";
 import { fireEvent, render, screen } from "@testing-library/react";
-import { FileSystemAdapter, Platform, TFile, type App } from "obsidian";
+import { FileSystemAdapter, Notice, Platform, TFile, type App } from "obsidian";
 import React from "react";
 
 jest.mock("@/utils/openWithSystemDefault", () => ({ openWithSystemDefault: jest.fn() }));
@@ -61,6 +61,11 @@ function props(
 }
 
 describe("VaultSearchModal", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    Platform.isMobile = false;
+  });
+
   describe("buildFileTypeOptions()", () => {
     it(`derives counted file types and remembers unchecked selections (${issue})`, () => {
       const files: SearchFile[] = [
@@ -131,7 +136,7 @@ describe("VaultSearchModal", () => {
     it(`opens renderable files in Obsidian and honors the new-tab modifier (${issue})`, async () => {
       const app = appFor("Papers/Attention.pdf", "pdf");
 
-      await openVaultSearchResult(app, results[1], true);
+      await expect(openVaultSearchResult(app, results[1], true)).resolves.toBe(true);
 
       expect(app.workspace.openLinkText).toHaveBeenCalledWith("Papers/Attention.pdf", "", true);
       expect(openWithSystemDefault).not.toHaveBeenCalled();
@@ -141,11 +146,28 @@ describe("VaultSearchModal", () => {
       Platform.isMobile = false;
       const app = appFor("Books/Stoicism.epub", null);
 
-      await openVaultSearchResult(app, results[0], false);
+      await expect(openVaultSearchResult(app, results[0], false)).resolves.toBe(true);
 
       expect(openWithSystemDefault).toHaveBeenCalledWith("/vault/Books/Stoicism.epub");
       expect(app.workspace.openLinkText).not.toHaveBeenCalled();
       expect(canObsidianRenderFile(app, "epub")).toBe(false);
+    });
+
+    it(`keeps search open with a Notice for stale, mobile-unavailable, and rejected results (${issue})`, async () => {
+      const staleApp = appFor("Books/Missing.epub", null);
+      staleApp.vault.getAbstractFileByPath = jest.fn(() => null);
+      const mobileApp = appFor("Books/Stoicism.epub", null);
+      const desktopApp = appFor("Books/Stoicism.epub", null);
+
+      await expect(openVaultSearchResult(staleApp, results[0], false)).resolves.toBe(false);
+      Platform.isMobile = true;
+      await expect(openVaultSearchResult(mobileApp, results[0], false)).resolves.toBe(false);
+      Platform.isMobile = false;
+      jest.mocked(openWithSystemDefault).mockRejectedValueOnce(new Error("shell unavailable"));
+      await expect(openVaultSearchResult(desktopApp, results[0], false)).resolves.toBe(false);
+
+      expect(Notice).toHaveBeenCalledTimes(3);
+      expect(Notice).toHaveBeenLastCalledWith("Could not open this file.");
     });
   });
 });

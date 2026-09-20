@@ -7,7 +7,7 @@ import { updateSetting, useSettingsValue } from "@/settings/model";
 import { openWithSystemDefault } from "@/utils/openWithSystemDefault";
 import { useVaultSearch } from "@/vaultSearch/useVaultSearch";
 import type { SearchCandidate, SearchFile } from "@/vaultSearch/types";
-import { FileSystemAdapter, Platform, TFile, prepareFuzzySearch, type App } from "obsidian";
+import { FileSystemAdapter, Notice, Platform, TFile, prepareFuzzySearch, type App } from "obsidian";
 import React, { type ReactElement, useCallback, useMemo, useState } from "react";
 
 export interface FileTypeOption {
@@ -50,17 +50,26 @@ export async function openVaultSearchResult(
   app: App,
   candidate: SearchCandidate,
   newTab: boolean
-): Promise<void> {
-  const file = app.vault.getAbstractFileByPath(candidate.path);
-  if (!(file instanceof TFile)) return;
-  if (canObsidianRenderFile(app, candidate.extension)) {
-    await app.workspace.openLinkText(file.path, "", newTab);
-    return;
+): Promise<boolean> {
+  try {
+    const file = app.vault.getAbstractFileByPath(candidate.path);
+    if (file instanceof TFile) {
+      if (canObsidianRenderFile(app, candidate.extension)) {
+        await app.workspace.openLinkText(file.path, "", newTab);
+        return true;
+      }
+      const adapter = app.vault.adapter;
+      if (!Platform.isMobile && adapter instanceof FileSystemAdapter) {
+        await openWithSystemDefault(adapter.getFullPath(file.path));
+        return true;
+      }
+    }
+  } catch {
+    // Opening failures follow the same user-facing path as stale and unavailable results.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/515
   }
-  const adapter = app.vault.adapter;
-  if (!Platform.isMobile && adapter instanceof FileSystemAdapter) {
-    await openWithSystemDefault(adapter.getFullPath(file.path));
-  }
+  new Notice("Could not open this file.");
+  return false;
 }
 
 export function canObsidianRenderFile(app: App, extension: string): boolean {
@@ -296,7 +305,9 @@ function VaultSearchModalBody({
     updateSetting("vaultSearchExcludedFileTypes", [...excluded].sort());
   };
   const onOpen = (candidate: SearchCandidate, newTab: boolean) => {
-    void openVaultSearchResult(app, candidate, newTab).then(close);
+    void openVaultSearchResult(app, candidate, newTab).then((opened) => {
+      if (opened) close();
+    });
   };
 
   return (
