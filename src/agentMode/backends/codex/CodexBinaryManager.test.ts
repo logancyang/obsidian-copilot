@@ -105,7 +105,7 @@ describe("CodexBinaryManager", () => {
     });
 
     describe("install()", () => {
-      it("ISSUE_PENDING rejects a managed pin below minimum without downloading or replacing the selected installation", async () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/535 rejects a managed pin below minimum without downloading or replacing the selected installation", async () => {
         const manager = new CodexBinaryManager();
         const previous = path.join(tempDir, "previous-codex");
         fs.writeFileSync(previous, "working runtime");

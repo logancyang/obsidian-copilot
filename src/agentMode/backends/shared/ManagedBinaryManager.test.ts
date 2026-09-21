@@ -74,14 +74,14 @@ describe("ManagedBinaryManager", () => {
           binarySource: "managed",
         };
       });
-      it(`ISSUE_PENDING rejects a shipped pin below the minimum before downloading`, async () => {
+      it(`https://github.com/Brevilabs/obsidian-copilot-private/issues/535 rejects a shipped pin below the minimum before downloading`, async () => {
         await expect(manager.autoUpgrade("1.0.0", "2.0.0", () => true, jest.fn())).rejects.toThrow(
           "requires"
         );
         expect(manager.pipeline).not.toHaveBeenCalled();
       });
       it.each([undefined, "0.9.0"])(
-        `ISSUE_PENDING retries legacy or previous-minimum cooldown %s`,
+        `https://github.com/Brevilabs/obsidian-copilot-private/issues/535 retries legacy or previous-minimum cooldown %s`,
         async (minimumVersion) => {
           fs.mkdirSync(manager.getDataDir(), { recursive: true });
           fs.writeFileSync(

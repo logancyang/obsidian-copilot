@@ -22,7 +22,7 @@ export function classifyBinaryInstall(
 ): InstallState {
   if (inspection.kind !== "installed") return inspection;
   const parsed = VERSION_PATTERN.exec(inspection.version);
-  // Invalid metadata must not make a configured runtime appear ready. ISSUE_PENDING
+  // Invalid metadata must not make a configured runtime appear ready. https://github.com/Brevilabs/obsidian-copilot-private/issues/535
   if (!parsed || !VERSION_PATTERN.test(minimumVersion)) {
     return {
       kind: "error",
@@ -30,7 +30,7 @@ export function classifyBinaryInstall(
     };
   }
   const order = compareSemver(inspection.version, minimumVersion);
-  // Prereleases of the minimum do not guarantee its stable protocol contract. ISSUE_PENDING
+  // Prereleases of the minimum do not guarantee its stable protocol contract. https://github.com/Brevilabs/obsidian-copilot-private/issues/535
   if (order < 0 || (order === 0 && parsed[4] !== undefined)) {
     return {
       kind: "incompatible",
@@ -55,7 +55,7 @@ export function assertBinaryCompatible(
   displayName: string
 ): void {
   const state = classifyBinaryInstall(inspection, minimumVersion, displayName);
-  // Execution cannot recover from missing or invalid packages without configuration. ISSUE_PENDING
+  // Execution cannot recover from missing or invalid packages without configuration. https://github.com/Brevilabs/obsidian-copilot-private/issues/535
   if (state.kind !== "ready")
     throw new Error(
       "message" in state

@@ -54,7 +54,7 @@ export function assertBackendCompatible(
   process?: Pick<BackendProcess, "assertCompatible">
 ): void {
   // Selection changes cannot replace the runtime already serving a session.
-  // COMPATIBILITY_ISSUE
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/535
   if (process?.assertCompatible) return process.assertCompatible();
   // A selectable agent must never execute a binary below the supported minimum.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/531

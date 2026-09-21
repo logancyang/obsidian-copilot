@@ -85,7 +85,7 @@ export class CodexBinaryManager extends ManagedBinaryManager<CodexInstallProgres
   }: ManagedBinaryInstallOptions<CodexInstallProgress> & {
     signal: AbortSignal;
   }): Promise<InstalledBinary> {
-    // Manual retries must not replace a working selection with an unsupported release pin. ISSUE_PENDING
+    // Manual retries must not replace a working selection with an unsupported release pin. https://github.com/Brevilabs/obsidian-copilot-private/issues/535
     assertBinaryCompatible(
       { kind: "installed", version: CODEX_ACP_PINNED_VERSION, source: "managed" },
       CODEX_ACP_MIN_VERSION,

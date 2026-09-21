@@ -7,7 +7,7 @@ import type { CopilotSettings } from "@/settings/model";
 
 describe("descriptor", () => {
   describe("assertBackendCompatible()", () => {
-    it("COMPATIBILITY_ISSUE rejects an old process even when the selected installation is ready", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/535 rejects an old process even when the selected installation is ready", () => {
       const descriptor = { getInstallState: () => ({ kind: "ready", source: "managed" }) as const };
       const process = {
         assertCompatible: () => {
@@ -19,7 +19,7 @@ describe("descriptor", () => {
       );
     });
 
-    it("COMPATIBILITY_ISSUE permits a supported process independently of a different incompatible selection", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/535 permits a supported process independently of a different incompatible selection", () => {
       const descriptor = {
         getInstallState: () =>
           ({

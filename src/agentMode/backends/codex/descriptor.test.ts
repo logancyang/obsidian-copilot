@@ -277,7 +277,7 @@ describe("descriptor", () => {
     });
     describe("getInstallState()", () => {
       it.each(["managed", "custom"] as const)(
-        "ISSUE_PENDING reports below-minimum %s runtime as incompatible",
+        "https://github.com/Brevilabs/obsidian-copilot-private/issues/535 reports below-minimum %s runtime as incompatible",
         (source) => {
           mockedResolveSupportedPackage.mockReturnValue({
             entryPath: "/codex/index.js",
@@ -303,16 +303,19 @@ describe("descriptor", () => {
       it.each([
         ["ENOENT", "absent"],
         ["EINVAL", "error"],
-      ])("ISSUE_PENDING classifies %s inspection failure as %s", (code, kind) => {
-        mockedResolveSupportedPackage.mockImplementation(() => {
-          throw Object.assign(new Error("Invalid package"), { code });
-        });
-        expect(
-          CodexBackendDescriptor.getInstallState(
-            settingsWithCodex({ binaryPath: "/codex/index.js" })
-          ).kind
-        ).toBe(kind);
-      });
+      ])(
+        "https://github.com/Brevilabs/obsidian-copilot-private/issues/535 classifies %s inspection failure as %s",
+        (code, kind) => {
+          mockedResolveSupportedPackage.mockImplementation(() => {
+            throw Object.assign(new Error("Invalid package"), { code });
+          });
+          expect(
+            CodexBackendDescriptor.getInstallState(
+              settingsWithCodex({ binaryPath: "/codex/index.js" })
+            ).kind
+          ).toBe(kind);
+        }
+      );
       it.each([
         ["legacy path", {}, "1.9.0", { kind: "ready", source: "custom" }],
         [

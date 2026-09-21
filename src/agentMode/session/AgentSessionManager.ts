@@ -2501,7 +2501,7 @@ export class AgentSessionManager {
     const process = this.backends.get(backendId);
     let runnable = installState?.kind === "ready";
     // Preserve supported chats when a different selection is too old; uninstall still stops them.
-    // COMPATIBILITY_ISSUE
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/535
     if (installState && installState.kind !== "absent" && hasSession && process?.assertCompatible) {
       try {
         process.assertCompatible();

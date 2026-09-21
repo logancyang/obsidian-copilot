@@ -166,7 +166,7 @@ export function computeInstallState(
   if (s.binaryPath && fileExists(s.binaryPath)) {
     return {
       kind: "installed",
-      // An existing selection without usable metadata needs Configure, not Install. ISSUE_PENDING
+      // An existing selection without usable metadata needs Configure, not Install. https://github.com/Brevilabs/obsidian-copilot-private/issues/535
       version: s.binaryVersion ?? "",
       path: s.binaryPath,
       source: s.binarySource ?? "managed",
@@ -405,7 +405,7 @@ export class OpencodeBinaryManager extends ManagedBinaryManager<ProgressEvent, I
     opts: InstallPipelineOptions = {}
   ): Promise<{ version: string; path: string }> {
     const version = opts.version ?? OPENCODE_PINNED_VERSION;
-    // Manual retries must not replace a working selection with an unsupported release pin. ISSUE_PENDING
+    // Manual retries must not replace a working selection with an unsupported release pin. https://github.com/Brevilabs/obsidian-copilot-private/issues/535
     assertBinaryCompatible(
       { kind: "installed", version, source: "managed" },
       OPENCODE_MIN_ACP_VERSION,

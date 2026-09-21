@@ -1069,7 +1069,7 @@ describe("buildOpencodeConfig — context-cache external_directory allow", () =>
 });
 
 describe("OpencodeBackend.buildSpawnDescriptor", () => {
-  it("COMPATIBILITY_ISSUE rejects the actual old executable even when settings claim a supported version", async () => {
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/535 rejects the actual old executable even when settings claim a supported version", async () => {
     updateAgentModeBackendFields("opencode", {
       binaryPath: "/old-opencode",
       binaryVersion: "2.0.0",
@@ -1083,7 +1083,7 @@ describe("OpencodeBackend.buildSpawnDescriptor", () => {
     expect(verifyOpencodeBinary).toHaveBeenCalledWith("/old-opencode");
   });
 
-  it("COMPATIBILITY_ISSUE keeps the selected runtime version after a different installation is published", async () => {
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/535 keeps the selected runtime version after a different installation is published", async () => {
     updateAgentModeBackendFields("opencode", {
       binaryPath: "/old-opencode",
       binaryVersion: "1.18.31",

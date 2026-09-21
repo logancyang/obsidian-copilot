@@ -3083,7 +3083,7 @@ describe("AgentSessionManager.onInstallStateChanged", () => {
   }
 
   it.each([true, false])(
-    "COMPATIBILITY_ISSUE uses the live process compatibility (%s) when a different incompatible runtime is selected",
+    "https://github.com/Brevilabs/obsidian-copilot-private/issues/535 uses the live process compatibility (%s) when a different incompatible runtime is selected",
     async (supported) => {
       let processSupported = true;
       const { mgr, setInstallState } = buildInstallStateManager({

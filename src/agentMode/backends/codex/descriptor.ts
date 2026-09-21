@@ -173,7 +173,7 @@ export const CodexBackendDescriptor: BackendDescriptor = {
         "Codex"
       );
     } catch (error) {
-      // Missing files and invalid packages need different recovery actions. ISSUE_PENDING
+      // Missing files and invalid packages need different recovery actions. https://github.com/Brevilabs/obsidian-copilot-private/issues/535
       return classifyBinaryInstall(
         (error as NodeJS.ErrnoException).code === "ENOENT"
           ? { kind: "absent" }

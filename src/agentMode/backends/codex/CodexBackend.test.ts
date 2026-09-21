@@ -70,7 +70,7 @@ jest.mock("@/agentMode/skills", () => {
 describe("CodexBackend", () => {
   describe("CodexBackend", () => {
     describe("buildSpawnDescriptor()", () => {
-      it("COMPATIBILITY_ISSUE keeps the inspected runtime version after a different installation is selected", async () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/535 keeps the inspected runtime version after a different installation is selected", async () => {
         const desc = await new CodexBackend().buildSpawnDescriptor({ vaultBasePath: "/vault" });
         expect(desc.assertCompatible).toBeDefined();
         expect(() => desc.assertCompatible!()).not.toThrow();

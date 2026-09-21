@@ -130,7 +130,7 @@ export abstract class ManagedBinaryManager<
     canStart: () => boolean,
     notify: (message: string) => void
   ): Promise<void> {
-    // A release must never select a shipped runtime below its own support floor. ISSUE_PENDING
+    // A release must never select a shipped runtime below its own support floor. https://github.com/Brevilabs/obsidian-copilot-private/issues/535
     assertBinaryCompatible(
       { kind: "installed", version: pin, source: "managed" },
       minimumVersion,
@@ -165,7 +165,7 @@ export abstract class ManagedBinaryManager<
         // https://github.com/Brevilabs/obsidian-copilot-private/issues/530
         if (
           failure?.pin === pin &&
-          // A raised minimum (or legacy record) permits one fresh recovery attempt. ISSUE_PENDING
+          // A raised minimum (or legacy record) permits one fresh recovery attempt. https://github.com/Brevilabs/obsidian-copilot-private/issues/535
           failure.minimumVersion === minimumVersion &&
           typeof failure.failedAt === "number" &&
           failure.failedAt <= Date.now() &&

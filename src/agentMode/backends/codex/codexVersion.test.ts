@@ -46,14 +46,14 @@ function installedAdapterPath(packageMetadata: unknown): string {
 describe("codexVersion", () => {
   describe("inspectCodexAcpPackage()", () => {
     it.each(["0.0.44", "0.0.45", "0.0.46", "0.0.45-beta.1"])(
-      "ISSUE_PENDING inspects valid npm version %s independently of the minimum",
+      "https://github.com/Brevilabs/obsidian-copilot-private/issues/535 inspects valid npm version %s independently of the minimum",
       (version) => {
         expect(
           inspectCodexAcpPackage(UNIX_ENTRY, "darwin", packageFs(UNIX_ENTRY, metadata(version)))
         ).toEqual({ entryPath: UNIX_ENTRY, version, runtimeVersion: version });
       }
     );
-    it("ISSUE_PENDING retains the actual runtime version separately from native packaging revisions", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/535 retains the actual runtime version separately from native packaging revisions", () => {
       const entry = "/bundle/codex-acp";
       expect(
         inspectCodexAcpPackage(

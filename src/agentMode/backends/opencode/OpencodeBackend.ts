@@ -133,7 +133,7 @@ export class OpencodeBackend implements AcpBackend {
       );
     }
 
-    // Persisted versions can lag a custom executable replaced outside Copilot. COMPATIBILITY_ISSUE
+    // Persisted versions can lag a custom executable replaced outside Copilot. https://github.com/Brevilabs/obsidian-copilot-private/issues/535
     const runtimeVersion =
       parseVersionFromStdout((await verifyOpencodeBinary(binaryPath)).stdout) ?? "";
     const source = settings.agentMode?.backends?.opencode?.binarySource ?? "managed";

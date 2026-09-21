@@ -58,7 +58,7 @@ export function inspectCodexAcpPackage(
   try {
     entryPath = packageFs.realpathSync(adapterPath);
   } catch (error) {
-    // Synced paths missing on this device need Install rather than an invalid-package error. ISSUE_PENDING
+    // Synced paths missing on this device need Install rather than an invalid-package error. https://github.com/Brevilabs/obsidian-copilot-private/issues/535
     if ((error as NodeJS.ErrnoException).code === "ENOENT") throw error;
     throw unsupportedAdapter();
   }
@@ -81,7 +81,7 @@ export function inspectCodexAcpPackage(
         typeof provenance.acpVersion === "string"
           ? SEMVER_PATTERN.exec(provenance.acpVersion)
           : null;
-      // Package structure and runtime compatibility are separate checks. ISSUE_PENDING
+      // Package structure and runtime compatibility are separate checks. https://github.com/Brevilabs/obsidian-copilot-private/issues/535
       if (
         parsedVersion &&
         (provenance.packagingRevision === undefined ||

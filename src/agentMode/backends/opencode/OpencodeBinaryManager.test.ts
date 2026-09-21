@@ -244,7 +244,7 @@ describe("OpencodeBinaryManager", () => {
     });
 
     it.each(["managed", "custom"] as const)(
-      "ISSUE_PENDING applies the minimum and invalid metadata policy for %s",
+      "https://github.com/Brevilabs/obsidian-copilot-private/issues/535 applies the minimum and invalid metadata policy for %s",
       (source) => {
         const classify = (version: string) =>
           toOpencodeInstallState({ kind: "installed", version, path: "/opencode", source });

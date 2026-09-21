@@ -122,7 +122,7 @@ describe("AcpBackendProcess", () => {
   });
 
   describe("start()", () => {
-    it("COMPATIBILITY_ISSUE rejects an unsupported executable before spawning", async () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/535 rejects an unsupported executable before spawning", async () => {
       const backend = new AcpBackendProcess(
         buildApp(),
         buildStubBackend({
@@ -143,7 +143,7 @@ describe("AcpBackendProcess", () => {
       expect(AcpProcessManager).not.toHaveBeenCalled();
     });
 
-    it("COMPATIBILITY_ISSUE shuts down if the spawned runtime becomes incompatible during initialization", async () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/535 shuts down if the spawned runtime becomes incompatible during initialization", async () => {
       let supported = true;
       mockInitializeResult = {
         then(resolve: (value: unknown) => void) {
@@ -191,7 +191,7 @@ describe("AcpBackendProcess", () => {
   describe.each(["newSession", "prompt", "resumeSession", "loadSession"] as const)(
     "%s() compatibility",
     (method) => {
-      it("COMPATIBILITY_ISSUE rejects the old process after the selected installation changes and keeps cancellation available", async () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/535 rejects the old process after the selected installation changes and keeps cancellation available", async () => {
         let minimum = 1;
         let selectedVersion = 1;
         const spawnedVersion = selectedVersion;

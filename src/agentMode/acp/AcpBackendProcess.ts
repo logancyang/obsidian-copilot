@@ -227,7 +227,7 @@ export class AcpBackendProcess implements BackendProcess {
     });
 
     // A new selected download must not vouch for an older process.
-    // COMPATIBILITY_ISSUE
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/535
     this.assertCompatible = descriptor.assertCompatible;
     this.assertCompatible?.();
 

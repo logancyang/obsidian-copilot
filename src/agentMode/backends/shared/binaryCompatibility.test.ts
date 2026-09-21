@@ -3,7 +3,7 @@ import { classifyBinaryInstall, assertBinaryCompatible } from "./binaryCompatibi
 describe("binaryCompatibility", () => {
   describe("classifyBinaryInstall()", () => {
     it.each(["Codex", "opencode"])(
-      "ISSUE_PENDING classifies every minimum boundary for %s",
+      "https://github.com/Brevilabs/obsidian-copilot-private/issues/535 classifies every minimum boundary for %s",
       (name) => {
         const installed = (version: string) => ({
           kind: "installed" as const,
@@ -36,7 +36,7 @@ describe("binaryCompatibility", () => {
     );
   });
   describe("assertBinaryCompatible()", () => {
-    it("ISSUE_PENDING allows supported runtimes and rejects incompatible, invalid, or missing installs", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/535 allows supported runtimes and rejects incompatible, invalid, or missing installs", () => {
       expect(() =>
         assertBinaryCompatible(
           { kind: "installed", version: "2.0.0", source: "custom" },
