@@ -98,6 +98,7 @@ Each agent has its own model list. The models shown in one agent do not automati
 - Before the first message, choosing a model from another installed agent switches the empty chat to that agent. Once a conversation has started, it stays with its agent.
 - **Effort** appears only when the selected agent and model support it. Higher effort can improve difficult reasoning but may take longer and use more of your account allowance.
 - Models with effort controls always use a concrete effort. A supported saved effort is kept; otherwise Copilot chooses the lowest supported effort and updates the saved default. Models without effort controls omit effort. **Agent default** clears the saved model preference; the new session shows the agent's model and its resolved effort.
+- Reloading an agent keeps each open chat's model and effort. If that model is no longer enabled for the agent, or is still waiting for its API key, the chat falls back to your saved default, or to one of your enabled models.
 
 The permission picker shows only choices supported by the current agent:
 

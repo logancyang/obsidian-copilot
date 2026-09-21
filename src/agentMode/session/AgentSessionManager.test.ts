@@ -41,6 +41,7 @@ import type {
   BackendModelCatalog,
   BackendState,
   InstallState,
+  ModelSelection,
 } from "./types";
 
 const mockEnsureMaterialized = ensureProjectContextMaterialized as jest.Mock;
@@ -1075,6 +1076,47 @@ describe("AgentSessionManager", () => {
         ).toEqual(saved);
       });
 
+      it.each([
+        {
+          name: "prefers a carried-over selection over the saved default while its model is offered",
+          offered: ["copilot-plus/flash", "copilot-plus/glm-5.2"],
+          saved: { baseModelId: "copilot-plus/flash", effort: "low" },
+          preferred: { baseModelId: "copilot-plus/glm-5.2", effort: "high" },
+          expected: { baseModelId: "copilot-plus/glm-5.2", effort: "high" },
+        },
+        {
+          name: "falls back to the saved default when the carried-over model is no longer offered",
+          offered: ["copilot-plus/flash"],
+          saved: { baseModelId: "copilot-plus/flash", effort: "low" },
+          preferred: { baseModelId: "copilot-plus/glm-5.2", effort: "high" },
+          expected: { baseModelId: "copilot-plus/flash", effort: "low" },
+        },
+        {
+          name: "stands in with an enabled model when the carried-over model was turned off and no saved default can replace it",
+          offered: ["copilot-plus/flash"],
+          saved: null,
+          preferred: { baseModelId: "copilot-plus/glm-5.2", effort: "high" },
+          expected: { baseModelId: "copilot-plus/flash", effort: null },
+        },
+        {
+          name: "returns null when there is neither a carried-over selection nor a saved default",
+          offered: ["copilot-plus/flash"],
+          saved: null,
+          preferred: undefined,
+          expected: null,
+        },
+      ] as {
+        name: string;
+        offered: string[];
+        saved: { baseModelId: string; effort: string } | null;
+        preferred: { baseModelId: string; effort: string } | undefined;
+        expected: { baseModelId: string; effort: string | null } | null;
+      }[])("$name (https://github.com/logancyang/obsidian-copilot/issues/3319)", (testCase) => {
+        const mgr = buildManagerWithOffered(testCase.offered, testCase.saved);
+
+        expect(mgr.getSeedSelection("opencode", testCase.preferred)).toEqual(testCase.expected);
+      });
+
       it("seeds the first enabled model when the saved one is no longer offered, so no prompt goes to the agent's own fallback (https://github.com/Brevilabs/obsidian-copilot-private/issues/474)", () => {
         // The backend rejects the stale selection and the session quietly keeps
         // whatever model the agent picked, which is the silent failure this stops.
@@ -1103,6 +1145,38 @@ describe("AgentSessionManager", () => {
           baseModelId: "copilot-plus/flash",
           effort: null,
         });
+      });
+
+      it("stands in for a saved default whose provider key has not been added yet, and says so (https://github.com/logancyang/obsidian-copilot/issues/3319)", () => {
+        // Settings deliberately lets the default be chosen before the key is
+        // pasted, but the backend rejects a keyless model exactly like a
+        // withdrawn one, so a chat must not start on it. The notice names the
+        // missing key rather than claiming the agent withdrew the model.
+        const mgr = buildManagerWithOffered(
+          [{ baseModelId: "byok/gpt-5.6", credentialState: "missing_key" }, "copilot-plus/flash"],
+          { baseModelId: "byok/gpt-5.6", effort: "high" }
+        );
+
+        expect(mgr.getSeedSelection("opencode")).toEqual({
+          baseModelId: "copilot-plus/flash",
+          effort: null,
+        });
+        expect((Notice as unknown as jest.Mock).mock.calls.at(-1)?.[0]).toBe(
+          "gpt-5.6 needs an API key for opencode. Using copilot-plus/flash until you add it."
+        );
+      });
+
+      it("stands in only with a model the resumed session itself advertises (https://github.com/logancyang/obsidian-copilot/issues/3319)", () => {
+        // A restarted session reports its own catalog, and seeding a model it
+        // never advertised is rejected exactly like the withdrawn default.
+        const mgr = buildManagerWithOffered(["copilot-plus/flash", "copilot-plus/glm-5.2"], {
+          baseModelId: "copilot-plus/minimax-m2.7",
+          effort: "high",
+        });
+
+        expect(
+          mgr.getSeedSelection("opencode", null, modelCatalog("copilot-plus/glm-5.2"))
+        ).toEqual({ baseModelId: "copilot-plus/glm-5.2", effort: null });
       });
 
       it("returns null when every enabled model is missing its provider key (https://github.com/Brevilabs/obsidian-copilot-private/issues/474)", () => {
@@ -1162,6 +1236,40 @@ describe("AgentSessionManager", () => {
 
         expect(Notice).toHaveBeenCalledTimes(2);
         expect((Notice as unknown as jest.Mock).mock.calls.at(-1)?.[0]).toContain("model-b");
+      });
+
+      it("tells an open chat its model was turned off rather than withdrawn by the agent (https://github.com/logancyang/obsidian-copilot/issues/3319)", () => {
+        // Turning the model off in settings is what restarts the agent, so the
+        // notice must name the user's own action and the chat that moved, not a
+        // default nobody set.
+        const mgr = buildManagerWithOffered(["copilot-plus/flash"], null);
+
+        mgr.getSeedSelection("opencode", {
+          baseModelId: "copilot-plus/minimax-m2.7",
+          effort: "high",
+        });
+
+        expect((Notice as unknown as jest.Mock).mock.calls.at(-1)?.[0]).toBe(
+          "minimax-m2.7 is turned off for opencode. Open chats moved to copilot-plus/flash."
+        );
+      });
+
+      it("warns about the same model once as an open chat's selection and once as a withdrawn default (https://github.com/logancyang/obsidian-copilot/issues/3319)", () => {
+        // The two notices say different things, so the chat-side warning must
+        // not silence the default-side one for the same model.
+        const mgr = buildManagerWithOffered(["copilot-plus/flash"], null);
+        mgr.getSeedSelection("opencode", {
+          baseModelId: "copilot-plus/minimax-m2.7",
+          effort: null,
+        });
+
+        savedDefault({ baseModelId: "copilot-plus/minimax-m2.7", effort: null });
+        mgr.getSeedSelection("opencode");
+
+        expect(Notice).toHaveBeenCalledTimes(2);
+        expect((Notice as unknown as jest.Mock).mock.calls.at(-1)?.[0]).toContain(
+          "opencode no longer offers minimax-m2.7"
+        );
       });
 
       it.each([
@@ -1954,12 +2062,17 @@ describe("AgentSessionManager.restartBackend", () => {
   });
 
   /** Manager whose backend can replay a session, as every real backend can. */
-  function buildManagerWithReplay(backendOverrides: Record<string, unknown>): AgentSessionManager {
+  function buildManagerWithReplay(
+    backendOverrides: Record<string, unknown>,
+    descriptorOverrides: Partial<BackendDescriptor> = {}
+  ): AgentSessionManager {
     const backend = { ...makeMockBackendProcess(), ...backendOverrides };
     const descriptor = {
       ...buildDescriptor(),
       getInstallState: jest.fn(() => ({ kind: "ready" })),
       createBackendProcess: jest.fn(() => backend),
+      applySelection: jest.fn(async () => undefined),
+      ...descriptorOverrides,
     } as unknown as BackendDescriptor;
     return new AgentSessionManager(
       buildApp(),
@@ -1981,6 +2094,217 @@ describe("AgentSessionManager.restartBackend", () => {
       }
     );
   }
+
+  it.each([
+    ["resumes each tab's conversation in place", false],
+    ["recreates each tab as a fresh conversation", true],
+  ] as const)(
+    "preserves each tab's model and effort when the restart %s (https://github.com/logancyang/obsidian-copilot/issues/3319)",
+    async (_case, unsupported) => {
+      const state = (baseModelId: string, effort: string): BackendState => ({
+        model: {
+          current: { baseModelId, effort },
+          availableModels: [],
+          apply: { kind: "setModel" },
+        },
+        mode: null,
+      });
+      const mgr = buildManagerWithReplay(
+        {
+          loadSession: jest.fn(async ({ sessionId }: { sessionId: string }) => {
+            if (unsupported) throw new MethodUnsupportedError("session/load");
+            return { sessionId, state: state("big-pickle", "low") };
+          }),
+          resumeSession: jest.fn(async () => {
+            throw new MethodUnsupportedError("session/resume");
+          }),
+          setSessionModel: jest.fn(async ({ modelId }: { modelId: string }) => {
+            const selection = JSON.parse(modelId);
+            return state(selection.baseModelId, selection.effort);
+          }),
+        },
+        {
+          applySelection: async (session, selection) =>
+            session.applyModelWireId(JSON.stringify(selection)),
+        }
+      );
+      const flash = await mgr.createSession();
+      const reasoning = await mgr.createSession();
+      jest.spyOn(flash, "getState").mockReturnValue(state("copilot-plus/flash", "high"));
+      jest.spyOn(reasoning, "getState").mockReturnValue(state("copilot-plus/reasoning", "medium"));
+      sessionCreateSpy.mockClear();
+
+      await mgr.restartBackend("opencode", "config changed");
+
+      if (unsupported) {
+        expect(sessionCreateSpy.mock.calls.map(([opts]) => opts.defaultModelSelection)).toEqual([
+          { baseModelId: "copilot-plus/flash", effort: "high" },
+          { baseModelId: "copilot-plus/reasoning", effort: "medium" },
+        ]);
+      } else {
+        expect(mgr.getSessions().map((session) => session.getState()?.model?.current)).toEqual([
+          { baseModelId: "copilot-plus/flash", effort: "high" },
+          { baseModelId: "copilot-plus/reasoning", effort: "medium" },
+        ]);
+      }
+      await mgr.shutdown();
+    }
+  );
+
+  it.each([
+    ["resumes the tab's conversation in place", false],
+    ["recreates the tab as a fresh conversation", true],
+  ] as const)(
+    "replaces a disabled tab model with the enabled default when the restart %s (https://github.com/logancyang/obsidian-copilot/issues/3319)",
+    async (_case, unsupported) => {
+      const originalSettings = (mockedGetSettings as jest.Mock).getMockImplementation();
+      const saved = { baseModelId: "copilot-plus/flash", effort: "high" };
+      (mockedGetSettings as jest.Mock).mockReturnValue({
+        agentMode: { backends: { opencode: { defaultModel: saved } } },
+      });
+      const state: BackendState = {
+        model: {
+          current: { baseModelId: "big-pickle", effort: "low" },
+          apply: { kind: "setModel" },
+          availableModels: [
+            { baseModelId: saved.baseModelId, name: "Flash", provider: null, effortOptions: [] },
+          ],
+        },
+        mode: null,
+      };
+      const mgr = buildManagerWithReplay(
+        {
+          loadSession: jest.fn(async ({ sessionId }: { sessionId: string }) => {
+            if (unsupported) throw new MethodUnsupportedError("session/load");
+            return { sessionId, state };
+          }),
+          resumeSession: jest.fn(async () => {
+            throw new MethodUnsupportedError("session/resume");
+          }),
+          setSessionModel: jest.fn(async ({ modelId }: { modelId: string }) => ({
+            ...state,
+            model: { ...state.model!, current: JSON.parse(modelId) },
+          })),
+        },
+        {
+          getEnabledModelEntries: () => [
+            { baseModelId: saved.baseModelId, name: "Flash", credentialState: "ok" },
+          ],
+          applySelection: async (session, selection) =>
+            session.applyModelWireId(JSON.stringify(selection)),
+        }
+      );
+      try {
+        const first = await mgr.createSession();
+        jest.spyOn(first, "getState").mockReturnValue({
+          ...state,
+          model: { ...state.model!, current: { baseModelId: "disabled-model", effort: "medium" } },
+        });
+        sessionCreateSpy.mockClear();
+
+        await mgr.restartBackend("opencode", "enabled models changed");
+
+        if (unsupported) {
+          expect(sessionCreateSpy).toHaveBeenLastCalledWith(
+            expect.objectContaining({ defaultModelSelection: saved })
+          );
+        } else {
+          expect(mgr.getActiveSession()?.getState()?.model?.current).toEqual(saved);
+        }
+      } finally {
+        await mgr.shutdown();
+        (mockedGetSettings as jest.Mock).mockImplementation(originalSettings);
+      }
+    }
+  );
+
+  it("settles the resumed tab on the seeded model's own effort, not the effort of the model it left (https://github.com/logancyang/obsidian-copilot/issues/3319)", async () => {
+    // A descriptor's startup config resolves effort against whatever the
+    // session currently reports, so it must run after the seeded model round
+    // trip rather than beside it: the pre-restart catalog entry does not list
+    // the effort the tab was on, and writing from it lands the chat on an
+    // effort belonging to the model it just left.
+    const server = { baseModelId: "big-pickle", effort: "low" };
+    const catalogBeforeSetModel = [
+      { baseModelId: "big-pickle", name: "Big Pickle", provider: null, effortOptions: [] },
+      {
+        baseModelId: "copilot-plus/reasoning",
+        name: "Reasoning",
+        provider: null,
+        effortOptions: [{ value: "medium", label: "Medium" }],
+      },
+    ];
+    const catalogAfterSetModel = [
+      {
+        baseModelId: "copilot-plus/reasoning",
+        name: "Reasoning",
+        provider: null,
+        effortOptions: [
+          { value: "high", label: "High" },
+          { value: "medium", label: "Medium" },
+        ],
+      },
+    ];
+    const stateFor = (availableModels: unknown): BackendState =>
+      ({
+        model: { current: { ...server }, apply: { kind: "setModel" }, availableModels },
+        mode: null,
+      }) as BackendState;
+    const mgr = buildManagerWithReplay(
+      {
+        loadSession: jest.fn(async ({ sessionId }: { sessionId: string }) => ({
+          sessionId,
+          state: stateFor(catalogBeforeSetModel),
+        })),
+        setSessionModel: jest.fn(async ({ modelId }: { modelId: string }) => {
+          const selection = JSON.parse(modelId);
+          server.baseModelId = selection.baseModelId;
+          server.effort = selection.effort;
+          return stateFor(catalogAfterSetModel);
+        }),
+        setSessionConfigOption: jest.fn(async ({ value }: { value: string }) => {
+          server.effort = value;
+          return stateFor(catalogAfterSetModel);
+        }),
+      },
+      {
+        applySelection: async (session: AgentSession, selection: ModelSelection) =>
+          session.applyModelWireId(JSON.stringify(selection)),
+        applyInitialSessionConfig: async (
+          session: AgentSession,
+          _settings: unknown,
+          seeded?: ModelSelection
+        ) => {
+          const model = session.getState()?.model;
+          if (!model) return;
+          const options = (
+            model.availableModels.find((e) => e.baseModelId === model.current.baseModelId)
+              ?.effortOptions ?? []
+          ).map((option) => option.value);
+          const effort =
+            seeded?.effort && options.includes(seeded.effort) ? seeded.effort : options[0];
+          if (effort && effort !== model.current.effort) {
+            await session.setConfigOption("effort", effort);
+          }
+        },
+      }
+    );
+    const chat = await mgr.createSession();
+    // The tab is on a model and effort the restarted process has not heard of.
+    jest.spyOn(chat, "getState").mockReturnValue({
+      model: {
+        current: { baseModelId: "copilot-plus/reasoning", effort: "high" },
+        apply: { kind: "setModel" },
+        availableModels: catalogBeforeSetModel,
+      },
+      mode: null,
+    } as unknown as BackendState);
+
+    await mgr.restartBackend("opencode", "config changed");
+
+    expect(server).toEqual({ baseModelId: "copilot-plus/reasoning", effort: "high" });
+    await mgr.shutdown();
+  });
 
   it("brings the replaced tab back on its own conversation (https://github.com/Brevilabs/obsidian-copilot-private/issues/475)", async () => {
     const loadSession = jest.fn(async ({ sessionId }: { sessionId: string }) => ({
@@ -3679,7 +4003,8 @@ describe("AgentSessionManager chat history aggregation", () => {
 
       expect(applyInitialSessionConfig).toHaveBeenCalledWith(
         session,
-        expect.objectContaining({ agentMode: expect.any(Object) })
+        expect.objectContaining({ agentMode: expect.any(Object) }),
+        undefined
       );
       expect(setSessionConfigOption).toHaveBeenCalledWith({
         sessionId: "saved-chat",
