@@ -119,14 +119,23 @@ module.exports = {
       read: jest.fn(),
     },
   })),
-  ItemView: jest.fn().mockImplementation(function () {
-    this.containerEl = window.document.createElement("div");
-    this.onOpen = jest.fn();
-    this.onClose = jest.fn();
-    this.getDisplayText = jest.fn().mockReturnValue("Mock View");
-    this.getViewType = jest.fn().mockReturnValue("mock-view");
-    this.getIcon = jest.fn().mockReturnValue("document");
-  }),
+  // Obsidian's ItemView builds its chrome in the constructor — a title bar
+  // followed by the content area — and takes `app` from the leaf it is given.
+  // Nothing is assigned onto the instance beyond that, so a view under test
+  // answers with its own prototype methods rather than with stand-ins.
+  ItemView: class ItemView {
+    constructor(leaf) {
+      this.leaf = leaf;
+      this.app = leaf?.app;
+      this.containerEl = window.document.createElement("div");
+      this.containerEl.createDiv({ cls: "view-header" });
+      this.containerEl.createDiv({ cls: "view-content" });
+      this.registered = [];
+    }
+    register(cb) {
+      this.registered.push(cb);
+    }
+  },
   Notice: jest.fn().mockImplementation(function (message) {
     this.message = message;
     this.noticeEl = window.document.createElement("div");
