@@ -7,13 +7,20 @@ import type { ChatMessage } from "@/types/message";
 
 interface UserMessageProps {
   message: ChatMessage;
+  sourcePath?: string;
 }
 
-function UserMessage({ message }: UserMessageProps) {
+function UserMessage({ message, sourcePath }: UserMessageProps) {
   const app = useApp();
   return (
     <TooltipProvider>
-      <ChatSingleMessage message={message} app={app} isStreaming={false} onEdit={() => undefined} />
+      <ChatSingleMessage
+        message={message}
+        sourcePath={sourcePath}
+        app={app}
+        isStreaming={false}
+        onEdit={() => undefined}
+      />
     </TooltipProvider>
   );
 }
@@ -72,5 +79,12 @@ export const LongMessage: StoryObj<UserMessageProps> = {
       ...baseMessage,
       message: `${formattedText}\n\n${formattedText}\n\n${formattedText}`,
     },
+  },
+};
+
+export const SavedNoteLink: StoryObj<UserMessageProps> = {
+  args: {
+    sourcePath: "Research/Conversation.md",
+    message: { ...baseMessage, message: "Review [[Findings]] beside this saved conversation." },
   },
 };

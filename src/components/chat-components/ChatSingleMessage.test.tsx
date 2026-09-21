@@ -448,6 +448,35 @@ describe("ChatSingleMessage", () => {
       );
     });
 
+    it.each(["", "chat/Conversation.md"])(
+      "resolves user Markdown from conversation source %s instead of the active editor https://github.com/Brevilabs/obsidian-copilot-private/issues/539",
+      async (sourcePath) => {
+        const app = {
+          ...testApp,
+          workspace: { getActiveFile: () => ({ path: "other/Context.md" }) },
+        } as unknown as App;
+        render(
+          <TooltipProvider>
+            <ChatSingleMessage
+              {...{ sourcePath }}
+              message={{ ...baseMessage, sender: "user", message: "[[MarkdownTarget]]" }}
+              app={app}
+              isStreaming={false}
+            />
+          </TooltipProvider>
+        );
+        await waitFor(() =>
+          expect(renderMarkdownMock).toHaveBeenCalledWith(
+            testApp,
+            "[[MarkdownTarget]]",
+            expect.any(HTMLElement),
+            sourcePath,
+            expect.anything()
+          )
+        );
+      }
+    );
+
     it("passes user reasoning syntax to Markdown without assistant preprocessing", async () => {
       const markdown = "Explain this syntax: <think>draft</think>";
       render(

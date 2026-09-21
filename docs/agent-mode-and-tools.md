@@ -4,7 +4,7 @@ Agent Chat is the default Copilot experience on desktop. It gives an AI agent a 
 
 Quick Chat remains available for lightweight conversation and is the main chat experience on mobile. For multi-step work, Projects, Skills, or file changes, start with Agent Chat.
 
-Your sent messages display Markdown formatting, including headings, lists, code blocks, links, and image embeds. Copy and Edit keep the original Markdown text.
+Your sent messages display Markdown formatting, including headings, lists, code blocks, links, and image embeds. Copy and Edit keep the original Markdown text. Links and image embeds in saved chats resolve from the conversation note, even when another note is open.
 
 ## Choose an agent
 

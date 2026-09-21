@@ -303,6 +303,8 @@ function MessageContext({ context }: { context: ChatMessage["context"] }) {
 interface ChatSingleMessageProps {
   message: ChatMessage;
   app: App;
+  /** Saved conversation path for user Markdown; empty for an unsaved chat. */
+  sourcePath?: string;
   isStreaming: boolean;
   onRegenerate?: () => void;
   onEdit?: (newMessage: string) => void;
@@ -314,6 +316,7 @@ interface ChatSingleMessageProps {
 const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
   message,
   app,
+  sourcePath = "",
   isStreaming,
   onRegenerate,
   onEdit,
@@ -922,7 +925,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
                     {message.sender === USER_SENDER ? (
                       <Markdown
                         text={message.message}
-                        sourcePath={app.workspace.getActiveFile()?.path ?? ""}
+                        sourcePath={sourcePath}
                         className="tw-break-words tw-text-[calc(var(--font-text-size)_-_2px)] tw-font-normal"
                       />
                     ) : (
@@ -956,7 +959,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
     return message.sender === USER_SENDER ? (
       <Markdown
         text={message.message}
-        sourcePath={app.workspace.getActiveFile()?.path ?? ""}
+        sourcePath={sourcePath}
         className="tw-break-words tw-text-[calc(var(--font-text-size)_-_2px)] tw-font-normal"
       />
     ) : (

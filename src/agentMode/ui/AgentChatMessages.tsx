@@ -21,6 +21,7 @@ import React, { memo, useMemo } from "react";
 interface AgentChatMessagesProps {
   messages: AgentChatMessage[];
   app: App;
+  sourcePath?: string;
   currentPlan: CurrentPlan | null;
   pendingToolPermissions: PermissionPrompt[];
   pendingAskUserQuestions: AskUserQuestionPrompt[];
@@ -60,6 +61,7 @@ const AgentChatMessages = memo(
   ({
     messages,
     app,
+    sourcePath = "",
     currentPlan,
     pendingToolPermissions,
     pendingAskUserQuestions,
@@ -184,6 +186,7 @@ const AgentChatMessages = memo(
                   // copy / insert actions it can honor.
                   <>
                     <ChatSingleMessage
+                      sourcePath={sourcePath}
                       message={adaptedMessage}
                       app={app}
                       isStreaming={false}

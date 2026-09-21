@@ -4,6 +4,7 @@
  * session-pool invariants without touching ACP or spawning a child process.
  */
 import { FileSystemAdapter, App, Notice, TFile } from "obsidian";
+import { mockTFile } from "@/__tests__/mockObsidian";
 import { join } from "node:path";
 import { waitFor } from "@testing-library/react";
 import { AgentSession } from "./AgentSession";
@@ -214,6 +215,11 @@ function makeMockSession(overrides: {
       labelSource = source;
     },
     setLabel: jest.fn(),
+    loadDisplayMessages: jest.fn((messages) => {
+      displayMessages = messages;
+      hasUserVisibleMessages = messages.length > 0;
+    }),
+    seedSessionUsage: jest.fn(),
     getSessionUsage: () => null,
     subscribe: (l: Parameters<typeof listeners.add>[0]) => {
       listeners.add(l);
@@ -362,7 +368,8 @@ function modelCatalog(baseModelId: string): BackendModelCatalog {
 
 function buildManager(
   modelPreloaderOverrides: Partial<AgentModelPreloader> = {},
-  persistenceManager?: ConstructorParameters<typeof AgentSessionManager>[2]["persistenceManager"]
+  persistenceManager?: ConstructorParameters<typeof AgentSessionManager>[2]["persistenceManager"],
+  app = buildApp()
 ): AgentSessionManager {
   const descriptor = buildDescriptor();
   const modelPreloader = {
@@ -378,7 +385,7 @@ function buildManager(
     ...modelPreloaderOverrides,
   };
   return new AgentSessionManager(
-    buildApp(),
+    app,
     buildPlugin() as unknown as ConstructorParameters<typeof AgentSessionManager>[1],
     {
       persistenceManager,
@@ -1200,6 +1207,55 @@ describe("AgentSessionManager", () => {
           effort: null,
         });
         expect(mgr.getDefaultSelection("opencode")).toEqual(saved);
+      });
+    });
+
+    describe("getSessionSourcePath()", () => {
+      setupSavedNoteTests();
+      it("keeps unsaved sessions independent of a saved session and follows its file rename https://github.com/Brevilabs/obsidian-copilot-private/issues/539", async () => {
+        const file = mockTFile({ path: "chat/Conversation.md" });
+        const app = buildApp();
+        jest.mocked(app.vault.getAbstractFileByPath).mockReturnValue(file);
+        const saveSession = jest.fn().mockResolvedValue({ path: file.path });
+        const mgr = buildManager({}, { saveSession } as never, app);
+        const first = await mgr.createSession();
+        expect(mgr.getSessionSourcePath(first.internalId)).toBe("");
+        getSessionTestHandle(first).setMessages([{ message: "Hello" }]);
+        const listener = jest.fn();
+        mgr.subscribe(listener);
+        await mgr.saveActiveSession();
+        expect(listener).toHaveBeenCalledTimes(1);
+        expect(mgr.getSessionSourcePath(first.internalId)).toBe(file.path);
+        file.path = "archive/Conversation.md";
+        expect(mgr.getSessionSourcePath(first.internalId)).toBe(file.path);
+        expect(await mgr.saveActiveSession()).toEqual({ path: file.path });
+        const second = await mgr.createSession();
+        expect(mgr.getSessionSourcePath(second.internalId)).toBe("");
+        mgr.setActiveSession(first.internalId);
+        getSessionTestHandle(first).setMessages([{ message: "Changed" }]);
+        saveSession.mockResolvedValue(null);
+        await mgr.saveActiveSession();
+        expect(mgr.getSessionSourcePath(first.internalId)).toBe(file.path);
+        expect(saveSession).toHaveBeenLastCalledWith(
+          expect.anything(),
+          first.backendId,
+          expect.objectContaining({ existingPath: file.path })
+        );
+        await mgr.shutdown();
+      });
+      it("uses the loaded conversation file before any save https://github.com/Brevilabs/obsidian-copilot-private/issues/539", async () => {
+        const file = mockTFile({ path: "chat/Loaded.md" });
+        const loadFile = jest.fn().mockResolvedValue({
+          backendId: "opencode",
+          projectId: GLOBAL_SCOPE,
+          messages: [{ message: "Loaded" }],
+        });
+        const mgr = buildManager({}, { loadFile } as never);
+        const loaded = await mgr.loadSessionFromHistory(file);
+        expect(mgr.getSessionSourcePath(loaded.internalId)).toBe(file.path);
+        file.path = "archive/Loaded.md";
+        expect(mgr.getSessionSourcePath(loaded.internalId)).toBe(file.path);
+        await mgr.shutdown();
       });
     });
 
@@ -2274,10 +2330,8 @@ describe("AgentSessionManager.getRunningChatIds", () => {
     mgr.subscribe(listener);
     await mgr.saveActiveSession();
 
-    // The save itself must not notify (autosave stays decoupled from row
-    // visibility). Instead the set now carries BOTH ids, so whichever id the
-    // mounted list rendered the row under, `.has()` still hits.
-    expect(listener).not.toHaveBeenCalled();
+    // The saved source path becomes observable without dropping either recent-list identity.
+    expect(listener).toHaveBeenCalledTimes(1);
     const ids = mgr.getRunningChatIds();
     expect(ids.has("chats/agent__saved.md")).toBe(true);
     expect(ids.has(nativeId)).toBe(true);
