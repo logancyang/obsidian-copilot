@@ -9,7 +9,7 @@ type AgentTrailProps = React.ComponentProps<typeof AgentTrail>;
 
 function tool(
   id: string,
-  vendorToolName: string,
+  vendorToolName: string | undefined,
   overrides: Partial<Extract<AgentMessagePart, { kind: "tool_call" }>> = {}
 ): AgentMessagePart {
   return {
@@ -137,4 +137,38 @@ export const UnifiedCardStyles: StoryObj<AgentTrailProps> = {
 /** A restored structured turn falls back to its timestamp when no duration was persisted. */
 export const CompletedWithoutDuration: StoryObj<AgentTrailProps> = {
   render: () => <TrailDemo parts={UNIFIED_CARDS} showCompletedDuration={false} />,
+};
+
+/** Native child outcomes stay distinct; unsupported adapters disclose their limited detail. */
+export const SubagentOutcomes: StoryObj<AgentTrailProps> = {
+  render: () => (
+    <TrailDemo
+      parts={[
+        ...(
+          ["running", "completed", "failed", "cancelled", "disconnected", "unavailable"] as const
+        ).map((subagent) =>
+          tool(subagent, undefined, {
+            subagent,
+            status:
+              subagent === "running"
+                ? "in_progress"
+                : subagent === "completed" || subagent === "unavailable"
+                  ? "completed"
+                  : "failed",
+            input: { description: "Read fixture note", task: "Delegated task for Fixture reader" },
+            output:
+              subagent === "completed"
+                ? [{ type: "text", text: "The fixture describes project milestones." }]
+                : undefined,
+          })
+        ),
+        tool("Read fixture", undefined, { toolKind: "read", parentToolCallId: "completed" }),
+        tool("Stopped read", undefined, {
+          toolKind: "read",
+          parentToolCallId: "cancelled",
+          status: "in_progress",
+        }),
+      ]}
+    />
+  ),
 };

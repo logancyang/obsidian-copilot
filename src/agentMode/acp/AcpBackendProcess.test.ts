@@ -44,7 +44,10 @@ jest.mock("@agentclientprotocol/sdk", () => {
   return {
     RequestError,
     ClientSideConnection,
-    ndJsonStream: jest.fn(() => ({})),
+    ndJsonStream: jest.fn(() => ({
+      readable: new ReadableStream(),
+      writable: new WritableStream(),
+    })),
     PROTOCOL_VERSION: 1,
   };
 });
@@ -120,6 +123,27 @@ describe("AcpBackendProcess", () => {
   });
 
   describe("start()", () => {
+    it("advertises native child support with the SDK-compatible metadata inside client capabilities (https://github.com/Brevilabs/obsidian-copilot-private/issues/467)", async () => {
+      const backend = new AcpBackendProcess(
+        buildApp(),
+        buildStubBackend(),
+        "1.0.0",
+        buildStubDescriptor()
+      );
+      await backend.start();
+      const connection = (backend as unknown as { connection: { initialize: jest.Mock } })
+        .connection;
+      expect(connection.initialize).toHaveBeenCalledWith(
+        expect.objectContaining({
+          clientCapabilities: {
+            fs: { readTextFile: true, writeTextFile: true },
+            subagents: {},
+            _meta: { jetbrains: { air: { version: 1, capabilities: ["nativeSubagentSessions"] } } },
+          },
+        })
+      );
+    });
+
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/121 passes the active vault identity to the shared process used by global and Project sessions", async () => {
       const agentBackend = buildStubBackend();
       const backend = new AcpBackendProcess(

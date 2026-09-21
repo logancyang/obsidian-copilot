@@ -350,6 +350,46 @@ describe("AgentTrail", () => {
     expect(screen.getByText("Read notes/b.md")).toBeTruthy();
   });
 
+  it("shows native task descriptions, emitted reports and distinct child outcomes (https://github.com/Brevilabs/obsidian-copilot-private/issues/467)", () => {
+    renderTrail({
+      parts: [
+        toolCall("child", {
+          subagent: "cancelled",
+          status: "failed",
+          input: { description: "Fixture reader", task: "Delegated task for Fixture reader" },
+          output: [{ type: "text", text: "Partial child report" }],
+        }),
+      ],
+    });
+    expect(screen.getByText("Cancelled")).toBeTruthy();
+    fireEvent.click(screen.getByText('Sub-agent · "Fixture reader"'));
+    expect(screen.getByText("Partial child report")).toBeTruthy();
+    fireEvent.click(screen.getByText("Task"));
+    expect(screen.getByText("Delegated task for Fixture reader")).toBeTruthy();
+    expect(
+      screen.getByText("The adapter reports this task description, not the full delegated prompt.")
+    ).toBeTruthy();
+    expect(screen.queryByText("Prompt")).toBeNull();
+  });
+
+  it("shows unfinished tools as last reported activity when their parent ends (https://github.com/Brevilabs/obsidian-copilot-private/issues/467)", () => {
+    const pending = { ...READ_A, parentToolCallId: "child", status: "in_progress" as const };
+    const { container } = renderTrail({
+      parts: [
+        toolCall("child", {
+          subagent: "cancelled",
+          status: "failed",
+          input: { description: "Stopped reader" },
+        }),
+        pending,
+      ],
+    });
+    fireEvent.click(screen.getByText('Sub-agent · "Stopped reader"'));
+    expect(screen.getByText("Last reported")).toBeTruthy();
+    expect(container.querySelector(".tw-animate-spin")).toBeNull();
+    expect(pending.status).toBe("in_progress");
+  });
+
   it("groups a sub-agent's children too", () => {
     renderTrail({
       parts: [

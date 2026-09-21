@@ -58,7 +58,7 @@ function selectToolSummary(part: ToolCallPart): ToolSummary {
   // Heuristic: opencode's `task` tool is a sub-agent invocation but
   // surfaces no `vendorToolName` and maps to `kind: "other"`. Recognize
   // it by data shape so the registry stays backend-id-free.
-  if (isOpencodeTaskTool(part)) return TASK_SUMMARY;
+  if (part.subagent || isOpencodeTaskTool(part)) return TASK_SUMMARY;
   if (part.vendorToolName) {
     const v = VENDOR_SUMMARIES[part.vendorToolName];
     if (v) return v;
@@ -490,8 +490,8 @@ function formatTokens(n: number): string {
  * both surface the prompt this way). Returns null when absent or empty.
  */
 export function extractSubAgentInputPrompt(part: ToolCallPart): string | null {
-  const input = part.input as { prompt?: unknown } | null | undefined;
-  const prompt = input?.prompt;
+  const input = part.input as { prompt?: unknown; task?: unknown } | null | undefined;
+  const prompt = input?.prompt ?? (part.subagent ? input?.task : undefined);
   if (typeof prompt !== "string") return null;
   const trimmed = prompt.trim();
   return trimmed.length > 0 ? trimmed : null;

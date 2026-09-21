@@ -85,6 +85,8 @@ export const AgentTrail: React.FC<AgentTrailProps> = ({
 
 /** What every node in one trail renders against, regardless of its position. */
 interface TrailContext {
+  /** Parent delegation ended; unfinished tool rows show their last reported state. */
+  inactive?: boolean;
   app: App;
   /** The trail's trailing part, reference-compared to freeze stale reasoning. */
   lastPart: AgentMessagePart | undefined;
@@ -148,6 +150,7 @@ function renderNode(
         <ActionCard
           key={key}
           part={node.part}
+          inactive={ctx.inactive}
           open={ctx.expansion.isOpen(expansionId)}
           onToggle={() => ctx.expansion.toggle(expansionId)}
         />
@@ -168,14 +171,33 @@ function renderNode(
       const children = foldActivityGroups(node.children);
       const lastChild = children[children.length - 1];
       const childTrailId = `${trailId}/subagent:${node.parent.id}`;
+      // A terminal child may have no final tool status; do not keep its spinner running.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/467
+      const childCtx = {
+        ...ctx,
+        inactive:
+          ctx.inactive ||
+          (!!node.parent.subagent &&
+            node.parent.subagent !== "running" &&
+            node.parent.subagent !== "unavailable"),
+      };
       return (
         <SubAgentCard
           key={key}
           parent={node.parent}
+          inactive={ctx.inactive}
           childNodes={children}
           truncated={node.truncated}
           app={ctx.app}
-          renderNode={(n, k) => renderNode(n, k, ctx, atLiveEdge && n === lastChild, childTrailId)}
+          renderNode={(n, k) =>
+            renderNode(
+              n,
+              k,
+              childCtx,
+              !childCtx.inactive && atLiveEdge && n === lastChild,
+              childTrailId
+            )
+          }
         />
       );
     }
@@ -238,6 +260,7 @@ const ActivityGroupRow: React.FC<ActivityGroupRowProps> = ({ group, atLiveEdge, 
   return (
     <ActivityGroupCard
       group={group}
+      inactive={ctx.inactive}
       thinkingMs={thinkingMs}
       open={groupOpen}
       onToggle={toggleGroup}
