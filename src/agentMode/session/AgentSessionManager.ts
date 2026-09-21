@@ -392,7 +392,7 @@ export class AgentSessionManager {
   // Per-session bookkeeping, all keyed by `internalId`. Mixes persistence
   // bookkeeping with subscription teardowns — the unifying property is
   // "must be cleaned up when the session is detached":
-  // - `path`: persisted file (set after first successful save)
+  // - `source`: live persisted file or uncached path (set on load or successful save)
   // - `timer`: pending debounce timer
   // - `indexTimer`: pending session-index write-through debounce timer
   // - `unsub`: tear-down for the auto-save `session.subscribe()`
@@ -402,7 +402,7 @@ export class AgentSessionManager {
   private readonly sessionState = new Map<
     string,
     {
-      path?: string;
+      source?: { path: string };
       timer?: number;
       indexTimer?: number;
       unsub?: () => void;
@@ -832,7 +832,7 @@ export class AgentSessionManager {
     const paths = new Set<string>();
     for (const [internalId, session] of this.sessions) {
       if (!session.getNeedsAttention()) continue;
-      const path = this.sessionState.get(internalId)?.path;
+      const path = this.sessionState.get(internalId)?.source?.path;
       if (path) paths.add(path);
     }
     return paths;
@@ -856,7 +856,7 @@ export class AgentSessionManager {
    */
   private recentChatIdsForSession(internalId: string, session: AgentSession): string[] {
     const ids: string[] = [];
-    const path = this.sessionState.get(internalId)?.path;
+    const path = this.sessionState.get(internalId)?.source?.path;
     if (path) ids.push(path);
     const backendSessionId = session.getBackendSessionId();
     if (backendSessionId) ids.push(buildNativeChatId(session.backendId, backendSessionId));
@@ -2992,13 +2992,13 @@ export class AgentSessionManager {
     const requestId = ++this.latestHistoryLoadRequestId;
 
     for (const [internalId, state] of this.sessionState.entries()) {
-      if (state.path !== file.path) continue;
+      if (this.getSessionSourcePath(internalId) !== file.path) continue;
       const existing = this.sessions.get(internalId);
       if (existing && existing.getStatus() !== "closed") {
         this.setActiveSession(internalId);
         return existing;
       }
-      state.path = undefined;
+      state.source = undefined;
     }
 
     // Captured before we create the loaded session (which becomes active) so
@@ -3043,7 +3043,7 @@ export class AgentSessionManager {
     session.loadDisplayMessages(loaded.messages);
     session.seedSessionUsage(loaded.usage);
     if (loaded.label) session.setLabel(loaded.label);
-    this.getSessionState(session.internalId).path = file.path;
+    this.getSessionState(session.internalId).source = file;
     if (loaded.sessionId) {
       // Keep the native twin's recency in step with the markdown side so the
       // merged history ranks this chat correctly after a reopen.
@@ -3428,7 +3428,7 @@ export class AgentSessionManager {
     const state = this.getSessionState(session.internalId);
     // Manual Save opts this chat into keeping its note current.
     // https://github.com/logancyang/obsidian-copilot/issues/3225
-    if (!getSettings().autosaveChat && !state.path) return;
+    if (!getSettings().autosaveChat && !state.source) return;
     if (state.timer) window.clearTimeout(state.timer);
     state.timer = window.setTimeout(() => {
       state.timer = undefined;
@@ -3510,6 +3510,15 @@ export class AgentSessionManager {
     return result;
   }
 
+  /**
+   * Resolves user Markdown against its own saved conversation, including vault renames.
+   * @param internalId Runtime session whose transcript owns the links.
+   */
+  getSessionSourcePath(internalId: string): string {
+    const state = this.sessionState.get(internalId);
+    return state?.source?.path ?? "";
+  }
+
   private async flushAutoSave(session: AgentSession): Promise<{ path: string } | null> {
     const persistence = this.opts.persistenceManager;
     if (!persistence) return null;
@@ -3543,12 +3552,13 @@ export class AgentSessionManager {
     }-${fanoutSig}-${usage?.updatedAt ?? ""}`;
     const state = this.getSessionState(session.internalId);
     if (state.signature === signature) {
-      return state.path ? { path: state.path } : null;
+      return state.source ?? null;
     }
 
+    const previousSourcePath = this.getSessionSourcePath(session.internalId);
     const result = await persistence.saveSession(messages, session.backendId, {
       label,
-      existingPath: state.path,
+      existingPath: this.getSessionSourcePath(session.internalId) || undefined,
       sessionId,
       // GLOBAL_SCOPE writes no frontmatter (byte-identical to legacy chats);
       // a real project id binds the chat to that scope on disk.
@@ -3556,8 +3566,11 @@ export class AgentSessionManager {
       usage: usage ?? undefined,
     });
     if (result) {
-      state.path = result.path;
+      state.source = this.app.vault.getAbstractFileByPath(result.path) ?? result;
       state.signature = signature;
+      // The first successful save changes relative-link resolution in the mounted chat.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/539
+      if (previousSourcePath !== result.path) this.notify();
     }
     return result;
   }

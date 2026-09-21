@@ -138,6 +138,7 @@ export function useChatManager(chatUIState: ChatUIState) {
   return {
     // Core state
     messages,
+    sourcePath: chatUIState.getSourcePath(),
 
     // Modern API
     sendMessage,

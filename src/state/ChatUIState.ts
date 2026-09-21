@@ -41,6 +41,7 @@ export interface ChatUIState {
   clearMessages(): void;
   truncateAfterMessageId(messageId: string): Promise<void>;
   getMessages(): ChatMessage[];
+  getSourcePath(): string;
   getMessage(id: string): ChatMessage | undefined;
   getLLMMessage(id: string): ChatMessage | undefined;
   getLLMMessages(): ChatMessage[];
@@ -207,6 +208,10 @@ export class ChatManagerChatUIState implements ChatUIState {
   // DATA ACCESS
   // ================================
 
+  getSourcePath(): string {
+    return this.chatManager.getSourcePath();
+  }
+
   /**
    * Get messages for UI display
    */
@@ -293,6 +298,7 @@ export class ChatManagerChatUIState implements ChatUIState {
    */
   async saveChat(modelKey: string): Promise<void> {
     await this.chatManager.saveChat(modelKey);
+    this.notifyListeners();
   }
 
   /**

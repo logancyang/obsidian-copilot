@@ -52,14 +52,16 @@ export class ChatPersistenceManager {
   ) {}
 
   /**
-   * Save current chat history to a markdown file
+   * Save current chat history and return its live vault file or uncached path.
+   * Returns null when no transcript was written.
+   * @param modelKey Model identity stored in the conversation metadata.
    */
-  async saveChat(modelKey: string): Promise<void> {
+  async saveChat(modelKey: string): Promise<{ path: string } | null> {
     try {
       const messages = this.messageRepo.getDisplayMessages();
       if (messages.length === 0) {
         new Notice("No messages to save.");
-        return;
+        return null;
       }
 
       const firstMessageEpoch = messages[0].timestamp?.epoch || Date.now();
@@ -115,6 +117,7 @@ export class ChatPersistenceManager {
         existingLastAccessedAt
       );
       let targetFile: TFile | null = existingFile;
+      let savedPath = preferredFileName;
 
       // Check if existingFile is a real vault file (not a synthetic object for hidden dirs)
       const existingFileIsReal =
@@ -214,6 +217,7 @@ export class ChatPersistenceManager {
                 } else {
                   // File exists on disk but not in vault cache (hidden directory)
                   await this.app.vault.adapter.write(fallbackName, noteContent);
+                  savedPath = fallbackName;
                   new Notice("Existing chat note found - updating it now.");
                   logInfo(
                     `[ChatPersistenceManager] Resolved fallback save conflict via adapter: ${fallbackName}`
@@ -230,9 +234,11 @@ export class ChatPersistenceManager {
       }
 
       this.generateTopicAsyncIfNeeded(targetFile, messages, existingTopic);
+      return targetFile ?? { path: savedPath };
     } catch (error) {
       logError("[ChatPersistenceManager] Error saving chat:", error);
       new Notice("Failed to save chat as note. Check console for details.");
+      return null;
     }
   }
 

@@ -14,7 +14,8 @@ jest.mock("@/chatUtils", () => ({
 
 jest.mock("./ChatPersistenceManager", () => ({
   ChatPersistenceManager: jest.fn().mockImplementation(() => ({
-    saveChat: jest.fn().mockResolvedValue({ success: true, path: "/test/path.md" }),
+    saveChat: jest.fn().mockResolvedValue({ path: "/test/path.md" }),
+    loadChat: jest.fn().mockResolvedValue([]),
   })),
 }));
 
@@ -46,6 +47,7 @@ jest.mock("@/commands/state", () => ({
 jest.mock("@/services/webViewerService/webViewerServiceSingleton", () => ({
   getWebViewerService: jest.fn(),
 }));
+import { ChatPersistenceManager } from "./ChatPersistenceManager";
 import { ChatManager } from "./ChatManager";
 import { MessageRepository } from "./MessageRepository";
 import { ContextManager } from "./ContextManager";
@@ -673,9 +675,70 @@ describe("ChatManager", () => {
     });
   });
 
+  describe("getSourcePath()", () => {
+    it("starts without a conversation source", () => {
+      expect(chatManager.getSourcePath()).toBe("");
+    });
+  });
+
+  describe("loadChatHistory()", () => {
+    it("retains the loaded file so vault renames update link resolution https://github.com/Brevilabs/obsidian-copilot-private/issues/539", async () => {
+      const file = mockTFile({ path: "chat/Conversation.md" });
+      await chatManager.loadChatHistory(file);
+      expect(chatManager.getSourcePath()).toBe("chat/Conversation.md");
+      file.path = "archive/Conversation.md";
+      expect(chatManager.getSourcePath()).toBe("archive/Conversation.md");
+    });
+  });
+
+  describe("saveChat()", () => {
+    function saveMock(): jest.Mock {
+      const persistence = (ChatPersistenceManager as jest.Mock).mock.results.slice(-1)[0].value as {
+        saveChat: jest.Mock;
+      };
+      return persistence.saveChat;
+    }
+
+    it("adopts a successful first save and follows its live file through renames", async () => {
+      const file = mockTFile({ path: "chat/Saved.md" });
+      saveMock().mockResolvedValue(file);
+      await chatManager.saveChat("model");
+      expect(chatManager.getSourcePath()).toBe("chat/Saved.md");
+      file.path = "archive/Saved.md";
+      expect(chatManager.getSourcePath()).toBe("archive/Saved.md");
+    });
+
+    it("preserves the loaded path when saving fails https://github.com/Brevilabs/obsidian-copilot-private/issues/539", async () => {
+      await chatManager.loadChatHistory(mockTFile({ path: "chat/Original.md" }));
+      saveMock().mockResolvedValue(null);
+      await chatManager.saveChat("model");
+      expect(chatManager.getSourcePath()).toBe("chat/Original.md");
+    });
+
+    it.each([false, true])(
+      "ignores an old save after switching conversation (load another = %s) https://github.com/Brevilabs/obsidian-copilot-private/issues/539",
+      async (loadAnother) => {
+        let resolve!: (source: { path: string }) => void;
+        saveMock().mockReturnValue(
+          new Promise((done) => {
+            resolve = done;
+          })
+        );
+        const saving = chatManager.saveChat("model");
+        chatManager.clearMessages();
+        if (loadAnother) await chatManager.loadChatHistory(mockTFile({ path: "chat/Another.md" }));
+        resolve({ path: "chat/Previous.md" });
+        await saving;
+        expect(chatManager.getSourcePath()).toBe(loadAnother ? "chat/Another.md" : "");
+      }
+    );
+  });
+
   describe("clearMessages", () => {
-    it("should clear all messages and chain history", () => {
+    it("should clear all messages, conversation source, and chain history", async () => {
+      await chatManager.loadChatHistory(mockTFile({ path: "chat/Original.md" }));
       chatManager.clearMessages();
+      expect(chatManager.getSourcePath()).toBe("");
 
       expect(mockMessageRepo.clear).toHaveBeenCalled();
       expect(mockChainManager.memoryManager.clearChatMemory).toHaveBeenCalled();
@@ -708,7 +771,9 @@ describe("ChatManager", () => {
         createMockMessage("msg-2", "Response", "AI"),
       ];
 
+      await chatManager.loadChatHistory(mockTFile({ path: "chat/Original.md" }));
       await chatManager.loadMessages(messages);
+      expect(chatManager.getSourcePath()).toBe("");
 
       expect(mockMessageRepo.clear).toHaveBeenCalled();
       expect(mockMessageRepo.addMessage).toHaveBeenCalledTimes(2);

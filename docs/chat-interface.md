@@ -46,6 +46,8 @@ Manage saved commands under **Settings → Copilot → Command**. See [Copilot C
 
 Press **Enter** to send by default. You can switch this to **Shift + Enter** under **Settings → Copilot → Basic → General → Send Shortcut**. Use the stop button to interrupt a response.
 
+Your sent messages display Markdown formatting, including headings, lists, code blocks, links, and image embeds. Copy and Edit keep the original Markdown text. Links and image embeds in saved chats resolve from the conversation note, even when another note is open.
+
 Hover over a message to use its actions:
 
 - Your messages: **Copy**, **Edit**, and **Delete**.

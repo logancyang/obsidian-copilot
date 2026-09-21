@@ -31,6 +31,8 @@ import { buildWebTabsWithActiveSnapshot } from "@/services/webViewerService/acti
  * while providing a clean API for UI components.
  */
 export class ChatManager {
+  private chatSource: { path: string } | null = null;
+  private conversationGeneration = 0;
   private contextManager: ContextManager;
   private persistenceManager: ChatPersistenceManager;
   private onMessageCreatedCallback?: (messageId: string) => void;
@@ -517,6 +519,8 @@ export class ChatManager {
    * Clear all messages
    */
   clearMessages(): void {
+    this.chatSource = null;
+    this.conversationGeneration++;
     this.messageRepo.clear();
     // Clear chain memory directly (fire-and-forget; errors are logged but do not block UI)
     void this.chainManager.memoryManager
@@ -582,6 +586,8 @@ export class ChatManager {
    * Load messages from saved chat
    */
   async loadMessages(messages: ChatMessage[]): Promise<void> {
+    this.chatSource = null;
+    this.conversationGeneration++;
     this.messageRepo.clear();
     messages.forEach((msg) => {
       this.messageRepo.addMessage(msg);
@@ -597,7 +603,16 @@ export class ChatManager {
    * Save current chat history
    */
   async saveChat(modelKey: string): Promise<void> {
-    await this.persistenceManager.saveChat(modelKey);
+    const generation = this.conversationGeneration;
+    const source = await this.persistenceManager.saveChat(modelKey);
+    // An older save must not change link resolution after starting or reopening another chat.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/539
+    if (source && generation === this.conversationGeneration) this.chatSource = source;
+  }
+
+  /** Saved conversation path, following vault renames through the retained file reference. */
+  getSourcePath(): string {
+    return this.chatSource?.path ?? "";
   }
 
   /**
@@ -626,6 +641,7 @@ export class ChatManager {
 
     // Load messages from file - only restores message text and context references (not fetched content)
     const messages = await this.persistenceManager.loadChat(file);
+    this.chatSource = file;
 
     // Add messages to the current repository
     for (const message of messages) {

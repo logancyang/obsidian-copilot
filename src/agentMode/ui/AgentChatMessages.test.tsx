@@ -26,11 +26,13 @@ jest.mock("@/components/chat-components/ChatSingleMessage", () => ({
   default: ({
     message,
     footerStart,
+    sourcePath,
   }: {
     message: { message: string };
     footerStart?: React.ReactNode;
+    sourcePath?: string;
   }) => (
-    <div>
+    <div data-source-path={sourcePath}>
       {message.message}
       <div data-testid="single-message-footer">{footerStart}</div>
     </div>
@@ -132,6 +134,17 @@ describe("AgentChatMessages", () => {
     });
 
     afterEach(() => jest.useRealTimers());
+
+    it("forwards the active session conversation path to user messages https://github.com/Brevilabs/obsidian-copilot-private/issues/539", () => {
+      const { container } = renderMessages(
+        [assistantMessage("user-1", 1, { sender: "user", message: "[[Findings]]" })],
+        false,
+        { sourcePath: "chat/Conversation.md" }
+      );
+      expect(
+        container.querySelector('[data-source-path="chat/Conversation.md"]')?.textContent
+      ).toContain("[[Findings]]");
+    });
 
     it("retains the latest completed turn duration with a static icon", () => {
       const { container } = renderMessages(

@@ -1,5 +1,21 @@
-import { isChatEmpty } from "@/components/chat-components/ChatMessages";
+import React from "react";
+import { render, screen } from "@testing-library/react";
+import ChatMessages, { isChatEmpty } from "@/components/chat-components/ChatMessages";
 import { ChatMessage } from "@/types/message";
+
+jest.mock("@/hooks/useChatScrolling", () => ({
+  useChatScrolling: jest.fn(() => ({
+    containerMinHeight: 0,
+    scrollContainerCallbackRef: jest.fn(),
+    getMessageKey: () => "message",
+  })),
+}));
+jest.mock("@/components/chat-components/ChatSingleMessage", () => ({
+  __esModule: true,
+  default: ({ sourcePath }: { sourcePath: string }) => (
+    <div data-testid="message-source">{sourcePath}</div>
+  ),
+}));
 
 function message(overrides: Partial<ChatMessage> = {}): ChatMessage {
   return {
@@ -13,6 +29,23 @@ function message(overrides: Partial<ChatMessage> = {}): ChatMessage {
 }
 
 describe("ChatMessages", () => {
+  describe("ChatMessages()", () => {
+    it("forwards its saved conversation path to the shared renderer https://github.com/Brevilabs/obsidian-copilot-private/issues/539", () => {
+      render(
+        <ChatMessages
+          sourcePath="chat/Conversation.md"
+          chatHistory={[message()]}
+          currentAiMessage=""
+          app={{} as never}
+          onRegenerate={() => undefined}
+          onEdit={() => undefined}
+          onDelete={() => undefined}
+        />
+      );
+      expect(screen.getByTestId("message-source").textContent).toBe("chat/Conversation.md");
+    });
+  });
+
   describe("isChatEmpty()", () => {
     it("reports an empty chat when there is no message and nothing streaming", () => {
       expect(isChatEmpty([], "")).toBe(true);

@@ -14,6 +14,7 @@ interface ChatMessagesProps {
   loading?: boolean;
   loadingMessage?: string;
   app: App;
+  sourcePath?: string;
   onRegenerate: (messageIndex: number) => void;
   onEdit: (messageIndex: number, newMessage: string) => void;
   onDelete: (messageIndex: number) => void;
@@ -40,6 +41,7 @@ const ChatMessages = memo(
     loading,
     loadingMessage,
     app,
+    sourcePath = "",
     onRegenerate,
     onEdit,
     onDelete,
@@ -85,6 +87,7 @@ const ChatMessages = memo(
                 >
                   <ChatSingleMessage
                     message={message}
+                    sourcePath={sourcePath}
                     app={app}
                     isStreaming={false}
                     onRegenerate={() => onRegenerate(index)}

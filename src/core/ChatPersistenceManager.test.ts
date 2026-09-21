@@ -363,6 +363,26 @@ Nature's quiet song`);
   });
 
   describe("saveChat", () => {
+    it("returns the live created file so its renamed path remains observable https://github.com/Brevilabs/obsidian-copilot-private/issues/539", async () => {
+      const file = mockTFile({ path: "chat/Saved.md" });
+      mockMessageRepo.getDisplayMessages.mockReturnValue([
+        { id: "1", sender: USER_SENDER, message: "Hello", isVisible: true, timestamp: null },
+      ]);
+      mockApp.vault.create.mockResolvedValue(file);
+      const saved = await persistenceManager.saveChat("model");
+      expect(saved).toBe(file);
+      file.path = "archive/Saved.md";
+      expect(saved?.path).toBe(file.path);
+    });
+
+    it("returns no source when a write fails https://github.com/Brevilabs/obsidian-copilot-private/issues/539", async () => {
+      mockMessageRepo.getDisplayMessages.mockReturnValue([
+        { id: "1", sender: USER_SENDER, message: "Hello", isVisible: true, timestamp: null },
+      ]);
+      mockApp.vault.create.mockRejectedValue(new Error("write failed"));
+      expect(await persistenceManager.saveChat("model")).toBeNull();
+    });
+
     it("saves uploaded images with their message before context and timestamp metadata (https://github.com/logancyang/obsidian-copilot/issues/2900)", async () => {
       const message: ChatMessage = {
         id: "image",
@@ -440,7 +460,8 @@ Nature's quiet song`);
       mockMessageRepo.getDisplayMessages.mockReturnValue(messages);
       mockApp.vault.getAbstractFileByPath.mockReturnValue(true); // Folder exists
 
-      await persistenceManager.saveChat("gpt-4");
+      const saved = await persistenceManager.saveChat("gpt-4");
+      expect(saved?.path).toBe("test-folder/Hello@20240923_221800.md");
 
       expect(mockApp.vault.create).toHaveBeenCalledWith(
         "test-folder/Hello@20240923_221800.md",
@@ -877,7 +898,8 @@ Nature's quiet song`);
         }
       });
 
-      await persistenceManager.saveChat("gpt-4");
+      const saved = await persistenceManager.saveChat("gpt-4");
+      expect(saved).toBe(existingFallbackFile);
 
       // Verify that vault.modify was called to update the existing fallback file
       expect(mockApp.vault.modify).toHaveBeenCalledWith(
@@ -1059,7 +1081,8 @@ Nature's quiet song`);
       // findFileByEpoch returns null, but file exists on disk (hidden dir)
       mockApp.vault.adapter.exists.mockResolvedValue(true);
 
-      await persistenceManager.saveChat("gpt-4");
+      const saved = await persistenceManager.saveChat("gpt-4");
+      expect(saved?.path).toBe(mockApp.vault.adapter.write.mock.calls[0][0]);
 
       // Should write via adapter, not vault.create
       expect(mockApp.vault.adapter.write).toHaveBeenCalledWith(

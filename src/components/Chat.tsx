@@ -68,7 +68,11 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
   const settings = useSettingsValue();
   const eventTarget = useContext(EventTargetContext);
 
-  const { messages: chatHistory, addMessage: rawAddMessage } = useChatManager(chatUIState);
+  const {
+    messages: chatHistory,
+    sourcePath,
+    addMessage: rawAddMessage,
+  } = useChatManager(chatUIState);
   const [currentModelKey, setCurrentModelKey] = useModelKey();
   const [currentChain] = useChainType();
   // Non-agent chat picker sourced from the model-management "chat" backend.
@@ -742,6 +746,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
           </div>
         )}
         <ChatMessages
+          sourcePath={sourcePath}
           chatHistory={chatHistory}
           currentAiMessage={currentAiMessage}
           streamingMessageId={streamingMessageIdRef.current}

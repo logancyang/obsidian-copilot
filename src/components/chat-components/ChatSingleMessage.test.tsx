@@ -1,11 +1,22 @@
 import React from "react";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { AppContext } from "@/context";
+import { fireEvent, render as renderComponent, screen, waitFor } from "@testing-library/react";
 import ChatSingleMessage, {
   normalizeFootnoteRendering,
 } from "@/components/chat-components/ChatSingleMessage";
 import { ChatMessage } from "@/types/message";
 import type { App } from "obsidian";
 import { TooltipProvider } from "@/components/ui/tooltip";
+
+const mockCopy = jest.fn();
+jest.mock("@/hooks/useCopyToClipboard", () => ({
+  useCopyToClipboard: jest.fn(() => ({ isCopied: false, copy: mockCopy })),
+}));
+jest.mock("@/components/chat-components/InlineMessageEditor", () => ({
+  InlineMessageEditor: ({ initialValue }: { initialValue: string }) => (
+    <textarea aria-label="Edit message" defaultValue={initialValue} />
+  ),
+}));
 
 jest.mock("@/settings/model", () => ({
   useSettingsValue: jest.fn(() => ({
@@ -75,6 +86,15 @@ const { __renderMock: renderMarkdownMock } = jest.requireMock<{
   __renderMock: jest.Mock;
 }>("obsidian");
 
+const testApp = {
+  workspace: { getActiveFile: () => null },
+  metadataCache: { getFirstLinkpathDest: () => null },
+} as unknown as App;
+
+function render(ui: React.ReactElement) {
+  return renderComponent(<AppContext.Provider value={testApp}>{ui}</AppContext.Provider>);
+}
+
 // ---------------------------------------------------------------------------
 // Verifies that the HTML string passed to MarkdownRenderer.renderMarkdown
 // never has </div> or </details> on the same line as a 4-space-indented
@@ -103,7 +123,11 @@ describe("ChatSingleMessage", () => {
 
     beforeEach(() => {
       renderMarkdownMock.mockReset();
-      renderMarkdownMock.mockResolvedValue(undefined);
+      renderMarkdownMock.mockImplementation(
+        async (_app: unknown, text: string, el: HTMLElement) => {
+          el.textContent = text;
+        }
+      );
     });
 
     beforeAll(() => {
@@ -210,7 +234,11 @@ describe("ChatSingleMessage", () => {
   describe("normalizeFootnoteRendering()", () => {
     beforeEach(() => {
       renderMarkdownMock.mockReset();
-      renderMarkdownMock.mockResolvedValue(undefined);
+      renderMarkdownMock.mockImplementation(
+        async (_app: unknown, text: string, el: HTMLElement) => {
+          el.textContent = text;
+        }
+      );
     });
 
     it("removes separator and backref while preserving non-footnote elements", () => {
@@ -316,11 +344,159 @@ describe("ChatSingleMessage", () => {
 
     beforeEach(() => {
       renderMarkdownMock.mockReset();
-      renderMarkdownMock.mockResolvedValue(undefined);
+      renderMarkdownMock.mockImplementation(
+        async (_app: unknown, text: string, el: HTMLElement) => {
+          el.textContent = text;
+        }
+      );
     });
 
     beforeAll(() => {
       (window as unknown as Record<string, unknown>).activeDocument = window.document;
+    });
+
+    it.each([false, true])(
+      "renders user Markdown through Obsidian with rich content = %s",
+      async (richContent) => {
+        const markdown = "**Review** this `diagram`\n\n- First finding\n- Second finding";
+        renderMarkdownMock.mockImplementation(
+          async (_app: unknown, text: string, el: HTMLElement) => {
+            expect(text).toBe(markdown);
+            const strong = document.createElement("strong");
+            strong.textContent = "Review";
+            el.append(strong);
+          }
+        );
+        const { container } = render(
+          <TooltipProvider>
+            <ChatSingleMessage
+              message={{
+                ...baseMessage,
+                sender: "user",
+                message: markdown,
+                content: richContent
+                  ? [
+                      { type: "text", text: markdown },
+                      { type: "image_url", image_url: { url: "data:image/png;base64,cGl4ZWw=" } },
+                    ]
+                  : undefined,
+              }}
+              app={testApp}
+              isStreaming={false}
+            />
+          </TooltipProvider>
+        );
+        await waitFor(() =>
+          expect(container.querySelector(".markdown-rendered strong")?.textContent).toBe("Review")
+        );
+        expect(renderMarkdownMock).toHaveBeenCalledTimes(1);
+        expect(container.querySelectorAll("img")).toHaveLength(richContent ? 1 : 0);
+        if (richContent)
+          expect(screen.getByAltText("User uploaded image").getAttribute("src")).toBe(
+            "data:image/png;base64,cGl4ZWw="
+          );
+      }
+    );
+
+    it("renders a reloaded user image embed through Obsidian instead of showing its Markdown source", async () => {
+      const markdown = "Describe this image\n\n![[organized/diagram.png]]";
+      renderMarkdownMock.mockImplementation(
+        async (_app: unknown, text: string, el: HTMLElement) => {
+          expect(text).toBe(markdown);
+          const image = document.createElement("img");
+          image.alt = "Saved diagram";
+          image.src = "app://vault/organized/diagram.png";
+          el.append(image);
+        }
+      );
+      const { container } = render(
+        <TooltipProvider>
+          <ChatSingleMessage
+            message={{ ...baseMessage, sender: "user", message: markdown }}
+            app={testApp}
+            isStreaming={false}
+          />
+        </TooltipProvider>
+      );
+      await waitFor(() =>
+        expect(screen.getByAltText("Saved diagram").getAttribute("src")).toBe(
+          "app://vault/organized/diagram.png"
+        )
+      );
+      expect(container.textContent).not.toContain("![[organized/diagram.png]]");
+      expect(container.querySelectorAll("img")).toHaveLength(1);
+    });
+
+    it("keeps raw Markdown for Copy and Edit while rendering the user message", async () => {
+      const markdown = "**Review** the `diagram`\n\n![[organized/diagram.png]]";
+      render(
+        <TooltipProvider>
+          <ChatSingleMessage
+            message={{ ...baseMessage, sender: "user", message: markdown }}
+            app={testApp}
+            isStreaming={false}
+            onEdit={() => undefined}
+          />
+        </TooltipProvider>
+      );
+      await waitFor(() => expect(renderMarkdownMock).toHaveBeenCalled());
+      fireEvent.click(screen.getByTitle("Copy"));
+      expect(mockCopy).toHaveBeenLastCalledWith(markdown);
+      fireEvent.click(screen.getByTitle("Edit"));
+      expect(screen.getByRole<HTMLTextAreaElement>("textbox", { name: "Edit message" }).value).toBe(
+        markdown
+      );
+    });
+
+    it.each(["", "chat/Conversation.md"])(
+      "resolves user Markdown from conversation source %s instead of the active editor https://github.com/Brevilabs/obsidian-copilot-private/issues/539",
+      async (sourcePath) => {
+        const app = {
+          ...testApp,
+          workspace: { getActiveFile: () => ({ path: "other/Context.md" }) },
+        } as unknown as App;
+        render(
+          <TooltipProvider>
+            <ChatSingleMessage
+              {...{ sourcePath }}
+              message={{ ...baseMessage, sender: "user", message: "[[MarkdownTarget]]" }}
+              app={app}
+              isStreaming={false}
+            />
+          </TooltipProvider>
+        );
+        await waitFor(() =>
+          expect(renderMarkdownMock).toHaveBeenCalledWith(
+            testApp,
+            "[[MarkdownTarget]]",
+            expect.any(HTMLElement),
+            sourcePath,
+            expect.anything()
+          )
+        );
+      }
+    );
+
+    it("passes user reasoning syntax to Markdown without assistant preprocessing", async () => {
+      const markdown = "Explain this syntax: <think>draft</think>";
+      render(
+        <TooltipProvider>
+          <ChatSingleMessage
+            message={{ ...baseMessage, sender: "user", message: markdown }}
+            app={testApp}
+            isStreaming={false}
+          />
+        </TooltipProvider>
+      );
+      await waitFor(() =>
+        expect(renderMarkdownMock).toHaveBeenCalledWith(
+          testApp,
+          markdown,
+          expect.any(HTMLElement),
+          "",
+          expect.anything()
+        )
+      );
     });
 
     describe("MessageContext()", () => {
