@@ -20,6 +20,11 @@ class TestBinaryManager extends ManagedBinaryManager<number> {
   pipeline = jest.fn(
     async (options: ManagedBinaryInstallOptions<number> & { signal: AbortSignal }) => {
       options.onProgress?.(50);
+      this.selectInstalledBinary({
+        binaryVersion: "1.2.3",
+        binaryPath: "/managed/binary",
+        binarySource: "managed",
+      });
       return { version: "1.2.3", path: "/managed/binary" };
     }
   );
@@ -60,6 +65,88 @@ describe("ManagedBinaryManager", () => {
     });
     afterEach(() => fs.rmSync(tempDir, { recursive: true, force: true }));
 
+    describe("autoUpgrade()", () => {
+      const issue = "https://github.com/Brevilabs/obsidian-copilot-private/issues/530";
+      beforeEach(() => {
+        manager.settings = {
+          binaryPath: customPath,
+          binaryVersion: "1.0.0",
+          binarySource: "managed",
+        };
+      });
+      it.each(["2.0.0", "0.9.0"])(
+        `${issue} follows a changed pin in either direction and emits one success`,
+        async (pin) => {
+          const notify = jest.fn();
+          await manager.autoUpgrade(pin, notify);
+          expect(manager.pipeline).toHaveBeenCalledTimes(1);
+          expect(notify).toHaveBeenCalledTimes(1);
+          expect(notify.mock.calls[0][0]).toContain("updated");
+        }
+      );
+      it.each(["equal", "custom", "absent"])(
+        `${issue} skips %s without a notice`,
+        async (reason) => {
+          if (reason === "custom") manager.settings.binarySource = "custom";
+          if (reason === "absent") manager.settings = {};
+          const notify = jest.fn();
+          await manager.autoUpgrade(reason === "equal" ? "1.0.0" : "2.0.0", notify);
+          expect(manager.pipeline).not.toHaveBeenCalled();
+          expect(notify).not.toHaveBeenCalled();
+        }
+      );
+      it(`${issue} does not replace a custom selection written during download`, async () => {
+        const pipeline = manager.pipeline.getMockImplementation()!;
+        manager.pipeline.mockImplementation(async (options) => {
+          manager.settings = {
+            binaryPath: customPath,
+            binaryVersion: "9.0.0",
+            binarySource: "custom",
+          };
+          return pipeline(options);
+        });
+        await manager.autoUpgrade("2.0.0", jest.fn());
+        expect(manager.settings).toEqual({
+          binaryPath: customPath,
+          binaryVersion: "9.0.0",
+          binarySource: "custom",
+        });
+      });
+      it(`${issue} skips a second simultaneous load instead of duplicating its download`, async () => {
+        let finish!: () => void;
+        const pending = new Promise<void>((resolve) => {
+          finish = resolve;
+        });
+        const pipeline = manager.pipeline.getMockImplementation()!;
+        manager.pipeline.mockImplementation(async (options) => {
+          await pending;
+          return pipeline(options);
+        });
+        const notify = jest.fn();
+        const first = manager.autoUpgrade("2.0.0", notify);
+        await manager.autoUpgrade("2.0.0", notify);
+        finish();
+        await first;
+        expect(manager.pipeline).toHaveBeenCalledTimes(1);
+        expect(notify).toHaveBeenCalledTimes(1);
+      });
+      it(`${issue} persists offline cooldown across manager lifecycles while preserving the selected binary`, async () => {
+        const original = { ...manager.settings };
+        manager.pipeline.mockRejectedValue(new Error("offline"));
+        const notify = jest.fn();
+        await manager.autoUpgrade("2.0.0", notify);
+        expect(manager.settings).toEqual(original);
+        expect(notify).toHaveBeenCalledTimes(1);
+        const reopened = new TestBinaryManager(manager.getDataDir());
+        reopened.settings = original;
+        await reopened.autoUpgrade("2.0.0", notify);
+        expect(reopened.pipeline).not.toHaveBeenCalled();
+        const now = jest.spyOn(Date, "now").mockReturnValue(Date.now() + 24 * 60 * 60 * 1000 + 1);
+        await reopened.autoUpgrade("2.0.0", notify);
+        expect(reopened.pipeline).toHaveBeenCalledTimes(1);
+        now.mockRestore();
+      });
+    });
     describe("getRuntimeState()", () => {
       it("keeps the idle snapshot stable between reads", () => {
         expect(manager.getRuntimeState()).toEqual({ kind: "idle" });

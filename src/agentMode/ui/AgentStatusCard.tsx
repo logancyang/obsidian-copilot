@@ -1,3 +1,4 @@
+import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
@@ -28,6 +29,7 @@ interface AgentStatusCardProps {
   /** Concise state-specific heading; omitted for short statuses. */
   summary?: string;
   tone?: AgentStatusTone;
+  progress?: { percent?: number };
   action?: AgentStatusAction;
   /**
    * `"row"` puts the action beside the message instead of under it, for a
@@ -45,6 +47,7 @@ export const AgentStatusCard: React.FC<AgentStatusCardProps> = ({
   message,
   summary,
   tone = "neutral",
+  progress,
   action,
   layout = "stack",
 }) => (
@@ -86,6 +89,13 @@ export const AgentStatusCard: React.FC<AgentStatusCardProps> = ({
       <p className="tw-m-0 tw-w-full tw-select-text tw-whitespace-pre-wrap tw-text-normal [overflow-wrap:anywhere]">
         {message}
       </p>
+    )}
+    {progress && (
+      <Progress
+        value={progress.percent}
+        aria-valuenow={progress.percent}
+        aria-label="Installation progress"
+      />
     )}
     {action &&
       ("href" in action ? (

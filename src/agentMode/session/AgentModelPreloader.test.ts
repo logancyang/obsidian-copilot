@@ -111,6 +111,45 @@ function buildDescriptor(makeProc: () => MockProcHandle): {
 
 describe("AgentModelPreloader", () => {
   describe("preload()", () => {
+    it("waits for installation before inspecting and probing the selected binary (https://github.com/Brevilabs/obsidian-copilot-private/issues/530)", async () => {
+      const { descriptor, procHandle } = buildDescriptor(() => makeMockProc());
+      let finish!: () => void;
+      const upgrade = new Promise<void>((resolve) => {
+        finish = resolve;
+      });
+      const preloader = new AgentModelPreloader(
+        buildApp(),
+        buildPlugin(),
+        () => descriptor,
+        () => upgrade
+      );
+      const probe = preloader.preload(descriptor.id);
+      await Promise.resolve();
+      expect(descriptor.createBackendProcess).not.toHaveBeenCalled();
+      finish();
+      await probe;
+      expect(procHandle.start).toHaveBeenCalledTimes(1);
+      expect(preloader.takeWarm(descriptor.id)?.proc).toBe(procHandle.proc);
+    });
+    it("does not start a process when disposed during installation (https://github.com/Brevilabs/obsidian-copilot-private/issues/530)", async () => {
+      const { descriptor } = buildDescriptor(() => makeMockProc());
+      let finish!: () => void;
+      const upgrade = new Promise<void>((resolve) => {
+        finish = resolve;
+      });
+      const preloader = new AgentModelPreloader(
+        buildApp(),
+        buildPlugin(),
+        () => descriptor,
+        () => upgrade
+      );
+      const probe = preloader.preload(descriptor.id);
+      preloader.shutdown();
+      finish();
+      await probe;
+      expect(descriptor.createBackendProcess).not.toHaveBeenCalled();
+    });
+
     it("does not start or probe an incompatible binary (https://github.com/Brevilabs/obsidian-copilot-private/issues/531)", async () => {
       const { descriptor, procHandle } = buildDescriptor(() => makeMockProc());
       descriptor.getInstallState = () => ({

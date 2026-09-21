@@ -1,3 +1,4 @@
+import { AgentStatusCard } from "@/agentMode/ui/AgentStatusCard";
 import { AgentChatControls } from "@/agentMode/ui/AgentChatControls";
 import { AgentHome } from "@/agentMode/ui/AgentHome";
 import { AgentModeStatus } from "@/agentMode/ui/AgentModeStatus";
@@ -5,6 +6,7 @@ import { AgentSelectPanel } from "@/agentMode/ui/AgentSelectPanel";
 import { AgentSelectPane } from "@/agentMode/ui/AgentSelectPane";
 import {
   useBackendInstallState,
+  useManagedInstallActionState,
   useSessionBackendDescriptor,
 } from "@/agentMode/ui/useBackendDescriptor";
 import { useAgentInputDrafts } from "@/agentMode/ui/hooks/useAgentInputDrafts";
@@ -36,6 +38,7 @@ export const AgentModeChat: React.FC<Props> = ({
   const manager = plugin.agentSessionManager;
   const descriptor = useSessionBackendDescriptor(manager);
   const installState = useBackendInstallState(descriptor, plugin);
+  const managedInstall = useManagedInstallActionState(descriptor, plugin);
   const settings = useSettingsValue();
   const [tick, setTick] = React.useState(0);
 
@@ -60,7 +63,7 @@ export const AgentModeChat: React.FC<Props> = ({
   // on-demand probe).
   React.useEffect(() => {
     if (!manager) return;
-    if (!preloadReady) return;
+    if (!preloadReady || managedInstall.kind === "running") return;
     // Gate on the *current scope's* sessions, not the whole pool: closing the
     // last session in a scope (project or global) nulls the active session but
     // keeps `activeProjectId` put, so we must re-spawn that scope's landing even
@@ -76,7 +79,7 @@ export const AgentModeChat: React.FC<Props> = ({
       logError("[AgentMode] auto-start failed", e);
     });
     // tick forces re-evaluation when the manager's pool changes.
-  }, [manager, installState.kind, preloadReady, tick]);
+  }, [manager, installState.kind, preloadReady, managedInstall.kind, tick]);
 
   const handleInstall = React.useCallback(() => {
     descriptor.openInstallUI(plugin);
@@ -96,6 +99,23 @@ export const AgentModeChat: React.FC<Props> = ({
   });
 
   if (!manager) return null;
+
+  // The prior supported installation can still report ready during its update.
+  // Show the shared download before model loading or creating a fresh chat.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/530
+  if (managedInstall.kind === "running") {
+    return (
+      <div className="tw-flex tw-size-full tw-flex-col tw-overflow-hidden">
+        <div className="tw-flex-1" />
+        <AgentStatusCard
+          summary={`Updating ${descriptor.displayName}…`}
+          message={managedInstall.label}
+          progress={{ percent: managedInstall.percent }}
+        />
+        <AgentChatControls />
+      </div>
+    );
+  }
 
   // Render a loading placeholder until plugin-load preload settles. This
   // guarantees the picker (and effort dropdown) read from a populated

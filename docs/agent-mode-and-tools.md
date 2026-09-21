@@ -83,7 +83,7 @@ An empty Agent Chat shows a fixed hint: "Ask anything • @ to add context • /
 
 Agent Chat groups consecutive tool calls and reasoning into a compact activity row. The row reports the total tool commands, distinct files read or edited, and recorded reasoning time. Open it to inspect every step.
 
-Copilot checks for updates in the background when the plugin loads, including when Obsidian starts. If a newer version is available, a notice offers **View release notes** once per release. This is remembered separately from dismissing the Agent Chat home banner. You can keep using or close Obsidian while the check runs. Copilot reads the version from the published release’s manifest, and Settings and Agent Chat share that check.
+Copilot checks for updates before starting that agent when the plugin loads, including when Obsidian starts. If a newer version is available, a notice offers **View release notes** once per release. This is remembered separately from dismissing the Agent Chat home banner. You can keep using or close Obsidian while the check runs. Copilot reads the version from the published release’s manifest, and Settings and Agent Chat share that check.
 
 Copilot also checks for the latest release whenever you create a new Agent Chat tab with **+**, so you can discover updates without reloading the plugin. When a newer Copilot release is available, the global Agent Chat home shows an update banner along the bottom of the pane. The banner stays above the home tabs when space is tight. Select **See what’s new** to read the release notes, or dismiss the banner for that release. Project homes and active conversations do not show it.
 
@@ -200,3 +200,7 @@ Copilot also includes **research-memo** as an optional theme. For a named theme,
 When an installed agent needs a supported version, select **Configure** in Basic → Agents. Agent Chat offers **Upgrade** if Copilot can upgrade that installation. Both surfaces show the same progress and failures, including upgrades started in Configure. If an upgrade fails, retry in Configure or use **Retry** in Agent Chat. A failed custom-path selection is reported in Configure and does not turn the upgrade action into a path-validation retry.
 
 Image-only messages appear as "Image attachment" in the queue. Sessions with only images use the same fallback title in tabs and Recent Chats until a text or agent-generated title is available.
+
+### Managed runtime updates
+
+When Copilot loads, managed Codex and OpenCode runtimes update to the version shipped with Copilot before that agent starts. Agent Chat shows download progress, then opens a new chat when the agent is ready. Other agents remain usable during the download. A failed download leaves the previous supported runtime available and retries on a later load after 24 hours. Configure lets you retry immediately or select your own binary, which Copilot does not update automatically.

@@ -64,7 +64,7 @@ export const ManagedUpgradeRunning: StoryObj<AgentStatusCardProps> = {
     summary: "Updating opencode…",
     tone: "warning",
     message: "Downloading opencode-darwin-arm64.zip 42%",
-    action: { label: "Upgrading…", onClick: () => undefined, disabled: true },
+    progress: { percent: 42 },
   },
 };
 

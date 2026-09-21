@@ -233,6 +233,8 @@ export interface AgentSessionManagerOptions {
   askUserQuestionPrompter?: AskUserQuestionPrompter;
   resolveDescriptor: DescriptorResolver;
   modelPreloader: AgentModelPreloader;
+  /** Waits for plugin-load installation before any process is acquired. */
+  beforeBackendStart?: (id: BackendId) => Promise<void>;
   /**
    * Persistence layer for Agent Mode chats. Optional only so legacy callers
    * (tests) can omit it; production wiring always supplies one via the
@@ -3678,6 +3680,8 @@ export class AgentSessionManager {
     backendId: BackendId,
     descriptor: BackendDescriptor
   ): Promise<BackendProcess> {
+    await this.opts.beforeBackendStart?.(backendId);
+    if (this.disposed) throw new Error("AgentSessionManager has been shut down");
     const existing = this.backends.get(backendId);
     if (existing && existing.isRunning()) return existing;
     const inflight = this.starting.get(backendId);

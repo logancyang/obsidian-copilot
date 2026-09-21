@@ -3,8 +3,12 @@ import {
   ManagedInstallOperationInFlightError,
   type ManagedInstallRuntimeState,
 } from "@/agentMode/backends/shared/managedInstall";
+import { logWarn } from "@/logger";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 import { validateExecutableFile } from "@/utils/detectBinary";
+
+// Offline reloads retry at most daily; this file is local to the managed runtime directory.
+const AUTOMATIC_UPDATE_RETRY_DELAY_MS = 24 * 60 * 60 * 1000;
 
 export interface BinarySettings {
   binaryPath?: string;
@@ -29,6 +33,7 @@ export abstract class ManagedBinaryManager<
   TProgress,
   TOptions extends ManagedBinaryInstallOptions<TProgress> = ManagedBinaryInstallOptions<TProgress>,
 > {
+  private automaticSelection: BinarySettings | null = null;
   private operation: AbortController | null = null;
   private runtimeState: ManagedInstallRuntimeState<TProgress> = { kind: "idle" };
   private readonly subscribers = new Set<() => void>();
@@ -107,6 +112,101 @@ export abstract class ManagedBinaryManager<
       }
       throw error;
     }
+  }
+
+  /**
+   * Attempts a load-time pin change, retaining working binaries and a device-local failure cooldown.
+   * @param pin - Runtime shipped by this plugin release, including reverted pins.
+   * @param notify - Publishes exactly one result notice for an attempted download.
+   */
+  async autoUpgrade(pin: string, notify: (message: string) => void): Promise<void> {
+    const selected = this.readBinarySettings();
+    // Custom selections and first installs require explicit user intent.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/530
+    if (
+      this.isBusy() ||
+      selected.binarySource !== "managed" ||
+      !selected.binaryPath ||
+      !selected.binaryVersion ||
+      selected.binaryVersion === pin
+    )
+      return;
+    const fs = requireNodeModule<typeof import("node:fs")>("fs");
+    const path = requireNodeModule<typeof import("node:path")>("path");
+    if (!fs.existsSync(selected.binaryPath)) return;
+    const failurePath = path.join(this.getDataDir(), "auto-upgrade-failure.json");
+    let attempted = false;
+    try {
+      await this.runExclusive({ kind: "installing", progress: null }, async (signal) => {
+        let failure: { pin?: string; failedAt?: number } = {};
+        try {
+          failure = JSON.parse(await fs.promises.readFile(failurePath, "utf8"));
+        } catch {
+          /* First attempt or invalid local metadata. */
+        }
+        // A failed network request must not repeat on every reload; a changed pin can retry immediately.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/530
+        if (
+          failure?.pin === pin &&
+          typeof failure.failedAt === "number" &&
+          failure.failedAt <= Date.now() &&
+          Date.now() - failure.failedAt < AUTOMATIC_UPDATE_RETRY_DELAY_MS
+        )
+          return;
+        if (signal.aborted) return;
+        this.automaticSelection = selected;
+        this.assertAutomaticSelection();
+        attempted = true;
+        try {
+          await this.installPipeline({
+            signal,
+            onProgress: (progress: TProgress) => this.publishProgress(progress),
+          } as TOptions & { signal: AbortSignal });
+          await fs.promises
+            .rm(failurePath, { force: true })
+            .catch((error) => logWarn(`[AgentMode] Could not clear update cooldown: ${error}`));
+        } catch (error) {
+          try {
+            await fs.promises.mkdir(this.getDataDir(), { recursive: true });
+            await fs.promises.writeFile(failurePath, JSON.stringify({ pin, failedAt: Date.now() }));
+          } catch (writeError) {
+            logWarn(`[AgentMode] Could not save update cooldown: ${writeError}`);
+          }
+          throw error;
+        } finally {
+          this.automaticSelection = null;
+        }
+      });
+      if (attempted) notify(`${this.displayName} updated to ${pin}.`);
+    } catch (error) {
+      if (!attempted) return;
+      logWarn(`[AgentMode] Automatic ${this.displayName} update failed: ${error}`);
+      notify(
+        `${this.displayName} could not update. Your runtime selection was kept; retry from Configure.`
+      );
+    } finally {
+      this.automaticSelection = null;
+    }
+  }
+
+  private assertAutomaticSelection(): void {
+    const previous = this.automaticSelection;
+    const current = this.readBinarySettings();
+    // Settings can change outside the manager lock (sync or another plugin lifecycle).
+    // Never replace a selection made while the download was running.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/530
+    if (
+      previous &&
+      (current.binaryPath !== previous.binaryPath ||
+        current.binaryVersion !== previous.binaryVersion ||
+        current.binarySource !== previous.binarySource)
+    )
+      throw new ManagedInstallAbortError();
+  }
+
+  protected selectInstalledBinary(settings: BinarySettings): void {
+    this.assertAutomaticSelection();
+    this.updateBinarySettings(settings);
   }
 
   abstract getDataDir(): string;
