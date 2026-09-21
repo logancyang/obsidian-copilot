@@ -13,7 +13,11 @@ import type { ManagedInstallActionState } from "@/agentMode/session/types";
 import { copilotAppDataDir } from "@/utils/appPaths";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 import { getSettings, updateAgentModeBackendFields } from "@/settings/model";
-import { resolveSupportedCodexAcpPackage, CODEX_MIN_VERSION } from "./codexVersion";
+import {
+  inspectCodexAcpPackage,
+  resolveSupportedCodexAcpPackage,
+  CODEX_MIN_VERSION,
+} from "./codexVersion";
 
 import { installCodexArchive, CODEX_PINNED_VERSION } from "./codexArchive";
 
@@ -76,6 +80,21 @@ export class CodexBinaryManager extends ManagedBinaryManager<CodexInstallProgres
     }
     return path().join(copilotAppDataDir(home), "codex");
   }
+  protected async isManagedInstallation(directory: string, version: string): Promise<boolean> {
+    try {
+      const entry = entryPath(directory);
+      return (
+        (await fs().promises.lstat(entry)).isFile() &&
+        (await fs().promises.lstat(path().join(directory, "provenance.json"))).isFile() &&
+        // Reclamation validates ownership, not whether an obsolete runtime can still execute.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/537
+        inspectCodexAcpPackage(entry).version === version
+      );
+    } catch {
+      return false;
+    }
+  }
+
   protected async installPipeline({
     signal,
     onProgress,

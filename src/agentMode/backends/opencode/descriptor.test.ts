@@ -581,9 +581,11 @@ describe("descriptor", () => {
         const manager = getOpencodeBinaryManager(plugin);
         const refresh = jest.spyOn(manager, "refreshInstallState").mockResolvedValue();
         const automatic = jest.spyOn(manager, "autoUpgrade").mockResolvedValue();
+        const cleanup = jest.spyOn(manager, "cleanupRuntimes").mockResolvedValue();
         try {
           await OpencodeBackendDescriptor.onPluginLoad?.(plugin);
           expect(refresh).toHaveBeenCalledTimes(1);
+          expect(cleanup).toHaveBeenCalledTimes(1);
           expect(automatic).toHaveBeenCalledWith(
             OPENCODE_PINNED_VERSION,
             OPENCODE_MIN_VERSION,
@@ -591,6 +593,7 @@ describe("descriptor", () => {
           );
         } finally {
           refresh.mockRestore();
+          cleanup.mockRestore();
           automatic.mockRestore();
         }
       });

@@ -75,6 +75,22 @@ const issue = "https://github.com/Brevilabs/obsidian-copilot-private/issues/530"
       fs.rmSync(root, { recursive: true, force: true });
     });
     describe("install()", () => {
+      it("reclaims only complete older managed OpenCode installations (https://github.com/Brevilabs/obsidian-copilot-private/issues/537)", async () => {
+        const old = path.join(root, "1.16.0");
+        const incomplete = path.join(root, "1.15.0");
+        for (const directory of [old, incomplete]) {
+          fs.mkdirSync(path.join(directory, "bin"), { recursive: true });
+          fs.writeFileSync(path.join(directory, "bin", "opencode"), "old executable");
+        }
+        fs.writeFileSync(
+          path.join(old, "install-manifest.json"),
+          JSON.stringify({ version: "1.16.0", assetName: "opencode-darwin-arm64.zip" })
+        );
+        await manager.install();
+        expect(fs.existsSync(old)).toBe(false);
+        expect(fs.existsSync(incomplete)).toBe(true);
+      });
+
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/535 rejects a managed pin below minimum without downloading or replacing the selected installation", async () => {
         const selected = { ...getSettings().agentMode.backends?.opencode };
         jest.mocked(requestUrl).mockClear();

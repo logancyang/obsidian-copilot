@@ -207,6 +207,7 @@ export const CodexBackendDescriptor: BackendDescriptor = {
     // A new vault or plugin lifecycle must not inherit a previous installation failure.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
     codexBinaryManager.forgetSettledError();
+    await codexBinaryManager.cleanupRuntimes();
     await codexBinaryManager.autoUpgrade(CODEX_PINNED_VERSION, CODEX_MIN_VERSION, (message) => {
       new Notice(message);
     });

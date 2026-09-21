@@ -1,3 +1,4 @@
+import { pruneManagedRuntimes } from "@/agentMode/backends/shared/managedRuntimeCleanup";
 import { assertBinaryCompatible } from "./binaryCompatibility";
 import {
   ManagedInstallAbortError,
@@ -183,6 +184,7 @@ export abstract class ManagedBinaryManager<
             signal,
             onProgress: (progress: TProgress) => this.publishProgress(progress),
           } as TOptions & { signal: AbortSignal });
+          await this.cleanupRuntimes();
           await fs.promises
             .rm(failurePath, { force: true })
             .catch((error) => logWarn(`[AgentMode] Could not clear update cooldown: ${error}`));
@@ -233,6 +235,17 @@ export abstract class ManagedBinaryManager<
     this.updateBinarySettings(settings);
   }
 
+  /** Reclaims completed older managed downloads; failures never prevent startup. */
+  async cleanupRuntimes(): Promise<void> {
+    await pruneManagedRuntimes(this.getDataDir(), this.readBinarySettings(), (directory, version) =>
+      this.isManagedInstallation(directory, version)
+    );
+  }
+
+  protected isManagedInstallation(_directory: string, _version: string): Promise<boolean> {
+    return Promise.resolve(false);
+  }
+
   abstract getDataDir(): string;
   protected abstract readBinarySettings(): BinarySettings;
   protected abstract updateBinarySettings(settings: BinarySettings): void;
@@ -246,16 +259,18 @@ export abstract class ManagedBinaryManager<
    * @param options - Backend installation options and an optional progress observer.
    */
   async install(options: TOptions = {} as TOptions): Promise<InstalledBinary> {
-    return this.runExclusive({ kind: "installing", progress: null }, (signal) =>
-      this.installPipeline({
+    return this.runExclusive({ kind: "installing", progress: null }, async (signal) => {
+      const result = await this.installPipeline({
         ...options,
         signal,
         onProgress: (progress: TProgress) => {
           this.publishProgress(progress);
           options.onProgress?.(progress);
         },
-      })
-    );
+      });
+      await this.cleanupRuntimes();
+      return result;
+    });
   }
 
   protected reclaimableDirs(): string[] {

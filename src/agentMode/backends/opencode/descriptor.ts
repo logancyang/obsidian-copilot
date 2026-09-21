@@ -355,6 +355,7 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
     // over — and here it stops a failure from one vault greeting the next.
     manager.forgetSettledError();
     await manager.refreshInstallState();
+    await manager.cleanupRuntimes();
     await manager.autoUpgrade(OPENCODE_PINNED_VERSION, OPENCODE_MIN_VERSION, (message) => {
       new Notice(message);
     });

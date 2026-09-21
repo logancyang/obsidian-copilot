@@ -415,14 +415,17 @@ describe("descriptor", () => {
     describe("onPluginLoad()", () => {
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/530 checks the shipped pin before completing plugin load", async () => {
         const automatic = jest.spyOn(getCodexBinaryManager(), "autoUpgrade").mockResolvedValue();
+        const cleanup = jest.spyOn(getCodexBinaryManager(), "cleanupRuntimes").mockResolvedValue();
         try {
           await CodexBackendDescriptor.onPluginLoad?.({} as CopilotPlugin);
+          expect(cleanup).toHaveBeenCalledTimes(1);
           expect(automatic).toHaveBeenCalledWith(
             CODEX_PINNED_VERSION,
             CODEX_MIN_VERSION,
             expect.any(Function)
           );
         } finally {
+          cleanup.mockRestore();
           automatic.mockRestore();
         }
       });

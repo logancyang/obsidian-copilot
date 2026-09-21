@@ -65,6 +65,33 @@ describe("ManagedBinaryManager", () => {
     });
     afterEach(() => fs.rmSync(tempDir, { recursive: true, force: true }));
 
+    describe("cleanupRuntimes()", () => {
+      it("preserves downloads when a backend cannot establish installation ownership (https://github.com/Brevilabs/obsidian-copilot-private/issues/537)", async () => {
+        const root = manager.getDataDir();
+        for (const version of ["1.0.0", "2.0.0"]) {
+          fs.mkdirSync(path.join(root, version), { recursive: true });
+          fs.writeFileSync(path.join(root, version, "binary"), "binary");
+        }
+        manager.settings = {
+          binaryPath: path.join(root, "2.0.0", "binary"),
+          binaryVersion: "2.0.0",
+          binarySource: "managed",
+        };
+        await manager.cleanupRuntimes();
+        expect(fs.existsSync(path.join(root, "1.0.0", "binary"))).toBe(true);
+      });
+
+      it("keeps unrecognized installations and custom selections (https://github.com/Brevilabs/obsidian-copilot-private/issues/537)", async () => {
+        manager.settings = {
+          binaryPath: customPath,
+          binaryVersion: "2.0.0",
+          binarySource: "custom",
+        };
+        await manager.cleanupRuntimes();
+        expect(fs.readFileSync(customPath, "utf8")).toBe("binary");
+      });
+    });
+
     describe("autoUpgrade()", () => {
       const issue = "https://github.com/Brevilabs/obsidian-copilot-private/issues/530";
       beforeEach(() => {
@@ -93,9 +120,11 @@ describe("ManagedBinaryManager", () => {
       it.each(["2.0.0", "0.9.0"])(
         `${issue} follows a changed pin in either direction and emits one success`,
         async (pin) => {
+          const cleanup = jest.spyOn(manager, "cleanupRuntimes");
           const notify = jest.fn();
           await manager.autoUpgrade(pin, "0.8.0", notify);
           expect(manager.pipeline).toHaveBeenCalledTimes(1);
+          expect(cleanup).toHaveBeenCalledTimes(1);
           expect(notify).toHaveBeenCalledTimes(1);
           expect(notify.mock.calls[0][0]).toContain("updated");
         }

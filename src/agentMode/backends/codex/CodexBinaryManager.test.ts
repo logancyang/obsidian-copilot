@@ -104,6 +104,20 @@ describe("CodexBinaryManager", () => {
     });
 
     describe("install()", () => {
+      it("removes completed older runtimes after selecting a successful installation (https://github.com/Brevilabs/obsidian-copilot-private/issues/537)", async () => {
+        const manager = new CodexBinaryManager();
+        const old = path.join(manager.getDataDir(), "0.0.1");
+        fs.mkdirSync(old, { recursive: true });
+        fs.writeFileSync(path.join(old, "codex-acp"), "old runtime");
+        fs.writeFileSync(
+          path.join(old, "provenance.json"),
+          JSON.stringify({ acpVersion: "0.0.1", target: `darwin-${process.arch}` })
+        );
+        const installed = await manager.install();
+        expect(fs.existsSync(installed.path)).toBe(true);
+        expect(fs.existsSync(old)).toBe(false);
+      });
+
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/535 rejects a managed pin below minimum without downloading or replacing the selected installation", async () => {
         const manager = new CodexBinaryManager();
         const previous = path.join(tempDir, "previous-codex");
