@@ -1,5 +1,5 @@
 import { AI_SENDER, USER_SENDER } from "@/constants";
-import { AgentMessagePart } from "@/agentMode/session/types";
+import { AgentMessagePart, TurnFileChange } from "@/agentMode/session/types";
 import { serializeFanoutComposite, type FanoutTurn } from "@/agentMode/session/fanout/fanoutTypes";
 import { formatDateTime } from "@/utils";
 import { AgentMessageStore } from "./AgentMessageStore";
@@ -618,6 +618,53 @@ describe("AgentMessageStore", () => {
       it("setFanout returns false for an unknown message", () => {
         const store = new AgentMessageStore();
         expect(store.setFanout("nope", liveTurn())).toBe(false);
+      });
+    });
+
+    describe("setFileChanges()", () => {
+      const change = (path: string): TurnFileChange => ({
+        path,
+        status: "modified",
+        before: "old\n",
+        after: "new\n",
+        additions: 1,
+        deletions: 1,
+      });
+
+      it("publishes the turn's file changes on the message and invalidates its cached view", () => {
+        const store = new AgentMessageStore();
+        const id = store.addMessage(placeholder());
+        const before = store.getDisplayMessages().find((m) => m.id === id);
+        expect(before?.fileChanges).toBeUndefined();
+
+        expect(store.setFileChanges(id, [change("notes/a.md")])).toBe(true);
+
+        const after = store.getDisplayMessages().find((m) => m.id === id);
+        expect(after?.fileChanges).toEqual([change("notes/a.md")]);
+        expect(after).not.toBe(before);
+      });
+
+      it("replaces a previously published list rather than appending to it", () => {
+        const store = new AgentMessageStore();
+        const id = store.addMessage(placeholder());
+        store.setFileChanges(id, [change("notes/a.md")]);
+        store.setFileChanges(id, [change("notes/b.md")]);
+        expect(store.getMessage(id)?.fileChanges).toEqual([change("notes/b.md")]);
+      });
+
+      it("returns false for an unknown message", () => {
+        const store = new AgentMessageStore();
+        expect(store.setFileChanges("nope", [change("notes/a.md")])).toBe(false);
+      });
+
+      it("drops file changes from a loaded chat so a reopened turn shows none", () => {
+        const store = new AgentMessageStore();
+        const id = store.addMessage(placeholder());
+        store.setFileChanges(id, [change("notes/a.md")]);
+
+        store.loadMessages(store.getDisplayMessages());
+
+        expect(store.getMessage(id)?.fileChanges).toBeUndefined();
       });
     });
   });
