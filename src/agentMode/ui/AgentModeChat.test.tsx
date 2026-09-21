@@ -9,6 +9,7 @@ import React from "react";
 
 // Readiness of the backend the pane would run, swapped per test. Declared with
 // the `mock` prefix so Jest allows the mock factory below to close over it.
+let mockInstallAction = { kind: "idle" } as { kind: string; label?: string; percent?: number };
 let mockManagedInstall: object | undefined;
 let mockInstallState: InstallState = { kind: "ready", source: "custom" };
 
@@ -20,10 +21,12 @@ let mockInstallState: InstallState = { kind: "ready", source: "custom" };
 jest.mock("@/agentMode/ui/useBackendDescriptor", () => ({
   useSessionBackendDescriptor: () => ({
     id: "claude",
+    displayName: "Claude",
     managedInstall: mockManagedInstall,
     openInstallUI: jest.fn(),
   }),
   useBackendInstallState: () => mockInstallState,
+  useManagedInstallActionState: () => mockInstallAction,
 }));
 /* eslint-enable @eslint-react/hooks-extra/no-unnecessary-use-prefix */
 
@@ -103,8 +106,38 @@ function renderFallback(installState: InstallState, lastError: string | null, st
 describe("AgentModeChat", () => {
   afterEach(() => {
     mockManagedInstall = undefined;
+    mockInstallAction = { kind: "idle" };
     mockInstallState = { kind: "ready", source: "custom" };
     mockLastDraft = null;
+  });
+
+  describe("startup upgrade", () => {
+    it("shows download progress before model loading and starts chat when the download settles (https://github.com/Brevilabs/obsidian-copilot-private/issues/530)", async () => {
+      mockInstallState = { kind: "ready", source: "managed" };
+      mockInstallAction = { kind: "running", label: "Downloading agent…", percent: 42 };
+      const { manager, getOrCreateActiveSession } = makeManager({
+        activeProjectId: GLOBAL_SCOPE,
+        scopeSessions: [],
+        poolSessions: [],
+      });
+      (manager.isPreloadReady as jest.Mock).mockReturnValue(false);
+      const { rerender } = renderChat(manager);
+      expect(screen.getByText("Downloading agent…")).toBeTruthy();
+      expect(screen.getByRole("progressbar")).toBeTruthy();
+      expect(screen.queryByText("Loading agent models…")).toBeNull();
+      expect(getOrCreateActiveSession).not.toHaveBeenCalled();
+      mockInstallAction = { kind: "idle" };
+      (manager.isPreloadReady as jest.Mock).mockReturnValue(true);
+      rerender(
+        <AgentModeChat
+          plugin={{ app: {}, agentSessionManager: manager } as unknown as CopilotPlugin}
+          onSaveChat={() => {}}
+          updateUserMessageHistory={() => {}}
+        />
+      );
+      await waitFor(() => expect(getOrCreateActiveSession).toHaveBeenCalledTimes(1));
+      expect(screen.queryByRole("progressbar")).toBeNull();
+    });
   });
 
   describe("compose draft ownership", () => {

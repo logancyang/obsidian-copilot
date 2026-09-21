@@ -638,6 +638,37 @@ describe("AgentSessionManager", () => {
     });
 
     describe("createSession()", () => {
+      it.each([false, true])(
+        "waits for the startup upgrade and respects shutdown=%s before launching (https://github.com/Brevilabs/obsidian-copilot-private/issues/530)",
+        async (shutdown) => {
+          let finish!: () => void;
+          const upgrade = new Promise<void>((resolve) => {
+            finish = resolve;
+          });
+          const beforeBackendStart = jest.fn(() => upgrade);
+          const descriptor = buildDescriptor();
+          const mgr = new AgentSessionManager(buildApp(), buildPlugin() as never, {
+            permissionPrompter: jest.fn(),
+            resolveDescriptor: () => descriptor,
+            modelPreloader: {
+              takeWarm: jest.fn(() => null),
+              shutdown: jest.fn(),
+            } as unknown as AgentModelPreloader,
+            beforeBackendStart,
+          });
+          const creating = mgr.createSession();
+          await waitFor(() => expect(beforeBackendStart).toHaveBeenCalled());
+          expect(mockBackendStart).not.toHaveBeenCalled();
+          if (shutdown) await mgr.shutdown();
+          finish();
+          if (shutdown) await expect(creating).rejects.toThrow("shut down");
+          else {
+            await creating;
+            expect(mockBackendStart).toHaveBeenCalledTimes(1);
+          }
+        }
+      );
+
       it("keeps a validated running process usable when another installation is selected (https://github.com/Brevilabs/obsidian-copilot-private/issues/531)", async () => {
         const descriptor = buildDescriptor();
         const mgr = new AgentSessionManager(buildApp(), buildPlugin() as never, {

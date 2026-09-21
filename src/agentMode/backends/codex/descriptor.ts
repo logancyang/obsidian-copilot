@@ -1,3 +1,4 @@
+import { Notice } from "obsidian";
 import { resolveEffort } from "@/lib/model-effort";
 import { codexAuth } from "./codexAuth";
 import type CopilotPlugin from "@/main";
@@ -156,19 +157,8 @@ export const CodexBackendDescriptor: BackendDescriptor = {
     const configured = settings.agentMode?.backends?.codex;
     if (!configured?.binaryPath) return { kind: "absent" };
     try {
-      const installed = resolveSupportedCodexAcpPackage(configured.binaryPath);
+      resolveSupportedCodexAcpPackage(configured.binaryPath);
       const source = configured.binarySource ?? "custom";
-      // A supported older bundle stays selectable for the managed Update action.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
-      if (source === "managed" && installed.version !== CODEX_BUNDLE_VERSION) {
-        return {
-          kind: "incompatible",
-          source,
-          currentVersion: installed.version,
-          minVersion: CODEX_BUNDLE_VERSION,
-          message: `Codex adapter ${installed.version} does not match this Copilot release (${CODEX_BUNDLE_VERSION}).`,
-        };
-      }
       return { kind: "ready", source };
     } catch {
       return { kind: "absent" };
@@ -202,6 +192,9 @@ export const CodexBackendDescriptor: BackendDescriptor = {
     // A new vault or plugin lifecycle must not inherit a previous installation failure.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
     codexBinaryManager.forgetSettledError();
+    await codexBinaryManager.autoUpgrade(CODEX_BUNDLE_VERSION, (message) => {
+      new Notice(message);
+    });
   },
 
   managedInstall: {

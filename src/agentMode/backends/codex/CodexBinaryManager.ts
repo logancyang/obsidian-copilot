@@ -102,7 +102,7 @@ export class CodexBinaryManager extends ManagedBinaryManager<CodexInstallProgres
       if (signal.aborted) throw new ManagedInstallAbortError();
       await promoteManagedVersion(stageDir, versionDir, "Codex adapter");
       const finalEntry = entryPath(versionDir);
-      updateAgentModeBackendFields("codex", {
+      this.selectInstalledBinary({
         binaryPath: finalEntry,
         binaryVersion: CODEX_BUNDLE_VERSION,
         binarySource: "managed",

@@ -4,6 +4,10 @@ import React from "react";
 
 describe("AgentStatusCard", () => {
   describe("AgentStatusCard()", () => {
+    it("shows installation progress when requested (https://github.com/Brevilabs/obsidian-copilot-private/issues/530)", () => {
+      render(<AgentStatusCard message="Downloading agent…" progress={{ percent: 42 }} />);
+      expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBe("42");
+    });
     it("renders a neutral message and invokes its recovery action", () => {
       const onClick = jest.fn();
 

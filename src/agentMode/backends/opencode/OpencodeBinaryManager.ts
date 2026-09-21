@@ -271,7 +271,8 @@ export class OpencodeBinaryManager extends ManagedBinaryManager<ProgressEvent, I
   }
 
   protected readBinarySettings(): BinarySettings {
-    return readOpencodeSettings();
+    const settings = readOpencodeSettings();
+    return { ...settings, binarySource: settings.binarySource ?? "managed" };
   }
 
   protected updateBinarySettings(settings: BinarySettings): void {
@@ -429,7 +430,7 @@ export class OpencodeBinaryManager extends ManagedBinaryManager<ProgressEvent, I
         cur.binaryPath !== finalBinPath ||
         cur.binarySource !== "managed"
       ) {
-        updateOpencodeFields({
+        this.selectInstalledBinary({
           binaryVersion: version,
           binaryPath: finalBinPath,
           binarySource: "managed",
@@ -487,16 +488,15 @@ export class OpencodeBinaryManager extends ManagedBinaryManager<ProgressEvent, I
         JSON.stringify(manifest, null, 2)
       );
 
+      // Verification must finish before any published directory changes.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/530
+      const verified = await verifyOpencodeBinary(nodePath().join(stageBinDir, binName));
+      if (parseVersionFromStdout(verified.stdout) !== version)
+        throw new Error(`The opencode download did not report version ${version}.`);
+      this.throwIfAborted(opts.signal);
       await promoteManagedVersion(stageDir, versionDir, "opencode");
 
-      // Smoke-test the installed binary. Catches corrupt extracts and
-      // platform/libc mismatches before the user hits them at ACP boot —
-      // failures here surface in the install Modal where a Retry is one click
-      // away.
-      await verifyOpencodeBinary(finalBinPath);
-      this.throwIfAborted(opts.signal);
-
-      updateOpencodeFields({
+      this.selectInstalledBinary({
         binaryVersion: version,
         binaryPath: finalBinPath,
         binarySource: "managed",

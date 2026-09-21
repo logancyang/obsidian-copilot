@@ -278,7 +278,7 @@ describe("descriptor", () => {
           "managed older bundle",
           { binarySource: "managed", binaryVersion: "1.9.0-r1" },
           "1.9.0-r1",
-          { kind: "incompatible", source: "managed" },
+          { kind: "ready", source: "managed" },
         ],
         [
           "custom mismatch",
@@ -290,7 +290,7 @@ describe("descriptor", () => {
           "managed packaging mismatch",
           { binarySource: "managed", binaryVersion: "1.10.0-r2" },
           "1.10.0-r2",
-          { kind: "incompatible", source: "managed" },
+          { kind: "ready", source: "managed" },
         ],
         [
           "managed pin",
@@ -299,7 +299,7 @@ describe("descriptor", () => {
           { kind: "ready", source: "managed" },
         ],
       ])(
-        "https://github.com/Brevilabs/obsidian-copilot-private/issues/379 classifies a supported %s by ownership",
+        "https://github.com/Brevilabs/obsidian-copilot-private/issues/530 keeps a supported %s runnable by ownership",
         (_label, fields, actualVersion, expected) => {
           mockedResolveSupportedPackage.mockReturnValue({
             entryPath: "/codex/index.js",
@@ -372,6 +372,15 @@ describe("descriptor", () => {
     });
 
     describe("onPluginLoad()", () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/530 checks the shipped pin before completing plugin load", async () => {
+        const automatic = jest.spyOn(getCodexBinaryManager(), "autoUpgrade").mockResolvedValue();
+        try {
+          await CodexBackendDescriptor.onPluginLoad?.({} as CopilotPlugin);
+          expect(automatic).toHaveBeenCalledWith(CODEX_BUNDLE_VERSION, expect.any(Function));
+        } finally {
+          automatic.mockRestore();
+        }
+      });
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/368 clears the singleton failure for each plugin lifecycle", async () => {
         const reset = jest.spyOn(getCodexBinaryManager(), "forgetSettledError");
         await CodexBackendDescriptor.onPluginLoad?.({} as CopilotPlugin);

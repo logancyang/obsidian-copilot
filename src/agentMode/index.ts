@@ -234,7 +234,16 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
       });
     },
   });
-  const preloader = new AgentModelPreloader(app, plugin, (id) => backendRegistry[id]);
+  const initializing = new Map<BackendId, Promise<void>>();
+  const beforeBackendStart = async (id: BackendId): Promise<void> => {
+    await initializing.get(id);
+  };
+  const preloader = new AgentModelPreloader(
+    app,
+    plugin,
+    (id) => backendRegistry[id],
+    beforeBackendStart
+  );
   const persistenceManager = new AgentChatPersistenceManager(app);
   // Plugin-local (per-vault) record of resumable backend sessions, so recent
   // chats can list and resume sessions that were never saved as markdown.
@@ -270,6 +279,7 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     askUserQuestionPrompter,
     resolveDescriptor: (id) => backendRegistry[id],
     modelPreloader: preloader,
+    beforeBackendStart,
     persistenceManager,
     sessionIndex,
   });
@@ -485,6 +495,10 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
   // require its process to refresh, so unrelated saves do not churn backends.
   for (const descriptor of listBackendDescriptors()) {
     descriptor.subscribeInstallState(plugin, () => {
+      // Startup already reads the final installation after upgrading. Reacting to
+      // its intermediate writes would launch duplicate probes or restart a waiter.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/530
+      if (initializing.has(descriptor.id)) return;
       // A first warm probe must see the newly installed skills, especially for backends
       // that do not restart on skill changes. https://github.com/logancyang/obsidian-copilot/issues/3022
       void seedManagedBuiltins()
@@ -500,31 +514,28 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
   const initialSkillsReady = seedManagedBuiltins().catch((error) => {
     logError("[Skills] Initial discovery pass failed", error);
   });
-  // Non-blocking — plugin load should not wait on disk reconcile.
+  // Installation must settle before any probe or chat starts this backend.
+  // Other agents and the rest of Obsidian remain usable during a download.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/530
   for (const descriptor of listBackendDescriptors()) {
-    descriptor
-      .onPluginLoad?.(plugin)
-      .catch((e) => logError(`[AgentMode] backend ${descriptor.id} onPluginLoad failed`, e));
+    const ready = Promise.resolve()
+      .then(() => descriptor.onPluginLoad?.(plugin))
+      .catch((e) => logError(`[AgentMode] backend ${descriptor.id} onPluginLoad failed`, e))
+      .then(() => initialSkillsReady)
+      .finally(() => initializing.delete(descriptor.id));
+    initializing.set(descriptor.id, ready);
+    if (isAgentModeEnabled()) {
+      manager.registerPreload(
+        descriptor.id,
+        ready.then(() => {
+          if (descriptor.getInstallState(getSettings()).kind === "ready") {
+            return manager.preloadModels(descriptor.id);
+          }
+        })
+      );
+    }
   }
 
-  const settings = getSettings();
-  if (!isAgentModeEnabled()) return manager;
-  // Per-backend preload registration: each backend's status flips
-  // independently. The chat UI gates on the active backend's status; the
-  // picker reads every backend's status to render per-backend loading rows.
-  // Every installed backend preloads — Self-Host Mode marks cloud agents but
-  // keeps them usable, so they load like any other.
-  for (const descriptor of listBackendDescriptors()) {
-    if (descriptor.getInstallState(settings).kind !== "ready") continue;
-    const promise = initialSkillsReady.then(() => manager.preloadModels(descriptor.id));
-    manager.registerPreload(
-      descriptor.id,
-      promise.catch((e) => {
-        logError(`[AgentMode] preload ${descriptor.id} failed`, e);
-        throw e;
-      })
-    );
-  }
   return manager;
 }
 

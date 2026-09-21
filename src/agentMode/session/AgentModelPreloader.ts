@@ -62,7 +62,8 @@ export class AgentModelPreloader {
   constructor(
     private readonly app: App,
     private readonly plugin: CopilotPlugin,
-    private readonly resolveDescriptor: (id: BackendId) => BackendDescriptor | undefined
+    private readonly resolveDescriptor: (id: BackendId) => BackendDescriptor | undefined,
+    private readonly beforeBackendStart?: (id: BackendId) => Promise<void>
   ) {}
 
   /**
@@ -237,7 +238,8 @@ export class AgentModelPreloader {
       logWarn(`[AgentMode] preload skipped: unknown backend ${backendId}`);
       return;
     }
-    if (descriptor.getInstallState(getSettings()).kind !== "ready") return;
+    await this.beforeBackendStart?.(backendId);
+    if (this.disposed || descriptor.getInstallState(getSettings()).kind !== "ready") return;
 
     const proc = descriptor.createBackendProcess({
       plugin: this.plugin,
