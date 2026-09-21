@@ -1,13 +1,10 @@
 import type { InstallState } from "@/agentMode/session/types";
-import { compareSemver } from "@/utils/semver";
+import { compareSemver, parseSemver } from "@/utils/semver";
 
 export type BinaryInspection =
   | { kind: "absent" }
   | { kind: "error"; message: string }
   | { kind: "installed"; version: string; source: "managed" | "custom" };
-
-const VERSION_PATTERN =
-  /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
 
 /**
  * Determines whether an agent installation meets Copilot's minimum version requirement.
@@ -25,9 +22,9 @@ export function classifyBinaryInstall(
   displayName: string
 ): InstallState {
   if (inspection.kind !== "installed") return inspection;
-  const parsed = VERSION_PATTERN.exec(inspection.version);
+  const parsed = parseSemver(inspection.version);
   // Invalid metadata must not make a configured runtime appear ready. https://github.com/Brevilabs/obsidian-copilot-private/issues/535
-  if (!parsed || !VERSION_PATTERN.test(minimumVersion)) {
+  if (!parsed || !parseSemver(minimumVersion)) {
     return {
       kind: "error",
       message: `${displayName} has invalid version metadata. Configure a valid installation.`,
@@ -35,7 +32,7 @@ export function classifyBinaryInstall(
   }
   const order = compareSemver(inspection.version, minimumVersion);
   // Prereleases of the minimum do not guarantee its stable protocol contract. https://github.com/Brevilabs/obsidian-copilot-private/issues/535
-  if (order < 0 || (order === 0 && parsed[4] !== undefined)) {
+  if (order < 0 || (order === 0 && parsed.prerelease !== undefined)) {
     return {
       kind: "incompatible",
       source: inspection.source,

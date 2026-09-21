@@ -1,11 +1,9 @@
+import { parseSemver } from "@/utils/semver";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 import { assertBinaryCompatible } from "@/agentMode/backends/shared/binaryCompatibility";
 
 const CURRENT_PACKAGE_NAME = "@agentclientprotocol/codex-acp";
 const CURRENT_PACKAGE_ENTRY = "dist/index.js";
-const SEMVER_PATTERN =
-  /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
-
 // Bundled CLI authentication requires the passthrough added in version 0.0.45.
 // https://github.com/logancyang/obsidian-copilot/issues/2967
 export const CODEX_MIN_VERSION = "0.0.45";
@@ -79,9 +77,7 @@ export function inspectCodexAcpPackage(
           )
         );
       const parsedVersion =
-        typeof provenance.acpVersion === "string"
-          ? SEMVER_PATTERN.exec(provenance.acpVersion)
-          : null;
+        typeof provenance.acpVersion === "string" ? parseSemver(provenance.acpVersion) : null;
       // Valid older bundles must remain detectable so Configure can offer an upgrade.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/535
       if (
@@ -136,7 +132,7 @@ export function inspectCodexAcpPackage(
   if (typeof version !== "string") {
     throw unsupportedAdapter();
   }
-  const parsedVersion = SEMVER_PATTERN.exec(version);
+  const parsedVersion = parseSemver(version);
   if (!parsedVersion) {
     throw unsupportedAdapter();
   }
