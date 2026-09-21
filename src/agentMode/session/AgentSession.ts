@@ -939,6 +939,11 @@ export class AgentSession {
    *   - `userMessageId`: id of the appended user message.
    *   - `turn`: promise that resolves with `StopReason` when the turn
    *     completes, or rejects on transport errors.
+   *
+   * @param displayText - User message text shown in the conversation.
+   * @param context - Notes, selections, and other context attached to the message.
+   * @param promptContent - Text and image content to send to the agent, if supplied separately.
+   * @param mentionedAgents - Agents selected to answer this prompt together.
    */
   sendPrompt(
     displayText: string,

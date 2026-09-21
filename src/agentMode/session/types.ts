@@ -742,7 +742,7 @@ export interface CancelInput {
 export type SessionUpdateHandler = (event: SessionEvent) => void;
 
 export interface BackendProcess {
-  /** Reject execution when this process's own runtime is unsupported. */
+  /** Throws if this process's agent version is unsupported, regardless of the currently selected installation. */
   assertCompatible?: () => void;
   /**
    * Optional bring-up step. ACP backends spawn the subprocess and run the

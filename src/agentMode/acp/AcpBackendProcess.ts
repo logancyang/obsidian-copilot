@@ -226,7 +226,8 @@ export class AcpBackendProcess implements BackendProcess {
       vaultName: this.app.vault.getName(),
     });
 
-    // A new selected download must not vouch for an older process.
+    // Check the version captured for this launch; selecting a newer download
+    // later cannot upgrade a process that is already running.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/535
     this.assertCompatible = descriptor.assertCompatible;
     this.assertCompatible?.();
@@ -728,22 +729,9 @@ export class AcpBackendProcess implements BackendProcess {
         transcript: finishReplayTranscript(collector),
       };
     } finally {
-      // Only retire OUR accumulator: `loadSession` is public and has more than
-      // one caller (history resume and the model preloader), so a concurrent
-      // load for the same session would otherwise have its accumulator deleted
-      // here and its frames folded into ours. Mirrors the same guard in
-      // `registerSessionHandler`.
-      //
-      // DESIGN NOTE — this guard does not make two *overlapping* loads of the
-      // same session safe, and deliberately so. ACP notifications carry only a
-      // session id, no request id, so overlapping replays of one session are
-      // unsplittable at this layer and would need single-flighting here. No
-      // caller can produce that overlap: history resume already single-flights
-      // per (backend, session) in `AgentSessionManager.tryResumeSessionFromHistory`,
-      // and the preloader only ever loads its own probe session, on a process it
-      // owns until that load has resolved. Single-flighting again here would be
-      // a second copy of a guard the one reachable caller already has. If a
-      // future review flags this again, point them at this note.
+      // Remove only this load's collector so cleanup cannot delete a replacement.
+      // Callers must serialize loads of the same session: ACP replay notifications
+      // contain no request ID, so overlapping replays cannot be separated here.
       if (this.loadSessionCollectors.get(sessionId) === collector) {
         this.loadSessionCollectors.delete(sessionId);
       }

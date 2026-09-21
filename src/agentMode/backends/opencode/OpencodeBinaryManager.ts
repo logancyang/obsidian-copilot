@@ -149,14 +149,13 @@ export function pickMatchingAsset(release: GithubRelease, candidates: string[]):
 }
 
 /**
- * Derive the install state from the persisted `agentMode.backends.opencode`
- * slice. A configured `binaryPath` whose file is missing on this device counts
- * as `absent`, not `installed`: when a vault syncs to a second device the path
- * can be present in settings while the binary was never installed locally
- * (logancyang/obsidian-copilot-preview#123). Reporting `absent` surfaces the
- * install prompt and skips the auto-spawn that otherwise fails with a cryptic
- * error at load. `fileExists` is injected so the branch is unit-testable
- * without touching disk.
+ * Reports whether the configured OpenCode executable exists on this device.
+ * Synced settings can point to a file that exists only on another device;
+ * returning `absent` lets Copilot offer installation instead of trying to launch it.
+ * Version compatibility is checked separately by toOpencodeInstallState.
+ *
+ * @param opencode - Saved OpenCode path, version, and installation source.
+ * @param fileExists - Checks whether the configured executable exists locally.
  */
 export function computeInstallState(
   opencode: OpencodeBackendSettings | undefined,
@@ -181,11 +180,11 @@ export function readOpencodeSettings(): OpencodeBackendSettings {
 }
 
 /**
- * Whether an installed opencode version predates the minimum the plugin
- * supports ({@link OPENCODE_MIN_VERSION}). Older binaries either predate
- * the current model catalog or leave the backing turn running after ACP
- * cancellation. An unknown version isn't flagged — we can't prove it's old,
- * and a missing install is handled by the install prompt instead.
+ * Returns whether a reported OpenCode version fails Copilot's compatibility check.
+ * Older versions, prereleases of OPENCODE_MIN_VERSION, and malformed versions fail.
+ * Missing or empty versions return false because installation detection handles them.
+ *
+ * @param version - Version reported by the OpenCode executable, if available.
  */
 export function isOpencodeVersionOutdated(version: string | undefined): boolean {
   if (!version) return false;
@@ -199,8 +198,11 @@ export function isOpencodeVersionOutdated(version: string | undefined): boolean 
 }
 
 /**
- * Gives every OpenCode entry point one readiness policy so outdated installs are handled consistently.
- * @param state - The detected OpenCode installation state to interpret for backend use.
+ * Converts a detected OpenCode installation into the status shown by Copilot:
+ * `ready`, `incompatible` with OPENCODE_MIN_VERSION, `error` for invalid version
+ * metadata, or `absent` when no installation was found.
+ *
+ * @param state - Locally detected installation with its saved version and source.
  */
 export function toOpencodeInstallState(state: InstallState): BackendInstallState {
   return classifyBinaryInstall(state, OPENCODE_MIN_VERSION, "opencode");
@@ -392,14 +394,12 @@ export class OpencodeBinaryManager extends ManagedBinaryManager<ProgressEvent, I
   }
 
   /**
-   * Full install pipeline: resolve target → fetch release metadata →
-   * download → extract → atomic rename → persist settings. Idempotent when
-   * an existing install matches the pinned manifest.
+   * Installs and selects a supported OpenCode release, reusing matching files
+   * when possible. The caller must hold the installation lock so an upgrade can
+   * install the replacement and remove the old version as one operation.
    *
-   * Protected and lock-free: {@link install} and
-   * {@link upgradeManaged} are the entry points that own an operation, and
-   * upgrade calls this directly so it does not re-enter the lock it already
-   * holds — or settle the run to idle before it has removed the old version.
+   * @param opts - Release version, progress callback, cancellation signal, and
+   * whether to preserve existing files for running sessions.
    */
   protected async installPipeline(
     opts: InstallPipelineOptions = {}

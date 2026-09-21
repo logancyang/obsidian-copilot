@@ -41,13 +41,17 @@ function unsupportedAdapter(): Error {
 }
 
 /**
- * Inspects a native bundle or npm package independently of the minimum version.
- * The older Zed adapter shares the `codex-acp` binary name but advertises
- * incompatible mode ids, so package identity is part of the support contract.
+ * Validates a Codex adapter's package identity and metadata, then returns its
+ * executable path and versions. Older versions are returned so callers can
+ * distinguish an installation that needs an upgrade from an invalid package.
+ * Throws for missing files or invalid packages. The older Zed adapter is rejected
+ * because it shares the `codex-acp` name but uses incompatible mode IDs.
  * https://github.com/logancyang/obsidian-copilot/issues/2916
  * @param adapterPath - Configured native executable, npm launcher, or package entry point.
  * @param platform - Platform whose path rules should resolve the package layout.
  * @param packageFs - Filesystem operations used to inspect package metadata.
+ * @returns `version` identifies the installed package, including a native packaging
+ * revision when present; `runtimeVersion` is the adapter version used for compatibility checks.
  */
 export function inspectCodexAcpPackage(
   adapterPath: string,
@@ -65,9 +69,6 @@ export function inspectCodexAcpPackage(
 
   const path = requireNodeModule<typeof import("node:path")>("path");
   const pathImpl = platform === "win32" ? path.win32 : path.posix;
-  // Retain native bundle revisions so older managed installs can offer Update.
-  // User-owned npm selections retain their package contract.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
   if (pathImpl.basename(entryPath) === (platform === "win32" ? "codex-acp.exe" : "codex-acp")) {
     try {
       const provenance: { acpVersion?: string; packagingRevision?: number; target?: string } =
@@ -81,7 +82,8 @@ export function inspectCodexAcpPackage(
         typeof provenance.acpVersion === "string"
           ? SEMVER_PATTERN.exec(provenance.acpVersion)
           : null;
-      // Package structure and runtime compatibility are separate checks. https://github.com/Brevilabs/obsidian-copilot-private/issues/535
+      // Valid older bundles must remain detectable so Configure can offer an upgrade.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/535
       if (
         parsedVersion &&
         (provenance.packagingRevision === undefined ||
@@ -142,9 +144,11 @@ export function inspectCodexAcpPackage(
 }
 
 /**
- * Resolves the installation and enforces the shared minimum-version policy.
- * @param adapterPath - Configured native executable or npm package entry.
- * @param platform - Platform owning the package layout.
+ * Returns the Codex adapter's executable path and package version only if its
+ * package is valid and its runtime meets CODEX_MIN_VERSION. Throws otherwise.
+ *
+ * @param adapterPath - Configured native executable, npm launcher, or package entry point.
+ * @param platform - Operating system whose path rules and native bundle target to validate.
  * @param packageFs - Filesystem used to inspect package metadata.
  */
 export function resolveSupportedCodexAcpPackage(

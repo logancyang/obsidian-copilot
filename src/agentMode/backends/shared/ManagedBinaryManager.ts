@@ -118,11 +118,16 @@ export abstract class ManagedBinaryManager<
   }
 
   /**
-   * Attempts a load-time pin change, retaining working binaries and a device-local failure cooldown.
-   * @param pin - Runtime shipped by this plugin release, including reverted pins.
-   * @param minimumVersion - Minimum supported runtime; changes allow a fresh automatic attempt.
-   * @param canStart - Whether the host has no session to disturb at attempt start.
-   * @param notify - Publishes exactly one result notice for an attempted download.
+   * Updates an existing Copilot-managed installation to this plugin release's
+   * chosen agent version when no session is active. Retains the previous files
+   * and leaves the selection unchanged if installation fails.
+   * Recent failures delay another attempt on this device unless the target or
+   * minimum supported version changes. Throws if the target version is unsupported.
+   *
+   * @param pin - Agent version chosen for this plugin release, which may be older than the installed version.
+   * @param minimumVersion - Oldest stable agent version this plugin release supports.
+   * @param canStart - Checks whether an update can begin without disturbing a session.
+   * @param notify - Receives one success or failure message after an attempted installation.
    */
   async autoUpgrade(
     pin: string,
@@ -130,7 +135,8 @@ export abstract class ManagedBinaryManager<
     canStart: () => boolean,
     notify: (message: string) => void
   ): Promise<void> {
-    // A release must never select a shipped runtime below its own support floor. https://github.com/Brevilabs/obsidian-copilot-private/issues/535
+    // A misconfigured release must not install an agent version that Copilot cannot run.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/535
     assertBinaryCompatible(
       { kind: "installed", version: pin, source: "managed" },
       minimumVersion,
@@ -165,7 +171,8 @@ export abstract class ManagedBinaryManager<
         // https://github.com/Brevilabs/obsidian-copilot-private/issues/530
         if (
           failure?.pin === pin &&
-          // A raised minimum (or legacy record) permits one fresh recovery attempt. https://github.com/Brevilabs/obsidian-copilot-private/issues/535
+          // A changed minimum version or a failure record without one must not delay recovery.
+          // https://github.com/Brevilabs/obsidian-copilot-private/issues/535
           failure.minimumVersion === minimumVersion &&
           typeof failure.failedAt === "number" &&
           failure.failedAt <= Date.now() &&

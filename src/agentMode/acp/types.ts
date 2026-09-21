@@ -7,7 +7,7 @@ import type { PlanUsageReading } from "@/agentMode/session/planUsage";
  * spawn time.
  */
 export interface AcpSpawnDescriptor {
-  /** Checks the runtime selected for this process, independently of later settings changes. */
+  /** Throws if the agent version captured for this launch is unsupported, regardless of later settings changes. */
   assertCompatible?: () => void;
   command: string;
   args: string[];

@@ -10,10 +10,14 @@ const VERSION_PATTERN =
   /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
 
 /**
- * Applies the same support floor to backend-owned installation inspection.
- * @param inspection - Backend-validated package or executable and actual runtime version.
- * @param minimumVersion - Oldest stable release supporting the plugin contract.
- * @param displayName - Agent name used in actionable configuration errors.
+ * Determines whether an agent installation meets Copilot's minimum version requirement.
+ * Returns `ready` for supported versions, `incompatible` for older versions or
+ * prereleases of the minimum version, and `error` for invalid version metadata.
+ * Missing installations and existing inspection errors pass through unchanged.
+ *
+ * @param inspection - Installation details already checked by the caller, including the runtime version.
+ * @param minimumVersion - Oldest stable agent version Copilot supports.
+ * @param displayName - Agent name to include in error messages.
  */
 export function classifyBinaryInstall(
   inspection: BinaryInspection,
@@ -44,10 +48,13 @@ export function classifyBinaryInstall(
 }
 
 /**
- * Rejects execution or download of an installation outside the shared support contract.
- * @param inspection - Inspected runtime captured by the caller.
- * @param minimumVersion - Minimum supported stable runtime version.
- * @param displayName - Agent name for the failure message.
+ * Throws when an agent installation is missing, has invalid version metadata,
+ * or fails Copilot's minimum version requirement. Call before launching an agent
+ * or selecting a release to download.
+ *
+ * @param inspection - Installation details or proposed download version to validate.
+ * @param minimumVersion - Oldest stable agent version Copilot supports.
+ * @param displayName - Agent name to include in error messages.
  */
 export function assertBinaryCompatible(
   inspection: BinaryInspection,

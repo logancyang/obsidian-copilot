@@ -2465,27 +2465,13 @@ export class AgentSessionManager {
   }
 
   /**
-   * React to a backend's install state changing at runtime — a binary path
-   * applied/cleared, or a binary installed/updated from the Configure dialog.
-   * Without this, the change only re-renders the settings status line: the
-   * running or warm process keeps the old binary, and a backend installed
-   * after plugin load is never spawned, so the user has to reload the plugin.
+   * Applies installation changes to running agents and cached model discovery.
+   * Keeps a supported process serving an open or starting chat until reload,
+   * even if another installation is selected. Stops unusable processes and stops
+   * all processes for an uninstalled backend. Refreshes idle agents or starts
+   * model discovery for a newly installed backend.
    *
-   * Three transitions, all reusing the existing restart/refresh coalescing so
-   * a burst of edits folds into one re-probe:
-   *   - now uninstalled → tear down any live proc and drop the warm probe so
-   *     the picker stops offering a backend that can no longer spawn;
-   *   - installed with an open/starting session → retain its process and hold a reload;
-   *   - installed with only a warm process → refresh it against the new binary;
-   *   - installed but never probed (freshly installed) → kick a first preload
-   *     (`restartBackend` returns `false` here, since nothing is warm yet).
-   *
-   * The fresh-preload case is unique to this signal: the load-time preload
-   * loop skips backends that aren't installed yet, so install-state is the
-   * only event that can flip a backend from "never preloaded" into "should
-   * preload". The provider/system-prompt restart subscriptions always act on
-   * an already-installed (already-preloaded) backend, so they only ever need
-   * `restartBackend`'s restart/refresh — never a first preload.
+   * @param backendId - Backend whose installation settings or files changed.
    */
   async onInstallStateChanged(backendId: BackendId): Promise<void> {
     if (this.disposed) return;
@@ -3257,9 +3243,14 @@ export class AgentSessionManager {
   }
 
   /**
-   * @param chatInputId Composer the resumed session should keep owning. Set
-   *   only when an on-screen chat is being rebuilt in place (a backend
-   *   restart); a resume opened from history mints its own.
+   * Restores a saved conversation and its project context into an agent session.
+   * Returns null when the conversation cannot be restored.
+   *
+   * @param backendId - Agent that owns the saved conversation.
+   * @param sessionId - Saved conversation to restore.
+   * @param projectId - Project or global scope supplying the working directory and context.
+   * @param chatInputId - Existing composer to preserve when rebuilding an open chat;
+   * omitted when opening a separate chat from history.
    */
   private async resumeSessionFromHistory(
     backendId: BackendId,
@@ -3267,8 +3258,8 @@ export class AgentSessionManager {
     projectId: ProjectScopeId,
     chatInputId?: string
   ): Promise<AgentSession | null> {
-    // Same instruction ensure as `createSession` — a resumed session still derives its cwd
-    // from the scope, so the backend needs the file present before cwd is read.
+    // Restored sessions need the scope's instruction file in place before the
+    // backend opens its working directory.
     await this.ensureScopeInstructions(
       projectId,
       projectId === GLOBAL_SCOPE ? undefined : getCachedProjectRecordById(projectId)
@@ -3319,9 +3310,8 @@ export class AgentSessionManager {
     const additionalDirectories = contextReady
       ? (await contextReady).additionalDirectories
       : undefined;
-    // The await above is a new suspension point — re-check disposal before
-    // touching the (possibly tearing-down) backend, mirroring the fresh-create
-    // guard in AgentSession.initialize. Same cleanup as the path's other returns.
+    // The manager may have been disposed while project context was loading;
+    // do not resume a conversation on a backend that is shutting down.
     if (this.disposed) {
       this.finishPendingCreate(backendId);
       return null;
@@ -3394,11 +3384,9 @@ export class AgentSessionManager {
       runFanoutTurn: (input) => this.runFanoutTurn(input),
       getDisplayName: (id) => this.resolveDescriptor(id).displayName,
       getApp: () => this.app,
-      // Project sessions only. A resumed conversation was closed for a while, so
-      // its sources may well have changed — seed the cursor BEHIND the current
-      // epoch so its first send always emits the coarse note (the maintainer's
-      // "resumed-session note"), independent of whether a change was observed this
-      // plugin session. Deferred fresh-manifest re-delivery is a separate feature.
+      // Project sources may have changed while the conversation was closed.
+      // Start its revision cursor behind the current revision so the first prompt
+      // tells the agent to check its sources, even without a recorded vault event.
       ...(projectId !== GLOBAL_SCOPE
         ? {
             getProjectContextUpdates: () => this.getProjectContextUpdates(internalId, projectId),
@@ -3717,6 +3705,8 @@ export class AgentSessionManager {
    * Obtain a running backend process from manager ownership, an in-flight
    * spawn, a warm probe process, or a fresh spawn. Warm process adoption never
    * adopts the probe session; callers open or resume their own session.
+   * @param backendId - Backend whose process to obtain or start.
+   * @param descriptor - Backend installation checks and process factory.
    */
   private async ensureBackend(
     backendId: BackendId,

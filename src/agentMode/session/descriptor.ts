@@ -43,10 +43,15 @@ export type InstallState =
     }
   | { kind: "error"; message: string };
 
-/** Reject execution on an unsupported install, including an already-running process.
- * @param descriptor - The executing backend, when supplied by the session owner.
- * @param settings - Current configuration used before a runtime has been captured.
- * @param process - Existing process whose runtime owns execution compatibility.
+/**
+ * Checks the running agent's version when its process provides a compatibility
+ * check; otherwise throws only if the configured installation is `incompatible`.
+ * Settings changes must not make an old process appear supported or block a
+ * supported process that is still serving a chat.
+ *
+ * @param descriptor - Backend installation inspector; omitted when none is available.
+ * @param settings - Current installation settings used when no process check is available.
+ * @param process - Running agent whose compatibility check takes precedence over settings.
  */
 export function assertBackendCompatible(
   descriptor: Pick<BackendDescriptor, "getInstallState"> | undefined,
