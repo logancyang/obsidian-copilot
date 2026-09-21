@@ -107,6 +107,7 @@ type MockApp = {
     getConfig: jest.Mock;
     create: jest.Mock;
     modify: jest.Mock;
+    process: jest.Mock;
     read: jest.Mock;
     getMarkdownFiles: jest.Mock;
     adapter: {
@@ -143,6 +144,12 @@ describe("ChatPersistenceManager", () => {
         getConfig: jest.fn(() => "attachments"),
         create: jest.fn(),
         modify: jest.fn(),
+        process: jest.fn(async (file: TFile, update: (content: string) => string) => {
+          const current = (await mockApp.vault.adapter.read(file.path)) as string | undefined;
+          const next = update(current ?? "");
+          await mockApp.vault.modify(file, next);
+          return next;
+        }),
         read: jest.fn(),
         getMarkdownFiles: jest.fn().mockReturnValue([]), // Default: no files
         adapter: {
@@ -383,6 +390,65 @@ Nature's quiet song`);
       expect(await persistenceManager.saveChat("model")).toBeNull();
     });
 
+    it("preserves host links after reopening a saved upload and a legacy transcript (https://github.com/Brevilabs/obsidian-copilot-private/issues/533)", async () => {
+      const file = mockTFile({ path: "test-folder/existing.md" });
+      const message: ChatMessage = {
+        id: "image",
+        sender: USER_SENDER,
+        message: "image",
+        isVisible: true,
+        timestamp: { epoch: 1695513480000, display: "2024/09/23 22:18:00", fileName: "" },
+        content: [{ type: "image_url", image_url: { url: "data:image/png;base64,AQID" } }],
+      };
+      let disk = "";
+      mockMessageRepo.getDisplayMessages.mockReturnValue([message]);
+      mockApp.vault.create.mockImplementation(async (_path: string, content: string) => {
+        disk = content;
+        return file;
+      });
+      await persistenceManager.saveChat("gpt-4");
+      const original = disk;
+      jest.spyOn(persistenceManager, "getChatHistoryFiles").mockResolvedValue([file]);
+      mockApp.metadataCache.getFileCache.mockReturnValue({
+        frontmatter: { epoch: message.timestamp!.epoch },
+      });
+      mockApp.vault.getAbstractFileByPath.mockReturnValue(file);
+      mockApp.vault.adapter.exists.mockResolvedValue(true);
+      mockApp.vault.adapter.read.mockImplementation(async () => disk);
+      mockApp.vault.read.mockImplementation(async () => disk);
+      mockApp.vault.modify.mockImplementation(async (_file: TFile, content: string) => {
+        disk = content;
+      });
+      for (const legacy of [false, true]) {
+        disk = legacy
+          ? original
+              .replace(/<!-- copilot-image:[\w-]+ -->\n/g, "")
+              .replace(/\n<!-- \/copilot-image -->/g, "")
+          : original.replace(/\n/g, "\r\n");
+        const loaded = await persistenceManager.loadChat(file);
+        expect(loaded[0].message).not.toContain("copilot-image:");
+        expect(loaded[0].timestamp?.epoch).toBe(message.timestamp!.epoch);
+        if (legacy) file.path = "test-folder/renamed-chat.md";
+        else loaded[0].message = loaded[0].message.replace("image", "edited text");
+        disk = disk.replace(/!\[\]\([^)]+\)/, "![[moved.png]]");
+        mockMessageRepo.getDisplayMessages.mockReturnValue(loaded);
+        await persistenceManager.saveChat("gpt-4");
+        expect(disk).toContain("![[moved.png]]");
+        await persistenceManager.saveChat("gpt-4");
+        expect(disk).toContain("![[moved.png]]");
+        if (legacy) {
+          loaded[0].message = loaded[0].message.replace(/!\[\]\([^)]+\)/, "![[intentional.png]]");
+          await persistenceManager.saveChat("gpt-4");
+          expect(disk).toContain("![[intentional.png]]");
+          disk = disk.replace("intentional.png", "organized-edit.png");
+          await persistenceManager.saveChat("gpt-4");
+          await persistenceManager.saveChat("gpt-4");
+          expect(disk).toContain("![[organized-edit.png]]");
+        }
+      }
+      expect(mockApp.vault.createBinary).toHaveBeenCalledTimes(1);
+    });
+
     it("saves uploaded images with their message before context and timestamp metadata (https://github.com/logancyang/obsidian-copilot/issues/2900)", async () => {
       const message: ChatMessage = {
         id: "image",
@@ -405,7 +471,7 @@ Nature's quiet song`);
       const imagePath = mockApp.vault.createBinary.mock.calls[0][0] as string;
       const saved = mockApp.vault.create.mock.calls[0][1] as string;
       expect(saved).toContain(
-        `**user**: Look at this\n\n![](/${imagePath})\n[Context: URLs: https://example.com]\n[Timestamp:`
+        `![](/${imagePath})\n<!-- /copilot-image -->\n[Context: URLs: https://example.com]\n[Timestamp:`
       );
       expect(message.message).toBe("Look at this");
       expect(asInternal(persistenceManager).parseChatContent(saved)[0].message).toContain(

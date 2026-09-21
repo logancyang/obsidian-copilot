@@ -1,4 +1,9 @@
-import { prepareChatImagesForSave } from "@/utils/chatImagePersistence";
+import type { TAbstractFile } from "obsidian";
+import {
+  prepareChatImagesForSave,
+  stripChatImageReceipts,
+  updateChatTranscript,
+} from "@/utils/chatImagePersistence";
 import { AI_SENDER, COPILOT_CONVERSATION_TAG, USER_SENDER } from "@/constants";
 import ChainManager from "@/LLMProviders/chainManager";
 import { parseReasoningBlock } from "@/LLMProviders/chainRunner/utils/AgentReasoningState";
@@ -45,11 +50,24 @@ function escapeYamlString(str: string): string {
  * - Formatting chat content for storage
  */
 export class ChatPersistenceManager {
+  private readonly loadedTranscripts = new Map<TAbstractFile | string, string>();
+
   constructor(
     private app: App,
     private messageRepo: MessageRepository,
     private chainManager?: ChainManager
   ) {}
+
+  private async updateTranscript(path: string, content: string): Promise<void> {
+    const key = this.app.vault.getAbstractFileByPath(path) ?? path;
+    const baseline = await updateChatTranscript(
+      this.app,
+      path,
+      content,
+      this.loadedTranscripts.get(key)
+    );
+    this.loadedTranscripts.set(key, baseline);
+  }
 
   /**
    * Save current chat history and return its live vault file or uncached path.
@@ -105,7 +123,11 @@ export class ChatPersistenceManager {
       const preparedMessages = await prepareChatImagesForSave(
         this.app,
         messages,
-        conversationsFolder
+        conversationsFolder,
+        (await this.app.vault.adapter.exists(preferredFileName))
+          ? await this.app.vault.adapter.read(preferredFileName)
+          : "",
+        preferredFileName
       );
       const chatContent = this.formatChatContent(preparedMessages);
 
@@ -125,14 +147,14 @@ export class ChatPersistenceManager {
 
       if (existingFile && existingFileIsReal) {
         // If the file exists in the vault cache, update via vault API
-        await this.app.vault.modify(existingFile, noteContent);
+        await this.updateTranscript(existingFile.path, noteContent);
         logInfo(`[ChatPersistenceManager] Updated existing chat file: ${existingFile.path}`);
       } else if (
         !isInVaultCache(this.app, preferredFileName) &&
         (await this.app.vault.adapter.exists(preferredFileName))
       ) {
         // File exists on disk but not in the vault cache (hidden directory).
-        await this.app.vault.adapter.write(preferredFileName, noteContent);
+        await this.updateTranscript(preferredFileName, noteContent);
         new Notice("Existing chat note found - updating it now.");
         logInfo(
           `[ChatPersistenceManager] Updated existing chat file via adapter: ${preferredFileName}`
@@ -164,7 +186,7 @@ export class ChatPersistenceManager {
                 existingTopic,
                 conflictLastAccessedAt
               );
-              await this.app.vault.modify(conflictFile, updatedContent);
+              await this.updateTranscript(conflictFile.path, updatedContent);
               targetFile = conflictFile;
               new Notice("Existing chat note found - updating it now.");
               logInfo(
@@ -172,7 +194,7 @@ export class ChatPersistenceManager {
               );
             } else {
               // File exists on disk but not in vault cache (hidden directory)
-              await this.app.vault.adapter.write(preferredFileName, noteContent);
+              await this.updateTranscript(preferredFileName, noteContent);
               new Notice("Existing chat note found - updating it now.");
               logInfo(
                 `[ChatPersistenceManager] Resolved save conflict via adapter: ${preferredFileName}`
@@ -208,7 +230,7 @@ export class ChatPersistenceManager {
                     conflictTopic,
                     conflictLastAccessedAt
                   );
-                  await this.app.vault.modify(conflictFile, updatedContent);
+                  await this.updateTranscript(conflictFile.path, updatedContent);
                   targetFile = conflictFile;
                   new Notice("Existing chat note found - updating it now.");
                   logInfo(
@@ -216,7 +238,7 @@ export class ChatPersistenceManager {
                   );
                 } else {
                   // File exists on disk but not in vault cache (hidden directory)
-                  await this.app.vault.adapter.write(fallbackName, noteContent);
+                  await this.updateTranscript(fallbackName, noteContent);
                   savedPath = fallbackName;
                   new Notice("Existing chat note found - updating it now.");
                   logInfo(
@@ -254,6 +276,8 @@ export class ChatPersistenceManager {
         // Fallback for hidden directory files not indexed by Obsidian
         content = await this.app.vault.adapter.read(file.path);
       }
+      const key = this.app.vault.getAbstractFileByPath(file.path) ?? file.path;
+      this.loadedTranscripts.set(key, content);
       const messages = this.parseChatContent(content);
       logInfo(`[ChatPersistenceManager] Loaded ${messages.length} messages from ${file.path}`);
       return messages;
@@ -344,7 +368,7 @@ export class ChatPersistenceManager {
     const messages: ChatMessage[] = [];
 
     // Extract the YAML frontmatter
-    const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
+    const frontmatterMatch = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
     let chatContent = content;
     let conversationEpoch: number | undefined;
 
@@ -438,7 +462,7 @@ export class ChatPersistenceManager {
       }
 
       messages.push({
-        message: messageText,
+        message: stripChatImageReceipts(messageText),
         sender,
         isVisible: true,
         timestamp: epoch

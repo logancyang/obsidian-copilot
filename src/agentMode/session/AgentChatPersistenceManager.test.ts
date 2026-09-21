@@ -71,6 +71,10 @@ function makeApp() {
         files.set(path, file);
         return file;
       }),
+      process: jest.fn(async (file: FakeFile, update: (content: string) => string) => {
+        file.contents = update(file.contents ?? "");
+        return file.contents;
+      }),
       modify: jest.fn(async (file: FakeFile, content: string) => {
         file.contents = content;
       }),
@@ -127,6 +131,58 @@ describe("AgentChatPersistenceManager", () => {
   });
 
   describe("saveSession()", () => {
+    it("preserves organizer links after native rehydration, reopening and later deletion (https://github.com/Brevilabs/obsidian-copilot-private/issues/533)", async () => {
+      const message = {
+        ...makeMessage(USER_SENDER, "image"),
+        content: [{ type: "image_url", image_url: { url: "data:image/png;base64,AQID" } }],
+      };
+      const saved = await manager.saveSession([message], "claude");
+      const file = app.files.get(saved!.path)!;
+      Object.setPrototypeOf(file, TFile.prototype);
+      file.contents = file.contents!.replace(/!\[\]\([^)]+\)/, "![[organized.png]]");
+      const resumed = new AgentChatPersistenceManager(app as unknown as App);
+      await resumed.saveSession([JSON.parse(JSON.stringify(message))], "claude", {
+        existingPath: saved!.path,
+      });
+      expect(file.contents).toContain("![[organized.png]]");
+      file.contents = file.contents.replace(/\n/g, "\r\n");
+      const loaded = await resumed.loadFile(file as unknown as TFile);
+      expect(loaded.messages[0].message).not.toContain("copilot-image:");
+      file.contents = file.contents.replace("organized.png", "renamed.png");
+      loaded.messages[0].message = loaded.messages[0].message.replace("image", "edited text");
+      await resumed.saveSession(loaded.messages, "claude", { existingPath: saved!.path });
+      expect(file.contents).toContain("![[renamed.png]]");
+      await resumed.saveSession(loaded.messages, "claude", { existingPath: saved!.path });
+      expect(file.contents).toContain("![[renamed.png]]");
+      expect(file.contents).toContain("edited text");
+      expect(app.vault.createBinary).toHaveBeenCalledTimes(1);
+    });
+
+    it("preserves host moves of reopened legacy links while accepting intentional embed edits (https://github.com/Brevilabs/obsidian-copilot-private/issues/533)", async () => {
+      const saved = await manager.saveSession(
+        [makeMessage(USER_SENDER, "image\n\n![[old.png]]")],
+        "claude"
+      );
+      const file = app.files.get(saved!.path)!;
+      Object.setPrototypeOf(file, TFile.prototype);
+      const loaded = await manager.loadFile(file as unknown as TFile);
+      app.files.delete(file.path);
+      file.path = "copilot-conversations/renamed-legacy.md";
+      app.files.set(file.path, file);
+      saved!.path = file.path;
+      file.contents = file.contents!.replace("old.png", "moved.png");
+      await manager.saveSession(loaded.messages, "claude", { existingPath: saved!.path });
+      expect(file.contents).toContain("![[moved.png]]");
+      loaded.messages[0].message = loaded.messages[0].message.replace("old.png", "intentional.png");
+      await manager.saveSession(loaded.messages, "claude", { existingPath: saved!.path });
+      expect(file.contents).toContain("![[intentional.png]]");
+      file.contents = file.contents.replace("intentional.png", "organized-edit.png");
+      await manager.saveSession(loaded.messages, "claude", { existingPath: saved!.path });
+      await manager.saveSession(loaded.messages, "claude", { existingPath: saved!.path });
+      expect(file.contents).toContain("![[organized-edit.png]]");
+      expect(app.vault.createBinary).not.toHaveBeenCalled();
+    });
+
     it("saves uploaded image embeds beside the user message and preserves them on reload (https://github.com/logancyang/obsidian-copilot/issues/2900)", async () => {
       const message = {
         ...makeMessage(USER_SENDER, "Look at this"),
@@ -142,7 +198,7 @@ describe("AgentChatPersistenceManager", () => {
       );
       const imagePath = app.vault.createBinary.mock.calls[0][0];
       const file = app.files.get(saved!.path)!;
-      expect(file.contents).toContain(`**user**: Look at this\n\n![](/${imagePath})\n[Timestamp:`);
+      expect(file.contents).toContain(`![](/${imagePath})`);
       expect(file.contents).toContain("**ai**: An image");
       const loaded = await manager.loadFile(file as unknown as TFile);
       expect(loaded.messages[0].message).toContain(`![](/${imagePath})`);

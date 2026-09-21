@@ -1,4 +1,9 @@
-import { prepareChatImagesForSave } from "@/utils/chatImagePersistence";
+import type { TAbstractFile } from "obsidian";
+import {
+  prepareChatImagesForSave,
+  stripChatImageReceipts,
+  updateChatTranscript,
+} from "@/utils/chatImagePersistence";
 import { serializeFanoutComposite } from "@/agentMode/session/fanout/fanoutTypes";
 import { AGENT_CHAT_MODE, AI_SENDER, COPILOT_CONVERSATION_TAG, USER_SENDER } from "@/constants";
 import { logError, logInfo, logWarn } from "@/logger";
@@ -109,7 +114,20 @@ interface ExistingMeta {
  * Sessions with zero visible messages are never written.
  */
 export class AgentChatPersistenceManager {
+  private readonly loadedTranscripts = new Map<TAbstractFile | string, string>();
+
   constructor(private readonly app: App) {}
+
+  private async updateTranscript(path: string, content: string): Promise<void> {
+    const key = this.app.vault.getAbstractFileByPath(path) ?? path;
+    const baseline = await updateChatTranscript(
+      this.app,
+      path,
+      content,
+      this.loadedTranscripts.get(key)
+    );
+    this.loadedTranscripts.set(key, baseline);
+  }
 
   /**
    * Save the supplied messages to disk. Returns the resulting file (or the
@@ -168,7 +186,11 @@ export class AgentChatPersistenceManager {
       const preparedMessages = await prepareChatImagesForSave(
         this.app,
         messages,
-        conversationsFolder
+        conversationsFolder,
+        (await this.app.vault.adapter.exists(preferredFileName))
+          ? await this.app.vault.adapter.read(preferredFileName)
+          : "",
+        preferredFileName
       );
       const chatContent = this.formatChatContent(preparedMessages);
 
@@ -192,7 +214,7 @@ export class AgentChatPersistenceManager {
       });
 
       if (existingFile && isInVaultCache(this.app, existingFile.path)) {
-        await this.app.vault.modify(existingFile, noteContent);
+        await this.updateTranscript(existingFile.path, noteContent);
         return { path: existingFile.path };
       }
 
@@ -200,7 +222,7 @@ export class AgentChatPersistenceManager {
         !isInVaultCache(this.app, preferredFileName) &&
         (await this.app.vault.adapter.exists(preferredFileName))
       ) {
-        await this.app.vault.adapter.write(preferredFileName, noteContent);
+        await this.updateTranscript(preferredFileName, noteContent);
         return { path: preferredFileName };
       }
 
@@ -209,7 +231,7 @@ export class AgentChatPersistenceManager {
         return { path: created.path };
       } catch (err) {
         if (isFileAlreadyExistsError(err)) {
-          await this.app.vault.adapter.write(preferredFileName, noteContent);
+          await this.updateTranscript(preferredFileName, noteContent);
           return { path: preferredFileName };
         }
         if (isNameTooLongError(err)) {
@@ -220,7 +242,7 @@ export class AgentChatPersistenceManager {
             return { path: created.path };
           } catch (fallbackErr) {
             if (isFileAlreadyExistsError(fallbackErr)) {
-              await this.app.vault.adapter.write(fallback, noteContent);
+              await this.updateTranscript(fallback, noteContent);
               return { path: fallback };
             }
             throw fallbackErr;
@@ -247,6 +269,8 @@ export class AgentChatPersistenceManager {
       content = await this.app.vault.adapter.read(file.path);
     }
 
+    const key = this.app.vault.getAbstractFileByPath(file.path) ?? file.path;
+    this.loadedTranscripts.set(key, content);
     const { frontmatter, body } = this.splitFrontmatter(content);
     const backendId = (frontmatter.backendId ?? "").trim();
     if (!backendId) {
@@ -394,7 +418,7 @@ export class AgentChatPersistenceManager {
         : `loaded-${messages.length}`;
       messages.push({
         id,
-        message: messageText,
+        message: stripChatImageReceipts(messageText),
         sender,
         isVisible: true,
         timestamp,
@@ -407,7 +431,7 @@ export class AgentChatPersistenceManager {
     frontmatter: Record<string, string>;
     body: string;
   } {
-    const match = content.match(/^---\n([\s\S]*?)\n---/);
+    const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
     if (!match) return { frontmatter: {}, body: content };
     const frontmatter: Record<string, string> = {};
     for (const line of match[1].split("\n")) {

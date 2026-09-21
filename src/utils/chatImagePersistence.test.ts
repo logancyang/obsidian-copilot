@@ -1,7 +1,13 @@
-import { prepareChatImagesForSave } from "@/utils/chatImagePersistence";
+import { mockTFile } from "@/__tests__/mockObsidian";
+import {
+  prepareChatImagesForSave,
+  preserveChatImageReferences,
+  updateChatTranscript,
+  stripChatImageReceipts,
+} from "@/utils/chatImagePersistence";
 import { arrayBufferToBase64, base64ToArrayBuffer } from "@/utils/base64";
 import { sha256 } from "@/utils/hash";
-import type { App } from "obsidian";
+import { type TFile, type App } from "obsidian";
 
 const ISSUE = "https://github.com/logancyang/obsidian-copilot/issues/2900";
 const DESTINATION_ISSUE = "https://github.com/logancyang/obsidian-copilot/issues/3242";
@@ -14,6 +20,7 @@ function makeApp() {
   const files = new Map<string, ArrayBuffer>();
   const folders = new Set<string>();
   const vault = {
+    getAbstractFileByPath: jest.fn(() => null as TFile | null),
     getConfig: jest.fn(() => "Media"),
     createFolder: jest.fn(async (path: string) => {
       folders.add(path);
@@ -42,8 +49,366 @@ function makeApp() {
   return { files, folders, vault, app: { vault } as unknown as App };
 }
 
+function visibleMessage(message: string): string {
+  return message
+    .replace(/<!-- copilot-image:[\w-]+ -->\n/g, "")
+    .replace(/\n<!-- \/copilot-image -->/g, "");
+}
+
 describe("chatImagePersistence", () => {
+  describe("stripChatImageReceipts()", () => {
+    it("leaves user-authored receipt-like comments untouched (https://github.com/Brevilabs/obsidian-copilot-private/issues/533)", () => {
+      const text = "<!-- copilot-image:foo -->\nexample\n<!-- /copilot-image -->";
+      expect(stripChatImageReceipts(text)).toBe(text);
+    });
+    it("strips CRLF receipt delimiters without exposing metadata (https://github.com/Brevilabs/obsidian-copilot-private/issues/533)", () => {
+      expect(
+        stripChatImageReceipts(
+          "<!-- copilot-image:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa -->\r\n![[image.png]]\r\n<!-- /copilot-image -->"
+        )
+      ).toBe("![[image.png]]");
+    });
+    it("exposes embeds without persistence metadata and keeps unrelated comments (https://github.com/Brevilabs/obsidian-copilot-private/issues/533)", () => {
+      expect(
+        stripChatImageReceipts(
+          "<!-- authored -->\n<!-- copilot-image:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa -->\n![[image.png]]\n<!-- /copilot-image -->"
+        )
+      ).toBe("<!-- authored -->\n![[image.png]]");
+    });
+  });
+
   describe("prepareChatImagesForSave()", () => {
+    it("remembers successful content writes when streaming replaces image objects (https://github.com/Brevilabs/obsidian-copilot-private/issues/533)", async () => {
+      const { app, files, vault } = makeApp();
+      const messages = [{ message: "image", content: [IMAGE] }];
+      const first = await prepareChatImagesForSave(app, messages, CHATS);
+      files.clear();
+      const second = await prepareChatImagesForSave(
+        app,
+        JSON.parse(JSON.stringify(messages)) as typeof messages,
+        CHATS
+      );
+      expect(second).toEqual(first);
+      expect(files.size).toBe(0);
+      expect(vault.createBinary).toHaveBeenCalledTimes(1);
+    });
+
+    it("shares concurrent image writes but formats each conversation's link separately (https://github.com/Brevilabs/obsidian-copilot-private/issues/533)", async () => {
+      const { app, vault } = makeApp();
+      const file = mockTFile({ path: `${STORE}/image.png` });
+      vault.getAbstractFileByPath.mockReturnValue(file);
+      Object.assign(app, {
+        metadataCache: {
+          fileToLinktext: jest.fn((_file, source) =>
+            source === "a.md" ? "attachments/image.png" : "../attachments/image.png"
+          ),
+        },
+      });
+      const messages = [{ message: "image", content: [IMAGE] }];
+      const [a, b] = await Promise.all([
+        prepareChatImagesForSave(app, messages, CHATS, "", "a.md"),
+        prepareChatImagesForSave(app, messages, CHATS, "", "nested/b.md"),
+      ]);
+      expect(visibleMessage(a[0].message)).toBe("image\n\n![[attachments/image.png]]");
+      expect(visibleMessage(b[0].message)).toBe("image\n\n![[../attachments/image.png]]");
+      expect(vault.createBinary).toHaveBeenCalledTimes(1);
+    });
+
+    it("uses one content receipt across fresh objects and reordered messages (https://github.com/Brevilabs/obsidian-copilot-private/issues/533)", async () => {
+      const { app, vault, files } = makeApp();
+      const [saved] = await prepareChatImagesForSave(
+        app,
+        [{ message: "first", content: [IMAGE] }],
+        CHATS
+      );
+      expect(saved.message).toContain(`<!-- copilot-image:${sha256(DATA)} -->`);
+      files.clear();
+      const fresh = makeApp();
+      const messages = [
+        { message: "other" },
+        { message: "edited", content: [JSON.parse(JSON.stringify(IMAGE))] },
+      ];
+      const [, restored] = await prepareChatImagesForSave(
+        fresh.app,
+        messages,
+        CHATS,
+        `**user**: ${saved.message.replace(/!\[\]\([^)]+\)/, "![[moved.png]]")}`
+      );
+      expect(visibleMessage(restored.message)).toBe("edited\n\n![[moved.png]]");
+      expect(fresh.vault.createBinary).not.toHaveBeenCalled();
+      expect(vault.createBinary).toHaveBeenCalledTimes(1);
+    });
+
+    it("keeps successful saves separate for conversations uploading the same object (https://github.com/Brevilabs/obsidian-copilot-private/issues/533)", async () => {
+      const { app, vault, files } = makeApp();
+      const messages = [{ message: "image", content: [IMAGE] }];
+      await prepareChatImagesForSave(app, messages, CHATS, "", `${CHATS}/a.md`);
+      files.clear();
+      await prepareChatImagesForSave(app, messages, CHATS, "", `${CHATS}/b.md`);
+      expect(vault.createBinary).toHaveBeenCalledTimes(2);
+      expect(files.size).toBe(1);
+    });
+
+    it("does not adopt corrupted hash-named legacy bytes (https://github.com/Brevilabs/obsidian-copilot-private/issues/533)", async () => {
+      const { app, vault, files } = makeApp();
+      const path = `${STORE}/copilot-image-${sha256(DATA)}.png`;
+      files.set(path, base64ToArrayBuffer("AQID"));
+      const [saved] = await prepareChatImagesForSave(
+        app,
+        [{ sender: "user", message: "image", content: [IMAGE] }],
+        CHATS,
+        `**user**: image\n\n![](/${path})`
+      );
+      expect(saved.message).not.toContain(`![](/${path})`);
+      expect(vault.createBinary).toHaveBeenCalledTimes(1);
+      expect(arrayBufferToBase64(vault.createBinary.mock.calls[0][1])).toBe(DATA);
+    });
+    it("retains a moved and deleted image receipt after CRLF normalization (https://github.com/Brevilabs/obsidian-copilot-private/issues/533)", async () => {
+      const { app, files, vault } = makeApp();
+      const messages = [{ sender: "user", message: "image", content: [IMAGE] }];
+      const [saved] = await prepareChatImagesForSave(app, messages, CHATS);
+      const moved = saved.message.replace(/!\[\]\([^)]+\)/, "![[organized.png]]");
+      files.clear();
+      const fresh = makeApp();
+      const [restored] = await prepareChatImagesForSave(
+        fresh.app,
+        JSON.parse(JSON.stringify(messages)) as typeof messages,
+        CHATS,
+        `**user**: ${moved}`.replace(/\n/g, "\r\n")
+      );
+      expect(restored.message).toBe(moved);
+      expect(fresh.vault.createBinary).not.toHaveBeenCalled();
+      expect(vault.createBinary).toHaveBeenCalledTimes(1);
+    });
+
+    it("reuses an existing content receipt when an identical upload changes position (https://github.com/Brevilabs/obsidian-copilot-private/issues/533)", async () => {
+      const { app, vault, files } = makeApp();
+      const earlier = { sender: "user", message: "earlier" };
+      const later = { sender: "user", message: "later", content: [IMAGE] };
+      const [, saved] = await prepareChatImagesForSave(app, [earlier, later], CHATS);
+      const moved = saved.message.replace(/!\[\]\([^)]+\)/, "![[moved.png]]");
+      const [remaining] = await prepareChatImagesForSave(
+        app,
+        [later],
+        CHATS,
+        `**user**: earlier\n\n**user**: ${moved}`
+      );
+      files.clear();
+      const replacement = {
+        sender: "user",
+        message: "new upload",
+        content: [{ type: "image_url", image_url: { ...IMAGE.image_url } }],
+      };
+      const [, next] = await prepareChatImagesForSave(
+        app,
+        [later, replacement],
+        CHATS,
+        `**user**: ${remaining.message}`
+      );
+      expect(next.message).toContain("![[moved.png]]");
+      expect(vault.createBinary).toHaveBeenCalledTimes(1);
+    });
+
+    it("preserves a later moved image when an earlier user message is deleted (https://github.com/Brevilabs/obsidian-copilot-private/issues/533)", async () => {
+      const { app, vault } = makeApp();
+      const earlier = { sender: "user", message: "earlier" };
+      const later = { sender: "user", message: "later", content: [IMAGE] };
+      const [, saved] = await prepareChatImagesForSave(app, [earlier, later], CHATS);
+      const moved = saved.message.replace(/!\[\]\([^)]+\)/, "![[moved.png]]");
+      const [remaining] = await prepareChatImagesForSave(
+        app,
+        [later],
+        CHATS,
+        `**user**: earlier\n\n**user**: ${moved}`
+      );
+      expect(remaining.message).toBe(moved);
+      const fresh = makeApp();
+      const [reopened] = await prepareChatImagesForSave(
+        fresh.app,
+        [JSON.parse(JSON.stringify(later)) as typeof later],
+        CHATS,
+        `**user**: ${remaining.message}`
+      );
+      expect(reopened.message).toBe(moved);
+      expect(fresh.vault.createBinary).not.toHaveBeenCalled();
+      expect(vault.createBinary).toHaveBeenCalledTimes(1);
+    });
+
+    it.each(["![](/raw%name.png)", "![[deleted.png]]"])(
+      "does not fail autosave when legacy identity cannot be read from %s (https://github.com/Brevilabs/obsidian-copilot-private/issues/533)",
+      async (embed) => {
+        const { app, vault } = makeApp();
+        Object.assign(app, {
+          metadataCache: {
+            getFirstLinkpathDest: jest.fn(() => mockTFile({ path: "deleted.png" })),
+          },
+        });
+        vault.adapter.readBinary.mockRejectedValueOnce(new Error("file missing"));
+        await expect(
+          prepareChatImagesForSave(
+            app,
+            [{ sender: "user", message: "image", content: [IMAGE] }],
+            CHATS,
+            `**user**: image\n\n${embed}`
+          )
+        ).resolves.toHaveLength(1);
+        expect(vault.createBinary).toHaveBeenCalledTimes(1);
+      }
+    );
+
+    it("keeps concurrent writes in their captured conversation roots (https://github.com/Brevilabs/obsidian-copilot-private/issues/533)", async () => {
+      const { app, vault, files } = makeApp();
+      await Promise.all(
+        ["one", "two"].map((root) =>
+          prepareChatImagesForSave(
+            app,
+            [{ message: "", content: [JSON.parse(JSON.stringify(IMAGE))] }],
+            `${root}/copilot-conversations`
+          )
+        )
+      );
+      expect(vault.createBinary).toHaveBeenCalledTimes(2);
+      expect([...files.keys()].some((path) => path.startsWith("one/"))).toBe(true);
+      expect([...files.keys()].some((path) => path.startsWith("two/"))).toBe(true);
+    });
+
+    it("saves replacement bytes instead of adopting an unrelated legacy embed (https://github.com/Brevilabs/obsidian-copilot-private/issues/533)", async () => {
+      const { app, vault, files } = makeApp();
+      files.set("organized.png", base64ToArrayBuffer("AQID"));
+      Object.assign(app, {
+        metadataCache: {
+          getFirstLinkpathDest: jest.fn(() => mockTFile({ path: "organized.png" })),
+        },
+      });
+      const [saved] = await prepareChatImagesForSave(
+        app,
+        [{ sender: "user", message: "image", content: [IMAGE] }],
+        CHATS,
+        "**user**: image\n\n![[organized.png]]"
+      );
+      expect(saved.message).not.toContain("![[organized.png]]");
+      expect(vault.createBinary).toHaveBeenCalledTimes(1);
+    });
+
+    it("preserves a missing legacy attachment whose hash filename proves upload identity (https://github.com/Brevilabs/obsidian-copilot-private/issues/533)", async () => {
+      const { app, vault } = makeApp();
+      const embed = `![[moved/copilot-image-${sha256(DATA)} 1.png]]`;
+      const [saved] = await prepareChatImagesForSave(
+        app,
+        [{ sender: "user", message: "image", content: [IMAGE] }],
+        CHATS,
+        `**user**: image\n\n${embed}`
+      );
+      expect(saved.message).toContain(embed);
+      expect(vault.createBinary).not.toHaveBeenCalled();
+    });
+
+    it("keeps persisted organizer links across native rehydration independently of user ordinals (https://github.com/Brevilabs/obsidian-copilot-private/issues/533)", async () => {
+      const { app, files, vault } = makeApp();
+      const messages = [{ sender: "user", message: "image", content: [IMAGE] }];
+      const [first] = await prepareChatImagesForSave(app, messages, CHATS);
+      const moved = first.message.replace(/!\[\]\([^)]+\)/, "![[organized.png]]");
+      files.clear();
+      const fresh = makeApp();
+      const [, restored] = await prepareChatImagesForSave(
+        fresh.app,
+        [
+          { sender: "ai", message: "backend detail" },
+          ...(JSON.parse(JSON.stringify(messages)) as typeof messages),
+        ],
+        CHATS,
+        `**user**: ${moved}`
+      );
+      expect(restored.message).toBe(moved);
+      expect(fresh.vault.createBinary).not.toHaveBeenCalled();
+      expect(vault.createBinary).toHaveBeenCalledTimes(1);
+    });
+
+    it.each(["", "text", "manual\n\n![[manual.png]]"])(
+      "adopts renamed legacy suffix embeds for message %j (https://github.com/Brevilabs/obsidian-copilot-private/issues/533)",
+      async (message) => {
+        const { app, vault, files } = makeApp();
+        files.set("organized.png", base64ToArrayBuffer(DATA));
+        Object.assign(app, {
+          metadataCache: {
+            getFirstLinkpathDest: jest.fn(() => mockTFile({ path: "organized.png" })),
+          },
+        });
+        const [restored] = await prepareChatImagesForSave(
+          app,
+          [{ sender: "user", message, content: [IMAGE] }],
+          CHATS,
+          `**user**: ${message}\n\n![](../organized.png)\n[Timestamp: time]`
+        );
+        expect(visibleMessage(restored.message)).toBe(
+          [message, "![](../organized.png)"].filter(Boolean).join("\n\n")
+        );
+        expect(restored.message).toContain("<!-- copilot-image:");
+        expect(vault.createBinary).not.toHaveBeenCalled();
+      }
+    );
+
+    it("retries failed initial writes but does not retry after successful persistence (https://github.com/Brevilabs/obsidian-copilot-private/issues/533)", async () => {
+      const { app, vault, files } = makeApp();
+      vault.createBinary.mockRejectedValueOnce(new Error("disk full"));
+      const messages = [{ message: "", content: [IMAGE] }];
+      await expect(prepareChatImagesForSave(app, messages, CHATS)).rejects.toThrow("disk full");
+      await prepareChatImagesForSave(app, messages, CHATS);
+      files.clear();
+      await prepareChatImagesForSave(app, messages, CHATS);
+      expect(vault.createBinary).toHaveBeenCalledTimes(2);
+      expect(files.size).toBe(0);
+    });
+
+    it("reuses the saved reference for identical bytes in a later message (https://github.com/Brevilabs/obsidian-copilot-private/issues/533)", async () => {
+      const { app, vault, files } = makeApp();
+      const first = {
+        sender: "user",
+        message: "first",
+        content: [JSON.parse(JSON.stringify(IMAGE))],
+      };
+      const [saved] = await prepareChatImagesForSave(app, [first], CHATS);
+      files.clear();
+      const second = {
+        sender: "user",
+        message: "second",
+        content: [JSON.parse(JSON.stringify(IMAGE))],
+      };
+      await prepareChatImagesForSave(app, [first, second], CHATS, `**user**: ${saved.message}`);
+      expect(vault.createBinary).toHaveBeenCalledTimes(1);
+      expect(files.size).toBe(0);
+    });
+
+    it.each(["unique.png", "folder/duplicate.png"])(
+      "uses the host's unambiguous wiki path %s (https://github.com/Brevilabs/obsidian-copilot-private/issues/533)",
+      async (link) => {
+        const { app, vault } = makeApp();
+        const file = mockTFile({ path: "unique.png" });
+        vault.getAbstractFileByPath.mockReturnValue(file);
+        const fileToLinktext = jest.fn(() => link);
+        Object.assign(app, { metadataCache: { fileToLinktext } });
+        const [saved] = await prepareChatImagesForSave(
+          app,
+          [{ message: "", content: [IMAGE] }],
+          CHATS,
+          "",
+          `${CHATS}/chat.md`
+        );
+        expect(visibleMessage(saved.message)).toBe(`![[${link}]]`);
+        expect(fileToLinktext).toHaveBeenCalledWith(file, `${CHATS}/chat.md`, false);
+      }
+    );
+
+    it("does not recreate a moved or deleted live upload (https://github.com/Brevilabs/obsidian-copilot-private/issues/533)", async () => {
+      const { app, files, vault } = makeApp();
+      const messages = [{ message: "image", content: [IMAGE] }];
+      const saved = await prepareChatImagesForSave(app, messages, CHATS);
+      files.clear();
+      expect(await prepareChatImagesForSave(app, messages, CHATS)).toEqual(saved);
+      expect(files.size).toBe(0);
+      expect(vault.createBinary).toHaveBeenCalledTimes(1);
+    });
+
     it(`embeds every uploaded image beside its own message without mutating live content (${ISSUE})`, async () => {
       const { app, files, vault } = makeApp();
       const messages = [
@@ -57,8 +422,8 @@ describe("chatImagePersistence", () => {
       const original = JSON.stringify(messages);
       const prepared = await prepareChatImagesForSave(app, messages, CHATS);
       const paths = [...files.keys()];
-      expect(prepared[0].message).toBe(`First image\n\n![](/${paths[0]})`);
-      expect(prepared[1].message).toBe(`![](/${paths[1]})`);
+      expect(visibleMessage(prepared[0].message)).toBe(`First image\n\n![](/${paths[0]})`);
+      expect(visibleMessage(prepared[1].message)).toBe(`![](/${paths[1]})`);
       expect(paths[1]).toMatch(/\.jpg$/);
       expect(arrayBufferToBase64(files.get(paths[0])!)).toBe(DATA);
       expect(JSON.stringify(messages)).toBe(original);
@@ -98,7 +463,7 @@ describe("chatImagePersistence", () => {
       const messages = [{ message: "", content: [IMAGE] }];
       const hiddenChats = ".copilot/copilot-conversations";
       const first = await prepareChatImagesForSave(app, messages, hiddenChats);
-      expect(first[0].message).toBe(
+      expect(visibleMessage(first[0].message)).toBe(
         `![](/${hiddenChats}/attachments/copilot-image-${sha256(DATA)}.png)`
       );
       expect(await prepareChatImagesForSave(app, messages, hiddenChats)).toEqual(first);
@@ -212,7 +577,7 @@ describe("chatImagePersistence", () => {
       const first = await prepareChatImagesForSave(app, messages, CHATS);
       const second = await prepareChatImagesForSave(app, messages, CHATS);
       const expectedPath = collision.replace(".png", " 1.png");
-      expect(first[0].message).toBe(
+      expect(visibleMessage(first[0].message)).toBe(
         `two\n\n![](/${expectedPath.replace(" ", "%20")})\n\n![](/${expectedPath.replace(" ", "%20")})`
       );
       expect(second).toEqual(first);
@@ -222,35 +587,18 @@ describe("chatImagePersistence", () => {
 
     it(`completes both concurrent saves when the winning attachment contains the same bytes (${ISSUE})`, async () => {
       const { app, files, vault } = makeApp();
-      let releaseFirst!: () => void;
-      let finishFirst!: () => void;
-      const secondCreating = new Promise<void>((resolve) => {
-        releaseFirst = resolve;
-      });
-      const firstWritten = new Promise<void>((resolve) => {
-        finishFirst = resolve;
-      });
-      vault.createBinary.mockImplementation(async (path, bytes) => {
-        if (vault.createBinary.mock.calls.length === 1) {
-          await secondCreating;
-          files.set(path, bytes);
-          finishFirst();
-          return { path };
-        }
-        releaseFirst();
-        await firstWritten;
-        throw new Error("File already exists.");
-      });
       const messages = [{ message: "", content: [IMAGE] }];
       const results = await Promise.all([
         prepareChatImagesForSave(app, messages, CHATS),
         prepareChatImagesForSave(app, messages, CHATS),
       ]);
       expect(results[0]).toEqual(results[1]);
-      expect(results[0][0].message).toBe(`![](/${STORE}/copilot-image-${sha256(DATA)}.png)`);
+      expect(visibleMessage(results[0][0].message)).toBe(
+        `![](/${STORE}/copilot-image-${sha256(DATA)}.png)`
+      );
       expect(files.size).toBe(1);
       expect(arrayBufferToBase64([...files.values()][0])).toBe(DATA);
-      expect(vault.createBinary).toHaveBeenCalledTimes(2);
+      expect(vault.createBinary).toHaveBeenCalledTimes(1);
     });
 
     it.each(["different", "unreadable"])(
@@ -277,7 +625,7 @@ describe("chatImagePersistence", () => {
         [{ message: "", content: [IMAGE] }],
         "notes ] # % (reference)/copilot-conversations"
       );
-      expect(prepared[0].message).toBe(
+      expect(visibleMessage(prepared[0].message)).toBe(
         `![](/notes%20%5D%20%23%20%25%20%28reference%29/copilot-conversations/attachments/copilot-image-${sha256(DATA)}.png)`
       );
     });
@@ -336,5 +684,113 @@ describe("chatImagePersistence", () => {
         prepareChatImagesForSave(app, [{ message: "", content: [IMAGE] }], CHATS)
       ).rejects.toThrow("disk full");
     });
+  });
+  describe("preserveChatImageReferences()", () => {
+    it("keeps a loaded content identity after text edits and message reordering (https://github.com/Brevilabs/obsidian-copilot-private/issues/533)", () => {
+      const receipt = `<!-- copilot-image:${sha256(DATA)} -->\n![[old.png]]\n<!-- /copilot-image -->`;
+      const loaded = `**user**: earlier\n\n**user**: image\n\n${receipt}`;
+      const existing = loaded.replace("old.png", "moved.png");
+      const next = "**user**: edited image\n\n![[old.png]]\n\n**user**: earlier";
+      expect(preserveChatImageReferences(next, existing, loaded)).toBe(
+        next.replace("![[old.png]]", receipt.replace("old.png", "moved.png"))
+      );
+    });
+
+    it("restores disk-only markers after clean loading (https://github.com/Brevilabs/obsidian-copilot-private/issues/533)", () => {
+      const original =
+        "**user**: image\n\n<!-- copilot-image:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa -->\n![[old.png]]\n<!-- /copilot-image -->\n[Timestamp: now]";
+      const authored = original.replace(
+        "image\n\n",
+        "image\n\n<!-- copilot-image:foo -->\nexample\n<!-- /copilot-image -->\n\n"
+      );
+      expect(
+        preserveChatImageReferences(
+          stripChatImageReceipts(authored),
+          authored.replace("old.png", "moved.png"),
+          authored
+        )
+      ).toBe(authored.replace("old.png", "moved.png"));
+      const moved = original.replace("old.png", "moved.png");
+      const clean = visibleMessage(original);
+      expect(preserveChatImageReferences(clean, moved, original)).toBe(moved);
+      expect(preserveChatImageReferences(original, moved, original.replace(/\n/g, "\r\n"))).toBe(
+        moved
+      );
+      expect(
+        preserveChatImageReferences(
+          clean,
+          moved.replace(/\n/g, "\r\n"),
+          original.replace(/\n/g, "\r\n")
+        ).replace(/\r\n/g, "\n")
+      ).toBe(moved);
+    });
+
+    it("keeps the current receipt link when an organizer rewrites during save (https://github.com/Brevilabs/obsidian-copilot-private/issues/533)", () => {
+      const next =
+        "**user**: image\n\n<!-- copilot-image:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa -->\n![[old.png]]\n<!-- /copilot-image -->\n[Timestamp: now]";
+      expect(preserveChatImageReferences(next, next.replace("old.png", "moved.png"))).toBe(
+        next.replace("old.png", "moved.png")
+      );
+    });
+    it("preserves host-updated legacy embeds after reopening without changing other text (https://github.com/Brevilabs/obsidian-copilot-private/issues/533)", () => {
+      const next = "**user**: image\n\n![](/old.png)\n[Timestamp: now]\n\n**ai**: New answer";
+      const existing = next
+        .replace("![](/old.png)", "![[moved.png]]")
+        .replace("New answer", "Old answer");
+      expect(preserveChatImageReferences(next, existing, next)).toBe(
+        next.replace("![](/old.png)", "![[moved.png]]")
+      );
+      expect(preserveChatImageReferences(next.replace("image", "edited"), existing, next)).toBe(
+        next.replace("image", "edited")
+      );
+      const editedEmbed = next.replace("old.png", "intentional.png");
+      expect(preserveChatImageReferences(editedEmbed, existing, next)).toBe(editedEmbed);
+    });
+  });
+
+  describe("updateChatTranscript()", () => {
+    it("retains the live reference baseline across repeated saves after an organizer move (https://github.com/Brevilabs/obsidian-copilot-private/issues/533)", async () => {
+      const { app, vault } = makeApp();
+      const loaded = `**user**: image\n\n<!-- copilot-image:${sha256(DATA)} -->\n![[old.png]]\n<!-- /copilot-image -->`;
+      const next = "**user**: edited\n\n![[old.png]]";
+      let disk = loaded.replace("old.png", "moved.png");
+      Object.assign(vault.adapter, {
+        read: jest.fn(async () => disk),
+        write: jest.fn(async (_path: string, text: string) => {
+          disk = text;
+        }),
+      });
+      const baseline = await updateChatTranscript(app, "chat.md", next, loaded);
+      expect(disk).toContain("![[moved.png]]");
+      expect(disk).toContain("**user**: edited");
+      expect(baseline).toContain("![[old.png]]");
+      expect(baseline).toContain(`copilot-image:${sha256(DATA)}`);
+      await updateChatTranscript(app, "chat.md", next, baseline);
+      expect(disk).toContain("![[moved.png]]");
+    });
+
+    it.each([true, false])(
+      "preserves a link updated immediately before writing an indexed=%s transcript (https://github.com/Brevilabs/obsidian-copilot-private/issues/533)",
+      async (indexed) => {
+        const { app, vault } = makeApp();
+        const file = mockTFile({ path: "chat.md" });
+        vault.getAbstractFileByPath.mockReturnValue(indexed ? file : null);
+        const next =
+          "<!-- copilot-image:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa -->\n![[old.png]]\n<!-- /copilot-image -->";
+        let disk = next.replace("old.png", "moved.png");
+        const process = jest.fn(async (_file: TFile, update: (content: string) => string) => {
+          disk = update(disk);
+          return disk;
+        });
+        const write = jest.fn(async (_path: string, value: string) => {
+          disk = value;
+        });
+        Object.assign(vault, { process });
+        Object.assign(vault.adapter, { read: jest.fn(async () => disk), write });
+        await updateChatTranscript(app, file.path, next);
+        expect(disk).toBe(next.replace("old.png", "moved.png"));
+        expect(indexed ? process : write).toHaveBeenCalledTimes(1);
+      }
+    );
   });
 });
