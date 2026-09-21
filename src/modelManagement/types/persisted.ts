@@ -138,6 +138,21 @@ export interface ConfiguredModel {
 }
 
 /**
+ * The model a backend starts new sessions on, stored beside the enabled list
+ * it must be drawn from.
+ *
+ * `effort` is a plain string rather than the agent layer's `ModelSelection`
+ * type: this module may not import `agentMode` (lint boundary), and the value
+ * is opaque here — only the owning backend knows which levels it accepts.
+ */
+export interface BackendDefaultModel {
+  /** A `ConfiguredModel.configuredModelId`, in the same id space as `BackendConfig.enabledModels`. */
+  configuredModelId: string;
+  /** Reasoning level to start on, or `null`/absent for the model's own default. */
+  effort?: string | null;
+}
+
+/**
  * Per-backend model selection. Persisted.
  *
  * Backend identity is the map key in the future settings shape
@@ -147,13 +162,19 @@ export interface ConfiguredModel {
  * `enabledModels` references `ConfiguredModel` rows by
  * `configuredModelId`. The picker shows every entry regardless of any
  * runtime ACP inventory; unreachable models surface at request time,
- * not as silent filters. There is no designated default — the first
- * enabled model is used on first use, and subsequent sessions inherit
- * the previous session's selection.
+ * not as silent filters.
+ *
+ * `default` names which of them a new session starts on. Both fields share one
+ * id space and one row, so "the default must be one of the enabled models" is
+ * answerable from this object alone. An absent `default` means no choice is on
+ * record: chat falls back to the first enabled entry, and an agent starts on
+ * whatever model it reports for itself.
  */
 export interface BackendConfig {
   /** Each entry is a `ConfiguredModel.configuredModelId`. */
   enabledModels: string[];
+  /** The model new sessions start on. Absent when the user never picked one. */
+  default?: BackendDefaultModel;
 }
 
 /**

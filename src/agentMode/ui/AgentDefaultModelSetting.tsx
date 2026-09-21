@@ -27,10 +27,12 @@ const EFFORT_NOT_SUPPORTED_LABEL = "Not supported";
  * Per-agent "Default model" picker shown in each toggled-on agent's settings
  * section. Sources its options from the agent's enabled (toggled-on) models,
  * and writes the chosen (model, effort) as that backend's durable default via
- * `persistDefaultSelection` — the only writer of `defaultModel` besides
- * `applyCopilotDefaultModel`, which seeds it on license activation. Every new
- * session and fan-out answerer on this backend starts from it, and an open
- * chat picks it up on the next turn (see `AgentSessionManager`).
+ * `persistDefaultSelection`. It is the only user-driven writer of
+ * `backends.<id>.default` for an agent; `applyLicenseSettings` seeds `chat` and
+ * `applyCopilotDefaultModel` seeds every routable agent when a license is
+ * applied. Every new session and fan-out answerer on this backend starts from
+ * it, and an open chat picks it up on the next turn (see
+ * `AgentSessionManager`).
  */
 export const AgentDefaultModelSetting: React.FC<Props> = ({ descriptor, manager }) => {
   // Re-render when the model cache settles so freshly-probed effort options

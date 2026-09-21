@@ -484,7 +484,88 @@ describe("runSettingsMigrations()", () => {
     );
     expect(write).toBeUndefined();
   });
+
+  it("v15: records chat's and each agent's default beside its enabled list on a pre-versioned vault", async () => {
+    mockGetSettings.mockReturnValue(defaultsVaultAt(undefined));
+    const { api } = makeApi();
+
+    await runSettingsMigrations(api);
+
+    expect(backendsWrite()).toEqual({
+      chat: { enabledModels: ["cm-sonnet"], default: { configuredModelId: "cm-sonnet" } },
+      claude: {
+        enabledModels: ["cm-sonnet"],
+        default: { configuredModelId: "cm-sonnet", effort: "high" },
+      },
+    });
+    expect(mockSetSettings).toHaveBeenCalledWith({ settingsVersion: CURRENT_SETTINGS_VERSION });
+  });
+
+  it("v15: leaves an agent default that names no enabled model unset, and still stamps the version", async () => {
+    const vault = defaultsVaultAt(14);
+    vault.agentMode.backends.claude = { defaultModel: { baseModelId: "withdrawn", effort: null } };
+    mockGetSettings.mockReturnValue(vault);
+    const { api } = makeApi();
+
+    await runSettingsMigrations(api);
+
+    expect(backendsWrite()?.claude?.default).toBeUndefined();
+    expect(backendsWrite()?.chat?.default).toEqual({ configuredModelId: "cm-sonnet" });
+    expect(mockSetSettings).toHaveBeenCalledWith({ settingsVersion: CURRENT_SETTINGS_VERSION });
+  });
+
+  it("v15: leaves a vault already at the current version alone", async () => {
+    mockGetSettings.mockReturnValue(defaultsVaultAt(CURRENT_SETTINGS_VERSION));
+    const { api } = makeApi();
+
+    await runSettingsMigrations(api);
+
+    expect(mockSetSettings).not.toHaveBeenCalled();
+  });
 });
+
+/** The `backends` slice v15 wrote, or undefined when it wrote none. */
+function backendsWrite(): CopilotSettings["backends"] | undefined {
+  const call = mockSetSettings.mock.calls.findLast(
+    (entry) => typeof entry[0] === "object" && "backends" in entry[0]
+  );
+  return (call?.[0] as Partial<CopilotSettings> | undefined)?.backends;
+}
+
+/** A vault carrying both legacy default forms: a chat key and an agent selection. */
+function defaultsVaultAt(settingsVersion: number | undefined): CopilotSettings {
+  return settings({
+    settingsVersion,
+    defaultModelKey: "claude-sonnet-4-5|anthropic",
+    providers: {
+      "prov-claude": {
+        providerId: "prov-claude",
+        providerType: "anthropic",
+        displayName: "Claude Code",
+        origin: { kind: "agent", agentType: "claude" },
+        addedAt: 0,
+      },
+    },
+    configuredModels: [
+      {
+        configuredModelId: "cm-sonnet",
+        providerId: "prov-claude",
+        info: { id: "claude-sonnet-4-5", displayName: "Claude Sonnet 4.5" },
+        configuredAt: 0,
+      },
+    ],
+    backends: {
+      chat: { enabledModels: ["cm-sonnet"] },
+      claude: { enabledModels: ["cm-sonnet"] },
+    },
+    agentMode: {
+      ...DEFAULT_SETTINGS.agentMode,
+      backends: {
+        claude: { defaultModel: { baseModelId: "claude-sonnet-4-5", effort: "high" } },
+      },
+    },
+  });
+}
 
 /** A vault whose codex catalog was enrolled one row per (model × effort) pair. */
 function codexVaultAt(settingsVersion: number): CopilotSettings {

@@ -10,6 +10,7 @@ import {
   getSettings,
   setSettings,
   subscribeToSettingsChange,
+  updateBackendDefaultModel,
   updateSetting,
   useSettingsValue,
 } from "@/settings/model";
@@ -50,39 +51,18 @@ export function isPlusModel(modelKey: string): boolean {
 }
 
 /**
- * Every wire form a Copilot chat model can take in a backend's stored default:
- * bare, and prefixed with the Copilot provider as opencode records it. Matching
- * these exactly, rather than searching for the model id inside the stored value,
- * is what keeps a BYOK model of a similar name (`openrouter/copilot-plus-flash`,
- * `copilot-plus-flash-v2`) from being mistaken for the licensed one.
+ * Whether any default a license installed still points at a Copilot model —
+ * chat's, or an agent's from {@link applyLicenseSettings}. Both matter on
+ * expiry: a user can move chat onto their own model and leave an agent on the
+ * Copilot one, and those sessions are the ones about to break.
  *
- * The prefix is `ChatModelProviders.COPILOT_PLUS` rather than opencode's own
- * copy of it, which lives behind the desktop-only Agent Mode barrel; a test in
- * `opencodeModelResolve.test.ts` pins the two together.
- */
-const LICENSED_DEFAULT_WIRE_IDS: ReadonlySet<string> = Object.freeze(
-  new Set([
-    DEFAULT_COPILOT_PLUS_CHAT_MODEL as string,
-    `${ChatModelProviders.COPILOT_PLUS}/${DEFAULT_COPILOT_PLUS_CHAT_MODEL}`,
-  ])
-);
-
-/**
- * Whether any default a license installed still points at a Copilot model — the
- * chat default, or an agent's stored default from {@link applyLicenseSettings}.
- * Both matter on expiry: a user can move chat onto their own model and leave an
- * agent on the Copilot one, and those sessions are the ones about to break.
- *
- * The agent side reads the stored wire ids rather than resolving them through
- * the configured set, because expiry unregisters the provider and takes those
- * rows with it — often before this is read.
+ * Every backend stores its default as a `configuredModelId`, so one lookup
+ * against the configured set answers this for all of them.
  */
 export function isUsingLicensedModels(settings: CopilotSettings): boolean {
-  if (isPlusModel(settings.defaultModelKey)) return true;
-  return Object.values(settings.agentMode?.backends ?? {}).some((backend) => {
-    const baseModelId = backend?.defaultModel?.baseModelId;
-    return baseModelId !== undefined && LICENSED_DEFAULT_WIRE_IDS.has(baseModelId);
-  });
+  return Object.values(settings.backends ?? {}).some((backend) =>
+    backend?.default ? isPlusModel(backend.default.configuredModelId) : false
+  );
 }
 
 /**
@@ -490,7 +470,7 @@ export async function applyLicenseSettings(): Promise<void> {
   }
 
   setModelKey(configuredModelId);
-  setSettings({ defaultModelKey: configuredModelId });
+  updateBackendDefaultModel("chat", { configuredModelId });
 
   // Agent Mode is desktop-only, and its barrel pulls in Node-backed modules
   // that crash the plugin when loaded on mobile — hence the guarded dynamic

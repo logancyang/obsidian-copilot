@@ -8,6 +8,7 @@ import type { CopilotMode, ModelSelection } from "@/agentMode";
 import { ChainType } from "@/chainType";
 import type {
   BackendConfig,
+  BackendDefaultModel,
   BackendType,
   ConfiguredModel,
   PersistedCopilotPlusCatalog,
@@ -71,7 +72,13 @@ export interface CopilotSettings {
   deepseekApiKey: string;
   siliconflowApiKey: string;
   defaultChainType: ChainType;
-  defaultModelKey: string;
+  /**
+   * Legacy Quick Chat default, superseded by `backends.chat.default`. Holds a
+   * `wireModelId|provider` composite, a `configuredModelId`, or `""` depending
+   * on how old the vault is. Only the settings migrations read it; every
+   * runtime reader goes through `backends.chat.default`.
+   */
+  defaultModelKey?: string;
   contextTurns: number;
   lastDismissedVersion: string | null;
   lastShownStartupVersion: string | null;
@@ -357,7 +364,7 @@ export type ClaudeAutoModePermission = "acceptEdits" | "auto" | "bypassPermissio
  * descriptor is active.
  */
 export interface ClaudeBackendSettings {
-  /** Sticky model preference — `{ baseModelId, effort }`. Unset = use the agent's default. */
+  /** Legacy sticky model preference, superseded by `backends.claude.default`. Migrations only. */
   defaultModel?: ModelSelection | null;
   /** Sticky permission-mode preference (default/plan/auto). Unset = the agent's natural starting mode. */
   defaultMode?: CopilotMode | null;
@@ -386,7 +393,7 @@ export interface CodexBackendSettings {
   /** Path to the configured `codex-acp` package entry. */
   binaryPath?: string;
   binarySource?: "managed" | "custom";
-  /** Sticky model preference — `{ baseModelId, effort }`. Unset = use the agent's default. */
+  /** Legacy sticky model preference, superseded by `backends.codex.default`. Migrations only. */
   defaultModel?: ModelSelection | null;
   /** Sticky permission-mode preference (default/plan/auto). Unset = the agent's natural starting mode. */
   defaultMode?: CopilotMode | null;
@@ -405,10 +412,7 @@ export interface OpencodeBackendSettings {
    * when a `binaryPath` exists.
    */
   binarySource?: "managed" | "custom";
-  /**
-   * Sticky model preference — `{ baseModelId, effort }`. For opencode,
-   * `baseModelId` is the `<provider>/<model>` form (no effort suffix).
-   */
+  /** Legacy sticky model preference, superseded by `backends.opencode.default`. Migrations only. */
   defaultModel?: ModelSelection | null;
   /** Sticky permission-mode preference (default/plan/auto). Unset = the agent's natural starting mode. */
   defaultMode?: CopilotMode | null;
@@ -429,7 +433,7 @@ export interface OpencodeBackendSettings {
  * `agentMode.deviceProfiles[deviceId]`. Mirrors the flat
  * `agentMode.claudeCli`/`backends.*` fields, but only the fields whose correct
  * value differs per device — binary paths, env overrides, and the opencode
- * probe session id. Synced, non-device fields (e.g. `defaultModel`,
+ * probe session id. Synced, non-device fields (e.g. `defaultMode`,
  * `enableThinking`) deliberately stay in the flat `backends.*` slices.
  */
 export interface DeviceAgentProfile {
@@ -594,6 +598,35 @@ export function updateAgentModeBackendFields<
       },
     },
   }));
+}
+
+/**
+ * Write (or clear, with `null`) the model a backend starts new sessions on,
+ * without disturbing the enabled list stored beside it.
+ *
+ * The single per-backend writer for `backends.<id>.default`: the settings
+ * picker, Quick Chat, and `applyLicenseSettings`' chat seed all route through
+ * it, so each preserves the rest of the row and produces the one settings
+ * change live sessions listen for. `seedCopilotDefaultModel` is the one other
+ * writer, and only because it batches every agent backend into a single
+ * revision rather than fanning the same user action out once per agent.
+ *
+ * @param backend - Which picker's default is being set.
+ * @param next - The chosen model and reasoning level, or `null` to record no choice.
+ */
+export function updateBackendDefaultModel(
+  backend: BackendType,
+  next: BackendDefaultModel | null
+): void {
+  setSettings((cur) => {
+    const existing = cur.backends?.[backend];
+    // Spread the row, not just its enabled list: a field added to
+    // `BackendConfig` later must survive a default being set or cleared.
+    const config: BackendConfig = { ...existing, enabledModels: existing?.enabledModels ?? [] };
+    if (next) config.default = next;
+    else delete config.default;
+    return { backends: { ...cur.backends, [backend]: config } };
+  });
 }
 
 /**

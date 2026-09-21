@@ -18,6 +18,7 @@ import { CLAUDE_INSTALL_COMMAND } from "./cliSetup";
 import { getClaudeAuthStatus, signInToClaude, signOutFromClaude } from "./claudeAuth";
 import { assertClaudeVersionSupported } from "./claudeVersion";
 import { agentOriginEnabledModelEntries } from "@/agentMode/backends/shared/agentEnabledModels";
+import { readBackendDefault } from "@/agentMode/session/backendDefaultModel";
 import { ClaudeSdkBackendProcess } from "@/agentMode/sdk/ClaudeSdkBackendProcess";
 import { getCachedSdkCatalog, synthesizeEffortConfigOption } from "@/agentMode/sdk/effortOption";
 import { buildAgentSystemPrompt } from "@/agentMode/backends/shared/agentSystemPrompt";
@@ -384,7 +385,8 @@ export const ClaudeBackendDescriptor: ClaudeDescriptor = {
       checkCompatibility: () =>
         assertClaudeVersionSupported(claudePath, claudeChildEnv(getSettings())),
       isPlanModePlanFilePath: isClaudePlanModePlanFilePath,
-      getDefaultModelId: () => getSettings().agentMode?.backends?.claude?.defaultModel?.baseModelId,
+      getDefaultModelId: () =>
+        readBackendDefault(ClaudeBackendDescriptor, getSettings())?.baseModelId,
       // Compose the shared system prompt — the Copilot base framing (unless the
       // user disabled it), the pill-syntax directive, and the user's custom
       // prompt — plus the owning project's instructions when the session is
@@ -446,7 +448,7 @@ export const ClaudeBackendDescriptor: ClaudeDescriptor = {
     settings: CopilotSettings,
     seededSelection?: ModelSelection
   ): Promise<void> {
-    const persistedEffort = settings.agentMode?.backends?.claude?.defaultModel?.effort ?? null;
+    const persistedEffort = settings.backends?.claude?.default?.effort ?? null;
     const effort = seededSelection ? seededSelection.effort : persistedEffort;
     await replayPersistedEffort(session, effort ?? undefined);
   },

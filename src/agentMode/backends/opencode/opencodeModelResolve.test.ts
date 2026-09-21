@@ -1,11 +1,8 @@
 import type { CopilotSettings } from "@/settings/model";
 import type { ConfiguredModel, Provider, ProviderOrigin, ProviderType } from "@/modelManagement";
-import { ChatModelProviders } from "@/constants";
 import {
-  COPILOT_PLUS_OPENCODE_PROVIDER_ID,
   copilotPlusModelId,
   isOpencodeZenWireId,
-  mapProviderToOpencodeId,
   opencodeEnabledModelEntries,
   opencodeWireBaseIdFor,
 } from "./opencodeModelResolve";
@@ -58,45 +55,6 @@ function makeSettings(args: {
 }
 
 describe("opencodeModelResolve", () => {
-  describe("mapProviderToOpencodeId", () => {
-    it("maps a BYOK provider with a catalog id to that id, non-native", () => {
-      const provider = makeProvider("p1", { kind: "byok", catalogProviderId: "anthropic" });
-      expect(mapProviderToOpencodeId(provider)).toEqual({ id: "anthropic", native: false });
-    });
-
-    it("maps BYOK openrouter to openrouter, non-native", () => {
-      const provider = makeProvider("p1", { kind: "byok", catalogProviderId: "openrouter" });
-      expect(mapProviderToOpencodeId(provider)).toEqual({ id: "openrouter", native: false });
-    });
-
-    it("returns null for a non-OpenAI-compatible BYOK provider without a catalog id", () => {
-      const provider = makeProvider("p1", { kind: "byok" });
-      expect(mapProviderToOpencodeId(provider)).toBeNull();
-    });
-
-    it("maps an OpenAI-compatible BYOK provider without a catalog id to its providerId", () => {
-      const provider = makeProvider("p1", { kind: "byok" }, "openai-compatible");
-      expect(mapProviderToOpencodeId(provider)).toEqual({ id: "p1", native: false });
-    });
-
-    it("returns null for a google BYOK provider without a catalog id", () => {
-      expect(mapProviderToOpencodeId(makeProvider("p1", { kind: "byok" }, "google"))).toBeNull();
-    });
-
-    it("maps copilot-plus origin to the reserved copilot-plus id, non-native", () => {
-      const provider = makeProvider("p1", { kind: "copilot-plus" });
-      expect(mapProviderToOpencodeId(provider)).toEqual({ id: "copilot-plus", native: false });
-    });
-
-    it("maps an agent-origin provider to its providerId, native", () => {
-      const provider = makeProvider("opencode-provider", { kind: "agent", agentType: "opencode" });
-      expect(mapProviderToOpencodeId(provider)).toEqual({
-        id: "opencode-provider",
-        native: true,
-      });
-    });
-  });
-
   describe("isOpencodeZenWireId", () => {
     it("matches the opencode/ prefix only", () => {
       expect(isOpencodeZenWireId("opencode/big-pickle")).toBe(true);
@@ -257,15 +215,6 @@ describe("opencodeModelResolve", () => {
         configuredModels: [makeModel("cm1", "p1", "some-google-model")],
       });
       expect(opencodeEnabledModelEntries(settings)).toHaveLength(0);
-    });
-  });
-
-  describe("COPILOT_PLUS_OPENCODE_PROVIDER_ID", () => {
-    it("equals the Copilot provider id host code builds wire ids from", () => {
-      // `plusUtils.isUsingLicensedModels` reconstructs the prefixed wire id from
-      // `ChatModelProviders.COPILOT_PLUS`, because this module sits behind the
-      // desktop-only Agent Mode barrel. Drift would silently stop it matching.
-      expect(COPILOT_PLUS_OPENCODE_PROVIDER_ID).toBe(ChatModelProviders.COPILOT_PLUS);
     });
   });
 

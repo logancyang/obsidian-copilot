@@ -1,5 +1,5 @@
 import { useChatBackendModelOptions } from "@/hooks/useChatBackendModelOptions";
-import { updateSetting, useSettingsValue } from "@/settings/model";
+import { updateBackendDefaultModel, useSettingsValue } from "@/settings/model";
 import { ChatModelEnableList } from "@/settings/v2/components/ChatModelEnableList";
 import { QuickChatModelSettings } from "@/settings/v2/components/ui/QuickChatModelSettings";
 import React from "react";
@@ -10,9 +10,11 @@ export const QuickChatPanel: React.FC = () => {
   const { options, resolveSelectionId } = useChatBackendModelOptions();
   return (
     <QuickChatModelSettings
-      defaultModelId={resolveSelectionId(settings.defaultModelKey)}
+      defaultModelId={resolveSelectionId(settings.backends?.chat?.default?.configuredModelId)}
       options={options}
-      onDefaultModelChange={(value) => updateSetting("defaultModelKey", value)}
+      onDefaultModelChange={(value) =>
+        updateBackendDefaultModel("chat", { configuredModelId: value })
+      }
     >
       <ChatModelEnableList />
     </QuickChatModelSettings>
