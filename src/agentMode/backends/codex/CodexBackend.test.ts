@@ -11,6 +11,7 @@ import { MIYO_SEARCH_FOLDER_ENV, MIYO_SEARCH_SCOPE_ENV } from "@/builtinSkills/b
 import { detectBinary } from "@/utils/detectBinary";
 import { CodexBackend } from "./CodexBackend";
 import { resolveSupportedCodexAcpEntry } from "./codexVersion";
+import * as codexVersion from "./codexVersion";
 
 jest.mock("@/utils/detectBinary", () => ({ detectBinary: jest.fn() }));
 
@@ -24,6 +25,12 @@ jest.mock("./codexVersion", () => {
   const actual = jest.requireActual("./codexVersion");
   return {
     ...actual,
+    __esModule: true,
+    inspectCodexAcpPackage: (path: string) => ({
+      entryPath: jest.mocked(resolveSupportedCodexAcpEntry)(path),
+      version: "1.11.0",
+      runtimeVersion: "1.11.0",
+    }),
     resolveSupportedCodexAcpEntry: jest
       .fn()
       .mockReturnValue("/npm/lib/node_modules/@agentclientprotocol/codex-acp/dist/index.js"),
@@ -62,6 +69,21 @@ jest.mock("@/agentMode/skills", () => {
 describe("CodexBackend", () => {
   describe("CodexBackend", () => {
     describe("buildSpawnDescriptor()", () => {
+      it("rejects a runtime below the plugin minimum before returning a launch command (https://github.com/Brevilabs/obsidian-copilot-private/issues/535)", async () => {
+        const minimum = jest.replaceProperty<{ CODEX_MIN_VERSION: string }, "CODEX_MIN_VERSION">(
+          codexVersion,
+          "CODEX_MIN_VERSION",
+          "1.12.0"
+        );
+        try {
+          await expect(
+            new CodexBackend().buildSpawnDescriptor({ vaultBasePath: "/vault" })
+          ).rejects.toThrow("1.11.0");
+        } finally {
+          minimum.restore();
+        }
+      });
+
       const hostPlatform = process.platform;
       // POSIX descriptor fixtures must not inherit the Windows Node-launch branch.
       // https://github.com/logancyang/obsidian-copilot/issues/2967

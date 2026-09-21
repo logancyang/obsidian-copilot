@@ -7,7 +7,7 @@ import {
 } from "@/agentMode/backends/opencode/ui/OpencodeConfigView";
 import React from "react";
 import {
-  OPENCODE_MIN_ACP_VERSION,
+  OPENCODE_MIN_VERSION,
   OPENCODE_PINNED_VERSION,
 } from "@/agentMode/backends/opencode/ui/opencodeVersion";
 import type { InstallState } from "@/agentMode/session/types";
@@ -34,8 +34,8 @@ const OUTDATED: InstallState = {
   kind: "incompatible",
   source: "managed",
   currentVersion: "0.14.2",
-  minVersion: OPENCODE_MIN_ACP_VERSION,
-  message: `opencode v0.14.2 is not supported. Copilot requires opencode v${OPENCODE_MIN_ACP_VERSION} or newer.`,
+  minVersion: OPENCODE_MIN_VERSION,
+  message: `opencode v0.14.2 is not supported. Copilot requires opencode v${OPENCODE_MIN_VERSION} or newer.`,
 };
 
 /**

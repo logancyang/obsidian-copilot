@@ -1,4 +1,4 @@
-import { OPENCODE_PINNED_VERSION } from "./ui/opencodeVersion";
+import { OPENCODE_PINNED_VERSION, OPENCODE_MIN_VERSION } from "./ui/opencodeVersion";
 import { getOpencodeBinaryManager, OpencodeBackendDescriptor } from "./descriptor";
 import { legacyVaultDataDir } from "./OpencodeBinaryManager";
 import * as fs from "node:fs";
@@ -584,7 +584,11 @@ describe("descriptor", () => {
         try {
           await OpencodeBackendDescriptor.onPluginLoad?.(plugin);
           expect(refresh).toHaveBeenCalledTimes(1);
-          expect(automatic).toHaveBeenCalledWith(OPENCODE_PINNED_VERSION, expect.any(Function));
+          expect(automatic).toHaveBeenCalledWith(
+            OPENCODE_PINNED_VERSION,
+            OPENCODE_MIN_VERSION,
+            expect.any(Function)
+          );
         } finally {
           refresh.mockRestore();
           automatic.mockRestore();

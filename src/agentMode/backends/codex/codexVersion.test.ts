@@ -4,7 +4,8 @@ import * as path from "node:path";
 
 import {
   buildCodexAcpInvocation,
-  CODEX_ACP_MIN_VERSION,
+  inspectCodexAcpPackage,
+  CODEX_MIN_VERSION,
   isSupportedCodexAcpPath,
   resolveSupportedCodexAcpPackage,
   resolveSupportedCodexAcpEntry,
@@ -43,6 +44,30 @@ function installedAdapterPath(packageMetadata: unknown): string {
 }
 
 describe("codexVersion", () => {
+  describe("inspectCodexAcpPackage()", () => {
+    it.each(["0.0.44", "0.0.45", "0.0.46", "0.0.45-beta.1"])(
+      "https://github.com/Brevilabs/obsidian-copilot-private/issues/535 inspects valid npm version %s independently of the minimum",
+      (version) => {
+        expect(
+          inspectCodexAcpPackage(UNIX_ENTRY, "darwin", packageFs(UNIX_ENTRY, metadata(version)))
+        ).toEqual({ entryPath: UNIX_ENTRY, version, runtimeVersion: version });
+      }
+    );
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/535 retains the actual runtime version separately from native packaging revisions", () => {
+      const entry = "/bundle/codex-acp";
+      expect(
+        inspectCodexAcpPackage(
+          entry,
+          "darwin",
+          packageFs(entry, {
+            acpVersion: "0.0.44",
+            packagingRevision: 1,
+            target: `darwin-${process.arch}`,
+          })
+        )
+      ).toEqual({ entryPath: entry, version: "0.0.44-r1", runtimeVersion: "0.0.44" });
+    });
+  });
   describe("resolveSupportedCodexAcpPackage()", () => {
     it("returns the validated version of a user-owned npm package", () => {
       const packageFileSystem = packageFs(UNIX_ENTRY, metadata("1.10.0"));
@@ -117,7 +142,7 @@ describe("codexVersion", () => {
   });
   describe("resolveSupportedCodexAcpEntry()", () => {
     it("https://github.com/logancyang/obsidian-copilot/issues/2967 accepts the earliest adapter with bundled CLI authentication", () => {
-      const packageFileSystem = packageFs(UNIX_ENTRY, metadata(CODEX_ACP_MIN_VERSION));
+      const packageFileSystem = packageFs(UNIX_ENTRY, metadata(CODEX_MIN_VERSION));
 
       expect(
         resolveSupportedCodexAcpEntry("/usr/local/bin/codex-acp", "darwin", packageFileSystem)

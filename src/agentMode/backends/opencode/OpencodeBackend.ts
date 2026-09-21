@@ -1,3 +1,6 @@
+import { parseVersionFromStdout, verifyOpencodeBinary } from "./OpencodeBinaryManager";
+import { assertBinaryCompatible } from "@/agentMode/backends/shared/binaryCompatibility";
+import { OPENCODE_MIN_VERSION } from "./ui/opencodeVersion";
 import { ChatModelProviders } from "@/constants";
 import { logInfo, logWarn } from "@/logger";
 import { getSettings } from "@/settings/model";
@@ -129,6 +132,16 @@ export class OpencodeBackend implements AcpBackend {
         "opencode binary not installed. Open Agent Mode settings and install it before starting a session."
       );
     }
+
+    // Persisted versions can lag a custom executable replaced outside Copilot. https://github.com/Brevilabs/obsidian-copilot-private/issues/535
+    const runtimeVersion =
+      parseVersionFromStdout((await verifyOpencodeBinary(binaryPath)).stdout) ?? "";
+    const source = settings.agentMode?.backends?.opencode?.binarySource ?? "managed";
+    assertBinaryCompatible(
+      { kind: "installed", version: runtimeVersion, source },
+      OPENCODE_MIN_VERSION,
+      this.displayName
+    );
 
     // opencode discovers vault and project AGENTS.md files from the session cwd, so this spawn
     // needs no instruction-specific configuration.

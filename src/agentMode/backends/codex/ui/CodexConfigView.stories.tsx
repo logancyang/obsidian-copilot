@@ -1,7 +1,7 @@
 import { FULL_BLEED_MODAL_CLASS } from "@/components/modals/ReactModal";
 import {
   CodexConfigView,
-  CODEX_BUNDLE_VERSION,
+  CODEX_PINNED_VERSION,
   type CodexBinarySource,
   type CodexConfigActions,
   type CodexConfigViewProps,
@@ -23,7 +23,7 @@ const ACTIONS: CodexConfigActions = {
 
 const MANAGED: CodexManagedInfo = {
   platform: "darwin-arm64",
-  version: CODEX_BUNDLE_VERSION,
+  version: CODEX_PINNED_VERSION,
   destination: "~/.obsidian-copilot/codex",
   run: { kind: "idle" },
 };
@@ -32,8 +32,8 @@ const OUTDATED: InstallState = {
   kind: "incompatible",
   source: "managed",
   currentVersion: "1.9.0-r1",
-  minVersion: CODEX_BUNDLE_VERSION,
-  message: `Codex adapter v1.9.0-r1 requires an upgrade. Copilot requires Codex adapter v${CODEX_BUNDLE_VERSION} or newer.`,
+  minVersion: CODEX_PINNED_VERSION,
+  message: `Codex adapter v1.9.0-r1 requires an upgrade. Copilot requires Codex adapter v${CODEX_PINNED_VERSION} or newer.`,
 };
 
 /**
@@ -53,7 +53,7 @@ const InteractiveConfigView: React.FC<Partial<CodexConfigViewProps>> = (props) =
         terminalCommand:
           props.activeSource === "custom"
             ? "'/usr/local/bin/codex-acp' cli login"
-            : `'/Users/example/.obsidian-copilot/codex/${CODEX_BUNDLE_VERSION}/codex-acp' cli login`,
+            : `'/Users/example/.obsidian-copilot/codex/${CODEX_PINNED_VERSION}/codex-acp' cli login`,
       }}
     />
   );

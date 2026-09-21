@@ -58,7 +58,7 @@ jest.mock("./opencodeCliDetector", () => ({
   detectOpencodeCliPath: jest.fn(async () => null),
 }));
 
-import { OPENCODE_MIN_ACP_VERSION, OPENCODE_PINNED_VERSION } from "./ui/opencodeVersion";
+import { OPENCODE_MIN_VERSION, OPENCODE_PINNED_VERSION } from "./ui/opencodeVersion";
 import { copilotAppDataDir } from "@/utils/appPaths";
 import * as fs from "node:fs";
 import * as os from "os";
@@ -192,11 +192,8 @@ describe("computeInstallState", () => {
     expect(computeInstallState(undefined)).toEqual({ kind: "absent" });
   });
 
-  it("absent when path is set but version is missing", () => {
-    // We no longer surface a path-only state — without a version we can't
-    // tell what binary the user is pointing at, so the manager forces
-    // install/setCustomBinaryPath to populate both fields together.
-    expect(computeInstallState({ binaryPath: "/p" })).toEqual({ kind: "absent" });
+  it("absent when the path has no local file or version", () => {
+    expect(computeInstallState({ binaryPath: "/p" }, () => false)).toEqual({ kind: "absent" });
   });
 
   it("installed (managed) when source is missing — legacy data defaults to managed", () => {
@@ -239,13 +236,28 @@ describe("OpencodeBinaryManager", () => {
       expect(
         toOpencodeInstallState({
           kind: "installed",
-          version: OPENCODE_MIN_ACP_VERSION,
+          version: OPENCODE_MIN_VERSION,
           path: "/p",
           source: "managed",
         })
       ).toEqual({ kind: "ready", source: "managed" });
     });
 
+    it.each(["managed", "custom"] as const)(
+      "https://github.com/Brevilabs/obsidian-copilot-private/issues/535 applies the minimum and invalid metadata policy for %s",
+      (source) => {
+        const classify = (version: string) =>
+          toOpencodeInstallState({ kind: "installed", version, path: "/opencode", source });
+        expect(classify("1.15.0")).toMatchObject({ kind: "incompatible", source });
+        expect(classify(OPENCODE_MIN_VERSION)).toEqual({ kind: "ready", source });
+        expect(classify(OPENCODE_PINNED_VERSION)).toEqual({ kind: "ready", source });
+        expect(classify(OPENCODE_MIN_VERSION + "-beta.1").kind).toBe("incompatible");
+        expect(classify("invalid").kind).toBe("error");
+        expect(
+          toOpencodeInstallState(computeInstallState({ binaryPath: "/opencode" }, () => true)).kind
+        ).toBe("error");
+      }
+    );
     it("returns the shared incompatible state for an outdated install", () => {
       expect(
         toOpencodeInstallState({
@@ -258,8 +270,8 @@ describe("OpencodeBinaryManager", () => {
         kind: "incompatible",
         source: "custom",
         currentVersion: "1.15.12",
-        minVersion: OPENCODE_MIN_ACP_VERSION,
-        message: `opencode v1.15.12 is not supported. Copilot requires opencode v${OPENCODE_MIN_ACP_VERSION} or newer.`,
+        minVersion: OPENCODE_MIN_VERSION,
+        message: `opencode v1.15.12 is not supported. Copilot requires opencode v${OPENCODE_MIN_VERSION} or newer.`,
       });
     });
   });
@@ -551,7 +563,7 @@ fi
     });
 
     const mgr = new OpencodeBinaryManager(fakePlugin);
-    await expect(mgr.upgradeCustomBinary()).rejects.toThrow(OPENCODE_MIN_ACP_VERSION);
+    await expect(mgr.upgradeCustomBinary()).rejects.toThrow(OPENCODE_MIN_VERSION);
     expect(settingsMock.__get()).toEqual({
       binaryPath: file,
       binaryVersion: "1.15.11",

@@ -1,5 +1,5 @@
 import { CODEX_BINARY_NAME, codexBinaryPathPlaceholder } from "@/agentMode/backends/codex/cliSetup";
-import { CODEX_ACP_MIN_VERSION } from "@/agentMode/backends/codex/codexVersion";
+import { CODEX_MIN_VERSION } from "@/agentMode/backends/codex/codexVersion";
 import {
   ManagedBinaryConfigView,
   type ManagedBinaryConfigProps,
@@ -29,8 +29,8 @@ export const CodexConfigView: React.FC<CodexConfigViewProps> = (props) => (
     managedDescription="Let Copilot download and manage Codex."
     customDescription={
       <>
-        Copilot supports <code>@agentclientprotocol/codex-acp</code> {CODEX_ACP_MIN_VERSION} or
-        newer. You manage its upgrades; Auto-detect checks the usual npm locations and your PATH.
+        Copilot supports <code>@agentclientprotocol/codex-acp</code> {CODEX_MIN_VERSION} or newer.
+        You manage its upgrades; Auto-detect checks the usual npm locations and your PATH.
       </>
     }
     customPathPlaceholder={codexBinaryPathPlaceholder(process.platform)}
@@ -45,4 +45,4 @@ export const CodexConfigView: React.FC<CodexConfigViewProps> = (props) => (
   </ManagedBinaryConfigView>
 );
 
-export { CODEX_BUNDLE_VERSION } from "@/agentMode/backends/codex/cliSetup";
+export { CODEX_PINNED_VERSION } from "@/agentMode/backends/codex/cliSetup";

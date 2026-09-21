@@ -1,3 +1,4 @@
+import { assertBinaryCompatible } from "./binaryCompatibility";
 import {
   ManagedInstallAbortError,
   ManagedInstallOperationInFlightError,
@@ -115,11 +116,28 @@ export abstract class ManagedBinaryManager<
   }
 
   /**
-   * Attempts a load-time pin change, retaining working binaries and a device-local failure cooldown.
-   * @param pin - Runtime shipped by this plugin release, including reverted pins.
-   * @param notify - Publishes exactly one result notice for an attempted download.
+   * Updates an existing Copilot-managed installation to this plugin release's
+   * chosen agent version before startup. Retains the previous files
+   * and leaves the selection unchanged if installation fails.
+   * Recent failures delay another attempt on this device unless the target or
+   * minimum supported version changes. Throws if the target version is unsupported.
+   *
+   * @param pin - Agent version chosen for this plugin release, which may be older than the installed version.
+   * @param minimumVersion - Oldest stable agent version this plugin release supports.
+   * @param notify - Receives one success or failure message after an attempted installation.
    */
-  async autoUpgrade(pin: string, notify: (message: string) => void): Promise<void> {
+  async autoUpgrade(
+    pin: string,
+    minimumVersion: string,
+    notify: (message: string) => void
+  ): Promise<void> {
+    // A misconfigured release must not install an agent version that Copilot cannot run.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/535
+    assertBinaryCompatible(
+      { kind: "installed", version: pin, source: "managed" },
+      minimumVersion,
+      this.displayName
+    );
     const selected = this.readBinarySettings();
     // Custom selections and first installs require explicit user intent.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/530
@@ -138,7 +156,7 @@ export abstract class ManagedBinaryManager<
     let attempted = false;
     try {
       await this.runExclusive({ kind: "installing", progress: null }, async (signal) => {
-        let failure: { pin?: string; failedAt?: number } = {};
+        let failure: { pin?: string; minimumVersion?: string; failedAt?: number } = {};
         try {
           failure = JSON.parse(await fs.promises.readFile(failurePath, "utf8"));
         } catch {
@@ -148,6 +166,9 @@ export abstract class ManagedBinaryManager<
         // https://github.com/Brevilabs/obsidian-copilot-private/issues/530
         if (
           failure?.pin === pin &&
+          // A changed minimum version or a failure record without one must not delay recovery.
+          // https://github.com/Brevilabs/obsidian-copilot-private/issues/535
+          failure.minimumVersion === minimumVersion &&
           typeof failure.failedAt === "number" &&
           failure.failedAt <= Date.now() &&
           Date.now() - failure.failedAt < AUTOMATIC_UPDATE_RETRY_DELAY_MS
@@ -168,7 +189,10 @@ export abstract class ManagedBinaryManager<
         } catch (error) {
           try {
             await fs.promises.mkdir(this.getDataDir(), { recursive: true });
-            await fs.promises.writeFile(failurePath, JSON.stringify({ pin, failedAt: Date.now() }));
+            await fs.promises.writeFile(
+              failurePath,
+              JSON.stringify({ pin, minimumVersion, failedAt: Date.now() })
+            );
           } catch (writeError) {
             logWarn(`[AgentMode] Could not save update cooldown: ${writeError}`);
           }
