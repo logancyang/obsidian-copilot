@@ -62,8 +62,6 @@ import {
   type PendingFanoutContext,
 } from "@/agentMode/session/fanout/fanoutTypes";
 import { v4 as uuidv4 } from "uuid";
-import { assertBackendCompatible } from "@/agentMode/session/descriptor";
-import { getSettings } from "@/settings/model";
 
 /**
  * Seam the session calls to dispatch a multi-agent read-only QA turn. Supplied
@@ -564,7 +562,6 @@ export class AgentSession {
       // user message (see `runTurn`).
       this.projectContextBlock = contextResult?.projectContextBlock ?? null;
       if (this.disposed) return;
-      assertBackendCompatible(this.getDescriptor?.(), getSettings());
       const resp = await backend.newSession({
         cwd,
         // Capture the owning scope alongside cwd so the backend can resolve
@@ -946,7 +943,6 @@ export class AgentSession {
     promptContent?: PromptContent[],
     mentionedAgents?: ReadonlyArray<BackendId>
   ): { userMessageId: string; turn: Promise<StopReason> } {
-    assertBackendCompatible(this.getDescriptor?.(), getSettings());
     const status = this.getStatus();
     if (status === "starting") {
       throw new Error("Session is still starting");
@@ -1114,7 +1110,6 @@ export class AgentSession {
       const promptStarted = !signal.aborted;
       let resp: PromptOutput = { stopReason: "cancelled" };
       if (promptStarted) {
-        assertBackendCompatible(this.getDescriptor?.(), getSettings());
         const backingPrompt = this.backend.prompt(req);
         resp = await Promise.race([
           backingPrompt,

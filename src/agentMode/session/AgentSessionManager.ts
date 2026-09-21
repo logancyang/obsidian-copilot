@@ -48,7 +48,6 @@ import {
   type MarkdownChatEntry,
 } from "./chatHistoryMerge";
 import { MethodUnsupportedError } from "./errors";
-import { assertBackendCompatible } from "./descriptor";
 import { replayPersistedMode } from "./replayPersistedMode";
 import {
   FanoutOrchestrator,
@@ -3295,18 +3294,6 @@ export class AgentSessionManager {
       this.finishPendingCreate();
       return null;
     }
-    // Readiness can flip while the project context materializes, after
-    // `ensureBackend` already cleared the install. Recorded as the resume's own
-    // failure so the status surface shows the upgrade requirement instead of the
-    // generic "Could not resume".
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/531
-    try {
-      assertBackendCompatible(descriptor, getSettings());
-    } catch (err) {
-      this.setLastError(err2String(err));
-      this.finishPendingCreate();
-      return null;
-    }
     let resumeResult: LoadSessionOutput | null = null;
     try {
       resumeResult = await backend.loadSession({
@@ -3691,7 +3678,6 @@ export class AgentSessionManager {
     backendId: BackendId,
     descriptor: BackendDescriptor
   ): Promise<BackendProcess> {
-    assertBackendCompatible(descriptor, getSettings());
     const existing = this.backends.get(backendId);
     if (existing && existing.isRunning()) return existing;
     const inflight = this.starting.get(backendId);
@@ -3704,7 +3690,6 @@ export class AgentSessionManager {
         await this.preloader.preload(backendId);
       }
 
-      assertBackendCompatible(descriptor, getSettings());
       const warm = this.preloader.takeWarm(backendId);
       if (warm) {
         // Probe subprocess is already started + initialize-handshaken —
@@ -3715,6 +3700,12 @@ export class AgentSessionManager {
         return warm.proc;
       }
 
+      // Validate the selected installation only when launching it. A running
+      // process keeps its version when settings select a different executable.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/531
+      const installState = descriptor.getInstallState(getSettings());
+      if (installState.kind === "incompatible") throw new Error(installState.message);
+
       const proc = descriptor.createBackendProcess({
         plugin: this.plugin,
         app: this.app,
@@ -3724,17 +3715,6 @@ export class AgentSessionManager {
       // ACP backends declare `start()` to spawn the subprocess and run the
       // initialize handshake. In-process adapters (Claude SDK) omit it.
       if (proc.start) await proc.start();
-      // A readiness flip during the handshake is invisible to
-      // `onInstallStateChanged`: the process is not in `this.backends` yet, so
-      // its teardown finds nothing and the unsupported binary would be adopted
-      // and cached here, then run by the very next `newSession`.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/531
-      try {
-        assertBackendCompatible(descriptor, getSettings());
-      } catch (err) {
-        await proc.shutdown().catch(() => {});
-        throw err;
-      }
       this.wirePrompters(proc);
       this.installBackendExitHandler(backendId, proc, descriptor);
       this.backends.set(backendId, proc);

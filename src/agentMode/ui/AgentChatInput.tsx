@@ -2,8 +2,7 @@ import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
 import { GLOBAL_SCOPE } from "@/agentMode/session/scope";
 import { expandCustomCommandPrefix } from "@/agentMode/session/expandCustomCommandPrefix";
 import { resolveActiveNoteToken } from "@/agentMode/session/resolveActiveNoteToken";
-import { useBackendInstallState } from "@/agentMode/ui/useBackendDescriptor";
-import type { BackendDescriptor, PromptContent } from "@/agentMode/session/types";
+import type { PromptContent } from "@/agentMode/session/types";
 import type {
   AgentInputDraftControls,
   QueuedAgentMessage,
@@ -40,7 +39,7 @@ import {
   type SelectedTextContext,
   type WebTabContext,
 } from "@/types/message";
-import { getSettings, getModelKeyFromModel } from "@/settings/model";
+import { getModelKeyFromModel } from "@/settings/model";
 import { modelSupportsVision } from "@/utils";
 import { arrayBufferToBase64, base64ToArrayBuffer } from "@/utils/base64";
 import { mergeWebTabContexts } from "@/utils/urlNormalization";
@@ -70,8 +69,6 @@ interface AgentChatInputProps {
    * before a session lands.
    */
   mainAgentId: BackendId | null;
-  /** Descriptor of the agent whose live compatibility gates draft consumption. */
-  descriptor: BackendDescriptor;
   updateUserMessageHistory: (newMessage: string) => void;
   isStarting: boolean;
   hasPendingPlanPermission: boolean;
@@ -201,7 +198,6 @@ export const AgentChatInput = memo(function AgentChatInput({
   draft,
   app,
   mainAgentId,
-  descriptor,
   updateUserMessageHistory,
   isStarting,
   hasPendingPlanPermission,
@@ -349,10 +345,6 @@ export const AgentChatInput = memo(function AgentChatInput({
     [backend, setLoading, updateUserMessageHistory]
   );
 
-  const installState = useBackendInstallState(descriptor, plugin);
-  const unsupportedAgentMessage =
-    installState.kind === "incompatible" ? installState.message : null;
-
   const handleSendMessage = useCallback(
     async (webTabs?: WebTabContext[]) => {
       // A hard-disabled composer (e.g. an orphaned project) must not send. The
@@ -429,6 +421,24 @@ export const AgentChatInput = memo(function AgentChatInput({
         if (isFanout(answerers, mainAgentId)) mentionedAgents = answerers;
       }
 
+      // Clear the composer NOW, before the async image reads below, so it empties
+      // the instant the user sends instead of after every attached image finishes
+      // decoding. `selectedImages` is already captured in this closure, so the
+      // conversion still runs on the snapshot. (The stale-text-left-behind race in
+      // #211 is closed at its source by `ignoreSelectionChange` on the editor's
+      // OnChangePlugin; clearing before the awaits additionally shrinks the window
+      // the draft stays populated, but is not what fixes the race.)
+      mentionedAgentIdsRef.current = [];
+      resetCompose();
+      // The message context is built below from this render's captured
+      // `selectedTextContexts` (a closure value the atom clear doesn't touch), so
+      // clearing the global atom here is safe for this send. The narrow window where
+      // the awaits below let the user switch sessions and start a new selection
+      // before this clear fires is accepted as-is (carried over verbatim from the
+      // pre-split AgentChat, and a cleared selection is trivially recoverable). If a
+      // future review flags this again, point them here.
+      clearSelectedTextContexts();
+
       // Convert the attached images to base64 image content blocks.
       const content: PromptContent[] = [];
       for (const image of selectedImages) {
@@ -451,18 +461,6 @@ export const AgentChatInput = memo(function AgentChatInput({
         promptContent: content.length > 0 ? content : undefined,
         mentionedAgents,
       };
-
-      // Async command expansion and image reads can outlive a compatible install.
-      // Re-read at the commit point, with no await before queueing or sending.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/531
-      const currentInstall = descriptor.getInstallState(getSettings());
-      if (currentInstall.kind === "incompatible") {
-        new Notice(currentInstall.message);
-        return;
-      }
-      mentionedAgentIdsRef.current = [];
-      resetCompose();
-      clearSelectedTextContexts();
 
       // Queue-and-hold: while a turn is in flight, starting, or the project's
       // context is still materializing, park the message instead of sending.
@@ -490,7 +488,6 @@ export const AgentChatInput = memo(function AgentChatInput({
       loading,
       isStarting,
       unsupportedImageModelLabel,
-      descriptor,
       holdForContext,
       disabled,
       resetCompose,
@@ -524,20 +521,8 @@ export const AgentChatInput = memo(function AgentChatInput({
   useEffect(() => {
     // `disabled` guards the same hard-disable as the send path: a project
     // orphaned while messages are queued must not drain its queue into a
-    // disabled composer. `unsupportedAgentMessage` holds the queue for the same
-    // reason it blocks a send — draining into a refusal the session layer raises
-    // after the dequeue would discard the follow-ups.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/531
-    if (
-      disabled ||
-      loading ||
-      isStarting ||
-      holdForContext ||
-      unsupportedAgentMessage ||
-      queuedMessages.length === 0
-    ) {
-      return;
-    }
+    // disabled composer.
+    if (disabled || loading || isStarting || holdForContext || queuedMessages.length === 0) return;
     const combined = combineQueuedMessages(queuedMessages);
     if (
       combined.promptContent?.some((content) => content.type === "image") &&
@@ -559,7 +544,6 @@ export const AgentChatInput = memo(function AgentChatInput({
     runSend,
     setQueuedMessages,
     unsupportedImageModelLabel,
-    unsupportedAgentMessage,
   ]);
 
   const handleRemoveQueuedMessage = useCallback(

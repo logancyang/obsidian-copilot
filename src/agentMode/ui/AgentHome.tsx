@@ -755,7 +755,6 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       draft={draft}
       app={app}
       mainAgentId={mainAgentId}
-      descriptor={descriptor}
       updateUserMessageHistory={updateUserMessageHistory}
       isStarting={isStarting}
       hasPendingPlanPermission={hasPendingPlanPermission}
