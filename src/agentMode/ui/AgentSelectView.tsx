@@ -26,6 +26,7 @@ const STATUS_BADGES: Partial<Record<AgentSelectStatus, StatusBadgeSpec>> = {
   checking: { label: "Checking…", variant: "secondary", Icon: LoaderCircle },
   installed: { label: "Installed", variant: "success", Icon: Check },
   outdated: { label: "Update required", variant: "destructive", Icon: AlertTriangle },
+  "signed-out": { label: "Sign in required", variant: "secondary", Icon: AlertTriangle },
   error: { label: "Error", variant: "destructive", Icon: AlertTriangle },
 };
 
