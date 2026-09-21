@@ -1,3 +1,6 @@
+import { parseVersionFromStdout, verifyOpencodeBinary } from "./OpencodeBinaryManager";
+import { assertBinaryCompatible } from "@/agentMode/backends/shared/binaryCompatibility";
+import { OPENCODE_MIN_ACP_VERSION } from "./ui/opencodeVersion";
 import { ChatModelProviders } from "@/constants";
 import { logInfo, logWarn } from "@/logger";
 import { getSettings } from "@/settings/model";
@@ -130,6 +133,11 @@ export class OpencodeBackend implements AcpBackend {
       );
     }
 
+    // Persisted versions can lag a custom executable replaced outside Copilot. COMPATIBILITY_ISSUE
+    const runtimeVersion =
+      parseVersionFromStdout((await verifyOpencodeBinary(binaryPath)).stdout) ?? "";
+    const source = settings.agentMode?.backends?.opencode?.binarySource ?? "managed";
+
     // opencode discovers vault and project AGENTS.md files from the session cwd, so this spawn
     // needs no instruction-specific configuration.
     // The off-vault conversions cache lives outside opencode's `--cwd <vault>`
@@ -211,6 +219,12 @@ export class OpencodeBackend implements AcpBackend {
 
     return {
       command: binaryPath,
+      assertCompatible: () =>
+        assertBinaryCompatible(
+          { kind: "installed", version: runtimeVersion, source },
+          OPENCODE_MIN_ACP_VERSION,
+          this.displayName
+        ),
       args: ["acp", "--cwd", ctx.vaultBasePath],
       env: {
         ...process.env,

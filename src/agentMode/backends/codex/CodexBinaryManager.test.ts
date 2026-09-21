@@ -1,3 +1,4 @@
+import * as codexVersion from "./codexVersion";
 import { installCodexArchive, CODEX_BUNDLE_VERSION } from "./codexArchive";
 // Only the download is faked: the real CODEX_BUNDLE_VERSION must reach the manager so the
 // install assertions still compare the version directory against the adapter version the
@@ -6,7 +7,7 @@ jest.mock("./codexArchive", () => ({
   ...jest.requireActual<object>("./codexArchive"),
   installCodexArchive: jest.fn(),
 }));
-import { getSettings, setSettings } from "@/settings/model";
+import { getSettings, setSettings, updateAgentModeBackendFields } from "@/settings/model";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 import { detectBinary } from "@/utils/detectBinary";
 import type * as childProcess from "node:child_process";
@@ -104,6 +105,29 @@ describe("CodexBinaryManager", () => {
     });
 
     describe("install()", () => {
+      it("ISSUE_PENDING rejects a managed pin below minimum without downloading or replacing the selected installation", async () => {
+        const manager = new CodexBinaryManager();
+        const previous = path.join(tempDir, "previous-codex");
+        fs.writeFileSync(previous, "working runtime");
+        updateAgentModeBackendFields("codex", {
+          binaryPath: previous,
+          binaryVersion: CODEX_BUNDLE_VERSION,
+          binarySource: "managed",
+        });
+        const selected = { ...getSettings().agentMode.backends?.codex };
+        const minimum = jest.replaceProperty<
+          { CODEX_ACP_MIN_VERSION: string },
+          "CODEX_ACP_MIN_VERSION"
+        >(codexVersion, "CODEX_ACP_MIN_VERSION", "999.0.0");
+        try {
+          await expect(manager.install()).rejects.toThrow("requires");
+          expect(installCodexArchive).not.toHaveBeenCalled();
+          expect(getSettings().agentMode.backends?.codex).toEqual(selected);
+          expect(fs.readFileSync(previous, "utf8")).toBe("working runtime");
+        } finally {
+          minimum.restore();
+        }
+      });
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 selects the verified native bundle without invoking npm", async () => {
         const manager = new CodexBinaryManager();
         const listener = jest.fn();

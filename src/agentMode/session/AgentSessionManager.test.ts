@@ -3047,6 +3047,7 @@ describe("AgentSessionManager.onInstallStateChanged", () => {
   function buildInstallStateManager(opts: {
     installState: InstallState;
     refreshResult?: Promise<void> | null;
+    assertCompatible?: () => void;
   }) {
     let installState = opts.installState;
     const preloader = {
@@ -3062,6 +3063,10 @@ describe("AgentSessionManager.onInstallStateChanged", () => {
     const descriptor = {
       ...buildDescriptor(),
       getInstallState: jest.fn(() => installState),
+      createBackendProcess: () => ({
+        ...makeMockBackendProcess(),
+        assertCompatible: opts.assertCompatible,
+      }),
     } as unknown as BackendDescriptor;
     const mgr = new AgentSessionManager(
       buildApp(),
@@ -3076,6 +3081,38 @@ describe("AgentSessionManager.onInstallStateChanged", () => {
     );
     return { mgr, preloader, setInstallState: (state: InstallState) => (installState = state) };
   }
+
+  it.each([true, false])(
+    "COMPATIBILITY_ISSUE uses the live process compatibility (%s) when a different incompatible runtime is selected",
+    async (supported) => {
+      let processSupported = true;
+      const { mgr, setInstallState } = buildInstallStateManager({
+        installState: { kind: "ready", source: "managed" },
+        assertCompatible: () => {
+          if (!processSupported) throw new Error("Old runtime unsupported");
+        },
+      });
+      const session = await mgr.createSession();
+      await session.ready;
+      processSupported = supported;
+      setInstallState({
+        kind: "incompatible",
+        source: "managed",
+        currentVersion: "1.0.0",
+        minVersion: "2.0.0",
+        message: "Selected runtime unsupported",
+      });
+      mockBackendShutdown.mockClear();
+      await mgr.onInstallStateChanged("opencode");
+      if (supported) {
+        expect(mockBackendShutdown).not.toHaveBeenCalled();
+        expect(mgr.getActiveSession()).toBe(session);
+        expect(mgr.hasHeldConfigChange("opencode")).toBe(true);
+      } else {
+        expect(mockBackendShutdown).toHaveBeenCalled();
+      }
+    }
+  );
 
   it("preloads a freshly-installed backend that was never probed", async () => {
     // Newly installed: nothing warm, nothing live. `restartBackend` returns

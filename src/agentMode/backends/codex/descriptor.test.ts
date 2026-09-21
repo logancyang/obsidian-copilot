@@ -5,7 +5,11 @@ import { detectBinary } from "@/utils/detectBinary";
 import { resolveCodexAcpBinary } from "./codexBinaryResolver";
 import { CODEX_BUNDLE_VERSION } from "./codexArchive";
 import { CodexBackendDescriptor, detectCodexAcpPath, getCodexBinaryManager } from "./descriptor";
-import { isSupportedCodexAcpPath, resolveSupportedCodexAcpPackage } from "./codexVersion";
+import {
+  isSupportedCodexAcpPath,
+  inspectCodexAcpPackage,
+  CODEX_ACP_MIN_VERSION,
+} from "./codexVersion";
 
 jest.mock("@/utils/detectBinary", () => ({ detectBinary: jest.fn() }));
 jest.mock("./codexBinaryResolver", () => ({
@@ -15,7 +19,7 @@ jest.mock("./codexBinaryResolver", () => ({
 jest.mock("./codexVersion", () => ({
   ...jest.requireActual("./codexVersion"),
   isSupportedCodexAcpPath: jest.fn(),
-  resolveSupportedCodexAcpPackage: jest.fn(),
+  inspectCodexAcpPackage: jest.fn(),
 }));
 
 const mockedDetectBinary = jest.mocked(detectBinary);
@@ -68,7 +72,7 @@ const ADVERTISED_CONFIG_OPTIONS: BackendConfigOption[] = [
     ],
   },
 ];
-const mockedResolveSupportedPackage = jest.mocked(resolveSupportedCodexAcpPackage);
+const mockedResolveSupportedPackage = jest.mocked(inspectCodexAcpPackage);
 
 function settingsWithCodex(codex: Record<string, unknown>): CopilotSettings {
   return {
@@ -272,6 +276,43 @@ describe("descriptor", () => {
       expect(CodexBackendDescriptor.auth).toBe(codexAuth);
     });
     describe("getInstallState()", () => {
+      it.each(["managed", "custom"] as const)(
+        "ISSUE_PENDING reports below-minimum %s runtime as incompatible",
+        (source) => {
+          mockedResolveSupportedPackage.mockReturnValue({
+            entryPath: "/codex/index.js",
+            version: "0.0.44",
+            runtimeVersion: "0.0.44",
+          });
+          expect(
+            CodexBackendDescriptor.getInstallState(
+              settingsWithCodex({
+                binaryPath: "/codex/index.js",
+                binarySource: source,
+                binaryVersion: CODEX_BUNDLE_VERSION,
+              })
+            )
+          ).toMatchObject({
+            kind: "incompatible",
+            source,
+            currentVersion: "0.0.44",
+            minVersion: CODEX_ACP_MIN_VERSION,
+          });
+        }
+      );
+      it.each([
+        ["ENOENT", "absent"],
+        ["EINVAL", "error"],
+      ])("ISSUE_PENDING classifies %s inspection failure as %s", (code, kind) => {
+        mockedResolveSupportedPackage.mockImplementation(() => {
+          throw Object.assign(new Error("Invalid package"), { code });
+        });
+        expect(
+          CodexBackendDescriptor.getInstallState(
+            settingsWithCodex({ binaryPath: "/codex/index.js" })
+          ).kind
+        ).toBe(kind);
+      });
       it.each([
         ["legacy path", {}, "1.9.0", { kind: "ready", source: "custom" }],
         [
@@ -304,6 +345,7 @@ describe("descriptor", () => {
           mockedResolveSupportedPackage.mockReturnValue({
             entryPath: "/codex/index.js",
             version: actualVersion,
+            runtimeVersion: actualVersion.replace(/-r\d+$/, ""),
           });
 
           expect(
@@ -379,6 +421,7 @@ describe("descriptor", () => {
           await CodexBackendDescriptor.onPluginLoad?.({} as CopilotPlugin, canStart);
           expect(automatic).toHaveBeenCalledWith(
             CODEX_BUNDLE_VERSION,
+            CODEX_ACP_MIN_VERSION,
             canStart,
             expect.any(Function)
           );

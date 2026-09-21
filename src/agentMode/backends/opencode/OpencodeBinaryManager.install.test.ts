@@ -1,3 +1,4 @@
+import * as opencodeVersion from "./ui/opencodeVersion";
 import { OpencodeBinaryManager } from "./OpencodeBinaryManager";
 import { OPENCODE_PINNED_VERSION } from "./ui/opencodeVersion";
 import { extractArchive } from "@/agentMode/backends/shared/extractArchive";
@@ -74,6 +75,22 @@ const issue = "https://github.com/Brevilabs/obsidian-copilot-private/issues/530"
       fs.rmSync(root, { recursive: true, force: true });
     });
     describe("install()", () => {
+      it("ISSUE_PENDING rejects a managed pin below minimum without downloading or replacing the selected installation", async () => {
+        const selected = { ...getSettings().agentMode.backends?.opencode };
+        jest.mocked(requestUrl).mockClear();
+        const minimum = jest.replaceProperty<
+          { OPENCODE_MIN_ACP_VERSION: string },
+          "OPENCODE_MIN_ACP_VERSION"
+        >(opencodeVersion, "OPENCODE_MIN_ACP_VERSION", "999.0.0");
+        try {
+          await expect(manager.install()).rejects.toThrow("requires");
+          expect(requestUrl).not.toHaveBeenCalled();
+          expect(getSettings().agentMode.backends?.opencode).toEqual(selected);
+          expect(fs.readFileSync(previous, "utf8")).toBe("running process executable");
+        } finally {
+          minimum.restore();
+        }
+      });
       it(`${issue} verifies a fresh directory and preserves a running reverted pin`, async () => {
         const result = await manager.install({ preserveExisting: true });
         expect(result.version).toBe(OPENCODE_PINNED_VERSION);

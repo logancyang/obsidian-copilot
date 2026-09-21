@@ -1,3 +1,4 @@
+import { assertBinaryCompatible } from "./binaryCompatibility";
 import {
   ManagedInstallAbortError,
   ManagedInstallOperationInFlightError,
@@ -119,14 +120,22 @@ export abstract class ManagedBinaryManager<
   /**
    * Attempts a load-time pin change, retaining working binaries and a device-local failure cooldown.
    * @param pin - Runtime shipped by this plugin release, including reverted pins.
+   * @param minimumVersion - Minimum supported runtime; changes allow a fresh automatic attempt.
    * @param canStart - Whether the host has no session to disturb at attempt start.
    * @param notify - Publishes exactly one result notice for an attempted download.
    */
   async autoUpgrade(
     pin: string,
+    minimumVersion: string,
     canStart: () => boolean,
     notify: (message: string) => void
   ): Promise<void> {
+    // A release must never select a shipped runtime below its own support floor. ISSUE_PENDING
+    assertBinaryCompatible(
+      { kind: "installed", version: pin, source: "managed" },
+      minimumVersion,
+      this.displayName
+    );
     const selected = this.readBinarySettings();
     // Custom selections and first installs require explicit user intent.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/530
@@ -146,7 +155,7 @@ export abstract class ManagedBinaryManager<
     let attempted = false;
     try {
       await this.runExclusive({ kind: "installing", progress: null }, async (signal) => {
-        let failure: { pin?: string; failedAt?: number } = {};
+        let failure: { pin?: string; minimumVersion?: string; failedAt?: number } = {};
         try {
           failure = JSON.parse(await fs.promises.readFile(failurePath, "utf8"));
         } catch {
@@ -156,6 +165,8 @@ export abstract class ManagedBinaryManager<
         // https://github.com/Brevilabs/obsidian-copilot-private/issues/530
         if (
           failure?.pin === pin &&
+          // A raised minimum (or legacy record) permits one fresh recovery attempt. ISSUE_PENDING
+          failure.minimumVersion === minimumVersion &&
           typeof failure.failedAt === "number" &&
           failure.failedAt <= Date.now() &&
           Date.now() - failure.failedAt < AUTOMATIC_UPDATE_RETRY_DELAY_MS
@@ -177,7 +188,10 @@ export abstract class ManagedBinaryManager<
         } catch (error) {
           try {
             await fs.promises.mkdir(this.getDataDir(), { recursive: true });
-            await fs.promises.writeFile(failurePath, JSON.stringify({ pin, failedAt: Date.now() }));
+            await fs.promises.writeFile(
+              failurePath,
+              JSON.stringify({ pin, minimumVersion, failedAt: Date.now() })
+            );
           } catch (writeError) {
             logWarn(`[AgentMode] Could not save update cooldown: ${writeError}`);
           }

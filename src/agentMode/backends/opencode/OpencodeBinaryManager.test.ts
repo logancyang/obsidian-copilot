@@ -192,11 +192,8 @@ describe("computeInstallState", () => {
     expect(computeInstallState(undefined)).toEqual({ kind: "absent" });
   });
 
-  it("absent when path is set but version is missing", () => {
-    // We no longer surface a path-only state — without a version we can't
-    // tell what binary the user is pointing at, so the manager forces
-    // install/setCustomBinaryPath to populate both fields together.
-    expect(computeInstallState({ binaryPath: "/p" })).toEqual({ kind: "absent" });
+  it("absent when the path has no local file or version", () => {
+    expect(computeInstallState({ binaryPath: "/p" }, () => false)).toEqual({ kind: "absent" });
   });
 
   it("installed (managed) when source is missing — legacy data defaults to managed", () => {
@@ -246,6 +243,21 @@ describe("OpencodeBinaryManager", () => {
       ).toEqual({ kind: "ready", source: "managed" });
     });
 
+    it.each(["managed", "custom"] as const)(
+      "ISSUE_PENDING applies the minimum and invalid metadata policy for %s",
+      (source) => {
+        const classify = (version: string) =>
+          toOpencodeInstallState({ kind: "installed", version, path: "/opencode", source });
+        expect(classify("1.15.0")).toMatchObject({ kind: "incompatible", source });
+        expect(classify(OPENCODE_MIN_ACP_VERSION)).toEqual({ kind: "ready", source });
+        expect(classify(OPENCODE_PINNED_VERSION)).toEqual({ kind: "ready", source });
+        expect(classify(OPENCODE_MIN_ACP_VERSION + "-beta.1").kind).toBe("incompatible");
+        expect(classify("invalid").kind).toBe("error");
+        expect(
+          toOpencodeInstallState(computeInstallState({ binaryPath: "/opencode" }, () => true)).kind
+        ).toBe("error");
+      }
+    );
     it("returns the shared incompatible state for an outdated install", () => {
       expect(
         toOpencodeInstallState({

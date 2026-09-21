@@ -2494,7 +2494,23 @@ export class AgentSessionManager {
     // authoritative result. Keep live and warm processes intact until that
     // result says whether the configured runtime is actually usable.
     if (installState?.kind === "checking") return;
-    if (installState?.kind !== "ready") {
+    const inflight = this.starting.get(backendId);
+    if (inflight) await inflight.catch(() => undefined);
+    if (this.disposed) return;
+    const hasSession = this.hasSessionOn(backendId) || this.pendingCreates.has(backendId);
+    const process = this.backends.get(backendId);
+    let runnable = installState?.kind === "ready";
+    // Preserve supported chats when a different selection is too old; uninstall still stops them.
+    // COMPATIBILITY_ISSUE
+    if (installState && installState.kind !== "absent" && hasSession && process?.assertCompatible) {
+      try {
+        process.assertCompatible();
+        runnable = true;
+      } catch {
+        runnable = false;
+      }
+    }
+    if (!runnable) {
       // Tears down a live proc (the install guard in `restartBackendNow` keeps
       // it from respawning); `clearCached` then drops any warm probe.
       await this.restartBackend(backendId, "binary no longer available");
@@ -2511,9 +2527,7 @@ export class AgentSessionManager {
     // A session can start while an automatic download is in flight. Keep its process
     // and binary intact; the next spawn reads the published pointer.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/530
-    const inflight = this.starting.get(backendId);
-    if (inflight) await inflight.catch(() => undefined);
-    if (this.hasSessionOn(backendId) || this.pendingCreates.has(backendId)) {
+    if (hasSession) {
       await this.noteSpawnConfigChanged(backendId, "binary path changed");
       return;
     }
@@ -3316,7 +3330,7 @@ export class AgentSessionManager {
     // generic "Could not resume".
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/531
     try {
-      assertBackendCompatible(descriptor, getSettings());
+      assertBackendCompatible(descriptor, getSettings(), backend);
     } catch (err) {
       this.setLastError(err2String(err));
       this.finishPendingCreate(backendId);
@@ -3706,9 +3720,12 @@ export class AgentSessionManager {
     backendId: BackendId,
     descriptor: BackendDescriptor
   ): Promise<BackendProcess> {
-    assertBackendCompatible(descriptor, getSettings());
     const existing = this.backends.get(backendId);
-    if (existing && existing.isRunning()) return existing;
+    if (existing && existing.isRunning()) {
+      assertBackendCompatible(descriptor, getSettings(), existing);
+      return existing;
+    }
+    assertBackendCompatible(descriptor, getSettings());
     const inflight = this.starting.get(backendId);
     if (inflight) return inflight;
     const startPromise = (async () => {
@@ -3722,6 +3739,12 @@ export class AgentSessionManager {
       assertBackendCompatible(descriptor, getSettings());
       const warm = this.preloader.takeWarm(backendId);
       if (warm) {
+        try {
+          assertBackendCompatible(descriptor, getSettings(), warm.proc);
+        } catch (error) {
+          await warm.proc.shutdown();
+          throw error;
+        }
         // Probe subprocess is already started + initialize-handshaken —
         // wire it into the manager without paying either cost again.
         this.wirePrompters(warm.proc);
@@ -3745,7 +3768,7 @@ export class AgentSessionManager {
       // and cached here, then run by the very next `newSession`.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/531
       try {
-        assertBackendCompatible(descriptor, getSettings());
+        assertBackendCompatible(descriptor, getSettings(), proc);
       } catch (err) {
         await proc.shutdown().catch(() => {});
         throw err;

@@ -1,3 +1,4 @@
+import { assertBinaryCompatible } from "@/agentMode/backends/shared/binaryCompatibility";
 import { getSettings } from "@/settings/model";
 import { detectBinary } from "@/utils/detectBinary";
 import { AcpBackend, AcpSpawnDescriptor } from "@/agentMode/acp/types";
@@ -10,7 +11,11 @@ import {
 import type { PlanUsageReading } from "@/agentMode/session/planUsage";
 import { defaultCodexHome, readCodexPlanUsage } from "./codexPlanUsage";
 import { mergeCodexConfigEnv } from "./codexConfigEnv";
-import { buildCodexAcpInvocation, resolveSupportedCodexAcpEntry } from "./codexVersion";
+import {
+  buildCodexAcpInvocation,
+  inspectCodexAcpPackage,
+  CODEX_ACP_MIN_VERSION,
+} from "./codexVersion";
 
 /**
  * Spawns the configured `@agentclientprotocol/codex-acp` package entry point.
@@ -60,7 +65,8 @@ export class CodexBackend implements AcpBackend {
     descriptor.env.CODEX_CONFIG = mergeCodexConfigEnv(descriptor.env.CODEX_CONFIG, directive);
     // Deliberately no `project_doc_fallback_filenames=["project.md"]`: project.md is metadata,
     // while Codex discovers the canonical AGENTS.md instructions from the session cwd.
-    const entryPath = resolveSupportedCodexAcpEntry(descriptor.command);
+    const installed = inspectCodexAcpPackage(descriptor.command);
+    const entryPath = installed.entryPath;
     // Native bundles include their runtime; only user-owned npm entries need Node.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
     const nodePath =
@@ -75,7 +81,20 @@ export class CodexBackend implements AcpBackend {
       nodePath ?? undefined
     );
     this.codexHome = invocation.env.CODEX_HOME ?? defaultCodexHome();
-    return { ...descriptor, ...invocation };
+    return {
+      ...descriptor,
+      ...invocation,
+      assertCompatible: () =>
+        assertBinaryCompatible(
+          {
+            kind: "installed",
+            version: installed.runtimeVersion,
+            source: settings.agentMode?.backends?.codex?.binarySource ?? "custom",
+          },
+          CODEX_ACP_MIN_VERSION,
+          this.displayName
+        ),
+    };
   }
 
   /**

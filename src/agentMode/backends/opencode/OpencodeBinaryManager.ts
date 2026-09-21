@@ -1,3 +1,7 @@
+import {
+  classifyBinaryInstall,
+  assertBinaryCompatible,
+} from "@/agentMode/backends/shared/binaryCompatibility";
 import { v4 as uuidv4 } from "uuid";
 import { extractArchive } from "@/agentMode/backends/shared/extractArchive";
 import {
@@ -7,7 +11,6 @@ import {
 } from "@/agentMode/backends/shared/ManagedBinaryManager";
 import { OPENCODE_MIN_ACP_VERSION, OPENCODE_PINNED_VERSION } from "./ui/opencodeVersion";
 import { OPENCODE_RELEASE_API_URL_TEMPLATE } from "@/constants";
-import { compareSemver } from "@/utils/semver";
 import { logError, logInfo, logWarn } from "@/logger";
 import type CopilotPlugin from "@/main";
 import { getSettings, setSettings, type OpencodeBackendSettings } from "@/settings/model";
@@ -160,10 +163,11 @@ export function computeInstallState(
   fileExists: (path: string) => boolean = (p) => nodeFs().existsSync(p)
 ): InstallState {
   const s = opencode ?? {};
-  if (s.binaryPath && s.binaryVersion && fileExists(s.binaryPath)) {
+  if (s.binaryPath && fileExists(s.binaryPath)) {
     return {
       kind: "installed",
-      version: s.binaryVersion,
+      // An existing selection without usable metadata needs Configure, not Install. ISSUE_PENDING
+      version: s.binaryVersion ?? "",
       path: s.binaryPath,
       source: s.binarySource ?? "managed",
     };
@@ -185,7 +189,13 @@ export function readOpencodeSettings(): OpencodeBackendSettings {
  */
 export function isOpencodeVersionOutdated(version: string | undefined): boolean {
   if (!version) return false;
-  return compareSemver(version, OPENCODE_MIN_ACP_VERSION) < 0;
+  return (
+    classifyBinaryInstall(
+      { kind: "installed", version, source: "managed" },
+      OPENCODE_MIN_ACP_VERSION,
+      "opencode"
+    ).kind !== "ready"
+  );
 }
 
 /**
@@ -193,17 +203,7 @@ export function isOpencodeVersionOutdated(version: string | undefined): boolean 
  * @param state - The detected OpenCode installation state to interpret for backend use.
  */
 export function toOpencodeInstallState(state: InstallState): BackendInstallState {
-  if (state.kind === "absent") return state;
-  if (!isOpencodeVersionOutdated(state.version)) {
-    return { kind: "ready", source: state.source };
-  }
-  return {
-    kind: "incompatible",
-    source: state.source,
-    currentVersion: state.version,
-    minVersion: OPENCODE_MIN_ACP_VERSION,
-    message: `opencode v${state.version} is not supported. Copilot requires opencode v${OPENCODE_MIN_ACP_VERSION} or newer.`,
-  };
+  return classifyBinaryInstall(state, OPENCODE_MIN_ACP_VERSION, "opencode");
 }
 
 function updateOpencodeFields(partial: Partial<OpencodeBackendSettings>): void {
@@ -405,6 +405,12 @@ export class OpencodeBinaryManager extends ManagedBinaryManager<ProgressEvent, I
     opts: InstallPipelineOptions = {}
   ): Promise<{ version: string; path: string }> {
     const version = opts.version ?? OPENCODE_PINNED_VERSION;
+    // Manual retries must not replace a working selection with an unsupported release pin. ISSUE_PENDING
+    assertBinaryCompatible(
+      { kind: "installed", version, source: "managed" },
+      OPENCODE_MIN_ACP_VERSION,
+      "opencode"
+    );
     const dataDir = this.getDataDir();
     // Retained versions may still belong to a running session, including after a pin reversion.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/530

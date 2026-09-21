@@ -34,7 +34,12 @@ import { CodexBinaryManager } from "./CodexBinaryManager";
 import { CODEX_BUNDLE_VERSION } from "./codexArchive";
 import { CODEX_BINARY_NAME } from "./cliSetup";
 import { buildCodexModeMapping } from "./codexModeMapping";
-import { isSupportedCodexAcpPath, resolveSupportedCodexAcpPackage } from "./codexVersion";
+import {
+  isSupportedCodexAcpPath,
+  inspectCodexAcpPackage,
+  CODEX_ACP_MIN_VERSION,
+} from "./codexVersion";
+import { classifyBinaryInstall } from "@/agentMode/backends/shared/binaryCompatibility";
 
 const codexBinaryManager = new CodexBinaryManager();
 
@@ -157,11 +162,25 @@ export const CodexBackendDescriptor: BackendDescriptor = {
     const configured = settings.agentMode?.backends?.codex;
     if (!configured?.binaryPath) return { kind: "absent" };
     try {
-      resolveSupportedCodexAcpPackage(configured.binaryPath);
-      const source = configured.binarySource ?? "custom";
-      return { kind: "ready", source };
-    } catch {
-      return { kind: "absent" };
+      const installed = inspectCodexAcpPackage(configured.binaryPath);
+      return classifyBinaryInstall(
+        {
+          kind: "installed",
+          version: installed.runtimeVersion,
+          source: configured.binarySource ?? "custom",
+        },
+        CODEX_ACP_MIN_VERSION,
+        "Codex"
+      );
+    } catch (error) {
+      // Missing files and invalid packages need different recovery actions. ISSUE_PENDING
+      return classifyBinaryInstall(
+        (error as NodeJS.ErrnoException).code === "ENOENT"
+          ? { kind: "absent" }
+          : { kind: "error", message: error instanceof Error ? error.message : String(error) },
+        CODEX_ACP_MIN_VERSION,
+        "Codex"
+      );
     }
   },
 
@@ -193,9 +212,14 @@ export const CodexBackendDescriptor: BackendDescriptor = {
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
     codexBinaryManager.forgetSettledError();
     if (canAutoUpgrade)
-      await codexBinaryManager.autoUpgrade(CODEX_BUNDLE_VERSION, canAutoUpgrade, (message) => {
-        new Notice(message);
-      });
+      await codexBinaryManager.autoUpgrade(
+        CODEX_BUNDLE_VERSION,
+        CODEX_ACP_MIN_VERSION,
+        canAutoUpgrade,
+        (message) => {
+          new Notice(message);
+        }
+      );
   },
 
   managedInstall: {

@@ -1,3 +1,6 @@
+import { verifyOpencodeBinary } from "./OpencodeBinaryManager";
+import * as opencodeVersion from "./ui/opencodeVersion";
+import { updateAgentModeBackendFields } from "@/settings/model";
 import { ChatModelProviders } from "@/constants";
 import { logWarn } from "@/logger";
 import { OPENARTIFACTS_WORKSPACE_ROOT_ENV } from "@/openArtifacts/constants";
@@ -48,6 +51,11 @@ function resetPromptState(): void {
   updateSetting("defaultSystemPromptTitle", "");
   updateCachedSystemPrompts([]);
 }
+
+jest.mock("./OpencodeBinaryManager", () => ({
+  ...jest.requireActual("./OpencodeBinaryManager"),
+  verifyOpencodeBinary: jest.fn().mockResolvedValue({ stdout: "1.18.31" }),
+}));
 
 jest.mock("@/logger", () => ({
   logInfo: jest.fn(),
@@ -1061,6 +1069,46 @@ describe("buildOpencodeConfig — context-cache external_directory allow", () =>
 });
 
 describe("OpencodeBackend.buildSpawnDescriptor", () => {
+  it("COMPATIBILITY_ISSUE rejects the actual old executable even when settings claim a supported version", async () => {
+    updateAgentModeBackendFields("opencode", {
+      binaryPath: "/old-opencode",
+      binaryVersion: "2.0.0",
+      binarySource: "managed",
+    });
+    jest.mocked(verifyOpencodeBinary).mockResolvedValueOnce({ stdout: "1.0.0" });
+    const desc = await new OpencodeBackend(NO_MODELS_DEPS).buildSpawnDescriptor({
+      vaultBasePath: "/vault",
+    });
+    expect(() => desc.assertCompatible!()).toThrow("1.0.0");
+    expect(verifyOpencodeBinary).toHaveBeenCalledWith("/old-opencode");
+  });
+
+  it("COMPATIBILITY_ISSUE keeps the selected runtime version after a different installation is published", async () => {
+    updateAgentModeBackendFields("opencode", {
+      binaryPath: "/old-opencode",
+      binaryVersion: "1.18.31",
+      binarySource: "managed",
+    });
+    const desc = await new OpencodeBackend(NO_MODELS_DEPS).buildSpawnDescriptor({
+      vaultBasePath: "/vault",
+    });
+    expect(desc.assertCompatible).toBeDefined();
+    expect(() => desc.assertCompatible!()).not.toThrow();
+    updateAgentModeBackendFields("opencode", {
+      binaryPath: "/new-opencode",
+      binaryVersion: "2.0.0",
+    });
+    const minimum = jest.replaceProperty<
+      { OPENCODE_MIN_ACP_VERSION: string },
+      "OPENCODE_MIN_ACP_VERSION"
+    >(opencodeVersion, "OPENCODE_MIN_ACP_VERSION", "1.19.0");
+    try {
+      expect(() => desc.assertCompatible!()).toThrow("1.18.31");
+    } finally {
+      minimum.restore();
+    }
+  });
+
   beforeEach(() => {
     resetSettings();
     seedSkills([]);

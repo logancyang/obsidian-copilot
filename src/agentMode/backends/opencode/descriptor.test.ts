@@ -1,4 +1,4 @@
-import { OPENCODE_PINNED_VERSION } from "./ui/opencodeVersion";
+import { OPENCODE_PINNED_VERSION, OPENCODE_MIN_ACP_VERSION } from "./ui/opencodeVersion";
 import { getOpencodeBinaryManager, OpencodeBackendDescriptor } from "./descriptor";
 import { legacyVaultDataDir } from "./OpencodeBinaryManager";
 import * as fs from "node:fs";
@@ -587,6 +587,7 @@ describe("descriptor", () => {
           expect(refresh).toHaveBeenCalledTimes(1);
           expect(automatic).toHaveBeenCalledWith(
             OPENCODE_PINNED_VERSION,
+            OPENCODE_MIN_ACP_VERSION,
             canStart,
             expect.any(Function)
           );

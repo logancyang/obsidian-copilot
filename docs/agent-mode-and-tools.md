@@ -204,3 +204,5 @@ Image-only messages appear as "Image attachment" in the queue. Sessions with onl
 ### Managed runtime updates
 
 When Copilot loads with no open agent session, managed Codex and OpenCode runtimes update to the version shipped with Copilot. Existing chats keep their current runtime if they start during the download. A failed download leaves the previous supported runtime available and retries on a later load after 24 hours. Configure lets you retry immediately or select your own binary, which Copilot does not update automatically.
+
+Codex and OpenCode show **Upgrade required** when the installed runtime is below the minimum supported by Copilot. An unsuccessful update keeps that installation unavailable until you upgrade it; only an older runtime that still meets the minimum remains usable. Configure lets you retry immediately. A new minimum requirement permits a fresh automatic update attempt even if a previous attempt was postponed. Custom binaries require a manual update.

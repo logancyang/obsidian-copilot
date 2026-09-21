@@ -7,6 +7,8 @@ import type { PlanUsageReading } from "@/agentMode/session/planUsage";
  * spawn time.
  */
 export interface AcpSpawnDescriptor {
+  /** Checks the runtime selected for this process, independently of later settings changes. */
+  assertCompatible?: () => void;
   command: string;
   args: string[];
   env: NodeJS.ProcessEnv;

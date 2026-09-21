@@ -45,12 +45,17 @@ export type InstallState =
 
 /** Reject execution on an unsupported install, including an already-running process.
  * @param descriptor - The executing backend, when supplied by the session owner.
- * @param settings - Current configuration, not the process's startup snapshot.
+ * @param settings - Current configuration used before a runtime has been captured.
+ * @param process - Existing process whose runtime owns execution compatibility.
  */
 export function assertBackendCompatible(
   descriptor: Pick<BackendDescriptor, "getInstallState"> | undefined,
-  settings: CopilotSettings
+  settings: CopilotSettings,
+  process?: Pick<BackendProcess, "assertCompatible">
 ): void {
+  // Selection changes cannot replace the runtime already serving a session.
+  // COMPATIBILITY_ISSUE
+  if (process?.assertCompatible) return process.assertCompatible();
   // A selectable agent must never execute a binary below the supported minimum.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/531
   const state = descriptor?.getInstallState(settings);

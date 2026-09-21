@@ -1,3 +1,4 @@
+import { assertBinaryCompatible } from "@/agentMode/backends/shared/binaryCompatibility";
 import { v4 as uuidv4 } from "uuid";
 import {
   ManagedBinaryManager,
@@ -13,7 +14,7 @@ import type { ManagedInstallActionState } from "@/agentMode/session/types";
 import { copilotAppDataDir } from "@/utils/appPaths";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 import { getSettings, updateAgentModeBackendFields } from "@/settings/model";
-import { resolveSupportedCodexAcpPackage } from "./codexVersion";
+import { resolveSupportedCodexAcpPackage, CODEX_ACP_MIN_VERSION } from "./codexVersion";
 import { CODEX_ACP_PINNED_VERSION } from "./cliSetup";
 
 import { installCodexArchive, CODEX_BUNDLE_VERSION } from "./codexArchive";
@@ -84,6 +85,12 @@ export class CodexBinaryManager extends ManagedBinaryManager<CodexInstallProgres
   }: ManagedBinaryInstallOptions<CodexInstallProgress> & {
     signal: AbortSignal;
   }): Promise<InstalledBinary> {
+    // Manual retries must not replace a working selection with an unsupported release pin. ISSUE_PENDING
+    assertBinaryCompatible(
+      { kind: "installed", version: CODEX_ACP_PINNED_VERSION, source: "managed" },
+      CODEX_ACP_MIN_VERSION,
+      "Codex adapter"
+    );
     const dataDir = this.getDataDir();
     // A reverted pin may already have a running process; never replace its directory.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/530

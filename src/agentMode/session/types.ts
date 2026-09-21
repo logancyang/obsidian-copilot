@@ -742,6 +742,8 @@ export interface CancelInput {
 export type SessionUpdateHandler = (event: SessionEvent) => void;
 
 export interface BackendProcess {
+  /** Reject execution when this process's own runtime is unsupported. */
+  assertCompatible?: () => void;
   /**
    * Optional bring-up step. ACP backends spawn the subprocess and run the
    * `initialize` handshake here; in-process adapters (Claude SDK) leave this

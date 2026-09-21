@@ -2,6 +2,8 @@ import { FileSystemAdapter, App } from "obsidian";
 import type { BackendDescriptor, PermissionOption } from "@/agentMode/session/types";
 import { AcpBackendProcess } from "./AcpBackendProcess";
 import type { AcpBackend } from "./types";
+import { AcpProcessManager } from "./AcpProcessManager";
+import { sessionIdFromAcp } from "./wireTranslate";
 import type { VaultClient } from "./VaultClient";
 
 jest.mock("@/logger", () => ({
@@ -120,6 +122,54 @@ describe("AcpBackendProcess", () => {
   });
 
   describe("start()", () => {
+    it("COMPATIBILITY_ISSUE rejects an unsupported executable before spawning", async () => {
+      const backend = new AcpBackendProcess(
+        buildApp(),
+        buildStubBackend({
+          buildSpawnDescriptor: jest.fn().mockResolvedValue({
+            command: "/old-agent",
+            args: [],
+            env: {},
+            assertCompatible: () => {
+              throw new Error("Runtime below minimum");
+            },
+          }),
+        }),
+        "1.0.0",
+        buildStubDescriptor()
+      );
+      jest.mocked(AcpProcessManager).mockClear();
+      await expect(backend.start()).rejects.toThrow("Runtime below minimum");
+      expect(AcpProcessManager).not.toHaveBeenCalled();
+    });
+
+    it("COMPATIBILITY_ISSUE shuts down if the spawned runtime becomes incompatible during initialization", async () => {
+      let supported = true;
+      mockInitializeResult = {
+        then(resolve: (value: unknown) => void) {
+          supported = false;
+          resolve({ protocolVersion: 1 });
+        },
+      };
+      const backend = new AcpBackendProcess(
+        buildApp(),
+        buildStubBackend({
+          buildSpawnDescriptor: jest.fn().mockResolvedValue({
+            command: "/old-agent",
+            args: [],
+            env: {},
+            assertCompatible: () => {
+              if (!supported) throw new Error("Runtime below minimum");
+            },
+          }),
+        }),
+        "1.0.0",
+        buildStubDescriptor()
+      );
+      await expect(backend.start()).rejects.toThrow("Runtime below minimum");
+      expect(backend.isRunning()).toBe(false);
+    });
+
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/121 passes the active vault identity to the shared process used by global and Project sessions", async () => {
       const agentBackend = buildStubBackend();
       const backend = new AcpBackendProcess(
@@ -137,6 +187,53 @@ describe("AcpBackendProcess", () => {
       });
     });
   });
+
+  describe.each(["newSession", "prompt", "resumeSession", "loadSession"] as const)(
+    "%s() compatibility",
+    (method) => {
+      it("COMPATIBILITY_ISSUE rejects the old process after the selected installation changes and keeps cancellation available", async () => {
+        let minimum = 1;
+        let selectedVersion = 1;
+        const spawnedVersion = selectedVersion;
+        mockInitializeResult = {
+          protocolVersion: 1,
+          agentCapabilities: {
+            loadSession: true,
+            sessionCapabilities: { resume: {} },
+          },
+        };
+        const backend = new AcpBackendProcess(
+          buildApp(),
+          buildStubBackend({
+            buildSpawnDescriptor: jest.fn().mockResolvedValue({
+              command: "/old-agent",
+              args: [],
+              env: {},
+              assertCompatible: () => {
+                if (spawnedVersion < minimum) throw new Error("Runtime below minimum");
+              },
+            }),
+          }),
+          "1.0.0",
+          buildStubDescriptor()
+        );
+        await backend.start();
+        await backend.newSession({ cwd: "/vault" });
+        selectedVersion = 2;
+        minimum = 2;
+        expect(selectedVersion).toBe(minimum);
+        const sessionId = sessionIdFromAcp("test-session");
+        const call = () =>
+          method === "prompt"
+            ? backend.prompt({ sessionId, prompt: [{ type: "text", text: "Hello" }] })
+            : method === "newSession"
+              ? backend.newSession({ cwd: "/vault" })
+              : backend[method]({ sessionId, cwd: "/vault" });
+        await expect(call()).rejects.toThrow("Runtime below minimum");
+        await expect(backend.cancel({ sessionId })).resolves.toBeUndefined();
+      });
+    }
+  );
 
   describe("routeSessionUpdate()", () => {
     it("routes session updates to the matching session handler and drops unknown ones", async () => {

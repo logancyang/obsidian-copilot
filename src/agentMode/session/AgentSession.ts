@@ -564,7 +564,7 @@ export class AgentSession {
       // user message (see `runTurn`).
       this.projectContextBlock = contextResult?.projectContextBlock ?? null;
       if (this.disposed) return;
-      assertBackendCompatible(this.getDescriptor?.(), getSettings());
+      assertBackendCompatible(this.getDescriptor?.(), getSettings(), this.backend);
       const resp = await backend.newSession({
         cwd,
         // Capture the owning scope alongside cwd so the backend can resolve
@@ -946,7 +946,7 @@ export class AgentSession {
     promptContent?: PromptContent[],
     mentionedAgents?: ReadonlyArray<BackendId>
   ): { userMessageId: string; turn: Promise<StopReason> } {
-    assertBackendCompatible(this.getDescriptor?.(), getSettings());
+    assertBackendCompatible(this.getDescriptor?.(), getSettings(), this.backend);
     const status = this.getStatus();
     if (status === "starting") {
       throw new Error("Session is still starting");
@@ -1114,7 +1114,7 @@ export class AgentSession {
       const promptStarted = !signal.aborted;
       let resp: PromptOutput = { stopReason: "cancelled" };
       if (promptStarted) {
-        assertBackendCompatible(this.getDescriptor?.(), getSettings());
+        assertBackendCompatible(this.getDescriptor?.(), getSettings(), this.backend);
         const backingPrompt = this.backend.prompt(req);
         resp = await Promise.race([
           backingPrompt,

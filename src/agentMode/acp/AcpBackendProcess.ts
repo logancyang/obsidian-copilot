@@ -133,6 +133,7 @@ function updateModelConfigOptionValue(
  */
 export class AcpBackendProcess implements BackendProcess {
   private process: AcpProcessManager | null = null;
+  assertCompatible: (() => void) | undefined;
   private connection: ClientSideConnection | null = null;
   private readonly domainHandlers = new Map<SessionId, DomainSessionUpdateHandler>();
   /**
@@ -225,6 +226,11 @@ export class AcpBackendProcess implements BackendProcess {
       vaultName: this.app.vault.getName(),
     });
 
+    // A new selected download must not vouch for an older process.
+    // COMPATIBILITY_ISSUE
+    this.assertCompatible = descriptor.assertCompatible;
+    this.assertCompatible?.();
+
     const procOpts: AcpProcessManagerOptions = {
       command: descriptor.command,
       args: descriptor.args,
@@ -280,6 +286,7 @@ export class AcpBackendProcess implements BackendProcess {
           version: this.clientVersion,
         },
       });
+      this.assertCompatible?.();
       if (init.agentCapabilities?.sessionCapabilities?.list != null) {
         this.capabilities.set("session/list", true);
       }
@@ -374,6 +381,7 @@ export class AcpBackendProcess implements BackendProcess {
   }
 
   async newSession(params: OpenSessionInput): Promise<OpenSessionOutput> {
+    this.assertCompatible?.();
     const req: NewSessionRequest = {
       cwd: params.cwd,
       mcpServers: [],
@@ -392,6 +400,7 @@ export class AcpBackendProcess implements BackendProcess {
   }
 
   async prompt(params: PromptInput): Promise<PromptOutput> {
+    this.assertCompatible?.();
     const resp = await this.requireConnection().prompt({
       sessionId: sessionIdToAcp(params.sessionId),
       prompt: promptContentToAcp(params.prompt),
@@ -665,6 +674,7 @@ export class AcpBackendProcess implements BackendProcess {
   }
 
   async resumeSession(params: ResumeSessionInput): Promise<ResumeSessionOutput> {
+    this.assertCompatible?.();
     const wireResp = await this.dispatchCapability(
       "session/resume",
       (c) =>
@@ -688,6 +698,7 @@ export class AcpBackendProcess implements BackendProcess {
   }
 
   async loadSession(params: LoadSessionInput): Promise<LoadSessionOutput> {
+    this.assertCompatible?.();
     const sessionId = params.sessionId;
     // Installed before the request goes out: the agent replays the conversation
     // while it is in flight, so a collector added afterwards would miss it.

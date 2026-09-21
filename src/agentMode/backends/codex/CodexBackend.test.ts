@@ -11,6 +11,8 @@ import { MIYO_SEARCH_FOLDER_ENV, MIYO_SEARCH_SCOPE_ENV } from "@/builtinSkills/b
 import { detectBinary } from "@/utils/detectBinary";
 import { CodexBackend } from "./CodexBackend";
 import { resolveSupportedCodexAcpEntry } from "./codexVersion";
+import * as codexVersion from "./codexVersion";
+import { updateAgentModeBackendFields } from "@/settings/model";
 
 jest.mock("@/utils/detectBinary", () => ({ detectBinary: jest.fn() }));
 
@@ -24,6 +26,12 @@ jest.mock("./codexVersion", () => {
   const actual = jest.requireActual("./codexVersion");
   return {
     ...actual,
+    __esModule: true,
+    inspectCodexAcpPackage: (path: string) => ({
+      entryPath: jest.mocked(resolveSupportedCodexAcpEntry)(path),
+      version: "1.11.0",
+      runtimeVersion: "1.11.0",
+    }),
     resolveSupportedCodexAcpEntry: jest
       .fn()
       .mockReturnValue("/npm/lib/node_modules/@agentclientprotocol/codex-acp/dist/index.js"),
@@ -62,6 +70,22 @@ jest.mock("@/agentMode/skills", () => {
 describe("CodexBackend", () => {
   describe("CodexBackend", () => {
     describe("buildSpawnDescriptor()", () => {
+      it("COMPATIBILITY_ISSUE keeps the inspected runtime version after a different installation is selected", async () => {
+        const desc = await new CodexBackend().buildSpawnDescriptor({ vaultBasePath: "/vault" });
+        expect(desc.assertCompatible).toBeDefined();
+        expect(() => desc.assertCompatible!()).not.toThrow();
+        updateAgentModeBackendFields("codex", { binaryPath: "/new-codex", binaryVersion: "2.0.0" });
+        const minimum = jest.replaceProperty<
+          { CODEX_ACP_MIN_VERSION: string },
+          "CODEX_ACP_MIN_VERSION"
+        >(codexVersion, "CODEX_ACP_MIN_VERSION", "1.12.0");
+        try {
+          expect(() => desc.assertCompatible!()).toThrow("1.11.0");
+        } finally {
+          minimum.restore();
+        }
+      });
+
       const hostPlatform = process.platform;
       // POSIX descriptor fixtures must not inherit the Windows Node-launch branch.
       // https://github.com/logancyang/obsidian-copilot/issues/2967
