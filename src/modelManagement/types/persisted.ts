@@ -32,8 +32,14 @@ export interface ConfiguredModel {
   configuredAt: number;
 }
 
+export interface BackendDefaultModel {
+  configuredModelId: string;
+  effort?: string | null;
+}
+
 export interface BackendConfig {
   enabledModels: string[];
+  default?: BackendDefaultModel;
 }
 
 export interface PersistedCopilotPlusCatalog {

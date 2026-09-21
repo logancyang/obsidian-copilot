@@ -17,8 +17,7 @@ jest.mock("@/agentMode", () => ({
   partitionOpencodeOnlyWireIds: jest.requireActual(
     "@/agentMode/backends/opencode/opencodeProbePartition"
   ).partitionOpencodeOnlyWireIds,
-  mapProviderToOpencodeId: jest.requireActual("@/agentMode/backends/opencode/opencodeModelResolve")
-    .mapProviderToOpencodeId,
+  mapProviderToOpencodeId: jest.requireActual("@/utils/opencodeModelId").mapProviderToOpencodeId,
 }));
 
 import { buildManagedOpencodeProviderIds, wireAgentModelDiscovery } from "./agentModelDiscovery";

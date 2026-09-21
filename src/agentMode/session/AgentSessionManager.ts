@@ -16,6 +16,7 @@ import {
   setSettings,
   settingsStore,
   subscribeToSettingsChange,
+  updateBackendDefaultModel,
   type CopilotSettings,
 } from "@/settings/model";
 import {
@@ -37,6 +38,11 @@ import { readFrontmatterViaAdapter } from "@/utils/vaultAdapterUtils";
 import { App, FileSystemAdapter, Notice, Platform, TFile } from "obsidian";
 import { v4 as uuidv4 } from "uuid";
 import { AgentSession, ATTENTION_TRIGGER_STATUSES, DEFAULT_TITLE_PREFIX } from "./AgentSession";
+import {
+  findConfiguredModelId,
+  readBackendDefault,
+  readStoredDefault,
+} from "./backendDefaultModel";
 import type { AgentChatPersistenceManager } from "./AgentChatPersistenceManager";
 import type { AgentModelPreloader } from "./AgentModelPreloader";
 import { buildNativeChatId, parseNativeChatId } from "@/utils/nativeChatId";
@@ -289,20 +295,19 @@ export class AgentSessionManager {
   }
 
   private onDefaultSelectionsChanged(prev: CopilotSettings, next: CopilotSettings): void {
-    const prevBackends = prev.agentMode?.backends as
-      | Record<string, { defaultModel?: ModelSelection | null } | undefined>
-      | undefined;
-    const nextBackends = next.agentMode?.backends as
-      | Record<string, { defaultModel?: ModelSelection | null } | undefined>
-      | undefined;
     for (const session of this.sessions.values()) {
       if (session.getStatus() === "closed") continue;
       const backendId = session.backendId;
-      const before = prevBackends?.[backendId]?.defaultModel ?? null;
-      const after = nextBackends?.[backendId]?.defaultModel ?? null;
-      if (before?.baseModelId === after?.baseModelId && before?.effort === after?.effort) continue;
       const descriptor = this.opts.resolveDescriptor(backendId);
       if (!descriptor) continue;
+      const before = readStoredDefault(prev, backendId);
+      const after = readStoredDefault(next, backendId);
+      if (
+        before?.configuredModelId === after?.configuredModelId &&
+        (before?.effort ?? null) === (after?.effort ?? null)
+      ) {
+        continue;
+      }
       this.enqueueDefaultApply(session, descriptor);
     }
   }
@@ -1389,10 +1394,8 @@ export class AgentSessionManager {
   }
 
   getDefaultSelection(backendId: BackendId): ModelSelection | null {
-    const backends = getSettings().agentMode?.backends as
-      | Record<string, { defaultModel?: ModelSelection | null } | undefined>
-      | undefined;
-    return backends?.[backendId]?.defaultModel ?? null;
+    const descriptor = this.opts.resolveDescriptor(backendId);
+    return descriptor ? readBackendDefault(descriptor, getSettings()) : null;
   }
 
   /**
@@ -1468,20 +1471,22 @@ export class AgentSessionManager {
     backendId: BackendId,
     selection: ModelSelection | null
   ): Promise<void> {
-    setSettings((cur) => {
-      const existing = (cur.agentMode.backends as Record<string, unknown> | undefined)?.[
-        backendId
-      ] as Record<string, unknown> | undefined;
-      return {
-        agentMode: {
-          ...cur.agentMode,
-          backends: {
-            ...cur.agentMode.backends,
-            [backendId]: { ...(existing ?? {}), defaultModel: selection },
-          },
-        },
-      };
-    });
+    const backend = backendId as keyof CopilotSettings["backends"];
+    if (!selection) {
+      updateBackendDefaultModel(backend, null);
+      return;
+    }
+    const descriptor = this.opts.resolveDescriptor(backendId);
+    const configuredModelId = descriptor
+      ? findConfiguredModelId(descriptor, selection.baseModelId, getSettings())
+      : null;
+    // An unresolvable pointer would render as a blank picker the user could not clear.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/540
+    if (!configuredModelId) {
+      logWarn(`[AgentMode] ${backendId} has no configured model for ${selection.baseModelId}`);
+      return;
+    }
+    updateBackendDefaultModel(backend, { configuredModelId, effort: selection.effort });
   }
 
   async applySelection(

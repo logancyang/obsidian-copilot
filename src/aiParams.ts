@@ -13,7 +13,8 @@ const modelKeyAtom = atom(
     if (userValue !== null) {
       return userValue;
     }
-    return get(settingsAtom).defaultModelKey;
+    // `""` resolves to the first enabled model through `findChatBackendEntry`: https://github.com/Brevilabs/obsidian-copilot-private/issues/540
+    return get(settingsAtom).backends?.chat?.default?.configuredModelId ?? "";
   },
   (get, set, newValue) => {
     set(userModelKeyAtom, newValue);

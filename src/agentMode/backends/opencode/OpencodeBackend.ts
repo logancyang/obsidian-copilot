@@ -17,7 +17,8 @@ import {
   sanitizeBuiltinSkillEnvOverrides,
 } from "@/agentMode/backends/shared/builtinSkillEnv";
 import { OpencodeBackendDescriptor } from "./descriptor";
-import { copilotPlusModelId, mapProviderToOpencodeId } from "./opencodeModelResolve";
+import { mapProviderToOpencodeId } from "@/utils/opencodeModelId";
+import { copilotPlusModelId } from "./opencodeModelResolve";
 import type { PlanUsageReading } from "@/agentMode/session/planUsage";
 import { CopilotPlusUsageReader } from "@/agentMode/backends/shared/copilotPlusUsage";
 import type { SelfHostWebSearchAgentChannel } from "@/LLMProviders/selfHostServices";

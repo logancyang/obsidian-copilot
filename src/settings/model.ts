@@ -8,6 +8,7 @@ import type { CopilotMode, ModelSelection } from "@/agentMode";
 import { ChainType } from "@/chainType";
 import type {
   BackendConfig,
+  BackendDefaultModel,
   BackendType,
   ConfiguredModel,
   PersistedCopilotPlusCatalog,
@@ -52,7 +53,7 @@ export interface CopilotSettings {
   deepseekApiKey: string;
   siliconflowApiKey: string;
   defaultChainType: ChainType;
-  defaultModelKey: string;
+  defaultModelKey?: string;
   contextTurns: number;
   lastDismissedVersion: string | null;
   lastShownStartupVersion: string | null;
@@ -297,6 +298,19 @@ export function updateAgentModeBackendFields<
       },
     },
   }));
+}
+
+export function updateBackendDefaultModel(
+  backend: BackendType,
+  next: BackendDefaultModel | null
+): void {
+  setSettings((cur) => {
+    const existing = cur.backends?.[backend];
+    const config: BackendConfig = { ...existing, enabledModels: existing?.enabledModels ?? [] };
+    if (next) config.default = next;
+    else delete config.default;
+    return { backends: { ...cur.backends, [backend]: config } };
+  });
 }
 
 export function getSettings(): Readonly<CopilotSettings> {
