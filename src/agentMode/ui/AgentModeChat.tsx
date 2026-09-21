@@ -41,7 +41,7 @@ export const AgentModeChat: React.FC<Props> = ({
   const installState = useBackendInstallState(descriptor, plugin);
   const auth = useBackendAuthState(descriptor);
   const awaitingAuth = Boolean(
-    installState.kind === "ready" && descriptor.auth && auth.status === null
+    installState.kind === "ready" && descriptor.auth && (auth.checking || auth.status === null)
   );
   const signedOut = Boolean(descriptor.auth && auth.status?.signedIn === false);
   const managedInstall = useManagedInstallActionState(descriptor, plugin);
@@ -157,7 +157,8 @@ export const AgentModeChat: React.FC<Props> = ({
   const cannotLaunch =
     installState.kind === "absent" ||
     installState.kind === "error" ||
-    (installState.kind === "incompatible" && installState.source === "custom") ||
+    (installState.kind === "incompatible" &&
+      (installState.source === "custom" || !descriptor.managedInstall)) ||
     (installState.kind === "ready" && signedOut);
 
   if (cannotLaunch) {

@@ -45,6 +45,7 @@ describe("AgentModeStatus", () => {
       installState = { kind: "ready", source: "custom" };
       authState = {
         status: null,
+        checking: false,
         signingIn: false,
         signingOut: false,
         signOut: jest.fn(),
@@ -184,6 +185,7 @@ describe("AgentModeStatus", () => {
       descriptor = { ...descriptor, auth: {} as BackendAuth };
       authState = {
         status: { signedIn: false },
+        checking: false,
         signingIn: false,
         signingOut: false,
         signOut: jest.fn(),

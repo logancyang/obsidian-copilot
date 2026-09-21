@@ -14,8 +14,9 @@ import React from "react";
 let mockInstallAction = { kind: "idle" } as { kind: string; label?: string; percent?: number };
 let mockAuthStatus: { signedIn: boolean } | null = { signedIn: true };
 let mockHasAuth = false;
+let mockAuthChecking = false;
 jest.mock("@/agentMode/session/useBackendAuthState", () => ({
-  useBackendAuthState: jest.fn(() => ({ status: mockAuthStatus })),
+  useBackendAuthState: jest.fn(() => ({ status: mockAuthStatus, checking: mockAuthChecking })),
 }));
 
 let mockManagedInstall: object | undefined;
@@ -115,6 +116,7 @@ function renderFallback(installState: InstallState, lastError: string | null, st
 describe("AgentModeChat", () => {
   afterEach(() => {
     mockHasAuth = false;
+    mockAuthChecking = false;
     mockAuthStatus = { signedIn: true };
     mockManagedInstall = undefined;
     mockInstallAction = { kind: "idle" };
@@ -253,6 +255,32 @@ describe("AgentModeChat", () => {
   });
 
   describe("known launch blockers", () => {
+    it("routes an outdated auto-detected backend without managed installation to setup (https://github.com/Brevilabs/obsidian-copilot-private/issues/532)", () => {
+      renderFallback(
+        {
+          kind: "incompatible",
+          source: "managed",
+          currentVersion: "1",
+          minVersion: "2",
+          message: "Too old",
+        },
+        null
+      );
+      expect(screen.getByTestId("select-panel")).toBeTruthy();
+    });
+    it("waits for fresh authentication despite cached sign-in (https://github.com/Brevilabs/obsidian-copilot-private/issues/532)", () => {
+      mockHasAuth = true;
+      mockAuthChecking = true;
+      const { manager, getOrCreateActiveSession } = makeManager({
+        activeProjectId: GLOBAL_SCOPE,
+        scopeSessions: [],
+        poolSessions: [],
+      });
+      renderChat(manager);
+      expect(screen.getByText("Checking agent sign-in…")).toBeTruthy();
+      expect(getOrCreateActiveSession).not.toHaveBeenCalled();
+    });
+
     const failures: Array<[string, InstallState, boolean]> = [
       ["missing", { kind: "absent" }, false],
       ["corrupt", { kind: "error", message: "Cannot execute binary" }, false],
