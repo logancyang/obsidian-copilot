@@ -1,5 +1,5 @@
 import { Notice } from "obsidian";
-import { OPENCODE_PINNED_VERSION, OPENCODE_MIN_ACP_VERSION } from "./ui/opencodeVersion";
+import { OPENCODE_PINNED_VERSION, OPENCODE_MIN_VERSION } from "./ui/opencodeVersion";
 import { resolveEffort } from "@/lib/model-effort";
 import { OpencodeInstallModal } from "@/agentMode/backends/opencode/OpencodeInstallModal";
 import OpencodeLogo from "@/agentMode/backends/opencode/logo.svg";
@@ -358,7 +358,7 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
     if (canAutoUpgrade)
       await manager.autoUpgrade(
         OPENCODE_PINNED_VERSION,
-        OPENCODE_MIN_ACP_VERSION,
+        OPENCODE_MIN_VERSION,
         canAutoUpgrade,
         (message) => {
           new Notice(message);

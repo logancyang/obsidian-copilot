@@ -1,4 +1,4 @@
-import { installCodexArchive, CODEX_BUNDLE_VERSION } from "./codexArchive";
+import { installCodexArchive, CODEX_PINNED_VERSION } from "./codexArchive";
 import { requestUrl } from "obsidian";
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -25,7 +25,7 @@ describe("codexArchive", () => {
     beforeEach(() => {
       stage = fs.mkdtempSync(path.join(os.tmpdir(), "codex-archive-"));
       const target = `${process.platform}-${process.arch}`;
-      stem = `codex-acp-v${CODEX_BUNDLE_VERSION}-${target}`;
+      stem = `codex-acp-v${CODEX_PINNED_VERSION}-${target}`;
       const extension = process.platform === "linux" ? ".tar.gz" : ".zip";
       bytes = new Uint8Array(
         fs.readFileSync(path.join(__dirname, "__fixtures__", `runtime${extension}`))
@@ -33,7 +33,7 @@ describe("codexArchive", () => {
       manifest = {
         archive: `${stem}${extension}`,
         target,
-        acpVersion: CODEX_BUNDLE_VERSION,
+        acpVersion: CODEX_PINNED_VERSION,
         sha256: createHash("sha256").update(bytes).digest("hex"),
         archiveBytes: bytes.length,
         extractedBytes: 13,
@@ -87,7 +87,7 @@ describe("codexArchive", () => {
       async (extension) => {
         if (extension === ".tar.gz") Object.defineProperty(process, "platform", { value: "linux" });
         const target = `${process.platform}-${process.arch}`;
-        stem = `codex-acp-v${CODEX_BUNDLE_VERSION}-${target}`;
+        stem = `codex-acp-v${CODEX_PINNED_VERSION}-${target}`;
         bytes = new Uint8Array(
           fs.readFileSync(path.join(__dirname, "__fixtures__", `runtime${extension}`))
         );
@@ -101,7 +101,7 @@ describe("codexArchive", () => {
         expect(fs.readFileSync(path.join(stage, "codex-runtime/codex"), "utf8")).toBe("runtime");
         expect(fs.existsSync(path.join(stage, manifest.archive as string))).toBe(false);
         expect(requestUrl).toHaveBeenCalledWith(
-          `https://github.com/Brevilabs/codex-acp-binary/releases/download/v${CODEX_BUNDLE_VERSION}/${stem}.json`
+          `https://github.com/Brevilabs/codex-acp-binary/releases/download/v${CODEX_PINNED_VERSION}/${stem}.json`
         );
       }
     );
@@ -116,7 +116,7 @@ describe("codexArchive", () => {
         );
         Object.assign(manifest, {
           target,
-          archive: `codex-acp-v${CODEX_BUNDLE_VERSION}-${target}${extension}`,
+          archive: `codex-acp-v${CODEX_PINNED_VERSION}-${target}${extension}`,
           sha256: createHash("sha256").update(bytes).digest("hex"),
           archiveBytes: bytes.length,
         });
@@ -131,7 +131,7 @@ describe("codexArchive", () => {
           .mockResolvedValue();
         await installCodexArchive(stage, new AbortController().signal);
         expect(mockGet.mock.calls[0][0]).toBe(
-          `https://github.com/Brevilabs/codex-acp-binary/releases/download/v${CODEX_BUNDLE_VERSION}/${manifest.archive as string}`
+          `https://github.com/Brevilabs/codex-acp-binary/releases/download/v${CODEX_PINNED_VERSION}/${manifest.archive as string}`
         );
         expect(extractor).toHaveBeenCalledWith(
           path.join(stage, manifest.archive as string),

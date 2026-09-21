@@ -9,7 +9,7 @@ import {
   type BinarySettings,
   type InstalledBinary,
 } from "@/agentMode/backends/shared/ManagedBinaryManager";
-import { OPENCODE_MIN_ACP_VERSION, OPENCODE_PINNED_VERSION } from "./ui/opencodeVersion";
+import { OPENCODE_MIN_VERSION, OPENCODE_PINNED_VERSION } from "./ui/opencodeVersion";
 import { OPENCODE_RELEASE_API_URL_TEMPLATE } from "@/constants";
 import { logError, logInfo, logWarn } from "@/logger";
 import type CopilotPlugin from "@/main";
@@ -182,7 +182,7 @@ export function readOpencodeSettings(): OpencodeBackendSettings {
 
 /**
  * Whether an installed opencode version predates the minimum the plugin
- * supports ({@link OPENCODE_MIN_ACP_VERSION}). Older binaries either predate
+ * supports ({@link OPENCODE_MIN_VERSION}). Older binaries either predate
  * the current model catalog or leave the backing turn running after ACP
  * cancellation. An unknown version isn't flagged — we can't prove it's old,
  * and a missing install is handled by the install prompt instead.
@@ -192,7 +192,7 @@ export function isOpencodeVersionOutdated(version: string | undefined): boolean 
   return (
     classifyBinaryInstall(
       { kind: "installed", version, source: "managed" },
-      OPENCODE_MIN_ACP_VERSION,
+      OPENCODE_MIN_VERSION,
       "opencode"
     ).kind !== "ready"
   );
@@ -203,7 +203,7 @@ export function isOpencodeVersionOutdated(version: string | undefined): boolean 
  * @param state - The detected OpenCode installation state to interpret for backend use.
  */
 export function toOpencodeInstallState(state: InstallState): BackendInstallState {
-  return classifyBinaryInstall(state, OPENCODE_MIN_ACP_VERSION, "opencode");
+  return classifyBinaryInstall(state, OPENCODE_MIN_VERSION, "opencode");
 }
 
 function updateOpencodeFields(partial: Partial<OpencodeBackendSettings>): void {
@@ -408,7 +408,7 @@ export class OpencodeBinaryManager extends ManagedBinaryManager<ProgressEvent, I
     // Manual retries must not replace a working selection with an unsupported release pin. https://github.com/Brevilabs/obsidian-copilot-private/issues/535
     assertBinaryCompatible(
       { kind: "installed", version, source: "managed" },
-      OPENCODE_MIN_ACP_VERSION,
+      OPENCODE_MIN_VERSION,
       "opencode"
     );
     const dataDir = this.getDataDir();
@@ -596,7 +596,7 @@ export class OpencodeBinaryManager extends ManagedBinaryManager<ProgressEvent, I
       }
       if (isOpencodeVersionOutdated(version)) {
         throw new Error(
-          `opencode upgrade did not reach the required version ${OPENCODE_MIN_ACP_VERSION}+ ` +
+          `opencode upgrade did not reach the required version ${OPENCODE_MIN_VERSION}+ ` +
             `(still v${version}).`
         );
       }

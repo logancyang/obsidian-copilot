@@ -1,6 +1,6 @@
 import * as codexVersion from "./codexVersion";
-import { installCodexArchive, CODEX_BUNDLE_VERSION } from "./codexArchive";
-// Only the download is faked: the real CODEX_BUNDLE_VERSION must reach the manager so the
+import { installCodexArchive, CODEX_PINNED_VERSION } from "./codexArchive";
+// Only the download is faked: the real CODEX_PINNED_VERSION must reach the manager so the
 // install assertions still compare the version directory against the adapter version the
 // launcher check demands. A literal here decouples the two on every pin bump.
 jest.mock("./codexArchive", () => ({
@@ -15,7 +15,6 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { CodexBinaryManager } from "./CodexBinaryManager";
-import { CODEX_ACP_PINNED_VERSION } from "./cliSetup";
 
 jest.mock("@/utils/detectBinary", () => ({
   ...jest.requireActual("@/utils/detectBinary"),
@@ -47,7 +46,7 @@ function setPlatform(platform: NodeJS.Platform): void {
   Object.defineProperty(process, "platform", { configurable: true, value: platform });
 }
 
-function writeAdapter(prefix: string, version = CODEX_ACP_PINNED_VERSION): string {
+function writeAdapter(prefix: string, version = CODEX_PINNED_VERSION): string {
   const root = path.join(prefix, "node_modules", "@agentclientprotocol", "codex-acp");
   const entry = path.join(root, "dist", "index.js");
   fs.mkdirSync(path.dirname(entry), { recursive: true });
@@ -75,7 +74,7 @@ describe("CodexBinaryManager", () => {
       mockedExecFile.mockReset().mockImplementation((_command, _args, _options, callback) => {
         (callback as (error: Error | null, stdout: string, stderr: string) => void)(
           null,
-          `${CODEX_ACP_PINNED_VERSION} Codex CLI`,
+          `${CODEX_PINNED_VERSION} Codex CLI`,
           ""
         );
         return {} as childProcess.ChildProcess;
@@ -88,7 +87,7 @@ describe("CodexBinaryManager", () => {
           fs.writeFileSync(
             path.join(stage, "provenance.json"),
             JSON.stringify({
-              acpVersion: CODEX_ACP_PINNED_VERSION,
+              acpVersion: CODEX_PINNED_VERSION,
               target: `darwin-${process.arch}`,
             })
           );
@@ -111,14 +110,15 @@ describe("CodexBinaryManager", () => {
         fs.writeFileSync(previous, "working runtime");
         updateAgentModeBackendFields("codex", {
           binaryPath: previous,
-          binaryVersion: CODEX_BUNDLE_VERSION,
+          binaryVersion: CODEX_PINNED_VERSION,
           binarySource: "managed",
         });
         const selected = { ...getSettings().agentMode.backends?.codex };
-        const minimum = jest.replaceProperty<
-          { CODEX_ACP_MIN_VERSION: string },
-          "CODEX_ACP_MIN_VERSION"
-        >(codexVersion, "CODEX_ACP_MIN_VERSION", "999.0.0");
+        const minimum = jest.replaceProperty<{ CODEX_MIN_VERSION: string }, "CODEX_MIN_VERSION">(
+          codexVersion,
+          "CODEX_MIN_VERSION",
+          "999.0.0"
+        );
         try {
           await expect(manager.install()).rejects.toThrow("requires");
           expect(installCodexArchive).not.toHaveBeenCalled();
@@ -135,10 +135,10 @@ describe("CodexBinaryManager", () => {
         await manager.install();
         expect(getSettings().agentMode.backends?.codex).toMatchObject({
           binarySource: "managed",
-          binaryVersion: CODEX_BUNDLE_VERSION,
-          binaryPath: path.join(manager.getDataDir(), CODEX_BUNDLE_VERSION, "codex-acp"),
+          binaryVersion: CODEX_PINNED_VERSION,
+          binaryPath: path.join(manager.getDataDir(), CODEX_PINNED_VERSION, "codex-acp"),
         });
-        expect(fs.readdirSync(manager.getDataDir())).toEqual([CODEX_ACP_PINNED_VERSION]);
+        expect(fs.readdirSync(manager.getDataDir())).toEqual([CODEX_PINNED_VERSION]);
         expect(mockedDetectBinary).not.toHaveBeenCalled();
         expect(listener).toHaveBeenCalled();
         expect(manager.getActionState()).toEqual({ kind: "idle" });
@@ -158,7 +158,7 @@ describe("CodexBinaryManager", () => {
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 rejects a wrong adapter version or missing bundled runtime before selecting files", async () => {
         const manager = new CodexBinaryManager();
         const before = getSettings().agentMode.backends?.codex;
-        for (const output of ["0.0.1", CODEX_ACP_PINNED_VERSION]) {
+        for (const output of ["0.0.1", CODEX_PINNED_VERSION]) {
           mockedExecFile.mockImplementation((_command, _args, _options, callback) => {
             (callback as (error: Error | null, stdout: string, stderr: string) => void)(
               null,
@@ -259,7 +259,7 @@ describe("CodexBinaryManager", () => {
         await manager.setCustomBinaryPath(linked);
         expect(getSettings().agentMode.backends?.codex).toMatchObject({
           binaryPath: fs.realpathSync(entry),
-          binaryVersion: CODEX_ACP_PINNED_VERSION,
+          binaryVersion: CODEX_PINNED_VERSION,
           binarySource: "custom",
         });
       });
@@ -292,7 +292,7 @@ describe("CodexBinaryManager", () => {
             ...current.agentMode,
             backends: {
               ...current.agentMode.backends,
-              codex: { binaryPath: entry, binaryVersion: CODEX_ACP_PINNED_VERSION },
+              codex: { binaryPath: entry, binaryVersion: CODEX_PINNED_VERSION },
             },
           },
         }));
@@ -311,12 +311,12 @@ describe("CodexBinaryManager", () => {
         mockedExecFile.mockImplementation((command, args, _options, callback) => {
           const cb = callback as (error: Error | null, stdout: string, stderr: string) => void;
           manager.cancelCurrentOperation();
-          cb(null, `${CODEX_ACP_PINNED_VERSION} Codex CLI`, "");
+          cb(null, `${CODEX_PINNED_VERSION} Codex CLI`, "");
           return {} as childProcess.ChildProcess;
         });
         await expect(manager.install()).rejects.toThrow("Aborted");
         expect(getSettings().agentMode.backends?.codex).toEqual(before);
-        expect(fs.existsSync(path.join(manager.getDataDir(), CODEX_BUNDLE_VERSION))).toBe(false);
+        expect(fs.existsSync(path.join(manager.getDataDir(), CODEX_PINNED_VERSION))).toBe(false);
         expect(manager.getRuntimeState()).toEqual({ kind: "idle" });
       });
     });

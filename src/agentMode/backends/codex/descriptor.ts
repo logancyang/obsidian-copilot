@@ -31,14 +31,10 @@ import type {
 import { formatCodexModelId, parseCodexModelId } from "@/utils/codexModelId";
 import { codexAcpSearchDirs, resolveCodexAcpBinary } from "./codexBinaryResolver";
 import { CodexBinaryManager } from "./CodexBinaryManager";
-import { CODEX_BUNDLE_VERSION } from "./codexArchive";
+import { CODEX_PINNED_VERSION } from "./codexArchive";
 import { CODEX_BINARY_NAME } from "./cliSetup";
 import { buildCodexModeMapping } from "./codexModeMapping";
-import {
-  isSupportedCodexAcpPath,
-  inspectCodexAcpPackage,
-  CODEX_ACP_MIN_VERSION,
-} from "./codexVersion";
+import { isSupportedCodexAcpPath, inspectCodexAcpPackage, CODEX_MIN_VERSION } from "./codexVersion";
 import { classifyBinaryInstall } from "@/agentMode/backends/shared/binaryCompatibility";
 
 const codexBinaryManager = new CodexBinaryManager();
@@ -169,7 +165,7 @@ export const CodexBackendDescriptor: BackendDescriptor = {
           version: installed.runtimeVersion,
           source: configured.binarySource ?? "custom",
         },
-        CODEX_ACP_MIN_VERSION,
+        CODEX_MIN_VERSION,
         "Codex"
       );
     } catch (error) {
@@ -178,7 +174,7 @@ export const CodexBackendDescriptor: BackendDescriptor = {
         (error as NodeJS.ErrnoException).code === "ENOENT"
           ? { kind: "absent" }
           : { kind: "error", message: error instanceof Error ? error.message : String(error) },
-        CODEX_ACP_MIN_VERSION,
+        CODEX_MIN_VERSION,
         "Codex"
       );
     }
@@ -213,8 +209,8 @@ export const CodexBackendDescriptor: BackendDescriptor = {
     codexBinaryManager.forgetSettledError();
     if (canAutoUpgrade)
       await codexBinaryManager.autoUpgrade(
-        CODEX_BUNDLE_VERSION,
-        CODEX_ACP_MIN_VERSION,
+        CODEX_PINNED_VERSION,
+        CODEX_MIN_VERSION,
         canAutoUpgrade,
         (message) => {
           new Notice(message);

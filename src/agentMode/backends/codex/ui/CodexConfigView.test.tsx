@@ -6,12 +6,12 @@ import {
   type CodexConfigViewProps,
   type CodexManagedInfo,
 } from "./CodexConfigView";
-import { CODEX_BUNDLE_VERSION } from "@/agentMode/backends/codex/cliSetup";
+import { CODEX_PINNED_VERSION } from "@/agentMode/backends/codex/cliSetup";
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/368";
 const MANAGED: CodexManagedInfo = {
   platform: "darwin-arm64",
-  version: CODEX_BUNDLE_VERSION,
+  version: CODEX_PINNED_VERSION,
   destination: "~/.obsidian-copilot/codex",
   run: { kind: "idle" },
 };
@@ -58,7 +58,7 @@ describe("CodexConfigView", () => {
       expect(screen.getByRole("radiogroup", { name: "codex-acp binary source" })).toBeTruthy();
       expect(screen.queryByRole("textbox")).toBeNull();
       expect(screen.getByText("darwin-arm64")).toBeTruthy();
-      expect(screen.getByText(`v${CODEX_BUNDLE_VERSION} (pinned)`)).toBeTruthy();
+      expect(screen.getByText(`v${CODEX_PINNED_VERSION} (pinned)`)).toBeTruthy();
       expect(screen.getByText("~/.obsidian-copilot/codex")).toBeTruthy();
       fireEvent.click(screen.getByRole("radio", { name: "My own binary" }));
       expect(onSourceChange).toHaveBeenCalledWith("custom");
@@ -192,7 +192,7 @@ describe("CodexConfigView", () => {
           kind: "incompatible",
           source: "managed",
           currentVersion: "1.9.0-r1",
-          minVersion: CODEX_BUNDLE_VERSION,
+          minVersion: CODEX_PINNED_VERSION,
           message: "Upgrade required",
         },
         activeSource: "managed",

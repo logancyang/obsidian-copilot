@@ -8,7 +8,7 @@ const SEMVER_PATTERN =
 
 // Bundled CLI authentication requires the passthrough added in version 0.0.45.
 // https://github.com/logancyang/obsidian-copilot/issues/2967
-export const CODEX_ACP_MIN_VERSION = "0.0.45";
+export const CODEX_MIN_VERSION = "0.0.45";
 
 export interface CodexAcpInvocation {
   command: string;
@@ -36,7 +36,7 @@ function defaultPackageFs(): CodexAcpPackageFs {
 
 function unsupportedAdapter(): Error {
   return new Error(
-    `The configured Codex adapter is not supported. Install ${CURRENT_PACKAGE_NAME} ${CODEX_ACP_MIN_VERSION} or newer, then run Auto-detect again.`
+    `The configured Codex adapter is not supported. Install ${CURRENT_PACKAGE_NAME} ${CODEX_MIN_VERSION} or newer, then run Auto-detect again.`
   );
 }
 
@@ -159,7 +159,7 @@ export function resolveSupportedCodexAcpPackage(
   );
   assertBinaryCompatible(
     { kind: "installed", version: runtimeVersion, source: "custom" },
-    CODEX_ACP_MIN_VERSION,
+    CODEX_MIN_VERSION,
     CURRENT_PACKAGE_NAME
   );
   return { entryPath, version };

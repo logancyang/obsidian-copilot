@@ -75,10 +75,11 @@ describe("CodexBackend", () => {
         expect(desc.assertCompatible).toBeDefined();
         expect(() => desc.assertCompatible!()).not.toThrow();
         updateAgentModeBackendFields("codex", { binaryPath: "/new-codex", binaryVersion: "2.0.0" });
-        const minimum = jest.replaceProperty<
-          { CODEX_ACP_MIN_VERSION: string },
-          "CODEX_ACP_MIN_VERSION"
-        >(codexVersion, "CODEX_ACP_MIN_VERSION", "1.12.0");
+        const minimum = jest.replaceProperty<{ CODEX_MIN_VERSION: string }, "CODEX_MIN_VERSION">(
+          codexVersion,
+          "CODEX_MIN_VERSION",
+          "1.12.0"
+        );
         try {
           expect(() => desc.assertCompatible!()).toThrow("1.11.0");
         } finally {

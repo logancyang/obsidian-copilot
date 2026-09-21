@@ -3,13 +3,9 @@ import type CopilotPlugin from "@/main";
 import { getSettings, setSettings, type CopilotSettings } from "@/settings/model";
 import { detectBinary } from "@/utils/detectBinary";
 import { resolveCodexAcpBinary } from "./codexBinaryResolver";
-import { CODEX_BUNDLE_VERSION } from "./codexArchive";
+import { CODEX_PINNED_VERSION } from "./codexArchive";
 import { CodexBackendDescriptor, detectCodexAcpPath, getCodexBinaryManager } from "./descriptor";
-import {
-  isSupportedCodexAcpPath,
-  inspectCodexAcpPackage,
-  CODEX_ACP_MIN_VERSION,
-} from "./codexVersion";
+import { isSupportedCodexAcpPath, inspectCodexAcpPackage, CODEX_MIN_VERSION } from "./codexVersion";
 
 jest.mock("@/utils/detectBinary", () => ({ detectBinary: jest.fn() }));
 jest.mock("./codexBinaryResolver", () => ({
@@ -289,14 +285,14 @@ describe("descriptor", () => {
               settingsWithCodex({
                 binaryPath: "/codex/index.js",
                 binarySource: source,
-                binaryVersion: CODEX_BUNDLE_VERSION,
+                binaryVersion: CODEX_PINNED_VERSION,
               })
             )
           ).toMatchObject({
             kind: "incompatible",
             source,
             currentVersion: "0.0.44",
-            minVersion: CODEX_ACP_MIN_VERSION,
+            minVersion: CODEX_MIN_VERSION,
           });
         }
       );
@@ -338,8 +334,8 @@ describe("descriptor", () => {
         ],
         [
           "managed pin",
-          { binarySource: "managed", binaryVersion: CODEX_BUNDLE_VERSION },
-          CODEX_BUNDLE_VERSION,
+          { binarySource: "managed", binaryVersion: CODEX_PINNED_VERSION },
+          CODEX_PINNED_VERSION,
           { kind: "ready", source: "managed" },
         ],
       ])(
@@ -423,8 +419,8 @@ describe("descriptor", () => {
         try {
           await CodexBackendDescriptor.onPluginLoad?.({} as CopilotPlugin, canStart);
           expect(automatic).toHaveBeenCalledWith(
-            CODEX_BUNDLE_VERSION,
-            CODEX_ACP_MIN_VERSION,
+            CODEX_PINNED_VERSION,
+            CODEX_MIN_VERSION,
             canStart,
             expect.any(Function)
           );

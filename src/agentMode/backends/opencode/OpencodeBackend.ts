@@ -1,6 +1,6 @@
 import { parseVersionFromStdout, verifyOpencodeBinary } from "./OpencodeBinaryManager";
 import { assertBinaryCompatible } from "@/agentMode/backends/shared/binaryCompatibility";
-import { OPENCODE_MIN_ACP_VERSION } from "./ui/opencodeVersion";
+import { OPENCODE_MIN_VERSION } from "./ui/opencodeVersion";
 import { ChatModelProviders } from "@/constants";
 import { logInfo, logWarn } from "@/logger";
 import { getSettings } from "@/settings/model";
@@ -222,7 +222,7 @@ export class OpencodeBackend implements AcpBackend {
       assertCompatible: () =>
         assertBinaryCompatible(
           { kind: "installed", version: runtimeVersion, source },
-          OPENCODE_MIN_ACP_VERSION,
+          OPENCODE_MIN_VERSION,
           this.displayName
         ),
       args: ["acp", "--cwd", ctx.vaultBasePath],

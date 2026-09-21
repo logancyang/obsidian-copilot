@@ -14,10 +14,9 @@ import type { ManagedInstallActionState } from "@/agentMode/session/types";
 import { copilotAppDataDir } from "@/utils/appPaths";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 import { getSettings, updateAgentModeBackendFields } from "@/settings/model";
-import { resolveSupportedCodexAcpPackage, CODEX_ACP_MIN_VERSION } from "./codexVersion";
-import { CODEX_ACP_PINNED_VERSION } from "./cliSetup";
+import { resolveSupportedCodexAcpPackage, CODEX_MIN_VERSION } from "./codexVersion";
 
-import { installCodexArchive, CODEX_BUNDLE_VERSION } from "./codexArchive";
+import { installCodexArchive, CODEX_PINNED_VERSION } from "./codexArchive";
 
 const IDLE_ACTION_STATE = Object.freeze({ kind: "idle" as const });
 const TIMEOUT_MS = 5 * 60_000;
@@ -87,8 +86,8 @@ export class CodexBinaryManager extends ManagedBinaryManager<CodexInstallProgres
   }): Promise<InstalledBinary> {
     // Manual retries must not replace a working selection with an unsupported release pin. https://github.com/Brevilabs/obsidian-copilot-private/issues/535
     assertBinaryCompatible(
-      { kind: "installed", version: CODEX_ACP_PINNED_VERSION, source: "managed" },
-      CODEX_ACP_MIN_VERSION,
+      { kind: "installed", version: CODEX_PINNED_VERSION, source: "managed" },
+      CODEX_MIN_VERSION,
       "Codex adapter"
     );
     const dataDir = this.getDataDir();
@@ -96,9 +95,9 @@ export class CodexBinaryManager extends ManagedBinaryManager<CodexInstallProgres
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/530
     const versionDir = path().join(
       dataDir,
-      preserveExisting ? `${CODEX_BUNDLE_VERSION}-${uuidv4()}` : CODEX_BUNDLE_VERSION
+      preserveExisting ? `${CODEX_PINNED_VERSION}-${uuidv4()}` : CODEX_PINNED_VERSION
     );
-    const stageDir = path().join(dataDir, `.tmp-${CODEX_ACP_PINNED_VERSION}-${Date.now()}`);
+    const stageDir = path().join(dataDir, `.tmp-${CODEX_PINNED_VERSION}-${Date.now()}`);
     await fs().promises.mkdir(stageDir, { recursive: true });
     try {
       onProgress?.({ label: "Installing the Codex adapter…", percent: 30 });
@@ -118,11 +117,11 @@ export class CodexBinaryManager extends ManagedBinaryManager<CodexInstallProgres
       const finalEntry = entryPath(versionDir);
       this.selectInstalledBinary({
         binaryPath: finalEntry,
-        binaryVersion: CODEX_BUNDLE_VERSION,
+        binaryVersion: CODEX_PINNED_VERSION,
         binarySource: "managed",
       });
       onProgress?.({ label: "Codex adapter ready.", percent: 100 });
-      return { version: CODEX_BUNDLE_VERSION, path: finalEntry };
+      return { version: CODEX_PINNED_VERSION, path: finalEntry };
     } finally {
       await fs()
         .promises.rm(stageDir, { recursive: true, force: true })
@@ -137,8 +136,8 @@ function entryPath(versionDir: string): string {
 
 async function verifyLauncher(entry: string, signal: AbortSignal): Promise<void> {
   const stdout = await run(entry, ["--version"], signal);
-  if (!stdout.includes(CODEX_ACP_PINNED_VERSION)) {
-    throw new Error(`The Codex adapter did not report version ${CODEX_ACP_PINNED_VERSION}.`);
+  if (!stdout.includes(CODEX_PINNED_VERSION)) {
+    throw new Error(`The Codex adapter did not report version ${CODEX_PINNED_VERSION}.`);
   }
 }
 

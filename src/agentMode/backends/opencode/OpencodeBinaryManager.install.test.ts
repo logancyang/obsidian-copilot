@@ -79,9 +79,9 @@ const issue = "https://github.com/Brevilabs/obsidian-copilot-private/issues/530"
         const selected = { ...getSettings().agentMode.backends?.opencode };
         jest.mocked(requestUrl).mockClear();
         const minimum = jest.replaceProperty<
-          { OPENCODE_MIN_ACP_VERSION: string },
-          "OPENCODE_MIN_ACP_VERSION"
-        >(opencodeVersion, "OPENCODE_MIN_ACP_VERSION", "999.0.0");
+          { OPENCODE_MIN_VERSION: string },
+          "OPENCODE_MIN_VERSION"
+        >(opencodeVersion, "OPENCODE_MIN_VERSION", "999.0.0");
         try {
           await expect(manager.install()).rejects.toThrow("requires");
           expect(requestUrl).not.toHaveBeenCalled();

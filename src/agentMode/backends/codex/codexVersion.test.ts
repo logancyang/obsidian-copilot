@@ -5,7 +5,7 @@ import * as path from "node:path";
 import {
   buildCodexAcpInvocation,
   inspectCodexAcpPackage,
-  CODEX_ACP_MIN_VERSION,
+  CODEX_MIN_VERSION,
   isSupportedCodexAcpPath,
   resolveSupportedCodexAcpPackage,
   resolveSupportedCodexAcpEntry,
@@ -142,7 +142,7 @@ describe("codexVersion", () => {
   });
   describe("resolveSupportedCodexAcpEntry()", () => {
     it("https://github.com/logancyang/obsidian-copilot/issues/2967 accepts the earliest adapter with bundled CLI authentication", () => {
-      const packageFileSystem = packageFs(UNIX_ENTRY, metadata(CODEX_ACP_MIN_VERSION));
+      const packageFileSystem = packageFs(UNIX_ENTRY, metadata(CODEX_MIN_VERSION));
 
       expect(
         resolveSupportedCodexAcpEntry("/usr/local/bin/codex-acp", "darwin", packageFileSystem)

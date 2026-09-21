@@ -1098,10 +1098,11 @@ describe("OpencodeBackend.buildSpawnDescriptor", () => {
       binaryPath: "/new-opencode",
       binaryVersion: "2.0.0",
     });
-    const minimum = jest.replaceProperty<
-      { OPENCODE_MIN_ACP_VERSION: string },
-      "OPENCODE_MIN_ACP_VERSION"
-    >(opencodeVersion, "OPENCODE_MIN_ACP_VERSION", "1.19.0");
+    const minimum = jest.replaceProperty<{ OPENCODE_MIN_VERSION: string }, "OPENCODE_MIN_VERSION">(
+      opencodeVersion,
+      "OPENCODE_MIN_VERSION",
+      "1.19.0"
+    );
     try {
       expect(() => desc.assertCompatible!()).toThrow("1.18.31");
     } finally {

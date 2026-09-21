@@ -1,6 +1,6 @@
 import { useBackendAuthState } from "@/agentMode/session/useBackendAuthState";
 import type { CodexBinaryManager } from "@/agentMode/backends/codex/CodexBinaryManager";
-import { CODEX_BUNDLE_VERSION, codexSignInCommand } from "@/agentMode/backends/codex/cliSetup";
+import { CODEX_PINNED_VERSION, codexSignInCommand } from "@/agentMode/backends/codex/cliSetup";
 import {
   CodexConfigView,
   type CodexBinarySource,
@@ -158,7 +158,7 @@ export const CodexConfigContainer: React.FC<CodexConfigContainerProps> = ({ mana
       activeSource={activeSource}
       managed={{
         platform: `${process.platform}-${process.arch}`,
-        version: CODEX_BUNDLE_VERSION,
+        version: CODEX_PINNED_VERSION,
         destination,
         // Retained files stay removable; only installs honor cancellation.
         // https://github.com/Brevilabs/obsidian-copilot-private/issues/379

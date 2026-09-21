@@ -58,7 +58,7 @@ jest.mock("./opencodeCliDetector", () => ({
   detectOpencodeCliPath: jest.fn(async () => null),
 }));
 
-import { OPENCODE_MIN_ACP_VERSION, OPENCODE_PINNED_VERSION } from "./ui/opencodeVersion";
+import { OPENCODE_MIN_VERSION, OPENCODE_PINNED_VERSION } from "./ui/opencodeVersion";
 import { copilotAppDataDir } from "@/utils/appPaths";
 import * as fs from "node:fs";
 import * as os from "os";
@@ -236,7 +236,7 @@ describe("OpencodeBinaryManager", () => {
       expect(
         toOpencodeInstallState({
           kind: "installed",
-          version: OPENCODE_MIN_ACP_VERSION,
+          version: OPENCODE_MIN_VERSION,
           path: "/p",
           source: "managed",
         })
@@ -249,9 +249,9 @@ describe("OpencodeBinaryManager", () => {
         const classify = (version: string) =>
           toOpencodeInstallState({ kind: "installed", version, path: "/opencode", source });
         expect(classify("1.15.0")).toMatchObject({ kind: "incompatible", source });
-        expect(classify(OPENCODE_MIN_ACP_VERSION)).toEqual({ kind: "ready", source });
+        expect(classify(OPENCODE_MIN_VERSION)).toEqual({ kind: "ready", source });
         expect(classify(OPENCODE_PINNED_VERSION)).toEqual({ kind: "ready", source });
-        expect(classify(OPENCODE_MIN_ACP_VERSION + "-beta.1").kind).toBe("incompatible");
+        expect(classify(OPENCODE_MIN_VERSION + "-beta.1").kind).toBe("incompatible");
         expect(classify("invalid").kind).toBe("error");
         expect(
           toOpencodeInstallState(computeInstallState({ binaryPath: "/opencode" }, () => true)).kind
@@ -270,8 +270,8 @@ describe("OpencodeBinaryManager", () => {
         kind: "incompatible",
         source: "custom",
         currentVersion: "1.15.12",
-        minVersion: OPENCODE_MIN_ACP_VERSION,
-        message: `opencode v1.15.12 is not supported. Copilot requires opencode v${OPENCODE_MIN_ACP_VERSION} or newer.`,
+        minVersion: OPENCODE_MIN_VERSION,
+        message: `opencode v1.15.12 is not supported. Copilot requires opencode v${OPENCODE_MIN_VERSION} or newer.`,
       });
     });
   });
@@ -563,7 +563,7 @@ fi
     });
 
     const mgr = new OpencodeBinaryManager(fakePlugin);
-    await expect(mgr.upgradeCustomBinary()).rejects.toThrow(OPENCODE_MIN_ACP_VERSION);
+    await expect(mgr.upgradeCustomBinary()).rejects.toThrow(OPENCODE_MIN_VERSION);
     expect(settingsMock.__get()).toEqual({
       binaryPath: file,
       binaryVersion: "1.15.11",

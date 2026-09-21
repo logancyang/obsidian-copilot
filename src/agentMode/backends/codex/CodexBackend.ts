@@ -11,11 +11,7 @@ import {
 import type { PlanUsageReading } from "@/agentMode/session/planUsage";
 import { defaultCodexHome, readCodexPlanUsage } from "./codexPlanUsage";
 import { mergeCodexConfigEnv } from "./codexConfigEnv";
-import {
-  buildCodexAcpInvocation,
-  inspectCodexAcpPackage,
-  CODEX_ACP_MIN_VERSION,
-} from "./codexVersion";
+import { buildCodexAcpInvocation, inspectCodexAcpPackage, CODEX_MIN_VERSION } from "./codexVersion";
 
 /**
  * Spawns the configured `@agentclientprotocol/codex-acp` package entry point.
@@ -91,7 +87,7 @@ export class CodexBackend implements AcpBackend {
             version: installed.runtimeVersion,
             source: settings.agentMode?.backends?.codex?.binarySource ?? "custom",
           },
-          CODEX_ACP_MIN_VERSION,
+          CODEX_MIN_VERSION,
           this.displayName
         ),
     };
