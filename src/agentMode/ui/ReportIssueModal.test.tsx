@@ -483,11 +483,20 @@ describe("ReportIssueModal", () => {
 
         const report = await prepare(new Set(["activityLog", "chatLog"]));
 
-        expect(bundleInput().logs.map((log) => log.id)).toEqual(["activityLog", "chatLog"]);
         const entries = unzipSync(new Uint8Array(await realFs.readFile(report.zipPath)));
         const entryText = (name: string) => new TextDecoder().decode(entries[name]);
         expect(entryText("acp-frames.ndjson.txt")).toBe(frames);
         expect(entryText("copilot-chat-log.md")).toBe(chatLog);
+      });
+
+      it("asks for the logs smallest-growing first, so a heavy session's frames cannot crowd the others out (https://github.com/Brevilabs/obsidian-copilot-private/issues/538)", async () => {
+        await prepare(new Set(["activityLog", "chatLog", "opencodeLog"]));
+
+        expect(bundleInput().logs.map((log) => log.id)).toEqual([
+          "chatLog",
+          "opencodeLog",
+          "activityLog",
+        ]);
       });
 
       it("reads no activity log, and says why, when it was selected while turned off (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", async () => {
