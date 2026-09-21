@@ -142,6 +142,10 @@ export class BackendConfigRegistry {
   // -------------------------------------------------------------------------
   // Mutations
   // -------------------------------------------------------------------------
+  //
+  // Every writer here rewrites `enabledModels` only, and so must spread the
+  // row it replaces: `BackendConfig` also carries `default`, which a curation
+  // toggle has no business clearing.
 
   /**
    * Replace the enabled-models list for a backend.
@@ -157,7 +161,7 @@ export class BackendConfigRegistry {
         if (existing && arraysEqual(existing.enabledModels, nextIds)) {
           return {};
         }
-        const next: BackendConfig = { enabledModels: nextIds };
+        const next: BackendConfig = { ...existing, enabledModels: nextIds };
         return { backends: { ...cur.backends, [backend]: next } };
       });
     });
@@ -174,6 +178,7 @@ export class BackendConfigRegistry {
         // added the id doesn't produce a duplicate row.
         if (current?.enabledModels.includes(configuredModelId)) return {};
         const next: BackendConfig = {
+          ...current,
           enabledModels: [...(current?.enabledModels ?? []), configuredModelId],
         };
         return { backends: { ...cur.backends, [backend]: next } };
@@ -190,7 +195,7 @@ export class BackendConfigRegistry {
         const current = cur.backends[backend];
         if (!current) return {};
         const nextIds = current.enabledModels.filter((id) => id !== configuredModelId);
-        const next: BackendConfig = { enabledModels: nextIds };
+        const next: BackendConfig = { ...current, enabledModels: nextIds };
         return { backends: { ...cur.backends, [backend]: next } };
       });
     });
@@ -214,6 +219,7 @@ export class BackendConfigRegistry {
         >) {
           if (!config.enabledModels.some((id) => removed.has(id))) continue;
           nextBackends[backendKey] = {
+            ...config,
             enabledModels: config.enabledModels.filter((id) => !removed.has(id)),
           };
           mutated = true;

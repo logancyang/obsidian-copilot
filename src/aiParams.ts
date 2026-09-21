@@ -16,7 +16,9 @@ const modelKeyAtom = atom(
     if (userValue !== null) {
       return userValue;
     }
-    return get(settingsAtom).defaultModelKey;
+    // `""` means "no choice on record": every consumer resolves that through
+    // `findChatBackendEntry`, which falls back to the first enabled model.
+    return get(settingsAtom).backends?.chat?.default?.configuredModelId ?? "";
   },
   (get, set, newValue) => {
     set(userModelKeyAtom, newValue);

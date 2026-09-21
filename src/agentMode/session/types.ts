@@ -185,9 +185,10 @@ export interface EnabledModelEntry {
 }
 
 /**
- * Normalized model selection — the single shape used by both runtime
- * state (`BackendState.model.current`) and persisted preferences
- * (`agentMode.backends.<id>.defaultModel`). `baseModelId` is what
+ * Normalized model selection — the wire-form shape used by runtime state
+ * (`BackendState.model.current`) and by every picker. The persisted default
+ * (`backends.<id>.default`) names a `configuredModelId` instead, and
+ * `session/backendDefaultModel` converts between the two. `baseModelId` is what
  * `BackendDescriptor.wire.decode(wireId).baseModelId` produces for
  * this backend; round-trips through `wire.encode` for the same backend
  * but is meaningless cross-backend (opencode's includes a `provider/`

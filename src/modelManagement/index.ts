@@ -11,6 +11,7 @@ export type { CatalogProvider, ModelInfo, ProviderType } from "./types/catalog";
 export type {
   AgentType,
   BackendConfig,
+  BackendDefaultModel,
   BackendType,
   ConfiguredModel,
   PersistedCopilotPlusCatalog,

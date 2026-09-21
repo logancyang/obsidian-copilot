@@ -54,9 +54,7 @@ jest.mock("@/logger", () => ({
 
 // Captured `subscribeToSettingsChange` callbacks, so a test can drive a
 // settings change and assert the manager's reaction.
-const settingsChangeCallbacks = new Set<
-  (prev: { agentMode: unknown }, next: { agentMode: unknown }) => void
->();
+const settingsChangeCallbacks = new Set<(prev: object, next: object) => void>();
 
 // Spy passthrough: the file-level contracts (no conjuring, import next to a user AGENTS.md)
 // are covered in agentsFile.test.ts; the manager tests only assert the wiring — which scopes
@@ -112,12 +110,24 @@ jest.mock("@/settings/model", () => ({
     },
   })),
   setSettings: jest.fn(),
-  subscribeToSettingsChange: jest.fn(
-    (cb: (prev: { agentMode: unknown }, next: { agentMode: unknown }) => void) => {
-      settingsChangeCallbacks.add(cb);
-      return () => settingsChangeCallbacks.delete(cb);
-    }
-  ),
+  // Stands in for the real writer, routing through the mocked `setSettings` so
+  // `readPersistedDefault` can replay what the manager wrote.
+  updateBackendDefaultModel: (backend: string, next: unknown) =>
+    jest
+      .requireMock<{ setSettings: jest.Mock }>("@/settings/model")
+      .setSettings((cur: { backends?: Record<string, { enabledModels?: string[] }> }) => ({
+        backends: {
+          ...cur.backends,
+          [backend]: {
+            enabledModels: cur.backends?.[backend]?.enabledModels ?? [],
+            ...(next ? { default: next } : {}),
+          },
+        },
+      })),
+  subscribeToSettingsChange: jest.fn((cb: (prev: object, next: object) => void) => {
+    settingsChangeCallbacks.add(cb);
+    return () => settingsChangeCallbacks.delete(cb);
+  }),
   // Minimal jotai-store shim: a non-global spawn publishes context-load state
   // through it (beginContextMaterialization). `get` returns an empty map so the
   // first publish "owns" the flight; `set` is a no-op spy.
@@ -125,7 +135,7 @@ jest.mock("@/settings/model", () => ({
 }));
 
 /** Fire the manager's settings subscription with a before/after pair. */
-function emitSettingsChange(prev: { agentMode: unknown }, next: { agentMode: unknown }): void {
+function emitSettingsChange(prev: object, next: object): void {
   for (const cb of settingsChangeCallbacks) cb(prev, next);
 }
 
@@ -358,7 +368,50 @@ function buildDescriptor(): BackendDescriptor {
     subscribeInstallState: jest.fn(),
     openInstallUI: jest.fn(),
     createBackendProcess: jest.fn(() => makeMockBackendProcess()),
+    // Stand-in codec: these cases fabricate wire ids directly, so a configured
+    // model's own id is the id this backend addresses it by.
+    wire: {
+      encode: (selection: { baseModelId: string }) => selection.baseModelId,
+      decode: (wireId: string) => ({
+        selection: { baseModelId: wireId, effort: null },
+        provider: null,
+      }),
+    },
   } as unknown as BackendDescriptor;
+}
+
+/**
+ * Settings recording `saved` as opencode's stored default and `offered` as its
+ * enabled list. The store keys both by `configuredModelId`, so every wire id a
+ * case names needs a configured-model row standing behind it.
+ */
+function backendDefaultSettings(
+  saved: { baseModelId: string; effort: string | null } | null,
+  offered: readonly string[]
+): Record<string, unknown> {
+  const wireIds = [...new Set([...offered, ...(saved ? [saved.baseModelId] : [])])];
+  return {
+    configuredModels: wireIds.map((wireId) => ({
+      configuredModelId: `cm:${wireId}`,
+      providerId: "p1",
+      info: { id: wireId, displayName: wireId },
+      configuredAt: 0,
+    })),
+    backends: {
+      opencode: {
+        enabledModels: offered.map((wireId) => `cm:${wireId}`),
+        ...(saved
+          ? { default: { configuredModelId: `cm:${saved.baseModelId}`, effort: saved.effort } }
+          : {}),
+      },
+    },
+    agentMode: {
+      activeBackend: "opencode",
+      backends: {},
+      notificationSound: false,
+      notificationSoundId: "piano",
+    },
+  };
 }
 
 function modelCatalog(baseModelId: string): BackendModelCatalog {
@@ -1007,14 +1060,12 @@ describe("AgentSessionManager", () => {
               }
             : {}),
         } as unknown as BackendDescriptor;
-        (mockedGetSettings as jest.Mock).mockReturnValue({
-          agentMode: {
-            activeBackend: "opencode",
-            backends: { opencode: { defaultModel: saved } },
-            notificationSound: false,
-            notificationSoundId: "piano",
-          },
-        });
+        (mockedGetSettings as jest.Mock).mockReturnValue(
+          backendDefaultSettings(
+            saved,
+            (offered ?? []).map((entry) => (typeof entry === "string" ? entry : entry.baseModelId))
+          )
+        );
         return new AgentSessionManager(
           buildApp(),
           buildPlugin() as unknown as ConstructorParameters<typeof AgentSessionManager>[1],
@@ -1037,15 +1088,11 @@ describe("AgentSessionManager", () => {
       }
 
       /** Point the settings store at `saved` as this backend's sticky preference. */
-      function savedDefault(saved: { baseModelId: string; effort: string | null } | null): void {
-        (mockedGetSettings as jest.Mock).mockReturnValue({
-          agentMode: {
-            activeBackend: "opencode",
-            backends: { opencode: { defaultModel: saved } },
-            notificationSound: false,
-            notificationSoundId: "piano",
-          },
-        });
+      function savedDefault(
+        saved: { baseModelId: string; effort: string | null } | null,
+        offered: readonly string[]
+      ): void {
+        (mockedGetSettings as jest.Mock).mockReturnValue(backendDefaultSettings(saved, offered));
       }
 
       let originalGetSettings: (() => unknown) | undefined;
@@ -1231,7 +1278,7 @@ describe("AgentSessionManager", () => {
         mgr.getSeedSelection("opencode");
         expect((Notice as unknown as jest.Mock).mock.calls.at(-1)?.[0]).toContain("model-a");
 
-        savedDefault({ baseModelId: "copilot-plus/model-b", effort: null });
+        savedDefault({ baseModelId: "copilot-plus/model-b", effort: null }, ["copilot-plus/flash"]);
         mgr.getSeedSelection("opencode");
 
         expect(Notice).toHaveBeenCalledTimes(2);
@@ -1263,7 +1310,9 @@ describe("AgentSessionManager", () => {
           effort: null,
         });
 
-        savedDefault({ baseModelId: "copilot-plus/minimax-m2.7", effort: null });
+        savedDefault({ baseModelId: "copilot-plus/minimax-m2.7", effort: null }, [
+          "copilot-plus/flash",
+        ]);
         mgr.getSeedSelection("opencode");
 
         expect(Notice).toHaveBeenCalledTimes(2);
@@ -2159,9 +2208,9 @@ describe("AgentSessionManager.restartBackend", () => {
     async (_case, unsupported) => {
       const originalSettings = (mockedGetSettings as jest.Mock).getMockImplementation();
       const saved = { baseModelId: "copilot-plus/flash", effort: "high" };
-      (mockedGetSettings as jest.Mock).mockReturnValue({
-        agentMode: { backends: { opencode: { defaultModel: saved } } },
-      });
+      (mockedGetSettings as jest.Mock).mockReturnValue(
+        backendDefaultSettings(saved, [saved.baseModelId])
+      );
       const state: BackendState = {
         model: {
           current: { baseModelId: "big-pickle", effort: "low" },
@@ -3129,13 +3178,9 @@ describe("AgentSessionManager default-model settings subscription", () => {
   ])(
     "https://github.com/Brevilabs/obsidian-copilot-private/issues/219 repairs saved $effort only when the fallback is confirmed ($confirmed)",
     async ({ effort, confirmed, expected }) => {
-      const settings = {
-        agentMode: {
-          activeBackend: "opencode",
-          backends: { opencode: { defaultModel: { baseModelId: "opus", effort } } },
-        },
-      };
-      (mockedGetSettings as jest.Mock).mockReturnValue(settings);
+      (mockedGetSettings as jest.Mock).mockReturnValue(
+        backendDefaultSettings({ baseModelId: "opus", effort }, ["opus"])
+      );
       (mockedSetSettings as jest.Mock).mockClear();
       const resolved = confirmed;
       sessionCreateSpy.mockImplementationOnce((opts) => {
@@ -3175,11 +3220,9 @@ describe("AgentSessionManager default-model settings subscription", () => {
       await mgr.createSession();
       await flushApplyChain();
       expect(readPersistedDefault(mockedSetSettings as jest.Mock, "opencode")).toEqual(
-        expected === undefined ? undefined : { baseModelId: "opus", effort: expected }
+        expected === undefined ? undefined : { configuredModelId: "cm:opus", effort: expected }
       );
-      (mockedGetSettings as jest.Mock).mockReturnValue({
-        agentMode: { activeBackend: "opencode", backends: {} },
-      });
+      (mockedGetSettings as jest.Mock).mockReturnValue(backendDefaultSettings(null, []));
       await mgr.shutdown();
     }
   );
@@ -3200,16 +3243,10 @@ describe("AgentSessionManager default-model settings subscription", () => {
     );
     const session = await mgr.createSession();
 
-    const prev = { agentMode: { backends: { opencode: { defaultModel: null } } } };
-    const next = {
-      agentMode: {
-        backends: { opencode: { defaultModel: { baseModelId: "opus", effort: "high" } } },
-      },
-    };
+    const prev = backendDefaultSettings(null, ["opus"]);
+    const next = backendDefaultSettings({ baseModelId: "opus", effort: "high" }, ["opus"]);
     // The re-apply re-reads the live default at run time, so reflect it here.
-    (mockedGetSettings as jest.Mock).mockReturnValue({
-      agentMode: { activeBackend: "opencode", ...next.agentMode },
-    });
+    (mockedGetSettings as jest.Mock).mockReturnValue(next);
     emitSettingsChange(prev, next);
     await flushApplyChain();
 
@@ -3217,9 +3254,7 @@ describe("AgentSessionManager default-model settings subscription", () => {
       baseModelId: "opus",
       effort: "high",
     });
-    (mockedGetSettings as jest.Mock).mockReturnValue({
-      agentMode: { activeBackend: "opencode", backends: {} },
-    });
+    (mockedGetSettings as jest.Mock).mockReturnValue(backendDefaultSettings(null, []));
   });
 
   it("ignores an unchanged default and other backends' changes", async () => {
@@ -3240,13 +3275,13 @@ describe("AgentSessionManager default-model settings subscription", () => {
 
     const same = { baseModelId: "opus", effort: "high" };
     emitSettingsChange(
-      { agentMode: { backends: { opencode: { defaultModel: same } } } },
-      { agentMode: { backends: { opencode: { defaultModel: { ...same } } } } }
+      backendDefaultSettings(same, ["opus"]),
+      backendDefaultSettings({ ...same }, ["opus"])
     );
     // A different backend's default changing must not touch the opencode session.
     emitSettingsChange(
-      { agentMode: { backends: { claude: { defaultModel: null } } } },
-      { agentMode: { backends: { claude: { defaultModel: { baseModelId: "x", effort: null } } } } }
+      { backends: { claude: { enabledModels: [] } } },
+      { backends: { claude: { enabledModels: [], default: { configuredModelId: "cm:x" } } } }
     );
     expect(applySelectionMock).not.toHaveBeenCalled();
   });
@@ -3271,12 +3306,8 @@ describe("AgentSessionManager default-model settings subscription", () => {
     // User picks "Agent default" → stored default goes from explicit to null.
     const settingsReadsBeforeChange = (mockedGetSettings as jest.Mock).mock.calls.length;
     emitSettingsChange(
-      {
-        agentMode: {
-          backends: { opencode: { defaultModel: { baseModelId: "opus", effort: "high" } } },
-        },
-      },
-      { agentMode: { backends: { opencode: { defaultModel: null } } } }
+      backendDefaultSettings({ baseModelId: "opus", effort: "high" }, ["opus"]),
+      backendDefaultSettings(null, ["opus"])
     );
     await waitFor(() =>
       expect((mockedGetSettings as jest.Mock).mock.calls.length).toBeGreaterThan(
@@ -3315,16 +3346,10 @@ describe("AgentSessionManager default-model settings subscription", () => {
     const session = await mgr.createSession();
 
     const latest = { baseModelId: "opus", effort: "low" };
-    (mockedGetSettings as jest.Mock).mockReturnValue({
-      agentMode: { activeBackend: "opencode", backends: { opencode: { defaultModel: latest } } },
-    });
+    (mockedGetSettings as jest.Mock).mockReturnValue(backendDefaultSettings(latest, ["opus"]));
     emitSettingsChange(
-      {
-        agentMode: {
-          backends: { opencode: { defaultModel: { baseModelId: "opus", effort: "high" } } },
-        },
-      },
-      { agentMode: { backends: { opencode: { defaultModel: latest } } } }
+      backendDefaultSettings({ baseModelId: "opus", effort: "high" }, ["opus"]),
+      backendDefaultSettings(latest, ["opus"])
     );
 
     // Nothing applied while the session is still starting.
@@ -3336,9 +3361,7 @@ describe("AgentSessionManager default-model settings subscription", () => {
     await flushApplyChain();
 
     expect(applySelectionMock).toHaveBeenCalledWith(session, latest);
-    (mockedGetSettings as jest.Mock).mockReturnValue({
-      agentMode: { activeBackend: "opencode", backends: {} },
-    });
+    (mockedGetSettings as jest.Mock).mockReturnValue(backendDefaultSettings(null, []));
   });
 
   it("serializes rapid default changes and commits the latest", async () => {
@@ -3368,23 +3391,23 @@ describe("AgentSessionManager default-model settings subscription", () => {
     await mgr.createSession();
 
     const first = { baseModelId: "first", effort: null };
-    (mockedGetSettings as jest.Mock).mockReturnValue({
-      agentMode: { activeBackend: "opencode", backends: { opencode: { defaultModel: first } } },
-    });
+    (mockedGetSettings as jest.Mock).mockReturnValue(
+      backendDefaultSettings(first, ["first", "second"])
+    );
     emitSettingsChange(
-      { agentMode: { backends: { opencode: { defaultModel: null } } } },
-      { agentMode: { backends: { opencode: { defaultModel: first } } } }
+      backendDefaultSettings(null, ["first", "second"]),
+      backendDefaultSettings(first, ["first", "second"])
     );
     await flushApplyChain();
 
     // Second change arrives while the first apply is mid-flight.
     const second = { baseModelId: "second", effort: null };
-    (mockedGetSettings as jest.Mock).mockReturnValue({
-      agentMode: { activeBackend: "opencode", backends: { opencode: { defaultModel: second } } },
-    });
+    (mockedGetSettings as jest.Mock).mockReturnValue(
+      backendDefaultSettings(second, ["first", "second"])
+    );
     emitSettingsChange(
-      { agentMode: { backends: { opencode: { defaultModel: first } } } },
-      { agentMode: { backends: { opencode: { defaultModel: second } } } }
+      backendDefaultSettings(first, ["first", "second"]),
+      backendDefaultSettings(second, ["first", "second"])
     );
     await flushApplyChain();
 
@@ -3394,9 +3417,7 @@ describe("AgentSessionManager default-model settings subscription", () => {
     await flushApplyChain();
 
     expect(order).toEqual(["first", "second"]);
-    (mockedGetSettings as jest.Mock).mockReturnValue({
-      agentMode: { activeBackend: "opencode", backends: {} },
-    });
+    (mockedGetSettings as jest.Mock).mockReturnValue(backendDefaultSettings(null, []));
   });
 });
 
@@ -3562,18 +3583,18 @@ describe("AgentSessionManager.onInstallStateChanged", () => {
 function readPersistedDefault(
   setSettings: jest.Mock,
   backendId: string
-): { baseModelId: string; effort: string | null } | undefined {
-  let backends: Record<string, { defaultModel?: { baseModelId: string; effort: string | null } }> =
-    {};
+): { configuredModelId: string; effort?: string | null } | undefined {
+  let backends: Record<
+    string,
+    { enabledModels: string[]; default?: { configuredModelId: string; effort?: string | null } }
+  > = {};
   for (const call of setSettings.mock.calls) {
     const updater = call[0];
     if (typeof updater !== "function") continue;
-    const patch = updater({ agentMode: { backends } });
-    if (patch?.agentMode?.backends) {
-      backends = { ...backends, ...patch.agentMode.backends };
-    }
+    const patch = updater({ backends });
+    if (patch?.backends) backends = { ...backends, ...patch.backends };
   }
-  return backends[backendId]?.defaultModel;
+  return backends[backendId]?.default;
 }
 
 describe("AgentSessionManager chat history aggregation", () => {

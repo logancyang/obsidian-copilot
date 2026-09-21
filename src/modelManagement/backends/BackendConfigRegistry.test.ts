@@ -6,7 +6,12 @@
  * APIs are touched.
  */
 
-import { getSettings, resetSettings, updateSetting } from "@/settings/model";
+import {
+  getSettings,
+  resetSettings,
+  updateBackendDefaultModel,
+  updateSetting,
+} from "@/settings/model";
 
 import { ConfiguredModelRegistry } from "@/modelManagement/models/ConfiguredModelRegistry";
 import { ProviderRegistry } from "@/modelManagement/providers/ProviderRegistry";
@@ -84,6 +89,48 @@ describe("BackendConfigRegistry", () => {
     const before = getSettings().backends;
     await registry.removeRefs([]);
     expect(getSettings().backends).toBe(before);
+  });
+
+  describe("stored default preservation", () => {
+    // Every writer in this class rewrites `enabledModels` only, but it replaces
+    // the whole `BackendConfig` row to do it, and that row also carries the
+    // backend's `default`. Curating which models a picker lists is not a
+    // statement about which one it starts on.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/540
+    beforeEach(async () => {
+      await registry.setEnabledModels(CHAT, ["m1", "m2"]);
+      updateBackendDefaultModel(CHAT, { configuredModelId: "m2", effort: "high" });
+    });
+
+    const STORED = { configuredModelId: "m2", effort: "high" };
+
+    it("setEnabledModels() keeps the default while replacing the list", async () => {
+      await registry.setEnabledModels(CHAT, ["m2", "m1", "m3"]);
+
+      expect(registry.get(CHAT).enabledModels).toEqual(["m2", "m1", "m3"]);
+      expect(registry.get(CHAT).default).toEqual(STORED);
+    });
+
+    it("enableModel() keeps the default while appending", async () => {
+      await registry.enableModel(CHAT, "m3");
+
+      expect(registry.get(CHAT).enabledModels).toEqual(["m1", "m2", "m3"]);
+      expect(registry.get(CHAT).default).toEqual(STORED);
+    });
+
+    it("disableModel() keeps the default of a model the user did not turn off", async () => {
+      await registry.disableModel(CHAT, "m1");
+
+      expect(registry.get(CHAT).enabledModels).toEqual(["m2"]);
+      expect(registry.get(CHAT).default).toEqual(STORED);
+    });
+
+    it("removeRefs() keeps the default of a backend whose other refs were swept", async () => {
+      await registry.removeRefs(["m1"]);
+
+      expect(registry.get(CHAT).enabledModels).toEqual(["m2"]);
+      expect(registry.get(CHAT).default).toEqual(STORED);
+    });
   });
 
   describe("subscribe()", () => {

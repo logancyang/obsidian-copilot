@@ -21,7 +21,7 @@
  *     segments are preserved.
  *
  * Only fields whose correct value differs per device move into a profile;
- * synced preferences like `defaultModel` / `enableThinking` stay in the flat
+ * synced preferences like `defaultMode` / `enableThinking` stay in the flat
  * `backends.*` slices.
  */
 

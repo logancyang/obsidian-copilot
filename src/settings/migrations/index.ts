@@ -11,7 +11,7 @@
  */
 
 import { DEFAULT_COPILOT_FOLDER } from "@/constants";
-import { logInfo } from "@/logger";
+import { logInfo, logWarn } from "@/logger";
 import { seedDocProcessorBackend } from "@/miyo/miyoUtils";
 import type { ModelManagementApi } from "@/modelManagement";
 import {
@@ -22,6 +22,7 @@ import {
 } from "@/settings/model";
 
 import { executeAzureRemoval } from "./azureRemovalMigration";
+import { planBackendDefaultModels } from "./backendDefaultModelMigration";
 import { executeBedrockRemoval } from "./bedrockRemovalMigration";
 import { executeByokMigration } from "./byokMigration";
 import { planCodexModelIdCollapse } from "./codexModelIdMigration";
@@ -142,17 +143,36 @@ export async function runSettingsMigrations(api: ModelManagementApi): Promise<vo
   if (fromVersion < 14) {
     const collapse = planCodexModelIdCollapse(getSettings());
     if (collapse) {
+      const backends = getSettings().backends;
       setSettings({
         configuredModels: collapse.configuredModels,
         backends: {
-          ...getSettings().backends,
-          codex: { enabledModels: collapse.enabledModels },
+          ...backends,
+          // Spread the row, not just its enabled list: `BackendConfig` also
+          // carries `default`, and rewriting the row whole would drop it.
+          codex: { ...backends.codex, enabledModels: collapse.enabledModels },
         },
       });
       if (collapse.defaultModel) {
         updateAgentModeBackendFields("codex", { defaultModel: collapse.defaultModel });
       }
     }
+  }
+
+  // v15: move each backend's default model into `backends.<id>.default`, beside
+  // the enabled list it has to be drawn from. Runs last so it sees the codex row
+  // collapse above and every earlier provider removal, and so the chat key it
+  // reads is whatever those left behind.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/540
+  if (fromVersion < 15) {
+    const plan = planBackendDefaultModels(getSettings());
+    for (const entry of plan.unresolved) {
+      logWarn(
+        `[settings-migration] v15: ${entry.backend} default "${entry.saved}" is ${entry.reason}; ` +
+          `left unset, so it falls back to the first enabled model`
+      );
+    }
+    if (plan.backends) setSettings({ backends: plan.backends });
   }
 
   // Bump unconditionally after the migrations so a per-provider failure can't

@@ -2,6 +2,13 @@ import type { BackendDescriptor, BackendId } from "./types";
 import { type CopilotSettings, getSettings, setSettings } from "@/settings/model";
 
 /**
+ * The persisted per-backend row, taken from the settings type rather than
+ * imported as `BackendConfig` from `@/modelManagement`, which `session/` may
+ * not reach.
+ */
+type BackendRow = NonNullable<CopilotSettings["backends"][keyof CopilotSettings["backends"]]>;
+
+/**
  * Make one configured model the durable default for every backend that can
  * route it.
  *
@@ -35,28 +42,28 @@ export function seedCopilotDefaultModel(
   configuredModelId: string
 ): BackendId[] {
   const settings = getSettings();
-  const targets = new Map<BackendId, string>();
-  for (const descriptor of descriptors) {
-    const baseModelId = descriptor.getWireBaseId?.(configuredModelId, settings) ?? null;
-    if (baseModelId) targets.set(descriptor.id, baseModelId);
-  }
-  if (targets.size === 0) return [];
+  const targets = descriptors
+    .filter((descriptor) => descriptor.getWireBaseId?.(configuredModelId, settings))
+    .map((descriptor) => descriptor.id);
+  if (targets.length === 0) return [];
 
-  // One write for all backends: `onDefaultSelectionsChanged` re-applies the new
-  // default to every live session on each changed backend, so writing per
-  // backend would fan out that work once per agent for a single user action.
+  // The one writer of `backends.<id>.default` that bypasses
+  // `updateBackendDefaultModel`, and only to batch: `onDefaultSelectionsChanged`
+  // re-applies the new default to every live session on each changed backend,
+  // so writing per backend would fan that out once per agent for a single user
+  // action.
   setSettings((cur: CopilotSettings) => {
-    const backends = { ...cur.agentMode.backends } as Record<
-      string,
-      Record<string, unknown> | undefined
-    >;
-    for (const [backendId, baseModelId] of targets) {
+    const backends = { ...cur.backends } as Record<string, BackendRow>;
+    for (const backendId of targets) {
+      // Spread the row, not just its enabled list: a field added to
+      // `BackendConfig` later must survive this seed.
       backends[backendId] = {
-        ...(backends[backendId] ?? {}),
-        defaultModel: { baseModelId, effort: null },
+        ...backends[backendId],
+        enabledModels: backends[backendId]?.enabledModels ?? [],
+        default: { configuredModelId, effort: null },
       };
     }
-    return { agentMode: { ...cur.agentMode, backends } };
+    return { backends };
   });
-  return [...targets.keys()];
+  return targets;
 }

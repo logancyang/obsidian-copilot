@@ -27,5 +27,7 @@
  *          credential cleanup is gated separately, in
  *          `legacyIndexRemovalMigration`, because this version is synced.
  *   14  → fold Codex's per-effort configured models into one row per base model.
+ *   15  → store each backend's default model in `backends.<id>.default`, keyed
+ *          by `configuredModelId` like the enabled list beside it.
  */
-export const CURRENT_SETTINGS_VERSION = 14;
+export const CURRENT_SETTINGS_VERSION = 15;
