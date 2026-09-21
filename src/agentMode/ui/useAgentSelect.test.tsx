@@ -49,10 +49,22 @@ const openInstallUI = backendRegistry.codex.openInstallUI as jest.Mock;
 const plugin = {} as CopilotPlugin;
 
 function makeManager(startResult: Promise<unknown> = Promise.resolve({})) {
+  const listeners = new Set<() => void>();
+  let starting = false;
   return {
+    subscribe: (listener: () => void) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    getIsStarting: () => starting,
+    setStarting: (value: boolean) => {
+      starting = value;
+      listeners.forEach((listener) => listener());
+    },
     setDefaultBackend: jest.fn(),
     getOrCreateActiveSession: jest.fn().mockReturnValue(startResult),
   } as unknown as AgentSessionManager & {
+    setStarting: (value: boolean) => void;
     setDefaultBackend: jest.Mock;
     getOrCreateActiveSession: jest.Mock;
   };
@@ -122,6 +134,49 @@ describe("useAgentSelect", () => {
       expect(manager.setDefaultBackend).toHaveBeenCalledWith("claude");
       expect(manager.getOrCreateActiveSession).toHaveBeenCalled();
       expect(openInstallUI).not.toHaveBeenCalled();
+    });
+
+    it("waits for an unavailable agent's pending launch before starting the selected alternative (https://github.com/Brevilabs/obsidian-copilot-private/issues/532)", () => {
+      const manager = makeManager();
+      manager.setStarting(true);
+      const { result } = render(
+        {
+          opencode: { kind: "error", message: "Launch failed" },
+          claude: { kind: "ready", source: "custom" },
+        },
+        manager
+      );
+
+      // Configure remains usable while another launch is settling.
+      act(() => result.current.runCta());
+      expect(openInstallUI).toHaveBeenCalledWith(plugin);
+      act(() => result.current.select("claude"));
+      expect(result.current.cta).toEqual({
+        action: "wait",
+        label: "Starting…",
+        note: "Wait for the current agent launch to finish.",
+      });
+      act(() => result.current.runCta());
+      expect(manager.setDefaultBackend).not.toHaveBeenCalled();
+      expect(manager.getOrCreateActiveSession).not.toHaveBeenCalled();
+
+      act(() => manager.setStarting(false));
+      expect(result.current.cta.action).toBe("start");
+      act(() => result.current.runCta());
+      expect(manager.setDefaultBackend).toHaveBeenCalledWith("claude");
+      expect(manager.getOrCreateActiveSession).toHaveBeenCalledTimes(1);
+    });
+
+    it("ignores a Start callback if a launch began since it rendered (https://github.com/Brevilabs/obsidian-copilot-private/issues/532)", () => {
+      const manager = makeManager();
+      const { result } = render({ opencode: { kind: "ready", source: "managed" } }, manager);
+      const start = result.current.runCta;
+
+      act(() => manager.setStarting(true));
+      act(() => start());
+
+      expect(manager.setDefaultBackend).not.toHaveBeenCalled();
+      expect(manager.getOrCreateActiveSession).not.toHaveBeenCalled();
     });
 
     it("opens the selected backend's install dialog when it is not ready", () => {

@@ -42,6 +42,12 @@ export function useAgentSelect(
   plugin: CopilotPlugin,
   manager: AgentSessionManager | null | undefined
 ): AgentSelectState {
+  const subscribe = React.useCallback(
+    (listener: () => void) => manager?.subscribe(listener) ?? (() => {}),
+    [manager]
+  );
+  const getIsStarting = React.useCallback(() => manager?.getIsStarting() ?? false, [manager]);
+  const isStarting = React.useSyncExternalStore(subscribe, getIsStarting, getIsStarting);
   const descriptors = backendDisplayOrder();
   const states = useBackendInstallStates(plugin);
   // Until the user picks a row, the selection follows whichever backend would
@@ -72,7 +78,20 @@ export function useAgentSelect(
     [descriptors, states, selectedId, selectedDescriptor.auth, auth.status]
   );
   const selectedRow = rows.find((row) => row.id === selectedId) ?? rows[0];
-  const cta = React.useMemo(() => resolveAgentSelectCta(selectedRow), [selectedRow]);
+  const cta = React.useMemo<AgentSelectCta>(() => {
+    const resolved = resolveAgentSelectCta(selectedRow);
+    // A pending first launch is shared by scope, so Start could reuse the wrong
+    // agent's promise. Configure can remain available while that launch settles.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/532
+    if (resolved.action === "start" && isStarting) {
+      return {
+        action: "wait",
+        label: "Starting…",
+        note: "Wait for the current agent launch to finish.",
+      };
+    }
+    return resolved;
+  }, [selectedRow, isStarting]);
 
   const runCta = React.useCallback(() => {
     const id = selectedRow.id;
@@ -81,7 +100,9 @@ export function useAgentSelect(
       backendRegistry[id].openInstallUI(plugin);
       return;
     }
-    if (!manager) return;
+    // Recheck at click time in case another pane started a launch after render.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/532
+    if (!manager || manager.getIsStarting()) return;
     // Persisting the choice is the point: without it the next launch would drop
     // the user back here instead of on the agent they deliberately picked.
     manager.setDefaultBackend(id);

@@ -150,3 +150,17 @@ export const ClaudeSignInRequired: StoryObj<AgentSelectViewProps> = {
   },
   render: AgentSelectStory,
 };
+
+export const LaunchPending: StoryObj<AgentSelectViewProps> = {
+  args: {
+    rows: [
+      { ...OPENCODE, status: "error", statusMessage: "Agent launch failed." },
+      { ...CLAUDE, status: "installed" },
+      CODEX,
+    ],
+    selectedId: "claude",
+    ctaLabel: "Starting…",
+    footerNote: "Wait for the current agent launch to finish.",
+    ctaDisabled: true,
+  },
+};
