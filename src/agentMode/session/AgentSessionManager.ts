@@ -3700,6 +3700,12 @@ export class AgentSessionManager {
         return warm.proc;
       }
 
+      // Validate the selected installation only when launching it. A running
+      // process keeps its version when settings select a different executable.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/531
+      const installState = descriptor.getInstallState(getSettings());
+      if (installState.kind === "incompatible") throw new Error(installState.message);
+
       const proc = descriptor.createBackendProcess({
         plugin: this.plugin,
         app: this.app,

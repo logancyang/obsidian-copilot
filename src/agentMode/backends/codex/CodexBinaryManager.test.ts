@@ -1,7 +1,10 @@
 import { installCodexArchive, CODEX_BUNDLE_VERSION } from "./codexArchive";
+// Only the download is faked: the real CODEX_BUNDLE_VERSION must reach the manager so the
+// install assertions still compare the version directory against the adapter version the
+// launcher check demands. A literal here decouples the two on every pin bump.
 jest.mock("./codexArchive", () => ({
+  ...jest.requireActual<object>("./codexArchive"),
   installCodexArchive: jest.fn(),
-  CODEX_BUNDLE_VERSION: "1.10.0",
 }));
 import { getSettings, setSettings } from "@/settings/model";
 import { requireNodeModule } from "@/utils/desktopRuntime";
@@ -111,6 +114,7 @@ describe("CodexBinaryManager", () => {
           binaryVersion: CODEX_BUNDLE_VERSION,
           binaryPath: path.join(manager.getDataDir(), CODEX_BUNDLE_VERSION, "codex-acp"),
         });
+        expect(fs.readdirSync(manager.getDataDir())).toEqual([CODEX_ACP_PINNED_VERSION]);
         expect(mockedDetectBinary).not.toHaveBeenCalled();
         expect(listener).toHaveBeenCalled();
         expect(manager.getActionState()).toEqual({ kind: "idle" });
