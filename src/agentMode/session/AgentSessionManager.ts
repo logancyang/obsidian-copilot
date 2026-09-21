@@ -2489,14 +2489,16 @@ export class AgentSessionManager {
    */
   async onInstallStateChanged(backendId: BackendId): Promise<void> {
     if (this.disposed) return;
+    const inflight = this.starting.get(backendId);
+    if (inflight) await inflight.catch(() => undefined);
+    if (this.disposed) return;
+    // Selection can change during startup; stale state must not tear down a valid session.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/535
     const installState = this.opts.resolveDescriptor(backendId)?.getInstallState(getSettings());
     // Compatibility probes publish a transient checking state before their
     // authoritative result. Keep live and warm processes intact until that
     // result says whether the configured runtime is actually usable.
     if (installState?.kind === "checking") return;
-    const inflight = this.starting.get(backendId);
-    if (inflight) await inflight.catch(() => undefined);
-    if (this.disposed) return;
     const hasSession = this.hasSessionOn(backendId) || this.pendingCreates.has(backendId);
     const process = this.backends.get(backendId);
     let runnable = installState?.kind === "ready";

@@ -3206,6 +3206,38 @@ describe("AgentSessionManager.onInstallStateChanged", () => {
     expect(mgr.hasHeldConfigChange("opencode")).toBe(true);
   });
 
+  it("preserves the starting session when a cleared path is replaced before startup finishes (https://github.com/Brevilabs/obsidian-copilot-private/issues/535)", async () => {
+    const { mgr, preloader, setInstallState } = buildInstallStateManager({
+      installState: { kind: "ready", source: "custom" },
+    });
+    let finishStart!: () => void;
+    const starting = new Promise<void>((resolve) => {
+      finishStart = resolve;
+    });
+    let entered!: () => void;
+    const booting = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    mockBackendStart.mockImplementationOnce(async () => {
+      entered();
+      await starting;
+    });
+    const created = mgr.createSession();
+    await booting;
+    setInstallState({ kind: "absent" });
+    const cleared = mgr.onInstallStateChanged("opencode");
+    setInstallState({ kind: "ready", source: "custom" });
+    const replaced = mgr.onInstallStateChanged("opencode");
+    finishStart();
+    const session = await created;
+    await Promise.all([cleared, replaced, session.ready]);
+
+    expect(mgr.getActiveSession()).toBe(session);
+    expect(mockBackendShutdown).not.toHaveBeenCalled();
+    expect(preloader.clearCached).not.toHaveBeenCalled();
+    expect(mgr.hasHeldConfigChange("opencode")).toBe(true);
+  });
+
   it("https://github.com/Brevilabs/obsidian-copilot-private/issues/530 preserves a session started during a background download when its pointer is published", async () => {
     const { mgr, preloader } = buildInstallStateManager({
       installState: { kind: "ready", source: "managed" },
