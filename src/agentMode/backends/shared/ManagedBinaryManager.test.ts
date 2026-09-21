@@ -35,6 +35,9 @@ class TestBinaryManager extends ManagedBinaryManager<number> {
   getDataDir(): string {
     return this.dataDir;
   }
+  protected managedEntryPath(dir: string): string {
+    return path.join(dir, "binary");
+  }
   protected readBinarySettings(): BinarySettings {
     return this.settings;
   }
@@ -64,6 +67,103 @@ describe("ManagedBinaryManager", () => {
       fs.writeFileSync(customPath, "binary", { mode: 0o755 });
     });
     afterEach(() => fs.rmSync(tempDir, { recursive: true, force: true }));
+
+    describe("ensureManagedInstalled()", () => {
+      const issue = "https://github.com/Brevilabs/obsidian-copilot-private/issues/536";
+      beforeEach(() => {
+        manager.settings = {
+          binaryPath: path.join(tempDir, "missing"),
+          binaryVersion: "1.2.3",
+          binarySource: "managed",
+        };
+      });
+      it.each(["1.2.3", "0.9.0"])(
+        `${issue} restores a missing selection regardless of recorded version %s`,
+        async (version) => {
+          manager.settings.binaryVersion = version;
+          await manager.ensureManagedInstalled("1.2.3");
+          expect(manager.settings.binaryPath).toBe("/managed/binary");
+          expect(manager.pipeline.mock.calls[0][0]).toMatchObject({ preserveExisting: true });
+        }
+      );
+      it(`${issue} coalesces concurrent recovery requests`, async () => {
+        await Promise.all([
+          manager.ensureManagedInstalled("1.2.3"),
+          manager.ensureManagedInstalled("1.2.3"),
+        ]);
+        expect(manager.pipeline).toHaveBeenCalledTimes(1);
+      });
+      it(`${issue} reuses a verified exact version without deleting a higher cached version`, async () => {
+        const root = manager.getDataDir();
+        fs.mkdirSync(path.join(root, "1.2.3-copy"), { recursive: true });
+        fs.mkdirSync(path.join(root, "2.0.0"));
+        fs.writeFileSync(path.join(root, "1.2.3-copy", "binary"), "cached");
+        fs.writeFileSync(path.join(root, "2.0.0", "binary"), "higher");
+        await manager.ensureManagedInstalled("1.2.3");
+        expect(manager.settings.binaryPath).toBe(path.join(root, "1.2.3-copy", "binary"));
+        expect(manager.pipeline).not.toHaveBeenCalled();
+        expect(fs.readFileSync(path.join(root, "2.0.0", "binary"), "utf8")).toBe("higher");
+      });
+      it(`${issue} preserves the missing selection and exposes retry after download failure`, async () => {
+        const previous = manager.settings;
+        manager.pipeline.mockRejectedValueOnce(new Error("offline"));
+        await expect(manager.ensureManagedInstalled("1.2.3")).rejects.toThrow("offline");
+        expect(manager.settings).toEqual(previous);
+        expect(manager.getRuntimeState()).toMatchObject({ kind: "error", operation: "install" });
+        await manager.ensureManagedInstalled("1.2.3");
+        expect(manager.settings.binaryPath).toBe("/managed/binary");
+      });
+      it(`${issue} preserves a custom selection made during recovery`, async () => {
+        let release!: () => void;
+        const pending = new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        manager.validate.mockImplementation(async (binaryPath) => {
+          await pending;
+          return { version: "1.2.3", path: binaryPath };
+        });
+        fs.mkdirSync(path.join(manager.getDataDir(), "1.2.3"), { recursive: true });
+        const recovery = manager.ensureManagedInstalled("1.2.3");
+        manager.settings = { binaryPath: customPath, binarySource: "custom" };
+        release();
+        await expect(recovery).rejects.toBeInstanceOf(ManagedInstallAbortError);
+        expect(manager.settings.binaryPath).toBe(customPath);
+        expect(manager.pipeline).not.toHaveBeenCalled();
+      });
+      it(`${issue} leaves corrupt and wrong-version cache entries intact and downloads a fresh installation`, async () => {
+        fs.mkdirSync(path.join(manager.getDataDir(), "1.2.3"), { recursive: true });
+        fs.writeFileSync(path.join(manager.getDataDir(), "1.2.3", "binary"), "wrong");
+        manager.validate.mockResolvedValueOnce({ version: "2.0.0", path: "unused" });
+        await manager.ensureManagedInstalled("1.2.3");
+        expect(manager.pipeline).toHaveBeenCalledTimes(1);
+        expect(fs.readFileSync(path.join(manager.getDataDir(), "1.2.3", "binary"), "utf8")).toBe(
+          "wrong"
+        );
+      });
+      it(`${issue} bypasses an automatic upgrade cooldown when the selected file is missing`, async () => {
+        fs.mkdirSync(manager.getDataDir(), { recursive: true });
+        fs.writeFileSync(
+          path.join(manager.getDataDir(), "auto-upgrade-failure.json"),
+          JSON.stringify({ pin: "1.2.3", failedAt: Date.now() })
+        );
+        await manager.ensureManagedInstalled("1.2.3");
+        expect(manager.settings.binaryPath).toBe("/managed/binary");
+      });
+      it(`${issue} never recovers a custom selection or first install`, async () => {
+        manager.settings.binarySource = "custom";
+        await manager.ensureManagedInstalled("1.2.3");
+        manager.settings = {};
+        await manager.ensureManagedInstalled("1.2.3");
+        expect(manager.pipeline).not.toHaveBeenCalled();
+      });
+      it(`${issue} leaves a working old runtime selected for the background updater`, async () => {
+        manager.settings.binaryPath = customPath;
+        manager.settings.binaryVersion = "1.0.0";
+        await manager.ensureManagedInstalled("1.2.3");
+        expect(manager.pipeline).not.toHaveBeenCalled();
+        expect(manager.settings.binaryVersion).toBe("1.0.0");
+      });
+    });
 
     describe("autoUpgrade()", () => {
       const issue = "https://github.com/Brevilabs/obsidian-copilot-private/issues/530";

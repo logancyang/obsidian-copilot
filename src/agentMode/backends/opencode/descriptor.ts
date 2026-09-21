@@ -196,6 +196,10 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
     }).open();
   },
 
+  async prepareRuntime(plugin): Promise<void> {
+    await getOpencodeBinaryManager(plugin).ensureManagedInstalled(OPENCODE_PINNED_VERSION);
+  },
+
   managedInstall: {
     getState(plugin: CopilotPlugin): ManagedInstallActionState {
       return managedInstallActionState(getOpencodeBinaryManager(plugin));
@@ -207,6 +211,7 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
 
     async run(plugin: CopilotPlugin): Promise<void> {
       const manager = getOpencodeBinaryManager(plugin);
+      if (await manager.ensureManagedInstalled(OPENCODE_PINNED_VERSION)) return;
       const state = computeInstallState(getSettings().agentMode?.backends?.opencode);
       if (state.kind !== "installed") return;
       if (state.source === "custom") {

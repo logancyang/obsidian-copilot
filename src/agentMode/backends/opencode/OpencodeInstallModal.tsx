@@ -112,7 +112,12 @@ export const OpencodeConfigContainer: React.FC<{
 
   const install = React.useCallback(() => {
     manager
-      .install()
+      // Retry is additive even when a higher version belongs to another closed vault.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/536
+      .ensureManagedInstalled(OPENCODE_PINNED_VERSION)
+      .then(async (recovered) =>
+        recovered ? { version: OPENCODE_PINNED_VERSION } : manager.install()
+      )
       .then(({ version }) => {
         forgetUpgradeOutcome();
         new Notice(`opencode v${version} installed.`);

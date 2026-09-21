@@ -362,9 +362,9 @@ function modelCatalog(baseModelId: string): BackendModelCatalog {
 
 function buildManager(
   modelPreloaderOverrides: Partial<AgentModelPreloader> = {},
-  persistenceManager?: ConstructorParameters<typeof AgentSessionManager>[2]["persistenceManager"]
+  persistenceManager?: ConstructorParameters<typeof AgentSessionManager>[2]["persistenceManager"],
+  descriptor = buildDescriptor()
 ): AgentSessionManager {
-  const descriptor = buildDescriptor();
   const modelPreloader = {
     getCachedModelCatalog: jest.fn(() => null),
     getEffortCatalog: jest.fn(() => null),
@@ -436,6 +436,30 @@ function savedNoteFixture() {
 
 describe("AgentSessionManager", () => {
   describe("AgentSessionManager", () => {
+    describe("ensureBackend()", () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/536 repairs an unavailable runtime before starting a new process and reuses the live process afterward", async () => {
+        const descriptor = buildDescriptor();
+        let ready = false;
+        descriptor.getInstallState = () =>
+          ready
+            ? { kind: "ready", source: "managed" }
+            : {
+                kind: "incompatible",
+                source: "managed",
+                currentVersion: "1",
+                minVersion: "2",
+                message: "missing runtime",
+              };
+        descriptor.prepareRuntime = jest.fn(async () => {
+          ready = true;
+        });
+        const mgr = buildManager({}, undefined, descriptor);
+        await mgr.createSession();
+        await mgr.createSession();
+        expect(descriptor.prepareRuntime).toHaveBeenCalledTimes(1);
+        expect(mockBackendStart).toHaveBeenCalledTimes(1);
+      });
+    });
     describe("noteSpawnConfigChanged()", () => {
       it("keeps an open session alive and holds the restart for the user (https://github.com/Brevilabs/obsidian-copilot-private/issues/475)", async () => {
         const mgr = buildManager();

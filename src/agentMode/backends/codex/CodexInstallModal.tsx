@@ -81,13 +81,20 @@ export const CodexConfigContainer: React.FC<CodexConfigContainerProps> = ({ mana
   }
 
   const install = (): void => {
-    manager.install().catch((error: unknown) => {
-      // Cancellation belongs to the user; a competing action cannot overwrite shared progress.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
-      if ((error as Error)?.name === "AbortError") return;
-      if (error instanceof ManagedInstallOperationInFlightError) new Notice(error.message);
-      logError("[AgentMode] Codex install failed", error);
-    });
+    // Retry repairs a missing selection without replacing any cached installation.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/536
+    manager
+      .ensureManagedInstalled(CODEX_PINNED_VERSION)
+      .then(async (recovered) => {
+        if (!recovered) await manager.install();
+      })
+      .catch((error: unknown) => {
+        // Cancellation belongs to the user; a competing action cannot overwrite shared progress.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
+        if ((error as Error)?.name === "AbortError") return;
+        if (error instanceof ManagedInstallOperationInFlightError) new Notice(error.message);
+        logError("[AgentMode] Codex install failed", error);
+      });
   };
 
   const saveCustomPath = async (path: string): Promise<string | null> => {

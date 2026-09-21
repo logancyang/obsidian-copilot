@@ -307,7 +307,10 @@ export interface BackendDescriptor {
   /** Optional: backend-specific settings panel. Rendered inside the Agent Mode tab. */
   SettingsPanel?: React.FC<{ plugin: CopilotPlugin; app: App }>;
 
-  /** Optional: reconcile install state on plugin load (e.g. clear stale managed install). */
+  /** Recover a missing managed runtime before readiness checks or process startup. */
+  prepareRuntime?(plugin: CopilotPlugin): Promise<void>;
+
+  /** Optional: reconcile install state and check for updates on plugin load. */
   onPluginLoad?(plugin: CopilotPlugin, canAutoUpgrade?: () => boolean): Promise<void>;
 
   /**

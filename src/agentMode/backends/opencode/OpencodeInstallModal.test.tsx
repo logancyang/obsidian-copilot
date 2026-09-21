@@ -1,3 +1,4 @@
+import { OPENCODE_PINNED_VERSION } from "./ui/opencodeVersion";
 jest.mock("@/agentMode/backends/opencode/descriptor", () => ({
   detectOpencodeCliPath: jest.fn().mockResolvedValue(null),
 }));
@@ -77,6 +78,7 @@ const makeManager = (): {
     },
     getRuntimeState: () => runtime,
     cancelCurrentOperation,
+    ensureManagedInstalled: jest.fn().mockResolvedValue(false),
     install: jest.fn((opts: { signal?: AbortSignal; onProgress?: (e: ProgressEvent) => void }) => {
       installCalls.push(opts);
       publish({ kind: "installing", progress: null });
@@ -148,6 +150,16 @@ describe("OpencodeInstallModal", () => {
   });
 
   describe("OpencodeConfigContainer()", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/536 routes Configure retry through additive recovery", async () => {
+      const { manager } = makeManager();
+      jest.mocked(manager.ensureManagedInstalled).mockResolvedValue(true);
+      renderContainer(manager);
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Download & install" }));
+      });
+      expect(manager.ensureManagedInstalled).toHaveBeenCalledWith(OPENCODE_PINNED_VERSION);
+      expect(manager.install).not.toHaveBeenCalled();
+    });
     it("opens on the managed source when nothing was ever configured", () => {
       const { manager } = makeManager();
       renderContainer(manager);
@@ -193,7 +205,9 @@ describe("OpencodeInstallModal", () => {
       const { manager, publish, installDeferred } = makeManager();
       renderContainer(manager);
 
-      fireEvent.click(screen.getByRole("button", { name: "Download & install" }));
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Download & install" }));
+      });
       expect(screen.getByText("Starting…")).toBeTruthy();
 
       // Progress arrives through the manager's runtime state now, so the row
@@ -223,7 +237,9 @@ describe("OpencodeInstallModal", () => {
       const { manager, cancelCurrentOperation, publish, installDeferred } = makeManager();
       const { unmount } = renderContainer(manager);
 
-      fireEvent.click(screen.getByRole("button", { name: "Download & install" }));
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Download & install" }));
+      });
       fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
       expect(cancelCurrentOperation).toHaveBeenCalled();
 
@@ -245,7 +261,9 @@ describe("OpencodeInstallModal", () => {
       const { manager, publish, installDeferred } = makeManager();
       renderContainer(manager);
 
-      fireEvent.click(screen.getByRole("button", { name: "Download & install" }));
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Download & install" }));
+      });
       await act(async () => {
         installDeferred().reject(new Error("tar exited with 1"));
       });
@@ -286,7 +304,9 @@ describe("OpencodeInstallModal", () => {
       });
       expect(screen.getByText("tar exited with 1")).toBeTruthy();
 
-      fireEvent.click(screen.getByRole("button", { name: "Reinstall" }));
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Reinstall" }));
+      });
       await act(async () => {
         installDeferred().resolve({ version: "1.16.0", path: "/managed" });
       });
@@ -309,7 +329,9 @@ describe("OpencodeInstallModal", () => {
 
       // The reinstall takes the lock; the upgrade clicked underneath it never
       // owns the run, so it must not take the run's display with it.
-      fireEvent.click(screen.getByRole("button", { name: "Reinstall" }));
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Reinstall" }));
+      });
       await act(async () => {
         fireEvent.click(screen.getByRole("button", { name: "Upgrade to latest" }));
       });
@@ -455,7 +477,9 @@ describe("OpencodeInstallModal", () => {
       const { manager, installDeferred } = makeManager();
       renderContainer(manager);
 
-      fireEvent.click(screen.getByRole("button", { name: "Download & install" }));
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Download & install" }));
+      });
       await act(async () => {
         installDeferred().reject(new OperationInFlightError());
       });

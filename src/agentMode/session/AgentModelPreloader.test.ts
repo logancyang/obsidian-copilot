@@ -111,6 +111,19 @@ function buildDescriptor(makeProc: () => MockProcHandle): {
 
 describe("AgentModelPreloader", () => {
   describe("preload()", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/536 recovers a missing runtime before the readiness check and probe", async () => {
+      const { descriptor, procHandle } = buildDescriptor(() => makeMockProc());
+      let ready = false;
+      descriptor.getInstallState = () =>
+        ready ? { kind: "ready", source: "managed" } : { kind: "absent" };
+      descriptor.prepareRuntime = jest.fn(async () => {
+        ready = true;
+      });
+      const preloader = new AgentModelPreloader(buildApp(), buildPlugin(), () => descriptor);
+      await preloader.preload(descriptor.id);
+      expect(procHandle.start).toHaveBeenCalledTimes(1);
+      preloader.shutdown();
+    });
     it("does not start or probe an incompatible binary (https://github.com/Brevilabs/obsidian-copilot-private/issues/531)", async () => {
       const { descriptor, procHandle } = buildDescriptor(() => makeMockProc());
       descriptor.getInstallState = () => ({

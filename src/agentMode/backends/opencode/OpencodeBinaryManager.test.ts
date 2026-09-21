@@ -356,6 +356,30 @@ describe("OpencodeBinaryManager.refreshInstallState", () => {
     await fs.promises.rm(tmpDir, { recursive: true, force: true });
   });
 
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/536 recovers from a verified cached executable without removing higher downloads", async () => {
+    if (process.platform === "win32") return;
+    const manager = new OpencodeBinaryManager(fakePlugin);
+    jest.spyOn(manager, "getDataDir").mockReturnValue(tmpDir);
+    const cached = path.join(tmpDir, `${OPENCODE_PINNED_VERSION}-retained`, "bin", "opencode");
+    const higher = path.join(tmpDir, "99.0.0", "bin", "opencode");
+    await fs.promises.mkdir(path.dirname(cached), { recursive: true });
+    await fs.promises.mkdir(path.dirname(higher), { recursive: true });
+    await fs.promises.writeFile(
+      cached,
+      `#!/bin/sh\nprintf '%s\\n' '${OPENCODE_PINNED_VERSION}'\n`,
+      { mode: 0o755 }
+    );
+    await fs.promises.writeFile(higher, "higher");
+    settingsMock.__reset({
+      binaryPath: path.join(tmpDir, "missing"),
+      binaryVersion: "0.0.1",
+      binarySource: "managed",
+    });
+    await manager.refreshInstallState();
+    expect(settingsMock.__get().binaryPath).toBe(cached);
+    expect(await fs.promises.readFile(higher, "utf8")).toBe("higher");
+  });
+
   it("no-op for absent state", async () => {
     settingsMock.__reset({});
     const mgr = new OpencodeBinaryManager(fakePlugin);
@@ -381,7 +405,7 @@ describe("OpencodeBinaryManager.refreshInstallState", () => {
     });
   });
 
-  it("clears settings when persisted managed binary is missing on disk", async () => {
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/536 retains missing settings when recovery fails", async () => {
     const ghost = path.join(tmpDir, "does-not-exist", "opencode");
     settingsMock.__reset({
       binaryPath: ghost,
@@ -389,11 +413,15 @@ describe("OpencodeBinaryManager.refreshInstallState", () => {
       binarySource: "managed",
     });
     const mgr = new OpencodeBinaryManager(fakePlugin);
-    await mgr.refreshInstallState();
+    const recovery = jest
+      .spyOn(mgr, "ensureManagedInstalled")
+      .mockRejectedValueOnce(new Error("offline"));
+    await expect(mgr.refreshInstallState()).rejects.toThrow("offline");
+    expect(recovery).toHaveBeenCalledWith(OPENCODE_PINNED_VERSION);
     expect(settingsMock.__get()).toEqual({
-      binaryPath: undefined,
-      binaryVersion: undefined,
-      binarySource: undefined,
+      binaryPath: ghost,
+      binaryVersion: OPENCODE_PINNED_VERSION,
+      binarySource: "managed",
     });
   });
 

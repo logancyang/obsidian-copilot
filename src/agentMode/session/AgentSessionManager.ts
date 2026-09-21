@@ -3717,10 +3717,13 @@ export class AgentSessionManager {
       assertBackendCompatible(descriptor, getSettings(), existing);
       return existing;
     }
-    assertBackendCompatible(descriptor, getSettings());
     const inflight = this.starting.get(backendId);
     if (inflight) return inflight;
     const startPromise = (async () => {
+      // Another vault can reclaim an idle installation after plugin load.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/536
+      await descriptor.prepareRuntime?.(this.plugin);
+      assertBackendCompatible(descriptor, getSettings());
       // A plugin-load probe owns the only process for this backend until it
       // settles. Await that same deduped probe so a user selection cannot race
       // it and spawn a second process before the warm entry exists.

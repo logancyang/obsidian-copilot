@@ -77,6 +77,23 @@ export class CodexBinaryManager extends ManagedBinaryManager<CodexInstallProgres
     }
     return path().join(copilotAppDataDir(home), "codex");
   }
+  protected managedEntryPath(versionDir: string): string {
+    return entryPath(versionDir);
+  }
+
+  protected async validateManagedBinary(
+    binaryPath: string,
+    signal: AbortSignal
+  ): Promise<InstalledBinary> {
+    // Native validation includes the bundled runtime, not just its launcher metadata.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/536
+    await verifyLauncher(binaryPath, signal);
+    const runtime = await run(binaryPath, ["cli", "--help"], signal);
+    if (!runtime.includes("Codex CLI"))
+      throw new Error("The bundled Codex runtime could not start.");
+    return { path: binaryPath, version: CODEX_PINNED_VERSION };
+  }
+
   protected async installPipeline({
     signal,
     onProgress,
@@ -97,7 +114,7 @@ export class CodexBinaryManager extends ManagedBinaryManager<CodexInstallProgres
       dataDir,
       preserveExisting ? `${CODEX_PINNED_VERSION}-${uuidv4()}` : CODEX_PINNED_VERSION
     );
-    const stageDir = path().join(dataDir, `.tmp-${CODEX_PINNED_VERSION}-${Date.now()}`);
+    const stageDir = path().join(dataDir, `.tmp-${CODEX_PINNED_VERSION}-${uuidv4()}`);
     await fs().promises.mkdir(stageDir, { recursive: true });
     try {
       onProgress?.({ label: "Installing the Codex adapter…", percent: 30 });
@@ -136,7 +153,9 @@ function entryPath(versionDir: string): string {
 
 async function verifyLauncher(entry: string, signal: AbortSignal): Promise<void> {
   const stdout = await run(entry, ["--version"], signal);
-  if (!stdout.includes(CODEX_PINNED_VERSION)) {
+  // Exact version matching prevents a cache candidate with a longer version from passing.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/536
+  if (stdout.match(/\b\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?\b/)?.[0] !== CODEX_PINNED_VERSION) {
     throw new Error(`The Codex adapter did not report version ${CODEX_PINNED_VERSION}.`);
   }
 }

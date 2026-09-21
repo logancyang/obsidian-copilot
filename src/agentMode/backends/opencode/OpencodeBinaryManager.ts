@@ -220,14 +220,6 @@ function updateOpencodeFields(partial: Partial<OpencodeBackendSettings>): void {
   }));
 }
 
-function clearOpencodeBinary(): void {
-  updateOpencodeFields({
-    binaryVersion: undefined,
-    binaryPath: undefined,
-    binarySource: undefined,
-  });
-}
-
 /**
  * Per-user, OS-local directory the managed opencode binary installs into,
  * OUTSIDE the Obsidian vault — `~/.obsidian-copilot/opencode`. Composed under
@@ -312,8 +304,7 @@ export class OpencodeBinaryManager extends ManagedBinaryManager<ProgressEvent, I
    * Every *user-triggered* operation that writes `binaryPath`/`binarySource`
    * goes through here, which is what makes the lock useful: guarding only the
    * managed install would still let the Configure dialog apply a custom path
-   * underneath it. {@link refreshInstallState} is the one writer outside, and
-   * says there why.
+   * underneath it. Missing-download recovery uses the same operation lock.
    *
    * @param running - State published while `body` runs.
    * @param body - Receives the signal to honour for cancellation.
@@ -336,36 +327,18 @@ export class OpencodeBinaryManager extends ManagedBinaryManager<ProgressEvent, I
     return computeInstallState(readOpencodeSettings());
   }
 
-  /**
-   * Reconcile persisted install state with what's actually on disk. If we
-   * believe a managed install exists but the binary is gone (user deleted it,
-   * restored a vault from backup, etc.), demote to `absent`. Skipped for
-   * custom-source installs — re-checking on every plugin load would punish
-   * users for transient filesystem hiccups (network mounts, etc.).
-   *
-   * DESIGN NOTE — this is the one `binaryPath` writer that stays outside
-   * {@link runExclusive}, and the residual race is accepted. To lose data a
-   * user needs a managed path whose file is already gone, an install still
-   * running from a previous lifecycle, a reload landing mid-run, AND the
-   * single `fileExists` stat below straddling the instant that install
-   * persists its result — at which point the clear would wipe the fresh
-   * install. Taking the lock here would be worse: a reconcile at load would
-   * throw `OperationInFlightError` on every plugin load that happens during a
-   * download, turning a millisecond-wide race into a routine failure. If a
-   * future review flags this again, point them at this note; the cheap fix, if
-   * it ever bites, is to re-read settings after the await and only clear when
-   * the path still matches the one checked.
-   */
+  /** Restore a missing managed download without forgetting the user's selection. */
   async refreshInstallState(): Promise<void> {
-    // Read raw settings (not getInstallState) so we can still see a configured
-    // path whose file is gone — getInstallState now reports that as `absent`.
-    // Only auto-clear a *managed* install whose binary vanished; a custom path
-    // is the user's to manage and may point at a not-yet-mounted volume.
-    const s = readOpencodeSettings();
-    if (!s.binaryPath || (s.binarySource ?? "managed") !== "managed") return;
-    if (await fileExists(s.binaryPath)) return;
-    logWarn(`[AgentMode] persisted opencode binary missing at ${s.binaryPath}; clearing settings.`);
-    clearOpencodeBinary();
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/536
+    await this.ensureManagedInstalled(OPENCODE_PINNED_VERSION);
+  }
+
+  protected managedEntryPath(versionDir: string): string {
+    return nodePath().join(
+      versionDir,
+      "bin",
+      process.platform === "win32" ? "opencode.exe" : "opencode"
+    );
   }
 
   /**

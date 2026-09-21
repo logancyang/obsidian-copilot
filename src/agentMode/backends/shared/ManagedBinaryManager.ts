@@ -38,6 +38,7 @@ export abstract class ManagedBinaryManager<
 > {
   private automaticSelection: BinarySettings | null = null;
   private operation: AbortController | null = null;
+  private recovery: Promise<boolean> | null = null;
   private runtimeState: ManagedInstallRuntimeState<TProgress> = { kind: "idle" };
   private readonly subscribers = new Set<() => void>();
 
@@ -218,6 +219,111 @@ export abstract class ManagedBinaryManager<
     } finally {
       this.automaticSelection = null;
     }
+  }
+
+  /**
+   * Repairs a missing managed selection additively; existing/custom selections are unchanged.
+   * Returns whether recovery was needed. Failures retain settings and remain explicitly retryable.
+   * @param pin - Exact runtime version shipped by the loaded plugin.
+   */
+  async ensureManagedInstalled(pin: string): Promise<boolean> {
+    if (this.recovery) return this.recovery;
+    const selected = this.readBinarySettings();
+    const fs = requireNodeModule<typeof import("node:fs")>("fs");
+    // Closed vaults can retain paths removed by another vault's cleanup. First installs
+    // and user-owned paths must never trigger automatic downloads.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/536
+    if (
+      selected.binarySource !== "managed" ||
+      !selected.binaryPath ||
+      fs.existsSync(selected.binaryPath)
+    )
+      return false;
+    if (this.isBusy()) {
+      await new Promise<void>((resolve) => {
+        const unsubscribe = this.subscribeRuntimeState(() => {
+          if (!this.isBusy()) {
+            unsubscribe();
+            resolve();
+          }
+        });
+      });
+      return this.ensureManagedInstalled(pin);
+    }
+    this.recovery = this.runExclusive({ kind: "installing", progress: null }, async (signal) => {
+      this.automaticSelection = selected;
+      try {
+        const cached = await this.findManagedBinary(pin, signal);
+        this.assertAutomaticSelection();
+        if (signal.aborted) throw new ManagedInstallAbortError();
+        if (cached) {
+          this.selectInstalledBinary({
+            binaryPath: cached.path,
+            binaryVersion: pin,
+            binarySource: "managed",
+          });
+        } else {
+          // A repair is not an upgrade: never delete or replace other versions, and
+          // never suppress it with the optional background-upgrade failure cooldown.
+          // https://github.com/Brevilabs/obsidian-copilot-private/issues/536
+          await this.installPipeline({
+            preserveExisting: true,
+            signal,
+            onProgress: (progress: TProgress) => this.publishProgress(progress),
+          } as TOptions & { signal: AbortSignal });
+        }
+        return true;
+      } finally {
+        this.automaticSelection = null;
+      }
+    });
+    try {
+      return await this.recovery;
+    } finally {
+      this.recovery = null;
+    }
+  }
+
+  private async findManagedBinary(
+    pin: string,
+    signal: AbortSignal
+  ): Promise<InstalledBinary | null> {
+    const fs = requireNodeModule<typeof import("node:fs")>("fs");
+    const path = requireNodeModule<typeof import("node:path")>("path");
+    let entries: import("node:fs").Dirent[];
+    try {
+      entries = await fs.promises.readdir(this.getDataDir(), { withFileTypes: true });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+      throw error;
+    }
+    for (const entry of entries) {
+      // Inspect only published managed directories, never staging or symlink targets.
+      // The executable's native verification, not the filename, proves the exact pin.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/536
+      if (!entry.isDirectory() || (entry.name !== pin && !entry.name.startsWith(`${pin}-`)))
+        continue;
+      try {
+        const installed = await this.validateManagedBinary(
+          this.managedEntryPath(path.join(this.getDataDir(), entry.name)),
+          signal
+        );
+        if (installed.version === pin) return installed;
+      } catch (error) {
+        if (signal.aborted) throw error;
+        // A corrupt cache entry is retained; recovery publishes a fresh directory.
+      }
+    }
+    return null;
+  }
+
+  protected abstract managedEntryPath(versionDir: string): string;
+
+  protected validateManagedBinary(
+    binaryPath: string,
+    _signal: AbortSignal
+  ): Promise<InstalledBinary> {
+    return this.validateCustomBinary(binaryPath);
   }
 
   private assertAutomaticSelection(): void {

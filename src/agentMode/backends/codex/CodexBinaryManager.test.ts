@@ -103,6 +103,36 @@ describe("CodexBinaryManager", () => {
       fs.rmSync(tempDir, { recursive: true, force: true });
     });
 
+    describe("ensureManagedInstalled()", () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/536 reuses a native verified cache and preserves a higher installation", async () => {
+        const manager = new CodexBinaryManager();
+        const cached = await manager.install({ preserveExisting: true });
+        const higher = path.join(manager.getDataDir(), "99.0.0");
+        fs.mkdirSync(higher);
+        fs.writeFileSync(path.join(higher, "codex-acp"), "higher");
+        setSettings({
+          agentMode: {
+            ...getSettings().agentMode,
+            backends: {
+              ...getSettings().agentMode.backends,
+              codex: {
+                binarySource: "managed",
+                binaryPath: path.join(tempDir, "missing"),
+                binaryVersion: "0.0.1",
+              },
+            },
+          },
+        });
+        jest.mocked(installCodexArchive).mockClear();
+        mockedExecFile.mockClear();
+        await manager.ensureManagedInstalled(CODEX_PINNED_VERSION);
+        expect(getSettings().agentMode.backends?.codex?.binaryPath).toBe(cached.path);
+        expect(installCodexArchive).not.toHaveBeenCalled();
+        expect(mockedExecFile).toHaveBeenCalledTimes(2);
+        expect(fs.readFileSync(path.join(higher, "codex-acp"), "utf8")).toBe("higher");
+      });
+    });
+
     describe("install()", () => {
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/535 rejects a managed pin below minimum without downloading or replacing the selected installation", async () => {
         const manager = new CodexBinaryManager();
@@ -158,7 +188,11 @@ describe("CodexBinaryManager", () => {
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 rejects a wrong adapter version or missing bundled runtime before selecting files", async () => {
         const manager = new CodexBinaryManager();
         const before = getSettings().agentMode.backends?.codex;
-        for (const output of ["0.0.1", CODEX_PINNED_VERSION]) {
+        for (const output of [
+          "0.0.1",
+          `${CODEX_PINNED_VERSION}1 Codex CLI`,
+          CODEX_PINNED_VERSION,
+        ]) {
           mockedExecFile.mockImplementation((_command, _args, _options, callback) => {
             (callback as (error: Error | null, stdout: string, stderr: string) => void)(
               null,
@@ -168,7 +202,9 @@ describe("CodexBinaryManager", () => {
             return {} as childProcess.ChildProcess;
           });
           await expect(manager.install()).rejects.toThrow(
-            output === "0.0.1" ? "did not report version" : "runtime could not start"
+            output === CODEX_PINNED_VERSION
+              ? "runtime could not start"
+              : "did not report version"
           );
           expect(getSettings().agentMode.backends?.codex).toEqual(before);
           expect(fs.readdirSync(manager.getDataDir())).toEqual([]);

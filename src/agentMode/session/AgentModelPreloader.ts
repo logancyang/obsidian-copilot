@@ -237,6 +237,9 @@ export class AgentModelPreloader {
       logWarn(`[AgentMode] preload skipped: unknown backend ${backendId}`);
       return;
     }
+    // Repair stale saved paths before treating a backend as unavailable.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/536
+    await descriptor.prepareRuntime?.(this.plugin);
     if (descriptor.getInstallState(getSettings()).kind !== "ready") return;
 
     const proc = descriptor.createBackendProcess({

@@ -66,6 +66,7 @@ function makeManager() {
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
+    ensureManagedInstalled: jest.fn().mockResolvedValue(false),
     install: jest.fn().mockResolvedValue(undefined),
     cancelCurrentOperation: jest.fn(),
     setCustomBinaryPath: jest.fn().mockResolvedValue(undefined),
@@ -153,6 +154,18 @@ describe("CodexInstallModal", () => {
       await act(async () => fireEvent.click(screen.getByRole("button", { name: "Apply" })));
       expect(fixture.manager.setCustomBinaryPath).toHaveBeenCalledWith("/my/codex-acp");
       expect(Notice).toHaveBeenCalledWith("Codex adapter path saved.");
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/536 routes Configure retry through additive recovery", async () => {
+      const fixture = makeManager();
+      fixture.manager.downloadsSize.mockResolvedValue(0);
+      fixture.manager.ensureManagedInstalled.mockResolvedValue(true);
+      await fixture.render();
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Download & install" }));
+      });
+      expect(fixture.manager.ensureManagedInstalled).toHaveBeenCalled();
+      expect(fixture.manager.install).not.toHaveBeenCalled();
     });
 
     it(`defaults new setups to managed and starts the manager's install for ${ISSUE}`, async () => {
@@ -249,7 +262,9 @@ describe("CodexInstallModal", () => {
         ).toBe("true");
         if (operation === "install") {
           expect(screen.getByText("Download failed")).toBeTruthy();
-          fireEvent.click(screen.getByRole("button", { name: "Reinstall & use managed" }));
+          await act(async () => {
+            fireEvent.click(screen.getByRole("button", { name: "Reinstall & use managed" }));
+          });
           expect(fixture.manager.install).toHaveBeenCalledTimes(1);
         }
         expect(getSettings().agentMode.backends?.codex?.binaryPath).toBe("/my/codex-acp");
