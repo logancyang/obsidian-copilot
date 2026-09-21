@@ -7,6 +7,15 @@ import { act, renderHook } from "@testing-library/react";
 import { useAgentSelect } from "./useAgentSelect";
 import { useBackendInstallStates, useSessionBackendDescriptor } from "./useBackendDescriptor";
 
+let mockAuthChecking = false;
+let mockAuthStatuses: Record<string, { signedIn: boolean } | null> = {};
+jest.mock("@/agentMode/session/useBackendAuthState", () => ({
+  useBackendAuthState: jest.fn((descriptor: { id: string }) => ({
+    status: mockAuthStatuses[descriptor.id] ?? null,
+    checking: mockAuthChecking,
+  })),
+}));
+
 jest.mock("@/logger", () => ({ logError: jest.fn() }));
 
 jest.mock("./useBackendDescriptor", () => ({
@@ -19,6 +28,7 @@ jest.mock("@/agentMode/backends/registry", () => {
   const make = (id: string, displayName: string) => ({
     id,
     displayName,
+    auth: id === "opencode" ? undefined : {},
     setupDescription: `${displayName} description`,
     openInstallUI,
   });
@@ -41,10 +51,22 @@ const openInstallUI = backendRegistry.codex.openInstallUI as jest.Mock;
 const plugin = {} as CopilotPlugin;
 
 function makeManager(startResult: Promise<unknown> = Promise.resolve({})) {
+  const listeners = new Set<() => void>();
+  let starting = false;
   return {
+    subscribe: (listener: () => void) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    getIsStarting: () => starting,
+    setStarting: (value: boolean) => {
+      starting = value;
+      listeners.forEach((listener) => listener());
+    },
     setDefaultBackend: jest.fn(),
     getOrCreateActiveSession: jest.fn().mockReturnValue(startResult),
   } as unknown as AgentSessionManager & {
+    setStarting: (value: boolean) => void;
     setDefaultBackend: jest.Mock;
     getOrCreateActiveSession: jest.Mock;
   };
@@ -61,6 +83,8 @@ function render(
 describe("useAgentSelect", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockAuthChecking = false;
+    mockAuthStatuses = { claude: { signedIn: true }, codex: { signedIn: true } };
     mockSessionDescriptor.mockReturnValue(backendRegistry.opencode);
   });
 
@@ -115,6 +139,49 @@ describe("useAgentSelect", () => {
       expect(openInstallUI).not.toHaveBeenCalled();
     });
 
+    it("waits for an unavailable agent's pending launch before starting the selected alternative (https://github.com/Brevilabs/obsidian-copilot-private/issues/532)", () => {
+      const manager = makeManager();
+      manager.setStarting(true);
+      const { result } = render(
+        {
+          opencode: { kind: "error", message: "Launch failed" },
+          claude: { kind: "ready", source: "custom" },
+        },
+        manager
+      );
+
+      // Configure remains usable while another launch is settling.
+      act(() => result.current.runCta());
+      expect(openInstallUI).toHaveBeenCalledWith(plugin);
+      act(() => result.current.select("claude"));
+      expect(result.current.cta).toEqual({
+        action: "wait",
+        label: "Starting…",
+        note: "Wait for the current agent launch to finish.",
+      });
+      act(() => result.current.runCta());
+      expect(manager.setDefaultBackend).not.toHaveBeenCalled();
+      expect(manager.getOrCreateActiveSession).not.toHaveBeenCalled();
+
+      act(() => manager.setStarting(false));
+      expect(result.current.cta.action).toBe("start");
+      act(() => result.current.runCta());
+      expect(manager.setDefaultBackend).toHaveBeenCalledWith("claude");
+      expect(manager.getOrCreateActiveSession).toHaveBeenCalledTimes(1);
+    });
+
+    it("ignores a Start callback if a launch began since it rendered (https://github.com/Brevilabs/obsidian-copilot-private/issues/532)", () => {
+      const manager = makeManager();
+      const { result } = render({ opencode: { kind: "ready", source: "managed" } }, manager);
+      const start = result.current.runCta;
+
+      act(() => manager.setStarting(true));
+      act(() => start());
+
+      expect(manager.setDefaultBackend).not.toHaveBeenCalled();
+      expect(manager.getOrCreateActiveSession).not.toHaveBeenCalled();
+    });
+
     it("opens the selected backend's install dialog when it is not ready", () => {
       const manager = makeManager();
       const { result } = render({ codex: { kind: "error", message: "boom" } }, manager);
@@ -136,6 +203,51 @@ describe("useAgentSelect", () => {
       expect(openInstallUI).not.toHaveBeenCalled();
       expect(manager.setDefaultBackend).not.toHaveBeenCalled();
       expect(manager.getOrCreateActiveSession).not.toHaveBeenCalled();
+    });
+
+    it("configures a signed-out choice and starts an authenticated alternative (https://github.com/Brevilabs/obsidian-copilot-private/issues/532)", () => {
+      mockSessionDescriptor.mockReturnValue(backendRegistry.claude);
+      mockAuthStatuses.claude = { signedIn: false };
+      mockAuthStatuses.codex = null;
+      const manager = makeManager();
+      const { result, rerender } = render(
+        {
+          claude: { kind: "ready", source: "custom" },
+          codex: { kind: "ready", source: "managed" },
+        },
+        manager
+      );
+      expect(result.current.cta).toEqual({
+        label: "Configure",
+        note: "Claude not signed in",
+        action: "configure",
+      });
+      act(() => result.current.runCta());
+      expect(openInstallUI).toHaveBeenCalledWith(plugin);
+      expect(manager.getOrCreateActiveSession).not.toHaveBeenCalled();
+      act(() => result.current.select("codex"));
+      expect(result.current.cta.action).toBe("wait");
+      act(() => result.current.runCta());
+      expect(manager.getOrCreateActiveSession).not.toHaveBeenCalled();
+      mockAuthStatuses.codex = { signedIn: true };
+      mockAuthChecking = true;
+      rerender();
+      expect(result.current.cta.action).toBe("wait");
+      mockAuthChecking = false;
+      rerender();
+      expect(result.current.cta.action).toBe("start");
+      act(() => result.current.runCta());
+      expect(manager.setDefaultBackend).toHaveBeenCalledWith("codex");
+      expect(manager.getOrCreateActiveSession).toHaveBeenCalledTimes(1);
+    });
+    it("preserves the binary error over authentication state (https://github.com/Brevilabs/obsidian-copilot-private/issues/532)", () => {
+      mockSessionDescriptor.mockReturnValue(backendRegistry.claude);
+      mockAuthStatuses.claude = { signedIn: false };
+      const { result } = render(
+        { claude: { kind: "error", message: "Invalid binary" } },
+        makeManager()
+      );
+      expect(result.current.cta.note).toBe("Invalid binary");
     });
 
     it("logs a failed session spawn instead of rejecting", async () => {

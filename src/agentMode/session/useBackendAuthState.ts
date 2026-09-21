@@ -75,6 +75,8 @@ const publishAuthProbeStatus = (
 };
 
 export interface BackendAuthUiState {
+  /** True until this surface has refreshed its cached authentication status. */
+  checking: boolean;
   /**
    * Latest sign-in state, or `null` while the initial probe is in flight or
    * when the backend has no `auth` capability. Consumers should render the
@@ -123,6 +125,7 @@ export function useBackendAuthState(
 
   const operationController = React.useRef<AbortController | null>(null);
   const auth = descriptor.auth;
+  const [checking, setChecking] = React.useState(Boolean(auth));
   const cancelSignIn = React.useCallback(() => {
     if (auth) authControllers.get(auth)?.abort();
   }, [auth]);
@@ -149,18 +152,32 @@ export function useBackendAuthState(
       // its process stops. Additional mounts keep the cached status during refresh.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
       updateAuthSnapshot(auth, { status: null, failed: false, url: null });
-    } else if (getAuthSnapshot(auth).signingIn || getAuthSnapshot(auth).signingOut) return;
+    } else if (getAuthSnapshot(auth).signingIn || getAuthSnapshot(auth).signingOut) {
+      setChecking(false);
+      return;
+    }
+    // Cached sign-in may be stale when opening a fresh chat.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/532
+    let active = true;
+    setChecking(true);
     const generation = beginAuthProbe(auth);
     void (async () => {
       await authOperations.get(auth);
       return auth.getStatus(settingsRef.current);
-    })().then(
-      (s) => publishAuthProbeStatus(auth, s, generation),
-      (e) => {
-        logError("[AgentMode] auth status probe failed", e);
-        publishAuthProbeStatus(auth, { signedIn: false }, generation);
-      }
-    );
+    })()
+      .then(
+        (s) => publishAuthProbeStatus(auth, s, generation),
+        (e) => {
+          logError("[AgentMode] auth status probe failed", e);
+          publishAuthProbeStatus(auth, { signedIn: false }, generation);
+        }
+      )
+      .finally(() => {
+        if (active) setChecking(false);
+      });
+    return () => {
+      active = false;
+    };
   }, [auth, probeKey]);
 
   const runAuth = React.useCallback(
@@ -221,5 +238,5 @@ export function useBackendAuthState(
   const signIn = React.useCallback(() => runAuth("signIn"), [runAuth]);
   const signOut = React.useCallback(() => runAuth("signOut"), [runAuth]);
 
-  return { ...snapshot, signIn, signOut, cancelSignIn };
+  return { ...snapshot, checking: Boolean(auth && checking), signIn, signOut, cancelSignIn };
 }

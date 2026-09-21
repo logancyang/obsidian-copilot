@@ -156,6 +156,18 @@ describe("agentSelectModel", () => {
       });
     });
 
+    it("routes a signed-out agent to Configure with its sign-in reason (https://github.com/Brevilabs/obsidian-copilot-private/issues/532)", () => {
+      expect(
+        resolveAgentSelectCta(
+          rowWith({ status: "signed-out", statusMessage: "Claude not signed in" })
+        )
+      ).toEqual({
+        label: "Configure",
+        note: "Claude not signed in",
+        action: "configure",
+      });
+    });
+
     it("routes an absent agent to configure and names it in the note", () => {
       expect(resolveAgentSelectCta(rowWith({ status: "absent", name: "Codex" }))).toEqual({
         label: "Configure",

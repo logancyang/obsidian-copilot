@@ -184,7 +184,7 @@ describe("useBackendAuthState", () => {
       expect(owner.result.current.status?.signedIn).toBe(false);
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 retains cached status while a newly mounted consumer refreshes it", async () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 retains cached status and reports a pending refresh for a new consumer (https://github.com/Brevilabs/obsidian-copilot-private/issues/532)", async () => {
       const descriptor = makeDescriptor();
       const first = renderHook(() => useBackendAuthState(descriptor));
       await waitFor(() => expect(first.result.current.status?.signedIn).toBe(false));
@@ -199,11 +199,13 @@ describe("useBackendAuthState", () => {
       await waitFor(() => expect(descriptor.auth!.getStatus).toHaveBeenCalledTimes(1));
       expect(first.result.current.status?.signedIn).toBe(false);
       expect(second.result.current.status?.signedIn).toBe(false);
+      expect(second.result.current.checking).toBe(true);
       await act(async () => {
         finish({ signedIn: true });
       });
       expect(first.result.current.status?.signedIn).toBe(true);
       expect(second.result.current.status?.signedIn).toBe(true);
+      expect(second.result.current.checking).toBe(false);
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 clears a previous profile's failure before probing its replacement", async () => {
