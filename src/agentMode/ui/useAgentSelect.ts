@@ -66,7 +66,7 @@ export function useAgentSelect(
         // https://github.com/Brevilabs/obsidian-copilot-private/issues/532
         if (row.id !== selectedId || row.status !== "installed" || !selectedDescriptor.auth)
           return row;
-        if (auth.status === null) return { ...row, status: "checking" as const };
+        if (auth.checking || auth.status === null) return { ...row, status: "checking" as const };
         if (!auth.status.signedIn)
           return {
             ...row,
@@ -75,7 +75,7 @@ export function useAgentSelect(
           };
         return row;
       }),
-    [descriptors, states, selectedId, selectedDescriptor.auth, auth.status]
+    [descriptors, states, selectedId, selectedDescriptor.auth, auth.status, auth.checking]
   );
   const selectedRow = rows.find((row) => row.id === selectedId) ?? rows[0];
   const cta = React.useMemo<AgentSelectCta>(() => {

@@ -7,10 +7,12 @@ import { act, renderHook } from "@testing-library/react";
 import { useAgentSelect } from "./useAgentSelect";
 import { useBackendInstallStates, useSessionBackendDescriptor } from "./useBackendDescriptor";
 
+let mockAuthChecking = false;
 let mockAuthStatuses: Record<string, { signedIn: boolean } | null> = {};
 jest.mock("@/agentMode/session/useBackendAuthState", () => ({
   useBackendAuthState: jest.fn((descriptor: { id: string }) => ({
     status: mockAuthStatuses[descriptor.id] ?? null,
+    checking: mockAuthChecking,
   })),
 }));
 
@@ -81,6 +83,7 @@ function render(
 describe("useAgentSelect", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockAuthChecking = false;
     mockAuthStatuses = { claude: { signedIn: true }, codex: { signedIn: true } };
     mockSessionDescriptor.mockReturnValue(backendRegistry.opencode);
   });
@@ -227,6 +230,10 @@ describe("useAgentSelect", () => {
       act(() => result.current.runCta());
       expect(manager.getOrCreateActiveSession).not.toHaveBeenCalled();
       mockAuthStatuses.codex = { signedIn: true };
+      mockAuthChecking = true;
+      rerender();
+      expect(result.current.cta.action).toBe("wait");
+      mockAuthChecking = false;
       rerender();
       expect(result.current.cta.action).toBe("start");
       act(() => result.current.runCta());
