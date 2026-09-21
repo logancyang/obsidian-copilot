@@ -310,10 +310,19 @@ export class ReportIssueModal extends Modal {
       }
     }
 
+    // This order is the budget: `buildReportBundle` spends the bundle's room in
+    // request order and cuts each log to what is left, so an early source can
+    // starve every later one below the tail floor and drop it whole. Ask in
+    // ascending order of how large the source gets. The chat log is capped at
+    // the source (`logFileManager` keeps 500 lines), opencode's log is its own
+    // and stays modest, and the frame log routinely reaches its 50 MiB rotation
+    // on a heavy session, so it goes last and loses a tail instead — the
+    // degradation it is built for and already announces.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/538
     const logs: ReportLogRequest[] = [];
-    if (selected.has("activityLog")) logs.push(await activityLogRequest());
     if (selected.has("chatLog")) logs.push(await chatLogRequest());
     if (selected.has("opencodeLog")) logs.push(await opencodeLogRequest());
+    if (selected.has("activityLog")) logs.push(await activityLogRequest());
 
     const bundle = await buildReportBundle(
       {
