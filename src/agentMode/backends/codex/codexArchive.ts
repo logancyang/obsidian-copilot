@@ -2,15 +2,18 @@ import { extractArchive } from "@/agentMode/backends/shared/extractArchive";
 import { requestUrl } from "obsidian";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 import { ManagedInstallAbortError } from "@/agentMode/backends/shared/managedInstall";
-import { CODEX_ACP_PINNED_VERSION, CODEX_BUNDLE_VERSION } from "./cliSetup";
+import { CODEX_PINNED_VERSION } from "./cliSetup";
 
-export { CODEX_BUNDLE_VERSION } from "./cliSetup";
-const RELEASE = `https://github.com/Brevilabs/codex-acp-binary/releases/download/v${CODEX_BUNDLE_VERSION}`;
+export { CODEX_PINNED_VERSION } from "./cliSetup";
+const RELEASE = `https://github.com/Brevilabs/codex-acp-binary/releases/download/v${CODEX_PINNED_VERSION}`;
 
-/** Downloads and verifies the pinned full bundle into an unselected staging directory.
+/**
+ * Downloads, verifies, and extracts the Codex adapter and bundled runtime for
+ * this platform. Leaves the active installation unchanged so the caller can
+ * validate the extracted files before selecting them.
  * https://github.com/Brevilabs/obsidian-copilot-private/issues/379
- * @param stage - Empty directory owned by the managed installation transaction.
- * @param signal - Cancellation for download and extraction; never changes the active selection.
+ * @param stage - Empty temporary directory in which to extract the bundle.
+ * @param signal - Cancels download and extraction.
  */
 export async function installCodexArchive(stage: string, signal: AbortSignal): Promise<void> {
   const fs = requireNodeModule<typeof import("node:fs")>("fs");
@@ -25,7 +28,7 @@ export async function installCodexArchive(stage: string, signal: AbortSignal): P
   // A cancelled setup must not wait on the manifest request, which cannot be aborted.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
   if (signal.aborted) throw new ManagedInstallAbortError();
-  const stem = `codex-acp-v${CODEX_BUNDLE_VERSION}-${target}`;
+  const stem = `codex-acp-v${CODEX_PINNED_VERSION}-${target}`;
   // Linux releases use tar.gz so extraction works with GNU tar.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
   const archiveName = `${stem}${process.platform === "linux" ? ".tar.gz" : ".zip"}`;
@@ -40,7 +43,7 @@ export async function installCodexArchive(stage: string, signal: AbortSignal): P
   if (
     manifest?.archive !== archiveName ||
     manifest.target !== target ||
-    manifest.acpVersion !== CODEX_ACP_PINNED_VERSION ||
+    manifest.acpVersion !== CODEX_PINNED_VERSION ||
     !/^[a-f0-9]{64}$/.test(manifest.sha256) ||
     !Number.isSafeInteger(manifest.archiveBytes) ||
     manifest.archiveBytes <= 0 ||

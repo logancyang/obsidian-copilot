@@ -1,5 +1,5 @@
 import { Notice } from "obsidian";
-import { OPENCODE_PINNED_VERSION } from "./ui/opencodeVersion";
+import { OPENCODE_PINNED_VERSION, OPENCODE_MIN_VERSION } from "./ui/opencodeVersion";
 import { resolveEffort } from "@/lib/model-effort";
 import { OpencodeInstallModal } from "@/agentMode/backends/opencode/OpencodeInstallModal";
 import OpencodeLogo from "@/agentMode/backends/opencode/logo.svg";
@@ -355,7 +355,7 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
     // over — and here it stops a failure from one vault greeting the next.
     manager.forgetSettledError();
     await manager.refreshInstallState();
-    await manager.autoUpgrade(OPENCODE_PINNED_VERSION, (message) => {
+    await manager.autoUpgrade(OPENCODE_PINNED_VERSION, OPENCODE_MIN_VERSION, (message) => {
       new Notice(message);
     });
   },

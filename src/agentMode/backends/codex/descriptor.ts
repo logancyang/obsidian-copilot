@@ -31,10 +31,11 @@ import type {
 import { formatCodexModelId, parseCodexModelId } from "@/utils/codexModelId";
 import { codexAcpSearchDirs, resolveCodexAcpBinary } from "./codexBinaryResolver";
 import { CodexBinaryManager } from "./CodexBinaryManager";
-import { CODEX_BUNDLE_VERSION } from "./codexArchive";
+import { CODEX_PINNED_VERSION } from "./codexArchive";
 import { CODEX_BINARY_NAME } from "./cliSetup";
 import { buildCodexModeMapping } from "./codexModeMapping";
-import { isSupportedCodexAcpPath, resolveSupportedCodexAcpPackage } from "./codexVersion";
+import { isSupportedCodexAcpPath, inspectCodexAcpPackage, CODEX_MIN_VERSION } from "./codexVersion";
+import { classifyBinaryInstall } from "@/agentMode/backends/shared/binaryCompatibility";
 
 const codexBinaryManager = new CodexBinaryManager();
 
@@ -157,11 +158,25 @@ export const CodexBackendDescriptor: BackendDescriptor = {
     const configured = settings.agentMode?.backends?.codex;
     if (!configured?.binaryPath) return { kind: "absent" };
     try {
-      resolveSupportedCodexAcpPackage(configured.binaryPath);
-      const source = configured.binarySource ?? "custom";
-      return { kind: "ready", source };
-    } catch {
-      return { kind: "absent" };
+      const installed = inspectCodexAcpPackage(configured.binaryPath);
+      return classifyBinaryInstall(
+        {
+          kind: "installed",
+          version: installed.runtimeVersion,
+          source: configured.binarySource ?? "custom",
+        },
+        CODEX_MIN_VERSION,
+        "Codex"
+      );
+    } catch (error) {
+      // Missing files and invalid packages need different recovery actions. https://github.com/Brevilabs/obsidian-copilot-private/issues/535
+      return classifyBinaryInstall(
+        (error as NodeJS.ErrnoException).code === "ENOENT"
+          ? { kind: "absent" }
+          : { kind: "error", message: error instanceof Error ? error.message : String(error) },
+        CODEX_MIN_VERSION,
+        "Codex"
+      );
     }
   },
 
@@ -192,7 +207,7 @@ export const CodexBackendDescriptor: BackendDescriptor = {
     // A new vault or plugin lifecycle must not inherit a previous installation failure.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/368
     codexBinaryManager.forgetSettledError();
-    await codexBinaryManager.autoUpgrade(CODEX_BUNDLE_VERSION, (message) => {
+    await codexBinaryManager.autoUpgrade(CODEX_PINNED_VERSION, CODEX_MIN_VERSION, (message) => {
       new Notice(message);
     });
   },

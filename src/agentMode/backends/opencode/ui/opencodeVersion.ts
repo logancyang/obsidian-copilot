@@ -9,4 +9,4 @@ export const OPENCODE_PINNED_VERSION = "1.18.31";
  * catalog and session cancellation that aborts the backing turn so a stopped
  * session remains reusable.
  */
-export const OPENCODE_MIN_ACP_VERSION = "1.16.0";
+export const OPENCODE_MIN_VERSION = "1.16.0";

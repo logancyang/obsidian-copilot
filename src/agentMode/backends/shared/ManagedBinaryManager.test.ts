@@ -74,11 +74,27 @@ describe("ManagedBinaryManager", () => {
           binarySource: "managed",
         };
       });
+      it(`https://github.com/Brevilabs/obsidian-copilot-private/issues/535 rejects a shipped pin below the minimum before downloading`, async () => {
+        await expect(manager.autoUpgrade("1.0.0", "2.0.0", jest.fn())).rejects.toThrow("requires");
+        expect(manager.pipeline).not.toHaveBeenCalled();
+      });
+      it.each([undefined, "0.9.0"])(
+        `https://github.com/Brevilabs/obsidian-copilot-private/issues/535 retries legacy or previous-minimum cooldown %s`,
+        async (minimumVersion) => {
+          fs.mkdirSync(manager.getDataDir(), { recursive: true });
+          fs.writeFileSync(
+            path.join(manager.getDataDir(), "auto-upgrade-failure.json"),
+            JSON.stringify({ pin: "2.0.0", minimumVersion, failedAt: Date.now() })
+          );
+          await manager.autoUpgrade("2.0.0", "1.1.0", jest.fn());
+          expect(manager.pipeline).toHaveBeenCalledTimes(1);
+        }
+      );
       it.each(["2.0.0", "0.9.0"])(
         `${issue} follows a changed pin in either direction and emits one success`,
         async (pin) => {
           const notify = jest.fn();
-          await manager.autoUpgrade(pin, notify);
+          await manager.autoUpgrade(pin, "0.8.0", notify);
           expect(manager.pipeline).toHaveBeenCalledTimes(1);
           expect(notify).toHaveBeenCalledTimes(1);
           expect(notify.mock.calls[0][0]).toContain("updated");
@@ -90,7 +106,7 @@ describe("ManagedBinaryManager", () => {
           if (reason === "custom") manager.settings.binarySource = "custom";
           if (reason === "absent") manager.settings = {};
           const notify = jest.fn();
-          await manager.autoUpgrade(reason === "equal" ? "1.0.0" : "2.0.0", notify);
+          await manager.autoUpgrade(reason === "equal" ? "1.0.0" : "2.0.0", "1.0.0", notify);
           expect(manager.pipeline).not.toHaveBeenCalled();
           expect(notify).not.toHaveBeenCalled();
         }
@@ -105,7 +121,7 @@ describe("ManagedBinaryManager", () => {
           };
           return pipeline(options);
         });
-        await manager.autoUpgrade("2.0.0", jest.fn());
+        await manager.autoUpgrade("2.0.0", "1.0.0", jest.fn());
         expect(manager.settings).toEqual({
           binaryPath: customPath,
           binaryVersion: "9.0.0",
@@ -123,8 +139,8 @@ describe("ManagedBinaryManager", () => {
           return pipeline(options);
         });
         const notify = jest.fn();
-        const first = manager.autoUpgrade("2.0.0", notify);
-        await manager.autoUpgrade("2.0.0", notify);
+        const first = manager.autoUpgrade("2.0.0", "1.0.0", notify);
+        await manager.autoUpgrade("2.0.0", "1.0.0", notify);
         finish();
         await first;
         expect(manager.pipeline).toHaveBeenCalledTimes(1);
@@ -134,15 +150,15 @@ describe("ManagedBinaryManager", () => {
         const original = { ...manager.settings };
         manager.pipeline.mockRejectedValue(new Error("offline"));
         const notify = jest.fn();
-        await manager.autoUpgrade("2.0.0", notify);
+        await manager.autoUpgrade("2.0.0", "1.0.0", notify);
         expect(manager.settings).toEqual(original);
         expect(notify).toHaveBeenCalledTimes(1);
         const reopened = new TestBinaryManager(manager.getDataDir());
         reopened.settings = original;
-        await reopened.autoUpgrade("2.0.0", notify);
+        await reopened.autoUpgrade("2.0.0", "1.0.0", notify);
         expect(reopened.pipeline).not.toHaveBeenCalled();
         const now = jest.spyOn(Date, "now").mockReturnValue(Date.now() + 24 * 60 * 60 * 1000 + 1);
-        await reopened.autoUpgrade("2.0.0", notify);
+        await reopened.autoUpgrade("2.0.0", "1.0.0", notify);
         expect(reopened.pipeline).toHaveBeenCalledTimes(1);
         now.mockRestore();
       });

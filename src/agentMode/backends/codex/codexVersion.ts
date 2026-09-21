@@ -1,14 +1,12 @@
+import { parseSemver } from "@/utils/semver";
 import { requireNodeModule } from "@/utils/desktopRuntime";
-import { compareSemver } from "@/utils/semver";
+import { assertBinaryCompatible } from "@/agentMode/backends/shared/binaryCompatibility";
 
 const CURRENT_PACKAGE_NAME = "@agentclientprotocol/codex-acp";
 const CURRENT_PACKAGE_ENTRY = "dist/index.js";
-const SEMVER_PATTERN =
-  /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
-
 // Bundled CLI authentication requires the passthrough added in version 0.0.45.
 // https://github.com/logancyang/obsidian-copilot/issues/2967
-export const CODEX_ACP_MIN_VERSION = "0.0.45";
+export const CODEX_MIN_VERSION = "0.0.45";
 
 export interface CodexAcpInvocation {
   command: string;
@@ -34,39 +32,41 @@ function defaultPackageFs(): CodexAcpPackageFs {
   };
 }
 
-function unsupportedAdapter(message?: string): Error {
+function unsupportedAdapter(): Error {
   return new Error(
-    message ??
-      `The configured Codex adapter is not supported. Install ${CURRENT_PACKAGE_NAME} ${CODEX_ACP_MIN_VERSION} or newer, then run Auto-detect again.`
+    `The configured Codex adapter is not supported. Install ${CURRENT_PACKAGE_NAME} ${CODEX_MIN_VERSION} or newer, then run Auto-detect again.`
   );
 }
 
 /**
- * Resolves a supported native bundle or a supported npm package entry point.
- * The older Zed adapter shares the `codex-acp` binary name but advertises
- * incompatible mode ids, so package identity is part of the support contract.
+ * Validates a Codex adapter's package identity and metadata, then returns its
+ * executable path and versions. Older versions are returned so callers can
+ * distinguish an installation that needs an upgrade from an invalid package.
+ * Throws for missing files or invalid packages. The older Zed adapter is rejected
+ * because it shares the `codex-acp` name but uses incompatible mode IDs.
  * https://github.com/logancyang/obsidian-copilot/issues/2916
  * @param adapterPath - Configured native executable, npm launcher, or package entry point.
  * @param platform - Platform whose path rules should resolve the package layout.
  * @param packageFs - Filesystem operations used to inspect package metadata.
+ * @returns `version` identifies the installed package, including a native packaging
+ * revision when present; `runtimeVersion` is the adapter version used for compatibility checks.
  */
-export function resolveSupportedCodexAcpPackage(
+export function inspectCodexAcpPackage(
   adapterPath: string,
   platform: NodeJS.Platform = process.platform,
   packageFs: CodexAcpPackageFs = defaultPackageFs()
-): CodexAcpPackage {
+): CodexAcpPackage & { runtimeVersion: string } {
   let entryPath: string;
   try {
     entryPath = packageFs.realpathSync(adapterPath);
-  } catch {
+  } catch (error) {
+    // Synced paths missing on this device need Install rather than an invalid-package error. https://github.com/Brevilabs/obsidian-copilot-private/issues/535
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") throw error;
     throw unsupportedAdapter();
   }
 
   const path = requireNodeModule<typeof import("node:path")>("path");
   const pathImpl = platform === "win32" ? path.win32 : path.posix;
-  // Retain native bundle revisions so older managed installs can offer Update.
-  // User-owned npm selections retain their package contract.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
   if (pathImpl.basename(entryPath) === (platform === "win32" ? "codex-acp.exe" : "codex-acp")) {
     try {
       const provenance: { acpVersion?: string; packagingRevision?: number; target?: string } =
@@ -77,17 +77,11 @@ export function resolveSupportedCodexAcpPackage(
           )
         );
       const parsedVersion =
-        typeof provenance.acpVersion === "string"
-          ? SEMVER_PATTERN.exec(provenance.acpVersion)
-          : null;
-      const versionOrder = parsedVersion
-        ? compareSemver(parsedVersion[0], CODEX_ACP_MIN_VERSION)
-        : -1;
-      // The minimum stable release guarantees bundled CLI authentication; its prereleases do not.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
+        typeof provenance.acpVersion === "string" ? parseSemver(provenance.acpVersion) : null;
+      // Valid older bundles must remain detectable so Configure can offer an upgrade.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/535
       if (
         parsedVersion &&
-        (versionOrder > 0 || (versionOrder === 0 && parsedVersion[4] === undefined)) &&
         (provenance.packagingRevision === undefined ||
           (Number.isSafeInteger(provenance.packagingRevision) &&
             provenance.packagingRevision > 0)) &&
@@ -97,6 +91,7 @@ export function resolveSupportedCodexAcpPackage(
         // https://github.com/Brevilabs/obsidian-copilot-private/issues/379
         return {
           entryPath,
+          runtimeVersion: provenance.acpVersion!,
           version:
             provenance.packagingRevision === undefined
               ? provenance.acpVersion!
@@ -137,16 +132,36 @@ export function resolveSupportedCodexAcpPackage(
   if (typeof version !== "string") {
     throw unsupportedAdapter();
   }
-  const parsedVersion = SEMVER_PATTERN.exec(version);
+  const parsedVersion = parseSemver(version);
   if (!parsedVersion) {
     throw unsupportedAdapter();
   }
-  const versionOrder = compareSemver(version, CODEX_ACP_MIN_VERSION);
-  if (versionOrder < 0 || (versionOrder === 0 && parsedVersion[4] !== undefined)) {
-    throw unsupportedAdapter(
-      `${CURRENT_PACKAGE_NAME} ${version} is not supported. Install ${CODEX_ACP_MIN_VERSION} or newer, then run Auto-detect again.`
-    );
-  }
+  return { entryPath, version, runtimeVersion: version };
+}
+
+/**
+ * Returns the Codex adapter's executable path and package version only if its
+ * package is valid and its runtime meets CODEX_MIN_VERSION. Throws otherwise.
+ *
+ * @param adapterPath - Configured native executable, npm launcher, or package entry point.
+ * @param platform - Operating system whose path rules and native bundle target to validate.
+ * @param packageFs - Filesystem used to inspect package metadata.
+ */
+export function resolveSupportedCodexAcpPackage(
+  adapterPath: string,
+  platform: NodeJS.Platform = process.platform,
+  packageFs: CodexAcpPackageFs = defaultPackageFs()
+): CodexAcpPackage {
+  const { entryPath, version, runtimeVersion } = inspectCodexAcpPackage(
+    adapterPath,
+    platform,
+    packageFs
+  );
+  assertBinaryCompatible(
+    { kind: "installed", version: runtimeVersion, source: "custom" },
+    CODEX_MIN_VERSION,
+    CURRENT_PACKAGE_NAME
+  );
   return { entryPath, version };
 }
 
