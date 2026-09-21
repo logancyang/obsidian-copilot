@@ -374,6 +374,7 @@ function buildManager(
     shutdown: jest.fn(),
     clearCached: jest.fn(),
     takeWarm: jest.fn(() => null),
+    hasRuntimeProcess: jest.fn(() => false),
     getWarmProcs: jest.fn(() => []),
     ...modelPreloaderOverrides,
   };
@@ -458,6 +459,9 @@ describe("AgentSessionManager", () => {
         await mgr.createSession();
         expect(descriptor.prepareRuntime).toHaveBeenCalledTimes(1);
         expect(mockBackendStart).toHaveBeenCalledTimes(1);
+        await mgr.onInstallStateChanged("opencode", true);
+        expect(mgr.hasHeldConfigChange("opencode")).toBe(false);
+        expect(mgr.hasRuntimeProcess("opencode")).toBe(true);
       });
     });
     describe("noteSpawnConfigChanged()", () => {
@@ -1065,6 +1069,7 @@ describe("AgentSessionManager", () => {
               shutdown: jest.fn(),
               clearCached: jest.fn(),
               takeWarm: jest.fn(() => null),
+              hasRuntimeProcess: jest.fn(() => false),
               getWarmProcs: jest.fn(() => []),
             } as unknown as ConstructorParameters<typeof AgentSessionManager>[2]["modelPreloader"],
           }
@@ -1393,6 +1398,7 @@ describe("AgentSessionManager warm-backend reuse", () => {
       shutdown: jest.fn(),
       clearCached: jest.fn(),
       takeWarm: jest.fn(() => (preloadSettled ? { proc: warmProc } : null)),
+      hasRuntimeProcess: jest.fn(() => false),
       getWarmProcs: jest.fn(() => []),
     };
     const mgr = new AgentSessionManager(
@@ -1631,6 +1637,7 @@ describe("AgentSessionManager.restartBackend", () => {
       shutdown: jest.fn(),
       clearCached: jest.fn(),
       takeWarm: jest.fn(() => null),
+      hasRuntimeProcess: jest.fn(() => false),
       getWarmProcs: jest.fn(() => []),
     };
     const descriptor = {
@@ -1669,6 +1676,7 @@ describe("AgentSessionManager.restartBackend", () => {
       shutdown: jest.fn(),
       clearCached: jest.fn(),
       takeWarm: jest.fn(() => null),
+      hasRuntimeProcess: jest.fn(() => false),
       getWarmProcs: jest.fn(() => []),
     };
     const descriptor = {
@@ -1705,6 +1713,7 @@ describe("AgentSessionManager.restartBackend", () => {
       shutdown: jest.fn(),
       clearCached: jest.fn(),
       takeWarm: jest.fn(() => null),
+      hasRuntimeProcess: jest.fn(() => false),
       getWarmProcs: jest.fn(() => []),
     };
     const descriptor = {
@@ -1795,6 +1804,7 @@ describe("AgentSessionManager.restartBackend", () => {
       shutdown: jest.fn(),
       clearCached: jest.fn(),
       takeWarm: jest.fn(() => null),
+      hasRuntimeProcess: jest.fn(() => false),
       getWarmProcs: jest.fn(() => []),
     };
     const descriptor = {
@@ -1963,6 +1973,7 @@ describe("AgentSessionManager.restartBackend", () => {
           shutdown: jest.fn(),
           clearCached: jest.fn(),
           takeWarm: jest.fn(() => null),
+          hasRuntimeProcess: jest.fn(() => false),
           getWarmProcs: jest.fn(() => []),
         } as unknown as ConstructorParameters<typeof AgentSessionManager>[2]["modelPreloader"],
       }
@@ -2245,6 +2256,7 @@ describe("AgentSessionManager.getRunningChatIds", () => {
           shutdown: jest.fn(),
           clearCached: jest.fn(),
           takeWarm: jest.fn(() => null),
+          hasRuntimeProcess: jest.fn(() => false),
           getWarmProcs: jest.fn(() => []),
         } as unknown as ConstructorParameters<typeof AgentSessionManager>[2]["modelPreloader"],
         persistenceManager: persistence as unknown as ConstructorParameters<
@@ -2607,6 +2619,7 @@ describe("AgentSessionManager.applySelection", () => {
       shutdown: jest.fn(),
       clearCached: jest.fn(),
       takeWarm: jest.fn(() => null),
+      hasRuntimeProcess: jest.fn(() => false),
       getWarmProcs: jest.fn(() => []),
     };
     const mgr = new AgentSessionManager(
@@ -2683,6 +2696,7 @@ describe("AgentSessionManager.applyMode", () => {
       shutdown: jest.fn(),
       clearCached: jest.fn(),
       takeWarm: jest.fn(() => null),
+      hasRuntimeProcess: jest.fn(() => false),
       getWarmProcs: jest.fn(() => []),
     };
     return new AgentSessionManager(
@@ -2782,6 +2796,7 @@ describe("AgentSessionManager default-model settings subscription", () => {
       shutdown: jest.fn(),
       clearCached: jest.fn(),
       takeWarm: jest.fn(() => null),
+      hasRuntimeProcess: jest.fn(() => false),
       getWarmProcs: jest.fn(() => []),
     };
   }
@@ -3082,6 +3097,7 @@ describe("AgentSessionManager.onInstallStateChanged", () => {
       shutdown: jest.fn(),
       clearCached: jest.fn(),
       takeWarm: jest.fn(() => null),
+      hasRuntimeProcess: jest.fn(() => false),
       getWarmProcs: jest.fn(() => []),
     };
     const descriptor = {

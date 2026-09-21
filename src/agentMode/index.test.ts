@@ -110,7 +110,8 @@ const mockManager = {
   restartBackend: jest.fn(async (_id: string, _reason: string) => {}),
   noteSpawnConfigChanged: jest.fn(async (_id: string, _reason: string) => {}),
   registerPreload: jest.fn<void, [string, Promise<void>]>(),
-  onInstallStateChanged: jest.fn(async (_id: string) => {}),
+  hasRuntimeProcess: jest.fn(() => false),
+  onInstallStateChanged: jest.fn(async (_id: string, _unused?: boolean) => {}),
 };
 let plugin: CopilotPlugin;
 const reconcile = jest.mocked(reconcileBuiltinSkills);
@@ -157,6 +158,7 @@ describe("agentMode", () => {
   describe("createAgentSessionManager()", () => {
     beforeEach(() => {
       jest.clearAllMocks();
+      mockManager.hasRuntimeProcess.mockReset().mockReturnValue(false);
       mockStates.claude = { kind: "ready", source: "custom" };
       mockStates.opencode = { kind: "absent" };
       reconcile.mockResolvedValue(undefined);
@@ -199,23 +201,28 @@ describe("agentMode", () => {
       }
     );
 
-    it(`settles new-agent skills before refreshing that agent's installation ${ISSUE}`, async () => {
-      createAgentSessionManager({} as App, plugin);
-      await mockManager.registerPreload.mock.calls[0][1];
-      const gate = deferred();
-      const handled = deferred();
-      reconcile.mockReturnValueOnce(gate.promise);
-      mockManager.onInstallStateChanged.mockImplementationOnce(async () => handled.resolve());
-      mockStates.opencode = { kind: "ready", source: "custom" };
-      mockInstallListeners.opencode();
-      expect(reconcile).toHaveBeenLastCalledWith(
-        expect.objectContaining({ availableAgents: ["claude", "opencode"] })
-      );
-      expect(mockManager.onInstallStateChanged).not.toHaveBeenCalled();
-      gate.resolve();
-      await handled.promise;
-      expect(mockManager.onInstallStateChanged).toHaveBeenCalledWith("opencode");
-    });
+    it.each([false, true])(
+      `captures runtime use before delayed install notification (%s) https://github.com/Brevilabs/obsidian-copilot-private/issues/536`,
+      async (hadProcess) => {
+        createAgentSessionManager({} as App, plugin);
+        await mockManager.registerPreload.mock.calls[0][1];
+        const gate = deferred();
+        const handled = deferred();
+        reconcile.mockReturnValueOnce(gate.promise);
+        mockManager.onInstallStateChanged.mockImplementationOnce(async () => handled.resolve());
+        mockStates.opencode = { kind: "ready", source: "custom" };
+        mockManager.hasRuntimeProcess.mockReturnValue(hadProcess);
+        mockInstallListeners.opencode();
+        mockManager.hasRuntimeProcess.mockReturnValue(!hadProcess);
+        expect(reconcile).toHaveBeenLastCalledWith(
+          expect.objectContaining({ availableAgents: ["claude", "opencode"] })
+        );
+        expect(mockManager.onInstallStateChanged).not.toHaveBeenCalled();
+        gate.resolve();
+        await handled.promise;
+        expect(mockManager.onInstallStateChanged).toHaveBeenCalledWith("opencode", !hadProcess);
+      }
+    );
 
     it(`refreshes a spawn-config backend when a model's published effort levels change ${LINEUP_ISSUE}`, () => {
       // The Plus lineup reconcile rewrites the row in place, so no provider or

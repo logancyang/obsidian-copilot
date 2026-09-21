@@ -116,13 +116,19 @@ describe("AgentModelPreloader", () => {
       let ready = false;
       descriptor.getInstallState = () =>
         ready ? { kind: "ready", source: "managed" } : { kind: "absent" };
+      const preloader = new AgentModelPreloader(buildApp(), buildPlugin(), () => descriptor);
       descriptor.prepareRuntime = jest.fn(async () => {
+        expect(preloader.hasRuntimeProcess(descriptor.id)).toBe(false);
         ready = true;
       });
-      const preloader = new AgentModelPreloader(buildApp(), buildPlugin(), () => descriptor);
+      procHandle.start.mockImplementation(async () => {
+        expect(preloader.hasRuntimeProcess(descriptor.id)).toBe(true);
+      });
       await preloader.preload(descriptor.id);
       expect(procHandle.start).toHaveBeenCalledTimes(1);
+      expect(preloader.hasRuntimeProcess(descriptor.id)).toBe(true);
       preloader.shutdown();
+      expect(preloader.hasRuntimeProcess(descriptor.id)).toBe(false);
     });
     it("does not start or probe an incompatible binary (https://github.com/Brevilabs/obsidian-copilot-private/issues/531)", async () => {
       const { descriptor, procHandle } = buildDescriptor(() => makeMockProc());

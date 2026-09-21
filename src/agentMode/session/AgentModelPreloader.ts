@@ -40,6 +40,7 @@ export interface WarmBackend {
  */
 export class AgentModelPreloader {
   private readonly warm = new Map<BackendId, WarmBackend>();
+  private readonly spawning = new Set<BackendId>();
   // Probe-owned discovery data. Live sessions never write this map.
   private readonly modelCatalogCache = new Map<BackendId, BackendModelCatalog>();
   // Per-backend effort options keyed by baseModelId, discovered by probing each
@@ -129,6 +130,13 @@ export class AgentModelPreloader {
     }));
   }
 
+  /** Whether a probe has begun consuming runtime files, including its startup handshake.
+   * @param backendId - Backend whose runtime may be in use.
+   */
+  hasRuntimeProcess(backendId: BackendId): boolean {
+    return this.spawning.has(backendId) || this.warm.has(backendId);
+  }
+
   /** Best-effort probe; failures are logged and swallowed. Dedupes per backend. */
   preload(backendId: BackendId): Promise<void> {
     if (this.disposed) return Promise.resolve();
@@ -190,7 +198,11 @@ export class AgentModelPreloader {
       // the abandoned subprocess is shut down rather than leaked.
       if (round > 0) this.clearCached(backendId);
       round += 1;
-      await this.runProbe(backendId);
+      try {
+        await this.runProbe(backendId);
+      } finally {
+        this.spawning.delete(backendId);
+      }
     } while (this.pendingRefresh.has(backendId) && !this.disposed);
   }
 
@@ -242,6 +254,7 @@ export class AgentModelPreloader {
     await descriptor.prepareRuntime?.(this.plugin);
     if (descriptor.getInstallState(getSettings()).kind !== "ready") return;
 
+    this.spawning.add(backendId);
     const proc = descriptor.createBackendProcess({
       plugin: this.plugin,
       app: this.app,

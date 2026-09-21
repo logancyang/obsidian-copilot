@@ -264,6 +264,7 @@ export interface AgentSessionManagerOptions {
 export class AgentSessionManager {
   private backends = new Map<BackendId, BackendProcess>();
   private starting = new Map<BackendId, Promise<BackendProcess>>();
+  private readonly spawning = new Set<BackendId>();
   private sessions = new Map<string, AgentSession>();
   private chatUIStates = new Map<string, AgentChatUIState>();
   private activeSessionId: string | null = null;
@@ -2464,6 +2465,17 @@ export class AgentSessionManager {
     return Array.from(this.sessions.values()).some((s) => s.backendId === backendId);
   }
 
+  /** Capture runtime use at publication, before asynchronous install-state delivery.
+   * @param backendId - Backend whose installation changed.
+   */
+  hasRuntimeProcess(backendId: BackendId): boolean {
+    return (
+      !!this.backends.get(backendId)?.isRunning() ||
+      this.spawning.has(backendId) ||
+      this.preloader.hasRuntimeProcess(backendId)
+    );
+  }
+
   /**
    * Applies installation changes to running agents and cached model discovery.
    * Keeps a supported process serving an open or starting chat until reload,
@@ -2473,7 +2485,7 @@ export class AgentSessionManager {
    *
    * @param backendId - Backend whose installation settings or files changed.
    */
-  async onInstallStateChanged(backendId: BackendId): Promise<void> {
+  async onInstallStateChanged(backendId: BackendId, runtimeWasUnused = false): Promise<void> {
     if (this.disposed) return;
     const inflight = this.starting.get(backendId);
     if (inflight) await inflight.catch(() => undefined);
@@ -2515,6 +2527,14 @@ export class AgentSessionManager {
     // A session can start while an automatic download is in flight. Keep its process
     // and binary intact; the next spawn reads the published pointer.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/530
+    // A recovered pointer published before any process starts is already consumed
+    // by a later cold spawn; delayed notification must not request a redundant Reload.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/536
+    if (runtimeWasUnused) {
+      if (!this.hasRuntimeProcess(backendId) && !this.pendingCreates.has(backendId))
+        this.registerPreload(backendId, this.preloader.preload(backendId));
+      return;
+    }
     if (hasSession) {
       await this.noteSpawnConfigChanged(backendId, "binary path changed");
       return;
@@ -3748,6 +3768,7 @@ export class AgentSessionManager {
         return warm.proc;
       }
 
+      this.spawning.add(backendId);
       const proc = descriptor.createBackendProcess({
         plugin: this.plugin,
         app: this.app,
@@ -3777,6 +3798,7 @@ export class AgentSessionManager {
     try {
       return await startPromise;
     } finally {
+      this.spawning.delete(backendId);
       this.starting.delete(backendId);
     }
   }

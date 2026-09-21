@@ -202,9 +202,7 @@ describe("CodexBinaryManager", () => {
             return {} as childProcess.ChildProcess;
           });
           await expect(manager.install()).rejects.toThrow(
-            output === CODEX_PINNED_VERSION
-              ? "runtime could not start"
-              : "did not report version"
+            output === CODEX_PINNED_VERSION ? "runtime could not start" : "did not report version"
           );
           expect(getSettings().agentMode.backends?.codex).toEqual(before);
           expect(fs.readdirSync(manager.getDataDir())).toEqual([]);

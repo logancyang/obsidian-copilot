@@ -485,10 +485,13 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
   // require its process to refresh, so unrelated saves do not churn backends.
   for (const descriptor of listBackendDescriptors()) {
     descriptor.subscribeInstallState(plugin, () => {
+      // Capture before seeding yields: recovery may finish and start a chat before
+      // this notification is delivered. https://github.com/Brevilabs/obsidian-copilot-private/issues/536
+      const runtimeWasUnused = !manager.hasRuntimeProcess(descriptor.id);
       // A first warm probe must see the newly installed skills, especially for backends
       // that do not restart on skill changes. https://github.com/logancyang/obsidian-copilot/issues/3022
       void seedManagedBuiltins()
-        .then(() => manager.onInstallStateChanged(descriptor.id))
+        .then(() => manager.onInstallStateChanged(descriptor.id, runtimeWasUnused))
         .catch((error) =>
           logError(`[AgentMode] install-state refresh failed: ${descriptor.id}`, error)
         );
