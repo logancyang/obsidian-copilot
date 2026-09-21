@@ -1,3 +1,4 @@
+import { Markdown } from "@/components/Markdown";
 import { ChatButtons } from "@/components/chat-components/ChatButtons";
 import { AssistantResponseFooter } from "@/components/ui/AssistantResponseFooter";
 import { SourcesModal } from "@/components/modals/SourcesModal";
@@ -919,9 +920,11 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
                   // eslint-disable-next-line @eslint-react/no-array-index-key -- content array is fixed once message is rendered; items not reordered
                   <div key={index}>
                     {message.sender === USER_SENDER ? (
-                      <div className="tw-whitespace-pre-wrap tw-break-words tw-text-[calc(var(--font-text-size)_-_2px)] tw-font-normal">
-                        {message.message}
-                      </div>
+                      <Markdown
+                        text={message.message}
+                        sourcePath={app.workspace.getActiveFile()?.path ?? ""}
+                        className="tw-break-words tw-text-[calc(var(--font-text-size)_-_2px)] tw-font-normal"
+                      />
                     ) : (
                       <div
                         ref={contentRef}
@@ -951,9 +954,11 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
 
     // Fallback for messages without content array
     return message.sender === USER_SENDER ? (
-      <div className="tw-whitespace-pre-wrap tw-break-words tw-text-[calc(var(--font-text-size)_-_2px)] tw-font-normal">
-        {message.message}
-      </div>
+      <Markdown
+        text={message.message}
+        sourcePath={app.workspace.getActiveFile()?.path ?? ""}
+        className="tw-break-words tw-text-[calc(var(--font-text-size)_-_2px)] tw-font-normal"
+      />
     ) : (
       <div ref={contentRef} className={message.isErrorMessage ? "tw-text-error" : ""}></div>
     );
