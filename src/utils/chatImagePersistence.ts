@@ -3,7 +3,6 @@ import { arrayBufferToBase64, base64ToArrayBuffer } from "@/utils/base64";
 import { sha256 } from "@/utils/hash";
 import { isFileAlreadyExistsError } from "@/utils/vaultAdapterUtils";
 import { TFile, type App } from "obsidian";
-import { v4 as uuid } from "uuid";
 
 const IMAGE_EXTENSIONS = new Map([
   ["jpeg", "jpg"],
@@ -19,15 +18,26 @@ interface MessageWithImages {
   content?: unknown[];
 }
 
-// A successful upload belongs to the live attachment; share only pending writes.
+// Remember successful writes by conversation and content, including fresh objects
+// returned by a backend. Deleting a saved asset must not turn it into a new upload.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/533
-const liveUploads = new WeakMap<
-  App,
-  WeakMap<object, { url: string; key: string; saved: Promise<string> }>
->();
+const savedUploads = new WeakMap<App, Map<string, Promise<string>>>();
 const pendingUploads = new WeakMap<App, Map<string, Promise<string>>>();
 const RECEIPT =
-  /<!-- copilot-image:([a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}-[a-f0-9]{64}) -->\r?\n([\s\S]*?)\r?\n<!-- \/copilot-image -->/g;
+  /<!-- copilot-image:([a-f0-9]{64}) -->\r?\n([\s\S]*?)\r?\n<!-- \/copilot-image -->/g;
+
+const EMBED = /^!\[\[[^\r\n]+\]\]$|^!\[[^\r\n]*\]\([^\r\n]+\)$/gm;
+
+// The loaded transcript retains hash-to-link associations while display text stays
+// clean. Restore those associations without depending on message text or position.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/533
+function restoreChatImageReceipts(next: string, loaded: string): string {
+  const byEmbed = new Map([...loaded.matchAll(RECEIPT)].map((m) => [m[2], m[0]]));
+  return next.replace(
+    new RegExp(`${RECEIPT.source}|${EMBED.source}`, "gm"),
+    (value) => byEmbed.get(value) ?? value
+  );
+}
 
 /** Keep on-disk upload receipts out of display text, editors, and model history. */
 export function stripChatImageReceipts(text: string): string {
@@ -42,14 +52,17 @@ export function stripChatImageReceipts(text: string): string {
  */
 export function preserveChatImageReferences(next: string, existing: string, loaded = ""): string {
   const receipts = new Map([...existing.matchAll(RECEIPT)].map((m) => [m[1], m[0]]));
-  const merged = next.replace(RECEIPT, (receipt, key: string) => receipts.get(key) ?? receipt);
-  // Reopened messages contain clean embeds. Restore disk-only receipts and host
-  // link changes at the same user position, only while text and embeds are unchanged.
+  const merged = restoreChatImageReceipts(next, loaded).replace(
+    RECEIPT,
+    (receipt, hash: string) => receipts.get(hash) ?? receipt
+  );
+  // Legacy notes have no content identity. Preserve their host-updated links only
+  // at unchanged user positions; new receipts above do not need this fallback.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/533
   const userBlock = /\*\*user\*\*: ([\s\S]*?)(?=\n\*\*(?:user|ai)\*\*: |$)/g;
   const previous = [...existing.matchAll(userBlock)];
   const baseline = [...loaded.matchAll(userBlock)];
-  const embed = /^!\[\[[^\n]+\]\]$|^!\[[^\n]*\]\([^\n]+\)$/gm;
+  const embed = EMBED;
   const textOnly = (value: string) =>
     stripChatImageReceipts(value).replace(embed, "").replace(/\s+/g, " ").trim();
   let user = 0;
@@ -78,13 +91,15 @@ export function preserveChatImageReferences(next: string, existing: string, load
  * @param path - Existing note path.
  * @param next - Newly serialized live transcript.
  * @param loaded - Last accepted live transcript.
+ * @returns Live transcript with receipt metadata retained for the next save.
  */
 export async function updateChatTranscript(
   app: App,
   path: string,
   next: string,
   loaded = ""
-): Promise<void> {
+): Promise<string> {
+  const baseline = restoreChatImageReceipts(next, loaded);
   const file = app.vault.getAbstractFileByPath(path);
   if (file instanceof TFile) {
     await app.vault.process(file, (current) => preserveChatImageReferences(next, current, loaded));
@@ -94,6 +109,7 @@ export async function updateChatTranscript(
       preserveChatImageReferences(next, await app.vault.adapter.read(path), loaded)
     );
   }
+  return baseline;
 }
 
 /**
@@ -125,8 +141,8 @@ export async function prepareChatImagesForSave<T extends MessageWithImages>(
     ...existingContent.matchAll(/\*\*user\*\*: ([\s\S]*?)(?=\n\*\*(?:user|ai)\*\*: |$)/g),
   ];
   let userIndex = -1;
-  let live = liveUploads.get(app);
-  if (!live) liveUploads.set(app, (live = new WeakMap()));
+  let savedImages = savedUploads.get(app);
+  if (!savedImages) savedUploads.set(app, (savedImages = new Map<string, Promise<string>>()));
   let pending = pendingUploads.get(app);
   if (!pending) pendingUploads.set(app, (pending = new Map<string, Promise<string>>()));
 
@@ -182,12 +198,10 @@ export async function prepareChatImagesForSave<T extends MessageWithImages>(
       }
       const hash = sha256(base64);
       const name = `copilot-image-${hash}`;
-      let saved = live.get(image);
-      if (saved?.url !== image.url) saved = undefined;
-      const prior = [...(savedUsers[userIndex]?.[1] ?? "").matchAll(RECEIPT)][imageIndex]?.[1];
-      const key = saved?.key ?? (prior?.endsWith(`-${hash}`) ? prior : `${uuid()}-${hash}`);
+      const savedKey = `${sourcePath || conversationsFolder}\0${hash}`;
+      let saved = savedImages.get(savedKey);
       const ordinal = imageIndex++;
-      let persisted = receipts.get(key);
+      let persisted = receipts.get(hash);
       if (persisted === undefined && canAdoptLegacy) {
         try {
           const embed = legacyEmbeds[ordinal];
@@ -217,7 +231,7 @@ export async function prepareChatImagesForSave<T extends MessageWithImages>(
       // deleting or organizing an attachment must never trigger another upload.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/533
       if (persisted !== undefined) {
-        saved = { url: image.url, key, saved: Promise.resolve(persisted) };
+        saved = Promise.resolve(persisted);
       } else if (!saved) {
         const pendingKey = `${prefix}${name}.${extension}`;
         let writing = pending.get(pendingKey);
@@ -226,11 +240,11 @@ export async function prepareChatImagesForSave<T extends MessageWithImages>(
           pending.set(pendingKey, writing);
           void writing.finally(() => pending.delete(pendingKey)).catch(() => {});
         }
-        saved = { url: image.url, key, saved: writing.then(formatLink) };
-        void writing.catch(() => live.delete(image));
+        saved = writing.then(formatLink);
+        void saved.catch(() => savedImages.delete(savedKey));
       }
-      live.set(image, saved);
-      embeds.push(`<!-- copilot-image:${key} -->\n${await saved.saved}\n<!-- /copilot-image -->`);
+      savedImages.set(savedKey, saved);
+      embeds.push(`<!-- copilot-image:${hash} -->\n${await saved}\n<!-- /copilot-image -->`);
 
       async function writeImage(): Promise<string> {
         let current = "";

@@ -60,8 +60,13 @@ export class ChatPersistenceManager {
 
   private async updateTranscript(path: string, content: string): Promise<void> {
     const key = this.app.vault.getAbstractFileByPath(path) ?? path;
-    await updateChatTranscript(this.app, path, content, this.loadedTranscripts.get(key));
-    this.loadedTranscripts.set(key, content);
+    const baseline = await updateChatTranscript(
+      this.app,
+      path,
+      content,
+      this.loadedTranscripts.get(key)
+    );
+    this.loadedTranscripts.set(key, baseline);
   }
 
   /**

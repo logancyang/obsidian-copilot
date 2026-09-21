@@ -138,6 +138,7 @@ describe("AgentChatPersistenceManager", () => {
       };
       const saved = await manager.saveSession([message], "claude");
       const file = app.files.get(saved!.path)!;
+      Object.setPrototypeOf(file, TFile.prototype);
       file.contents = file.contents!.replace(/!\[\]\([^)]+\)/, "![[organized.png]]");
       const resumed = new AgentChatPersistenceManager(app as unknown as App);
       await resumed.saveSession([JSON.parse(JSON.stringify(message))], "claude", {
@@ -148,8 +149,12 @@ describe("AgentChatPersistenceManager", () => {
       const loaded = await resumed.loadFile(file as unknown as TFile);
       expect(loaded.messages[0].message).not.toContain("copilot-image:");
       file.contents = file.contents.replace("organized.png", "renamed.png");
+      loaded.messages[0].message = loaded.messages[0].message.replace("image", "edited text");
       await resumed.saveSession(loaded.messages, "claude", { existingPath: saved!.path });
       expect(file.contents).toContain("![[renamed.png]]");
+      await resumed.saveSession(loaded.messages, "claude", { existingPath: saved!.path });
+      expect(file.contents).toContain("![[renamed.png]]");
+      expect(file.contents).toContain("edited text");
       expect(app.vault.createBinary).toHaveBeenCalledTimes(1);
     });
 

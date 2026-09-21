@@ -429,8 +429,11 @@ Nature's quiet song`);
         expect(loaded[0].message).not.toContain("copilot-image:");
         expect(loaded[0].timestamp?.epoch).toBe(message.timestamp!.epoch);
         if (legacy) file.path = "test-folder/renamed-chat.md";
+        else loaded[0].message = loaded[0].message.replace("image", "edited text");
         disk = disk.replace(/!\[\]\([^)]+\)/, "![[moved.png]]");
         mockMessageRepo.getDisplayMessages.mockReturnValue(loaded);
+        await persistenceManager.saveChat("gpt-4");
+        expect(disk).toContain("![[moved.png]]");
         await persistenceManager.saveChat("gpt-4");
         expect(disk).toContain("![[moved.png]]");
         if (legacy) {
