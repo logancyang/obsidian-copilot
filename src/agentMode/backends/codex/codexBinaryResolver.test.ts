@@ -181,7 +181,7 @@ describe("codexBinaryResolver", () => {
             name: metadataPath.startsWith(prefixes[1])
               ? "@zed-industries/codex-acp"
               : "@agentclientprotocol/codex-acp",
-            version: "1.10.0",
+            version: "1.12.0",
             bin: { "codex-acp": "dist/index.js" },
           }),
       };
@@ -227,7 +227,7 @@ describe("codexBinaryResolver", () => {
             path.join(packageRoot, "package.json"),
             JSON.stringify({
               name: "@agentclientprotocol/codex-acp",
-              version: "1.10.0",
+              version: "1.12.0",
               bin: { "codex-acp": "dist/index.js" },
             })
           );

@@ -4,9 +4,9 @@ import { assertBinaryCompatible } from "@/agentMode/backends/shared/binaryCompat
 
 const CURRENT_PACKAGE_NAME = "@agentclientprotocol/codex-acp";
 const CURRENT_PACKAGE_ENTRY = "dist/index.js";
-// Bundled CLI authentication requires the passthrough added in version 0.0.45.
-// https://github.com/logancyang/obsidian-copilot/issues/2967
-export const CODEX_MIN_VERSION = "0.0.45";
+// Model selection requires config options validated with the bundled adapter.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/550
+export const CODEX_MIN_VERSION = "1.12.0";
 
 export interface CodexAcpInvocation {
   command: string;
