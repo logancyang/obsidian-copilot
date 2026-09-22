@@ -891,6 +891,34 @@ export class AgentSessionManager {
   }
 
   /**
+   * Remove a session from its tab strip while keeping its backend session available in history.
+   * Closing a tab is navigation; only the history action releases the backend resource.
+   * https://github.com/Brevilabs/obsidian-copilot-private/issues/429
+   * @param id The internal session identity to detach.
+   */
+  detachSessionFromTab(id: string): void {
+    const session = this.sessions.get(id);
+    if (!session || this.detachedFromTabIds.has(id)) return;
+    const scopeIdsBefore = this.getSessionIdsForScope(session.projectId);
+    const closedIndex = scopeIdsBefore.indexOf(id);
+    this.detachedFromTabIds.add(id);
+
+    if (this.lastActiveByScope.get(session.projectId) === id) {
+      this.lastActiveByScope.delete(session.projectId);
+    }
+    if (this.activeSessionId === id) {
+      const nextId = pickScopeNeighbor(
+        this.getSessionIdsForScope(session.projectId),
+        closedIndex,
+        this.lastActiveByScope.get(session.projectId)
+      );
+      this.activeSessionId = nextId;
+      if (nextId) this.lastActiveByScope.set(session.projectId, nextId);
+    }
+    this.notify();
+  }
+
+  /**
    * Recent-list ids of pool sessions whose backend turn is currently
    * `"running"`, so the landing rows can swap their relative-time chip for a
    * spinner. Only `"running"` counts — `awaiting_permission` is surfaced via

@@ -466,6 +466,24 @@ describe("AgentSessionManager", () => {
       });
     });
 
+    describe("detachSessionFromTab()", () => {
+      it("keeps the backend session open and discoverable in history for https://github.com/Brevilabs/obsidian-copilot-private/issues/429", async () => {
+        const mgr = buildManager();
+        const session = await mgr.createSession();
+        const historyId = buildNativeChatId(session.backendId, session.getBackendSessionId()!);
+        const proc = mgr.getBackendProcess(session.backendId)!;
+
+        mgr.detachSessionFromTab(session.internalId);
+
+        expect(mgr.getSessionsForScope(session.projectId)).not.toContain(session);
+        expect(mgr.getSessions()).toContain(session);
+        expect(mgr.getOpenChatIds()).toContain(historyId);
+        expect(proc.closeSession).not.toHaveBeenCalled();
+        expect(mockSessionCancel).not.toHaveBeenCalled();
+        expect(mockSessionDispose).not.toHaveBeenCalled();
+      });
+    });
+
     describe("closeChatSession()", () => {
       it("closes by saved or stale native identity and retains the saved transcript for https://github.com/Brevilabs/obsidian-copilot-private/issues/429", async () => {
         for (const useNativeId of [false, true]) {

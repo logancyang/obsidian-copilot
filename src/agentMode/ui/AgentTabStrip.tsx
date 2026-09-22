@@ -190,7 +190,7 @@ export const AgentTabStrip: React.FC<Props> = ({ manager }) => {
 
   const handleClose = React.useCallback(
     (id: string) => {
-      manager.closeSession(id).catch((e) => logError("[AgentMode] closeSession failed", e));
+      manager.detachSessionFromTab(id);
     },
     [manager]
   );
