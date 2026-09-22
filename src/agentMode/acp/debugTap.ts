@@ -14,7 +14,7 @@ interface JsonRpcFrame {
 /**
  * Wrap the subprocess stdin/stdout streams so every NDJSON-framed
  * JSON-RPC message is logged in both directions. Outbound is what
- * `ClientSideConnection` writes to stdin; inbound is what we read from
+ * the SDK client writes to stdin; inbound is what we read from
  * stdout. The taps are passthroughs — bytes flow through unchanged.
  *
  * Method names are remembered per request id so that responses (which

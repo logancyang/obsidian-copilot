@@ -34,23 +34,48 @@ jest.mock("@agentclientprotocol/sdk", () => {
       this.name = "RequestError";
     }
   }
-  class ClientSideConnection {
-    _client: unknown;
-    constructor(toClient: (c: unknown) => unknown) {
-      this._client = toClient(this);
-    }
-    initialize = jest.fn(async () => mockInitializeResult);
-    newSession = (...args: unknown[]) => mockNewSession(...args);
-    resumeSession = (...args: unknown[]) => mockResumeSession(...args);
-    closeSession = (...args: unknown[]) => mockCloseSession(...args);
-    loadSession = (...args: unknown[]) => mockLoadSession(...args);
-    prompt = jest.fn(async () => ({ stopReason: "end_turn" }));
-    cancel = jest.fn(async () => undefined);
-    setSessionConfigOption = mockSetSessionConfigOption;
+  function client() {
+    const handlers: Record<string, (context: { params: unknown }) => unknown> = {};
+    const builder = {
+      onRequest(method: string, handler: (context: { params: unknown }) => unknown) {
+        handlers[method] = handler;
+        return builder;
+      },
+      onNotification(method: string, handler: (context: { params: unknown }) => unknown) {
+        handlers[method] = handler;
+        return builder;
+      },
+      connect() {
+        const prompt = jest.fn(async () => ({ stopReason: "end_turn" }));
+        const requests: Record<string, (params: unknown) => unknown> = {
+          initialize: async () => mockInitializeResult,
+          "session/new": mockNewSession,
+          "session/resume": mockResumeSession,
+          "session/close": mockCloseSession,
+          "session/load": mockLoadSession,
+          "session/prompt": prompt,
+          "session/set_config_option": (params) =>
+            mockSetSessionConfigOption(params as { value: string }),
+        };
+        return {
+          prompt,
+          _client: {
+            sessionUpdate: (params: unknown) => handlers["session/update"]({ params }),
+            requestPermission: (params: unknown) =>
+              handlers["session/request_permission"]({ params }),
+          },
+          agent: {
+            request: (method: string, params: unknown) => requests[method](params),
+            notify: jest.fn(async () => undefined),
+          },
+        };
+      },
+    };
+    return builder;
   }
   return {
     RequestError,
-    ClientSideConnection,
+    client,
     ndJsonStream: jest.fn(() => ({})),
     PROTOCOL_VERSION: 1,
   };
@@ -103,10 +128,8 @@ function buildStubDescriptor(overrides: Partial<BackendDescriptor> = {}): Backen
 }
 
 /**
- * Pull the VaultClient that AcpBackendProcess wires into the mock
- * ClientSideConnection. The mock stores the `toClient(this)` result on
- * `_client`, which lets tests trigger routing/permission paths the same way
- * the agent backend would.
+ * Trigger registered SDK handlers through the mock connection so routing and
+ * permission tests exercise the same entry points as incoming agent messages.
  */
 function getVaultClient(backend: AcpBackendProcess): VaultClient {
   const connection = (backend as unknown as { connection: { _client: VaultClient } }).connection;

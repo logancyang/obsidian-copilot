@@ -1,6 +1,7 @@
 import { logError, logInfo, logWarn } from "@/logger";
 import {
-  ClientSideConnection,
+  client as createClient,
+  type ClientConnection,
   PROTOCOL_VERSION,
   RequestError,
   ndJsonStream,
@@ -106,7 +107,7 @@ interface SessionWireState {
 
 /**
  * One-per-vault wrapper around an ACP-speaking subprocess. Owns the
- * `ClientSideConnection`, the `AcpProcessManager`, and the demultiplexer
+ * `ClientConnection`, the `AcpProcessManager`, and the demultiplexer
  * that fans `session/update` notifications out to the right `AgentSession`.
  *
  * Lifecycle: `start()` exactly once, then any number of `newSession`/`prompt`
@@ -115,7 +116,7 @@ interface SessionWireState {
  */
 export class AcpBackendProcess implements BackendProcess {
   private process: AcpProcessManager | null = null;
-  private connection: ClientSideConnection | null = null;
+  private connection: ClientConnection | null = null;
   private readonly domainHandlers = new Map<SessionId, DomainSessionUpdateHandler>();
   /**
    * Per-session FIFO of `session/update` notifications that arrived before a
@@ -249,10 +250,15 @@ export class AcpBackendProcess implements BackendProcess {
       onSessionUpdate: (sessionId, update) => this.routeSessionUpdate(sessionId, update),
       requestPermission: (req) => this.handlePermission(req),
     });
-    this.connection = new ClientSideConnection(() => client, stream);
+    this.connection = createClient()
+      .onRequest("fs/read_text_file", ({ params }) => client.readTextFile(params))
+      .onRequest("fs/write_text_file", ({ params }) => client.writeTextFile(params))
+      .onRequest("session/request_permission", ({ params }) => client.requestPermission(params))
+      .onNotification("session/update", ({ params }) => client.sessionUpdate(params))
+      .connect(stream);
 
     try {
-      const init = await this.connection.initialize({
+      const init = await this.connection.agent.request("initialize", {
         protocolVersion: PROTOCOL_VERSION,
         clientCapabilities: {
           fs: { readTextFile: true, writeTextFile: true },
@@ -366,7 +372,7 @@ export class AcpBackendProcess implements BackendProcess {
       mcpServers: [],
       ...this.additionalDirectoriesField(params.additionalDirectories),
     };
-    const wireResp = await this.requireConnection().newSession(req);
+    const wireResp = await this.requireConnection().agent.request("session/new", req);
     this.recordWireState(wireResp.sessionId, {
       modes: wireResp.modes ?? null,
       configOptions: wireResp.configOptions ?? null,
@@ -378,7 +384,7 @@ export class AcpBackendProcess implements BackendProcess {
   }
 
   async prompt(params: PromptInput): Promise<PromptOutput> {
-    const resp = await this.requireConnection().prompt({
+    const resp = await this.requireConnection().agent.request("session/prompt", {
       sessionId: sessionIdToAcp(params.sessionId),
       prompt: promptContentToAcp(params.prompt),
     });
@@ -508,7 +514,7 @@ export class AcpBackendProcess implements BackendProcess {
   async closeSession(params: { sessionId: SessionId }): Promise<void> {
     await this.dispatchCapability(
       "session/close",
-      (connection) => connection.closeSession(params),
+      (connection) => connection.agent.request("session/close", params),
       {
         mustBeAdvertised: true,
       }
@@ -518,7 +524,7 @@ export class AcpBackendProcess implements BackendProcess {
   }
 
   async cancel(params: CancelInput): Promise<void> {
-    return this.requireConnection().cancel(cancelInputToAcp(params));
+    return this.requireConnection().agent.notify("session/cancel", cancelInputToAcp(params));
   }
 
   hasCapability(cap: AcpCapability): boolean {
@@ -564,7 +570,7 @@ export class AcpBackendProcess implements BackendProcess {
 
   async setSessionMode(params: { sessionId: SessionId; modeId: string }): Promise<BackendState> {
     await this.dispatchCapability("session/set_mode", (c) =>
-      c.setSessionMode({
+      c.agent.request("session/set_mode", {
         sessionId: sessionIdToAcp(params.sessionId),
         modeId: params.modeId,
       })
@@ -587,7 +593,7 @@ export class AcpBackendProcess implements BackendProcess {
     value: string;
   }): Promise<BackendState> {
     const resp = await this.dispatchCapability("session/set_config_option", (c) =>
-      c.setSessionConfigOption({
+      c.agent.request("session/set_config_option", {
         sessionId: sessionIdToAcp(params.sessionId),
         configId: params.configId,
         value: params.value,
@@ -614,7 +620,7 @@ export class AcpBackendProcess implements BackendProcess {
    */
   private async dispatchCapability<T>(
     capability: AcpCapability,
-    run: (c: ClientSideConnection) => Promise<T>,
+    run: (c: ClientConnection) => Promise<T>,
     opts: { mustBeAdvertised?: boolean } = {}
   ): Promise<T> {
     const known = this.capabilities.get(capability);
@@ -641,7 +647,7 @@ export class AcpBackendProcess implements BackendProcess {
   async listSessions(params: ListSessionsInput): Promise<ListSessionsOutput> {
     const resp = await this.dispatchCapability(
       "session/list",
-      (c) => c.listSessions(params.cwd ? { cwd: params.cwd } : {}),
+      (c) => c.agent.request("session/list", params.cwd ? { cwd: params.cwd } : {}),
       { mustBeAdvertised: true }
     );
     return {
@@ -660,7 +666,7 @@ export class AcpBackendProcess implements BackendProcess {
     const wireResp = await this.dispatchCapability(
       "session/resume",
       (c) =>
-        c.resumeSession({
+        c.agent.request("session/resume", {
           sessionId: sessionIdToAcp(params.sessionId),
           cwd: params.cwd,
           mcpServers: [],
@@ -689,7 +695,7 @@ export class AcpBackendProcess implements BackendProcess {
       const wireResp = await this.dispatchCapability(
         "session/load",
         (c) =>
-          c.loadSession({
+          c.agent.request("session/load", {
             sessionId: sessionIdToAcp(sessionId),
             cwd: params.cwd,
             mcpServers: [],
@@ -753,7 +759,7 @@ export class AcpBackendProcess implements BackendProcess {
     }
   }
 
-  private requireConnection(): ClientSideConnection {
+  private requireConnection(): ClientConnection {
     if (!this.connection) {
       throw new Error(
         this.process
