@@ -375,10 +375,10 @@ export class AgentSessionManager {
    */
   private readonly retainedChatInputIds = new Set<string>();
   /**
-   * Includes the reason because one unavailable model can require distinct notices.
+   * `backendId:baseModelId` pairs already reported as unavailable.
    * https://github.com/Brevilabs/obsidian-copilot-private/issues/474
    */
-  private readonly warnedUnavailableSelections = new Set<string>();
+  private readonly warnedUnavailableModels = new Set<string>();
   private readonly preloader: AgentModelPreloader;
   /**
    * Per-backend preload status. The chat UI gates its first render on the
@@ -2168,9 +2168,11 @@ export class AgentSessionManager {
   ): ModelSelection | null {
     const saved = this.getDefaultSelection(backendId);
     const offered = this.opts.resolveDescriptor(backendId)?.getEnabledModelEntries?.(getSettings());
-    // An empty list is not evidence the saved model is gone: an agent-native
-    // model stays routable whether or not Copilot's enabled list curates it.
-    if (!offered?.length) return preferred ?? saved;
+    const requested = preferred ?? saved;
+    // A missing accessor cannot validate agent-native models. An empty list is
+    // authoritative because it can mean the user just disabled the last model.
+    // https://github.com/logancyang/obsidian-copilot/issues/3319
+    if (!offered) return requested;
 
     const runnable = offered.filter(
       (entry) =>
@@ -2178,52 +2180,38 @@ export class AgentSessionManager {
         (!catalog?.availableModels?.length ||
           catalog.availableModels.some((model) => model.baseModelId === entry.baseModelId))
     );
-    for (const selection of [preferred, saved]) {
-      if (selection && runnable.some((entry) => entry.baseModelId === selection.baseModelId)) {
-        return selection;
-      }
-    }
-    const unavailable = saved ?? preferred;
-    if (!unavailable) return null;
+    if (!requested) return null;
 
-    const replacement = runnable[0];
-    const missingKey = offered.some(
-      (entry) => entry.baseModelId === unavailable.baseModelId && entry.credentialState !== "ok"
-    );
-    const reason = missingKey ? "keyless" : saved ? "default" : "chat";
-    this.warnSelectionNotRunnable(backendId, unavailable.baseModelId, replacement?.name, reason);
-    return replacement ? { baseModelId: replacement.baseModelId, effort: null } : null;
+    const resolved =
+      [preferred, saved].find(
+        (selection): selection is ModelSelection =>
+          !!selection && runnable.some((entry) => entry.baseModelId === selection.baseModelId)
+      ) ?? (runnable[0] ? { baseModelId: runnable[0].baseModelId, effort: null } : null);
+    if (resolved?.baseModelId !== requested.baseModelId) {
+      const replacementName = runnable.find(
+        (entry) => entry.baseModelId === resolved?.baseModelId
+      )?.name;
+      this.warnSelectionNotRunnable(backendId, requested.baseModelId, replacementName);
+    }
+    return resolved;
   }
 
   private warnSelectionNotRunnable(
     backendId: BackendId,
     baseModelId: string,
-    replacementName: string | undefined,
-    reason: "keyless" | "chat" | "default"
+    replacementName?: string
   ): void {
-    const key = `${backendId}:${reason}:${baseModelId}`;
-    if (this.warnedUnavailableSelections.has(key)) return;
-    this.warnedUnavailableSelections.add(key);
+    const key = `${backendId}:${baseModelId}`;
+    if (this.warnedUnavailableModels.has(key)) return;
+    this.warnedUnavailableModels.add(key);
     const agent = this.resolveDescriptor(backendId).displayName;
     const model = baseModelId.split("/").pop() || baseModelId;
-    logInfo(`[AgentMode] ${backendId} cannot start a chat on ${baseModelId} (${reason})`);
-    const cause = {
-      keyless: `${model} needs an API key for ${agent}.`,
-      chat: `${model} is turned off for ${agent}.`,
-      default: `${agent} no longer offers ${model}.`,
-    }[reason];
-    const outcome = replacementName
-      ? {
-          keyless: `Using ${replacementName} until you add it.`,
-          chat: `Open chats moved to ${replacementName}.`,
-          default: `New chats use ${replacementName} until you pick a new default.`,
-        }[reason]
-      : {
-          keyless: `Add it, or enable a model that already has one.`,
-          chat: `Enable a model ${agent} can run.`,
-          default: `Pick a model to make it your default again.`,
-        }[reason];
-    new Notice(`${cause} ${outcome}`);
+    logInfo(`[AgentMode] ${backendId} cannot start a chat on ${baseModelId}`);
+    new Notice(
+      replacementName
+        ? `${agent} couldn't use ${model}. Using ${replacementName} instead.`
+        : `${agent} couldn't use ${model}. Enable a model ${agent} can run.`
+    );
   }
 
   private repairDefaultEffort(backendId: BackendId, state: BackendState | null): void {
@@ -3905,19 +3893,13 @@ export class AgentSessionManager {
     labelSource: "user" | "agent" | null,
     seedSelection?: ModelSelection
   ): Promise<AgentSession> {
-    // A model-setting change can trigger this restart, so revalidate before
-    // either resuming the conversation or creating its fallback.
-    // https://github.com/logancyang/obsidian-copilot/issues/3319
-    const validatedSeed = seedSelection
-      ? (this.getSeedSelection(backendId, seedSelection) ?? undefined)
-      : undefined;
     if (resumableSessionId) {
       const resumed = await this.tryResumeSessionFromHistory(
         backendId,
         resumableSessionId,
         projectId,
         chatInputId,
-        validatedSeed
+        seedSelection
       ).catch((e) => {
         logWarn(`[AgentMode] resume after ${backendId} restart failed`, e);
         return null;
@@ -3931,7 +3913,13 @@ export class AgentSessionManager {
         return resumed;
       }
     }
-    return this.createSession(backendId, projectId, validatedSeed, chatInputId);
+    // A model-setting change can trigger this restart, so validate the seed
+    // before creating the fallback session.
+    // https://github.com/logancyang/obsidian-copilot/issues/3319
+    const fallbackSeed = seedSelection
+      ? (this.getSeedSelection(backendId, seedSelection) ?? undefined)
+      : undefined;
+    return this.createSession(backendId, projectId, fallbackSeed, chatInputId);
   }
 
   /** Immediately tear down `backendId` and rebuild its tabs with their composers. */

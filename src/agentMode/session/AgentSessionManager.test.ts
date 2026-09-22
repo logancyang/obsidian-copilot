@@ -1133,21 +1133,7 @@ describe("AgentSessionManager", () => {
         });
       });
 
-      it("skips an enabled model whose provider key is missing (https://github.com/Brevilabs/obsidian-copilot-private/issues/474)", () => {
-        // A flagged entry stays in the enabled list but the backend rejects it,
-        // so seeding it fails exactly like the withdrawn default.
-        const mgr = buildManagerWithOffered(
-          [{ baseModelId: "byok/gpt-5.6", credentialState: "missing_key" }, "copilot-plus/flash"],
-          { baseModelId: "copilot-plus/minimax-m2.7", effort: null }
-        );
-
-        expect(mgr.getSeedSelection("opencode")).toEqual({
-          baseModelId: "copilot-plus/flash",
-          effort: null,
-        });
-      });
-
-      it("stands in for a saved default whose provider key has not been added yet, and says so (https://github.com/logancyang/obsidian-copilot/issues/3319)", () => {
+      it("uses a credential-ready fallback and reports the substitution when the saved model has no key (https://github.com/Brevilabs/obsidian-copilot-private/issues/474)", () => {
         const mgr = buildManagerWithOffered(
           [{ baseModelId: "byok/gpt-5.6", credentialState: "missing_key" }, "copilot-plus/flash"],
           { baseModelId: "byok/gpt-5.6", effort: "high" }
@@ -1158,7 +1144,7 @@ describe("AgentSessionManager", () => {
           effort: null,
         });
         expect((Notice as unknown as jest.Mock).mock.calls.at(-1)?.[0]).toBe(
-          "gpt-5.6 needs an API key for opencode. Using copilot-plus/flash until you add it."
+          "opencode couldn't use gpt-5.6. Using copilot-plus/flash instead."
         );
       });
 
@@ -1173,35 +1159,19 @@ describe("AgentSessionManager", () => {
         ).toEqual({ baseModelId: "copilot-plus/glm-5.2", effort: null });
       });
 
-      it("returns null when every enabled model is missing its provider key (https://github.com/Brevilabs/obsidian-copilot-private/issues/474)", () => {
-        // Nothing enabled is routable, so the agent's own default is the only
-        // thing left to start on and the notice must say so.
+      it("returns null and reports the unavailable selection when no enabled model is runnable (https://github.com/Brevilabs/obsidian-copilot-private/issues/474)", () => {
         const mgr = buildManagerWithOffered(
           [{ baseModelId: "byok/gpt-5.6", credentialState: "missing_key" }],
           { baseModelId: "copilot-plus/minimax-m2.7", effort: null }
         );
 
         expect(mgr.getSeedSelection("opencode")).toBeNull();
-        expect((Notice as unknown as jest.Mock).mock.calls.at(-1)?.[0]).toContain(
-          "Pick a model to make it your default again"
+        expect((Notice as unknown as jest.Mock).mock.calls.at(-1)?.[0]).toBe(
+          "opencode couldn't use minimax-m2.7. Enable a model opencode can run."
         );
       });
 
-      it("names the model new chats fall back to (https://github.com/Brevilabs/obsidian-copilot-private/issues/474)", () => {
-        const mgr = buildManagerWithOffered(["copilot-plus/flash"], {
-          baseModelId: "copilot-plus/minimax-m2.7",
-          effort: null,
-        });
-
-        mgr.getSeedSelection("opencode");
-
-        expect((Notice as unknown as jest.Mock).mock.calls.at(-1)?.[0]).toContain(
-          "copilot-plus/flash"
-        );
-      });
-
-      it("names the withdrawn model once, not on every read (https://github.com/Brevilabs/obsidian-copilot-private/issues/474)", () => {
-        // The read runs on every session create and every default re-apply.
+      it("reports an unavailable model once, not on every selection read (https://github.com/Brevilabs/obsidian-copilot-private/issues/474)", () => {
         const mgr = buildManagerWithOffered(["copilot-plus/flash"], {
           baseModelId: "copilot-plus/minimax-m2.7",
           effort: null,
@@ -1214,10 +1184,7 @@ describe("AgentSessionManager", () => {
         expect((Notice as unknown as jest.Mock).mock.calls[0][0]).toContain("minimax-m2.7");
       });
 
-      it("names each withdrawn model, not just the first one a backend loses (https://github.com/Brevilabs/obsidian-copilot-private/issues/474)", () => {
-        // After one default is withdrawn the user picks another; losing that one
-        // too must be reported by the same manager rather than swallowed by the
-        // first warning.
+      it("reports each unavailable model once (https://github.com/Brevilabs/obsidian-copilot-private/issues/474)", () => {
         const mgr = buildManagerWithOffered(["copilot-plus/flash"], {
           baseModelId: "copilot-plus/model-a",
           effort: null,
@@ -1232,49 +1199,50 @@ describe("AgentSessionManager", () => {
         expect((Notice as unknown as jest.Mock).mock.calls.at(-1)?.[0]).toContain("model-b");
       });
 
-      it("tells an open chat its model was turned off rather than withdrawn by the agent (https://github.com/logancyang/obsidian-copilot/issues/3319)", () => {
-        const mgr = buildManagerWithOffered(["copilot-plus/flash"], null);
+      it("reports when a restarted chat falls back to the saved default (https://github.com/logancyang/obsidian-copilot/issues/3319)", () => {
+        const saved = { baseModelId: "copilot-plus/flash", effort: "low" };
+        const mgr = buildManagerWithOffered([saved.baseModelId], saved);
 
-        mgr.getSeedSelection("opencode", {
-          baseModelId: "copilot-plus/minimax-m2.7",
-          effort: "high",
-        });
-
+        expect(
+          mgr.getSeedSelection("opencode", {
+            baseModelId: "copilot-plus/minimax-m2.7",
+            effort: "high",
+          })
+        ).toEqual(saved);
         expect((Notice as unknown as jest.Mock).mock.calls.at(-1)?.[0]).toBe(
-          "minimax-m2.7 is turned off for opencode. Open chats moved to copilot-plus/flash."
+          "opencode couldn't use minimax-m2.7. Using copilot-plus/flash instead."
         );
       });
 
-      it("warns about the same model once as an open chat's selection and once as a withdrawn default (https://github.com/logancyang/obsidian-copilot/issues/3319)", () => {
+      it("reports the same unavailable model only once across open-chat and saved-default reads (https://github.com/logancyang/obsidian-copilot/issues/3319)", () => {
         const mgr = buildManagerWithOffered(["copilot-plus/flash"], null);
-        mgr.getSeedSelection("opencode", {
+        const unavailable = {
           baseModelId: "copilot-plus/minimax-m2.7",
           effort: null,
-        });
+        };
+        mgr.getSeedSelection("opencode", unavailable);
 
-        savedDefault({ baseModelId: "copilot-plus/minimax-m2.7", effort: null });
+        savedDefault(unavailable);
         mgr.getSeedSelection("opencode");
 
-        expect(Notice).toHaveBeenCalledTimes(2);
-        expect((Notice as unknown as jest.Mock).mock.calls.at(-1)?.[0]).toContain(
-          "opencode no longer offers minimax-m2.7"
-        );
+        expect(Notice).toHaveBeenCalledTimes(1);
       });
 
-      it.each([
-        ["an empty curated list", [] as string[]],
-        ["a backend that publishes no list at all", undefined],
-      ])(
-        "keeps the saved selection given %s, because an agent-native model stays routable without curation (https://github.com/Brevilabs/obsidian-copilot-private/issues/474)",
-        (_case, offered) => {
-          const saved = { baseModelId: "copilot-plus/glm-5.2", effort: null };
+      it("returns null when the enabled list is empty rather than reapplying the model the user just disabled (https://github.com/logancyang/obsidian-copilot/issues/3319)", () => {
+        const saved = { baseModelId: "copilot-plus/glm-5.2", effort: null };
+        const mgr = buildManagerWithOffered([], saved);
 
-          const mgr = buildManagerWithOffered(offered, saved);
+        expect(mgr.getSeedSelection("opencode")).toBeNull();
+        expect(Notice).toHaveBeenCalledTimes(1);
+      });
 
-          expect(mgr.getSeedSelection("opencode")).toEqual(saved);
-          expect(Notice).not.toHaveBeenCalled();
-        }
-      );
+      it("keeps the saved selection when the backend publishes no enabled-model list (https://github.com/Brevilabs/obsidian-copilot-private/issues/474)", () => {
+        const saved = { baseModelId: "copilot-plus/glm-5.2", effort: null };
+        const mgr = buildManagerWithOffered(undefined, saved);
+
+        expect(mgr.getSeedSelection("opencode")).toEqual(saved);
+        expect(Notice).not.toHaveBeenCalled();
+      });
 
       it("applies the saved selection again once its model is offered once more", () => {
         // Stood in for rather than deleted, so an offline launch or a briefly
