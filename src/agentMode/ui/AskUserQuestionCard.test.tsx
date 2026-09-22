@@ -256,5 +256,116 @@ describe("AskUserQuestionCard", () => {
       expect(onResolve).toHaveBeenCalledTimes(1);
       expect(onResolve).toHaveBeenCalledWith(REQUEST_ID, { "When do we ship?": "A" });
     });
+
+    it("submits a free-text ACP field by field id (https://github.com/Brevilabs/obsidian-copilot-private/issues/551)", () => {
+      const onResolve = jest.fn();
+      renderCard(
+        makeRequest([
+          {
+            question: "Explain the change",
+            header: "Give context",
+            answerKey: "reason",
+            input: "text",
+            options: [],
+          },
+        ]),
+        onResolve
+      );
+      expect(screen.getByText("Give context")).not.toBeNull();
+      expect((submitButton() as HTMLButtonElement).disabled).toBe(true);
+      fireEvent.change(screen.getByRole("textbox", { name: "Explain the change" }), {
+        target: { value: "Use the smaller API" },
+      });
+      fireEvent.click(submitButton());
+      expect(onResolve).toHaveBeenCalledWith(REQUEST_ID, { reason: "Use the smaller API" });
+    });
+
+    it("masks an ACP secret while submitting its value by field id (https://github.com/Brevilabs/obsidian-copilot-private/issues/551)", () => {
+      const onResolve = jest.fn();
+      renderCard(
+        makeRequest([{ question: "Token", answerKey: "token", input: "secret", options: [] }]),
+        onResolve
+      );
+      const input = screen.getByLabelText("Token");
+      expect(input.getAttribute("type")).toBe("password");
+      fireEvent.change(input, { target: { value: "private-value" } });
+      fireEvent.click(submitButton());
+      expect(onResolve).toHaveBeenCalledWith(REQUEST_ID, { token: "private-value" });
+      expect(screen.queryByText("private-value")).toBeNull();
+    });
+
+    it("returns ACP option values and an Other note without changing Claude answers (https://github.com/Brevilabs/obsidian-copilot-private/issues/551)", () => {
+      const onResolve = jest.fn();
+      renderCard(
+        makeRequest([
+          {
+            question: "Approach",
+            answerKey: "approach",
+            options: [{ label: "Simple", value: "simple" }],
+            allowOther: true,
+            otherOptionValue: "other",
+            otherNoteKey: "approach_note",
+          },
+        ]),
+        onResolve
+      );
+      fireEvent.click(getOtherControl("radio"));
+      fireEvent.change(otherTextarea(), { target: { value: "Use a script" } });
+      fireEvent.click(submitButton());
+      expect(onResolve).toHaveBeenCalledWith(REQUEST_ID, {
+        approach: "other",
+        approach_note: "Use a script",
+      });
+    });
+
+    it("masks a secret ACP Other note while returning its value (https://github.com/Brevilabs/obsidian-copilot-private/issues/551)", () => {
+      const onResolve = jest.fn();
+      renderCard(
+        makeRequest([
+          {
+            question: "Credential",
+            answerKey: "credential",
+            options: [{ label: "Stored" }],
+            allowOther: true,
+            otherOptionValue: "None of the above",
+            otherNoteKey: "credential_note1",
+            otherInput: "secret",
+          },
+        ]),
+        onResolve
+      );
+      fireEvent.click(getOtherControl("radio"));
+      const input = screen.getByLabelText("Other response");
+      expect(input.getAttribute("type")).toBe("password");
+      fireEvent.change(input, { target: { value: "secret-answer" } });
+      fireEvent.click(submitButton());
+      expect(onResolve).toHaveBeenCalledWith(REQUEST_ID, {
+        credential: "None of the above",
+        credential_note1: "secret-answer",
+      });
+    });
+
+    it("keeps ACP multi-select option values as an array (https://github.com/Brevilabs/obsidian-copilot-private/issues/551)", () => {
+      const onResolve = jest.fn();
+      renderCard(
+        makeRequest([
+          {
+            question: "Checks",
+            answerKey: "checks",
+            multiSelect: true,
+            options: [
+              { label: "Build", value: "build" },
+              { label: "Review", value: "review" },
+            ],
+            allowOther: false,
+          },
+        ]),
+        onResolve
+      );
+      fireEvent.click(screen.getByRole("checkbox", { name: "Build" }));
+      fireEvent.click(screen.getByRole("checkbox", { name: "Review" }));
+      fireEvent.click(submitButton());
+      expect(onResolve).toHaveBeenCalledWith(REQUEST_ID, { checks: ["build", "review"] });
+    });
   });
 });

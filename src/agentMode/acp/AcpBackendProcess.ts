@@ -2,6 +2,8 @@ import { logError, logInfo, logWarn } from "@/logger";
 import {
   client as createClient,
   type ClientConnection,
+  type CreateElicitationRequest,
+  type CreateElicitationResponse,
   PROTOCOL_VERSION,
   RequestError,
   ndJsonStream,
@@ -21,6 +23,8 @@ import type {
   BackendDescriptor,
   BackendProcess,
   BackendState,
+  AgentQuestionAnswers,
+  AskUserQuestionPrompt,
   CancelInput,
   ListSessionsInput,
   ListSessionsOutput,
@@ -40,6 +44,7 @@ import type {
   SessionUsage,
 } from "@/agentMode/session/types";
 import { wrapStreamsForDebug } from "./debugTap";
+import { formToQuestionPrompt } from "./elicitation";
 import { AcpBackend } from "./types";
 import {
   withoutExpiredWindows,
@@ -127,6 +132,9 @@ export class AcpBackendProcess implements BackendProcess {
   private static readonly PENDING_UPDATE_LIMIT = 32;
   private permissionPrompter: ((req: PermissionPrompt) => Promise<PermissionDecision>) | null =
     null;
+  private askUserQuestionPrompter:
+    | ((req: AskUserQuestionPrompt) => Promise<AgentQuestionAnswers>)
+    | null = null;
   private exitListeners = new Set<() => void>();
   private capabilities = new Map<AcpCapability, boolean>();
   private readonly sessionWireState = new Map<SessionId, SessionWireState>();
@@ -230,6 +238,7 @@ export class AcpBackendProcess implements BackendProcess {
       this.sawLiveUsage.clear();
       this.loadSessionCollectors.clear();
       this.permissionPrompter = null;
+      this.askUserQuestionPrompter = null;
       this.capabilities.clear();
       // Dropped rather than kept: a backend that starts again may be pointed at
       // different credentials, and a snapshot held across that would show the previous
@@ -255,6 +264,9 @@ export class AcpBackendProcess implements BackendProcess {
       .onRequest("fs/read_text_file", ({ params }) => client.readTextFile(params))
       .onRequest("fs/write_text_file", ({ params }) => client.writeTextFile(params))
       .onRequest("session/request_permission", ({ params }) => client.requestPermission(params))
+      .onRequest("elicitation/create", ({ params, requestId, signal }) =>
+        this.handleElicitation(params, String(requestId), signal)
+      )
       .onNotification("session/update", ({ params }) => client.sessionUpdate(params))
       .connect(stream);
 
@@ -263,6 +275,7 @@ export class AcpBackendProcess implements BackendProcess {
         protocolVersion: PROTOCOL_VERSION,
         clientCapabilities: {
           fs: { readTextFile: true, writeTextFile: true },
+          elicitation: { form: {} },
         },
         clientInfo: {
           name: COPILOT_CLIENT_NAME,
@@ -320,6 +333,12 @@ export class AcpBackendProcess implements BackendProcess {
 
   setPermissionPrompter(fn: (req: PermissionPrompt) => Promise<PermissionDecision>): void {
     this.permissionPrompter = fn;
+  }
+
+  setAskUserQuestionPrompter(
+    fn: (req: AskUserQuestionPrompt) => Promise<AgentQuestionAnswers>
+  ): void {
+    this.askUserQuestionPrompter = fn;
   }
 
   registerSessionHandler(sessionId: SessionId, handler: DomainSessionUpdateHandler): () => void {
@@ -745,6 +764,7 @@ export class AcpBackendProcess implements BackendProcess {
     this.loadSessionCollectors.clear();
     this.sawLiveUsage.clear();
     this.permissionPrompter = null;
+    this.askUserQuestionPrompter = null;
     this.capabilities.clear();
     // Same reasoning as the exit handler: the next start() may authenticate as a
     // different account, so nothing about this one may survive the restart.
@@ -967,5 +987,18 @@ export class AcpBackendProcess implements BackendProcess {
       )
     );
     return decisionToAcpResponse(decision);
+  }
+
+  private async handleElicitation(
+    request: CreateElicitationRequest,
+    requestId: string,
+    signal: AbortSignal
+  ): Promise<CreateElicitationResponse> {
+    const prompt = formToQuestionPrompt(request, requestId);
+    if (!prompt) return { action: "decline" };
+    if (!this.askUserQuestionPrompter || signal.aborted) return { action: "cancel" };
+    const answers = await this.askUserQuestionPrompter({ ...prompt, signal });
+    if (signal.aborted || Object.keys(answers).length === 0) return { action: "cancel" };
+    return { action: "accept", content: answers };
   }
 }

@@ -4017,6 +4017,29 @@ describe("AgentSession plan proposal lifecycle", () => {
     expect(session.getPendingAskUserQuestions()).toBe(session.getPendingAskUserQuestions());
   });
 
+  it("withdraws an ACP question when its request signal aborts (https://github.com/Brevilabs/obsidian-copilot-private/issues/551)", async () => {
+    const mock = makeMockBackend();
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "codex",
+    });
+    const controller = new AbortController();
+    const answers = session.handleAskUserQuestion({
+      sessionId: "acp-1",
+      requestId: "rpc-1",
+      questions: [{ question: "Approach", answerKey: "approach", options: [{ label: "Simple" }] }],
+      signal: controller.signal,
+    });
+    expect(session.getPendingAskUserQuestions()).toHaveLength(1);
+    controller.abort();
+    await expect(answers).resolves.toEqual({});
+    expect(session.getPendingAskUserQuestions()).toHaveLength(0);
+    session.resolveAskUserQuestion("rpc-1", { approach: "stale" });
+    expect(session.getPendingAskUserQuestions()).toHaveLength(0);
+  });
+
   it("flushes a pending AskUserQuestion with empty answers when the turn is cancelled", async () => {
     const mock = makeMockBackend();
     let resolvePrompt: ((v: { stopReason: "cancelled" }) => void) | null = null;

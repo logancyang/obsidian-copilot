@@ -24,6 +24,7 @@ function isAnswered(
   otherActive: boolean,
   customText: string
 ): boolean {
+  if (question.input) return customText.trim().length > 0;
   if (otherActive) return customText.trim().length > 0;
   if (question.multiSelect) {
     // An untouched or fully cleared multi-select must not become an empty-string answer.
@@ -87,13 +88,34 @@ export const AskUserQuestionCard: React.FC<AskUserQuestionCardProps> = ({ reques
       const sel = selections[i];
       const other = otherActive[i] ?? false;
       const text = (customTexts[i] ?? "").trim();
+      const key = q.answerKey ?? q.question;
+      if (q.input) {
+        answers[key] = q.input === "secret" ? (customTexts[i] ?? "") : text;
+        continue;
+      }
       if (q.multiSelect) {
         const labels = sel instanceof Set ? Array.from(sel) : [];
         if (other && text) labels.push(text);
-        answers[q.question] = labels.join(", ");
+        answers[key] = q.answerKey
+          ? labels.map(
+              (label) => q.options.find((option) => option.label === label)?.value ?? label
+            )
+          : labels.join(", ");
       } else {
-        // "Other" wins over any stale preset (radio exclusivity clears it anyway).
-        answers[q.question] = other ? text : typeof sel === "string" ? sel : "";
+        // ACP has stable option values and a separate note field. Claude's
+        // question-text/plain-string contract remains unchanged.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/551
+        answers[key] =
+          other && q.otherNoteKey
+            ? (q.otherOptionValue ?? "")
+            : other
+              ? text
+              : typeof sel === "string"
+                ? q.answerKey
+                  ? (q.options.find((option) => option.label === sel)?.value ?? sel)
+                  : sel
+                : "";
+        if (other && q.otherNoteKey) answers[q.otherNoteKey] = text;
       }
     }
     onResolve(requestId, answers);
@@ -153,13 +175,14 @@ export const AskUserQuestionCard: React.FC<AskUserQuestionCardProps> = ({ reques
       </div>
 
       <div className="tw-flex tw-flex-col tw-gap-2 tw-px-3 tw-py-2">
+        {request.message ? <div className="tw-text-sm tw-text-muted">{request.message}</div> : null}
         {showTabs ? (
           <div role="tablist" className="copilot-divider-b tw-flex tw-flex-wrap tw-gap-x-1">
             {questions.map((q, idx) => {
               const selected = idx === activeIdx;
               return (
                 <button
-                  key={q.question}
+                  key={q.answerKey ?? q.question}
                   type="button"
                   role="tab"
                   aria-selected={selected}
@@ -185,7 +208,7 @@ export const AskUserQuestionCard: React.FC<AskUserQuestionCardProps> = ({ reques
         ) : null}
 
         <QuestionPanel
-          key={active.question}
+          key={active.answerKey ?? active.question}
           question={active}
           name={`askq-${requestId}-${activeIdx}`}
           selection={selections[activeIdx]}
@@ -247,62 +270,95 @@ const QuestionPanel: React.FC<QuestionPanelProps> = ({
   const control = question.multiSelect ? "checkbox" : "radio";
   return (
     <div role="tabpanel" className="tw-flex tw-flex-col tw-gap-2">
-      <div className="tw-text-sm">{question.question}</div>
-      <div className="tw-flex tw-flex-col tw-gap-1">
-        {question.options.map((opt) => {
-          const checked = question.multiSelect
-            ? selection instanceof Set && selection.has(opt.label)
-            : selection === opt.label;
-          return (
-            <label
-              key={opt.label}
-              className="tw-flex tw-cursor-pointer tw-items-start tw-gap-2 tw-rounded tw-px-2 tw-py-1.5 hover:tw-bg-modifier-hover"
-            >
-              {/* Center the control in a box matching the label's line height so
+      {question.input ? (
+        <label className="tw-flex tw-flex-col tw-gap-1 tw-text-sm">
+          <span>{question.question}</span>
+          <input
+            type={question.input === "secret" ? "password" : "text"}
+            autoComplete="off"
+            value={customText}
+            disabled={disabled}
+            onChange={(e) => onCustomTextChange(e.target.value)}
+            className="tw-min-h-9 tw-w-full tw-rounded tw-border tw-border-solid tw-border-border tw-bg-primary tw-px-2 tw-py-1 tw-text-sm tw-text-normal tw-outline-none focus:tw-border-border-focus"
+          />
+        </label>
+      ) : (
+        <div className="tw-text-sm">{question.question}</div>
+      )}
+      {/* ACP uses header as the field description; Claude uses it only as a tab label.
+          https://github.com/Brevilabs/obsidian-copilot-private/issues/551 */}
+      {question.answerKey && question.header ? (
+        <div className="tw-text-xs tw-text-muted">{question.header}</div>
+      ) : null}
+      {!question.input ? (
+        <div className="tw-flex tw-flex-col tw-gap-1">
+          {question.options.map((opt) => {
+            const checked = question.multiSelect
+              ? selection instanceof Set && selection.has(opt.label)
+              : selection === opt.label;
+            return (
+              <label
+                key={opt.label}
+                className="tw-flex tw-cursor-pointer tw-items-start tw-gap-2 tw-rounded tw-px-2 tw-py-1.5 hover:tw-bg-modifier-hover"
+              >
+                {/* Center the control in a box matching the label's line height so
                   it top-aligns with the first line of text, not its mid-point.
                   `tw-m-0` strips the asymmetric default margin browsers give
                   native checkboxes/radios, which was throwing off alignment. */}
+                <span className="tw-flex tw-h-5 tw-shrink-0 tw-items-center">
+                  <input
+                    type={control}
+                    name={name}
+                    checked={checked}
+                    disabled={disabled}
+                    onChange={() => onTogglePreset(opt.label)}
+                    className="tw-m-0"
+                  />
+                </span>
+                <div className="tw-min-w-0">
+                  <div className="tw-text-sm tw-leading-5">{opt.label}</div>
+                  {opt.description ? (
+                    <div className="tw-text-xs tw-text-muted">{opt.description}</div>
+                  ) : null}
+                </div>
+              </label>
+            );
+          })}
+
+          {/* "Other" escape hatch: shares the radio group name so single-select
+            grouping stays native, and reveals a free-form textarea when armed. */}
+          {question.allowOther !== false ? (
+            <label className="tw-flex tw-cursor-pointer tw-items-start tw-gap-2 tw-rounded tw-px-2 tw-py-1.5 hover:tw-bg-modifier-hover">
               <span className="tw-flex tw-h-5 tw-shrink-0 tw-items-center">
                 <input
                   type={control}
                   name={name}
-                  checked={checked}
+                  checked={otherActive}
                   disabled={disabled}
-                  onChange={() => onTogglePreset(opt.label)}
+                  onChange={onToggleOther}
                   className="tw-m-0"
                 />
               </span>
               <div className="tw-min-w-0">
-                <div className="tw-text-sm tw-leading-5">{opt.label}</div>
-                {opt.description ? (
-                  <div className="tw-text-xs tw-text-muted">{opt.description}</div>
-                ) : null}
+                <div className="tw-text-sm tw-leading-5">Other</div>
+                <div className="tw-text-xs tw-text-muted">Type your own response</div>
               </div>
             </label>
-          );
-        })}
+          ) : null}
+        </div>
+      ) : null}
 
-        {/* "Other" escape hatch: shares the radio group name so single-select
-            grouping stays native, and reveals a free-form textarea when armed. */}
-        <label className="tw-flex tw-cursor-pointer tw-items-start tw-gap-2 tw-rounded tw-px-2 tw-py-1.5 hover:tw-bg-modifier-hover">
-          <span className="tw-flex tw-h-5 tw-shrink-0 tw-items-center">
-            <input
-              type={control}
-              name={name}
-              checked={otherActive}
-              disabled={disabled}
-              onChange={onToggleOther}
-              className="tw-m-0"
-            />
-          </span>
-          <div className="tw-min-w-0">
-            <div className="tw-text-sm tw-leading-5">Other</div>
-            <div className="tw-text-xs tw-text-muted">Type your own response</div>
-          </div>
-        </label>
-      </div>
-
-      {otherActive ? (
+      {otherActive && question.otherInput === "secret" ? (
+        <input
+          type="password"
+          aria-label="Other response"
+          autoComplete="off"
+          className="tw-min-h-9 tw-w-full tw-rounded tw-border tw-border-solid tw-border-border tw-bg-primary tw-px-2 tw-py-1 tw-text-sm tw-text-normal tw-outline-none focus:tw-border-border-focus"
+          value={customText}
+          disabled={disabled}
+          onChange={(e) => onCustomTextChange(e.target.value)}
+        />
+      ) : otherActive ? (
         <textarea
           className="tw-min-h-9 tw-w-full tw-resize-y tw-rounded tw-border tw-border-solid tw-border-border tw-bg-primary tw-px-2 tw-py-1 tw-text-sm tw-text-normal tw-outline-none focus:tw-border-border-focus"
           placeholder="Type your response…"

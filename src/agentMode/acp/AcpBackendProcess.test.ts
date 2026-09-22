@@ -25,6 +25,7 @@ const mockSetSessionConfigOption = jest.fn(async (params: { value: string }) => 
   configOptions: modelOptions(params.value),
 }));
 const mockLoadSession = jest.fn(async (..._args: unknown[]) => ({}));
+const mockInitializeRequest = jest.fn();
 
 jest.mock("@agentclientprotocol/sdk", () => {
   class RequestError extends Error {
@@ -36,7 +37,10 @@ jest.mock("@agentclientprotocol/sdk", () => {
     }
   }
   function client() {
-    const handlers: Record<string, (context: { params: unknown }) => unknown> = {};
+    const handlers: Record<
+      string,
+      (context: { params: unknown; requestId?: string; signal?: AbortSignal }) => unknown
+    > = {};
     const builder = {
       onRequest(method: string, handler: (context: { params: unknown }) => unknown) {
         handlers[method] = handler;
@@ -49,7 +53,10 @@ jest.mock("@agentclientprotocol/sdk", () => {
       connect() {
         const prompt = jest.fn(async () => ({ stopReason: "end_turn" }));
         const requests: Record<string, (params: unknown) => unknown> = {
-          initialize: async () => mockInitializeResult,
+          initialize: async (params: unknown) => {
+            mockInitializeRequest(params);
+            return mockInitializeResult;
+          },
           "session/new": mockNewSession,
           "session/resume": mockResumeSession,
           "session/close": mockCloseSession,
@@ -64,6 +71,8 @@ jest.mock("@agentclientprotocol/sdk", () => {
             sessionUpdate: (params: unknown) => handlers["session/update"]({ params }),
             requestPermission: (params: unknown) =>
               handlers["session/request_permission"]({ params }),
+            createElicitation: (params: unknown, requestId: string, signal: AbortSignal) =>
+              handlers["elicitation/create"]({ params, requestId, signal }),
           },
           agent: {
             request: (method: string, params: unknown) => requests[method](params),
@@ -164,6 +173,7 @@ describe("AcpBackendProcess", () => {
     exitListeners.clear();
     mockProcessIsRunning = true;
     mockInitializeResult = { protocolVersion: 1 };
+    mockInitializeRequest.mockClear();
     mockNewSession.mockClear();
     mockNewSession.mockResolvedValue({ sessionId: "test-session" });
     mockResumeSession.mockClear();
@@ -500,6 +510,93 @@ describe("AcpBackendProcess", () => {
       options: [{ optionId: "ok", name: "Allow", kind: "allow_once" }],
     } as unknown as Parameters<typeof client.requestPermission>[0]);
     expect(response).toEqual({ outcome: { outcome: "cancelled" } });
+  });
+
+  describe("createElicitation()", () => {
+    const form = {
+      mode: "form",
+      sessionId: "s1",
+      message: "Choose an approach",
+      requestedSchema: {
+        type: "object",
+        required: ["approach"],
+        properties: {
+          approach: { type: "string", title: "Approach", enum: ["simple", "complex"] },
+        },
+      },
+    };
+
+    async function openElicitationBackend() {
+      const backend = new AcpBackendProcess(
+        buildApp(),
+        buildStubBackend(),
+        "1.0.0",
+        buildStubDescriptor()
+      );
+      await backend.start();
+      const client = getVaultClient(backend) as VaultClient & {
+        createElicitation: (
+          params: unknown,
+          requestId: string,
+          signal: AbortSignal
+        ) => Promise<unknown>;
+      };
+      return { backend, client };
+    }
+
+    it("advertises forms and returns field-id content from the owning session (https://github.com/Brevilabs/obsidian-copilot-private/issues/551)", async () => {
+      const { backend, client } = await openElicitationBackend();
+      expect(mockInitializeRequest).toHaveBeenCalledWith(
+        expect.objectContaining({
+          clientCapabilities: expect.objectContaining({ elicitation: { form: {} } }),
+        })
+      );
+      const prompter = jest.fn().mockResolvedValue({ approach: "simple" });
+      backend.setAskUserQuestionPrompter(prompter);
+      const result = await client.createElicitation(form, "rpc-1", new AbortController().signal);
+      expect(prompter).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sessionId: "s1",
+          requestId: "rpc-1",
+          message: "Choose an approach",
+          questions: [expect.objectContaining({ answerKey: "approach" })],
+        })
+      );
+      expect(result).toEqual({ action: "accept", content: { approach: "simple" } });
+    });
+
+    it("returns cancel after the request signal aborts, even if an answer arrives later (https://github.com/Brevilabs/obsidian-copilot-private/issues/551)", async () => {
+      const { backend, client } = await openElicitationBackend();
+      let answer!: (answers: Record<string, string>) => void;
+      backend.setAskUserQuestionPrompter(
+        () =>
+          new Promise((resolve) => {
+            answer = resolve;
+          })
+      );
+      const controller = new AbortController();
+      const result = client.createElicitation(form, "rpc-2", controller.signal);
+      controller.abort();
+      answer({ approach: "simple" });
+      await expect(result).resolves.toEqual({ action: "cancel" });
+    });
+
+    it("declines unsupported forms without displaying a card (https://github.com/Brevilabs/obsidian-copilot-private/issues/551)", async () => {
+      const { backend, client } = await openElicitationBackend();
+      const prompter = jest.fn();
+      backend.setAskUserQuestionPrompter(prompter);
+      await expect(
+        client.createElicitation(
+          {
+            ...form,
+            requestedSchema: { type: "object", properties: { count: { type: "number" } } },
+          },
+          "rpc-3",
+          new AbortController().signal
+        )
+      ).resolves.toEqual({ action: "decline" });
+      expect(prompter).not.toHaveBeenCalled();
+    });
   });
 
   it("forwards opaque option metadata unchanged to the presentation hook before delegating", async () => {

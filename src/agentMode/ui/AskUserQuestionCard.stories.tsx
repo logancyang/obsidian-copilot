@@ -41,3 +41,32 @@ export default meta;
 
 /** Answer with Next, or select Checks early to inspect the disabled final Submit state. */
 export const MultipleQuestions: StoryObj<AskUserQuestionCardProps> = {};
+
+export const FreeText: StoryObj<AskUserQuestionCardProps> = {
+  args: {
+    request: {
+      sessionId: "gallery-session",
+      requestId: "gallery-text",
+      message: "Codex needs a short explanation before continuing.",
+      questions: [
+        {
+          question: "What should the summary focus on?",
+          answerKey: "focus",
+          input: "text",
+          options: [],
+        },
+      ],
+    },
+  },
+};
+
+export const Secret: StoryObj<AskUserQuestionCardProps> = {
+  args: {
+    request: {
+      sessionId: "gallery-session",
+      requestId: "gallery-secret",
+      message: "Codex needs a credential to continue.",
+      questions: [{ question: "Access token", answerKey: "token", input: "secret", options: [] }],
+    },
+  },
+};

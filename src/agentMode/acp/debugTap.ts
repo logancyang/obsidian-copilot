@@ -176,6 +176,15 @@ function logFrame(
   const method = idStr !== null ? (peerPending.get(idStr) ?? "(unknown)") : "(unknown)";
   if (idStr !== null) peerPending.delete(idStr);
   const idLabel = idStr !== null ? `#${idStr}` : "(no-id)";
+  // Elicitation responses can contain passwords. The tee's logging branch may
+  // observe a response before its request, so an unknown result is sensitive
+  // too. Keep the wire untouched while omitting values from both log modes.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/551
+  if (method === "elicitation/create" || method === "(unknown)") {
+    logInfo(`[ACP ${arrow}][${tag}] ${method}  ${idLabel}  [redacted]`);
+    emit?.(frame.error ? "error" : "result", method, idStr, "[redacted]");
+    return;
+  }
   if (frame.error) {
     logInfo(`[ACP ${arrow}][${tag}] (error) ${method}  ${idLabel}  ${formatPayload(frame.error)}`);
     emit?.("error", method, idStr, frame.error);
