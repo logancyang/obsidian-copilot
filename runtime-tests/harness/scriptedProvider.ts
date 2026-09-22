@@ -9,17 +9,22 @@ export interface ScriptedEndpoint {
 }
 
 /** How the provider answers one agent turn. */
-export type ScriptedReply =
+type ScriptedReply =
   /** Stream `text` one word at a time, then finish. */
   | { kind: "answer"; text: string }
-  /** Stream `text`, then keep the response open as a {@link HeldStream}. */
-  | { kind: "hold"; text: string }
+  /** Stream `text`, then keep the response open and hand it to `onHeld`. */
+  | { kind: "hold"; text: string; onHeld: (held: HeldStream) => void }
   /**
-   * Refuse with an HTTP error, as an OpenAI-compatible endpoint does. It
-   * answers every later attempt at the same question too, as a provider that
-   * keeps failing does. `retryAfterMs` sets the `retry-after-ms` header.
+   * Refuse with an HTTP error, as an OpenAI-compatible endpoint does, then call
+   * `onRefused`. `retryAfterMs` sets the `retry-after-ms` header.
    */
-  | { kind: "error"; status: number; message: string; retryAfterMs?: number };
+  | {
+      kind: "error";
+      status: number;
+      message: string;
+      retryAfterMs: number | undefined;
+      onRefused: () => void;
+    };
 
 /** One chat-completion request as the agent sent it. */
 export interface RecordedRequest {
@@ -30,6 +35,8 @@ export interface RecordedRequest {
   model: string;
   /** The request's `reasoning_effort` field, or `null` when it carried none. */
   reasoningEffort: string | null;
+  /** The request's last user message: the question an agent turn answers. */
+  question: string;
   /** The conversation the request carried, without the system prompt. */
   messages: readonly { role: string; content: string }[];
 }
@@ -90,7 +97,6 @@ export class ScriptedProvider {
   readonly #failures: string[] = [];
   readonly #open = new Set<http.ServerResponse>();
   readonly #held: HeldStream[] = [];
-  readonly #holdListeners = new Set<() => void>();
   /** The last error reply and the question it refused, which it keeps refusing. */
   #failing: { question: string; reply: ScriptedReply } | null = null;
 
@@ -118,20 +124,31 @@ export class ScriptedProvider {
     return this.#held;
   }
 
-  /** Call `listener` whenever an answer starts being held; returns an unsubscribe function. */
-  onHold(listener: () => void): () => void {
-    this.#holdListeners.add(listener);
-    return () => this.#holdListeners.delete(listener);
-  }
-
   /** Queue an answer for the next agent turn, streamed one word at a time. */
   answer(text: string): void {
-    this.reply({ kind: "answer", text });
+    this.#replies.push({ kind: "answer", text });
   }
 
-  /** Queue how the next agent turn is answered. */
-  reply(reply: ScriptedReply): void {
-    this.#replies.push(reply);
+  /**
+   * Queue an answer for the next agent turn that streams `text` and then stays
+   * open. Resolves with the open answer once the conversation shows `text`.
+   */
+  hold(text: string): Promise<HeldStream> {
+    return new Promise((onHeld) => this.#replies.push({ kind: "hold", text, onHeld }));
+  }
+
+  /**
+   * Queue an HTTP error for the next agent turn. It refuses every later
+   * attempt at the same question too, as a provider that keeps failing does.
+   * Resolves once the first refusal has been sent.
+   *
+   * @param retryAfterMs The `retry-after-ms` header, which sets opencode's wait
+   * before its next attempt; without it opencode backs off on its own.
+   */
+  refuse(status: number, message: string, retryAfterMs?: number): Promise<void> {
+    return new Promise((onRefused) =>
+      this.#replies.push({ kind: "error", status, message, retryAfterMs, onRefused })
+    );
   }
 
   /** Listen on a loopback port, serving only `endpoints`. */
@@ -188,10 +205,9 @@ export class ScriptedProvider {
         content:
           typeof message.content === "string" ? message.content : JSON.stringify(message.content),
       }));
+    const question = messages.findLast((message) => message.role === "user")?.content ?? "";
     let asker: Asker | undefined;
-    let question = "";
     if (kind === "turn") {
-      question = messages.findLast((message) => message.role === "user")?.content ?? "";
       asker = this.#options.askerFor(question);
       if (!asker) {
         return this.#refuse(
@@ -215,6 +231,7 @@ export class ScriptedProvider {
       endpoint: endpoint.name,
       model,
       reasoningEffort: typeof body.reasoning_effort === "string" ? body.reasoning_effort : null,
+      question,
       messages,
     });
 
@@ -223,7 +240,7 @@ export class ScriptedProvider {
       const retryAfter =
         reply.retryAfterMs === undefined ? {} : { "retry-after-ms": String(reply.retryAfterMs) };
       res.writeHead(reply.status, { "content-type": "application/json", ...retryAfter });
-      res.end(JSON.stringify({ error: { message: reply.message } }));
+      res.end(JSON.stringify({ error: { message: reply.message } }), reply.onRefused);
       return;
     }
 
@@ -262,7 +279,7 @@ export class ScriptedProvider {
 
     if (!(await stream(reply.text))) return;
     if (reply.kind === "hold") {
-      const rest = await this.#hold(question, closedByAgent);
+      const rest = await this.#hold(question, closedByAgent, reply.onHeld);
       if (rest === null) return close();
       if (!(await stream(rest))) return;
     }
@@ -272,11 +289,15 @@ export class ScriptedProvider {
   }
 
   /**
-   * Publish a {@link HeldStream} and wait for the scenario or the agent to end
-   * the hold. Resolves with the rest of the answer on release, or `null` once
-   * the stream is broken or closed.
+   * Hand a {@link HeldStream} to `onHeld` and wait for the scenario or the
+   * agent to end the hold. Resolves with the rest of the answer on release, or
+   * `null` once the stream is broken or closed.
    */
-  #hold(question: string, closedByAgent: Promise<void>): Promise<string | null> {
+  #hold(
+    question: string,
+    closedByAgent: Promise<void>,
+    onHeld: (held: HeldStream) => void
+  ): Promise<string | null> {
     return new Promise((resolve) => {
       const held = {
         question,
@@ -299,7 +320,7 @@ export class ScriptedProvider {
         resolve(null);
       });
       this.#held.push(held);
-      for (const listener of this.#holdListeners) listener();
+      onHeld(held);
     });
   }
 

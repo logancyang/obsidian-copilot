@@ -11,9 +11,8 @@ Feature: Stopping an answer and switching chats while one is running
   Background:
     Given Copilot's opencode agent uses the scripted model "model-a" by default
 
-  # Stop must abort opencode's request, leave the session reusable, and accept no
-  # more output from the stopped turn:
-  # https://github.com/Brevilabs/obsidian-copilot-private/issues/163
+  # Stop must abort opencode's request, keep the words shown, and leave the
+  # session reusable: https://github.com/Brevilabs/obsidian-copilot-private/issues/163
   Scenario: A stopped answer keeps the words already shown, and the next message is answered after it
     When I open a new conversation
     And I send "First question", which the model starts answering with "Partial answer" and then holds
@@ -27,12 +26,27 @@ Feature: Stopping an answer and switching chats while one is running
       | ai   | Partial answer  | cancelled     |
       | user | Second question |               |
       | ai   | Second answer   | end_turn      |
-    # opencode keeps the stopped answer's words as the model's reply in its history.
-    And the provider received this conversation with "Second question":
-      | role      | content         |
-      | user      | First question  |
-      | assistant | Partial answer  |
-      | user      | Second question |
+    And the model was last asked "Second question"
+
+  # The incident in https://github.com/Brevilabs/obsidian-copilot-private/issues/163:
+  # a stream failed after visible words, opencode retried it, and Stop could not
+  # interrupt the retry. The stopped turn must keep the words shown, opencode must
+  # not try again, and the next message must be answered.
+  Scenario: An answer stopped while opencode waits to retry it keeps the words shown, and opencode does not try again
+    When I open a new conversation
+    And I send "Question", which the model starts answering with "Alpha Bravo" and then holds
+    And the held answer's connection breaks, and the provider refuses the retry with 500 "The server had an error while processing your request", asking to wait a minute
+    And I stop the answer
+    Then the chat's status is "idle"
+    When I send "Next question", which the model answers with "Next answer"
+    Then the conversation shows exactly:
+      | from | message       | turn ended as |
+      | user | Question      |               |
+      | ai   | Alpha Bravo   | cancelled     |
+      | user | Next question |               |
+      | ai   | Next answer   | end_turn      |
+    And the model was last asked "Next question"
+    And opencode made no more attempts at "Question" after the answer was stopped
 
   # Output must reach only the chat whose turn produced it, even with two turns in
   # flight on one agent process:
@@ -65,6 +79,4 @@ Feature: Stopping an answer and switching chats while one is running
       | chat | shown | status | needs attention |
       | A    | no    | idle   | yes             |
       | B    | yes   | idle   | no              |
-    And the provider received this conversation with "Question B":
-      | role | content    |
-      | user | Question B |
+    And the request for "Question B" carried no message conversation "A" sent

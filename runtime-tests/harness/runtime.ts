@@ -19,7 +19,7 @@ import type CopilotPlugin from "@/main";
 import { createModelManagement } from "@/modelManagement";
 import { KeychainService } from "@/services/keychainService";
 import { getSettings, setSettings, updateAgentModeBackendFields } from "@/settings/model";
-import { AI_SENDER, DEFAULT_SETTINGS } from "@/constants";
+import { AI_SENDER, DEFAULT_SETTINGS, USER_SENDER } from "@/constants";
 
 import { EgressProxy } from "./egressProxy";
 import { App } from "./obsidianApp";
@@ -72,16 +72,11 @@ const SHUTDOWN_WARNINGS: readonly RegExp[] = [
 ];
 
 /**
- * What one turn that fails on a provider error logs: opencode's report of the
- * failed request on its stderr, the session's warning, and the chat view's
- * error. A scenario that makes a turn fail expects one of each; any other
- * warning, or a second failure, still fails the scenario.
+ * The first line of opencode's stderr report of a failed ACP request. The
+ * error it names follows on INFO lines, so this line alone cannot say which
+ * failure it reports.
  */
-const FAILED_TURN_LOGS: readonly RegExp[] = [
-  / ERROR \[AgentMode\]\[opencode\] Error handling request \{$/,
-  / WARN \[AgentMode\] prompt failed /,
-  / ERROR \[AgentMode\] turn failed /,
-];
+const OPENCODE_REQUEST_FAILED_LOG = " ERROR [AgentMode][opencode] Error handling request {";
 
 /** One observed state of the conversation's latest assistant message. */
 export interface AnswerSnapshot {
@@ -131,13 +126,11 @@ export class Runtime {
   #preloader: AgentModelPreloader | null = null;
   /** Log lines a deliberate restart wrote that {@link problems} ignores. */
   readonly #expectedLogLines = new Set<string>();
-  /** One pattern per log line the turns a scenario made fail are expected to write. */
-  readonly #expectedFailureLogs: RegExp[] = [];
+  /** One fragment per log line the turns a scenario made fail are expected to write. */
+  readonly #expectedFailureLogs: string[] = [];
   #manager: AgentSessionManager | null = null;
   /** Every chat opened so far, oldest first. */
   #conversations: Conversation[] = [];
-  /** How many of the provider's held streams a scenario has taken. */
-  #heldTaken = 0;
   /** Process startups the manager does not wait for on shutdown; see {@link stop}. */
   readonly #startups: Promise<unknown>[] = [];
 
@@ -339,19 +332,17 @@ export class Runtime {
   }
 
   /**
-   * The next answer the provider holds open, once it has streamed everything
-   * before the hold and the conversation shows it.
+   * Wait for a promise the scripted provider settles, such as {@link
+   * ScriptedProvider.hold}, within a turn's time.
+   *
+   * @param event What the provider is expected to do, for the failure message.
    */
-  async nextHeldStream(): Promise<HeldStream> {
-    const index = this.#heldTaken;
-    await waitUntil(
-      () => this.provider.held.length > index,
-      (listener) => this.provider.onHold(listener),
+  waitForProvider<T>(promise: Promise<T>, event: string): Promise<T> {
+    return within(
       TURN_TIMEOUT_MS,
-      () => `the provider to hold an answer; it has ${this.#describeProvider()}`
+      promise,
+      () => `timed out waiting for the provider to ${event}; it has ${this.#describeProvider()}`
     );
-    this.#heldTaken += 1;
-    return this.provider.held[index];
   }
 
   /** Resolve once opencode closes `held`'s request, as it does when the turn is stopped. */
@@ -379,10 +370,20 @@ export class Runtime {
 
   /**
    * Record that the scenario is making one turn fail on a provider error, so
-   * the {@link FAILED_TURN_LOGS} it writes do not fail the scenario.
+   * the three lines that failure logs do not fail the scenario: opencode's
+   * report of the failed request, the session's warning, and the chat view's
+   * error. Any other warning, or a second failure, still fails it.
+   *
+   * @param message The provider's error message, which the two Copilot lines name.
    */
-  expectTurnToFail(): void {
-    this.#expectedFailureLogs.push(...FAILED_TURN_LOGS);
+  expectTurnToFail(message: string): void {
+    // Copilot writes the error's stack after a literal "\n", which ends the message.
+    const error = `Internal error: ${message}\\n`;
+    this.#expectedFailureLogs.push(
+      OPENCODE_REQUEST_FAILED_LOG,
+      ` WARN [AgentMode] prompt failed ${error}`,
+      ` ERROR [AgentMode] turn failed ${error}`
+    );
   }
 
   /**
@@ -405,7 +406,7 @@ export class Runtime {
       .filter((line) => {
         // opencode's stderr and its ACP reply arrive on separate pipes, so its
         // report may be logged after the turn has already ended.
-        const expected = failureLogs.findIndex((pattern) => pattern.test(line));
+        const expected = failureLogs.findIndex((fragment) => line.includes(fragment));
         if (expected === -1) return true;
         failureLogs.splice(expected, 1);
         return false;
@@ -446,7 +447,6 @@ export class Runtime {
     const manager = this.#manager;
     this.#manager = null;
     this.#conversations = [];
-    this.#heldTaken = 0;
     this.#modelManagement = null;
     this.#preloader = null;
     this.#expectedLogLines.clear();
@@ -641,11 +641,22 @@ export class Conversation {
   #record(): void {
     const answer = this.ui.getMessages().findLast((m) => m.sender === AI_SENDER);
     if (!answer) return;
-    const next = { text: answer.message, stopReason: answer.turnStopReason ?? null };
+    const next = { text: drawnText(answer), stopReason: answer.turnStopReason ?? null };
     const last = this.#timeline.at(-1);
     if (last?.text === next.text && last.stopReason === next.stopReason) return;
     this.#timeline.push(next);
   }
+}
+
+/**
+ * The text the chat view draws for `message`. `AgentChatMessages.tsx` renders
+ * an assistant message that has parts as its trail, whose prose is its text
+ * parts, and ignores `message.message`, where a failed turn's error is written:
+ * https://github.com/Brevilabs/obsidian-copilot-private/issues/388
+ */
+export function drawnText(message: AgentChatMessage): string {
+  if (message.sender === USER_SENDER || !message.parts?.length) return message.message;
+  return message.parts.flatMap((part) => (part.kind === "text" ? [part.text] : [])).join("\n\n");
 }
 
 function formatTimeline(timeline: readonly AnswerSnapshot[]): string {
