@@ -4,50 +4,30 @@ import { ChatHistoryPopover } from "./ChatHistoryPopover";
 
 type Props = React.ComponentProps<typeof ChatHistoryPopover>;
 
-interface StoryHarnessProps {
-  title: string;
-  onCloseSession: (id: string) => Promise<void>;
-  closeOnOpen?: boolean;
-}
+const TITLE = "Open research session";
+const TIMESTAMP = new Date("2026-09-21T12:00:00-07:00");
+const OPEN_CHAT_IDS = new Set([TITLE]);
+const CHAT_HISTORY = [
+  {
+    id: TITLE,
+    title: TITLE,
+    createdAt: TIMESTAMP,
+    lastAccessedAt: TIMESTAMP,
+  },
+];
 
-const StoryHarness: React.FC<StoryHarnessProps> = ({
-  title,
-  onCloseSession,
-  closeOnOpen = false,
-}) => {
+const OpenPopover: React.FC = () => {
   const triggerRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     triggerRef.current?.click();
-    if (!closeOnOpen) return;
+  }, []);
 
-    const tick = window.setInterval(() => {
-      const titleElement = Array.from(document.querySelectorAll<HTMLElement>("[title]")).find(
-        (candidate) => candidate.title === title
-      );
-      const closeButton = titleElement
-        ?.closest('[role="button"]')
-        ?.querySelector<HTMLButtonElement>('[aria-label="Close session"]');
-      if (!closeButton) return;
-      closeButton.click();
-      window.clearInterval(tick);
-    }, 50);
-    return () => window.clearInterval(tick);
-  }, [closeOnOpen, title]);
-
-  const timestamp = new Date("2026-09-21T12:00:00-07:00");
   return (
     <ChatHistoryPopover
-      chatHistory={[
-        {
-          id: title,
-          title,
-          createdAt: timestamp,
-          lastAccessedAt: timestamp,
-        },
-      ]}
-      openChatIds={new Set([title])}
-      onCloseSession={onCloseSession}
+      chatHistory={CHAT_HISTORY}
+      openChatIds={OPEN_CHAT_IDS}
+      onCloseSession={async () => {}}
       onUpdateTitle={async () => {}}
       onDeleteChat={async () => {}}
       onLoadChat={async () => {}}
@@ -67,27 +47,5 @@ const meta = {
 export default meta;
 
 export const OpenSession: StoryObj<Props> = {
-  render: () => <StoryHarness title="Open research session" onCloseSession={async () => {}} />,
-};
-
-export const PendingClose: StoryObj<Props> = {
-  render: () => (
-    <StoryHarness
-      title="Closing research session"
-      closeOnOpen
-      onCloseSession={() => new Promise(() => {})}
-    />
-  ),
-};
-
-export const FailedClose: StoryObj<Props> = {
-  render: () => (
-    <StoryHarness
-      title="Failed research session"
-      closeOnOpen
-      onCloseSession={async () => {
-        throw new Error("Backend unavailable");
-      }}
-    />
-  ),
+  render: () => <OpenPopover />,
 };
