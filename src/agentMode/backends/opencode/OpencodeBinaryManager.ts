@@ -101,6 +101,8 @@ interface GithubAsset {
   name: string;
   size: number;
   browser_download_url: string;
+  /** `sha256:<hex>` computed by GitHub from the uploaded file; the API may return null. */
+  digest?: string | null;
 }
 
 interface GithubRelease {
@@ -445,6 +447,18 @@ export class OpencodeBinaryManager extends ManagedBinaryManager<ProgressEvent, I
       return { version, path: finalBinPath };
     }
 
+    // A download that merely reports the pinned version could be any executable, so an
+    // asset without a GitHub digest to check it against is refused, never installed unverified.
+    // https://github.com/logancyang/obsidian-copilot/issues/2890
+    const expectedSha256 = asset.digest?.match(/^sha256:([0-9a-f]{64})$/i)?.[1].toLowerCase();
+    if (!expectedSha256) {
+      throw new Error(
+        `GitHub publishes no SHA-256 digest for ${asset.name} in opencode v${version}, so Copilot ` +
+          "cannot verify the download and did not install it. To use opencode anyway, install it " +
+          'yourself and choose "My own binary".'
+      );
+    }
+
     // Create the OS-local install root up front so an unwritable home dir
     // (sandboxed/confined HOME on Linux Flatpak/Snap, locked-down accounts)
     // fails here with an actionable message naming the path, rather than later
@@ -463,8 +477,22 @@ export class OpencodeBinaryManager extends ManagedBinaryManager<ProgressEvent, I
 
     try {
       const archivePath = nodePath().join(tmpDir, asset.name);
-      await downloadToFile(asset.browser_download_url, archivePath, asset.size, opts);
+      const sha256 = await downloadToFile(
+        asset.browser_download_url,
+        archivePath,
+        asset.size,
+        opts
+      );
       this.throwIfAborted(opts.signal);
+      // A corrupted or tampered archive must never reach extraction.
+      // https://github.com/logancyang/obsidian-copilot/issues/2890
+      if (sha256 !== expectedSha256) {
+        throw new Error(
+          `The downloaded ${asset.name} does not match the SHA-256 digest GitHub publishes for ` +
+            `opencode v${version}. It may be corrupted or tampered with, so Copilot discarded it ` +
+            "without installing. Retry the installation."
+        );
+      }
 
       opts.onProgress?.({ phase: "extract", message: "Extracting archive…" });
       const extractDir = nodePath().join(tmpDir, "extract");
@@ -755,17 +783,19 @@ function httpsGetWithRedirects(
 }
 
 /**
- * Stream a remote asset to `dest`, emitting progress events and aborting if
- * no bytes arrive for `DOWNLOAD_INACTIVITY_TIMEOUT_MS`. Stalled connections
- * surface a clear "download stalled" error instead of hanging forever.
+ * Stream a remote asset to `dest` and resolve with the hex SHA-256 of the bytes
+ * written, emitting progress events and aborting if no bytes arrive for
+ * `DOWNLOAD_INACTIVITY_TIMEOUT_MS`. Stalled connections surface a clear
+ * "download stalled" error instead of hanging forever.
  */
 async function downloadToFile(
   url: string,
   dest: string,
   expectedSize: number | undefined,
   opts: InstallPipelineOptions
-): Promise<void> {
+): Promise<string> {
   const assetName = nodePath().basename(dest);
+  const hash = requireNodeModule<typeof import("node:crypto")>("crypto").createHash("sha256");
   const res = await httpsGetWithRedirects(url, opts.signal);
   const total =
     expectedSize ??
@@ -796,6 +826,7 @@ async function downloadToFile(
     armInactivity();
     res.on("data", (chunk: Uint8Array) => {
       received += chunk.length;
+      hash.update(chunk);
       armInactivity();
       opts.onProgress?.({ phase: "download", received, total, assetName });
     });
@@ -812,6 +843,7 @@ async function downloadToFile(
     });
     res.pipe(out);
   });
+  return hash.digest("hex");
 }
 
 // BFS because the binary's depth inside the upstream archive varies across

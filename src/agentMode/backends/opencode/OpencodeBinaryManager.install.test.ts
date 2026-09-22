@@ -10,6 +10,7 @@ import * as path from "node:path";
 import * as https from "https";
 import { Readable } from "node:stream";
 import { EventEmitter } from "node:events";
+import { createHash } from "node:crypto";
 
 jest.mock("https", () => ({ get: jest.fn() }));
 jest.mock("obsidian", () => ({ ...jest.requireActual("obsidian"), requestUrl: jest.fn() }));
@@ -24,12 +25,48 @@ jest.mock("./platformResolver", () => ({
 jest.mock("@/logger", () => ({ logInfo: jest.fn(), logWarn: jest.fn(), logError: jest.fn() }));
 
 const issue = "https://github.com/Brevilabs/obsidian-copilot-private/issues/530";
+const digestIssue = "https://github.com/logancyang/obsidian-copilot/issues/2890";
+const RELEASE_ARCHIVE = "official release archive";
+const sha256Of = (content: string): string => createHash("sha256").update(content).digest("hex");
+
+/** Serves `content` as the response to every download request. */
+function serveDownload(content: string): void {
+  jest.mocked(https.get).mockImplementation(((
+    _url: string,
+    callback: (response: unknown) => void
+  ) => {
+    const response = Object.assign(Readable.from([Buffer.from(content)]), {
+      statusCode: 200,
+      headers: {},
+    });
+    callback(response);
+    return new EventEmitter();
+  }) as never);
+}
+
+/** Publishes release metadata whose only asset carries `digest`. */
+function publishReleaseAsset(digest: string | null): void {
+  jest.mocked(requestUrl).mockResolvedValue({
+    status: 200,
+    json: {
+      assets: [
+        {
+          name: "opencode-darwin-arm64.zip",
+          browser_download_url: "https://example.invalid/release.zip",
+          digest,
+        },
+      ],
+    },
+  } as never);
+}
+
 (process.platform === "win32" ? describe.skip : describe)("OpencodeBinaryManager.install", () => {
   describe("OpencodeBinaryManager", () => {
     let root: string;
     let manager: OpencodeBinaryManager;
     let previous: string;
     beforeEach(() => {
+      jest.clearAllMocks();
       root = fs.mkdtempSync(path.join(os.tmpdir(), "opencode-publication-"));
       manager = new OpencodeBinaryManager({} as never);
       jest.spyOn(manager, "getDataDir").mockReturnValue(root);
@@ -41,28 +78,8 @@ const issue = "https://github.com/Brevilabs/obsidian-copilot-private/issues/530"
         binaryVersion: "0.1.0",
         binarySource: "managed",
       });
-      jest.mocked(requestUrl).mockResolvedValue({
-        status: 200,
-        json: {
-          assets: [
-            {
-              name: "opencode-darwin-arm64.zip",
-              browser_download_url: "https://example.invalid/release.zip",
-            },
-          ],
-        },
-      } as never);
-      jest.mocked(https.get).mockImplementation(((
-        _url: string,
-        callback: (response: unknown) => void
-      ) => {
-        const response = Object.assign(Readable.from([Buffer.from("archive")]), {
-          statusCode: 200,
-          headers: {},
-        });
-        callback(response);
-        return new EventEmitter();
-      }) as never);
+      publishReleaseAsset(`sha256:${sha256Of(RELEASE_ARCHIVE)}`);
+      serveDownload(RELEASE_ARCHIVE);
       jest.mocked(extractArchive).mockImplementation(async (_archive, destination) => {
         fs.writeFileSync(
           path.join(destination, "opencode"),
@@ -90,6 +107,49 @@ const issue = "https://github.com/Brevilabs/obsidian-copilot-private/issues/530"
         } finally {
           minimum.restore();
         }
+      });
+      it(`${digestIssue} installs and selects a download whose SHA-256 matches the digest GitHub publishes for the asset`, async () => {
+        const extracted: string[] = [];
+        jest.mocked(extractArchive).mockImplementation(async (archive, destination) => {
+          extracted.push(fs.readFileSync(archive, "utf8"));
+          fs.writeFileSync(
+            path.join(destination, "opencode"),
+            `#!${process.execPath}\nprocess.stdout.write("${OPENCODE_PINNED_VERSION}");\n`
+          );
+        });
+
+        const result = await manager.install();
+
+        expect(extracted).toEqual([RELEASE_ARCHIVE]);
+        expect(result).toEqual({ version: OPENCODE_PINNED_VERSION, path: previous });
+        expect(getSettings().agentMode.backends?.opencode).toMatchObject({
+          binaryPath: previous,
+          binaryVersion: OPENCODE_PINNED_VERSION,
+          binarySource: "managed",
+        });
+      });
+      it(`${digestIssue} discards a download whose SHA-256 differs from the published digest without extracting or selecting it`, async () => {
+        serveDownload("tampered archive whose executable prints the pinned version");
+
+        await expect(manager.install()).rejects.toThrow(
+          "opencode-darwin-arm64.zip does not match the SHA-256 digest GitHub publishes"
+        );
+
+        expect(extractArchive).not.toHaveBeenCalled();
+        expect(fs.readFileSync(previous, "utf8")).toBe("running process executable");
+        expect(getSettings().agentMode.backends?.opencode?.binaryVersion).toBe("0.1.0");
+        expect(fs.readdirSync(root)).toEqual([OPENCODE_PINNED_VERSION]);
+      });
+      it(`${digestIssue} refuses to download a release asset that has no published SHA-256 digest`, async () => {
+        publishReleaseAsset(null);
+
+        await expect(manager.install()).rejects.toThrow(
+          "GitHub publishes no SHA-256 digest for opencode-darwin-arm64.zip"
+        );
+
+        expect(https.get).not.toHaveBeenCalled();
+        expect(fs.readFileSync(previous, "utf8")).toBe("running process executable");
+        expect(getSettings().agentMode.backends?.opencode?.binaryVersion).toBe("0.1.0");
       });
       it(`${issue} verifies the staged executable before selecting the pinned installation`, async () => {
         const result = await manager.install();
