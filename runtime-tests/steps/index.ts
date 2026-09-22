@@ -83,7 +83,7 @@ AfterAll(function () {
 Given(
   "Copilot's opencode agent uses the scripted model {string} by default",
   async function (this: RuntimeWorld, model: string) {
-    await this.runtime.start({ binaryPath: pinnedBinaryPath(), models: [model] });
+    await this.runtime.start({ binaryPath: pinnedBinaryPath(), model });
   }
 );
 

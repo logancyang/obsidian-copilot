@@ -64,8 +64,8 @@ export interface AnswerSnapshot {
 export interface RuntimeOptions {
   /** Absolute path to the pinned opencode binary. */
   binaryPath: string;
-  /** Model ids the scripted provider serves; the first becomes opencode's default model. */
-  models: readonly string[];
+  /** The model id the scripted provider serves, made opencode's default model. */
+  model: string;
 }
 
 /**
@@ -94,9 +94,8 @@ export class Runtime {
 
   /**
    * Configure Copilot the way a user would — a BYOK OpenAI-compatible provider
-   * with a key, its models enabled for opencode, the first one picked as the
-   * default model — and construct the session layer. No process starts until a
-   * conversation is opened.
+   * with a key, its model enabled for opencode and picked as the default — then
+   * construct the session layer and start the model probe plugin load starts.
    */
   async start(options: RuntimeOptions): Promise<void> {
     this.#tempRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), "copilot-runtime-"));
@@ -127,7 +126,7 @@ export class Runtime {
       displayName: "Scripted",
       baseUrl: this.provider.baseUrl,
       apiKey: SYNTHETIC_API_KEY,
-      models: options.models.map((id) => ({ id, displayName: id })),
+      models: [{ id: options.model, displayName: options.model }],
       autoEnrollIn: ["opencode"],
     });
     updateAgentModeBackendFields("opencode", {
@@ -159,13 +158,13 @@ export class Runtime {
           entry.baseModelId === opencode.getWireBaseId?.(configuredModelIds[0], getSettings())
       );
     if (!defaultEntry) {
-      throw new Error(`"${options.models[0]}" is not an enabled opencode model after setup`);
+      throw new Error(`"${options.model}" is not an enabled opencode model after setup`);
     }
     await manager.persistDefaultSelection("opencode", {
       baseModelId: defaultEntry.baseModelId,
       effort: null,
     });
-    // Plugin load starts this probe; the first chat adopts its warm process.
+    // The first chat adopts this probe's warm process, as after plugin load.
     const preload = manager.preloadModels("opencode");
     this.#startups.push(preload);
     manager.registerPreload("opencode", preload);
@@ -350,7 +349,7 @@ export class Conversation {
       await within(
         TURN_TIMEOUT_MS,
         turn,
-        () => `the turn did not finish; the answer went ${describe(this.#timeline)}`
+        () => `the turn did not finish; the answer went ${formatTimeline(this.#timeline)}`
       );
     } finally {
       this.#turnInFlight = false;
@@ -364,7 +363,7 @@ export class Conversation {
       () => this.#timeline.at(-1)?.text === text,
       (listener) => this.ui.subscribe(listener),
       CHUNK_VISIBLE_TIMEOUT_MS,
-      () => `the conversation to show "${text}"; the answer went ${describe(this.#timeline)}`
+      () => `the conversation to show "${text}"; the answer went ${formatTimeline(this.#timeline)}`
     );
   }
 
@@ -378,7 +377,7 @@ export class Conversation {
   }
 }
 
-function describe(timeline: readonly AnswerSnapshot[]): string {
+function formatTimeline(timeline: readonly AnswerSnapshot[]): string {
   if (timeline.length === 0) return "unshown";
   return timeline
     .map((s) =>
