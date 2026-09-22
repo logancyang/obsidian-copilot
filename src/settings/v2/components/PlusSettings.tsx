@@ -9,6 +9,7 @@ import { updateSetting, useSettingsValue } from "@/settings/model";
 import { ExternalLink, Loader2 } from "lucide-react";
 import React, { useState } from "react";
 import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
+import { TagSuggestionFocusSetting } from "@/settings/v2/components/ui/TagSuggestionFocusSetting";
 
 /**
  * B3 placeholder: mock Plus usage data until the real API is available.
@@ -108,6 +109,11 @@ export function PlusSettings() {
           </div>
         </div>
       )}
+
+      <TagSuggestionFocusSetting
+        checked={settings.suggestTagsOnPropertyFocus}
+        onCheckedChange={(checked) => updateSetting("suggestTagsOnPropertyFocus", checked)}
+      />
 
       <div className="tw-flex tw-items-center tw-gap-2">
         <PasswordInput

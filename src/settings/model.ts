@@ -110,6 +110,7 @@ export interface CopilotSettings {
   defaultConversationTag: string;
   autosaveChat: boolean;
   autoAddActiveContentToContext: boolean;
+  suggestTagsOnPropertyFocus: boolean;
   customPromptsFolder: string;
   chatNoteContextPath: string;
   chatNoteContextTags: string[];
@@ -997,6 +998,10 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
       sanitizedSettings.autoAddActiveContentToContext =
         DEFAULT_SETTINGS.autoAddActiveContentToContext;
     }
+  }
+
+  if (typeof sanitizedSettings.suggestTagsOnPropertyFocus !== "boolean") {
+    sanitizedSettings.suggestTagsOnPropertyFocus = DEFAULT_SETTINGS.suggestTagsOnPropertyFocus;
   }
 
   // Ensure enableMiyo has a default value

@@ -9,6 +9,8 @@ import ChainOwner from "@/LLMProviders/chainOwner";
 import { CustomModel, setSelectedTextContexts, getSelectedTextContexts } from "@/aiParams";
 import { NoteSelectedTextContext, SelectedTextContext } from "@/types/message";
 import { registerCommands } from "@/commands";
+import { TagSuggestionRow } from "@/tagSuggestions/tagSuggestionRow";
+import { TagSuggestionFocusTrigger } from "@/tagSuggestions/tagSuggestionFocusTrigger";
 import CopilotView from "@/components/CopilotView";
 import RelevantNotesView from "@/components/RelevantNotesView";
 import { APPLY_VIEW_TYPE, ApplyView } from "@/components/composer/ApplyView";
@@ -162,6 +164,7 @@ export default class CopilotPlugin extends Plugin {
   private ribbonIconEl?: HTMLElement;
   userMemoryManager: UserMemoryManager;
   quickAskController: QuickAskController;
+  tagSuggestionRow: TagSuggestionRow;
   chatSelectionHighlightController: ChatSelectionHighlightController;
   // Most-recently-focused chat view, used to route "add … to chat context"
   // commands when both chat views are open. Defaults to legacy so a
@@ -454,6 +457,9 @@ export default class CopilotPlugin extends Plugin {
         .catch((error) => logError("Failed to open OpenArtifacts publishing.", error));
     };
     this.register(() => openArtifactsPublisher.dispose());
+    this.tagSuggestionRow = new TagSuggestionRow(this.app);
+    this.addChild(this.tagSuggestionRow);
+    this.addChild(new TagSuggestionFocusTrigger(this.app, this.tagSuggestionRow));
     registerCommands(this, publishFile);
 
     // Tool initialization is now handled automatically in CopilotPlusChainRunner and AutonomousAgentChainRunner

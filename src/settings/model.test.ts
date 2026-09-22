@@ -138,6 +138,27 @@ describe("sanitizeSettings - autoAddActiveContentToContext migration", () => {
   });
 });
 
+describe("sanitizeSettings - tag suggestion focus trigger", () => {
+  it("defaults click-triggered tag suggestions on for existing settings", () => {
+    const settings = { ...DEFAULT_SETTINGS } as unknown as Record<string, unknown>;
+    delete settings.suggestTagsOnPropertyFocus;
+
+    const sanitized = sanitizeSettings(settings as unknown as CopilotSettings);
+
+    expect(DEFAULT_SETTINGS.suggestTagsOnPropertyFocus).toBe(true);
+    expect(sanitized.suggestTagsOnPropertyFocus).toBe(true);
+  });
+
+  it("preserves an explicit opt-out", () => {
+    const sanitized = sanitizeSettings({
+      ...DEFAULT_SETTINGS,
+      suggestTagsOnPropertyFocus: false,
+    });
+
+    expect(sanitized.suggestTagsOnPropertyFocus).toBe(false);
+  });
+});
+
 describe("sanitizeSettings - agentMode shape migration", () => {
   it("creates a default agentMode slice when missing", () => {
     const sanitized = sanitizeSettings({
