@@ -59,6 +59,7 @@ export const ScrollableList: StoryObj<GlobalRecentChatsSectionProps> = {
   render: renderShelf,
 };
 
+/** Hover either blue-dot icon to verify the live-session tooltip. */
 export const OpenSessions: StoryObj<GlobalRecentChatsSectionProps> = {
   args: {
     items: items.slice(0, 3).map((item, index) => ({

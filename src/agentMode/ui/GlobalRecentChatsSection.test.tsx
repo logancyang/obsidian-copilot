@@ -92,7 +92,9 @@ describe("GlobalRecentChatsSection", () => {
         onLoadChat,
         onDeleteChat,
       });
-      expect(screen.getAllByLabelText("Session live")).toHaveLength(2);
+      const liveDots = screen.getAllByLabelText("Session live");
+      expect(liveDots).toHaveLength(2);
+      expect(liveDots[0].parentElement?.getAttribute("title")).toBe("Session is running");
       expect(screen.getByLabelText("Responding")).toBeTruthy();
       const buttons = screen.getAllByRole("button", { name: "Close session" });
       expect(buttons).toHaveLength(2);
