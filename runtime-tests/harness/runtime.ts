@@ -235,39 +235,42 @@ export class Runtime {
   /**
    * Shut the session layer down, then make sure nothing it spawned survived,
    * then stop the servers and delete the temp dirs. Every step runs even if an
-   * earlier one throws. Returns any opencode processes that outlived the
-   * production shutdown (they are killed).
+   * earlier one fails. Returns what went wrong: a failed shutdown, and any
+   * opencode process that outlived it (which is killed).
    */
   async stop(): Promise<string[]> {
     const manager = this.#manager;
     this.#manager = null;
     this.#conversations.length = 0;
-    const survivors: string[] = [];
-    try {
-      // `shutdown()` stops the processes it owns but not one still starting: a
-      // probe that finishes afterwards shuts its own process down, too late for
-      // the sweep below. A scenario that ends early must not leave one behind.
-      await within(
-        STARTUP_TIMEOUT_MS,
-        Promise.allSettled(this.#startups.splice(0)),
-        () => "opencode was still starting at teardown"
-      ).catch(() => {});
-      await manager?.shutdown();
-    } finally {
-      if (this.#vaultPath) survivors.push(...killProcessesMentioning(this.#vaultPath));
-      await this.provider.stop();
-      await this.egress.stop();
-      KeychainService.resetInstance();
-      resetSettings();
-      this.#restoreEnvironment?.();
-      this.#restoreEnvironment = null;
-      if (this.#originalCwd) process.chdir(this.#originalCwd);
-      if (this.#tempRoot) {
-        await fs.promises.rm(this.#tempRoot, { recursive: true, force: true, maxRetries: 3 });
+    const problems: string[] = [];
+    // `shutdown()` stops the processes it owns but not one still starting: a
+    // probe that finishes afterwards shuts its own process down, too late for
+    // the sweep below. A scenario that ends early must not leave one behind.
+    await within(
+      STARTUP_TIMEOUT_MS,
+      Promise.allSettled(this.#startups.splice(0)),
+      () => "opencode was still starting at teardown"
+    ).catch(() => {});
+    await manager?.shutdown().catch((error: unknown) => {
+      problems.push(`the session shutdown failed: ${messageOf(error)}`);
+    });
+    if (this.#vaultPath) {
+      for (const survivor of killProcessesMentioning(this.#vaultPath)) {
+        problems.push(`opencode outlived the session shutdown (${survivor})`);
       }
-      this.#tempRoot = "";
     }
-    return survivors;
+    await this.provider.stop();
+    await this.egress.stop();
+    KeychainService.resetInstance();
+    resetSettings();
+    this.#restoreEnvironment?.();
+    this.#restoreEnvironment = null;
+    if (this.#originalCwd) process.chdir(this.#originalCwd);
+    if (this.#tempRoot) {
+      await fs.promises.rm(this.#tempRoot, { recursive: true, force: true, maxRetries: 3 });
+    }
+    this.#tempRoot = "";
+    return problems;
   }
 
   /**

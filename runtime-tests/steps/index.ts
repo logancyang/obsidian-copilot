@@ -56,8 +56,7 @@ After(async function (this: RuntimeWorld, scenario: ITestCaseHookParameter) {
   // Read before `stop()` deletes the agent home that holds opencode's logs.
   const diagnostics = await this.runtime.diagnostics();
   try {
-    const survivors = await this.runtime.stop();
-    problems.push(...survivors.map((p) => `opencode outlived the session shutdown (${p})`));
+    problems.push(...(await this.runtime.stop()));
   } finally {
     const failed = scenario.result?.status !== Status.PASSED || problems.length > 0;
     const error = [scenario.result?.message, ...problems].filter(Boolean).join("\n");
