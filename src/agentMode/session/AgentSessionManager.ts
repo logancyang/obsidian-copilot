@@ -867,6 +867,9 @@ export class AgentSessionManager {
   getOpenChatIds(): ReadonlySet<string> {
     const ids = new Set<string>();
     for (const [internalId, session] of this.sessions) {
+      // A starting or failed session has no backend resource for the user to close.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/429
+      if (!session.getBackendSessionId()) continue;
       for (const id of this.recentChatIdsForSession(internalId, session)) ids.add(id);
     }
     return ids.size === 0 ? EMPTY_RECENT_CHAT_IDS : ids;

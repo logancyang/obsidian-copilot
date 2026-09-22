@@ -1,10 +1,6 @@
-import {
-  CloseSessionButton,
-  OpenSessionIndicator,
-} from "@/components/chat-components/ui/OpenSessionControls";
+import { CloseSessionButton } from "@/components/chat-components/ui/OpenSessionControls";
 import type { Meta, StoryObj } from "@/lib/story";
 import React from "react";
-import { MessageSquare } from "lucide-react";
 
 type Props = React.ComponentProps<typeof CloseSessionButton>;
 const meta = {
@@ -15,18 +11,7 @@ const meta = {
 } satisfies Meta<Props>;
 export default meta;
 
-export const OpenIdle: StoryObj<Props> = {
-  render: (args) => (
-    <div className="tw-flex tw-items-center tw-gap-2">
-      <span className="tw-relative tw-inline-flex tw-shrink-0">
-        <MessageSquare className="tw-size-4 tw-text-muted" />
-        <OpenSessionIndicator />
-      </span>
-      <span>Research notes</span>
-      <CloseSessionButton {...meta.args} {...args} />
-    </div>
-  ),
-};
+export const Default: StoryObj<Props> = {};
 export const Pending: StoryObj<Props> = {
   args: { onCloseSession: () => new Promise(() => {}) },
 };

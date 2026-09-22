@@ -1374,22 +1374,20 @@ export class AgentSession {
     }
   }
 
-  /** Release backend resources while blocking new turns until disposal, or restore sending on failure. */
+  /** Release the allocated backend session while blocking new turns, or restore sending on failure. */
   async releaseBackendSession(): Promise<void> {
     // Duplicate closes must not undo the first caller's send guard on failure.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/429
     if (this.closing) throw new Error("Session is already closing");
+    const backendSessionId = this.backendSessionId;
+    if (!backendSessionId || !this.backend.closeSession) {
+      throw new Error("This agent does not support closing individual sessions.");
+    }
     this.closing = true;
     try {
-      // Failed startup must still permit closing the local chat.
+      // The backend close operation owns cancellation and resource cleanup.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/429
-      await this.ready.catch(() => {});
-      await this.cancel();
-      // A failed startup owns no backend session to release.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/429
-      if (!this.backendSessionId) return;
-      if (!this.backend.closeSession) throw new MethodUnsupportedError("session/close");
-      await this.backend.closeSession({ sessionId: this.backendSessionId });
+      await this.backend.closeSession({ sessionId: backendSessionId });
     } catch (error) {
       // Unsupported agents must leave the chat usable and explain why it remains open.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/429

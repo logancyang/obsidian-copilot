@@ -2,16 +2,6 @@ import { Button } from "@/components/ui/button";
 import { Power } from "lucide-react";
 import React, { useState } from "react";
 
-export function OpenSessionIndicator() {
-  return (
-    <span
-      aria-label="Session open"
-      title="Session open"
-      className="tw-absolute -tw-right-0.5 -tw-top-0.5 tw-size-2 tw-rounded-full tw-bg-current tw-text-loading tw-ring-1 tw-ring-[var(--background-primary)]"
-    />
-  );
-}
-
 interface CloseSessionButtonProps {
   chatId: string;
   onCloseSession: (id: string) => Promise<void>;

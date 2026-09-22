@@ -1,5 +1,4 @@
 import React from "react";
-import { OpenSessionIndicator } from "@/components/chat-components/ui/OpenSessionControls";
 import { cn } from "@/lib/utils";
 
 interface ChatIconWithAttentionProps {
@@ -29,7 +28,13 @@ export const ChatIconWithAttention: React.FC<ChatIconWithAttentionProps> = ({
   <span className="tw-relative tw-inline-flex tw-shrink-0 tw-items-center tw-justify-center">
     <Icon className={iconClassName} />
     {/* Idle backends still hold resources: https://github.com/Brevilabs/obsidian-copilot-private/issues/429 */}
-    {isSessionOpen && <OpenSessionIndicator />}
+    {isSessionOpen && (
+      <span
+        aria-label="Session open"
+        title="Session open"
+        className="tw-absolute -tw-right-0.5 -tw-top-0.5 tw-size-2 tw-rounded-full tw-bg-current tw-text-loading tw-ring-1 tw-ring-[var(--background-primary)]"
+      />
+    )}
     {needsAttention && (
       <span
         aria-hidden

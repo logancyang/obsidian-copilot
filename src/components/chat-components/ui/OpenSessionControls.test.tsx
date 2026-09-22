@@ -1,19 +1,10 @@
-import {
-  CloseSessionButton,
-  OpenSessionIndicator,
-} from "@/components/chat-components/ui/OpenSessionControls";
+import { CloseSessionButton } from "@/components/chat-components/ui/OpenSessionControls";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
 
 const issue = "https://github.com/Brevilabs/obsidian-copilot-private/issues/429";
 
 describe("OpenSessionControls", () => {
-  describe("OpenSessionIndicator()", () => {
-    it(`${issue} labels an open session independently of turn activity`, () => {
-      render(<OpenSessionIndicator />);
-      expect(screen.getByLabelText("Session open").title).toBe("Session open");
-    });
-  });
   describe("CloseSessionButton()", () => {
     it(`${issue} releases the selected session once while pending without activating its row`, async () => {
       let finish!: () => void;
