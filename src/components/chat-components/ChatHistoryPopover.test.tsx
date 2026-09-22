@@ -61,7 +61,7 @@ describe("ChatHistoryPopover", () => {
       expect(onLoadChat).toHaveBeenCalledWith(history[0].id);
     });
 
-    it(`${issue} distinguishes a responding agent from an idle live session`, () => {
+    it(`${issue} keeps the live-session dot while showing the responding spinner`, () => {
       render(
         <ChatHistoryPopover
           chatHistory={history}
@@ -78,7 +78,7 @@ describe("ChatHistoryPopover", () => {
 
       fireEvent.click(screen.getByText("History"));
       expect(screen.getByLabelText("Responding")).toBeTruthy();
-      expect(screen.getAllByLabelText("Session live")).toHaveLength(1);
+      expect(screen.getAllByLabelText("Session live")).toHaveLength(2);
     });
   });
 });

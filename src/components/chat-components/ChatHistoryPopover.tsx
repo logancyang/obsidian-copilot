@@ -495,7 +495,7 @@ function ChatHistoryItem({
       <ChatIconWithAttention
         icon={RowIcon}
         needsAttention={chat.needsAttention}
-        isSessionLive={isSessionOpen && !isRunning}
+        isSessionLive={isSessionOpen}
         iconClassName="tw-size-3 tw-text-muted"
       />
       <span
