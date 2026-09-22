@@ -1,4 +1,4 @@
-import type { BackendState, EnabledModelEntry } from "@/agentMode/session/types";
+import type { BackendState } from "@/agentMode/session/types";
 import { resolveEffort } from "@/lib/model-effort";
 import { logError, logInfo, logWarn } from "@/logger";
 import type CopilotPlugin from "@/main";
@@ -375,11 +375,10 @@ export class AgentSessionManager {
    */
   private readonly retainedChatInputIds = new Set<string>();
   /**
-   * `backendId:reason:baseModelId` triples already warned about, since the read
-   * that discovers them runs on every session create and default re-apply.
+   * Includes the reason because one unavailable model can require distinct notices.
    * https://github.com/Brevilabs/obsidian-copilot-private/issues/474
    */
-  private readonly warnedMissingDefaults = new Set<string>();
+  private readonly warnedUnavailableSelections = new Set<string>();
   private readonly preloader: AgentModelPreloader;
   /**
    * Per-backend preload status. The chat UI gates its first render on the
@@ -2151,27 +2150,16 @@ export class AgentSessionManager {
   }
 
   /**
-   * The model to start a session on: the caller's own selection, then the
-   * sticky preference, then a stand-in when neither names a model this backend
-   * can actually run right now. Copilot only ever seeds an enabled model whose
-   * provider key is in place: one the user turned off, or one still waiting for
-   * its key, is never what it starts a chat on. With neither a selection to
-   * carry over nor a preference, nothing is seeded and the session starts on
-   * the agent's own default, which is what "Agent default" means.
-   *
-   * A selection outlives its model (Copilot Plus withdraws it, the user turns
-   * it off, or its provider is deleted) because the removal cascade touches
-   * neither the saved preference nor an open chat. Seeding the stale selection
-   * does not fail loudly: the backend rejects it and the session keeps whatever
-   * model the agent picked for itself. Substituting here rather than in
-   * {@link getDefaultSelection} keeps the saved value visible in settings —
-   * where it is deliberately pickable before its key is pasted — and applying
-   * again once the model is runnable.
+   * Chooses a runnable startup model without changing the saved preference.
+   * A carried selection wins, then the saved default, then the first enabled
+   * model with credentials. With no explicit selection, the agent keeps its
+   * own default.
    * https://github.com/Brevilabs/obsidian-copilot-private/issues/474
+   * https://github.com/logancyang/obsidian-copilot/issues/3319
    *
    * @param backendId Agent whose enabled models constrain the selection.
-   * @param preferred Selection a rebuilt tab carries over, tried ahead of the saved default.
-   * @param catalog Models the live session advertises, so a stand-in is one it can actually route.
+   * @param preferred Selection retained by a rebuilt tab.
+   * @param catalog Models advertised by the live session, when available.
    */
   getSeedSelection(
     backendId: BackendId,
@@ -2184,63 +2172,38 @@ export class AgentSessionManager {
     // model stays routable whether or not Copilot's enabled list curates it.
     if (!offered?.length) return preferred ?? saved;
 
-    // Enabled is half the test: a model whose provider key has not been pasted
-    // is rejected by the backend just like a withdrawn one, and a model the
-    // live session never advertised cannot be applied to it either.
-    const routable = offered.filter(
+    const runnable = offered.filter(
       (entry) =>
         entry.credentialState === "ok" &&
         (!catalog?.availableModels?.length ||
           catalog.availableModels.some((model) => model.baseModelId === entry.baseModelId))
     );
-    const routableIds = new Set(routable.map((entry) => entry.baseModelId));
     for (const selection of [preferred, saved]) {
-      if (selection && routableIds.has(selection.baseModelId)) return selection;
+      if (selection && runnable.some((entry) => entry.baseModelId === selection.baseModelId)) {
+        return selection;
+      }
     }
-    // Nothing on record to stand in for: "Agent default" is a choice of its
-    // own, and the session starts on whatever the agent reports.
-    const displaced = saved ?? preferred;
-    if (!displaced) return null;
+    const unavailable = saved ?? preferred;
+    if (!unavailable) return null;
 
-    // Naming a replacement beats seeding nothing, since the agent's own default
-    // lands outside the enabled list in practice; effort is left unset so the
-    // model's own default level applies. With nothing runnable enabled there is
-    // no honest choice left, and the chat falls back to the agent's model until
-    // the user enables one.
-    const replacement = routable[0];
-    this.warnSelectionNotRunnable(backendId, displaced.baseModelId, replacement, {
-      keyless: offered.some(
-        (entry) => entry.baseModelId === displaced.baseModelId && entry.credentialState !== "ok"
-      ),
-      fromOpenChat: !saved,
-    });
+    const replacement = runnable[0];
+    const missingKey = offered.some(
+      (entry) => entry.baseModelId === unavailable.baseModelId && entry.credentialState !== "ok"
+    );
+    const reason = missingKey ? "keyless" : saved ? "default" : "chat";
+    this.warnSelectionNotRunnable(backendId, unavailable.baseModelId, replacement?.name, reason);
     return replacement ? { baseModelId: replacement.baseModelId, effort: null } : null;
   }
 
-  /**
-   * Tell the user once per unusable model why their chat is not on it, since a
-   * session silently starting on a different one is the whole failure here.
-   *
-   * @param baseModelId - Model that cannot be seeded.
-   * @param replacement - Model taking its place, or undefined when the agent's
-   *   own default takes over.
-   * @param route - How the user got here: `keyless` means the model is still
-   *   enabled and only its provider key is missing, and `fromOpenChat` means an
-   *   open chat's own selection was lost rather than the saved default. Each
-   *   route is reached differently and reads differently.
-   */
   private warnSelectionNotRunnable(
     backendId: BackendId,
     baseModelId: string,
-    replacement: EnabledModelEntry | undefined,
-    route: { keyless: boolean; fromOpenChat: boolean }
+    replacementName: string | undefined,
+    reason: "keyless" | "chat" | "default"
   ): void {
-    // One model can be lost by more than one route, and each says something
-    // different, so the first warning must not silence the others.
-    const reason = route.keyless ? "keyless" : route.fromOpenChat ? "chat" : "default";
     const key = `${backendId}:${reason}:${baseModelId}`;
-    if (this.warnedMissingDefaults.has(key)) return;
-    this.warnedMissingDefaults.add(key);
+    if (this.warnedUnavailableSelections.has(key)) return;
+    this.warnedUnavailableSelections.add(key);
     const agent = this.resolveDescriptor(backendId).displayName;
     const model = baseModelId.split("/").pop() || baseModelId;
     logInfo(`[AgentMode] ${backendId} cannot start a chat on ${baseModelId} (${reason})`);
@@ -2249,11 +2212,11 @@ export class AgentSessionManager {
       chat: `${model} is turned off for ${agent}.`,
       default: `${agent} no longer offers ${model}.`,
     }[reason];
-    const outcome = replacement
+    const outcome = replacementName
       ? {
-          keyless: `Using ${replacement.name} until you add it.`,
-          chat: `Open chats moved to ${replacement.name}.`,
-          default: `New chats use ${replacement.name} until you pick a new default.`,
+          keyless: `Using ${replacementName} until you add it.`,
+          chat: `Open chats moved to ${replacementName}.`,
+          default: `New chats use ${replacementName} until you pick a new default.`,
         }[reason]
       : {
           keyless: `Add it, or enable a model that already has one.`,
@@ -3403,10 +3366,7 @@ export class AgentSessionManager {
       return null;
     }
 
-    // Only a restart seeds a resume: the tab it rebuilds has a model on screen
-    // that must survive. A resume opened from history seeds nothing, so the
-    // backend's own report stands and each descriptor's persisted replay still
-    // owns the session's startup configuration.
+    // Restarted tabs carry their selection; history opens keep the loaded model.
     // https://github.com/logancyang/obsidian-copilot/issues/3319
     const resolvedSeed = seedSelection
       ? (this.getSeedSelection(backendId, seedSelection, resumeResult.state.model) ?? undefined)
@@ -3441,8 +3401,7 @@ export class AgentSessionManager {
         : {}),
     });
 
-    // The seeded selection is applied inside `ready`, so waiting here keeps it
-    // ahead of `applyInitialSessionConfig` instead of racing it.
+    // Apply the seed before replaying backend-specific startup config.
     await session.ready;
 
     // ACP backends rebuild the visible transcript from the frames the agent
@@ -3946,10 +3905,9 @@ export class AgentSessionManager {
     labelSource: "user" | "agent" | null,
     seedSelection?: ModelSelection
   ): Promise<AgentSession> {
-    // The restart may itself be the enabled-model list changing, so the tab's
-    // model is checked against the new list here: the recreate branch seeds
-    // `createSession` with whatever it is handed, while the resume branch
-    // re-checks the result against the catalog its own session reports.
+    // A model-setting change can trigger this restart, so revalidate before
+    // either resuming the conversation or creating its fallback.
+    // https://github.com/logancyang/obsidian-copilot/issues/3319
     const validatedSeed = seedSelection
       ? (this.getSeedSelection(backendId, seedSelection) ?? undefined)
       : undefined;
@@ -4024,9 +3982,7 @@ export class AgentSessionManager {
             resumableSessionId: session.getBackendSessionId() ?? undefined,
             label: session.getLabel(),
             labelSource: session.getLabelSource(),
-            // The model on screen right now. Nothing else carries it across the
-            // restart: the rebuilt session starts on whatever the agent itself
-            // picks, so the tab would silently change model under the user.
+            // The displayed selection is otherwise lost when the process restarts.
             // https://github.com/logancyang/obsidian-copilot/issues/3319
             seedSelection: session.getState()?.model?.current,
             detached: this.detachedFromTabIds.has(session.internalId),

@@ -1148,10 +1148,6 @@ describe("AgentSessionManager", () => {
       });
 
       it("stands in for a saved default whose provider key has not been added yet, and says so (https://github.com/logancyang/obsidian-copilot/issues/3319)", () => {
-        // Settings deliberately lets the default be chosen before the key is
-        // pasted, but the backend rejects a keyless model exactly like a
-        // withdrawn one, so a chat must not start on it. The notice names the
-        // missing key rather than claiming the agent withdrew the model.
         const mgr = buildManagerWithOffered(
           [{ baseModelId: "byok/gpt-5.6", credentialState: "missing_key" }, "copilot-plus/flash"],
           { baseModelId: "byok/gpt-5.6", effort: "high" }
@@ -1167,8 +1163,6 @@ describe("AgentSessionManager", () => {
       });
 
       it("stands in only with a model the resumed session itself advertises (https://github.com/logancyang/obsidian-copilot/issues/3319)", () => {
-        // A restarted session reports its own catalog, and seeding a model it
-        // never advertised is rejected exactly like the withdrawn default.
         const mgr = buildManagerWithOffered(["copilot-plus/flash", "copilot-plus/glm-5.2"], {
           baseModelId: "copilot-plus/minimax-m2.7",
           effort: "high",
@@ -1239,9 +1233,6 @@ describe("AgentSessionManager", () => {
       });
 
       it("tells an open chat its model was turned off rather than withdrawn by the agent (https://github.com/logancyang/obsidian-copilot/issues/3319)", () => {
-        // Turning the model off in settings is what restarts the agent, so the
-        // notice must name the user's own action and the chat that moved, not a
-        // default nobody set.
         const mgr = buildManagerWithOffered(["copilot-plus/flash"], null);
 
         mgr.getSeedSelection("opencode", {
@@ -1255,8 +1246,6 @@ describe("AgentSessionManager", () => {
       });
 
       it("warns about the same model once as an open chat's selection and once as a withdrawn default (https://github.com/logancyang/obsidian-copilot/issues/3319)", () => {
-        // The two notices say different things, so the chat-side warning must
-        // not silence the default-side one for the same model.
         const mgr = buildManagerWithOffered(["copilot-plus/flash"], null);
         mgr.getSeedSelection("opencode", {
           baseModelId: "copilot-plus/minimax-m2.7",
@@ -2219,11 +2208,7 @@ describe("AgentSessionManager.restartBackend", () => {
   );
 
   it("settles the resumed tab on the seeded model's own effort, not the effort of the model it left (https://github.com/logancyang/obsidian-copilot/issues/3319)", async () => {
-    // A descriptor's startup config resolves effort against whatever the
-    // session currently reports, so it must run after the seeded model round
-    // trip rather than beside it: the pre-restart catalog entry does not list
-    // the effort the tab was on, and writing from it lands the chat on an
-    // effort belonging to the model it just left.
+    // The seed must update the model catalog before startup config resolves effort.
     const server = { baseModelId: "big-pickle", effort: "low" };
     const catalogBeforeSetModel = [
       { baseModelId: "big-pickle", name: "Big Pickle", provider: null, effortOptions: [] },
@@ -2290,7 +2275,6 @@ describe("AgentSessionManager.restartBackend", () => {
       }
     );
     const chat = await mgr.createSession();
-    // The tab is on a model and effort the restarted process has not heard of.
     jest.spyOn(chat, "getState").mockReturnValue({
       model: {
         current: { baseModelId: "copilot-plus/reasoning", effort: "high" },
