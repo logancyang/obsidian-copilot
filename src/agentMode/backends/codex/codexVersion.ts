@@ -6,7 +6,7 @@ const CURRENT_PACKAGE_NAME = "@agentclientprotocol/codex-acp";
 const CURRENT_PACKAGE_ENTRY = "dist/index.js";
 // Model selection requires config options validated with the bundled adapter.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/550
-export const CODEX_MIN_VERSION = "1.12.0";
+export const CODEX_MIN_VERSION = "1.13.0";
 
 export interface CodexAcpInvocation {
   command: string;

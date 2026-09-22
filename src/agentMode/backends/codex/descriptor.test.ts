@@ -355,23 +355,23 @@ describe("descriptor", () => {
         }
       );
       it.each([
-        ["legacy path", {}, "1.12.0", { kind: "ready", source: "custom" }],
+        ["legacy path", {}, "1.13.0", { kind: "ready", source: "custom" }],
         [
           "managed revised bundle",
-          { binarySource: "managed", binaryVersion: "1.12.0-r1" },
-          "1.12.0-r1",
+          { binarySource: "managed", binaryVersion: "1.13.0-r1" },
+          "1.13.0-r1",
           { kind: "ready", source: "managed" },
         ],
         [
           "custom mismatch",
-          { binarySource: "custom", binaryVersion: "1.12.0" },
-          "1.12.0",
+          { binarySource: "custom", binaryVersion: "1.13.0" },
+          "1.13.0",
           { kind: "ready", source: "custom" },
         ],
         [
           "managed packaging mismatch",
-          { binarySource: "managed", binaryVersion: "1.12.0-r2" },
-          "1.12.0-r2",
+          { binarySource: "managed", binaryVersion: "1.13.0-r2" },
+          "1.13.0-r2",
           { kind: "ready", source: "managed" },
         ],
         [
