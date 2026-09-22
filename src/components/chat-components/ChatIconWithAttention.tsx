@@ -15,8 +15,8 @@ interface ChatIconWithAttentionProps {
 /**
  * Chat-row icon with the same "needs attention" accent dot the agent tab strip's
  * `BrandIcon` paints, so a backgrounded session that finished / paused for
- * permission remains visible in the history list. An open session uses the same
- * dot position with the loading color when no attention state takes priority.
+ * permission remains visible in the history list. A live session uses the same
+ * bottom-right position with the loading color when no attention state takes priority.
  */
 export const ChatIconWithAttention: React.FC<ChatIconWithAttentionProps> = ({
   icon: Icon,
@@ -32,7 +32,7 @@ export const ChatIconWithAttention: React.FC<ChatIconWithAttentionProps> = ({
         aria-hidden={!isSessionLive}
         title={isSessionLive ? "Session live" : undefined}
         className={cn(
-          "tw-absolute -tw-right-0.5 -tw-top-0.5 tw-size-1.5 tw-rounded-full tw-ring-1 tw-ring-[var(--background-primary)]",
+          "tw-absolute -tw-bottom-0.5 -tw-right-0.5 tw-size-1.5 tw-rounded-full tw-ring-1 tw-ring-[var(--background-primary)]",
           needsAttention ? "tw-bg-interactive-accent" : "tw-bg-current tw-text-loading"
         )}
       />

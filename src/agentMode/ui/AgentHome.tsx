@@ -997,6 +997,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                       onDeleteChat={handleDeleteChat}
                       onCloseSession={handleCloseSession}
                       openChatIds={openChatIds}
+                      runningChatIds={runningChatIds}
                       onOpenSourceFile={handleOpenSourceFile}
                       usageMeter={<AgentContextMeter backend={backend} />}
                       showMultiAgentUpsell

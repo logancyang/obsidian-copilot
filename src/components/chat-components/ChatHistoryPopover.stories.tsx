@@ -16,7 +16,7 @@ const CHAT_HISTORY = [
   },
 ];
 
-const OpenPopover: React.FC = () => {
+const OpenPopover: React.FC<{ isRunning?: boolean }> = ({ isRunning = false }) => {
   const triggerRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -27,6 +27,7 @@ const OpenPopover: React.FC = () => {
     <ChatHistoryPopover
       chatHistory={CHAT_HISTORY}
       openChatIds={OPEN_CHAT_IDS}
+      runningChatIds={isRunning ? OPEN_CHAT_IDS : undefined}
       onCloseSession={async () => {}}
       onUpdateTitle={async () => {}}
       onDeleteChat={async () => {}}
@@ -48,4 +49,8 @@ export default meta;
 
 export const OpenSession: StoryObj<Props> = {
   render: () => <OpenPopover />,
+};
+
+export const Responding: StoryObj<Props> = {
+  render: () => <OpenPopover isRunning />,
 };

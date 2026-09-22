@@ -32,6 +32,7 @@ interface AgentChatControlsProps {
   onDeleteChat?: (id: string) => Promise<void>;
   onCloseSession?: (id: string) => Promise<void>;
   openChatIds?: ReadonlySet<string>;
+  runningChatIds?: ReadonlySet<string>;
   onOpenSourceFile?: (id: string) => Promise<void>;
   /**
    * Context-window usage meter, rendered as the first item in the right-side
@@ -69,6 +70,7 @@ export const AgentChatControls: React.FC<AgentChatControlsProps> = ({
   onDeleteChat,
   onCloseSession,
   openChatIds,
+  runningChatIds,
   onOpenSourceFile,
   usageMeter,
   showMultiAgentUpsell = false,
@@ -138,6 +140,7 @@ export const AgentChatControls: React.FC<AgentChatControlsProps> = ({
               onDeleteChat={onDeleteChat!}
               onCloseSession={onCloseSession}
               openChatIds={openChatIds}
+              runningChatIds={runningChatIds}
               onLoadChat={onLoadChat}
               onOpenSourceFile={onOpenSourceFile}
               getIcon={resolveHistoryIcon}

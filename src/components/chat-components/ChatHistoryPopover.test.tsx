@@ -60,5 +60,25 @@ describe("ChatHistoryPopover", () => {
       );
       expect(onLoadChat).toHaveBeenCalledWith(history[0].id);
     });
+
+    it(`${issue} distinguishes a responding agent from an idle live session`, () => {
+      render(
+        <ChatHistoryPopover
+          chatHistory={history}
+          openChatIds={new Set(history.map((chat) => chat.id))}
+          runningChatIds={new Set([history[0].id])}
+          onCloseSession={async () => {}}
+          onUpdateTitle={async () => {}}
+          onDeleteChat={async () => {}}
+          onLoadChat={async () => {}}
+        >
+          <button type="button">History</button>
+        </ChatHistoryPopover>
+      );
+
+      fireEvent.click(screen.getByText("History"));
+      expect(screen.getByLabelText("Responding")).toBeTruthy();
+      expect(screen.getAllByLabelText("Session live")).toHaveLength(1);
+    });
   });
 });

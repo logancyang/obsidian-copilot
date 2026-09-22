@@ -236,7 +236,13 @@ const RecentChatRow = memo(function RecentChatRow({
         }
       }}
     >
-      <ChatIconTile Icon={Icon} needsAttention={hasAttention} isSessionLive={isSessionOpen} />
+      {/* A response spinner and an idle live-session dot are separate states.
+          https://github.com/Brevilabs/obsidian-copilot-private/issues/429 */}
+      <ChatIconTile
+        Icon={Icon}
+        needsAttention={hasAttention}
+        isSessionLive={isSessionOpen && !isRunning}
+      />
       <RecentChatTitle title={item.title} />
 
       {/* Relative time by default; a backgrounded running session shows an accent

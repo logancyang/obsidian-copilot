@@ -1,5 +1,14 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ArrowUpRight, Check, Edit2, MessageCircle, Power, Trash2, X } from "lucide-react";
+import {
+  ArrowUpRight,
+  Check,
+  Edit2,
+  LoaderCircle,
+  MessageCircle,
+  Power,
+  Trash2,
+  X,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SearchBar } from "@/components/ui/SearchBar";
@@ -45,6 +54,7 @@ interface ChatHistoryPopoverProps {
   children: React.ReactNode;
   chatHistory: ChatHistoryItem[];
   openChatIds?: ReadonlySet<string>;
+  runningChatIds?: ReadonlySet<string>;
   onCloseSession?: (id: string) => Promise<void>;
   onUpdateTitle: (id: string, newTitle: string) => Promise<void>;
   onDeleteChat: (id: string) => Promise<void>;
@@ -73,6 +83,7 @@ export function ChatHistoryPopover({
   children,
   chatHistory,
   openChatIds,
+  runningChatIds,
   onCloseSession,
   onUpdateTitle,
   onDeleteChat,
@@ -349,6 +360,7 @@ export function ChatHistoryPopover({
                             key={chat.id}
                             chat={chat}
                             isSessionOpen={openChatIds?.has(chat.id) ?? false}
+                            isRunning={runningChatIds?.has(chat.id) ?? false}
                             onCloseSession={onCloseSession}
                             isEditing={editingId === chat.id}
                             editingTitle={editingTitle}
@@ -393,6 +405,7 @@ export function ChatHistoryPopover({
 interface ChatHistoryItemProps {
   chat: ChatHistoryItem;
   isSessionOpen: boolean;
+  isRunning: boolean;
   onCloseSession?: (id: string) => Promise<void>;
   isEditing: boolean;
   editingTitle: string;
@@ -413,6 +426,7 @@ interface ChatHistoryItemProps {
 function ChatHistoryItem({
   chat,
   isSessionOpen,
+  isRunning,
   onCloseSession,
   isEditing,
   editingTitle,
@@ -481,7 +495,7 @@ function ChatHistoryItem({
       <ChatIconWithAttention
         icon={RowIcon}
         needsAttention={chat.needsAttention}
-        isSessionLive={isSessionOpen}
+        isSessionLive={isSessionOpen && !isRunning}
         iconClassName="tw-size-3 tw-text-muted"
       />
       <span
@@ -492,6 +506,13 @@ function ChatHistoryItem({
       </span>
 
       {getBadge?.(chat)}
+
+      {isRunning && (
+        <LoaderCircle
+          className="tw-size-3.5 tw-shrink-0 tw-animate-spin tw-text-accent group-focus-within:tw-hidden group-hover:tw-hidden"
+          aria-label="Responding"
+        />
+      )}
 
       <div
         className={cn(
