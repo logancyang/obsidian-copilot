@@ -252,18 +252,20 @@ A scenario is bounded by its steps; the longest (open plus send) is bounded by
 
 Measured durations:
 
-| Where                                      | Cache | Scenario    | `test:runtime` / install        | Whole job |
-| ------------------------------------------ | ----- | ----------- | ------------------------------- | --------- |
-| Apple M-series Mac, darwin-arm64, Node 26  | Cold  | 1.6 – 4.8 s | 37 s, including the install     | —         |
-| Apple M-series Mac, darwin-arm64, Node 26  | Warm  | 1.6 – 4.8 s | 33 s                            | —         |
-| GitHub `ubuntu-latest`, linux-x64, Node 22 | Cold  | 4.7 s       | 9 s, after a 6 s install        | 52 s      |
-| GitHub `ubuntu-latest`, linux-x64, Node 22 | Warm  | 4.0 s       | 8 s, after a 2 s cached install | 42 s      |
+| Where                                      | Cache | Scenario    | `test:runtime` / install         | Whole job |
+| ------------------------------------------ | ----- | ----------- | -------------------------------- | --------- |
+| Apple M-series Mac, darwin-arm64, Node 26  | Cold  | 1.6 – 4.8 s | 37 s, including the install      | —         |
+| Apple M-series Mac, darwin-arm64, Node 26  | Warm  | 1.6 – 4.8 s | 33 s                             | —         |
+| GitHub `ubuntu-latest`, linux-x64, Node 22 | Cold  | 4.7 s mean  | 52 s, after a 5 s install        | 88 s      |
+| GitHub `ubuntu-latest`, linux-x64, Node 22 | Warm  | 4.7 s mean  | 52 s, after a 1 s cached install | 82 s      |
 
-Locally, startup through a ready session takes about 1.2 s and the turn about
-1 s. In CI, `npm ci` takes 16-20 s of the job; the CI numbers come from the
-job's first run and a rerun that hit the binary cache. The startup and turn
-bounds are over fifteen times their local durations and at least four times the
-whole cold CI scenario; the job bound is over ten times the cold CI job.
+Locally, startup through a ready session takes about 1.2 s and a turn about
+1 s; the longest scenario, the Reload action, takes 4.8 s. In CI, `npm ci`
+takes 14-20 s of the job, and the report of a passing run is not uploaded, so
+the CI scenario time is the suite's time over its ten scenarios. The CI numbers
+come from a job's first run and a rerun that hit the binary cache. The startup
+and turn bounds are over fifteen times their local durations; the job bound is
+over six times the cold CI job.
 
 ## Failure report
 
