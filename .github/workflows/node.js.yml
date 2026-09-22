@@ -84,10 +84,47 @@ jobs:
       - run: npm run gallery:build
       - run: node scripts/mobile-load-smoke.cjs
 
+  runtime:
+    name: OpenCode runtime contracts (22.x)
+    runs-on: ubuntu-latest
+    # Bounds a hung runtime well past the measured duration; see runtime-tests/README.md.
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: npm
+      - run: npm ci
+      - name: Read the pinned opencode version
+        id: pin
+        run: echo "version=$(sed -n 's/.*OPENCODE_PINNED_VERSION = "\(.*\)";/\1/p' src/agentMode/backends/opencode/ui/opencodeVersion.ts)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        with:
+          path: runtime-tests/.opencode
+          key: opencode-${{ runner.os }}-${{ runner.arch }}-${{ steps.pin.outputs.version }}
+      # A separate step, so the token that lifts GitHub's API rate limit for the
+      # release lookup never reaches the environment of the runtime under test.
+      - name: Install the pinned opencode
+        run: node runtime-tests/build.mjs && node runtime-tests/.build/fetch-opencode.mjs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - name: Run the runtime contracts
+        run: npm run test:runtime
+      - name: Upload the runtime report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-report
+          path: runtime-tests/.report
+          retention-days: 14
+
   build:
     name: build (22.x)
     if: always()
-    needs: [jest, lint, review, bundle]
+    needs: [jest, lint, review, bundle, runtime]
     runs-on: ubuntu-latest
     steps:
       - name: Require every CI job to pass
@@ -96,11 +133,13 @@ jobs:
           LINT_RESULT: ${{ needs.lint.result }}
           REVIEW_RESULT: ${{ needs.review.result }}
           BUNDLE_RESULT: ${{ needs.bundle.result }}
+          RUNTIME_RESULT: ${{ needs.runtime.result }}
         run: |
           test "$JEST_RESULT" = success
           test "$LINT_RESULT" = success
           test "$REVIEW_RESULT" = success
           test "$BUNDLE_RESULT" = success
+          test "$RUNTIME_RESULT" = success
 
   docs:
     runs-on: ubuntu-latest
