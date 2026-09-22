@@ -276,6 +276,18 @@ export class AgentModelPreloader {
     // best-effort — failures leave the picker without prefetched effort.
     await this.runEffortPrefetch(backendId, descriptor, proc, probe.sessionId, probe.state);
 
+    // Prefetch awaits RPCs before the exit listener is installed; never cache a
+    // dead process or retain one after shutdown. https://github.com/Brevilabs/obsidian-copilot-private/issues/550
+    if (this.disposed || !proc.isRunning()) {
+      this.effortCatalog.delete(backendId);
+      try {
+        await proc.shutdown();
+      } catch (e) {
+        logWarn(`[AgentMode] preload ${backendId}: shutdown failed`, e);
+      }
+      return;
+    }
+
     // Probe succeeded — retain the running subprocess as a warm entry so
     // the first chat-open can adopt it instead of paying another spawn +
     // initialize round-trip.

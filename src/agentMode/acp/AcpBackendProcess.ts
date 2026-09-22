@@ -1,6 +1,7 @@
 import { logError, logInfo, logWarn } from "@/logger";
 import {
-  ClientSideConnection,
+  client as createClient,
+  type ClientConnection,
   PROTOCOL_VERSION,
   RequestError,
   ndJsonStream,
@@ -10,7 +11,6 @@ import {
   type SessionConfigOption,
   type SessionId as AcpSessionId,
   type SessionModeState,
-  type SessionModelState,
   type SessionNotification,
 } from "@agentclientprotocol/sdk";
 import { App, FileSystemAdapter } from "obsidian";
@@ -75,7 +75,6 @@ export type AcpCapability =
   | "session/list"
   | "session/resume"
   | "session/load"
-  | "session/set_model"
   | "session/set_mode"
   | "session/set_config_option"
   | "session/additional_directories";
@@ -102,30 +101,13 @@ const COPILOT_CLIENT_NAME = "obsidian-copilot";
  * `BackendState` without having to refetch from the agent.
  */
 interface SessionWireState {
-  models: SessionModelState | null;
   modes: SessionModeState | null;
   configOptions: SessionConfigOption[] | null;
 }
 
 /**
- * Return a copy of `options` with the `category:"model"` select's currentValue
- * set to `modelId`, or the input unchanged when there's no such option. Lets an
- * optimistic model switch be reflected for backends whose catalog lives in a
- * config option (opencode ≥ 1.15.13) rather than a dedicated `models` state.
- */
-function updateModelConfigOptionValue(
-  options: SessionConfigOption[] | null,
-  modelId: string
-): SessionConfigOption[] | null {
-  if (!options) return options;
-  return options.map((o) =>
-    o.type === "select" && o.category === "model" ? { ...o, currentValue: modelId } : o
-  );
-}
-
-/**
  * One-per-vault wrapper around an ACP-speaking subprocess. Owns the
- * `ClientSideConnection`, the `AcpProcessManager`, and the demultiplexer
+ * `ClientConnection`, the `AcpProcessManager`, and the demultiplexer
  * that fans `session/update` notifications out to the right `AgentSession`.
  *
  * Lifecycle: `start()` exactly once, then any number of `newSession`/`prompt`
@@ -134,7 +116,7 @@ function updateModelConfigOptionValue(
  */
 export class AcpBackendProcess implements BackendProcess {
   private process: AcpProcessManager | null = null;
-  private connection: ClientSideConnection | null = null;
+  private connection: ClientConnection | null = null;
   private readonly domainHandlers = new Map<SessionId, DomainSessionUpdateHandler>();
   /**
    * Per-session FIFO of `session/update` notifications that arrived before a
@@ -268,10 +250,15 @@ export class AcpBackendProcess implements BackendProcess {
       onSessionUpdate: (sessionId, update) => this.routeSessionUpdate(sessionId, update),
       requestPermission: (req) => this.handlePermission(req),
     });
-    this.connection = new ClientSideConnection(() => client, stream);
+    this.connection = createClient()
+      .onRequest("fs/read_text_file", ({ params }) => client.readTextFile(params))
+      .onRequest("fs/write_text_file", ({ params }) => client.writeTextFile(params))
+      .onRequest("session/request_permission", ({ params }) => client.requestPermission(params))
+      .onNotification("session/update", ({ params }) => client.sessionUpdate(params))
+      .connect(stream);
 
     try {
-      const init = await this.connection.initialize({
+      const init = await this.connection.agent.request("initialize", {
         protocolVersion: PROTOCOL_VERSION,
         clientCapabilities: {
           fs: { readTextFile: true, writeTextFile: true },
@@ -385,9 +372,8 @@ export class AcpBackendProcess implements BackendProcess {
       mcpServers: [],
       ...this.additionalDirectoriesField(params.additionalDirectories),
     };
-    const wireResp = await this.requireConnection().newSession(req);
+    const wireResp = await this.requireConnection().agent.request("session/new", req);
     this.recordWireState(wireResp.sessionId, {
-      models: wireResp.models ?? null,
       modes: wireResp.modes ?? null,
       configOptions: wireResp.configOptions ?? null,
     });
@@ -398,7 +384,7 @@ export class AcpBackendProcess implements BackendProcess {
   }
 
   async prompt(params: PromptInput): Promise<PromptOutput> {
-    const resp = await this.requireConnection().prompt({
+    const resp = await this.requireConnection().agent.request("session/prompt", {
       sessionId: sessionIdToAcp(params.sessionId),
       prompt: promptContentToAcp(params.prompt),
     });
@@ -528,7 +514,7 @@ export class AcpBackendProcess implements BackendProcess {
   async closeSession(params: { sessionId: SessionId }): Promise<void> {
     await this.dispatchCapability(
       "session/close",
-      (connection) => connection.closeSession(params),
+      (connection) => connection.agent.request("session/close", params),
       {
         mustBeAdvertised: true,
       }
@@ -538,7 +524,7 @@ export class AcpBackendProcess implements BackendProcess {
   }
 
   async cancel(params: CancelInput): Promise<void> {
-    return this.requireConnection().cancel(cancelInputToAcp(params));
+    return this.requireConnection().agent.notify("session/cancel", cancelInputToAcp(params));
   }
 
   hasCapability(cap: AcpCapability): boolean {
@@ -565,36 +551,26 @@ export class AcpBackendProcess implements BackendProcess {
   }
 
   async setSessionModel(params: { sessionId: SessionId; modelId: string }): Promise<BackendState> {
-    await this.dispatchCapability("session/set_model", (c) =>
-      c.unstable_setSessionModel({
-        sessionId: sessionIdToAcp(params.sessionId),
-        modelId: params.modelId,
-      })
-    );
-    const wire = this.sessionWireState.get(params.sessionId);
-    if (wire) {
-      if (wire.models) {
-        wire.models = { ...wire.models, currentModelId: params.modelId };
-      } else {
-        // No dedicated `models` state (opencode ≥ 1.15.13 exposes the catalog
-        // only as a `category:"model"` config option). Update that option's
-        // currentValue so `computeState` recomputes from the real catalog —
-        // never fabricate an empty `models` state (that strands the picker on
-        // a raw wire id with everything else "not offered by agent").
-        wire.configOptions = updateModelConfigOptionValue(wire.configOptions, params.modelId);
-      }
-    }
-    this.republishPlanUsage(params.sessionId);
-    return this.computeState(params.sessionId);
+    const option = this.sessionWireState
+      .get(params.sessionId)
+      ?.configOptions?.find((option) => option.type === "select" && option.category === "model");
+    // Current agents expose model switching only through advertised config options.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/550
+    if (!option) throw new MethodUnsupportedError("session/set_config_option");
+    return this.setSessionConfigOption({
+      sessionId: params.sessionId,
+      configId: option.id,
+      value: params.modelId,
+    });
   }
 
   isSetSessionModelSupported(): boolean | null {
-    return this.capabilitySupported("session/set_model");
+    return this.isSetSessionConfigOptionSupported();
   }
 
   async setSessionMode(params: { sessionId: SessionId; modeId: string }): Promise<BackendState> {
     await this.dispatchCapability("session/set_mode", (c) =>
-      c.setSessionMode({
+      c.agent.request("session/set_mode", {
         sessionId: sessionIdToAcp(params.sessionId),
         modeId: params.modeId,
       })
@@ -617,7 +593,7 @@ export class AcpBackendProcess implements BackendProcess {
     value: string;
   }): Promise<BackendState> {
     const resp = await this.dispatchCapability("session/set_config_option", (c) =>
-      c.setSessionConfigOption({
+      c.agent.request("session/set_config_option", {
         sessionId: sessionIdToAcp(params.sessionId),
         configId: params.configId,
         value: params.value,
@@ -644,7 +620,7 @@ export class AcpBackendProcess implements BackendProcess {
    */
   private async dispatchCapability<T>(
     capability: AcpCapability,
-    run: (c: ClientSideConnection) => Promise<T>,
+    run: (c: ClientConnection) => Promise<T>,
     opts: { mustBeAdvertised?: boolean } = {}
   ): Promise<T> {
     const known = this.capabilities.get(capability);
@@ -671,7 +647,7 @@ export class AcpBackendProcess implements BackendProcess {
   async listSessions(params: ListSessionsInput): Promise<ListSessionsOutput> {
     const resp = await this.dispatchCapability(
       "session/list",
-      (c) => c.listSessions(params.cwd ? { cwd: params.cwd } : {}),
+      (c) => c.agent.request("session/list", params.cwd ? { cwd: params.cwd } : {}),
       { mustBeAdvertised: true }
     );
     return {
@@ -690,7 +666,7 @@ export class AcpBackendProcess implements BackendProcess {
     const wireResp = await this.dispatchCapability(
       "session/resume",
       (c) =>
-        c.resumeSession({
+        c.agent.request("session/resume", {
           sessionId: sessionIdToAcp(params.sessionId),
           cwd: params.cwd,
           mcpServers: [],
@@ -699,7 +675,6 @@ export class AcpBackendProcess implements BackendProcess {
       { mustBeAdvertised: true }
     );
     this.recordWireState(sessionIdToAcp(params.sessionId), {
-      models: wireResp.models ?? null,
       modes: wireResp.modes ?? null,
       configOptions: wireResp.configOptions ?? null,
     });
@@ -720,7 +695,7 @@ export class AcpBackendProcess implements BackendProcess {
       const wireResp = await this.dispatchCapability(
         "session/load",
         (c) =>
-          c.loadSession({
+          c.agent.request("session/load", {
             sessionId: sessionIdToAcp(sessionId),
             cwd: params.cwd,
             mcpServers: [],
@@ -729,7 +704,6 @@ export class AcpBackendProcess implements BackendProcess {
         { mustBeAdvertised: true }
       );
       this.recordWireState(sessionIdToAcp(sessionId), {
-        models: wireResp.models ?? null,
         modes: wireResp.modes ?? null,
         configOptions: wireResp.configOptions ?? null,
       });
@@ -785,7 +759,7 @@ export class AcpBackendProcess implements BackendProcess {
     }
   }
 
-  private requireConnection(): ClientSideConnection {
+  private requireConnection(): ClientConnection {
     if (!this.connection) {
       throw new Error(
         this.process
@@ -816,11 +790,10 @@ export class AcpBackendProcess implements BackendProcess {
 
   private computeState(sessionId: AcpSessionId): BackendState {
     const wire = this.sessionWireState.get(sessionIdFromAcp(sessionId)) ?? {
-      models: null,
       modes: null,
       configOptions: null,
     };
-    return acpStateToBackendState(wire.models, wire.modes, wire.configOptions, this.descriptor);
+    return acpStateToBackendState(wire.modes, wire.configOptions, this.descriptor);
   }
 
   private routeSessionUpdate(acpSessionId: AcpSessionId, update: SessionNotification): void {
@@ -966,14 +939,11 @@ export class AcpBackendProcess implements BackendProcess {
   }
 
   /**
-   * Wire model id the session is currently on, from the cached wire state — the
-   * dedicated `models` state when the agent has one, else the `category:"model"` config
-   * option (opencode ≥ 1.15.13 exposes the catalog only there).
+   * Current model id from the session's advertised model config option.
    */
   private currentWireModelId(sessionId: SessionId): string | null {
     const wire = this.sessionWireState.get(sessionId);
     if (!wire) return null;
-    if (wire.models?.currentModelId) return wire.models.currentModelId;
     for (const option of wire.configOptions ?? []) {
       if (option.type === "select" && option.category === "model" && option.currentValue) {
         return option.currentValue;

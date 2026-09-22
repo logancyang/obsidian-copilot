@@ -158,8 +158,8 @@ export class AcpProcessManager {
  * CSI (colors, cursor moves) and OSC (window title) escape sequences. Agent
  * binaries and their plugins write these to stdout for a human terminal;
  * anything prefixed to a JSON-RPC envelope makes `JSON.parse` throw, and the
- * SDK's `ndJsonStream` drops such frames silently — which strands Agent Mode
- * when the decorated frame is the initialization response.
+ * SDK rejects the decorated frame instead of delivering its response, stranding
+ * Agent Mode when that response completes initialization.
  * See https://github.com/logancyang/obsidian-copilot/issues/2876.
  *
  * The CSI parameter class spans the full `0x30`-`0x3f` range ECMA-48 allows,

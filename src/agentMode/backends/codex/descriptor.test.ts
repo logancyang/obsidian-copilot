@@ -21,7 +21,6 @@ jest.mock("./codexVersion", () => ({
 const mockedDetectBinary = jest.mocked(detectBinary);
 const mockedResolveCodexAcpBinary = jest.mocked(resolveCodexAcpBinary);
 const mockedIsSupportedCodexAcpPath = jest.mocked(isSupportedCodexAcpPath);
-import type { AgentSession } from "@/agentMode/session/AgentSession";
 import { translateBackendState } from "@/agentMode/session/translateBackendState";
 import type {
   BackendConfigOption,
@@ -199,72 +198,115 @@ describe("descriptor", () => {
       });
     });
 
-    describe("applySelection()", () => {
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/219 sends the bracketed wire id for the chosen effort", async () => {
-        const applyModelWireId = jest.fn();
-        const session = { applyModelWireId, getState: () => null } as unknown as AgentSession;
-
-        await CodexBackendDescriptor.applySelection(session, {
-          baseModelId: "gpt-5.6-sol",
-          effort: "max",
+    describe("prefetchEffortCatalog()", () => {
+      it("discovers inactive model effort and restores the probe model https://github.com/Brevilabs/obsidian-copilot-private/issues/550", async () => {
+        const effortOptions = [{ value: "high", label: "high" }];
+        const setSessionConfigOption = jest.fn(async () => ({
+          model: { availableModels: [{ baseModelId: "other", effortOptions }] },
+          mode: null,
+        }));
+        const result = await CodexBackendDescriptor.prefetchEffortCatalog!({
+          proc: {
+            setSessionConfigOption,
+          } as unknown as import("@/agentMode/session/types").BackendProcess,
+          sessionId: "probe",
+          modelState: {
+            current: { baseModelId: "original", effort: "high" },
+            availableModels: [],
+            apply: { kind: "setConfigOption", configId: "model" },
+          },
+          enabledModels: [{ baseModelId: "other", name: "Other", credentialState: "ok" }],
+          isAborted: () => false,
         });
-
-        expect(applyModelWireId).toHaveBeenCalledWith("gpt-5.6-sol[max]");
+        expect(result).toEqual({ other: effortOptions });
+        expect(setSessionConfigOption.mock.calls).toEqual([
+          [{ sessionId: "probe", configId: "model", value: "other" }],
+          [{ sessionId: "probe", configId: "model", value: "original" }],
+        ]);
       });
+    });
 
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/219 preserves the missing-catalog error when no effort can be resolved", async () => {
-        const applyModelWireId = jest.fn();
-        const session = { applyModelWireId, getState: () => null } as unknown as AgentSession;
-        await expect(
-          CodexBackendDescriptor.applySelection(session, {
-            baseModelId: "gpt-5.6-sol",
-            effort: null,
-          })
-        ).rejects.toThrow("Choose an explicit effort");
-        expect(applyModelWireId).not.toHaveBeenCalled();
+    describe("applySelection()", () => {
+      function stateFor(modelId: string, efforts: string[]) {
+        return translateBackendState(
+          {
+            models: null,
+            modes: null,
+            configOptions: [
+              ...ADVERTISED_CONFIG_OPTIONS.map((option) =>
+                option.type === "select" ? { ...option, currentValue: modelId } : option
+              ),
+              {
+                id: "reasoning_effort",
+                category: "thought_level",
+                type: "select",
+                name: "Effort",
+                currentValue: efforts[0],
+                options: efforts.map((value) => ({ value, name: value })),
+              },
+            ],
+          },
+          CodexBackendDescriptor
+        );
+      }
+
+      it("switches the bare model before applying effort from its refreshed catalog https://github.com/Brevilabs/obsidian-copilot-private/issues/550", async () => {
+        let state = stateFor("gpt-5.6-sol", ["low", "ultra"]);
+        const applyModelWireId = jest.fn(async () => {
+          state = stateFor("gpt-5.5", ["medium", "high"]);
+        });
+        const setConfigOption = jest.fn();
+        await CodexBackendDescriptor.applySelection(
+          { getState: () => state, applyModelWireId, setConfigOption },
+          { baseModelId: "gpt-5.5", effort: "ultra" }
+        );
+        expect(applyModelWireId).toHaveBeenCalledWith("gpt-5.5");
+        expect(setConfigOption).toHaveBeenCalledWith("reasoning_effort", "medium");
       });
 
       it.each([null, "removed", "high"])(
-        "https://github.com/Brevilabs/obsidian-copilot-private/issues/219 resolves saved effort %p against the live model catalog",
+        "resolves saved effort %p from the current model without switching models https://github.com/Brevilabs/obsidian-copilot-private/issues/550",
         async (effort) => {
-          const state = translateBackendState(
-            { models: ADVERTISED_CATALOG, modes: null, configOptions: null },
-            CodexBackendDescriptor
-          );
+          const state = stateFor("gpt-5.6-sol", ["low", "high"]);
           const applyModelWireId = jest.fn();
-          const session = { applyModelWireId, getState: () => state } as unknown as AgentSession;
-          await CodexBackendDescriptor.applySelection(session, {
-            baseModelId: "gpt-5.6-sol",
-            effort,
-          });
-          expect(applyModelWireId).toHaveBeenCalledWith(
-            `gpt-5.6-sol[${effort === "high" ? "high" : "low"}]`
+          const setConfigOption = jest.fn();
+          await CodexBackendDescriptor.applySelection(
+            { getState: () => state, applyModelWireId, setConfigOption },
+            { baseModelId: "gpt-5.6-sol", effort }
+          );
+          expect(applyModelWireId).not.toHaveBeenCalled();
+          expect(setConfigOption).toHaveBeenCalledWith(
+            "reasoning_effort",
+            effort === "high" ? "high" : "low"
           );
         }
       );
 
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/219 retains and applies the only advertised effort", async () => {
+      it("uses the backend-reported model instead of an optimistic startup seed https://github.com/Brevilabs/obsidian-copilot-private/issues/550", async () => {
+        const state = stateFor("gpt-5.6-sol", ["low", "high"]);
+        const applyModelWireId = jest.fn();
+        const setConfigOption = jest.fn();
+        await CodexBackendDescriptor.applySelection(
+          { getState: () => state, applyModelWireId, setConfigOption },
+          state.model!.current,
+          { backendReportedCurrent: { baseModelId: "gpt-5.5", effort: "high" } }
+        );
+        expect(applyModelWireId).toHaveBeenCalledWith("gpt-5.6-sol");
+        expect(setConfigOption).toHaveBeenCalledWith("reasoning_effort", "low");
+      });
+
+      it("leaves effort unset when the selected model advertises no effort option https://github.com/Brevilabs/obsidian-copilot-private/issues/550", async () => {
         const state = translateBackendState(
-          {
-            models: {
-              currentModelId: "example[high]",
-              availableModels: [{ modelId: "example[high]", name: "Example (high)" }],
-            },
-            modes: null,
-            configOptions: null,
-          },
+          { models: null, modes: null, configOptions: ADVERTISED_CONFIG_OPTIONS },
           CodexBackendDescriptor
         );
-        expect(state.model?.availableModels[0].effortOptions).toEqual([
-          { value: "high", label: "high" },
-        ]);
-        expect(state.model?.current).toEqual({ baseModelId: "example", effort: "high" });
         const applyModelWireId = jest.fn();
+        const setConfigOption = jest.fn();
         await CodexBackendDescriptor.applySelection(
-          { getState: () => state, applyModelWireId } as unknown as AgentSession,
-          state.model!.current
+          { getState: () => state, applyModelWireId, setConfigOption },
+          { baseModelId: "gpt-5.6-sol", effort: "high" }
         );
-        expect(applyModelWireId).toHaveBeenCalledWith("example[high]");
+        expect(setConfigOption).not.toHaveBeenCalled();
       });
     });
 
@@ -313,23 +355,23 @@ describe("descriptor", () => {
         }
       );
       it.each([
-        ["legacy path", {}, "1.9.0", { kind: "ready", source: "custom" }],
+        ["legacy path", {}, "1.13.0", { kind: "ready", source: "custom" }],
         [
-          "managed older bundle",
-          { binarySource: "managed", binaryVersion: "1.9.0-r1" },
-          "1.9.0-r1",
+          "managed revised bundle",
+          { binarySource: "managed", binaryVersion: "1.13.0-r1" },
+          "1.13.0-r1",
           { kind: "ready", source: "managed" },
         ],
         [
           "custom mismatch",
-          { binarySource: "custom", binaryVersion: "1.9.0" },
-          "1.9.0",
+          { binarySource: "custom", binaryVersion: "1.13.0" },
+          "1.13.0",
           { kind: "ready", source: "custom" },
         ],
         [
           "managed packaging mismatch",
-          { binarySource: "managed", binaryVersion: "1.10.0-r2" },
-          "1.10.0-r2",
+          { binarySource: "managed", binaryVersion: "1.13.0-r2" },
+          "1.13.0-r2",
           { kind: "ready", source: "managed" },
         ],
         [

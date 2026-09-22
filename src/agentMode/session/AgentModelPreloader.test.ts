@@ -150,6 +150,42 @@ describe("AgentModelPreloader", () => {
       expect(descriptor.createBackendProcess).not.toHaveBeenCalled();
     });
 
+    it.each(["process exit", "plugin shutdown"] as const)(
+      "discards the probe and catalogs after %s during effort prefetch https://github.com/Brevilabs/obsidian-copilot-private/issues/550",
+      async (event) => {
+        const { descriptor, procHandle } = buildDescriptor(() => makeMockProc());
+        let finish!: () => void;
+        const pending = new Promise<void>((resolve) => {
+          finish = resolve;
+        });
+        descriptor.prefetchEffortCatalog = jest.fn(async () => {
+          await pending;
+          return { "claude-sonnet": [{ label: "High", value: "high" }] };
+        });
+        descriptor.getEnabledModelEntries = () => [
+          {
+            baseModelId: "claude-sonnet",
+            name: "Claude Sonnet",
+            credentialState: "ok",
+          },
+        ];
+        const preloader = new AgentModelPreloader(buildApp(), buildPlugin(), () => descriptor);
+        const probe = preloader.preload(descriptor.id);
+        await waitFor(() => expect(descriptor.prefetchEffortCatalog).toHaveBeenCalled());
+        if (event === "plugin shutdown") preloader.shutdown();
+        else {
+          procHandle.proc.isRunning = () => false;
+          procHandle.emitExit();
+        }
+        finish();
+        await probe;
+        expect(preloader.takeWarm(descriptor.id)).toBeNull();
+        expect(preloader.getCachedModelCatalog(descriptor.id)).toBeNull();
+        expect(preloader.getEffortCatalog(descriptor.id)).toBeNull();
+        expect(procHandle.shutdown).toHaveBeenCalledTimes(1);
+      }
+    );
+
     it("does not start or probe an incompatible binary (https://github.com/Brevilabs/obsidian-copilot-private/issues/531)", async () => {
       const { descriptor, procHandle } = buildDescriptor(() => makeMockProc());
       descriptor.getInstallState = () => ({
