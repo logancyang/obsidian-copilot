@@ -113,7 +113,7 @@ Feature: Choosing the model, effort, and mode a conversation runs on
   # A saved effort the default model did not offer made new conversations open on
   # opencode's own model: https://github.com/Brevilabs/obsidian-copilot-private/issues/364
   # The saved default drops that effort: https://github.com/Brevilabs/obsidian-copilot-private/issues/219
-  Scenario: A saved effort the default model does not offer is dropped instead of changing the model
+  Scenario: A saved effort on a default model with no effort levels is dropped instead of changing the model
     Given Copilot starts with "model-a" at "high" effort as opencode's default model
     When I open a new conversation
     Then the model picker shows "alpha/model-a" with no effort control
