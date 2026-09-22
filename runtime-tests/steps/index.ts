@@ -26,6 +26,7 @@ import { getModelKeyFromModel, getSettings } from "@/settings/model";
 import { shownNotices } from "../harness/obsidianShim";
 import { pinnedBinaryPath } from "../harness/pinnedBinary";
 import { Conversation, Runtime, type ScriptedModel } from "../harness/runtime";
+import type { HeldStream, RecordedRequest } from "../harness/scriptedProvider";
 import { Report } from "./report";
 
 // Above the harness's own bounds (30s startup plus a 20s turn in one step, 30s
@@ -42,7 +43,12 @@ class RuntimeWorld extends World {
   /** The models the scenario configures once Copilot starts. */
   models: ScriptedModel[] = [];
   #conversation: Conversation | null = null;
+  /** Conversations the scenario opened by name, in the order it opened them. */
+  readonly named = new Map<string, Conversation>();
+  /** The answer the provider holds open, and the conversation waiting on it. */
+  held: { stream: HeldStream; in: Conversation } | null = null;
 
+  /** The conversation the chat view shows, which the scenario's messages go to. */
   get conversation(): Conversation {
     if (!this.#conversation) throw new Error("no conversation has been opened");
     return this.#conversation;
@@ -50,6 +56,17 @@ class RuntimeWorld extends World {
 
   set conversation(value: Conversation) {
     this.#conversation = value;
+  }
+
+  conversationNamed(name: string): Conversation {
+    const conversation = this.named.get(name);
+    if (!conversation) throw new Error(`no conversation "${name}" has been opened`);
+    return conversation;
+  }
+
+  get heldAnswer(): { stream: HeldStream; in: Conversation } {
+    if (!this.held) throw new Error("the provider holds no answer");
+    return this.held;
   }
 }
 
@@ -133,13 +150,15 @@ Then("the turn ended only after its last word", function (this: RuntimeWorld) {
 });
 
 Then("the conversation shows exactly:", function (this: RuntimeWorld, table: DataTable) {
-  const shown = this.conversation.messages.map((m) => [
-    m.sender,
-    m.message,
-    m.turnStopReason ?? "",
-  ]);
-  assert.deepEqual(shown, table.rows());
+  assert.deepEqual(messageRows(this.conversation), table.rows());
 });
+
+Then(
+  "conversation {string} shows exactly:",
+  function (this: RuntimeWorld, name: string, table: DataTable) {
+    assert.deepEqual(messageRows(this.conversationNamed(name)), table.rows());
+  }
+);
 
 Given(
   "Copilot's opencode agent is configured with these scripted models:",
@@ -176,6 +195,112 @@ Given(
 
 When("I open a new conversation", async function (this: RuntimeWorld) {
   this.conversation = await this.runtime.openConversation();
+});
+
+When("I open conversation {string}", async function (this: RuntimeWorld, name: string) {
+  this.conversation = await this.runtime.openConversation();
+  this.named.set(name, this.conversation);
+});
+
+// Clicking the conversation's tab.
+When("I switch to conversation {string}", function (this: RuntimeWorld, name: string) {
+  this.conversation = this.conversationNamed(name);
+  this.runtime.show(this.conversation);
+});
+
+// Returns once the provider holds the answer, which is after the conversation shows its words.
+When(
+  "I send {string}, which the model starts answering with {string} and then holds",
+  async function (this: RuntimeWorld, text: string, answer: string) {
+    this.runtime.provider.reply({ kind: "hold", text: answer });
+    this.conversation.start(text);
+    this.held = { stream: await this.runtime.nextHeldStream(), in: this.conversation };
+  }
+);
+
+When(
+  "the model's held answer continues with {string}",
+  async function (this: RuntimeWorld, rest: string) {
+    const held = this.heldAnswer;
+    held.stream.release(` ${rest}`);
+    await held.in.finish();
+  }
+);
+
+When("the held answer's connection breaks", async function (this: RuntimeWorld) {
+  const held = this.heldAnswer;
+  held.stream.break();
+  await held.in.finish();
+});
+
+// The chat input's stop button, then the input unlocking once the turn ends.
+When("I stop the answer", async function (this: RuntimeWorld) {
+  await this.conversation.stop();
+  await this.conversation.finish();
+});
+
+When(
+  "I send {string}, which the provider refuses with {int} {string}, asking to retry at once",
+  async function (this: RuntimeWorld, text: string, status: number, message: string) {
+    this.runtime.provider.reply({ kind: "error", status, message, retryAfterMs: 0 });
+    this.runtime.expectTurnToFail();
+    await this.conversation.send(text);
+  }
+);
+
+When(
+  "the provider refuses the next request with {int} {string}",
+  function (this: RuntimeWorld, status: number, message: string) {
+    this.runtime.provider.reply({ kind: "error", status, message });
+    this.runtime.expectTurnToFail();
+  }
+);
+
+Then("opencode closed the held answer's request", async function (this: RuntimeWorld) {
+  await this.runtime.requestClosed(this.heldAnswer.stream);
+});
+
+Then(
+  "opencode sent {string} to the provider {int} times",
+  function (this: RuntimeWorld, text: string, times: number) {
+    const attempts = this.runtime.provider.requests.filter(
+      (request) => request.kind === "turn" && lastUserMessage(request) === text
+    );
+    assert.equal(attempts.length, times);
+  }
+);
+
+Then(
+  "the provider received this conversation with {string}:",
+  function (this: RuntimeWorld, text: string, table: DataTable) {
+    const request = this.runtime.provider.requests.findLast(
+      (candidate) => candidate.kind === "turn" && lastUserMessage(candidate) === text
+    );
+    if (!request) throw new Error(`the provider received no agent turn ending with "${text}"`);
+    assert.deepEqual(
+      request.messages.map((message) => [message.role, message.content]),
+      table.rows()
+    );
+  }
+);
+
+// The status the chat's tab draws: a spinner while running, a red dot on an error.
+Then("the chat's status is {string}", function (this: RuntimeWorld, status: string) {
+  assert.equal(this.runtime.manager.getSession(this.conversation.id)?.getStatus(), status);
+});
+
+Then("the chat tabs show:", function (this: RuntimeWorld, table: DataTable) {
+  const shownId = this.runtime.manager.getActiveSession()?.internalId;
+  const rows = [...this.named].map(([name, conversation]) => {
+    const session = this.runtime.manager.getSession(conversation.id);
+    return [
+      name,
+      conversation.id === shownId ? "yes" : "no",
+      session?.getStatus() ?? "closed",
+      session?.getNeedsAttention() ? "yes" : "no",
+    ];
+  });
+  assert.deepEqual(rows, table.rows());
 });
 
 When(
@@ -328,6 +453,16 @@ Then(
 Then("Copilot showed exactly these notices:", function (table: DataTable) {
   assert.deepEqual(shownNotices, table.raw().flat());
 });
+
+/** Each message as the conversation shows it: sender, text, and how its turn ended. */
+function messageRows(conversation: Conversation): string[][] {
+  return conversation.messages.map((m) => [m.sender, m.message, m.turnStopReason ?? ""]);
+}
+
+/** The user message an agent turn request ends with, which names the question it answers. */
+function lastUserMessage(request: RecordedRequest): string | undefined {
+  return request.messages.findLast((message) => message.role === "user")?.content;
+}
 
 /** The chat input's model picker, built by production code for the chat now shown. */
 function modelPicker(runtime: Runtime): AgentModelPickerOverride {

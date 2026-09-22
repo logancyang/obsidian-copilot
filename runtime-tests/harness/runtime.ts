@@ -24,7 +24,7 @@ import { AI_SENDER, DEFAULT_SETTINGS } from "@/constants";
 import { EgressProxy } from "./egressProxy";
 import { App } from "./obsidianApp";
 import { shownNotices } from "./obsidianShim";
-import { ScriptedProvider } from "./scriptedProvider";
+import { ScriptedProvider, type HeldStream } from "./scriptedProvider";
 
 // Agent Mode schedules its timers on `window`, which a bare Node process lacks.
 (globalThis as { window?: unknown }).window ??= globalThis;
@@ -39,6 +39,8 @@ const TURN_TIMEOUT_MS = 20_000;
 const CHUNK_VISIBLE_TIMEOUT_MS = 10_000;
 /** How long opencode may take to confirm a picked model, effort, or mode. */
 const SELECTION_TIMEOUT_MS = 10_000;
+/** How long opencode may take to close a held answer's request once its turn is stopped. */
+const HELD_CLOSE_TIMEOUT_MS = 10_000;
 
 /**
  * The only credential the scripted provider accepts. It reaches opencode the
@@ -67,6 +69,18 @@ const EXPECTED_REFUSED_EGRESS: ReadonlySet<string> = new Set([
 const SHUTDOWN_WARNINGS: readonly RegExp[] = [
   / WARN \[AgentMode\] backend opencode exited$/,
   / WARN \[AgentMode\] session\/list title poll failed for \S+ ACP connection closed/,
+];
+
+/**
+ * What one turn that fails on a provider error logs: opencode's report of the
+ * failed request on its stderr, the session's warning, and the chat view's
+ * error. A scenario that makes a turn fail expects one of each; any other
+ * warning, or a second failure, still fails the scenario.
+ */
+const FAILED_TURN_LOGS: readonly RegExp[] = [
+  / ERROR \[AgentMode\]\[opencode\] Error handling request \{$/,
+  / WARN \[AgentMode\] prompt failed /,
+  / ERROR \[AgentMode\] turn failed /,
 ];
 
 /** One observed state of the conversation's latest assistant message. */
@@ -104,8 +118,7 @@ export interface RuntimeOptions {
 export class Runtime {
   readonly provider = new ScriptedProvider({
     apiKey: SYNTHETIC_API_KEY,
-    sentText: () => this.#conversation?.sentText,
-    pace: (sentSoFar) => this.#requireConversation().waitForAnswerText(sentSoFar),
+    askerFor: (message) => this.#conversations.findLast((c) => c.sentText === message),
   });
   readonly egress = new EgressProxy();
 
@@ -118,8 +131,13 @@ export class Runtime {
   #preloader: AgentModelPreloader | null = null;
   /** Log lines a deliberate restart wrote that {@link problems} ignores. */
   readonly #expectedLogLines = new Set<string>();
+  /** One pattern per log line the turns a scenario made fail are expected to write. */
+  readonly #expectedFailureLogs: RegExp[] = [];
   #manager: AgentSessionManager | null = null;
-  #conversation: Conversation | null = null;
+  /** Every chat opened so far, oldest first. */
+  #conversations: Conversation[] = [];
+  /** How many of the provider's held streams a scenario has taken. */
+  #heldTaken = 0;
   /** Process startups the manager does not wait for on shutdown; see {@link stop}. */
   readonly #startups: Promise<unknown>[] = [];
 
@@ -243,10 +261,7 @@ export class Runtime {
     } catch (error) {
       throw new Error(`opencode did not start a conversation: ${err2String(error)}`);
     }
-    const ui = manager.getChatUIState(session.internalId);
-    if (!ui) throw new Error("the new session has no chat UI state");
-    this.#conversation = new Conversation(ui);
-    return this.#conversation;
+    return this.#track(session.internalId);
   }
 
   /** The production session manager, for the selection and restart APIs the chat view calls. */
@@ -300,24 +315,74 @@ export class Runtime {
    */
   async restartAgent(): Promise<Conversation> {
     const manager = this.#requireManager();
-    const restart = async (): Promise<AgentChatUIState> => {
+    const restart = async (): Promise<AgentSession> => {
       await this.#expectingShutdown(async () => {
         await manager.noteSpawnConfigChanged("opencode", "runtime scenario");
         await manager.applyHeldConfigChange("opencode");
       });
       const session = manager.getActiveSession();
-      const ui = session && manager.getChatUIState(session.internalId);
-      if (!ui) throw new Error("no chat is shown after the restart");
+      if (!session) throw new Error("no chat is shown after the restart");
       await session.ready;
-      return ui;
+      return session;
     };
-    const ui = await within(
+    const session = await within(
       STARTUP_TIMEOUT_MS,
       restart(),
       () => `the chat was not resumed (last error: ${manager.getLastError() ?? "none"})`
     );
-    this.#conversation = new Conversation(ui);
-    return this.#conversation;
+    return this.#track(session.internalId);
+  }
+
+  /** Show `conversation` in the chat view, as clicking its tab does. */
+  show(conversation: Conversation): void {
+    this.#requireManager().setActiveSession(conversation.id);
+  }
+
+  /**
+   * The next answer the provider holds open, once it has streamed everything
+   * before the hold and the conversation shows it.
+   */
+  async nextHeldStream(): Promise<HeldStream> {
+    const index = this.#heldTaken;
+    await waitUntil(
+      () => this.provider.held.length > index,
+      (listener) => this.provider.onHold(listener),
+      TURN_TIMEOUT_MS,
+      () => `the provider to hold an answer; it has ${this.#describeProvider()}`
+    );
+    this.#heldTaken += 1;
+    return this.provider.held[index];
+  }
+
+  /** Resolve once opencode closes `held`'s request, as it does when the turn is stopped. */
+  async requestClosed(held: HeldStream): Promise<void> {
+    await within(
+      HELD_CLOSE_TIMEOUT_MS,
+      held.closedByAgent,
+      () =>
+        `opencode did not close the held answer to ${JSON.stringify(held.question)}; it is ${held.state}`
+    );
+  }
+
+  /**
+   * What the provider has done so far, for a failure message: it tells an
+   * answer held on purpose from a request that never arrived.
+   */
+  #describeProvider(): string {
+    const turns = this.provider.requests.filter((r) => r.kind === "turn").length;
+    const held =
+      this.provider.held.map((h) => `${JSON.stringify(h.question)} (${h.state})`).join(", ") ||
+      "none";
+    const refused = this.provider.failures.join("; ") || "nothing";
+    return `received ${turns} agent turn(s), held answers to ${held}, and refused ${refused}`;
+  }
+
+  /**
+   * Record that the scenario is making one turn fail on a provider error, so
+   * the {@link FAILED_TURN_LOGS} it writes do not fail the scenario.
+   */
+  expectTurnToFail(): void {
+    this.#expectedFailureLogs.push(...FAILED_TURN_LOGS);
   }
 
   /**
@@ -331,11 +396,20 @@ export class Runtime {
     const unexpectedEgress = [...new Set(this.egress.attempts)]
       .filter((target) => !EXPECTED_REFUSED_EGRESS.has(target))
       .map((target) => `the runtime tried to reach ${target}`);
+    const failureLogs = [...this.#expectedFailureLogs];
     const loggedProblems = logFileManager
       .exportLogText()
       .split("\n")
       .filter((line) => ["WARN", "ERROR"].includes(line.split(" ")[1]))
       .filter((line) => !this.#expectedLogLines.has(line))
+      .filter((line) => {
+        // opencode's stderr and its ACP reply arrive on separate pipes, so its
+        // report may be logged after the turn has already ended.
+        const expected = failureLogs.findIndex((pattern) => pattern.test(line));
+        if (expected === -1) return true;
+        failureLogs.splice(expected, 1);
+        return false;
+      })
       .map((line) => `Copilot logged: ${line}`);
     return [...this.provider.failures, ...unexpectedEgress, ...loggedProblems];
   }
@@ -371,10 +445,12 @@ export class Runtime {
   async stop(): Promise<string[]> {
     const manager = this.#manager;
     this.#manager = null;
-    this.#conversation = null;
+    this.#conversations = [];
+    this.#heldTaken = 0;
     this.#modelManagement = null;
     this.#preloader = null;
     this.#expectedLogLines.clear();
+    this.#expectedFailureLogs.length = 0;
     const problems: string[] = [];
     // `shutdown()` stops the processes it owns but not one still starting: a
     // probe that finishes afterwards shuts its own process down, too late for
@@ -461,9 +537,13 @@ export class Runtime {
     return this.#manager;
   }
 
-  #requireConversation(): Conversation {
-    if (!this.#conversation) throw new Error("no conversation has been opened");
-    return this.#conversation;
+  /** Wrap the chat `internalId` names as a {@link Conversation} the provider can pace. */
+  #track(internalId: string): Conversation {
+    const ui = this.#requireManager().getChatUIState(internalId);
+    if (!ui) throw new Error("the new session has no chat UI state");
+    const conversation = new Conversation(internalId, ui, () => this.#describeProvider());
+    this.#conversations.push(conversation);
+    return conversation;
   }
 }
 
@@ -475,8 +555,18 @@ export class Runtime {
 export class Conversation {
   #timeline: AnswerSnapshot[] = [];
   #sentText: string | undefined;
+  #turn: Promise<void> | null = null;
 
-  constructor(private readonly ui: AgentChatUIState) {
+  /**
+   * @param id The chat's session id, which the chat view's tabs switch by.
+   * @param ui The state the chat view renders this chat from.
+   * @param describeProvider What the provider has done, for a stalled turn's failure message.
+   */
+  constructor(
+    readonly id: string,
+    private readonly ui: AgentChatUIState,
+    private readonly describeProvider: () => string
+  ) {
     ui.subscribe(() => this.#record());
   }
 
@@ -497,15 +587,32 @@ export class Conversation {
 
   /** Send a message through the chat input's path and wait for the turn to end. */
   async send(text: string): Promise<void> {
+    this.start(text);
+    await this.finish();
+  }
+
+  /** Send a message through the chat input's path without waiting for the turn to end. */
+  start(text: string): void {
     this.#timeline = [];
     this.#sentText = text;
-    const { turn } = this.ui.sendMessage(text);
+    this.#turn = this.ui.sendMessage(text).turn;
+  }
+
+  /** Wait for the turn the last message started to end, as the chat input does before it unlocks. */
+  async finish(): Promise<void> {
+    if (!this.#turn) throw new Error("no message has been sent");
     await within(
       TURN_TIMEOUT_MS,
-      turn,
-      () => `the turn did not finish; the answer went ${formatTimeline(this.#timeline)}`
+      this.#turn,
+      () =>
+        `the turn did not finish; the answer went ${formatTimeline(this.#timeline)}; the provider ${this.describeProvider()}`
     );
     this.#record();
+  }
+
+  /** Stop the answer being written, as the chat input's stop button does. */
+  stop(): Promise<void> {
+    return this.ui.cancel();
   }
 
   /**
