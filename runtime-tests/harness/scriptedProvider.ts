@@ -8,7 +8,6 @@ const BASE_PATH = "/v1";
 export interface RecordedRequest {
   /** `turn` for an agent turn, `title` for opencode's session-title call. */
   kind: "turn" | "title";
-  model: string;
 }
 
 export interface ScriptedProviderOptions {
@@ -125,7 +124,7 @@ export class ScriptedProvider {
     if (answer === undefined) {
       return this.#refuse(res, 500, `agent turn on "${model}" arrived with no scripted answer`);
     }
-    this.#requests.push({ kind, model });
+    this.#requests.push({ kind });
 
     this.#open.add(res);
     res.on("close", () => this.#open.delete(res));
