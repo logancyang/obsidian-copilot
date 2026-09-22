@@ -16,7 +16,6 @@ import type {
   SessionConfigOption,
   SessionId as AcpSessionId,
   SessionModeState,
-  SessionModelState,
   SessionNotification,
   StopReason as AcpStopReason,
   ToolCall,
@@ -32,7 +31,6 @@ import type {
   BackendConfigOption,
   BackendDescriptor,
   RawModeState,
-  RawModelState,
   BackendState,
   CancelInput,
   ListedSessionInfo,
@@ -53,20 +51,6 @@ import { resolveToolName } from "@/agentMode/session/toolName";
 import { translateBackendState } from "@/agentMode/session/translateBackendState";
 
 // ---- Catalog wire → neutral (pass-through, structural alias) -----------
-
-export function modelStateFromAcp(
-  state: SessionModelState | null | undefined
-): RawModelState | null {
-  if (!state) return null;
-  return {
-    currentModelId: state.currentModelId,
-    availableModels: state.availableModels.map((m) => ({
-      modelId: m.modelId,
-      name: m.name,
-      description: m.description ?? undefined,
-    })),
-  };
-}
 
 export function modeStateFromAcp(state: SessionModeState | null | undefined): RawModeState | null {
   if (!state) return null;
@@ -126,14 +110,13 @@ function configOptionFromAcp(opt: SessionConfigOption): BackendConfigOption {
 }
 
 export function acpStateToBackendState(
-  models: SessionModelState | null | undefined,
   modes: SessionModeState | null | undefined,
   configOptions: SessionConfigOption[] | null | undefined,
   descriptor: BackendDescriptor
 ): BackendState {
   return translateBackendState(
     {
-      models: modelStateFromAcp(models),
+      models: null,
       modes: modeStateFromAcp(modes),
       configOptions: configOptionsFromAcp(configOptions),
     },

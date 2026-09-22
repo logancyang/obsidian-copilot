@@ -10,7 +10,6 @@ import {
   type SessionConfigOption,
   type SessionId as AcpSessionId,
   type SessionModeState,
-  type SessionModelState,
   type SessionNotification,
 } from "@agentclientprotocol/sdk";
 import { App, FileSystemAdapter } from "obsidian";
@@ -75,7 +74,6 @@ export type AcpCapability =
   | "session/list"
   | "session/resume"
   | "session/load"
-  | "session/set_model"
   | "session/set_mode"
   | "session/set_config_option"
   | "session/additional_directories";
@@ -102,25 +100,8 @@ const COPILOT_CLIENT_NAME = "obsidian-copilot";
  * `BackendState` without having to refetch from the agent.
  */
 interface SessionWireState {
-  models: SessionModelState | null;
   modes: SessionModeState | null;
   configOptions: SessionConfigOption[] | null;
-}
-
-/**
- * Return a copy of `options` with the `category:"model"` select's currentValue
- * set to `modelId`, or the input unchanged when there's no such option. Lets an
- * optimistic model switch be reflected for backends whose catalog lives in a
- * config option (opencode ≥ 1.15.13) rather than a dedicated `models` state.
- */
-function updateModelConfigOptionValue(
-  options: SessionConfigOption[] | null,
-  modelId: string
-): SessionConfigOption[] | null {
-  if (!options) return options;
-  return options.map((o) =>
-    o.type === "select" && o.category === "model" ? { ...o, currentValue: modelId } : o
-  );
 }
 
 /**
@@ -387,7 +368,6 @@ export class AcpBackendProcess implements BackendProcess {
     };
     const wireResp = await this.requireConnection().newSession(req);
     this.recordWireState(wireResp.sessionId, {
-      models: wireResp.models ?? null,
       modes: wireResp.modes ?? null,
       configOptions: wireResp.configOptions ?? null,
     });
@@ -565,31 +545,21 @@ export class AcpBackendProcess implements BackendProcess {
   }
 
   async setSessionModel(params: { sessionId: SessionId; modelId: string }): Promise<BackendState> {
-    await this.dispatchCapability("session/set_model", (c) =>
-      c.unstable_setSessionModel({
-        sessionId: sessionIdToAcp(params.sessionId),
-        modelId: params.modelId,
-      })
-    );
-    const wire = this.sessionWireState.get(params.sessionId);
-    if (wire) {
-      if (wire.models) {
-        wire.models = { ...wire.models, currentModelId: params.modelId };
-      } else {
-        // No dedicated `models` state (opencode ≥ 1.15.13 exposes the catalog
-        // only as a `category:"model"` config option). Update that option's
-        // currentValue so `computeState` recomputes from the real catalog —
-        // never fabricate an empty `models` state (that strands the picker on
-        // a raw wire id with everything else "not offered by agent").
-        wire.configOptions = updateModelConfigOptionValue(wire.configOptions, params.modelId);
-      }
-    }
-    this.republishPlanUsage(params.sessionId);
-    return this.computeState(params.sessionId);
+    const option = this.sessionWireState
+      .get(params.sessionId)
+      ?.configOptions?.find((option) => option.type === "select" && option.category === "model");
+    // Current agents expose model switching only through advertised config options.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/550
+    if (!option) throw new MethodUnsupportedError("session/set_config_option");
+    return this.setSessionConfigOption({
+      sessionId: params.sessionId,
+      configId: option.id,
+      value: params.modelId,
+    });
   }
 
   isSetSessionModelSupported(): boolean | null {
-    return this.capabilitySupported("session/set_model");
+    return this.isSetSessionConfigOptionSupported();
   }
 
   async setSessionMode(params: { sessionId: SessionId; modeId: string }): Promise<BackendState> {
@@ -699,7 +669,6 @@ export class AcpBackendProcess implements BackendProcess {
       { mustBeAdvertised: true }
     );
     this.recordWireState(sessionIdToAcp(params.sessionId), {
-      models: wireResp.models ?? null,
       modes: wireResp.modes ?? null,
       configOptions: wireResp.configOptions ?? null,
     });
@@ -729,7 +698,6 @@ export class AcpBackendProcess implements BackendProcess {
         { mustBeAdvertised: true }
       );
       this.recordWireState(sessionIdToAcp(sessionId), {
-        models: wireResp.models ?? null,
         modes: wireResp.modes ?? null,
         configOptions: wireResp.configOptions ?? null,
       });
@@ -816,11 +784,10 @@ export class AcpBackendProcess implements BackendProcess {
 
   private computeState(sessionId: AcpSessionId): BackendState {
     const wire = this.sessionWireState.get(sessionIdFromAcp(sessionId)) ?? {
-      models: null,
       modes: null,
       configOptions: null,
     };
-    return acpStateToBackendState(wire.models, wire.modes, wire.configOptions, this.descriptor);
+    return acpStateToBackendState(wire.modes, wire.configOptions, this.descriptor);
   }
 
   private routeSessionUpdate(acpSessionId: AcpSessionId, update: SessionNotification): void {
@@ -966,14 +933,11 @@ export class AcpBackendProcess implements BackendProcess {
   }
 
   /**
-   * Wire model id the session is currently on, from the cached wire state — the
-   * dedicated `models` state when the agent has one, else the `category:"model"` config
-   * option (opencode ≥ 1.15.13 exposes the catalog only there).
+   * Current model id from the session's advertised model config option.
    */
   private currentWireModelId(sessionId: SessionId): string | null {
     const wire = this.sessionWireState.get(sessionId);
     if (!wire) return null;
-    if (wire.models?.currentModelId) return wire.models.currentModelId;
     for (const option of wire.configOptions ?? []) {
       if (option.type === "select" && option.category === "model" && option.currentValue) {
         return option.currentValue;

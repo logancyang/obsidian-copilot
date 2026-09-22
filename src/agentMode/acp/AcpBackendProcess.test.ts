@@ -3,6 +3,8 @@ import type { BackendDescriptor, PermissionOption } from "@/agentMode/session/ty
 import { AcpBackendProcess } from "./AcpBackendProcess";
 import type { AcpBackend } from "./types";
 import type { VaultClient } from "./VaultClient";
+import { MethodUnsupportedError } from "@/agentMode/session/errors";
+import type { SessionConfigOption } from "@agentclientprotocol/sdk";
 
 jest.mock("@/logger", () => ({
   logInfo: jest.fn(),
@@ -18,6 +20,9 @@ let mockInitializeResult: unknown = { protocolVersion: 1 };
 const mockNewSession = jest.fn(async (..._args: unknown[]) => ({ sessionId: "test-session" }));
 const mockResumeSession = jest.fn(async (..._args: unknown[]) => ({}));
 const mockCloseSession = jest.fn(async (..._args: unknown[]) => ({}));
+const mockSetSessionConfigOption = jest.fn(async (params: { value: string }) => ({
+  configOptions: modelOptions(params.value),
+}));
 const mockLoadSession = jest.fn(async (..._args: unknown[]) => ({}));
 
 jest.mock("@agentclientprotocol/sdk", () => {
@@ -41,7 +46,7 @@ jest.mock("@agentclientprotocol/sdk", () => {
     loadSession = (...args: unknown[]) => mockLoadSession(...args);
     prompt = jest.fn(async () => ({ stopReason: "end_turn" }));
     cancel = jest.fn(async () => undefined);
-    unstable_setSessionModel = jest.fn(async () => ({}));
+    setSessionConfigOption = mockSetSessionConfigOption;
   }
   return {
     RequestError,
@@ -108,6 +113,28 @@ function getVaultClient(backend: AcpBackendProcess): VaultClient {
   return connection._client;
 }
 
+function modelOptions(currentValue: string): SessionConfigOption[] {
+  return [
+    {
+      id: "active-model",
+      type: "select",
+      category: "model",
+      name: "Model",
+      currentValue,
+      options: ["model-a", "model-b", currentValue].map((value) => ({ value, name: value })),
+    },
+  ];
+}
+
+function modelDescriptor(): BackendDescriptor {
+  return buildStubDescriptor({
+    wire: {
+      encode: (selection) => selection.baseModelId,
+      decode: (wireId) => ({ selection: { baseModelId: wireId, effort: null }, provider: null }),
+    },
+  });
+}
+
 describe("AcpBackendProcess", () => {
   beforeEach(() => {
     exitListeners.clear();
@@ -119,8 +146,72 @@ describe("AcpBackendProcess", () => {
     mockResumeSession.mockResolvedValue({});
     mockCloseSession.mockReset();
     mockCloseSession.mockResolvedValue({});
+    mockSetSessionConfigOption.mockReset();
+    mockSetSessionConfigOption.mockImplementation(async ({ value }) => ({
+      configOptions: modelOptions(value),
+    }));
     mockLoadSession.mockClear();
     mockLoadSession.mockResolvedValue({});
+  });
+
+  describe("setSessionModel()", () => {
+    async function openModelSession() {
+      mockNewSession.mockResolvedValue({
+        sessionId: "s1",
+        configOptions: modelOptions("model-a"),
+      } as { sessionId: string });
+      const backend = new AcpBackendProcess(
+        buildApp(),
+        buildStubBackend(),
+        "1.0.0",
+        modelDescriptor()
+      );
+      await backend.start();
+      await backend.newSession({ cwd: "/vault" });
+      return backend;
+    }
+
+    it("switches through the advertised model config id and returns the agent's refreshed catalog https://github.com/Brevilabs/obsidian-copilot-private/issues/550", async () => {
+      const backend = await openModelSession();
+      const state = await backend.setSessionModel({ sessionId: "s1", modelId: "model-b" });
+      expect(mockSetSessionConfigOption).toHaveBeenCalledWith({
+        sessionId: "s1",
+        configId: "active-model",
+        value: "model-b",
+      });
+      expect(state.model?.current.baseModelId).toBe("model-b");
+      expect(state.model?.apply).toEqual({ kind: "setConfigOption", configId: "active-model" });
+      expect(backend.isSetSessionModelSupported()).toBe(true);
+    });
+
+    it("preserves the active model when the agent rejects a switch https://github.com/Brevilabs/obsidian-copilot-private/issues/550", async () => {
+      const backend = await openModelSession();
+      mockSetSessionConfigOption.mockRejectedValueOnce(new Error("Model unavailable"));
+      await expect(
+        backend.setSessionModel({ sessionId: "s1", modelId: "model-b" })
+      ).rejects.toThrow("Model unavailable");
+      const state = (
+        backend as unknown as {
+          computeState(id: string): import("@/agentMode/session/types").BackendState;
+        }
+      ).computeState("s1");
+      expect(state.model?.current.baseModelId).toBe("model-a");
+    });
+
+    it("reports unsupported switching when the session advertises no model option https://github.com/Brevilabs/obsidian-copilot-private/issues/550", async () => {
+      const backend = new AcpBackendProcess(
+        buildApp(),
+        buildStubBackend(),
+        "1.0.0",
+        modelDescriptor()
+      );
+      await backend.start();
+      await backend.newSession({ cwd: "/vault" });
+      await expect(
+        backend.setSessionModel({ sessionId: "test-session", modelId: "model-b" })
+      ).rejects.toBeInstanceOf(MethodUnsupportedError);
+      expect(mockSetSessionConfigOption).not.toHaveBeenCalled();
+    });
   });
 
   describe("closeSession()", () => {
@@ -1091,21 +1182,21 @@ describe("AcpBackendProcess", () => {
           wire: {
             encode: (selection: { baseModelId: string }) => selection.baseModelId,
             decode: (wireId: string) => ({
-              selection: { baseModelId: wireId },
+              selection: { baseModelId: wireId, effort: null },
               provider: null,
             }),
           },
-        } as unknown as Partial<BackendDescriptor>)
+        })
       );
       await backend.start();
       mockNewSession.mockResolvedValueOnce({
         sessionId: "s-metered",
-        models: { availableModels: [], currentModelId: "metered/gemini-3-pro" },
+        configOptions: modelOptions("metered/gemini-3-pro"),
       } as unknown as { sessionId: string });
       await backend.newSession({ cwd: "/vault" });
       mockNewSession.mockResolvedValueOnce({
         sessionId: "s-byok",
-        models: { availableModels: [], currentModelId: "google/gemini-3-pro" },
+        configOptions: modelOptions("google/gemini-3-pro"),
       } as unknown as { sessionId: string });
       await backend.newSession({ cwd: "/vault" });
       const metered = jest.fn();
@@ -1162,7 +1253,7 @@ describe("AcpBackendProcess", () => {
     ): Promise<{ backend: AcpBackendProcess; handler: jest.Mock }> {
       mockNewSession.mockResolvedValue({
         sessionId: "s1",
-        models: { availableModels: [], currentModelId: "copilot-plus/gemini-3-pro" },
+        configOptions: modelOptions("copilot-plus/gemini-3-pro"),
       } as unknown as { sessionId: string });
       const backend = new AcpBackendProcess(
         buildApp(),
@@ -1177,17 +1268,17 @@ describe("AcpBackendProcess", () => {
       return { backend, handler };
     }
 
-    /** Enough descriptor for `computeState` to translate a `models` wire state. */
+    /** Enough descriptor for `computeState` to translate a model config option. */
     function modelCapableDescriptor(): Partial<BackendDescriptor> {
       return {
         wire: {
           encode: (selection: { baseModelId: string }) => selection.baseModelId,
           decode: (wireId: string) => ({
-            selection: { baseModelId: wireId },
+            selection: { baseModelId: wireId, effort: null },
             provider: null,
           }),
         },
-      } as unknown as Partial<BackendDescriptor>;
+      };
     }
 
     function sendUsage(backend: AcpBackendProcess, used: number, size?: number): Promise<void> {
