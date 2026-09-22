@@ -103,21 +103,23 @@ Each agent has its own model list. The models shown in one agent do not automati
 
 The permission picker shows only choices supported by the current agent:
 
-| Choice      | What it does                                                                        |
-| ----------- | ----------------------------------------------------------------------------------- |
-| **Default** | Uses the agent's normal approval behavior and is the safest starting point          |
-| **Plan**    | Prepares a read-only plan before edits when the current agent supports this choice  |
-| **Auto**    | Reduces approval prompts according to the current agent's automatic permission rule |
+| Choice   | What it does                                                                        |
+| -------- | ----------------------------------------------------------------------------------- |
+| **Safe** | Asks for approval before edits                                                      |
+| **Plan** | Prepares a read-only plan before edits when the current agent supports this choice  |
+| **Auto** | Reduces approval prompts according to the current agent's automatic permission rule |
 
-opencode supports **Default** and **Auto**. Claude supports **Default**, **Plan**, and **Auto**. Codex shows the choices supported by the installed adapter. Claude also has an **Auto mode permissions** setting that controls how much Auto may approve.
+opencode supports **Safe** and **Auto**. Claude supports **Safe**, **Plan**, and **Auto**. Codex shows the choices supported by the installed adapter. Claude also has an **Auto mode permissions** setting that controls how much Auto may approve.
 
 When an action needs approval, Agent Chat displays a **Permission required** card with the proposed change or tool input. Choose one of the temporary or persistent allow or deny options offered by that agent. Stopping the turn cancels unanswered requests.
 
 When Claude or Codex asks a set of questions, answer the current tab and select **Next**. On the final tab, **Submit** becomes available after every question has an answer. You can use the tabs to review or skip ahead. For Codex, you can also type an answer or enter a secret in a masked field when it asks for one. **Cancel** dismisses the entire request. If Codex withdraws or times out the question, its card disappears.
 
+Codex can ask questions while the permission picker is on **Safe**, **Plan**, or **Auto**. You do not need to switch to Plan to answer a question.
+
 Permission and question cards stay in a scrolling action area above the message box until you answer them, even while the response continues streaming.
 
-Your vault or project is the agent's working directory, not a security sandbox. Auto or bypass permissions can reach other files and services available to the agent or your account. Use **Default** for unfamiliar work and review persistent permissions carefully.
+Your vault or project is the agent's working directory, not a security sandbox. Auto or bypass permissions can reach other files and services available to the agent or your account. Use **Safe** for unfamiliar work and review persistent permissions carefully.
 
 ## Context and history
 
