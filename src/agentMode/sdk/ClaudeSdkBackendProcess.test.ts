@@ -302,19 +302,6 @@ describe("ClaudeSdkBackendProcess", () => {
       });
     }
 
-    it("removes an idle session while another session remains usable https://github.com/Brevilabs/obsidian-copilot-private/issues/429", async () => {
-      const backend = makeBackend();
-      const closed = await backend.newSession({ cwd: "/vault" });
-      const sibling = await backend.newSession({ cwd: "/vault" });
-      await backend.closeSession({ sessionId: closed.sessionId });
-      await expect(
-        backend.setSessionModel({ sessionId: closed.sessionId, modelId: "claude-sonnet-4" })
-      ).rejects.toThrow("Unknown session");
-      await expect(
-        backend.setSessionModel({ sessionId: sibling.sessionId, modelId: "claude-sonnet-4" })
-      ).resolves.toBeDefined();
-    });
-
     it("terminates only the closing session's active query https://github.com/Brevilabs/obsidian-copilot-private/issues/429", async () => {
       const backend = makeBackend();
       const first = await backend.newSession({ cwd: "/vault" });

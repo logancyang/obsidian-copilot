@@ -464,14 +464,6 @@ describe("AgentSessionManager", () => {
         await mgr.closeChatSession(idleId);
         expect(mgr.getOpenChatIds()).toEqual(new Set([runningId]));
       });
-
-      it("omits a session until the backend allocates a closable resource for https://github.com/Brevilabs/obsidian-copilot-private/issues/429", async () => {
-        const mgr = buildManager();
-        const session = await mgr.createSession();
-        jest.spyOn(session, "getBackendSessionId").mockReturnValue(null);
-
-        expect(mgr.getOpenChatIds().size).toBe(0);
-      });
     });
 
     describe("closeChatSession()", () => {
@@ -515,49 +507,6 @@ describe("AgentSessionManager", () => {
         expect(mgr.getSessions()).toEqual([sibling]);
         expect(mgr.getActiveSession()).toBe(sibling);
         expect(proc.shutdown).not.toHaveBeenCalled();
-      });
-
-      it("keeps the chat open when backend release fails so the user can retry for https://github.com/Brevilabs/obsidian-copilot-private/issues/429", async () => {
-        const mgr = buildManager();
-        const session = await mgr.createSession();
-        const proc = mgr.getBackendProcess(session.backendId)!;
-        (proc.closeSession as jest.Mock).mockRejectedValueOnce(new Error("release failed"));
-        const id = buildNativeChatId(session.backendId, session.getBackendSessionId()!);
-        await expect(mgr.closeChatSession(id)).rejects.toThrow("release failed");
-        expect(mgr.getOpenChatIds().has(id)).toBe(true);
-        expect(mgr.getSessions()).toEqual([session]);
-        expect(mockSessionDispose).not.toHaveBeenCalled();
-      });
-
-      it("reports unsupported release without hiding the open chat for https://github.com/Brevilabs/obsidian-copilot-private/issues/429", async () => {
-        const mgr = buildManager();
-        const session = await mgr.createSession();
-        mgr.getBackendProcess(session.backendId)!.closeSession = undefined;
-        const id = buildNativeChatId(session.backendId, session.getBackendSessionId()!);
-        await expect(mgr.closeChatSession(id)).rejects.toThrow(/does not support closing/);
-        expect(mgr.getOpenChatIds().has(id)).toBe(true);
-      });
-
-      it("explains unsupported backend capabilities without hiding the open chat for https://github.com/Brevilabs/obsidian-copilot-private/issues/429", async () => {
-        const mgr = buildManager();
-        const session = await mgr.createSession();
-        const proc = mgr.getBackendProcess(session.backendId)!;
-        (proc.closeSession as jest.Mock).mockRejectedValueOnce(
-          new MethodUnsupportedError("session/close")
-        );
-        const id = buildNativeChatId(session.backendId, session.getBackendSessionId()!);
-        await expect(mgr.closeChatSession(id)).rejects.toThrow(
-          "This agent does not support closing individual sessions."
-        );
-        expect(mgr.getOpenChatIds().has(id)).toBe(true);
-      });
-
-      it("leaves sessions unchanged when a stale history row is already closed for https://github.com/Brevilabs/obsidian-copilot-private/issues/429", async () => {
-        const mgr = buildManager();
-        const session = await mgr.createSession();
-        await mgr.closeChatSession("missing.md");
-        expect(mgr.getSessions()).toEqual([session]);
-        expect(mockSessionCancel).not.toHaveBeenCalled();
       });
     });
 

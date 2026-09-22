@@ -25,10 +25,8 @@ export interface AgentHistoryControls {
   loadChat: (id: string) => Promise<void>;
   updateChatTitle: (id: string, newTitle: string) => Promise<void>;
   deleteChat: (id: string) => Promise<void>;
-  closeSession: (id: string) => Promise<void>;
   openSourceFile: (id: string) => Promise<void>;
 }
-
 /**
  * History popover handlers (load list, open, rename, delete, open source) plus
  * the items state they refresh. Kept separate from chat-runtime state because
@@ -145,8 +143,6 @@ export function useAgentHistoryControls(
     [manager, loadChatHistory, runWithNotice]
   );
 
-  const closeSession = useCallback((id: string) => manager.closeChatSession(id), [manager]);
-
   const openSourceFile = useCallback(
     async (id: string) => {
       await runWithNotice("open chat source", () => plugin.openChatSourceFile(id));
@@ -161,7 +157,6 @@ export function useAgentHistoryControls(
     loadChat,
     updateChatTitle,
     deleteChat,
-    closeSession,
     openSourceFile,
   };
 }

@@ -80,7 +80,7 @@ describe("GlobalRecentChatsSection", () => {
   });
 
   describe("GlobalRecentChatsSection()", () => {
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/429 shows idle and running open sessions, retaining saved chats after close", async () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/429 shows open sessions and retains saved chats after close", async () => {
       const onLoadChat = jest.fn(noop);
       const onDeleteChat = jest.fn(noop);
       const onCloseSession = jest.fn(noop);
@@ -92,7 +92,8 @@ describe("GlobalRecentChatsSection", () => {
         onLoadChat,
         onDeleteChat,
       });
-      expect(screen.getAllByLabelText("Session open")).toHaveLength(2);
+      expect(screen.getAllByLabelText("Session live")).toHaveLength(2);
+      expect(screen.getByLabelText("Responding")).toBeTruthy();
       const buttons = screen.getAllByRole("button", { name: "Close session" });
       expect(buttons).toHaveLength(2);
       fireEvent.keyDown(buttons[0], { key: "Enter" });
@@ -123,14 +124,14 @@ describe("GlobalRecentChatsSection", () => {
     it("renders a running spinner instead of the time for a backgrounded session", () => {
       const item = makeItem("running-1");
       renderSection({ items: [item], runningChatIds: new Set([item.id]) });
-      expect(screen.getByLabelText("Running")).toBeTruthy();
+      expect(screen.getByLabelText("Responding")).toBeTruthy();
       expect(screen.queryByText("now")).toBeNull();
     });
 
     it("renders the relative time (no spinner) when the session is not running", () => {
       const item = makeItem("idle-1");
       renderSection({ items: [item], runningChatIds: new Set() });
-      expect(screen.queryByLabelText("Running")).toBeNull();
+      expect(screen.queryByLabelText("Responding")).toBeNull();
       expect(screen.getByText("now")).toBeTruthy();
     });
 

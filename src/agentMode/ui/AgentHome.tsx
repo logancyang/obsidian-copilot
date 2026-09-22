@@ -263,9 +263,22 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     loadChat: handleLoadChat,
     updateChatTitle: handleUpdateChatTitle,
     deleteChat: handleDeleteChat,
-    closeSession: handleCloseSession,
     openSourceFile: handleOpenSourceFile,
   } = useAgentHistoryControls(manager, plugin, activeProjectId);
+
+  const handleCloseSession = useCallback(
+    async (id: string) => {
+      try {
+        await manager.closeChatSession(id);
+      } catch (error) {
+        logError("[AgentMode] close chat session failed", error);
+        new Notice(
+          `Could not close session: ${error instanceof Error ? error.message : "Try again."}`
+        );
+      }
+    },
+    [manager]
+  );
 
   // GlobalRecentChatsSection refreshes in an effect keyed to `onLoadHistory`,
   // and a completed load stores a fresh items array that re-renders this

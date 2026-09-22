@@ -1,6 +1,5 @@
-import { CloseSessionButton } from "@/components/chat-components/ui/OpenSessionControls";
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ArrowUpRight, Check, Edit2, MessageCircle, Trash2, X } from "lucide-react";
+import { ArrowUpRight, Check, Edit2, MessageCircle, Power, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SearchBar } from "@/components/ui/SearchBar";
@@ -482,7 +481,7 @@ function ChatHistoryItem({
       <ChatIconWithAttention
         icon={RowIcon}
         needsAttention={chat.needsAttention}
-        isSessionOpen={isSessionOpen}
+        isSessionLive={isSessionOpen}
         iconClassName="tw-size-3 tw-text-muted"
       />
       <span
@@ -532,7 +531,19 @@ function ChatHistoryItem({
           // Show edit and delete buttons
           <>
             {isSessionOpen && onCloseSession && (
-              <CloseSessionButton chatId={chat.id} onCloseSession={onCloseSession} />
+              <Button
+                size="sm"
+                variant="ghost"
+                className="tw-size-5 tw-p-0"
+                aria-label="Close session"
+                title="Close session"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  safeAsyncHandler(onCloseSession)(chat.id);
+                }}
+              >
+                <Power className="tw-size-3" />
+              </Button>
             )}
             <Button
               size="sm"

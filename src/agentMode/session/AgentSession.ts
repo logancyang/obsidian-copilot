@@ -327,7 +327,6 @@ export class AgentSession {
   /** Resolves when startup and any initial model selection have settled. */
   readonly ready: Promise<void>;
   private backendSessionId: SessionId | null = null;
-  private closing = false;
   private readonly backend: BackendProcess;
   private readonly cwd: string | null;
   // Resolves to the project's context-materialization result; awaited before
@@ -944,9 +943,6 @@ export class AgentSession {
     promptContent?: PromptContent[],
     mentionedAgents?: ReadonlyArray<BackendId>
   ): { userMessageId: string; turn: Promise<StopReason> } {
-    // A slow backend release must not accept a new turn into the session being closed.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/429
-    if (this.closing) throw new Error("Session is closing");
     const status = this.getStatus();
     if (status === "starting") {
       throw new Error("Session is still starting");
@@ -1374,24 +1370,15 @@ export class AgentSession {
     }
   }
 
-  /** Release the allocated backend session while blocking new turns, or restore sending on failure. */
+  /** Release the allocated backend session. */
   async releaseBackendSession(): Promise<void> {
-    // Duplicate closes must not undo the first caller's send guard on failure.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/429
-    if (this.closing) throw new Error("Session is already closing");
     const backendSessionId = this.backendSessionId;
     if (!backendSessionId || !this.backend.closeSession) {
       throw new Error("This agent does not support closing individual sessions.");
     }
-    this.closing = true;
     try {
-      // The backend close operation owns cancellation and resource cleanup.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/429
       await this.backend.closeSession({ sessionId: backendSessionId });
     } catch (error) {
-      // Unsupported agents must leave the chat usable and explain why it remains open.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/429
-      this.closing = false;
       if (error instanceof MethodUnsupportedError) {
         throw new Error("This agent does not support closing individual sessions.");
       }

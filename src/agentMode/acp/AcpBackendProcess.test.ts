@@ -165,23 +165,6 @@ describe("AcpBackendProcess", () => {
       expect(mockCloseSession).not.toHaveBeenCalled();
       expect(backend.isRunning()).toBe(true);
     });
-
-    it("preserves the close failure for callers to keep the session open https://github.com/Brevilabs/obsidian-copilot-private/issues/429", async () => {
-      mockInitializeResult = {
-        protocolVersion: 1,
-        agentCapabilities: { sessionCapabilities: { close: {} } },
-      };
-      mockCloseSession.mockRejectedValueOnce(new Error("backend busy"));
-      const backend = new AcpBackendProcess(
-        buildApp(),
-        buildStubBackend(),
-        "1.0.0",
-        buildStubDescriptor()
-      );
-      await backend.start();
-      await expect(backend.closeSession({ sessionId: "open" })).rejects.toThrow("backend busy");
-      expect(backend.isRunning()).toBe(true);
-    });
   });
 
   describe("start()", () => {

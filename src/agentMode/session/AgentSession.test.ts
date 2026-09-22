@@ -1591,67 +1591,6 @@ describe("AgentSession.releaseBackendSession", () => {
     return { mock, session };
   }
 
-  it("blocks new sends before awaiting release and preserves messages through disposal https://github.com/Brevilabs/obsidian-copilot-private/issues/429", async () => {
-    const { mock, session } = setupReleaseSession();
-    await session.sendPrompt("saved conversation").turn;
-    const messages = session.store.getDisplayMessages();
-    let finish!: () => void;
-    let markStarted!: () => void;
-    const started = new Promise<void>((resolve) => {
-      markStarted = resolve;
-    });
-    mock.closeSession.mockImplementation(
-      () =>
-        new Promise<void>((resolve) => {
-          finish = resolve;
-          markStarted();
-        })
-    );
-
-    const release = session.releaseBackendSession();
-    expect(() => session.sendPrompt("racing send")).toThrow("Session is closing");
-    await started;
-    expect(mock.closeSession).toHaveBeenCalledWith({ sessionId: "acp-1" });
-    expect(() => session.sendPrompt("during close")).toThrow("Session is closing");
-    expect(mock.prompt).toHaveBeenCalledTimes(1);
-    expect(session.store.getDisplayMessages()).toEqual(messages);
-    finish();
-    await release;
-    expect(() => session.sendPrompt("after release")).toThrow("Session is closing");
-    await session.dispose();
-    expect(session.getStatus()).toBe("closed");
-    expect(session.store.getDisplayMessages()).toEqual(messages);
-  });
-
-  it("rejects a duplicate close without reopening sending or issuing another RPC https://github.com/Brevilabs/obsidian-copilot-private/issues/429", async () => {
-    const { mock, session } = setupReleaseSession();
-    let finish!: () => void;
-    let markStarted!: () => void;
-    const started = new Promise<void>((resolve) => {
-      markStarted = resolve;
-    });
-    const pending = new Promise<void>((resolve) => {
-      finish = resolve;
-    });
-    mock.closeSession.mockImplementationOnce(() => {
-      markStarted();
-      return pending;
-    });
-
-    const first = session.releaseBackendSession();
-    await started;
-    const second = session.releaseBackendSession();
-    try {
-      await expect(second).rejects.toThrow("Session is already closing");
-      expect(mock.closeSession).toHaveBeenCalledTimes(1);
-      expect(() => session.sendPrompt("duplicate close race")).toThrow("Session is closing");
-    } finally {
-      finish();
-      await first;
-    }
-    expect(() => session.sendPrompt("released session")).toThrow("Session is closing");
-  });
-
   it("closes a running backend session without waiting for cancellation https://github.com/Brevilabs/obsidian-copilot-private/issues/429", async () => {
     const { mock, session } = setupReleaseSession();
     mock.cancel.mockImplementation(() => new Promise<void>(() => undefined));
@@ -1674,15 +1613,8 @@ describe("AgentSession.releaseBackendSession", () => {
     await turn;
   });
 
-  it("restores sending when backend release fails https://github.com/Brevilabs/obsidian-copilot-private/issues/429", async () => {
-    const { mock, session } = setupReleaseSession();
-    mock.closeSession.mockRejectedValueOnce(new Error("backend busy"));
-    await expect(session.releaseBackendSession()).rejects.toThrow("backend busy");
-    await expect(session.sendPrompt("try again").turn).resolves.toBe("end_turn");
-  });
-
   it.each(["missing", "unsupported"])(
-    "explains %s close support and restores sending https://github.com/Brevilabs/obsidian-copilot-private/issues/429",
+    "explains %s close support for https://github.com/Brevilabs/obsidian-copilot-private/issues/429",
     async (kind) => {
       const { mock, session } = setupReleaseSession();
       if (kind === "missing") delete mock.asBackend.closeSession;
@@ -1691,7 +1623,6 @@ describe("AgentSession.releaseBackendSession", () => {
       await expect(session.releaseBackendSession()).rejects.toThrow(
         "This agent does not support closing individual sessions."
       );
-      await expect(session.sendPrompt("still usable").turn).resolves.toBe("end_turn");
     }
   );
 });

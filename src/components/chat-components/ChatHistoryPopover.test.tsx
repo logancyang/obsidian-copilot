@@ -39,7 +39,7 @@ describe("ChatHistoryPopover", () => {
         </ChatHistoryPopover>
       );
       fireEvent.click(screen.getByText("History"));
-      expect(screen.getAllByLabelText("Session open")).toHaveLength(1);
+      expect(screen.getAllByLabelText("Session live")).toHaveLength(1);
       const button = screen.getByRole("button", { name: "Close session" });
       fireEvent.keyDown(button, { key: "Enter" });
       await act(async () => fireEvent.click(button));
@@ -51,7 +51,7 @@ describe("ChatHistoryPopover", () => {
           <button type="button">History</button>
         </ChatHistoryPopover>
       );
-      expect(screen.queryByLabelText("Session open")).toBeNull();
+      expect(screen.queryByLabelText("Session live")).toBeNull();
       expect(screen.queryByRole("button", { name: "Close session" })).toBeNull();
       expect(screen.getByText("Open research")).toBeTruthy();
       expect(screen.getByText("Saved research")).toBeTruthy();

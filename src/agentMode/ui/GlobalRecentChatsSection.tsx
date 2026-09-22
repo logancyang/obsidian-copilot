@@ -1,4 +1,3 @@
-import { CloseSessionButton } from "@/components/chat-components/ui/OpenSessionControls";
 import { backendRegistry } from "@/agentMode/backends/registry";
 import { AgentHomePreviewList } from "@/agentMode/ui/AgentHomeSection";
 import { RecentChatProjectBadge, RecentChatTitle } from "@/agentMode/ui/RecentChatTitle";
@@ -12,7 +11,16 @@ import { cn } from "@/lib/utils";
 import { isNativeChatId } from "@/utils/nativeChatId";
 import { formatCompactRelativeTime } from "@/utils/formatRelativeTime";
 import { sortByStrategy, type SortStrategy } from "@/utils/recentUsageManager";
-import { ArrowUpRight, Check, Edit2, LoaderCircle, MessageCircle, Trash2, X } from "lucide-react";
+import {
+  ArrowUpRight,
+  Check,
+  Edit2,
+  LoaderCircle,
+  MessageCircle,
+  Power,
+  Trash2,
+  X,
+} from "lucide-react";
 import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { useIncrementalPaging } from "@/hooks/useIncrementalPaging";
 import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
@@ -111,17 +119,17 @@ const ChatIconTile = memo(
   ({
     Icon,
     needsAttention,
-    isSessionOpen,
+    isSessionLive,
   }: {
     Icon: React.ComponentType<{ className?: string }>;
     needsAttention?: boolean;
-    isSessionOpen?: boolean;
+    isSessionLive?: boolean;
   }) => (
     <span className="tw-flex tw-size-6 tw-shrink-0 tw-items-center tw-justify-center tw-rounded-md tw-bg-secondary tw-text-muted">
       <ChatIconWithAttention
         icon={Icon}
         needsAttention={needsAttention}
-        isSessionOpen={isSessionOpen}
+        isSessionLive={isSessionLive}
         iconClassName="tw-size-4"
       />
     </span>
@@ -228,7 +236,7 @@ const RecentChatRow = memo(function RecentChatRow({
         }
       }}
     >
-      <ChatIconTile Icon={Icon} needsAttention={hasAttention} isSessionOpen={isSessionOpen} />
+      <ChatIconTile Icon={Icon} needsAttention={hasAttention} isSessionLive={isSessionOpen} />
       <RecentChatTitle title={item.title} />
 
       {/* Relative time by default; a backgrounded running session shows an accent
@@ -245,7 +253,7 @@ const RecentChatRow = memo(function RecentChatRow({
               "tw-size-3.5 tw-shrink-0 tw-animate-spin tw-text-accent",
               "group-focus-within:tw-hidden group-hover:tw-hidden"
             )}
-            aria-label="Running"
+            aria-label="Responding"
           />
         ) : (
           <span
@@ -286,7 +294,19 @@ const RecentChatRow = memo(function RecentChatRow({
           ) : (
             <>
               {isSessionOpen && onCloseSession && (
-                <CloseSessionButton chatId={item.id} onCloseSession={onCloseSession} />
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="tw-size-5 tw-p-0"
+                  aria-label="Close session"
+                  title="Close session"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    safeAsyncHandler(onCloseSession)(item.id);
+                  }}
+                >
+                  <Power className="tw-size-3" />
+                </Button>
               )}
               {canOpenSourceFile && (
                 <Button
