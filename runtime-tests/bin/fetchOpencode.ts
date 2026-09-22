@@ -1,7 +1,7 @@
 /**
  * Install the exact opencode release the plugin pins, using the plugin's own
  * installer (platform resolution, GitHub release lookup, download, extraction,
- * version verification), into a cache the suite owns. A cached binary is
+ * `--version` check), into a cache the suite owns. A cached binary is
  * reused only while it reports the pinned version. Any failure exits non-zero:
  * the suite never falls back to another opencode or to a fake process.
  */

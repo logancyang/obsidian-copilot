@@ -115,6 +115,8 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
       - name: Run the runtime contracts
         run: npm run test:runtime
+        env:
+          COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
       - name: Upload the runtime report
         if: failure()
         uses: actions/upload-artifact@v4

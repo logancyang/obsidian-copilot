@@ -1,6 +1,9 @@
 import * as http from "node:http";
 import type { AddressInfo } from "node:net";
 
+/** The path prefix of the base URL Copilot stores, and so of every request it configures. */
+const BASE_PATH = "/v1";
+
 /** One chat-completion request as the agent sent it, and how it was answered. */
 export interface RecordedRequest {
   /** `turn` for an agent turn, `title` for opencode's session-title call. */
@@ -11,6 +14,8 @@ export interface RecordedRequest {
 export interface ScriptedProviderOptions {
   /** The only bearer credential the provider accepts. */
   apiKey: string;
+  /** The text Copilot was asked to send, which an agent turn's last user message must equal. */
+  sentText: () => string | undefined;
   /**
    * Awaited after each streamed chunk of an agent turn, before the next one is
    * written, with the answer text sent so far. Lets the caller hold every
@@ -26,14 +31,16 @@ export interface ScriptedProviderOptions {
  *
  * It replaces remote inference and nothing else: the agent reaches it through
  * its own `@ai-sdk/openai-compatible` adapter over real HTTP, configured by
- * production `buildOpencodeConfig`. Anything the script does not cover — an
- * unknown path, a missing credential, a turn with no scripted answer — is
- * refused and recorded in {@link failures}.
+ * production `buildOpencodeConfig`. Anything the script does not cover — a
+ * path other than the configured one, a missing credential, another model, a
+ * turn whose last user message is not what Copilot sent, a turn with no
+ * scripted answer — is refused and recorded in {@link failures}.
  */
 export class ScriptedProvider {
   readonly #options: ScriptedProviderOptions;
   #server: http.Server | null = null;
   #port = 0;
+  #model = "";
   readonly #answers: string[] = [];
   readonly #requests: RecordedRequest[] = [];
   readonly #failures: string[] = [];
@@ -45,7 +52,7 @@ export class ScriptedProvider {
 
   /** Base URL to store on the Copilot provider row (`.../v1`). */
   get baseUrl(): string {
-    return `http://127.0.0.1:${this.#port}/v1`;
+    return `http://127.0.0.1:${this.#port}${BASE_PATH}`;
   }
 
   /** Chat-completion requests answered so far, oldest first. */
@@ -63,7 +70,9 @@ export class ScriptedProvider {
     this.#answers.push(text);
   }
 
-  async start(): Promise<void> {
+  /** Listen on a loopback port, serving only `model`. */
+  async start(model: string): Promise<void> {
+    this.#model = model;
     const server = http.createServer((req, res) => {
       this.#handle(req, res).catch((error: unknown) => {
         this.#failures.push(`provider error on ${req.method} ${req.url}: ${String(error)}`);
@@ -85,19 +94,33 @@ export class ScriptedProvider {
 
   async #handle(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
     const route = `${req.method} ${req.url}`;
-    if (req.method !== "POST" || !req.url?.endsWith("/chat/completions")) {
+    if (req.method !== "POST" || req.url !== `${BASE_PATH}/chat/completions`) {
       return this.#refuse(res, 404, `unexpected request ${route}`);
     }
     if (req.headers.authorization !== `Bearer ${this.#options.apiKey}`) {
       return this.#refuse(res, 401, `${route} did not carry the configured credential`);
     }
 
-    const body = JSON.parse(await readBody(req)) as { model?: unknown; tools?: unknown };
-    const model = typeof body.model === "string" ? body.model : "";
+    const body = JSON.parse(await readBody(req)) as ChatCompletionRequest;
+    const model = String(body.model);
+    if (model !== this.#model) {
+      return this.#refuse(res, 400, `${route} asked for model "${model}", not "${this.#model}"`);
+    }
     // opencode names a new session with a separate, tool-less completion. It is
     // part of every first turn, so it gets a fixed title instead of consuming
     // the answer scripted for the turn.
     const kind = Array.isArray(body.tools) ? "turn" : "title";
+    if (kind === "turn") {
+      const received = body.messages?.findLast((message) => message.role === "user")?.content;
+      const sent = this.#options.sentText();
+      if (received !== sent) {
+        return this.#refuse(
+          res,
+          400,
+          `the agent turn's last user message was ${JSON.stringify(received)}, not ${JSON.stringify(sent)}`
+        );
+      }
+    }
     const answer = kind === "title" ? "Runtime scenario" : this.#answers.shift();
     if (answer === undefined) {
       return this.#refuse(res, 500, `agent turn on "${model}" arrived with no scripted answer`);
@@ -129,6 +152,13 @@ export class ScriptedProvider {
     res.writeHead(status, { "content-type": "application/json" });
     res.end(JSON.stringify({ error: { message: `[runtime-tests] ${reason}` } }));
   }
+}
+
+/** The parts of an OpenAI-compatible chat-completion request the script reads. */
+interface ChatCompletionRequest {
+  model?: unknown;
+  tools?: unknown;
+  messages?: { role: string; content: unknown }[];
 }
 
 function chunk(

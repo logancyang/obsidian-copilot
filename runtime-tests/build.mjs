@@ -79,5 +79,5 @@ await esbuild.build({
   plugins: [obsidianShimPlugin, svgrPlugin],
   loader: { ".md": "text" },
   tsconfig: resolve(repoRoot, "tsconfig.json"),
-  define: { "process.env.NODE_ENV": '"test"' },
+  define: { "process.env.NODE_ENV": '"production"' },
 });

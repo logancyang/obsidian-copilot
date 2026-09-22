@@ -3,6 +3,8 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 
+import { redactLogText } from "@/utils/redactLog";
+
 import { BINARY_CACHE_HOME, pinnedBinaryPath } from "../harness/pinnedBinary";
 
 /** One scenario's outcome as written to `summary.json`. */
@@ -34,10 +36,10 @@ export class Report {
 
   /** Record one scenario; `diagnostics`, when given, is redacted and saved. */
   add(result: Omit<ScenarioResult, "log">, diagnostics?: string): void {
-    const entry: ScenarioResult = { ...result, error: result.error && redact(result.error) };
+    const entry: ScenarioResult = { ...result, error: result.error && redactLogText(result.error) };
     if (diagnostics !== undefined) {
       entry.log = `logs/${this.#results.length + 1}-${slug(result.name)}.log`;
-      fs.writeFileSync(path.join(this.#dir, entry.log), redact(diagnostics));
+      fs.writeFileSync(path.join(this.#dir, entry.log), redactLogText(diagnostics));
     }
     this.#results.push(entry);
   }
@@ -57,7 +59,8 @@ export class Report {
       }),
       os: `${process.platform}-${process.arch} ${os.release()}`,
       node: process.version,
-      commit: process.env.GITHUB_SHA ?? commandOutput("git", ["rev-parse", "HEAD"]),
+      // CI names the pushed commit; its checkout of a pull request is a temporary merge commit.
+      commit: process.env.COMMIT_SHA ?? commandOutput("git", ["rev-parse", "HEAD"]),
       elapsedMs: Date.now() - this.#startedAt,
       scenarios: this.#results,
     };
@@ -65,23 +68,6 @@ export class Report {
     fs.writeFileSync(file, `${JSON.stringify(summary, null, 2)}\n`);
     return file;
   }
-}
-
-const REDACTIONS: ReadonlyArray<[RegExp, string]> = [
-  [/\bBearer\s+[\w.~+/-]+=*/gi, "Bearer [redacted]"],
-  [/\b(?:sk|pk|rk|ghp|gho|ghs|ghu|github_pat|xox[abpr])[-_][\w-]{8,}/g, "[redacted]"],
-  [
-    /(["']?[\w-]*(?:api[_-]?key|token|secret|password|credential)["']?\s*[:=]\s*)(["']?)[^\s"',}]+\2/gi,
-    "$1$2[redacted]$2",
-  ],
-  [/(^|[\s"'=:(])\/(?:Users|home)\/[^/\s"']+/gm, "$1~"],
-];
-
-/** Mask key- and token-shaped values and home-directory paths. */
-export function redact(text: string): string {
-  let out = text.split(os.homedir()).join("~");
-  for (const [pattern, replacement] of REDACTIONS) out = out.replace(pattern, replacement);
-  return out;
 }
 
 function commandOutput(command: string, args: string[], env = process.env): string {

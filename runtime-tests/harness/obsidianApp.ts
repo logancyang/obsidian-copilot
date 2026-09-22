@@ -54,12 +54,4 @@ class InMemorySecretStorage {
   getSecret(id: string): string | null {
     return this.#secrets.get(id) ?? null;
   }
-
-  listSecrets(): string[] {
-    return [...this.#secrets.keys()];
-  }
-
-  deleteSecret(id: string): void {
-    this.#secrets.delete(id);
-  }
 }

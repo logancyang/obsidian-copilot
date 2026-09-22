@@ -50,6 +50,8 @@ Before(function (this: RuntimeWorld) {
 });
 
 After(async function (this: RuntimeWorld, scenario: ITestCaseHookParameter) {
+  // Read before teardown: a clean shutdown right after a turn logs warnings of
+  // its own (see runtime-tests/README.md).
   const problems = this.runtime.problems();
   // Cucumber passes a run whose scenarios were skipped; every scenario here is required.
   if (scenario.result?.status === Status.SKIPPED) problems.push("the scenario was skipped");
@@ -86,9 +88,12 @@ Given(
   }
 );
 
-Given("the model will answer {string}", function (this: RuntimeWorld, text: string) {
-  this.runtime.provider.answer(text);
-});
+Given(
+  "the model will answer {string} to exactly the message I send",
+  function (this: RuntimeWorld, text: string) {
+    this.runtime.provider.answer(text);
+  }
+);
 
 When("I send {string} in a new conversation", async function (this: RuntimeWorld, text: string) {
   this.conversation = await this.runtime.openConversation();
@@ -102,11 +107,22 @@ Then("the answer grew in the conversation as:", function (this: RuntimeWorld, ta
   assert.deepEqual(shown, table.raw().flat());
 });
 
-Then("the turn completed normally after its last word", function (this: RuntimeWorld) {
+Then("the turn ended only after its last word", function (this: RuntimeWorld) {
   const timeline = this.conversation.timeline;
-  const last = timeline.at(-1);
-  assert.equal(last?.stopReason, "end_turn", `the turn ended as ${JSON.stringify(last)}`);
-  const earlier = timeline.slice(0, -1).filter((snapshot) => snapshot.stopReason !== null);
-  assert.deepEqual(earlier, [], "the turn reported completion before its last word");
-  assert.equal(last.text, timeline.at(-2)?.text, "the answer changed as the turn completed");
+  const ended = timeline.findIndex((snapshot) => snapshot.stopReason !== null);
+  assert.equal(ended, timeline.length - 1, `the answer went ${JSON.stringify(timeline)}`);
+  assert.equal(
+    timeline.at(-1)?.text,
+    timeline.at(-2)?.text,
+    "the answer changed as the turn ended"
+  );
+});
+
+Then("the conversation shows exactly:", function (this: RuntimeWorld, table: DataTable) {
+  const shown = this.conversation.messages.map((m) => [
+    m.sender,
+    m.message,
+    m.turnStopReason ?? "",
+  ]);
+  assert.deepEqual(shown, table.rows());
 });

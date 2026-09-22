@@ -11,8 +11,9 @@ import type { AgentChatUIState } from "@/agentMode/session/AgentChatUIState";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
 import { AgentModelPreloader } from "@/agentMode/session/AgentModelPreloader";
 import { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
-import type { StopReason } from "@/agentMode/session/types";
+import type { AgentChatMessage, StopReason } from "@/agentMode/session/types";
 import { createDefaultPermissionPrompter } from "@/agentMode/ui/permissionPrompter";
+import { err2String } from "@/errorFormat";
 import { logFileManager } from "@/logFileManager";
 import type CopilotPlugin from "@/main";
 import { createModelManagement } from "@/modelManagement";
@@ -39,7 +40,7 @@ const CHUNK_VISIBLE_TIMEOUT_MS = 10_000;
 /**
  * The only credential the scripted provider accepts. It reaches opencode the
  * way a user's key does — keychain, then generated config — so a request
- * carrying it proves that path, and redaction is exercised on a key-shaped value.
+ * carrying it proves that path.
  */
 const SYNTHETIC_API_KEY = "sk-runtime-tests-synthetic-0000000000";
 
@@ -72,13 +73,14 @@ export interface RuntimeOptions {
  * A Copilot Agent Mode session layer driving the real opencode runtime.
  *
  * Owns a temp vault and agent home, the scripted provider, the egress proxy,
- * and a production `AgentSessionManager`; hands out {@link Conversation}s.
+ * and a production `AgentSessionManager`; opens the scenario's {@link Conversation}.
  * Carries no test-runner vocabulary so any test format can drive it.
  */
 export class Runtime {
   readonly provider = new ScriptedProvider({
     apiKey: SYNTHETIC_API_KEY,
-    pace: (sentSoFar) => this.#awaitingAnswer().waitForAnswerText(sentSoFar),
+    sentText: () => this.#conversation?.sentText,
+    pace: (sentSoFar) => this.#requireConversation().waitForAnswerText(sentSoFar),
   });
   readonly egress = new EgressProxy();
 
@@ -88,7 +90,7 @@ export class Runtime {
   #restoreEnvironment: (() => void) | null = null;
   #originalCwd = "";
   #manager: AgentSessionManager | null = null;
-  readonly #conversations: Conversation[] = [];
+  #conversation: Conversation | null = null;
   /** Process startups the manager does not wait for on shutdown; see {@link stop}. */
   readonly #startups: Promise<unknown>[] = [];
 
@@ -108,7 +110,9 @@ export class Runtime {
     // from a repository checkout, so neither should the scenario.
     this.#originalCwd = process.cwd();
     process.chdir(this.#tempRoot);
-    await this.provider.start();
+    // The log buffer outlives a scenario; start each one with its own.
+    await logFileManager.clear();
+    await this.provider.start(options.model);
     await this.egress.start();
     this.#restoreEnvironment = this.#isolateEnvironment();
 
@@ -189,25 +193,31 @@ export class Runtime {
         () => `still starting (last error: ${manager.getLastError() ?? "none"})`
       );
     } catch (error) {
-      throw new Error(`opencode did not start a conversation: ${messageOf(error)}`);
+      throw new Error(`opencode did not start a conversation: ${err2String(error)}`);
     }
     const ui = manager.getChatUIState(session.internalId);
     if (!ui) throw new Error("the new session has no chat UI state");
-    const conversation = new Conversation(ui);
-    this.#conversations.push(conversation);
-    return conversation;
+    this.#conversation = new Conversation(ui);
+    return this.#conversation;
   }
 
   /**
    * Everything that should fail a scenario even when its own steps passed:
-   * requests the scripted provider refused, and network destinations the
-   * runtime tried to reach that are not {@link EXPECTED_REFUSED_EGRESS}.
+   * requests the scripted provider refused, network destinations the runtime
+   * tried to reach that are not {@link EXPECTED_REFUSED_EGRESS}, and warnings or
+   * errors in Copilot's log, which is where the session layer reports a failure
+   * it swallows.
    */
   problems(): string[] {
     const unexpectedEgress = [...new Set(this.egress.attempts)]
       .filter((target) => !EXPECTED_REFUSED_EGRESS.has(target))
       .map((target) => `the runtime tried to reach ${target}`);
-    return [...this.provider.failures, ...unexpectedEgress];
+    const loggedProblems = logFileManager
+      .exportLogText()
+      .split("\n")
+      .filter((line) => ["WARN", "ERROR"].includes(line.split(" ")[1]))
+      .map((line) => `Copilot logged: ${line}`);
+    return [...this.provider.failures, ...unexpectedEgress, ...loggedProblems];
   }
 
   /**
@@ -241,7 +251,7 @@ export class Runtime {
   async stop(): Promise<string[]> {
     const manager = this.#manager;
     this.#manager = null;
-    this.#conversations.length = 0;
+    this.#conversation = null;
     const problems: string[] = [];
     // `shutdown()` stops the processes it owns but not one still starting: a
     // probe that finishes afterwards shuts its own process down, too late for
@@ -252,7 +262,7 @@ export class Runtime {
       () => "opencode was still starting at teardown"
     ).catch(() => {});
     await manager?.shutdown().catch((error: unknown) => {
-      problems.push(`the session shutdown failed: ${messageOf(error)}`);
+      problems.push(`the session shutdown failed: ${err2String(error)}`);
     });
     if (this.#vaultPath) {
       for (const survivor of killProcessesMentioning(this.#vaultPath)) {
@@ -295,6 +305,9 @@ export class Runtime {
       https_proxy: proxy,
       NO_PROXY: "127.0.0.1,localhost",
       no_proxy: "127.0.0.1,localhost",
+      // opencode's plugin install honors a registry set in the developer's npm
+      // config, which would name a destination the allow-list does not expect.
+      npm_config_registry: "https://registry.npmjs.org/",
     };
     const previous = Object.keys(isolated).map((key) => [key, process.env[key]] as const);
     Object.assign(process.env, isolated);
@@ -311,12 +324,9 @@ export class Runtime {
     return this.#manager;
   }
 
-  #awaitingAnswer(): Conversation {
-    const waiting = this.#conversations.filter((c) => c.isAwaitingAnswer);
-    if (waiting.length !== 1) {
-      throw new Error(`expected one conversation awaiting an answer, found ${waiting.length}`);
-    }
-    return waiting[0];
+  #requireConversation(): Conversation {
+    if (!this.#conversation) throw new Error("no conversation has been opened");
+    return this.#conversation;
   }
 }
 
@@ -327,15 +337,20 @@ export class Runtime {
  */
 export class Conversation {
   #timeline: AnswerSnapshot[] = [];
-  #turnInFlight = false;
+  #sentText: string | undefined;
 
   constructor(private readonly ui: AgentChatUIState) {
     ui.subscribe(() => this.#record());
   }
 
-  /** Whether a sent message has not finished its turn yet. */
-  get isAwaitingAnswer(): boolean {
-    return this.#turnInFlight;
+  /** The last message sent, as typed. */
+  get sentText(): string | undefined {
+    return this.#sentText;
+  }
+
+  /** Every message the conversation shows, in order. */
+  get messages(): readonly AgentChatMessage[] {
+    return this.ui.getMessages();
   }
 
   /** Every distinct state of the answer to the last message sent, in order. */
@@ -346,17 +361,13 @@ export class Conversation {
   /** Send a message through the chat input's path and wait for the turn to end. */
   async send(text: string): Promise<void> {
     this.#timeline = [];
-    this.#turnInFlight = true;
-    try {
-      const { turn } = this.ui.sendMessage(text);
-      await within(
-        TURN_TIMEOUT_MS,
-        turn,
-        () => `the turn did not finish; the answer went ${formatTimeline(this.#timeline)}`
-      );
-    } finally {
-      this.#turnInFlight = false;
-    }
+    this.#sentText = text;
+    const { turn } = this.ui.sendMessage(text);
+    await within(
+      TURN_TIMEOUT_MS,
+      turn,
+      () => `the turn did not finish; the answer went ${formatTimeline(this.#timeline)}`
+    );
     this.#record();
   }
 
@@ -387,10 +398,6 @@ function formatTimeline(timeline: readonly AnswerSnapshot[]): string {
       s.stopReason ? `${JSON.stringify(s.text)} (${s.stopReason})` : JSON.stringify(s.text)
     )
     .join(" → ");
-}
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 /** Reject with `explain()` if `promise` has not settled within `ms`. */
