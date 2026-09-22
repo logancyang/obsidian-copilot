@@ -1,6 +1,8 @@
 import { requireNodeModule } from "@/utils/desktopRuntime";
 import { AcpProcessManager, sanitizeAcpStdout } from "@/agentMode/acp/AcpProcessManager";
 
+const mockSpawn = jest.fn();
+
 jest.mock("@/logger", () => ({
   logInfo: jest.fn(),
   logWarn: jest.fn(),
@@ -41,6 +43,36 @@ async function readLines(stream: ReadableStream<Uint8Array>): Promise<string[]> 
 describe("AcpProcessManager", () => {
   describe("AcpProcessManager", () => {
     describe("start()", () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/555 starts the agent in the requested vault directory", () => {
+        const identity = <T>(value: T): T => value;
+        const child = {
+          stdin: {},
+          stdout: streamOf([]),
+          stderr: { setEncoding: jest.fn(), on: jest.fn() },
+          on: jest.fn(),
+        };
+        mockSpawn.mockReturnValue(child);
+        (requireNodeModule as jest.Mock).mockImplementation((id: string) =>
+          id === "child_process"
+            ? { spawn: mockSpawn }
+            : { Readable: { toWeb: identity }, Writable: { toWeb: identity } }
+        );
+        const manager = new AcpProcessManager({
+          command: "/bin/agent",
+          args: ["acp"],
+          cwd: "/Volumes/Notes/Main Vault",
+          env: {},
+        });
+
+        manager.start();
+
+        expect(mockSpawn).toHaveBeenCalledWith(
+          "/bin/agent",
+          ["acp"],
+          expect.objectContaining({ cwd: "/Volumes/Notes/Main Vault" })
+        );
+      });
+
       it("returns a stdout stream with the child's terminal escape sequences already stripped (https://github.com/logancyang/obsidian-copilot/issues/2876)", async () => {
         const identity = <T>(value: T): T => value;
         const child = {

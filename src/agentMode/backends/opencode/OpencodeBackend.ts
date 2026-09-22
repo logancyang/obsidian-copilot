@@ -81,7 +81,7 @@ export interface OpencodeModelDeps {
 }
 
 /**
- * Spawns `opencode acp --cwd <vault>` with an `OPENCODE_CONFIG_CONTENT` payload
+ * Spawns `opencode acp` in the vault with an `OPENCODE_CONFIG_CONTENT` payload
  * built from the user's enabled BYOK models. The registries are injected by the
  * descriptor from `plugin.modelManagement`.
  */
@@ -145,8 +145,8 @@ export class OpencodeBackend implements AcpBackend {
 
     // opencode discovers vault and project AGENTS.md files from the session cwd, so this spawn
     // needs no instruction-specific configuration.
-    // The off-vault conversions cache lives outside opencode's `--cwd <vault>`
-    // boundary, so opencode prompts (`external_directory` ask) on every snapshot
+    // The off-vault conversions cache lives outside the vault directory,
+    // so opencode prompts (`external_directory` ask) on every snapshot
     // read unless we pre-allow it (see `buildOpencodeConfig`). cacheRoot is a
     // static path with no first-launch window, so resolving it here at spawn is
     // unconditional. The resolver is injected (from `conversionsLocation`) so
@@ -224,7 +224,10 @@ export class OpencodeBackend implements AcpBackend {
 
     return {
       command: binaryPath,
-      args: ["acp", "--cwd", ctx.vaultBasePath],
+      args: ["acp"],
+      // OpenCode uses the process directory for project discovery; its ACP
+      // command has no --cwd flag. https://github.com/Brevilabs/obsidian-copilot-private/issues/555
+      cwd: ctx.vaultBasePath,
       env: {
         ...process.env,
         ...builtinSkillEnv,

@@ -17,6 +17,8 @@ export interface AcpProcessManagerOptions {
   command: string;
   /** Process arguments. */
   args: string[];
+  /** Working directory inherited by the agent process. */
+  cwd?: string;
   /** Environment for the child. Pass through `process.env` plus any overrides. */
   env: NodeJS.ProcessEnv;
   /** Tag used in stderr/log lines so multiple agents can be distinguished. */
@@ -54,6 +56,7 @@ export class AcpProcessManager {
     const { Readable, Writable } = requireNodeModule<typeof import("node:stream")>("stream");
     logInfo(`[AgentMode] spawning ${this.opts.command} ${this.opts.args.join(" ")} (tag=${tag})`);
     const child = spawn(this.opts.command, this.opts.args, {
+      cwd: this.opts.cwd,
       env: this.opts.env,
       stdio: ["pipe", "pipe", "pipe"],
       windowsHide: true,
