@@ -166,10 +166,20 @@ version.
 A scenario is bounded by its steps; the longest (open plus send) is bounded by
 50 s of harness waits.
 
-Measured on an Apple M-series Mac (darwin-arm64, Node 26): the scenario takes
-about 2.7 s, of which startup through a ready session is about 1.2 s and the
-turn about 1 s. `npm run test:runtime` takes about 10.5 s cold (no cache: bundle
-0.4 s, download and verify 5.4 s) and 7.0 s warm.
+Measured durations:
+
+| Where                                      | Cache | Scenario | `test:runtime` / install          | Whole job |
+| ------------------------------------------ | ----- | -------- | --------------------------------- | --------- |
+| Apple M-series Mac, darwin-arm64, Node 26  | Cold  | 2.8 s    | 10.5 s, including a 5.4 s install | —         |
+| Apple M-series Mac, darwin-arm64, Node 26  | Warm  | 2.8 s    | 7.0 s                             | —         |
+| GitHub `ubuntu-latest`, linux-x64, Node 22 | Cold  | 4.7 s    | 9 s, after a 6 s install          | 52 s      |
+| GitHub `ubuntu-latest`, linux-x64, Node 22 | Warm  | 4.0 s    | 8 s, after a 2 s cached install   | 42 s      |
+
+Locally, startup through a ready session takes about 1.2 s and the turn about
+1 s. In CI, `npm ci` takes 16-20 s of the job; the CI numbers come from the
+job's first run and a rerun that hit the binary cache. The startup and turn
+bounds are over fifteen times their local durations and at least four times the
+whole cold CI scenario; the job bound is over ten times the cold CI job.
 
 ## Failure report
 
