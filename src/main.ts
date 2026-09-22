@@ -1,4 +1,5 @@
 import { startReleaseUpdateCheck } from "@/services/releaseUpdateNotice";
+import { releaseCursorAssociation } from "@/editor/releaseCursorAssociation";
 import type { AgentSessionManager, SkillManager } from "@/agentMode";
 // Deep import (not the barrel): these run on the load path for every
 // platform, and the barrel pulls Node-only modules that crash mobile.
@@ -383,6 +384,7 @@ export default class CopilotPlugin extends Plugin {
     // Initialize QuickAskController and register CM6 extension
     this.quickAskController = new QuickAskController(this);
     this.registerEditorExtension(this.quickAskController.createExtension());
+    this.registerEditorExtension(releaseCursorAssociation);
 
     // Initialize Chat selection highlight controller
     this.chatSelectionHighlightController = new ChatSelectionHighlightController(this, {
