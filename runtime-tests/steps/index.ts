@@ -1,192 +1,113 @@
 import * as assert from "node:assert/strict";
-import * as os from "node:os";
 import * as path from "node:path";
 
 import {
   After,
+  AfterAll,
   Before,
+  DataTable,
   Given,
+  Status,
   Then,
   When,
+  World,
   setDefaultTimeout,
   setWorldConstructor,
-  Status,
-  World,
   type ITestCaseHookParameter,
 } from "@cucumber/cucumber";
-import { execFileSync } from "node:child_process";
 
 import { pinnedBinaryPath } from "../harness/pinnedBinary";
-import { Conversation, Runtime, type Turn } from "../harness/runtime";
+import { Conversation, Runtime } from "../harness/runtime";
+import { Report } from "./report";
 
-// Spawning a real binary and streaming a turn through it takes seconds, not
-// milliseconds; Cucumber's 5s default would fail on machine load alone.
-setDefaultTimeout(120_000);
+// Above the harness's own bounds (30s startup plus a 20s turn in one step, 30s
+// teardown), so a slow runtime fails with the harness's message naming what it
+// was waiting for rather than Cucumber's generic timeout.
+setDefaultTimeout(60_000);
+
+const report = new Report(path.resolve(__dirname, "..", ".report"));
 
 /** Cucumber's per-scenario state. The harness itself knows nothing about it. */
 class RuntimeWorld extends World {
   readonly runtime = new Runtime();
-  conversation: Conversation | null = null;
-  turn: Turn | null = null;
+  startedAt = 0;
+  #conversation: Conversation | null = null;
 
-  get open(): Conversation {
-    if (!this.conversation) throw new Error("no conversation is open");
-    return this.conversation;
+  get conversation(): Conversation {
+    if (!this.#conversation) throw new Error("no conversation has been opened");
+    return this.#conversation;
   }
 
-  get lastTurn(): Turn {
-    if (!this.turn) throw new Error("no turn has completed");
-    return this.turn;
+  set conversation(value: Conversation) {
+    this.#conversation = value;
   }
 }
 
 setWorldConstructor(RuntimeWorld);
 
 Before(function (this: RuntimeWorld) {
-  this.turn = null;
+  this.startedAt = Date.now();
 });
 
 After(async function (this: RuntimeWorld, scenario: ITestCaseHookParameter) {
-  // One diagnostic line, so a CI failure identifies the runtime and commit it
-  // happened on without digging through logs.
-  if (scenario.result?.status === Status.FAILED) {
-    this.attach(
-      `opencode ${version(pinnedBinaryPath())} | ${process.platform}-${process.arch} ${os.release()} | commit ${commit()}`
+  const problems = this.runtime.problems();
+  // Cucumber passes a run whose scenarios were skipped; every scenario here is required.
+  if (scenario.result?.status === Status.SKIPPED) problems.push("the scenario was skipped");
+  // Read before `stop()` deletes the agent home that holds opencode's logs.
+  const diagnostics = await this.runtime.diagnostics();
+  try {
+    const survivors = await this.runtime.stop();
+    problems.push(...survivors.map((p) => `opencode outlived the session shutdown (${p})`));
+  } finally {
+    const failed = scenario.result?.status !== Status.PASSED || problems.length > 0;
+    const error = [scenario.result?.message, ...problems].filter(Boolean).join("\n");
+    report.add(
+      {
+        name: scenario.pickle.name,
+        status: failed ? "failed" : "passed",
+        elapsedMs: Date.now() - this.startedAt,
+        ...(error ? { error } : {}),
+      },
+      failed ? diagnostics : undefined
     );
   }
-  await this.runtime.stop();
+  if (problems.length > 0) throw new Error(problems.join("\n"));
 });
 
-// --- setup ----------------------------------------------------------------
-
-Given(
-  "an opencode runtime serving the models {string}",
-  async function (this: RuntimeWorld, models: string) {
-    await this.runtime.start({
-      binaryPath: pinnedBinaryPath(),
-      models: models.split(",").map((m) => m.trim()),
-    });
-  }
-);
-
-Given(
-  "the vault file {string} contains {string}",
-  async function (this: RuntimeWorld, file: string, content: string) {
-    await this.runtime.writeVaultFile(file, content);
-  }
-);
-
-// --- provider script ------------------------------------------------------
-
-Given("the provider will answer {string}", function (this: RuntimeWorld, text: string) {
-  this.runtime.provider.reply({ kind: "text", text });
-});
-
-Given("the provider will then answer {string}", function (this: RuntimeWorld, text: string) {
-  this.runtime.provider.reply({ kind: "text", text });
+AfterAll(function () {
+  process.stdout.write(`\nruntime report: ${report.write()}\n`);
+  // Cucumber passes a run that found no scenarios, e.g. after a path typo.
+  if (report.size === 0) throw new Error("no runtime scenarios ran");
 });
 
 Given(
-  "the provider will answer {string} and hold the stream open",
-  function (this: RuntimeWorld, text: string) {
-    this.runtime.provider.reply({ kind: "hold", text });
+  "Copilot's opencode agent uses the scripted model {string} by default",
+  async function (this: RuntimeWorld, model: string) {
+    await this.runtime.start({ binaryPath: pinnedBinaryPath(), models: [model] });
   }
 );
 
-Given(
-  "the provider will ask to write {string} into the vault file {string}",
-  function (this: RuntimeWorld, content: string, file: string) {
-    this.runtime.provider.reply({
-      kind: "toolCall",
-      name: "write",
-      arguments: { filePath: path.join(this.runtime.vaultPath, file), content },
-    });
-  }
-);
-
-Given("I will deny every permission request", function (this: RuntimeWorld) {
-  this.runtime.answerPermissionsWith("deny");
+Given("the model will answer {string}", function (this: RuntimeWorld, text: string) {
+  this.runtime.provider.answer(text);
 });
 
-// --- conversation ---------------------------------------------------------
-
-When("I open a conversation on {string}", async function (this: RuntimeWorld, modelId: string) {
-  this.conversation = await this.runtime.openConversation(modelId);
+When("I send {string} in a new conversation", async function (this: RuntimeWorld, text: string) {
+  this.conversation = await this.runtime.openConversation();
+  await this.conversation.send(text);
 });
 
-When("I select the model {string}", async function (this: RuntimeWorld, modelId: string) {
-  await this.open.selectModel(modelId);
+Then("the answer grew in the conversation as:", function (this: RuntimeWorld, table: DataTable) {
+  const shown = this.conversation.timeline
+    .map((snapshot) => snapshot.text)
+    .filter((text, i, all) => text !== "" && text !== all[i - 1]);
+  assert.deepEqual(shown, table.raw().flat());
 });
 
-When("I send {string}", async function (this: RuntimeWorld, text: string) {
-  this.turn = await this.open.send(text);
+Then("the turn completed normally after its last word", function (this: RuntimeWorld) {
+  const timeline = this.conversation.timeline;
+  const last = timeline.at(-1);
+  assert.equal(last?.stopReason, "end_turn", `the turn ended as ${JSON.stringify(last)}`);
+  const earlier = timeline.slice(0, -1).filter((snapshot) => snapshot.stopReason !== null);
+  assert.deepEqual(earlier, [], "the turn reported completion before its last word");
+  assert.equal(last.text, timeline.at(-2)?.text, "the answer changed as the turn completed");
 });
-
-When(
-  "I send {string} without waiting for the turn to end",
-  function (this: RuntimeWorld, text: string) {
-    this.open.sendWithoutWaiting(text);
-  }
-);
-
-When(
-  "I cancel the turn once {string} has streamed",
-  async function (this: RuntimeWorld, marker: string) {
-    await this.open.waitForText(marker);
-    await this.open.cancel();
-    this.turn = await this.open.awaitTurn();
-  }
-);
-
-// --- assertions -----------------------------------------------------------
-
-Then("the conversation shows {string}", function (this: RuntimeWorld, expected: string) {
-  assert.equal(this.lastTurn.text.trim(), expected);
-});
-
-Then("the conversation does not show {string}", function (this: RuntimeWorld, forbidden: string) {
-  assert.ok(
-    !this.lastTurn.text.includes(forbidden),
-    `expected the turn not to mention "${forbidden}", got "${this.lastTurn.text}"`
-  );
-});
-
-Then("the turn ended because it was cancelled", function (this: RuntimeWorld) {
-  assert.equal(this.lastTurn.stopReason, "cancelled");
-});
-
-Then(
-  "the provider's last request used the model {string}",
-  function (this: RuntimeWorld, modelId: string) {
-    const last = this.runtime.provider.requests.at(-1);
-    assert.ok(last, "the scripted provider received no request at all");
-    assert.equal(last.model, modelId);
-  }
-);
-
-Then("Copilot was asked to approve the edit", function (this: RuntimeWorld) {
-  assert.equal(this.runtime.permissionPrompts.length, 1);
-});
-
-Then(
-  "the vault file {string} still contains {string}",
-  async function (this: RuntimeWorld, file: string, expected: string) {
-    assert.equal(await this.runtime.readVaultFile(file), expected);
-  }
-);
-
-function version(binary: string): string {
-  try {
-    return execFileSync(binary, ["--version"], { encoding: "utf-8" }).trim();
-  } catch {
-    return "unknown";
-  }
-}
-
-function commit(): string {
-  try {
-    return execFileSync("git", ["rev-parse", "--short", "HEAD"], { encoding: "utf-8" }).trim();
-  } catch {
-    return "unknown";
-  }
-}

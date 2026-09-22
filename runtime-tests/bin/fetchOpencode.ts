@@ -1,100 +1,79 @@
 /**
- * Download and cache the exact opencode release the plugin pins, then verify
- * it. Any failure exits non-zero: the suite must never fall back to another
- * local opencode or to a fake process.
+ * Install the exact opencode release the plugin pins, using the plugin's own
+ * installer (platform resolution, GitHub release lookup, download, extraction,
+ * version verification), into a cache the suite owns. A cached binary is
+ * reused only while it reports the pinned version. Any failure exits non-zero:
+ * the suite never falls back to another opencode or to a fake process.
  */
 import * as fs from "node:fs";
-import * as os from "node:os";
 import * as path from "node:path";
-import { execFileSync } from "node:child_process";
+
+import type { App as ObsidianApp } from "obsidian";
 
 import {
+  OpencodeBinaryManager,
   parseVersionFromStdout,
-  pickMatchingAsset,
+  verifyOpencodeBinary,
 } from "@/agentMode/backends/opencode/OpencodeBinaryManager";
-import { resolveOpencodeTarget } from "@/agentMode/backends/opencode/platformResolver";
 import { OPENCODE_PINNED_VERSION } from "@/agentMode/backends/opencode/ui/opencodeVersion";
+import type CopilotPlugin from "@/main";
 
-import { pinnedBinaryPath } from "../harness/pinnedBinary";
+import { App } from "../harness/obsidianApp";
+import { allowRequestUrl } from "../harness/obsidianShim";
+import { BINARY_CACHE_HOME, pinnedBinaryPath } from "../harness/pinnedBinary";
+
+// The installer's download watchdog uses `window.setTimeout`.
+(globalThis as { window?: unknown }).window ??= globalThis;
 
 async function main(): Promise<void> {
+  // The installer places releases under `<home>/.obsidian-copilot`, and even
+  // `opencode --version` creates its state directories under the home.
+  process.env.HOME = BINARY_CACHE_HOME;
   const target = pinnedBinaryPath();
-  if (fs.existsSync(target) && installedVersion(target) === OPENCODE_PINNED_VERSION) {
-    process.stdout.write(`opencode ${OPENCODE_PINNED_VERSION} already cached at ${target}\n`);
+  const cached = await reportedVersion(target);
+  if (cached === OPENCODE_PINNED_VERSION) {
+    process.stdout.write(`opencode ${cached} cached at ${target}\n`);
     return;
   }
+  if (cached !== null) process.stdout.write(`discarding cached binary reporting ${cached}\n`);
+  // Drop a partial or mismatched install so the installer cannot treat it as done.
+  await fs.promises.rm(path.dirname(path.dirname(target)), { recursive: true, force: true });
 
-  const { candidates } = await resolveOpencodeTarget();
-  const release = (await fetchJson(
-    `https://api.github.com/repos/sst/opencode/releases/tags/v${OPENCODE_PINNED_VERSION}`
-  )) as Parameters<typeof pickMatchingAsset>[0];
-  const asset = pickMatchingAsset(release, candidates);
+  allowRequestUrl(async ({ url, method, headers }) => {
+    const token = url.startsWith("https://api.github.com/") ? process.env.GITHUB_TOKEN : undefined;
+    const response = await fetch(url, {
+      method,
+      headers: { ...headers, ...(token ? { authorization: `Bearer ${token}` } : {}) },
+    });
+    return { status: response.status, json: await response.json().catch(() => null) };
+  });
+  const plugin = { app: new App(BINARY_CACHE_HOME) as unknown as ObsidianApp };
+  const installed = await new OpencodeBinaryManager(plugin as CopilotPlugin).install({
+    onProgress: (event) => {
+      if (event.phase !== "download") process.stdout.write(`${event.phase}\n`);
+    },
+  });
 
-  process.stdout.write(`downloading ${asset.name} …\n`);
-  const staging = await fs.promises.mkdtemp(path.join(os.tmpdir(), "opencode-dl-"));
-  const archive = path.join(staging, asset.name);
-  const response = await fetch(asset.browser_download_url);
-  if (!response.ok)
-    throw new Error(`download failed: ${response.status} ${asset.browser_download_url}`);
-  await fs.promises.writeFile(archive, new Uint8Array(await response.arrayBuffer()));
-
-  const extracted = path.join(staging, "out");
-  await fs.promises.mkdir(extracted, { recursive: true });
-  if (asset.name.endsWith(".zip")) {
-    execFileSync("unzip", ["-oq", archive, "-d", extracted]);
-  } else {
-    execFileSync("tar", ["-xzf", archive, "-C", extracted]);
-  }
-
-  const binary = find(extracted, process.platform === "win32" ? "opencode.exe" : "opencode");
-  if (!binary) throw new Error(`no opencode executable inside ${asset.name}`);
-  await fs.promises.mkdir(path.dirname(target), { recursive: true });
-  await fs.promises.copyFile(binary, target);
-  await fs.promises.chmod(target, 0o755);
-  await fs.promises.rm(staging, { recursive: true, force: true });
-
-  const installed = installedVersion(target);
-  if (installed !== OPENCODE_PINNED_VERSION) {
+  const version = await reportedVersion(target);
+  if (installed.path !== target || version !== OPENCODE_PINNED_VERSION) {
     throw new Error(
-      `expected opencode ${OPENCODE_PINNED_VERSION}, downloaded reports ${installed}`
+      `expected opencode ${OPENCODE_PINNED_VERSION} at ${target}; ` +
+        `the installer produced ${installed.path}, which reports ${version ?? "nothing"}`
     );
   }
-  process.stdout.write(`opencode ${installed} ready at ${target}\n`);
+  process.stdout.write(`opencode ${version} installed at ${target}\n`);
 }
 
-function installedVersion(binary: string): string | undefined {
+/** The version `binary --version` reports, or null when it is missing or does not run. */
+async function reportedVersion(binary: string): Promise<string | null> {
   try {
-    return parseVersionFromStdout(execFileSync(binary, ["--version"], { encoding: "utf-8" }));
+    return parseVersionFromStdout((await verifyOpencodeBinary(binary)).stdout) ?? null;
   } catch {
-    return undefined;
+    return null;
   }
-}
-
-async function fetchJson(url: string): Promise<unknown> {
-  const token = process.env.GITHUB_TOKEN;
-  const response = await fetch(url, {
-    headers: token ? { authorization: `Bearer ${token}` } : {},
-  });
-  if (!response.ok) {
-    throw new Error(`${url} returned ${response.status} (unauthenticated GitHub API allows 60/hr)`);
-  }
-  return response.json();
-}
-
-function find(dir: string, name: string): string | null {
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) {
-      const hit = find(full, name);
-      if (hit) return hit;
-    } else if (entry.name === name) {
-      return full;
-    }
-  }
-  return null;
 }
 
 main().catch((error: unknown) => {
-  process.stderr.write(`${String(error)}\n`);
+  process.stderr.write(`fetching opencode ${OPENCODE_PINNED_VERSION} failed: ${String(error)}\n`);
   process.exit(1);
 });

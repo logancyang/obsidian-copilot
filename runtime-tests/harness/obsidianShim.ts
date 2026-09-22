@@ -3,9 +3,9 @@
  *
  * The published package is types-only: importing it in Node yields nothing at
  * runtime. Production Agent Mode code imports it for real behaviour
- * (`FileSystemAdapter`, `Platform`, `normalizePath`), so the suite's esbuild
- * bundle aliases `obsidian` to this file. Every export here is listed in
- * `runtime-tests/README.md` with what it substitutes.
+ * (`FileSystemAdapter`, `Platform`, `normalizePath`, `requestUrl`), so the
+ * suite's esbuild bundle aliases `obsidian` to this file. Every export here is
+ * listed in `runtime-tests/README.md` with what it substitutes.
  */
 
 import * as nodeFs from "node:fs";
@@ -33,22 +33,10 @@ export const Platform = {
   isLinux: process.platform === "linux",
 };
 
-/** UI toast. Nothing renders in the suite, so construction is the whole behaviour. */
-export class Notice {
-  constructor(public readonly message: string | DocumentFragment) {}
-  setMessage(): this {
-    return this;
-  }
-  hide(): void {}
-}
-
 /**
- * Real filesystem access rooted at a directory, backing `app.vault.adapter`.
- *
- * `AcpBackendProcess.start` and `VaultClient.resolveVaultRelative` both do
- * `adapter instanceof FileSystemAdapter`, so this must be a class whose
- * instances the production code accepts — and the agent's file tools read and
- * write through it, so it must touch the real disk.
+ * The vault adapter, rooted at a real directory. Agent Mode checks
+ * `adapter instanceof FileSystemAdapter` before it resolves the vault path, so
+ * this must be a class; the members are the ones the session layer calls.
  */
 export class FileSystemAdapter {
   constructor(private readonly basePath: string) {}
@@ -57,68 +45,50 @@ export class FileSystemAdapter {
     return this.basePath;
   }
 
-  private full(relativePath: string): string {
-    return nodePath.join(this.basePath, relativePath);
-  }
-
-  async read(relativePath: string): Promise<string> {
-    return nodeFs.promises.readFile(this.full(relativePath), "utf-8");
-  }
-
-  async write(relativePath: string, data: string): Promise<void> {
-    await nodeFs.promises.writeFile(this.full(relativePath), data, "utf-8");
-  }
-
   async exists(relativePath: string): Promise<boolean> {
     try {
-      await nodeFs.promises.access(this.full(relativePath));
+      await nodeFs.promises.access(nodePath.join(this.basePath, relativePath));
       return true;
     } catch {
       return false;
     }
   }
+}
 
-  async mkdir(relativePath: string): Promise<void> {
-    await nodeFs.promises.mkdir(this.full(relativePath), { recursive: true });
-  }
+interface RequestUrlParam {
+  url: string;
+  method?: string;
+  headers?: Record<string, string>;
+}
+
+interface RequestUrlResponse {
+  status: number;
+  json: unknown;
+}
+
+type RequestUrlHandler = (request: RequestUrlParam) => Promise<RequestUrlResponse>;
+
+let requestUrlHandler: RequestUrlHandler | null = null;
+
+/**
+ * Let one process opt in to real HTTP through `requestUrl`. Only the binary
+ * fetcher does, so the production installer can read GitHub release metadata;
+ * the scenario process never calls this.
+ */
+export function allowRequestUrl(handler: RequestUrlHandler): void {
+  requestUrlHandler = handler;
 }
 
 /**
- * Obsidian's HTTP helper. The suite allows no remote calls, so this fails
- * loudly instead of reaching the network — an unexpected request shows up as a
- * scenario failure naming the URL rather than as a silent egress.
+ * Obsidian's HTTP helper. Scenarios allow no remote calls from Copilot code,
+ * so unless {@link allowRequestUrl} was called this fails loudly instead of
+ * reaching the network — an unexpected request becomes a scenario failure
+ * naming the URL rather than a silent egress.
  */
-export function requestUrl(options: { url: string } | string): never {
-  const url = typeof options === "string" ? options : options.url;
-  throw new Error(`[runtime-tests] blocked network request to ${url}`);
-}
-
-/** Base classes the imported production modules only ever subclass. */
-export class Component {
-  onload(): void {}
-  onunload(): void {}
-  load(): void {}
-  unload(): void {}
-  register(): void {}
-  registerEvent(): void {}
-  registerDomEvent(): void {}
-  addChild<T>(child: T): T {
-    return child;
+export async function requestUrl(options: RequestUrlParam | string): Promise<RequestUrlResponse> {
+  const request = typeof options === "string" ? { url: options } : options;
+  if (!requestUrlHandler) {
+    throw new Error(`[runtime-tests] blocked network request to ${request.url}`);
   }
+  return requestUrlHandler(request);
 }
-export class Modal extends Component {
-  constructor(public readonly app: unknown) {
-    super();
-  }
-  open(): void {}
-  close(): void {}
-}
-export class PluginSettingTab extends Component {}
-export class ItemView extends Component {}
-export class Plugin extends Component {}
-export class TFile {}
-export class TFolder {}
-export class TAbstractFile {}
-export class Vault {}
-export class Setting {}
-export class MarkdownRenderer {}

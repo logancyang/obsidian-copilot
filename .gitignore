@@ -41,6 +41,7 @@ copilot/acp-frames.old.ndjson
 .copilot/model-catalog-cache.json
 .otacon/
 
-# Runtime suite: bundled step definitions and the cached pinned opencode binary
+# Runtime suite: bundled step definitions, the cached pinned opencode binary, and run reports
 runtime-tests/.build/
 runtime-tests/.opencode/
+runtime-tests/.report/

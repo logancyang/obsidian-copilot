@@ -1,119 +1,192 @@
 # Runtime tests
 
-Executable proof that the pinned `opencode` executable still works with
-Copilot's real config generation and ACP wiring. A passing mocked unit test
-cannot detect a binary incompatibility; these scenarios can.
+Executable Gherkin contracts that run Copilot's Agent Mode session layer against
+the real pinned `opencode` executable. A mocked unit test cannot detect a binary
+incompatibility; these scenarios can.
 
 ```bash
 npm run test:runtime
 ```
 
-That bundles the suite, downloads and verifies the pinned opencode release into
-`runtime-tests/.opencode/<version>/` (cached; a download or version mismatch
-fails the run rather than falling back to another local opencode), and runs
-`runtime-tests/features/`. Cold ≈ 20s, warm ≈ 14s on an M-series laptop.
+The command bundles the suite (`build.mjs`), installs the pinned opencode
+release into `runtime-tests/.opencode/` (`bin/fetchOpencode.ts`), and runs
+`features/` with Cucumber. It needs no credentials and makes no inference
+requests. It runs on macOS and Linux.
 
-Jest never sees any of this: `jest.config.js` roots are `src`, `dev` and
-`scripts`.
+## Test boundary
 
-## What is real
+A scenario talks to Copilot the way the Agent Chat view does: it creates a chat
+through `AgentSessionManager.createSession`, sends through
+`AgentChatUIState.sendMessage`, and reads the conversation from
+`AgentChatUIState.getMessages()` as it changes. Everything from there to the
+model is production code or the real runtime.
 
-Everything between the step definitions and the model:
-`OpencodeBackend.buildSpawnDescriptor` → `buildOpencodeConfig` →
-`AcpProcessManager` (a real `child_process.spawn` of the real binary) →
-`@agentclientprotocol/sdk` → `VaultClient` → `wireTranslate` →
-`AcpBackendProcess`, plus `BackendConfigRegistry`, `ConfiguredModelRegistry`,
-the settings store and the production `OpencodeBackendDescriptor`.
+**Real:** `AgentSessionManager`, `AgentModelPreloader` (the plugin-load probe
+whose warm process the first chat adopts), `AgentSession`, `AgentMessageStore`,
+`AgentChatUIState`, the default permission prompter, the backend registry and
+`OpencodeBackendDescriptor`, `OpencodeBackend.buildSpawnDescriptor` and
+`buildOpencodeConfig`, `AcpBackendProcess`, `AcpProcessManager` (a real
+`child_process.spawn`), `@agentclientprotocol/sdk`, `VaultClient`,
+`wireTranslate`, the settings store, `createModelManagement` (provider, model,
+and backend registries), `KeychainService`, the opencode binary, and opencode's
+own `@ai-sdk/openai-compatible` provider adapter talking HTTP.
 
-The scripted provider is configured the way a user configures a local model: an
-`openai-compatible` BYOK provider row with a `baseUrl`, enabled for the
-`opencode` backend. `buildOpencodeConfig` turns that into the runtime's
-`@ai-sdk/openai-compatible` entry, so config generation is under test rather
-than bypassed. The `OPENCODE_CONFIG_CONTENT` override is deliberately unused.
+Copilot is configured through its normal paths: the BYOK wizard's
+`setup.byok.setupProvider` adds an OpenAI-compatible provider with a key and
+enables its model for opencode, the Default model picker's
+`persistDefaultSelection` makes it the default, and the env-overrides setting
+passes one runtime flag. `buildOpencodeConfig` turns that into opencode's
+config, so config generation is under test.
 
-## What is substituted, and why
+**Substituted:**
 
-| Substitute                                                      | Stands in for                          | Why                                                                                                                                                                                                                    |
-| --------------------------------------------------------------- | -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `harness/scriptedProvider.ts`                                   | The remote model provider              | The only substitution the epic allows. Deterministic SSE over real HTTP on loopback, so the agent's own provider adapter is still exercised.                                                                           |
-| `obsidianShim.ts` → `FileSystemAdapter`                         | Obsidian's vault adapter               | Must be a real class: `AcpBackendProcess.start` and `VaultClient.resolveVaultRelative` both do `instanceof FileSystemAdapter`. Reads and writes hit the real temp vault, because the agent's file tools go through it. |
-| `obsidianShim.ts` → `Platform`                                  | Obsidian's platform flags              | `requireNodeModule` refuses to load Node built-ins unless `isDesktopApp && !isMobile`.                                                                                                                                 |
-| `obsidianShim.ts` → `normalizePath`                             | Obsidian's path normalizer             | Same rule (backslashes to slashes, no leading/trailing slash); `VaultClient` depends on it.                                                                                                                            |
-| `obsidianShim.ts` → `Notice`                                    | Obsidian's toast                       | Nothing renders here.                                                                                                                                                                                                  |
-| `obsidianShim.ts` → `requestUrl`                                | Obsidian's HTTP helper                 | Throws. An unexpected remote call from plugin code surfaces as a named failure rather than silent egress.                                                                                                              |
-| `obsidianShim.ts` → `Component`, `Modal`, `PluginSettingTab`, … | Obsidian UI base classes               | The backend descriptor pulls in settings panels and modals that only subclass them.                                                                                                                                    |
-| Generated inert classes                                         | Every other `obsidian` export          | `build.mjs` emits one per name declared in `obsidian.d.ts` that the shim does not implement, so the checked-in shim stays limited to APIs whose behaviour matters.                                                     |
-| `harness/obsidianApp.ts`                                        | Obsidian's `App`                       | Agent Mode reads exactly `vault.adapter` and `vault.getName()`.                                                                                                                                                        |
-| Duck-typed `ProviderRegistry`                                   | `modelManagement`'s `ProviderRegistry` | The real one reads keys from Electron's keychain. The scripted provider row takes no key, so this answers `null` — what the real registry answers for a keyless row.                                                   |
-| `globalThis.window = globalThis`                                | Electron's window                      | `AcpProcessManager.shutdown` schedules its SIGTERM grace period with `window.setTimeout`.                                                                                                                              |
+| Substitute                              | Stands in for                          | Why                                                                                                                                                                                                                     |
+| --------------------------------------- | -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `harness/scriptedProvider.ts`           | The remote model provider              | The one substitution the epic allows. Deterministic SSE over real loopback HTTP, so opencode's own provider adapter still runs.                                                                                         |
+| `obsidianShim.ts` → `FileSystemAdapter` | Obsidian's vault adapter               | Must be a class (`instanceof` checks) rooted at the temp vault. `exists` is called when the session ensures the vault's `AGENTS.md`.                                                                                    |
+| `obsidianShim.ts` → `Platform`          | Obsidian's platform flags              | `requireNodeModule` loads Node built-ins only on desktop.                                                                                                                                                               |
+| `obsidianShim.ts` → `normalizePath`     | Obsidian's path normalizer             | Same rule; path helpers depend on it.                                                                                                                                                                                   |
+| `obsidianShim.ts` → `requestUrl`        | Obsidian's HTTP helper                 | Throws in scenarios, so a remote call from Copilot code fails by name. Only the fetcher enables it.                                                                                                                     |
+| Generated inert classes                 | Every other `obsidian` export          | `build.mjs` emits an empty class per name in `obsidian.d.ts` the shim lacks. Imported modules only subclass or type against them on this path.                                                                          |
+| `harness/obsidianApp.ts` → `vault`      | Obsidian's `Vault`                     | `adapter` and `getName` feed the spawn; `getAbstractFileByPath` answers the empty index (callers fall back to the adapter); `on`/`offref` accept the project content tracker's subscriptions, and no vault event fires. |
+| `obsidianApp.ts` → `metadataCache`      | Obsidian's `MetadataCache`             | Same tracker subscription; nothing fires.                                                                                                                                                                               |
+| `obsidianApp.ts` → `workspace`          | Obsidian's `Workspace`                 | `getLeavesOfType` answers "no chat view is focused" when a finished turn asks whether to raise attention.                                                                                                               |
+| `obsidianApp.ts` → `secretStorage`      | The OS keychain behind `SecretStorage` | In memory, so the synthetic key never reaches a real keychain. `KeychainService` itself is real.                                                                                                                        |
+| Plugin object in `harness/runtime.ts`   | `CopilotPlugin`                        | Carries `app`, `manifest.version`, and the real `modelManagement` — the only members the session layer and opencode descriptor read on this path.                                                                       |
+| `window = globalThis`                   | Electron's `window`                    | Agent Mode schedules timers with `window.setTimeout`.                                                                                                                                                                   |
+
+Every stand-in member was checked by running the scenario with it removed: the
+session layer either throws or logs a swallowed warning, and a passing run logs
+no `WARN` or `ERROR` line.
+
+**Not wired:** chat persistence (`AgentChatPersistenceManager`), the session
+index, and `SkillManager`. They are optional collaborators the streaming
+contract does not reach; without `SkillManager`, opencode gets the empty skill
+deny list production uses before skills load.
+
+**Why not the plugin-level entry point.** `createAgentSessionManager(app,
+plugin)` does run headless with these stand-ins, but it also runs every
+registered backend's load-time hooks and preloads, so its behavior depends on
+what the host has installed: on a developer machine it found
+`~/.local/bin/claude` and started a Claude SDK probe session. It seeds built-in
+skills into the vault while teardown deletes it (`ENOTEMPTY`), and it leaves
+handles open: the Cucumber process had not exited three minutes after the
+scenario finished. The suite therefore constructs `AgentSessionManager` with
+the collaborators that function passes for opencode.
 
 ## Isolation
 
-Each scenario gets a fresh temp root holding the vault and an agent home.
-`HOME` and the four `XDG_*` roots are redirected there through the production
-`agentMode.backends.opencode.envOverrides` setting, so nothing touches the
-developer's `~/.config/opencode` or `~/.local/share/opencode`. Settings live in
-the in-memory jotai store and are reset on teardown; nothing writes to
-`~/.obsidian-copilot`. The subprocess and the HTTP server are torn down in an
-`After` hook, so an assertion failure still cleans up.
+Each scenario gets a fresh temp root holding the vault and an agent home. For
+the scenario's duration the harness points `HOME` and the four `XDG_*` roots at
+the agent home and moves the working directory to the temp root, so neither
+Copilot, the opencode it spawns, nor the `opencode --version` probe that runs
+before every spawn reads or writes the developer's state or the repository's
+project config. The key is synthetic, the keychain is in memory, settings live
+in the in-memory store, and all of it is reset on teardown.
 
-Every conversation is pinned to a scripted model. Left alone, opencode starts a
-session on one of its own hosted free models and the turn would leave the
-machine. Note that the binary still contacts its own catalog services at
-startup; the suite constrains _inference_, not opencode's own bootstrap.
+Teardown runs in an `After` hook, so a failed assertion still cleans up. It
+waits for any process startup still in flight (`AgentSessionManager.shutdown`
+does not stop a starting process), shuts the manager down, then kills and
+reports as a failure any process whose command line still names the scenario's
+vault. Interrupting the run with SIGINT or SIGKILL mid-scenario left no
+opencode process in a local check; the temp dir then stays in the OS temp
+directory.
+
+## Network
+
+opencode honors `HTTP_PROXY`/`HTTPS_PROXY`. The harness points them at
+`harness/egressProxy.ts`, a loopback proxy that refuses every request and
+records its destination; `NO_PROXY` exempts loopback so the scripted provider
+is reachable.
+
+- **Blocked:** every proxied request. With nothing turned off, the pinned
+  release contacts `models.opencode.ai` (the models.dev catalog) and
+  `registry.npmjs.org` (an unconditional background
+  `npm install @opencode-ai/plugin` in its config directory) at startup, and
+  nothing else during a turn.
+- **Turned off:** the catalog download, via `OPENCODE_DISABLE_MODELS_FETCH=1`
+  in the env-overrides setting. No setting disables the plugin install.
+- **Reported:** any refused destination other than `registry.npmjs.org:443`
+  fails the scenario, as does any request the scripted provider refuses (an
+  unknown path, a missing or wrong key, a turn with no scripted answer).
+  Copilot's own `requestUrl` throws.
+- **Unconstrained:** a connection that ignores the proxy variables. None was
+  observed: sampling `lsof` every 50 ms across three runs saw only loopback
+  sockets on the opencode process, while the same probe without the proxy saw
+  connections to remote port-443 addresses. DNS lookups are not intercepted.
+  Environment variables of the test process other than the ones above (for
+  example a provider key exported in a developer's shell) are inherited by
+  opencode, as Obsidian's are in production.
+
+opencode starts every session on its hosted `opencode/big-pickle` model; the
+scenario's default model moves it to the scripted one before the first prompt.
+With the default removed, the turn goes to `opencode.ai:443`, which the proxy
+refuses and the scenario reports.
+
+## Runner guarantees
+
+The run fails, each checked by trying it, when:
+
+- a step is undefined, or pending (`strict: true` in `cucumber.mjs`);
+- a scenario is skipped (the `After` hook; Cucumber alone exits 0);
+- no scenario runs, for example after a path typo (the `AfterAll` hook;
+  Cucumber alone exits 0).
+
+Jest never sees this suite: its roots are `src`, `dev`, and `scripts`, and
+`npx jest --listTests` lists nothing under `runtime-tests/`. The bundle resolves
+`@agentclientprotocol/sdk` and every other package from `node_modules`, so
+Jest's `moduleNameMapper` mocks (`__mocks__/`) cannot apply; the built bundle
+contains the SDK's `dist/` sources and no `__mocks__` code.
+
+## Pinned binary
+
+`bin/fetchOpencode.ts` installs `OPENCODE_PINNED_VERSION` with the plugin's own
+installer, `OpencodeBinaryManager.install()` — platform resolution, GitHub
+release lookup, download, extraction, and `--version` verification — with the
+home directory pointed at `runtime-tests/.opencode/`. A cached binary is reused
+only while it reports the pinned version; anything else is deleted and
+reinstalled. A failed lookup, download, or verification exits non-zero before
+any scenario runs (checked with a pin naming a missing release and with a
+download that reports another version). Without the cached binary a scenario
+fails with `No file at …` rather than using an opencode found on `PATH`. CI
+caches `runtime-tests/.opencode/` keyed on the OS, architecture, and pinned
+version.
+
+## Timeouts and measurements
+
+| Bound                  | Value  | Where                                                 |
+| ---------------------- | ------ | ----------------------------------------------------- |
+| Startup                | 30 s   | Spawn, ACP `initialize`, `session/new`, default model |
+| Turn                   | 20 s   | Send until the session reports its stop reason        |
+| Streamed chunk visible | 10 s   | The scripted provider's pace barrier                  |
+| Teardown wait          | 30 s   | In-flight startups before shutdown                    |
+| Cucumber step          | 60 s   | `setDefaultTimeout`, above the harness bounds         |
+| CI job                 | 10 min | `timeout-minutes` on the runtime job                  |
+
+A scenario is bounded by its steps; the longest (open plus send) is bounded by
+50 s of harness waits.
+
+Measured on an Apple M-series Mac (darwin-arm64, Node 26): the scenario takes
+about 2.7 s, of which startup through a ready session is about 1.2 s and the
+turn about 1 s. `npm run test:runtime` takes about 10.5 s cold (no cache: bundle
+0.4 s, download and verify 5.4 s) and 7.0 s warm.
+
+## Failure report
+
+Every run writes `runtime-tests/.report/summary.json` with the opencode
+version, OS, Node version, commit, total elapsed time, and each scenario's
+result, elapsed time, and error. A failed scenario also gets
+`logs/<n>-<scenario>.log`: Copilot's log buffer (which includes ACP frames and
+opencode's stderr), opencode's own log files, the provider's requests and
+refusals, and the refused network attempts. Everything written is redacted:
+key- and token-shaped values, `Bearer` credentials, and home-directory paths.
+CI uploads the directory as the `runtime-report` artifact when the job fails.
 
 ## The harness
 
-`harness/` is deliberately free of test-runner vocabulary — no World, no hooks,
-no assertions — so the same harness can be driven from any test format.
-
-```ts
-class Runtime {
-  readonly provider: ScriptedProvider;
-  readonly permissionPrompts: PermissionPrompt[];
-  readonly vaultPath: string;
-  start(options: { binaryPath: string; models: readonly string[] }): Promise<void>;
-  openConversation(modelId: string): Promise<Conversation>;
-  answerPermissionsWith(answer: "allow" | "deny"): void;
-  readVaultFile(relativePath: string): Promise<string | null>;
-  writeVaultFile(relativePath: string, content: string): Promise<void>;
-  stop(): Promise<void>;
-}
-
-class Conversation {
-  readonly sessionId: string;
-  selectModel(modelId: string): Promise<void>;
-  send(text: string): Promise<Turn>; // Turn = { text, stopReason }
-  sendWithoutWaiting(text: string): void;
-  awaitTurn(): Promise<Turn>;
-  cancel(): Promise<void>;
-  waitForText(needle: string, timeoutMs?: number): Promise<void>;
-}
-
-class ScriptedProvider {
-  readonly baseUrl: string;
-  readonly requests: readonly RecordedRequest[]; // { url, model, body }
-  reply(...replies: ScriptedReply[]): void;
-}
-
-type ScriptedReply =
-  | { kind: "text"; text: string }
-  | { kind: "hold"; text: string } // streams, then waits to be aborted
-  | { kind: "toolCall"; name: string; arguments: Record<string, unknown> };
-
-function pinnedBinaryPath(): string;
-```
-
-Scripted replies are consumed one per _agent_ turn. opencode names a
-conversation with a second, tool-less completion call; that one gets a fixed
-answer so it cannot eat a scripted reply.
-
-## The runner
-
-`build.mjs` bundles the step definitions with esbuild — the same mechanism that
-builds the plugin — and Cucumber loads the bundle. One step covers all three
-resolution problems: aliasing `obsidian`, resolving `@/`, and loading the
-`.svg`/`.md` assets that production Agent Mode modules import. It also inlines
-the ESM-only ACP SDK, which puts Jest's global `__mocks__` alias for that
-package out of reach by construction. Output is ESM because some bundled React
-dependencies use top-level await; the banner restores `require` and `__dirname`.
+`harness/` carries no test-runner vocabulary, so any test format can drive it.
+`Runtime` owns the temp dirs, the scripted provider, the egress proxy, and the
+session manager; `Conversation` wraps one chat's `AgentChatUIState` and records
+every distinct state of the latest answer. The scripted provider streams each
+word only after the previous one is visible in the conversation, so a scenario
+can assert the order text arrives in without timing assumptions.

@@ -2,9 +2,9 @@
 // plugin itself, and the only one that satisfies all of this suite's
 // resolution needs in one step: alias `obsidian` (types-only at runtime) to the
 // shim, resolve the `@/` alias, and load the `.svg` / `.md` assets that
-// production Agent Mode modules import. It also inlines the ESM-only ACP SDK
-// into CJS, which puts Jest's global `__mocks__` alias for that package out of
-// reach by construction.
+// production Agent Mode modules import. Every other import, including the ACP
+// SDK, resolves from `node_modules`, so Jest's `moduleNameMapper` mocks are out
+// of reach by construction.
 import esbuild from "esbuild";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
@@ -29,7 +29,7 @@ const obsidianShimPlugin = {
     build.onLoad({ filter: /obsidianShim\.ts$/ }, async (args) => {
       const shim = await readFile(args.path, "utf8");
       const declared = new Set(
-        [...shim.matchAll(/export (?:class|function|const) (\w+)/g)].map((m) => m[1])
+        [...shim.matchAll(/export (?:async )?(?:class|function|const) (\w+)/g)].map((m) => m[1])
       );
       const dts = await readFile(resolve(repoRoot, "node_modules/obsidian/obsidian.d.ts"), "utf8");
       const stubs = [
@@ -77,7 +77,7 @@ await esbuild.build({
   // register into a second copy the runner never reads.
   external: ["@cucumber/cucumber"],
   plugins: [obsidianShimPlugin, svgrPlugin],
-  loader: { ".md": "text", ".wasm": "binary" },
+  loader: { ".md": "text" },
   tsconfig: resolve(repoRoot, "tsconfig.json"),
   define: { "process.env.NODE_ENV": '"test"' },
 });
