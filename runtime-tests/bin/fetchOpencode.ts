@@ -26,6 +26,9 @@ import { BINARY_CACHE_HOME, pinnedBinaryPath } from "../harness/pinnedBinary";
 (globalThis as { window?: unknown }).window ??= globalThis;
 
 async function main(): Promise<void> {
+  // Only the GitHub API request sees the token; no process this one starts inherits it.
+  const githubToken = process.env.GITHUB_TOKEN;
+  delete process.env.GITHUB_TOKEN;
   // The installer places releases under `<home>/.obsidian-copilot`, and even
   // `opencode --version` creates its state directories under the home.
   process.env.HOME = BINARY_CACHE_HOME;
@@ -40,7 +43,7 @@ async function main(): Promise<void> {
   await fs.promises.rm(path.dirname(path.dirname(target)), { recursive: true, force: true });
 
   allowRequestUrl(async ({ url, method, headers }) => {
-    const token = url.startsWith("https://api.github.com/") ? process.env.GITHUB_TOKEN : undefined;
+    const token = url.startsWith("https://api.github.com/") ? githubToken : undefined;
     const response = await fetch(url, {
       method,
       headers: { ...headers, ...(token ? { authorization: `Bearer ${token}` } : {}) },

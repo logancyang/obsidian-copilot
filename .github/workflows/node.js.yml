@@ -87,6 +87,8 @@ jobs:
   runtime:
     name: OpenCode runtime contracts (22.x)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     # Bounds a hung runtime well past the measured duration; see runtime-tests/README.md.
     timeout-minutes: 10
     steps:
