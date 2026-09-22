@@ -1370,6 +1370,22 @@ export class AgentSession {
     }
   }
 
+  /** Release the allocated backend session. */
+  async releaseBackendSession(): Promise<void> {
+    const backendSessionId = this.backendSessionId;
+    if (!backendSessionId || !this.backend.closeSession) {
+      throw new Error("This agent does not support closing individual sessions.");
+    }
+    try {
+      await this.backend.closeSession({ sessionId: backendSessionId });
+    } catch (error) {
+      if (error instanceof MethodUnsupportedError) {
+        throw new Error("This agent does not support closing individual sessions.");
+      }
+      throw error;
+    }
+  }
+
   /** Detach from the backend. Does not cancel — call `cancel()` first. */
   async dispose(): Promise<void> {
     this.disposed = true;

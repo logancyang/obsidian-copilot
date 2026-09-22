@@ -49,6 +49,7 @@ interface MockBackend {
   emit: (event: SessionEvent) => void;
   prompt: jest.Mock;
   cancel: jest.Mock;
+  closeSession: jest.Mock;
   newSession: jest.Mock;
   setSessionModel: jest.Mock;
   setSessionConfigOption: jest.Mock;
@@ -70,6 +71,7 @@ function makeMockBackend(): MockBackend {
   });
   const prompt = jest.fn(async () => ({ stopReason: "end_turn" as const }));
   const cancel = jest.fn(async () => undefined);
+  const closeSession = jest.fn(async () => undefined);
   const newSession = jest.fn(async () => ({ sessionId: "acp-1", state: emptyState() }));
   const setSessionModel = jest.fn(async () => emptyState());
   const setSessionConfigOption = jest.fn(async () => emptyState());
@@ -83,6 +85,7 @@ function makeMockBackend(): MockBackend {
     newSession: newSession,
     prompt: prompt,
     cancel: cancel,
+    closeSession,
     setSessionModel: setSessionModel,
     isSetSessionModelSupported: () => true,
     setSessionMode: setSessionMode,
@@ -99,6 +102,7 @@ function makeMockBackend(): MockBackend {
     registerHandler,
     prompt,
     cancel,
+    closeSession,
     newSession,
     setSessionModel,
     setSessionConfigOption,
@@ -1573,6 +1577,54 @@ describe("AgentSession.sendPrompt", () => {
       jest.useRealTimers();
     }
   });
+});
+
+describe("AgentSession.releaseBackendSession", () => {
+  function setupReleaseSession() {
+    const mock = makeMockBackend();
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "opencode",
+    });
+    return { mock, session };
+  }
+
+  it("closes a running backend session without waiting for cancellation https://github.com/Brevilabs/obsidian-copilot-private/issues/429", async () => {
+    const { mock, session } = setupReleaseSession();
+    mock.cancel.mockImplementation(() => new Promise<void>(() => undefined));
+    let finishPrompt!: (result: { stopReason: "cancelled" }) => void;
+    mock.prompt.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finishPrompt = resolve;
+        })
+    );
+    const turn = session.sendPrompt("release this session").turn;
+
+    const release = session.releaseBackendSession();
+    await Promise.resolve();
+
+    expect(mock.closeSession).toHaveBeenCalledWith({ sessionId: "acp-1" });
+    expect(mock.cancel).not.toHaveBeenCalled();
+    await release;
+    finishPrompt({ stopReason: "cancelled" });
+    await turn;
+  });
+
+  it.each(["missing", "unsupported"])(
+    "explains %s close support for https://github.com/Brevilabs/obsidian-copilot-private/issues/429",
+    async (kind) => {
+      const { mock, session } = setupReleaseSession();
+      if (kind === "missing") delete mock.asBackend.closeSession;
+      else mock.closeSession.mockRejectedValueOnce(new MethodUnsupportedError("session/close"));
+
+      await expect(session.releaseBackendSession()).rejects.toThrow(
+        "This agent does not support closing individual sessions."
+      );
+    }
+  );
 });
 
 describe("withReadOnlyPreamble", () => {

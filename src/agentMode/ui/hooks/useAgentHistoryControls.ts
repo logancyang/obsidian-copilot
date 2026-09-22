@@ -27,7 +27,6 @@ export interface AgentHistoryControls {
   deleteChat: (id: string) => Promise<void>;
   openSourceFile: (id: string) => Promise<void>;
 }
-
 /**
  * History popover handlers (load list, open, rename, delete, open source) plus
  * the items state they refresh. Kept separate from chat-runtime state because

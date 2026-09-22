@@ -863,6 +863,61 @@ export class AgentSessionManager {
     return ids;
   }
 
+  /** Recent-list identities of sessions still held by Copilot, including idle chats. */
+  getOpenChatIds(): ReadonlySet<string> {
+    const ids = new Set<string>();
+    for (const [internalId, session] of this.sessions) {
+      // A starting or failed session has no backend resource for the user to close.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/429
+      if (!session.getBackendSessionId()) continue;
+      for (const id of this.recentChatIdsForSession(internalId, session)) ids.add(id);
+    }
+    return ids.size === 0 ? EMPTY_RECENT_CHAT_IDS : ids;
+  }
+
+  /**
+   * Release an open conversation without deleting its saved history.
+   * @param historyId The markdown path or native chat identity shown in history.
+   */
+  async closeChatSession(historyId: string): Promise<void> {
+    for (const [internalId, session] of this.sessions) {
+      // History can still display the native identity after the first autosave.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/429
+      if (this.recentChatIdsForSession(internalId, session).includes(historyId)) {
+        await this.closeSession(internalId, { releaseBackend: true });
+        return;
+      }
+    }
+  }
+
+  /**
+   * Remove a session from its tab strip while keeping its backend session available in history.
+   * Closing a tab is navigation; only the history action releases the backend resource.
+   * https://github.com/Brevilabs/obsidian-copilot-private/issues/429
+   * @param id The internal session identity to detach.
+   */
+  detachSessionFromTab(id: string): void {
+    const session = this.sessions.get(id);
+    if (!session || this.detachedFromTabIds.has(id)) return;
+    const scopeIdsBefore = this.getSessionIdsForScope(session.projectId);
+    const closedIndex = scopeIdsBefore.indexOf(id);
+    this.detachedFromTabIds.add(id);
+
+    if (this.lastActiveByScope.get(session.projectId) === id) {
+      this.lastActiveByScope.delete(session.projectId);
+    }
+    if (this.activeSessionId === id) {
+      const nextId = pickScopeNeighbor(
+        this.getSessionIdsForScope(session.projectId),
+        closedIndex,
+        this.lastActiveByScope.get(session.projectId)
+      );
+      this.activeSessionId = nextId;
+      if (nextId) this.lastActiveByScope.set(session.projectId, nextId);
+    }
+    this.notify();
+  }
+
   /**
    * Recent-list ids of pool sessions whose backend turn is currently
    * `"running"`, so the landing rows can swap their relative-time chip for a
@@ -2636,9 +2691,12 @@ export class AgentSessionManager {
    * Cancel any in-flight turn, dispose the session, and remove it from the
    * pool. If the closed session was active, picks the right neighbor (or the
    * last remaining session) as the new active — `null` when none remain.
-   * Backend stays up.
+   * The shared backend process stays up. Explicit resource release retains the
+   * local session on failure so history can still offer a retry.
+   * @param id The internal session identity to remove.
+   * @param options Request backend release for a user-initiated session close.
    */
-  async closeSession(id: string): Promise<void> {
+  async closeSession(id: string, options?: { releaseBackend: boolean }): Promise<void> {
     const session = this.sessions.get(id);
     if (!session) return;
     const closedScope = session.projectId;
@@ -2646,13 +2704,19 @@ export class AgentSessionManager {
     // neighbour pick stays in-scope (never jumps the user to another project).
     const scopeIdsBefore = this.getSessionIdsForScope(closedScope);
     const closedIdx = scopeIdsBefore.indexOf(id);
-    try {
-      await session.cancel();
-    } catch (e) {
-      logWarn(`[AgentMode] cancel during closeSession failed`, e);
+    // User-requested release must block new sends before cancellation and saving.
+    // Internal teardown also works when the whole backend is being restarted.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/429
+    if (options?.releaseBackend) {
+      await session.releaseBackendSession();
+    } else {
+      try {
+        await session.cancel();
+      } catch (e) {
+        logWarn(`[AgentMode] cancel during closeSession failed`, e);
+      }
     }
-    // Drain any pending debounced auto-save before tearing the session
-    // down — otherwise the last few tokens of a fast turn never reach disk.
+    // Drain the final transcript before disposing subscriptions and pending saves.
     await this.drainAutoSave(session);
     try {
       await session.dispose();

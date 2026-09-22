@@ -7,9 +7,15 @@ type SectionItems = React.ComponentProps<typeof GlobalRecentChatsSection>["items
 
 const noop = async () => {};
 
-function renderSection(props: Partial<React.ComponentProps<typeof GlobalRecentChatsSection>> = {}) {
+function renderSection(
+  props: Partial<React.ComponentProps<typeof GlobalRecentChatsSection>> & {
+    openChatIds?: ReadonlySet<string>;
+    onCloseSession?: (id: string) => Promise<void>;
+  } = {}
+) {
   return render(
     <GlobalRecentChatsSection
+      {...{ openChatIds: props.openChatIds, onCloseSession: props.onCloseSession }}
       items={props.items ?? []}
       variant={props.variant}
       title={props.title}
@@ -74,6 +80,34 @@ describe("GlobalRecentChatsSection", () => {
   });
 
   describe("GlobalRecentChatsSection()", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/429 shows open sessions and retains saved chats after close", async () => {
+      const onLoadChat = jest.fn(noop);
+      const onDeleteChat = jest.fn(noop);
+      const onCloseSession = jest.fn(noop);
+      renderSection({
+        items: [makeItem("idle"), makeItem("running"), makeItem("closed")],
+        openChatIds: new Set(["idle", "running"]),
+        runningChatIds: new Set(["running"]),
+        onCloseSession,
+        onLoadChat,
+        onDeleteChat,
+      });
+      const liveDots = screen.getAllByLabelText("Session live");
+      expect(liveDots).toHaveLength(2);
+      expect(liveDots[0].parentElement?.getAttribute("title")).toBe("Session is running");
+      expect(screen.getByLabelText("Responding")).toBeTruthy();
+      const buttons = screen.getAllByRole("button", { name: "Close session" });
+      expect(buttons).toHaveLength(2);
+      fireEvent.keyDown(buttons[0], { key: "Enter" });
+      await act(async () => {
+        fireEvent.click(buttons[0]);
+      });
+      expect(onCloseSession).toHaveBeenCalledTimes(1);
+      expect(onLoadChat).not.toHaveBeenCalled();
+      expect(onDeleteChat).not.toHaveBeenCalled();
+      expect(screen.getByText("Chat idle")).toBeTruthy();
+    });
+
     it("defaults to the global empty-state copy", () => {
       renderSection();
       expect(screen.getByText("No recent chats")).toBeTruthy();
@@ -92,14 +126,14 @@ describe("GlobalRecentChatsSection", () => {
     it("renders a running spinner instead of the time for a backgrounded session", () => {
       const item = makeItem("running-1");
       renderSection({ items: [item], runningChatIds: new Set([item.id]) });
-      expect(screen.getByLabelText("Running")).toBeTruthy();
+      expect(screen.getByLabelText("Responding")).toBeTruthy();
       expect(screen.queryByText("now")).toBeNull();
     });
 
     it("renders the relative time (no spinner) when the session is not running", () => {
       const item = makeItem("idle-1");
       renderSection({ items: [item], runningChatIds: new Set() });
-      expect(screen.queryByLabelText("Running")).toBeNull();
+      expect(screen.queryByLabelText("Responding")).toBeNull();
       expect(screen.getByText("now")).toBeTruthy();
     });
 

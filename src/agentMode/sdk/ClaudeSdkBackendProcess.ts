@@ -497,6 +497,9 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
     const turnAbort = new AbortController();
     options.abortController = turnAbort;
 
+    // Closing during async preparation must not launch an orphan query afterward.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/429
+    if (this.sessions.get(params.sessionId) !== session) return { stopReason: "cancelled" };
     const q = query({ prompt: promptStream, options });
     session.active = q;
     session.firstPromptStarted = true;
@@ -557,6 +560,18 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
     }
     logSdkOutboundResult("prompt", { stopReason }, params.sessionId);
     return { stopReason };
+  }
+
+  /**
+   * Release one session and its query without touching persisted history or sibling queries.
+   * @param params Identifies the live session to release.
+   */
+  async closeSession(params: { sessionId: SessionId }): Promise<void> {
+    // Interrupt alone leaves the query's resources alive; each SDK query owns its own process.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/429
+    this.sessions.get(params.sessionId)?.active?.close();
+    this.sessions.delete(params.sessionId);
+    this.pendingUpdates.delete(params.sessionId);
   }
 
   async cancel(params: CancelInput): Promise<void> {
