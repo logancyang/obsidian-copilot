@@ -20,7 +20,7 @@ Feature: Choosing the model, effort, and mode a conversation runs on
   # https://github.com/logancyang/obsidian-copilot/issues/2898
   # BYOK OpenAI-compatible models were not offered through opencode:
   # https://github.com/Brevilabs/obsidian-copilot-private/issues/76
-  Scenario Outline: A model and effort picked mid-conversation reach that model's endpoint with that effort
+  Scenario Outline: A model picked mid-conversation at <effort> effort reaches that model's endpoint with that effort
     Given Copilot starts with "model-a" as opencode's default model
     When I open a new conversation
     Then the model picker offers exactly:
@@ -43,6 +43,8 @@ Feature: Choosing the model, effort, and mode a conversation runs on
       | user | Second question |               |
       | ai   | Second answer   | end_turn      |
 
+    # One example per level: each checks opencode's own mapping of that level onto
+    # the request, which the OpenCode V2 migration changes.
     Examples:
       | effort  | sent   |
       | low     | low    |
@@ -52,7 +54,7 @@ Feature: Choosing the model, effort, and mode a conversation runs on
 
   # A new conversation must open in the mode the user last chose:
   # https://github.com/Brevilabs/obsidian-copilot-private/issues/71
-  Scenario: The mode picked in a conversation is confirmed and new conversations open in it
+  Scenario: The mode picked in a conversation is confirmed and the next new conversation switches to it
     Given Copilot starts with "model-a" as opencode's default model
     When I open a new conversation
     Then the mode picker offers "Default, Auto" and shows "Default"
@@ -62,6 +64,8 @@ Feature: Choosing the model, effort, and mode a conversation runs on
 
   # A restart resumes each open conversation instead of replacing it:
   # https://github.com/Brevilabs/obsidian-copilot-private/issues/475
+  # Not covered: a pick made after the last turn, or in a chat with no turns, is
+  # not restored: https://github.com/logancyang/obsidian-copilot/issues/3319
   Scenario: A conversation continues on the model and effort of its last turn after opencode restarts
     Given Copilot starts with "model-a" as opencode's default model
     When I open a new conversation
@@ -77,13 +81,21 @@ Feature: Choosing the model, effort, and mode a conversation runs on
       | bravo    | model-b | high             |
       | bravo    | model-b | medium           |
       | bravo    | model-b | medium           |
+    # Turns replayed from opencode's history carry no stop reason.
+    And the conversation shows exactly:
+      | from | message         | turn ended as |
+      | user | First question  |               |
+      | ai   | First answer    |               |
+      | user | Second question |               |
+      | ai   | Second answer   |               |
+      | user | Third question  |               |
+      | ai   | Third answer    | end_turn      |
 
   # New conversations kept opencode's own effort instead of the saved one:
   # https://github.com/Brevilabs/obsidian-copilot-private/issues/201
-  Scenario: After Copilot reloads, a new conversation starts on the saved default model and effort
+  Scenario: A new conversation starts on the default model and effort saved in settings
     Given Copilot starts with "model-a" as opencode's default model
     When I set opencode's default model to "model-b" at "high" effort in settings
-    And Copilot reloads
     And I open a new conversation
     Then the model picker shows "bravo/model-b" at "high" effort
     When I send "Question", which the model answers with "Answer"
@@ -96,7 +108,6 @@ Feature: Choosing the model, effort, and mode a conversation runs on
   Scenario: A saved default model that is turned off gives way to an enabled model, and the user is told
     Given Copilot starts with "model-b" at "high" effort as opencode's default model
     When I turn off "model-b" for opencode in settings
-    And Copilot reloads
     And I open a new conversation
     Then the model picker offers exactly:
       | model         | effort levels |

@@ -20,15 +20,15 @@ production Copilot code driving the real pinned opencode process, with only
 remote inference replaced by the scripted provider. A pass says nothing about a
 hosted model's behavior or about Obsidian's UI.
 
-| Scenario                                                                                                                    | Behavior it protects                                                                                                                                                                                                                          | Origin                                                                                                                                                             |
-| --------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `streaming.feature`: A streamed answer appears in the conversation word by word and then completes                          | Streamed text reaches the conversation in order, and the turn ends only after its last word.                                                                                                                                                  | —                                                                                                                                                                  |
-| `model-selection.feature`: A model and effort picked mid-conversation reach that model's endpoint with that effort          | The model picker offers exactly the enabled models and the effort levels opencode advertises; a pick is confirmed by opencode; the next turn goes to the picked model on its own provider's endpoint with that effort. One example per level. | [#2898](https://github.com/logancyang/obsidian-copilot/issues/2898), [private #76](https://github.com/Brevilabs/obsidian-copilot-private/issues/76)                |
-| `model-selection.feature`: The mode picked in a conversation is confirmed and new conversations open in it                  | opencode confirms the picked mode, and the next new conversation switches to it.                                                                                                                                                              | [private #71](https://github.com/Brevilabs/obsidian-copilot-private/issues/71)                                                                                     |
-| `model-selection.feature`: A conversation continues on the model and effort of its last turn after opencode restarts        | The effort picker changes effort alone; the chat's Reload action resumes the conversation, which shows and uses the model and effort of its last turn.                                                                                        | [private #475](https://github.com/Brevilabs/obsidian-copilot-private/issues/475)                                                                                   |
-| `model-selection.feature`: After Copilot reloads, a new conversation starts on the saved default model and effort           | The saved default model and effort are applied before a new chat can send, and its first request uses them.                                                                                                                                   | [private #201](https://github.com/Brevilabs/obsidian-copilot-private/issues/201)                                                                                   |
-| `model-selection.feature`: A saved default model that is turned off gives way to an enabled model, and the user is told     | A new chat starts on an enabled model instead, one notice names the model that is gone, and the saved default is kept.                                                                                                                        | [private #474](https://github.com/Brevilabs/obsidian-copilot-private/issues/474)                                                                                   |
-| `model-selection.feature`: A saved effort on a default model with no effort levels is dropped instead of changing the model | The saved model is still applied, no effort is sent, and the saved default drops the effort.                                                                                                                                                  | [private #364](https://github.com/Brevilabs/obsidian-copilot-private/issues/364), [private #219](https://github.com/Brevilabs/obsidian-copilot-private/issues/219) |
+| Scenario                                                                                                                       | Behavior it protects                                                                                                                                                                                                                                                                                                                                              | Origin                                                                                                                                                             |
+| ------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `streaming.feature`: A streamed answer appears in the conversation word by word and then completes                             | Streamed text reaches the conversation in order, and the turn ends only after its last word.                                                                                                                                                                                                                                                                      | —                                                                                                                                                                  |
+| `model-selection.feature`: A model picked mid-conversation at `<effort>` effort reaches that model's endpoint with that effort | The model picker offers exactly the enabled models and the effort levels opencode advertises; a pick is confirmed by opencode; the next turn goes to the picked model on its own provider's endpoint with that effort. One example per level, because each checks opencode's own mapping of that level onto the request, which the OpenCode V2 migration changes. | [#2898](https://github.com/logancyang/obsidian-copilot/issues/2898), [private #76](https://github.com/Brevilabs/obsidian-copilot-private/issues/76)                |
+| `model-selection.feature`: The mode picked in a conversation is confirmed and the next new conversation switches to it         | opencode confirms the picked mode, and the next new conversation switches to it once it is ready.                                                                                                                                                                                                                                                                 | [private #71](https://github.com/Brevilabs/obsidian-copilot-private/issues/71)                                                                                     |
+| `model-selection.feature`: A conversation continues on the model and effort of its last turn after opencode restarts           | The effort picker changes effort alone; after a pick made before the chat's last turn, the chat's Reload action resumes the conversation, which keeps its transcript and shows and uses the model and effort of its last turn.                                                                                                                                    | [private #475](https://github.com/Brevilabs/obsidian-copilot-private/issues/475)                                                                                   |
+| `model-selection.feature`: A new conversation starts on the default model and effort saved in settings                         | The saved default model and effort are applied before a new chat can send, and its first request uses them.                                                                                                                                                                                                                                                       | [private #201](https://github.com/Brevilabs/obsidian-copilot-private/issues/201)                                                                                   |
+| `model-selection.feature`: A saved default model that is turned off gives way to an enabled model, and the user is told        | After opencode restarts on the new model list, a new chat starts on an enabled model instead, one notice names the model that is gone, and the saved default is kept.                                                                                                                                                                                             | [private #474](https://github.com/Brevilabs/obsidian-copilot-private/issues/474)                                                                                   |
+| `model-selection.feature`: A saved effort on a default model with no effort levels is dropped instead of changing the model    | The saved model is still applied, no effort is sent, and the saved default drops the effort.                                                                                                                                                                                                                                                                      | [private #364](https://github.com/Brevilabs/obsidian-copilot-private/issues/364), [private #219](https://github.com/Brevilabs/obsidian-copilot-private/issues/219) |
 
 What the pinned opencode advertises and sends, as observed by running it:
 
@@ -42,6 +42,36 @@ What the pinned opencode advertises and sends, as observed by running it:
   text turn's request is the same in both, with the same tools and system
   prompt, so the mode scenario asserts the confirmed state. What the mode
   changes, whether an edit asks first, is a file-edit behavior.
+
+### Known gaps (unverified)
+
+These do not hold on the pinned release, so no scenario asserts them. Each was
+observed with a scenario run outside the suite.
+
+- **A pick made after the chat's last turn is lost on the Reload action.** The
+  resumed chat comes back on the model and effort of its last turn: after a
+  turn on `alpha/model-a`, picking `bravo/model-b` at `high` effort, and Reload,
+  the picker shows `alpha/model-a` and the next message goes to `model-a` on
+  the `alpha` endpoint. The user's next message runs on a model and provider
+  they did not pick, and nothing on screen says so.
+  [#3319](https://github.com/logancyang/obsidian-copilot/issues/3319); open
+  fix [#3323](https://github.com/logancyang/obsidian-copilot/pull/3323);
+  [private #540](https://github.com/Brevilabs/obsidian-copilot-private/issues/540).
+- **A chat with no turns comes back on OpenCode Zen/Big Pickle after the Reload
+  action.** With `bravo/model-b` at `high` effort saved as the default, the
+  resumed chat shows `OpenCode Zen/Big Pickle`, and its first message goes to
+  `opencode.ai`, which the egress proxy refuses. A BYOK user's prompt goes to a
+  hosted service they never configured.
+  [#3319](https://github.com/logancyang/obsidian-copilot/issues/3319); open
+  fix [#3323](https://github.com/logancyang/obsidian-copilot/pull/3323);
+  [private #540](https://github.com/Brevilabs/obsidian-copilot-private/issues/540).
+- **A new chat can take a message before its saved mode is applied.** Copilot
+  asks opencode for the saved mode only once the chat is ready: with Auto
+  saved, a new chat shows Default when it can first take a message, and a
+  message sent then goes out before opencode confirms Auto. Whether that first
+  message runs in Auto, or in Default and asks before an edit the user expected
+  to happen without asking, depends on opencode's ordering, which no scenario
+  checks. The mode scenario therefore waits for the switch.
 
 ## Test boundary
 
@@ -74,13 +104,13 @@ turns that into opencode's config, so config generation is under test.
 
 Two session-lifecycle paths are driven the way the product drives them:
 
-- **Reload action.** `AgentSessionManager.noteSpawnConfigChanged`, which the
-  settings subscriptions call when a spawn-time setting changes, holds the
-  restart while a chat is open; `applyHeldConfigChange`, the chat's Reload
-  action, restarts opencode and resumes each open chat through `session/load`.
-- **Copilot reload.** `Runtime.reloadCopilot` shuts the manager down as plugin
-  unload does, then builds new model registries, a new manager, and a new
-  model probe as plugin load does.
+- **Settings change.** `AgentSessionManager.noteSpawnConfigChanged` is the call
+  the settings subscriptions make when a spawn-time setting changes, such as a
+  model turned off. With no chat open it restarts opencode's warm probe on the
+  new config at once.
+- **Reload action.** With a chat open, `noteSpawnConfigChanged` holds the
+  restart; `applyHeldConfigChange`, the chat's Reload action, restarts opencode
+  and resumes each open chat through `session/load`.
 
 **Substituted:**
 
@@ -98,7 +128,6 @@ Two session-lifecycle paths are driven the way the product drives them:
 | `obsidianApp.ts` → `workspace`          | Obsidian's `Workspace`                  | `getLeavesOfType` answers "no chat view is focused" when a finished turn asks whether to raise attention.                                                                                                               |
 | `obsidianApp.ts` → `secretStorage`      | The OS keychain behind `SecretStorage`  | In memory, so the synthetic key never reaches a real keychain. `KeychainService` itself is real.                                                                                                                        |
 | Plugin object in `harness/runtime.ts`   | `CopilotPlugin`                         | Carries `app`, `manifest.version`, and the real `modelManagement` — the only members the session layer and opencode descriptor read on this path.                                                                       |
-| `Runtime.reloadCopilot`                 | Disabling and re-enabling the plugin    | Settings and the keychain stay in memory, standing in for `data.json` and the OS keychain; they are not serialized and loaded back. The backends' `onPluginLoad` hooks do not run.                                      |
 | `window = globalThis`                   | Electron's `window`                     | Agent Mode schedules timers with `window.setTimeout`.                                                                                                                                                                   |
 | `build.mjs` bundle                      | The plugin's `esbuild.config.mjs` build | Node loads an ESM bundle with a CommonJS banner (`require`, `__dirname`) and `obsidian` aliased to the shim. `process.env.NODE_ENV` is `"production"`, as in a release build.                                           |
 
@@ -120,8 +149,8 @@ around the manager. None of it is on the paths the scenarios drive:
   the binary path directly);
 - the subscriptions that restart or refresh a backend when provider, model,
   env-override, system-prompt, managed-env, skill, or install settings change.
-  A scenario that turns a model off reloads Copilot before it opens a chat, and
-  the Reload action scenario calls `noteSpawnConfigChanged` in their place;
+  The scenarios that turn a model off or use the Reload action call
+  `noteSpawnConfigChanged` in their place;
 - `wireAgentModelDiscovery` and the ACP frame-log sink;
 - settings persistence (`plugin.saveData`): settings live in the in-memory
   store;
@@ -204,10 +233,10 @@ The run fails, each checked by trying it, when:
 - Copilot logs a `WARN` or `ERROR` line during the scenario. The check runs
   before teardown, because a clean shutdown right after a turn logs two
   warnings of its own: `backend opencode exited`, and a `session/list` title
-  poll cut off by the closing connection. A Reload action or Copilot reload
-  inside a scenario logs the same two, which are expected only while that
-  restart or unload runs. Plugin unload stops a warm model probe without
-  waiting for it to exit, so a Copilot reload also waits for that exit;
+  poll cut off by the closing connection. A restart inside a scenario, from a
+  settings change or the Reload action, logs the same two, which are expected
+  only while that restart runs. A settings change stops the warm probe without
+  waiting for it to exit, so the harness also waits for that exit;
 - no scenario runs, for example after a path typo (the `AfterAll` hook;
   Cucumber alone exits 0).
 
@@ -241,8 +270,8 @@ version.
 | Turn                   | 20 s   | Send until the session reports its stop reason        |
 | Streamed chunk visible | 10 s   | The scripted provider's pace barrier                  |
 | Selection confirmed    | 10 s   | A pick, or a new chat's saved mode, until shown       |
+| Settings change        | 30 s   | Old warm probe exits and the new one is warm          |
 | Reload action          | 30 s   | Restart until the resumed chat can take a message     |
-| Copilot reload         | 30 s   | Startups settle, unload, and every stopped exit       |
 | Teardown wait          | 30 s   | In-flight startups before shutdown                    |
 | Cucumber step          | 60 s   | `setDefaultTimeout`, above the harness bounds         |
 | CI job                 | 10 min | `timeout-minutes` on the runtime job                  |
@@ -285,8 +314,7 @@ directory as the `runtime-report` artifact when the job fails.
 
 `harness/` carries no test-runner vocabulary, so any test format can drive it.
 `Runtime` owns the temp dirs, the scripted provider, the egress proxy, and the
-session manager, and restarts opencode or reloads Copilot the way the product
-does; `Conversation` wraps one chat's `AgentChatUIState` and records every
+session manager, and restarts opencode the way the product does; `Conversation` wraps one chat's `AgentChatUIState` and records every
 distinct state of the latest answer. The scripted provider serves each
 configured provider row at its own base path, records the endpoint, model,
 and `reasoning_effort` of every request, and streams each word only after the

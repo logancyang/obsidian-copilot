@@ -197,7 +197,7 @@ When(
   }
 );
 
-// The opencode tab's model toggle.
+// The opencode tab's model toggle, then the restart its settings subscription asks for.
 When(
   "I turn off {string} for opencode in settings",
   async function (this: RuntimeWorld, model: string) {
@@ -207,12 +207,9 @@ When(
       "opencode",
       configured.configuredModelId
     );
+    await this.runtime.noteSpawnConfigChanged("model config changed");
   }
 );
-
-When("Copilot reloads", async function (this: RuntimeWorld) {
-  await this.runtime.reloadCopilot();
-});
 
 When("opencode restarts from the chat's Reload action", async function (this: RuntimeWorld) {
   this.conversation = await this.runtime.restartAgent();
@@ -225,7 +222,9 @@ When(
     const picker = modelPicker(this.runtime);
     const row = picker.models.find((entry) => entry.displayName === model);
     if (!row) throw new Error(`the model picker offers no "${model}"`);
-    picker.commitSelection?.(getModelKeyFromModel(row), effort);
+    const key = getModelKeyFromModel(row);
+    const option = effortOption(picker.effortOptionsByModelKey?.[key], model, effort);
+    picker.commitSelection?.(key, option.value);
     const expected = `${model} at ${effort} effort`;
     await this.conversation.waitFor(
       () => pickerSelection(this.runtime) === expected,
@@ -237,9 +236,10 @@ When(
 When("I choose {string} in the effort picker", async function (this: RuntimeWorld, effort: string) {
   const control = modelPicker(this.runtime).effort;
   if (!control) throw new Error("the model picker has no effort control");
-  control.onChange(effort);
+  const option = effortOption(control.options, "the current model", effort);
+  control.onChange(option.value);
   await this.conversation.waitFor(
-    () => modelPicker(this.runtime).effort?.value === effort,
+    () => modelPicker(this.runtime).effort?.value === option.value,
     () => `the effort picker to show ${effort}; it shows ${pickerSelection(this.runtime)}`
   );
 });
@@ -340,12 +340,31 @@ function modelPicker(runtime: Runtime): AgentModelPickerOverride {
   return picker;
 }
 
-/** What the model picker's trigger reads: the selected row, and its effort when it has one. */
+/** What the model picker's trigger reads: the selected row, and its effort's label when it has one. */
 function pickerSelection(runtime: Runtime): string {
   const picker = modelPicker(runtime);
   const row = picker.models.find((entry) => getModelKeyFromModel(entry) === picker.value);
   const model = row?.displayName ?? "no model";
-  return picker.effort ? `${model} at ${String(picker.effort.value)} effort` : model;
+  if (!picker.effort) return model;
+  const { options, value } = picker.effort;
+  const effort = options.find((option) => option.value === value)?.label ?? String(value);
+  return `${model} at ${effort} effort`;
+}
+
+/** The effort option a user picks by its label, as the picker's stepper shows it. */
+function effortOption(
+  options: readonly { label: string; value: string | null }[] | undefined,
+  model: string,
+  label: string
+): { label: string; value: string | null } {
+  const option = options?.find((candidate) => candidate.label === label);
+  if (!option) {
+    const offered = options?.map((candidate) => candidate.label).join(", ") || "none";
+    throw new Error(
+      `the model picker offers no "${label}" effort for ${model}; it offers ${offered}`
+    );
+  }
+  return option;
 }
 
 /** The chat input's mode picker, built by production code for the chat now shown. */

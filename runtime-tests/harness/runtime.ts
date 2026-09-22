@@ -61,8 +61,8 @@ const EXPECTED_REFUSED_EGRESS: ReadonlySet<string> = new Set([
 /**
  * Warnings Copilot logs when it stops opencode: the process exit itself and,
  * right after a turn, the title poll that turn started, cut off by the closing
- * connection. Logged while a scenario deliberately restarts or unloads, they
- * are expected; anywhere else they fail the scenario.
+ * connection. Logged while a scenario deliberately restarts opencode, they are
+ * expected; anywhere else they fail the scenario.
  */
 const SHUTDOWN_WARNINGS: readonly RegExp[] = [
   / WARN \[AgentMode\] backend opencode exited$/,
@@ -114,10 +114,9 @@ export class Runtime {
   #agentHome = "";
   #restoreEnvironment: (() => void) | null = null;
   #originalCwd = "";
-  #app: ObsidianApp | null = null;
   #modelManagement: ReturnType<typeof createModelManagement> | null = null;
   #preloader: AgentModelPreloader | null = null;
-  /** Log lines a deliberate restart or unload wrote that {@link problems} ignores. */
+  /** Log lines a deliberate restart wrote that {@link problems} ignores. */
   readonly #expectedLogLines = new Set<string>();
   #manager: AgentSessionManager | null = null;
   #conversation: Conversation | null = null;
@@ -158,10 +157,17 @@ export class Runtime {
     // keeps every provider that has a key, so it would carry one scenario's
     // providers into the next.
     setSettings(DEFAULT_SETTINGS);
-    this.#app = new App(this.#vaultPath) as unknown as ObsidianApp;
-    const manager = this.#startCopilot();
+    const app = new App(this.#vaultPath) as unknown as ObsidianApp;
+    const modelManagement = createModelManagement({ app });
+    this.#modelManagement = modelManagement;
+    const plugin = {
+      app,
+      manifest: { version: CLIENT_VERSION },
+      modelManagement,
+    } as unknown as CopilotPlugin;
+
     for (const provider of providers) {
-      await this.modelManagement.setup.byok.setupProvider({
+      await modelManagement.setup.byok.setupProvider({
         providerType: "openai-compatible",
         displayName: provider,
         baseUrl: this.provider.baseUrl(provider),
@@ -180,13 +186,29 @@ export class Runtime {
       // models.dev catalog download, which the proxy would refuse anyway.
       envOverrides: { OPENCODE_DISABLE_MODELS_FETCH: "1" },
     });
+
+    const preloader = new AgentModelPreloader(app, plugin, (id) => backendRegistry[id]);
+    this.#preloader = preloader;
+    const manager: AgentSessionManager = new AgentSessionManager(app, plugin, {
+      permissionPrompter: createDefaultPermissionPrompter(
+        (id) => manager.getSessionByBackendId(id),
+        (id) => manager.isReadOnlyFanoutSession(id)
+      ),
+      resolveDescriptor: (id) => backendRegistry[id],
+      modelPreloader: preloader,
+    });
+    this.#manager = manager;
+
     // The same write the Default model setting makes. Without a default,
     // opencode starts sessions on one of its own hosted models.
     await manager.persistDefaultSelection("opencode", {
       baseModelId: this.wireId(options.defaultModel.model),
       effort: options.defaultModel.effort,
     });
-    this.#preload(manager);
+    // The first chat adopts this probe's warm process, as after plugin load.
+    const preload = manager.preloadModels("opencode");
+    this.#startups.push(preload);
+    manager.registerPreload("opencode", preload);
   }
 
   /** opencode's id for a configured model, as the picker and saved selections name it. */
@@ -239,35 +261,35 @@ export class Runtime {
   }
 
   /**
-   * Unload and load Copilot again, as disabling and enabling the plugin or
-   * restarting Obsidian does: the manager shuts down with its processes, and a
-   * new plugin lifecycle builds a new one and starts its model probe. Settings,
-   * the keychain, the vault, and opencode's own data persist, as on disk.
+   * Report a spawn-time setting change with no chat open, as Copilot's settings
+   * subscriptions do: opencode's warm probe restarts on the new config at once.
+   * Resolves once the old probe has exited and the new one is warm.
+   *
+   * @param reason The reason the subscription reports, carried into the log.
    */
-  async reloadCopilot(): Promise<void> {
-    const previous = this.#requireManager();
-    this.#conversation = null;
-    const unload = async (): Promise<void> => {
-      // A probe still starting would outlive the unload, as at teardown.
+  async noteSpawnConfigChanged(reason: string): Promise<void> {
+    const manager = this.#requireManager();
+    const restart = this.#expectingShutdown(async () => {
+      // A probe still starting would take the change itself and exit later.
       await Promise.allSettled(this.#startups.splice(0));
-      // Unload stops a warm probe without waiting for it to exit; its exit
-      // warning belongs to the unload all the same.
-      const running = [
-        previous.getBackendProcess("opencode"),
-        ...(this.#preloader?.getWarmProcs().map((warm) => warm.proc) ?? []),
-      ].filter((proc) => proc?.isRunning());
+      // The refresh stops the old probe without waiting for it to exit; its
+      // exit warning belongs to this restart all the same.
       const exited = Promise.all(
-        running.map((proc) => new Promise<void>((resolve) => proc?.onExit(resolve)))
+        (this.#preloader?.getWarmProcs() ?? [])
+          .filter(({ proc }) => proc.isRunning())
+          .map(({ proc }) => new Promise<void>((resolve) => proc.onExit(resolve)))
       );
-      await previous.shutdown();
+      await manager.noteSpawnConfigChanged("opencode", reason);
       await exited;
-    };
+      // Deduplicated onto the new probe the change started.
+      await manager.preloadModels("opencode");
+    });
     await within(
       STARTUP_TIMEOUT_MS,
-      this.#expectingShutdown(unload),
-      () => "Copilot was still unloading: opencode was starting or had not exited"
+      restart,
+      () =>
+        "opencode's warm probe did not restart: the old probe had not exited or the new one was still starting"
     );
-    this.#preload(this.#startCopilot());
   }
 
   /**
@@ -350,7 +372,6 @@ export class Runtime {
     const manager = this.#manager;
     this.#manager = null;
     this.#conversation = null;
-    this.#app = null;
     this.#modelManagement = null;
     this.#preloader = null;
     this.#expectedLogLines.clear();
@@ -386,8 +407,8 @@ export class Runtime {
   }
 
   /**
-   * Run a deliberate restart or unload, recording the {@link SHUTDOWN_WARNINGS}
-   * it logs as expected. Any other warning it logs still fails the scenario.
+   * Run a deliberate restart, recording the {@link SHUTDOWN_WARNINGS} it logs
+   * as expected. Any other warning it logs still fails the scenario.
    */
   async #expectingShutdown(stop: () => Promise<void>): Promise<void> {
     const before = new Set(logFileManager.exportLogText().split("\n"));
@@ -397,46 +418,6 @@ export class Runtime {
         this.#expectedLogLines.add(line);
       }
     }
-  }
-
-  /**
-   * Construct what plugin load constructs for opencode: the model registries,
-   * a plugin object carrying them, and a session manager with the default
-   * permission prompter and the model preloader.
-   */
-  #startCopilot(): AgentSessionManager {
-    const app = this.#requireApp();
-    const modelManagement = createModelManagement({ app });
-    this.#modelManagement = modelManagement;
-    const plugin = {
-      app,
-      manifest: { version: CLIENT_VERSION },
-      modelManagement,
-    } as unknown as CopilotPlugin;
-    const preloader = new AgentModelPreloader(app, plugin, (id) => backendRegistry[id]);
-    this.#preloader = preloader;
-    const manager: AgentSessionManager = new AgentSessionManager(app, plugin, {
-      permissionPrompter: createDefaultPermissionPrompter(
-        (id) => manager.getSessionByBackendId(id),
-        (id) => manager.isReadOnlyFanoutSession(id)
-      ),
-      resolveDescriptor: (id) => backendRegistry[id],
-      modelPreloader: preloader,
-    });
-    this.#manager = manager;
-    return manager;
-  }
-
-  /** Start the model probe plugin load starts; the first chat adopts its warm process. */
-  #preload(manager: AgentSessionManager): void {
-    const preload = manager.preloadModels("opencode");
-    this.#startups.push(preload);
-    manager.registerPreload("opencode", preload);
-  }
-
-  #requireApp(): ObsidianApp {
-    if (!this.#app) throw new Error("Runtime.start() has not run");
-    return this.#app;
   }
 
   /**
