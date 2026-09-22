@@ -335,7 +335,7 @@ Measured durations, with the pinned binary already cached:
 | Where                                      | Scenario    | `test:runtime`            | Whole job |
 | ------------------------------------------ | ----------- | ------------------------- | --------- |
 | Apple M-series Mac, darwin-arm64, Node 26  | 1.6 – 4.9 s | 48 s                      | —         |
-| GitHub `ubuntu-latest`, linux-x64, Node 22 | 4.7 s mean  | 51 s, after a 2 s install | 87 s      |
+| GitHub `ubuntu-latest`, linux-x64, Node 22 | 3.8 s mean  | 61 s, after a 4 s install | 87 s      |
 
 Locally, startup through a ready session takes about 1.2 s and a turn about
 1 s; the longest scenarios are the Reload action (4.8 s) and the broken stream
