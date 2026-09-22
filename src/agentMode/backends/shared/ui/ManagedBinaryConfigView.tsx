@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { SegmentedControl, type SegmentedControlOption } from "@/components/ui/segmented-control";
 import { cn } from "@/lib/utils";
-import { Info } from "lucide-react";
+import { AlertTriangle, Info } from "lucide-react";
 import React from "react";
 
 /** Which of the two setup paths a binary came from. Mirrors the persisted `binarySource`. */
@@ -270,6 +270,20 @@ export const ManagedBinaryConfigView: React.FC<ManagedBinaryConfigViewProps> = (
         <p className="tw-my-0 tw-text-sm tw-text-muted">
           {source === "managed" ? managedDescription : customDescription}
         </p>
+      )}
+      {/* Custom executables may differ from the version Copilot has tested.
+          https://github.com/Brevilabs/obsidian-copilot-private/issues/570 */}
+      {source === "custom" && (
+        <div
+          role="note"
+          className="tw-flex tw-items-start tw-gap-2 tw-rounded-md tw-border tw-border-solid tw-bg-callout-warning/20 tw-p-3 tw-text-sm tw-border-warning/40"
+        >
+          <AlertTriangle aria-hidden className="tw-mt-0.5 tw-size-4 tw-shrink-0 tw-text-warning" />
+          <p className="tw-my-0 tw-text-normal">
+            Copilot is tested with the version managed by Copilot. Other versions may not work
+            correctly. We recommend Managed by Copilot.
+          </p>
+        </div>
       )}
       {source === "managed" ? (
         <>

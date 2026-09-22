@@ -16,6 +16,8 @@ Open [**Settings → Copilot → Basic → Agents**](settings.md#basic). Configu
 | **Claude**   | You already use Claude Code                     | Your Claude Code installation and Anthropic account                        |
 | **Codex**    | You already use the Codex CLI and Codex account | Your Codex CLI login through the `codex-acp` adapter                       |
 
+For opencode and Codex, **Managed by Copilot** uses the version Copilot tests. **My own binary** remains available, but other versions may not work correctly with Copilot. The Configure dialog reminds you of this when you choose your own binary.
+
 A one-agent chat can work without a Copilot license when you bring your own model access. An eligible paid plan adds Copilot-hosted models and cloud-backed features. [Compare Copilot plans](copilot-plus-and-self-host.md).
 
 ### opencode
